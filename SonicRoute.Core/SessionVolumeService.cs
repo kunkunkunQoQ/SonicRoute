@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using SonicRoute.Core.Interop;
@@ -17,8 +17,9 @@ namespace SonicRoute.Core
     ///     （SetVolumeScalar / Volume setter 对 foreach _sessions 全部 SetMasterVolume）。
     ///   - 本实现据此：按 PID 收集其全部 eRender 会话，读用第一个，写遍历全部。
     ///
-    /// 只收集 eRender（输出）：音量滑块控制的是应用输出音量，同 Windows 音量合成器行为，
-    /// 不干预输入（麦克风）会话。
+    /// 输出（eRender）：音量/静音控制，同 Windows 音量合成器行为。
+    /// 输入（eCapture）：麦克风静音（与 EarTrumpet 输入会话静音一致），只收集会话并按
+    /// 同一"读第一个/写全部"语义操作 SetMute，不提供音量调节。
     /// </summary>
     public static class SessionVolumeService
     {
@@ -30,6 +31,7 @@ namespace SonicRoute.Core
         private static DateTime _lastRefresh = DateTime.MinValue;
         private static DateTime _lastEnum = DateTime.MinValue;   // 实际完成枚举的时刻
         private static Dictionary<int, List<ISimpleAudioVolume>> _renderVolumes = new();
+        private static Dictionary<int, List<ISimpleAudioVolume>> _captureVolumes = new();
 
         /// <summary>该 PID 是否有可用的（输出）会话；缓存未命中会自动刷新（受节流保护）。</summary>
         public static bool HasSession(int pid)
@@ -185,15 +187,98 @@ namespace SonicRoute.Core
             return (!m, ok);
         }
 
-        /// <summary>重新枚举所有播放设备的会话，按 PID 缓存其全部 eRender 会话（旧引用释放）。
-        /// 带 2 秒节流：已有缓存且 2 秒内刷新过则跳过，降低高频操作（托盘滚轮/音量滑块）的
-        /// COM 枚举开销与内存/音频子系统压力。force=true 时强制执行（用于指定 PID 未命中）。</summary>
+        // ------------------------------------------------------------------
+        // 输入会话（麦克风静音，语义与输出一致：读组内第一个、写遍历全部）
+        // ------------------------------------------------------------------
+
+        /// <summary>该 PID 是否有可用的输入（录音）会话；缓存未命中自动刷新（受节流保护）。</summary>
+        public static bool HasInputSession(int pid)
+        {
+            lock (_lock)
+            {
+                if (_captureVolumes.TryGetValue(pid, out var l) && l.Count > 0) return true;
+            }
+            Refresh();
+            lock (_lock)
+            {
+                return _captureVolumes.TryGetValue(pid, out var l2) && l2.Count > 0;
+            }
+        }
+
+        /// <summary>麦克风是否静音（读组内第一个输入会话）。</summary>
+        public static bool IsInputMuted(int pid)
+        {
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                var list = FindCaptureVolumes(pid, 5);
+                if (list == null || list.Count == 0) return false;
+                try
+                {
+                    if (list[0].GetMute(out int m) < 0)
+                    {
+                        if (attempt == 0) { Refresh(true); continue; }
+                        return false;
+                    }
+                    return m != 0;
+                }
+                catch
+                {
+                    if (attempt == 0) { Refresh(true); continue; }
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>设置麦克风静音；对进程全部输入会话生效。</summary>
+        public static bool SetInputMute(int pid, bool mute)
+        {
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                var list = FindCaptureVolumes(pid, 5);
+                if (list == null || list.Count == 0) return false;
+                var g = Guid.Empty;
+                bool any = false;
+                try
+                {
+                    foreach (var v in list)
+                    {
+                        if (v.SetMute(mute ? 1 : 0, ref g) >= 0) any = true;
+                    }
+                    if (any) return true;
+                    if (attempt == 0) { Refresh(true); continue; }
+                    return false;
+                }
+                catch
+                {
+                    if (attempt == 0) { Refresh(true); continue; }
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>切换麦克风静音并报告是否真正生效（(新静音状态, 是否生效)）。
+        /// 应用没有任何输入会话时返回 (false, false)，避免误报"已静音"却什么都没做。</summary>
+        public static (bool Muted, bool Applied) ToggleInputMuteChecked(int pid)
+        {
+            var list = FindCaptureVolumes(pid, 5);
+            if (list == null || list.Count == 0) return (false, false);
+            bool m = IsInputMuted(pid);
+            bool ok = SetInputMute(pid, !m);
+            return (!m, ok);
+        }
+
+        /// <summary>重新枚举所有播放/录音设备的会话，按 PID 缓存其全部 eRender / eCapture 会话
+        /// （旧引用释放）。带 2 秒节流：已有缓存且 2 秒内刷新过则跳过，降低高频操作
+        /// （托盘滚轮/音量滑块）的 COM 枚举开销与内存/音频子系统压力。force=true 时强制执行
+        /// （用于指定 PID 未命中）。</summary>
         public static void Refresh(bool force = false)
         {
             lock (_refreshLock)
             {
                 var now = DateTime.UtcNow;
-                bool skip = !force && _renderVolumes.Count > 0
+                bool skip = !force && (_renderVolumes.Count + _captureVolumes.Count) > 0
                             && (now - _lastRefresh).TotalMilliseconds < 2000;
                 _lastRefresh = now;
                 if (skip) return;
@@ -201,9 +286,11 @@ namespace SonicRoute.Core
 
             var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
             var newRender = new Dictionary<int, List<ISimpleAudioVolume>>();
+            var newCapture = new Dictionary<int, List<ISimpleAudioVolume>>();
             try
             {
                 CollectInto(enumerator, EDataFlow.eRender, newRender);
+                CollectInto(enumerator, EDataFlow.eCapture, newCapture);
             }
             finally
             {
@@ -215,7 +302,11 @@ namespace SonicRoute.Core
                 foreach (var l in _renderVolumes.Values)
                     foreach (var v in l)
                         try { Marshal.ReleaseComObject(v); } catch { }
+                foreach (var l in _captureVolumes.Values)
+                    foreach (var v in l)
+                        try { Marshal.ReleaseComObject(v); } catch { }
                 _renderVolumes = newRender;
+                _captureVolumes = newCapture;
                 _lastEnum = DateTime.UtcNow;
             }
         }
@@ -307,6 +398,23 @@ namespace SonicRoute.Core
             lock (_lock)
             {
                 return _renderVolumes.TryGetValue(pid, out var l2) ? l2 : null;
+            }
+        }
+
+        /// <summary>按 PID 取输入（录音）会话列表，新鲜度语义与输出一致（5 秒强制刷新）。</summary>
+        private static List<ISimpleAudioVolume>? FindCaptureVolumes(int pid, double maxAgeSeconds)
+        {
+            lock (_lock)
+            {
+                if (_captureVolumes.TryGetValue(pid, out var l))
+                {
+                    if ((DateTime.UtcNow - _lastEnum).TotalSeconds < maxAgeSeconds) return l;
+                }
+            }
+            Refresh(true);
+            lock (_lock)
+            {
+                return _captureVolumes.TryGetValue(pid, out var l2) ? l2 : null;
             }
         }
     }

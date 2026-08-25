@@ -1,0 +1,62 @@
+Skip to content
+Navigation Menu
+Sign in
+kunkunkunQoQ
+/
+SonicRoute
+Public
+Code
+Issues
+Pull requests
+Actions
+Releases v1.0.2
+🎧 音跃 SonicRoute v1.0.2
+Latest
+Compare
+ kunkunkunQoQ released this 
+· 1 commit to master since this release
+ v1.0.2
+ 2461774
+音跃 SonicRoute v1.0.2
+
+Windows 11 按应用音频快速切换工具（作者：困困困）。
+
+功能
+一键切换单个应用的输出/输入设备（EarTrumpet Per-App Audio Routing 机制）
+托盘快捷面板 + 完整管理界面（应用/设备/快捷键/主题/设置）
+单独应用音量调节与静音（Audio Session API，不动系统主音量）
+当前应用自动检测（最近/上次/指定应用）
+设备筛选与自定义名称
+全局快捷键 + 托盘滚轮调音量
+深色/浅色主题、强调色（含 RGB）、背景透明度、中英文双语
+开机自启、解压即用（内置 .NET 运行时）
+使用
+下载 SonicRoute-v1.0.2.zip
+解压后双击 SonicRoute.exe（绿色免安装）
+单击托盘图标=快捷面板，双击=完整界面
+默认快捷键
+Ctrl+Alt+↑ / ↓ 增大/减小当前应用音量
+Ctrl+Shift+M 静音当前应用
+Ctrl+Alt+D 切换当前应用快捷设备
+Ctrl+Alt+Space 打开快速面板
+Assets
+3
+SonicRoute-v1.0.2.zip
+sha256:7e8cbb6390432b997a1897dcf1020ecb324077532f1770351aeb75f41840703c
+63.9 MB
+Source code
+(zip)
+Source code
+(tar.gz)
+Footer
+© 2026 GitHub, Inc.
+Footer navigation
+Terms
+Privacy
+Security
+Status
+Community
+Docs
+Contact
+Manage cookies
+Do not share my personal information

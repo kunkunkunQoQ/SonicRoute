@@ -455,6 +455,25 @@ namespace SonicRoute
             OverviewStatusText.Text = L10n.T(muted ? "Ov.Muted" : "Ov.Unmuted");
         }
 
+        private async void OverviewMicMuteButton_Click(object sender, RoutedEventArgs e)
+        {
+            var app = _overviewApp;
+            if (app == null)
+            {
+                OverviewStatusText.Text = L10n.T("Ov.MicNoSession");
+                return;
+            }
+            MarkLastUsed(app);
+            var r = await Task.Run(() => SessionVolumeService.ToggleInputMuteChecked((int)app.ProcessId));
+            if (!r.Applied)
+            {
+                OverviewStatusText.Text = L10n.T("Ov.MicNoSession");
+                return;
+            }
+            OverviewMicMuteButton.Content = L10n.T(r.Muted ? "Ov.MicUnmute" : "Ov.MuteMic");
+            OverviewStatusText.Text = L10n.T(r.Muted ? "Ov.MicMuted" : "Ov.MicUnmuted");
+        }
+
         private async void OverviewOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressDevCombo) return;

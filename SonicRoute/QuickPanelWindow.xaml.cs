@@ -389,6 +389,29 @@ namespace SonicRoute
             return true;
         }
 
+        private async void MicMuteButton_Click(object sender, RoutedEventArgs e)
+        {
+            await MicMuteCurrentAppAsync();
+        }
+
+        /// <summary>静音/取消静音当前应用的麦克风（输入会话）。与扬声器静音同一套语义
+        /// （读组内第一个、写遍历全部），面板按钮与麦克风静音快捷键共用；无输入会话时
+        /// 状态行提示并返回 false。返回是否真正执行。</summary>
+        internal async Task<bool> MicMuteCurrentAppAsync()
+        {
+            if (_currentApp == null) return false;
+            MarkLastUsed(_currentApp);
+            var r = await Task.Run(() => SessionVolumeService.ToggleInputMuteChecked((int)_currentApp.ProcessId));
+            if (!r.Applied)
+            {
+                PanelStatusText.Text = L10n.T("Qp.MicNoSession");
+                return false;
+            }
+            MicMuteButton.Content = L10n.T(r.Muted ? "Qp.MicUnmute" : "Qp.MicMute");
+            PanelStatusText.Text = L10n.T(r.Muted ? "Qp.MicMuted" : "Qp.MicUnmuted");
+            return true;
+        }
+
         // ------------------------------------------------------------------
         // 底部按钮
         // ------------------------------------------------------------------

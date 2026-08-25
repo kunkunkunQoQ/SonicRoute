@@ -388,10 +388,16 @@
                                     ValueChanged="OverviewVolumeSlider_ValueChanged"/>
                         </DockPanel>
                         <DockPanel Margin="0,6,0,0">
-                            <Button x:Name="OverviewMuteButton"
-                                    Content="{Binding [Ov.Mute], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" Width="96" HorizontalAlignment="Left"
-                                    Click="OverviewMuteButton_Click"/>
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                <Button x:Name="OverviewMuteButton"
+                                        Content="{Binding [Ov.Mute], Source={x:Static local:L10n.Instance}}"
+                                        Style="{StaticResource GhostButton}" Width="96" Margin="0,0,8,0"
+                                        Click="OverviewMuteButton_Click"/>
+                                <Button x:Name="OverviewMicMuteButton"
+                                        Content="{Binding [Ov.MuteMic], Source={x:Static local:L10n.Instance}}"
+                                        Style="{StaticResource GhostButton}" Width="120"
+                                        Click="OverviewMicMuteButton_Click"/>
+                            </StackPanel>
                             <TextBlock x:Name="OverviewStatusText" Text=""
                                        FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                        VerticalAlignment="Center" HorizontalAlignment="Left"

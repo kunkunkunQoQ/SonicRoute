@@ -8,7 +8,9 @@ namespace SonicRoute
     public static class HotkeyActions
     {
         public const string ActSwitchOutput = "切换当前应用快捷设备";
+        public const string ActSwitchInput = "切换当前应用输入设备";
         public const string ActMute = "静音当前应用";
+        public const string ActMuteInput = "麦克风静音当前应用";
         public const string ActVolUp = "增大当前应用音量";
         public const string ActVolDown = "减小当前应用音量";
         public const string ActPanel = "打开快速面板";
@@ -18,7 +20,9 @@ namespace SonicRoute
             ActVolUp,
             ActVolDown,
             ActSwitchOutput,
+            ActSwitchInput,
             ActMute,
+            ActMuteInput,
             ActPanel
         };
 
@@ -27,7 +31,9 @@ namespace SonicRoute
             [ActVolUp] = "Ctrl+Alt+Up",
             [ActVolDown] = "Ctrl+Alt+Down",
             [ActSwitchOutput] = "Ctrl+Alt+D",
+            [ActSwitchInput] = "Ctrl+Alt+Shift+D", // 与输出切换 Ctrl+Alt+D 区分
             [ActMute] = "Ctrl+Shift+M",   // Ctrl+Alt+M 常被其他程序注册（本机实测被占用），改用 Ctrl+Shift+M
+            [ActMuteInput] = "Ctrl+Shift+N",      // 麦克风静音，与扬声器静音 Ctrl+Shift+M 区分
             [ActPanel] = "Ctrl+Alt+Space",
         };
 
@@ -35,7 +41,9 @@ namespace SonicRoute
         public static string DisplayName(string action) => action switch
         {
             ActSwitchOutput => L10n.T("Act.SwitchOutput"),
+            ActSwitchInput => L10n.T("Act.SwitchInput"),
             ActMute => L10n.T("Act.Mute"),
+            ActMuteInput => L10n.T("Act.MuteInput"),
             ActVolUp => L10n.T("Act.VolUp"),
             ActVolDown => L10n.T("Act.VolDown"),
             ActPanel => L10n.T("Act.Panel"),

@@ -1,4 +1,4 @@
-﻿using SonicRoute.Core;
+using SonicRoute.Core;
 
 string mode = args.Length > 0 ? args[0] : "";
 int pid = args.Length > 1 ? int.Parse(args[1]) : 0;
@@ -32,4 +32,17 @@ else if (mode == "toggle")
     bool after = SessionVolumeService.ToggleMute(pid);
     bool afterState = SessionVolumeService.IsMuted(pid);
     Console.WriteLine($"pid={pid} before={before} toggleret={after} afterState={afterState}");
+}
+else if (mode == "inmutecheck" && pid > 0)
+{
+    SessionVolumeService.Refresh(true);
+    Console.WriteLine($"pid={pid} hasInput={SessionVolumeService.HasInputSession(pid)} inputMuted={SessionVolumeService.IsInputMuted(pid)}");
+}
+else if (mode == "inmute" && pid > 0)
+{
+    SessionVolumeService.Refresh(true);
+    bool before = SessionVolumeService.IsInputMuted(pid);
+    var r = SessionVolumeService.ToggleInputMuteChecked(pid);
+    bool after = SessionVolumeService.IsInputMuted(pid);
+    Console.WriteLine($"pid={pid} before={before} retMuted={r.Muted} applied={r.Applied} after={after}");
 }
