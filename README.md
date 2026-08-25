@@ -40,7 +40,7 @@
 
 ## 📦 下载与安装
 
-前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载 `SonicRoute-v1.0.2-解压即用.zip`：
+前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载最新版 zip（如 `SonicRoute-v1.0.2.zip`，**解压即用**）：
 
 1. 解压到任意目录
 2. 双击 `SonicRoute.exe` 运行（已内置运行时，绿色免安装）
