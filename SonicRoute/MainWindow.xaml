@@ -1,0 +1,786 @@
+<Window x:Class="SonicRoute.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SonicRoute"
+        Title="音跃 SonicRoute v1.02"
+        Icon="SonicRoute.png"
+        Width="920" Height="620"
+        MinWidth="780" MinHeight="540"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
+    <Window.Resources>
+        <!-- 左导航项 -->
+        <Style x:Key="NavItem" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="bd" Background="Transparent" CornerRadius="8" Padding="14,0">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavSelected}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 小节标题 -->
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <!-- 页面大标题 -->
+        <Style x:Key="PageTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
+        </Style>
+
+        <!-- 标题栏按钮 -->
+        <Style x:Key="TitleBarButton" TargetType="Button">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TitleCloseButton" TargetType="Button" BasedOn="{StaticResource TitleBarButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#E81123"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 通用下拉（圆角 + 选中项强调色，模板见 App.xaml RoundedComboBox） -->
+        <Style x:Key="SelCombo" TargetType="ComboBox" BasedOn="{StaticResource RoundedComboBox}">
+        </Style>
+
+        <!-- 卡片 -->
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBgAlpha}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="18"/>
+        </Style>
+
+        <!-- 主按钮 -->
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.OnAccent}"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.Accent}"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.AccentHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.AccentDisabled}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 次要按钮 -->
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 设备快速切换按钮（概览） -->
+        <Style x:Key="QuickDevButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="QuickDevButtonActive" TargetType="Button" BasedOn="{StaticResource QuickDevButton}">
+            <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- 应用项模板（图标 + 名称，用于概览应用切换与列表） -->
+        <DataTemplate x:Key="AppItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <Image Source="{Binding Icon}" Width="18" Height="18" Margin="0,0,8,0"
+                       SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="13"
+                           TextTrimming="CharacterEllipsis" MaxWidth="230"/>
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource Theme.WindowBgAlpha}"
+            BorderBrush="{DynamicResource Theme.Border}"
+            BorderThickness="1"
+            CornerRadius="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.25" Color="#000000"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="42"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- ======================= 标题栏 ======================= -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="🎧 音跃 SonicRoute v1.02"
+                           FontSize="13.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Theme.TextPrimary}"
+                           VerticalAlignment="Center" Margin="16,0,0,0"
+                           MouseLeftButtonDown="Titlebar_MouseDown"
+                           ToolTip="拖动移动窗口"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <Button Content="─" Style="{StaticResource TitleBarButton}" Click="TitlebarMin_Click" ToolTip="最小化"/>
+                    <Button Content="□" Style="{StaticResource TitleBarButton}" Click="TitlebarMax_Click" ToolTip="最大化 / 还原"/>
+                    <Button Content="✕" Style="{StaticResource TitleCloseButton}" Click="TitlebarClose_Click" ToolTip="关闭"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ======================= 主体 ======================= -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="196"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+        <!-- ======================= 左侧导航 ======================= -->
+        <Border Grid.Column="0"
+                Background="{DynamicResource Theme.WindowBgAlpha}"
+                BorderBrush="{DynamicResource Theme.Border}"
+                BorderThickness="0,0,1,0">
+            <StackPanel Margin="14,20,14,16">
+                <TextBlock Text="🎧 音跃" FontSize="20" FontWeight="Bold"
+                           Foreground="{DynamicResource Theme.TextPrimary}"/>
+                <TextBlock Text="{Binding [App.About], Source={x:Static local:L10n.Instance}}"
+                           FontSize="10.5"
+                           Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,4,0,22"/>
+
+                <RadioButton x:Name="NavOverview" GroupName="Nav" Style="{StaticResource NavItem}"
+                             Content="{Binding [Nav.Overview], Source={x:Static local:L10n.Instance}}"
+                             IsChecked="True" Checked="Nav_Checked" Tag="Overview"/>
+                <RadioButton x:Name="NavApps" GroupName="Nav" Style="{StaticResource NavItem}"
+                             Content="{Binding [Nav.Apps], Source={x:Static local:L10n.Instance}}"
+                             Checked="Nav_Checked" Tag="Apps"/>
+                <RadioButton x:Name="NavHotkeys" GroupName="Nav" Style="{StaticResource NavItem}"
+                             Content="{Binding [Nav.Hotkeys], Source={x:Static local:L10n.Instance}}"
+                             Checked="Nav_Checked" Tag="Hotkeys"/>
+                <RadioButton x:Name="NavTheme" GroupName="Nav" Style="{StaticResource NavItem}"
+                             Content="{Binding [Nav.Theme], Source={x:Static local:L10n.Instance}}"
+                             Checked="Nav_Checked" Tag="Theme"/>
+                <RadioButton x:Name="NavSettings" GroupName="Nav" Style="{StaticResource NavItem}"
+                             Content="{Binding [Nav.Settings], Source={x:Static local:L10n.Instance}}"
+                             Checked="Nav_Checked" Tag="Settings"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ======================= 内容区 ======================= -->
+        <Grid Grid.Column="1" Margin="26,20,26,20">
+            <!-- 概览 -->
+            <Grid x:Name="OverviewPage">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+
+                <!-- 当前应用（可切换） -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                    <DockPanel>
+                        <Button x:Name="OverviewRefreshButton" DockPanel.Dock="Right"
+                                Content="{Binding [Ov.Refresh], Source={x:Static local:L10n.Instance}}"
+                                Style="{StaticResource GhostButton}" Click="OverviewRefreshButton_Click"/>
+                        <StackPanel>
+                            <TextBlock Text="{Binding [Ov.CurrentApp], Source={x:Static local:L10n.Instance}}"
+                                       Style="{StaticResource SectionTitle}"/>
+                            <ComboBox x:Name="OverviewAppCombo" Style="{StaticResource SelCombo}"
+                                      ItemTemplate="{StaticResource AppItemTemplate}"
+                                      SelectionChanged="OverviewAppCombo_SelectionChanged"/>
+                            <TextBlock x:Name="OverviewAppPidText" Text=""
+                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- 输出设备 -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Ov.Output], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}"/>
+                        <DockPanel Margin="0,0,0,8">
+                            <ComboBox x:Name="OverviewOutputCombo" DockPanel.Dock="Left"
+                                      Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
+                                      SelectionChanged="OverviewOutputCombo_SelectionChanged"/>
+                            <TextBlock x:Name="OverviewOutputCurrentText" Text=""
+                                       FontSize="12" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                        <ItemsControl x:Name="OverviewOutputQuickPanel">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- 输入设备 -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Ov.Input], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}"/>
+                        <DockPanel Margin="0,0,0,8">
+                            <ComboBox x:Name="OverviewInputCombo" DockPanel.Dock="Left"
+                                      Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
+                                      SelectionChanged="OverviewInputCombo_SelectionChanged"/>
+                            <TextBlock x:Name="OverviewInputCurrentText" Text=""
+                                       FontSize="12" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                        <ItemsControl x:Name="OverviewInputQuickPanel">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- 音量 + 应用 -->
+                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Ov.Volume], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}"/>
+                        <DockPanel Margin="0,0,0,4" MouseWheel="OverviewVolume_MouseWheel">
+                            <Button x:Name="OverviewMinus" Content="−" Style="{StaticResource GhostButton}"
+                                    Width="34" Padding="0" DockPanel.Dock="Left" Margin="0,0,8,0" Click="OverviewMinus_Click"/>
+                            <Button x:Name="OverviewPlus" Content="+" Style="{StaticResource GhostButton}"
+                                    Width="34" Padding="0" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OverviewPlus_Click"/>
+                            <TextBlock x:Name="OverviewVolumeText" Text="0%"
+                                       FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Theme.TextPrimary}"
+                                       DockPanel.Dock="Right" Width="46" TextAlignment="Right"
+                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Slider x:Name="OverviewVolumeSlider" Minimum="0" Maximum="100"
+                                    VerticalAlignment="Center" IsMoveToPointEnabled="True"
+                                    ValueChanged="OverviewVolumeSlider_ValueChanged"/>
+                        </DockPanel>
+                        <DockPanel Margin="0,6,0,0">
+                            <Button x:Name="OverviewMuteButton"
+                                    Content="{Binding [Ov.Mute], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource GhostButton}" Width="96" HorizontalAlignment="Left"
+                                    Click="OverviewMuteButton_Click"/>
+                            <TextBlock x:Name="OverviewStatusText" Text=""
+                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Left"
+                                       Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+                </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- 应用 -->
+            <Grid x:Name="AppsPage" Visibility="Collapsed">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,12,0" Padding="10">
+                    <DockPanel>
+                        <Button x:Name="AppsRefreshButton" DockPanel.Dock="Bottom"
+                                Content="{Binding [Apps.Refresh], Source={x:Static local:L10n.Instance}}"
+                                Style="{StaticResource GhostButton}" Margin="0,10,0,0" Click="AppsRefreshButton_Click"/>
+                        <TextBlock Text="{Binding [Apps.Title], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}" DockPanel.Dock="Top"/>
+                        <ListBox x:Name="AppsListBox" BorderThickness="0" Background="Transparent"
+                                 FontSize="13" ItemTemplate="{StaticResource AppItemTemplate}"
+                                 ItemContainerStyle="{StaticResource RoundedListBoxItem}"
+                                 SelectionChanged="AppsListBox_SelectionChanged">
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+
+                <Border Grid.Column="1" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock x:Name="AppsDetailTitle"
+                                   Text="{Binding [Apps.SelectHint], Source={x:Static local:L10n.Instance}}"
+                                   FontSize="15" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,0,0,4"/>
+                        <TextBlock x:Name="AppsDetailPid" Text=""
+                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                   Margin="0,0,0,14"/>
+                        <TextBlock Text="{Binding [Apps.Output], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}"/>
+                        <ComboBox x:Name="AppsOutputCombo" Style="{StaticResource SelCombo}"
+                                  Margin="0,0,0,14" DisplayMemberPath="DisplayLabel"/>
+                        <TextBlock Text="{Binding [Apps.Input], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}"/>
+                        <ComboBox x:Name="AppsInputCombo" Style="{StaticResource SelCombo}"
+                                  Margin="0,0,0,16" DisplayMemberPath="DisplayLabel"/>
+                        <TextBlock Text="{Binding [Apps.Volume], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}"/>
+                        <DockPanel Margin="0,0,0,10" MouseWheel="AppsVolume_MouseWheel">
+                            <Button x:Name="AppsMinus" Content="−" Style="{StaticResource GhostButton}"
+                                    Width="34" Padding="0" DockPanel.Dock="Left" Margin="0,0,8,0" Click="AppsMinus_Click"/>
+                            <Button x:Name="AppsPlus" Content="+" Style="{StaticResource GhostButton}"
+                                    Width="34" Padding="0" DockPanel.Dock="Right" Margin="8,0,0,0" Click="AppsPlus_Click"/>
+                            <TextBlock x:Name="AppsVolumeText" Text="0%"
+                                       FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Theme.TextPrimary}"
+                                       DockPanel.Dock="Right" Width="46" TextAlignment="Right"
+                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Slider x:Name="AppsVolumeSlider" Minimum="0" Maximum="100"
+                                    VerticalAlignment="Center" IsMoveToPointEnabled="True"
+                                    ValueChanged="AppsVolumeSlider_ValueChanged"/>
+                        </DockPanel>
+                        <DockPanel Margin="0,4,0,0">
+                            <Button x:Name="AppsMuteButton"
+                                    Content="{Binding [Apps.Mute], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource GhostButton}" Width="96" HorizontalAlignment="Left"
+                                    Click="AppsMuteButton_Click"/>
+                            <Button x:Name="AppsApplyButton"
+                                    Content="{Binding [Apps.Apply], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right"
+                                    DockPanel.Dock="Right" Click="AppsApplyButton_Click"/>
+                            <TextBlock x:Name="AppsStatusText" Text=""
+                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       VerticalAlignment="Center" HorizontalAlignment="Left"
+                                       Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- 快捷键 -->
+            <Grid x:Name="HotkeysPage" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="{Binding [Hk.Hint], Source={x:Static local:L10n.Instance}}"
+                               FontSize="12" Foreground="{DynamicResource Theme.TextSecondary}"
+                               Margin="0,0,0,16" TextWrapping="Wrap"/>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <ItemsControl x:Name="HotkeyList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <!-- 主题 -->
+            <Grid x:Name="ThemePage" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Nav.Theme], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource PageTitle}"/>
+
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [St.ThemeMode], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                    <RadioButton x:Name="ThemeSystem" Content="{Binding [St.ThemeSystem], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="ThemeMode" FontSize="13" Margin="0,0,16,0"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Theme_Changed" Tag="system"/>
+                                    <RadioButton x:Name="ThemeLight" Content="{Binding [St.ThemeLight], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="ThemeMode" FontSize="13" Margin="0,0,16,0"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Theme_Changed" Tag="light"/>
+                                    <RadioButton x:Name="ThemeDark" Content="{Binding [St.ThemeDark], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="ThemeMode" FontSize="13"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Theme_Changed" Tag="dark"/>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding [St.Accent], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <RadioButton x:Name="AccentBlue" Content="{Binding [St.AccentBlue], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="Accent" FontSize="13" Margin="0,0,16,0"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Theme_Changed" Tag="blue"/>
+                                    <RadioButton x:Name="AccentGreen" Content="{Binding [St.AccentGreen], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="Accent" FontSize="13" Margin="0,0,16,0"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Theme_Changed" Tag="green"/>
+                                    <RadioButton x:Name="AccentPurple" Content="{Binding [St.AccentPurple], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="Accent" FontSize="13" Margin="0,0,16,0"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Theme_Changed" Tag="purple"/>
+                                    <RadioButton x:Name="AccentCustom" Content="{Binding [Th.Custom], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="Accent" FontSize="13"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Theme_Changed" Tag="custom"/>
+                                </StackPanel>
+
+                                <!-- RGB 自定义 -->
+                                <StackPanel x:Name="RgbRow" Margin="24,8,0,0">
+                                    <DockPanel Margin="0,0,0,8">
+                                        <Border x:Name="RgbPreview" Width="28" Height="28" CornerRadius="14"
+                                                BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1"
+                                                Background="#2563EB" DockPanel.Dock="Left"/>
+                                        <TextBlock x:Name="RgbHex" Text="#2563EB" FontSize="12.5" FontFamily="Consolas"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"
+                                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                    </DockPanel>
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="22"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="42"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="R" Grid.Column="0" Foreground="#EF4444" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <Slider x:Name="RSlider" Grid.Column="1" Minimum="0" Maximum="255"
+                                                ValueChanged="Rgb_Changed" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="RText" Grid.Column="2" Text="37" FontSize="12"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"
+                                                   TextAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="22"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="42"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="G" Grid.Column="0" Foreground="#22C55E" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <Slider x:Name="GSlider" Grid.Column="1" Minimum="0" Maximum="255"
+                                                ValueChanged="Rgb_Changed" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="GText" Grid.Column="2" Text="99" FontSize="12"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"
+                                                   TextAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="22"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="42"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="B" Grid.Column="0" Foreground="#3B82F6" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                        <Slider x:Name="BSlider" Grid.Column="1" Minimum="0" Maximum="255"
+                                                ValueChanged="Rgb_Changed" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="BText" Grid.Column="2" Text="235" FontSize="12"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"
+                                                   TextAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding [St.Opacity], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,16,0,2"/>
+                                <DockPanel>
+                                    <TextBlock x:Name="OpacityText" Text="85%" DockPanel.Dock="Right"
+                                               FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"
+                                               VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
+                                    <Slider x:Name="OpacitySlider" Minimum="60" Maximum="100" IsMoveToPointEnabled="True"
+                                            ValueChanged="OpacitySlider_ValueChanged" VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <TextBlock Text="{Binding [St.OpacityHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,3,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- 设置 -->
+            <Grid x:Name="SettingsPage" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [St.Settings], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource PageTitle}"/>
+
+                        <!-- ① 保留的设备（置顶） -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [St.KeepDevices], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}" TextWrapping="Wrap"
+                                           VerticalAlignment="Center" Margin="0,0,0,2"/>
+                                <DockPanel Margin="0,4,0,2">
+                                    <Button x:Name="SelectAllOutputButton"
+                                            Content="{Binding [St.SelectAll], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="26" Padding="10,0"
+                                            DockPanel.Dock="Right" Margin="10,0,0,0"
+                                            Click="SelectAllOutput_Click"/>
+                                    <TextBlock Text="{Binding [St.Output], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="12.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Theme.TextPrimary}"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <ItemsControl x:Name="OutputFilterList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                                <DockPanel Margin="0,12,4,2">
+                                    <Button x:Name="SelectAllInputButton"
+                                            Content="{Binding [St.SelectAll], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="26" Padding="10,0"
+                                            DockPanel.Dock="Right" Margin="10,0,0,0"
+                                            Click="SelectAllInput_Click"/>
+                                    <TextBlock Text="{Binding [St.Input], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="12.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Theme.TextPrimary}"
+                                               VerticalAlignment="Center"/>
+                                </DockPanel>
+                                <ItemsControl x:Name="InputFilterList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ② 设备名称 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [St.DeviceNames], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="{Binding [St.DeviceNamesHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,-4,0,8" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding [St.Output], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,4,0,2"/>
+                                <ItemsControl x:Name="OutputNameList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                                <TextBlock Text="{Binding [St.Input], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,12,0,2"/>
+                                <ItemsControl x:Name="InputNameList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ③ 默认应用 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [St.DefaultApp], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="{Binding [St.DefaultAppHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,-4,0,8" TextWrapping="Wrap"/>
+                                <StackPanel>
+                                    <RadioButton x:Name="DefaultAppRecent" Content="{Binding [St.DefaultAppRecent], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="DefaultApp" FontSize="13" Margin="0,4"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="DefaultAppMode_Changed" Tag="recent"/>
+                                    <RadioButton x:Name="DefaultAppLast" Content="{Binding [St.DefaultAppLast], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="DefaultApp" FontSize="13" Margin="0,4"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="DefaultAppMode_Changed" Tag="last"/>
+                                    <RadioButton x:Name="DefaultAppFixed" Content="{Binding [St.DefaultAppFixed], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="DefaultApp" FontSize="13" Margin="0,4"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="DefaultAppMode_Changed" Tag="fixed"/>
+                                    <ComboBox x:Name="FixedAppCombo" Style="{StaticResource SelCombo}"
+                                              ItemTemplate="{StaticResource AppItemTemplate}"
+                                              Margin="24,6,0,2" SelectionChanged="FixedAppCombo_SelectionChanged"/>
+                                    <TextBlock Text="{Binding [St.FixedAppHint], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                               Margin="24,2,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ④ 语言 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [St.Language], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <RadioButton x:Name="LangZh" Content="{Binding [St.LangZh], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="Lang" FontSize="13" Margin="0,0,24,0"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Language_Changed" Tag="zh-CN"/>
+                                    <RadioButton x:Name="LangEn" Content="{Binding [St.LangEn], Source={x:Static local:L10n.Instance}}"
+                                                 GroupName="Lang" FontSize="13"
+                                                 Foreground="{DynamicResource Theme.TextPrimary}"
+                                                 Checked="Language_Changed" Tag="en-US"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ⑤ 启动选项 + 关于 -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <CheckBox x:Name="SettingsAutoStart"
+                                          Content="{Binding [St.AutoStart], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Margin="0,0,0,8"
+                                          Checked="SettingsAutoStart_Changed" Unchecked="SettingsAutoStart_Changed"/>
+                                <CheckBox x:Name="SettingsStartMinimized"
+                                          Content="{Binding [St.StartMinimized], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Margin="0,0,0,8"
+                                          Checked="SettingsStartMinimized_Changed" Unchecked="SettingsStartMinimized_Changed"/>
+                                <CheckBox x:Name="SettingsShowPanelOnStart"
+                                          Content="{Binding [St.StartPanel], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Checked="SettingsShowPanelOnStart_Changed" Unchecked="SettingsShowPanelOnStart_Changed"/>
+                                <TextBlock Text="{Binding [App.About], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,16,0,0"/>
+                                <TextBlock Margin="0,12,0,0" FontSize="13"
+                                           Foreground="{DynamicResource Theme.TextSecondary}">
+                                    <Run Text="作者主页 ‖ "/>
+                                    <Hyperlink x:Name="BiliLink" Click="BiliLink_Click"
+                                               Foreground="{DynamicResource Theme.Accent}">
+                                        <Run Text="哔哩哔哩"/>
+                                    </Hyperlink>
+                                    <Run Text=" ‖ "/>
+                                    <Hyperlink x:Name="IfdianLink" Click="IfdianLink_Click"
+                                               Foreground="{DynamicResource Theme.Accent}">
+                                        <Run Text="爱发电"/>
+                                    </Hyperlink>
+                                    <Run Text=" ‖ "/>
+                                    <Hyperlink x:Name="GithubLink" Click="GithubLink_Click"
+                                               Foreground="{DynamicResource Theme.Accent}">
+                                        <Run Text="GitHub"/>
+                                    </Hyperlink>
+                                    <Run Text=" ‖"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+            </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

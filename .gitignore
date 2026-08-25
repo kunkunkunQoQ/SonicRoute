@@ -1,0 +1,20 @@
+# ===== 编译产物 =====
+bin/
+obj/
+
+# ===== 发布产物（解压即用包，不纳入源码仓库）=====
+dist/
+*.zip
+
+# ===== Visual Studio 用户设置 =====
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ===== 构建/调试临时文件 =====
+*.pdb
+*.cache
+*.log
+TestResults/

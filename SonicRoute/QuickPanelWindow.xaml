@@ -1,0 +1,204 @@
+﻿<Window x:Class="SonicRoute.QuickPanelWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SonicRoute"
+        Title="音跃 - 快速面板"
+        Width="340"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        SnapsToDevicePixels="True"
+        FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
+    <Window.Resources>
+        <!-- 设备快速切换按钮 -->
+        <Style x:Key="DevButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 已选中（当前）设备按钮：高亮 -->
+        <Style x:Key="DevButtonActive" TargetType="Button" BasedOn="{StaticResource DevButton}">
+            <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- 底部工具按钮 -->
+        <Style x:Key="FootButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 应用项模板 -->
+        <DataTemplate x:Key="AppItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,8,0"
+                       SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="12.5"
+                           TextTrimming="CharacterEllipsis" MaxWidth="210"/>
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource Theme.WindowBgAlpha}"
+            BorderBrush="{DynamicResource Theme.Border}"
+            BorderThickness="1"
+            CornerRadius="10"
+            Margin="0,0,6,0">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.25" Color="#000000"/>
+        </Border.Effect>
+
+        <StackPanel Margin="14,12,14,12">
+            <!-- 标题 + 应用切换 -->
+            <DockPanel>
+                <TextBlock Text="🎧 音跃"
+                           FontSize="15" FontWeight="Bold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                <TextBlock Text="v1.02" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </DockPanel>
+            <TextBlock x:Name="AppNameText"
+                       Text="{Binding [Qp.Detecting], Source={x:Static local:L10n.Instance}}"
+                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                       Margin="0,4,0,2" TextTrimming="CharacterEllipsis"/>
+            <ComboBox x:Name="AppCombo" Style="{StaticResource RoundedComboBox}" Height="32"
+                      ItemTemplate="{StaticResource AppItemTemplate}"
+                      SelectionChanged="AppCombo_SelectionChanged"/>
+
+            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,10"/>
+
+            <!-- 输出设备 -->
+            <TextBlock Text="{Binding [Qp.Output], Source={x:Static local:L10n.Instance}}"
+                       FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,6"/>
+            <TextBlock x:Name="OutputCurrentText" Text="…"
+                       FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
+                       Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
+                       ToolTipService.ShowDuration="8000"/>
+            <ItemsControl x:Name="OutputButtonsPanel">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,10"/>
+
+            <!-- 输入设备 -->
+            <TextBlock Text="{Binding [Qp.Input], Source={x:Static local:L10n.Instance}}"
+                       FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,6"/>
+            <TextBlock x:Name="InputCurrentText" Text="…"
+                       FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
+                       Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
+                       ToolTipService.ShowDuration="8000"/>
+            <ItemsControl x:Name="InputButtonsPanel">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,10"/>
+
+            <!-- 音量 -->
+            <TextBlock Text="{Binding [Qp.Volume], Source={x:Static local:L10n.Instance}}"
+                       FontSize="12.5" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+            <DockPanel Margin="0,0,0,2" MouseWheel="Volume_MouseWheel">
+                <Button x:Name="MinusButton" Content="−" DockPanel.Dock="Left" Width="26" Height="26"
+                        FontSize="15" Style="{StaticResource FootButton}" Margin="0,0,6,0" Click="MinusButton_Click"/>
+                <Button x:Name="PlusButton" Content="+" DockPanel.Dock="Right" Width="26" Height="26"
+                        FontSize="15" Style="{StaticResource FootButton}" Margin="6,0,0,0" Click="PlusButton_Click"/>
+                <TextBlock x:Name="VolumePercentText" Text="0%" DockPanel.Dock="Right"
+                           FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"
+                           VerticalAlignment="Center" Margin="0,0,4,0" Width="40" TextAlignment="Right"/>
+                <Slider x:Name="VolumeSlider" Minimum="0" Maximum="100"
+                        VerticalAlignment="Center" IsMoveToPointEnabled="True"
+                        ValueChanged="VolumeSlider_ValueChanged"/>
+            </DockPanel>
+            <DockPanel Margin="0,4,0,0">
+                <Button x:Name="MuteButton"
+                        Content="{Binding [Qp.Mute], Source={x:Static local:L10n.Instance}}"
+                        Style="{StaticResource FootButton}" Width="80" Height="28"
+                        HorizontalAlignment="Left" Click="MuteButton_Click"/>
+                <TextBlock x:Name="PanelStatusText" Text=""
+                           FontSize="11" Foreground="{DynamicResource Theme.TextSecondary}"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"
+                           TextTrimming="CharacterEllipsis"/>
+            </DockPanel>
+
+            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,10"/>
+
+            <!-- 底部 -->
+            <DockPanel>
+                <Button x:Name="SettingsButton"
+                        Content="{Binding [Qp.Settings], Source={x:Static local:L10n.Instance}}"
+                        Style="{StaticResource FootButton}" DockPanel.Dock="Right"
+                        Click="SettingsButton_Click"/>
+            </DockPanel>
+        </StackPanel>
+    </Border>
+</Window>
