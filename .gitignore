@@ -18,3 +18,6 @@ dist/
 *.cache
 *.log
 TestResults/
+
+# 临时附件
+_attach_tmp.bin
