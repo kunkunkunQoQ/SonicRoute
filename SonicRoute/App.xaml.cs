@@ -228,13 +228,6 @@ namespace SonicRoute
                     string? dev = await CycleDeviceAsync(pid, EDataFlow.eRender);
                     _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(dev) ? "无可用设备" : $"🔊 {dev}");
                     break;
-
-                case HotkeyActions.ActSwitchInput:
-                    // 麦克风切换：原理与播放设备切换完全一致（同一个 CycleDeviceAsync），
-                    // 只在可见输入设备间循环切换当前应用的录音设备。
-                    string? mdev = await CycleDeviceAsync(pid, EDataFlow.eCapture);
-                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? "无可用设备" : $"🎤 {mdev}");
-                    break;
             }
         }
 
