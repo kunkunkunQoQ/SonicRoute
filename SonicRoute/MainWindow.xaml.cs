@@ -283,6 +283,10 @@ namespace SonicRoute
 
         private async Task RefreshOverviewDevicesVolumeAsync()
         {
+            // 全局麦克风状态与应用无关，始终刷新按钮文案
+            bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
+            OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
+
             var outs = DisplayDevices(VisibleOutputs).ToList();
 
             if (_overviewApp == null)
@@ -310,11 +314,8 @@ namespace SonicRoute
 
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
             bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
-            bool inMuted = await Task.Run(() => SessionVolumeService.IsInputMuted(pid));
             SetVolumeUi(vol >= 0 ? vol : null);
             OverviewMuteButton.Content = L10n.T(muted ? "Ov.Unmute" : "Ov.Mute");
-            // 同步麦克风静音按钮文案（切换应用后不残留旧状态）
-            OverviewMicMuteButton.Content = L10n.T(inMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
         }
 
         private void SetVolumeUi(int? percent)
@@ -431,21 +432,10 @@ namespace SonicRoute
 
         private async void OverviewMicMuteButton_Click(object sender, RoutedEventArgs e)
         {
-            var app = _overviewApp;
-            if (app == null)
-            {
-                OverviewStatusText.Text = L10n.T("Ov.MicNoSession");
-                return;
-            }
-            MarkLastUsed(app);
-            var r = await Task.Run(() => SessionVolumeService.ToggleInputMuteChecked((int)app.ProcessId));
-            if (!r.Applied)
-            {
-                OverviewStatusText.Text = L10n.T("Ov.MicNoSession");
-                return;
-            }
-            OverviewMicMuteButton.Content = L10n.T(r.Muted ? "Ov.MicUnmute" : "Ov.MuteMic");
-            OverviewStatusText.Text = L10n.T(r.Muted ? "Ov.MicMuted" : "Ov.MicUnmuted");
+            // 全局麦克风静音：静音/取消静音系统所有录音设备（与当前应用无关）
+            bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
+            OverviewMicMuteButton.Content = L10n.T(muted ? "Ov.MicUnmute" : "Ov.MuteMic");
+            OverviewStatusText.Text = L10n.T(muted ? "Ov.MicMuted" : "Ov.MicUnmuted");
         }
 
         private async void OverviewOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)

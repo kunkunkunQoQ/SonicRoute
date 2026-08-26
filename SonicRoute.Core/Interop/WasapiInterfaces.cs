@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.Core.Interop
@@ -140,5 +140,40 @@ namespace SonicRoute.Core.Interop
         int IsSystemSoundsSession();
         [PreserveSig]
         int SetDuckingPreference(int optOut);
+    }
+
+    // IAudioEndpointVolume : {5CDF2C82-841E-4546-9722-0CF74078229A}
+    // 扁平声明（RegisterControlChangeNotify 为 vtable 第 4 个方法）。
+    // SetMute 为第 12 个方法、GetMute 为第 13 个——用于设备级静音（全局麦克风静音）。
+    [ComImport, Guid("5CDF2C82-841E-4546-9722-0CF74078229A"),
+     InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IAudioEndpointVolume
+    {
+        [PreserveSig]
+        int RegisterControlChangeNotify([MarshalAs(UnmanagedType.Interface)] object pNotify);
+        [PreserveSig]
+        int UnregisterControlChangeNotify([MarshalAs(UnmanagedType.Interface)] object pNotify);
+        [PreserveSig]
+        int GetChannelCount(out uint pnChannelCount);
+        [PreserveSig]
+        int SetMasterVolumeLevel(float fLevelDB, ref Guid pguidEventContext);
+        [PreserveSig]
+        int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);
+        [PreserveSig]
+        int GetMasterVolumeLevel(out float pfLevelDB);
+        [PreserveSig]
+        int GetMasterVolumeLevelScalar(out float pfLevel);
+        [PreserveSig]
+        int SetChannelVolumeLevel(uint nChannel, float fLevelDB, ref Guid pguidEventContext);
+        [PreserveSig]
+        int SetChannelVolumeLevelScalar(uint nChannel, float fLevel, ref Guid pguidEventContext);
+        [PreserveSig]
+        int GetChannelVolumeLevel(uint nChannel, out float pfLevelDB);
+        [PreserveSig]
+        int GetChannelVolumeLevelScalar(uint nChannel, out float pfLevel);
+        [PreserveSig]
+        int SetMute(int bMute, ref Guid pguidEventContext);
+        [PreserveSig]
+        int GetMute(out int pbMute);
     }
 }

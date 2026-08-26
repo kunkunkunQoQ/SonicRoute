@@ -194,14 +194,19 @@ namespace SonicRoute
                     break;
 
                 case HotkeyActions.ActMuteInput:
-                    // 麦克风静音：与扬声器静音同一套语义，目标同样是面板/概览显示的当前应用。
-                    // 面板打开时走面板路径（同步按钮/状态行），否则直接对共享当前应用静音并 OSD。
-                    if (_quickPanel is { IsVisible: true } && await _quickPanel.MicMuteCurrentAppAsync())
-                        break;
-                    var mir = await Task.Run(() => SessionVolumeService.ToggleInputMuteChecked(pid));
-                    _trayWheel?.ShowOsd(name, mir.Applied
-                        ? (mir.Muted ? "🎤 麦克风已静音" : "🎤 取消麦克风静音")
-                        : "⚠ 该应用无输入会话");
+                    // 全局麦克风静音：静音/取消静音系统所有录音设备（与当前应用无关）。
+                    // 面板打开时走面板路径（同步按钮/状态行），否则直接全局静音并 OSD。
+                    if (_quickPanel is { IsVisible: true })
+                    {
+                        await _quickPanel.ToggleGlobalMicMuteAsync();
+                    }
+                    else
+                    {
+                        bool gm = await Task.Run(() => GlobalMicMuteService.Toggle());
+                        _trayWheel?.ShowOsd(name, gm
+                            ? L10n.T("Ov.MicMuted")
+                            : L10n.T("Ov.MicUnmuted"));
+                    }
                     break;
 
                 case HotkeyActions.ActVolUp:

@@ -46,3 +46,14 @@ else if (mode == "inmute" && pid > 0)
     bool after = SessionVolumeService.IsInputMuted(pid);
     Console.WriteLine($"pid={pid} before={before} retMuted={r.Muted} applied={r.Applied} after={after}");
 }
+else if (mode == "gmiccheck")
+{
+    Console.WriteLine($"allMicsMuted={GlobalMicMuteService.IsMuted()}");
+}
+else if (mode == "gmic")
+{
+    bool before = GlobalMicMuteService.IsMuted();
+    bool after = GlobalMicMuteService.Toggle();
+    bool real = GlobalMicMuteService.IsMuted();
+    Console.WriteLine($"before={before} ret={after} real={real}");
+}

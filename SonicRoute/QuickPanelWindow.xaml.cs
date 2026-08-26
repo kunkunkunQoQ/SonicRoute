@@ -188,12 +188,12 @@ namespace SonicRoute
             var vol = await Task.Run(() =>
             {
                 SessionVolumeService.Refresh();
-                return (pct: SessionVolumeService.GetVolumePercent(pid), muted: SessionVolumeService.IsMuted(pid),
-                        inMuted: SessionVolumeService.IsInputMuted(pid));
+                return (pct: SessionVolumeService.GetVolumePercent(pid), muted: SessionVolumeService.IsMuted(pid));
             });
 
-            // 无论有无输出会话，都同步麦克风静音按钮文案（切换应用后不残留旧状态）
-            MicMuteButton.Content = L10n.T(vol.inMuted ? "Qp.MicUnmute" : "Qp.MicMute");
+            // 无论有无输出会话，都同步麦克风静音按钮文案（全局状态与应用无关，切换应用后不残留旧状态）
+            bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
+            MicMuteButton.Content = L10n.T(globalMicMuted ? "Qp.MicUnmute" : "Qp.MicMute");
 
             if (vol.pct >= 0)
             {
@@ -375,24 +375,17 @@ namespace SonicRoute
 
         private async void MicMuteButton_Click(object sender, RoutedEventArgs e)
         {
-            await MicMuteCurrentAppAsync();
+            await ToggleGlobalMicMuteAsync();
         }
 
-        /// <summary>静音/取消静音当前应用的麦克风（输入会话）。与扬声器静音同一套语义
-        /// （读组内第一个、写遍历全部），面板按钮与麦克风静音快捷键共用；无输入会话时
-        /// 状态行提示并返回 false。返回是否真正执行。</summary>
-        internal async Task<bool> MicMuteCurrentAppAsync()
+        /// <summary>全局麦克风静音：直接静音/取消静音系统所有录音设备（设备级），
+        /// 与当前应用无关，所有应用录音都生效。面板按钮与麦克风静音快捷键共用。
+        /// 返回是否已静音。</summary>
+        internal async Task<bool> ToggleGlobalMicMuteAsync()
         {
-            if (_currentApp == null) return false;
-            MarkLastUsed(_currentApp);
-            var r = await Task.Run(() => SessionVolumeService.ToggleInputMuteChecked((int)_currentApp.ProcessId));
-            if (!r.Applied)
-            {
-                PanelStatusText.Text = L10n.T("Qp.MicNoSession");
-                return false;
-            }
-            MicMuteButton.Content = L10n.T(r.Muted ? "Qp.MicUnmute" : "Qp.MicMute");
-            PanelStatusText.Text = L10n.T(r.Muted ? "Qp.MicMuted" : "Qp.MicUnmuted");
+            bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
+            MicMuteButton.Content = L10n.T(muted ? "Qp.MicUnmute" : "Qp.MicMute");
+            PanelStatusText.Text = L10n.T(muted ? "Qp.MicMuted" : "Qp.MicUnmuted");
             return true;
         }
 
