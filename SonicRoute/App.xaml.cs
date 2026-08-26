@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.05",
+                Text = "音跃 SonicRoute v1.05r",
                 Visible = true
             };
 

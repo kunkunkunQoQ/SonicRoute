@@ -114,7 +114,7 @@
             <DockPanel>
                 <TextBlock Text="🎧 音跃"
                            FontSize="15" FontWeight="Bold" Foreground="{DynamicResource Theme.TextPrimary}"/>
-                <TextBlock Text="v1.05" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
+                <TextBlock Text="v1.05r" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
                            VerticalAlignment="Center" HorizontalAlignment="Right"/>
             </DockPanel>
             <TextBlock x:Name="AppNameText"
