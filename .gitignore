@@ -22,3 +22,8 @@ TestResults/
 # 临时附件
 _attach_tmp.bin
 屏幕截图 *.png
+
+# 根目录截图（已归档到 docs/images）
+/快速面板.png
+/默认调节的应用设置.png
+/多种快捷键.png
