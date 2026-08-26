@@ -74,7 +74,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.05r3 · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.05r4 · 困困困",
 
                 // 导航
                 ["Nav.Overview"] = "概览",

@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.05r3",
+                Text = "音跃 SonicRoute v1.05r4",
                 Visible = true
             };
 
@@ -172,20 +172,22 @@ namespace SonicRoute
             var cfg = ConfigService.Load();
             var apps = await Task.Run(() => AudioService.GetApps());
             var cur = CurrentAppService.Current;
-            int pid;
-            string name;
-            if (cur != null)
+            AudioAppInfo? target = cur;
+            if (target == null)
             {
-                pid = (int)cur.ProcessId;
-                name = AppDisplayName.Get(cur);
+                // 共享 Current 为空（未打开面板 / last、fixed 模式下监听不写 Current）时：
+                // 优先"最近有音频的前台应用"（1.5s 监听维护，任意模式都在记录）。它比快捷键
+                // 按下瞬间的前台更稳定、更贴近用户真正在用的应用，且与面板/概览同源——
+                // 避免按快捷键瞬间前台抖动 / 被无关有音频应用占用导致识别错对象。
+                target = CurrentAppService.LastForegroundAudio;
+                if (target != null && !apps.Any(a => a.ProcessId == target.ProcessId))
+                    target = null;              // 该应用已退出，重新解析
+                if (target == null)
+                    target = CurrentAppService.Resolve(apps, cfg);
             }
-            else
-            {
-                var target = CurrentAppService.Resolve(apps, cfg);
-                if (target == null) return;
-                pid = (int)target.ProcessId;
-                name = AppDisplayName.Get(target);
-            }
+            if (target == null) return;
+            int pid = (int)target.ProcessId;
+            string name = AppDisplayName.Get(target);
             if (pid <= 0) return;
 
             switch (action)
