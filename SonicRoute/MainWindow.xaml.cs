@@ -310,8 +310,11 @@ namespace SonicRoute
 
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
             bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
+            bool inMuted = await Task.Run(() => SessionVolumeService.IsInputMuted(pid));
             SetVolumeUi(vol >= 0 ? vol : null);
             OverviewMuteButton.Content = L10n.T(muted ? "Ov.Unmute" : "Ov.Mute");
+            // 同步麦克风静音按钮文案（切换应用后不残留旧状态）
+            OverviewMicMuteButton.Content = L10n.T(inMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
         }
 
         private void SetVolumeUi(int? percent)

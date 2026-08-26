@@ -188,8 +188,12 @@ namespace SonicRoute
             var vol = await Task.Run(() =>
             {
                 SessionVolumeService.Refresh();
-                return (pct: SessionVolumeService.GetVolumePercent(pid), muted: SessionVolumeService.IsMuted(pid));
+                return (pct: SessionVolumeService.GetVolumePercent(pid), muted: SessionVolumeService.IsMuted(pid),
+                        inMuted: SessionVolumeService.IsInputMuted(pid));
             });
+
+            // 无论有无输出会话，都同步麦克风静音按钮文案（切换应用后不残留旧状态）
+            MicMuteButton.Content = L10n.T(vol.inMuted ? "Qp.MicUnmute" : "Qp.MicMute");
 
             if (vol.pct >= 0)
             {

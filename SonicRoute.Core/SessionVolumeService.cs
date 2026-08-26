@@ -259,14 +259,22 @@ namespace SonicRoute.Core
         }
 
         /// <summary>切换麦克风静音并报告是否真正生效（(新静音状态, 是否生效)）。
-        /// 应用没有任何输入会话时返回 (false, false)，避免误报"已静音"却什么都没做。</summary>
+        /// 应用没有任何输入会话时返回 (false, false)，避免误报"已静音"却什么都没做。
+        ///
+        /// 关键：输入会话（eCapture）比输出会话更易随写入重建/失活（应用没在录音时会话处于
+        /// 半活跃态，SetMute 返回成功但读回仍是旧值），因此写入后必须强制重新枚举会话并
+        /// 重读真实状态，否则按钮文案与实际静音状态错乱（"静音不稳定"根因）。</summary>
         public static (bool Muted, bool Applied) ToggleInputMuteChecked(int pid)
         {
             var list = FindCaptureVolumes(pid, 5);
             if (list == null || list.Count == 0) return (false, false);
             bool m = IsInputMuted(pid);
             bool ok = SetInputMute(pid, !m);
-            return (!m, ok);
+            if (!ok) return (!m, false);
+            // 强制重新枚举，读写入后的真实状态
+            Refresh(true);
+            bool actual = IsInputMuted(pid);
+            return (actual, true);
         }
 
         /// <summary>重新枚举所有播放/录音设备的会话，按 PID 缓存其全部 eRender / eCapture 会话
