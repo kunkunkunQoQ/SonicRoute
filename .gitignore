@@ -32,3 +32,6 @@ _attach_tmp.bin
 
 # ===== 源码归档（本地备份，不入仓库）=====
 /SonicRoute源码/
+
+# Release 临时 JSON
+/rel*.json
