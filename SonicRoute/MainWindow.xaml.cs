@@ -560,6 +560,7 @@ private List<AppItem> _appItems = new();
         {
             var apps = await Task.Run(() => AudioService.GetApps());
             _appItems = apps.Select(AppItem.From).ToList();
+            foreach (var item in _appItems) item.RefreshAutoSwitchState();
             AppsListBox.ItemsSource = null;
             AppsListBox.ItemsSource = _appItems;
         }
@@ -598,6 +599,36 @@ private List<AppItem> _appItems = new();
             bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
             SetAppsVolumeUi(vol >= 0 ? vol : null);
             AppsMuteButton.Content = L10n.T(muted ? "Apps.Unmute" : "Apps.Mute");
+            UpdateAppsDisableAutoButton();
+        }
+
+        /// <summary>切换选中应用的"禁用自动切换"状态（不影响手动选择，只影响自动检测/跟随）。</summary>
+        private async void AppsDisableAutoButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_appsSelected == null) return;
+            var name = _appsSelected.ProcessName;
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            var cfg = ConfigService.Load();
+            if (cfg.DisabledAutoSwitchApps.Contains(name)) cfg.DisabledAutoSwitchApps.Remove(name);
+            else cfg.DisabledAutoSwitchApps.Add(name);
+            ConfigService.Save(cfg);
+
+            foreach (var item in _appItems)
+                if (string.Equals(item.ProcessName, name, StringComparison.OrdinalIgnoreCase))
+                    item.RefreshAutoSwitchState();
+            UpdateAppsDisableAutoButton();
+            AppsStatusText.Text = L10n.T(cfg.DisabledAutoSwitchApps.Contains(name)
+                ? "Apps.DisableAutoOn" : "Apps.DisableAuto");
+            await Task.CompletedTask;
+        }
+
+        /// <summary>按当前选中应用是否禁用自动切换刷新按钮文字。</summary>
+        private void UpdateAppsDisableAutoButton()
+        {
+            bool disabled = _appsSelected != null && !string.IsNullOrWhiteSpace(_appsSelected.ProcessName)
+                && ConfigService.Load().DisabledAutoSwitchApps.Contains(_appsSelected.ProcessName);
+            AppsDisableAutoButton.Content = L10n.T(disabled ? "Apps.DisableAutoOn" : "Apps.DisableAuto");
         }
 
         private void SetAppsVolumeUi(int? percent)
@@ -934,7 +965,7 @@ private List<AppItem> _appItems = new();
                 : accent switch
                 {
                     "green" => Color.FromRgb(0x22, 0xC5, 0x5E),
-                    "purple" => Color.FromRgb(0x8B, 0x5C, 0xF6),
+                    "purple" => Color.FromRgb(0xEC, 0x48, 0x99), // 粉色 #EC4899（与 ThemeService 一致）
                     _ => Color.FromRgb(0x2F, 0x80, 0xED)
                 };
             RText.Text = color.R.ToString();
@@ -971,6 +1002,9 @@ private List<AppItem> _appItems = new();
             ThemeService.Apply(mode, accent);
             // 主题背景色变化后，透明度要基于新背景色重新生成
             ThemeService.ApplyBackgroundOpacity(_config.BackgroundOpacity);
+            // 强调色变化后刷新应用列表"禁用自动切换"状态点的反色
+            if (_appItems != null)
+                foreach (var item in _appItems) item.RefreshAutoSwitchState();
         }
 
         private void Rgb_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

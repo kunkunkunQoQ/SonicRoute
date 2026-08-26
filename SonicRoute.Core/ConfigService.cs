@@ -25,6 +25,9 @@ namespace SonicRoute.Core
         /// <summary>应用自定义名称：进程名 → 显示名（空则用默认名称）。通知/列表/面板/概览统一显示。</summary>
         public Dictionary<string, string> AppNames { get; set; } = new();
 
+        /// <summary>禁用自动切换的应用（进程名列表）：这些应用不会被自动选为"当前应用"（前台跟随/最近使用等），但仍可手动选择。</summary>
+        public List<string> DisabledAutoSwitchApps { get; set; } = new();
+
         /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
         public string Language { get; set; } = "";
 

@@ -14,6 +14,46 @@ namespace SonicRoute
         public string Label => AppDisplayName.Get(Info);
         public ImageSource? Icon { get; init; }
 
+        private bool _isAutoSwitchDisabled;
+        private System.Windows.Media.Brush _dotBrush = System.Windows.Media.Brushes.Transparent;
+
+        /// <summary>该应用是否禁用了自动切换为当前应用（影响自动检测，不影响手动选择）。</summary>
+        public bool IsAutoSwitchDisabled
+        {
+            get => _isAutoSwitchDisabled;
+            set
+            {
+                if (_isAutoSwitchDisabled != value)
+                {
+                    _isAutoSwitchDisabled = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAutoSwitchDisabled)));
+                }
+            }
+        }
+
+        /// <summary>图标右上角状态点颜色：禁用了自动切换时为主题色 RGB 反色，否则透明。</summary>
+        public System.Windows.Media.Brush DotBrush
+        {
+            get => _dotBrush;
+            set
+            {
+                if (!ReferenceEquals(_dotBrush, value))
+                {
+                    _dotBrush = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DotBrush)));
+                }
+            }
+        }
+
+        /// <summary>按当前配置与主题刷新"禁用自动切换"状态（应用列表刷新 / 切换主题强调色时调用）。</summary>
+        public void RefreshAutoSwitchState()
+        {
+            bool disabled = !string.IsNullOrWhiteSpace(ProcessName) &&
+                            ConfigService.Load().DisabledAutoSwitchApps.Contains(ProcessName);
+            IsAutoSwitchDisabled = disabled;
+            DotBrush = disabled ? ThemeService.GetInvertedAccentBrush() : System.Windows.Media.Brushes.Transparent;
+        }
+
         public override string ToString() => Label;
 
         public event PropertyChangedEventHandler? PropertyChanged;

@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SonicRoute"
-        Title="音跃 SonicRoute v1.05r4"
+        Title="音跃 SonicRoute v1.06"
         Icon="SonicRoute.png"
         Width="920" Height="620"
         MinWidth="780" MinHeight="540"
@@ -13,6 +13,8 @@
         ResizeMode="NoResize"
         FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
     <Window.Resources>
+        <!-- bool → 可见性（禁用自动切换状态点） -->
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <!-- 左导航项 -->
         <Style x:Key="NavItem" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
@@ -221,8 +223,15 @@
         <!-- 应用项模板（图标 + 名称，用于概览应用切换与列表） -->
         <DataTemplate x:Key="AppItemTemplate">
             <StackPanel Orientation="Horizontal">
-                <Image Source="{Binding Icon}" Width="18" Height="18" Margin="0,0,8,0"
-                       SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <Grid Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <Image Source="{Binding Icon}" Width="18" Height="18"
+                           SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <!-- 禁用自动切换的应用：图标右上角主题色 RGB 反色小圆点 -->
+                    <Ellipse Width="6" Height="6" HorizontalAlignment="Right" VerticalAlignment="Top"
+                             Margin="0,-1,-1,0" Fill="{Binding DotBrush}"
+                             Visibility="{Binding IsAutoSwitchDisabled, Converter={StaticResource BoolToVis}}"
+                             ToolTip="已禁用自动切换"/>
+                </Grid>
                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="13"
                            TextTrimming="CharacterEllipsis" MaxWidth="230"/>
             </StackPanel>
@@ -250,7 +259,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="🎧 音跃 SonicRoute v1.05r4"
+                <TextBlock Text="🎧 音跃 SonicRoute v1.06"
                            FontSize="13.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource Theme.TextPrimary}"
                            VerticalAlignment="Center" Margin="16,0,0,0"
@@ -438,8 +447,12 @@
                         <DockPanel Margin="0,4,0,0">
                             <Button x:Name="AppsMuteButton"
                                     Content="{Binding [Apps.Mute], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" Width="96" HorizontalAlignment="Left"
+                                    Style="{StaticResource GhostButton}" Width="96"
                                     Click="AppsMuteButton_Click"/>
+                            <Button x:Name="AppsDisableAutoButton"
+                                    Content="{Binding [Apps.DisableAuto], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource GhostButton}" MinWidth="132" Margin="8,0,0,0"
+                                    Click="AppsDisableAutoButton_Click"/>
                             <TextBlock x:Name="AppsStatusText" Text=""
                                        FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                        VerticalAlignment="Center" HorizontalAlignment="Left"

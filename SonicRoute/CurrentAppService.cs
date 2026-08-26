@@ -57,38 +57,46 @@ namespace SonicRoute
         }
 
         /// <summary>在前台应用列表里匹配一个音频应用：先精确 PID，再按进程名（解决哔哩哔哩等
-        /// 客户端 UI 进程与音频 helper 进程同名不同 PID 的情况）。</summary>
+        /// 客户端 UI 进程与音频 helper 进程同名不同 PID 的情况）。已"禁用自动切换"的应用不参与匹配。</summary>
         private static AudioAppInfo? MatchForeground(List<AudioAppInfo> apps, int fgPid)
         {
+            var disabled = ConfigService.Load().DisabledAutoSwitchApps;
+            bool Off(AudioAppInfo a) =>
+                !string.IsNullOrWhiteSpace(a.ProcessName) && disabled.Contains(a.ProcessName);
+
             var exact = apps.FirstOrDefault(a => a.ProcessId == (uint)fgPid);
-            if (exact != null) return exact;
+            if (exact != null && !Off(exact)) return exact;
             string? fgName = ForegroundAppService.GetProcessNameSafe(fgPid);
             if (string.IsNullOrWhiteSpace(fgName)) return null;
             return apps.FirstOrDefault(a =>
-                string.Equals(a.ProcessName, fgName, StringComparison.OrdinalIgnoreCase));
+                string.Equals(a.ProcessName, fgName, StringComparison.OrdinalIgnoreCase) && !Off(a));
         }
 
         public static AudioAppInfo? Resolve(List<AudioAppInfo> apps, AppConfig cfg)
         {
             if (apps == null || apps.Count == 0) return null;
 
+            var disabled = cfg.DisabledAutoSwitchApps;
+            bool Off(AudioAppInfo a) =>
+                !string.IsNullOrWhiteSpace(a.ProcessName) && disabled.Contains(a.ProcessName);
+
             AudioAppInfo? ByName(string? n) =>
                 string.IsNullOrWhiteSpace(n) ? null :
                 apps.FirstOrDefault(x => string.Equals(x.ProcessName, n, StringComparison.OrdinalIgnoreCase));
 
-            // 1) 用户显式指定：last / fixed 精确匹配
+            // 1) 用户显式指定：last / fixed 精确匹配（被禁用自动切换的应用不自动选中，仍可手动选择）
             if (cfg.DefaultAppMode == "last")
             {
                 var t = ByName(cfg.LastUsedAppName);
-                if (t != null) return t;
+                if (t != null && !Off(t)) return t;
             }
             else if (cfg.DefaultAppMode == "fixed")
             {
                 var t = ByName(cfg.FixedAppName);
-                if (t != null) return t;
+                if (t != null && !Off(t)) return t;
             }
 
-            // 2) 直接前台应用（有音频、非本程序）——先精确 PID，再按进程名
+            // 2) 直接前台应用（有音频、非本程序）——先精确 PID，再按进程名；MatchForeground 已跳过禁用应用
             int own = Environment.ProcessId;
             int fg = ForegroundAppService.GetForegroundProcessId();
             if (fg > 0 && fg != own)
@@ -97,14 +105,14 @@ namespace SonicRoute
                 if (a != null) return a;
             }
 
-            // 3) 最近一次有音频的前台应用（面板/概览在前台时仍能回到用户正在用的应用）
+            // 3) 最近一次有音频的前台应用（跳过禁用；面板/概览在前台时仍能回到用户正在用的应用）
             var last = LastForegroundAudio;
-            if (last != null && apps.Any(x => x.ProcessId == last.ProcessId)) return last;
+            if (last != null && apps.Any(x => x.ProcessId == last.ProcessId) && !Off(last)) return last;
 
-            // 4) 上次操作的应用；5) 兜底
+            // 4) 上次操作的应用；5) 兜底（跳过禁用，全部禁用时回退列表第一个）
             var byLast = ByName(cfg.LastUsedAppName);
-            if (byLast != null) return byLast;
-            return apps[0];
+            if (byLast != null && !Off(byLast)) return byLast;
+            return apps.FirstOrDefault(a => !Off(a)) ?? apps[0];
         }
 
         private static int _ownPid;

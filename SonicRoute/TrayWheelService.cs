@@ -151,7 +151,10 @@ namespace SonicRoute
             int pid = ResolveTargetPid();
             if (pid <= 0) { ShowOsd("—", "无音频会话"); return; }
 
-            string? name = ForegroundAppService.GetProcessNameSafe(pid) ?? "应用";
+            // OSD 应用名优先显示用户自定义名称（与快捷键/面板/通知一致），
+            // 未设置自定义名则显示进程名本身，两者都拿不到才显示"应用"
+            string proc = ForegroundAppService.GetProcessNameSafe(pid) ?? "";
+            string name = AppDisplayName.Get(proc, string.IsNullOrWhiteSpace(proc) ? "应用" : proc);
             int cur = SessionVolumeService.GetVolumePercent(pid);
             if (cur < 0) { ShowOsd(name, "无法读取音量"); return; }
             int next = Math.Clamp(cur + (delta > 0 ? 4 : -4), 0, 100);

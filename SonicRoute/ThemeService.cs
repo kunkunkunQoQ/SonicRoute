@@ -135,6 +135,25 @@ namespace SonicRoute
             }
         }
 
+        /// <summary>当前强调色的 RGB 反色画刷（用于"禁用自动切换"状态点等）。</summary>
+        public static System.Windows.Media.Brush GetInvertedAccentBrush()
+        {
+            try
+            {
+                if (Application.Current?.Resources["Theme.Accent"] is SolidColorBrush b)
+                {
+                    var c = b.Color;
+                    return new SolidColorBrush(Color.FromRgb(
+                        (byte)(255 - c.R), (byte)(255 - c.G), (byte)(255 - c.B)));
+                }
+            }
+            catch
+            {
+                // 取色失败回退透明
+            }
+            return System.Windows.Media.Brushes.Transparent;
+        }
+
         private static Color Blend(Color a, Color b, double t)
         {
             byte C(byte x, byte y) => (byte)Math.Clamp((int)Math.Round(x * (1 - t) + y * t), 0, 255);

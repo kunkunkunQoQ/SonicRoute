@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.05r4",
+                Text = "音跃 SonicRoute v1.06",
                 Visible = true
             };
 
@@ -167,24 +167,12 @@ namespace SonicRoute
                 return;
             }
 
-            // 静音/切设备的目标 = 快捷面板/概览显示的当前应用（共享 CurrentAppService.Current）。
-            // 只要 Current 已确定就直接用它（含 PID），不回退到列表第一个，避免缓存抖动时静音错对象。
+            // 静音/切设备/音量的目标应用：与托盘滚轮调音量完全一致——直接走
+            // CurrentAppService.Resolve 同一套规则（last/fixed → 前台 → 最近使用 → 兜底），
+            // 保证快捷键和"鼠标放任务栏滚轮调音量"永远解析出同一个应用。
             var cfg = ConfigService.Load();
             var apps = await Task.Run(() => AudioService.GetApps());
-            var cur = CurrentAppService.Current;
-            AudioAppInfo? target = cur;
-            if (target == null)
-            {
-                // 共享 Current 为空（未打开面板 / last、fixed 模式下监听不写 Current）时：
-                // 优先"最近有音频的前台应用"（1.5s 监听维护，任意模式都在记录）。它比快捷键
-                // 按下瞬间的前台更稳定、更贴近用户真正在用的应用，且与面板/概览同源——
-                // 避免按快捷键瞬间前台抖动 / 被无关有音频应用占用导致识别错对象。
-                target = CurrentAppService.LastForegroundAudio;
-                if (target != null && !apps.Any(a => a.ProcessId == target.ProcessId))
-                    target = null;              // 该应用已退出，重新解析
-                if (target == null)
-                    target = CurrentAppService.Resolve(apps, cfg);
-            }
+            var target = CurrentAppService.Resolve(apps, cfg);
             if (target == null) return;
             int pid = (int)target.ProcessId;
             string name = AppDisplayName.Get(target);
