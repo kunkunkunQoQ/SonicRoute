@@ -2,7 +2,7 @@
 
 > Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出设备切到耳机、音箱、显示器或虚拟设备，改完立即生效。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.2** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.3** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
 
 底层完全基于 **EarTrumpet 已验证的 Per-App Audio Routing 机制** 实现（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`），实测通过。
 
@@ -28,8 +28,8 @@
 ## 🚀 快速开始
 
 1. 前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 选择版本下载：
-   - **绿色免安装版**（`SonicRoute-v1.0.2.exe` / `SonicRoute-v1.0.2.zip`）：无需任何环境，下载即用
-   - **轻量版**（`SonicRoute-v1.0.2-Lite.exe` / `SonicRoute-v1.0.2-Lite.zip`）：体积极小，需已装 .NET 8 Desktop Runtime
+   - **绿色免安装版**（`SonicRoute-v1.0.3.exe` / `SonicRoute-v1.0.3.zip`）：无需任何环境，下载即用
+   - **轻量版**（`SonicRoute-v1.0.3-Lite.exe` / `SonicRoute-v1.0.3-Lite.zip`）：体积极小，需已装 .NET 8 Desktop Runtime
 2. 双击运行（绿色免安装版已内置运行时）
 3. 程序驻留系统托盘：
    - **单击**托盘图标 → 快捷面板（当前应用切设备 / 调音量 / 静音 / 全局麦克风静音）
@@ -66,6 +66,8 @@
 <img src="docs/images/hotkeys.png" width="700" alt="多种快捷键">
 
 在「快捷键」页点击「修改」按下新组合键即可重新绑定，支持：增大/减小当前应用音量、切换当前应用快捷设备、静音当前应用、静音全局麦克风、打开快速面板。
+
+> 💡 上图为**作者的个人快捷键设置**，并非默认快捷键；默认值见下方「全局快捷键」表格，均可自定义。
 
 ## ⌨️ 全局快捷键
 
@@ -144,12 +146,17 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 安装需求 | 优点 | 缺点 |
 |---|---|---|---|---|---|
-| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.2.exe` / `SonicRoute-v1.0.2.zip` | ~155MB / ~64MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
-| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.2-Lite.exe` / `SonicRoute-v1.0.2-Lite.zip` | ~1.5MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
+| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.3.exe` / `SonicRoute-v1.0.3.zip` | ~155MB / ~64MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
+| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.3-Lite.exe` / `SonicRoute-v1.0.3-Lite.zip` | ~1.5MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
 
 **轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
 
 ## 📋 更新日志
+
+**v1.0.3**
+- 新增**应用自定义名称**：在「应用」页选中应用即可重命名，通知/面板/概览/应用列表统一显示新名称
+- 设置里"最近打开的程序"更名为"**最近使用的应用**"（8 种语言同步更新）
+- 应用列表排序优化：正在播放音频的应用自动置顶
 
 **v1.0.2**
 - 新增多语言 8 种（中/英/日/韩/法/德/西/俄），首次启动跟随系统，设置下拉切换（重启生效）

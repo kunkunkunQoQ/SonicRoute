@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.02",
+                Text = "音跃 SonicRoute v1.03",
                 Visible = true
             };
 
@@ -177,14 +177,14 @@ namespace SonicRoute
             if (cur != null)
             {
                 pid = (int)cur.ProcessId;
-                name = cur.Label;
+                name = AppDisplayName.Get(cur);
             }
             else
             {
                 var target = CurrentAppService.Resolve(apps, cfg);
                 if (target == null) return;
                 pid = (int)target.ProcessId;
-                name = target.Label;
+                name = AppDisplayName.Get(target);
             }
             if (pid <= 0) return;
 

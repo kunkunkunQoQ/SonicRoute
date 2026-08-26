@@ -1,4 +1,5 @@
-﻿using System.Windows.Media;
+using System.Windows.Media;
+using SonicRoute.Core;
 using SonicRoute.Core.Models;
 
 namespace SonicRoute
@@ -9,7 +10,7 @@ namespace SonicRoute
         public required AudioAppInfo Info { get; init; }
         public int ProcessId => (int)Info.ProcessId;
         public string ProcessName => Info.ProcessName ?? "";
-        public string Label => Info.Label;
+        public string Label => AppDisplayName.Get(Info);
         public ImageSource? Icon { get; init; }
 
         public override string ToString() => Label;

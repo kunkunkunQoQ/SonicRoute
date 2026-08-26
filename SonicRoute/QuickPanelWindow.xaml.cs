@@ -163,7 +163,7 @@ namespace SonicRoute
             if (app == null)
                 AppNameText.Text = L10n.T("Qp.NoAudio");
             else
-                AppNameText.Text = string.Format(L10n.T("Qp.CurrentApp"), app.Label);
+                AppNameText.Text = string.Format(L10n.T("Qp.CurrentApp"), AppDisplayName.Get(app));
         }
 
         private async Task RefreshCurrentAppDataAsync()
@@ -276,7 +276,7 @@ namespace SonicRoute
             var pid = (int)_currentApp.ProcessId;
             var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, dev.Id));
             if (ok)
-                PanelStatusText.Text = string.Format(L10n.T("Qp.SwitchOk"), "🔊 " + dev.DisplayName, _currentApp.Label);
+                PanelStatusText.Text = string.Format(L10n.T("Qp.SwitchOk"), "🔊 " + dev.DisplayName, AppDisplayName.Get(_currentApp));
             else
                 PanelStatusText.Text = $"✗ {msg}";
 

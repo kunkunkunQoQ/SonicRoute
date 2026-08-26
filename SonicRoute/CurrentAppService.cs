@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Threading;
@@ -17,7 +17,7 @@ namespace SonicRoute
     ///  4. 上次操作的应用；5. 任意第一个有音频应用。
     ///
     /// 前台监听（StartForegroundWatcher）：每 1.2s 记录"最近有音频的前台应用"；
-    /// 在 recent 模式下自动把当前应用切到该应用，实现"最近打开的程序"自动跟随抖音/游戏等。
+    /// 在 recent 模式下自动把当前应用切到该应用，实现"最近使用的程序"自动跟随抖音/游戏等。
     /// </summary>
     public static class CurrentAppService
     {

@@ -22,6 +22,9 @@ namespace SonicRoute.Core
         /// <summary>设备自定义名称：短 ID → 显示名（空则用默认名称）。</summary>
         public Dictionary<string, string> DeviceNames { get; set; } = new();
 
+        /// <summary>应用自定义名称：进程名 → 显示名（空则用默认名称）。通知/列表/面板/概览统一显示。</summary>
+        public Dictionary<string, string> AppNames { get; set; } = new();
+
         /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
         public string Language { get; set; } = "";
 
@@ -31,7 +34,7 @@ namespace SonicRoute.Core
         /// <summary>强调色：blue / green / purple。</summary>
         public string Accent { get; set; } = "blue";
 
-        /// <summary>默认打开的应用：recent(最近打开) / last(上次操作) / fixed(指定)。</summary>
+        /// <summary>默认打开的应用：recent(最近使用) / last(上次操作) / fixed(指定)。</summary>
         public string DefaultAppMode { get; set; } = "recent";
 
         /// <summary>指定默认应用（进程名）。</summary>
