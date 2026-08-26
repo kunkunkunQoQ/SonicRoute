@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.05r",
+                Text = "音跃 SonicRoute v1.05r2",
                 Visible = true
             };
 

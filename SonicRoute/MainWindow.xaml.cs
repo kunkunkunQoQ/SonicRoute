@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using SonicRoute.Core;
@@ -55,7 +57,41 @@ private List<AppItem> _appItems = new();
             Closed += (_, _) => CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
             // 快捷键内联录音：在窗口内直接捕获按键，免弹窗
             PreviewKeyDown += MainWindow_PreviewKeyDown;
+            // 自绘边框窗口：点击任务栏图标也能最小化（补 WS_MINIMIZEBOX + 拦截系统最小化命令）
+            SourceInitialized += MainWindow_SourceInitialized;
         }
+
+        /// <summary>窗口句柄就绪后：确保带"最小化框"样式，并拦截任务栏/系统发出的最小化命令。</summary>
+        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            const int GWL_STYLE = -16;
+            const int WS_MINIMIZEBOX = 0x00020000;
+            var style = GetWindowLong(hwnd, GWL_STYLE);
+            if ((style & WS_MINIMIZEBOX) == 0)
+                SetWindowLong(hwnd, GWL_STYLE, style | WS_MINIMIZEBOX);
+            HwndSource.FromHwnd(hwnd)?.AddHook(TaskbarMinimizeWndProc);
+        }
+
+        /// <summary>WM_SYSCOMMAND / SC_MINIMIZE：点击任务栏图标时让窗口真正最小化。</summary>
+        private IntPtr TaskbarMinimizeWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_SYSCOMMAND = 0x0112;
+            const int SC_MINIMIZE = 0xF020;
+            if (msg == WM_SYSCOMMAND && (((int)wParam) & 0xFFF0) == SC_MINIMIZE)
+            {
+                WindowState = WindowState.Minimized;
+                handled = true;
+            }
+            return IntPtr.Zero;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
         private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {

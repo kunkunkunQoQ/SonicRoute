@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace SonicRoute
@@ -74,7 +74,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.05r · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.05r2 · 困困困",
 
                 // 导航
                 ["Nav.Overview"] = "概览",
@@ -126,8 +126,8 @@ namespace SonicRoute
                 // 设置页
                 ["St.Settings"] = "设置",
                 ["St.KeepDevices"] = "保留的设备（快速切换界面只显示勾选的设备）",
-                ["St.SelectAll"] = "☑ 全选",
-                ["St.ClearAll"] = "☐ 取消全选",
+                ["St.SelectAll"] = "全选",
+                ["St.ClearAll"] = "取消全选",
                 ["St.Output"] = "🔊 播放设备（输出）",
                 ["St.DeviceNames"] = "设备名称",
                 ["St.DeviceNamesHint"] = "自定义设备显示名称（留空则用默认名称）",
@@ -255,8 +255,8 @@ namespace SonicRoute
 
                 ["St.Settings"] = "Settings",
                 ["St.KeepDevices"] = "Kept devices (quick switch shows only checked)",
-                ["St.SelectAll"] = "☑ Select all",
-                ["St.ClearAll"] = "☐ Select none",
+                ["St.SelectAll"] = "Select all",
+                ["St.ClearAll"] = "Select none",
                 ["St.Output"] = "🔊 Playback (Output)",
                 ["St.DeviceNames"] = "Device Names",
                 ["St.DeviceNamesHint"] = "Custom device display names (empty = default)",
@@ -380,8 +380,8 @@ namespace SonicRoute
 
                 ["St.Settings"] = "設定",
                 ["St.KeepDevices"] = "表示するデバイス（クイックスイッチにはチェック済みのみ表示）",
-                ["St.SelectAll"] = "☑ すべて選択",
-                ["St.ClearAll"] = "☐ 選択解除",
+                ["St.SelectAll"] = "すべて選択",
+                ["St.ClearAll"] = "選択解除",
                 ["St.Output"] = "🔊 再生デバイス（出力）",
                 ["St.DeviceNames"] = "デバイス名",
                 ["St.DeviceNamesHint"] = "カスタムデバイス名（空欄なら既定名）",
@@ -505,8 +505,8 @@ namespace SonicRoute
 
                 ["St.Settings"] = "설정",
                 ["St.KeepDevices"] = "표시할 장치（퀵 스위치에는 체크된 것만 표시）",
-                ["St.SelectAll"] = "☑ 모두 선택",
-                ["St.ClearAll"] = "☐ 선택 해제",
+                ["St.SelectAll"] = "모두 선택",
+                ["St.ClearAll"] = "선택 해제",
                 ["St.Output"] = "🔊 재생 장치（출력）",
                 ["St.DeviceNames"] = "장치 이름",
                 ["St.DeviceNamesHint"] = "사용자 지정 장치 이름（비우면 기본 이름）",
@@ -630,8 +630,8 @@ namespace SonicRoute
 
                 ["St.Settings"] = "Paramètres",
                 ["St.KeepDevices"] = "Périphériques conservés（le basculement rapide n'affiche que les cochés）",
-                ["St.SelectAll"] = "☑ Tout sélectionner",
-                ["St.ClearAll"] = "☐ Tout désélectionner",
+                ["St.SelectAll"] = "Tout sélectionner",
+                ["St.ClearAll"] = "Tout désélectionner",
                 ["St.Output"] = "🔊 Lecture（sortie）",
                 ["St.DeviceNames"] = "Noms des périphériques",
                 ["St.DeviceNamesHint"] = "Noms personnalisés（vide = nom par défaut）",
@@ -755,8 +755,8 @@ namespace SonicRoute
 
                 ["St.Settings"] = "Einstellungen",
                 ["St.KeepDevices"] = "Behaltene Geräte（Schnellumschaltung zeigt nur angehakte）",
-                ["St.SelectAll"] = "☑ Alle auswählen",
-                ["St.ClearAll"] = "☐ Auswahl aufheben",
+                ["St.SelectAll"] = "Alle auswählen",
+                ["St.ClearAll"] = "Auswahl aufheben",
                 ["St.Output"] = "🔊 Wiedergabe（Ausgabe）",
                 ["St.DeviceNames"] = "Gerätenamen",
                 ["St.DeviceNamesHint"] = "Benutzerdefinierte Gerätenamen（leer = Standardname）",
@@ -880,8 +880,8 @@ namespace SonicRoute
 
                 ["St.Settings"] = "Ajustes",
                 ["St.KeepDevices"] = "Dispositivos conservados（el cambio rápido solo muestra los marcados）",
-                ["St.SelectAll"] = "☑ Seleccionar todo",
-                ["St.ClearAll"] = "☐ Deseleccionar todo",
+                ["St.SelectAll"] = "Seleccionar todo",
+                ["St.ClearAll"] = "Deseleccionar todo",
                 ["St.Output"] = "🔊 Reproducción（salida）",
                 ["St.DeviceNames"] = "Nombres de dispositivos",
                 ["St.DeviceNamesHint"] = "Nombres personalizados（vacío = nombre predeterminado）",
@@ -1005,8 +1005,8 @@ namespace SonicRoute
 
                 ["St.Settings"] = "Настройки",
                 ["St.KeepDevices"] = "Сохранённые устройства（быстрое переключение показывает только отмеченные）",
-                ["St.SelectAll"] = "☑ Выбрать всё",
-                ["St.ClearAll"] = "☐ Снять выбор",
+                ["St.SelectAll"] = "Выбрать всё",
+                ["St.ClearAll"] = "Снять выбор",
                 ["St.Output"] = "🔊 Воспроизведение（вывод）",
                 ["St.DeviceNames"] = "Имена устройств",
                 ["St.DeviceNamesHint"] = "Пользовательские имена устройств（пусто = по умолчанию）",
