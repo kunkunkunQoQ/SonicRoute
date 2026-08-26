@@ -233,11 +233,6 @@ namespace SonicRoute
         // 概览页：默认应用解析 + 应用切换器
         // ==================================================================
 
-        private async void OverviewRefreshButton_Click(object sender, RoutedEventArgs e)
-        {
-            await RefreshOverviewAsync(force: true);
-        }
-
         private async Task RefreshOverviewAsync(bool force = false)
         {
             var apps = await Task.Run(() => AudioService.GetApps(force));
@@ -793,8 +788,11 @@ namespace SonicRoute
                 _suppressAppCombo = false;
                 FixedAppCombo.IsEnabled = _config.DefaultAppMode == "fixed";
 
-                // 语言
-                SetRadioByTag(LangZh, LangEn, null, _config.Language);
+                // 语言（下拉，重启生效）
+                LangCombo.ItemsSource = L10n.SupportedLanguages.Select(x => x.NativeName).ToList();
+                int li = Array.FindIndex(L10n.SupportedLanguages,
+                    x => string.Equals(x.Code, _config.Language, StringComparison.OrdinalIgnoreCase));
+                LangCombo.SelectedIndex = li < 0 ? 0 : li;
 
                 // 启动选项
                 SettingsAutoStart.IsChecked = _config.AutoStart;
@@ -830,16 +828,16 @@ namespace SonicRoute
             ConfigService.Save(_config);
         }
 
-        private void Language_Changed(object sender, RoutedEventArgs e)
+        private void Language_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!IsLoaded || _suppressSettings || sender is not RadioButton rb) return;
-            _config.Language = rb.Tag as string ?? "zh-CN";
+            if (!IsLoaded || _suppressSettings || LangCombo.SelectedIndex < 0) return;
+            if (LangCombo.SelectedIndex >= L10n.SupportedLanguages.Length) return;
+            var code = L10n.SupportedLanguages[LangCombo.SelectedIndex].Code;
+            if (string.Equals(code, _config.Language, StringComparison.OrdinalIgnoreCase)) return;
+            _config.Language = code;
             ConfigService.Save(_config);
-            L10n.Instance.SetLanguage(_config.Language);
-            // 代码生成的部分文本需要手动刷新；GetApps 带缓存，重复调用不会重复枚举
-            BuildHotkeyList();
-            _ = RefreshOverviewAsync();
-            if (AppsPage.Visibility == Visibility.Visible) _ = LoadAppsAsync();
+            // 语言更改在下次启动生效：仅提示，不刷新当前界面
+            ((App)Application.Current).ShowOsd(L10n.T("St.Language"), L10n.T("St.LangRestart"));
         }
 
         private void LoadTheme()

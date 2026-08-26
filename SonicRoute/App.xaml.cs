@@ -29,6 +29,12 @@ namespace SonicRoute
         {
             base.OnStartup(e);
             var config = ConfigService.Load();
+            // 首次启动（未设置过语言）跟随系统语言，之后使用配置的语言
+            if (string.IsNullOrWhiteSpace(config.Language))
+            {
+                config.Language = DetectSystemLanguage();
+                ConfigService.Save(config);
+            }
             L10n.Instance.SetLanguage(config.Language);
             ThemeService.Apply(config.ThemeMode, config.Accent);
             ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
@@ -97,6 +103,9 @@ namespace SonicRoute
             else if (showMain)
                 Dispatcher.BeginInvoke(ShowMainWindow);
         }
+
+        /// <summary>右上角 OSD 提示（托盘滚轮/快捷键/设置提示共用）。</summary>
+        internal void ShowOsd(string app, string text) => _trayWheel?.ShowOsd(app, text);
 
         internal void ToggleQuickPanel()
         {
@@ -291,6 +300,31 @@ namespace SonicRoute
             try { _trayIcon.Icon?.Dispose(); } catch { }
             _trayIcon.Dispose();
             _trayIcon = null;
+        }
+
+        /// <summary>首次启动：按 Windows 系统 UI 语言匹配到支持的语言；未匹配则默认英文。</summary>
+        private static string DetectSystemLanguage()
+        {
+            try
+            {
+                var ci = System.Globalization.CultureInfo.InstalledUICulture;
+                string two = ci?.TwoLetterISOLanguageName?.ToLowerInvariant() ?? "";
+                return two switch
+                {
+                    "zh" => "zh-CN",
+                    "ja" => "ja-JP",
+                    "ko" => "ko-KR",
+                    "fr" => "fr-FR",
+                    "de" => "de-DE",
+                    "es" => "es-ES",
+                    "ru" => "ru-RU",
+                    _ => "en-US"
+                };
+            }
+            catch
+            {
+                return "en-US";
+            }
         }
     }
 }

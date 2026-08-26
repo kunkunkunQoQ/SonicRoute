@@ -169,7 +169,7 @@
                             Margin="0,0,6,0" Click="MuteButton_Click"/>
                     <Button x:Name="MicMuteButton"
                             Content="{Binding [Qp.MicMute], Source={x:Static local:L10n.Instance}}"
-                            Style="{StaticResource FootButton}" Width="104" Height="28"
+                            Style="{StaticResource FootButton}" MinWidth="136" Height="28"
                             Click="MicMuteButton_Click"/>
                 </StackPanel>
                 <TextBlock x:Name="PanelStatusText" Text=""

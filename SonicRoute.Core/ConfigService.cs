@@ -22,8 +22,8 @@ namespace SonicRoute.Core
         /// <summary>设备自定义名称：短 ID → 显示名（空则用默认名称）。</summary>
         public Dictionary<string, string> DeviceNames { get; set; } = new();
 
-        /// <summary>界面语言：zh-CN / en-US。</summary>
-        public string Language { get; set; } = "zh-CN";
+        /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
+        public string Language { get; set; } = "";
 
         /// <summary>主题模式：system / light / dark。</summary>
         public string ThemeMode { get; set; } = "system";

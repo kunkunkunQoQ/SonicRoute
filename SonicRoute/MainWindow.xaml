@@ -272,7 +272,7 @@
 
         <!-- ======================= 左侧导航 ======================= -->
         <Border Grid.Column="0"
-                Background="{DynamicResource Theme.WindowBgAlpha}"
+                Background="Transparent"
                 BorderBrush="{DynamicResource Theme.Border}"
                 BorderThickness="0,0,1,0">
             <StackPanel Margin="14,20,14,16">
@@ -309,21 +309,16 @@
 
                 <!-- 当前应用（可切换） -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                    <DockPanel>
-                        <Button x:Name="OverviewRefreshButton" DockPanel.Dock="Right"
-                                Content="{Binding [Ov.Refresh], Source={x:Static local:L10n.Instance}}"
-                                Style="{StaticResource GhostButton}" Click="OverviewRefreshButton_Click"/>
-                        <StackPanel>
-                            <TextBlock Text="{Binding [Ov.CurrentApp], Source={x:Static local:L10n.Instance}}"
-                                       Style="{StaticResource SectionTitle}"/>
-                            <ComboBox x:Name="OverviewAppCombo" Style="{StaticResource SelCombo}"
-                                      ItemTemplate="{StaticResource AppItemTemplate}"
-                                      SelectionChanged="OverviewAppCombo_SelectionChanged"/>
-                            <TextBlock x:Name="OverviewAppPidText" Text=""
-                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       Margin="0,4,0,0"/>
-                        </StackPanel>
-                    </DockPanel>
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Ov.CurrentApp], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource SectionTitle}"/>
+                        <ComboBox x:Name="OverviewAppCombo" Style="{StaticResource SelCombo}"
+                                  ItemTemplate="{StaticResource AppItemTemplate}"
+                                  SelectionChanged="OverviewAppCombo_SelectionChanged"/>
+                        <TextBlock x:Name="OverviewAppPidText" Text=""
+                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
                 </Border>
 
                 <!-- 输出设备 -->
@@ -374,7 +369,7 @@
                                         Click="OverviewMuteButton_Click"/>
                                 <Button x:Name="OverviewMicMuteButton"
                                         Content="{Binding [Ov.MuteMic], Source={x:Static local:L10n.Instance}}"
-                                        Style="{StaticResource GhostButton}" Width="120"
+                                        Style="{StaticResource GhostButton}" MinWidth="140"
                                         Click="OverviewMicMuteButton_Click"/>
                             </StackPanel>
                             <TextBlock x:Name="OverviewStatusText" Text=""
@@ -676,16 +671,9 @@
                             <StackPanel>
                                 <TextBlock Text="{Binding [St.Language], Source={x:Static local:L10n.Instance}}"
                                            Style="{StaticResource SectionTitle}"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <RadioButton x:Name="LangZh" Content="{Binding [St.LangZh], Source={x:Static local:L10n.Instance}}"
-                                                 GroupName="Lang" FontSize="13" Margin="0,0,24,0"
-                                                 Foreground="{DynamicResource Theme.TextPrimary}"
-                                                 Checked="Language_Changed" Tag="zh-CN"/>
-                                    <RadioButton x:Name="LangEn" Content="{Binding [St.LangEn], Source={x:Static local:L10n.Instance}}"
-                                                 GroupName="Lang" FontSize="13"
-                                                 Foreground="{DynamicResource Theme.TextPrimary}"
-                                                 Checked="Language_Changed" Tag="en-US"/>
-                                </StackPanel>
+                                <ComboBox x:Name="LangCombo" Style="{StaticResource SelCombo}"
+                                          MaxWidth="300" HorizontalAlignment="Left" MinWidth="220"
+                                          SelectionChanged="Language_SelectionChanged"/>
                             </StackPanel>
                         </Border>
 

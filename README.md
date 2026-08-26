@@ -20,7 +20,7 @@
 - **全局快捷键**：切设备（输出）、调音量、静音（扬声器/麦克风）、打开面板，全部可自定义
 - **托盘滚轮调音量**：鼠标放在托盘图标上滚轮即可调节当前应用音量，OSD 提示
 - **界面主题**：深色/浅色跟随系统，多种强调色（含 RGB 自定义）、背景透明度可调
-- **中英文双语**：设置里一键切换
+- **多语言**：支持 中文 / English / 日本語 / 한국어 / Français / Deutsch / Español / Русский，首次启动跟随系统语言，设置里下拉切换（重启生效）
 - **开机自启**、**解压即用**（内置 .NET 运行时，无需安装任何环境）
 
 ## 🛠 技术实现
@@ -41,13 +41,12 @@
 
 ## 📦 下载与安装
 
-前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载最新版 zip（如 `SonicRoute-v1.0.2.zip`，**解压即用**）：
+前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载最新版 `SonicRoute-v1.0.2.exe`（**单文件，无需解压、无需安装**）：
 
-1. 解压到任意目录
-2. 双击 `SonicRoute.exe` 运行（已内置运行时，绿色免安装）
-3. 程序驻留系统托盘，开始使用
+1. 下载后直接双击 `SonicRoute-v1.0.2.exe` 运行（已内置运行时，绿色免安装）
+2. 程序驻留系统托盘，开始使用
 
-> 也可直接运行 `SonicRoute.exe --main` 打开完整界面。
+> 也可运行 `SonicRoute.exe --main` 打开完整界面。
 
 ## ⌨️ 全局快捷键
 
