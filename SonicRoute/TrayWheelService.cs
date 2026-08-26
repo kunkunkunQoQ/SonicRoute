@@ -271,7 +271,15 @@ namespace SonicRoute
 
         private void HideOsd()
         {
-            try { _osd?.Hide(); }
+            try
+            {
+                if (_osd != null)
+                {
+                    _osd.Hide();
+                    // A2：隐藏时释放内容树（Border 下 TextBlock 等），下次显示再重建，避免常驻 UI 对象
+                    if (_osd.Content is Border b) b.Child = null;
+                }
+            }
             catch { }
         }
 
