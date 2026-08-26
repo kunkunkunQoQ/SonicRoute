@@ -26,9 +26,7 @@ namespace SonicRoute
     public partial class MainWindow : Window
     {
         private List<AudioDeviceInfo> _outputs = new();
-        private List<AudioDeviceInfo> _inputs = new();
         private List<AudioDeviceInfo> _outputDisplay = new();
-        private List<AudioDeviceInfo> _inputDisplay = new();
         private AudioAppInfo? _overviewApp;
         private AudioAppInfo? _appsSelected;
         private bool _suppressVolume;
@@ -161,19 +159,12 @@ namespace SonicRoute
 
         private async Task LoadDevicesAsync()
         {
-            var (outputs, inputs) = await Task.Run(() =>
-            (
-                AudioService.GetDevices(EDataFlow.eRender),
-                AudioService.GetDevices(EDataFlow.eCapture)
-            ));
+            var outputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eRender));
 
             string? defOut = await Task.Run(() => AudioService.GetDefaultDeviceId(EDataFlow.eRender));
-            string? defIn = await Task.Run(() => AudioService.GetDefaultDeviceId(EDataFlow.eCapture));
             foreach (var d in outputs) d.IsDefault = string.Equals(d.Id, defOut, StringComparison.OrdinalIgnoreCase);
-            foreach (var d in inputs) d.IsDefault = string.Equals(d.Id, defIn, StringComparison.OrdinalIgnoreCase);
 
             _outputs = outputs;
-            _inputs = inputs;
 
             ReloadDeviceDisplay();
         }
@@ -192,8 +183,6 @@ namespace SonicRoute
 
         private IEnumerable<AudioDeviceInfo> VisibleOutputs =>
             _outputs.Where(d => !_config.HiddenOutputDevices.Contains(d.Id));
-        private IEnumerable<AudioDeviceInfo> VisibleInputs =>
-            _inputs.Where(d => !_config.HiddenInputDevices.Contains(d.Id));
 
         /// <summary>刷新所有设备下拉 / 快速按钮 / 名称编辑列表的显示。</summary>
         private void ReloadDeviceDisplay()
@@ -208,15 +197,10 @@ namespace SonicRoute
         private void RefreshDeviceDisplays()
         {
             _outputDisplay = DisplayDevices(_outputs);
-            _inputDisplay = DisplayDevices(_inputs);
             OverviewOutputCombo.ItemsSource = null;
             OverviewOutputCombo.ItemsSource = _outputDisplay;
-            OverviewInputCombo.ItemsSource = null;
-            OverviewInputCombo.ItemsSource = _inputDisplay;
             AppsOutputCombo.ItemsSource = null;
             AppsOutputCombo.ItemsSource = _outputDisplay;
-            AppsInputCombo.ItemsSource = null;
-            AppsInputCombo.ItemsSource = _inputDisplay;
         }
 
         // ==================================================================
@@ -300,40 +284,28 @@ namespace SonicRoute
         private async Task RefreshOverviewDevicesVolumeAsync()
         {
             var outs = DisplayDevices(VisibleOutputs).ToList();
-            var ins = DisplayDevices(VisibleInputs).ToList();
 
             if (_overviewApp == null)
             {
                 OverviewOutputCurrentText.Text = "";
-                OverviewInputCurrentText.Text = "";
-                RenderQuickButtons(OverviewOutputQuickPanel, outs, true);
-                RenderQuickButtons(OverviewInputQuickPanel, ins, false);
+                RenderQuickButtons(OverviewOutputQuickPanel, outs);
                 SetVolumeUi(null);
                 return;
             }
 
             var pid = (int)_overviewApp.ProcessId;
-            var (outId, inId) = await Task.Run(() =>
-            (
-                AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender),
-                AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture)
-            ));
+            var outId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
 
             string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
-            string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
 
             OverviewOutputCurrentText.Text = DescribeCurrent(_outputDisplay, outShort);
-            OverviewInputCurrentText.Text = DescribeCurrent(_inputDisplay, inShort);
-            RenderQuickButtons(OverviewOutputQuickPanel, outs, true);
-            RenderQuickButtons(OverviewInputQuickPanel, ins, false);
+            RenderQuickButtons(OverviewOutputQuickPanel, outs);
 
             // 选中项必须从下拉实际绑定的显示列表（含自定义名称）中查找，
             // 否则改过名称的设备会多出一个"默认名"的幽灵项
             var selectedOut = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase));
-            var selectedIn = _inputDisplay.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase));
             _suppressDevCombo = true;
             OverviewOutputCombo.SelectedItem = selectedOut ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault();
-            OverviewInputCombo.SelectedItem = selectedIn ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault();
             _suppressDevCombo = false;
 
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
@@ -364,7 +336,7 @@ namespace SonicRoute
             _suppressVolume = false;
         }
 
-        private void RenderQuickButtons(ItemsControl panel, List<AudioDeviceInfo> devices, bool isOutput)
+        private void RenderQuickButtons(ItemsControl panel, List<AudioDeviceInfo> devices)
         {
             panel.Items.Clear();
             foreach (var dev in devices)
@@ -376,15 +348,15 @@ namespace SonicRoute
                     ToolTip = dev.DisplayName
                 };
                 btn.SetResourceReference(StyleProperty, "QuickDevButton");
-                btn.Click += (_, _) => OnQuickSwitch(dev, isOutput);
+                btn.Click += (_, _) => OnQuickSwitch(dev);
                 panel.Items.Add(btn);
             }
-            HighlightQuickActive(panel, isOutput);
+            HighlightQuickActive(panel);
         }
 
-        private void HighlightQuickActive(ItemsControl panel, bool isOutput)
+        private void HighlightQuickActive(ItemsControl panel)
         {
-            string? activeId = isOutput ? (OverviewOutputCurrentText.Tag as string) : (OverviewInputCurrentText.Tag as string);
+            string? activeId = OverviewOutputCurrentText.Tag as string;
             foreach (var item in panel.Items)
             {
                 if (item is not Button btn || btn.Tag is not AudioDeviceInfo dev) continue;
@@ -394,7 +366,7 @@ namespace SonicRoute
             }
         }
 
-        private async void OnQuickSwitch(AudioDeviceInfo dev, bool isOutput)
+        private async void OnQuickSwitch(AudioDeviceInfo dev)
         {
             var app = _overviewApp;
             if (app == null)
@@ -405,10 +377,9 @@ namespace SonicRoute
             MarkLastUsed(app);
 
             var pid = (int)app.ProcessId;
-            var flow = isOutput ? EDataFlow.eRender : EDataFlow.eCapture;
-            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, flow, dev.Id));
+            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, dev.Id));
             OverviewStatusText.Text = ok
-                ? string.Format(L10n.T("Ov.SwitchOk"), (isOutput ? "🔊 " : "🎤 ") + dev.DisplayName, app.Label)
+                ? string.Format(L10n.T("Ov.SwitchOk"), "🔊 " + dev.DisplayName, app.Label)
                 : $"✗ {msg}";
             await RefreshOverviewDevicesVolumeAsync();
         }
@@ -477,29 +448,22 @@ namespace SonicRoute
         private async void OverviewOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressDevCombo) return;
-            await ApplyOverviewComboSelectionAsync(EDataFlow.eRender);
+            await ApplyOverviewComboSelectionAsync();
         }
 
-        private async void OverviewInputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_suppressDevCombo) return;
-            await ApplyOverviewComboSelectionAsync(EDataFlow.eCapture);
-        }
-
-        /// <summary>概览下拉选择即生效：直接持久化当前应用的设备（无需再点"应用设置"）。</summary>
-        private async Task ApplyOverviewComboSelectionAsync(EDataFlow flow)
+        /// <summary>概览下拉选择即生效：直接持久化当前应用的输出设备（无需再点"应用设置"）。</summary>
+        private async Task ApplyOverviewComboSelectionAsync()
         {
             var app = _overviewApp;
             if (app == null) return;
-            var dev = (flow == EDataFlow.eRender ? OverviewOutputCombo : OverviewInputCombo)
-                .SelectedItem as AudioDeviceInfo;
+            var dev = OverviewOutputCombo.SelectedItem as AudioDeviceInfo;
             if (dev == null) return;
             MarkLastUsed(app);
 
             var pid = (int)app.ProcessId;
-            var (ok, msg) = await Apply(pid, flow, dev.Id);
+            var (ok, msg) = await Apply(pid, EDataFlow.eRender, dev.Id);
             OverviewStatusText.Text = ok
-                ? string.Format(L10n.T("Ov.SwitchOk"), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName, app.Label)
+                ? string.Format(L10n.T("Ov.SwitchOk"), "🔊 " + dev.DisplayName, app.Label)
                 : $"✗ {msg}";
             await RefreshOverviewDevicesVolumeAsync();
         }
@@ -544,19 +508,12 @@ namespace SonicRoute
             AppsDetailTitle.Text = _appsSelected.Label;
             AppsDetailPid.Text = $"PID {pid} · {_appsSelected.ProcessName ?? "?"}";
 
-            var (outId, inId) = await Task.Run(() =>
-            (
-                AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender),
-                AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture)
-            ));
+            var outId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
 
             string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
-            string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
 
             AppsOutputCombo.SelectedItem = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
                                            ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault();
-            AppsInputCombo.SelectedItem = _inputDisplay.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase))
-                                          ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault();
 
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
             bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
@@ -627,20 +584,50 @@ namespace SonicRoute
             AppsStatusText.Text = L10n.T(muted ? "Ov.Muted" : "Ov.Unmuted");
         }
 
-        private async void AppsApplyButton_Click(object sender, RoutedEventArgs e)
+        private async void AppsOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_appsSelected == null) return;
-            var pid = (int)_appsSelected.ProcessId;
-            var outDev = AppsOutputCombo.SelectedItem as AudioDeviceInfo;
-            var inDev = AppsInputCombo.SelectedItem as AudioDeviceInfo;
+            if (_suppressDevCombo) return;
+            await ApplyAppsComboSelectionAsync();
+        }
 
-            var (outOk, outMsg) = outDev != null ? await Apply(pid, EDataFlow.eRender, outDev.Id) : (false, "");
-            var (inOk, inMsg) = inDev != null ? await Apply(pid, EDataFlow.eCapture, inDev.Id) : (false, "");
+        /// <summary>应用页输出下拉选择即生效（无需再点"应用设置"）。</summary>
+        private async Task ApplyAppsComboSelectionAsync()
+        {
+            var app = _appsSelected;
+            if (app == null) return;
+            var dev = AppsOutputCombo.SelectedItem as AudioDeviceInfo;
+            if (dev == null) return;
 
-            if ((outDev == null || outOk) && (inDev == null || inOk))
-                AppsStatusText.Text = string.Format(L10n.T("Ov.ApplyOk"), _appsSelected.Label);
+            var pid = (int)app.ProcessId;
+            var (ok, msg) = await Apply(pid, EDataFlow.eRender, dev.Id);
+            if (ok)
+            {
+                AppsStatusText.Text = string.Format(L10n.T("Ov.SwitchOk"), "🔊 " + dev.DisplayName, app.Label);
+                await RefreshAppsSelectionAsync();
+            }
             else
-                AppsStatusText.Text = $"✗ {(outOk ? "" : outMsg)} {(inOk ? "" : inMsg)}".Trim();
+            {
+                AppsStatusText.Text = $"✗ {msg}";
+            }
+        }
+
+        /// <summary>重新读取当前选中应用的状态（下拉选中项 / 音量 / 静音）。</summary>
+        private async Task RefreshAppsSelectionAsync()
+        {
+            var app = _appsSelected;
+            if (app == null) return;
+            var pid = (int)app.ProcessId;
+            var outId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
+            string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
+            _suppressDevCombo = true;
+            AppsOutputCombo.SelectedItem = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
+                                           ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault();
+            _suppressDevCombo = false;
+
+            int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
+            bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
+            SetAppsVolumeUi(vol >= 0 ? vol : null);
+            AppsMuteButton.Content = L10n.T(muted ? "Apps.Unmute" : "Apps.Mute");
         }
 
         // ==================================================================
@@ -664,53 +651,23 @@ namespace SonicRoute
                 cb.Unchecked += DeviceFilterChanged;
                 OutputFilterList.Items.Add(cb);
             }
-
-            InputFilterList.Items.Clear();
-            foreach (var dev in _inputs)
-            {
-                var cb = new CheckBox
-                {
-                    Content = dev.DisplayLabel,
-                    IsChecked = !_config.HiddenInputDevices.Contains(dev.Id),
-                    Tag = dev,
-                    FontSize = 13,
-                    Margin = new Thickness(0, 4, 6, 4)
-                };
-                cb.Checked += DeviceFilterChanged;
-                cb.Unchecked += DeviceFilterChanged;
-                InputFilterList.Items.Add(cb);
-            }
         }
 
         private void DeviceFilterChanged(object sender, RoutedEventArgs e)
         {
             if (sender is not CheckBox cb || cb.Tag is not AudioDeviceInfo dev) return;
-            if (dev.Flow == EDataFlow.eRender)
-            {
-                if (cb.IsChecked == false) { if (!_config.HiddenOutputDevices.Contains(dev.Id)) _config.HiddenOutputDevices.Add(dev.Id); }
-                else _config.HiddenOutputDevices.Remove(dev.Id);
-            }
-            else
-            {
-                if (cb.IsChecked == false) { if (!_config.HiddenInputDevices.Contains(dev.Id)) _config.HiddenInputDevices.Add(dev.Id); }
-                else _config.HiddenInputDevices.Remove(dev.Id);
-            }
+            if (cb.IsChecked == false) { if (!_config.HiddenOutputDevices.Contains(dev.Id)) _config.HiddenOutputDevices.Add(dev.Id); }
+            else _config.HiddenOutputDevices.Remove(dev.Id);
             ConfigService.Save(_config);
             UpdateSelectAllLabels();
             // 快速切换界面立即生效（刷新设备显示）
             if (!_suppressFilter) _ = RefreshOverviewDevicesVolumeAsync();
         }
 
-        /// <summary>输出设备全选/全不选（与输入独立）。</summary>
+        /// <summary>输出设备全选/全不选。</summary>
         private void SelectAllOutput_Click(object sender, RoutedEventArgs e)
         {
             ToggleSelectAll(OutputFilterList.Items.OfType<CheckBox>().ToList());
-        }
-
-        /// <summary>输入设备全选/全不选（与输出独立）。</summary>
-        private void SelectAllInput_Click(object sender, RoutedEventArgs e)
-        {
-            ToggleSelectAll(InputFilterList.Items.OfType<CheckBox>().ToList());
         }
 
         /// <summary>一键全选/全不选：该组当前若全部勾选则全部取消，否则全部勾选。</summary>
@@ -730,7 +687,6 @@ namespace SonicRoute
         private void UpdateSelectAllLabels()
         {
             UpdateSelectAllLabel(SelectAllOutputButton, OutputFilterList.Items.OfType<CheckBox>().ToList());
-            UpdateSelectAllLabel(SelectAllInputButton, InputFilterList.Items.OfType<CheckBox>().ToList());
         }
 
         private static void UpdateSelectAllLabel(System.Windows.Controls.Button? btn, List<CheckBox> boxes)
@@ -748,8 +704,6 @@ namespace SonicRoute
         {
             OutputNameList.Items.Clear();
             foreach (var dev in _outputs) OutputNameList.Items.Add(MakeNameRow(dev));
-            InputNameList.Items.Clear();
-            foreach (var dev in _inputs) InputNameList.Items.Add(MakeNameRow(dev));
         }
 
         private UIElement MakeNameRow(AudioDeviceInfo dev)

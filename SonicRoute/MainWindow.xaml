@@ -347,27 +347,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- 输入设备 -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                    <StackPanel>
-                        <TextBlock Text="{Binding [Ov.Input], Source={x:Static local:L10n.Instance}}"
-                                   Style="{StaticResource SectionTitle}"/>
-                        <DockPanel Margin="0,0,0,8">
-                            <ComboBox x:Name="OverviewInputCombo" DockPanel.Dock="Left"
-                                      Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
-                                      SelectionChanged="OverviewInputCombo_SelectionChanged"/>
-                            <TextBlock x:Name="OverviewInputCurrentText" Text=""
-                                       FontSize="12" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       VerticalAlignment="Center" Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
-                        </DockPanel>
-                        <ItemsControl x:Name="OverviewInputQuickPanel">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
                 <!-- 音量 + 应用 -->
                 <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                     <StackPanel>
@@ -443,11 +422,8 @@
                         <TextBlock Text="{Binding [Apps.Output], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource SectionTitle}"/>
                         <ComboBox x:Name="AppsOutputCombo" Style="{StaticResource SelCombo}"
-                                  Margin="0,0,0,14" DisplayMemberPath="DisplayLabel"/>
-                        <TextBlock Text="{Binding [Apps.Input], Source={x:Static local:L10n.Instance}}"
-                                   Style="{StaticResource SectionTitle}"/>
-                        <ComboBox x:Name="AppsInputCombo" Style="{StaticResource SelCombo}"
-                                  Margin="0,0,0,16" DisplayMemberPath="DisplayLabel"/>
+                                  Margin="0,0,0,16" DisplayMemberPath="DisplayLabel"
+                                  SelectionChanged="AppsOutputCombo_SelectionChanged"/>
                         <TextBlock Text="{Binding [Apps.Volume], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource SectionTitle}"/>
                         <DockPanel Margin="0,0,0,10" MouseWheel="AppsVolume_MouseWheel">
@@ -469,10 +445,6 @@
                                     Content="{Binding [Apps.Mute], Source={x:Static local:L10n.Instance}}"
                                     Style="{StaticResource GhostButton}" Width="96" HorizontalAlignment="Left"
                                     Click="AppsMuteButton_Click"/>
-                            <Button x:Name="AppsApplyButton"
-                                    Content="{Binding [Apps.Apply], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right"
-                                    DockPanel.Dock="Right" Click="AppsApplyButton_Click"/>
                             <TextBlock x:Name="AppsStatusText" Text=""
                                        FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                        VerticalAlignment="Center" HorizontalAlignment="Left"
@@ -646,22 +618,6 @@
                                         <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                 </ItemsControl>
-                                <DockPanel Margin="0,12,4,2">
-                                    <Button x:Name="SelectAllInputButton"
-                                            Content="{Binding [St.SelectAll], Source={x:Static local:L10n.Instance}}"
-                                            Style="{StaticResource GhostButton}" Height="26" Padding="10,0"
-                                            DockPanel.Dock="Right" Margin="10,0,0,0"
-                                            Click="SelectAllInput_Click"/>
-                                    <TextBlock Text="{Binding [St.Input], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="12.5" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Theme.TextPrimary}"
-                                               VerticalAlignment="Center"/>
-                                </DockPanel>
-                                <ItemsControl x:Name="InputFilterList">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
                             </StackPanel>
                         </Border>
 
@@ -677,14 +633,6 @@
                                            FontSize="12.5" FontWeight="SemiBold"
                                            Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,4,0,2"/>
                                 <ItemsControl x:Name="OutputNameList">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                </ItemsControl>
-                                <TextBlock Text="{Binding [St.Input], Source={x:Static local:L10n.Instance}}"
-                                           FontSize="12.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,12,0,2"/>
-                                <ItemsControl x:Name="InputNameList">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>

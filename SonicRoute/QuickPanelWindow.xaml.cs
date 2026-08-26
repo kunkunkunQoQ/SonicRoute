@@ -16,18 +16,15 @@ using Size = System.Windows.Size;
 namespace SonicRoute
 {
     /// <summary>
-    /// 托盘快速切换面板：当前应用（可切换）+ 快速切换输出/输入设备 + 应用音量。
+    /// 托盘快速切换面板：当前应用（可切换）+ 快速切换输出设备 + 应用音量 + 麦克风静音。
     /// 只显示设置里勾选（保留）的设备。
     /// </summary>
     public partial class QuickPanelWindow : Window
     {
         private List<AudioDeviceInfo> _outputs = new();
-        private List<AudioDeviceInfo> _inputs = new();
         private List<AudioDeviceInfo> _outputDisplay = new();
-        private List<AudioDeviceInfo> _inputDisplay = new();
         private AudioAppInfo? _currentApp;
         private string? _currentOutId;
-        private string? _currentInId;
         private bool _volumeReady;
         private bool _suppressAppCombo;
         private bool _everFocused;
@@ -84,19 +81,12 @@ namespace SonicRoute
         {
             try
             {
-                var (outputs, inputs) = await Task.Run(() =>
-                (
-                    AudioService.GetDevices(EDataFlow.eRender),
-                    AudioService.GetDevices(EDataFlow.eCapture)
-                ));
+                var outputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eRender));
 
                 _outputs = outputs;
-                _inputs = inputs;
                 _outputDisplay = DisplayDevices(outputs);
-                _inputDisplay = DisplayDevices(inputs);
 
-                RenderDeviceButtons(OutputButtonsPanel, _outputDisplay, true);
-                RenderDeviceButtons(InputButtonsPanel, _inputDisplay, false);
+                RenderDeviceButtons(OutputButtonsPanel, _outputDisplay);
 
                 await ResolveDefaultAppAsync();
 
@@ -181,27 +171,19 @@ namespace SonicRoute
             if (_currentApp == null)
             {
                 OutputCurrentText.Text = "—";
-                InputCurrentText.Text = "—";
                 VolumeSlider.Value = 0;
                 VolumePercentText.Text = "0%";
                 return;
             }
 
             var pid = (int)_currentApp.ProcessId;
-            var (outId, inId) = await Task.Run(() =>
-            (
-                AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender),
-                AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture)
-            ));
+            var outId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
 
             _currentOutId = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
-            _currentInId = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
 
             OutputCurrentText.Text = DescribeCurrent(_outputDisplay, _currentOutId);
-            InputCurrentText.Text = DescribeCurrent(_inputDisplay, _currentInId);
 
             HighlightActive(OutputButtonsPanel, _currentOutId);
-            HighlightActive(InputButtonsPanel, _currentInId);
 
             var vol = await Task.Run(() =>
             {
@@ -248,14 +230,13 @@ namespace SonicRoute
         // 设备按钮渲染 + 点击切换
         // ------------------------------------------------------------------
 
-        private void RenderDeviceButtons(ItemsControl panel, List<AudioDeviceInfo> devices, bool isOutput)
+        private void RenderDeviceButtons(ItemsControl panel, List<AudioDeviceInfo> devices)
         {
             panel.Items.Clear();
             var cfg = ConfigService.Load();
-            var hidden = isOutput ? cfg.HiddenOutputDevices : cfg.HiddenInputDevices;
             foreach (var dev in devices)
             {
-                if (hidden.Contains(dev.Id)) continue;
+                if (cfg.HiddenOutputDevices.Contains(dev.Id)) continue;
                 var btn = new Button
                 {
                     Content = ShortName(dev.DisplayName),
@@ -263,7 +244,7 @@ namespace SonicRoute
                     ToolTip = dev.DisplayName
                 };
                 btn.SetResourceReference(StyleProperty, "DevButton");
-                btn.Click += (_, _) => OnDeviceButtonClick(dev, isOutput);
+                btn.Click += (_, _) => OnDeviceButtonClick(dev);
                 panel.Items.Add(btn);
             }
         }
@@ -279,7 +260,7 @@ namespace SonicRoute
             }
         }
 
-        private async void OnDeviceButtonClick(AudioDeviceInfo dev, bool isOutput)
+        private async void OnDeviceButtonClick(AudioDeviceInfo dev)
         {
             if (_currentApp == null)
             {
@@ -289,10 +270,9 @@ namespace SonicRoute
 
             MarkLastUsed(_currentApp);
             var pid = (int)_currentApp.ProcessId;
-            var flow = isOutput ? EDataFlow.eRender : EDataFlow.eCapture;
-            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, flow, dev.Id));
+            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, dev.Id));
             if (ok)
-                PanelStatusText.Text = string.Format(L10n.T("Qp.SwitchOk"), (isOutput ? "🔊 " : "🎤 ") + dev.DisplayName, _currentApp.Label);
+                PanelStatusText.Text = string.Format(L10n.T("Qp.SwitchOk"), "🔊 " + dev.DisplayName, _currentApp.Label);
             else
                 PanelStatusText.Text = $"✗ {msg}";
 
