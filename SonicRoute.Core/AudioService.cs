@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -167,7 +167,8 @@ namespace SonicRoute.Core
             }
 
             return apps.Values
-                .OrderBy(a => a.Label, StringComparer.CurrentCultureIgnoreCase)
+                .OrderByDescending(a => a.HasActiveSession) // 正在播放的应用优先
+                .ThenBy(a => a.Label, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
 
@@ -209,7 +210,7 @@ namespace SonicRoute.Core
 
                                 if (!apps.TryGetValue(pid, out var existing))
                                 {
-                                    apps[pid] = new AudioAppInfo
+                                    existing = apps[pid] = new AudioAppInfo
                                     {
                                         ProcessId = pid,
                                         DisplayName = displayName,
@@ -220,6 +221,9 @@ namespace SonicRoute.Core
                                 {
                                     existing.DisplayName = displayName;
                                 }
+                                // 存在正在播放(Active)的会话 → 标记，供列表排序优先展示
+                                if (hrState >= 0 && state == AudioSessionState.Active)
+                                    existing.HasActiveSession = true;
                             }
                             finally
                             {
