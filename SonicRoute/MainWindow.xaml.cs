@@ -51,6 +51,29 @@ namespace SonicRoute
             // 共享"当前应用"变化（前台自动跟随/面板切换）时同步概览
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
             Closed += (_, _) => CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+            // 快捷键内联录音：在窗口内直接捕获按键，免弹窗
+            PreviewKeyDown += MainWindow_PreviewKeyDown;
+        }
+
+        private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (_recordingAction == null) return;
+            e.Handled = true;
+            if (e.Key == Key.Escape)
+            {
+                _recordingAction = null;
+                BuildHotkeyList();
+                return;
+            }
+            var combo = HotkeyActions.Format(e);
+            if (combo == null) return; // 缺少修饰键，等待有效组合
+            var action = _recordingAction;
+            _recordingAction = null;
+            _config.Hotkeys[action] = combo;
+            ConfigService.Save(_config);
+            // 先重载注册（让 registered 反映新组合），再按最新注册刷新显示
+            ((App)Application.Current).ReloadHotkeys();
+            BuildHotkeyList();
         }
 
         private async void OnSharedCurrentChanged()
@@ -80,6 +103,9 @@ namespace SonicRoute
 
         private bool _titleMaximized;
         private readonly double _restoreWidth = 920, _restoreHeight = 620;
+
+        // 快捷键内联录音：正在等待重新绑定的动作名（非 null 表示处于录音态）
+        private string? _recordingAction;
 
         private void Titlebar_MouseDown(object sender, MouseButtonEventArgs e)
         {
@@ -1035,6 +1061,7 @@ namespace SonicRoute
 
         private void BuildHotkeyList()
         {
+            _recordingAction = null;
             HotkeyList.Items.Clear();
             var actions = HotkeyActions.All;
             var registered = ((App)Application.Current).HotkeyRegistration;
@@ -1096,6 +1123,9 @@ namespace SonicRoute
         private void HotkeyRebind_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn || btn.Tag is not string action) return;
+            // 已有录制进行中：先恢复所有按钮，避免多个按钮同时处于录音态
+            if (_recordingAction != null) BuildHotkeyList();
+            _recordingAction = action;
             btn.Content = new TextBlock
             {
                 Text = L10n.T("Hk.PressNew"),
@@ -1104,55 +1134,7 @@ namespace SonicRoute
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = (Brush)FindResource("Theme.Accent")
             };
-            var window = new Window
-            {
-                Title = L10n.T("Nav.Hotkeys"),
-                Width = 380,
-                Height = 190,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = this,
-                Background = (Brush)FindResource("Theme.WindowBg")
-            };
-            var sp = new StackPanel { Margin = new Thickness(20) };
-            sp.Children.Add(new TextBlock
-            {
-                Text = string.Format(L10n.T("Hk.Hint"), HotkeyActions.DisplayName(action)),
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 13,
-                Foreground = (Brush)FindResource("Theme.TextPrimary")
-            });
-            var preview = new TextBlock
-            {
-                Text = "",
-                FontSize = 20,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = (Brush)FindResource("Theme.Accent"),
-                Margin = new Thickness(0, 20, 0, 0)
-            };
-            sp.Children.Add(preview);
-            window.Content = sp;
-            window.KeyDown += async (_, args) =>
-            {
-                if (args.Key == Key.Escape)
-                {
-                    window.Close();
-                    return;
-                }
-                var combo = HotkeyActions.Format(args);
-                if (combo == null)
-                {
-                    preview.Text = L10n.T("Hk.Conflict");
-                    return;
-                }
-                preview.Text = combo;
-                await Task.Delay(120);
-                _config.Hotkeys[action] = combo;
-                ConfigService.Save(_config);
-                window.Close();
-                BuildHotkeyList();
-                ((App)Application.Current).ReloadHotkeys();
-            };
-            window.ShowDialog();
+            btn.Focus();
         }
 
         // ==================================================================

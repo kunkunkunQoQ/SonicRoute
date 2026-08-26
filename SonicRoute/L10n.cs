@@ -113,6 +113,7 @@ namespace SonicRoute
                 ["St.DefaultAppHint"] = "概览默认应用：最近打开 / 上次操作 / 指定",
                 ["St.Opacity"] = "背景透明度",
                 ["St.OpacityHint"] = "快速面板与窗口背景的透明度（越低越透）",
+                ["St.AuthorHome"] = "作者主页 ‖ ",
 
                 // 快捷键页
                 ["Hk.Title"] = "全局快捷键",
@@ -236,6 +237,7 @@ namespace SonicRoute
                 ["St.DefaultAppHint"] = "Default app: Recent / Last used / Specific",
                 ["St.Opacity"] = "Background Opacity",
                 ["St.OpacityHint"] = "Opacity of the quick panel and window background (lower = more transparent)",
+                ["St.AuthorHome"] = "Author Home ‖ ",
 
                 ["Hk.Title"] = "Global Hotkeys",
                 ["Hk.Hint"] = "Click 'Change' then press the new key combination.",

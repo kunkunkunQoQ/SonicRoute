@@ -61,7 +61,14 @@ namespace SonicRoute
                 Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.Escape)
                 return null;
 
-            string keyName = key == Key.Space ? "Space" : key.ToString();
+            string keyName = key switch
+            {
+                Key.D0 => "0", Key.D1 => "1", Key.D2 => "2", Key.D3 => "3",
+                Key.D4 => "4", Key.D5 => "5", Key.D6 => "6", Key.D7 => "7",
+                Key.D8 => "8", Key.D9 => "9",
+                Key.Space => "Space",
+                _ => key.ToString()
+            };
             return string.Join("+", mods) + "+" + keyName;
         }
     }

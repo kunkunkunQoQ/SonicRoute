@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -203,6 +203,7 @@ namespace SonicRoute
                         Topmost = true,
                         ResizeMode = ResizeMode.NoResize,
                         SizeToContent = SizeToContent.WidthAndHeight,
+                        MaxWidth = 400,   // 限制通知最大宽度，避免超长文本撑爆/位置漂移
                         Focusable = false
                     };
                     var border = new Border
@@ -214,40 +215,23 @@ namespace SonicRoute
                     // 主题化：背景/边框/文字全部绑主题资源，透明度随 Theme.SurfaceBgAlpha
                     border.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceBgAlpha");
                     border.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
-                    var sp = new StackPanel();
-                    var appTb = new TextBlock
-                    {
-                        FontSize = 12,
-                        MaxWidth = 260,
-                        TextTrimming = TextTrimming.CharacterEllipsis
-                    };
-                    appTb.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
-                    var valTb = new TextBlock
-                    {
-                        FontSize = 18,
-                        FontWeight = FontWeights.SemiBold,
-                        Margin = new Thickness(0, 3, 0, 0)
-                    };
-                    valTb.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Accent");
-                    sp.Children.Add(appTb);
-                    sp.Children.Add(valTb);
-                    border.Child = sp;
+                    border.Child = new StackPanel();
                     _osd.Content = border;
                 }
 
                 var root = (Border)_osd.Content;
-                root.Child = null;
                 var stack = new StackPanel();
                 var a = new TextBlock
                 {
                     Text = app, FontSize = 12,
-                    MaxWidth = 260, TextTrimming = TextTrimming.CharacterEllipsis
+                    MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis
                 };
                 a.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
                 var v = new TextBlock
                 {
                     Text = text, FontSize = 18, FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(0, 3, 0, 0)
+                    Margin = new Thickness(0, 3, 0, 0),
+                    MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis
                 };
                 v.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Accent");
                 stack.Children.Add(a);
@@ -260,11 +244,8 @@ namespace SonicRoute
                     _osd.Topmost = true;
                 }
 
-                // 位置：右上角、工作区上沿
-                var wa = SystemParameters.WorkArea;
-                double w = _osd.ActualWidth > 0 ? _osd.ActualWidth : 340;
-                _osd.Left = wa.Right - w - 16;
-                _osd.Top = wa.Top + 14;
+                // 位置：右上角、工作区上沿。等布局完成后按实际宽度右对齐，防止文本变化导致位置不协调
+                _osd.Dispatcher.BeginInvoke(new Action(RepositionOsd), DispatcherPriority.Background);
 
                 _osdTimer.Stop();
                 _osdTimer.Start();
@@ -273,6 +254,19 @@ namespace SonicRoute
             {
                 // OSD 失败不影响核心功能
             }
+        }
+
+        private void RepositionOsd()
+        {
+            try
+            {
+                if (_osd == null) return;
+                var wa = SystemParameters.WorkArea;
+                double w = Math.Min(_osd.ActualWidth > 0 ? _osd.ActualWidth : 360, 400);
+                _osd.Left = wa.Right - w - 16;
+                _osd.Top = wa.Top + 14;
+            }
+            catch { }
         }
 
         private void HideOsd()

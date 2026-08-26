@@ -711,7 +711,7 @@
                                            Margin="0,16,0,0"/>
                                 <TextBlock Margin="0,12,0,0" FontSize="13"
                                            Foreground="{DynamicResource Theme.TextSecondary}">
-                                    <Run Text="作者主页 ‖ "/>
+                                    <Run Text="{Binding [St.AuthorHome], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                     <Hyperlink x:Name="BiliLink" Click="BiliLink_Click"
                                                Foreground="{DynamicResource Theme.Accent}">
                                         <Run Text="哔哩哔哩"/>

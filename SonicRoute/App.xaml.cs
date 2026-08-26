@@ -252,7 +252,10 @@ namespace SonicRoute
                 int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
                 int next = idx < 0 ? 0 : (idx + 1) % visible.Count;
                 var r = AudioService.ApplyEndpoint(pid, flow, visible[next].Id);
-                return r.Success ? visible[next].DisplayName : null;
+                if (!r.Success) return null;
+                // 通知/OSD 显示用户自定义名称（与设置页"设备名称"一致）
+                string? custom = config.DeviceNames.TryGetValue(visible[next].Id, out var n) ? n : null;
+                return string.IsNullOrWhiteSpace(custom) ? visible[next].DisplayName : custom;
             }
             catch
             {
