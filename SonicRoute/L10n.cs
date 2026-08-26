@@ -74,7 +74,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.04 · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.05 · 困困困",
 
                 // 导航
                 ["Nav.Overview"] = "概览",
@@ -207,7 +207,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.04 · by 困困困",
+                ["App.About"] = "SonicRoute v1.05 · by 困困困",
 
                 ["Nav.Overview"] = "Overview",
                 ["Nav.Apps"] = "Apps",
@@ -332,7 +332,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "音躍",
                 ["App.NameFull"] = "音躍 SonicRoute",
-                ["App.About"] = "音躍 SonicRoute v1.04 · 困困困",
+                ["App.About"] = "音躍 SonicRoute v1.05 · 困困困",
 
                 ["Nav.Overview"] = "概要",
                 ["Nav.Apps"] = "アプリ",
@@ -457,7 +457,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "소리 점프",
                 ["App.NameFull"] = "소리 점프 SonicRoute",
-                ["App.About"] = "소리 점프 SonicRoute v1.04 · 困困困",
+                ["App.About"] = "소리 점프 SonicRoute v1.05 · 困困困",
 
                 ["Nav.Overview"] = "개요",
                 ["Nav.Apps"] = "앱",
@@ -582,7 +582,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.04 · par 困困困",
+                ["App.About"] = "SonicRoute v1.05 · par 困困困",
 
                 ["Nav.Overview"] = "Aperçu",
                 ["Nav.Apps"] = "Applications",
@@ -707,7 +707,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.04 · von 困困困",
+                ["App.About"] = "SonicRoute v1.05 · von 困困困",
 
                 ["Nav.Overview"] = "Übersicht",
                 ["Nav.Apps"] = "Apps",
@@ -832,7 +832,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.04 · por 困困困",
+                ["App.About"] = "SonicRoute v1.05 · por 困困困",
 
                 ["Nav.Overview"] = "Resumen",
                 ["Nav.Apps"] = "Aplicaciones",
@@ -957,7 +957,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.04 · от 困困困",
+                ["App.About"] = "SonicRoute v1.05 · от 困困困",
 
                 ["Nav.Overview"] = "Обзор",
                 ["Nav.Apps"] = "Приложения",
