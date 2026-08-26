@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace SonicRoute
@@ -25,6 +25,7 @@ namespace SonicRoute
             ("ru-RU", "Русский"),
         };
 
+
         public string this[string key] =>
             Tables.TryGetValue(CurrentLanguage, out var t) && t.TryGetValue(key, out var v)
                 ? v
@@ -42,14 +43,38 @@ namespace SonicRoute
 
         public static string T(string key) => Instance[key];
 
-        private static readonly Dictionary<string, Dictionary<string, string>> Tables = new()
+        private static Dictionary<string, Dictionary<string, string>>? _tables;
+        private static Dictionary<string, Dictionary<string, string>> Tables =>
+            _tables ??= BuildTables();
+
+        private static Dictionary<string, Dictionary<string, string>> BuildTables()
         {
-            ["zh-CN"] = new Dictionary<string, string>
-            {
+            var t = new Dictionary<string, Dictionary<string, string>>();
+            var cur = CurrentLanguage;
+            t[cur] = BuildTable(cur);
+            if (cur != "zh-CN") t["zh-CN"] = BuildZh();
+            return t;
+        }
+
+        private static Dictionary<string, string> BuildTable(string lang) => lang switch
+        {
+            "en-US" => BuildEn(),
+            "ja-JP" => BuildJa(),
+            "ko-KR" => BuildKo(),
+            "fr-FR" => BuildFr(),
+            "de-DE" => BuildDe(),
+            "es-ES" => BuildEs(),
+            "ru-RU" => BuildRu(),
+            _ => BuildZh(),
+        };
+
+
+        private static Dictionary<string, string> BuildZh() => new()
+        {
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.03 · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.04 · 困困困",
 
                 // 导航
                 ["Nav.Overview"] = "概览",
@@ -94,7 +119,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 静音",
                 ["Apps.Unmute"] = "🔈 取消静音",
 ["Apps.Rename"] = "应用名称",
-["Apps.RenameHint"] = "自定义应用显示名称（留空恢复默认），通知/面板/概览同步显示",
+["Apps.RenameHint"] = "自定义应用显示名称（输入即自动保存，留空恢复默认），通知/面板/概览同步显示",
 ["Apps.RenameSave"] = "✎ 保存名称",
 ["Apps.RenameSaved"] = "名称已保存",
 
@@ -122,7 +147,7 @@ namespace SonicRoute
                 ["St.Accent"] = "强调色",
                 ["St.AccentBlue"] = "蓝色",
                 ["St.AccentGreen"] = "绿色",
-                ["St.AccentPurple"] = "紫色",
+                ["St.AccentPurple"] = "粉色",
                 ["Th.Custom"] = "自定义",
                 ["St.StartMinimized"] = "启动时最小化到托盘（不显示主窗口）",
                 ["St.StartPanel"] = "启动时显示快速面板",
@@ -177,12 +202,12 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ 快捷键已更新",
                 ["Hk.ConflictTip"] = "组合键 {0} 被其他程序占用，已自动使用 {1}（可在下方重新设置）",
                 ["Hk.Unregistered"] = "该快捷键未能注册（可能与其他程序冲突）",
-            },
-            ["en-US"] = new Dictionary<string, string>
+            };
+        private static Dictionary<string, string> BuildEn() => new()
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.03 · by 困困困",
+                ["App.About"] = "SonicRoute v1.04 · by 困困困",
 
                 ["Nav.Overview"] = "Overview",
                 ["Nav.Apps"] = "Apps",
@@ -224,7 +249,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 Mute",
                 ["Apps.Unmute"] = "🔈 Unmute",
 ["Apps.Rename"] = "App Name",
-["Apps.RenameHint"] = "Custom display name (empty = default); notifications/panel/overview all use it",
+["Apps.RenameHint"] = "Custom display name (saved automatically as you type; empty = default); used in notifications/panel/overview",
 ["Apps.RenameSave"] = "✎ Save Name",
 ["Apps.RenameSaved"] = "Name saved",
 
@@ -251,7 +276,7 @@ namespace SonicRoute
                 ["St.Accent"] = "Accent",
                 ["St.AccentBlue"] = "Blue",
                 ["St.AccentGreen"] = "Green",
-                ["St.AccentPurple"] = "Purple",
+                ["St.AccentPurple"] = "Pink",
                 ["Th.Custom"] = "Custom",
                 ["St.StartMinimized"] = "Start minimized to tray (no window)",
                 ["St.StartPanel"] = "Show quick panel on start",
@@ -302,12 +327,12 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ Hotkey updated",
                 ["Hk.ConflictTip"] = "{0} is occupied by another program; using {1} instead (re-assign below)",
                 ["Hk.Unregistered"] = "This hotkey could not be registered (likely conflicts with another program)",
-            },
-            ["ja-JP"] = new Dictionary<string, string>
+            };
+        private static Dictionary<string, string> BuildJa() => new()
             {
                 ["App.Name"] = "音躍",
                 ["App.NameFull"] = "音躍 SonicRoute",
-                ["App.About"] = "音躍 SonicRoute v1.03 · 困困困",
+                ["App.About"] = "音躍 SonicRoute v1.04 · 困困困",
 
                 ["Nav.Overview"] = "概要",
                 ["Nav.Apps"] = "アプリ",
@@ -349,7 +374,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 ミュート",
                 ["Apps.Unmute"] = "🔈 ミュート解除",
 ["Apps.Rename"] = "アプリ名",
-["Apps.RenameHint"] = "カスタム表示名（空欄なら既定名）。通知・パネル・概要にも反映",
+["Apps.RenameHint"] = "カスタム表示名（入力で自動保存、空欄なら既定名）。通知・パネル・概要にも反映",
 ["Apps.RenameSave"] = "✎ 名前を保存",
 ["Apps.RenameSaved"] = "名前を保存しました",
 
@@ -376,7 +401,7 @@ namespace SonicRoute
                 ["St.Accent"] = "アクセントカラー",
                 ["St.AccentBlue"] = "青",
                 ["St.AccentGreen"] = "緑",
-                ["St.AccentPurple"] = "紫",
+                ["St.AccentPurple"] = "ピンク",
                 ["Th.Custom"] = "カスタム",
                 ["St.StartMinimized"] = "起動時に最小化してトレイへ",
                 ["St.StartPanel"] = "起動時にクイックパネルを表示",
@@ -427,12 +452,12 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ ショートカットを更新しました",
                 ["Hk.ConflictTip"] = "{0} は別のプログラムが使用中、{1} を使用します（下で再設定可）",
                 ["Hk.Unregistered"] = "ショートカットを登録できませんでした（他のプログラムと競合の可能性）",
-            },
-            ["ko-KR"] = new Dictionary<string, string>
+            };
+        private static Dictionary<string, string> BuildKo() => new()
             {
                 ["App.Name"] = "소리 점프",
                 ["App.NameFull"] = "소리 점프 SonicRoute",
-                ["App.About"] = "소리 점프 SonicRoute v1.03 · 困困困",
+                ["App.About"] = "소리 점프 SonicRoute v1.04 · 困困困",
 
                 ["Nav.Overview"] = "개요",
                 ["Nav.Apps"] = "앱",
@@ -474,7 +499,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 음소거",
                 ["Apps.Unmute"] = "🔈 음소거 해제",
 ["Apps.Rename"] = "앱 이름",
-["Apps.RenameHint"] = "사용자 지정 표시 이름（비우면 기본）. 알림·패널·개요에도 반영",
+["Apps.RenameHint"] = "사용자 지정 표시 이름（입력 시 자동 저장, 비우면 기본）. 알림·패널·개요에도 반영",
 ["Apps.RenameSave"] = "✎ 이름 저장",
 ["Apps.RenameSaved"] = "이름이 저장되었습니다",
 
@@ -501,7 +526,7 @@ namespace SonicRoute
                 ["St.Accent"] = "강조색",
                 ["St.AccentBlue"] = "파랑",
                 ["St.AccentGreen"] = "초록",
-                ["St.AccentPurple"] = "보라",
+                ["St.AccentPurple"] = "분홍",
                 ["Th.Custom"] = "사용자 지정",
                 ["St.StartMinimized"] = "시작 시 트레이로 최소화",
                 ["St.StartPanel"] = "시작 시 퀵 패널 표시",
@@ -552,12 +577,12 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ 단축키가 업데이트됨",
                 ["Hk.ConflictTip"] = "{0}이（가） 다른 프로그램에서 사용 중, {1}을（를） 사용합니다（아래에서 재설정 가능）",
                 ["Hk.Unregistered"] = "단축키를 등록할 수 없습니다（다른 프로그램과 충돌 가능）",
-            },
-            ["fr-FR"] = new Dictionary<string, string>
+            };
+        private static Dictionary<string, string> BuildFr() => new()
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.03 · par 困困困",
+                ["App.About"] = "SonicRoute v1.04 · par 困困困",
 
                 ["Nav.Overview"] = "Aperçu",
                 ["Nav.Apps"] = "Applications",
@@ -599,7 +624,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 Couper",
                 ["Apps.Unmute"] = "🔈 Réactiver",
 ["Apps.Rename"] = "Nom de l'application",
-["Apps.RenameHint"] = "Nom personnalisé（vide = défaut）；notifications/panneau/aperçu l'utilisent",
+["Apps.RenameHint"] = "Nom personnalisé（enregistré automatiquement；vide = défaut）；notifications/panneau/aperçu",
 ["Apps.RenameSave"] = "✎ Enregistrer",
 ["Apps.RenameSaved"] = "Nom enregistré",
 
@@ -626,7 +651,7 @@ namespace SonicRoute
                 ["St.Accent"] = "Couleur d'accent",
                 ["St.AccentBlue"] = "Bleu",
                 ["St.AccentGreen"] = "Vert",
-                ["St.AccentPurple"] = "Violet",
+                ["St.AccentPurple"] = "Rose",
                 ["Th.Custom"] = "Personnalisé",
                 ["St.StartMinimized"] = "Réduire dans la barre au démarrage",
                 ["St.StartPanel"] = "Afficher le panneau rapide au démarrage",
@@ -677,12 +702,12 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ Raccourci mis à jour",
                 ["Hk.ConflictTip"] = "{0} est utilisé par un autre programme ; {1} est utilisé à la place（reconfigurer ci-dessous）",
                 ["Hk.Unregistered"] = "Raccourci non enregistré（probablement en conflit avec un autre programme）",
-            },
-            ["de-DE"] = new Dictionary<string, string>
+            };
+        private static Dictionary<string, string> BuildDe() => new()
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.03 · von 困困困",
+                ["App.About"] = "SonicRoute v1.04 · von 困困困",
 
                 ["Nav.Overview"] = "Übersicht",
                 ["Nav.Apps"] = "Apps",
@@ -724,7 +749,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 Stumm",
                 ["Apps.Unmute"] = "🔈 Ton an",
 ["Apps.Rename"] = "App-Name",
-["Apps.RenameHint"] = "Benutzerdefinierter Name（leer = Standard）；gilt für Benachrichtigungen/Panel/Übersicht",
+["Apps.RenameHint"] = "Benutzerdefinierter Name（automatisch gespeichert；leer = Standard）；gilt für Benachrichtigungen/Panel/Übersicht",
 ["Apps.RenameSave"] = "✎ Speichern",
 ["Apps.RenameSaved"] = "Name gespeichert",
 
@@ -751,7 +776,7 @@ namespace SonicRoute
                 ["St.Accent"] = "Akzentfarbe",
                 ["St.AccentBlue"] = "Blau",
                 ["St.AccentGreen"] = "Grün",
-                ["St.AccentPurple"] = "Lila",
+                ["St.AccentPurple"] = "Rosa",
                 ["Th.Custom"] = "Benutzerdefiniert",
                 ["St.StartMinimized"] = "Beim Start in die Ablage minimieren",
                 ["St.StartPanel"] = "Schnellpanel beim Start anzeigen",
@@ -802,12 +827,12 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ Tastenkürzel aktualisiert",
                 ["Hk.ConflictTip"] = "{0} wird von einem anderen Programm belegt; {1} wird verwendet（unten neu zuweisen）",
                 ["Hk.Unregistered"] = "Tastenkürzel konnte nicht registriert werden（wahrscheinlich Konflikt）",
-            },
-            ["es-ES"] = new Dictionary<string, string>
+            };
+        private static Dictionary<string, string> BuildEs() => new()
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.03 · por 困困困",
+                ["App.About"] = "SonicRoute v1.04 · por 困困困",
 
                 ["Nav.Overview"] = "Resumen",
                 ["Nav.Apps"] = "Aplicaciones",
@@ -849,7 +874,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 Silenciar",
                 ["Apps.Unmute"] = "🔈 Activar sonido",
 ["Apps.Rename"] = "Nombre de la app",
-["Apps.RenameHint"] = "Nombre personalizado（vacío = predeterminado）；notificaciones/panel/vista general",
+["Apps.RenameHint"] = "Nombre personalizado（guardado automático；vacío = predeterminado）；notificaciones/panel/vista general",
 ["Apps.RenameSave"] = "✎ Guardar",
 ["Apps.RenameSaved"] = "Nombre guardado",
 
@@ -876,7 +901,7 @@ namespace SonicRoute
                 ["St.Accent"] = "Color de acento",
                 ["St.AccentBlue"] = "Azul",
                 ["St.AccentGreen"] = "Verde",
-                ["St.AccentPurple"] = "Morado",
+                ["St.AccentPurple"] = "Rosa",
                 ["Th.Custom"] = "Personalizado",
                 ["St.StartMinimized"] = "Iniciar minimizado en la bandeja",
                 ["St.StartPanel"] = "Mostrar panel rápido al inicio",
@@ -927,12 +952,12 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ Atajo actualizado",
                 ["Hk.ConflictTip"] = "{0} está ocupado por otro programa; se usará {1}（reasignar abajo）",
                 ["Hk.Unregistered"] = "No se pudo registrar el atajo（probable conflicto）",
-            },
-            ["ru-RU"] = new Dictionary<string, string>
+            };
+        private static Dictionary<string, string> BuildRu() => new()
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.03 · от 困困困",
+                ["App.About"] = "SonicRoute v1.04 · от 困困困",
 
                 ["Nav.Overview"] = "Обзор",
                 ["Nav.Apps"] = "Приложения",
@@ -974,7 +999,7 @@ namespace SonicRoute
                 ["Apps.Mute"] = "🔇 Отключить звук",
                 ["Apps.Unmute"] = "🔈 Включить звук",
 ["Apps.Rename"] = "Название приложения",
-["Apps.RenameHint"] = "Пользовательское имя（пусто = по умолчанию）；отображается в уведомлениях/панели/обзоре",
+["Apps.RenameHint"] = "Пользовательское имя（сохраняется автоматически；пусто = по умолчанию）；отображается в уведомлениях/панели/обзоре",
 ["Apps.RenameSave"] = "✎ Сохранить",
 ["Apps.RenameSaved"] = "Имя сохранено",
 
@@ -1001,7 +1026,7 @@ namespace SonicRoute
                 ["St.Accent"] = "Цвет акцента",
                 ["St.AccentBlue"] = "Синий",
                 ["St.AccentGreen"] = "Зелёный",
-                ["St.AccentPurple"] = "Фиолетовый",
+                ["St.AccentPurple"] = "Розовый",
                 ["Th.Custom"] = "Пользовательский",
                 ["St.StartMinimized"] = "Сворачивать в трей при запуске",
                 ["St.StartPanel"] = "Показывать панель при запуске",
@@ -1052,7 +1077,7 @@ namespace SonicRoute
                 ["Hk.Updated"] = "✓ Горячая клавиша обновлена",
                 ["Hk.ConflictTip"] = "{0} занято другой программой; используется {1}（переназначить ниже）",
                 ["Hk.Unregistered"] = "Не удалось зарегистрировать горячую клавишу（возможен конфликт）",
-            },
-        };
+            };
+
     }
 }

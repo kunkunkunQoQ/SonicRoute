@@ -36,6 +36,8 @@ namespace SonicRoute
         private bool _suppressDevCombo;
         private bool _suppressSettings;
         private bool _suppressFilter;
+private bool _suppressRename;
+private List<AppItem> _appItems = new();
         private readonly AppConfig _config;
 
         public MainWindow()
@@ -500,10 +502,11 @@ namespace SonicRoute
             await LoadAppsAsync();
         }
 
-        /// <summary>应用页：保存应用自定义名称（按进程名）。留空=恢复默认；保存后刷新列表并恢复选中。</summary>
-        private async void AppsRenameSave_Click(object sender, RoutedEventArgs e)
+        /// <summary>应用页：输入即自动保存应用自定义名称（按进程名），留空=恢复默认。
+        /// 不重建列表/输入框，避免中文输入法组合中断；仅更新标题与列表项显示。</summary>
+        private void AppsRenameBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (_appsSelected == null) return;
+            if (_suppressRename || _appsSelected == null) return;
             var pn = _appsSelected.ProcessName;
             if (string.IsNullOrWhiteSpace(pn)) return;
             var name = AppsRenameBox.Text.Trim();
@@ -511,18 +514,18 @@ namespace SonicRoute
             else _config.AppNames[pn] = name;
             ConfigService.Save(_config);
 
-            var selPid = _appsSelected.ProcessId;
-            await LoadAppsAsync();
-            var item = AppsListBox.Items.OfType<AppItem>().FirstOrDefault(x => x.ProcessId == selPid);
-            if (item != null) AppsListBox.SelectedItem = item;
-            AppsStatusText.Text = L10n.T("Apps.RenameSaved");
+            AppsDetailTitle.Text = AppDisplayName.Get(_appsSelected);
+            foreach (var it in _appItems)
+                if (string.Equals(it.ProcessName, pn, StringComparison.OrdinalIgnoreCase))
+                    it.RefreshName();
         }
 
         private async Task LoadAppsAsync()
         {
             var apps = await Task.Run(() => AudioService.GetApps());
+            _appItems = apps.Select(AppItem.From).ToList();
             AppsListBox.ItemsSource = null;
-            AppsListBox.ItemsSource = apps.Select(AppItem.From).ToList();
+            AppsListBox.ItemsSource = _appItems;
         }
 
         private async void AppsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -532,7 +535,9 @@ namespace SonicRoute
             {
                 AppsDetailTitle.Text = L10n.T("Apps.SelectHint");
                 AppsDetailPid.Text = "";
+                _suppressRename = true;
                 AppsRenameBox.Text = "";
+                _suppressRename = false;
                 AppsRenameBox.IsEnabled = false;
                 SetAppsVolumeUi(null);
                 return;
@@ -542,7 +547,9 @@ namespace SonicRoute
             AppsDetailTitle.Text = AppDisplayName.Get(_appsSelected);
             AppsDetailPid.Text = $"PID {pid} · {_appsSelected.ProcessName ?? "?"}";
             AppsRenameBox.IsEnabled = true;
+            _suppressRename = true;
             AppsRenameBox.Text = _config.AppNames.TryGetValue(_appsSelected.ProcessName ?? "", out var rn) ? rn ?? "" : "";
+            _suppressRename = false;
 
             var outId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
 

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -10,7 +10,7 @@
     <RootNamespace>SonicRoute</RootNamespace>
     <AssemblyName>SonicRoute</AssemblyName>
     <PlatformTarget>x64</PlatformTarget>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <AssemblyTitle>SonicRoute</AssemblyTitle>
     <Product>音跃 SonicRoute</Product>
     <Authors>困困困</Authors>

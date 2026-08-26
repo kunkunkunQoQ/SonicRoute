@@ -2,7 +2,7 @@
 
 > Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出设备切到耳机、音箱、显示器或虚拟设备，改完立即生效。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.3** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.4** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
 
 底层完全基于 **EarTrumpet 已验证的 Per-App Audio Routing 机制** 实现（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`），实测通过。
 
@@ -28,8 +28,8 @@
 ## 🚀 快速开始
 
 1. 前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 选择版本下载：
-   - **绿色免安装版**（`SonicRoute-v1.0.3.exe` / `SonicRoute-v1.0.3.zip`）：无需任何环境，下载即用
-   - **轻量版**（`SonicRoute-v1.0.3-Lite.exe` / `SonicRoute-v1.0.3-Lite.zip`）：体积极小，需已装 .NET 8 Desktop Runtime
+   - **绿色免安装版**（`SonicRoute-v1.0.4.exe` / `SonicRoute-v1.0.4.zip`）：无需任何环境，下载即用
+   - **轻量版**（`SonicRoute-v1.0.4-Lite.exe` / `SonicRoute-v1.0.4-Lite.zip`）：体积极小，需已装 .NET 8 Desktop Runtime
 2. 双击运行（绿色免安装版已内置运行时）
 3. 程序驻留系统托盘：
    - **单击**托盘图标 → 快捷面板（当前应用切设备 / 调音量 / 静音 / 全局麦克风静音）
@@ -146,12 +146,17 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 安装需求 | 优点 | 缺点 |
 |---|---|---|---|---|---|
-| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.3.exe` / `SonicRoute-v1.0.3.zip` | ~155MB / ~64MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
-| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.3-Lite.exe` / `SonicRoute-v1.0.3-Lite.zip` | ~1.5MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
+| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.4.exe` / `SonicRoute-v1.0.4.zip` | ~155MB / ~64MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
+| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.4-Lite.exe` / `SonicRoute-v1.0.4-Lite.zip` | ~1.5MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
 
 **轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
 
 ## 📋 更新日志
+
+**v1.0.4**
+- 应用重命名改为**输入即自动保存**（无需再点"保存名称"按钮，留空即恢复默认）
+- 优化内存占用：多语言改为**按需加载**，只加载正在使用的语言（切换重启生效）
+- 主题强调色"紫色"改为"**粉色**"（8 种语言同步更新）
 
 **v1.0.3**
 - 新增**应用自定义名称**：在「应用」页选中应用即可重命名，通知/面板/概览/应用列表统一显示新名称

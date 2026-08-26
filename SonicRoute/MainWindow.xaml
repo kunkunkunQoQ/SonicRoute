@@ -411,14 +411,9 @@
                                    Text="{Binding [Apps.SelectHint], Source={x:Static local:L10n.Instance}}"
                                    FontSize="15" FontWeight="SemiBold"
                                    Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,0,0,4"/>
-                        <DockPanel Margin="0,0,0,2">
-                            <Button x:Name="AppsRenameSave" DockPanel.Dock="Right"
-                                    Content="{Binding [Apps.RenameSave], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" Margin="8,0,0,0"
-                                    Click="AppsRenameSave_Click"/>
-                            <TextBox x:Name="AppsRenameBox" FontSize="12.5"
-                                     VerticalContentAlignment="Center" Padding="8,4"/>
-                        </DockPanel>
+                        <TextBox x:Name="AppsRenameBox" FontSize="12.5"
+                                 VerticalContentAlignment="Center" Padding="8,4"
+                                 TextChanged="AppsRenameBox_TextChanged"/>
                         <TextBlock Text="{Binding [Apps.RenameHint], Source={x:Static local:L10n.Instance}}"
                                    FontSize="11" Foreground="{DynamicResource Theme.TextSecondary}"
                                    Margin="0,0,0,12" TextWrapping="Wrap"/>

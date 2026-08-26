@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Media;
 using Microsoft.Win32;
@@ -54,7 +54,7 @@ namespace SonicRoute
                 (byte aR, byte aG, byte aB) = accent switch
                 {
                     "green" => ((byte)0x22, (byte)0xC5, (byte)0x5E),
-                    "purple" => ((byte)0x8B, (byte)0x5C, (byte)0xF6),
+                    "purple" => ((byte)0xEC, (byte)0x48, (byte)0x99), // 粉色 #EC4899
                     _ => ((byte)0x2F, (byte)0x80, (byte)0xED) // blue
                 };
                 accentColor = Color.FromRgb(aR, aG, aB);
