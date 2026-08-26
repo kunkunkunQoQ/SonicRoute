@@ -1,4 +1,4 @@
-﻿<Application x:Class="SonicRoute.App"
+<Application x:Class="SonicRoute.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
@@ -331,7 +331,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Theme.TextSecondary}"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                                 <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
