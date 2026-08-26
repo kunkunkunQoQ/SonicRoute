@@ -27,8 +27,10 @@
 
 ## 🚀 快速开始
 
-1. 前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载 `SonicRoute-v1.0.2.exe`（单文件）或 `SonicRoute-v1.0.2-解压即用.zip`
-2. 双击运行（绿色免安装，已内置运行时）
+1. 前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 选择版本下载：
+   - **绿色免安装版**（`SonicRoute-v1.0.2.exe` / `SonicRoute-v1.0.2.zip`）：无需任何环境，下载即用
+   - **轻量版**（`SonicRoute-v1.0.2-Lite.exe` / `SonicRoute-v1.0.2-Lite.zip`）：体积极小，需已装 .NET 8 Desktop Runtime
+2. 双击运行（绿色免安装版已内置运行时）
 3. 程序驻留系统托盘：
    - **单击**托盘图标 → 快捷面板（当前应用切设备 / 调音量 / 静音 / 全局麦克风静音）
    - **双击**托盘图标 → 完整管理界面
@@ -120,10 +122,14 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 ## 📦 发布产物
 
-每次 Release 同时提供两种：
+每次 Release 提供 **绿色免安装版（自包含）** 与 **轻量版（框架依赖）** 两种，均含 exe 与 zip：
 
-- **`SonicRoute-v1.0.2.exe`**：单文件自包含，下载直接双击运行（无需解压）
-- **`SonicRoute-v1.0.2-解压即用.zip`**：解压后双击 `SonicRoute.exe`（含使用说明.txt）
+| 版本 | 文件 | 体积 | 安装需求 | 优点 | 缺点 |
+|---|---|---|---|---|---|
+| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.2.exe` / `SonicRoute-v1.0.2.zip` | ~155MB / ~64MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
+| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.2-Lite.exe` / `SonicRoute-v1.0.2-Lite.zip` | ~1.5MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
+
+**轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
 
 ## 📋 更新日志
 
