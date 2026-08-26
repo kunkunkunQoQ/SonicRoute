@@ -95,16 +95,8 @@
 <a id="languages"></a>
 ## 🌐 多语言支持
 
-| 语言 | 代码 |
+| 语言 | 中文 `zh-CN` · English `en-US` · 日本語 `ja-JP` · 한국어 `ko-KR` · Français `fr-FR` · Deutsch `de-DE` · Español `es-ES` · Русский `ru-RU` |
 |---|---|
-| 中文 | `zh-CN` |
-| English | `en-US` |
-| 日本語 | `ja-JP` |
-| 한국어 | `ko-KR` |
-| Français | `fr-FR` |
-| Deutsch | `de-DE` |
-| Español | `es-ES` |
-| Русский | `ru-RU` |
 
 - **首次启动**自动跟随 Windows 系统语言（未匹配时默认英文）
 - **切换方式**：「设置 → 语言」下拉选择，重启后生效
