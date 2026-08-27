@@ -152,6 +152,7 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 |---|---|---|---|---|---|
 | 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.6.exe` / `SonicRoute-v1.0.6.zip` | ~156MB / ~67MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
 | ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.6-Lite.exe` / `SonicRoute-v1.0.6-Lite.zip` | ~1.6MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
+| 📦 MSI 安装包（仅稳定版） | `SonicRoute-v1.0.6.msi` | ~51MB | **无**（内置运行时） | 标准安装/卸载、开始菜单快捷方式、控制面板统一管理 | 体积较大，需管理员权限安装；仅正式/修复版发布 |
 
 **轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
 
@@ -196,7 +197,7 @@ A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应�
 | `r` | **修复版**（修复 bug 后的正式版本） | ✅ 上传 GitHub |
 
 - 例：`v1.0.5a` = 内部测试版；`v1.0.5r` = 修复 bug 后的正式发布版（再次修复递增 `r2`、`r3`…）
-- **MSI 安装包仅按需制作**：默认只发布 exe + zip；仅在明确要求制作 MSI 时才制作
+- **MSI 安装包仅按需制作，且仅上传稳定版本**：默认只发布 exe + zip，仅在明确要求制作 MSI 时才制作；`a` 测试版不制作、不上传 MSI，`r`/正式版才上传 MSI
   - 工具：WiX Toolset v7（`wix` dotnet 全局工具）；源文件 `dist\msi\SonicRoute-vX.Y.Z.wxs`
   - 构建：`wix build -acceptEula wix7 <wxs> -arch x64 -o <msi>`
   - 要点：安装文件名固定为 `SonicRoute.exe`（`<File Name="SonicRoute.exe">`），开始菜单快捷方式 Target 必须与之一致；快捷方式须显式 `<Shortcut Icon="AppIcon">`，否则开始菜单无图标；`UpgradeCode` 固定以便升级覆盖；控制面板"支持链接"用 `ARPURLINFOABOUT`
