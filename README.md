@@ -146,14 +146,12 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 <a id="release"></a>
 ## 📦 发布产物
 
-每次 Release 提供**绿色免安装版**与**轻量版**两种，均含 exe 与 zip（**默认不制作安装包**，MSI 仅 v1.0.6 曾提供）：
+每次 Release 提供**绿色免安装版**与**轻量版**两种，均含 exe 与 zip：
 
 | 版本 | 文件 | 体积 | 安装需求 | 优点 | 缺点 |
 |---|---|---|---|---|---|
 | 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.6.exe` / `SonicRoute-v1.0.6.zip` | ~156MB / ~67MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
 | ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.6-Lite.exe` / `SonicRoute-v1.0.6-Lite.zip` | ~1.6MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
-| 📦 MSI 安装包（仅 v1.0.6 提供，此后不再制作） | `SonicRoute-v1.0.6.msi` | ~51MB | **无**（内置运行时） | 标准安装/卸载、开始菜单快捷方式、控制面板统一管理、标准用户可安装（无需管理员） | 体积较大；已停止制作 |
-| 📦 MSI 轻量版（仅 v1.0.6 提供，此后不再制作） | `SonicRoute-v1.0.6-Lite.msi` | ~0.6MB | **需已装 .NET 8 Desktop Runtime** | 体积极小、标准安装/卸载、标准用户可安装（无需管理员） | 需先装 .NET 8 运行时；已停止制作 |
 
 **轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
 
@@ -198,8 +196,8 @@ A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应�
 | `r` | **修复版**（修复 bug 后的正式版本） | ✅ 上传 GitHub |
 
 - 例：`v1.0.5a` = 内部测试版；`v1.0.5r` = 修复 bug 后的正式发布版（再次修复递增 `r2`、`r3`…）
-- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**；MSI / MSIX 仅当明确要求时才制作，且**均不上传 GitHub**（MSIX 仅供 Microsoft Store 提交使用；MSI 曾于 v1.0.6 提供）
-- **MSI / MSIX 安装包（如有）须归档进源码文件夹**：`SonicRoute源码\vX.Y.Z\安装包\`（与绿色版 exe/zip 分开存放，不上传 GitHub）
+- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**；MSIX 仅当明确要求时才制作且**不上传 GitHub**（仅供 Microsoft Store 提交使用）
+- **MSIX 安装包（如有）须归档进源码文件夹**：`SonicRoute源码\vX.Y.Z\安装包\`（与绿色版 exe/zip 分开存放，不上传 GitHub）
 - **MSIX 打包要点**（仅按需制作，不上传 GitHub；是否提交 Microsoft Store 视情况）：
   - 工具：Windows SDK BuildTools NuGet 包（解压即用），`dist\msix\sdkbuildtools\bin\10.0.28000.0\x64\` 下的 `makeappx.exe` / `signtool.exe`
   - 产物：完整版 `SonicRoute-vX.Y.Z.msix`（自包含，~64MB）、Lite 版 `SonicRoute-vX.Y.Z-Lite.msix`（框架依赖，~0.4MB，需系统已装 .NET 8 Desktop Runtime）
