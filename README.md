@@ -15,17 +15,15 @@
 <a id="quick-start"></a>
 ## 🚀 快速开始
 
-1. 前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 选择版本下载：
-   - **绿色免安装版**（`SonicRoute-v1.0.6.exe` / `SonicRoute-v1.0.6.zip`）：无需任何环境，下载即用
-   - **轻量版**（`SonicRoute-v1.0.6-Lite.exe` / `SonicRoute-v1.0.6-Lite.zip`）：体积极小，需已装 .NET 8 Desktop Runtime
-2. 双击运行（绿色免安装版已内置运行时）
+1. 前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 选择版本下载（文件名见「📦 发布产物」）：
+   - **绿色免安装版**：无需任何环境，解压即用
+   - **轻量版**：体积极小，需已装 .NET 8 Desktop Runtime
+2. 双击 `SonicRoute.exe` 即可运行（绿色版已内置运行时）
 3. 程序驻留系统托盘：
    - **单击**托盘图标 → 快捷面板（当前应用切设备 / 调音量 / 静音 / 全局麦克风静音）
    - **双击**托盘图标 → 完整管理界面
    - **右键**托盘图标 → 打开完整界面 / 快速面板 / 退出
    - **滚轮**放在托盘右侧的任务栏区域上 → 调节当前应用音量
-
-> 也可运行 `SonicRoute.exe --main` 直接打开完整界面。
 
 <a id="features"></a>
 ## ✨ 功能特性
@@ -57,6 +55,8 @@
 <img src="docs/images/app-settings.png" width="700" alt="设置页">
 
 双击托盘图标打开完整界面，左侧导航（概览 / 应用 / 快捷键 / 主题 / 设置）：
+
+> 也可运行 `SonicRoute.exe --main` 直接打开完整界面。
 
 - **概览**：同快捷面板——当前应用、快捷切输出设备、音量、静音/全局麦克风静音
 - **应用**：列出有音频会话的应用，可切输出设备、调音量、改名、禁用自动切换
