@@ -198,13 +198,13 @@ A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应�
 | `r` | **修复版**（修复 bug 后的正式版本） | ✅ 上传 GitHub |
 
 - 例：`v1.0.5a` = 内部测试版；`v1.0.5r` = 修复 bug 后的正式发布版（再次修复递增 `r2`、`r3`…）
-- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**；MSI 仅当明确要求时才制作（曾于 v1.0.6 提供）
-- **MSIX 仅按需制作，默认不制作、不上传 Microsoft Store**（完整版 `SonicRoute-vX.Y.Z.msix` 曾于 v1.0.6 提供）
+- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**；MSI / MSIX 仅当明确要求时才制作，且**均不上传 GitHub**（MSIX 仅供 Microsoft Store 提交使用；MSI 曾于 v1.0.6 提供）
+- **MSIX 打包要点**（仅按需制作，不上传 GitHub；是否提交 Microsoft Store 视情况）：
   - 工具：Windows SDK BuildTools NuGet 包（解压即用），`dist\msix\sdkbuildtools\bin\10.0.28000.0\x64\` 下的 `makeappx.exe` / `signtool.exe`
   - 产物：完整版 `SonicRoute-vX.Y.Z.msix`（自包含，~64MB）、Lite 版 `SonicRoute-vX.Y.Z-Lite.msix`（框架依赖，~0.4MB，需系统已装 .NET 8 Desktop Runtime）
-  - 清单：x64 + `runFullTrust` 桌面桥（`EntryPoint="Windows.FullTrustApplication"`）；Identity Name 完整版 `SonicRoute` / Lite `SonicRouteLite`（互不冲突）；`Publisher="CN=SonicRouteDev"`（**必须与签名证书 Subject 一致**）；`TargetDeviceFamily` = Windows.Desktop，MinVersion `10.0.17763.0`；图标 Assets 多尺寸 PNG（44/150/310/Store/Wide）
+  - 清单：x64 + `runFullTrust` 桌面桥（`EntryPoint="Windows.FullTrustApplication"`）；提交 Microsoft Store 时 Identity Name = `8B44F47E.SonicRoute`、`Publisher="CN=1517F817-E0CD-44DA-8269-A50E0B6D7877"`（**须与 Partner Center 账号一致，且与签名证书 Subject 匹配**）、DisplayName 用预留的应用名；`TargetDeviceFamily` = Windows.Desktop，MinVersion `10.0.17763.0`；图标 Assets 多尺寸 PNG（44/150/310/Store/Wide）
   - 打包：`makeappx pack /d <内容目录> /o /p <输出.msix>`（内容目录含 AppxManifest.xml + Assets\ + 固定名 `SonicRoute.exe`）
-  - 签名：自签名代码证书 `New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=SonicRouteDev"` → 导出 pfx → `signtool sign /fd SHA256 /f <pfx> /p <密码> /tr http://timestamp.digicert.com /td SHA256 <msix>`
+  - 签名：自签名代码证书 `New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=1517F817-E0CD-44DA-8269-A50E0B6D7877"` → 导出 pfx → `signtool sign /fd SHA256 /f <pfx> /p <密码> /tr http://timestamp.digicert.com /td SHA256 <msix>`
   - 安装：自签名证书须先导入 `LocalMachine\Root`（管理员）才能 `Add-AppxPackage` 安装；卸载用 `Remove-AppxPackage`
 
 <a id="license"></a>
