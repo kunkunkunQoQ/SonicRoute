@@ -198,11 +198,7 @@ A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应�
 | `r` | **修复版**（修复 bug 后的正式版本） | ✅ 上传 GitHub |
 
 - 例：`v1.0.5a` = 内部测试版；`v1.0.5r` = 修复 bug 后的正式发布版（再次修复递增 `r2`、`r3`…）
-- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**：**MSI 仅当用户明确要求时才制作**；**MSIX 一律不制作、不上传 Microsoft Store**（此前 v1.0.6 曾提供 MSI 与 MSIX，此后默认不再制作）
-  - 工具：WiX Toolset v7（`wix` dotnet 全局工具）；源文件 `dist\msi\SonicRoute-vX.Y.Z.wxs` 与 `dist\msi\SonicRoute-vX.Y.Z-Lite.wxs`
-  - 构建：`wix build -acceptEula wix7 -arch x86 <wxs> -o <msi>`（**x86 包 + perUser 安装**，标准用户可静默安装，符合微软 MSI 应用认证；程序本体仍为 x64）
-  - 要点：安装文件名固定为 `SonicRoute.exe`（`<File Name="SonicRoute.exe">`），开始菜单快捷方式 Target 必须与之一致；快捷方式须显式 `<Shortcut Icon="AppIcon">`，否则开始菜单无图标；`UpgradeCode` 固定以便升级覆盖；控制面板"支持链接"用 `ARPURLINFOABOUT`；安装目录用 `LocalAppDataFolder`（%LocalAppData%\SonicRoute），`Scope="perUser"`
-  - 已知限制：WiX v7 自定义安装向导受保护级别限制（暂用 Windows 基础安装界面）；未签名 MSI 可能触发 SmartScreen 提示（数字签名需付费证书）
+- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**；MSI 仅当明确要求时才制作，MSIX 一律不制作（曾于 v1.0.6 提供）
 
 <a id="license"></a>
 ## 📄 许可证
