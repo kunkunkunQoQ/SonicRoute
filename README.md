@@ -90,7 +90,7 @@
 | 切换当前应用快捷设备 | `Ctrl + Alt + D` |
 | 打开快速面板 | `Ctrl + Alt + Space` |
 
-> 在「设置 → 快捷键」中可点击「修改」重新绑定（免弹窗内联录音，`Esc` 取消）。若组合被其他程序占用会自动回退默认并标注 ⚠。
+> 在「快捷键」页可点击「修改」重新绑定（免弹窗内联录音，`Esc` 取消）。若组合被其他程序占用会自动回退默认并标注 ⚠。
 
 <a id="languages"></a>
 ## 🌐 多语言支持
@@ -196,15 +196,7 @@ A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应�
 | `r` | **修复版**（修复 bug 后的正式版本） | ✅ 上传 GitHub |
 
 - 例：`v1.0.5a` = 内部测试版；`v1.0.5r` = 修复 bug 后的正式发布版（再次修复递增 `r2`、`r3`…）
-- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**；MSIX 仅当明确要求时才制作且**不上传 GitHub**（仅供 Microsoft Store 提交使用）
-- **MSIX 安装包（如有）须归档进源码文件夹**：`SonicRoute源码\vX.Y.Z\安装包\`（与绿色版 exe/zip 分开存放，不上传 GitHub）
-- **MSIX 打包要点**（仅按需制作，不上传 GitHub；是否提交 Microsoft Store 视情况）：
-  - 工具：Windows SDK BuildTools NuGet 包（解压即用），`dist\msix\sdkbuildtools\bin\10.0.28000.0\x64\` 下的 `makeappx.exe` / `signtool.exe`
-  - 产物：完整版 `SonicRoute-vX.Y.Z.msix`（自包含，~64MB）、Lite 版 `SonicRoute-vX.Y.Z-Lite.msix`（框架依赖，~0.4MB，需系统已装 .NET 8 Desktop Runtime）
-  - 清单：x64 + `runFullTrust` 桌面桥（`EntryPoint="Windows.FullTrustApplication"`）；提交 Microsoft Store 时 Identity Name = `8B44F47E.SonicRoute`、`Publisher="CN=1517F817-E0CD-44DA-8269-A50E0B6D7877"`（**须与 Partner Center 账号一致，且与签名证书 Subject 匹配**）、DisplayName 用预留的应用名；`TargetDeviceFamily` = Windows.Desktop，MinVersion `10.0.17763.0`；图标 Assets 多尺寸 PNG（44/150/310/Store/Wide）
-  - 打包：`makeappx pack /d <内容目录> /o /p <输出.msix>`（内容目录含 AppxManifest.xml + Assets\ + 固定名 `SonicRoute.exe`）
-  - 签名：自签名代码证书 `New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=1517F817-E0CD-44DA-8269-A50E0B6D7877"` → 导出 pfx → `signtool sign /fd SHA256 /f <pfx> /p <密码> /tr http://timestamp.digicert.com /td SHA256 <msix>`
-  - 安装：自签名证书须先导入 `LocalMachine\Root`（管理员）才能 `Add-AppxPackage` 安装；卸载用 `Remove-AppxPackage`
+- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**
 
 <a id="license"></a>
 ## 📄 许可证
