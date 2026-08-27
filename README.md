@@ -199,6 +199,7 @@ A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应�
 
 - 例：`v1.0.5a` = 内部测试版；`v1.0.5r` = 修复 bug 后的正式发布版（再次修复递增 `r2`、`r3`…）
 - **默认不制作安装包，仅发布绿色免安装版（exe + zip）**；MSI / MSIX 仅当明确要求时才制作，且**均不上传 GitHub**（MSIX 仅供 Microsoft Store 提交使用；MSI 曾于 v1.0.6 提供）
+- **MSI / MSIX 安装包（如有）须归档进源码文件夹**：`SonicRoute源码\vX.Y.Z\安装包\`（与绿色版 exe/zip 分开存放，不上传 GitHub）
 - **MSIX 打包要点**（仅按需制作，不上传 GitHub；是否提交 Microsoft Store 视情况）：
   - 工具：Windows SDK BuildTools NuGet 包（解压即用），`dist\msix\sdkbuildtools\bin\10.0.28000.0\x64\` 下的 `makeappx.exe` / `signtool.exe`
   - 产物：完整版 `SonicRoute-vX.Y.Z.msix`（自包含，~64MB）、Lite 版 `SonicRoute-vX.Y.Z-Lite.msix`（框架依赖，~0.4MB，需系统已装 .NET 8 Desktop Runtime）
