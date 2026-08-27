@@ -153,6 +153,7 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 | 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.6.exe` / `SonicRoute-v1.0.6.zip` | ~156MB / ~67MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
 | ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.6-Lite.exe` / `SonicRoute-v1.0.6-Lite.zip` | ~1.6MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
 | 📦 MSI 安装包（仅稳定版） | `SonicRoute-v1.0.6.msi` | ~51MB | **无**（内置运行时） | 标准安装/卸载、开始菜单快捷方式、控制面板统一管理、标准用户可安装（无需管理员） | 体积较大；仅正式/修复版发布 |
+| 📦 MSI 轻量版（仅稳定版） | `SonicRoute-v1.0.6-Lite.msi` | ~0.6MB | **需已装 .NET 8 Desktop Runtime** | 体积极小、标准安装/卸载、标准用户可安装（无需管理员） | 需先装 .NET 8 运行时；仅正式/修复版发布 |
 
 **轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
 
