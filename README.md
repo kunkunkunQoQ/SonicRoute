@@ -2,9 +2,9 @@
 
 > Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出设备切到耳机、音箱、显示器或虚拟设备。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.6** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.7** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
 
-底层完全基于 **EarTrumpet 已验证的 Per-App Audio Routing 机制** 实现（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`），实测通过。
+底层完全基于 **EarTrumpet 已验证的 Per-App Audio Routing 机制** 实现（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
 ---
 
@@ -183,7 +183,7 @@ A：不需要，解压即用，已内置 .NET 运行时。
 A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应用改回即可（SonicRoute 改的就是音量合成器里应用那项，卸载后依然保留）。
 
 **Q：为什么打开过快提面板或完整界面后，内存会从 30-38MB 涨到 56-68MB？**
-A：这是 WPF 渲染层的正常行为——首次创建窗口时，WPF 会初始化整套渲染系统（渲染线程、交换链、字体/画刷缓存等）。这部分是**进程级共享缓存，关闭窗口也不会释放**（只有退出进程才回收）。内存涨到 56-68MB 后**保持稳定、不会继续增长**，不是内存泄漏。
+A：这是 WPF 渲染层的正常行为——首次创建窗口时，WPF 会初始化整套渲染系统（渲染线程、交换链、字体/画刷缓存等）。这部分是**进程级共享缓存，关闭窗口也不会释放**（只有退出进程才回收）。内存涨到 56-68MB 后**保持稳定、不会继续增长**，不是内存泄漏。（如果一直不打开快速面板或者完整ui就一直占用低后续会优化）
 
 <a id="versioning"></a>
 ## 📌 版本规范
