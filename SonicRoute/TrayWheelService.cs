@@ -266,8 +266,41 @@ namespace SonicRoute
                 if (_osd == null) return;
                 var wa = SystemParameters.WorkArea;
                 double w = Math.Min(_osd.ActualWidth > 0 ? _osd.ActualWidth : 360, 400);
-                _osd.Left = wa.Right - w - 16;
-                _osd.Top = wa.Top + 14;
+                double h = _osd.ActualHeight > 0 ? _osd.ActualHeight : 80;
+
+                // 实验设置 - 自由调整：9 宫格位置 + X/Y 偏移（默认右上角 TR）；"Custom" 用自定义坐标直接定位
+                var cfg = ConfigService.Load();
+                string pos = string.IsNullOrWhiteSpace(cfg.OsdPosition) ? "TR" : cfg.OsdPosition;
+                double ox = cfg.OsdOffsetX;
+                double oy = cfg.OsdOffsetY;
+
+                // 自定义模式：直接使用用户输入的屏幕坐标（未设置时回退右上角）
+                if (string.Equals(pos, "Custom", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (cfg.OsdCustomX >= 0 && cfg.OsdCustomY >= 0)
+                    {
+                        _osd.Left = cfg.OsdCustomX;
+                        _osd.Top = cfg.OsdCustomY;
+                        return;
+                    }
+                    pos = "TR";
+                }
+
+                double left, top;
+                switch (pos)
+                {
+                    case "TL": left = wa.Left + 16; top = wa.Top + 14; break;
+                    case "T": left = wa.Left + (wa.Width - w) / 2; top = wa.Top + 14; break;
+                    case "L": left = wa.Left + 16; top = wa.Top + (wa.Height - h) / 2; break;
+                    case "C": left = wa.Left + (wa.Width - w) / 2; top = wa.Top + (wa.Height - h) / 2; break;
+                    case "R": left = wa.Right - w - 16; top = wa.Top + (wa.Height - h) / 2; break;
+                    case "BL": left = wa.Left + 16; top = wa.Bottom - h - 14; break;
+                    case "B": left = wa.Left + (wa.Width - w) / 2; top = wa.Bottom - h - 14; break;
+                    case "BR": left = wa.Right - w - 16; top = wa.Bottom - h - 14; break;
+                    default: left = wa.Right - w - 16; top = wa.Top + 14; break; // TR 右上角
+                }
+                _osd.Left = left + ox;
+                _osd.Top = top + oy;
             }
             catch { }
         }

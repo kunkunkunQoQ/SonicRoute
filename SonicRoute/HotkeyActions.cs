@@ -13,6 +13,8 @@ namespace SonicRoute
         public const string ActVolUp = "增大当前应用音量";
         public const string ActVolDown = "减小当前应用音量";
         public const string ActPanel = "打开快速面板";
+        /// <summary>实验模式 - 麦克风选项开启后才显示的隐藏动作：切换当前应用的录音（输入）设备。</summary>
+        public const string ActSwitchInput = "切换当前应用麦克风设备";
 
         public static readonly string[] All =
         {
@@ -21,6 +23,7 @@ namespace SonicRoute
             ActSwitchOutput,
             ActMute,
             ActMuteInput,
+            ActSwitchInput,
             ActPanel
         };
 
@@ -31,6 +34,7 @@ namespace SonicRoute
             [ActSwitchOutput] = "Ctrl+Alt+D",
             [ActMute] = "Ctrl+Shift+M",   // Ctrl+Alt+M 常被其他程序注册（本机实测被占用），改用 Ctrl+Shift+M
             [ActMuteInput] = "Ctrl+Shift+N",      // 麦克风静音，与扬声器静音 Ctrl+Shift+M 区分
+            [ActSwitchInput] = "Ctrl+Alt+Shift+D", // 实验模式：切换当前应用麦克风设备
             [ActPanel] = "Ctrl+Alt+Space",
         };
 
@@ -43,6 +47,7 @@ namespace SonicRoute
             ActVolUp => L10n.T("Act.VolUp"),
             ActVolDown => L10n.T("Act.VolDown"),
             ActPanel => L10n.T("Act.Panel"),
+            ActSwitchInput => L10n.T("Act.SwitchInput"),
             _ => action
         };
 
