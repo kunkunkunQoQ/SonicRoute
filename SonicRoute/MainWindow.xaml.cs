@@ -1369,6 +1369,8 @@ private List<AppItem> _appItems = new();
                 ExpMicPanelCheck.IsChecked = _config.MicInPanel;
                 ExpMicPanelCheck.IsEnabled = expMic;
                 ExpFreeUIMemCheck.IsChecked = _config.FreeUIMemoryOnClose;
+                ExpFreePanelMemCheck.IsChecked = _config.FreePanelUIMemory;
+                ExpFreePanelMemCheck.Visibility = _config.FreeUIMemoryOnClose ? Visibility.Visible : Visibility.Collapsed;
 
                 // OSD 位置：下拉（9 宫格 + 自定义）
                 var posLabels = OsdPosKeys.Select(k => L10n.T("Exp.Osd." + k)).ToList();
@@ -1435,6 +1437,16 @@ private List<AppItem> _appItems = new();
         {
             if (!IsLoaded || _suppressSettings) return;
             _config.FreeUIMemoryOnClose = ExpFreeUIMemCheck.IsChecked == true;
+            ConfigService.Save(_config);
+            // 子选项「释放快速面板 UI 内存」跟随主开关显示
+            ExpFreePanelMemCheck.Visibility = ExpFreeUIMemCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>实验设置 - 子选项：关闭快速面板时释放面板 UI 内存（实时生效，独立于主开关）。</summary>
+        private void ExpFreePanelMem_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.FreePanelUIMemory = ExpFreePanelMemCheck.IsChecked == true;
             ConfigService.Save(_config);
         }
 
