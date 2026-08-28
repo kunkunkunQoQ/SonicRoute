@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.0.7",
+                Text = "音跃 SonicRoute v1.0.7r",
                 Visible = true
             };
 
@@ -132,9 +132,20 @@ namespace SonicRoute
                 _mainWindow.Closed += (_, _) =>
                 {
                     _mainWindow = null;
-                    // 实验设置「关闭 UI 释放内存」：窗口真正关闭后延迟触发一次 GC，尽快回收窗口与 UI 资源
+                    // 实验设置「关闭 UI 释放内存」：窗口真正关闭后强制回收 UI 内存。
+                    // 立即回收一次，再延迟多次重试（1s/3s/5s）：窗口关闭瞬间可能有挂起的异步续体
+                    // （切设备/调音量/刷新应用等，闭包会捕获窗口对象），等它们跑完后窗口才真正可回收，
+                    // 此时再次 GC 确保窗口与视觉树被回收。
                     if (ConfigService.Load().FreeUIMemoryOnClose)
-                        _ = Task.Run(async () => { await Task.Delay(300); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); });
+                        _ = Task.Run(async () =>
+                        {
+                            GcNow();
+                            foreach (var ms in new[] { 1000, 3000, 5000 })
+                            {
+                                await Task.Delay(ms);
+                                GcNow();
+                            }
+                        });
                 };
             }
 
@@ -144,6 +155,18 @@ namespace SonicRoute
                 _mainWindow.WindowState = WindowState.Normal;
             _mainWindow.Topmost = true;
             _mainWindow.Topmost = false;
+        }
+
+        /// <summary>强制回收：GC 两轮（含终结器队列），用于「关闭 UI 释放内存」时尽快回收窗口与 UI 资源。</summary>
+        private static void GcNow()
+        {
+            try
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
+            catch { }
         }
 
         /// <summary>重新加载全局快捷键（设置页修改后调用）。实验模式的隐藏动作仅在"实验模式+麦克风选项"开启时注册。</summary>
