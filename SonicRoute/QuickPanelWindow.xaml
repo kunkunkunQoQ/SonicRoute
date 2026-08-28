@@ -114,7 +114,7 @@
             <DockPanel>
                 <TextBlock Text="🎧 音跃"
                            FontSize="15" FontWeight="Bold" Foreground="{DynamicResource Theme.TextPrimary}"/>
-                <TextBlock Text="v1.06" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
+                <TextBlock Text="v1.0.7" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
                            VerticalAlignment="Center" HorizontalAlignment="Right"/>
             </DockPanel>
             <TextBlock x:Name="AppNameText"
@@ -142,6 +142,25 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
+
+            <!-- 输入设备（麦克风）：实验模式+麦克风选项+快捷面板显示时可见，与输出一致 -->
+            <StackPanel x:Name="InputSection" Visibility="Collapsed">
+                <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,10"/>
+                <TextBlock Text="{Binding [Qp.Input], Source={x:Static local:L10n.Instance}}"
+                           FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,6"/>
+                <TextBlock x:Name="InputCurrentText" Text="…"
+                           FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
+                           Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
+                           ToolTipService.ShowDuration="8000"/>
+                <ItemsControl x:Name="InputButtonsPanel">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
 
             <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,10"/>
 

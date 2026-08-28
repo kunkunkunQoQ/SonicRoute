@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.06",
+                Text = "音跃 SonicRoute v1.0.7",
                 Visible = true
             };
 
@@ -129,7 +129,13 @@ namespace SonicRoute
             if (_mainWindow == null)
             {
                 _mainWindow = new MainWindow();
-                _mainWindow.Closed += (_, _) => _mainWindow = null;
+                _mainWindow.Closed += (_, _) =>
+                {
+                    _mainWindow = null;
+                    // 实验设置「关闭 UI 释放内存」：窗口真正关闭后延迟触发一次 GC，尽快回收窗口与 UI 资源
+                    if (ConfigService.Load().FreeUIMemoryOnClose)
+                        _ = Task.Run(async () => { await Task.Delay(300); GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); });
+                };
             }
 
             _mainWindow.Show();
@@ -140,14 +146,17 @@ namespace SonicRoute
             _mainWindow.Topmost = false;
         }
 
-        /// <summary>重新加载全局快捷键（设置页修改后调用）。</summary>
+        /// <summary>重新加载全局快捷键（设置页修改后调用）。实验模式的隐藏动作仅在"实验模式+麦克风选项"开启时注册。</summary>
         internal void ReloadHotkeys()
         {
             if (_hotkeys == null) return;
             var config = ConfigService.Load();
+            bool expMicOn = config.ExperimentalMode && config.ExperimentalMic;
             var map = new Dictionary<string, string>();
             foreach (var a in HotkeyActions.All)
             {
+                // 实验模式隐藏动作：未开启麦克风选项不注册，避免后台占用组合键
+                if (a == HotkeyActions.ActSwitchInput && !expMicOn) continue;
                 map[a] = config.Hotkeys.TryGetValue(a, out var c)
                     ? c
                     : (HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "");
@@ -231,6 +240,12 @@ namespace SonicRoute
                 case HotkeyActions.ActSwitchOutput:
                     string? dev = await CycleDeviceAsync(pid, EDataFlow.eRender);
                     _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(dev) ? "无可用设备" : $"🔊 {dev}");
+                    break;
+
+                case HotkeyActions.ActSwitchInput:
+                    // 实验模式 - 麦克风选项开启后才注册的隐藏动作：切换当前应用的录音（输入）设备
+                    string? mdev = await CycleDeviceAsync(pid, EDataFlow.eCapture);
+                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? "无可用麦克风设备" : $"🎤 {mdev}");
                     break;
             }
         }

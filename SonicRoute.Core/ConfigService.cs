@@ -54,6 +54,39 @@ namespace SonicRoute.Core
 
         /// <summary>窗口/面板背景透明度（60–100，默认 85：适当通透、保持可读）。</summary>
         public int BackgroundOpacity { get; set; } = 85;
+
+        /// <summary>实验模式已解锁（设置页底部点击作者名 5 次触发，持久化后显示实验模式开关）。</summary>
+        public bool ExperimentalUnlocked { get; set; }
+
+        /// <summary>实验模式开关（需先解锁，重启生效）。</summary>
+        public bool ExperimentalMode { get; set; }
+
+        /// <summary>实验模式 - 麦克风选项（需开启实验模式，重启生效；开启后显示麦克风相关设置与快捷键）。</summary>
+        public bool ExperimentalMic { get; set; }
+
+        /// <summary>实验设置 - 麦克风相关选项是否在快捷面板显示（需实验模式+麦克风选项，重启生效）。</summary>
+        public bool MicInPanel { get; set; } = true;
+
+        /// <summary>折叠设置页"保留的设备/设备名称"区块（含麦克风），默认开启；开关位于设置页（不依赖实验模式）。</summary>
+        public bool CollapseDeviceSections { get; set; } = true;
+
+        /// <summary>实验设置 - OSD 显示位置（9 宫格：TL/T/TR/L/C/R/BL/B/BR；"Custom" 用自定义坐标）。</summary>
+        public string OsdPosition { get; set; } = "TR";
+
+        /// <summary>实验设置 - 关闭完整界面时释放 UI 占用的内存（真正关闭窗口，下次打开重建，实时生效）。</summary>
+        public bool FreeUIMemoryOnClose { get; set; }
+
+        /// <summary>实验设置 - OSD 水平偏移（像素，右/下为正；非自定义模式生效）。</summary>
+        public int OsdOffsetX { get; set; }
+
+        /// <summary>实验设置 - OSD 垂直偏移（像素，右/下为正；非自定义模式生效）。</summary>
+        public int OsdOffsetY { get; set; }
+
+        /// <summary>实验设置 - 自定义 OSD 位置 X（屏幕像素坐标，-1 表示未设置回退默认）。</summary>
+        public int OsdCustomX { get; set; } = -1;
+
+        /// <summary>实验设置 - 自定义 OSD 位置 Y（屏幕像素坐标，-1 表示未设置回退默认）。</summary>
+        public int OsdCustomY { get; set; } = -1;
     }
 
     public static class ConfigService

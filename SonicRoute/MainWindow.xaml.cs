@@ -29,6 +29,8 @@ namespace SonicRoute
     {
         private List<AudioDeviceInfo> _outputs = new();
         private List<AudioDeviceInfo> _outputDisplay = new();
+        private List<AudioDeviceInfo> _inputs = new();
+        private List<AudioDeviceInfo> _inputDisplay = new();
         private AudioAppInfo? _overviewApp;
         private AudioAppInfo? _appsSelected;
         private bool _suppressVolume;
@@ -51,6 +53,10 @@ private List<AppItem> _appItems = new();
                 await LoadDevicesAsync();
                 await RefreshOverviewAsync();
                 BuildDeviceNameLists();
+                // 实验 UI（概览/应用/设置输入区/名称区）可见性：麦克风选项开启时显示
+                ApplyExpMicUi(_config.ExperimentalUnlocked && _config.ExperimentalMode && _config.ExperimentalMic);
+                NavExperimental.Visibility = _config.ExperimentalUnlocked && _config.ExperimentalMode
+                    ? Visibility.Visible : Visibility.Collapsed;
             };
             // 共享"当前应用"变化（前台自动跟随/面板切换）时同步概览
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
@@ -209,12 +215,14 @@ private List<AppItem> _appItems = new();
             HotkeysPage.Visibility = tag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
             ThemePage.Visibility = tag == "Theme" ? Visibility.Visible : Visibility.Collapsed;
             SettingsPage.Visibility = tag == "Settings" ? Visibility.Visible : Visibility.Collapsed;
+            ExperimentalPage.Visibility = tag == "Experimental" ? Visibility.Visible : Visibility.Collapsed;
 
             if (tag == "Overview") await RefreshOverviewAsync();
             else if (tag == "Apps") await LoadAppsAsync();
             else if (tag == "Hotkeys") BuildHotkeyList();
             else if (tag == "Theme") LoadTheme();
             else if (tag == "Settings") LoadSettings();
+            else if (tag == "Experimental") LoadExperimentalSettings();
         }
 
         // ==================================================================
@@ -229,6 +237,16 @@ private List<AppItem> _appItems = new();
             foreach (var d in outputs) d.IsDefault = string.Equals(d.Id, defOut, StringComparison.OrdinalIgnoreCase);
 
             _outputs = outputs;
+
+            // 输入设备（麦克风）：仅实验模式 + 麦克风选项使用（快速切换当前应用麦克风设备/保留设置）
+            try
+            {
+                var inputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eCapture));
+                string? defIn = await Task.Run(() => AudioService.GetDefaultDeviceId(EDataFlow.eCapture));
+                foreach (var d in inputs) d.IsDefault = string.Equals(d.Id, defIn, StringComparison.OrdinalIgnoreCase);
+                _inputs = inputs;
+            }
+            catch { _inputs = new List<AudioDeviceInfo>(); }
 
             ReloadDeviceDisplay();
         }
@@ -247,6 +265,9 @@ private List<AppItem> _appItems = new();
 
         private IEnumerable<AudioDeviceInfo> VisibleOutputs =>
             _outputs.Where(d => !_config.HiddenOutputDevices.Contains(d.Id));
+
+        private IEnumerable<AudioDeviceInfo> VisibleInputs =>
+            _inputs.Where(d => !_config.HiddenInputDevices.Contains(d.Id));
 
         /// <summary>刷新所有设备下拉 / 快速按钮 / 名称编辑列表的显示。</summary>
         private void ReloadDeviceDisplay()
@@ -347,11 +368,17 @@ private List<AppItem> _appItems = new();
             OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
 
             var outs = DisplayDevices(VisibleOutputs).ToList();
+            _inputDisplay = DisplayDevices(VisibleInputs).ToList();
+            OverviewInputCombo.ItemsSource = null;
+            OverviewInputCombo.ItemsSource = _inputDisplay;
 
             if (_overviewApp == null)
             {
                 OverviewOutputCurrentText.Text = "";
                 RenderQuickButtons(OverviewOutputQuickPanel, outs);
+                OverviewInputCurrentText.Text = "";
+                OverviewInputCurrentText.Tag = null;
+                RenderInputQuickButtons();
                 SetVolumeUi(null);
                 return;
             }
@@ -369,6 +396,17 @@ private List<AppItem> _appItems = new();
             var selectedOut = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase));
             _suppressDevCombo = true;
             OverviewOutputCombo.SelectedItem = selectedOut ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault();
+            _suppressDevCombo = false;
+
+            // 输入设备（麦克风）：与输出一致读取持久化端点并刷新下拉/快捷按钮
+            var inId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture));
+            string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
+            OverviewInputCurrentText.Text = DescribeCurrent(_inputDisplay, inShort);
+            OverviewInputCurrentText.Tag = inShort;
+            RenderInputQuickButtons();
+            var selectedIn = _inputDisplay.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase));
+            _suppressDevCombo = true;
+            OverviewInputCombo.SelectedItem = selectedIn ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault();
             _suppressDevCombo = false;
 
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
@@ -443,6 +481,79 @@ private List<AppItem> _appItems = new();
             var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, dev.Id));
             OverviewStatusText.Text = ok
                 ? string.Format(L10n.T("Ov.SwitchOk"), "🔊 " + dev.DisplayName, AppDisplayName.Get(app))
+                : $"✗ {msg}";
+            await RefreshOverviewDevicesVolumeAsync();
+        }
+
+        // ==================================================================
+        // 概览：输入设备（麦克风）—— 与输出完全对称（实验模式 + 麦克风选项开启时使用）
+        // ==================================================================
+
+        private void RenderInputQuickButtons()
+        {
+            OverviewInputQuickPanel.Items.Clear();
+            foreach (var dev in _inputDisplay)
+            {
+                var btn = new Button
+                {
+                    Content = ShortName(dev.DisplayName),
+                    Tag = dev,
+                    ToolTip = dev.DisplayName
+                };
+                btn.SetResourceReference(StyleProperty, "QuickDevButton");
+                btn.Click += (_, _) => OnInputQuickSwitch(dev);
+                OverviewInputQuickPanel.Items.Add(btn);
+            }
+            HighlightInputQuickActive();
+        }
+
+        private void HighlightInputQuickActive()
+        {
+            string? activeId = OverviewInputCurrentText.Tag as string;
+            foreach (var item in OverviewInputQuickPanel.Items)
+            {
+                if (item is not Button btn || btn.Tag is not AudioDeviceInfo dev) continue;
+                bool active = activeId != null &&
+                              string.Equals(dev.Id, activeId, StringComparison.OrdinalIgnoreCase);
+                btn.SetResourceReference(StyleProperty, active ? "QuickDevButtonActive" : "QuickDevButton");
+            }
+        }
+
+        private async void OnInputQuickSwitch(AudioDeviceInfo dev)
+        {
+            var app = _overviewApp;
+            if (app == null)
+            {
+                OverviewStatusText.Text = L10n.T("Ov.NoAudio");
+                return;
+            }
+            MarkLastUsed(app);
+
+            var pid = (int)app.ProcessId;
+            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eCapture, dev.Id));
+            OverviewStatusText.Text = ok
+                ? string.Format(L10n.T("Ov.SwitchOk"), "🎤 " + dev.DisplayName, AppDisplayName.Get(app))
+                : $"✗ {msg}";
+            await RefreshOverviewDevicesVolumeAsync();
+        }
+
+        private async void OverviewInputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressDevCombo) return;
+            await ApplyOverviewInputComboSelectionAsync();
+        }
+
+        /// <summary>概览输入下拉选择即生效。</summary>
+        private async Task ApplyOverviewInputComboSelectionAsync()
+        {
+            var app = _overviewApp;
+            if (app == null) return;
+            if (OverviewInputCombo.SelectedItem is not AudioDeviceInfo dev) return;
+
+            var pid = (int)app.ProcessId;
+            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eCapture, dev.Id));
+            OverviewStatusText.Text = ok
+                ? string.Format(L10n.T("Ov.SwitchOk"), "🎤 " + dev.DisplayName, AppDisplayName.Get(app))
                 : $"✗ {msg}";
             await RefreshOverviewDevicesVolumeAsync();
         }
@@ -721,6 +832,33 @@ private List<AppItem> _appItems = new();
             }
         }
 
+        /// <summary>应用页输入下拉选择即生效。</summary>
+        private async void AppsInputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressDevCombo) return;
+            await ApplyAppsInputComboSelectionAsync();
+        }
+
+        /// <summary>应用页输入（麦克风）设备切换，与输出一致即选即生效。</summary>
+        private async Task ApplyAppsInputComboSelectionAsync()
+        {
+            var app = _appsSelected;
+            if (app == null) return;
+            if (AppsInputCombo.SelectedItem is not AudioDeviceInfo dev) return;
+
+            var pid = (int)app.ProcessId;
+            var (ok, msg) = await Apply(pid, EDataFlow.eCapture, dev.Id);
+            if (ok)
+            {
+                AppsStatusText.Text = string.Format(L10n.T("Ov.SwitchOk"), "🎤 " + dev.DisplayName, AppDisplayName.Get(app));
+                await RefreshAppsSelectionAsync();
+            }
+            else
+            {
+                AppsStatusText.Text = $"✗ {msg}";
+            }
+        }
+
         /// <summary>重新读取当前选中应用的状态（下拉选中项 / 音量 / 静音）。</summary>
         private async Task RefreshAppsSelectionAsync()
         {
@@ -732,6 +870,16 @@ private List<AppItem> _appItems = new();
             _suppressDevCombo = true;
             AppsOutputCombo.SelectedItem = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
                                            ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault();
+            _suppressDevCombo = false;
+
+            // 输入设备（麦克风）：与输出一致
+            var inId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture));
+            string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
+            _suppressDevCombo = true;
+            AppsInputCombo.ItemsSource = null;
+            AppsInputCombo.ItemsSource = _inputDisplay;
+            AppsInputCombo.SelectedItem = _inputDisplay.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase))
+                                          ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault();
             _suppressDevCombo = false;
 
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
@@ -761,6 +909,23 @@ private List<AppItem> _appItems = new();
                 cb.Unchecked += DeviceFilterChanged;
                 OutputFilterList.Items.Add(cb);
             }
+
+            // 输入设备（麦克风）保留：仅实验模式 + 麦克风选项开启时显示并生效
+            InputFilterList.Items.Clear();
+            foreach (var dev in _inputs)
+            {
+                var cb = new CheckBox
+                {
+                    Content = dev.DisplayLabel,
+                    IsChecked = !_config.HiddenInputDevices.Contains(dev.Id),
+                    Tag = dev,
+                    FontSize = 13,
+                    Margin = new Thickness(0, 4, 6, 4)
+                };
+                cb.Checked += InputFilterChanged;
+                cb.Unchecked += InputFilterChanged;
+                InputFilterList.Items.Add(cb);
+            }
         }
 
         private void DeviceFilterChanged(object sender, RoutedEventArgs e)
@@ -774,10 +939,26 @@ private List<AppItem> _appItems = new();
             if (!_suppressFilter) _ = RefreshOverviewDevicesVolumeAsync();
         }
 
+        /// <summary>输入设备（麦克风）保留勾选：实验模式 + 麦克风选项开启时可用。</summary>
+        private void InputFilterChanged(object sender, RoutedEventArgs e)
+        {
+            if (sender is not CheckBox cb || cb.Tag is not AudioDeviceInfo dev) return;
+            if (cb.IsChecked == false) { if (!_config.HiddenInputDevices.Contains(dev.Id)) _config.HiddenInputDevices.Add(dev.Id); }
+            else _config.HiddenInputDevices.Remove(dev.Id);
+            ConfigService.Save(_config);
+            UpdateSelectAllLabels();
+        }
+
         /// <summary>输出设备全选/全不选。</summary>
         private void SelectAllOutput_Click(object sender, RoutedEventArgs e)
         {
             ToggleSelectAll(OutputFilterList.Items.OfType<CheckBox>().ToList());
+        }
+
+        /// <summary>输入设备（麦克风）全选/全不选。</summary>
+        private void SelectAllInput_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleSelectAll(InputFilterList.Items.OfType<CheckBox>().ToList());
         }
 
         /// <summary>一键全选/全不选：该组当前若全部勾选则全部取消，否则全部勾选。</summary>
@@ -797,6 +978,7 @@ private List<AppItem> _appItems = new();
         private void UpdateSelectAllLabels()
         {
             UpdateSelectAllLabel(SelectAllOutputButton, OutputFilterList.Items.OfType<CheckBox>().ToList());
+            UpdateSelectAllLabel(SelectAllInputButton, InputFilterList.Items.OfType<CheckBox>().ToList());
         }
 
         private static void UpdateSelectAllLabel(System.Windows.Controls.Button? btn, List<CheckBox> boxes)
@@ -814,6 +996,8 @@ private List<AppItem> _appItems = new();
         {
             OutputNameList.Items.Clear();
             foreach (var dev in _outputs) OutputNameList.Items.Add(MakeNameRow(dev));
+            InputNameList.Items.Clear();
+            foreach (var dev in _inputs) InputNameList.Items.Add(MakeNameRow(dev));
         }
 
         private UIElement MakeNameRow(AudioDeviceInfo dev)
@@ -894,6 +1078,20 @@ private List<AppItem> _appItems = new();
                 SettingsAutoStart.IsChecked = _config.AutoStart;
                 SettingsStartMinimized.IsChecked = _config.StartMinimized;
                 SettingsShowPanelOnStart.IsChecked = _config.StartPanelOnStart;
+                ExpCollapseCheck.IsChecked = _config.CollapseDeviceSections;
+
+                // 实验模式（隐藏）：解锁后显示开关；开启实验模式后导航显示"实验设置"；麦克风选项开启后各处显示麦克风 UI
+                bool expUnlocked = _config.ExperimentalUnlocked;
+                bool expOn = expUnlocked && _config.ExperimentalMode;
+                bool expMic = expOn && _config.ExperimentalMic;
+                SettingsExperimentalMode.Visibility = expUnlocked ? Visibility.Visible : Visibility.Collapsed;
+                ExperimentalModeHint.Visibility = expUnlocked ? Visibility.Visible : Visibility.Collapsed;
+                SettingsExperimentalMode.IsChecked = expOn;
+                NavExperimental.Visibility = expOn ? Visibility.Visible : Visibility.Collapsed;
+                ApplyExpMicUi(expMic);
+
+                // 折叠设置页设备区块（设置页开关，默认开启，不依赖实验模式）：开启后"保留的设备/设备名称"默认收起，可点击标题按钮展开
+                ApplyCollapseUi();
             }
             finally
             {
@@ -1101,6 +1299,273 @@ private List<AppItem> _appItems = new();
             }
         }
 
+        // ==================================================================
+        // 实验模式（隐藏功能）
+        // 解锁：设置页底部点击"困困困"（作者名）5 次 → 持久化 ExperimentalUnlocked。
+        // 之后"开机自启"栏下方出现"实验模式"开关；开启（重启生效）后出现"麦克风选项"；
+        // 开启麦克风选项（重启生效）后：设置页"保留的设备"显示输入设备区、快捷键页显示"切换当前应用麦克风设备"。
+        // 更新日志规范：实验模式内容不写入 GitHub 更新日志，仅记录于本地规范 README。
+        // ==================================================================
+
+        private int _authorClicks;
+
+        private void AboutAuthorText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_config.ExperimentalUnlocked) return; // 已解锁
+            _authorClicks++;
+            if (_authorClicks >= 5)
+            {
+                _authorClicks = 0;
+                _config.ExperimentalUnlocked = true;
+                ConfigService.Save(_config);
+                SettingsExperimentalMode.Visibility = Visibility.Visible;
+                ExperimentalModeHint.Visibility = Visibility.Visible;
+                ShowToast(L10n.T("St.ExpUnlocked"));
+            }
+            else
+            {
+                ShowToast(string.Format(L10n.T("St.ExpClicked"), _authorClicks, 5));
+            }
+        }
+
+        private void SettingsExperimentalMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.ExperimentalMode = SettingsExperimentalMode.IsChecked == true;
+            ConfigService.Save(_config);
+            // 导航"实验设置"入口立即显示/隐藏（功能本身重启生效）
+            NavExperimental.Visibility = _config.ExperimentalMode ? Visibility.Visible : Visibility.Collapsed;
+            ShowToast(L10n.T("St.ExpModeNeedRestart"));
+        }
+
+        /// <summary>按麦克风选项开关状态统一控制各界面麦克风（输入）UI 的可见性。
+        /// 概览 / 应用 / 设置保留区 / 设备名称区 与实验设置页子选项联动。</summary>
+        private void ApplyExpMicUi(bool expMic)
+        {
+            OverviewInputCard.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            AppsInputLabel.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            AppsInputCombo.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            InputFilterHeader.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            InputFilterList.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            InputNameHeader.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            InputNameList.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            // 实验设置页"在快捷面板显示麦克风"子选项：仅麦克风选项开启时显示
+            if (ExpMicPanelCheck != null)
+                ExpMicPanelCheck.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>实验设置页：加载麦克风选项 / 快捷面板显示 / OSD 位置 / 折叠 的当前配置。</summary>
+        private void LoadExperimentalSettings()
+        {
+            _suppressSettings = true;
+            try
+            {
+                bool expOn = _config.ExperimentalMode;
+                bool expMic = expOn && _config.ExperimentalMic;
+
+                ExpMicOptionCheck.IsChecked = _config.ExperimentalMic;
+                ExpMicOptionCheck.IsEnabled = expOn; // 未开实验模式时置灰
+                ApplyExpMicUi(expMic);
+                ExpMicPanelCheck.IsChecked = _config.MicInPanel;
+                ExpMicPanelCheck.IsEnabled = expMic;
+                ExpFreeUIMemCheck.IsChecked = _config.FreeUIMemoryOnClose;
+
+                // OSD 位置：下拉（9 宫格 + 自定义）
+                var posLabels = OsdPosKeys.Select(k => L10n.T("Exp.Osd." + k)).ToList();
+                posLabels.Add(L10n.T("Exp.Osd.Custom"));
+                OsdPositionCombo.ItemsSource = null;
+                OsdPositionCombo.ItemsSource = posLabels;
+                _suppressOsdPos = true;
+                if (string.Equals(_config.OsdPosition, "Custom", StringComparison.OrdinalIgnoreCase))
+                    OsdPositionCombo.SelectedIndex = posLabels.Count - 1;
+                else
+                {
+                    int pi = Array.IndexOf(OsdPosKeys, _config.OsdPosition);
+                    OsdPositionCombo.SelectedIndex = pi < 0 ? 2 : pi;
+                }
+                _suppressOsdPos = false;
+
+                OsdOffsetXSlider.Value = Math.Clamp(_config.OsdOffsetX, -300, 300);
+                OsdOffsetYSlider.Value = Math.Clamp(_config.OsdOffsetY, -300, 300);
+                OsdOffsetXText.Text = _config.OsdOffsetX.ToString();
+                OsdOffsetYText.Text = _config.OsdOffsetY.ToString();
+                OsdCustomXBox.Text = _config.OsdCustomX >= 0 ? _config.OsdCustomX.ToString() : "";
+                OsdCustomYBox.Text = _config.OsdCustomY >= 0 ? _config.OsdCustomY.ToString() : "";
+                UpdateOsdPanels();
+            }
+            finally
+            {
+                _suppressSettings = false;
+            }
+        }
+
+        private bool _suppressOsdPos;
+
+        /// <summary>OSD 9 宫格位置键（与实验设置页下拉索引一一对应，最后一个索引为"自定义"）。</summary>
+        private static readonly string[] OsdPosKeys = { "TL", "T", "TR", "L", "C", "R", "BL", "B", "BR" };
+
+        private void ExpMicOption_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.ExperimentalMic = ExpMicOptionCheck.IsChecked == true;
+            ConfigService.Save(_config);
+            ApplyExpMicUi(_config.ExperimentalMode && _config.ExperimentalMic);
+            ExpMicPanelCheck.IsEnabled = _config.ExperimentalMode && _config.ExperimentalMic;
+            ShowToast(L10n.T("St.ExpMicNeedRestart"));
+        }
+
+        private void ExpMicPanel_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.MicInPanel = ExpMicPanelCheck.IsChecked == true;
+            ConfigService.Save(_config);
+            ShowToast(L10n.T("St.ExpMicPanelNeedRestart"));
+        }
+
+        private void ExpCollapse_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.CollapseDeviceSections = ExpCollapseCheck.IsChecked == true;
+            ConfigService.Save(_config);
+            ApplyCollapseUi();
+        }
+
+        /// <summary>实验设置 - 关闭 UI 释放内存开关（实时生效：下次关闭完整界面时真正关闭并回收 UI 内存）。</summary>
+        private void ExpFreeUIMem_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.FreeUIMemoryOnClose = ExpFreeUIMemCheck.IsChecked == true;
+            ConfigService.Save(_config);
+        }
+
+        /// <summary>应用折叠状态：开启后显示折叠按钮并默认收起"保留的设备/设备名称"，关闭则全部展开。</summary>
+        private void ApplyCollapseUi()
+        {
+            bool collapse = _config.CollapseDeviceSections;
+            KeepDevicesToggleButton.Visibility = collapse ? Visibility.Visible : Visibility.Collapsed;
+            DeviceNamesToggleButton.Visibility = collapse ? Visibility.Visible : Visibility.Collapsed;
+            if (collapse)
+            {
+                KeepDevicesBody.Visibility = Visibility.Collapsed;
+                DeviceNamesBody.Visibility = Visibility.Collapsed;
+                KeepDevicesToggleButton.Content = "▸";
+                DeviceNamesToggleButton.Content = "▸";
+            }
+            else
+            {
+                KeepDevicesBody.Visibility = Visibility.Visible;
+                DeviceNamesBody.Visibility = Visibility.Visible;
+            }
+        }
+
+        /// <summary>OSD 位置下拉选择：0-8 对应 9 宫格，末项为"自定义"（用 X/Y 坐标参数定位）。</summary>
+        private void OsdPosition_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings || _suppressOsdPos) return;
+            int idx = OsdPositionCombo.SelectedIndex;
+            if (idx >= 0 && idx < OsdPosKeys.Length)
+                _config.OsdPosition = OsdPosKeys[idx];
+            else if (idx == OsdPosKeys.Length)
+                _config.OsdPosition = "Custom";
+            else return;
+            ConfigService.Save(_config);
+            UpdateOsdPanels();
+        }
+
+        /// <summary>切换自定义坐标 / 偏移微调面板的可见性。</summary>
+        private void UpdateOsdPanels()
+        {
+            bool isCustom = string.Equals(_config.OsdPosition, "Custom", StringComparison.OrdinalIgnoreCase);
+            if (OsdCustomPanel == null || OsdOffsetPanel == null) return;
+            OsdCustomPanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+            OsdOffsetPanel.Visibility = isCustom ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>自定义 X 坐标输入（输入即保存）。</summary>
+        private void OsdCustomX_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            if (int.TryParse(OsdCustomXBox.Text, out int x))
+            {
+                _config.OsdCustomX = x;
+                ConfigService.Save(_config);
+            }
+        }
+
+        /// <summary>自定义 Y 坐标输入（输入即保存）。</summary>
+        private void OsdCustomY_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            if (int.TryParse(OsdCustomYBox.Text, out int y))
+            {
+                _config.OsdCustomY = y;
+                ConfigService.Save(_config);
+            }
+        }
+
+        /// <summary>一键还原 OSD 位置到默认（右上角 + 零偏移 + 清空自定义坐标）。</summary>
+        private void OsdReset_Click(object sender, RoutedEventArgs e)
+        {
+            _config.OsdPosition = "TR";
+            _config.OsdOffsetX = 0;
+            _config.OsdOffsetY = 0;
+            _config.OsdCustomX = -1;
+            _config.OsdCustomY = -1;
+            ConfigService.Save(_config);
+            _suppressSettings = true;
+            _suppressOsdPos = true;
+            OsdPositionCombo.SelectedIndex = 2; // TR
+            OsdOffsetXSlider.Value = 0;
+            OsdOffsetYSlider.Value = 0;
+            OsdCustomXBox.Text = "";
+            OsdCustomYBox.Text = "";
+            _suppressOsdPos = false;
+            _suppressSettings = false;
+            OsdOffsetXText.Text = "0";
+            OsdOffsetYText.Text = "0";
+            UpdateOsdPanels();
+            ShowToast(L10n.T("Exp.OsdResetDone"));
+        }
+
+        private void OsdOffsetX_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.OsdOffsetX = (int)OsdOffsetXSlider.Value;
+            OsdOffsetXText.Text = _config.OsdOffsetX.ToString();
+            ConfigService.Save(_config);
+        }
+
+        private void OsdOffsetY_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.OsdOffsetY = (int)OsdOffsetYSlider.Value;
+            OsdOffsetYText.Text = _config.OsdOffsetY.ToString();
+            ConfigService.Save(_config);
+        }
+
+        /// <summary>折叠/展开设置页"保留的设备"卡片（实验设置-折叠开启时可见）。</summary>
+        private void KeepDevicesToggle_Click(object sender, RoutedEventArgs e)
+        {
+            bool collapsed = KeepDevicesBody.Visibility != Visibility.Visible;
+            KeepDevicesBody.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
+            KeepDevicesToggleButton.Content = collapsed ? "▾" : "▸";
+        }
+
+        /// <summary>折叠/展开设置页"设备名称"卡片（实验设置-折叠开启时可见）。</summary>
+        private void DeviceNamesToggle_Click(object sender, RoutedEventArgs e)
+        {
+            bool collapsed = DeviceNamesBody.Visibility != Visibility.Visible;
+            DeviceNamesBody.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
+            DeviceNamesToggleButton.Content = collapsed ? "▾" : "▸";
+        }
+
+        /// <summary>右上角 OSD 通知（兼容主题/强调色/透明度）。</summary>
+        private void ShowToast(string text)
+        {
+            try { ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), text); }
+            catch { /* 通知失败静默 */ }
+        }
+
         /// <summary>打开 B 站链接。</summary>
         private void BiliLink_Click(object sender, RoutedEventArgs e)
         {
@@ -1160,7 +1625,11 @@ private List<AppItem> _appItems = new();
         {
             _recordingAction = null;
             HotkeyList.Items.Clear();
-            var actions = HotkeyActions.All;
+            // 实验模式隐藏动作：仅在"实验模式 + 麦克风选项"开启时显示（切换当前应用麦克风设备）
+            bool expMicOn = _config.ExperimentalMode && _config.ExperimentalMic;
+            var actions = HotkeyActions.All
+                .Where(a => a != HotkeyActions.ActSwitchInput || expMicOn)
+                .ToArray();
             var registered = ((App)Application.Current).HotkeyRegistration;
             foreach (var a in actions)
             {
@@ -1258,11 +1727,15 @@ private List<AppItem> _appItems = new();
             return head.Substring(0, 11) + "…";
         }
 
-        /// <summary>关闭窗口 → 最小化到托盘（真正退出走托盘菜单）。</summary>
+        /// <summary>关闭窗口 → 默认最小化到托盘（真正退出走托盘菜单）。
+        /// 实验设置「关闭 UI 释放内存」开启时：真正关闭窗口，触发 Closed → App 置空引用 → 窗口与 UI 资源可被 GC 回收。</summary>
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
         {
-            e.Cancel = true;
-            Hide();
+            if (!ConfigService.Load().FreeUIMemoryOnClose)
+            {
+                e.Cancel = true;
+                Hide();
+            }
             base.OnClosing(e);
         }
     }
