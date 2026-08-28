@@ -1,0 +1,354 @@
+<Window x:Class="WpfUiSkeleton.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:WpfUiSkeleton"
+        Title="{Binding [App.Title], Source={x:Static local:L10n.Instance}}"
+        Width="820" Height="560"
+        MinWidth="720" MinHeight="480"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
+    <Window.Resources>
+        <!-- 左导航项 -->
+        <Style x:Key="NavItem" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="bd" Background="Transparent" CornerRadius="8" Padding="14,0">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavSelected}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 小节标题 -->
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <!-- 页面大标题 -->
+        <Style x:Key="PageTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
+        </Style>
+
+        <!-- 标题栏按钮 -->
+        <Style x:Key="TitleBarButton" TargetType="Button">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TitleCloseButton" TargetType="Button" BasedOn="{StaticResource TitleBarButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#E81123"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 通用下拉 -->
+        <Style x:Key="SelCombo" TargetType="ComboBox" BasedOn="{StaticResource RoundedComboBox}"/>
+
+        <!-- 卡片 -->
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBgAlpha}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="Padding" Value="18"/>
+        </Style>
+
+        <!-- 主按钮 -->
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.OnAccent}"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.Accent}"/>
+            <Setter Property="FontSize" Value="13.5"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="18,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.AccentHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.8"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 次要按钮 -->
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource Theme.WindowBgAlpha}"
+            BorderBrush="{DynamicResource Theme.Border}"
+            BorderThickness="1"
+            CornerRadius="10">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.25" Color="#000000"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="42"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- ===== 标题栏 ===== -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding [App.Title], Source={x:Static local:L10n.Instance}}"
+                           FontSize="13.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Theme.TextPrimary}"
+                           VerticalAlignment="Center" Margin="16,0,0,0"
+                           MouseLeftButtonDown="Titlebar_MouseDown"
+                           ToolTip="拖动移动窗口"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <Button Content="─" Style="{StaticResource TitleBarButton}" Click="TitlebarMin_Click" ToolTip="最小化"/>
+                    <Button Content="□" Style="{StaticResource TitleBarButton}" Click="TitlebarMax_Click" ToolTip="最大化 / 还原"/>
+                    <Button Content="✕" Style="{StaticResource TitleCloseButton}" Click="TitlebarClose_Click" ToolTip="关闭"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- ===== 主体 ===== -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="180"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- 左侧导航 -->
+                <Border Grid.Column="0" Background="Transparent"
+                        BorderBrush="{DynamicResource Theme.Border}" BorderThickness="0,0,1,0">
+                    <StackPanel Margin="14,20,14,16">
+                        <RadioButton x:Name="NavOverview" GroupName="Nav" Style="{StaticResource NavItem}"
+                                     Content="{Binding [Nav.Overview], Source={x:Static local:L10n.Instance}}"
+                                     IsChecked="True" Checked="Nav_Checked" Tag="Overview"/>
+                        <RadioButton x:Name="NavSettings" GroupName="Nav" Style="{StaticResource NavItem}"
+                                     Content="{Binding [Nav.Settings], Source={x:Static local:L10n.Instance}}"
+                                     Checked="Nav_Checked" Tag="Settings"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- 右侧内容区 -->
+                <Grid Grid.Column="1" Margin="26,20,26,20">
+
+                    <!-- ===== 概览页 ===== -->
+                    <Grid x:Name="OverviewPage">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Nav.Overview], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource PageTitle}"/>
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding [Ov.Hello], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="15" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Theme.TextPrimary}"
+                                                   Margin="0,0,0,6"/>
+                                        <TextBlock Text="{Binding [Ov.Desc], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="13" Foreground="{DynamicResource Theme.TextSecondary}"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="{Binding [Nav.Settings], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource PrimaryButton}" Click="GotoSettings"/>
+                                    <Button Content="Ghost" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <!-- ===== 设置页 ===== -->
+                    <Grid x:Name="SettingsPage" Visibility="Collapsed">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Nav.Settings], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource PageTitle}"/>
+
+                                <!-- 外观模式 -->
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding [Set.Mode], Source={x:Static local:L10n.Instance}}"
+                                                   Style="{StaticResource SectionTitle}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <RadioButton x:Name="ModeAuto" GroupName="Mode" Content="{Binding [Set.AAuto], Source={x:Static local:L10n.Instance}}"
+                                                         IsChecked="True" Checked="Mode_Checked" Tag="auto" Margin="0,0,16,0"/>
+                                            <RadioButton x:Name="ModeLight" GroupName="Mode" Content="{Binding [Set.Light], Source={x:Static local:L10n.Instance}}"
+                                                         Checked="Mode_Checked" Tag="light" Margin="0,0,16,0"/>
+                                            <RadioButton x:Name="ModeDark" GroupName="Mode" Content="{Binding [Set.Dark], Source={x:Static local:L10n.Instance}}"
+                                                         Checked="Mode_Checked" Tag="dark"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 强调色 -->
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding [Set.Accent], Source={x:Static local:L10n.Instance}}"
+                                                   Style="{StaticResource SectionTitle}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <RadioButton x:Name="AccBlue" GroupName="Accent" Content="{Binding [Set.Blue], Source={x:Static local:L10n.Instance}}"
+                                                         IsChecked="True" Checked="Accent_Checked" Tag="blue" Margin="0,0,16,0"/>
+                                            <RadioButton x:Name="AccGreen" GroupName="Accent" Content="{Binding [Set.Green], Source={x:Static local:L10n.Instance}}"
+                                                         Checked="Accent_Checked" Tag="green" Margin="0,0,16,0"/>
+                                            <RadioButton x:Name="AccPink" GroupName="Accent" Content="{Binding [Set.Pink], Source={x:Static local:L10n.Instance}}"
+                                                         Checked="Accent_Checked" Tag="purple"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 背景透明度 -->
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding [Set.Opacity], Source={x:Static local:L10n.Instance}}"
+                                                   Style="{StaticResource SectionTitle}"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Slider x:Name="OpacitySlider" Minimum="60" Maximum="100" Value="85"
+                                                    ValueChanged="OpacitySlider_ValueChanged"/>
+                                            <TextBlock x:Name="OpacityText" Grid.Column="1" Text="85%"
+                                                       FontSize="13" Foreground="{DynamicResource Theme.TextSecondary}"
+                                                       VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 语言 -->
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding [Set.Lang], Source={x:Static local:L10n.Instance}}"
+                                                   Style="{StaticResource SectionTitle}"/>
+                                        <StackPanel Orientation="Horizontal">
+                                            <RadioButton x:Name="LangZh" GroupName="Lang" Content="中文"
+                                                         IsChecked="True" Checked="Lang_Checked" Tag="zh" Margin="0,0,16,0"/>
+                                            <RadioButton x:Name="LangEn" GroupName="Lang" Content="English"
+                                                         Checked="Lang_Checked" Tag="en"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 控件演示 -->
+                                <Border Style="{StaticResource Card}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding [Set.Demo], Source={x:Static local:L10n.Instance}}"
+                                                   Style="{StaticResource SectionTitle}"/>
+                                        <CheckBox Content="{Binding [Set.CheckDemo], Source={x:Static local:L10n.Instance}}"
+                                                  Margin="0,0,0,10"/>
+                                        <TextBlock Text="{Binding [Set.SliderDemo], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                                   Margin="0,0,0,4"/>
+                                        <Slider Minimum="0" Maximum="100" Value="50"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                </Grid>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

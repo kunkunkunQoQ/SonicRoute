@@ -1270,32 +1270,67 @@ private List<AppItem> _appItems = new();
             ConfigService.Save(_config);
         }
 
-        /// <summary>开机自启：写入/删除 HKCU\Software\Microsoft\Windows\CurrentVersion\Run。</summary>
-        private void SettingsAutoStart_Changed(object sender, RoutedEventArgs e)
+        /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
+        private static bool IsPackaged()
+        {
+            try
+            {
+                _ = Windows.ApplicationModel.Package.Current;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>开机自启：MSIX 环境用 StartupTask API，非 MSIX（绿色版）写注册表 Run 键。</summary>
+        private async void SettingsAutoStart_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsLoaded || _suppressSettings) return;
             bool on = SettingsAutoStart.IsChecked == true;
             _config.AutoStart = on;
             ConfigService.Save(_config);
-            try
+
+            if (IsPackaged())
             {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                    @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
-                if (key == null) return;
-                if (on)
+                // MSIX：注册表写入会被沙箱重定向，必须用 StartupTask API
+                try
                 {
-                    var exe = Environment.ProcessPath;
-                    if (!string.IsNullOrWhiteSpace(exe))
-                        key.SetValue("SonicRoute", $"\"{exe}\"");
+                    var task = await Windows.ApplicationModel.StartupTask.GetAsync("SonicRouteStartup");
+                    if (on)
+                        await task.RequestEnableAsync();
+                    else
+                        task.Disable();
                 }
-                else
+                catch
                 {
-                    key.DeleteValue("SonicRoute", throwOnMissingValue: false);
+                    // StartupTask 调用失败不打断界面
                 }
             }
-            catch
+            else
             {
-                // 注册表写入失败不打断界面
+                // 绿色版：写 HKCU\...\Run
+                try
+                {
+                    using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                        @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                    if (key == null) return;
+                    if (on)
+                    {
+                        var exe = Environment.ProcessPath;
+                        if (!string.IsNullOrWhiteSpace(exe))
+                            key.SetValue("SonicRoute", $"\"{exe}\"");
+                    }
+                    else
+                    {
+                        key.DeleteValue("SonicRoute", throwOnMissingValue: false);
+                    }
+                }
+                catch
+                {
+                    // 注册表写入失败不打断界面
+                }
             }
         }
 
