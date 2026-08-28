@@ -2,7 +2,7 @@
 
 > Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出设备切到耳机、音箱、显示器或虚拟设备。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.7** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.7r2** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
 
 底层完全基于 **EarTrumpet 已验证的 Per-App Audio Routing 机制** 实现（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
@@ -24,6 +24,9 @@
    - **双击**托盘图标 → 完整管理界面
    - **右键**托盘图标 → 打开完整界面 / 快速面板 / 退出
    - **滚轮**放在托盘右侧的任务栏区域上 → 调节当前应用音量
+
+📥 也可以从 **Microsoft Store** 安装（自动更新、更省心）：  
+👉 https://apps.microsoft.com/detail/9NQZGRTPM1NT
 
 <a id="features"></a>
 ## ✨ 功能特性
@@ -150,8 +153,9 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 安装需求 | 优点 | 缺点 |
 |---|---|---|---|---|---|
-| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.7.exe` / `SonicRoute-v1.0.7.zip` | ~156MB / ~63MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
-| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.7-Lite.exe` / `SonicRoute-v1.0.7-Lite.zip` | ~1.2MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
+| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.7r2.exe` / `SonicRoute-v1.0.7r2.zip` | ~156MB / ~63MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
+| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.7r2-Lite.exe` / `SonicRoute-v1.0.7r2-Lite.zip` | ~1.2MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
+| 🛍 微软商店版（MSIX） | [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 搜索「SonicRoute」 | — | 商店自动安装与更新 | 自动更新、受信任分发 | 仅 Windows 10/11 商店可用 |
 
 **轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
 
@@ -160,9 +164,9 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 > 本页只展示**最新版本**的改动。
 
-**v1.0.7**（正式版）
-- **新增：设置页「折叠」开关**：默认开启，可折叠「保留的设备 / 设备名称」区域，点击标题右侧按钮展开，切换即时生效
-- 版本号统一为 **v1.0.7**
+**v1.0.7r2**（修复版）
+- **实验设置「关闭 UI 释放内存」增强**：改为**立即回收 + 延迟多次（1s/3s/5s）强制回收**，确保挂起的异步操作跑完后窗口被真正回收
+- **新增子选项「释放快速面板 UI 内存」**：关闭快速面板时立即 + 多次强制回收面板 UI 内存，独立开关、实时生效
 
 <a id="faq"></a>
 ## ❓ 常见问题
