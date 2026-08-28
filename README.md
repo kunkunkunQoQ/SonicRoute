@@ -2,7 +2,7 @@
 
 > Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出设备切到耳机、音箱、显示器或虚拟设备。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.7r2** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.8** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
 
 底层完全基于 **EarTrumpet 已验证的 Per-App Audio Routing 机制** 实现（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
@@ -153,8 +153,8 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 安装需求 | 优点 | 缺点 |
 |---|---|---|---|---|---|
-| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.7r2.exe` / `SonicRoute-v1.0.7r2.zip` | ~156MB / ~63MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
-| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.7r2-Lite.exe` / `SonicRoute-v1.0.7r2-Lite.zip` | ~1.2MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
+| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.8.exe` / `SonicRoute-v1.0.8.zip` | ~180MB / ~69MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
+| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.8-Lite.exe` / `SonicRoute-v1.0.8-Lite.zip` | ~25MB / ~6MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
 | 🛍 微软商店版（MSIX） | [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 搜索「SonicRoute」 | — | 商店自动安装与更新 | 自动更新、受信任分发 | 仅 Windows 10/11 商店可用 |
 
 **轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
@@ -164,9 +164,11 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 > 本页只展示**最新版本**的改动。
 
-**v1.0.7r2**（修复版）
-- **实验设置「关闭 UI 释放内存」增强**：改为**立即回收 + 延迟多次（1s/3s/5s）强制回收**，确保挂起的异步操作跑完后窗口被真正回收
-- **新增子选项「释放快速面板 UI 内存」**：关闭快速面板时立即 + 多次强制回收面板 UI 内存，独立开关、实时生效
+**v1.0.8**
+- **1080p 高清图标**：所有图标从 1080x1080 源图重新生成，窗口/托盘/开始菜单更清晰
+- **MSIX 任务栏图标透明修复**：新增 targetsize 多尺寸图标，任务栏不再显示不透明方块
+- **MSIX 开机自启修复**：改用 `windows.startupTask` 扩展 + `StartupTask` API（原注册表方式在 MSIX 沙箱中不生效）
+- **新增 WpfUiSkeleton**：可复用的 WPF UI 骨架模板（无边框圆角窗口 + 主题 + 多语言），零第三方依赖
 
 <a id="faq"></a>
 ## ❓ 常见问题
