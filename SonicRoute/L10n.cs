@@ -74,7 +74,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.0.7r · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.0.7r2 · 困困困",
 
                 // 导航
                 ["Nav.Overview"] = "概览",
@@ -190,6 +190,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "输入通知左上角的屏幕坐标（X 从左到右 / Y 从上到下，单位像素），输入后按此位置显示",
                 ["Exp.FreeUiMem"] = "关闭 UI 释放内存",
                 ["Exp.FreeUiMemHint"] = "开启后关闭完整界面时真正释放 UI 占用的内存（窗口将真正关闭，下次从托盘打开会重建），实时生效",
+                ["Exp.FreePanelMem"] = "释放快速面板 UI 内存",
+                ["Exp.FreePanelMemHint"] = "开启后关闭快速面板时强制回收面板占用的内存（立即 + 1/3/5 秒多次回收），实时生效",
                 ["Exp.Collapse"] = "折叠设置页设备区块",
                 ["Exp.CollapseHint"] = "开启后「保留设备 / 设备名称」区域默认收起，可点击标题右侧按钮展开（即时生效）",
                 ["Exp.CollapseTip"] = "折叠 / 展开",
@@ -249,7 +251,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.7r · by 困困困",
+                ["App.About"] = "SonicRoute v1.0.7r2 · by 困困困",
 
                 ["Nav.Overview"] = "Overview",
                 ["Nav.Apps"] = "Apps",
@@ -361,6 +363,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "Enter the on-screen coordinates of the notification top-left corner (X left-to-right / Y top-to-bottom, pixels); the notification appears there immediately",
                 ["Exp.FreeUiMem"] = "Free UI memory on close",
                 ["Exp.FreeUiMemHint"] = "When enabled, closing the full UI truly releases the memory used by the UI (the window is really closed; reopening from the tray rebuilds it). Takes effect immediately",
+                ["Exp.FreePanelMem"] = "Free quick-panel UI memory",
+                ["Exp.FreePanelMemHint"] = "When enabled, closing the quick panel forces memory used by the panel to be reclaimed (immediately + retries at 1/3/5s). Takes effect immediately",
                 ["Exp.Collapse"] = "Collapse device sections in Settings",
                 ["Exp.CollapseHint"] = "When enabled, the 'Kept devices / Device names' sections collapse by default; click the button next to the title to expand (takes effect immediately)",
                 ["Exp.CollapseTip"] = "Collapse / Expand",
@@ -416,7 +420,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "音躍",
                 ["App.NameFull"] = "音躍 SonicRoute",
-                ["App.About"] = "音躍 SonicRoute v1.0.7r · 困困困",
+                ["App.About"] = "音躍 SonicRoute v1.0.7r2 · 困困困",
 
                 ["Nav.Overview"] = "概要",
                 ["Nav.Apps"] = "アプリ",
@@ -528,6 +532,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "通知の左上隅の画面座標を入力（X 左→右 / Y 上→下、ピクセル）、入力後すぐ反映",
                 ["Exp.FreeUiMem"] = "UI を閉じたらメモリを解放",
                 ["Exp.FreeUiMemHint"] = "オンにすると完全 UI を閉じた際に UI が使っていたメモリを解放（ウィンドウは実際に閉じられ、トレイから再度開くと再作成）、即時反映",
+                ["Exp.FreePanelMem"] = "クイックパネルの UI メモリを解放",
+                ["Exp.FreePanelMemHint"] = "オンにするとクイックパネルを閉じた際にパネルが使うメモリを強制回収（即時 + 1/3/5 秒後に再試行）、即時反映",
                 ["Exp.Collapse"] = "設定のデバイス欄を折りたたむ",
                 ["Exp.CollapseHint"] = "オンにすると「保留デバイス / デバイス名」セクションは既定で折りたたまれ、タイトル右のボタンで展開（即時反映）",
                 ["Exp.CollapseTip"] = "折りたたむ / 展開",
@@ -583,7 +589,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "소리 점프",
                 ["App.NameFull"] = "소리 점프 SonicRoute",
-                ["App.About"] = "소리 점프 SonicRoute v1.0.7r · 困困困",
+                ["App.About"] = "소리 점프 SonicRoute v1.0.7r2 · 困困困",
 
                 ["Nav.Overview"] = "개요",
                 ["Nav.Apps"] = "앱",
@@ -695,6 +701,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "알림 왼쪽 위 모서리의 화면 좌표 입력（X 왼→오 / Y 위→아래, 픽셀）, 입력 후 바로 표시",
                 ["Exp.FreeUiMem"] = "UI 닫을 때 메모리 해제",
                 ["Exp.FreeUiMemHint"] = "켜면 전체 UI를 닫을 때 UI가 사용하던 메모리를 해제（창이 실제로 닫히고, 트레이에서 다시 열면 재생성）, 즉시 적용",
+                ["Exp.FreePanelMem"] = "빠른 패널 UI 메모리 해제",
+                ["Exp.FreePanelMemHint"] = "켜면 빠른 패널을 닫을 때 패널이 사용하는 메모리를 강제 회수（즉시 + 1/3/5초 후 재시도）, 즉시 적용",
                 ["Exp.Collapse"] = "설정의 장치 섹션 접기",
                 ["Exp.CollapseHint"] = "켜면「유지 장치 / 장치 이름」섹션이 기본적으로 접히고, 제목 오른쪽 버튼으로 펼칠 수 있음（즉시 적용）",
                 ["Exp.CollapseTip"] = "접기 / 펼치기",
@@ -750,7 +758,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.7r · par 困困困",
+                ["App.About"] = "SonicRoute v1.0.7r2 · par 困困困",
 
                 ["Nav.Overview"] = "Aperçu",
                 ["Nav.Apps"] = "Applications",
@@ -862,6 +870,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "Saisir les coordonnées écran du coin supérieur gauche de la notification (X gauche→droite / Y haut→bas, pixels), affichage immédiat",
                 ["Exp.FreeUiMem"] = "Libérer la mémoire de l'UI à la fermeture",
                 ["Exp.FreeUiMemHint"] = "Lorsqu'activé, fermer l'interface complète libère réellement la mémoire utilisée par l'UI (la fenêtre est vraiment fermée ; la rouvrir depuis la zone de notification la recrée). Effet immédiat",
+                ["Exp.FreePanelMem"] = "Libérer la mémoire de l'UI du panneau rapide",
+                ["Exp.FreePanelMemHint"] = "Lorsqu'activé, fermer le panneau rapide force la récupération de la mémoire qu'il utilise (immédiat + nouvelles tentatives à 1/3/5 s). Effet immédiat",
                 ["Exp.Collapse"] = "Replier les sections d'appareils des réglages",
                 ["Exp.CollapseHint"] = "Lorsqu'activé, les sections « Appareils conservés / Noms d'appareils » sont repliées par défaut ; cliquez sur le bouton à droite du titre pour déplier (effet immédiat)",
                 ["Exp.CollapseTip"] = "Replier / Déplier",
@@ -917,7 +927,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.7r · von 困困困",
+                ["App.About"] = "SonicRoute v1.0.7r2 · von 困困困",
 
                 ["Nav.Overview"] = "Übersicht",
                 ["Nav.Apps"] = "Apps",
@@ -1029,6 +1039,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "Bildschirmkoordinaten der oberen linken Ecke der Benachrichtigung eingeben (X links→rechts / Y oben→unten, Pixel), Anzeige sofort",
                 ["Exp.FreeUiMem"] = "UI-Speicher beim Schließen freigeben",
                 ["Exp.FreeUiMemHint"] = "Wenn aktiviert, gibt das Schließen der Voll-UI den von der UI belegten Speicher wirklich frei (das Fenster wird echt geschlossen; erneutes Öffnen über das Tray erstellt es neu). Sofort wirksam",
+                ["Exp.FreePanelMem"] = "Schnellpanel-UI-Speicher freigeben",
+                ["Exp.FreePanelMemHint"] = "Wenn aktiviert, wird beim Schließen des Schnellpanels der von ihm belegte Speicher erzwungen freigegeben (sofort + erneute Versuche nach 1/3/5 s). Sofort wirksam",
                 ["Exp.Collapse"] = "Geräteabschnitte in Einstellungen einklappen",
                 ["Exp.CollapseHint"] = "Wenn aktiviert, sind die Bereiche «Behaltene Geräte / Gerätenamen» standardmäßig eingeklappt; über die Schaltfläche rechts neben dem Titel aufklappen (sofort wirksam)",
                 ["Exp.CollapseTip"] = "Einklappen / Aufklappen",
@@ -1084,7 +1096,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.7r · por 困困困",
+                ["App.About"] = "SonicRoute v1.0.7r2 · por 困困困",
 
                 ["Nav.Overview"] = "Resumen",
                 ["Nav.Apps"] = "Aplicaciones",
@@ -1196,6 +1208,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "Introduzca las coordenadas de pantalla de la esquina superior izquierda de la notificación (X izquierda→derecha / Y arriba→abajo, píxeles), se muestra de inmediato",
                 ["Exp.FreeUiMem"] = "Liberar memoria de la UI al cerrar",
                 ["Exp.FreeUiMemHint"] = "Al activarse, cerrar la interfaz completa libera realmente la memoria usada por la UI (la ventana se cierra de verdad; reabrirla desde la bandeja la reconstruye). Efecto inmediato",
+                ["Exp.FreePanelMem"] = "Liberar memoria de la UI del panel rápido",
+                ["Exp.FreePanelMemHint"] = "Al activarse, cerrar el panel rápido fuerza la recuperación de la memoria que usa (inmediato + reintentos a 1/3/5 s). Efecto inmediato",
                 ["Exp.Collapse"] = "Plegar secciones de dispositivos en Ajustes",
                 ["Exp.CollapseHint"] = "Al activarse, las secciones «Dispositivos conservados / Nombres de dispositivos» se pliegan por defecto; haga clic en el botón junto al título para desplegar (efecto inmediato)",
                 ["Exp.CollapseTip"] = "Plegar / Expandir",
@@ -1251,7 +1265,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.7r · от 困困困",
+                ["App.About"] = "SonicRoute v1.0.7r2 · от 困困困",
 
                 ["Nav.Overview"] = "Обзор",
                 ["Nav.Apps"] = "Приложения",
@@ -1363,6 +1377,8 @@ namespace SonicRoute
                 ["Exp.OsdCustomHint"] = "Введите координаты экрана верхнего левого угла уведомления (X слева→направо / Y сверху→вниз, пиксели), применяется сразу",
                 ["Exp.FreeUiMem"] = "Освобождать память UI при закрытии",
                 ["Exp.FreeUiMemHint"] = "При включении закрытие полного интерфейса действительно освобождает память, занимаемую UI (окно по-настоящему закрывается; повторное открытие из трея создаёт его заново). Применяется сразу",
+                ["Exp.FreePanelMem"] = "Освобождать память UI быстрой панели",
+                ["Exp.FreePanelMemHint"] = "При включении закрытие быстрой панели принудительно освобождает память, которую она занимает (сразу + повторные попытки через 1/3/5 с). Применяется сразу",
                 ["Exp.Collapse"] = "Сворачивать разделы устройств в настройках",
                 ["Exp.CollapseHint"] = "При включении разделы «Сохраняемые устройства / Имена устройств» сворачиваются по умолчанию; нажмите кнопку справа от заголовка, чтобы развернуть (применяется сразу)",
                 ["Exp.CollapseTip"] = "Свернуть / Развернуть",

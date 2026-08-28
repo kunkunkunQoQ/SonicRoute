@@ -76,6 +76,9 @@ namespace SonicRoute.Core
         /// <summary>实验设置 - 关闭完整界面时释放 UI 占用的内存（真正关闭窗口，下次打开重建，实时生效）。</summary>
         public bool FreeUIMemoryOnClose { get; set; }
 
+        /// <summary>实验设置 - 关闭快速面板时释放面板 UI 占用的内存（子选项，实时生效，独立于主开关）。</summary>
+        public bool FreePanelUIMemory { get; set; }
+
         /// <summary>实验设置 - OSD 水平偏移（像素，右/下为正；非自定义模式生效）。</summary>
         public int OsdOffsetX { get; set; }
 

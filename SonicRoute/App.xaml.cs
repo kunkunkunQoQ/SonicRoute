@@ -42,7 +42,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.0.7r",
+                Text = "音跃 SonicRoute v1.0.7r2",
                 Visible = true
             };
 
@@ -118,6 +118,17 @@ namespace SonicRoute
             if (_quickPanel.IsVisible)
             {
                 _quickPanel.Close();
+                // 实验设置「释放快速面板 UI 内存」：面板关闭后立即 + 延迟多次（1s/3s/5s）强制回收面板 UI 内存
+                if (ConfigService.Load().FreePanelUIMemory)
+                    _ = Task.Run(async () =>
+                    {
+                        GcNow();
+                        foreach (var ms in new[] { 1000, 3000, 5000 })
+                        {
+                            await Task.Delay(ms);
+                            GcNow();
+                        }
+                    });
                 return;
             }
 
