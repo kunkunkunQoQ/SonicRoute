@@ -88,8 +88,6 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 <a id="changelog"></a>
 ## 📋 更新日志
 
-> 仅展示最新版本，完整历史见 [SonicRoute源码/README.md](SonicRoute源码/README.md)。
-
 **v1.0.8**
 - 1080p 高清图标（全部图标从 1080x1080 源图重新生成）
 - MSIX 任务栏图标透明修复（targetsize 多尺寸图标）
@@ -108,7 +106,7 @@ A：设置 → 保留的设备 里勾选。
 **Q：删了软件怎么改回应用播放设备？**
 A：任务栏声音图标右键 → 音量合成器，把对应应用改回即可。
 
-**Q：打开过面板/完整界面后内存从 30MB 涨到 56MB？**
+**Q：打开过面板/完整界面后内存从 30MB 涨到 48MB？**
 A：WPF 渲染层首次初始化的进程级缓存，关闭窗口不释放，稳定不增长，非泄漏。
 
 <a id="versioning"></a>
