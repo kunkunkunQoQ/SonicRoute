@@ -1,213 +1,139 @@
 # 🎧 音跃 SonicRoute
 
-> Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出设备切到耳机、音箱、显示器或虚拟设备。
+> Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出切到耳机/音箱/显示器，不改系统默认设备。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ 版本 **v1.0.8** ｜ 平台 **Windows 10 / 11 (x64)** ｜ 语言 **C# / .NET 8 / WPF**
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.0.8** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
-底层完全基于 **EarTrumpet 已验证的 Per-App Audio Routing 机制** 实现（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
+底层基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
 ---
 
-## 📑 目录
-
-[🚀 快速开始](#quick-start) ｜ [✨ 功能特性](#features) ｜ [🖼 界面一览](#screenshots) ｜ [⌨️ 全局快捷键](#hotkeys) ｜ [🌐 多语言支持](#languages) ｜ [🎨 主题与自定义](#theme) ｜ [🛠 技术实现](#tech) ｜ [⚙️ 配置文件](#config) ｜ [🔨 本地构建](#build) ｜ [📦 发布产物](#release) ｜ [📋 更新日志](#changelog) ｜ [❓ 常见问题](#faq) ｜ [📌 版本规范](#versioning) ｜ [📄 许可证](#license)
+[🚀 快速开始](#quick-start) ｜ [✨ 功能](#features) ｜ [🖼 界面](#screenshots) ｜ [⌨️ 快捷键](#hotkeys) ｜ [🌐 语言](#languages) ｜ [🎨 主题](#theme) ｜ [🛠 技术](#tech) ｜ [📦 下载](#release) ｜ [📋 更新日志](#changelog) ｜ [❓ FAQ](#faq) ｜ [📌 版本规范](#versioning)
 
 <a id="quick-start"></a>
 ## 🚀 快速开始
 
-1. 前往 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 选择版本下载（文件名见「📦 发布产物」）：
-   - **绿色免安装版**：无需任何环境，解压即用
-   - **轻量版**：体积极小，需已装 .NET 8 Desktop Runtime
-2. 双击 `SonicRoute.exe` 即可运行（绿色版已内置运行时）
-3. 程序驻留系统托盘：
-   - **单击**托盘图标 → 快捷面板（当前应用切设备 / 调音量 / 静音 / 全局麦克风静音）
-   - **双击**托盘图标 → 完整管理界面
-   - **右键**托盘图标 → 打开完整界面 / 快速面板 / 退出
-   - **滚轮**放在托盘右侧的任务栏区域上 → 调节当前应用音量
-
-📥 也可以从 **Microsoft Store** 安装（自动更新、更省心）：  
-👉 https://apps.microsoft.com/detail/9NQZGRTPM1NT
+1. [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载（**绿色版**解压即用 / **轻量版**需 .NET 8 运行时），或 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 自动更新
+2. 双击运行，程序驻留托盘：
+   - **单击** → 快捷面板（切设备 / 调音量 / 静音）
+   - **双击** → 完整管理界面
+   - **任务栏区域滚轮** → 调当前应用音量（OSD 实时提示）
 
 <a id="features"></a>
-## ✨ 功能特性
+## ✨ 功能
 
 | 特性 | 说明 |
 |---|---|
-| 🎯 **按应用切设备 + 音量** | 为单个应用切输出设备、调音量、静音，音量合成器同步更新 |
-| 🎤 **全局麦克风静音** | 一键静音/取消所有录音设备 |
-| 🧩 **托盘快捷面板** | 单击托盘图标弹出，秒切设备、调音量、静音 |
-| 🖥 **完整管理界面** | 双击打开，管理应用、设备、快捷键、主题、配置 |
-| 📋 **设备筛选 + 改名** | 勾选常用设备只显示常用；可为设备自定义名称 |
-| 🕵️ **当前应用自动检测** | 自动跟随最近使用/正在使用的应用；可对单个应用禁用 |
-| ⌨️ **全局快捷键** | 切设备、调音量、静音、开面板，可自定义 |
-| 🖱 **托盘滚轮调音量** | 任务栏区域滚轮调当前应用音量，OSD 实时提示 |
-| 🌐 **多语言 / 🎨 主题** | 8 种语言跟随系统；深浅色 + RGB 强调色 + 透明度 |
-| 🚀 **开机自启 / 解压即用** | 内置 .NET 运行时，无需安装环境 |
+| 🎯 按应用切设备+音量 | 单应用切输出/调音量/静音，音量合成器同步 |
+| 🎤 全局麦克风静音 | 一键静音所有录音设备 |
+| 🧩 托盘快捷面板 | 单击弹出，秒切设备、调音量、静音，点空白自动关闭 |
+| 🖥 完整管理界面 | 应用/设备/快捷键/主题/设置一站式管理 |
+| 📋 设备筛选+改名 | 勾选常用设备只显示常用，可自定义设备名 |
+| 🕵️ 当前应用自动检测 | 自动跟随最近使用的应用，可单应用禁用 |
+| ⌨️ 全局快捷键 | 切设备/调音量/静音/开面板，可自定义 |
+| 🌐 8语言 / 🎨 主题 | 跟随系统语言；深浅色+RGB强调色+透明度 |
 
 <a id="screenshots"></a>
-## 🖼 界面一览
+## 🖼 界面
 
-### 📌 快捷面板（单击托盘图标）
+| 快捷面板（单击托盘） | 完整界面（双击托盘） |
+|---|---|
+| <img src="docs/images/quick-panel.png" width="300"> | <img src="docs/images/app-settings.png" width="400"> |
 
-<img src="docs/images/quick-panel.png" width="320" alt="快捷面板">
+**OSD 通知**（右上角，切设备/调音量/快捷键时弹出，1秒淡出，跟随主题）：
+<img src="docs/images/osb.png" width="280">
 
-单击托盘图标弹出小巧面板：顶部自动显示**当前应用**，下方切常用输出设备、调音量、静音/全局麦克风静音，点击空白自动关闭。
+**快捷键设置**（内联录音，点击修改即按新组合，Esc 取消）：
+<img src="docs/images/hotkeys.png" width="500">
 
-### 🖥 完整管理界面（双击托盘图标）
-
-<img src="docs/images/app-settings.png" width="700" alt="设置页">
-
-双击托盘图标打开完整界面，左侧导航（概览 / 应用 / 快捷键 / 主题 / 设置）：
-
-> 也可运行 `SonicRoute.exe --main` 直接打开完整界面。
-
-- **概览**：同快捷面板——当前应用、快捷切输出设备、音量、静音/全局麦克风静音
-- **应用**：列出有音频会话的应用，可切输出设备、调音量、改名、禁用自动切换
-- **快捷键**：查看与重设全局快捷键（内联录音）
-- **主题**：深浅色、强调色（预设 + RGB）、透明度
-- **设置**：保留设备、改名、默认应用模式、语言、开机自启
-
-### 🔔 OSD 通知（屏幕右上角）
-
-<img src="docs/images/osb.png" width="300" alt="OSD 通知">
-
-托盘滚轮、快捷键、切设备时右上角弹出轻量**OSD 通知**（应用名+音量/设备/状态），约 1 秒自动淡出，跟随主题，名称使用自定义名。
-
-### ⌨️ 多种快捷键
-
-<img src="docs/images/hotkeys.png" width="700" alt="多种快捷键">
-
-在「快捷键」页点击「修改」按下新组合即可重新绑定。
-
-> 💡 上图为**作者的个人快捷键设置**，并非默认快捷键；默认值见下方「全局快捷键」表格，均可自定义。
+> 快捷键截图为作者个人设置，非默认值；默认值见下表。
 
 <a id="hotkeys"></a>
 ## ⌨️ 全局快捷键
 
-| 功能 | 默认快捷键 |
-|---|---|
-| 增大当前应用音量 | `Ctrl + Alt + ↑` |
-| 减小当前应用音量 | `Ctrl + Alt + ↓` |
-| 静音当前应用 | `Ctrl + Shift + M` |
-| 全局麦克风静音 | `Ctrl + Shift + N` |
-| 切换当前应用快捷设备 | `Ctrl + Alt + D` |
-| 打开快速面板 | `Ctrl + Alt + Space` |
-
-> 在「快捷键」页可点击「修改」重新绑定（免弹窗内联录音，`Esc` 取消）。若组合被其他程序占用会自动回退默认并标注 ⚠。
+| 功能 | 默认 | 功能 | 默认 |
+|---|---|---|---|
+| 音量+ | `Ctrl+Alt+↑` | 音量- | `Ctrl+Alt+↓` |
+| 静音当前应用 | `Ctrl+Shift+M` | 全局麦克风静音 | `Ctrl+Shift+N` |
+| 切换快捷设备 | `Ctrl+Alt+D` | 打开快速面板 | `Ctrl+Alt+Space` |
 
 <a id="languages"></a>
-## 🌐 多语言支持
+## 🌐 多语言
 
-| 中文 `zh-CN` | English `en-US` | 日本語 `ja-JP` | 한국어 `ko-KR` |
-|---|---|---|---|
-| Français `fr-FR` | Deutsch `de-DE` | Español `es-ES` | Русский `ru-RU` |
+中文 ｜ English ｜ 日本語 ｜ 한국어 ｜ Français ｜ Deutsch ｜ Español ｜ Русский
 
-- **首次启动**自动跟随 Windows 系统语言（未匹配时默认英文）
-- **切换方式**：「设置 → 语言」下拉选择，重启后生效
+首次启动跟随系统语言；设置页下拉切换，重启生效。
 
 <a id="theme"></a>
-## 🎨 主题与自定义
+## 🎨 主题
 
-- 主题模式：跟随系统 / 浅色 / 深色
-- 强调色：蓝色 / 绿色 / 粉色预设，或 **RGB 滑块自定义**任意颜色
-- 背景透明度：60%–100%（默认 85%），快捷面板与完整界面统一生效
+- 模式：跟随系统 / 浅色 / 深色
+- 强调色：蓝/绿/粉预设 + RGB 自定义
+- 背景透明度：60%–100%（默认 85%），面板与主窗口统一
 
 <a id="tech"></a>
 ## 🛠 技术实现
 
-底层完全移植并调用 **EarTrumpet 已验证的 Per-App Audio Routing** 机制：
-
-| 组件 | 说明 |
+| 组件 | 作用 |
 |---|---|
-| `IAudioPolicyConfigFactory` | Windows 按应用音频路由的工厂接口 |
-| `SetPersistedDefaultAudioEndpoint` | 按应用**持久化**输出设备（**不改系统默认设备**） |
-| `GetPersistedDefaultAudioEndpoint` | 读取应用当前持久化设备 |
-| `GenerateDeviceId` / `UnpackDeviceId` | 设备 ID 完整路径编解码 |
+| `IAudioPolicyConfigFactory` | Windows 按应用音频路由工厂接口 |
+| `SetPersistedDefaultAudioEndpoint` | 按应用持久化输出设备（不改系统默认） |
+| `ISimpleAudioVolume` | 按 PID 聚合会话，独立调音量/静音 |
 
-> 音量/静音独立走 **Audio Session API**（`ISimpleAudioVolume`），按 PID 聚合全部输出会话，绝不触碰系统主音量。
+项目结构：`SonicRoute`（WPF）/ `SonicRoute.Core`（核心）/ `SonicRoute.Selftest`（自检）/ `Probe`（调试）。配置文件：`%LocalAppData%\SonicRoute\config.json`。
 
-- **项目结构**：`SonicRoute`（WPF 主程序）/ `SonicRoute.Core`（核心库）/ `SonicRoute.Selftest`（回归自检）/ `Probe`（调试工具）
-
-<a id="config"></a>
-## ⚙️ 配置文件
-
-- **位置**：`%LocalAppData%\SonicRoute\config.json`（JSON，改动即时保存，删除即重置默认）
-
-<a id="build"></a>
-## 🔨 本地构建
-
+**本地构建**：
 ```bash
-# Debug
 dotnet build SonicRoute.sln -c Debug
-
-# 发布版（自包含单文件）
-dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contained true \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true \
-  -o dist\SonicRoute
+dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
 ```
 
 <a id="release"></a>
-## 📦 发布产物
+## 📦 下载
 
-每次 Release 提供**绿色免安装版**与**轻量版**两种，均含 exe 与 zip：
+| 版本 | 文件 | 体积 | 需求 |
+|---|---|---|---|
+| 🟢 绿色免安装 | `SonicRoute-v1.0.8.exe` / `.zip` | ~180MB / ~69MB | 无（内置运行时） |
+| ⚡ 轻量版 | `SonicRoute-v1.0.8-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 Desktop Runtime x64 |
+| 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动安装更新 |
 
-| 版本 | 文件 | 体积 | 安装需求 | 优点 | 缺点 |
-|---|---|---|---|---|---|
-| 🟢 绿色免安装版（自包含） | `SonicRoute-v1.0.8.exe` / `SonicRoute-v1.0.8.zip` | ~180MB / ~69MB | **无**（内置 .NET 运行时） | 免安装免环境，下载即用；适合普通用户、装机环境不干净的用户 | 体积大，下载慢 |
-| ⚡ 轻量版（框架依赖） | `SonicRoute-v1.0.8-Lite.exe` / `SonicRoute-v1.0.8-Lite.zip` | ~25MB / ~6MB | **需已装 .NET 8 Desktop Runtime (x64)**（未装会弹官方下载引导） | 体积极小，秒下秒开；适合已装运行时/开发者的用户 | 需先装 .NET 8 运行时，否则无法运行 |
-| 🛍 微软商店版（MSIX） | [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 搜索「SonicRoute」 | — | 商店自动安装与更新 | 自动更新、受信任分发 | 仅 Windows 10/11 商店可用 |
-
-**轻量版运行时安装**：前往 https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0 选择 "Windows x64 → .NET Desktop Runtime 8.0.x" 安装。
+轻量版运行时：[dotnet.microsoft.com](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0) → Windows x64 → .NET Desktop Runtime。
 
 <a id="changelog"></a>
 ## 📋 更新日志
 
-> 本页只展示**最新版本**的改动。
+> 仅展示最新版本，完整历史见 [SonicRoute源码/README.md](SonicRoute源码/README.md)。
 
 **v1.0.8**
-- **1080p 高清图标**：所有图标从 1080x1080 源图重新生成，窗口/托盘/开始菜单更清晰
-- **MSIX 任务栏图标透明修复**：新增 targetsize 多尺寸图标，任务栏不再显示不透明方块
-- **MSIX 开机自启修复**：改用 `windows.startupTask` 扩展 + `StartupTask` API（原注册表方式在 MSIX 沙箱中不生效）
-- **新增 WpfUiSkeleton**：可复用的 WPF UI 骨架模板（无边框圆角窗口 + 主题 + 多语言），零第三方依赖
+- 1080p 高清图标（全部图标从 1080x1080 源图重新生成）
+- MSIX 任务栏图标透明修复（targetsize 多尺寸图标）
+- MSIX 开机自启修复（startupTask 扩展 + StartupTask API）
+- 新增 WpfUiSkeleton 可复用 WPF UI 骨架模板
 
 <a id="faq"></a>
-## ❓ 常见问题
+## ❓ FAQ
 
-**Q：为什么改了应用的输出设备，系统默认设备没变？**
-A：设计如此——Per-App Audio Routing 只改变单个应用的输出，不动系统默认设备。
+**Q：改了应用输出设备，系统默认设备没变？**
+A：设计如此——只改单个应用，不动系统默认。
 
-**Q：快捷面板里没看到我想用的设备？**
-A：到「设置 → 保留的设备」勾选要显示的设备。
+**Q：面板里没看到想用的设备？**
+A：设置 → 保留的设备 里勾选。
 
-**Q：语言切换后界面没变？**
-A：语言更改在**下次启动**时生效。
+**Q：删了软件怎么改回应用播放设备？**
+A：任务栏声音图标右键 → 音量合成器，把对应应用改回即可。
 
-**Q：软件是否需要安装？**
-A：不需要，解压即用，已内置 .NET 运行时。
-
-**Q：如果我把软件删了，怎么改回应用的播放设备？**
-A：任务栏声音图标**右键 → 打开"音量合成器"**，把对应应用改回即可（SonicRoute 改的就是音量合成器里应用那项，卸载后依然保留）。
-
-**Q：为什么打开过快提面板或完整界面后，内存会从 30-38MB 涨到 56-68MB？**
-A：这是 WPF 渲染层的正常行为——首次创建窗口时，WPF 会初始化整套渲染系统（渲染线程、交换链、字体/画刷缓存等）。这部分是**进程级共享缓存，关闭窗口也不会释放**（只有退出进程才回收）。内存涨到 56-68MB 后**保持稳定、不会继续增长**，不是内存泄漏。（如果一直不打开快速面板或者完整ui就一直占用低后续会优化）
+**Q：打开过面板/完整界面后内存从 30MB 涨到 56MB？**
+A：WPF 渲染层首次初始化的进程级缓存，关闭窗口不释放，稳定不增长，非泄漏。
 
 <a id="versioning"></a>
 ## 📌 版本规范
 
-本项目发布版本号采用 **主版本.次版本.修订 + 后缀** 命名：
-
-| 后缀 | 含义 | 是否更新 GitHub |
+| 后缀 | 含义 | 上传 GitHub |
 |---|---|---|
-| `a` | **测试版**（内部验证，可能有 bug，仅供自测） | ❌ **不上传 GitHub** |
-| `r` | **修复版**（修复 bug 后的正式版本） | ✅ 上传 GitHub |
+| `a` | 测试版（内部验证） | ❌ |
+| `r` | 修复版（bug 修复后正式发布） | ✅ |
 
-- 例：`v1.0.5a` = 内部测试版；`v1.0.5r` = 修复 bug 后的正式发布版（再次修复递增 `r2`、`r3`…）
-- **默认不制作安装包，仅发布绿色免安装版（exe + zip）**
-
-<a id="license"></a>
-## 📄 许可证
-
-本项目仅供学习交流使用。参考实现：[EarTrumpet](https://github.com/File-New-Project/EarTrumpet)（MIT License）。
+例：`v1.0.5a`=测试版；`v1.0.5r`=修复版（再次修复递增 r2/r3…）。默认仅发布绿色免安装版（exe+zip）。
 
 ---
 
