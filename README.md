@@ -8,7 +8,7 @@
 
 ---
 
-[🚀 快速开始](#quick-start) ｜ [✨ 功能](#features) ｜ [🖼 界面](#screenshots) ｜ [⌨️ 快捷键](#hotkeys) ｜ [🌐 语言](#languages) ｜ [🎨 主题](#theme) ｜ [🛠 技术](#tech) ｜ [📦 下载](#release) ｜ [📋 更新日志](#changelog) ｜ [❓ FAQ](#faq) ｜ [📌 版本规范](#versioning)
+[🚀 快速开始](#quick-start) ｜ [✨ 功能](#features) ｜ [🖼 界面](#screenshots) ｜ [⌨️ 快捷键](#hotkeys) ｜ [🎨 自定义](#customize) ｜ [🛠 技术](#tech) ｜ [📦 下载](#release) ｜ [📋 更新日志](#changelog) ｜ [❓ FAQ](#faq) ｜ [📌 版本规范](#versioning)
 
 <a id="quick-start"></a>
 ## 🚀 快速开始
@@ -22,31 +22,23 @@
 <a id="features"></a>
 ## ✨ 功能
 
-| 特性 | 说明 |
-|---|---|
-| 🎯 按应用切设备+音量 | 单应用切输出/调音量/静音，音量合成器同步 |
-| 🎤 全局麦克风静音 | 一键静音所有录音设备 |
-| 🧩 托盘快捷面板 | 单击弹出，秒切设备、调音量、静音，点空白自动关闭 |
-| 🖥 完整管理界面 | 应用/设备/快捷键/主题/设置一站式管理 |
-| 📋 设备筛选+改名 | 勾选常用设备只显示常用，可自定义设备名 |
-| 🕵️ 当前应用自动检测 | 自动跟随最近使用的应用，可单应用禁用 |
-| ⌨️ 全局快捷键 | 切设备/调音量/静音/开面板，可自定义 |
-| 🌐 8语言 / 🎨 主题 | 跟随系统语言；深浅色+RGB强调色+透明度 |
+| 特性 | 说明 | 特性 | 说明 |
+|---|---|---|---|
+| 🎯 按应用切设备+音量 | 单应用切输出/调音量/静音，音量合成器同步 | 🎤 全局麦克风静音 | 一键静音所有录音设备 |
+| 🧩 托盘快捷面板 | 单击弹出，秒切设备、调音量、静音，点空白自动关闭 | 🖥 完整管理界面 | 应用/设备/快捷键/主题/设置一站式管理 |
+| 📋 设备筛选+改名 | 勾选常用设备只显示常用，可自定义设备名 | 🕵️ 当前应用自动检测 | 自动跟随最近使用的应用，可单应用禁用 |
+| ⌨️ 全局快捷键 | 切设备/调音量/静音/开面板，可自定义 | 🌐 8语言 / 🎨 主题 | 跟随系统语言；深浅色+RGB强调色+透明度 |
 
 <a id="screenshots"></a>
 ## 🖼 界面
 
 | 快捷面板（单击托盘） | 完整界面（双击托盘） |
 |---|---|
-| <img src="docs/images/quick-panel.png" width="300"> | <img src="docs/images/app-settings.png" width="400"> |
+| <img src="docs/images/quick-panel.png" width="320"> 顶部自动显示当前应用，下方切设备/调音量/静音 | <img src="docs/images/app-settings.png" width="380"> 左侧导航，管理应用/设备/快捷键/主题/设置 |
+| **OSD 通知**（右上角弹出，1秒淡出，跟随主题） | **快捷键设置**（内联录音，点击即改，Esc 取消） |
+| <img src="docs/images/osb.png" width="320"> | <img src="docs/images/hotkeys.png" width="380"> |
 
-**OSD 通知**（右上角，切设备/调音量/快捷键时弹出，1秒淡出，跟随主题）：
-<img src="docs/images/osb.png" width="280">
-
-**快捷键设置**（内联录音，点击修改即按新组合，Esc 取消）：
-<img src="docs/images/hotkeys.png" width="500">
-
-> 快捷键截图为作者个人设置，非默认值；默认值见下表。
+> 快捷键截图为作者个人设置，非默认值。
 
 <a id="hotkeys"></a>
 ## ⌨️ 全局快捷键
@@ -57,19 +49,12 @@
 | 静音当前应用 | `Ctrl+Shift+M` | 全局麦克风静音 | `Ctrl+Shift+N` |
 | 切换快捷设备 | `Ctrl+Alt+D` | 打开快速面板 | `Ctrl+Alt+Space` |
 
-<a id="languages"></a>
-## 🌐 多语言
+<a id="customize"></a>
+## 🎨 自定义
 
-中文 ｜ English ｜ 日本語 ｜ 한국어 ｜ Français ｜ Deutsch ｜ Español ｜ Русский
+**🌐 多语言**：中文 ｜ English ｜ 日本語 ｜ 한국어 ｜ Français ｜ Deutsch ｜ Español ｜ Русский — 首次启动跟随系统，设置页切换后重启生效
 
-首次启动跟随系统语言；设置页下拉切换，重启生效。
-
-<a id="theme"></a>
-## 🎨 主题
-
-- 模式：跟随系统 / 浅色 / 深色
-- 强调色：蓝/绿/粉预设 + RGB 自定义
-- 背景透明度：60%–100%（默认 85%），面板与主窗口统一
+**🎨 主题**：模式（跟随系统/浅色/深色）· 强调色（蓝/绿/粉 + RGB 自定义）· 背景透明度（60%–100%，默认 85%，面板与主窗口统一）
 
 <a id="tech"></a>
 ## 🛠 技术实现
@@ -80,11 +65,12 @@
 | `SetPersistedDefaultAudioEndpoint` | 按应用持久化输出设备（不改系统默认） |
 | `ISimpleAudioVolume` | 按 PID 聚合会话，独立调音量/静音 |
 
-项目结构：`SonicRoute`（WPF）/ `SonicRoute.Core`（核心）/ `SonicRoute.Selftest`（自检）/ `Probe`（调试）。配置文件：`%LocalAppData%\SonicRoute\config.json`。
+项目结构：`SonicRoute`（WPF）/ `SonicRoute.Core`（核心）/ `SonicRoute.Selftest`（自检）/ `Probe`（调试）。配置：`%LocalAppData%\SonicRoute\config.json`。
 
-**本地构建**：
 ```bash
+# 构建
 dotnet build SonicRoute.sln -c Debug
+# 发布（自包含单文件）
 dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
 ```
 
