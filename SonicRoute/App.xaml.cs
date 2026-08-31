@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime;
 using System.Windows;
 using System.Windows.Forms;
 using SonicRoute.Core;
@@ -42,7 +43,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.0.8",
+                Text = "音跃 SonicRoute v1.0.9",
                 Visible = true
             };
 
@@ -148,15 +149,18 @@ namespace SonicRoute
                     // （切设备/调音量/刷新应用等，闭包会捕获窗口对象），等它们跑完后窗口才真正可回收，
                     // 此时再次 GC 确保窗口与视觉树被回收。
                     if (ConfigService.Load().FreeUIMemoryOnClose)
-                        _ = Task.Run(async () =>
+                        Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            GcNow();
-                            foreach (var ms in new[] { 1000, 3000, 5000 })
+                            _ = Task.Run(async () =>
                             {
-                                await Task.Delay(ms);
                                 GcNow();
-                            }
-                        });
+                                foreach (var ms in new[] { 1000, 3000, 5000, 8000, 12000 })
+                                {
+                                    await Task.Delay(ms);
+                                    GcNow();
+                                }
+                            });
+                        }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 };
             }
 
@@ -173,9 +177,12 @@ namespace SonicRoute
         {
             try
             {
-                GC.Collect();
+                // 压缩 LOH（大对象堆）：WPF 视觉树/位图可能产生 >85KB 的大对象，
+                // 默认 LOH 不压缩，回收后内存碎片不归还给 OS，导致残留 1-4MB
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, true, true); // 强制阻塞压缩式完整GC
                 GC.WaitForPendingFinalizers();
-                GC.Collect();
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
             }
             catch { }
         }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -27,6 +27,8 @@ namespace SonicRoute
 {
     public partial class MainWindow : Window
     {
+        private bool _isClosed;
+        private HwndSource? _hwndSource;
         private List<AudioDeviceInfo> _outputs = new();
         private List<AudioDeviceInfo> _outputDisplay = new();
         private List<AudioDeviceInfo> _inputs = new();
@@ -60,7 +62,14 @@ private List<AppItem> _appItems = new();
             };
             // 共享"当前应用"变化（前台自动跟随/面板切换）时同步概览
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
-            Closed += (_, _) => CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+            Closed += (_, _) =>
+            {
+                _isClosed = true;
+                CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+                PreviewKeyDown -= MainWindow_PreviewKeyDown;
+                _hwndSource?.RemoveHook(TaskbarMinimizeWndProc);
+                _hwndSource = null;
+            };
             // 快捷键内联录音：在窗口内直接捕获按键，免弹窗
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             // 自绘边框窗口：点击任务栏图标也能最小化（补 WS_MINIMIZEBOX + 拦截系统最小化命令）
@@ -77,7 +86,8 @@ private List<AppItem> _appItems = new();
             var style = GetWindowLong(hwnd, GWL_STYLE);
             if ((style & WS_MINIMIZEBOX) == 0)
                 SetWindowLong(hwnd, GWL_STYLE, style | WS_MINIMIZEBOX);
-            HwndSource.FromHwnd(hwnd)?.AddHook(TaskbarMinimizeWndProc);
+            _hwndSource = HwndSource.FromHwnd(hwnd);
+            _hwndSource?.AddHook(TaskbarMinimizeWndProc);
         }
 
         /// <summary>WM_SYSCOMMAND / SC_MINIMIZE：点击任务栏图标时让窗口真正最小化。</summary>
@@ -209,6 +219,7 @@ private List<AppItem> _appItems = new();
         private async void Nav_Checked(object sender, RoutedEventArgs e)
         {
             if (!IsLoaded) return;
+            if (_isClosed) return;
             var tag = ((RadioButton)sender).Tag as string;
             OverviewPage.Visibility = tag == "Overview" ? Visibility.Visible : Visibility.Collapsed;
             AppsPage.Visibility = tag == "Apps" ? Visibility.Visible : Visibility.Collapsed;
@@ -1355,11 +1366,12 @@ private List<AppItem> _appItems = new();
                 ConfigService.Save(_config);
                 SettingsExperimentalMode.Visibility = Visibility.Visible;
                 ExperimentalModeHint.Visibility = Visibility.Visible;
-                ShowToast(L10n.T("St.ExpUnlocked"));
+                ShowToast(L10n.T("St.EggDone"));
             }
             else
             {
-                ShowToast(string.Format(L10n.T("St.ExpClicked"), _authorClicks, 5));
+                string[] eggs = { L10n.T("St.Egg1"), L10n.T("St.Egg2"), L10n.T("St.Egg3"), L10n.T("St.Egg4") };
+                ShowToast(_authorClicks <= eggs.Length ? eggs[_authorClicks - 1] : $"还需点击 {5 - _authorClicks} 次");
             }
         }
 
@@ -1405,7 +1417,7 @@ private List<AppItem> _appItems = new();
                 ExpMicPanelCheck.IsEnabled = expMic;
                 ExpFreeUIMemCheck.IsChecked = _config.FreeUIMemoryOnClose;
                 ExpFreePanelMemCheck.IsChecked = _config.FreePanelUIMemory;
-                ExpFreePanelMemCheck.Visibility = _config.FreeUIMemoryOnClose ? Visibility.Visible : Visibility.Collapsed;
+                ExpMemMoreToggle.Visibility = _config.FreeUIMemoryOnClose ? Visibility.Visible : Visibility.Collapsed;
 
                 // OSD 位置：下拉（9 宫格 + 自定义）
                 var posLabels = OsdPosKeys.Select(k => L10n.T("Exp.Osd." + k)).ToList();
@@ -1473,8 +1485,8 @@ private List<AppItem> _appItems = new();
             if (!IsLoaded || _suppressSettings) return;
             _config.FreeUIMemoryOnClose = ExpFreeUIMemCheck.IsChecked == true;
             ConfigService.Save(_config);
-            // 子选项「释放快速面板 UI 内存」跟随主开关显示
-            ExpFreePanelMemCheck.Visibility = ExpFreeUIMemCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            ExpMemMoreToggle.Visibility = ExpFreeUIMemCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            if (ExpFreeUIMemCheck.IsChecked != true) ExpMemMorePanel.Visibility = Visibility.Collapsed;
         }
 
         /// <summary>实验设置 - 子选项：关闭快速面板时释放面板 UI 内存（实时生效，独立于主开关）。</summary>
@@ -1485,6 +1497,37 @@ private List<AppItem> _appItems = new();
             ConfigService.Save(_config);
         }
 
+
+        /// <summary>实验设置 - 「更多选项」折叠按钮：切换释放快速面板UI内存子选项的显示。</summary>
+        private void ExpMemMoreToggle_Click(object sender, RoutedEventArgs e)
+        {
+            ExpMemMorePanel.Visibility = ExpMemMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>实验设置 - 一键还原全部应用为默认播放设备（清除所有应用的持久化输出设备设置）。</summary>
+        private async void ExpResetAll_Click(object sender, RoutedEventArgs e)
+        {
+            ExpResetAllButton.IsEnabled = false;
+            try
+            {
+                var apps = await Task.Run(() => AudioService.GetApps());
+                int total = apps.Count, ok = 0;
+                foreach (var app in apps)
+                {
+                    int pid = (int)app.ProcessId;
+                    int hr = await Task.Run(() =>
+                    {
+                        var cfg = new AudioPolicyConfig(EDataFlow.eRender);
+                        return cfg.SetDefaultEndPoint(null, pid);
+                    });
+                    if (hr >= 0) ok++;
+                }
+                if (total == 0) ShowToast(L10n.T("Exp.ResetAllNone"));
+                else if (ok == total) ShowToast(string.Format(L10n.T("Exp.ResetAllDone"), ok));
+                else ShowToast(string.Format(L10n.T("Exp.ResetAllFail"), ok, total));
+            }
+            finally { ExpResetAllButton.IsEnabled = true; }
+        }
         /// <summary>应用折叠状态：开启后显示折叠按钮并默认收起"保留的设备/设备名称"，关闭则全部展开。</summary>
         private void ApplyCollapseUi()
         {
