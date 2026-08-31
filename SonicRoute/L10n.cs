@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace SonicRoute
@@ -74,7 +74,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.0.8 · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.0.9 · 困困困",
 
                 // 导航
                 ["Nav.Overview"] = "概览",
@@ -197,6 +197,17 @@ namespace SonicRoute
                 ["Exp.CollapseTip"] = "折叠 / 展开",
                 ["St.ExpMicPanelNeedRestart"] = "快捷面板显示部分功能可能重启生效",
                 ["St.ExpCollapseNeedRestart"] = "折叠部分功能可能重启生效",
+                ["Exp.ResetAll"] = "一键还原全部应用为默认播放设备",
+                ["Exp.ResetAllHint"] = "清除所有应用的持久化输出设备设置，恢复为系统默认播放设备",
+                ["Exp.ResetAllDone"] = "✓ 已还原 {0} 个应用为默认设备",
+                ["Exp.ResetAllNone"] = "没有需要还原的应用",
+                ["Exp.ResetAllFail"] = "部分应用还原失败（{0}/{1}）",
+                ["Exp.MoreOptions"] = "更多选项",
+                ["St.Egg1"] = "咦？你发现了什么？",
+                ["St.Egg2"] = "继续点，有惊喜~",
+                ["St.Egg3"] = "快了快了...",
+                ["St.Egg4"] = "最后一下！",
+                ["St.EggDone"] = "🎉 实验模式已解锁！",
                 ["Ov.Input"] = "🎤 输入设备",
                 ["Apps.Input"] = "输入设备",
                 ["Qp.Input"] = "🎤 输入",
@@ -251,7 +262,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.8 · by 困困困",
+                ["App.About"] = "SonicRoute v1.0.9 · by 困困困",
 
                 ["Nav.Overview"] = "Overview",
                 ["Nav.Apps"] = "Apps",
@@ -420,7 +431,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "音躍",
                 ["App.NameFull"] = "音躍 SonicRoute",
-                ["App.About"] = "音躍 SonicRoute v1.0.8 · 困困困",
+                ["App.About"] = "音躍 SonicRoute v1.0.9 · 困困困",
 
                 ["Nav.Overview"] = "概要",
                 ["Nav.Apps"] = "アプリ",
@@ -589,7 +600,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "소리 점프",
                 ["App.NameFull"] = "소리 점프 SonicRoute",
-                ["App.About"] = "소리 점프 SonicRoute v1.0.8 · 困困困",
+                ["App.About"] = "소리 점프 SonicRoute v1.0.9 · 困困困",
 
                 ["Nav.Overview"] = "개요",
                 ["Nav.Apps"] = "앱",
@@ -758,7 +769,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.8 · par 困困困",
+                ["App.About"] = "SonicRoute v1.0.9 · par 困困困",
 
                 ["Nav.Overview"] = "Aperçu",
                 ["Nav.Apps"] = "Applications",
@@ -927,7 +938,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.8 · von 困困困",
+                ["App.About"] = "SonicRoute v1.0.9 · von 困困困",
 
                 ["Nav.Overview"] = "Übersicht",
                 ["Nav.Apps"] = "Apps",
@@ -1096,7 +1107,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.8 · por 困困困",
+                ["App.About"] = "SonicRoute v1.0.9 · por 困困困",
 
                 ["Nav.Overview"] = "Resumen",
                 ["Nav.Apps"] = "Aplicaciones",
@@ -1265,7 +1276,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.0.8 · от 困困困",
+                ["App.About"] = "SonicRoute v1.0.9 · от 困困困",
 
                 ["Nav.Overview"] = "Обзор",
                 ["Nav.Apps"] = "Приложения",
