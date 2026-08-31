@@ -1,8 +1,8 @@
-# 🎧 音跃 SonicRoute
+﻿# 🎧 音跃 SonicRoute
 
 > Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出切到耳机/音箱/显示器，不改系统默认设备。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.0.8** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.0.9** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
 底层基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
@@ -79,8 +79,8 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
-| 🟢 绿色免安装 | `SonicRoute-v1.0.8.exe` / `.zip` | ~180MB / ~69MB | 无（内置运行时） |
-| ⚡ 轻量版 | `SonicRoute-v1.0.8-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 Desktop Runtime x64 |
+| 🟢 绿色免安装 | `SonicRoute-v1.0.9.exe` / `.zip` | ~75MB / ~69MB | 无（内置运行时） |
+| ⚡ 轻量版 | `SonicRoute-v1.0.9-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 Desktop Runtime x64 |
 | 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动安装更新 |
 
 轻量版运行时：[dotnet.microsoft.com](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0) → Windows x64 → .NET Desktop Runtime。
@@ -88,7 +88,7 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 <a id="changelog"></a>
 ## 📋 更新日志
 
-**v1.0.8**
+**v1.0.9**
 - 1080p 高清图标（全部图标从 1080x1080 源图重新生成）
 - MSIX 任务栏图标透明修复（targetsize 多尺寸图标）
 - MSIX 开机自启修复（startupTask 扩展 + StartupTask API）
