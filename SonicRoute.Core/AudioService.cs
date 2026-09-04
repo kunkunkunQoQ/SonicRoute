@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -270,7 +270,7 @@ namespace SonicRoute.Core
         {
             try
             {
-                var config = new AudioPolicyConfig(flow);
+                using var config = new AudioPolicyConfig(flow);
                 // 设备 ID 可能是短 ID（IMMDevice.GetId()），统一包装为完整接口路径再调用
                 string fullDeviceId = AudioPolicyConfig.EnsureFullDeviceId(deviceId, flow);
                 int hr = config.SetDefaultEndPoint(fullDeviceId, processId);
@@ -289,7 +289,7 @@ namespace SonicRoute.Core
         {
             try
             {
-                var config = new AudioPolicyConfig(flow);
+                using var config = new AudioPolicyConfig(flow);
                 return config.GetDefaultEndPoint(processId);
             }
             catch

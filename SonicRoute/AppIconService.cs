@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
@@ -69,5 +69,12 @@ namespace SonicRoute
 
         [System.Runtime.InteropServices.DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
+
+        /// <summary>清空图标缓存。窗口关闭释放内存时调用，让 BitmapSource 可被 GC 回收
+        /// （图标冻结后缓存是窗口关闭后残留的主要静态持有物之一）。</summary>
+        public static void Clear()
+        {
+            Cache.Clear();
+        }
     }
 }

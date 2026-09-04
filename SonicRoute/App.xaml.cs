@@ -43,7 +43,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.0.9",
+                Text = "音跃 SonicRoute v1.10",
                 Visible = true
             };
 
@@ -113,23 +113,35 @@ namespace SonicRoute
             if (_quickPanel == null)
             {
                 _quickPanel = new QuickPanelWindow();
-                _quickPanel.Closed += (_, _) => _quickPanel = null;
+                _quickPanel.Closed += (_, _) =>
+                {
+                    _quickPanel = null;
+                    AppIconService.Clear(); // 清空图标缓存，让面板加载的 BitmapSource 可被 GC 回收
+                    // 实验设置「释放快速面板 UI 内存」：无论面板以何种方式关闭（托盘切换 / 失焦自动关闭），
+                    // 都在关闭后立即 + 延迟多次（1s/3s/5s）强制回收面板 UI 内存（修复失焦关闭不释放问题）
+                    if (ConfigService.Load().FreePanelUIMemory)
+                        _ = Task.Run(async () =>
+                        {
+                            // 先排空 UI Dispatcher 队列（面板关闭 + 挂起的异步续体），再 GC 才能真正回收面板
+                            for (int i = 0; i < 3; i++)
+                            {
+                                Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                                await Task.Delay(200);
+                            }
+                            GcNow();
+                            foreach (var ms in new[] { 1000, 3000, 5000 })
+                            {
+                                await Task.Delay(ms);
+                                GcNow();
+                            }
+                            TrimWorkingSet(); // 面板 UI 残余渲染缓存无法托管回收，最后换出工作集
+                        });
+                };
             }
 
             if (_quickPanel.IsVisible)
             {
                 _quickPanel.Close();
-                // 实验设置「释放快速面板 UI 内存」：面板关闭后立即 + 延迟多次（1s/3s/5s）强制回收面板 UI 内存
-                if (ConfigService.Load().FreePanelUIMemory)
-                    _ = Task.Run(async () =>
-                    {
-                        GcNow();
-                        foreach (var ms in new[] { 1000, 3000, 5000 })
-                        {
-                            await Task.Delay(ms);
-                            GcNow();
-                        }
-                    });
                 return;
             }
 
@@ -144,6 +156,7 @@ namespace SonicRoute
                 _mainWindow.Closed += (_, _) =>
                 {
                     _mainWindow = null;
+                    AppIconService.Clear(); // 清空图标缓存（窗口关闭后残留的主要静态持有物），让 BitmapSource 可被 GC 回收
                     // 实验设置「关闭 UI 释放内存」：窗口真正关闭后强制回收 UI 内存。
                     // 立即回收一次，再延迟多次重试（1s/3s/5s）：窗口关闭瞬间可能有挂起的异步续体
                     // （切设备/调音量/刷新应用等，闭包会捕获窗口对象），等它们跑完后窗口才真正可回收，
@@ -153,12 +166,20 @@ namespace SonicRoute
                         {
                             _ = Task.Run(async () =>
                             {
+                                // 优化：GC 前先让 UI 线程排空 Dispatcher 队列（窗口关闭 + 挂起的异步续体
+                                // 闭包可能捕获窗口），队列清空后再 GC 才能把窗口与视觉树真正回收
+                                for (int i = 0; i < 3; i++)
+                                {
+                                    Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                                    await Task.Delay(200);
+                                }
                                 GcNow();
                                 foreach (var ms in new[] { 1000, 3000, 5000, 8000, 12000 })
                                 {
                                     await Task.Delay(ms);
                                     GcNow();
                                 }
+                                TrimWorkingSet(); // UI 残余渲染缓存无法托管回收，最后换出工作集，任务管理器"内存"列立即下降
                             });
                         }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
                 };
@@ -186,6 +207,21 @@ namespace SonicRoute
             }
             catch { }
         }
+
+        /// <summary>将进程工作集换出到磁盘。WPF Milcore 渲染缓存（native、进程级共享）无法被托管 GC 回收，
+        /// 关闭 UI 后残余的十几 MB 只能靠换出；换出的不活跃页面不再换回（无访问），任务管理器"内存"列立即下降。</summary>
+        private static void TrimWorkingSet()
+        {
+            try
+            {
+                using var p = System.Diagnostics.Process.GetCurrentProcess();
+                SetProcessWorkingSetSize(p.Handle, new IntPtr(-1), new IntPtr(-1));
+            }
+            catch { }
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern bool SetProcessWorkingSetSize(IntPtr proc, IntPtr min, IntPtr max);
 
         /// <summary>重新加载全局快捷键（设置页修改后调用）。实验模式的隐藏动作仅在"实验模式+麦克风选项"开启时注册。</summary>
         internal void ReloadHotkeys()
