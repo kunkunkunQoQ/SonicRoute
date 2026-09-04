@@ -1,10 +1,8 @@
 ﻿# 🎧 音跃 SonicRoute
 
-> Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出切到耳机/音箱/显示器，不改系统默认设备。
+> Windows 10/11 按应用音频快速切换工具：一键切单应用输出/音量/静音，不改系统默认设备。基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
 作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.10** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
-
-底层基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
 ---
 
@@ -13,11 +11,8 @@
 <a id="quick-start"></a>
 ## 🚀 快速开始
 
-1. [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载（**绿色版**解压即用 / **轻量版**需 .NET 8 运行时），或 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 自动更新
-2. 双击运行，程序驻留托盘：
-   - **单击** → 快捷面板（切设备 / 调音量 / 静音）
-   - **双击** → 完整管理界面
-   - **任务栏区域滚轮** → 调当前应用音量（OSD 实时提示）
+1. [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载（绿色版解压即用 / 轻量版需 .NET 8），或 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT)
+2. 驻留托盘：**单击**→快捷面板（切设备/音量/静音）｜**双击**→完整界面｜**任务栏滚轮**→调当前应用音量（OSD 提示）
 
 <a id="features"></a>
 ## ✨ 功能
@@ -53,9 +48,7 @@
 <a id="customize"></a>
 ## 🎨 自定义
 
-**🌐 多语言**：中文 ｜ English ｜ 日本語 ｜ 한국어 ｜ Français ｜ Deutsch ｜ Español ｜ Русский — 首次启动跟随系统，设置页切换后重启生效
-
-**🎨 主题**：模式（跟随系统/浅色/深色）· 强调色（蓝/绿/粉 + RGB 自定义）· 背景透明度（60%–100%，默认 85%，面板与主窗口统一）
+**🌐 多语言**：中文/English/日本語/한국어/Français/Deutsch/Español/Русский，跟随系统，切换后重启生效 ｜ **🎨 主题**：深浅色跟随系统、RGB 强调色、透明度 60–100%（默认 85%）
 
 <a id="tech"></a>
 ## 🛠 技术实现
@@ -80,20 +73,20 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
-| 🟢 绿色免安装 | `SonicRoute-v1.10.exe` / `.zip` | ~180MB / ~69MB | 无（内置运行时） |
-| ⚡ 轻量版 | `SonicRoute-v1.10-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 Desktop Runtime x64 |
+| 🟢 绿色免安装 | `SonicRoute-v1.10.exe` / `.zip` | ~180MB / ~69MB | 内置运行时 |
+| ⚡ 轻量版 | `SonicRoute-v1.10-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 |
 | 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动安装更新 |
 
-轻量版运行时：[dotnet.microsoft.com](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0) → Windows x64 → .NET Desktop Runtime。
+轻量版需 .NET 8 Desktop Runtime：[下载](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0)
 
 <a id="changelog"></a>
 ## 📋 更新日志
 
 **v1.10**
-- 折叠 UI 统一「更多选项」样式（保留设备/设备名称折叠升级）
-- 补齐全部 8 种语言的遗漏翻译（11 个键）
-- 内存优化：关闭 UI 释放内存默认开启 + TrimWorkingSet 换出（关闭 UI 后内存可降至 ~4MB）
-- 正常版发布去除压缩参数保持低内存（与 Lite 一致）
+- 折叠 UI「更多选项」样式（设备/设备名称折叠）
+- 补齐 8 语言遗漏翻译（11 键）
+- 内存优化：关闭 UI 自动释放+换出，占用可降至 ~4MB（默认开启）
+- 正常版低内存发布（同 Lite，不加压缩参数）
 
 <a id="faq"></a>
 ## ❓ FAQ
