@@ -69,6 +69,11 @@ private List<AppItem> _appItems = new();
                 PreviewKeyDown -= MainWindow_PreviewKeyDown;
                 _hwndSource?.RemoveHook(TaskbarMinimizeWndProc);
                 _hwndSource = null;
+                // 置空音频对象/UI 列表引用，帮助窗口与视觉树更快被 GC 回收（关闭 UI 释放内存优化）
+                _outputs = new(); _outputDisplay = new();
+                _inputs = new(); _inputDisplay = new();
+                _overviewApp = null; _appsSelected = null;
+                _appItems = new();
             };
             // 快捷键内联录音：在窗口内直接捕获按键，免弹窗
             PreviewKeyDown += MainWindow_PreviewKeyDown;
@@ -1517,7 +1522,7 @@ private List<AppItem> _appItems = new();
                     int pid = (int)app.ProcessId;
                     int hr = await Task.Run(() =>
                     {
-                        var cfg = new AudioPolicyConfig(EDataFlow.eRender);
+                        using var cfg = new AudioPolicyConfig(EDataFlow.eRender);
                         return cfg.SetDefaultEndPoint(null, pid);
                     });
                     if (hr >= 0) ok++;
@@ -1532,14 +1537,14 @@ private List<AppItem> _appItems = new();
         private void ApplyCollapseUi()
         {
             bool collapse = _config.CollapseDeviceSections;
-            KeepDevicesToggleButton.Visibility = collapse ? Visibility.Visible : Visibility.Collapsed;
-            DeviceNamesToggleButton.Visibility = collapse ? Visibility.Visible : Visibility.Collapsed;
+            KeepDevicesMoreToggle.Visibility = collapse ? Visibility.Visible : Visibility.Collapsed;
+            DeviceNamesMoreToggle.Visibility = collapse ? Visibility.Visible : Visibility.Collapsed;
             if (collapse)
             {
                 KeepDevicesBody.Visibility = Visibility.Collapsed;
                 DeviceNamesBody.Visibility = Visibility.Collapsed;
-                KeepDevicesToggleButton.Content = "▸";
-                DeviceNamesToggleButton.Content = "▸";
+                KeepDevicesMoreToggle.IsChecked = false;
+                DeviceNamesMoreToggle.IsChecked = false;
             }
             else
             {
@@ -1634,19 +1639,16 @@ private List<AppItem> _appItems = new();
         }
 
         /// <summary>折叠/展开设置页"保留的设备"卡片（实验设置-折叠开启时可见）。</summary>
-        private void KeepDevicesToggle_Click(object sender, RoutedEventArgs e)
+        /// <summary>折叠/展开设置页"保留的设备"卡片（更多选项样式，实验设置-折叠开启时可见）。</summary>
+        private void KeepDevicesMoreToggle_Click(object sender, RoutedEventArgs e)
         {
-            bool collapsed = KeepDevicesBody.Visibility != Visibility.Visible;
-            KeepDevicesBody.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
-            KeepDevicesToggleButton.Content = collapsed ? "▾" : "▸";
+            KeepDevicesBody.Visibility = KeepDevicesMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        /// <summary>折叠/展开设置页"设备名称"卡片（实验设置-折叠开启时可见）。</summary>
-        private void DeviceNamesToggle_Click(object sender, RoutedEventArgs e)
+        /// <summary>折叠/展开设置页"设备名称"卡片（更多选项样式，实验设置-折叠开启时可见）。</summary>
+        private void DeviceNamesMoreToggle_Click(object sender, RoutedEventArgs e)
         {
-            bool collapsed = DeviceNamesBody.Visibility != Visibility.Visible;
-            DeviceNamesBody.Visibility = collapsed ? Visibility.Visible : Visibility.Collapsed;
-            DeviceNamesToggleButton.Content = collapsed ? "▾" : "▸";
+            DeviceNamesBody.Visibility = DeviceNamesMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>右上角 OSD 通知（兼容主题/强调色/透明度）。</summary>

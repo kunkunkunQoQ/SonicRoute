@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -73,8 +73,8 @@ namespace SonicRoute.Core
         /// <summary>实验设置 - OSD 显示位置（9 宫格：TL/T/TR/L/C/R/BL/B/BR；"Custom" 用自定义坐标）。</summary>
         public string OsdPosition { get; set; } = "TR";
 
-        /// <summary>实验设置 - 关闭完整界面时释放 UI 占用的内存（真正关闭窗口，下次打开重建，实时生效）。</summary>
-        public bool FreeUIMemoryOnClose { get; set; }
+        /// <summary>实验设置 - 关闭完整界面时释放 UI 占用的内存（真正关闭窗口，下次打开重建，实时生效）。默认开启。</summary>
+        public bool FreeUIMemoryOnClose { get; set; } = true;
 
         /// <summary>实验设置 - 关闭快速面板时释放面板 UI 占用的内存（子选项，实时生效，独立于主开关）。</summary>
         public bool FreePanelUIMemory { get; set; }

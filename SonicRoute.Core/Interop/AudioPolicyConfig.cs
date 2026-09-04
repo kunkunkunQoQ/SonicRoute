@@ -26,7 +26,7 @@ namespace SonicRoute.Core.Interop
     //      \\?\SWD#MMDEVAPI#... 形式），且同时设置 eMultimedia 与 eConsole。
     // =====================================================================
 
-    public sealed class AudioPolicyConfig
+    public sealed class AudioPolicyConfig : IDisposable
     {
         private const string ACTIVATABLE_CLASS_ID = "Windows.Media.Internal.AudioPolicyConfig";
         private const int BUILD_21H2 = 22000;
@@ -157,7 +157,21 @@ namespace SonicRoute.Core.Interop
                 NativeMethods.WindowsDeleteString(hstring);
             }
         }
-        /// <summary>生成完整设备接口路径（把 IMMDevice.GetId() 的短 ID 包装为策略 API 需要的完整路径）。</summary>
+
+        /// <summary>释放持有的 COM 工厂接口引用（内存优化①）：每次切换设备 new 一个实例，
+        /// 若只增不减会持续累积 COM 引用导致无法 GC 回收。调用方用 using 包裹。</summary>
+        public void Dispose()
+        {
+            lock (_sync)
+            {
+                if (_factory != IntPtr.Zero)
+                {
+                    Marshal.Release(_factory);
+                    _factory = IntPtr.Zero;
+                }
+            }
+            GC.SuppressFinalize(this);
+        }        /// <summary>生成完整设备接口路径（把 IMMDevice.GetId() 的短 ID 包装为策略 API 需要的完整路径）。</summary>
         public static string GenerateDeviceId(string shortDeviceId, EDataFlow flow)
         {
             var suffix = flow == EDataFlow.eRender ? DEVINTERFACE_AUDIO_RENDER : DEVINTERFACE_AUDIO_CAPTURE;

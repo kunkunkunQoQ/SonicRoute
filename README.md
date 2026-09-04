@@ -2,7 +2,7 @@
 
 > Windows 10/11 按应用音频快速切换工具 —— 一键把单个应用的输出切到耳机/音箱/显示器，不改系统默认设备。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.0.9** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.10** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
 底层基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
@@ -79,8 +79,8 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
-| 🟢 绿色免安装 | `SonicRoute-v1.0.9.exe` / `.zip` | ~75MB / ~69MB | 无（内置运行时） |
-| ⚡ 轻量版 | `SonicRoute-v1.0.9-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 Desktop Runtime x64 |
+| 🟢 绿色免安装 | `SonicRoute-v1.10.exe` / `.zip` | ~180MB / ~69MB | 无（内置运行时） |
+| ⚡ 轻量版 | `SonicRoute-v1.10-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 Desktop Runtime x64 |
 | 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动安装更新 |
 
 轻量版运行时：[dotnet.microsoft.com](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0) → Windows x64 → .NET Desktop Runtime。
@@ -88,11 +88,11 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 <a id="changelog"></a>
 ## 📋 更新日志
 
-**v1.0.9**
-- 1080p 高清图标（全部图标从 1080x1080 源图重新生成）
-- MSIX 任务栏图标透明修复（targetsize 多尺寸图标）
-- MSIX 开机自启修复（startupTask 扩展 + StartupTask API）
-- 新增 WpfUiSkeleton 可复用 WPF UI 骨架模板
+**v1.10**
+- 折叠 UI 统一「更多选项」样式（保留设备/设备名称折叠升级）
+- 补齐全部 8 种语言的遗漏翻译（11 个键）
+- 内存优化：关闭 UI 释放内存默认开启 + TrimWorkingSet 换出（关闭 UI 后内存可降至 ~4MB）
+- 正常版发布去除压缩参数保持低内存（与 Lite 一致）
 
 <a id="faq"></a>
 ## ❓ FAQ
@@ -105,12 +105,6 @@ A：设置 → 保留的设备 里勾选。
 
 **Q：删了软件怎么改回应用播放设备？**
 A：任务栏声音图标右键 → 音量合成器，把对应应用改回即可。
-
-**Q：打开过面板/完整界面后内存从 30MB 涨到 48MB？**
-A：WPF 渲染层首次初始化的进程级缓存，关闭窗口不释放，稳定不增长，非泄漏。
-
-**Q：如何优化内存占用？**
-A：设置页底部点作者名「困困困」5 次解锁实验模式 → 开启实验模式 → 实验设置 → 开启「关闭 UI 释放内存」。开启后关闭完整界面即释放 UI 内存，占用可降至约 42MB。⚠️ 实验功能，部分场景可能无法完全生效。
 
 <a id="versioning"></a>
 ## 📌 版本规范
