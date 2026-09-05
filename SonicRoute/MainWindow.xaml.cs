@@ -56,7 +56,7 @@ private List<AppItem> _appItems = new();
                 await RefreshOverviewAsync();
                 BuildDeviceNameLists();
                 // 实验 UI（概览/应用/设置输入区/名称区）可见性：麦克风选项开启时显示
-                ApplyExpMicUi(_config.ExperimentalUnlocked && _config.ExperimentalMode && _config.ExperimentalMic);
+                ApplyExpMicUi(_config.ExperimentalMic);
                 NavExperimental.Visibility = _config.ExperimentalUnlocked && _config.ExperimentalMode
                     ? Visibility.Visible : Visibility.Collapsed;
             };
@@ -77,6 +77,10 @@ private List<AppItem> _appItems = new();
             };
             // 快捷键内联录音：在窗口内直接捕获按键，免弹窗
             PreviewKeyDown += MainWindow_PreviewKeyDown;
+            // 快捷键内联录音（鼠标键）：录制态下支持绑定中键/侧键（XButton1/2）
+            PreviewMouseDown += MainWindow_PreviewMouseDown;
+            // 快捷键内联录音（滚轮）：录制态下支持 Ctrl+滚轮上/下绑定（WheelUp/WheelDown）
+            PreviewMouseWheel += MainWindow_PreviewMouseWheel;
             // 自绘边框窗口：点击任务栏图标也能最小化（补 WS_MINIMIZEBOX + 拦截系统最小化命令）
             SourceInitialized += MainWindow_SourceInitialized;
         }
@@ -120,8 +124,16 @@ private List<AppItem> _appItems = new();
             e.Handled = true;
             if (e.Key == Key.Escape)
             {
-                _recordingAction = null;
-                BuildHotkeyList();
+                // Esc = 不绑定任何东西：清除该动作的快捷键（不是保留原绑定）
+                if (_recordingAction != null)
+                {
+                    var escAction = _recordingAction;
+                    _recordingAction = null;
+                    _config.Hotkeys[escAction] = "";
+                    ConfigService.Save(_config);
+                    ((App)Application.Current).ReloadHotkeys();
+                    BuildHotkeyList();
+                }
                 return;
             }
             var combo = HotkeyActions.Format(e);
@@ -131,6 +143,36 @@ private List<AppItem> _appItems = new();
             _config.Hotkeys[action] = combo;
             ConfigService.Save(_config);
             // 先重载注册（让 registered 反映新组合），再按最新注册刷新显示
+            ((App)Application.Current).ReloadHotkeys();
+            BuildHotkeyList();
+        }
+
+        /// <summary>录制态下捕获鼠标键（中键/侧键）绑定为快捷键；左键/右键忽略（不吞事件，避免影响 UI 交互）。</summary>
+        private void MainWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (_recordingAction == null) return;
+            var combo = HotkeyActions.FormatMouse(e);
+            if (combo == null) return; // 左键/右键等不可绑定的鼠标键：忽略
+            e.Handled = true;
+            var action = _recordingAction;
+            _recordingAction = null;
+            _config.Hotkeys[action] = combo;
+            ConfigService.Save(_config);
+            ((App)Application.Current).ReloadHotkeys();
+            BuildHotkeyList();
+        }
+
+        /// <summary>录制态下捕获鼠标滚轮：Ctrl+滚轮上 = Ctrl+WheelUp，滚轮下 = WheelDown（可带修饰键）。</summary>
+        private void MainWindow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (_recordingAction == null) return;
+            var combo = HotkeyActions.FormatWheel(e);
+            if (combo == null) return;
+            e.Handled = true;
+            var action = _recordingAction;
+            _recordingAction = null;
+            _config.Hotkeys[action] = combo;
+            ConfigService.Save(_config);
             ((App)Application.Current).ReloadHotkeys();
             BuildHotkeyList();
         }
@@ -494,7 +536,7 @@ private List<AppItem> _appItems = new();
             MarkLastUsed(app);
 
             var pid = (int)app.ProcessId;
-            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, dev.Id));
+            var (ok, msg) = await Apply(pid, EDataFlow.eRender, dev.Id);
             OverviewStatusText.Text = ok
                 ? string.Format(L10n.T("Ov.SwitchOk"), "🔊 " + dev.DisplayName, AppDisplayName.Get(app))
                 : $"✗ {msg}";
@@ -546,7 +588,7 @@ private List<AppItem> _appItems = new();
             MarkLastUsed(app);
 
             var pid = (int)app.ProcessId;
-            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eCapture, dev.Id));
+            var (ok, msg) = await Apply(pid, EDataFlow.eCapture, dev.Id);
             OverviewStatusText.Text = ok
                 ? string.Format(L10n.T("Ov.SwitchOk"), "🎤 " + dev.DisplayName, AppDisplayName.Get(app))
                 : $"✗ {msg}";
@@ -567,7 +609,7 @@ private List<AppItem> _appItems = new();
             if (OverviewInputCombo.SelectedItem is not AudioDeviceInfo dev) return;
 
             var pid = (int)app.ProcessId;
-            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eCapture, dev.Id));
+            var (ok, msg) = await Apply(pid, EDataFlow.eCapture, dev.Id);
             OverviewStatusText.Text = ok
                 ? string.Format(L10n.T("Ov.SwitchOk"), "🎤 " + dev.DisplayName, AppDisplayName.Get(app))
                 : $"✗ {msg}";
@@ -942,6 +984,7 @@ private List<AppItem> _appItems = new();
                 cb.Unchecked += InputFilterChanged;
                 InputFilterList.Items.Add(cb);
             }
+
         }
 
         private void DeviceFilterChanged(object sender, RoutedEventArgs e)
@@ -1096,15 +1139,19 @@ private List<AppItem> _appItems = new();
                 SettingsShowPanelOnStart.IsChecked = _config.StartPanelOnStart;
                 ExpCollapseCheck.IsChecked = _config.CollapseDeviceSections;
 
-                // 实验模式（隐藏）：解锁后显示开关；开启实验模式后导航显示"实验设置"；麦克风选项开启后各处显示麦克风 UI
+                // 实验模式（隐藏）：解锁后显示开关；开启实验模式后导航显示"实验设置"
                 bool expUnlocked = _config.ExperimentalUnlocked;
                 bool expOn = expUnlocked && _config.ExperimentalMode;
-                bool expMic = expOn && _config.ExperimentalMic;
                 SettingsExperimentalMode.Visibility = expUnlocked ? Visibility.Visible : Visibility.Collapsed;
                 ExperimentalModeHint.Visibility = expUnlocked ? Visibility.Visible : Visibility.Collapsed;
                 SettingsExperimentalMode.IsChecked = expOn;
                 NavExperimental.Visibility = expOn ? Visibility.Visible : Visibility.Collapsed;
-                ApplyExpMicUi(expMic);
+
+                // 麦克风选项（设置页常驻，不依赖实验模式）：开启后概览/应用/设置显示麦克风 UI
+                ExpMicOptionCheck.IsChecked = _config.ExperimentalMic;
+                ExpMicPanelCheck.IsChecked = _config.MicInPanel;
+                ExpMicPanelCheck.Visibility = _config.ExperimentalMic ? Visibility.Visible : Visibility.Collapsed;
+                ApplyExpMicUi(_config.ExperimentalMic);
 
                 // 折叠设置页设备区块（设置页开关，默认开启，不依赖实验模式）：开启后"保留的设备/设备名称"默认收起，可点击标题按钮展开
                 ApplyCollapseUi();
@@ -1413,13 +1460,7 @@ private List<AppItem> _appItems = new();
             try
             {
                 bool expOn = _config.ExperimentalMode;
-                bool expMic = expOn && _config.ExperimentalMic;
-
-                ExpMicOptionCheck.IsChecked = _config.ExperimentalMic;
-                ExpMicOptionCheck.IsEnabled = expOn; // 未开实验模式时置灰
-                ApplyExpMicUi(expMic);
-                ExpMicPanelCheck.IsChecked = _config.MicInPanel;
-                ExpMicPanelCheck.IsEnabled = expMic;
+                ApplyExpMicUi(_config.ExperimentalMic);
                 ExpFreeUIMemCheck.IsChecked = _config.FreeUIMemoryOnClose;
                 ExpFreePanelMemCheck.IsChecked = _config.FreePanelUIMemory;
                 ExpMemMoreToggle.Visibility = _config.FreeUIMemoryOnClose ? Visibility.Visible : Visibility.Collapsed;
@@ -1463,8 +1504,8 @@ private List<AppItem> _appItems = new();
             if (!IsLoaded || _suppressSettings) return;
             _config.ExperimentalMic = ExpMicOptionCheck.IsChecked == true;
             ConfigService.Save(_config);
-            ApplyExpMicUi(_config.ExperimentalMode && _config.ExperimentalMic);
-            ExpMicPanelCheck.IsEnabled = _config.ExperimentalMode && _config.ExperimentalMic;
+            ApplyExpMicUi(_config.ExperimentalMic);
+            ExpMicPanelCheck.Visibility = _config.ExperimentalMic ? Visibility.Visible : Visibility.Collapsed;
             ShowToast(L10n.T("St.ExpMicNeedRestart"));
         }
 
@@ -1509,27 +1550,17 @@ private List<AppItem> _appItems = new();
             ExpMemMorePanel.Visibility = ExpMemMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        /// <summary>实验设置 - 一键还原全部应用为默认播放设备（清除所有应用的持久化输出设备设置）。</summary>
+        /// <summary>实验设置 - 一键还原全部应用输出/输入默认设备：
+        /// 覆盖系统里所有应用（所有运行进程 + 曾设置过/有音频会话的应用），清除持久化路由跟随系统默认。</summary>
         private async void ExpResetAll_Click(object sender, RoutedEventArgs e)
         {
             ExpResetAllButton.IsEnabled = false;
             try
             {
-                var apps = await Task.Run(() => AudioService.GetApps());
-                int total = apps.Count, ok = 0;
-                foreach (var app in apps)
-                {
-                    int pid = (int)app.ProcessId;
-                    int hr = await Task.Run(() =>
-                    {
-                        using var cfg = new AudioPolicyConfig(EDataFlow.eRender);
-                        return cfg.SetDefaultEndPoint(null, pid);
-                    });
-                    if (hr >= 0) ok++;
-                }
+                var (okOut, okIn, total) = await Task.Run(() => AudioService.ResetAllPersistedEndpoints());
                 if (total == 0) ShowToast(L10n.T("Exp.ResetAllNone"));
-                else if (ok == total) ShowToast(string.Format(L10n.T("Exp.ResetAllDone"), ok));
-                else ShowToast(string.Format(L10n.T("Exp.ResetAllFail"), ok, total));
+                else if (okOut == total && okIn == total) ShowToast(string.Format(L10n.T("Exp.ResetAllDone"), total));
+                else ShowToast(string.Format(L10n.T("Exp.ResetAllFail"), okOut, total, okIn, total));
             }
             finally { ExpResetAllButton.IsEnabled = true; }
         }
@@ -1718,13 +1749,26 @@ private List<AppItem> _appItems = new();
             _recordingAction = null;
             HotkeyList.Items.Clear();
             // 实验模式隐藏动作：仅在"实验模式 + 麦克风选项"开启时显示（切换当前应用麦克风设备）
-            bool expMicOn = _config.ExperimentalMode && _config.ExperimentalMic;
-            var actions = HotkeyActions.All
-                .Where(a => a != HotkeyActions.ActSwitchInput || expMicOn)
-                .ToArray();
+            bool expMicOn = _config.ExperimentalMic;
             var registered = ((App)Application.Current).HotkeyRegistration;
-            foreach (var a in actions)
+            // 按分组渲染：每组先加分类标题，再渲染动作行
+            foreach (var (l10nKey, groupActions) in HotkeyActions.Groups)
             {
+                var visible = groupActions
+                    .Where(a => (a != HotkeyActions.ActSwitchInput && a != HotkeyActions.ActSwitchAllInput) || expMicOn)
+                    .ToArray();
+                if (visible.Length == 0) continue;
+                var header = new TextBlock
+                {
+                    Text = L10n.T(l10nKey),
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = (Brush)FindResource("Theme.Accent"),
+                    Margin = new Thickness(0, 12, 0, 4)
+                };
+                HotkeyList.Items.Add(header);
+                foreach (var a in visible)
+                {
                 string combo = _config.Hotkeys.TryGetValue(a, out var c) ? c
                     : HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : L10n.T("Ov.Unset");
                 var actionLabel = HotkeyActions.DisplayName(a);
@@ -1770,11 +1814,12 @@ private List<AppItem> _appItems = new();
                     VerticalAlignment = VerticalAlignment.Center,
                     Foreground = (Brush)FindResource("Theme.Accent")
                 };
-                btn.Click += HotkeyRebind_Click;
-                row.Children.Add(btn);
-                row.Children.Add(label);
-                DockPanel.SetDock(btn, Dock.Right);
-                HotkeyList.Items.Add(row);
+                    btn.Click += HotkeyRebind_Click;
+                    row.Children.Add(btn);
+                    row.Children.Add(label);
+                    DockPanel.SetDock(btn, Dock.Right);
+                    HotkeyList.Items.Add(row);
+                }
             }
         }
 

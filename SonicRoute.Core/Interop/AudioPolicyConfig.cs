@@ -35,9 +35,11 @@ namespace SonicRoute.Core.Interop
         private const string DEVINTERFACE_AUDIO_RENDER = "#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
         private const string DEVINTERFACE_AUDIO_CAPTURE = "#{2eef81be-33fa-4800-9670-1cd474972c3f}";
 
-        // vtable 槽位：3 IUnknown + 3 IInspectable + 19 内部方法
+        // vtable 槽位（已实测）：Set=25、Get=26；ClearAllPersistedApplicationDefaultEndpoints = 27
+        // （EarTrumpet 0-based 索引：Set=24、Get=25、ClearAll=26，与上面对应）
         private const int VTBL_SLOT_SET = 25;
         private const int VTBL_SLOT_GET = 26;
+        private const int VTBL_SLOT_CLEAR_ALL = 27;
 
         private static readonly Guid IID_21H2 = new Guid("ab3d4648-e242-459f-b02f-541c70306324");
         private static readonly Guid IID_DOWNLEVEL = new Guid("2a59116d-6c4f-45e0-a74f-707e3fef9258");
@@ -49,6 +51,9 @@ namespace SonicRoute.Core.Interop
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         private delegate int GetPersistedDefaultAudioEndpointDelegate(
             IntPtr self, uint processId, EDataFlow flow, ERole role, out IntPtr deviceId);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate int ClearAllPersistedApplicationDefaultEndpointsDelegate(IntPtr self);
 
         private readonly EDataFlow _flow;
         private readonly object _sync = new();
@@ -156,6 +161,16 @@ namespace SonicRoute.Core.Interop
             {
                 NativeMethods.WindowsDeleteString(hstring);
             }
+        }
+
+        /// <summary>清除所有应用的全部持久化音频设备（输出+输入），即 Windows 11 音量合成器
+        /// "重置"按钮的底层机制（Win11 22H2+ 才有，旧系统返回 E_NOTIMPL）。
+        /// 立即生效，运行中与已退出的应用都会被还原为跟随系统默认设备。</summary>
+        public int ClearAllPersistedApplicationDefaultEndpoints()
+        {
+            IntPtr factory = EnsureFactory();
+            var fn = GetMethod<ClearAllPersistedApplicationDefaultEndpointsDelegate>(factory, VTBL_SLOT_CLEAR_ALL);
+            return fn(factory);
         }
 
         /// <summary>释放持有的 COM 工厂接口引用（内存优化①）：每次切换设备 new 一个实例，

@@ -1,8 +1,8 @@
-﻿# 🎧 音跃 SonicRoute
+# 🎧 音跃 SonicRoute
 
 > Windows 10/11 按应用音频快速切换工具：一键切单应用输出/音量/静音，不改系统默认设备。基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.10** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.11** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
 ---
 
@@ -40,9 +40,12 @@
 
 | 功能 | 默认 | 功能 | 默认 |
 |---|---|---|---|
-| 音量+ | `Ctrl+Alt+↑` | 音量- | `Ctrl+Alt+↓` |
-| 静音当前应用 | `Ctrl+Shift+M` | 全局麦克风静音 | `Ctrl+Shift+N` |
-| 切换快捷设备 | `Ctrl+Alt+D` | 打开快速面板 | `Ctrl+Alt+Space` |
+| 音量+ / 音量- | `Ctrl+Alt+↑/↓` | 静音当前应用 / 全局麦克风静音 | `Ctrl+Shift+M/N` |
+| 切换当前应用快捷设备 | `Ctrl+Alt+D` | 切换当前应用麦克风 | `Ctrl+Alt+Shift+D` |
+| 切换全局应用输出 / 输入 | `Ctrl+Alt+Shift+O/I` | 切换系统默认输出 / 输入 | `Ctrl+Alt+O/I` |
+| 还原全部应用默认设备 | `Ctrl+Alt+Shift+R` | 打开快速面板 | `Ctrl+Alt+Space` |
+
+支持 F1-F24、无修饰单键、鼠标键/滚轮绑定（可组合修饰键），按键设置按「音量 / 当前应用 / 全局与系统 / 界面」分组。
 
 <a id="customize"></a>
 ## 🎨 自定义
@@ -72,8 +75,8 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
-| 🟢 绿色免安装 | `SonicRoute-v1.10.exe` / `.zip` | ~180MB / ~69MB | 内置运行时 |
-| ⚡ 轻量版 | `SonicRoute-v1.10-Lite.exe` / `.zip` | ~25MB / ~6MB | 需 .NET 8 |
+| 🟢 绿色免安装 | `SonicRoute-v1.11.exe` / `.zip` | ~180MB / ~69MB | 内置运行时 |
+| ⚡ 轻量版 | `SonicRoute-v1.11-Lite.exe` / `.zip` | ~25MB / ~6.5MB | 需 .NET 8 |
 | 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动安装更新 |
 
 轻量版需 .NET 8 Desktop Runtime：[下载](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0)
@@ -81,11 +84,10 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 <a id="changelog"></a>
 ## 📋 更新日志
 
-**v1.10**
-- 折叠 UI「更多选项」样式（设备/设备名称折叠）
-- 补齐 8 语言遗漏翻译（11 键）
-- 内存优化：关闭 UI 自动释放+换出，占用可降至 ~4MB（默认开启）
-- 正常版低内存发布（同 Lite，不加压缩参数）
+**v1.11**
+- 快捷键大升级：支持 F1-F24 / 无修饰单键 / 鼠标键+滚轮绑定 / Esc 取消，设置页按功能分组
+- 新增快捷键：切换系统默认输出/输入（Ctrl+Alt+O/I）、切换全局应用输出/输入（Ctrl+Alt+Shift+O/I）、还原全部应用默认设备（Ctrl+Alt+Shift+R）
+- 麦克风选项移至设置页常驻，不再需要实验模式
 
 <a id="faq"></a>
 ## ❓ FAQ
