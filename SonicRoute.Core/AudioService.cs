@@ -74,6 +74,14 @@ namespace SonicRoute.Core
             return result;
         }
 
+        /// <summary>虚拟"系统默认"设备 ID：代表"跟随系统默认设备"（清除该应用的按应用持久化路由）。
+        /// 用于保留设备筛选 / 快速切换面板 / 概览 / 全局切换的可选目标。</summary>
+        public const string SystemDefaultDeviceId = "@@SYSTEM_DEFAULT@@";
+
+        /// <summary>判断设备 ID 是否为"系统默认"虚拟项。</summary>
+        public static bool IsSystemDefault(string? id) =>
+            string.Equals(id, SystemDefaultDeviceId, StringComparison.OrdinalIgnoreCase);
+
         /// <summary>系统默认设备完整 ID（未取到返回 null）。</summary>
         public static string? GetDefaultDeviceId(EDataFlow flow)
         {
@@ -282,6 +290,68 @@ namespace SonicRoute.Core
             {
                 return (false, 0, ex.Message);
             }
+        }
+
+        /// <summary>一键还原：把系统里所有应用（含所有运行进程 + 有音频会话的应用 + 已退出但曾设置过的应用）
+        /// 的输出/输入设备都清除持久化路由，恢复为跟随系统默认。返回 (输出成功数, 输入成功数, 尝试总数)。</summary>
+        public static (int OutOk, int InOk, int Total) ResetAllPersistedEndpoints()
+        {
+            // 第一步：ClearAllPersistedApplicationDefaultEndpoints（Win11 22H2+，
+            // 即系统"音量合成器→重置"的底层机制）。一次性清除所有应用的输出+输入
+            // 持久化路由（含运行中与已退出的应用），立即生效。
+            int hrClear = -999;
+            try
+            {
+                using var clearAll = new AudioPolicyConfig(EDataFlow.eRender);
+                hrClear = clearAll.ClearAllPersistedApplicationDefaultEndpoints();
+            }
+            catch { /* 旧系统/异常时回退 */ }
+
+            var pids = new HashSet<uint>();
+            foreach (var p in System.Diagnostics.Process.GetProcesses())
+            {
+                try { if (p.Id > 0) pids.Add((uint)p.Id); } catch { /* 权限不足的进程跳过 */ }
+            }
+            foreach (var app in GetApps(refresh: true))
+                if (app.ProcessId > 0) pids.Add(app.ProcessId);
+
+            int okOut = 0, okIn = 0, total = 0;
+            foreach (var pid in pids)
+            {
+                total++;
+                try
+                {
+                    using (var c1 = new AudioPolicyConfig(EDataFlow.eRender))
+                        if (c1.SetDefaultEndPoint(null, (int)pid) >= 0) okOut++;
+                    using (var c2 = new AudioPolicyConfig(EDataFlow.eCapture))
+                        if (c2.SetDefaultEndPoint(null, (int)pid) >= 0) okIn++;
+                }
+                catch { /* 单个进程失败不影响其余 */ }
+            }
+            // 第三步：无条件清除注册表磁盘条目（已退出应用的持久化路由存这里，
+            // ClearAll 只清内存策略，不清磁盘；audiosrv 会在应用退出/重开时读磁盘恢复旧设备）
+            // HKCU\Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore
+            // 每个子键 = 一个应用的持久化端点（默认值含应用路径）。整树删除 = 全部还原为系统默认。
+            int cleared = ClearPersistedPolicyStore();
+            return (okOut + cleared, okIn + cleared, total + cleared);
+        }
+
+        /// <summary>清除注册表中所有按应用持久化音频路由（含已退出应用），返回删除的子键数。</summary>
+        private static int ClearPersistedPolicyStore()
+        {
+            const string path = @"Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore";
+            int n = 0;
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(path, writable: true);
+                if (key == null) return 0;
+                foreach (var name in key.GetSubKeyNames())
+                {
+                    try { key.DeleteSubKeyTree(name); n++; } catch { /* 单个条目失败不影响其余 */ }
+                }
+            }
+            catch { /* 无权限/键不存在则跳过 */ }
+            return n;
         }
 
         /// <summary>读取进程当前持久化的设备完整 ID（未设置返回 null）。</summary>

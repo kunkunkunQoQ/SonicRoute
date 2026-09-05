@@ -62,10 +62,10 @@ namespace SonicRoute.Core
         public bool ExperimentalMode { get; set; }
 
         /// <summary>实验模式 - 麦克风选项（需开启实验模式，重启生效；开启后显示麦克风相关设置与快捷键）。</summary>
-        public bool ExperimentalMic { get; set; }
+        public bool ExperimentalMic { get; set; } = true;
 
         /// <summary>实验设置 - 麦克风相关选项是否在快捷面板显示（需实验模式+麦克风选项，重启生效）。</summary>
-        public bool MicInPanel { get; set; } = true;
+        public bool MicInPanel { get; set; } = false;
 
         /// <summary>折叠设置页"保留的设备/设备名称"区块（含麦克风），默认开启；开关位于设置页（不依赖实验模式）。</summary>
         public bool CollapseDeviceSections { get; set; } = true;

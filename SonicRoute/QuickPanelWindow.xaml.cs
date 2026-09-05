@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -93,7 +93,7 @@ namespace SonicRoute
 
                 // 输入设备（麦克风）：仅实验模式 + 麦克风选项 + 快捷面板显示时展示
                 var cfg = ConfigService.Load();
-                bool micOn = cfg.ExperimentalMode && cfg.ExperimentalMic;
+                bool micOn = cfg.ExperimentalMic;
                 bool showInput = micOn && cfg.MicInPanel;
                 InputSection.Visibility = showInput ? Visibility.Visible : Visibility.Collapsed;
                 if (micOn)
