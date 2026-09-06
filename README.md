@@ -4,6 +4,8 @@
 
 作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.11** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
+> 🙏 **特别感谢 [EarTrumpet](https://github.com/File-New-Project/EarTrumpet)**：本项目的按应用音频路由（Per-App Audio Routing）底层实现参考其开源代码移植而来。
+
 ---
 
 [🚀 快速开始](#quick-start) ｜ [✨ 功能](#features) ｜ [🖼 界面](#screenshots) ｜ [⌨️ 快捷键](#hotkeys) ｜ [🎨 自定义](#customize) ｜ [🛠 技术](#tech) ｜ [📦 下载](#release) ｜ [📋 更新日志](#changelog) ｜ [❓ FAQ](#faq) ｜ [📌 版本规范](#versioning)
