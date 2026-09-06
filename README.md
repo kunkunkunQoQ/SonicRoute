@@ -65,7 +65,7 @@
 | `ClearAllPersistedApplicationDefaultEndpoints` | Win11 22H2+「音量合成器重置」底层，一键还原 |
 | `ISimpleAudioVolume` | 按 PID 聚合会话，独立调音量/静音 |
 
-项目结构：`SonicRoute`（WPF）/ `SonicRoute.Core`（核心）/ `SonicRoute.Selftest`（自检）/ `Probe`（调试）。配置：`%LocalAppData%\SonicRoute\config.json`。完整实现细节见 [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki/%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0)。
+项目结构：`SonicRoute`（WPF）/ `SonicRoute.Core`（核心）/ `SonicRoute.Selftest`（自检）/ `Probe`（调试）。配置：`%LocalAppData%\SonicRoute\config.json`。完整实现细节见 [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0)。
 
 ```bash
 # 构建
@@ -106,7 +106,7 @@ A：设置 → 保留的设备 里勾选，输出和输入分开勾选。
 A：任务栏声音图标右键 → 音量合成器，把对应应用改回即可。
 
 **Q：更多问题？**
-A：见 [Wiki 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)（20+ 条分类解答）。
+A：见 [Wiki 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)（20+ 条分类解答）。
 
 <a id="versioning"></a>
 ## 📌 版本规范
