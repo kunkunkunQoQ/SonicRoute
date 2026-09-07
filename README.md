@@ -13,7 +13,7 @@
 <a id="quick-start"></a>
 ## 🚀 快速开始
 
-1. [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载（绿色版解压即用 / 轻量版需 .NET 8），或 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT)
+1. [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载（绿色版解压即用 / 建议轻量版环境不全则绿色版），或 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT)
 2. 驻留托盘：**单击**→快捷面板｜**双击**→完整界面｜**任务栏滚轮**→调当前应用音量（OSD 提示）
 3. 完整体验：[Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)（功能详解 / 分步教程 / 常见问题）
 
