@@ -35,3 +35,4 @@ _attach_tmp.bin
 
 # Release 临时 JSON
 /rel*.json
+.preview/
