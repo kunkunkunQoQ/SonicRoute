@@ -1,0 +1,43 @@
+{
+  "schema_version": "1",
+  "source_path": "E:\\kunkun\\SonarSwitch\\屏幕截图 2026-09-09 164436.png",
+  "source_filename": "屏幕截图 2026-09-09 164436.png",
+  "source_hash": "7b98b6452379",
+  "source_size_bytes": 132945,
+  "kind": "image",
+  "rendered_at_utc": "2026-09-09T09:11:29+00:00",
+  "output_dir": "E:\\kunkun\\SonarSwitch\\.preview\\7b98b6452379",
+  "page_count": 1,
+  "rendered_page_count": 1,
+  "collage_count": 0,
+  "extracted_text_chars": 0,
+  "text_relpath": null,
+  "thumbnail_relpath": null,
+  "pages": [
+    {
+      "page": 1,
+      "relpath": "pages\\p001.png",
+      "size_bytes": 132945,
+      "width": 0,
+      "height": 0
+    }
+  ],
+  "collages": [],
+  "warnings": [
+    "image probe failed: No module named 'PIL'",
+    "Pillow unavailable for thumbnail",
+    "Pillow unavailable: No module named 'PIL'"
+  ],
+  "options": {
+    "max_pages": 12,
+    "collage": true,
+    "page_range": null,
+    "thumbnail": true,
+    "text_only": false,
+    "jpeg_quality": 85,
+    "out_max_dim": 2048
+  },
+  "summary": {
+    "dimensions": "unknown"
+  }
+}

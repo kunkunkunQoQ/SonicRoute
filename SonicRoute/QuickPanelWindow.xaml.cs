@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,7 +19,7 @@ namespace SonicRoute
     /// 托盘快速切换面板：当前应用（可切换）+ 快速切换输出设备 + 应用音量 + 麦克风静音。
     /// 只显示设置里勾选（保留）的设备。
     /// </summary>
-    public partial class QuickPanelWindow : Window
+    public partial class QuickPanelWindow : Window, IQuickPanel
     {
         private List<AudioDeviceInfo> _outputs = new();
         private List<AudioDeviceInfo> _outputDisplay = new();
@@ -135,6 +135,10 @@ namespace SonicRoute
         {
             var cfg = ConfigService.Load();
             var apps = await Task.Run(() => AudioService.GetApps());
+            // 过滤：完整界面「应用」里关闭"在快速面板显示"的应用
+            var hiddenPanel = cfg.HiddenPanelApps;
+            apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
+                && !hiddenPanel.Any(h => string.Equals(h, a.ProcessName, StringComparison.OrdinalIgnoreCase))).ToList();
             var items = apps.Select(AppItem.From).ToList();
 
             var cur = CurrentAppService.Current;
@@ -216,13 +220,13 @@ namespace SonicRoute
 
             // 无论有无输出会话，都同步麦克风静音按钮文案（全局状态与应用无关，切换应用后不残留旧状态）
             bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
-            MicMuteButton.Content = L10n.T(globalMicMuted ? "Qp.MicUnmute" : "Qp.MicMute");
+            ApplyMicMuteVisual(globalMicMuted);
 
             if (vol.pct >= 0)
             {
                 VolumeSlider.Value = vol.pct;   // 此时 _volumeReady 仍为 false，ValueChanged 不会写回
                 VolumePercentText.Text = $"{vol.pct}%";
-                MuteButton.Content = L10n.T(vol.muted ? "Qp.Unmute" : "Qp.Mute");
+                ApplyMuteVisual(vol.muted);
                 _volumeReady = true;
                 VolumeSlider.IsEnabled = true;
                 MinusButton.IsEnabled = true;
@@ -234,7 +238,7 @@ namespace SonicRoute
                 _volumeReady = false;
                 VolumeSlider.Value = 0;
                 VolumePercentText.Text = "—";
-                MuteButton.Content = L10n.T("Qp.Mute");
+                ApplyMuteVisual(false);
                 VolumeSlider.IsEnabled = false;
                 MinusButton.IsEnabled = false;
                 PlusButton.IsEnabled = false;
@@ -395,7 +399,7 @@ namespace SonicRoute
         /// <summary>调整当前应用音量（delta 为 ±n 百分比），同步面板滑块/百分比/状态行。
         /// 供音量快捷键与面板 ± 按钮共用，保证快捷键调的就是面板/概览显示的当前应用。
         /// 返回调整后的实际音量；无当前应用/无输出会话返回 -1。</summary>
-        internal async Task<int> AdjustVolumeAsync(int delta)
+        public async Task<int> AdjustVolumeAsync(int delta)
         {
             if (_currentApp == null || !_volumeReady) return -1;
             MarkLastUsed(_currentApp);
@@ -437,15 +441,31 @@ namespace SonicRoute
             await MuteCurrentAppAsync();
         }
 
+        /// <summary>全局麦克风静音：文本固定「麦克风静音」，静音状态文字变强调色。</summary>
+        private void ApplyMicMuteVisual(bool muted)
+        {
+            MicMuteButton.Content = L10n.T("Qp.MicMute");
+            if (muted) MicMuteButton.Foreground = (System.Windows.Media.Brush)FindResource("Theme.Accent");
+            else MicMuteButton.ClearValue(Button.ForegroundProperty);
+        }
+
+        /// <summary>静音按钮：文本固定「静音」，静音状态文字变强调色（不切换文案）。</summary>
+        private void ApplyMuteVisual(bool muted)
+        {
+            MuteButton.Content = L10n.T("Qp.Mute");
+            if (muted) MuteButton.Foreground = (System.Windows.Media.Brush)FindResource("Theme.Accent");
+            else MuteButton.ClearValue(Button.ForegroundProperty);
+        }
+
         /// <summary>静音/取消静音当前应用（面板显示的应用）。面板按钮与静音快捷键共用同一条
         /// 路径，保证快捷键静音的就是面板/概览显示的同一个当前应用；同时回写面板按钮文字与
         /// 状态行，让快捷键操作在面板上有可见反馈。返回是否真正执行。</summary>
-        internal async Task<bool> MuteCurrentAppAsync()
+        public async Task<bool> MuteCurrentAppAsync()
         {
             if (_currentApp == null || !_volumeReady) return false;
             MarkLastUsed(_currentApp);
             bool muted = await Task.Run(() => SessionVolumeService.ToggleMute((int)_currentApp.ProcessId));
-            MuteButton.Content = L10n.T(muted ? "Qp.Unmute" : "Qp.Mute");
+            ApplyMuteVisual(muted);
             PanelStatusText.Text = L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted");
             return true;
         }
@@ -458,10 +478,10 @@ namespace SonicRoute
         /// <summary>全局麦克风静音：直接静音/取消静音系统所有录音设备（设备级），
         /// 与当前应用无关，所有应用录音都生效。面板按钮与麦克风静音快捷键共用。
         /// 返回是否已静音。</summary>
-        internal async Task<bool> ToggleGlobalMicMuteAsync()
+        public async Task<bool> ToggleGlobalMicMuteAsync()
         {
             bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
-            MicMuteButton.Content = L10n.T(muted ? "Qp.MicUnmute" : "Qp.MicMute");
+            ApplyMicMuteVisual(muted);
             PanelStatusText.Text = L10n.T(muted ? "Qp.MicMuted" : "Qp.MicUnmuted");
             return true;
         }

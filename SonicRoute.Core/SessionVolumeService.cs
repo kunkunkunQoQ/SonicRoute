@@ -188,6 +188,50 @@ namespace SonicRoute.Core
         }
 
         // ------------------------------------------------------------------
+        // 全局输出静音（静音/取消静音所有有输出会话的应用）
+        // ------------------------------------------------------------------
+
+        /// <summary>所有有输出会话的应用是否都已静音（没有任何会话视为未静音）。</summary>
+        public static bool AllMuted()
+        {
+            foreach (var pid in RenderPids())
+            {
+                if (!IsMuted(pid)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>当前有输出会话的全部进程 PID。</summary>
+        private static List<int> RenderPids()
+        {
+            Refresh(true);
+            lock (_lock)
+            {
+                return _renderVolumes.Where(kv => kv.Value is { Count: > 0 }).Select(kv => kv.Key).ToList();
+            }
+        }
+
+        /// <summary>静音/取消静音所有有输出会话的应用；任一成功即视为成功。</summary>
+        public static bool SetAllMute(bool mute)
+        {
+            bool any = false;
+            foreach (var pid in RenderPids())
+            {
+                if (SetMute(pid, mute)) any = true;
+            }
+            return any;
+        }
+
+        /// <summary>切换全局输出静音，返回切换后的状态。</summary>
+        public static bool ToggleAllMute()
+        {
+            bool m = AllMuted();
+            SetAllMute(!m);
+            return AllMuted();
+        }
+
+
+        // ------------------------------------------------------------------
         // 输入会话（麦克风静音，语义与输出一致：读组内第一个、写遍历全部）
         // ------------------------------------------------------------------
 

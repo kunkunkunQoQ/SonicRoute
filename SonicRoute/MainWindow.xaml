@@ -1,8 +1,8 @@
-﻿<Window x:Class="SonicRoute.MainWindow"
+<Window x:Class="SonicRoute.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SonicRoute"
-        Title="音跃 SonicRoute v1.11"
+        Title="音跃 SonicRoute v1.12"
         Icon="SonicRoute.ico"
         Width="920" Height="620"
         MinWidth="780" MinHeight="540"
@@ -259,7 +259,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="🎧 音跃 SonicRoute v1.11"
+                <TextBlock Text="🎧 音跃 SonicRoute v1.12"
                            FontSize="13.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource Theme.TextPrimary}"
                            VerticalAlignment="Center" Margin="16,0,0,0"
@@ -484,6 +484,10 @@
                                     Content="{Binding [Apps.DisableAuto], Source={x:Static local:L10n.Instance}}"
                                     Style="{StaticResource GhostButton}" MinWidth="132" Margin="8,0,0,0"
                                     Click="AppsDisableAutoButton_Click"/>
+                            <Button x:Name="AppsShowInPanelButton"
+                                    Content="{Binding [Apps.ShowInPanel], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource GhostButton}" MinWidth="132" Margin="8,0,0,0"
+                                    Click="AppsShowInPanelButton_Click"/>
                             <TextBlock x:Name="AppsStatusText" Text=""
                                        FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                        VerticalAlignment="Center" HorizontalAlignment="Left"
@@ -539,8 +543,6 @@
                                                  Checked="Theme_Changed" Tag="dark"/>
                                 </StackPanel>
 
-                                <TextBlock Text="{Binding [St.Accent], Source={x:Static local:L10n.Instance}}"
-                                           Style="{StaticResource SectionTitle}"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <RadioButton x:Name="AccentBlue" Content="{Binding [St.AccentBlue], Source={x:Static local:L10n.Instance}}"
                                                  GroupName="Accent" FontSize="13" Margin="0,0,16,0"
@@ -624,6 +626,21 @@
                                 <TextBlock Text="{Binding [St.OpacityHint], Source={x:Static local:L10n.Instance}}"
                                            FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                            Margin="0,3,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+                        <!-- 自由调整：OSD 显示位置 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Exp.Osd], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button x:Name="OsdAdjustBtnTheme" Content="{Binding [Exp.OsdAdjust], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="32" Padding="14,0"
+                                            Margin="0,0,10,0" Click="OsdAdjust_Click"/>
+                                    <Button x:Name="OsdResetButtonTheme" Content="{Binding [Exp.OsdReset], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="32" Padding="14,0"
+                                            Click="OsdReset_Click"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -776,6 +793,17 @@
                                           Margin="0,0,0,8"
                                           Checked="SettingsAutoStart_Changed" Unchecked="SettingsAutoStart_Changed"/>
                                 <!-- 实验模式（隐藏）：点击底部作者名 5 次解锁后显示 -->
+                                <ToggleButton x:Name="SettingsMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
+                                              Margin="24,8,0,0" Background="Transparent" BorderThickness="0"
+                                              HorizontalAlignment="Left" Padding="0"
+                                              Checked="SettingsMoreToggle_Click" Unchecked="SettingsMoreToggle_Click"/>
+                                <StackPanel x:Name="SettingsMorePanel" Visibility="Collapsed" Margin="0,6,0,0">
+                                    <Button x:Name="CleanAutoStartBtn"
+                                            Content="{Binding [St.CleanAutoStart], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" FontSize="12.5" Margin="24,0,0,0"
+                                            HorizontalAlignment="Left" Click="CleanAutoStart_Click"/>
+                                </StackPanel>
                                 <CheckBox x:Name="SettingsExperimentalMode"
                                           Content="{Binding [St.ExperimentalMode], Source={x:Static local:L10n.Instance}}"
                                           FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
@@ -791,13 +819,20 @@
                                           FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
                                           Margin="0,0,0,4"
                                           Checked="ExpMicOption_Changed" Unchecked="ExpMicOption_Changed"/>
+                                <ToggleButton x:Name="MicMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
+                                              Margin="24,6,0,0" Background="Transparent" BorderThickness="0"
+                                              HorizontalAlignment="Left" Padding="0" Visibility="Collapsed"
+                                              Checked="MicMoreToggle_Click" Unchecked="MicMoreToggle_Click"/>
+                                <StackPanel x:Name="MicMorePanel" Margin="24,6,0,0" Visibility="Collapsed">
+                                    <CheckBox x:Name="ExpMicPanelCheck"
+                                              Content="{Binding [Exp.MicPanel], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                              Margin="0,8,0,0"
+                                              Checked="ExpMicPanel_Changed" Unchecked="ExpMicPanel_Changed"/>
+                                </StackPanel>
 
                                 <!-- 子选项：麦克风相关选项是否在快捷面板显示（麦克风选项开启才显示） -->
-                                <CheckBox x:Name="ExpMicPanelCheck"
-                                          Content="{Binding [Exp.MicPanel], Source={x:Static local:L10n.Instance}}"
-                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                          Margin="24,8,0,0" Visibility="Collapsed"
-                                          Checked="ExpMicPanel_Changed" Unchecked="ExpMicPanel_Changed"/>
                                 <CheckBox x:Name="SettingsStartMinimized"
                                           Content="{Binding [St.StartMinimized], Source={x:Static local:L10n.Instance}}"
                                           FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
@@ -807,6 +842,15 @@
                                           Content="{Binding [St.StartPanel], Source={x:Static local:L10n.Instance}}"
                                           FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
                                           Checked="SettingsShowPanelOnStart_Changed" Unchecked="SettingsShowPanelOnStart_Changed"/>
+                                <!-- 快速面板样式：经典面板 / 简洁面板（默认简洁） -->
+                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                    <TextBlock Text="{Binding [St.QuickPanelStyle], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <ComboBox x:Name="QuickPanelStyleCombo" Style="{StaticResource SelCombo}"
+                                              MinWidth="160" HorizontalAlignment="Left"
+                                              SelectionChanged="QuickPanelStyleCombo_Changed"/>
+                                </StackPanel>
                                 <CheckBox x:Name="ExpCollapseCheck"
                                           Content="{Binding [Exp.Collapse], Source={x:Static local:L10n.Instance}}"
                                           FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,8,0,0"
@@ -847,103 +891,6 @@
                     <StackPanel>
                         <TextBlock Text="{Binding [Nav.Experimental], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource PageTitle}"/>
-
-
-                        <!-- 关闭 UI 释放内存 -->
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                            <StackPanel>
-                                <CheckBox x:Name="ExpFreeUIMemCheck"
-                                          Content="{Binding [Exp.FreeUiMem], Source={x:Static local:L10n.Instance}}"
-                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,0,0,4"
-                                          Checked="ExpFreeUIMem_Changed" Unchecked="ExpFreeUIMem_Changed"/>
-                                <TextBlock Text="{Binding [Exp.FreeUiMemHint], Source={x:Static local:L10n.Instance}}"
-                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                           Margin="24,0,0,0" TextWrapping="Wrap"/>
-                                <ToggleButton x:Name="ExpMemMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
-                                              FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
-                                              Margin="24,8,0,0" Background="Transparent" BorderThickness="0"
-                                              HorizontalAlignment="Left" Padding="0" Visibility="Collapsed"
-                                              Click="ExpMemMoreToggle_Click"/>
-                                <StackPanel x:Name="ExpMemMorePanel" Visibility="Collapsed" Margin="0,6,0,0">
-                                    <CheckBox x:Name="ExpFreePanelMemCheck" Content="{Binding [Exp.FreePanelMem], Source={x:Static local:L10n.Instance}}"
-                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}" Margin="24,0,0,0"
-                                              Checked="ExpFreePanelMem_Changed" Unchecked="ExpFreePanelMem_Changed"/>
-                                    <TextBlock Text="{Binding [Exp.FreePanelMemHint], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                               Margin="48,0,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- 自由调整：OSD 显示位置 -->
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                            <StackPanel>
-                                <TextBlock Text="{Binding [Exp.Osd], Source={x:Static local:L10n.Instance}}"
-                                           Style="{StaticResource SectionTitle}"/>
-                                <TextBlock Text="{Binding [Exp.OsdHint], Source={x:Static local:L10n.Instance}}"
-                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                           Margin="0,-4,0,10" TextWrapping="Wrap"/>
-                                <ComboBox x:Name="OsdPositionCombo" Style="{StaticResource SelCombo}"
-                                          MaxWidth="300" HorizontalAlignment="Left" MinWidth="200"
-                                          SelectionChanged="OsdPosition_SelectionChanged"/>
-                                <!-- 自定义坐标输入（下拉选择"自定义"时显示） -->
-                                <StackPanel x:Name="OsdCustomPanel" Margin="0,14,0,0" Visibility="Collapsed">
-                                    <DockPanel Margin="0,0,0,8">
-                                        <TextBlock Text="{Binding [Exp.Osd.X], Source={x:Static local:L10n.Instance}}"
-                                                   Width="120" FontSize="12.5" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center" Foreground="{DynamicResource Theme.TextPrimary}"/>
-                                        <TextBox x:Name="OsdCustomXBox" FontSize="12.5"
-                                                 VerticalContentAlignment="Center" Padding="8,4"
-                                                 TextChanged="OsdCustomX_TextChanged"/>
-                                    </DockPanel>
-                                    <DockPanel>
-                                        <TextBlock Text="{Binding [Exp.Osd.Y], Source={x:Static local:L10n.Instance}}"
-                                                   Width="120" FontSize="12.5" FontWeight="SemiBold"
-                                                   VerticalAlignment="Center" Foreground="{DynamicResource Theme.TextPrimary}"/>
-                                        <TextBox x:Name="OsdCustomYBox" FontSize="12.5"
-                                                 VerticalContentAlignment="Center" Padding="8,4"
-                                                 TextChanged="OsdCustomY_TextChanged"/>
-                                    </DockPanel>
-                                    <TextBlock Text="{Binding [Exp.OsdCustomHint], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                               Margin="0,6,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <!-- 偏移微调（非自定义时显示） -->
-                                <StackPanel x:Name="OsdOffsetPanel">
-                                <DockPanel Margin="0,12,0,2">
-                                    <TextBlock Text="{Binding [Exp.OsdX], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Theme.TextPrimary}"/>
-                                    <TextBlock x:Name="OsdOffsetXText" Text="0" Width="34" TextAlignment="Right"
-                                               FontSize="12.5" DockPanel.Dock="Right" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Theme.TextPrimary}"/>
-                                    <Slider x:Name="OsdOffsetXSlider" Minimum="-300" Maximum="300" Value="0"
-                                            VerticalAlignment="Center" Margin="12,0,8,0" IsMoveToPointEnabled="True"
-                                            ValueChanged="OsdOffsetX_ValueChanged"/>
-                                </DockPanel>
-                                <DockPanel Margin="0,8,0,0">
-                                    <TextBlock Text="{Binding [Exp.OsdY], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Theme.TextPrimary}"/>
-                                    <TextBlock x:Name="OsdOffsetYText" Text="0" Width="34" TextAlignment="Right"
-                                               FontSize="12.5" DockPanel.Dock="Right" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Theme.TextPrimary}"/>
-                                    <Slider x:Name="OsdOffsetYSlider" Minimum="-300" Maximum="300" Value="0"
-                                            VerticalAlignment="Center" Margin="12,0,8,0" IsMoveToPointEnabled="True"
-                                            ValueChanged="OsdOffsetY_ValueChanged"/>
-                                </DockPanel>
-                                </StackPanel>
-                                <DockPanel Margin="0,14,0,0">
-                                    <Button x:Name="OsdResetButton"
-                                            Content="{Binding [Exp.OsdReset], Source={x:Static local:L10n.Instance}}"
-                                            Style="{StaticResource GhostButton}" Height="32" Padding="14,0"
-                                            DockPanel.Dock="Left" Click="OsdReset_Click"/>
-                                    <TextBlock Text="{Binding [Exp.OsdResetHint], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                               VerticalAlignment="Center" Margin="12,0,0,0" TextWrapping="Wrap"/>
-                                </DockPanel>
-                            </StackPanel>
-                        </Border>
 
                         <!-- 一键还原全部应用为默认播放设备 -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,14">

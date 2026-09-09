@@ -81,6 +81,13 @@ namespace SonicRoute
         private Window? _osd;
         private readonly DispatcherTimer _osdTimer;
 
+        // OSD 调整模式（实验设置「调整位置」：可拖动定位，松手保存）
+        private bool _osdAdjustMode;
+        private bool _osdDragging;
+        private System.Windows.Point _osdDragStart;
+        /// <summary>拖拽松手已保存位置后触发（UI 线程），用于设置页复位按钮状态与同步输入框。</summary>
+        internal event Action? OsdAdjustFinished;
+
         public TrayWheelService()
         {
             _proc = HookProc;
@@ -220,6 +227,32 @@ namespace SonicRoute
                     border.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
                     border.Child = new StackPanel();
                     _osd.Content = border;
+
+                    // 调整模式拖动：按住左键移动窗口，松手保存位置（仅调整模式生效）
+                    _osd.MouseLeftButtonDown += (_, e) =>
+                    {
+                        if (!_osdAdjustMode) return;
+                        _osdDragging = true;
+                        _osdDragStart = e.GetPosition(null);
+                        _osd.CaptureMouse();
+                        e.Handled = true;
+                    };
+                    _osd.MouseMove += (_, e) =>
+                    {
+                        if (!_osdDragging) return;
+                        var p = e.GetPosition(null);
+                        _osd.Left += p.X - _osdDragStart.X;
+                        _osd.Top += p.Y - _osdDragStart.Y;
+                        e.Handled = true;
+                    };
+                    _osd.MouseLeftButtonUp += (_, e) =>
+                    {
+                        if (!_osdDragging) return;
+                        _osdDragging = false;
+                        _osd.ReleaseMouseCapture();
+                        e.Handled = true;
+                        if (_osdAdjustMode) SaveOsdDragPosition();
+                    };
                 }
 
                 var root = (Border)_osd.Content;
@@ -315,6 +348,53 @@ namespace SonicRoute
                     // A2：隐藏时释放内容树（Border 下 TextBlock 等），下次显示再重建，避免常驻 UI 对象
                     if (_osd.Content is Border b) b.Child = null;
                 }
+            }
+            catch { }
+        }
+
+        /// <summary>进入 OSD 调整模式：显示常驻可拖动 OSD（不自动消失），拖动松手即保存位置。</summary>
+        internal void BeginOsdAdjust()
+        {
+            try
+            {
+                _osdAdjustMode = true;
+                ShowOsd("📍", L10n.T("Exp.OsdDragHint"));
+                _osdTimer.Stop(); // 调整模式常驻，不自动隐藏
+            }
+            catch { }
+        }
+
+        /// <summary>退出 OSD 调整模式（不保存当前拖动位置，隐藏 OSD）。</summary>
+        internal void CancelOsdAdjust()
+        {
+            _osdAdjustMode = false;
+            _osdDragging = false;
+            _osdTimer.Stop();
+            HideOsd();
+        }
+
+        /// <summary>实时位置预览：按当前配置立即显示 OSD（用于偏移滑块/坐标输入联动）。</summary>
+        internal void PreviewOsd()
+        {
+            if (_osdAdjustMode) return;
+            ShowOsd("📍", L10n.T("Exp.OsdPreview"));
+        }
+
+        /// <summary>拖动松手：把当前窗口位置写入配置（Custom 模式），保存并通知设置页。</summary>
+        private void SaveOsdDragPosition()
+        {
+            try
+            {
+                if (_osd == null) return;
+                var cfg = ConfigService.Load();
+                cfg.OsdPosition = "Custom";
+                cfg.OsdCustomX = (int)_osd.Left;
+                cfg.OsdCustomY = (int)_osd.Top;
+                ConfigService.Save(cfg);
+                _osdAdjustMode = false;
+                _osdTimer.Stop();
+                ShowOsd("📍", L10n.T("Exp.OsdSaved"));
+                OsdAdjustFinished?.Invoke();
             }
             catch { }
         }

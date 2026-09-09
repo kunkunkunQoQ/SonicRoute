@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -41,9 +41,11 @@ namespace SonicRoute
         private bool _suppressAppCombo;
         private bool _suppressDevCombo;
         private bool _suppressSettings;
+
+
         private bool _suppressFilter;
-private bool _suppressRename;
-private List<AppItem> _appItems = new();
+        private bool _suppressRename;
+        private List<AppItem> _appItems = new();
         private readonly AppConfig _config;
 
         public MainWindow()
@@ -767,8 +769,9 @@ private List<AppItem> _appItems = new();
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
             bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
             SetAppsVolumeUi(vol >= 0 ? vol : null);
-            AppsMuteButton.Content = L10n.T(muted ? "Apps.Unmute" : "Apps.Mute");
+            ApplyAppsMuteVisual(muted);
             UpdateAppsDisableAutoButton();
+            UpdateAppsShowInPanelButton();
         }
 
         /// <summary>切换选中应用的"禁用自动切换"状态（不影响手动选择，只影响自动检测/跟随）。</summary>
@@ -787,9 +790,30 @@ private List<AppItem> _appItems = new();
                 if (string.Equals(item.ProcessName, name, StringComparison.OrdinalIgnoreCase))
                     item.RefreshAutoSwitchState();
             UpdateAppsDisableAutoButton();
-            AppsStatusText.Text = L10n.T(cfg.DisabledAutoSwitchApps.Contains(name)
-                ? "Apps.DisableAutoOn" : "Apps.DisableAuto");
+            UpdateAppsShowInPanelButton();
             await Task.CompletedTask;
+        }
+
+        /// <summary>应用页三按钮：启用/禁用状态文字变强调色，不切换文案。</summary>
+        private void ApplyAppsMuteVisual(bool muted)
+        {
+            AppsMuteButton.Content = L10n.T("Apps.Mute");
+            if (muted) AppsMuteButton.Foreground = (Brush)FindResource("Theme.Accent");
+            else AppsMuteButton.ClearValue(Button.ForegroundProperty);
+        }
+
+        private void ApplyAppsDisableAutoVisual(bool disabled)
+        {
+            AppsDisableAutoButton.Content = L10n.T("Apps.DisableAuto");
+            if (disabled) AppsDisableAutoButton.Foreground = (Brush)FindResource("Theme.Accent");
+            else AppsDisableAutoButton.ClearValue(Button.ForegroundProperty);
+        }
+
+        private void ApplyAppsShowInPanelVisual(bool hidden)
+        {
+            AppsShowInPanelButton.Content = L10n.T("Apps.ShowInPanel");
+            if (hidden) AppsShowInPanelButton.Foreground = (Brush)FindResource("Theme.Accent");
+            else AppsShowInPanelButton.ClearValue(Button.ForegroundProperty);
         }
 
         /// <summary>按当前选中应用是否禁用自动切换刷新按钮文字。</summary>
@@ -797,9 +821,33 @@ private List<AppItem> _appItems = new();
         {
             bool disabled = _appsSelected != null && !string.IsNullOrWhiteSpace(_appsSelected.ProcessName)
                 && ConfigService.Load().DisabledAutoSwitchApps.Contains(_appsSelected.ProcessName);
-            AppsDisableAutoButton.Content = L10n.T(disabled ? "Apps.DisableAutoOn" : "Apps.DisableAuto");
+            ApplyAppsDisableAutoVisual(disabled);
         }
 
+
+        /// <summary>切换选中应用的"在快速面板显示"状态（隐藏的应用不出现在简洁/经典面板列表/下拉）。</summary>
+        private async void AppsShowInPanelButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_appsSelected == null) return;
+            var name = _appsSelected.ProcessName;
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var cfg = ConfigService.Load();
+            var hidden = cfg.HiddenPanelApps;
+            bool isHidden = hidden.Any(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase));
+            if (isHidden) hidden.RemoveAll(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase));
+            else hidden.Add(name);
+            ConfigService.Save(cfg);
+            UpdateAppsShowInPanelButton();
+            await Task.CompletedTask;
+        }
+
+        /// <summary>按当前选中应用是否已在快速面板隐藏刷新按钮文字。</summary>
+        private void UpdateAppsShowInPanelButton()
+        {
+            bool hidden = _appsSelected != null && !string.IsNullOrWhiteSpace(_appsSelected.ProcessName)
+                && ConfigService.Load().HiddenPanelApps.Any(h => string.Equals(h, _appsSelected.ProcessName, StringComparison.OrdinalIgnoreCase));
+            ApplyAppsShowInPanelVisual(hidden);
+        }
         private void SetAppsVolumeUi(int? percent)
         {
             _suppressVolume = true;
@@ -859,8 +907,7 @@ private List<AppItem> _appItems = new();
         {
             if (_appsSelected == null || !_appsVolumeReady) return;
             bool muted = await Task.Run(() => SessionVolumeService.ToggleMute((int)_appsSelected.ProcessId));
-            AppsMuteButton.Content = L10n.T(muted ? "Apps.Unmute" : "Apps.Mute");
-            AppsStatusText.Text = L10n.T(muted ? "Ov.Muted" : "Ov.Unmuted");
+            ApplyAppsMuteVisual(muted);
         }
 
         private async void AppsOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -943,7 +990,7 @@ private List<AppItem> _appItems = new();
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
             bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
             SetAppsVolumeUi(vol >= 0 ? vol : null);
-            AppsMuteButton.Content = L10n.T(muted ? "Apps.Unmute" : "Apps.Mute");
+            ApplyAppsMuteVisual(muted);
         }
 
         // ==================================================================
@@ -1134,9 +1181,22 @@ private List<AppItem> _appItems = new();
                 LangCombo.SelectedIndex = li < 0 ? 0 : li;
 
                 // 启动选项
-                SettingsAutoStart.IsChecked = _config.AutoStart;
+                // 启动选项（商店版与正常版自启配置分开存储）
+                SettingsAutoStart.IsChecked = IsPackaged() ? _config.AutoStartStore : _config.AutoStart;
+
+                // 商店版不显示「清理自启项」（StartupTask 由系统托管，无残留概念），折叠区一并隐藏
+                if (CleanAutoStartBtn != null)
+                {
+                    bool packaged = IsPackaged();
+                    CleanAutoStartBtn.Visibility = packaged ? Visibility.Collapsed : Visibility.Visible;
+                    SettingsMoreToggle.Visibility = packaged ? Visibility.Collapsed : Visibility.Visible;
+                    if (packaged) SettingsMorePanel.Visibility = Visibility.Collapsed;
+                }
                 SettingsStartMinimized.IsChecked = _config.StartMinimized;
                 SettingsShowPanelOnStart.IsChecked = _config.StartPanelOnStart;
+                // 快速面板样式：经典面板 / 简洁面板（默认简洁）
+                QuickPanelStyleCombo.ItemsSource = new[] { L10n.T("St.PanelClassic"), L10n.T("St.PanelModern") };
+                QuickPanelStyleCombo.SelectedIndex = _config.QuickPanelStyle == "classic" ? 0 : 1;
                 ExpCollapseCheck.IsChecked = _config.CollapseDeviceSections;
 
                 // 实验模式（隐藏）：解锁后显示开关；开启实验模式后导航显示"实验设置"
@@ -1333,6 +1393,13 @@ private List<AppItem> _appItems = new();
             ConfigService.Save(_config);
         }
 
+        private void QuickPanelStyleCombo_Changed(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings || QuickPanelStyleCombo.SelectedIndex < 0) return;
+            _config.QuickPanelStyle = QuickPanelStyleCombo.SelectedIndex == 0 ? "classic" : "modern";
+            ConfigService.Save(_config);
+        }
+
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
         private static bool IsPackaged()
         {
@@ -1352,7 +1419,7 @@ private List<AppItem> _appItems = new();
         {
             if (!IsLoaded || _suppressSettings) return;
             bool on = SettingsAutoStart.IsChecked == true;
-            _config.AutoStart = on;
+            if (IsPackaged()) _config.AutoStartStore = on; else _config.AutoStart = on;
             ConfigService.Save(_config);
 
             if (IsPackaged())
@@ -1397,6 +1464,51 @@ private List<AppItem> _appItems = new();
             }
         }
 
+        /// <summary>设置页「显示更多选项」折叠：展开/收起清理自启项与麦克风子选项。</summary>
+        private void SettingsMoreToggle_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsMorePanel.Visibility = SettingsMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>麦克风子选项「显示更多选项」折叠：展开/收起「在快捷面板显示麦克风」。</summary>
+        private void MicMoreToggle_Click(object sender, RoutedEventArgs e)
+        {
+            MicMorePanel.Visibility = MicMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+        /// <summary>清理开机自启项（方案四B）：绿色版删 Run 键，商店版禁用 StartupTask；同步配置与 UI。</summary>
+        private void CleanAutoStart_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (IsPackaged())
+                {
+                    var task = Windows.ApplicationModel.StartupTask.GetAsync("SonicRouteStartup").GetAwaiter().GetResult();
+                    task.Disable();
+                }
+                else
+                {
+                    using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                        @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                    key?.DeleteValue("SonicRoute", throwOnMissingValue: false);
+                }
+
+                // 同步配置与 UI（清理即视为关闭自启）
+                if (IsPackaged() ? _config.AutoStartStore : _config.AutoStart)
+                {
+                    if (IsPackaged()) _config.AutoStartStore = false; else _config.AutoStart = false;
+
+                    ConfigService.Save(_config);
+                    _suppressSettings = true;
+                    SettingsAutoStart.IsChecked = false;
+                    _suppressSettings = false;
+                }
+                ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), L10n.T("St.CleanAutoStartDone"));
+            }
+            catch
+            {
+                ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), L10n.T("St.CleanAutoStartFail"));
+            }
+        }
         // ==================================================================
         // 实验模式（隐藏功能）
         // 解锁：设置页底部点击"困困困"（作者名）5 次 → 持久化 ExperimentalUnlocked。
@@ -1448,12 +1560,14 @@ private List<AppItem> _appItems = new();
             InputFilterList.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
             InputNameHeader.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
             InputNameList.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
-            // 实验设置页"在快捷面板显示麦克风"子选项：仅麦克风选项开启时显示
+            // 麦克风子选项折叠按钮：仅麦克风选项开启时显示
             if (ExpMicPanelCheck != null)
                 ExpMicPanelCheck.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            if (MicMoreToggle != null)
+                MicMoreToggle.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        /// <summary>实验设置页：加载麦克风选项 / 快捷面板显示 / OSD 位置 / 折叠 的当前配置。</summary>
+        /// <summary>实验设置页：加载麦克风选项 / 快捷面板显示 / 折叠 的当前配置。</summary>
         private void LoadExperimentalSettings()
         {
             _suppressSettings = true;
@@ -1461,32 +1575,7 @@ private List<AppItem> _appItems = new();
             {
                 bool expOn = _config.ExperimentalMode;
                 ApplyExpMicUi(_config.ExperimentalMic);
-                ExpFreeUIMemCheck.IsChecked = _config.FreeUIMemoryOnClose;
-                ExpFreePanelMemCheck.IsChecked = _config.FreePanelUIMemory;
-                ExpMemMoreToggle.Visibility = _config.FreeUIMemoryOnClose ? Visibility.Visible : Visibility.Collapsed;
 
-                // OSD 位置：下拉（9 宫格 + 自定义）
-                var posLabels = OsdPosKeys.Select(k => L10n.T("Exp.Osd." + k)).ToList();
-                posLabels.Add(L10n.T("Exp.Osd.Custom"));
-                OsdPositionCombo.ItemsSource = null;
-                OsdPositionCombo.ItemsSource = posLabels;
-                _suppressOsdPos = true;
-                if (string.Equals(_config.OsdPosition, "Custom", StringComparison.OrdinalIgnoreCase))
-                    OsdPositionCombo.SelectedIndex = posLabels.Count - 1;
-                else
-                {
-                    int pi = Array.IndexOf(OsdPosKeys, _config.OsdPosition);
-                    OsdPositionCombo.SelectedIndex = pi < 0 ? 2 : pi;
-                }
-                _suppressOsdPos = false;
-
-                OsdOffsetXSlider.Value = Math.Clamp(_config.OsdOffsetX, -300, 300);
-                OsdOffsetYSlider.Value = Math.Clamp(_config.OsdOffsetY, -300, 300);
-                OsdOffsetXText.Text = _config.OsdOffsetX.ToString();
-                OsdOffsetYText.Text = _config.OsdOffsetY.ToString();
-                OsdCustomXBox.Text = _config.OsdCustomX >= 0 ? _config.OsdCustomX.ToString() : "";
-                OsdCustomYBox.Text = _config.OsdCustomY >= 0 ? _config.OsdCustomY.ToString() : "";
-                UpdateOsdPanels();
             }
             finally
             {
@@ -1494,10 +1583,6 @@ private List<AppItem> _appItems = new();
             }
         }
 
-        private bool _suppressOsdPos;
-
-        /// <summary>OSD 9 宫格位置键（与实验设置页下拉索引一一对应，最后一个索引为"自定义"）。</summary>
-        private static readonly string[] OsdPosKeys = { "TL", "T", "TR", "L", "C", "R", "BL", "B", "BR" };
 
         private void ExpMicOption_Changed(object sender, RoutedEventArgs e)
         {
@@ -1525,30 +1610,8 @@ private List<AppItem> _appItems = new();
             ApplyCollapseUi();
         }
 
-        /// <summary>实验设置 - 关闭 UI 释放内存开关（实时生效：下次关闭完整界面时真正关闭并回收 UI 内存）。</summary>
-        private void ExpFreeUIMem_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!IsLoaded || _suppressSettings) return;
-            _config.FreeUIMemoryOnClose = ExpFreeUIMemCheck.IsChecked == true;
-            ConfigService.Save(_config);
-            ExpMemMoreToggle.Visibility = ExpFreeUIMemCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-            if (ExpFreeUIMemCheck.IsChecked != true) ExpMemMorePanel.Visibility = Visibility.Collapsed;
-        }
-
-        /// <summary>实验设置 - 子选项：关闭快速面板时释放面板 UI 内存（实时生效，独立于主开关）。</summary>
-        private void ExpFreePanelMem_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!IsLoaded || _suppressSettings) return;
-            _config.FreePanelUIMemory = ExpFreePanelMemCheck.IsChecked == true;
-            ConfigService.Save(_config);
-        }
 
 
-        /// <summary>实验设置 - 「更多选项」折叠按钮：切换释放快速面板UI内存子选项的显示。</summary>
-        private void ExpMemMoreToggle_Click(object sender, RoutedEventArgs e)
-        {
-            ExpMemMorePanel.Visibility = ExpMemMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-        }
 
         /// <summary>实验设置 - 一键还原全部应用输出/输入默认设备：
         /// 覆盖系统里所有应用（所有运行进程 + 曾设置过/有音频会话的应用），清除持久化路由跟随系统默认。</summary>
@@ -1584,52 +1647,7 @@ private List<AppItem> _appItems = new();
             }
         }
 
-        /// <summary>OSD 位置下拉选择：0-8 对应 9 宫格，末项为"自定义"（用 X/Y 坐标参数定位）。</summary>
-        private void OsdPosition_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (!IsLoaded || _suppressSettings || _suppressOsdPos) return;
-            int idx = OsdPositionCombo.SelectedIndex;
-            if (idx >= 0 && idx < OsdPosKeys.Length)
-                _config.OsdPosition = OsdPosKeys[idx];
-            else if (idx == OsdPosKeys.Length)
-                _config.OsdPosition = "Custom";
-            else return;
-            ConfigService.Save(_config);
-            UpdateOsdPanels();
-        }
-
-        /// <summary>切换自定义坐标 / 偏移微调面板的可见性。</summary>
-        private void UpdateOsdPanels()
-        {
-            bool isCustom = string.Equals(_config.OsdPosition, "Custom", StringComparison.OrdinalIgnoreCase);
-            if (OsdCustomPanel == null || OsdOffsetPanel == null) return;
-            OsdCustomPanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
-            OsdOffsetPanel.Visibility = isCustom ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        /// <summary>自定义 X 坐标输入（输入即保存）。</summary>
-        private void OsdCustomX_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (!IsLoaded || _suppressSettings) return;
-            if (int.TryParse(OsdCustomXBox.Text, out int x))
-            {
-                _config.OsdCustomX = x;
-                ConfigService.Save(_config);
-            }
-        }
-
-        /// <summary>自定义 Y 坐标输入（输入即保存）。</summary>
-        private void OsdCustomY_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            if (!IsLoaded || _suppressSettings) return;
-            if (int.TryParse(OsdCustomYBox.Text, out int y))
-            {
-                _config.OsdCustomY = y;
-                ConfigService.Save(_config);
-            }
-        }
-
-        /// <summary>一键还原 OSD 位置到默认（右上角 + 零偏移 + 清空自定义坐标）。</summary>
+        /// <summary>主题页 - 一键还原 OSD 位置到默认（右上角 + 零偏移 + 清空自定义坐标）。</summary>
         private void OsdReset_Click(object sender, RoutedEventArgs e)
         {
             _config.OsdPosition = "TR";
@@ -1638,36 +1656,49 @@ private List<AppItem> _appItems = new();
             _config.OsdCustomX = -1;
             _config.OsdCustomY = -1;
             ConfigService.Save(_config);
-            _suppressSettings = true;
-            _suppressOsdPos = true;
-            OsdPositionCombo.SelectedIndex = 2; // TR
-            OsdOffsetXSlider.Value = 0;
-            OsdOffsetYSlider.Value = 0;
-            OsdCustomXBox.Text = "";
-            OsdCustomYBox.Text = "";
-            _suppressOsdPos = false;
-            _suppressSettings = false;
-            OsdOffsetXText.Text = "0";
-            OsdOffsetYText.Text = "0";
-            UpdateOsdPanels();
             ShowToast(L10n.T("Exp.OsdResetDone"));
         }
 
-        private void OsdOffsetX_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private bool _osdAdjusting;
+        private bool _osdAdjustSubscribed;
+
+        /// <summary>主题页 - 「调整位置」：进入/取消 OSD 拖拽定位模式（拖动松手即保存为自定义坐标）。</summary>
+        private void OsdAdjust_Click(object sender, RoutedEventArgs e)
         {
-            if (!IsLoaded || _suppressSettings) return;
-            _config.OsdOffsetX = (int)OsdOffsetXSlider.Value;
-            OsdOffsetXText.Text = _config.OsdOffsetX.ToString();
-            ConfigService.Save(_config);
+            var app = (App)Application.Current;
+            if (!_osdAdjusting)
+            {
+                SubscribeOsdAdjust();
+                _osdAdjusting = true;
+                SetOsdAdjustLabel(L10n.T("Exp.OsdAdjustCancel"));
+                app.BeginOsdAdjust();
+            }
+            else
+            {
+                _osdAdjusting = false;
+                SetOsdAdjustLabel(L10n.T("Exp.OsdAdjust"));
+                app.CancelOsdAdjust();
+            }
         }
 
-        private void OsdOffsetY_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        /// <summary>同步主题页的「调整位置」按钮文字。</summary>
+        private void SetOsdAdjustLabel(string text)
         {
-            if (!IsLoaded || _suppressSettings) return;
-            _config.OsdOffsetY = (int)OsdOffsetYSlider.Value;
-            OsdOffsetYText.Text = _config.OsdOffsetY.ToString();
-            ConfigService.Save(_config);
+            if (OsdAdjustBtnTheme != null) OsdAdjustBtnTheme.Content = text;
         }
+
+        private void SubscribeOsdAdjust()
+        {
+            if (_osdAdjustSubscribed) return;
+            _osdAdjustSubscribed = true;
+            ((App)Application.Current).OsdAdjustFinished += () =>
+            {
+                // 拖拽松手已保存：复位主题页按钮状态
+                _osdAdjusting = false;
+                SetOsdAdjustLabel(L10n.T("Exp.OsdAdjust"));
+            };
+        }
+
 
         /// <summary>折叠/展开设置页"保留的设备"卡片（实验设置-折叠开启时可见）。</summary>
         /// <summary>折叠/展开设置页"保留的设备"卡片（更多选项样式，实验设置-折叠开启时可见）。</summary>
@@ -1864,16 +1895,5 @@ private List<AppItem> _appItems = new();
             return head.Substring(0, 11) + "…";
         }
 
-        /// <summary>关闭窗口 → 默认最小化到托盘（真正退出走托盘菜单）。
-        /// 实验设置「关闭 UI 释放内存」开启时：真正关闭窗口，触发 Closed → App 置空引用 → 窗口与 UI 资源可被 GC 回收。</summary>
-        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
-        {
-            if (!ConfigService.Load().FreeUIMemoryOnClose)
-            {
-                e.Cancel = true;
-                Hide();
-            }
-            base.OnClosing(e);
-        }
     }
 }

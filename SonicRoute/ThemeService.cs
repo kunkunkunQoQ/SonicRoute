@@ -13,6 +13,18 @@ namespace SonicRoute
     /// </summary>
     public static class ThemeService
     {
+        // Brush cache pool: reuse one frozen brush per ARGB color to avoid frequent SolidColorBrush allocation
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, SolidColorBrush> _brushCache = new();
+        private static SolidColorBrush GetBrush(Color c)
+        {
+            int key = (c.A << 24) | (c.R << 16) | (c.G << 8) | c.B;
+            return _brushCache.GetOrAdd(key, _ =>
+            {
+                var b = new SolidColorBrush(c);
+                b.Freeze();
+                return b;
+            });
+        }
         public static bool IsDarkMode()
         {
             try
@@ -66,7 +78,7 @@ namespace SonicRoute
             var disabled = Blend(accentColor, Colors.Gray, 0.55);
 
             void Set(string key, Color c) =>
-                Application.Current.Resources[key] = new SolidColorBrush(c);
+                Application.Current.Resources[key] = GetBrush(c);
 
             if (dark)
             {
@@ -125,12 +137,14 @@ namespace SonicRoute
             {
                 var c = bg.Color;
                 Application.Current.Resources["Theme.WindowBgAlpha"] =
+                    GetBrush(Color.FromArgb(a, c.R, c.G, c.B));
                     new SolidColorBrush(Color.FromArgb(a, c.R, c.G, c.B));
             }
             if (Application.Current?.Resources["Theme.SurfaceBg"] is SolidColorBrush sb)
             {
                 var c = sb.Color;
                 Application.Current.Resources["Theme.SurfaceBgAlpha"] =
+                    GetBrush(Color.FromArgb(a, c.R, c.G, c.B));
                     new SolidColorBrush(Color.FromArgb(a, c.R, c.G, c.B));
             }
         }
@@ -143,7 +157,7 @@ namespace SonicRoute
                 if (Application.Current?.Resources["Theme.Accent"] is SolidColorBrush b)
                 {
                     var c = b.Color;
-                    return new SolidColorBrush(Color.FromRgb(
+                    return GetBrush(Color.FromRgb(
                         (byte)(255 - c.R), (byte)(255 - c.G), (byte)(255 - c.B)));
                 }
             }

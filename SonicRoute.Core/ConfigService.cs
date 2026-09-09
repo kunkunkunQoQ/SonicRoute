@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -28,6 +28,9 @@ namespace SonicRoute.Core
         /// <summary>禁用自动切换的应用（进程名列表）：这些应用不会被自动选为"当前应用"（前台跟随/最近使用等），但仍可手动选择。</summary>
         public List<string> DisabledAutoSwitchApps { get; set; } = new();
 
+        /// <summary>不在快速面板显示的应用（进程名列表，不区分大小写）：隐藏后不出现在简洁/经典面板的应用列表/下拉中。</summary>
+        public List<string> HiddenPanelApps { get; set; } = new();
+
         /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
         public string Language { get; set; } = "";
 
@@ -36,6 +39,7 @@ namespace SonicRoute.Core
 
         /// <summary>强调色：blue / green / purple。</summary>
         public string Accent { get; set; } = "blue";
+
 
         /// <summary>默认打开的应用：recent(最近使用) / last(上次操作) / fixed(指定)。</summary>
         public string DefaultAppMode { get; set; } = "recent";
@@ -49,8 +53,14 @@ namespace SonicRoute.Core
         /// <summary>启动时显示快速面板。</summary>
         public bool StartPanelOnStart { get; set; } = false;
 
-        /// <summary>开机自启（写入 HKCU\...\Run）。</summary>
+        /// <summary>快速面板样式：modern(简洁面板，默认) / classic(经典面板)。</summary>
+        public string QuickPanelStyle { get; set; } = "modern";
+
+        /// <summary>开机自启（写入 HKCU\...\Run，正常/绿色版）。</summary>
         public bool AutoStart { get; set; } = false;
+
+        /// <summary>开机自启（商店版 MSIX StartupTask，与正常版 AutoStart 分开存储，互不影响）。</summary>
+        public bool AutoStartStore { get; set; } = false;
 
         /// <summary>窗口/面板背景透明度（60–100，默认 85：适当通透、保持可读）。</summary>
         public int BackgroundOpacity { get; set; } = 85;
@@ -73,11 +83,7 @@ namespace SonicRoute.Core
         /// <summary>实验设置 - OSD 显示位置（9 宫格：TL/T/TR/L/C/R/BL/B/BR；"Custom" 用自定义坐标）。</summary>
         public string OsdPosition { get; set; } = "TR";
 
-        /// <summary>实验设置 - 关闭完整界面时释放 UI 占用的内存（真正关闭窗口，下次打开重建，实时生效）。默认开启。</summary>
-        public bool FreeUIMemoryOnClose { get; set; } = true;
 
-        /// <summary>实验设置 - 关闭快速面板时释放面板 UI 占用的内存（子选项，实时生效，独立于主开关）。</summary>
-        public bool FreePanelUIMemory { get; set; }
 
         /// <summary>实验设置 - OSD 水平偏移（像素，右/下为正；非自定义模式生效）。</summary>
         public int OsdOffsetX { get; set; }

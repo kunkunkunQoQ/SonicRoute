@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -21,14 +21,29 @@ namespace SonicRoute
     {
         private NotifyIcon? _trayIcon;
         private MainWindow? _mainWindow;
-        private QuickPanelWindow? _quickPanel;
+        private IQuickPanel? _quickPanel;
         private HotkeyService? _hotkeys;
         private TrayWheelService? _trayWheel;
         private CancellationTokenSource? _singleClickCts;
+        private System.Windows.Threading.DispatcherTimer? _idleTimer;
+        private static Mutex? _instanceMutex;
+        private static int _activateMsg;
+        private System.Windows.Interop.HwndSource? _activateSink;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // single instance: notify existing instance to open main window, then exit
+            _activateMsg = NativeRegisterWindowMessage("SonicRoute_ActivateMain");
+            _instanceMutex = new Mutex(true, @"Local\SonicRoute_9NQZGRTPM1NT", out bool isFirstInstance);
+            if (!isFirstInstance)
+            {
+                var h = NativeFindWindow(null, "SonicRoute_ActivateSink");
+                if (h != IntPtr.Zero) NativePostMessage(h, _activateMsg, IntPtr.Zero, IntPtr.Zero);
+                Shutdown();
+                return;
+            }
             var config = ConfigService.Load();
             // 首次启动（未设置过语言）跟随系统语言，之后使用配置的语言
             if (string.IsNullOrWhiteSpace(config.Language))
@@ -40,10 +55,14 @@ namespace SonicRoute
             ThemeService.Apply(config.ThemeMode, config.Accent);
             ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
 
+            // 启动自检：自启开启时 Run 键路径与当前 exe 不一致则自动修复（应对绿色版搬家/改名后自启失效）
+            if (!IsPackaged())
+                AutoStartSelfRepair(config.AutoStart);
+
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(),
-                Text = "音跃 SonicRoute v1.11",
+                Text = "音跃 SonicRoute v1.12",
                 Visible = true
             };
 
@@ -83,6 +102,35 @@ namespace SonicRoute
             _trayWheel = new TrayWheelService();
             _trayWheel.Start();
 
+            // single-instance activate sink (invisible): opens full UI on message
+            _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("SonicRoute_ActivateSink")
+            {
+                Width = 0, Height = 0, WindowStyle = 0,
+            });
+            _activateSink.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            {
+                if (msg == _activateMsg) { Dispatcher.BeginInvoke(ShowMainWindow); handled = true; }
+                return IntPtr.Zero;
+            });
+
+            // idle reclaim: first pass 15s after start, then every 120s; with no UI open -> force GC + trim working set
+            _idleTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+            bool firstTrim = true;
+            _idleTimer.Tick += (_, _) =>
+            {
+                if (_mainWindow == null && _quickPanel == null)
+                {
+                    GcNow();
+                    TrimWorkingSet();
+                }
+                if (firstTrim)
+                {
+                    firstTrim = false;
+                    _idleTimer.Interval = TimeSpan.FromSeconds(120);
+                }
+            };
+            _idleTimer.Start();
+
             // 前台监听：recent 模式下自动跟随前台音频应用（抖音/游戏等），并维护"最近有音频的前台应用"
             CurrentAppService.StartForegroundWatcher();
 
@@ -107,35 +155,69 @@ namespace SonicRoute
 
         /// <summary>右上角 OSD 提示（托盘滚轮/快捷键/设置提示共用）。</summary>
         internal void ShowOsd(string app, string text) => _trayWheel?.ShowOsd(app, text);
+        /// <summary>进入 OSD 调整模式（实验设置「调整位置」）。</summary>
+        internal void BeginOsdAdjust() => _trayWheel?.BeginOsdAdjust();
+        /// <summary>取消 OSD 调整（不保存）。</summary>
+        internal void CancelOsdAdjust() => _trayWheel?.CancelOsdAdjust();
+        /// <summary>实时位置预览（偏移滑块/坐标输入联动）。</summary>
+        internal void PreviewOsd() => _trayWheel?.PreviewOsd();
+        /// <summary>OSD 拖拽保存后通知（设置页复位按钮/同步输入框）。</summary>
+        internal event Action? OsdAdjustFinished
+        {
+            add { if (_trayWheel != null) _trayWheel.OsdAdjustFinished += value; }
+            remove { if (_trayWheel != null) _trayWheel.OsdAdjustFinished -= value; }
+        }
+        /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
+        private static bool IsPackaged()
+        {
+            try
+            {
+                _ = global::Windows.ApplicationModel.Package.Current;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 启动自检修复：自启开启时，注册表 Run 键指向的 exe 与当前路径不一致则自动重写。
+        /// 应对绿色版搬家/改名后自启失效；仅修复，不新建（用户已关闭自启则不动）。
+        /// </summary>
+        private static void AutoStartSelfRepair(bool autoStart)
+        {
+            if (!autoStart) return;
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                if (key == null) return;
+                var exe = Environment.ProcessPath;
+                if (string.IsNullOrWhiteSpace(exe)) return;
+                var cur = key.GetValue("SonicRoute") as string;
+                if (string.IsNullOrWhiteSpace(cur)) return; // 自启项已被删，不重新加回
+                var target = cur.Trim().Trim('"');
+                if (!string.Equals(target, exe, StringComparison.OrdinalIgnoreCase))
+                    key.SetValue("SonicRoute", $"\"{exe}\"");
+            }
+            catch
+            {
+                // 静默：修复失败不影响启动
+            }
+        }
 
         internal void ToggleQuickPanel()
         {
             if (_quickPanel == null)
             {
-                _quickPanel = new QuickPanelWindow();
+                // 按设置选择面板样式：modern=简洁面板（默认）/ classic=经典面板
+                var cfg = ConfigService.Load();
+                _quickPanel = cfg.QuickPanelStyle == "classic" ? new QuickPanelWindow() : new QuickPanelModernWindow();
                 _quickPanel.Closed += (_, _) =>
                 {
                     _quickPanel = null;
                     AppIconService.Clear(); // 清空图标缓存，让面板加载的 BitmapSource 可被 GC 回收
-                    // 实验设置「释放快速面板 UI 内存」：无论面板以何种方式关闭（托盘切换 / 失焦自动关闭），
-                    // 都在关闭后立即 + 延迟多次（1s/3s/5s）强制回收面板 UI 内存（修复失焦关闭不释放问题）
-                    if (ConfigService.Load().FreePanelUIMemory)
-                        _ = Task.Run(async () =>
-                        {
-                            // 先排空 UI Dispatcher 队列（面板关闭 + 挂起的异步续体），再 GC 才能真正回收面板
-                            for (int i = 0; i < 3; i++)
-                            {
-                                Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
-                                await Task.Delay(200);
-                            }
-                            GcNow();
-                            foreach (var ms in new[] { 1000, 3000, 5000 })
-                            {
-                                await Task.Delay(ms);
-                                GcNow();
-                            }
-                            TrimWorkingSet(); // 面板 UI 残余渲染缓存无法托管回收，最后换出工作集
-                        });
                 };
             }
 
@@ -161,7 +243,6 @@ namespace SonicRoute
                     // 立即回收一次，再延迟多次重试（1s/3s/5s）：窗口关闭瞬间可能有挂起的异步续体
                     // （切设备/调音量/刷新应用等，闭包会捕获窗口对象），等它们跑完后窗口才真正可回收，
                     // 此时再次 GC 确保窗口与视觉树被回收。
-                    if (ConfigService.Load().FreeUIMemoryOnClose)
                         Dispatcher.BeginInvoke(new Action(() =>
                         {
                             _ = Task.Run(async () =>
@@ -194,6 +275,16 @@ namespace SonicRoute
         }
 
         /// <summary>强制回收：GC 两轮（含终结器队列），用于「关闭 UI 释放内存」时尽快回收窗口与 UI 资源。</summary>
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "FindWindowW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern IntPtr NativeFindWindow(string? cls, string? win);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "PostMessageW")]
+        private static extern bool NativePostMessage(IntPtr h, int msg, IntPtr wParam, IntPtr lParam);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern int NativeRegisterWindowMessage(string name);
+
+        /// <summary>Forced GC (two rounds incl. finalizer queue) to reclaim window and UI resources after closing UI.</summary>
         private static void GcNow()
         {
             try
@@ -518,6 +609,9 @@ namespace SonicRoute
             try
             {
                 var ci = System.Globalization.CultureInfo.InstalledUICulture;
+                string name = ci?.Name?.ToLowerInvariant() ?? "";
+                if (name.StartsWith("zh-tw") || name.StartsWith("zh-hk") || name.StartsWith("zh-mo") || name.StartsWith("zh-hant"))
+                    return "zh-TW";
                 string two = ci?.TwoLetterISOLanguageName?.ToLowerInvariant() ?? "";
                 return two switch
                 {

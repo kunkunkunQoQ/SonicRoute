@@ -2,7 +2,7 @@
 
 > Windows 10/11 **音频控制中心**：不止切换单个应用——**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.11** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.12** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
 > 🙏 **特别感谢 [EarTrumpet](https://github.com/File-New-Project/EarTrumpet)**：本项目的按应用音频路由（Per-App Audio Routing）底层实现参考其开源代码移植而来。
 
@@ -23,7 +23,7 @@
 | 特性 | 说明 | 特性 | 说明 |
 |---|---|---|---|
 | 🎯 三档音频路由 | 当前应用 / 全局应用 / **系统默认设备**，随时切换 | 🎤 麦克风枢纽 | 按应用切输入 + 全局麦克风静音 |
-| 🧩 托盘快捷面板 | 单击秒切设备/音量/静音，点空白自动关闭 | 🖥 完整管理界面 | 应用/设备/快捷键/主题/设置一站式管理 |
+| 🧩 托盘快捷面板 | 简洁/经典双面板，单击秒切设备/音量/静音 | 🖥 完整管理界面 | 应用/设备/快捷键/主题/设置一站式管理 |
 | 📋 设备管理中枢 | 输出/输入筛选、改名、虚拟声卡一目了然 | 🕵️ 当前应用自动检测 | 自动跟随最近使用，可单应用禁用 |
 | ⌨️ 快捷键中枢 | 12 项动作全可自定义（F区/单键/鼠标/滚轮） | ♻️ 一键还原 | 全部应用（含已退出）恢复默认设备 |
 | 🧹 内存优化 | 关闭 UI 自动释放+换出，占用可降至 ~4MB | 🌐 多语言+主题 | 8 种语言、RGB 强调色、透明度 |
@@ -92,8 +92,8 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
-| 🟢 绿色免安装 | `SonicRoute-v1.11.exe` / `.zip` | ~180MB / ~69MB | 内置运行时 |
-| ⚡ 轻量版 | `SonicRoute-v1.11-Lite.exe` / `.zip` | ~25MB / ~6.5MB | 需 .NET 8 |
+| 🟢 绿色免安装 | `SonicRoute-v1.12.exe` / `.zip` | ~237MB / ~89MB | 内置运行时 |
+| ⚡ 轻量版 | `SonicRoute-v1.12-Lite.exe` / `.zip` | ~25.9MB / ~6.8MB | 需 .NET 8 |
 | 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动安装更新 |
 
 轻量版需 .NET 8 Desktop Runtime：[下载](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0)
@@ -101,10 +101,15 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 <a id="changelog"></a>
 ## 📋 更新日志
 
-**v1.11**
-- 快捷键大升级：支持 F1-F24 / 无修饰单键 / 鼠标键+滚轮绑定 / Esc 取消，设置页按功能分组
-- 新增快捷键：切换系统默认输出/输入（Ctrl+Alt+O/I）、切换全局应用输出/输入（Ctrl+Alt+Shift+O/I）、还原全部应用默认设备（Ctrl+Alt+Shift+R）
-- 麦克风选项移至设置页常驻，不再需要实验模式
+**v1.12**
+- 全新简洁快速面板（默认，Win11 音量飞出式）：逐应用音量列表 + 每行独立滑块/图标静音/折叠设设备 + 全局输出/麦克风静音；经典面板可在设置切换，新旧共用快捷键与托盘
+- 面板反馈改右上角 OSD 通知；静音/禁用自动切换/快速面板显示等按钮状态用强调色表达，文本固定不切换
+- 静音快捷键改为控制系统设备；应用列表新增「禁用在快速面板显示」独立开关
+- OSD 位置调整移入主题页（拖拽定位 + 一键还原）
+- 新增繁体中文（共 9 语言）；新增翻译规范
+- 内存优化落地：删除实验内存释放入口，启动 15s 提前回收，占用更低
+- 开机自启：新增清理自启项按钮、商店版独立自启存储、启动自检修复
+- UI 收纳：清理自启项与麦克风子选项收进「显示更多选项」折叠区
 
 <a id="faq"></a>
 ## ❓ FAQ
