@@ -372,35 +372,33 @@ namespace SonicRoute
             try
             {
                 if (_osd == null) return;
-                // 用窗口自身实际 DPI 缩放（VisualTreeHelper 对窗口返回真实值，比 GetDpiForSystem/GetDpiForWindow 可靠）
+                // 记录窗口自身 DPI 仅用于 ShouldRepositionOsd 的 DPI 变化检测，不参与坐标换算
                 double winScale = 1.0;
                 try { winScale = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
                 if (winScale <= 0) winScale = 1.0;
-                // 直接换算：SystemParameters.WorkArea 当前环境为物理像素，按窗口 DPI 缩放换算为逻辑单位
-                var _swa = SystemParameters.WorkArea;
-                var wa = new RECT
-                {
-                    Left = (int)Math.Round(_swa.Left / winScale),
-                    Top = (int)Math.Round(_swa.Top / winScale),
-                    Right = (int)Math.Round(_swa.Right / winScale),
-                    Bottom = (int)Math.Round(_swa.Bottom / winScale)
-                };
+
+                // 关键修正：WPF 的 SystemParameters.WorkArea 本身就是 WPF 逻辑坐标（DIP），
+                // 与 Window.Left/Top/Width/Height 同一坐标系。禁止再次除以 DPI（此前错误缩小导致 TR 偏到屏幕中央）。
+                var wa = SystemParameters.WorkArea; // WPF DIP
+
+                // 只在需要重新定位的时机（首次显示/尺寸变化/配置变化）调用，确保 SizeToContent=Height 下取到最终布局尺寸
+                _osd.UpdateLayout();
                 double w = _osd.ActualWidth > 0 ? _osd.ActualWidth : _osdWidth;
                 double h = _osd.ActualHeight > 0 ? _osd.ActualHeight : 80;
 
-                // 实验设置 - 自由调整：9 宫格位置 + X/Y 偏移（默认右上角 TR）；"Custom" 用自定义坐标直接定位
+                // 9 宫格位置 + X/Y 偏移（默认右上角 TR）；"Custom" 用自定义坐标直接定位
                 var cfg = ConfigService.Load();
                 string pos = string.IsNullOrWhiteSpace(cfg.OsdPosition) ? "TR" : cfg.OsdPosition;
                 double ox = cfg.OsdOffsetX;
                 double oy = cfg.OsdOffsetY;
                 // 记录当前定位状态，供 ShouldRepositionOsd 对比（DPI/工作区/位置配置变化才重新定位）
                 _lastDpiScale = winScale;
-                _lastWorkAreaLeft = _swa.Left; _lastWorkAreaTop = _swa.Top;
-                _lastWorkAreaRight = _swa.Right; _lastWorkAreaBottom = _swa.Bottom;
+                _lastWorkAreaLeft = wa.Left; _lastWorkAreaTop = wa.Top;
+                _lastWorkAreaRight = wa.Right; _lastWorkAreaBottom = wa.Bottom;
                 _lastOsdPos = pos; _lastOsdOx = ox; _lastOsdOy = oy;
                 _lastOsdCx = cfg.OsdCustomX; _lastOsdCy = cfg.OsdCustomY;
 
-                // 自定义模式：直接使用用户输入的屏幕坐标（未设置时回退右上角）
+                // 自定义模式：只使用用户保存的 WPF DIP 坐标（拖拽保存时已由物理像素换算为 DIP，读取时直接设置，不再换算）
                 if (string.Equals(pos, "Custom", StringComparison.OrdinalIgnoreCase))
                 {
                     if (cfg.OsdCustomX >= 0 && cfg.OsdCustomY >= 0)
@@ -412,6 +410,7 @@ namespace SonicRoute
                     pos = "TR";
                 }
 
+                // 默认九宫格：全部在主显示器 WorkArea（WPF DIP）内计算，不混入物理像素 / GetSystemMetrics
                 double left, top;
                 switch (pos)
                 {
@@ -425,7 +424,7 @@ namespace SonicRoute
                     case "BR": left = wa.Right - w - 16; top = wa.Bottom - h - 14; break;
                     default: left = wa.Right - w - 16; top = wa.Top + 14; break; // TR 右上角
                 }
-                // 限制在光标所在屏工作区内（防跨屏残留/边缘闪烁）
+                // Clamp 在默认位置所在工作区（主显示器，WPF DIP）内，防跨屏残留/边缘闪烁；与九宫格同一坐标系
                 double waL = wa.Left, waT = wa.Top, waR = wa.Right, waB = wa.Bottom;
                 left = Math.Clamp(left + ox, waL, Math.Max(waL, waR - w - 4));
                 top = Math.Clamp(top + oy, waT, Math.Max(waT, waB - h - 4));
