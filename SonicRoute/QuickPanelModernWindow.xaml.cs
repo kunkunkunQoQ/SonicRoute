@@ -381,10 +381,10 @@ namespace SonicRoute
                     var expand = new ToggleButton
                     {
                         Content = "▾",
-                        Width = 13,
-                        Height = 26,
-                        MinWidth = 13,
-                        MinHeight = 26,
+                        Width = 32,
+                        Height = 16,
+                        MinWidth = 32,
+                        MinHeight = 16,
                         VerticalAlignment = System.Windows.VerticalAlignment.Center,
                         Style = (Style)FindResource("RowExpandButton"),
                         Tag = row,
