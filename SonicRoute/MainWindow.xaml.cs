@@ -1715,8 +1715,9 @@ namespace SonicRoute
             _config.OsdWidth = 240;
             _config.OsdFontScale = 1.0;
             ConfigService.Save(_config);
+            SyncOsdSliders(); // 同步主题页滑条到还原值
             ShowToast(L10n.T("Exp.OsdResetDone"));
-            app.PreviewOsd(); // 立即预览还原后的默认位置与尺寸
+            app.PreviewOsd(); // 立即预览还原后的默认位置与尺寸（内部按需重定位到主屏默认位置）
         }
 
         private bool _osdAdjusting;

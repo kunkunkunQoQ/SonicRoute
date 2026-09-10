@@ -122,6 +122,7 @@ namespace SonicRoute
         private double _osdFontScale = 1.0;   // 当前字号倍率（主题页滑条调整）
         // 位置脏标记与定位缓存：仅首次/重新显示、尺寸、位置配置、DPI、显示器变化时重新定位
         private bool _osdPositionDirty = true;
+        private bool _osdRepositionPending;
         private double _lastDpiScale = 1.0;
         private double _lastWorkAreaLeft, _lastWorkAreaTop, _lastWorkAreaRight, _lastWorkAreaBottom;
         private string _lastOsdPos = "";
@@ -337,12 +338,9 @@ namespace SonicRoute
 
                 if (!_osd.IsVisible)
                 {
-                    // 首次/重新显示：淡入 120ms（仅此一次；连续操作期间窗口已显示，不会重复淡入淡出）
-                    _osd.Opacity = 0;
+                    // 首次/重新显示：直接 Show（不创建动画对象，内存稳定优先）
                     _osd.Show();
                     _osd.Topmost = true;
-                    _osd.BeginAnimation(UIElement.OpacityProperty,
-                        new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)));
                     _osdPositionDirty = true; // 重新显示确保位置正确
                 }
 
@@ -351,7 +349,16 @@ namespace SonicRoute
                 if (_osdPositionDirty || ShouldRepositionOsd())
                 {
                     _osdPositionDirty = false;
-                    _osd.Dispatcher.BeginInvoke(new Action(RepositionOsd), DispatcherPriority.Background);
+                    if (!_osdRepositionPending)
+                    {
+                        // 防 Dispatcher 队列堆积：同一时刻只排一个定位任务，连续快捷键更新只重算一次
+                        _osdRepositionPending = true;
+                        _osd.Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            _osdRepositionPending = false;
+                            if (_osd != null && _osd.IsVisible) RepositionOsd();
+                        }), DispatcherPriority.Background);
+                    }
                 }
 
                 _osdTimer.Stop();
