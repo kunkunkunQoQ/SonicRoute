@@ -410,20 +410,9 @@ namespace SonicRoute
                     pos = "TR";
                 }
 
-                // 默认九宫格：全部在主显示器 WorkArea（WPF DIP）内计算，不混入物理像素 / GetSystemMetrics
-                double left, top;
-                switch (pos)
-                {
-                    case "TL": left = wa.Left + 16; top = wa.Top + 14; break;
-                    case "T": left = wa.Left + (wa.Right - wa.Left - w) / 2; top = wa.Top + 14; break;
-                    case "L": left = wa.Left + 16; top = wa.Top + (wa.Bottom - wa.Top - h) / 2; break;
-                    case "C": left = wa.Left + (wa.Right - wa.Left - w) / 2; top = wa.Top + (wa.Bottom - wa.Top - h) / 2; break;
-                    case "R": left = wa.Right - w - 16; top = wa.Top + (wa.Bottom - wa.Top - h) / 2; break;
-                    case "BL": left = wa.Left + 16; top = wa.Bottom - h - 14; break;
-                    case "B": left = wa.Left + (wa.Right - wa.Left - w) / 2; top = wa.Bottom - h - 14; break;
-                    case "BR": left = wa.Right - w - 16; top = wa.Bottom - h - 14; break;
-                    default: left = wa.Right - w - 16; top = wa.Top + 14; break; // TR 右上角
-                }
+                // 默认位置：TR（主显示器右上角），全部在 WorkArea（WPF DIP）内计算，不混入物理像素 / GetSystemMetrics
+                double left = wa.Right - w - 16;
+                double top = wa.Top + 14;
                 // Clamp 在默认位置所在工作区（主显示器，WPF DIP）内，防跨屏残留/边缘闪烁；与九宫格同一坐标系
                 double waL = wa.Left, waT = wa.Top, waR = wa.Right, waB = wa.Bottom;
                 left = Math.Clamp(left + ox, waL, Math.Max(waL, waR - w - 4));

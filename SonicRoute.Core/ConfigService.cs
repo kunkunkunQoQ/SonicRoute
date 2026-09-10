@@ -82,7 +82,7 @@ namespace SonicRoute.Core
         /// <summary>折叠设置页"保留的设备/设备名称"区块（含麦克风），默认开启；开关位于设置页（不依赖实验模式）。</summary>
         public bool CollapseDeviceSections { get; set; } = true;
 
-        /// <summary>实验设置 - OSD 显示位置（9 宫格：TL/T/TR/L/C/R/BL/B/BR；"Custom" 用自定义坐标）。</summary>
+        /// <summary>主题 - OSD 显示位置（"TR"=主显示器右上角；"Custom"=用户拖拽保存的自定义坐标）。</summary>
         public string OsdPosition { get; set; } = "TR";
 
 
