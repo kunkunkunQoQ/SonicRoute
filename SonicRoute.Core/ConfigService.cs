@@ -99,8 +99,11 @@ namespace SonicRoute.Core
         /// <summary>实验设置 - 自定义 OSD 位置 Y（屏幕像素坐标，-1 表示未设置回退默认）。</summary>
         public int OsdCustomY { get; set; } = -1;
 
-        /// <summary>主题 - OSD 缩放倍率（0.5~2.0，默认 1.0；调整模式下拖右下角手柄修改）。</summary>
-        public double OsdScale { get; set; } = 1.0;
+        /// <summary>主题 - OSD 显示宽度（逻辑像素，180~600，默认 240；调整模式下拖手柄横向自由拉长缩短）。</summary>
+        public int OsdWidth { get; set; } = 240;
+
+        /// <summary>主题 - OSD 字号倍率（0.7~2.0，默认 1.0；调整模式下拖手柄纵向调整）。</summary>
+        public double OsdFontScale { get; set; } = 1.0;
     }
 
     public static class ConfigService

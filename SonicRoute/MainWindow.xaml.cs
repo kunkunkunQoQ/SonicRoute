@@ -1703,14 +1703,19 @@ namespace SonicRoute
         /// <summary>主题页 - 一键还原 OSD 位置到默认（右上角 + 零偏移 + 清空自定义坐标）。</summary>
         private void OsdReset_Click(object sender, RoutedEventArgs e)
         {
+            var app = (App)Application.Current;
+            // 若处于调整模式先退出，否则 PreviewOsd 被 _osdAdjustMode 挡住不显示（还原位置不生效的根因）
+            if (_osdAdjusting) { _osdAdjusting = false; SetOsdAdjustLabel(L10n.T("Exp.OsdAdjust")); app.CancelOsdAdjust(); }
             _config.OsdPosition = "TR";
             _config.OsdOffsetX = 0;
             _config.OsdOffsetY = 0;
             _config.OsdCustomX = -1;
             _config.OsdCustomY = -1;
+            _config.OsdWidth = 240;
+            _config.OsdFontScale = 1.0;
             ConfigService.Save(_config);
             ShowToast(L10n.T("Exp.OsdResetDone"));
-            ((App)Application.Current).PreviewOsd(); // 立即预览还原后的默认位置
+            app.PreviewOsd(); // 立即预览还原后的默认位置与尺寸
         }
 
         private bool _osdAdjusting;
