@@ -33,7 +33,6 @@ namespace SonicRoute
             public AudioAppInfo App = null!;
             public Border HeaderBorder = null!;
             public Slider Slider = null!;
-            public TextBlock Percent = null!;
             public Border MuteDot = null!;
             public Border? TrackBg;
             public Border? TrackFill;
@@ -379,22 +378,14 @@ namespace SonicRoute
                     iconGrid.Children.Add(row.MuteDot);
                     DockPanel.SetDock(iconGrid, Dock.Left);
 
-                    row.Percent = new TextBlock
-                    {
-                        Width = 38,
-                        TextAlignment = TextAlignment.Right,
-                        FontSize = 11,
-                        VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                        Margin = new Thickness(2, 0, 4, 0),
-                        Foreground = (Brush)FindResource("Theme.TextSecondary")
-                    };
-                    DockPanel.SetDock(row.Percent, Dock.Right);
-
                     var expand = new ToggleButton
                     {
                         Content = "▾",
-                        Width = 26,
+                        Width = 13,
                         Height = 26,
+                        MinWidth = 13,
+                        MinHeight = 26,
+                        VerticalAlignment = System.Windows.VerticalAlignment.Center,
                         Style = (Style)FindResource("RowExpandButton"),
                         Tag = row,
                         ToolTip = L10n.T("Qp.ExpandDevices")
@@ -445,7 +436,6 @@ namespace SonicRoute
                     row.Slider.MouseWheel += RowSlider_MouseWheel;
 
                     dock.Children.Add(iconGrid);
-                    dock.Children.Add(row.Percent);
                     dock.Children.Add(expand);
                     dock.Children.Add(row.Slider);
                     header.Child = dock;
@@ -468,12 +458,10 @@ namespace SonicRoute
                     if (vols.TryGetValue(pid, out var v) && v.vol >= 0)
                     {
                         row.Slider.Value = v.vol;
-                        row.Percent.Text = $"{v.vol}%";
                         ApplyRowMutedVisual(row, v.muted);
                     }
                     else
                     {
-                        row.Percent.Text = "—";
                         row.Slider.IsEnabled = false;
                         ApplyRowMutedVisual(row, false);
                     }
@@ -503,7 +491,6 @@ namespace SonicRoute
         {
             if (sender is not Slider sl || sl.Tag is not AppRow row) return;
             int pct = (int)Math.Round(e.NewValue);
-            row.Percent.Text = $"{pct}%";
             UpdateRowSliderLayout(row);
             _pendingVolume[(int)row.App.ProcessId] = pct;
 
@@ -542,7 +529,6 @@ namespace SonicRoute
         {
             var inv = ThemeService.GetInvertedAccentBrush();
             row.Slider.Foreground = muted ? inv : (Brush)FindResource("Theme.Accent");
-            row.Percent.Foreground = muted ? inv : (Brush)FindResource("Theme.TextSecondary");
             row.MuteDot.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
         }
 
