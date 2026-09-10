@@ -63,6 +63,47 @@ namespace SonicRoute
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool PtInRect(ref RECT lprc, POINT pt);
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+        /// <summary>光标所在显示器的工作区（多屏时 OSD 显示在操作发生的屏，避免跨屏闪现）。</summary>
+        private static RECT GetCursorWorkArea()
+        {
+            try
+            {
+                GetCursorPos(out var pt);
+                IntPtr hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
+                if (hMon != IntPtr.Zero)
+                {
+                    var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+                    if (GetMonitorInfo(hMon, ref info))
+                        return info.rcWork;
+                }
+            }
+            catch { }
+            var wa = SystemParameters.WorkArea;
+            return new RECT { Left = (int)wa.Left, Top = (int)wa.Top, Right = (int)wa.Right, Bottom = (int)wa.Bottom };
+        }
+
 
         private readonly LowLevelMouseProc _proc;
         private IntPtr _hook;
@@ -164,7 +205,8 @@ namespace SonicRoute
             string name = AppDisplayName.Get(proc, string.IsNullOrWhiteSpace(proc) ? "应用" : proc);
             int cur = SessionVolumeService.GetVolumePercent(pid);
             if (cur < 0) { ShowOsd(name, "无法读取音量"); return; }
-            int next = Math.Clamp(cur + (delta > 0 ? 4 : -4), 0, 100);
+            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int next = Math.Clamp(cur + (delta > 0 ? step : -step), 0, 100);
             SessionVolumeService.SetVolumePercent(pid, next);
             int actual = SessionVolumeService.GetVolumePercent(pid);
             if (actual < 0) actual = next;
@@ -212,8 +254,8 @@ namespace SonicRoute
                         ShowActivated = false,
                         Topmost = true,
                         ResizeMode = ResizeMode.NoResize,
-                        SizeToContent = SizeToContent.WidthAndHeight,
-                        MaxWidth = 400,   // 限制通知最大宽度，避免超长文本撑爆/位置漂移
+                        SizeToContent = SizeToContent.Height,
+                        Width = 340,   // 固定宽度：文本长短不影响窗口尺寸 → 位置稳定不闪烁
                         Focusable = false
                     };
                     var border = new Border
@@ -297,7 +339,7 @@ namespace SonicRoute
             try
             {
                 if (_osd == null) return;
-                var wa = SystemParameters.WorkArea;
+                var wa = GetCursorWorkArea();
                 double w = Math.Min(_osd.ActualWidth > 0 ? _osd.ActualWidth : 360, 400);
                 double h = _osd.ActualHeight > 0 ? _osd.ActualHeight : 80;
 
@@ -323,12 +365,12 @@ namespace SonicRoute
                 switch (pos)
                 {
                     case "TL": left = wa.Left + 16; top = wa.Top + 14; break;
-                    case "T": left = wa.Left + (wa.Width - w) / 2; top = wa.Top + 14; break;
-                    case "L": left = wa.Left + 16; top = wa.Top + (wa.Height - h) / 2; break;
-                    case "C": left = wa.Left + (wa.Width - w) / 2; top = wa.Top + (wa.Height - h) / 2; break;
-                    case "R": left = wa.Right - w - 16; top = wa.Top + (wa.Height - h) / 2; break;
+                    case "T": left = wa.Left + (wa.Right - wa.Left - w) / 2; top = wa.Top + 14; break;
+                    case "L": left = wa.Left + 16; top = wa.Top + (wa.Bottom - wa.Top - h) / 2; break;
+                    case "C": left = wa.Left + (wa.Right - wa.Left - w) / 2; top = wa.Top + (wa.Bottom - wa.Top - h) / 2; break;
+                    case "R": left = wa.Right - w - 16; top = wa.Top + (wa.Bottom - wa.Top - h) / 2; break;
                     case "BL": left = wa.Left + 16; top = wa.Bottom - h - 14; break;
-                    case "B": left = wa.Left + (wa.Width - w) / 2; top = wa.Bottom - h - 14; break;
+                    case "B": left = wa.Left + (wa.Right - wa.Left - w) / 2; top = wa.Bottom - h - 14; break;
                     case "BR": left = wa.Right - w - 16; top = wa.Bottom - h - 14; break;
                     default: left = wa.Right - w - 16; top = wa.Top + 14; break; // TR 右上角
                 }

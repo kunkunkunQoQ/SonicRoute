@@ -510,7 +510,8 @@ namespace SonicRoute
         private void RowSlider_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (sender is not Slider sl || sl.Tag is not AppRow row) return;
-            int pct = (int)Math.Round(sl.Value) + (e.Delta > 0 ? 4 : -4);
+            int step = Math.Clamp(SonicRoute.Core.ConfigService.Load().VolumeStep, 1, 20);
+            int pct = (int)Math.Round(sl.Value) + (e.Delta > 0 ? step : -step);
             sl.Value = Math.Clamp(pct, 0, 100);
             e.Handled = true;
         }

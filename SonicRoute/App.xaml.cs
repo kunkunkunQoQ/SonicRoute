@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Runtime;
 using System.Windows;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
@@ -61,11 +62,13 @@ namespace SonicRoute
 
             _trayIcon = new NotifyIcon
             {
-                Icon = IconFactory.CreateAppIcon(),
+                Icon = IconFactory.CreateAppIcon(IconFactory.IsTaskbarDark()),
                 Text = "音跃 SonicRoute v1.12r",
                 Visible = true
             };
 
+            // 托盘图标深浅色跟随任务栏主题：主题变化时重建图标（深色任务栏→白色图标，浅色→原图标）
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
             var menu = new ContextMenuStrip();
             menu.Items.Add(L10n.T("St.Settings"), null, (_, _) => ShowMainWindow());
             menu.Items.Add(L10n.T("Tray.OpenPanel"), null, (_, _) => ToggleQuickPanel());
@@ -391,7 +394,8 @@ namespace SonicRoute
                     // 调整面板/概览显示的当前应用音量（每次 ±5%）。面板打开时走面板路径
                     // （与 ± 按钮一致并同步滑块/状态行）；否则直接对共享当前应用调整并 OSD。
                     {
-                        int delta = action == HotkeyActions.ActVolUp ? 5 : -5;
+                        int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+                        int delta = action == HotkeyActions.ActVolUp ? step : -step;
                         if (_quickPanel is { IsVisible: true })
                         {
                             int v = await _quickPanel.AdjustVolumeAsync(delta);
@@ -578,6 +582,7 @@ namespace SonicRoute
 
         private void Quit()
         {
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();
@@ -588,6 +593,7 @@ namespace SonicRoute
 
         protected override void OnExit(ExitEventArgs e)
         {
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();
@@ -596,6 +602,19 @@ namespace SonicRoute
             base.OnExit(e);
         }
 
+        /// <summary>任务栏深浅色切换时重建托盘图标（深色任务栏用白色图标，浅色用原图标）。</summary>
+        private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+        {
+            try
+            {
+                if (e.Category != UserPreferenceCategory.General) return;
+                if (_trayIcon == null) return;
+                var old = _trayIcon.Icon;
+                _trayIcon.Icon = IconFactory.CreateAppIcon(IconFactory.IsTaskbarDark());
+                try { old?.Dispose(); } catch { }
+            }
+            catch { }
+        }
         /// <summary>释放托盘图标及其 HICON（避免退出后残留 GDI 资源）。</summary>
         private void DisposeTray()
         {

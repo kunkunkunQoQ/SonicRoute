@@ -1229,6 +1229,8 @@ namespace SonicRoute
                 // 快速面板样式：经典面板 / 简洁面板（默认简洁）
                 QuickPanelStyleCombo.ItemsSource = new[] { L10n.T("St.PanelClassic"), L10n.T("St.PanelModern") };
                 QuickPanelStyleCombo.SelectedIndex = _config.QuickPanelStyle == "classic" ? 0 : 1;
+            VolumeStepBox.Text = Math.Clamp(_config.VolumeStep, 1, 20).ToString();
+
                 ExpCollapseCheck.IsChecked = _config.CollapseDeviceSections;
 
                 // 实验模式（隐藏）：解锁后显示开关；开启实验模式后导航显示"实验设置"
@@ -1425,6 +1427,25 @@ namespace SonicRoute
             ConfigService.Save(_config);
         }
 
+        private void VolumeStepBox_LostFocus(object sender, RoutedEventArgs e) => SaveVolumeStep();
+
+        private void VolumeStepBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            if (e.Key != System.Windows.Input.Key.Enter) return;
+            SaveVolumeStep();
+            Keyboard.ClearFocus();
+        }
+
+        private void SaveVolumeStep()
+        {
+            if (_suppressSettings) return;
+            if (!int.TryParse(VolumeStepBox.Text.Trim(), out int v)) { VolumeStepBox.Text = "4"; v = 4; }
+            int step = Math.Clamp(v, 1, 20);
+            if (step != v) VolumeStepBox.Text = step.ToString();
+            if (_config.VolumeStep == step) return;
+            _config.VolumeStep = step;
+            ConfigService.Save(_config);
+        }
         private void QuickPanelStyleCombo_Changed(object sender, SelectionChangedEventArgs e)
         {
             if (!IsLoaded || _suppressSettings || QuickPanelStyleCombo.SelectedIndex < 0) return;

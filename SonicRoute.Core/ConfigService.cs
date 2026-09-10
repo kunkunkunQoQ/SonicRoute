@@ -62,6 +62,8 @@ namespace SonicRoute.Core
         /// <summary>开机自启（商店版 MSIX StartupTask，与正常版 AutoStart 分开存储，互不影响）。</summary>
         public bool AutoStartStore { get; set; } = false;
 
+        /// <summary>音量调节步进（1–20%，默认 4）：托盘滚轮、面板行滑块滚轮、音量±快捷键共用，设置页可自定义。</summary>
+        public int VolumeStep { get; set; } = 4;
         /// <summary>窗口/面板背景透明度（60–100，默认 85：适当通透、保持可读）。</summary>
         public int BackgroundOpacity { get; set; } = 85;
 

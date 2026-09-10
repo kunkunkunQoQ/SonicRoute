@@ -773,6 +773,22 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- ④ 音量步进 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [St.VolumeStep], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <DockPanel Margin="0,6,0,0">
+                                    <TextBox x:Name="VolumeStepBox" FontSize="13" Width="64"
+                                             VerticalContentAlignment="Center" Padding="6,4"
+                                             TextAlignment="Center" LostFocus="VolumeStepBox_LostFocus"
+                                             KeyDown="VolumeStepBox_KeyDown"/>
+                                    <TextBlock Text="{Binding [St.VolumeStepHint], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                               VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"/>
+                                </DockPanel>
+                            </StackPanel>
+                        </Border>
                         <!-- ④ 语言 -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                             <StackPanel>

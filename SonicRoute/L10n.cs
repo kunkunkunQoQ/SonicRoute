@@ -171,6 +171,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "选择指定应用后，概览默认显示它",
                 ["St.DefaultAppHint"] = "概览默认应用：最近使用 / 上次操作 / 指定",
                 ["St.Opacity"] = "背景透明度",
+                ["St.VolumeStep"] = "音量步进",
+                ["St.VolumeStepHint"] = "托盘滚轮、面板滚轮、音量±快捷键每次调节的百分比（1–20%）",
                 ["St.OpacityHint"] = "快速面板与窗口背景的透明度（越低越透）",
                 ["St.AuthorHome"] = "作者主页 ‖ ",
 
@@ -397,6 +399,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"]           = "選擇指定應用後，概覽預設顯示它",
                 ["St.DefaultAppHint"]         = "概覽預設應用：最近使用 / 上次操作 / 指定",
                 ["St.Opacity"]                = "背景透明度",
+                ["St.VolumeStep"]         = "音量步進",
+                ["St.VolumeStepHint"]         = "托盤滾輪、面板滾輪、音量±快捷鍵每次調節的百分比（1–20%）",
                 ["St.OpacityHint"]            = "快速面板與視窗背景的透明度（越低越透）",
                 ["St.AuthorHome"]             = "作者主頁 ‖ ",
 
@@ -617,6 +621,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "Overview defaults to the selected app",
                 ["St.DefaultAppHint"] = "Default app: Recently used / Last used / Specific",
                 ["St.Opacity"] = "Background Opacity",
+                ["St.VolumeStep"] = "Volume step",
+                ["St.VolumeStepHint"] = "Percent changed per wheel notch / volume hotkey (1–20%)",
                 ["St.OpacityHint"] = "Opacity of the quick panel and window background (lower = more transparent)",
                 ["St.AuthorHome"] = "Author Home ‖ ",
 
@@ -832,6 +838,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "指定アプリを選択すると概要に既定表示",
                 ["St.DefaultAppHint"] = "既定アプリ：最近使用 / 最後 / 指定",
                 ["St.Opacity"] = "背景の透明度",
+                ["St.VolumeStep"] = "音量ステップ",
+                ["St.VolumeStepHint"] = "ホイール1目盛り・音量ホットキーで変わる割合（1〜20%）",
                 ["St.OpacityHint"] = "クイックパネルとウィンドウ背景の透明度（低いほど透明）",
                 ["St.AuthorHome"] = "作者ホーム ‖ ",
 
@@ -1047,6 +1055,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "지정 앱 선택 시 개요에 기본 표시",
                 ["St.DefaultAppHint"] = "기본 앱: 최근 사용 / 마지막 / 지정",
                 ["St.Opacity"] = "배경 투명도",
+                ["St.VolumeStep"] = "볼륨 단계",
+                ["St.VolumeStepHint"] = "휠 한 칸·볼륨 단축키마다 바뀌는 %(1–20%)",
                 ["St.OpacityHint"] = "퀵 패널과 창 배경 투명도（낮을수록 투명）",
                 ["St.AuthorHome"] = "작성자 홈 ‖ ",
 
@@ -1262,6 +1272,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "L'aperçu affiche l'application sélectionnée",
                 ["St.DefaultAppHint"] = "App par défaut : Récemment utilisée / Dernière / Spécifique",
                 ["St.Opacity"] = "Opacité de l'arrière-plan",
+                ["St.VolumeStep"] = "Pas de volume",
+                ["St.VolumeStepHint"] = "Pourcentage par cran de molette / raccourci volume (1–20 %)",
                 ["St.OpacityHint"] = "Opacité du panneau et de l'arrière-plan（plus bas = plus transparent）",
                 ["St.AuthorHome"] = "Accueil auteur ‖ ",
 
@@ -1477,6 +1489,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "Die Übersicht zeigt die ausgewählte App",
                 ["St.DefaultAppHint"] = "Standard-App: Zuletzt verwendet / Zuletzt / Bestimmt",
                 ["St.Opacity"] = "Hintergrundtransparenz",
+                ["St.VolumeStep"] = "Lautstärke-Schritt",
+                ["St.VolumeStepHint"] = "Prozent je Mausrad-Stufe / Lautstärke-Hotkey (1–20 %)",
                 ["St.OpacityHint"] = "Transparenz von Panel und Fensterhintergrund（niedriger = transparenter）",
                 ["St.AuthorHome"] = "Autoren-Home ‖ ",
 
@@ -1692,6 +1706,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "El resumen muestra la app seleccionada",
                 ["St.DefaultAppHint"] = "App predeterminada: Recientemente usada / Última / Específica",
                 ["St.Opacity"] = "Opacidad del fondo",
+                ["St.VolumeStep"] = "Paso de volumen",
+                ["St.VolumeStepHint"] = "Porcentaje por rueda / acceso directo de volumen (1–20 %)",
                 ["St.OpacityHint"] = "Opacidad del panel y el fondo（menor = más transparente）",
                 ["St.AuthorHome"] = "Inicio del autor ‖ ",
 
@@ -1907,6 +1923,8 @@ namespace SonicRoute
                 ["St.FixedAppHint"] = "Обзор показывает выбранное приложение",
                 ["St.DefaultAppHint"] = "Приложение по умолчанию: Недавно использованное / Последнее / Указанное",
                 ["St.Opacity"] = "Прозрачность фона",
+                ["St.VolumeStep"] = "Шаг громкости",
+                ["St.VolumeStepHint"] = "Проценты за шаг колеса / горячую клавишу громкости (1–20 %)",
                 ["St.OpacityHint"] = "Прозрачность панели и фона окна（ниже = прозрачнее）",
                 ["St.AuthorHome"] = "Дом автора ‖ ",
 
