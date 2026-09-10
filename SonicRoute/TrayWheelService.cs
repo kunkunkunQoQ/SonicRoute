@@ -120,6 +120,13 @@ namespace SonicRoute
         private TextBlock? _osdValueText;
         private double _osdWidth = 240;       // 当前 OSD 逻辑宽度（主题页滑条调整）
         private double _osdFontScale = 1.0;   // 当前字号倍率（主题页滑条调整）
+        // 位置脏标记与定位缓存：仅首次/重新显示、尺寸、位置配置、DPI、显示器变化时重新定位
+        private bool _osdPositionDirty = true;
+        private double _lastDpiScale = 1.0;
+        private double _lastWorkAreaLeft, _lastWorkAreaTop, _lastWorkAreaRight, _lastWorkAreaBottom;
+        private string _lastOsdPos = "";
+        private double _lastOsdOx, _lastOsdOy;
+        private int _lastOsdCx = -1, _lastOsdCy = -1;
 
         public TrayWheelService()
         {
@@ -250,7 +257,7 @@ namespace SonicRoute
                         Topmost = true,
                         ResizeMode = ResizeMode.NoResize,
                         SizeToContent = SizeToContent.Height,
-                        Width = _osdWidth,   // 固定宽度（自由拉长缩短）：文本长短不影响窗口尺寸 → 位置稳定不闪烁
+                        Width = _osdWidth,   // 固定宽度：文本长短不影响窗口尺寸 → 位置稳定不闪烁
                         Focusable = false
                     };
                     var border = new Border
@@ -262,7 +269,27 @@ namespace SonicRoute
                     // 主题化：背景/边框/文字全部绑主题资源，透明度随 Theme.SurfaceBgAlpha
                     border.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceBgAlpha");
                     border.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
-                    border.Child = new Grid();
+
+                    // 视觉树只创建一次（1 Border + 2 TextBlock），之后 ShowOsd 只改文本，不再重建
+                    var grid = new Grid();
+                    var stack = new StackPanel();
+                    _osdAppText = new TextBlock
+                    {
+                        Text = app, FontSize = 12 * _osdFontScale,
+                        MaxWidth = _osdWidth - 32 * _osdFontScale, TextTrimming = TextTrimming.CharacterEllipsis
+                    };
+                    _osdAppText.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
+                    _osdValueText = new TextBlock
+                    {
+                        Text = text, FontSize = 18 * _osdFontScale, FontWeight = FontWeights.SemiBold,
+                        Margin = new Thickness(0, 3, 0, 0),
+                        MaxWidth = _osdWidth - 32 * _osdFontScale, TextTrimming = TextTrimming.CharacterEllipsis
+                    };
+                    _osdValueText.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Accent");
+                    stack.Children.Add(_osdAppText);
+                    stack.Children.Add(_osdValueText);
+                    grid.Children.Add(stack);
+                    border.Child = grid;
                     _osd.Content = border;
 
                     // 调整模式拖动：按住左键移动窗口，松手保存位置（仅调整模式生效）
@@ -300,48 +327,37 @@ namespace SonicRoute
                         e.Handled = true;
                         if (_osdAdjustMode) SaveOsdDragPosition();
                     };
+
+                    _osdPositionDirty = true; // 首次显示必须定位
                 }
 
-                var root = (Border)_osd.Content;
-                var grid = root.Child as Grid ?? new Grid();
-                grid.Children.Clear();
-                var stack = new StackPanel();
-                var a = new TextBlock
-                {
-                    Text = app, FontSize = 12 * _osdFontScale,
-                    MaxWidth = _osdWidth - 32 * _osdFontScale, TextTrimming = TextTrimming.CharacterEllipsis
-                };
-                a.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
-                var v = new TextBlock
-                {
-                    Text = text, FontSize = 18 * _osdFontScale, FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(0, 3, 0, 0),
-                    MaxWidth = _osdWidth - 32 * _osdFontScale, TextTrimming = TextTrimming.CharacterEllipsis
-                };
-                v.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Accent");
-                stack.Children.Add(a);
-                stack.Children.Add(v);
-                _osdAppText = a;
-                _osdValueText = v;
-                grid.Children.Add(stack);
-
-                root.Child = grid;
+                // 连续操作：只更新文本，不重建视觉树、不重复 Show
+                if (_osdAppText != null) _osdAppText.Text = app;
+                if (_osdValueText != null) _osdValueText.Text = text;
 
                 if (!_osd.IsVisible)
                 {
+                    // 首次/重新显示：淡入 120ms（仅此一次；连续操作期间窗口已显示，不会重复淡入淡出）
+                    _osd.Opacity = 0;
                     _osd.Show();
                     _osd.Topmost = true;
+                    _osd.BeginAnimation(UIElement.OpacityProperty,
+                        new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)));
+                    _osdPositionDirty = true; // 重新显示确保位置正确
                 }
 
-                // 位置：右上角、工作区上沿。等布局完成后按实际宽度右对齐，防止文本变化导致位置不协调
-                _osd.Dispatcher.BeginInvoke(new Action(RepositionOsd), DispatcherPriority.Background);
+                // 仅在必要时重新定位：首次/重新显示、尺寸变化、位置配置变化、DPI 或显示器变化
+                // 普通文字变化（50%→51%→…）不重新定位 → 位置完全不跳动
+                if (_osdPositionDirty || ShouldRepositionOsd())
+                {
+                    _osdPositionDirty = false;
+                    _osd.Dispatcher.BeginInvoke(new Action(RepositionOsd), DispatcherPriority.Background);
+                }
 
                 _osdTimer.Stop();
                 _osdTimer.Start();
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         private void RepositionOsd()
@@ -370,6 +386,12 @@ namespace SonicRoute
                 string pos = string.IsNullOrWhiteSpace(cfg.OsdPosition) ? "TR" : cfg.OsdPosition;
                 double ox = cfg.OsdOffsetX;
                 double oy = cfg.OsdOffsetY;
+                // 记录当前定位状态，供 ShouldRepositionOsd 对比（DPI/工作区/位置配置变化才重新定位）
+                _lastDpiScale = winScale;
+                _lastWorkAreaLeft = _swa.Left; _lastWorkAreaTop = _swa.Top;
+                _lastWorkAreaRight = _swa.Right; _lastWorkAreaBottom = _swa.Bottom;
+                _lastOsdPos = pos; _lastOsdOx = ox; _lastOsdOy = oy;
+                _lastOsdCx = cfg.OsdCustomX; _lastOsdCy = cfg.OsdCustomY;
 
                 // 自定义模式：直接使用用户输入的屏幕坐标（未设置时回退右上角）
                 if (string.Equals(pos, "Custom", StringComparison.OrdinalIgnoreCase))
@@ -413,13 +435,32 @@ namespace SonicRoute
                 if (_osd != null)
                 {
                     _osd.Hide();
-                    // A2：隐藏时释放内容树（Border 下 TextBlock 等），下次显示再重建，避免常驻 UI 对象
-                    if (_osd.Content is Border b) b.Child = null;
-                _osdAppText = null;
-                _osdValueText = null;
+                    // 保留完整视觉树（Border/Grid/两个 TextBlock），下次显示只更新文本——不重复创建控件
                 }
             }
             catch { }
+        }
+
+        /// <summary>检测是否需要重新定位：仅 DPI 变化 / 工作区（显示器布局）变化 / OSD 位置配置变化时返回 true。
+        /// 普通文字变化（连续滚动音量 50%→51%→…）不重新定位 → 位置完全不跳动。</summary>
+        private bool ShouldRepositionOsd()
+        {
+            try
+            {
+                if (_osd == null) return false;
+                double ws = 1.0;
+                try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                var _swa = SystemParameters.WorkArea;
+                if (Math.Abs(ws - _lastDpiScale) > 0.001) return true;
+                if (_swa.Left != _lastWorkAreaLeft || _swa.Top != _lastWorkAreaTop ||
+                    _swa.Right != _lastWorkAreaRight || _swa.Bottom != _lastWorkAreaBottom) return true;
+                var cfg = ConfigService.Load();
+                string pos = string.IsNullOrWhiteSpace(cfg.OsdPosition) ? "TR" : cfg.OsdPosition;
+                if (pos != _lastOsdPos || cfg.OsdOffsetX != _lastOsdOx || cfg.OsdOffsetY != _lastOsdOy ||
+                    cfg.OsdCustomX != _lastOsdCx || cfg.OsdCustomY != _lastOsdCy) return true;
+            }
+            catch { }
+            return false;
         }
 
         /// <summary>进入 OSD 调整模式：显示常驻可拖动 OSD（不自动消失），拖动松手即保存位置。</summary>
@@ -481,6 +522,7 @@ namespace SonicRoute
             try
             {
                 if (_osd == null) return;
+                _osdPositionDirty = true; // 尺寸变化后需重新定位（Custom 模式仍用已保存坐标，不跳回右上角）
                 _osdWidth = Math.Clamp(w, 180, 600);
                 _osdFontScale = Math.Clamp(fs, 0.7, 2.0);
                 _osd.Width = _osdWidth;
