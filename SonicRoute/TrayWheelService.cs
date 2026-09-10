@@ -330,7 +330,6 @@ namespace SonicRoute
             }
             catch
             {
-                // OSD 失败不影响核心功能
             }
         }
 
@@ -374,8 +373,12 @@ namespace SonicRoute
                     case "BR": left = wa.Right - w - 16; top = wa.Bottom - h - 14; break;
                     default: left = wa.Right - w - 16; top = wa.Top + 14; break; // TR 右上角
                 }
-                _osd.Left = left + ox;
-                _osd.Top = top + oy;
+                // 限制在光标所在屏工作区内（防跨屏残留/边缘闪烁）
+                double waL = wa.Left, waT = wa.Top, waR = wa.Right, waB = wa.Bottom;
+                left = Math.Clamp(left + ox, waL, Math.Max(waL, waR - w - 4));
+                top = Math.Clamp(top + oy, waT, Math.Max(waT, waB - h - 4));
+                _osd.Left = left;
+                _osd.Top = top;
             }
             catch { }
         }
