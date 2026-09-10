@@ -57,6 +57,7 @@ namespace SonicRoute
                 await LoadDevicesAsync();
                 await RefreshOverviewAsync();
                 BuildDeviceNameLists();
+                SyncOsdSliders();
                 // 实验 UI（概览/应用/设置输入区/名称区）可见性：麦克风选项开启时显示
                 ApplyExpMicUi(_config.ExperimentalMic);
                 NavExperimental.Visibility = _config.ExperimentalUnlocked && _config.ExperimentalMode
@@ -1758,6 +1759,38 @@ namespace SonicRoute
             };
         }
 
+
+        /// <summary>主题页 - OSD 宽度滑条：实时调整 OSD 宽度并保存。</summary>
+        private void OsdWidthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (OsdWidthValue == null || !IsLoaded) return;
+            int w = (int)Math.Round(OsdWidthSlider.Value);
+            OsdWidthValue.Text = w + "px";
+            var app = (App)Application.Current;
+            if (_config.OsdWidth != w) { _config.OsdWidth = w; ConfigService.Save(_config); }
+            app.SetOsdSize(w, _config.OsdFontScale);
+        }
+
+        /// <summary>主题页 - OSD 字号倍率滑条：实时调整 OSD 字号并保存。</summary>
+        private void OsdFontSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (OsdFontValue == null || !IsLoaded) return;
+            double fs = Math.Round(OsdFontSlider.Value, 2);
+            OsdFontValue.Text = (int)Math.Round(fs * 100) + "%";
+            var app = (App)Application.Current;
+            if (Math.Abs(_config.OsdFontScale - fs) > 0.001) { _config.OsdFontScale = fs; ConfigService.Save(_config); }
+            app.SetOsdSize(_config.OsdWidth, fs);
+        }
+
+        /// <summary>同步主题页 OSD 滑条与数值文本（页面加载与一键还原时调用）。</summary>
+        private void SyncOsdSliders()
+        {
+            if (OsdWidthSlider == null) return;
+            OsdWidthSlider.Value = _config.OsdWidth;
+            OsdFontSlider.Value = _config.OsdFontScale;
+            OsdWidthValue.Text = _config.OsdWidth + "px";
+            OsdFontValue.Text = (int)Math.Round(_config.OsdFontScale * 100) + "%";
+        }
 
         /// <summary>折叠/展开设置页"保留的设备"卡片（实验设置-折叠开启时可见）。</summary>
         /// <summary>折叠/展开设置页"保留的设备"卡片（更多选项样式，实验设置-折叠开启时可见）。</summary>

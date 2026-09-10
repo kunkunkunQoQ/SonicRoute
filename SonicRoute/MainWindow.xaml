@@ -644,6 +644,25 @@
                                            FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                            Margin="0,8,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
+                                <StackPanel Margin="0,14,0,0">
+                                    <DockPanel>
+                                        <TextBlock x:Name="OsdWidthValue" DockPanel.Dock="Right" FontSize="11.5"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                        <TextBlock Text="{Binding [Exp.OsdWidthLabel], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                    </DockPanel>
+                                    <Slider x:Name="OsdWidthSlider" Minimum="180" Maximum="600" Value="240"
+                                            Margin="0,2,0,0" ValueChanged="OsdWidthSlider_ValueChanged"/>
+                                    <DockPanel Margin="0,12,0,0">
+                                        <TextBlock x:Name="OsdFontValue" DockPanel.Dock="Right" FontSize="11.5"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                        <TextBlock Text="{Binding [Exp.OsdFontLabel], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                    </DockPanel>
+                                    <Slider x:Name="OsdFontSlider" Minimum="0.7" Maximum="2.0" Value="1.0"
+                                            SmallChange="0.05" LargeChange="0.1"
+                                            Margin="0,2,0,0" ValueChanged="OsdFontSlider_ValueChanged"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

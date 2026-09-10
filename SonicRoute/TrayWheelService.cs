@@ -110,7 +110,7 @@ namespace SonicRoute
         private Window? _osd;
         private readonly DispatcherTimer _osdTimer;
 
-        // OSD 调整模式（主题「调整 OSD」：拖动主体移动位置、拖右下角手柄调整大小，松手保存）
+        // OSD 调整模式（主题「调整 OSD」：拖动主体移动位置，松手保存；宽度/字号在主题页滑条调整）
         private bool _osdAdjustMode;
         private bool _osdDragging;
         private System.Windows.Point _osdDragStart;
@@ -118,13 +118,8 @@ namespace SonicRoute
         internal event Action? OsdAdjustFinished;
         private TextBlock? _osdAppText;
         private TextBlock? _osdValueText;
-        private Border? _osdHandle;
-        private double _osdWidth = 240;       // 当前 OSD 逻辑宽度（横向自由拉长缩短）
-        private double _osdFontScale = 1.0;   // 当前字号倍率（纵向调整）
-        private bool _osdResizing;
-        private System.Windows.Point _osdResizeStart;
-        private double _osdResizeBaseWidth;
-        private double _osdResizeBaseFont;
+        private double _osdWidth = 240;       // 当前 OSD 逻辑宽度（主题页滑条调整）
+        private double _osdFontScale = 1.0;   // 当前字号倍率（主题页滑条调整）
 
         public TrayWheelService()
         {
@@ -283,12 +278,18 @@ namespace SonicRoute
                     {
                         if (!_osdDragging) return;
                         var p = e.GetPosition(null);
-                        // 拖动中限制在工作区内，防止拖出屏外
+                        // 拖动中限制在虚拟屏幕（全部显示器）范围内，多屏时允许拖到副屏
                         double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
-                        var swa = SystemParameters.WorkArea;
-                        _osd.Left = Math.Clamp(_osd.Left + (p.X - _osdDragStart.X), swa.Left / ws, Math.Max(swa.Left / ws, swa.Right / ws - _osd.ActualWidth));
-                        _osd.Top = Math.Clamp(_osd.Top + (p.Y - _osdDragStart.Y), swa.Top / ws, Math.Max(swa.Top / ws, swa.Bottom / ws - _osd.ActualHeight));
-                        _osd.Top += p.Y - _osdDragStart.Y;
+                        double vsX = GetSystemMetrics(76); // SM_XVIRTUALSCREEN
+                        double vsY = GetSystemMetrics(77); // SM_YVIRTUALSCREEN
+                        double vsW = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
+                        double vsH = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
+                        double minX = vsX / ws;
+                        double maxX = (vsX + vsW) / ws - _osd.ActualWidth;
+                        double minY = vsY / ws;
+                        double maxY = (vsY + vsH) / ws - _osd.ActualHeight;
+                        _osd.Left = Math.Clamp(_osd.Left + (p.X - _osdDragStart.X), minX, Math.Max(minX, maxX));
+                        _osd.Top = Math.Clamp(_osd.Top + (p.Y - _osdDragStart.Y), minY, Math.Max(minY, maxY));
                         e.Handled = true;
                     };
                     _osd.MouseLeftButtonUp += (_, e) =>
@@ -323,55 +324,7 @@ namespace SonicRoute
                 _osdAppText = a;
                 _osdValueText = v;
                 grid.Children.Add(stack);
-                // 缩放手柄：右下角三线 grip，仅调整模式显示；横向拖动自由拉长缩短宽度、纵向调整字号
-                var grip = new System.Windows.Shapes.Path
-                {
-                    Data = System.Windows.Media.Geometry.Parse("M 3,17 L 17,3 M 8,17 L 17,8 M 13,17 L 17,13"),
-                    StrokeThickness = 1.6,
-                    StrokeStartLineCap = PenLineCap.Round,
-                    StrokeEndLineCap = PenLineCap.Round,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center
-                };
-                grip.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Theme.Accent");
-                var handle = new Border
-                {
-                    Width = 20 * _osdFontScale, Height = 20 * _osdFontScale,
-                    CornerRadius = new CornerRadius(5 * _osdFontScale),
-                    Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 0, 0, 0)),
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-                    VerticalAlignment = System.Windows.VerticalAlignment.Bottom,
-                    Cursor = System.Windows.Input.Cursors.SizeNWSE,
-                    Visibility = _osdAdjustMode ? Visibility.Visible : Visibility.Collapsed,
-                    Child = grip
-                };
-                handle.MouseLeftButtonDown += (_, e) =>
-                {
-                    if (!_osdAdjustMode) return;
-                    _osdResizing = true;
-                    _osdResizeStart = e.GetPosition(null);
-                    _osdResizeBaseWidth = _osdWidth;
-                    _osdResizeBaseFont = _osdFontScale;
-                    handle.CaptureMouse();
-                    e.Handled = true;
-                };
-                handle.MouseMove += (_, e) =>
-                {
-                    if (!_osdResizing) return;
-                    var p = e.GetPosition(null);
-                    ApplyOsdSize(_osdResizeBaseWidth + (p.X - _osdResizeStart.X), _osdResizeBaseFont + (p.Y - _osdResizeStart.Y) / 300.0);
-                    e.Handled = true;
-                };
-                handle.MouseLeftButtonUp += (_, e) =>
-                {
-                    if (!_osdResizing) return;
-                    _osdResizing = false;
-                    handle.ReleaseMouseCapture();
-                    e.Handled = true;
-                    if (_osdAdjustMode) SaveOsdSize();
-                };
-                _osdHandle = handle;
-                grid.Children.Add(handle);
+
                 root.Child = grid;
 
                 if (!_osd.IsVisible)
@@ -464,7 +417,6 @@ namespace SonicRoute
                     if (_osd.Content is Border b) b.Child = null;
                 _osdAppText = null;
                 _osdValueText = null;
-                _osdHandle = null;
                 }
             }
             catch { }
@@ -506,12 +458,14 @@ namespace SonicRoute
                 if (_osd == null) return;
                 var cfg = ConfigService.Load();
                 cfg.OsdPosition = "Custom";
-                // 保存前限制在工作区内（防止拖出屏外后保存无效坐标）
+                // 保存前限制在虚拟屏幕（全部显示器）范围内，多屏时允许存副屏坐标
                 double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
-                var swa = SystemParameters.WorkArea;
-                cfg.OsdCustomX = (int)Math.Clamp(_osd.Left, swa.Left / ws, Math.Max(swa.Left / ws, swa.Right / ws - _osd.ActualWidth));
-                cfg.OsdCustomY = (int)Math.Clamp(_osd.Top, swa.Top / ws, Math.Max(swa.Top / ws, swa.Bottom / ws - _osd.ActualHeight));
-                cfg.OsdCustomY = (int)_osd.Top;
+                double vsX = GetSystemMetrics(76); // SM_XVIRTUALSCREEN
+                double vsY = GetSystemMetrics(77); // SM_YVIRTUALSCREEN
+                double vsW = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
+                double vsH = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
+                cfg.OsdCustomX = (int)Math.Clamp(_osd.Left, vsX / ws, Math.Max(vsX / ws, (vsX + vsW) / ws - _osd.ActualWidth));
+                cfg.OsdCustomY = (int)Math.Clamp(_osd.Top, vsY / ws, Math.Max(vsY / ws, (vsY + vsH) / ws - _osd.ActualHeight));
                 ConfigService.Save(cfg);
                 _osdAdjustMode = false;
                 _osdTimer.Stop();
@@ -521,8 +475,8 @@ namespace SonicRoute
             catch { }
         }
 
-        /// <summary>应用 OSD 尺寸（宽度自由拉长缩短 + 字号倍率）到窗口与内容（调整模式拖手柄时实时调用）。</summary>
-        private void ApplyOsdSize(double w, double fs)
+        /// <summary>应用 OSD 尺寸（宽度 + 字号倍率）到窗口与内容（主题页滑条实时调用）。</summary>
+        internal void ApplyOsdSize(double w, double fs)
         {
             try
             {
@@ -537,25 +491,27 @@ namespace SonicRoute
                 }
                 if (_osdAppText != null) { _osdAppText.FontSize = 12 * _osdFontScale; _osdAppText.MaxWidth = _osdWidth - 32 * _osdFontScale; }
                 if (_osdValueText != null) { _osdValueText.FontSize = 18 * _osdFontScale; _osdValueText.MaxWidth = _osdWidth - 32 * _osdFontScale; }
-                if (_osdHandle != null) { _osdHandle.Width = 20 * _osdFontScale; _osdHandle.Height = 20 * _osdFontScale; _osdHandle.CornerRadius = new CornerRadius(5 * _osdFontScale); }
             }
             catch { }
         }
 
-        /// <summary>拖缩放手柄松手：保存宽度与字号倍率并退出调整模式。</summary>
-        private void SaveOsdSize()
+        /// <summary>应用并保存 OSD 尺寸（主题页滑条调用）：宽度 180~600、字号倍率 0.7~2.0，立即预览。</summary>
+        internal void SetOsdSize(int w, double fs)
         {
             try
             {
-                if (_osd == null) return;
                 var cfg = ConfigService.Load();
-                cfg.OsdWidth = (int)Math.Clamp(_osdWidth, 180, 600);
-                cfg.OsdFontScale = Math.Clamp(_osdFontScale, 0.7, 2.0);
-                ConfigService.Save(cfg);
-                _osdAdjustMode = false;
-                _osdTimer.Stop();
-                ShowOsd("📍", L10n.T("Exp.OsdScaleSaved"));
-                OsdAdjustFinished?.Invoke();
+                cfg.OsdWidth = (int)Math.Clamp(w, 180, 600);
+                cfg.OsdFontScale = Math.Clamp(fs, 0.7, 2.0);
+                ConfigService.Save(cfg); // 先保存，保证 OSD 创建时读到新值
+                _osdWidth = cfg.OsdWidth;
+                _osdFontScale = cfg.OsdFontScale;
+                ApplyOsdSize(_osdWidth, _osdFontScale);
+                if (!_osdAdjustMode)
+                {
+                    _osdTimer.Stop();
+                    ShowOsd("📍", L10n.T("Exp.OsdScaleSaved"));
+                }
             }
             catch { }
         }

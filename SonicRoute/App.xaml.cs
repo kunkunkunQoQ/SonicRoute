@@ -166,6 +166,8 @@ namespace SonicRoute
         internal void CancelOsdAdjust() => _trayWheel?.CancelOsdAdjust();
         /// <summary>实时位置预览（偏移滑块/坐标输入联动）。</summary>
         internal void PreviewOsd() => _trayWheel?.PreviewOsd();
+    internal void ApplyOsdSize(double w, double fs) => _trayWheel?.ApplyOsdSize(w, fs);
+    internal void SetOsdSize(int w, double fs) => _trayWheel?.SetOsdSize(w, fs);
         /// <summary>OSD 拖拽保存后通知（设置页复位按钮/同步输入框）。</summary>
         internal event Action? OsdAdjustFinished
         {
