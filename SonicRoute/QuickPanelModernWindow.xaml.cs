@@ -401,6 +401,7 @@ namespace SonicRoute
                         Maximum = 100,
                         Style = (Style)FindResource("RowSliderStyle"),
                         VerticalAlignment = System.Windows.VerticalAlignment.Center,
+                        Margin = new Thickness(0, 0, 6, 0),
                         Tag = row,
                         Foreground = (Brush)FindResource("Theme.Accent")
                     };
@@ -484,7 +485,8 @@ namespace SonicRoute
             double range = row.Slider.Maximum - row.Slider.Minimum;
             double frac = range <= 0 ? 0 : (row.Slider.Value - row.Slider.Minimum) / range;
             row.TrackFill.Width = Math.Max(0, w * frac);
-            row.Thumb.Margin = new Thickness(Math.Max(0, row.TrackFill.Width - 7), 0, 0, 0);
+            double thumbMax = Math.Max(0, w - 14);
+            row.Thumb.Margin = new Thickness(Math.Clamp(row.TrackFill.Width - 7, 0, thumbMax), 0, 0, 0);
         }
 
         private async void RowSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
