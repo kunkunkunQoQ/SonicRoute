@@ -250,11 +250,11 @@
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
                     <Button x:Name="GlobalMuteButton"
                             Content="{Binding [Qp.GlobalMute], Source={x:Static local:L10n.Instance}}"
-                            Style="{StaticResource ToolButton}" MinWidth="96" Height="28"
+                            Style="{StaticResource ToolButton}" MinWidth="112" Height="28"
                             Click="GlobalMuteButton_Click"/>
                     <Button x:Name="MicMuteButton"
                             Content="{Binding [Qp.MicMute], Source={x:Static local:L10n.Instance}}"
-                            Style="{StaticResource ToolButton}" MinWidth="118" Height="28"
+                            Style="{StaticResource ToolButton}" MinWidth="138" Height="28"
                             Click="MicMuteButton_Click"/>
                     <Button x:Name="FullUiButton"
                             Content="{Binding [Qp.FullUi], Source={x:Static local:L10n.Instance}}"
