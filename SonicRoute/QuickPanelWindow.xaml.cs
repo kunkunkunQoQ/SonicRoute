@@ -251,7 +251,7 @@ namespace SonicRoute
             if (currentShortId == null)
             {
                 var sysDef = devices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id));
-                return sysDef != null ? sysDef.DisplayName! : L10n.T("Ov.Unset");
+                return sysDef != null ? L10n.T("Ov.Default") + sysDef.DisplayName! : L10n.T("Ov.Unset");
             }
             var dev = devices.FirstOrDefault(d => string.Equals(d.Id, currentShortId, StringComparison.OrdinalIgnoreCase));
             return dev != null ? dev.DisplayName! : L10n.T("Ov.CurrentUnavailable");

@@ -427,7 +427,9 @@ namespace SonicRoute
             bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
             OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
 
-            var outs = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
+            _outputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
+            OverviewOutputCombo.ItemsSource = null;
+            OverviewOutputCombo.ItemsSource = _outputDisplay;
             _inputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(VisibleInputs), EDataFlow.eCapture, _config);
             OverviewInputCombo.ItemsSource = null;
             OverviewInputCombo.ItemsSource = _inputDisplay;
@@ -435,7 +437,7 @@ namespace SonicRoute
             if (_overviewApp == null)
             {
                 OverviewOutputCurrentText.Text = "";
-                RenderQuickButtons(OverviewOutputQuickPanel, outs);
+            RenderQuickButtons(OverviewOutputQuickPanel, _outputDisplay);
                 OverviewInputCurrentText.Text = "";
                 OverviewInputCurrentText.Tag = null;
                 RenderInputQuickButtons();
@@ -449,13 +451,15 @@ namespace SonicRoute
             string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
 
             OverviewOutputCurrentText.Text = DescribeCurrent(_outputDisplay, outShort, true);
-            RenderQuickButtons(OverviewOutputQuickPanel, outs);
+            RenderQuickButtons(OverviewOutputQuickPanel, _outputDisplay);
 
             // 选中项必须从下拉实际绑定的显示列表（含自定义名称）中查找，
             // 否则改过名称的设备会多出一个"默认名"的幽灵项
             var selectedOut = outShort == null
                 ? (_outputDisplay.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault())
                 : _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase));
+            _suppressDevCombo = true;
+            OverviewOutputCombo.SelectedItem = selectedOut;
             _suppressDevCombo = false;
 
             // 输入设备（麦克风）：与输出一致读取持久化端点并刷新下拉/快捷按钮
@@ -467,6 +471,8 @@ namespace SonicRoute
             var selectedIn = inShort == null
                 ? (_inputDisplay.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault())
                 : _inputDisplay.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase));
+            _suppressDevCombo = true;
+            OverviewInputCombo.SelectedItem = selectedIn;
             _suppressDevCombo = false;
 
             int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
@@ -1909,8 +1915,8 @@ namespace SonicRoute
             {
                 string sysId = isOutput ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId;
                 // 状态显示系统默认（自定义名优先；虚拟项被"保留设备"隐藏时仍显示状态）
-                if (_config.DeviceNames.TryGetValue(sysId, out var cn) && !string.IsNullOrWhiteSpace(cn)) return cn;
-                return L10n.T(isOutput ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn");
+                if (_config.DeviceNames.TryGetValue(sysId, out var cn) && !string.IsNullOrWhiteSpace(cn)) return L10n.T("Ov.Current") + cn;  // 与正常设备"当前：设备名"格式一致
+                return L10n.T("Ov.Current") + L10n.T(isOutput ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn");
             }
             var dev = devices.FirstOrDefault(d => string.Equals(d.Id, currentShortId, StringComparison.OrdinalIgnoreCase));
             return dev != null ? L10n.T("Ov.Current") + dev.DisplayName : L10n.T("Ov.CurrentUnavailable");
