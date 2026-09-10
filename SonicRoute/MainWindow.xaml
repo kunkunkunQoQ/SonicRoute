@@ -640,6 +640,9 @@
                                     <Button x:Name="OsdResetButtonTheme" Content="{Binding [Exp.OsdReset], Source={x:Static local:L10n.Instance}}"
                                             Style="{StaticResource GhostButton}" Height="32" Padding="14,0"
                                             Click="OsdReset_Click"/>
+                                <TextBlock Text="{Binding [Exp.OsdAdjustHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,8,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

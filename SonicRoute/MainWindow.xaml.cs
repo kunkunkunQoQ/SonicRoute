@@ -1710,6 +1710,7 @@ namespace SonicRoute
             _config.OsdCustomY = -1;
             ConfigService.Save(_config);
             ShowToast(L10n.T("Exp.OsdResetDone"));
+            ((App)Application.Current).PreviewOsd(); // 立即预览还原后的默认位置
         }
 
         private bool _osdAdjusting;

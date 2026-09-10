@@ -110,12 +110,19 @@ namespace SonicRoute
         private Window? _osd;
         private readonly DispatcherTimer _osdTimer;
 
-        // OSD 调整模式（实验设置「调整位置」：可拖动定位，松手保存）
+        // OSD 调整模式（主题「调整 OSD」：拖动主体移动位置、拖右下角手柄调整大小，松手保存）
         private bool _osdAdjustMode;
         private bool _osdDragging;
         private System.Windows.Point _osdDragStart;
         /// <summary>拖拽松手已保存位置后触发（UI 线程），用于设置页复位按钮状态与同步输入框。</summary>
         internal event Action? OsdAdjustFinished;
+        private TextBlock? _osdAppText;
+        private TextBlock? _osdValueText;
+        private Border? _osdHandle;
+        private double _osdScale = 1.0;
+        private bool _osdResizing;
+        private System.Windows.Point _osdResizeStart;
+        private double _osdResizeBaseScale;
 
         public TrayWheelService()
         {
@@ -233,6 +240,7 @@ namespace SonicRoute
             {
                 if (_osd == null)
                 {
+                    _osdScale = Math.Clamp(ConfigService.Load().OsdScale, 0.5, 2.0);
                     _osd = new Window
                     {
                         WindowStyle = WindowStyle.None,
@@ -243,19 +251,19 @@ namespace SonicRoute
                         Topmost = true,
                         ResizeMode = ResizeMode.NoResize,
                         SizeToContent = SizeToContent.Height,
-                        Width = 340,   // 固定宽度：文本长短不影响窗口尺寸 → 位置稳定不闪烁
+                        Width = 280 * _osdScale,   // 固定宽度（基础 280，随缩放倍率）：文本长短不影响窗口尺寸 → 位置稳定不闪烁
                         Focusable = false
                     };
                     var border = new Border
                     {
-                        CornerRadius = new CornerRadius(10),
-                        Padding = new Thickness(16, 10, 16, 10),
+                        CornerRadius = new CornerRadius(10 * _osdScale),
+                        Padding = new Thickness(16 * _osdScale, 10 * _osdScale, 16 * _osdScale, 10 * _osdScale),
                         BorderThickness = new Thickness(1)
                     };
                     // 主题化：背景/边框/文字全部绑主题资源，透明度随 Theme.SurfaceBgAlpha
                     border.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceBgAlpha");
                     border.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
-                    border.Child = new StackPanel();
+                    border.Child = new Grid();
                     _osd.Content = border;
 
                     // 调整模式拖动：按住左键移动窗口，松手保存位置（仅调整模式生效）
@@ -271,7 +279,11 @@ namespace SonicRoute
                     {
                         if (!_osdDragging) return;
                         var p = e.GetPosition(null);
-                        _osd.Left += p.X - _osdDragStart.X;
+                        // 拖动中限制在工作区内，防止拖出屏外
+                        double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                        var swa = SystemParameters.WorkArea;
+                        _osd.Left = Math.Clamp(_osd.Left + (p.X - _osdDragStart.X), swa.Left / ws, Math.Max(swa.Left / ws, swa.Right / ws - _osd.ActualWidth));
+                        _osd.Top = Math.Clamp(_osd.Top + (p.Y - _osdDragStart.Y), swa.Top / ws, Math.Max(swa.Top / ws, swa.Bottom / ws - _osd.ActualHeight));
                         _osd.Top += p.Y - _osdDragStart.Y;
                         e.Handled = true;
                     };
@@ -286,23 +298,73 @@ namespace SonicRoute
                 }
 
                 var root = (Border)_osd.Content;
+                var grid = root.Child as Grid ?? new Grid();
+                grid.Children.Clear();
                 var stack = new StackPanel();
                 var a = new TextBlock
                 {
-                    Text = app, FontSize = 12,
-                    MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis
+                    Text = app, FontSize = 12 * _osdScale,
+                    MaxWidth = 248 * _osdScale, TextTrimming = TextTrimming.CharacterEllipsis
                 };
                 a.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
                 var v = new TextBlock
                 {
-                    Text = text, FontSize = 18, FontWeight = FontWeights.SemiBold,
+                    Text = text, FontSize = 18 * _osdScale, FontWeight = FontWeights.SemiBold,
                     Margin = new Thickness(0, 3, 0, 0),
-                    MaxWidth = 300, TextTrimming = TextTrimming.CharacterEllipsis
+                    MaxWidth = 248 * _osdScale, TextTrimming = TextTrimming.CharacterEllipsis
                 };
                 v.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Accent");
                 stack.Children.Add(a);
                 stack.Children.Add(v);
-                root.Child = stack;
+                _osdAppText = a;
+                _osdValueText = v;
+                grid.Children.Add(stack);
+                // 缩放手柄：右下角斜线，仅调整模式显示；拖动按比例缩放窗口/字号/边距
+                var handleTxt = new TextBlock
+                {
+                    Text = "╲", FontSize = 11 * _osdScale, FontWeight = FontWeights.Bold,
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                    VerticalAlignment = System.Windows.VerticalAlignment.Center
+                };
+                handleTxt.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Accent");
+                var handle = new Border
+                {
+                    Width = 18 * _osdScale, Height = 18 * _osdScale,
+                    CornerRadius = new CornerRadius(5 * _osdScale),
+                    Background = new SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 0, 0, 0)),
+                    HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                    VerticalAlignment = System.Windows.VerticalAlignment.Bottom,
+                    Cursor = System.Windows.Input.Cursors.SizeNWSE,
+                    Visibility = _osdAdjustMode ? Visibility.Visible : Visibility.Collapsed,
+                    Child = handleTxt
+                };
+                handle.MouseLeftButtonDown += (_, e) =>
+                {
+                    if (!_osdAdjustMode) return;
+                    _osdResizing = true;
+                    _osdResizeStart = e.GetPosition(null);
+                    _osdResizeBaseScale = _osdScale;
+                    handle.CaptureMouse();
+                    e.Handled = true;
+                };
+                handle.MouseMove += (_, e) =>
+                {
+                    if (!_osdResizing) return;
+                    var p = e.GetPosition(null);
+                    ApplyOsdScale(_osdResizeBaseScale + (p.X - _osdResizeStart.X) / 200.0);
+                    e.Handled = true;
+                };
+                handle.MouseLeftButtonUp += (_, e) =>
+                {
+                    if (!_osdResizing) return;
+                    _osdResizing = false;
+                    handle.ReleaseMouseCapture();
+                    e.Handled = true;
+                    if (_osdAdjustMode) SaveOsdScale();
+                };
+                _osdHandle = handle;
+                grid.Children.Add(handle);
+                root.Child = grid;
 
                 if (!_osd.IsVisible)
                 {
@@ -339,7 +401,7 @@ namespace SonicRoute
                     Right = (int)Math.Round(_swa.Right / winScale),
                     Bottom = (int)Math.Round(_swa.Bottom / winScale)
                 };
-                double w = Math.Min(_osd.ActualWidth > 0 ? _osd.ActualWidth : 360, 400);
+                double w = _osd.ActualWidth > 0 ? _osd.ActualWidth : 280 * _osdScale;
                 double h = _osd.ActualHeight > 0 ? _osd.ActualHeight : 80;
 
                 // 实验设置 - 自由调整：9 宫格位置 + X/Y 偏移（默认右上角 TR）；"Custom" 用自定义坐标直接定位
@@ -392,6 +454,9 @@ namespace SonicRoute
                     _osd.Hide();
                     // A2：隐藏时释放内容树（Border 下 TextBlock 等），下次显示再重建，避免常驻 UI 对象
                     if (_osd.Content is Border b) b.Child = null;
+                _osdAppText = null;
+                _osdValueText = null;
+                _osdHandle = null;
                 }
             }
             catch { }
@@ -433,12 +498,53 @@ namespace SonicRoute
                 if (_osd == null) return;
                 var cfg = ConfigService.Load();
                 cfg.OsdPosition = "Custom";
-                cfg.OsdCustomX = (int)_osd.Left;
+                // 保存前限制在工作区内（防止拖出屏外后保存无效坐标）
+                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                var swa = SystemParameters.WorkArea;
+                cfg.OsdCustomX = (int)Math.Clamp(_osd.Left, swa.Left / ws, Math.Max(swa.Left / ws, swa.Right / ws - _osd.ActualWidth));
+                cfg.OsdCustomY = (int)Math.Clamp(_osd.Top, swa.Top / ws, Math.Max(swa.Top / ws, swa.Bottom / ws - _osd.ActualHeight));
                 cfg.OsdCustomY = (int)_osd.Top;
                 ConfigService.Save(cfg);
                 _osdAdjustMode = false;
                 _osdTimer.Stop();
                 ShowOsd("📍", L10n.T("Exp.OsdSaved"));
+                OsdAdjustFinished?.Invoke();
+            }
+            catch { }
+        }
+
+        /// <summary>应用 OSD 缩放倍率到窗口与内容（调整模式拖手柄时实时调用）。</summary>
+        private void ApplyOsdScale(double ns)
+        {
+            try
+            {
+                if (_osd == null) return;
+                _osdScale = Math.Clamp(ns, 0.5, 2.0);
+                _osd.Width = 280 * _osdScale;
+                if (_osd.Content is Border b)
+                {
+                    b.Padding = new Thickness(16 * _osdScale, 10 * _osdScale, 16 * _osdScale, 10 * _osdScale);
+                    b.CornerRadius = new CornerRadius(10 * _osdScale);
+                }
+                if (_osdAppText != null) { _osdAppText.FontSize = 12 * _osdScale; _osdAppText.MaxWidth = 248 * _osdScale; }
+                if (_osdValueText != null) { _osdValueText.FontSize = 18 * _osdScale; _osdValueText.MaxWidth = 248 * _osdScale; }
+                if (_osdHandle != null) { _osdHandle.Width = 18 * _osdScale; _osdHandle.Height = 18 * _osdScale; _osdHandle.CornerRadius = new CornerRadius(5 * _osdScale); }
+            }
+            catch { }
+        }
+
+        /// <summary>拖缩放手柄松手：保存缩放倍率并退出调整模式。</summary>
+        private void SaveOsdScale()
+        {
+            try
+            {
+                if (_osd == null) return;
+                var cfg = ConfigService.Load();
+                cfg.OsdScale = Math.Clamp(_osdScale, 0.5, 2.0);
+                ConfigService.Save(cfg);
+                _osdAdjustMode = false;
+                _osdTimer.Stop();
+                ShowOsd("📍", L10n.T("Exp.OsdScaleSaved"));
                 OsdAdjustFinished?.Invoke();
             }
             catch { }
