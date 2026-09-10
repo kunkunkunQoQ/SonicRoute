@@ -76,7 +76,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.12 · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.12r · 困困困",
             ["Dev.SystemDefaultOut"] = "系统默认输出",
             ["Dev.SystemDefaultIn"] = "系统默认输入",
 
@@ -239,7 +239,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "修改",
                 ["Act.SwitchOutput"] = "切换当前应用快捷设备",
                 ["Act.Mute"] = "静音当前应用",
-                ["Act.MuteInput"] = "静音全局麦克风",
+                ["Act.MuteInput"] = "静音麦克风",
                 ["Act.VolUp"] = "增大当前应用音量",
                 ["Act.VolDown"] = "减小当前应用音量",
                 ["Act.Panel"] = "打开快速面板",
@@ -269,18 +269,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ 音量设置失败",
                 ["Qp.Muted"] = "✓ 已静音",
                 ["Qp.Unmuted"] = "✓ 已取消静音",
-                ["Qp.MicMute"] = "🎤 全局麦克风静音",
-                ["Qp.GlobalMute"] = "全局输出静音",
-                ["Qp.GlobalUnmute"] = "取消全局输出静音",
-                ["Qp.GlobalMuted"] = "已全局静音",
-                ["Qp.GlobalUnmuted"] = "已取消全局静音",
+                ["Qp.MicMute"] = "🎤 麦克风静音",
+                ["Qp.GlobalMute"] = "输出静音",
+                ["Qp.GlobalUnmute"] = "取消输出静音",
+                ["Qp.GlobalMuted"] = "已静音",
+                ["Qp.GlobalUnmuted"] = "已取消静音",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 取消全局麦克风静音",
-                ["Qp.MicMuted"] = "✓ 全局麦克风已静音",
-                ["Qp.MicUnmuted"] = "✓ 全局麦克风已取消静音",
+                ["Qp.MicUnmute"] = "🎤 取消麦克风静音",
+                ["Qp.MicMuted"] = "✓ 麦克风已静音",
+                ["Qp.MicUnmuted"] = "✓ 麦克风已取消静音",
                 ["Qp.LoadFail"] = "加载失败",
                 ["Qp.Detecting"] = "当前应用：正在检测…",
 
@@ -302,7 +302,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"]                  = "音躍",
                 ["App.NameFull"]              = "音躍 SonicRoute",
-                ["App.About"]                 = "音躍 SonicRoute v1.12 · 困困困",
+                ["App.About"]                 = "音躍 SonicRoute v1.12r · 困困困",
                 ["Dev.SystemDefaultOut"]         = "系統預設輸出",
                 ["Dev.SystemDefaultIn"]         = "系統預設輸入",
 
@@ -465,7 +465,7 @@ namespace SonicRoute
                 ["Hk.Change"]                 = "修改",
                 ["Act.SwitchOutput"]          = "切換當前應用快捷裝置",
                 ["Act.Mute"]                  = "靜音當前應用",
-                ["Act.MuteInput"]             = "靜音全域麥克風",
+                ["Act.MuteInput"]             = "靜音麥克風",
                 ["Act.VolUp"]                 = "增大當前應用音量",
                 ["Act.VolDown"]               = "減小當前應用音量",
                 ["Act.Panel"]                 = "打開快速面板",
@@ -495,18 +495,18 @@ namespace SonicRoute
                 ["Qp.VolFail"]                = "✗ 音量設定失敗",
                 ["Qp.Muted"]                  = "✓ 已靜音",
                 ["Qp.Unmuted"]                = "✓ 已取消靜音",
-                ["Qp.MicMute"]                = "🎤 全域麥克風靜音",
-                ["Qp.GlobalMute"] = "全域輸出靜音",
-                ["Qp.GlobalUnmute"] = "取消全域輸出靜音",
-                ["Qp.GlobalMuted"] = "已全域靜音",
-                ["Qp.GlobalUnmuted"] = "已取消全域靜音",
+                ["Qp.MicMute"]                = "🎤 麥克風靜音",
+                ["Qp.GlobalMute"] = "輸出靜音",
+                ["Qp.GlobalUnmute"] = "取消輸出靜音",
+                ["Qp.GlobalMuted"] = "已靜音",
+                ["Qp.GlobalUnmuted"] = "已取消靜音",
 
 
 
 
-                ["Qp.MicUnmute"]              = "🎤 取消全域麥克風靜音",
-                ["Qp.MicMuted"]               = "✓ 全域麥克風已靜音",
-                ["Qp.MicUnmuted"]             = "✓ 全域麥克風已取消靜音",
+                ["Qp.MicUnmute"]              = "🎤 取消麥克風靜音",
+                ["Qp.MicMuted"]               = "✓ 麥克風已靜音",
+                ["Qp.MicUnmuted"]             = "✓ 麥克風已取消靜音",
                 ["Qp.LoadFail"]               = "加載失敗",
                 ["Qp.Detecting"]              = "當前應用：正在檢測…",
 
@@ -527,7 +527,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12 · by 困困困",
+                ["App.About"] = "SonicRoute v1.12r · by 困困困",
             ["Dev.SystemDefaultOut"] = "System Default Output",
             ["Dev.SystemDefaultIn"] = "System Default Input",
 
@@ -684,7 +684,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "Change",
                 ["Act.SwitchOutput"] = "Switch current app device",
                 ["Act.Mute"] = "Mute current app",
-                ["Act.MuteInput"] = "Mute all mics",
+                ["Act.MuteInput"] = "Mute mic",
                 ["Act.VolUp"] = "Increase current app volume",
                 ["Act.VolDown"] = "Decrease current app volume",
                 ["Act.Panel"] = "Open quick panel",
@@ -713,18 +713,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ Failed to set volume",
                 ["Qp.Muted"] = "✓ Muted",
                 ["Qp.Unmuted"] = "✓ Unmuted",
-                ["Qp.MicMute"] = "🎤 Mute All Mics",
-                ["Qp.GlobalMute"] = "Mute all apps",
-                ["Qp.GlobalUnmute"] = "Unmute all apps",
-                ["Qp.GlobalMuted"] = "All apps muted",
-                ["Qp.GlobalUnmuted"] = "All apps unmuted",
+                ["Qp.MicMute"] = "🎤 Mute Mic",
+                ["Qp.GlobalMute"] = "Mute output",
+                ["Qp.GlobalUnmute"] = "Unmute output",
+                ["Qp.GlobalMuted"] = "Output muted",
+                ["Qp.GlobalUnmuted"] = "Output unmuted",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 Unmute All Mics",
-                ["Qp.MicMuted"] = "✓ All mics muted",
-                ["Qp.MicUnmuted"] = "✓ All mics unmuted",
+                ["Qp.MicUnmute"] = "🎤 Unmute Mic",
+                ["Qp.MicMuted"] = "✓ Mic muted",
+                ["Qp.MicUnmuted"] = "✓ Mic unmuted",
                 ["Qp.LoadFail"] = "Load failed",
                 ["Qp.Detecting"] = "Current app: detecting…",
 
@@ -742,7 +742,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "音躍",
                 ["App.NameFull"] = "音躍 SonicRoute",
-                ["App.About"] = "音躍 SonicRoute v1.12 · 困困困",
+                ["App.About"] = "音躍 SonicRoute v1.12r · 困困困",
             ["Dev.SystemDefaultOut"] = "システム既定出力",
             ["Dev.SystemDefaultIn"] = "システム既定入力",
 
@@ -899,7 +899,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "変更",
                 ["Act.SwitchOutput"] = "現在のアプリのデバイスを切替",
                 ["Act.Mute"] = "現在のアプリをミュート",
-                ["Act.MuteInput"] = "全マイクをミュート",
+                ["Act.MuteInput"] = "マイクをミュート",
                 ["Act.VolUp"] = "現在のアプリの音量を上げる",
                 ["Act.VolDown"] = "現在のアプリの音量を下げる",
                 ["Act.Panel"] = "クイックパネルを開く",
@@ -928,18 +928,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ 音量設定に失敗",
                 ["Qp.Muted"] = "✓ ミュート済み",
                 ["Qp.Unmuted"] = "✓ ミュート解除済み",
-                ["Qp.MicMute"] = "🎤 全マイクをミュート",
-                ["Qp.GlobalMute"] = "全アプリをミュート",
-                ["Qp.GlobalUnmute"] = "全アプリのミュート解除",
-                ["Qp.GlobalMuted"] = "全アプリをミュート中",
-                ["Qp.GlobalUnmuted"] = "全アプリのミュート解除済み",
+                ["Qp.MicMute"] = "🎤 マイクをミュート",
+                ["Qp.GlobalMute"] = "出力をミュート",
+                ["Qp.GlobalUnmute"] = "出力のミュート解除",
+                ["Qp.GlobalMuted"] = "出力をミュート中",
+                ["Qp.GlobalUnmuted"] = "出力のミュート解除済み",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 全マイクのミュート解除",
-                ["Qp.MicMuted"] = "✓ 全マイクをミュート済み",
-                ["Qp.MicUnmuted"] = "✓ 全マイクのミュート解除済み",
+                ["Qp.MicUnmute"] = "🎤 マイクのミュート解除",
+                ["Qp.MicMuted"] = "✓ マイクをミュート済み",
+                ["Qp.MicUnmuted"] = "✓ マイクのミュート解除済み",
                 ["Qp.LoadFail"] = "読み込み失敗",
                 ["Qp.Detecting"] = "現在のアプリ：検出中…",
 
@@ -957,7 +957,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "소리 점프",
                 ["App.NameFull"] = "소리 점프 SonicRoute",
-                ["App.About"] = "소리 점프 SonicRoute v1.12 · 困困困",
+                ["App.About"] = "소리 점프 SonicRoute v1.12r · 困困困",
             ["Dev.SystemDefaultOut"] = "시스템 기본 출력",
             ["Dev.SystemDefaultIn"] = "시스템 기본 입력",
 
@@ -1114,7 +1114,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "변경",
                 ["Act.SwitchOutput"] = "현재 앱 장치 전환",
                 ["Act.Mute"] = "현재 앱 음소거",
-                ["Act.MuteInput"] = "모든 마이크 음소거",
+                ["Act.MuteInput"] = "마이크 음소거",
                 ["Act.VolUp"] = "현재 앱 볼륨 올리기",
                 ["Act.VolDown"] = "현재 앱 볼륨 내리기",
                 ["Act.Panel"] = "퀵 패널 열기",
@@ -1143,18 +1143,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ 볼륨 설정 실패",
                 ["Qp.Muted"] = "✓ 음소거됨",
                 ["Qp.Unmuted"] = "✓ 음소거 해제됨",
-                ["Qp.MicMute"] = "🎤 모든 마이크 음소거",
-                ["Qp.GlobalMute"] = "모든 앱 음소거",
-                ["Qp.GlobalUnmute"] = "모든 앱 음소거 해제",
-                ["Qp.GlobalMuted"] = "모든 앱 음소거됨",
-                ["Qp.GlobalUnmuted"] = "모든 앱 음소거 해제됨",
+                ["Qp.MicMute"] = "🎤 마이크 음소거",
+                ["Qp.GlobalMute"] = "출력 음소거",
+                ["Qp.GlobalUnmute"] = "출력 음소거 해제",
+                ["Qp.GlobalMuted"] = "출력 음소거됨",
+                ["Qp.GlobalUnmuted"] = "출력 음소거 해제됨",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 모든 마이크 음소거 해제",
-                ["Qp.MicMuted"] = "✓ 모든 마이크 음소거됨",
-                ["Qp.MicUnmuted"] = "✓ 모든 마이크 음소거 해제됨",
+                ["Qp.MicUnmute"] = "🎤 마이크 음소거 해제",
+                ["Qp.MicMuted"] = "✓ 마이크 음소거됨",
+                ["Qp.MicUnmuted"] = "✓ 마이크 음소거 해제됨",
                 ["Qp.LoadFail"] = "로드 실패",
                 ["Qp.Detecting"] = "현재 앱: 감지 중…",
 
@@ -1172,7 +1172,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12 · par 困困困",
+                ["App.About"] = "SonicRoute v1.12r · par 困困困",
             ["Dev.SystemDefaultOut"] = "Sortie système par défaut",
             ["Dev.SystemDefaultIn"] = "Entrée système par défaut",
 
@@ -1329,7 +1329,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "Modifier",
                 ["Act.SwitchOutput"] = "Basculer le périphérique de l'app actuelle",
                 ["Act.Mute"] = "Couper l'app actuelle",
-                ["Act.MuteInput"] = "Couper tous les micros",
+                ["Act.MuteInput"] = "Couper le micro",
                 ["Act.VolUp"] = "Augmenter le volume de l'app actuelle",
                 ["Act.VolDown"] = "Diminuer le volume de l'app actuelle",
                 ["Act.Panel"] = "Ouvrir le panneau rapide",
@@ -1358,18 +1358,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ Échec du réglage du volume",
                 ["Qp.Muted"] = "✓ Muet",
                 ["Qp.Unmuted"] = "✓ Son rétabli",
-                ["Qp.MicMute"] = "🎤 Couper tous les micros",
-                ["Qp.GlobalMute"] = "Couper le son de toutes les applis",
-                ["Qp.GlobalUnmute"] = "Réactiver le son de toutes les applis",
-                ["Qp.GlobalMuted"] = "Toutes les applis sont coupées",
-                ["Qp.GlobalUnmuted"] = "Son réactivé pour toutes les applis",
+                ["Qp.MicMute"] = "🎤 Couper le micro",
+                ["Qp.GlobalMute"] = "Couper la sortie",
+                ["Qp.GlobalUnmute"] = "Réactiver la sortie",
+                ["Qp.GlobalMuted"] = "Sortie coupée",
+                ["Qp.GlobalUnmuted"] = "Sortie réactivée",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 Réactiver tous les micros",
-                ["Qp.MicMuted"] = "✓ Tous les micros coupés",
-                ["Qp.MicUnmuted"] = "✓ Tous les micros réactivés",
+                ["Qp.MicUnmute"] = "🎤 Réactiver le micro",
+                ["Qp.MicMuted"] = "✓ Micro coupé",
+                ["Qp.MicUnmuted"] = "✓ Micro réactivé",
                 ["Qp.LoadFail"] = "Échec du chargement",
                 ["Qp.Detecting"] = "App actuelle : détection…",
 
@@ -1387,7 +1387,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12 · von 困困困",
+                ["App.About"] = "SonicRoute v1.12r · von 困困困",
             ["Dev.SystemDefaultOut"] = "System-Standardausgabe",
             ["Dev.SystemDefaultIn"] = "System-Standardeingabe",
 
@@ -1544,7 +1544,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "Ändern",
                 ["Act.SwitchOutput"] = "Gerät der aktuellen App wechseln",
                 ["Act.Mute"] = "Aktuelle App stummschalten",
-                ["Act.MuteInput"] = "Alle Mikros stummschalten",
+                ["Act.MuteInput"] = "Mikro stummschalten",
                 ["Act.VolUp"] = "Lautstärke der aktuellen App erhöhen",
                 ["Act.VolDown"] = "Lautstärke der aktuellen App verringern",
                 ["Act.Panel"] = "Schnellpanel öffnen",
@@ -1573,18 +1573,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ Lautstärke konnte nicht gesetzt werden",
                 ["Qp.Muted"] = "✓ Stummgeschaltet",
                 ["Qp.Unmuted"] = "✓ Ton wieder an",
-                ["Qp.MicMute"] = "🎤 Alle Mikros stummschalten",
-                ["Qp.GlobalMute"] = "Alle Apps stummschalten",
-                ["Qp.GlobalUnmute"] = "Ton aller Apps wieder aktivieren",
-                ["Qp.GlobalMuted"] = "Alle Apps stumm",
-                ["Qp.GlobalUnmuted"] = "Ton für alle Apps aktiv",
+                ["Qp.MicMute"] = "🎤 Mikro stummschalten",
+                ["Qp.GlobalMute"] = "Ausgabe stummschalten",
+                ["Qp.GlobalUnmute"] = "Ausgabe wieder aktivieren",
+                ["Qp.GlobalMuted"] = "Ausgabe stumm",
+                ["Qp.GlobalUnmuted"] = "Ausgabe aktiv",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 Stummschaltung aller Mikros aufheben",
-                ["Qp.MicMuted"] = "✓ Alle Mikros stummgeschaltet",
-                ["Qp.MicUnmuted"] = "✓ Stummschaltung aller Mikros aufgehoben",
+                ["Qp.MicUnmute"] = "🎤 Mikro-Stummschaltung aufheben",
+                ["Qp.MicMuted"] = "✓ Mikro stummgeschaltet",
+                ["Qp.MicUnmuted"] = "✓ Mikro-Stummschaltung aufgehoben",
                 ["Qp.LoadFail"] = "Laden fehlgeschlagen",
                 ["Qp.Detecting"] = "Aktuelle App: wird erkannt…",
 
@@ -1602,7 +1602,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12 · por 困困困",
+                ["App.About"] = "SonicRoute v1.12r · por 困困困",
             ["Dev.SystemDefaultOut"] = "Salida del sistema predeterminada",
             ["Dev.SystemDefaultIn"] = "Entrada del sistema predeterminada",
 
@@ -1759,7 +1759,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "Cambiar",
                 ["Act.SwitchOutput"] = "Cambiar dispositivo de la app actual",
                 ["Act.Mute"] = "Silenciar la app actual",
-                ["Act.MuteInput"] = "Silenciar todos los micrófonos",
+                ["Act.MuteInput"] = "Silenciar micrófono",
                 ["Act.VolUp"] = "Aumentar volumen de la app actual",
                 ["Act.VolDown"] = "Disminuir volumen de la app actual",
                 ["Act.Panel"] = "Abrir panel rápido",
@@ -1788,18 +1788,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ Error al ajustar el volumen",
                 ["Qp.Muted"] = "✓ Silenciado",
                 ["Qp.Unmuted"] = "✓ Sonido activado",
-                ["Qp.MicMute"] = "🎤 Silenciar todos los micrófonos",
-                ["Qp.GlobalMute"] = "Silenciar todas las apps",
-                ["Qp.GlobalUnmute"] = "Reactivar sonido de todas las apps",
-                ["Qp.GlobalMuted"] = "Todas las apps silenciadas",
-                ["Qp.GlobalUnmuted"] = "Sonido reactivado en todas las apps",
+                ["Qp.MicMute"] = "🎤 Silenciar micrófono",
+                ["Qp.GlobalMute"] = "Silenciar salida",
+                ["Qp.GlobalUnmute"] = "Reactivar salida",
+                ["Qp.GlobalMuted"] = "Salida silenciada",
+                ["Qp.GlobalUnmuted"] = "Salida reactivada",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 Activar todos los micrófonos",
-                ["Qp.MicMuted"] = "✓ Todos los micrófonos silenciados",
-                ["Qp.MicUnmuted"] = "✓ Todos los micrófonos activados",
+                ["Qp.MicUnmute"] = "🎤 Activar micrófono",
+                ["Qp.MicMuted"] = "✓ Micrófono silenciado",
+                ["Qp.MicUnmuted"] = "✓ Micrófono activado",
                 ["Qp.LoadFail"] = "Error de carga",
                 ["Qp.Detecting"] = "App actual: detectando…",
 
@@ -1817,7 +1817,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12 · от 困困困",
+                ["App.About"] = "SonicRoute v1.12r · от 困困困",
             ["Dev.SystemDefaultOut"] = "Системный вывод по умолчанию",
             ["Dev.SystemDefaultIn"] = "Системный ввод по умолчанию",
 
@@ -1974,7 +1974,7 @@ namespace SonicRoute
                 ["Hk.Change"] = "Изменить",
                 ["Act.SwitchOutput"] = "Переключить устройство текущего приложения",
                 ["Act.Mute"] = "Отключить звук текущего приложения",
-                ["Act.MuteInput"] = "Отключить все микрофоны",
+                ["Act.MuteInput"] = "Отключить микрофон",
                 ["Act.VolUp"] = "Увеличить громкость текущего приложения",
                 ["Act.VolDown"] = "Уменьшить громкость текущего приложения",
                 ["Act.Panel"] = "Открыть быструю панель",
@@ -2003,18 +2003,18 @@ namespace SonicRoute
                 ["Qp.VolFail"] = "✗ Не удалось установить громкость",
                 ["Qp.Muted"] = "✓ Звук отключён",
                 ["Qp.Unmuted"] = "✓ Звук включён",
-                ["Qp.MicMute"] = "🎤 Отключить все микрофоны",
-                ["Qp.GlobalMute"] = "Заглушить все приложения",
-                ["Qp.GlobalUnmute"] = "Включить звук всех приложений",
-                ["Qp.GlobalMuted"] = "Все приложения заглушены",
-                ["Qp.GlobalUnmuted"] = "Звук всех приложений включён",
+                ["Qp.MicMute"] = "🎤 Отключить микрофон",
+                ["Qp.GlobalMute"] = "Заглушить вывод",
+                ["Qp.GlobalUnmute"] = "Включить вывод",
+                ["Qp.GlobalMuted"] = "Вывод заглушён",
+                ["Qp.GlobalUnmuted"] = "Вывод включён",
 
 
 
 
-                ["Qp.MicUnmute"] = "🎤 Включить все микрофоны",
-                ["Qp.MicMuted"] = "✓ Все микрофоны отключены",
-                ["Qp.MicUnmuted"] = "✓ Все микрофоны включены",
+                ["Qp.MicUnmute"] = "🎤 Включить микрофон",
+                ["Qp.MicMuted"] = "✓ Микрофон отключён",
+                ["Qp.MicUnmuted"] = "✓ Микрофон включён",
                 ["Qp.LoadFail"] = "Ошибка загрузки",
                 ["Qp.Detecting"] = "Текущее приложение: определение…",
 
