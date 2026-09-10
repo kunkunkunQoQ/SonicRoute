@@ -254,7 +254,7 @@
                             Click="GlobalMuteButton_Click"/>
                     <Button x:Name="MicMuteButton"
                             Content="{Binding [Qp.MicMute], Source={x:Static local:L10n.Instance}}"
-                            Style="{StaticResource ToolButton}" MinWidth="128" Height="28"
+                            Style="{StaticResource ToolButton}" MinWidth="120" Height="28"
                             Click="MicMuteButton_Click"/>
                     <Button x:Name="FullUiButton"
                             Content="{Binding [Qp.FullUi], Source={x:Static local:L10n.Instance}}"
