@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -77,10 +77,10 @@ namespace SonicRoute.Core
         /// <summary>虚拟"系统默认"设备 ID：代表"跟随系统默认设备"（清除该应用的按应用持久化路由）。
         /// 用于保留设备筛选 / 快速切换面板 / 概览 / 全局切换的可选目标。</summary>
         public const string SystemDefaultDeviceId = "@@SYSTEM_DEFAULT@@";
-
-        /// <summary>判断设备 ID 是否为"系统默认"虚拟项。</summary>
+        public const string SystemDefaultInputDeviceId = "@@SYSTEM_DEFAULT_IN@@"; // 输入"系统默认"虚拟项（与输出分开，便于独立显示/命名）
         public static bool IsSystemDefault(string? id) =>
-            string.Equals(id, SystemDefaultDeviceId, StringComparison.OrdinalIgnoreCase);
+            string.Equals(id, SystemDefaultDeviceId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(id, SystemDefaultInputDeviceId, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>系统默认设备完整 ID（未取到返回 null）。</summary>
         public static string? GetDefaultDeviceId(EDataFlow flow)
@@ -272,13 +272,23 @@ namespace SonicRoute.Core
         // 按应用切换（EarTrumpet Per-App Audio Routing 机制）
         // ------------------------------------------------------------------
 
-        /// <summary>将进程的播放/录音设备持久化为指定设备。返回 HRESULT 与结果。</summary>
+        /// <summary>将进程的播放/录音设备持久化为指定设备；deviceId 为"系统默认"虚拟项时
+        /// 清除该应用的持久化路由（SetPersistedDefaultAudioEndpoint 传 null），跟随系统默认设备。
+        /// 返回 HRESULT 与结果。</summary>
         public static (bool Success, int HResult, string Message) ApplyEndpoint(
             int processId, EDataFlow flow, string deviceId)
         {
             try
             {
                 using var config = new AudioPolicyConfig(flow);
+                if (IsSystemDefault(deviceId))
+                {
+                    // 系统默认虚拟项：清除该应用持久化路由 → 跟随系统默认（与一键还原单应用方式一致）
+                    int hrClear = config.SetDefaultEndPoint(null, processId);
+                    if (hrClear >= 0)
+                        return (true, hrClear, "成功");
+                    return (false, hrClear, $"HRESULT: 0x{hrClear:X8} ({hrClear})");
+                }
                 // 设备 ID 可能是短 ID（IMMDevice.GetId()），统一包装为完整接口路径再调用
                 string fullDeviceId = AudioPolicyConfig.EnsureFullDeviceId(deviceId, flow);
                 int hr = config.SetDefaultEndPoint(fullDeviceId, processId);

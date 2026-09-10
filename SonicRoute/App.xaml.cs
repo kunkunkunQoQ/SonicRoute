@@ -459,9 +459,10 @@ namespace SonicRoute
         {
             var devs = AudioService.GetDevices(flow);
             var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
-            return devs.Where(d => !hidden.Contains(d.Id)).ToList();
+            var list = devs.Where(d => !hidden.Contains(d.Id)).ToList();
+            // 列表头部加入"系统默认输出/输入"虚拟项（与快捷面板/概览一致），选中即切回跟随系统默认
+            return PanelDevices.WithSystemDefault(list, flow, config);
         }
-
         /// <summary>设备名（自定义名优先）。</summary>
         private static string DeviceDisplayName(AppConfig config, AudioDeviceInfo dev)
         {
@@ -482,7 +483,9 @@ namespace SonicRoute
 
                 var persisted = AudioService.GetPersistedEndpoint(pid, flow);
                 string? curShort = persisted == null ? null : AudioPolicyConfig.UnpackDeviceId(persisted);
-                int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
+            // 跟随系统默认（无持久化）→ 位于"系统默认"虚拟项（首位），按下切到第一个真实设备
+            int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
+                if (idx < 0 && persisted == null && AudioService.IsSystemDefault(visible[0].Id)) idx = 0;  // 仅当"系统默认"虚拟项在列表首位时（未被隐藏），从它开始循环
                 int next = idx < 0 ? 0 : (idx + 1) % visible.Count;
                 var target = visible[next];
                 var r = AudioService.ApplyEndpoint(pid, flow, target.Id);

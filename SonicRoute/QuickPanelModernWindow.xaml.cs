@@ -115,12 +115,12 @@ namespace SonicRoute
                 _micUiOn = cfg.ExperimentalMic && cfg.MicInPanel;
 
                 var outputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eRender));
-                _outputDisplay = DisplayDevices(outputs);
+                _outputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(outputs), EDataFlow.eRender, cfg);
 
                 if (cfg.ExperimentalMic)
                 {
                     var inputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eCapture));
-                    _inputDisplay = DisplayDevices(inputs);
+                    _inputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(inputs), EDataFlow.eCapture, cfg);
                 }
 
                 // 顶部系统音频设备
@@ -606,7 +606,7 @@ namespace SonicRoute
             foreach (var dev in _outputDisplay)
             {
                 if (cfg.HiddenOutputDevices.Contains(dev.Id)) continue;
-                var btn = NewDevButton(dev, dev.Id == outId);
+                    var btn = NewDevButton(dev, dev.Id == (outId ?? AudioService.SystemDefaultDeviceId));
                 btn.Click += (_, _) => OnRowDeviceClickAsync(row, dev, EDataFlow.eRender);
                 outWrap.Children.Add(btn);
             }
@@ -630,7 +630,7 @@ namespace SonicRoute
                 foreach (var dev in _inputDisplay)
                 {
                     if (cfg.HiddenInputDevices.Contains(dev.Id)) continue;
-                    var btn = NewDevButton(dev, dev.Id == inId);
+                    var btn = NewDevButton(dev, dev.Id == (inId ?? AudioService.SystemDefaultInputDeviceId));
                     btn.Click += (_, _) => OnRowDeviceClickAsync(row, dev, EDataFlow.eCapture);
                     inWrap.Children.Add(btn);
                 }

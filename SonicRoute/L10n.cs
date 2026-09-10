@@ -77,6 +77,8 @@ namespace SonicRoute
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
                 ["App.About"] = "音跃 SonicRoute v1.12 · 困困困",
+            ["Dev.SystemDefaultOut"] = "系统默认输出",
+            ["Dev.SystemDefaultIn"] = "系统默认输入",
 
                 // 导航
                 ["Nav.Overview"] = "概览",
@@ -301,6 +303,8 @@ namespace SonicRoute
                 ["App.Name"]                  = "音躍",
                 ["App.NameFull"]              = "音躍 SonicRoute",
                 ["App.About"]                 = "音躍 SonicRoute v1.12 · 困困困",
+                ["Dev.SystemDefaultOut"]         = "系統預設輸出",
+                ["Dev.SystemDefaultIn"]         = "系統預設輸入",
 
                 // 导航
                 ["Nav.Overview"]              = "概覽",
@@ -524,6 +528,8 @@ namespace SonicRoute
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
                 ["App.About"] = "SonicRoute v1.12 · by 困困困",
+            ["Dev.SystemDefaultOut"] = "System Default Output",
+            ["Dev.SystemDefaultIn"] = "System Default Input",
 
                 ["Nav.Overview"] = "Overview",
                 ["Nav.Apps"] = "Apps",
@@ -737,6 +743,8 @@ namespace SonicRoute
                 ["App.Name"] = "音躍",
                 ["App.NameFull"] = "音躍 SonicRoute",
                 ["App.About"] = "音躍 SonicRoute v1.12 · 困困困",
+            ["Dev.SystemDefaultOut"] = "システム既定出力",
+            ["Dev.SystemDefaultIn"] = "システム既定入力",
 
                 ["Nav.Overview"] = "概要",
                 ["Nav.Apps"] = "アプリ",
@@ -950,6 +958,8 @@ namespace SonicRoute
                 ["App.Name"] = "소리 점프",
                 ["App.NameFull"] = "소리 점프 SonicRoute",
                 ["App.About"] = "소리 점프 SonicRoute v1.12 · 困困困",
+            ["Dev.SystemDefaultOut"] = "시스템 기본 출력",
+            ["Dev.SystemDefaultIn"] = "시스템 기본 입력",
 
                 ["Nav.Overview"] = "개요",
                 ["Nav.Apps"] = "앱",
@@ -1163,6 +1173,8 @@ namespace SonicRoute
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
                 ["App.About"] = "SonicRoute v1.12 · par 困困困",
+            ["Dev.SystemDefaultOut"] = "Sortie système par défaut",
+            ["Dev.SystemDefaultIn"] = "Entrée système par défaut",
 
                 ["Nav.Overview"] = "Aperçu",
                 ["Nav.Apps"] = "Applications",
@@ -1376,6 +1388,8 @@ namespace SonicRoute
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
                 ["App.About"] = "SonicRoute v1.12 · von 困困困",
+            ["Dev.SystemDefaultOut"] = "System-Standardausgabe",
+            ["Dev.SystemDefaultIn"] = "System-Standardeingabe",
 
                 ["Nav.Overview"] = "Übersicht",
                 ["Nav.Apps"] = "Apps",
@@ -1589,6 +1603,8 @@ namespace SonicRoute
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
                 ["App.About"] = "SonicRoute v1.12 · por 困困困",
+            ["Dev.SystemDefaultOut"] = "Salida del sistema predeterminada",
+            ["Dev.SystemDefaultIn"] = "Entrada del sistema predeterminada",
 
                 ["Nav.Overview"] = "Resumen",
                 ["Nav.Apps"] = "Aplicaciones",
@@ -1802,6 +1818,8 @@ namespace SonicRoute
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
                 ["App.About"] = "SonicRoute v1.12 · от 困困困",
+            ["Dev.SystemDefaultOut"] = "Системный вывод по умолчанию",
+            ["Dev.SystemDefaultIn"] = "Системный ввод по умолчанию",
 
                 ["Nav.Overview"] = "Обзор",
                 ["Nav.Apps"] = "Приложения",

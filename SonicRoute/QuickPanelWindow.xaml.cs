@@ -85,14 +85,14 @@ namespace SonicRoute
             try
             {
                 var outputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eRender));
+                var cfg = ConfigService.Load();
 
                 _outputs = outputs;
-                _outputDisplay = DisplayDevices(outputs);
+                _outputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(outputs), EDataFlow.eRender, cfg);
 
                 RenderDeviceButtons(OutputButtonsPanel, _outputDisplay);
 
                 // 输入设备（麦克风）：仅实验模式 + 麦克风选项 + 快捷面板显示时展示
-                var cfg = ConfigService.Load();
                 bool micOn = cfg.ExperimentalMic;
                 bool showInput = micOn && cfg.MicInPanel;
                 InputSection.Visibility = showInput ? Visibility.Visible : Visibility.Collapsed;
@@ -100,7 +100,7 @@ namespace SonicRoute
                 {
                     var inputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eCapture));
                     _inputs = inputs;
-                    _inputDisplay = DisplayDevices(inputs);
+                    _inputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(inputs), EDataFlow.eCapture, cfg);
                     RenderInputDeviceButtons();
                 }
 
@@ -250,8 +250,8 @@ namespace SonicRoute
         {
             if (currentShortId == null)
             {
-                var def = devices.FirstOrDefault(d => d.IsDefault);
-                return def != null ? L10n.T("Ov.Default") + def.DisplayName : L10n.T("Ov.Unset");
+                var sysDef = devices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id));
+                return sysDef != null ? sysDef.DisplayName! : L10n.T("Ov.Unset");
             }
             var dev = devices.FirstOrDefault(d => string.Equals(d.Id, currentShortId, StringComparison.OrdinalIgnoreCase));
             return dev != null ? dev.DisplayName! : L10n.T("Ov.CurrentUnavailable");
@@ -285,8 +285,8 @@ namespace SonicRoute
             foreach (var item in panel.Items)
             {
                 if (item is not Button btn || btn.Tag is not AudioDeviceInfo dev) continue;
-                bool active = activeShortId != null &&
-                              string.Equals(dev.Id, activeShortId, StringComparison.OrdinalIgnoreCase);
+                bool active = (activeShortId == null && AudioService.IsSystemDefault(dev.Id))
+                              || (activeShortId != null && string.Equals(dev.Id, activeShortId, StringComparison.OrdinalIgnoreCase));
                 btn.SetResourceReference(StyleProperty, active ? "DevButtonActive" : "DevButton");
             }
         }
@@ -339,8 +339,8 @@ namespace SonicRoute
             foreach (var item in InputButtonsPanel.Items)
             {
                 if (item is not Button btn || btn.Tag is not AudioDeviceInfo dev) continue;
-                bool active = _currentInId != null &&
-                              string.Equals(dev.Id, _currentInId, StringComparison.OrdinalIgnoreCase);
+                bool active = (_currentInId == null && AudioService.IsSystemDefault(dev.Id))
+                              || (_currentInId != null && string.Equals(dev.Id, _currentInId, StringComparison.OrdinalIgnoreCase));
                 btn.SetResourceReference(StyleProperty, active ? "DevButtonActive" : "DevButton");
             }
         }
