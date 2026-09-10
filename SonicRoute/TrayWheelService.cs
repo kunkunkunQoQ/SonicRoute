@@ -85,25 +85,13 @@ namespace SonicRoute
 
         private const uint MONITOR_DEFAULTTONEAREST = 2;
 
-        /// <summary>光标所在显示器的工作区（多屏时 OSD 显示在操作发生的屏，避免跨屏闪现）。</summary>
-        private static RECT GetCursorWorkArea()
-        {
-            try
-            {
-                GetCursorPos(out var pt);
-                IntPtr hMon = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
-                if (hMon != IntPtr.Zero)
-                {
-                    var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
-                    if (GetMonitorInfo(hMon, ref info))
-                        return info.rcWork;
-                }
-            }
-            catch { }
-            var wa = SystemParameters.WorkArea;
-            return new RECT { Left = (int)wa.Left, Top = (int)wa.Top, Right = (int)wa.Right, Bottom = (int)wa.Bottom };
-        }
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+        private const int SM_CXSCREEN = 0;
+        private const int SM_CYSCREEN = 1;
 
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
 
         private readonly LowLevelMouseProc _proc;
         private IntPtr _hook;
@@ -338,7 +326,19 @@ namespace SonicRoute
             try
             {
                 if (_osd == null) return;
-                var wa = GetCursorWorkArea();
+                // 用窗口自身实际 DPI 缩放（VisualTreeHelper 对窗口返回真实值，比 GetDpiForSystem/GetDpiForWindow 可靠）
+                double winScale = 1.0;
+                try { winScale = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                if (winScale <= 0) winScale = 1.0;
+                // 直接换算：SystemParameters.WorkArea 当前环境为物理像素，按窗口 DPI 缩放换算为逻辑单位
+                var _swa = SystemParameters.WorkArea;
+                var wa = new RECT
+                {
+                    Left = (int)Math.Round(_swa.Left / winScale),
+                    Top = (int)Math.Round(_swa.Top / winScale),
+                    Right = (int)Math.Round(_swa.Right / winScale),
+                    Bottom = (int)Math.Round(_swa.Bottom / winScale)
+                };
                 double w = Math.Min(_osd.ActualWidth > 0 ? _osd.ActualWidth : 360, 400);
                 double h = _osd.ActualHeight > 0 ? _osd.ActualHeight : 80;
 

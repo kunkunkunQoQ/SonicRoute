@@ -106,6 +106,7 @@ namespace SonicRoute
             _trayWheel.Start();
 
 
+
             // single-instance activate sink (invisible): opens full UI on message
             _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("SonicRoute_ActivateSink")
             {
