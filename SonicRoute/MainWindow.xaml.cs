@@ -427,9 +427,7 @@ namespace SonicRoute
             bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
             OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
 
-            _outputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
-            OverviewOutputCombo.ItemsSource = null;
-            OverviewOutputCombo.ItemsSource = _outputDisplay;
+            var outs = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
             _inputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(VisibleInputs), EDataFlow.eCapture, _config);
             OverviewInputCombo.ItemsSource = null;
             OverviewInputCombo.ItemsSource = _inputDisplay;
@@ -437,7 +435,7 @@ namespace SonicRoute
             if (_overviewApp == null)
             {
                 OverviewOutputCurrentText.Text = "";
-            RenderQuickButtons(OverviewOutputQuickPanel, _outputDisplay);
+            RenderQuickButtons(OverviewOutputQuickPanel, outs);
                 OverviewInputCurrentText.Text = "";
                 OverviewInputCurrentText.Tag = null;
                 RenderInputQuickButtons();
@@ -451,7 +449,7 @@ namespace SonicRoute
             string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
 
             OverviewOutputCurrentText.Text = DescribeCurrent(_outputDisplay, outShort, true);
-            RenderQuickButtons(OverviewOutputQuickPanel, _outputDisplay);
+            RenderQuickButtons(OverviewOutputQuickPanel, outs);
 
             // 选中项必须从下拉实际绑定的显示列表（含自定义名称）中查找，
             // 否则改过名称的设备会多出一个"默认名"的幽灵项
