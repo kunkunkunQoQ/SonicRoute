@@ -2,7 +2,7 @@
 
 > Windows 10/11 **音频控制中心**：不止切换单个应用——**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。基于 EarTrumpet 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.12** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.12r** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
 > 🙏 **特别感谢 [EarTrumpet](https://github.com/File-New-Project/EarTrumpet)**：本项目的按应用音频路由（Per-App Audio Routing）底层实现参考其开源代码移植而来。
 
@@ -92,8 +92,8 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
-| 🟢 绿色免安装 | `SonicRoute-v1.12.exe` / `.zip` | ~237MB / ~89MB | 内置运行时 |
-| ⚡ 轻量版 | `SonicRoute-v1.12-Lite.exe` / `.zip` | ~25.9MB / ~6.8MB | 需 .NET 8 |
+| 🟢 绿色免安装 | `SonicRoute-v1.12r.exe` / `.zip` | ~237MB / ~89MB | 内置运行时 |
+| ⚡ 轻量版 | `SonicRoute-v1.12r-Lite.exe` / `.zip` | ~25.9MB / ~6.8MB | 需 .NET 8 |
 | 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动安装更新 |
 
 轻量版需 .NET 8 Desktop Runtime：[下载](https://dotnet.microsoft.com/zh-cn/download/dotnet/8.0)
@@ -111,6 +111,14 @@ dotnet publish SonicRoute\SonicRoute.csproj -c Release -r win-x64 --self-contain
 - 开机自启：新增清理自启项按钮、商店版独立自启存储、启动自检修复
 - UI 收纳：清理自启项与麦克风子选项收进「显示更多选项」折叠区
 
+**v1.12r**（修复版）
+- OSD 全面重构：连续操作零闪烁零跳动、视觉树长期复用、内存不随操作增长、防定位任务堆积
+- 修复 OSD 不显示与一键还原位置错误（坐标单位混用根因）；清理九宫格死代码
+- OSD 支持自由调整大小（宽度/字号滑条）+ 拖拽定位 + 多屏 DPI 正确
+- 修复长设备名 OSD 闪烁 / 双屏闪现（固定宽度 + 定位 Clamp + 光标所在屏）
+- 托盘图标深浅色自动跟随任务栏主题
+- 新增音量步进设置（1-20%，托盘滚轮/面板滚轮/音量快捷键共用）
+- 简洁面板底部按钮布局微调；概览「全局麦克风静音」文案简化
 <a id="faq"></a>
 ## ❓ FAQ
 
