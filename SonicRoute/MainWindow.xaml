@@ -930,12 +930,13 @@
                                                Foreground="{DynamicResource Theme.Accent}">
                                         <Run Text="爱发电"/>
                                     </Hyperlink>
-                                    <Run Text=" ‖ "/>
+                                </TextBlock>
+                                <TextBlock Margin="0,10,0,0" FontSize="13"
+                                           Foreground="{DynamicResource Theme.TextSecondary}">
                                     <Hyperlink x:Name="GithubLink" Click="GithubLink_Click"
                                                Foreground="{DynamicResource Theme.Accent}">
                                         <Run Text="GitHub"/>
                                     </Hyperlink>
-                                    <Run Text=" ‖"/>
                                 </TextBlock>
                             </StackPanel>
                         </Border>
