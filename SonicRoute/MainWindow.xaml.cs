@@ -51,6 +51,9 @@ namespace SonicRoute
         public MainWindow()
         {
             InitializeComponent();
+            Title = $"音跃 SonicRoute {App.DisplayVersion}";
+            if (HeaderTitleText != null)
+                HeaderTitleText.Text = $"🎧 音跃 SonicRoute {App.DisplayVersion}";
             _config = ConfigService.Load();
             Loaded += async (_, _) =>
             {
