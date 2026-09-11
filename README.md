@@ -8,7 +8,7 @@
 
 ## 🚀 快速开始
 
-[Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载（绿色版解压即用 / 轻量版 / [微软商店](https://apps.microsoft.com/detail/9NQZGRTPM1NT)）→ 驻留托盘：**单击**快捷面板、**双击**完整界面、**任务栏滚轮**调当前应用音量。
+🛍 **推荐**：从 [微软商店](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 安装（自动更新）；或 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载绿色版解压即用 / 轻量版（需 .NET 8）→ 驻留托盘：**单击**快捷面板、**双击**完整界面、**任务栏滚轮**调当前应用音量。
 
 ## ✨ 核心功能
 
@@ -25,9 +25,9 @@
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
+| 🛍 微软商店（推荐） | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
 | 🟢 绿色免安装 | `SonicRoute-v1.12r.exe` / `.zip` | ~237MB / ~89MB | 内置运行时 |
 | ⚡ 轻量版 | `SonicRoute-v1.12r-Lite.exe` / `.zip` | ~25.9MB / ~6.8MB | 需 .NET 8 |
-| 🛍 微软商店 | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -42,4 +42,6 @@
 
 ---
 
-**作者主页 ‖ [哔哩哔哩](https://b23.tv/TDqSAKM) ‖ [爱发电](https://www.ifdian.net/a/koukou021) ‖ [GitHub](https://github.com/kunkunkunQoQ/SonicRoute)**
+**作者主页 ‖ [哔哩哔哩](https://b23.tv/TDqSAKM) ‖ 🤝 [赞助（爱发电）](https://www.ifdian.net/a/koukou021) ‖ [GitHub](https://github.com/kunkunkunQoQ/SonicRoute)**
+
+> 💖 如果音跃对你有所帮助，欢迎到 [爱发电](https://www.ifdian.net/a/koukou021) 赞助支持作者（困困困）。
