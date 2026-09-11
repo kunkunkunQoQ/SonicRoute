@@ -4,6 +4,10 @@
 
 作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.12r** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
+## 💖 赞助
+
+喜欢这个项目？欢迎到 [爱发电](https://www.ifdian.net/a/koukou021) 赞助支持作者（困困困）～ 仓库页右侧的 **Sponsor** 按钮也是直达爱发电。
+
 ---
 
 ## 🚀 快速开始
@@ -42,6 +46,4 @@
 
 ---
 
-**作者主页 ‖ [哔哩哔哩](https://b23.tv/TDqSAKM) ‖ 🤝 [赞助（爱发电）](https://www.ifdian.net/a/koukou021) ‖ [GitHub](https://github.com/kunkunkunQoQ/SonicRoute)**
-
-> 💖 如果音跃对你有所帮助，欢迎到 [爱发电](https://www.ifdian.net/a/koukou021) 赞助支持作者（困困困）。
+**作者主页 ‖ [哔哩哔哩](https://b23.tv/TDqSAKM) ‖ [爱发电](https://www.ifdian.net/a/koukou021) ‖ [GitHub](https://github.com/kunkunkunQoQ/SonicRoute)**
