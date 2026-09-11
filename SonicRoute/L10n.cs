@@ -76,7 +76,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"] = "音跃",
                 ["App.NameFull"] = "音跃 SonicRoute",
-                ["App.About"] = "音跃 SonicRoute v1.12r · 困困困",
+                ["App.About"] = "音跃 SonicRoute v1.13 · 困困困",
             ["Dev.SystemDefaultOut"] = "系统默认输出",
             ["Dev.SystemDefaultIn"] = "系统默认输入",
 
@@ -319,7 +319,7 @@ namespace SonicRoute
                 // 应用名
                 ["App.Name"]                  = "音躍",
                 ["App.NameFull"]              = "音躍 SonicRoute",
-                ["App.About"]                 = "音躍 SonicRoute v1.12r · 困困困",
+                ["App.About"]                 = "音躍 SonicRoute v1.13 · 困困困",
                 ["Dev.SystemDefaultOut"]         = "系統預設輸出",
                 ["Dev.SystemDefaultIn"]         = "系統預設輸入",
 
@@ -560,7 +560,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12r · by 困困困",
+                ["App.About"] = "SonicRoute v1.13 · by 困困困",
             ["Dev.SystemDefaultOut"] = "System Default Output",
             ["Dev.SystemDefaultIn"] = "System Default Input",
 
@@ -791,7 +791,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "音躍",
                 ["App.NameFull"] = "音躍 SonicRoute",
-                ["App.About"] = "音躍 SonicRoute v1.12r · 困困困",
+                ["App.About"] = "音躍 SonicRoute v1.13 · 困困困",
             ["Dev.SystemDefaultOut"] = "システム既定出力",
             ["Dev.SystemDefaultIn"] = "システム既定入力",
 
@@ -1022,7 +1022,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "소리 점프",
                 ["App.NameFull"] = "소리 점프 SonicRoute",
-                ["App.About"] = "소리 점프 SonicRoute v1.12r · 困困困",
+                ["App.About"] = "소리 점프 SonicRoute v1.13 · 困困困",
             ["Dev.SystemDefaultOut"] = "시스템 기본 출력",
             ["Dev.SystemDefaultIn"] = "시스템 기본 입력",
 
@@ -1253,7 +1253,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12r · par 困困困",
+                ["App.About"] = "SonicRoute v1.13 · par 困困困",
             ["Dev.SystemDefaultOut"] = "Sortie système par défaut",
             ["Dev.SystemDefaultIn"] = "Entrée système par défaut",
 
@@ -1484,7 +1484,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12r · von 困困困",
+                ["App.About"] = "SonicRoute v1.13 · von 困困困",
             ["Dev.SystemDefaultOut"] = "System-Standardausgabe",
             ["Dev.SystemDefaultIn"] = "System-Standardeingabe",
 
@@ -1715,7 +1715,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12r · por 困困困",
+                ["App.About"] = "SonicRoute v1.13 · por 困困困",
             ["Dev.SystemDefaultOut"] = "Salida del sistema predeterminada",
             ["Dev.SystemDefaultIn"] = "Entrada del sistema predeterminada",
 
@@ -1946,7 +1946,7 @@ namespace SonicRoute
             {
                 ["App.Name"] = "SonicRoute",
                 ["App.NameFull"] = "SonicRoute",
-                ["App.About"] = "SonicRoute v1.12r · от 困困困",
+                ["App.About"] = "SonicRoute v1.13 · от 困困困",
             ["Dev.SystemDefaultOut"] = "Системный вывод по умолчанию",
             ["Dev.SystemDefaultIn"] = "Системный ввод по умолчанию",
 

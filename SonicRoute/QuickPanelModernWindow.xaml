@@ -202,7 +202,7 @@
             <DockPanel>
                 <TextBlock Text="🎧 音跃 SonicRoute"
                            FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Theme.TextPrimary}"/>
-                <TextBlock x:Name="VersionText" Text="v1.12r" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
+                <TextBlock x:Name="VersionText" Text="v1.13" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
                            VerticalAlignment="Center" HorizontalAlignment="Right"/>
             </DockPanel>
 

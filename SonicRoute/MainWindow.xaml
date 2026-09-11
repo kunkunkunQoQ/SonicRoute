@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SonicRoute"
-        Title="音跃 SonicRoute v1.12r"
+        Title="音跃 SonicRoute v1.13"
         Icon="SonicRoute.ico"
         Width="920" Height="620"
         MinWidth="780" MinHeight="540"
@@ -259,7 +259,7 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="🎧 音跃 SonicRoute v1.12r"
+                <TextBlock Text="🎧 音跃 SonicRoute v1.13"
                            FontSize="13.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource Theme.TextPrimary}"
                            VerticalAlignment="Center" Margin="16,0,0,0"
