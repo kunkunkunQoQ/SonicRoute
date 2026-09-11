@@ -429,7 +429,8 @@ namespace SonicRoute
             OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
 
             var outs = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
-            _inputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(VisibleInputs), EDataFlow.eCapture, _config);
+            // 输入下拉框显示全部设备（与输出下拉一致，不受「保留的设备」筛选影响）
+            _inputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(_inputs), EDataFlow.eCapture, _config);
             OverviewInputCombo.ItemsSource = null;
             OverviewInputCombo.ItemsSource = _inputDisplay;
 
@@ -557,7 +558,9 @@ namespace SonicRoute
         private void RenderInputQuickButtons()
         {
             OverviewInputQuickPanel.Items.Clear();
-            foreach (var dev in _inputDisplay)
+            // 快捷按钮按「保留的设备」显示（与输出侧一致）；下拉框才显示全部设备
+            var visible = PanelDevices.WithSystemDefault(DisplayDevices(VisibleInputs), EDataFlow.eCapture, _config);
+            foreach (var dev in visible)
             {
                 var btn = new Button
                 {
@@ -1791,6 +1794,21 @@ namespace SonicRoute
             OsdFontSlider.Value = _config.OsdFontScale;
             OsdWidthValue.Text = _config.OsdWidth + "px";
             OsdFontValue.Text = (int)Math.Round(_config.OsdFontScale * 100) + "%";
+            if (MicMutePersistCheck != null) MicMutePersistCheck.IsChecked = _config.MicMuteOsdPersistent;
+            if (MicMuteTrackInputCheck != null) MicMuteTrackInputCheck.IsChecked = _config.MicMuteOsdTrackInputMuted;
+            if (MicMuteMoreToggle != null) ApplyMicMutePersistUi(_config.MicMuteOsdPersistent);
+        }
+
+        /// <summary>主题页 - 常驻「更多选项」联动（防呆）：主开关关闭时隐藏更多选项并折叠子选项，交互与麦克风选项一致。</summary>
+        private void ApplyMicMutePersistUi(bool on)
+        {
+            if (MicMuteMoreToggle != null)
+                MicMuteMoreToggle.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (!on)
+            {
+                if (MicMuteMoreToggle != null) MicMuteMoreToggle.IsChecked = false;
+                if (MicMuteMorePanel != null) MicMuteMorePanel.Visibility = Visibility.Collapsed;
+            }
         }
 
         /// <summary>折叠/展开设置页"保留的设备"卡片（实验设置-折叠开启时可见）。</summary>
@@ -1804,6 +1822,41 @@ namespace SonicRoute
         private void DeviceNamesMoreToggle_Click(object sender, RoutedEventArgs e)
         {
             DeviceNamesBody.Visibility = DeviceNamesMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>主题页 - 常驻子选项「同时监听默认输入静音」：保存配置并让 OSD 重新评估常驻状态
+        /// （开启且当前默认输入静音 → 立即常驻显示；关闭且常驻横幅仅由输入静音维持 → 退出常驻）。</summary>
+        private void MicMuteTrackInput_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || MicMuteTrackInputCheck == null) return;
+            bool on = MicMuteTrackInputCheck.IsChecked == true;
+            if (_config.MicMuteOsdTrackInputMuted != on)
+            {
+                _config.MicMuteOsdTrackInputMuted = on;
+                ConfigService.Save(_config);
+            }
+            ((App)Application.Current).NotifyMicMuteOsdSettingChanged(_config.MicMuteOsdPersistent);
+        }
+
+        /// <summary>主题页 - 常驻子选项「更多选项」折叠展开。</summary>
+        private void MicMuteMoreToggle_Click(object sender, RoutedEventArgs e)
+        {
+            MicMuteMorePanel.Visibility = MicMuteMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>主题页 - 「麦克风静音时 OSD 常驻」开关：保存配置并立即生效
+        /// （开启且当前已静音 → 立即常驻显示；关闭且正在常驻 → 退出常驻按普通生命周期隐藏）。</summary>
+        private void MicMutePersist_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || MicMutePersistCheck == null) return;
+            bool on = MicMutePersistCheck.IsChecked == true;
+            if (_config.MicMuteOsdPersistent != on)
+            {
+                _config.MicMuteOsdPersistent = on;
+                ConfigService.Save(_config);
+            }
+            ApplyMicMutePersistUi(on);
+            ((App)Application.Current).NotifyMicMuteOsdSettingChanged(on);
         }
 
         /// <summary>右上角 OSD 通知（兼容主题/强调色/透明度）。</summary>

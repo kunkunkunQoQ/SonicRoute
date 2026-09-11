@@ -716,8 +716,8 @@ namespace SonicRoute
         {
             bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
             ApplyMicMuteVisual(muted);
-            ShowOsd(L10n.T(muted ? "Qp.MicMuted" : "Qp.MicUnmuted"));
-            return true;
+            ((App)Application.Current).ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted); // 统一入口：标题固定「麦克风静音」，静音且常驻开关开 → 常驻
+            return muted; // 返回真实静音状态（快捷键共用：切换后立即更新 OSD）
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)

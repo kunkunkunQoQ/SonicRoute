@@ -104,8 +104,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ 已取消静音",
                 ["Ov.MuteMic"] = "🎤 麦克风静音",
                 ["Ov.MicUnmute"] = "🎤 取消麦克风静音",
-                ["Ov.MicMuted"] = "✓ 麦克风已静音",
-                ["Ov.MicUnmuted"] = "✓ 麦克风已取消静音",
+                ["Ov.MicMuted"] = "🔇 已静音",
+                ["Ov.MicUnmuted"] = "🎙 已开启",
+                ["Theme.MicMuteOsdPersist"] = "麦克风静音时 OSD 常驻",
+                ["Theme.MicMuteTrackInput"] = "同时监听默认输入静音",
                 ["Ov.Default"] = "（默认）",
                 ["Ov.Unset"] = "未设置",
                 ["Ov.Current"] = "当前：",
@@ -285,8 +287,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 取消麦克风静音",
-                ["Qp.MicMuted"] = "✓ 麦克风已静音",
-                ["Qp.MicUnmuted"] = "✓ 麦克风已取消静音",
+                ["Qp.MicMuted"] = "🔇 已静音",
+                ["Qp.MicUnmuted"] = "🎙 已开启",
                 ["Qp.LoadFail"] = "加载失败",
                 ["Qp.Detecting"] = "当前应用：正在检测…",
 
@@ -336,8 +338,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"]                = "✓ 已取消靜音",
                 ["Ov.MuteMic"]                = "🎤 麥克風靜音",
                 ["Ov.MicUnmute"]              = "🎤 取消麥克風靜音",
-                ["Ov.MicMuted"]               = "✓ 麥克風已靜音",
-                ["Ov.MicUnmuted"]             = "✓ 麥克風已取消靜音",
+                ["Ov.MicMuted"]               = "🔇 已靜音",
+                ["Ov.MicUnmuted"]             = "🎙 已開啟",
+                ["Theme.MicMuteOsdPersist"] = "麥克風靜音時 OSD 常駐",
+                ["Theme.MicMuteTrackInput"] = "同時監聽預設輸入靜音",
                 ["Ov.Default"]                = "（預設）",
                 ["Ov.Unset"]                  = "未設定",
                 ["Ov.Current"]                = "當前：",
@@ -516,8 +520,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"]              = "🎤 取消麥克風靜音",
-                ["Qp.MicMuted"]               = "✓ 麥克風已靜音",
-                ["Qp.MicUnmuted"]             = "✓ 麥克風已取消靜音",
+                ["Qp.MicMuted"]               = "🔇 已靜音",
+                ["Qp.MicUnmuted"]             = "🎙 已開啟",
                 ["Qp.LoadFail"]               = "加載失敗",
                 ["Qp.Detecting"]              = "當前應用：正在檢測…",
 
@@ -564,8 +568,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ Unmuted",
                 ["Ov.MuteMic"] = "🎤 Mute Mic",
                 ["Ov.MicUnmute"] = "🎤 Unmute Mic",
-                ["Ov.MicMuted"] = "✓ Mic muted",
-                ["Ov.MicUnmuted"] = "✓ Mic unmuted",
+                ["Ov.MicMuted"] = "🔇 Muted",
+                ["Ov.MicUnmuted"] = "🎙 Unmuted",
+                ["Theme.MicMuteOsdPersist"] = "Keep OSD visible while mic muted",
+                ["Theme.MicMuteTrackInput"] = "Also track default input mute",
                 ["Ov.Default"] = "(Default)",
                 ["Ov.Unset"] = "Not set",
                 ["Ov.Current"] = "Current: ",
@@ -739,8 +745,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 Unmute Mic",
-                ["Qp.MicMuted"] = "✓ Mic muted",
-                ["Qp.MicUnmuted"] = "✓ Mic unmuted",
+                ["Qp.MicMuted"] = "🔇 Muted",
+                ["Qp.MicUnmuted"] = "🎙 Unmuted",
                 ["Qp.LoadFail"] = "Load failed",
                 ["Qp.Detecting"] = "Current app: detecting…",
 
@@ -784,8 +790,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ ミュート解除済み",
                 ["Ov.MuteMic"] = "🎤 マイクをミュート",
                 ["Ov.MicUnmute"] = "🎤 マイクのミュート解除",
-                ["Ov.MicMuted"] = "✓ マイクをミュート済み",
-                ["Ov.MicUnmuted"] = "✓ マイクのミュート解除済み",
+                ["Ov.MicMuted"] = "🔇 ミュート中",
+                ["Ov.MicUnmuted"] = "🎙 ミュート解除",
+                ["Theme.MicMuteOsdPersist"] = "マイクミュート中はOSDを常駐",
+                ["Theme.MicMuteTrackInput"] = "既定入力のミュートも監視",
                 ["Ov.Default"] = "（デフォルト）",
                 ["Ov.Unset"] = "未設定",
                 ["Ov.Current"] = "現在：",
@@ -959,8 +967,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 マイクのミュート解除",
-                ["Qp.MicMuted"] = "✓ マイクをミュート済み",
-                ["Qp.MicUnmuted"] = "✓ マイクのミュート解除済み",
+                ["Qp.MicMuted"] = "🔇 ミュート中",
+                ["Qp.MicUnmuted"] = "🎙 ミュート解除",
                 ["Qp.LoadFail"] = "読み込み失敗",
                 ["Qp.Detecting"] = "現在のアプリ：検出中…",
 
@@ -1004,8 +1012,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ 음소거 해제됨",
                 ["Ov.MuteMic"] = "🎤 마이크 음소거",
                 ["Ov.MicUnmute"] = "🎤 마이크 음소거 해제",
-                ["Ov.MicMuted"] = "✓ 마이크 음소거됨",
-                ["Ov.MicUnmuted"] = "✓ 마이크 음소거 해제됨",
+                ["Ov.MicMuted"] = "🔇 음소거됨",
+                ["Ov.MicUnmuted"] = "🎙 음소거 해제됨",
+                ["Theme.MicMuteOsdPersist"] = "마이크 음소거 중 OSD 유지",
+                ["Theme.MicMuteTrackInput"] = "기본 입력 음소거도 추적",
                 ["Ov.Default"] = "（기본값）",
                 ["Ov.Unset"] = "설정 안 됨",
                 ["Ov.Current"] = "현재：",
@@ -1179,8 +1189,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 마이크 음소거 해제",
-                ["Qp.MicMuted"] = "✓ 마이크 음소거됨",
-                ["Qp.MicUnmuted"] = "✓ 마이크 음소거 해제됨",
+                ["Qp.MicMuted"] = "🔇 음소거됨",
+                ["Qp.MicUnmuted"] = "🎙 음소거 해제됨",
                 ["Qp.LoadFail"] = "로드 실패",
                 ["Qp.Detecting"] = "현재 앱: 감지 중…",
 
@@ -1224,8 +1234,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ Son rétabli",
                 ["Ov.MuteMic"] = "🎤 Couper le micro",
                 ["Ov.MicUnmute"] = "🎤 Réactiver le micro",
-                ["Ov.MicMuted"] = "✓ Micro coupé",
-                ["Ov.MicUnmuted"] = "✓ Micro réactivé",
+                ["Ov.MicMuted"] = "🔇 Coupé",
+                ["Ov.MicUnmuted"] = "🎙 Réactivé",
+                ["Theme.MicMuteOsdPersist"] = "Garder l'OSD quand micro coupé",
+                ["Theme.MicMuteTrackInput"] = "Aussi l'entrée par défaut",
                 ["Ov.Default"] = "（par défaut）",
                 ["Ov.Unset"] = "Non défini",
                 ["Ov.Current"] = "Actuel : ",
@@ -1399,8 +1411,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 Réactiver le micro",
-                ["Qp.MicMuted"] = "✓ Micro coupé",
-                ["Qp.MicUnmuted"] = "✓ Micro réactivé",
+                ["Qp.MicMuted"] = "🔇 Coupé",
+                ["Qp.MicUnmuted"] = "🎙 Réactivé",
                 ["Qp.LoadFail"] = "Échec du chargement",
                 ["Qp.Detecting"] = "App actuelle : détection…",
 
@@ -1444,8 +1456,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ Ton wieder an",
                 ["Ov.MuteMic"] = "🎤 Mikro stummschalten",
                 ["Ov.MicUnmute"] = "🎤 Mikro-Stummschaltung aufheben",
-                ["Ov.MicMuted"] = "✓ Mikro stummgeschaltet",
-                ["Ov.MicUnmuted"] = "✓ Mikro-Stummschaltung aufgehoben",
+                ["Ov.MicMuted"] = "🔇 Stumm",
+                ["Ov.MicUnmuted"] = "🎙 Aktiv",
+                ["Theme.MicMuteOsdPersist"] = "OSD bei Mikro-Stummschaltung anzeigen",
+                ["Theme.MicMuteTrackInput"] = "Auch Eingabe-Stummschaltung",
                 ["Ov.Default"] = "（Standard）",
                 ["Ov.Unset"] = "Nicht festgelegt",
                 ["Ov.Current"] = "Aktuell: ",
@@ -1619,8 +1633,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 Mikro-Stummschaltung aufheben",
-                ["Qp.MicMuted"] = "✓ Mikro stummgeschaltet",
-                ["Qp.MicUnmuted"] = "✓ Mikro-Stummschaltung aufgehoben",
+                ["Qp.MicMuted"] = "🔇 Stumm",
+                ["Qp.MicUnmuted"] = "🎙 Aktiv",
                 ["Qp.LoadFail"] = "Laden fehlgeschlagen",
                 ["Qp.Detecting"] = "Aktuelle App: wird erkannt…",
 
@@ -1664,8 +1678,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ Sonido activado",
                 ["Ov.MuteMic"] = "🎤 Silenciar micrófono",
                 ["Ov.MicUnmute"] = "🎤 Activar micrófono",
-                ["Ov.MicMuted"] = "✓ Micrófono silenciado",
-                ["Ov.MicUnmuted"] = "✓ Micrófono activado",
+                ["Ov.MicMuted"] = "🔇 Silenciado",
+                ["Ov.MicUnmuted"] = "🎙 Activo",
+                ["Theme.MicMuteOsdPersist"] = "Mantener OSD al silenciar micro",
+                ["Theme.MicMuteTrackInput"] = "También entrada silenciada",
                 ["Ov.Default"] = "（predeterminado）",
                 ["Ov.Unset"] = "Sin configurar",
                 ["Ov.Current"] = "Actual: ",
@@ -1839,8 +1855,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 Activar micrófono",
-                ["Qp.MicMuted"] = "✓ Micrófono silenciado",
-                ["Qp.MicUnmuted"] = "✓ Micrófono activado",
+                ["Qp.MicMuted"] = "🔇 Silenciado",
+                ["Qp.MicUnmuted"] = "🎙 Activo",
                 ["Qp.LoadFail"] = "Error de carga",
                 ["Qp.Detecting"] = "App actual: detectando…",
 
@@ -1884,8 +1900,10 @@ namespace SonicRoute
                 ["Ov.Unmuted"] = "✓ Звук включён",
                 ["Ov.MuteMic"] = "🎤 Отключить микрофон",
                 ["Ov.MicUnmute"] = "🎤 Включить микрофон",
-                ["Ov.MicMuted"] = "✓ Микрофон отключён",
-                ["Ov.MicUnmuted"] = "✓ Микрофон включён",
+                ["Ov.MicMuted"] = "🔇 Отключён",
+                ["Ov.MicUnmuted"] = "🎙 Включён",
+                ["Theme.MicMuteOsdPersist"] = "Держать OSD при отключении микрофона",
+                ["Theme.MicMuteTrackInput"] = "Также отключение входа",
                 ["Ov.Default"] = "（по умолчанию）",
                 ["Ov.Unset"] = "Не задано",
                 ["Ov.Current"] = "Текущий: ",
@@ -2059,8 +2077,8 @@ namespace SonicRoute
 
 
                 ["Qp.MicUnmute"] = "🎤 Включить микрофон",
-                ["Qp.MicMuted"] = "✓ Микрофон отключён",
-                ["Qp.MicUnmuted"] = "✓ Микрофон включён",
+                ["Qp.MicMuted"] = "🔇 Отключён",
+                ["Qp.MicUnmuted"] = "🎙 Включён",
                 ["Qp.LoadFail"] = "Ошибка загрузки",
                 ["Qp.Detecting"] = "Текущее приложение: определение…",
 

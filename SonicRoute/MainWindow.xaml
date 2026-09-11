@@ -663,6 +663,26 @@
                                             SmallChange="0.05" LargeChange="0.1"
                                             Margin="0,2,0,0" ValueChanged="OsdFontSlider_ValueChanged"/>
                                 </StackPanel>
+                                <!-- 麦克风静音时 OSD 常驻（默认关闭 = 与旧版一致） -->
+                                <CheckBox x:Name="MicMutePersistCheck"
+                                          Content="{Binding [Theme.MicMuteOsdPersist], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Margin="0,14,0,0"
+                                          Checked="MicMutePersist_Changed" Unchecked="MicMutePersist_Changed"/>
+                                <!-- 子选项（更多选项折叠展开，样式同麦克风选项子选项）：同时监听默认输出静音 -->
+                                <!-- 防呆：更多选项及子选项仅主开关开启时显示（与麦克风选项联动一致） -->
+                                <ToggleButton x:Name="MicMuteMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
+                                              Margin="24,6,0,0" Background="Transparent" BorderThickness="0"
+                                              HorizontalAlignment="Left" Padding="0" Visibility="Collapsed"
+                                              Checked="MicMuteMoreToggle_Click" Unchecked="MicMuteMoreToggle_Click"/>
+                                <StackPanel x:Name="MicMuteMorePanel" Margin="24,6,0,0" Visibility="Collapsed">
+                                    <CheckBox x:Name="MicMuteTrackInputCheck"
+                                              Content="{Binding [Theme.MicMuteTrackInput], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                              Margin="0,8,0,0"
+                                              Checked="MicMuteTrackInput_Changed" Unchecked="MicMuteTrackInput_Changed"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

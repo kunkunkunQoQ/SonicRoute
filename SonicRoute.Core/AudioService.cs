@@ -216,13 +216,19 @@ namespace SonicRoute.Core
                                 if (string.IsNullOrWhiteSpace(displayName))
                                     displayName = null;
 
+                                string? processName = GetProcessName(pid);
+                                // 幽灵会话：进程已不存在（任务管理器也搜不到）但会话残留未标记 Expired。
+                                // 过滤掉，避免完整界面应用列表出现无法操作的 PID 空项；权限受限的
+                                // 真实进程（IsProcessAlive=true）仍保留 PID 显示。
+                                if (processName == null && !IsProcessAlive(pid)) continue;
+
                                 if (!apps.TryGetValue(pid, out var existing))
                                 {
                                     existing = apps[pid] = new AudioAppInfo
                                     {
                                         ProcessId = pid,
                                         DisplayName = displayName,
-                                        ProcessName = GetProcessName(pid)
+                                        ProcessName = processName
                                     };
                                 }
                                 else if (existing.DisplayName == null && displayName != null)
@@ -265,6 +271,25 @@ namespace SonicRoute.Core
             catch
             {
                 return null;
+            }
+        }
+
+        /// <summary>进程是否真实存在：ArgumentException=进程已不存在（幽灵会话）；
+        /// 其他异常（如权限受限）=进程存在但读不到信息，视为存活保留显示。</summary>
+        private static bool IsProcessAlive(uint pid)
+        {
+            try
+            {
+                using var p = Process.GetProcessById((int)pid);
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            catch
+            {
+                return true; // 权限受限等：进程存在，保留 PID 显示
             }
         }
 

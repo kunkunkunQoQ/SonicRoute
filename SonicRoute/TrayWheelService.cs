@@ -128,12 +128,15 @@ namespace SonicRoute
         private string _lastOsdPos = "";
         private double _lastOsdOx, _lastOsdOy;
         private int _lastOsdCx = -1, _lastOsdCy = -1;
+// 麦克风静音 OSD 常驻状态：_micMutePersistentActive=当前常驻横幅显示中；_micMuteOverlayPending=普通 OSD 覆盖了常驻横幅，隐藏后需恢复
+        private bool _micMutePersistentActive;
+        private bool _micMuteOverlayPending;
 
         public TrayWheelService()
         {
             _proc = HookProc;
             _osdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1100) };
-            _osdTimer.Tick += (_, _) => HideOsd();
+            _osdTimer.Tick += (_, _) => OnOsdTimerElapsed();
         }
 
         /// <summary>必须在 UI 线程调用（钩子回调将运行在安装线程的消息循环上）。</summary>
@@ -239,10 +242,12 @@ namespace SonicRoute
 
         /// <summary>右上角 OSD 提示（托盘滚轮/全局快捷键共用）。必须在 UI 线程调用。
         /// 外观跟随主题：背景/边框/文字用主题资源（含用户设置的透明度与强调色），换肤即生效。</summary>
-        internal void ShowOsd(string app, string text)
+        internal void ShowOsd(string app, string text, bool persistent = false)
         {
             try
             {
+                // 普通 OSD 显示时若常驻麦克风横幅正显示 → 记覆盖标记，普通 OSD 隐藏后恢复常驻横幅
+                if (!persistent && _micMutePersistentActive) _micMuteOverlayPending = true;
                 if (_osd == null)
                 {
                     var _ocfg = ConfigService.Load();
@@ -362,7 +367,7 @@ namespace SonicRoute
                 }
 
                 _osdTimer.Stop();
-                _osdTimer.Start();
+                if (!persistent) _osdTimer.Start(); // 常驻模式（麦克风静音横幅）不启动自动隐藏
             }
             catch { }
         }
@@ -431,6 +436,71 @@ namespace SonicRoute
                 {
                     _osd.Hide();
                     // 保留完整视觉树（Border/Grid/两个 TextBlock），下次显示只更新文本——不重复创建控件
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>普通 OSD 隐藏计时器到期：隐藏普通 OSD；若此前普通 OSD 覆盖了麦克风静音常驻横幅，
+        /// 且麦克风仍静音、常驻开关仍开启 → 恢复常驻横幅（静音状态不因普通 OSD 出现而丢失）。</summary>
+        private async void OnOsdTimerElapsed()
+        {
+            try
+            {
+                _osdTimer.Stop();
+                HideOsd();
+                if (!_micMuteOverlayPending) return;
+                _micMuteOverlayPending = false;
+                bool muted = await Task.Run(() => GlobalMicMuteService.IsMuted());
+                if (muted && ConfigService.Load().MicMuteOsdPersistent)
+                    ShowMicMuteOsd(L10n.T("Ov.MuteMic"), true);
+            }
+            catch { }
+        }
+
+        /// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 设置开关共用）。
+        /// 静音且「常驻」开关开启 → 常驻显示（不自动隐藏）；否则按普通 OSD 生命周期自动隐藏。
+        /// 必须在 UI 线程调用。</summary>
+        internal void ShowMicMuteOsd(string app, bool muted)
+        {
+            try
+            {
+                var cfg = ConfigService.Load();
+                if (muted && cfg.MicMuteOsdPersistent)
+                {
+                    _micMutePersistentActive = true;
+                    ShowOsd(app, L10n.T("Ov.MicMuted"), persistent: true);
+                }
+                else
+                {
+                    _micMutePersistentActive = false;
+                    ShowOsd(app, muted ? L10n.T("Ov.MicMuted") : L10n.T("Ov.MicUnmuted"));
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>设置页「麦克风静音时 OSD 常驻」开关变化：
+        /// 开启且当前已静音 → 立即常驻显示；关闭且正在常驻 → 立即退出常驻，按普通 OSD 生命周期自动隐藏。</summary>
+        internal void NotifyMicMuteOsdSettingChanged(bool on)
+        {
+            try
+            {
+                if (on)
+                {
+                    if (_micMutePersistentActive && _osd != null && _osd.IsVisible) return; // 已在常驻
+                    bool muted = Task.Run(() => GlobalMicMuteService.IsAnyMuted(ConfigService.Load().MicMuteOsdTrackInputMuted)).GetAwaiter().GetResult();
+                    if (muted) ShowMicMuteOsd(L10n.T("Ov.MuteMic"), true);
+                }
+                else
+                {
+                    if (_micMutePersistentActive)
+                    {
+                        _micMutePersistentActive = false;
+                        _micMuteOverlayPending = false;
+                        _osdTimer.Stop();
+                        _osdTimer.Start(); // 当前常驻横幅转为普通生命周期，自动隐藏
+                    }
                 }
             }
             catch { }

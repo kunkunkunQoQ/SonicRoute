@@ -103,6 +103,12 @@ namespace SonicRoute.Core
         public int OsdWidth { get; set; } = 240;
 
         /// <summary>主题 - OSD 字号倍率（0.7~2.0，默认 1.0；调整模式下拖手柄纵向调整）。</summary>
+        /// <summary>主题 - 麦克风静音时 OSD 常驻（静音后持续显示状态，不自动隐藏；默认关闭 = 与旧版一致）。</summary>
+        public bool MicMuteOsdPersistent { get; set; }
+
+        /// <summary>主题 - 常驻子选项「同时监听默认输入静音」：默认输入设备静音时也常驻显示麦克风静音 OSD（默认开启）。</summary>
+        public bool MicMuteOsdTrackInputMuted { get; set; } = true;
+
         public double OsdFontScale { get; set; } = 1.0;
     }
 

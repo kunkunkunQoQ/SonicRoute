@@ -36,3 +36,11 @@ _attach_tmp.bin
 # Release 临时 JSON
 /rel*.json
 .preview/
+# 本地保留、不上传 GitHub 的多余文件
+/Probe/
+/SonicRoute.Selftest/
+/WpfUiSkeleton/
+/docs/
+/背景/
+/主题.png
+/图标.png

@@ -483,7 +483,7 @@ namespace SonicRoute
             bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
             ApplyMicMuteVisual(muted);
             PanelStatusText.Text = L10n.T(muted ? "Qp.MicMuted" : "Qp.MicUnmuted");
-            return true;
+            return muted; // 返回真实静音状态（快捷键共用：切换后立即更新 OSD）
         }
 
         // ------------------------------------------------------------------

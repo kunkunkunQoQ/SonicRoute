@@ -30,6 +30,10 @@ namespace SonicRoute
         private static Mutex? _instanceMutex;
         private static int _activateMsg;
         private System.Windows.Interop.HwndSource? _activateSink;
+// 麦克风静音状态后台检测（低频轮询兜底）：外部程序/Windows 修改静音状态时立即更新 OSD
+        private System.Windows.Threading.DispatcherTimer? _micMuteWatchTimer;
+        private bool _micMuteBaselineReady;
+        private bool _lastMicMutedBaseline;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -63,7 +67,7 @@ namespace SonicRoute
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(IconFactory.IsTaskbarDark()),
-                Text = "音跃 SonicRoute v1.12r",
+                Text = "音跃 SonicRoute v1.13",
                 Visible = true
             };
 
@@ -104,6 +108,33 @@ namespace SonicRoute
             // 托盘滚轮调音量
             _trayWheel = new TrayWheelService();
             _trayWheel.Start();
+
+            // 麦克风静音状态后台检测（2 秒低频轮询）：首次 tick 只建立基线不弹 OSD，之后状态变化立即更新 OSD
+            _micMuteWatchTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _micMuteWatchTimer.Tick += async (_, _) =>
+            {
+                try
+                {
+                    bool muted = await Task.Run(() =>
+                    {
+                        var cfg = ConfigService.Load();
+                        return GlobalMicMuteService.IsAnyMuted(cfg.MicMuteOsdTrackInputMuted);
+                    });
+                    if (!_micMuteBaselineReady)
+                    {
+                        _micMuteBaselineReady = true;
+                        _lastMicMutedBaseline = muted;
+                        return; // 首次只建立基线，不弹 OSD（保持启动行为与旧版一致）
+                    }
+                    if (muted != _lastMicMutedBaseline)
+                    {
+                        _lastMicMutedBaseline = muted;
+                        ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted);
+                    }
+                }
+                catch { }
+            };
+            _micMuteWatchTimer.Start();
 
 
 
@@ -160,6 +191,10 @@ namespace SonicRoute
 
         /// <summary>右上角 OSD 提示（托盘滚轮/快捷键/设置提示共用）。</summary>
         internal void ShowOsd(string app, string text) => _trayWheel?.ShowOsd(app, text);
+/// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 面板共用）：静音且常驻开关开启 → 常驻显示。</summary>
+        internal void ShowMicMuteOsd(string app, bool muted) => _trayWheel?.ShowMicMuteOsd(app, muted);
+        /// <summary>设置页「麦克风静音时 OSD 常驻」开关变化：立即生效（开启且已静音 → 常驻；关闭 → 退出常驻）。</summary>
+        internal void NotifyMicMuteOsdSettingChanged(bool on) => _trayWheel?.NotifyMicMuteOsdSettingChanged(on);
         /// <summary>进入 OSD 调整模式（实验设置「调整位置」）。</summary>
         internal void BeginOsdAdjust() => _trayWheel?.BeginOsdAdjust();
         /// <summary>取消 OSD 调整（不保存）。</summary>
@@ -373,24 +408,20 @@ namespace SonicRoute
                         break;
                     var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
                     _trayWheel?.ShowOsd(name, mr.Applied
-                        ? (mr.Muted ? "🔇 已静音" : "🔊 取消静音")
+                        ? (mr.Muted ? "🔇 已静音" : "🔊 已开启")
                         : "⚠ 该应用无输出会话");
                     break;
 
-                case HotkeyActions.ActMuteInput:
+                                case HotkeyActions.ActMuteInput:
                     // 全局麦克风静音：静音/取消静音系统所有录音设备（与当前应用无关）。
-                    // 面板打开时走面板路径（同步按钮/状态行），否则直接全局静音并 OSD。
+                    // 面板打开时走面板路径（同步按钮/状态行并返回真实状态），否则直接全局静音；
+                    // 切换后立即用真实状态更新 OSD（静音且常驻开关开启 → 常驻显示，不等待后台检测）。
+                    bool gm;
                     if (_quickPanel is { IsVisible: true })
-                    {
-                        await _quickPanel.ToggleGlobalMicMuteAsync();
-                    }
+                        gm = await _quickPanel.ToggleGlobalMicMuteAsync();
                     else
-                    {
-                        bool gm = await Task.Run(() => GlobalMicMuteService.Toggle());
-                        _trayWheel?.ShowOsd(string.IsNullOrEmpty(name) ? L10n.T("Ov.MuteMic") : name, gm
-                            ? L10n.T("Ov.MicMuted")
-                            : L10n.T("Ov.MicUnmuted"));
-                    }
+                        gm = await Task.Run(() => GlobalMicMuteService.Toggle());
+                    ShowMicMuteOsd(L10n.T("Ov.MuteMic"), gm); // 全局麦克风静音：标题固定「麦克风静音」，不显示应用名
                     break;
 
                 case HotkeyActions.ActVolUp:
@@ -587,6 +618,7 @@ namespace SonicRoute
         private void Quit()
         {
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            _micMuteWatchTimer?.Stop();
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();
@@ -598,6 +630,7 @@ namespace SonicRoute
         protected override void OnExit(ExitEventArgs e)
         {
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            _micMuteWatchTimer?.Stop();
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();
