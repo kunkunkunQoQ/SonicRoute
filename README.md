@@ -6,7 +6,9 @@
 
 ## 💖 赞助
 
-喜欢这个项目？欢迎到 [爱发电](https://www.ifdian.net/a/koukou021) 赞助支持作者（困困困）～ 仓库页右侧的 **Sponsor** 按钮也是直达爱发电。
+[![赞助 爱发电](https://img.shields.io/badge/赞助-爱发电-FF7A2F)](https://www.ifdian.net/a/koukou021)
+
+喜欢这个项目？点击上方按钮或到 [爱发电](https://www.ifdian.net/a/koukou021) 赞助支持作者（困困困）～ 仓库页右侧的 **Sponsor** 按钮同样直达爱发电。
 
 ---
 
