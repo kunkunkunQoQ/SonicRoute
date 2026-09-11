@@ -200,21 +200,21 @@ namespace SonicRoute
         private void AdjustVolume(int delta)
         {
             int pid = ResolveTargetPid();
-            if (pid <= 0) { ShowOsd("—", "无音频会话"); return; }
+            if (pid <= 0) { ShowOsd("—", L10n.T("Ov.NoSession")); return; }
 
             // OSD 应用名优先显示用户自定义名称（与快捷键/面板/通知一致），
             // 未设置自定义名则显示进程名本身，两者都拿不到才显示"应用"
             string proc = ForegroundAppService.GetProcessNameSafe(pid) ?? "";
             string name = AppDisplayName.Get(proc, string.IsNullOrWhiteSpace(proc) ? "应用" : proc);
             int cur = SessionVolumeService.GetVolumePercent(pid);
-            if (cur < 0) { ShowOsd(name, "无法读取音量"); return; }
+            if (cur < 0) { ShowOsd(name, L10n.T("Ov.VolReadFail")); return; }
             int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
             int next = Math.Clamp(cur + (delta > 0 ? step : -step), 0, 100);
             SessionVolumeService.SetVolumePercent(pid, next);
             int actual = SessionVolumeService.GetVolumePercent(pid);
             if (actual < 0) actual = next;
             bool muted = SessionVolumeService.IsMuted(pid);
-            ShowOsd(name, muted ? $"🔇 已静音 · {actual}%" : $"🔊 {actual}%");
+            ShowOsd(name, muted ? string.Format(L10n.T("Ov.MutedVol"), actual) : $"🔊 {actual}%");
         }
 
         /// <summary>

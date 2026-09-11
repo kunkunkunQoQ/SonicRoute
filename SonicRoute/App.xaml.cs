@@ -408,8 +408,8 @@ namespace SonicRoute
                         break;
                     var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
                     _trayWheel?.ShowOsd(name, mr.Applied
-                        ? (mr.Muted ? "🔇 已静音" : "🔊 已开启")
-                        : "⚠ 该应用无输出会话");
+                        ? (mr.Muted ? L10n.T("Ov.AppMuted") : L10n.T("Ov.AppUnmuted"))
+                        : "⚠ " + L10n.T("Ov.NoOutputSession"));
                     break;
 
                                 case HotkeyActions.ActMuteInput:
@@ -437,23 +437,23 @@ namespace SonicRoute
                             if (v >= 0) { _trayWheel?.ShowOsd(name, $"🔉 {v}%"); break; }
                         }
                         int curVol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
-                        if (curVol < 0) { _trayWheel?.ShowOsd(name, "⚠ 该应用无输出会话"); break; }
+                        if (curVol < 0) { _trayWheel?.ShowOsd(name, "⚠ " + L10n.T("Ov.NoOutputSession")); break; }
                         int nextVol = Math.Clamp(curVol + delta, 0, 100);
                         bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, nextVol));
                         int act = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
-                        _trayWheel?.ShowOsd(name, ok && act >= 0 ? $"🔉 {act}%" : "⚠ 调整失败");
+                        _trayWheel?.ShowOsd(name, ok && act >= 0 ? $"🔉 {act}%" : "⚠ " + L10n.T("Ov.VolAdjustFail"));
                         break;
                     }
 
                 case HotkeyActions.ActSwitchOutput:
                     string? dev = await CycleDeviceAsync(pid, EDataFlow.eRender);
-                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(dev) ? "无可用设备" : $"🔊 {dev}");
+                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(dev) ? L10n.T("Ov.NoDevice") : $"🔊 {dev}");
                     break;
 
                 case HotkeyActions.ActSwitchInput:
                     // 实验模式 - 麦克风选项开启后才注册的隐藏动作：切换当前应用的录音（输入）设备
                     string? mdev = await CycleDeviceAsync(pid, EDataFlow.eCapture);
-                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? "无可用麦克风设备" : $"🎤 {mdev}");
+                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? L10n.T("Ov.NoMicDevice") : $"🎤 {mdev}");
 
                     break;
                 case HotkeyActions.ActResetAllApps:
@@ -462,7 +462,7 @@ namespace SonicRoute
                         var rr = await Task.Run(() => AudioService.ResetAllPersistedEndpoints());
                         _trayWheel?.ShowOsd(L10n.T("Act.ResetAllApps"),
                             rr.Total == 0
-                                ? "无可还原应用"
+                                ? L10n.T("Ov.NoneToReset")
                                 : string.Format(L10n.T("Act.ResetAllAppsDone"), rr.OutOk, rr.InOk));
                     }
                     break;
@@ -470,25 +470,25 @@ namespace SonicRoute
                 case HotkeyActions.ActSwitchAllOutput:
                     // 切换全局应用输出设备：所有有音频会话的应用切到下一个保留设备
                     string? ao = await CycleAllAppsDeviceAsync(EDataFlow.eRender);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllOutput"), string.IsNullOrEmpty(ao) ? "无可用设备" : $"🔊 {ao}");
+                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllOutput"), string.IsNullOrEmpty(ao) ? L10n.T("Ov.NoDevice") : $"🔊 {ao}");
                     break;
 
                 case HotkeyActions.ActSwitchAllInput:
                     // 切换全局应用输入设备（跟随麦克风选项显示/注册）
                     string? ai = await CycleAllAppsDeviceAsync(EDataFlow.eCapture);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllInput"), string.IsNullOrEmpty(ai) ? "无可用麦克风设备" : $"🎤 {ai}");
+                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllInput"), string.IsNullOrEmpty(ai) ? L10n.T("Ov.NoMicDevice") : $"🎤 {ai}");
                     break;
 
                 case HotkeyActions.ActSetDefaultOutput:
                     // 切换系统默认输出设备（改系统默认，非按应用）
                     string? sd = await CycleSystemDefaultDeviceAsync(EDataFlow.eRender);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultOutput"), string.IsNullOrEmpty(sd) ? "无可用设备" : $"🔊 {sd}");
+                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultOutput"), string.IsNullOrEmpty(sd) ? L10n.T("Ov.NoDevice") : $"🔊 {sd}");
                     break;
 
                 case HotkeyActions.ActSetDefaultInput:
                     // 切换系统默认输入设备（无需启用麦克风选项，始终可用）
                     string? si = await CycleSystemDefaultDeviceAsync(EDataFlow.eCapture);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultInput"), string.IsNullOrEmpty(si) ? "无可用麦克风设备" : $"🎤 {si}");
+                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultInput"), string.IsNullOrEmpty(si) ? L10n.T("Ov.NoMicDevice") : $"🎤 {si}");
                     break;
             }
         }
