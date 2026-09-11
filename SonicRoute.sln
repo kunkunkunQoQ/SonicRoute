@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -7,7 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonicRoute.Core", "SonicRou
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonicRoute", "SonicRoute\SonicRoute.csproj", "{A027E049-9FA2-4500-8FFD-D5E1C498E4E5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonicRoute.Selftest", "SonicRoute.Selftest\SonicRoute.Selftest.csproj", "{EC80EDD5-9589-4536-8DBB-C3FBFD946FAD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
