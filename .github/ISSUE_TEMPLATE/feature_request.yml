@@ -1,0 +1,32 @@
+name: 💡 功能建议
+description: 想让音跃更好用？提出你的想法
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 感谢建议！
+        想先讨论功能想法，也可以去 [Discussions - Ideas](https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/ideas) 交流。
+  - type: textarea
+    id: desc
+    attributes:
+      label: 功能描述
+      description: 你想实现什么功能
+      placeholder: "描述这个功能"
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 在什么情况下会用到？解决什么问题？
+    validations:
+      required: false
+  - type: textarea
+    id: expect
+    attributes:
+      label: 期望行为
+      description: 期望它如何工作
+    validations:
+      required: false
