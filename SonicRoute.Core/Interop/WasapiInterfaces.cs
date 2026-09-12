@@ -104,7 +104,7 @@ namespace SonicRoute.Core.Interop
     }
 
     // IAudioSessionControl2 : {BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D}
-    // 扁平声明 14 个方法（9 个 IAudioSessionControl + 5 个 Control2），与 EarTrumpet 一致
+    // 扁平声明 14 个方法（9 个 IAudioSessionControl + 5 个 Control2）
     [ComImport, Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"),
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IAudioSessionControl2
