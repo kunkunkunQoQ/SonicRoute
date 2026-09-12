@@ -4,8 +4,8 @@ using System.Runtime.InteropServices;
 namespace SonicRoute.Core.Interop
 {
     // ISimpleAudioVolume：{87CE5498-68D6-44E5-9215-6DA47EF883D8}
-    // 接口定义参考 EarTrumpet Interop/MMDeviceAPI/ISimpleAudioVolume.cs 的用法。
-    // 会话对象本身实现了该接口（EarTrumpet AudioDeviceSession 直接 (ISimpleAudioVolume)session）。
+    // COM 接口按公开定义重新声明（自行实现）。
+    // 会话对象本身实现了该接口，可直接转换使用。
     [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"),
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface ISimpleAudioVolume
