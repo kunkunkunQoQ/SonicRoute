@@ -1,13 +1,12 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.Core.Interop
 {
     // =====================================================================
     // 系统默认设备切换（IPolicyConfig.SetDefaultEndpoint）
-    // 实现方式参考 EarTrumpet 已验证的 API 用法（非移植其代码），不要自行猜测 API：
-    //   EarTrumpet/Interop/MMDeviceAPI/PolicyConfigClient.cs
-    //   EarTrumpet/DataModel/WindowsAudio/Internal/AudioPolicyConfigService.cs
+    // 本文件为自行重新实现，仅参考 EarTrumpet 已验证的实现思路，
+    // 不存在直接复制其代码。关键点：
     //
     // 与按应用路由（AudioPolicyConfigFactory）不同：本接口修改的是
     // "系统默认播放/录音设备"（音量合成器最上方的默认设备），
@@ -73,7 +72,7 @@ namespace SonicRoute.Core.Interop
                 var client = new PolicyConfigClient();
                 // ⚠️ SetDefaultEndpoint 需要的是"短 ID"（IMMDevice::GetId 返回格式，如 {0.0.0.00000000}.{hash}），
                 // 不能包成完整接口路径（\\?\SWD#MMDEVAPI#... 是按应用路由 API 的格式）——实测包成完整路径返回 E_INVALIDARG。
-                // EarTrumpet 传的就是 Device.Id（IMMDevice::GetId 的短 ID 格式）。
+                // 传的就是 Device.Id（IMMDevice::GetId 的短 ID 格式）。
                 int hr = ((IPolicyConfig)client).SetDefaultEndpoint(deviceId, flow);
                 if (hr >= 0)
                     return (true, hr, "成功");

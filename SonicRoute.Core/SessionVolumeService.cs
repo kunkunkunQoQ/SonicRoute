@@ -8,17 +8,17 @@ namespace SonicRoute.Core
     /// <summary>
     /// 按应用的会话音量控制（独立于 Per-App Routing 核心，不动系统主音量、不影响其他应用）。
     ///
-    /// 会话选择语义与 EarTrumpet 完全一致（对照 EarTrumpet.AudioDeviceSessionGroup）：
+    /// 会话选择语义（自行实现，参考按进程聚合思路）：
     ///   - 同一进程可能对应多个 Audio Session（Chrome 每标签页一个、一个进程可跨多个端点设备，如
     ///     哔哩哔哩在 5 个设备上各有 1 个 render 会话）。不能"找到第一个 Session 就控制"——
     ///     那可能是应用没有发声/未路由到的设备上的会话，改了没用、读回来也是错的。
-    ///   - EarTrumpet 把同一进程（AppId 组）的所有会话聚合成组：读取音量取组内第一个会话
+    ///   - 同一进程（AppId 组）的所有会话聚合成组：读取音量取组内第一个会话
     ///     （Volume => _sessions[0].Volume），写入时遍历组内所有会话
     ///     （SetVolumeScalar / Volume setter 对 foreach _sessions 全部 SetMasterVolume）。
     ///   - 本实现据此：按 PID 收集其全部 eRender 会话，读用第一个，写遍历全部。
     ///
     /// 输出（eRender）：音量/静音控制，同 Windows 音量合成器行为。
-    /// 输入（eCapture）：麦克风静音（与 EarTrumpet 输入会话静音一致），只收集会话并按
+    /// 输入（eCapture）：麦克风静音，只收集会话并按
     /// 同一"读第一个/写全部"语义操作 SetMute，不提供音量调节。
     /// </summary>
     public static class SessionVolumeService
@@ -68,7 +68,7 @@ namespace SonicRoute.Core
                 if (list == null || list.Count == 0) return -1;
                 try
                 {
-                    // EarTrumpet 读组内第一个会话
+                    // 读组内第一个会话
                     if (list[0].GetMasterVolume(out float f) < 0)
                     {
                         if (attempt == 0) { Refresh(true); continue; }
@@ -97,7 +97,7 @@ namespace SonicRoute.Core
                 bool any = false;
                 try
                 {
-                    // EarTrumpet 写组内所有会话
+                    // 写组内所有会话
                     foreach (var v in list)
                     {
                         if (v.SetMasterVolume(val, ref g) >= 0) any = true;
