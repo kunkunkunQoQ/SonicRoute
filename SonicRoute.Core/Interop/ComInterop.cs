@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.Core.Interop
 {
-    // ---- WASAPI 基础枚举（与 EarTrumpet Interop/MMDeviceAPI 一致）----
+    // ---- WASAPI 基础枚举 ----
 
     public enum EDataFlow
     {
