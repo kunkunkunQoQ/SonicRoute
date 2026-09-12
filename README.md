@@ -26,7 +26,7 @@
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
 | 🛍 微软商店（推荐） | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
-| 🟢 绿色免安装 | `SonicRoute-v1.13.exe` / `.zip` | ~229MB / ~81MB | 内置运行时 |
+| 🟢 绿色免安装 | `SonicRoute-v1.13.exe` / `.zip` | ~237MB / ~85MB | 内置运行时 |
 | ⚡ 轻量版 | `SonicRoute-v1.13-Lite.exe` / `.zip` | ~27MB / ~6.7MB | 需 .NET 8 |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
