@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -235,7 +235,7 @@ internal static class Program
         return 0;
     }
 
-    // ---- 定向验证：改一次音量，确认该 PID 的全部会话都跟着变（EarTrumpet 组语义） ----
+    // ---- 定向验证：改一次音量，确认该 PID 的全部会话都跟着变（组语义） ----
     private static int RunVolumeTest(int targetPid)
     {
         Console.WriteLine($"===== 音量组语义验证：PID {targetPid} =====");
