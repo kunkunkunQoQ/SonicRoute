@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace SonicRoute.Core.Interop
 {
     // ---- WASAPI COM 接口定义 ----
-    // IID 全部取自 EarTrumpet Interop/MMDeviceAPI/*.cs（并与 Windows SDK 头文件核对）
+    // IID 参考 EarTrumpet Interop/MMDeviceAPI/*.cs（并与 Windows SDK 头文件核对）
 
     [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
     public class MMDeviceEnumeratorComObject
