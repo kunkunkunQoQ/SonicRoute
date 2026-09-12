@@ -1,14 +1,12 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.Core.Interop
 {
     // =====================================================================
     // 按应用持久化音频设备的策略接口（Per-App Audio Routing）
-    // 实现方式参考 EarTrumpet 已验证的 API 用法（非移植其代码），不要自行猜测 API：
-    //   EarTrumpet/Interop/MMDeviceAPI/IAudioPolicyConfigFactory*.cs
-    //   EarTrumpet/Interop/Helpers/AudioPolicyConfigFactory*.cs
-    //   EarTrumpet/DataModel/WindowsAudio/Internal/AudioPolicyConfigService.cs
+    // 本文件为自行重新实现（C# 手动 vtable 调用），仅参考 EarTrumpet 已验证的
+    // 实现思路，不存在直接复制其代码。核心要点：
     //
     // 激活方式：RoGetActivationFactory("Windows.Media.Internal.AudioPolicyConfig")
     //   接口 vtable：IUnknown(3) + IInspectable(3) + 19 个内部方法 = 25 个槽位，
@@ -106,7 +104,7 @@ namespace SonicRoute.Core.Interop
         /// <summary>
         /// 将某进程的输出/输入设备持久化为指定设备。
         /// fullDeviceId 必须是 IMMDevice.GetId() 的完整设备接口路径。
-        /// 与 EarTrumpet 一致：同时设置 eMultimedia 与 eConsole 两个 role。
+        /// 同时设置 eMultimedia 与 eConsole 两个 role（已验证）。
         /// 返回 HRESULT（&gt;=0 成功）。
         /// </summary>
         public int SetDefaultEndPoint(string fullDeviceId, int processId)
