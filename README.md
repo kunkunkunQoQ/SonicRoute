@@ -1,6 +1,6 @@
 # 🎧 音跃 SonicRoute · Windows 音频枢纽
 
-> Windows 10/11 **音频控制中心**：**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。底层参考 [EarTrumpet](https://github.com/File-New-Project/EarTrumpet) 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`）。
+> Windows 10/11 **音频控制中心**：**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。底层实现方式参考 [EarTrumpet](https://github.com/File-New-Project/EarTrumpet) 已验证的 Per-App Audio Routing（`IAudioPolicyConfigFactory` / `SetPersistedDefaultAudioEndpoint`），代码为自行重新实现。
 
 作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.13** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
