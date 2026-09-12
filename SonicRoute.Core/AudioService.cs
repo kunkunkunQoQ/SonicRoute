@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -257,7 +257,7 @@ namespace SonicRoute.Core
         }
 
         // ------------------------------------------------------------------
-        // 按应用切换（EarTrumpet Per-App Audio Routing 机制）
+        // 按应用切换（Per-App Audio Routing 机制）
         // ------------------------------------------------------------------
 
         /// <summary>将进程的播放/录音设备持久化为指定设备。返回 HRESULT 与结果。</summary>
