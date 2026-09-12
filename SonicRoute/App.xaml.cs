@@ -120,8 +120,8 @@ namespace SonicRoute
             _hotkeys.HotkeyPressed += action => Dispatcher.BeginInvoke(() => _ = ExecuteHotkeyAsync(action));
             ReloadHotkeys();
 
-            // 托盘滚轮调音量
-            _trayWheel = new TrayWheelService();
+            // 托盘滚轮调音量（传入托盘图标：关闭"整片托盘区域"开关时仅音跃图标上滚轮响应）
+            _trayWheel = new TrayWheelService(_trayIcon);
             _trayWheel.Start();
 
             // 麦克风静音状态后台检测（2 秒低频轮询）：首次 tick 只建立基线不弹 OSD，之后状态变化立即更新 OSD

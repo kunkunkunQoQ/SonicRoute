@@ -815,10 +815,10 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ④ 音量步进 -->
+                        <!-- ④ 音量与托盘滚轮 -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                             <StackPanel>
-                                <TextBlock Text="{Binding [St.VolumeStep], Source={x:Static local:L10n.Instance}}"
+                                <TextBlock Text="{Binding [St.VolumeAndTrayWheel], Source={x:Static local:L10n.Instance}}"
                                            Style="{StaticResource SectionTitle}"/>
                                 <DockPanel Margin="0,6,0,0">
                                     <TextBox x:Name="VolumeStepBox" FontSize="13" Width="64"
@@ -829,6 +829,14 @@
                                                FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                                VerticalAlignment="Center" Margin="10,0,0,0" TextWrapping="Wrap"/>
                                 </DockPanel>
+                                <CheckBox x:Name="SettingsTrayWheelEverywhere"
+                                          Content="{Binding [St.TrayWheelEverywhere], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Margin="0,10,0,0"
+                                          Checked="SettingsTrayWheelEverywhere_Changed" Unchecked="SettingsTrayWheelEverywhere_Changed"/>
+                                <TextBlock Text="{Binding [St.TrayWheelEverywhereHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="24,2,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                         <!-- ④ 语言 -->
@@ -937,9 +945,7 @@
                                                Foreground="{DynamicResource Theme.Accent}">
                                         <Run Text="爱发电"/>
                                     </Hyperlink>
-                                </TextBlock>
-                                <TextBlock Margin="0,10,0,0" FontSize="13"
-                                           Foreground="{DynamicResource Theme.TextSecondary}">
+                                    <Run Text=" ‖ "/>
                                     <Hyperlink x:Name="GithubLink" Click="GithubLink_Click"
                                                Foreground="{DynamicResource Theme.Accent}">
                                         <Run Text="GitHub"/>
@@ -971,6 +977,37 @@
                                 <TextBlock Text="{Binding [Exp.ResetAllTip], Source={x:Static local:L10n.Instance}}"
                                            FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                            Margin="0,6,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 一键清理配置文件 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Exp.ClearConfig], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="{Binding [Exp.ClearConfigHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,-4,0,10" TextWrapping="Wrap"/>
+                                <Button x:Name="ExpClearConfigButton" Content="{Binding [Exp.ClearConfig], Source={x:Static local:L10n.Instance}}"
+                                        Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
+                                        HorizontalAlignment="Left" Click="ExpClearConfig_Click"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 配置文件备份：导出 / 导入 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Exp.ConfigBackup], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="{Binding [Exp.ConfigTransferHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,-4,0,10" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="ExpExportConfigButton" Content="{Binding [Exp.ExportConfig], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
+                                            Margin="0,0,10,0" HorizontalAlignment="Left" Click="ExpExportConfig_Click"/>
+                                    <Button x:Name="ExpImportConfigButton" Content="{Binding [Exp.ImportConfig], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
+                                            HorizontalAlignment="Left" Click="ExpImportConfig_Click"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

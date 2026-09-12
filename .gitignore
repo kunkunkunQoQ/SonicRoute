@@ -44,3 +44,6 @@ _attach_tmp.bin
 /背景/
 /主题.png
 /图标.png
+
+# wiki 子仓库（独立 git 仓库，勿提交）
+SonicRoute.wiki/

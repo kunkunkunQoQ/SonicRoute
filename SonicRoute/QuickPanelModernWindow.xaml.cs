@@ -248,7 +248,7 @@ namespace SonicRoute
                 VolumeSlider.Value = actual;
                 VolumePercentText.Text = $"{actual}%";
             }
-            ShowOsd(ok && actual >= 0
+            ShowDeviceOsd(ok && actual >= 0
                 ? string.Format(L10n.T("Qp.VolOk"), actual)
                 : L10n.T("Qp.VolFail"));
         }
@@ -256,7 +256,8 @@ namespace SonicRoute
         private void Volume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (!_systemReady) return;
-            int pct = (int)Math.Round(VolumeSlider.Value) + (e.Delta > 0 ? 4 : -4);
+            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int pct = (int)Math.Round(VolumeSlider.Value) + (e.Delta > 0 ? step : -step);
             VolumeSlider.Value = Math.Clamp(pct, 0, 100);
             e.Handled = true;
         }
@@ -264,12 +265,19 @@ namespace SonicRoute
         /// <summary>操作反馈改为右上角 OSD 通知（避免面板状态文本顶掉底部按钮）。</summary>
         private void ShowOsd(string text) => ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), text);
 
+        /// <summary>设备音量/静音 OSD：主标题显示当前所选系统设备名（跟随设置的自定义设备名，无则默认名）。</summary>
+        private void ShowDeviceOsd(string text)
+        {
+            string title = (SystemDevCombo.SelectedItem as AudioDeviceInfo)?.DisplayName ?? L10n.T("App.NameFull");
+            ((App)Application.Current).ShowOsd(title, text);
+        }
+
         private async void MuteButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_systemReady) return;
             bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(_systemDeviceId));
             ApplySystemMuteVisual(muted);
-            ShowOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
+            ShowDeviceOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
         }
 
         /// <summary>调整系统设备音量（delta 为 ±n 百分比），同步顶部滑块/百分比/状态行。
@@ -287,7 +295,7 @@ namespace SonicRoute
             {
                 VolumeSlider.Value = actual;
                 VolumePercentText.Text = $"{actual}%";
-                ShowOsd(string.Format(L10n.T("Qp.VolOk"), actual));
+                ShowDeviceOsd(string.Format(L10n.T("Qp.VolOk"), actual));
             }
             return actual >= 0 ? actual : -1;
         }
@@ -298,7 +306,7 @@ namespace SonicRoute
             if (!_systemReady) return false;
             bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(_systemDeviceId));
             ApplySystemMuteVisual(muted);
-            ShowOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
+            ShowDeviceOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
             return true;
         }
         // ------------------------------------------------------------------
@@ -701,7 +709,8 @@ namespace SonicRoute
             bool muted = await Task.Run(() => SessionVolumeService.ToggleAllMute());
             ApplyGlobalMuteVisual(muted);
             foreach (var (_, row) in _rows) ApplyRowMutedVisual(row, muted);
-            ShowOsd(L10n.T(muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted"));
+            // 全局输出静音 OSD 主标题显示「全部应用」（静音的是所有应用，不是音跃本身）
+            ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted"));
             return true;
         }
 

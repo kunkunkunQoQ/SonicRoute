@@ -432,7 +432,8 @@ namespace SonicRoute
         private void Volume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (_currentApp == null || !_volumeReady) return;
-            int pct = (int)Math.Round(VolumeSlider.Value) + (e.Delta > 0 ? 4 : -4);
+            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int pct = (int)Math.Round(VolumeSlider.Value) + (e.Delta > 0 ? step : -step);
             VolumeSlider.Value = Math.Clamp(pct, 0, 100);
             e.Handled = true;
         }

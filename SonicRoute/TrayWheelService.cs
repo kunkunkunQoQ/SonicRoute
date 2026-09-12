@@ -93,6 +93,22 @@ namespace SonicRoute
         [DllImport("user32.dll")]
         private static extern uint GetDpiForWindow(IntPtr hWnd);
 
+        // 仅音跃图标模式：Shell_NotifyIconGetRect 获取托盘图标矩形（物理像素，与钩子坐标一致）
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NOTIFYICONIDENTIFIER
+        {
+            public int cbSize;
+            public IntPtr hWnd;
+            public int uID;
+            public Guid guidItem;
+        }
+
+        [DllImport("shell32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER identifier, out RECT iconLocation);
+
+        private readonly System.Windows.Forms.NotifyIcon? _trayIcon;
+
         private readonly LowLevelMouseProc _proc;
         private IntPtr _hook;
         private bool _disposed;
@@ -132,8 +148,9 @@ namespace SonicRoute
         private bool _micMutePersistentActive;
         private bool _micMuteOverlayPending;
 
-        public TrayWheelService()
+        public TrayWheelService(System.Windows.Forms.NotifyIcon? trayIcon)
         {
+            _trayIcon = trayIcon;
             _proc = HookProc;
             _osdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1100) };
             _osdTimer.Tick += (_, _) => OnOsdTimerElapsed();
@@ -174,8 +191,20 @@ namespace SonicRoute
             if (d != 0) AdjustVolume(d);
         }
 
-        private static bool IsOverTray(POINT pt)
+        /// <summary>
+        /// 判断光标是否在"可调音量区域"：
+        /// 配置 TrayWheelEverywhere=true（默认）→ 整个托盘通知区（含溢出区、第二任务栏）都响应；
+        /// false → 仅音跃自己的托盘图标矩形内响应（Shell_NotifyIconGetRect）。
+        /// </summary>
+        private bool IsOverTray(POINT pt)
         {
+            try
+            {
+                if (!ConfigService.Load().TrayWheelEverywhere)
+                    return IsOverOurIcon(pt);
+            }
+            catch { }
+
             IntPtr tray = FindWindow("Shell_TrayWnd", null);
             if (tray != IntPtr.Zero)
             {
@@ -194,6 +223,123 @@ namespace SonicRoute
                 if (notify2 != IntPtr.Zero && GetWindowRect(notify2, out var r3) && PtInRect(ref r3, pt))
                     return true;
             }
+            return false;
+        }
+
+        /// <summary>仅音跃图标模式：优先 Shell_NotifyIconGetRect 获取当前托盘图标矩形（物理像素），
+        /// 失败则回退到托盘 Toolbar 按钮枚举。反射取 NotifyIcon 内部消息窗口句柄与图标 ID
+        /// （.NET 8 字段名为 _window/_id，兼容旧版 window/id）。</summary>
+        private bool IsOverOurIcon(POINT pt)
+        {
+            try
+            {
+                if (_trayIcon == null) return false;
+                var t = _trayIcon.GetType();
+                IntPtr hwnd = IntPtr.Zero;
+                int id = 1;
+
+                var winField = t.GetField("_window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                            ?? t.GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (winField != null && winField.GetValue(_trayIcon) is { } win)
+                {
+                    var hp = win.GetType().GetProperty("Handle", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    if (hp != null && hp.GetValue(win) is IntPtr h) hwnd = h;
+                }
+                var idField = t.GetField("_id", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                           ?? t.GetField("id", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (idField != null && idField.GetValue(_trayIcon) is { } v)
+                {
+                    long l = v is IntPtr ip ? ip.ToInt64() : Convert.ToInt64(v);
+                    id = (int)l;
+                }
+                if (hwnd == IntPtr.Zero) return false;
+
+                // 主方案：Shell_NotifyIconGetRect（官方 API，含溢出区/多任务栏）。
+                // 注意：部分系统（含本机 Win11）返回值为 False 但 out 矩形实际有效
+                // （图标物理像素矩形）。必须【先调用再检查矩形】——若写成
+                // GetRect() && rect>0 的短路形式，GetRect 返回 False 时矩形检查
+                // 不会执行、out 参数保持全 0，导致有效矩形被丢弃。
+                var nii = new NOTIFYICONIDENTIFIER { cbSize = Marshal.SizeOf<NOTIFYICONIDENTIFIER>(), hWnd = hwnd, uID = id };
+                Shell_NotifyIconGetRect(ref nii, out var r);
+                if ((r.Right - r.Left) > 0 && (r.Bottom - r.Top) > 0)
+                    return PtInRect(ref r, pt);
+
+                // 回退：托盘 Toolbar 按钮枚举（匹配 hWnd/uID 后取按钮矩形；Win11 可能无按钮窗口）
+                return IsOverOurIconByToolbar(pt, hwnd, id);
+            }
+            catch { }
+            return false;
+        }
+
+        private const int TB_BUTTONCOUNT = 0x418;
+        private const int TB_GETBUTTON = 0x417;
+        private const int TB_GETITEMRECT = 0x41D;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct TBBUTTON
+        {
+            public int iBitmap;
+            public int idCommand;
+            public byte fsState;
+            public byte fsStyle;
+            public byte bReserved;
+            public IntPtr dwData;   // 指向 NOTIFYICONDATA（本进程添加时传入）
+            public IntPtr iString;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref TBBUTTON lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref RECT lParam);
+
+        /// <summary>托盘 Toolbar 按钮枚举：遍历 TrayNotifyWnd/溢出窗口/第二任务栏的 ToolbarWindow32，
+        /// 匹配按钮注册的 hWnd+uID（NOTIFYICONDATA，x64 布局：hWnd@8、uID@16），取按钮矩形判定光标。</summary>
+        private static bool IsOverOurIconByToolbar(POINT pt, IntPtr hwnd, int id)
+        {
+            try
+            {
+                IntPtr[] trays = { FindWindow("Shell_TrayWnd", null), FindWindow("Shell_SecondaryTrayWnd", null) };
+                foreach (var tray in trays)
+                {
+                    if (tray == IntPtr.Zero) continue;
+                    IntPtr notify = FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
+                    if (notify != IntPtr.Zero && CheckTrayToolbar(notify, pt, hwnd, id)) return true;
+                    IntPtr overflow = FindWindowEx(tray, IntPtr.Zero, "NotifyContainerOverflowWindow", null);
+                    if (overflow != IntPtr.Zero && CheckTrayToolbar(overflow, pt, hwnd, id)) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool CheckTrayToolbar(IntPtr parent, POINT pt, IntPtr hwnd, int id)
+        {
+            try
+            {
+                IntPtr tb = FindWindowEx(parent, IntPtr.Zero, "ToolbarWindow32", null);
+                if (tb == IntPtr.Zero) return false;
+                int count = (int)SendMessage(tb, TB_BUTTONCOUNT, IntPtr.Zero, IntPtr.Zero);
+                if (count <= 0) return false;
+                for (int i = 0; i < count; i++)
+                {
+                    TBBUTTON b = default;
+                    if (SendMessage(tb, TB_GETBUTTON, (IntPtr)i, ref b) == IntPtr.Zero) continue;
+                    if (b.dwData == IntPtr.Zero) continue;
+                    IntPtr bh = (IntPtr)Marshal.ReadInt64(b.dwData, 8); // NOTIFYICONDATA.hWnd (x64)
+                    int bid = Marshal.ReadInt32(b.dwData, 16);           // NOTIFYICONDATA.uID
+                    if (bh == hwnd && bid == id)
+                    {
+                        RECT r = default;
+                        if (SendMessage(tb, TB_GETITEMRECT, (IntPtr)i, ref r) != IntPtr.Zero)
+                            return PtInRect(ref r, pt);
+                    }
+                }
+            }
+            catch { }
             return false;
         }
 

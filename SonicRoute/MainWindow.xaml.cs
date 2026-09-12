@@ -1237,6 +1237,7 @@ namespace SonicRoute
                 QuickPanelStyleCombo.ItemsSource = new[] { L10n.T("St.PanelClassic"), L10n.T("St.PanelModern") };
                 QuickPanelStyleCombo.SelectedIndex = _config.QuickPanelStyle == "classic" ? 0 : 1;
             VolumeStepBox.Text = Math.Clamp(_config.VolumeStep, 1, 20).ToString();
+            SettingsTrayWheelEverywhere.IsChecked = _config.TrayWheelEverywhere;
 
                 ExpCollapseCheck.IsChecked = _config.CollapseDeviceSections;
 
@@ -1407,7 +1408,8 @@ namespace SonicRoute
         private void OverviewVolume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (_suppressVolume || _overviewApp == null || !_overviewVolumeReady) return;
-            int pct = (int)Math.Round(OverviewVolumeSlider.Value) + (e.Delta > 0 ? 4 : -4);
+            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int pct = (int)Math.Round(OverviewVolumeSlider.Value) + (e.Delta > 0 ? step : -step);
             OverviewVolumeSlider.Value = Math.Clamp(pct, 0, 100);
             e.Handled = true;
         }
@@ -1415,7 +1417,8 @@ namespace SonicRoute
         private void AppsVolume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (_suppressVolume || !_appsVolumeReady || _appsSelected == null) return;
-            int pct = (int)Math.Round(AppsVolumeSlider.Value) + (e.Delta > 0 ? 4 : -4);
+            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int pct = (int)Math.Round(AppsVolumeSlider.Value) + (e.Delta > 0 ? step : -step);
             AppsVolumeSlider.Value = Math.Clamp(pct, 0, 100);
             e.Handled = true;
         }
@@ -1451,6 +1454,14 @@ namespace SonicRoute
             if (step != v) VolumeStepBox.Text = step.ToString();
             if (_config.VolumeStep == step) return;
             _config.VolumeStep = step;
+            ConfigService.Save(_config);
+        }
+
+        /// <summary>托盘滚轮调音量区域开关：true=整个托盘通知区响应（默认）；false=仅音跃托盘图标上响应。</summary>
+        private void SettingsTrayWheelEverywhere_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_suppressSettings) return;
+            _config.TrayWheelEverywhere = SettingsTrayWheelEverywhere.IsChecked == true;
             ConfigService.Save(_config);
         }
         private void QuickPanelStyleCombo_Changed(object sender, SelectionChangedEventArgs e)
@@ -1686,6 +1697,68 @@ namespace SonicRoute
                 else ShowToast(string.Format(L10n.T("Exp.ResetAllFail"), okOut, total, okIn, total));
             }
             finally { ExpResetAllButton.IsEnabled = true; }
+        }
+
+        /// <summary>实验设置 - 一键清理配置文件：删除 config.json 恢复全部默认并自动重启应用。</summary>
+        private void ExpClearConfig_Click(object sender, RoutedEventArgs e)
+        {
+            SonicRoute.Core.ConfigService.ResetToDefault();
+            RestartApp();
+        }
+
+        /// <summary>实验设置 - 导出配置文件：把当前全部设置保存为 json 副本。</summary>
+        private void ExpExportConfig_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = L10n.T("Exp.ExportConfig"),
+                Filter = "JSON (*.json)|*.json",
+                FileName = "SonicRoute-config.json",
+                DefaultExt = ".json",
+            };
+            if (dlg.ShowDialog() != true) return;
+            if (SonicRoute.Core.ConfigService.ExportTo(dlg.FileName))
+                ShowToast(L10n.T("Exp.ExportDone"));
+            else
+                ShowToast(L10n.T("Exp.TransferFail"));
+        }
+
+        /// <summary>实验设置 - 导入配置文件：从备份文件恢复全部设置并自动重启应用。</summary>
+        private void ExpImportConfig_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = L10n.T("Exp.ImportConfig"),
+                Filter = "JSON (*.json)|*.json",
+                DefaultExt = ".json",
+            };
+            if (dlg.ShowDialog() != true) return;
+            if (SonicRoute.Core.ConfigService.ImportFrom(dlg.FileName))
+            {
+                ShowToast(L10n.T("Exp.ImportDone"));
+                RestartApp();
+            }
+            else
+            {
+                ShowToast(L10n.T("Exp.TransferFail"));
+            }
+        }
+
+        /// <summary>重启应用（供清理配置等需要全量重新初始化的场景使用）。</summary>
+        private void RestartApp()
+        {
+            try
+            {
+                var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
+                          ?? Environment.ProcessPath ?? "SonicRoute.exe";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = exe,
+                    UseShellExecute = true,
+                });
+            }
+            catch { }
+            System.Windows.Application.Current.Shutdown();
         }
         /// <summary>应用折叠状态：开启后显示折叠按钮并默认收起"保留的设备/设备名称"，关闭则全部展开。</summary>
         private void ApplyCollapseUi()
