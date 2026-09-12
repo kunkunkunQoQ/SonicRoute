@@ -2,10 +2,7 @@
 
 [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078d6)]()
-[![.NET](https://img.shields.io/badge/.NET-8-512BD4?logo=dotnet&logoColor=white)]()
-[![C#](https://img.shields.io/badge/C%23-239120?logo=csharp&logoColor=white)]()
-[![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=green)]()
+[![爱发电](https://img.shields.io/badge/赞助-爱发电-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
 
 > Windows 10/11 **音频控制中心**：**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。
 
