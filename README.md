@@ -8,7 +8,7 @@
 
 ## 🚀 快速开始
 
-🛍 **推荐**：从 [微软商店](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 安装（自动更新）；或 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载绿色版解压即用 / 轻量版（需 .NET 8）→ 驻留托盘：**单击**快捷面板、**双击**完整界面、**任务栏滚轮**调当前应用音量。
+🛍 **推荐**：从 [微软商店](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 安装（自动更新）；或 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载**含运行环境版本**（解压即用）/ 轻量版（需 .NET 8）→ 驻留托盘：**单击**快捷面板、**双击**完整界面、**任务栏滚轮**调当前应用音量。
 
 ## ✨ 核心功能
 
@@ -26,7 +26,7 @@
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
 | 🛍 微软商店（推荐） | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
-| 🟢 绿色免安装 | `SonicRoute-v1.13.exe` / `.zip` | ~237MB / ~85MB | 内置运行时 |
+| 🟢 含运行环境版本 | `SonicRoute-v1.13.exe` / `.zip` | ~237MB / ~85MB | 内置运行时 |
 | ⚡ 轻量版 | `SonicRoute-v1.13-Lite.exe` / `.zip` | ~27MB / ~6.7MB | 需 .NET 8 |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
@@ -39,7 +39,7 @@
 |---|---|---|
 | `r` | 修复版（修复 bug 后正式发布） | ✅ |
 
-发布形态：绿色免安装（正常版 + Lite）上传 Releases；微软商店版（Lite）自动更新、**优先推荐**；更新日志只展示最新版本，完整版本历史见 [Wiki · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
+发布形态：绿色免安装（含运行环境版本 + 轻量版）上传 Releases；微软商店版（Lite）自动更新、**优先推荐**；更新日志只展示最新版本，完整版本历史见 [Wiki · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
 ### 🔮 未来版本方向
 
