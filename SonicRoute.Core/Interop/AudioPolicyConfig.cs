@@ -5,7 +5,7 @@ namespace SonicRoute.Core.Interop
 {
     // =====================================================================
     // 按应用持久化音频设备的策略接口（Per-App Audio Routing）
-    // 移植自 EarTrumpet（已验证可行的实现），不要自行猜测 API：
+    // 实现方式参考 EarTrumpet 已验证的 API 用法（非移植其代码），不要自行猜测 API：
     //   EarTrumpet/Interop/MMDeviceAPI/IAudioPolicyConfigFactory*.cs
     //   EarTrumpet/Interop/Helpers/AudioPolicyConfigFactory*.cs
     //   EarTrumpet/DataModel/WindowsAudio/Internal/AudioPolicyConfigService.cs
