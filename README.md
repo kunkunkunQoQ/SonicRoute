@@ -1,5 +1,7 @@
 # 🎧 音跃 SonicRoute · Windows 音频枢纽
 
+[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](https://github.com/kunkunkunQoQ/SonicRoute/blob/master/LICENSE)
+
 > Windows 10/11 **音频控制中心**：**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。
 
 作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.13** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
