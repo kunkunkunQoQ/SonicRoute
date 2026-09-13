@@ -39,7 +39,6 @@
 
 ## 📌 版本相关
 
-发布形态：绿色免安装（含运行环境版本 + 轻量版）上传 Releases；微软商店版（Lite）自动更新、**优先推荐**；更新日志只展示最新版本，完整版本历史见 [Wiki · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
 ### 🔮 下一版本预告（v1.15）
 
@@ -49,6 +48,8 @@
 - 🛠 修复 bug
 
 > ⏰ 下次更新时间预计 **9 月 16 号**
+
+💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
 ---
 
