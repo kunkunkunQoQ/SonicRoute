@@ -242,10 +242,16 @@
   "Dev.SystemDefault": "시스템 기본",
   "Exp.OsdFontLabel": "글꼴 배율",
   "Exp.LangFiles": "언어 파일",
-  "Exp.LangFilesHint": "편집 가능한 언어 파일 내보내기 또는 외부 언어 파일 가져오기(다시 시작 후 적용)",
+  "Exp.LangFilesHint": "편집용 내보내기 또는 외부 언어 가져오기 (재시작 후 적용)",
   "Exp.ExportLang": "언어 내보내기",
   "Exp.ImportLang": "언어 가져오기",
   "Exp.LangExportDone": "선택한 폴더로 내보냈습니다",
   "Exp.LangImportDone": "언어를 가져왔습니다. 다시 시작 후 적용",
-  "Exp.LangImportFail": "잘못된 언어 파일"
+  "Exp.LangImportFail": "잘못된 언어 파일",
+  "Exp.OpenLangDir": "언어 폴더 열기",
+  "Exp.RestoreLang": "기본 언어 복원",
+  "Exp.LangRestored": "덮어쓴 언어 {0}개를 복원했습니다",
+  "Exp.LangNoOverride": "덮어쓴 언어가 없습니다",
+  "Exp.LangOpenFail": "언어 폴더를 열지 못했습니다",
+  "Exp.LangRestoreFail": "복원 실패"
 }

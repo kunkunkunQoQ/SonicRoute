@@ -242,10 +242,16 @@
   "Hk.ConflictTip": "组合键 {0} 被其他程序占用，已自动使用 {1}（可在下方重新设置）",
   "Hk.Unregistered": "该快捷键未能注册（可能与其他程序冲突）",
   "Exp.LangFiles": "语言文件",
-  "Exp.LangFilesHint": "导出可编辑的语言文件，或导入外置语言文件（重启生效）",
+  "Exp.LangFilesHint": "导出可编辑，或导入外置语言（重启生效）",
   "Exp.ExportLang": "导出语言",
   "Exp.ImportLang": "导入语言",
   "Exp.LangExportDone": "已导出到所选文件夹",
   "Exp.LangImportDone": "语言已导入，重启生效",
-  "Exp.LangImportFail": "语言文件无效"
+  "Exp.LangImportFail": "语言文件无效",
+  "Exp.OpenLangDir": "打开语言文件夹",
+  "Exp.RestoreLang": "还原默认语言",
+  "Exp.LangRestored": "已还原 {0} 个被覆盖的语言",
+  "Exp.LangNoOverride": "没有被覆盖的语言",
+  "Exp.LangOpenFail": "打开语言文件夹失败",
+  "Exp.LangRestoreFail": "还原失败"
 }

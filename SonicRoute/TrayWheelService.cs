@@ -262,13 +262,39 @@ namespace SonicRoute
                 var nii = new NOTIFYICONIDENTIFIER { cbSize = Marshal.SizeOf<NOTIFYICONIDENTIFIER>(), hWnd = hwnd, uID = id };
                 Shell_NotifyIconGetRect(ref nii, out var r);
                 if ((r.Right - r.Left) > 0 && (r.Bottom - r.Top) > 0)
-                    return PtInRect(ref r, pt);
+                {
+                    _cachedIconRect = r;
+                    _cachedIconRectAt = DateTime.UtcNow;
+                    var ir = InflateRect(r, 4);
+                    return PtInRect(ref ir, pt);
+                }
+
+                // API 完全失败（返回 False 且矩形无效）：图标位置短期不变，
+                // 用最近一次成功矩形（30s 内）判定，避免 Win11 上不可靠的 Toolbar 回退造成偶发失灵
+                if ((DateTime.UtcNow - _cachedIconRectAt).TotalSeconds < 30
+                    && (_cachedIconRect.Right - _cachedIconRect.Left) > 0
+                    && (_cachedIconRect.Bottom - _cachedIconRect.Top) > 0)
+                {
+                    var ir2 = InflateRect(_cachedIconRect, 4);
+                    return PtInRect(ref ir2, pt);
+                }
 
                 // 回退：托盘 Toolbar 按钮枚举（匹配 hWnd/uID 后取按钮矩形；Win11 可能无按钮窗口）
                 return IsOverOurIconByToolbar(pt, hwnd, id);
             }
             catch { }
             return false;
+        }
+
+        /// <summary>图标矩形缓存：Shell_NotifyIconGetRect 偶发失败（返回 False 且矩形无效）时，用最近一次成功矩形判定。</summary>
+        private RECT _cachedIconRect;
+        private DateTime _cachedIconRectAt;
+
+        /// <summary>矩形外扩 n 像素（物理像素坐标，减少图标边缘 1-2px 漏判）。</summary>
+        private static RECT InflateRect(RECT r, int n)
+        {
+            r.Left -= n; r.Top -= n; r.Right += n; r.Bottom += n;
+            return r;
         }
 
         private const int TB_BUTTONCOUNT = 0x418;

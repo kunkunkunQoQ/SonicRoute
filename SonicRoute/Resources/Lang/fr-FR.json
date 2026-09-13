@@ -242,10 +242,16 @@
   "Dev.SystemDefault": "Par défaut du système",
   "Exp.OsdFontLabel": "Échelle de police",
   "Exp.LangFiles": "Fichiers de langue",
-  "Exp.LangFilesHint": "Exportez des fichiers de langue modifiables, ou importez un fichier de langue externe (effet après redémarrage)",
+  "Exp.LangFilesHint": "Exporter pour éditer, ou importer (redémarrage requis)",
   "Exp.ExportLang": "Exporter les langues",
   "Exp.ImportLang": "Importer une langue",
   "Exp.LangExportDone": "Exporté vers le dossier sélectionné",
   "Exp.LangImportDone": "Langue importée ; effet après redémarrage",
-  "Exp.LangImportFail": "Fichier de langue invalide"
+  "Exp.LangImportFail": "Fichier de langue invalide",
+  "Exp.OpenLangDir": "Ouvrir le dossier des langues",
+  "Exp.RestoreLang": "Restaurer les langues par défaut",
+  "Exp.LangRestored": "{0} langue(s) écrasée(s) restaurée(s)",
+  "Exp.LangNoOverride": "Aucune langue écrasée",
+  "Exp.LangOpenFail": "Impossible d'ouvrir le dossier des langues",
+  "Exp.LangRestoreFail": "Échec de la restauration"
 }

@@ -1769,9 +1769,22 @@ namespace SonicRoute
             };
             if (fbd.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
             if (L10n.ExportBuiltinLanguages(fbd.SelectedPath))
+            {
                 ShowToast(L10n.T("Exp.LangExportDone"));
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = fbd.SelectedPath,
+                        UseShellExecute = true,
+                    });
+                }
+                catch { }
+            }
             else
+            {
                 ShowToast(L10n.T("Exp.LangImportFail"));
+            }
         }
 
         /// <summary>实验设置 - 导入语言：加载外置语言文件（写入 %LocalAppData%\SonicRoute\Lang，重启生效）。</summary>
@@ -1793,6 +1806,23 @@ namespace SonicRoute
             {
                 ShowToast(L10n.T("Exp.LangImportFail"));
             }
+        }
+
+        /// <summary>实验设置 - 打开语言文件夹（外置语言目录 %LocalAppData%\SonicRoute\Lang，不存在则创建）。</summary>
+        private void ExpOpenLangDir_Click(object sender, RoutedEventArgs e)
+        {
+            if (!L10n.OpenExternalLangDir())
+                ShowToast(L10n.T("Exp.LangOpenFail"));
+        }
+
+        /// <summary>实验设置 - 还原默认语言：删除外置目录中覆盖内置的同名语言文件（自定义语言保留），重启生效。</summary>
+        private void ExpRestoreLang_Click(object sender, RoutedEventArgs e)
+        {
+            var r = L10n.RestoreBuiltinLanguages();
+            if (!r.Ok) { ShowToast(L10n.T("Exp.LangRestoreFail")); return; }
+            if (r.Restored == 0) { ShowToast(L10n.T("Exp.LangNoOverride")); return; }
+            ShowToast(string.Format(L10n.T("Exp.LangRestored"), r.Restored));
+            RestartApp();
         }
 
         /// <summary>重启应用（供清理配置等需要全量重新初始化的场景使用）。</summary>

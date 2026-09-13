@@ -169,5 +169,39 @@ namespace SonicRoute
             }
             catch { return (false, ""); }
         }
+
+        /// <summary>打开外置语言目录（%LocalAppData%\SonicRoute\Lang，不存在则创建）。</summary>
+        public static bool OpenExternalLangDir()
+        {
+            try
+            {
+                Directory.CreateDirectory(ExternalLangDir);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = ExternalLangDir,
+                    UseShellExecute = true,
+                });
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>还原被覆盖的内置语言：删除外置目录中与内置 9 语言同名的文件；自定义语言保留。返回还原数量。</summary>
+        public static (bool Ok, int Restored) RestoreBuiltinLanguages()
+        {
+            try
+            {
+                if (!Directory.Exists(ExternalLangDir)) return (true, 0);
+                var codes = new HashSet<string>(BuiltinLanguages.Select(x => x.Code));
+                var n = 0;
+                foreach (var f in Directory.GetFiles(ExternalLangDir, "*.json"))
+                {
+                    var code = Path.GetFileNameWithoutExtension(f);
+                    if (codes.Contains(code)) { File.Delete(f); n++; }
+                }
+                return (true, n);
+            }
+            catch { return (false, 0); }
+        }
     }
 }

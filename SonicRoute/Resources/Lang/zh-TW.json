@@ -242,10 +242,16 @@
   "Hk.Unregistered": "該快速鍵未能註冊（可能與其他程式衝突）",
   "Exp.OsdFontLabel": "字型倍率",
   "Exp.LangFiles": "語言文件",
-  "Exp.LangFilesHint": "導出可編輯的語言文件，或導入外置語言文件（重啟生效）",
+  "Exp.LangFilesHint": "導出可編輯，或導入外置語言（重啟生效）",
   "Exp.ExportLang": "導出語言",
   "Exp.ImportLang": "導入語言",
   "Exp.LangExportDone": "已導出到所選資料夾",
   "Exp.LangImportDone": "語言已導入，重啟生效",
-  "Exp.LangImportFail": "語言文件無效"
+  "Exp.LangImportFail": "語言文件無效",
+  "Exp.OpenLangDir": "打開語言資料夾",
+  "Exp.RestoreLang": "還原預設語言",
+  "Exp.LangRestored": "已還原 {0} 個被覆蓋的語言",
+  "Exp.LangNoOverride": "沒有被覆蓋的語言",
+  "Exp.LangOpenFail": "開啟語言資料夾失敗",
+  "Exp.LangRestoreFail": "還原失敗"
 }

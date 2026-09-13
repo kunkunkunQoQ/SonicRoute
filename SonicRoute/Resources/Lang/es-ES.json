@@ -242,10 +242,16 @@
   "Dev.SystemDefault": "Predeterminado del sistema",
   "Exp.OsdFontLabel": "Escala de fuente",
   "Exp.LangFiles": "Archivos de idioma",
-  "Exp.LangFilesHint": "Exporta archivos de idioma editables, o importa un archivo de idioma externo (efecto tras reiniciar)",
+  "Exp.LangFilesHint": "Exportar para editar o importar (requiere reinicio)",
   "Exp.ExportLang": "Exportar idiomas",
   "Exp.ImportLang": "Importar idioma",
   "Exp.LangExportDone": "Exportado a la carpeta seleccionada",
   "Exp.LangImportDone": "Idioma importado; efecto tras reiniciar",
-  "Exp.LangImportFail": "Archivo de idioma no válido"
+  "Exp.LangImportFail": "Archivo de idioma no válido",
+  "Exp.OpenLangDir": "Abrir carpeta de idiomas",
+  "Exp.RestoreLang": "Restaurar idiomas predeterminados",
+  "Exp.LangRestored": "Se restauraron {0} idioma(s) sobrescrito(s)",
+  "Exp.LangNoOverride": "No hay idiomas sobrescritos",
+  "Exp.LangOpenFail": "No se pudo abrir la carpeta de idiomas",
+  "Exp.LangRestoreFail": "Error al restaurar"
 }

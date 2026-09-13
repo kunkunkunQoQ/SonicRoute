@@ -242,10 +242,16 @@
   "Dev.SystemDefault": "System Default",
   "Exp.OsdFontLabel": "Font scale",
   "Exp.LangFiles": "Language files",
-  "Exp.LangFilesHint": "Export editable language files, or import an external language file (takes effect after restart)",
+  "Exp.LangFilesHint": "Export for editing, or import external (restart to apply)",
   "Exp.ExportLang": "Export languages",
   "Exp.ImportLang": "Import language",
   "Exp.LangExportDone": "Exported to the selected folder",
   "Exp.LangImportDone": "Language imported; takes effect after restart",
-  "Exp.LangImportFail": "Invalid language file"
+  "Exp.LangImportFail": "Invalid language file",
+  "Exp.OpenLangDir": "Open Language Folder",
+  "Exp.RestoreLang": "Restore Default Languages",
+  "Exp.LangRestored": "Restored {0} overridden language(s)",
+  "Exp.LangNoOverride": "No overridden languages",
+  "Exp.LangOpenFail": "Failed to open language folder",
+  "Exp.LangRestoreFail": "Restore failed"
 }

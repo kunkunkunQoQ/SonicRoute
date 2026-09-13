@@ -892,14 +892,30 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- 语言（置于作者名上方） -->
+                        <!-- 语言（置于作者名上方）：语言下拉 + 语言文件管理（导出/导入/打开/还原） -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="{Binding [St.Language], Source={x:Static local:L10n.Instance}}"
                                            Style="{StaticResource SectionTitle}"/>
-                                <ComboBox x:Name="LangCombo" Style="{StaticResource SelCombo}"
-                                          MaxWidth="300" HorizontalAlignment="Left" MinWidth="220"
-                                          SelectionChanged="Language_SelectionChanged"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <ComboBox x:Name="LangCombo" Style="{StaticResource SelCombo}"
+                                              MaxWidth="240" MinWidth="200" VerticalAlignment="Center"
+                                              SelectionChanged="Language_SelectionChanged"/>
+                                    <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                                        <Button x:Name="ExpExportLangButton" Content="{Binding [Exp.ExportLang], Source={x:Static local:L10n.Instance}}"
+                                                Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
+                                                Margin="0,0,8,0" HorizontalAlignment="Left" Click="ExpExportLang_Click"/>
+                                        <Button x:Name="ExpImportLangButton" Content="{Binding [Exp.ImportLang], Source={x:Static local:L10n.Instance}}"
+                                                Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
+                                                Margin="0,0,8,0" HorizontalAlignment="Left" Click="ExpImportLang_Click"/>
+                                        <Button x:Name="ExpOpenLangDirButton" Content="{Binding [Exp.OpenLangDir], Source={x:Static local:L10n.Instance}}"
+                                                Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
+                                                Margin="0,0,8,0" HorizontalAlignment="Left" Click="ExpOpenLangDir_Click"/>
+                                        <Button x:Name="ExpRestoreLangButton" Content="{Binding [Exp.RestoreLang], Source={x:Static local:L10n.Instance}}"
+                                                Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
+                                                HorizontalAlignment="Left" Click="ExpRestoreLang_Click"/>
+                                    </StackPanel>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
@@ -1043,24 +1059,6 @@
                                     <Button x:Name="ExpImportConfigButton" Content="{Binding [Exp.ImportConfig], Source={x:Static local:L10n.Instance}}"
                                             Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
                                             HorizontalAlignment="Left" Click="ExpImportConfig_Click"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- 语言文件：导出 / 导入（外置语言） -->
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                            <StackPanel>
-                                <TextBlock Text="{Binding [Exp.LangFiles], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
-                                <TextBlock Text="{Binding [Exp.LangFilesHint], Source={x:Static local:L10n.Instance}}"
-                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                           Margin="0,-4,0,10" TextWrapping="Wrap"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <Button x:Name="ExpExportLangButton" Content="{Binding [Exp.ExportLang], Source={x:Static local:L10n.Instance}}"
-                                            Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                            Margin="0,0,10,0" HorizontalAlignment="Left" Click="ExpExportLang_Click"/>
-                                    <Button x:Name="ExpImportLangButton" Content="{Binding [Exp.ImportLang], Source={x:Static local:L10n.Instance}}"
-                                            Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                            HorizontalAlignment="Left" Click="ExpImportLang_Click"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

@@ -242,10 +242,16 @@
   "Dev.SystemDefault": "Systemstandard",
   "Exp.OsdFontLabel": "Schriftskalierung",
   "Exp.LangFiles": "Sprachdateien",
-  "Exp.LangFilesHint": "Bearbeitbare Sprachdateien exportieren oder eine externe Sprachdatei importieren (nach Neustart wirksam)",
+  "Exp.LangFilesHint": "Exportieren zum Bearbeiten oder importieren (Neustart nötig)",
   "Exp.ExportLang": "Sprachen exportieren",
   "Exp.ImportLang": "Sprache importieren",
   "Exp.LangExportDone": "In den ausgewählten Ordner exportiert",
   "Exp.LangImportDone": "Sprache importiert; nach Neustart wirksam",
-  "Exp.LangImportFail": "Ungültige Sprachdatei"
+  "Exp.LangImportFail": "Ungültige Sprachdatei",
+  "Exp.OpenLangDir": "Sprachordner öffnen",
+  "Exp.RestoreLang": "Standardsprachen wiederherstellen",
+  "Exp.LangRestored": "{0} überschriebene Sprache(n) wiederhergestellt",
+  "Exp.LangNoOverride": "Keine überschriebenen Sprachen",
+  "Exp.LangOpenFail": "Sprachordner konnte nicht geöffnet werden",
+  "Exp.LangRestoreFail": "Wiederherstellung fehlgeschlagen"
 }

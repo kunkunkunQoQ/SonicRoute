@@ -242,10 +242,16 @@
   "Dev.SystemDefault": "システム既定",
   "Exp.OsdFontLabel": "フォント倍率",
   "Exp.LangFiles": "言語ファイル",
-  "Exp.LangFilesHint": "編集可能な言語ファイルをエクスポート、または外部言語ファイルをインポート（再起動後に有効）",
+  "Exp.LangFilesHint": "編集用に書き出し、外部言語をインポート（再起動で有効）",
   "Exp.ExportLang": "言語をエクスポート",
   "Exp.ImportLang": "言語をインポート",
   "Exp.LangExportDone": "選択したフォルダーにエクスポートしました",
   "Exp.LangImportDone": "言語をインポートしました。再起動後に有効",
-  "Exp.LangImportFail": "無効な言語ファイル"
+  "Exp.LangImportFail": "無効な言語ファイル",
+  "Exp.OpenLangDir": "言語フォルダーを開く",
+  "Exp.RestoreLang": "既定の言語に戻す",
+  "Exp.LangRestored": "{0} 個の上書きされた言語を復元しました",
+  "Exp.LangNoOverride": "上書きされた言語はありません",
+  "Exp.LangOpenFail": "言語フォルダーを開けませんでした",
+  "Exp.LangRestoreFail": "復元に失敗しました"
 }
