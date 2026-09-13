@@ -518,17 +518,30 @@ namespace SonicRoute
                 {
                     // 首次/重新显示：直接 Show（不创建动画对象，内存稳定优先）
                     bool firstShow = !_osdShownOnce;
-                    _osd.Show();
-                    _osd.Topmost = true;
-                    _osdPositionDirty = true; // 重新显示确保位置正确
                     if (firstShow)
                     {
-                        // 首次显示：同步定位。Show 后窗口已加载，RepositionOsd 内 UpdateLayout 强制布局取真实尺寸，
-                        // 首帧即显示在正确位置，避免先出现在 WPF 默认位置再跳到正确位置（零点几秒闪烁）
+                        // 首次显示：先定位再 Show——Show 前设置 Left/Top，窗口直接以正确位置创建，
+                        // 首帧即显示在正确位置，避免先以 WPF 默认位置（屏幕中央）渲染一帧再跳到右上角
+                        // （启动后首次快捷键/滚轮调音量"从别处闪一下"）。TR 只需固定宽度 OsdWidth，
+                        // 未布局也能算准；Custom 用已保存坐标；其余九宫格依赖高度，Show 后再校准一次。
                         _osdShownOnce = true;
                         RepositionOsd();
                         _osdPositionDirty = false;
                         _osdRepositionPending = false;
+                    }
+                    _osd.Show();
+                    _osd.Topmost = true;
+                    if (firstShow)
+                    {
+                        // Show 后布局完成、实际尺寸已确定，同步校准一次：尺寸无关位置（TR）结果与
+                        // Show 前一致不产生移动；尺寸依赖位置（Center/B 等）在此取真实高度精确定位。
+                        RepositionOsd();
+                        _osdPositionDirty = false;
+                        _osdRepositionPending = false;
+                    }
+                    else
+                    {
+                        _osdPositionDirty = true; // 重新显示确保位置正确
                     }
                 }
 

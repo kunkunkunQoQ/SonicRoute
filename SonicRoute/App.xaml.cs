@@ -88,12 +88,7 @@ namespace SonicRoute
 
             // 托盘图标深浅色跟随任务栏主题：主题变化时重建图标（深色任务栏→白色图标，浅色→原图标）
             SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
-            var menu = new ContextMenuStrip();
-            menu.Items.Add(L10n.T("St.Settings"), null, (_, _) => ShowMainWindow());
-            menu.Items.Add(L10n.T("Tray.OpenPanel"), null, (_, _) => ToggleQuickPanel());
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(L10n.T("Tray.Exit"), null, (_, _) => Quit());
-            _trayIcon.ContextMenuStrip = menu;
+            RebuildTrayMenu();
 
             // 单击左键 → 快速面板（延时判别，避免与双击冲突）
             _trayIcon.MouseClick += (_, args) =>
@@ -206,6 +201,21 @@ namespace SonicRoute
 
         /// <summary>右上角 OSD 提示（托盘滚轮/快捷键/设置提示共用）。</summary>
         internal void ShowOsd(string app, string text) => _trayWheel?.ShowOsd(app, text);
+        /// <summary>重建托盘右键菜单（语言即时生效时调用：菜单文本取当前语言）。</summary>
+        internal void RebuildTrayMenu()
+        {
+            try
+            {
+                if (_trayIcon == null) return;
+                var menu = new ContextMenuStrip();
+                menu.Items.Add(L10n.T("St.Settings"), null, (_, _) => ShowMainWindow());
+                menu.Items.Add(L10n.T("Tray.OpenPanel"), null, (_, _) => ToggleQuickPanel());
+                menu.Items.Add(new ToolStripSeparator());
+                menu.Items.Add(L10n.T("Tray.Exit"), null, (_, _) => Quit());
+                _trayIcon.ContextMenuStrip = menu;
+            }
+            catch { }
+        }
 /// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 面板共用）：静音且常驻开关开启 → 常驻显示。</summary>
         internal void ShowMicMuteOsd(string app, bool muted) => _trayWheel?.ShowMicMuteOsd(app, muted);
         /// <summary>设置页「麦克风静音时 OSD 常驻」开关变化：立即生效（开启且已静音 → 常驻；关闭 → 退出常驻）。</summary>

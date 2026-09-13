@@ -1218,6 +1218,8 @@ namespace SonicRoute
                 int li = Array.FindIndex(L10n.SupportedLanguages,
                     x => string.Equals(x.Code, _config.Language, StringComparison.OrdinalIgnoreCase));
                 LangCombo.SelectedIndex = li < 0 ? 0 : li;
+                // 自定义语言管理区（方案3）
+                RefreshCustomLangList();
 
                 // 启动选项
                 // 启动选项（商店版与正常版自启配置分开存储）
@@ -1299,8 +1301,37 @@ namespace SonicRoute
             if (string.Equals(code, _config.Language, StringComparison.OrdinalIgnoreCase)) return;
             _config.Language = code;
             ConfigService.Save(_config);
-            // 语言更改在下次启动生效：仅提示，不刷新当前界面
-            ((App)Application.Current).ShowOsd(L10n.T("St.Language"), L10n.T("St.LangRestart"));
+            // 即时生效（无需重启）：失效缓存 + 切语言 + 全量绑定刷新 + 重建托盘菜单 + 重刷代码动态文本
+            L10n.Instance.ApplyImportedLanguage(code);
+            ((App)Application.Current).RebuildTrayMenu();
+            RefreshLangCombo(code);
+            RefreshDynamicTexts();
+            ((App)Application.Current).ShowOsd(L10n.T("St.Language"), L10n.T("St.LangApplied"));
+        }
+
+        /// <summary>语言切换后刷新代码动态文本（XAML 绑定已由 PropertyChanged 自动刷新；
+        /// 概览/应用页按钮与设置页动态项由代码设置，需按当前状态重刷）。</summary>
+        private async void RefreshDynamicTexts()
+        {
+            try
+            {
+                // 概览：设备/音量/按钮全量重刷（异步读取实际状态）
+                await RefreshOverviewDevicesVolumeAsync();
+                // 应用页：重读选中应用静音状态刷新按钮
+                if (_appsSelected != null)
+                {
+                    var pid = (int)_appsSelected.ProcessId;
+                    bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
+                    ApplyAppsMuteVisual(muted);
+                }
+                UpdateAppsDisableAutoButton();
+                UpdateAppsShowInPanelButton();
+                // 设置页动态文本
+                QuickPanelStyleCombo.ItemsSource = new[] { L10n.T("St.PanelClassic"), L10n.T("St.PanelModern") };
+                UpdateSelectAllLabels();
+                RefreshCustomLangList();
+            }
+            catch { }
         }
 
         private void LoadTheme()
@@ -1787,7 +1818,9 @@ namespace SonicRoute
             }
         }
 
-        /// <summary>实验设置 - 导入语言：加载外置语言文件（写入 %LocalAppData%\SonicRoute\Lang，重启生效）。</summary>
+        /// <summary>实验设置 - 导入语言：支持一次选择多个 json 批量导入（迁移/恢复场景）。
+        /// 方案1+4：导入成功即时生效（重建缓存 + 自动切到最后成功导入的语言 + 刷新界面 + 重建托盘菜单），无需重启。
+        /// 方案2：单文件导入显示键覆盖率，低于 80% 提示缺失键将显示中文。</summary>
         private void ExpImportLang_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new Microsoft.Win32.OpenFileDialog
@@ -1795,17 +1828,132 @@ namespace SonicRoute
                 Title = L10n.T("Exp.ImportLang"),
                 Filter = "JSON (*.json)|*.json",
                 DefaultExt = ".json",
+                Multiselect = true,
             };
             if (dlg.ShowDialog() != true) return;
-            if (L10n.ImportLanguageFile(dlg.FileName).Ok)
+            int ok = 0, fail = 0;
+            string? lastCode = null; int lastCov = 100;
+            foreach (var f in dlg.FileNames)
             {
-                ShowToast(L10n.T("Exp.LangImportDone"));
-                RestartApp();
+                var r = L10n.ImportLanguageFile(f);
+                if (r.Ok) { ok++; lastCode = r.Code; lastCov = r.CoveragePct; }
+                else fail++;
+            }
+            if (ok == 0) { ShowToast(L10n.T("Exp.LangImportFail")); return; }
+
+            // 即时生效：失效缓存 + 切到最后成功导入的语言 + 全量绑定刷新 + 重建托盘菜单
+            L10n.Instance.ApplyImportedLanguage(lastCode!);
+            ((App)Application.Current).RebuildTrayMenu();
+            RefreshLangCombo(lastCode!);
+            RefreshCustomLangList();
+
+            if (dlg.FileNames.Length == 1)
+            {
+                // 单文件：显示键覆盖率；低于 80% 额外警告缺失键回退中文
+                if (lastCov >= 80) ShowToast(L10n.T("Exp.LangImportDone"));
+                else ShowToast(string.Format(L10n.T("Exp.LangCoverageLow"), lastCov));
+            }
+            else if (fail > 0)
+            {
+                ShowToast(string.Format(L10n.T("Exp.LangImportPartial"), ok, fail));
             }
             else
             {
-                ShowToast(L10n.T("Exp.LangImportFail"));
+                ShowToast(L10n.T("Exp.LangImportDone"));
             }
+        }
+
+        /// <summary>重建语言下拉列表并选中指定语言（导入/删除/重命名后刷新，抑制保存）。</summary>
+        private void RefreshLangCombo(string selectCode)
+        {
+            LangCombo.ItemsSource = L10n.SupportedLanguages.Select(x => x.NativeName).ToList();
+            int idx = Array.FindIndex(L10n.SupportedLanguages,
+                x => string.Equals(x.Code, selectCode, StringComparison.OrdinalIgnoreCase));
+            _suppressSettings = true;
+            LangCombo.SelectedIndex = idx < 0 ? 0 : idx;
+            _suppressSettings = false;
+        }
+
+        /// <summary>刷新自定义语言管理区：当前使用的语言置顶（强调色圆点标记），其余按显示名排序；
+        /// 每行「显示名输入框 + code + 改名 + 移除」。</summary>
+        private void RefreshCustomLangList()
+        {
+            var langs = L10n.ListCustomLanguages()
+                .OrderBy(x => x.NativeName, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(x => string.Equals(x.Code, L10n.CurrentLanguage, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            CustomLangSection.Visibility = langs.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            var panel = new StackPanel();
+            foreach (var (code, native) in langs)
+            {
+                bool isCurrent = string.Equals(code, L10n.CurrentLanguage, StringComparison.OrdinalIgnoreCase);
+                var row = new StackPanel
+                {
+                    Orientation = System.Windows.Controls.Orientation.Horizontal,
+                    Margin = new Thickness(0, 6, 0, 0),
+                };
+                var box = new TextBox
+                {
+                    Text = native, Width = 140, FontSize = 12,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                };
+                box.ToolTip = L10n.T("Exp.LangNameHint");
+                var codePart = new StackPanel
+                {
+                    Orientation = System.Windows.Controls.Orientation.Horizontal,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(10, 0, 10, 0),
+                };
+                if (isCurrent)
+                {
+                    codePart.Children.Add(new TextBlock
+                    {
+                        Text = "●",
+                        Foreground = (Brush)FindResource("Theme.Accent"),
+                        FontSize = 11,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        Margin = new Thickness(0, 0, 6, 0),
+                    });
+                }
+                var codeText = new TextBlock
+                {
+                    Text = code, FontSize = 11,
+                    Foreground = (Brush)FindResource("Theme.TextSecondary"),
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                codeText.ToolTip = isCurrent ? L10n.T("Exp.LangCurrent") : code;
+                codePart.Children.Add(codeText);
+                var rename = new Button
+                {
+                    Content = L10n.T("Exp.LangSave"), Style = (Style)FindResource("GhostButton"),
+                    Height = 26, MinWidth = 64, Padding = new Thickness(8, 0, 8, 0), Tag = code,
+                };
+                rename.Click += (_, _) =>
+                {
+                    if (L10n.RenameCustomLanguage(code, box.Text))
+                    {
+                        RefreshCustomLangList();
+                        RefreshLangCombo(code);
+                    }
+                };
+                var remove = new Button
+                {
+                    Content = L10n.T("Exp.LangDelete"), Style = (Style)FindResource("GhostButton"),
+                    Height = 26, MinWidth = 64, Padding = new Thickness(8, 0, 8, 0),
+                    Margin = new Thickness(6, 0, 0, 0), Tag = code,
+                };
+                remove.Click += (_, _) =>
+                {
+                    if (L10n.DeleteCustomLanguage(code))
+                    {
+                        RefreshCustomLangList();
+                        RefreshLangCombo(L10n.CurrentLanguage);
+                    }
+                };
+                row.Children.Add(box); row.Children.Add(codePart); row.Children.Add(rename); row.Children.Add(remove);
+                panel.Children.Add(row);
+            }
+            CustomLangList.Content = panel;
         }
 
         /// <summary>实验设置 - 打开语言文件夹（外置语言目录 %LocalAppData%\SonicRoute\Lang，不存在则创建）。</summary>

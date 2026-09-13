@@ -916,6 +916,12 @@
                                                 HorizontalAlignment="Left" Click="ExpRestoreLang_Click"/>
                                     </StackPanel>
                                 </StackPanel>
+                                <!-- 自定义语言管理（方案3）：列出外置目录非内置语言，可改名/删除 -->
+                                <StackPanel x:Name="CustomLangSection" Margin="0,12,0,0" Visibility="Collapsed">
+                                    <TextBlock Text="{Binding [Exp.CustomLang], Source={x:Static local:L10n.Instance}}"
+                                               Style="{StaticResource SectionTitle}" FontSize="12.5"/>
+                                    <ContentControl x:Name="CustomLangList"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 
