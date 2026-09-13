@@ -1,0 +1,22 @@
+音跃 SonicRoute v1.0.9 改动说明
+================================
+
+相对 v1.0.8 的改动：
+
+1. 实验设置新增「一键还原全部应用为默认播放设备」
+   - 点击后枚举所有有音频会话的应用，逐个清除持久化输出设备设置（还原系统默认）
+   - 直接调用 AudioPolicyConfig.SetDefaultEndPoint(null, pid)，禁止用 ApplyEndpoint(空串)
+
+2. 实验设置「释放快速面板 UI 内存」子选项改为折叠
+   - 「更多选项」ToggleButton + 折叠 StackPanel，默认收起
+
+3. 彩蛋解锁提示改为渐进式趣味文案
+   - 点击作者名5次：咦？你发现了什么？→ 继续点，有惊喜~→ 快了快了...→ 最后一下！→ 🎉 实验模式已解锁！
+
+4. 关闭 UI 释放内存修复（核心）
+   - 修复 HwndSource 钩子未 RemoveHook 导致窗口无法 GC 回收
+   - GC 前等待 DispatcherPriority.ApplicationIdle 确保异步续体跑完
+   - GC 重试延长到 1s/3s/5s/8s/12s
+   - GcNow 升级为 LOH 压缩 + 强制压缩式完整 GC，消除残留 1-4MB
+
+5. 版本号 v1.0.8 → v1.0.9

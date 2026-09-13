@@ -1,0 +1,22 @@
+﻿SonicRoute v1.11 正式版（相对 v1.10）
+==========================================
+快捷键增强：
+- 设置快捷键时按 Esc 取消按键绑定（保持原绑定不变）
+- 支持绑定 F 区按键 F1-F24
+- 允许无修饰键的单个按键绑定
+- 支持鼠标按键/滚轮绑定（中键/侧键/滚轮，可组合修饰键），侧键默认吞事件防误触
+新增快捷键动作：
+- 切换系统默认输出设备 Ctrl+Alt+O（IPolicyConfig.SetDefaultEndpoint，短 ID）
+- 切换系统默认输入设备 Ctrl+Alt+I（无需开启麦克风选项）
+- 切换全局应用输出/输入 Ctrl+Alt+Shift+O / Ctrl+Alt+Shift+I
+- 一键还原全部应用默认设备 Ctrl+Alt+Shift+R（Win11 音量合成器"重置"底层
+  ClearAllPersistedApplicationDefaultEndpoints + 进程兜底 + 磁盘 PropertyStore 全清，
+  覆盖未打开但曾设置过的应用）
+其他：
+- 麦克风选项从实验设置移到设置页常驻（不依赖实验模式），子选项"在快捷面板显示麦克风"默认关闭
+- 快捷键设置页按功能分组：音量 / 当前应用 / 全局与系统 / 界面（8 语言同步）
+- 实验设置"一键还原"下方增加小字：建议使用 Windows 音量合成器自带的「重置」
+
+构建：Release 编译 0 错误；Lite 25.8MB / 正常版 179.8MB（均单文件）
+MSIX：SonicRoute-v1.11-Lite.msix（Version 1.11.0.0，已用 SonicRouteStoreNew.pfx 签名，
+      Issued to: 1517F817-E0CD-44DA-8269-A50E0B6D7877）

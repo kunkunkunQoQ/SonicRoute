@@ -1,0 +1,23 @@
+SonicRoute v1.10 改动说明（相对 v1.0.9）
+========================================
+
+【UI / 功能】
+1. 折叠 UI 统一改「更多选项」样式：设置页「保留的设备 / 设备名称」折叠从标题右侧小按钮改为「更多选项」样式 ToggleButton（强调色文字、透明背景、无边框）+ 下方折叠 StackPanel，点击展开/收起；由「折叠设置页设备区块」开关控制显隐（开启默认收起）。
+2. 补齐 v1.09a 遗漏的多语言翻译：Exp.ResetAll / Exp.ResetAllHint / Exp.ResetAllDone / Exp.ResetAllNone / Exp.ResetAllFail / Exp.MoreOptions / St.Egg1~St.Egg4 / St.EggDone 共 11 个键补齐全部 8 种语言。
+
+【内存优化】
+3. 面板失焦自动关闭不释放的修复：面板回收逻辑（置空引用 + GcNow + 排空 UI 队列）统一移到 _quickPanel.Closed 事件，覆盖所有关闭方式（托盘切换 / 失焦自动关闭 / WM_CLOSE）。实测：面板打开 48.1MB → 关闭后 34.5MB。
+4. 完整界面关闭残留定位：WeakReference 诊断确认窗口对象已被正常 GC 回收，残留来自 AppIconService.Cache（静态图标缓存）。新增 AppIconService.Clear()，主窗口/面板关闭时清空图标缓存。实测：关闭后 50.5MB → 41.5MB。
+5. 新增 TrimWorkingSet（EmptyWorkingSet）：关闭 UI / 面板的 GC 延迟循环结束后调用，把 WPF Milcore 渲染缓存等不活跃页面换出，任务管理器「内存」列立即下降。实测（全展开场景）：打开 61.9MB → 关闭 GC 后 53.7MB → TrimWorkingSet 后 4.1MB；重新打开 UI 功能正常、内存换回。
+6. 「关闭 UI 释放内存」默认开启：FreeUIMemoryOnClose 默认值改为 true（配置缺失时默认开启，已有配置不受影响）。
+7. 正常版低内存规范：正常版发布禁止加 EnableCompressionInSingleFile（压缩导致内存暴涨 96-134MB），不加压缩实测仅 ~37MB。
+
+【规范】
+8. a 版本号映射规则：用户口述 a → 版本号无后缀；a2 → r；a3 → r2。
+9. 折叠 UI 统一规范：以后所有折叠/展开一律用「更多选项」样式。
+10. 改动记录规范：所有开发改动必须同步记录到改动记录.md。
+11. MSIX 微软商店版本仅制作 Lite 版（v1.10 起）。
+
+【版本】
+12. 版本号 v1.0.9 → v1.10（AssemblyVersion 1.10，UI 显示 v1.10）。
+13. MSIX 清单 Version 1.10.0.0（仅 Lite 版，修订号 0）。

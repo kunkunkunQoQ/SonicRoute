@@ -1,0 +1,53 @@
+音跃 SonicRoute v1.15-双进程阶段2 备份说明（相对 v1.15 正式版，未发布）
+========================================================================
+
+一、背景
+- 目标：把 UI 与后台拆成双进程，UI 关闭后后台（托盘/快捷键/OSD/音频/麦克风）继续运行。
+- 阶段 0（已完成）：IHostServices 接口化——App.xaml.cs 中 UI 调用的宿主能力抽象成接口，
+  三个 UI 窗口 37 处 ((App)Application.Current).xxx 全部改经接口调用。
+- 阶段 1（已完成）：BackendHost 后台宿主化——托盘 NotifyIcon、托盘菜单、全局快捷键、
+  鼠标快捷键、当前应用检测、TrayWheelService、OSD、麦克风监听、后台 idle 回收、
+  后台预热全部整理进 BackendHost；App.xaml.cs 变轻量启动入口。
+- 阶段 2（本备份，代码完成 + 编译通过，待用户实测验收）：Named Pipe 双进程 IPC。
+
+二、阶段 2 新增文件
+- SonicRoute/IpcProtocol.cs —— 消息信封（T/Id/P）+ 请求/事件常量 + DTO + 长度前缀编解码
+- SonicRoute/IpcServer.cs —— 服务端双管道（Req/Evt）+ UI 会话管理 + 事件广播 + Replace/Activate
+- SonicRoute/IpcClient.cs —— 客户端单读循环 + 按消息 Id 分发 + 5s 超时兜底
+- 修改：BackendHost.cs、App.xaml.cs、SonicRoute.Core/ConfigService.cs、CurrentAppService.cs、
+  MainWindow.xaml.cs、QuickPanelWindow.xaml.cs、QuickPanelModernWindow.xaml.cs
+
+三、阶段 2 关键设计
+- 管道：Req=SonicRoute.Ipc.Req（请求/响应）、Evt=SonicRoute.Ipc.Evt（Backend→UI 事件 + EvtHello 注册）
+- 协议：4 字节小端长度前缀 + UTF-8 JSON；IpcMessage{T,Id(int?),P}
+- Backend（--service）：单实例锁拥有者、配置权威写入者；快捷键直执行 Core + 事件广播；
+  不持有任何 Window/QuickPanel 引用；idle 回收依赖 _ipc.HasUi
+- UI（--ui）：连接 → EvtHello → Hello 会话判定（ExistsUi/Replace）→ QueryState 取配置快照 →
+  ConfigService.SetSnapshot + 4 个 override（Save/Reset/Export/Import 全经 IPC）→ 订阅事件 →
+  启动行为（--panel/--main/按配置）
+- UI 关闭 → Backend 继续；UI 重开 → 重连取最新状态
+- 单实例：Mutex Local\SonicRoute_9NQZGRTPM1NT 归 Backend
+
+四、本备份前修复的两个 UI 启动根因（重要教训）
+1. 协议层 await 死锁：IpcProtocol.WriteAsync/ReadAsync/ReadFullAsync 缺 ConfigureAwait(false)，
+   UI 线程 TryConnect 用 GetAwaiter().GetResult() 同步等待写 EvtHello → 续体要回 UI 线程执行 →
+   永久死锁（UI 卡"开始连接"、进程堆积、主窗口出不来）。已全部补 ConfigureAwait(false)。
+   —— 教训：库级 IO async 方法一律 ConfigureAwait(false)；UI 线程同步等待只允许
+   等"不依赖 UI 上下文"的 Task。
+2. 事件连接即断：IpcServer.HandleEvtAsync 读完 EvtHello 立即 return，finally 马上注销并
+   Dispose 事件管道 → _activeEvt 永远 null（事件广播全丢）、UI 被杀后 _activeUiId 永不清理
+   （新 UI 启动 ExistsUi=True 被判定"已有 UI"而退出）。已改为注册后长驻读取循环，
+   仅断开（ReadAsync 返回 null）才清理会话。
+
+五、验证结果（自动链路测试）
+- 编译 Debug：0 errors
+- 默认无参启动 → Backend + UI：OK
+- --ui --main 完整界面：窗口正常显示
+- 关闭主窗口 UI → Backend 存活（26MB）
+- 再开 --ui --panel：ExistsUi=False（会话正确清理），面板正常
+- 待用户实测：快捷键、托盘滚轮、OSD、面板开关、麦克风、配置读写
+
+六、遗留
+- StartUi 临时调试日志（写 %TEMP%\sonicroute_ui.log）保留，用户实测确认后清理
+- 阶段 2 尚未做：MSIX 发布适配（不拆 MSIX）、Named Pipe 断线重连完善（UI 已实现 TryReconnect）
+- 后续阶段（用户验收后）：2.8 移除 4 个阶段 1 临时委托已完成（已删）、UI 独立退出/重连完善

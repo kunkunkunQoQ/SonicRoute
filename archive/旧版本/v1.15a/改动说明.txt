@@ -1,0 +1,31 @@
+【v1.15a 改动说明】（相对 v1.14，内部测试版，文件版本仍 1.14.0.0，按规范 a 版不改版本号，不发布 GitHub）
+一、v1.15 预告功能
+- 简洁面板「更改系统默认设备」开关（设置，默认关；经典面板样式时不显示此选项）：
+  开启后简洁面板下拉框更改设备 = 更改系统默认输出/输入设备
+- 设置页新增「启动选项」独立栏（主标题 St.StartupSection）：开机自启 / 启动时最小化 / 启动显示快速面板
+- 语言栏移出实验设置页，移到设置页作者名上方
+- 主题页新增「快速面板位置」卡：拖拽调整位置（逻辑与 OSD 一致，QuickPanelPosMode default/custom + QuickPanelCustomX/Y，DIP 默认 -1），一键还原；两面板均支持
+二、OSD 相关修复
+- 快速面板位置调整 OSD 主标题简化（📍，副标题「松手保存」）
+- 修复「OSD 大小已保存」误弹：只要 OsdWidth/OsdFontScale 非默认，每次打开完整 UI 就误弹提示
+  → MainWindow 新增 _syncingOsdSliders 标志，初始化/一键还原同步滑条时不触发 SetOsdSize 保存提示；手动拖动仍正常
+- OSD 文本统一优化（主标题 + 副标题规范，简洁无勾号）：
+  主标题 = 操作对象（应用/功能/设备名），副标题 = 结果；不再用软件名「音跃 SonicRoute」做标题；成功提示去掉 ✓
+  主标题替换：面板加载失败→「面板」、清理自启动→「自启动」、托盘无会话→「音量」、面板音量包装→「音量」、
+  系统默认设备失败→「默认输出」、设置页右上角通知→「设置」、OSD 拖动→「拖拽 OSD」
+  副标题精简：无会话/读取失败/无输出会话/无设备/无麦克风/调整失败/还原默认设备/无可还原/全局输出/全局输入/
+  默认输出/默认输入/麦克风/重启生效/已清理/清理失败/设置失败/松手保存/位置已保存/大小已保存/预览（9 语言同步）
+  去 ✓ 前缀：Qp.Muted/Qp.Unmuted/Qp.SwitchOk/Qp.VolOk/Exp.OsdScaleSaved/Exp.OsdSaved
+  行内切设备成功 OSD：主=应用名（自定义名称） 副=🔊/🎤 设备名；失败保留 ✗
+三、技术备注
+- 新增 L10n 键（9 语言）：Qp.Panel / St.AutoStartTitle / Ov.VolumeTitle / Exp.OsdDragTitle
+  （Ov.Volume / St.AutoStart 为已有键：应用音量、开机自启 UI 标签，避免冲突故用新名）
+- QuickPanelModernWindow 新增两参 ShowOsd(title, text) 重载
+- 测试产物：dist\build_l\SonicRoute.exe（Lite 测试版）
+
+四、本次备份新增（12:32 快照）
+- 快速面板屏幕定位优化：新增 SonicRoute\QuickPanelPosition.cs 共享静态类（Apply：Custom 直接用保存坐标/默认锚定主显示器工作区右下角含边界保护；DragBounds：虚拟屏幕物理像素÷DPI；Save：拖拽写入 Custom 并 Clamp）；两面板统一 RequestPosition()（Dispatcher.Background 合并同帧多次触发）+ SizeChanged/展开收起/列表刷新只定位一次 + SystemParameters.StaticPropertyChanged 监听工作区变化 + 拖拽期间跳过自动定位；经典面板补齐 SizeChanged 跟随
+- 首次 OSD 显示位置闪烁修复：新增 _osdShownOnce 标志，首次 Show 后立即同步 RepositionOsd()（UpdateLayout 强制布局取真实尺寸），首帧即正确位置；后续重新显示仍走 Background 合并
+- 折叠展开闪烁修复曾执行后按用户要求整体复原（不留）；规范已新增「OSD 首次显示同步定位规范（v1.15 沉淀）」
+- 提交：git 7ce628e（屏幕定位优化 + OSD 首次定位）
+- 测试产物：dist\build_l\SonicRoute.exe（12:32，Lite 测试版）

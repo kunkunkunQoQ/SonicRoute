@@ -1,0 +1,747 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Runtime;
+using System.Windows;
+using System.Windows.Forms;
+using Microsoft.Win32;
+using SonicRoute.Core;
+using SonicRoute.Core.Interop;
+using SonicRoute.Core.Models;
+using Application = System.Windows.Application;
+
+namespace SonicRoute
+{
+    /// <summary>
+    /// 应用编排器：托盘图标 + 窗口管理 + 全局快捷键。
+    /// 单击托盘 → 快速切换面板；双击托盘 → 完整界面；右键 → 上下文菜单。
+    /// </summary>
+    public partial class App : Application
+    {
+        private NotifyIcon? _trayIcon;
+        private MainWindow? _mainWindow;
+        private IQuickPanel? _quickPanel;
+        private HotkeyService? _hotkeys;
+        private TrayWheelService? _trayWheel;
+        private CancellationTokenSource? _singleClickCts;
+        private System.Windows.Threading.DispatcherTimer? _idleTimer;
+        private static Mutex? _instanceMutex;
+        private static int _activateMsg;
+
+        /// <summary>从程序集版本读取显示版本号（v1.13），随 csproj &lt;Version&gt; 自动更新。</summary>
+        public static string DisplayVersion
+        {
+            get
+            {
+                var asm = System.Reflection.Assembly.GetExecutingAssembly();
+                var attr = (System.Reflection.AssemblyInformationalVersionAttribute?)Attribute.GetCustomAttribute(
+                    asm, typeof(System.Reflection.AssemblyInformationalVersionAttribute));
+                var v = attr?.InformationalVersion ?? asm.GetName().Version?.ToString(3) ?? "0.0";
+                int plus = v.IndexOf('+');
+                if (plus > 0) v = v.Substring(0, plus);
+                return "v" + v;
+            }
+        }
+        private System.Windows.Interop.HwndSource? _activateSink;
+// 麦克风静音状态后台检测（低频轮询兜底）：外部程序/Windows 修改静音状态时立即更新 OSD
+        private System.Windows.Threading.DispatcherTimer? _micMuteWatchTimer;
+        private bool _micMuteBaselineReady;
+        private bool _lastMicMutedBaseline;
+
+        protected override void OnStartup(StartupEventArgs e)
+        {
+            base.OnStartup(e);
+
+            // single instance: notify existing instance to open main window, then exit
+            _activateMsg = NativeRegisterWindowMessage("SonicRoute_ActivateMain");
+            _instanceMutex = new Mutex(true, @"Local\SonicRoute_9NQZGRTPM1NT", out bool isFirstInstance);
+            if (!isFirstInstance)
+            {
+                var h = NativeFindWindow(null, "SonicRoute_ActivateSink");
+                if (h != IntPtr.Zero) NativePostMessage(h, _activateMsg, IntPtr.Zero, IntPtr.Zero);
+                Shutdown();
+                return;
+            }
+            var config = ConfigService.Load();
+            // 首次启动（未设置过语言）跟随系统语言，之后使用配置的语言
+            if (string.IsNullOrWhiteSpace(config.Language))
+            {
+                config.Language = DetectSystemLanguage();
+                ConfigService.Save(config);
+            }
+            L10n.Instance.SetLanguage(config.Language);
+            ThemeService.Apply(config.ThemeMode, config.Accent);
+            ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
+
+            // 启动自检：自启开启时 Run 键路径与当前 exe 不一致则自动修复（应对绿色版搬家/改名后自启失效）
+            if (!IsPackaged())
+                AutoStartSelfRepair(config.AutoStart);
+
+            _trayIcon = new NotifyIcon
+            {
+                Icon = IconFactory.CreateAppIcon(IconFactory.IsTaskbarDark()),
+                Text = $"音跃 SonicRoute {DisplayVersion}",
+                Visible = true
+            };
+
+            // 托盘图标深浅色跟随任务栏主题：主题变化时重建图标（深色任务栏→白色图标，浅色→原图标）
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+            var menu = new ContextMenuStrip();
+            menu.Items.Add(L10n.T("St.Settings"), null, (_, _) => ShowMainWindow());
+            menu.Items.Add(L10n.T("Tray.OpenPanel"), null, (_, _) => ToggleQuickPanel());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(L10n.T("Tray.Exit"), null, (_, _) => Quit());
+            _trayIcon.ContextMenuStrip = menu;
+
+            // 单击左键 → 快速面板（延时判别，避免与双击冲突）
+            _trayIcon.MouseClick += (_, args) =>
+            {
+                if (args.Button != MouseButtons.Left) return;
+                _singleClickCts?.Cancel();
+                var cts = _singleClickCts = new CancellationTokenSource();
+                _ = Task.Delay(280, cts.Token).ContinueWith(t =>
+                {
+                    if (t.IsCanceled) return;
+                    Dispatcher.BeginInvoke(ToggleQuickPanel);
+                }, TaskScheduler.Default);
+            };
+
+            // 双击 → 完整界面
+            _trayIcon.DoubleClick += (_, _) =>
+            {
+                _singleClickCts?.Cancel();
+                Dispatcher.BeginInvoke(ShowMainWindow);
+            };
+
+            // 全局快捷键
+            _hotkeys = new HotkeyService();
+            _hotkeys.HotkeyPressed += action => Dispatcher.BeginInvoke(() => _ = ExecuteHotkeyAsync(action));
+            ReloadHotkeys();
+
+            // 托盘滚轮调音量（传入托盘图标：关闭"整片托盘区域"开关时仅音跃图标上滚轮响应）
+            _trayWheel = new TrayWheelService(_trayIcon);
+            _trayWheel.Start();
+
+            // 麦克风静音状态后台检测（2 秒低频轮询）：首次 tick 只建立基线不弹 OSD，之后状态变化立即更新 OSD
+            _micMuteWatchTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            _micMuteWatchTimer.Tick += async (_, _) =>
+            {
+                try
+                {
+                    bool muted = await Task.Run(() =>
+                    {
+                        var cfg = ConfigService.Load();
+                        return GlobalMicMuteService.IsAnyMuted(cfg.MicMuteOsdTrackInputMuted);
+                    });
+                    if (!_micMuteBaselineReady)
+                    {
+                        _micMuteBaselineReady = true;
+                        _lastMicMutedBaseline = muted;
+                        return; // 首次只建立基线，不弹 OSD（保持启动行为与旧版一致）
+                    }
+                    if (muted != _lastMicMutedBaseline)
+                    {
+                        _lastMicMutedBaseline = muted;
+                        ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted);
+                    }
+                }
+                catch { }
+            };
+            _micMuteWatchTimer.Start();
+
+
+
+            // single-instance activate sink (invisible): opens full UI on message
+            _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("SonicRoute_ActivateSink")
+            {
+                Width = 0, Height = 0, WindowStyle = 0,
+            });
+            _activateSink.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
+            {
+                if (msg == _activateMsg) { Dispatcher.BeginInvoke(ShowMainWindow); handled = true; }
+                return IntPtr.Zero;
+            });
+
+            // idle reclaim: first pass 15s after start, then every 120s; with no UI open -> force GC + trim working set
+            _idleTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+            bool firstTrim = true;
+            _idleTimer.Tick += (_, _) =>
+            {
+                if (_mainWindow == null && _quickPanel == null)
+                {
+                    GcNow();
+                    TrimWorkingSet();
+                }
+                if (firstTrim)
+                {
+                    firstTrim = false;
+                    _idleTimer.Interval = TimeSpan.FromSeconds(120);
+                }
+            };
+            _idleTimer.Start();
+
+            // 前台监听：recent 模式下自动跟随前台音频应用（抖音/游戏等），并维护"最近有音频的前台应用"
+            CurrentAppService.StartForegroundWatcher();
+
+            // 后台预热音频会话/应用缓存，避免首次滚轮/切语言时在 UI 线程做重量级 COM 枚举
+            _ = Task.Run(() =>
+            {
+                try { AudioService.GetApps(); } catch { }
+                try { SessionVolumeService.Refresh(); } catch { }
+            });
+
+            // 启动行为
+            bool showMain = !config.StartMinimized;
+            if (e.Args.Contains("--panel", StringComparer.OrdinalIgnoreCase))
+                Dispatcher.BeginInvoke(ToggleQuickPanel);
+            else if (e.Args.Contains("--main", StringComparer.OrdinalIgnoreCase))
+                Dispatcher.BeginInvoke(ShowMainWindow);
+            else if (config.StartPanelOnStart)
+                Dispatcher.BeginInvoke(ToggleQuickPanel);
+            else if (showMain)
+                Dispatcher.BeginInvoke(ShowMainWindow);
+        }
+
+        /// <summary>右上角 OSD 提示（托盘滚轮/快捷键/设置提示共用）。</summary>
+        internal void ShowOsd(string app, string text) => _trayWheel?.ShowOsd(app, text);
+/// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 面板共用）：静音且常驻开关开启 → 常驻显示。</summary>
+        internal void ShowMicMuteOsd(string app, bool muted) => _trayWheel?.ShowMicMuteOsd(app, muted);
+        /// <summary>设置页「麦克风静音时 OSD 常驻」开关变化：立即生效（开启且已静音 → 常驻；关闭 → 退出常驻）。</summary>
+        internal void NotifyMicMuteOsdSettingChanged(bool on) => _trayWheel?.NotifyMicMuteOsdSettingChanged(on);
+        /// <summary>进入 OSD 调整模式（实验设置「调整位置」）。</summary>
+        internal void BeginOsdAdjust() => _trayWheel?.BeginOsdAdjust();
+        /// <summary>取消 OSD 调整（不保存）。</summary>
+        internal void CancelOsdAdjust() => _trayWheel?.CancelOsdAdjust();
+        /// <summary>实时位置预览（偏移滑块/坐标输入联动）。</summary>
+        internal void PreviewOsd() => _trayWheel?.PreviewOsd();
+    internal void ApplyOsdSize(double w, double fs) => _trayWheel?.ApplyOsdSize(w, fs);
+    internal void SetOsdSize(int w, double fs) => _trayWheel?.SetOsdSize(w, fs);
+        /// <summary>OSD 拖拽保存后通知（设置页复位按钮/同步输入框）。</summary>
+        internal event Action? OsdAdjustFinished
+        {
+            add { if (_trayWheel != null) _trayWheel.OsdAdjustFinished += value; }
+            remove { if (_trayWheel != null) _trayWheel.OsdAdjustFinished -= value; }
+        }
+
+        /// <summary>快速面板位置调整（主题页，逻辑同 OSD）：打开面板并进入拖拽调整模式（松手即保存自定义坐标）。</summary>
+        internal void BeginQuickPanelAdjust()
+        {
+            if (_quickPanel == null) ToggleQuickPanel();
+            SetPanelAdjustMode(true);
+        }
+
+        /// <summary>取消快速面板位置调整（不保存，关闭面板）。</summary>
+        internal void CancelQuickPanelAdjust()
+        {
+            SetPanelAdjustMode(false);
+            _quickPanel?.Close();
+        }
+
+        /// <summary>一键还原快速面板位置：恢复任务栏右下角默认位置，已打开则立即重定位。</summary>
+        internal void ResetQuickPanelPosition()
+        {
+            var cfg = ConfigService.Load();
+            cfg.QuickPanelPosMode = "default";
+            cfg.QuickPanelCustomX = -1;
+            cfg.QuickPanelCustomY = -1;
+            ConfigService.Save(cfg);
+            if (_quickPanel is QuickPanelWindow c) c.ResetPosition();
+            else if (_quickPanel is QuickPanelModernWindow m) m.ResetPosition();
+        }
+
+        /// <summary>快速面板拖拽保存后通知（主题页复位按钮）。</summary>
+        internal event Action? QuickPanelAdjustFinished;
+
+        /// <summary>供面板窗口在拖拽保存/关闭时触发（外部类不能直接 Invoke 事件）。</summary>
+        internal void NotifyQuickPanelAdjustFinished() => QuickPanelAdjustFinished?.Invoke();
+
+        private void SetPanelAdjustMode(bool on)
+        {
+            if (_quickPanel is QuickPanelWindow c) c.SetAdjustMode(on);
+            else if (_quickPanel is QuickPanelModernWindow m) m.SetAdjustMode(on);
+        }
+        /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
+        private static bool IsPackaged()
+        {
+            try
+            {
+                _ = global::Windows.ApplicationModel.Package.Current;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 启动自检修复：自启开启时，注册表 Run 键指向的 exe 与当前路径不一致则自动重写。
+        /// 应对绿色版搬家/改名后自启失效；仅修复，不新建（用户已关闭自启则不动）。
+        /// </summary>
+        private static void AutoStartSelfRepair(bool autoStart)
+        {
+            if (!autoStart) return;
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                if (key == null) return;
+                var exe = Environment.ProcessPath;
+                if (string.IsNullOrWhiteSpace(exe)) return;
+                var cur = key.GetValue("SonicRoute") as string;
+                if (string.IsNullOrWhiteSpace(cur)) return; // 自启项已被删，不重新加回
+                var target = cur.Trim().Trim('"');
+                if (!string.Equals(target, exe, StringComparison.OrdinalIgnoreCase))
+                    key.SetValue("SonicRoute", $"\"{exe}\"");
+            }
+            catch
+            {
+                // 静默：修复失败不影响启动
+            }
+        }
+
+        internal void ToggleQuickPanel()
+        {
+            if (_quickPanel == null)
+            {
+                // 按设置选择面板样式：modern=简洁面板（默认）/ classic=经典面板
+                var cfg = ConfigService.Load();
+                _quickPanel = cfg.QuickPanelStyle == "classic" ? new QuickPanelWindow() : new QuickPanelModernWindow();
+                _quickPanel.Closed += (_, _) =>
+                {
+                    _quickPanel = null;
+                    AppIconService.Clear(); // 清空图标缓存，让面板加载的 BitmapSource 可被 GC 回收
+                };
+            }
+
+            if (_quickPanel.IsVisible)
+            {
+                _quickPanel.Close();
+                return;
+            }
+
+            _quickPanel.ShowQuickPanel();
+        }
+
+        internal void ShowMainWindow()
+        {
+            if (_mainWindow == null)
+            {
+                _mainWindow = new MainWindow();
+                _mainWindow.Closed += (_, _) =>
+                {
+                    _mainWindow = null;
+                    AppIconService.Clear(); // 清空图标缓存（窗口关闭后残留的主要静态持有物），让 BitmapSource 可被 GC 回收
+                    // 实验设置「关闭 UI 释放内存」：窗口真正关闭后强制回收 UI 内存。
+                    // 立即回收一次，再延迟多次重试（1s/3s/5s）：窗口关闭瞬间可能有挂起的异步续体
+                    // （切设备/调音量/刷新应用等，闭包会捕获窗口对象），等它们跑完后窗口才真正可回收，
+                    // 此时再次 GC 确保窗口与视觉树被回收。
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            _ = Task.Run(async () =>
+                            {
+                                // 优化：GC 前先让 UI 线程排空 Dispatcher 队列（窗口关闭 + 挂起的异步续体
+                                // 闭包可能捕获窗口），队列清空后再 GC 才能把窗口与视觉树真正回收
+                                for (int i = 0; i < 3; i++)
+                                {
+                                    Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                                    await Task.Delay(200);
+                                }
+                                GcNow();
+                                foreach (var ms in new[] { 1000, 3000, 5000, 8000, 12000 })
+                                {
+                                    await Task.Delay(ms);
+                                    GcNow();
+                                }
+                                TrimWorkingSet(); // UI 残余渲染缓存无法托管回收，最后换出工作集，任务管理器"内存"列立即下降
+                            });
+                        }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                };
+            }
+
+            _mainWindow.Show();
+            _mainWindow.Activate();
+            if (_mainWindow.WindowState == WindowState.Minimized)
+                _mainWindow.WindowState = WindowState.Normal;
+            _mainWindow.Topmost = true;
+            _mainWindow.Topmost = false;
+        }
+
+        /// <summary>强制回收：GC 两轮（含终结器队列），用于「关闭 UI 释放内存」时尽快回收窗口与 UI 资源。</summary>
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "FindWindowW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern IntPtr NativeFindWindow(string? cls, string? win);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "PostMessageW")]
+        private static extern bool NativePostMessage(IntPtr h, int msg, IntPtr wParam, IntPtr lParam);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+        private static extern int NativeRegisterWindowMessage(string name);
+
+        /// <summary>Forced GC (two rounds incl. finalizer queue) to reclaim window and UI resources after closing UI.</summary>
+        private static void GcNow()
+        {
+            try
+            {
+                // 压缩 LOH（大对象堆）：WPF 视觉树/位图可能产生 >85KB 的大对象，
+                // 默认 LOH 不压缩，回收后内存碎片不归还给 OS，导致残留 1-4MB
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(2, GCCollectionMode.Forced, true, true); // 强制阻塞压缩式完整GC
+                GC.WaitForPendingFinalizers();
+                GC.Collect(2, GCCollectionMode.Forced, true, true);
+            }
+            catch { }
+        }
+
+        /// <summary>将进程工作集换出到磁盘。WPF Milcore 渲染缓存（native、进程级共享）无法被托管 GC 回收，
+        /// 关闭 UI 后残余的十几 MB 只能靠换出；换出的不活跃页面不再换回（无访问），任务管理器"内存"列立即下降。</summary>
+        private static void TrimWorkingSet()
+        {
+            try
+            {
+                using var p = System.Diagnostics.Process.GetCurrentProcess();
+                SetProcessWorkingSetSize(p.Handle, new IntPtr(-1), new IntPtr(-1));
+            }
+            catch { }
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern bool SetProcessWorkingSetSize(IntPtr proc, IntPtr min, IntPtr max);
+
+        /// <summary>重新加载全局快捷键（设置页修改后调用）。实验模式的隐藏动作仅在"实验模式+麦克风选项"开启时注册。</summary>
+        internal void ReloadHotkeys()
+        {
+            if (_hotkeys == null) return;
+            var config = ConfigService.Load();
+            bool expMicOn = config.ExperimentalMic;
+            var map = new Dictionary<string, string>();
+            foreach (var a in HotkeyActions.All)
+            {
+                // 实验模式隐藏动作：未开启麦克风选项不注册，避免后台占用组合键
+                if ((a == HotkeyActions.ActSwitchInput || a == HotkeyActions.ActSwitchAllInput) && !expMicOn) continue;
+                map[a] = config.Hotkeys.TryGetValue(a, out var c)
+                    ? c
+                    : (HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "");
+            }
+            _hotkeys.Reload(map);
+        }
+
+        /// <summary>快捷键实际注册状态：动作 → 生效组合（用于设置页显示占用冲突）。</summary>
+        internal IReadOnlyDictionary<string, string> HotkeyRegistration =>
+            _hotkeys?.RegistrationStatus ?? new Dictionary<string, string>();
+
+        private async Task ExecuteHotkeyAsync(string action)
+        {
+            if (action == HotkeyActions.ActPanel)
+            {
+                ToggleQuickPanel();
+                return;
+            }
+
+            // 静音/切设备/音量的目标应用：与托盘滚轮调音量完全一致——直接走
+            // CurrentAppService.Resolve 同一套规则（last/fixed → 前台 → 最近使用 → 兜底），
+            // 保证快捷键和"鼠标放任务栏滚轮调音量"永远解析出同一个应用。
+            var cfg = ConfigService.Load();
+            var apps = await Task.Run(() => AudioService.GetApps());
+            var target = CurrentAppService.Resolve(apps, cfg);
+            // 仅"当前应用"类动作需要解析当前应用；全局切换 / 系统默认切换不依赖，解析失败照常执行
+            bool needsTarget = action is HotkeyActions.ActMute or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown or HotkeyActions.ActSwitchOutput or HotkeyActions.ActSwitchInput;
+            if (needsTarget && target == null) return;
+            int pid = target == null ? -1 : (int)target.ProcessId;
+            string name = target == null ? "" : AppDisplayName.Get(target);
+
+            switch (action)
+            {
+                case HotkeyActions.ActMute:
+                    // 优先走快捷面板的静音路径：与面板静音按钮完全一致，静音的是面板/概览
+                    // 显示的同一个当前应用，并同步面板按钮文字/状态行。面板未打开或无当前
+                    // 应用时回退到共享当前应用路径。
+                    if (_quickPanel is { IsVisible: true } && await _quickPanel.MuteCurrentAppAsync())
+                        break;
+                    var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
+                    _trayWheel?.ShowOsd(name, mr.Applied
+                        ? (mr.Muted ? L10n.T("Ov.AppMuted") : L10n.T("Ov.AppUnmuted"))
+                        : L10n.T("Ov.NoOutputSession"));
+                    break;
+
+                                case HotkeyActions.ActMuteInput:
+                    // 全局麦克风静音：静音/取消静音系统所有录音设备（与当前应用无关）。
+                    // 面板打开时走面板路径（同步按钮/状态行并返回真实状态），否则直接全局静音；
+                    // 切换后立即用真实状态更新 OSD（静音且常驻开关开启 → 常驻显示，不等待后台检测）。
+                    bool gm;
+                    if (_quickPanel is { IsVisible: true })
+                        gm = await _quickPanel.ToggleGlobalMicMuteAsync();
+                    else
+                        gm = await Task.Run(() => GlobalMicMuteService.Toggle());
+                    ShowMicMuteOsd(L10n.T("Ov.MuteMic"), gm); // 全局麦克风静音：标题固定「麦克风静音」，不显示应用名
+                    break;
+
+                case HotkeyActions.ActVolUp:
+                case HotkeyActions.ActVolDown:
+                    // 调整面板/概览显示的当前应用音量（每次 ±5%）。面板打开时走面板路径
+                    // （与 ± 按钮一致并同步滑块/状态行）；否则直接对共享当前应用调整并 OSD。
+                    {
+                        int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+                        int delta = action == HotkeyActions.ActVolUp ? step : -step;
+                        if (_quickPanel is { IsVisible: true })
+                        {
+                            int v = await _quickPanel.AdjustVolumeAsync(delta);
+                            if (v >= 0) { _trayWheel?.ShowOsd(name, $"🔉 {v}%"); break; }
+                        }
+                        int curVol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
+                        if (curVol < 0) { _trayWheel?.ShowOsd(name, "⚠ " + L10n.T("Ov.NoOutputSession")); break; }
+                        int nextVol = Math.Clamp(curVol + delta, 0, 100);
+                        bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, nextVol));
+                        int act = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
+                        _trayWheel?.ShowOsd(name, ok && act >= 0 ? $"🔉 {act}%" : L10n.T("Ov.VolAdjustFail"));
+                        break;
+                    }
+
+                case HotkeyActions.ActSwitchOutput:
+                    string? dev = await CycleDeviceAsync(pid, EDataFlow.eRender);
+                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(dev) ? L10n.T("Ov.NoDevice") : $"🔊 {dev}");
+                    break;
+
+                case HotkeyActions.ActSwitchInput:
+                    // 实验模式 - 麦克风选项开启后才注册的隐藏动作：切换当前应用的录音（输入）设备
+                    string? mdev = await CycleDeviceAsync(pid, EDataFlow.eCapture);
+                    _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? L10n.T("Ov.NoMicDevice") : $"🎤 {mdev}");
+
+                    break;
+                case HotkeyActions.ActResetAllApps:
+                    // 一键还原全部应用（含未打开但曾设置过/正在运行的进程）输出+输入为系统默认
+                    {
+                        var rr = await Task.Run(() => AudioService.ResetAllPersistedEndpoints());
+                        _trayWheel?.ShowOsd(L10n.T("Act.ResetAllApps"),
+                            rr.Total == 0
+                                ? L10n.T("Ov.NoneToReset")
+                                : string.Format(L10n.T("Act.ResetAllAppsDone"), rr.OutOk, rr.InOk));
+                    }
+                    break;
+
+                case HotkeyActions.ActSwitchAllOutput:
+                    // 切换全局应用输出设备：所有有音频会话的应用切到下一个保留设备
+                    string? ao = await CycleAllAppsDeviceAsync(EDataFlow.eRender);
+                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllOutput"), string.IsNullOrEmpty(ao) ? L10n.T("Ov.NoDevice") : $"🔊 {ao}");
+                    break;
+
+                case HotkeyActions.ActSwitchAllInput:
+                    // 切换全局应用输入设备（跟随麦克风选项显示/注册）
+                    string? ai = await CycleAllAppsDeviceAsync(EDataFlow.eCapture);
+                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllInput"), string.IsNullOrEmpty(ai) ? L10n.T("Ov.NoMicDevice") : $"🎤 {ai}");
+                    break;
+
+                case HotkeyActions.ActSetDefaultOutput:
+                    // 切换系统默认输出设备（改系统默认，非按应用）
+                    string? sd = await CycleSystemDefaultDeviceAsync(EDataFlow.eRender);
+                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultOutput"), string.IsNullOrEmpty(sd) ? L10n.T("Ov.NoDevice") : $"🔊 {sd}");
+                    break;
+
+                case HotkeyActions.ActSetDefaultInput:
+                    // 切换系统默认输入设备（无需启用麦克风选项，始终可用）
+                    string? si = await CycleSystemDefaultDeviceAsync(EDataFlow.eCapture);
+                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultInput"), string.IsNullOrEmpty(si) ? L10n.T("Ov.NoMicDevice") : $"🎤 {si}");
+                    break;
+            }
+        }
+
+        /// <summary>构建可见设备列表（真实保留设备，按隐藏集合过滤）。</summary>
+        private static List<AudioDeviceInfo> BuildVisibleDevices(EDataFlow flow, AppConfig config)
+        {
+            var devs = AudioService.GetDevices(flow);
+            var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
+            var list = devs.Where(d => !hidden.Contains(d.Id)).ToList();
+            // 列表头部加入"系统默认输出/输入"虚拟项（与快捷面板/概览一致），选中即切回跟随系统默认
+            return PanelDevices.WithSystemDefault(list, flow, config);
+        }
+        /// <summary>设备名（自定义名优先）。</summary>
+        private static string DeviceDisplayName(AppConfig config, AudioDeviceInfo dev)
+        {
+            return config.DeviceNames.TryGetValue(dev.Id, out var n) && !string.IsNullOrWhiteSpace(n)
+                ? n
+                : dev.DisplayName;
+        }
+
+        /// <summary>在当前应用的可见设备间循环切换，返回切换到的设备名；失败/无设备返回 null。
+        /// 当前"跟随系统默认"（无持久化）且默认项在列表 → 从默认项的下一个开始。</summary>
+        private static Task<string?> CycleDeviceAsync(int pid, EDataFlow flow) => Task.Run(() =>
+        {
+            try
+            {
+                var config = ConfigService.Load();
+                var visible = BuildVisibleDevices(flow, config);
+                if (visible.Count == 0) return null;
+
+                var persisted = AudioService.GetPersistedEndpoint(pid, flow);
+                string? curShort = persisted == null ? null : AudioPolicyConfig.UnpackDeviceId(persisted);
+            // 跟随系统默认（无持久化）→ 位于"系统默认"虚拟项（首位），按下切到第一个真实设备
+            int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
+                if (idx < 0 && persisted == null && AudioService.IsSystemDefault(visible[0].Id)) idx = 0;  // 仅当"系统默认"虚拟项在列表首位时（未被隐藏），从它开始循环
+                int next = idx < 0 ? 0 : (idx + 1) % visible.Count;
+                var target = visible[next];
+                var r = AudioService.ApplyEndpoint(pid, flow, target.Id);
+                if (!r.Success) return null;
+                return DeviceDisplayName(config, target);
+            }
+            catch
+            {
+                return null;
+            }
+        });
+
+        /// <summary>在系统默认输出/输入设备间循环切换：从当前默认的下一个可见设备开始，改系统默认设备。
+        /// 返回切换到的设备名（用自定义名）；失败/无设备返回 null。</summary>
+        private static Task<string?> CycleSystemDefaultDeviceAsync(EDataFlow flow) => Task.Run(() =>
+        {
+            try
+            {
+                var config = ConfigService.Load();
+                var devs = AudioService.GetDevices(flow);
+                var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
+                var visible = devs.Where(d => !hidden.Contains(d.Id)).ToList();
+                if (visible.Count == 0) return null;
+
+                // GetDefaultDeviceId 返回完整 ID（"{0.0.0.00000000}.{...}"），需解包为短 ID 才能与设备列表比较，
+                // 否则永远找不到当前默认 → 总从第一个设备开始循环（用户实测的"逻辑不一致"根因）
+                var curDefault = AudioService.GetDefaultDeviceId(flow);
+                string? curShort = curDefault == null ? null : AudioPolicyConfig.UnpackDeviceId(curDefault);
+                int idx = curShort == null ? -1
+                    : visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
+                int next = idx < 0 ? 0 : (idx + 1) % visible.Count;
+                var r = SystemDefaultDeviceService.SetDefault(flow, visible[next].Id);
+                if (!r.Success) return null;
+                // 通知/OSD 显示用户自定义名称（与设置页"设备名称"一致）
+                string? custom = config.DeviceNames.TryGetValue(visible[next].Id, out var n) ? n : null;
+                return string.IsNullOrWhiteSpace(custom) ? visible[next].DisplayName : custom;
+            }
+            catch
+            {
+                return null;
+            }
+        });
+
+        /// <summary>切换全局应用设备：所有有音频会话的应用统一切到"当前系统默认设备的下一个可见设备"。
+        /// 目标可为"系统默认"虚拟项（清除所有应用的持久化路由，跟随系统默认）。
+        /// 返回目标设备名；无可见设备/无应用返回 null。</summary>
+        private static Task<string?> CycleAllAppsDeviceAsync(EDataFlow flow) => Task.Run(() =>
+        {
+            try
+            {
+                var config = ConfigService.Load();
+                var visible = BuildVisibleDevices(flow, config);
+                if (visible.Count == 0) return null;
+
+                var apps = AudioService.GetApps();
+                var target = visible[0]; // 无参考时默认第一个可见设备
+                // 参考设备：优先用第一个有音频会话应用的实际设备（会随上次切换更新，保证连续按能循环）；
+                // 应用跟随系统默认时退回用系统默认设备。
+                string? refShort = null;
+                var firstApp = apps.FirstOrDefault();
+                if (firstApp != null)
+                {
+                    var persisted = AudioService.GetPersistedEndpoint((int)firstApp.ProcessId, flow);
+                    if (persisted != null) refShort = AudioPolicyConfig.UnpackDeviceId(persisted);
+                }
+                if (refShort == null)
+                {
+                    var curDefault = AudioService.GetDefaultDeviceId(flow);
+                    refShort = curDefault == null ? null : AudioPolicyConfig.UnpackDeviceId(curDefault);
+                }
+                int idx = refShort == null ? -1
+                    : visible.FindIndex(d => string.Equals(d.Id, refShort, StringComparison.OrdinalIgnoreCase));
+                if (idx >= 0) target = visible[(idx + 1) % visible.Count];
+
+                int done = 0;
+                foreach (var app in apps)
+                {
+                    if (app.ProcessId <= 0) continue;
+                    var r = AudioService.ApplyEndpoint((int)app.ProcessId, flow, target.Id);
+                    if (r.Success) done++;
+                }
+                if (done == 0) return null;
+                return DeviceDisplayName(config, target);
+            }
+            catch
+            {
+                return null;
+            }
+        });
+
+        private void Quit()
+        {
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            _micMuteWatchTimer?.Stop();
+            _trayWheel?.Dispose();
+            _trayWheel = null;
+            _hotkeys?.Dispose();
+            _hotkeys = null;
+            DisposeTray();
+            Shutdown();
+        }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            _micMuteWatchTimer?.Stop();
+            _trayWheel?.Dispose();
+            _trayWheel = null;
+            _hotkeys?.Dispose();
+            _hotkeys = null;
+            DisposeTray();
+            base.OnExit(e);
+        }
+
+        /// <summary>任务栏深浅色切换时重建托盘图标（深色任务栏用白色图标，浅色用原图标）。</summary>
+        private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+        {
+            try
+            {
+                if (e.Category != UserPreferenceCategory.General) return;
+                if (_trayIcon == null) return;
+                var old = _trayIcon.Icon;
+                _trayIcon.Icon = IconFactory.CreateAppIcon(IconFactory.IsTaskbarDark());
+                try { old?.Dispose(); } catch { }
+            }
+            catch { }
+        }
+        /// <summary>释放托盘图标及其 HICON（避免退出后残留 GDI 资源）。</summary>
+        private void DisposeTray()
+        {
+            if (_trayIcon == null) return;
+            try { _trayIcon.Visible = false; } catch { }
+            try { _trayIcon.Icon?.Dispose(); } catch { }
+            _trayIcon.Dispose();
+            _trayIcon = null;
+        }
+
+        /// <summary>首次启动：按 Windows 系统 UI 语言匹配到支持的语言；未匹配则默认英文。</summary>
+        private static string DetectSystemLanguage()
+        {
+            try
+            {
+                var ci = System.Globalization.CultureInfo.InstalledUICulture;
+                string name = ci?.Name?.ToLowerInvariant() ?? "";
+                if (name.StartsWith("zh-tw") || name.StartsWith("zh-hk") || name.StartsWith("zh-mo") || name.StartsWith("zh-hant"))
+                    return "zh-TW";
+                string two = ci?.TwoLetterISOLanguageName?.ToLowerInvariant() ?? "";
+                return two switch
+                {
+                    "zh" => "zh-CN",
+                    "ja" => "ja-JP",
+                    "ko" => "ko-KR",
+                    "fr" => "fr-FR",
+                    "de" => "de-DE",
+                    "es" => "es-ES",
+                    "ru" => "ru-RU",
+                    _ => "en-US"
+                };
+            }
+            catch
+            {
+                return "en-US";
+            }
+        }
+    }
+}
+

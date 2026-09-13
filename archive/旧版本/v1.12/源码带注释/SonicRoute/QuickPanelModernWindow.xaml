@@ -1,0 +1,267 @@
+<Window x:Class="SonicRoute.QuickPanelModernWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SonicRoute"
+        Title="音跃 - 简洁面板"
+        Width="372"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        SnapsToDevicePixels="True"
+        FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
+    <Window.Resources>
+        <!-- 设备快速切换按钮 -->
+        <Style x:Key="DevButton" TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="9,4"/>
+            <Setter Property="Margin" Value="0,0,5,5"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 已选中（当前）设备按钮：高亮 -->
+        <Style x:Key="DevButtonActive" TargetType="Button" BasedOn="{StaticResource DevButton}">
+            <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- 工具按钮（静音/设置/完整界面） -->
+        <Style x:Key="ToolButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,5"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 应用行展开按钮（▾/▴） -->
+        <Style x:Key="RowExpandButton" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 系统音频设备项模板（顶部系统设备下拉） -->
+        <!-- 系统音频设备项模板（顶部系统设备下拉） -->
+        <DataTemplate x:Key="SystemDevItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="🔊" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                <TextBlock VerticalAlignment="Center" FontSize="12.5" Text="{Binding DisplayName}"
+                           TextTrimming="CharacterEllipsis" MaxWidth="210"/>
+                <TextBlock Text="（默认）" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
+                           Margin="4,0,0,0" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDefault}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- 应用行音量条：简化模板（进度/圆点用 Foreground 着色，静音时反色） -->
+        <Style x:Key="RowSliderStyle" TargetType="Slider">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="Minimum" Value="0"/>
+            <Setter Property="Maximum" Value="100"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Border x:Name="PART_TrackBg" Height="4" CornerRadius="2" VerticalAlignment="Center"
+                                    Background="{DynamicResource Theme.Border}"/>
+                            <Border x:Name="PART_TrackFill" Height="4" CornerRadius="2" VerticalAlignment="Center"
+                                    HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" Width="0"/>
+                            <Thumb x:Name="PART_Thumb" Width="14" Height="14" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                   Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Slider}}">
+                                <Thumb.Template>
+                                    <ControlTemplate TargetType="Thumb">
+                                        <Border x:Name="ThumbBg" Width="14" Height="14" CornerRadius="7"
+                                                Background="{TemplateBinding Background}"/>
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 行图标按钮（点击静音/取消静音该应用） -->
+        <Style x:Key="RowIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6">
+                            <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder"
+            Background="{DynamicResource Theme.WindowBgAlpha}"
+            BorderBrush="{DynamicResource Theme.Border}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Margin="0,0,6,0">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.28" Color="#000000"/>
+        </Border.Effect>
+
+        <StackPanel Margin="16,14,16,12">
+            <!-- 标题行 -->
+            <DockPanel>
+                <TextBlock Text="🎧 音跃 SonicRoute"
+                           FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                <TextBlock x:Name="VersionText" Text="v1.12" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
+                           VerticalAlignment="Center" HorizontalAlignment="Right"/>
+            </DockPanel>
+
+            <!-- 当前应用（快捷键/托盘滚轮操作目标） -->
+            <ComboBox x:Name="SystemDevCombo" Style="{StaticResource RoundedComboBox}" Height="32" Margin="0,10,0,0"
+                      SelectionChanged="SystemDevCombo_SelectionChanged"/>
+
+            <!-- 当前应用音量：大滑块 + 静音 + 百分比（滚轮可调） -->
+            <DockPanel Margin="0,10,0,0" MouseWheel="Volume_MouseWheel">
+                <Button x:Name="MuteButton"
+                        Content="{Binding [Qp.Mute], Source={x:Static local:L10n.Instance}}"
+                        Style="{StaticResource ToolButton}" DockPanel.Dock="Left" MinWidth="54" Height="28"
+                        Margin="0,0,10,0" Click="MuteButton_Click"/>
+                <TextBlock x:Name="VolumePercentText" Text="0%" DockPanel.Dock="Right"
+                           FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"
+                           VerticalAlignment="Center" Margin="10,0,0,0" Width="42" TextAlignment="Right"/>
+                <Slider x:Name="VolumeSlider" Minimum="0" Maximum="100"
+                        VerticalAlignment="Center" IsMoveToPointEnabled="True" Height="28"
+                        ValueChanged="VolumeSlider_ValueChanged"/>
+            </DockPanel>
+
+            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,8"/>
+
+            <!-- 应用列表：全部有音频的应用，每行独立音量，行右侧展开设置输出/输入设备 -->
+            <DockPanel Margin="0,0,0,6">
+                <TextBlock Text="{Binding [Qp.AppVolumes], Source={x:Static local:L10n.Instance}}"
+                           FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Theme.TextSecondary}"/>
+            </DockPanel>
+            <ScrollViewer x:Name="AppListScroll" MaxHeight="360" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="AppListPanel">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,8,0,10"/>
+
+            <!-- 底部工具（反馈改为右上角 OSD，避免顶掉按钮） -->
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" HorizontalAlignment="Right">
+                    <Button x:Name="GlobalMuteButton"
+                            Content="{Binding [Qp.GlobalMute], Source={x:Static local:L10n.Instance}}"
+                            Style="{StaticResource ToolButton}" MinWidth="132" Height="28"
+                            Click="GlobalMuteButton_Click"/>
+                    <Button x:Name="MicMuteButton"
+                            Content="{Binding [Qp.MicMute], Source={x:Static local:L10n.Instance}}"
+                            Style="{StaticResource ToolButton}" MinWidth="132" Height="28"
+                            Click="MicMuteButton_Click"/>
+                    <Button x:Name="FullUiButton"
+                            Content="{Binding [Qp.FullUi], Source={x:Static local:L10n.Instance}}"
+                            Style="{StaticResource ToolButton}" MinWidth="76" Height="28"
+                            Click="SettingsButton_Click"/>
+                </StackPanel>
+            </DockPanel>
+        </StackPanel>
+    </Border>
+</Window>

@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonicRoute.Core", "SonicRoute.Core\SonicRoute.Core.csproj", "{D6A1BF0B-5144-4FB7-82C3-AE140831242D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonicRoute", "SonicRoute\SonicRoute.csproj", "{A027E049-9FA2-4500-8FFD-D5E1C498E4E5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SonicRoute.Selftest", "SonicRoute.Selftest\SonicRoute.Selftest.csproj", "{EC80EDD5-9589-4536-8DBB-C3FBFD946FAD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D6A1BF0B-5144-4FB7-82C3-AE140831242D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6A1BF0B-5144-4FB7-82C3-AE140831242D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6A1BF0B-5144-4FB7-82C3-AE140831242D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6A1BF0B-5144-4FB7-82C3-AE140831242D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A027E049-9FA2-4500-8FFD-D5E1C498E4E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A027E049-9FA2-4500-8FFD-D5E1C498E4E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A027E049-9FA2-4500-8FFD-D5E1C498E4E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A027E049-9FA2-4500-8FFD-D5E1C498E4E5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC80EDD5-9589-4536-8DBB-C3FBFD946FAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC80EDD5-9589-4536-8DBB-C3FBFD946FAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC80EDD5-9589-4536-8DBB-C3FBFD946FAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC80EDD5-9589-4536-8DBB-C3FBFD946FAD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
