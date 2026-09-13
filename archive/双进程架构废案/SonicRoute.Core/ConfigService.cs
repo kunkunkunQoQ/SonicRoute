@@ -136,6 +136,32 @@ namespace SonicRoute.Core
         private static AppConfig? _cache;
         private static readonly object _lock = new();
 
+        // 双进程（阶段 2）：Backend 是配置权威写入者（写文件）；UI 进程只读快照、写经 IPC。
+        // UI 进程通过 SetSnapshot 注入 Backend 下发的最新配置（Load 直接返回，不读盘），
+        // 通过 SetXxxOverride 把写操作转发为 IPC 请求（Backend 落盘后广播 ConfigChanged）。
+        private static Action<AppConfig>? _saveOverride;
+        private static Func<AppConfig>? _resetOverride;
+        private static Func<string, bool>? _exportOverride;
+        private static Func<string, bool>? _importOverride;
+
+        /// <summary>注入配置快照（UI 进程启动/重连时由 Backend 下发；此后 Load 返回快照）。</summary>
+        public static void SetSnapshot(AppConfig config)
+        {
+            lock (_lock) _cache = config;
+        }
+
+        /// <summary>注入保存委托（UI 进程：Save → 发 IPC；Backend 进程不设，保持写文件）。</summary>
+        public static void SetSaveOverride(Action<AppConfig> save) => _saveOverride = save;
+
+        /// <summary>注入重置委托（UI 进程：一键清理配置 → IPC）。</summary>
+        public static void SetResetOverride(Func<AppConfig> reset) => _resetOverride = reset;
+
+        /// <summary>注入导出委托（UI 进程：导出配置 → IPC，保证落盘的是 Backend 权威文件）。</summary>
+        public static void SetExportOverride(Func<string, bool> export) => _exportOverride = export;
+
+        /// <summary>注入导入委托（UI 进程：导入配置 → IPC，由 Backend 写文件并广播）。</summary>
+        public static void SetImportOverride(Func<string, bool> import) => _importOverride = import;
+
         public static AppConfig Load()
         {
             lock (_lock)
@@ -168,6 +194,14 @@ namespace SonicRoute.Core
 
         public static void Save(AppConfig config)
         {
+            // UI 进程：写入转发 IPC（Backend 权威落盘）；本进程缓存照常更新（乐观即时生效）
+            var saveOverride = _saveOverride;
+            if (saveOverride != null)
+            {
+                try { saveOverride(config); } catch { }
+                lock (_lock) { _cache = config; }
+                return;
+            }
             try
             {
                 var dir = Path.GetDirectoryName(ConfigPath);
@@ -185,9 +219,17 @@ namespace SonicRoute.Core
             }
         }
 
-        /// <summary>一键清理配置文件：删除 config.json 并重置内存缓存为全新默认配置（实验设置功能）。</summary>
+        /// <summary>一键清理配置文件：删除 config.json 并重置内存缓存为全新默认配置（实验设置功能）。
+        /// UI 进程经 IPC 由 Backend 执行（返回新配置并广播 ConfigChanged）。</summary>
         public static AppConfig ResetToDefault()
         {
+            var resetOverride = _resetOverride;
+            if (resetOverride != null)
+            {
+                var c = resetOverride();
+                lock (_lock) { _cache = c; }
+                return c;
+            }
             lock (_lock)
             {
                 try { if (File.Exists(ConfigPath)) File.Delete(ConfigPath); } catch { }
@@ -200,6 +242,8 @@ namespace SonicRoute.Core
         /// <summary>导出配置副本到指定路径（先落盘当前内存配置再复制）。</summary>
         public static bool ExportTo(string destPath)
         {
+            var exportOverride = _exportOverride;
+            if (exportOverride != null) return exportOverride(destPath);
             try
             {
                 Save(Load());
@@ -209,9 +253,12 @@ namespace SonicRoute.Core
             catch { return false; }
         }
 
-        /// <summary>从指定文件导入配置：复制到配置路径并清空内存缓存，下次 Load 重新读取（调用方负责重启应用）。</summary>
+        /// <summary>从指定文件导入配置：复制到配置路径并清空内存缓存，下次 Load 重新读取（调用方负责重启应用）。
+        /// UI 进程经 IPC 由 Backend 执行（Backend 落盘并广播 ConfigChanged）。</summary>
         public static bool ImportFrom(string srcPath)
         {
+            var importOverride = _importOverride;
+            if (importOverride != null) return importOverride(srcPath);
             try
             {
                 var dir = Path.GetDirectoryName(ConfigPath);

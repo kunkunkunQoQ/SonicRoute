@@ -23,6 +23,8 @@ namespace SonicRoute
     /// </summary>
     public partial class QuickPanelWindow : Window, IQuickPanel
     {
+        /// <summary>宿主服务（阶段 0：App 直接实现；阶段 1 起由后台进程实现，经 IPC 代理调用）。</summary>
+        private readonly IHostServices _host;
         private List<AudioDeviceInfo> _outputs = new();
         private List<AudioDeviceInfo> _outputDisplay = new();
         private List<AudioDeviceInfo> _inputs = new();
@@ -41,6 +43,7 @@ namespace SonicRoute
         public QuickPanelWindow()
         {
             InitializeComponent();
+            _host = (IHostServices)Application.Current;
             VersionText.Text = App.DisplayVersion;
             // 只有面板真正获得过焦点（托盘点击等正常交互）才在失焦时关闭；
             // 启动/脚本等未获焦场景下保持打开，避免一闪而过
@@ -86,7 +89,7 @@ namespace SonicRoute
             {
                 CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
                 SystemParameters.StaticPropertyChanged -= OnSystemParamChanged;
-                if (_adjustMode) { _adjustMode = false; ((App)Application.Current).NotifyQuickPanelAdjustFinished(); }
+                if (_adjustMode) { _adjustMode = false; _host.NotifyQuickPanelAdjustFinished(); }
             };
         }
 
@@ -118,7 +121,7 @@ namespace SonicRoute
         internal void SetAdjustMode(bool on)
         {
             _adjustMode = on;
-            if (on) ((App)Application.Current).ShowOsd(L10n.T("Exp.PanelPosDragTitle"), L10n.T("Exp.PanelPosHint"));
+            if (on) _host.ShowOsd(L10n.T("Exp.PanelPosDragTitle"), L10n.T("Exp.PanelPosHint"));
         }
 
         /// <summary>一键还原默认位置（任务栏右下角），已打开则立即重定位。</summary>
@@ -135,8 +138,8 @@ namespace SonicRoute
             {
                 QuickPanelPosition.Save(this, ConfigService.Load());
                 _adjustMode = false;
-                ((App)Application.Current).ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
-                ((App)Application.Current).NotifyQuickPanelAdjustFinished();
+                _host.ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
+                _host.NotifyQuickPanelAdjustFinished();
             }
             catch { }
         }
@@ -580,7 +583,7 @@ namespace SonicRoute
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
             Close();
-            ((App)Application.Current).ShowMainWindow();
+            _host.ShowMainWindow();
         }
 
         protected override void OnKeyDown(KeyEventArgs e)

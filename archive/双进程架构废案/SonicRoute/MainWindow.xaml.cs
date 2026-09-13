@@ -47,10 +47,13 @@ namespace SonicRoute
         private bool _suppressRename;
         private List<AppItem> _appItems = new();
         private readonly AppConfig _config;
+        /// <summary>宿主服务（阶段 0：App 直接实现；阶段 1 起由后台进程实现，经 IPC 代理调用）。</summary>
+        private readonly IHostServices _host;
 
         public MainWindow()
         {
             InitializeComponent();
+            _host = (IHostServices)Application.Current;
             Title = $"音跃 SonicRoute {App.DisplayVersion}";
             if (HeaderTitleText != null)
                 HeaderTitleText.Text = $"🎧 音跃 SonicRoute {App.DisplayVersion}";
@@ -137,7 +140,7 @@ namespace SonicRoute
                     _recordingAction = null;
                     _config.Hotkeys[escAction] = "";
                     ConfigService.Save(_config);
-                    ((App)Application.Current).ReloadHotkeys();
+                    _host.ReloadHotkeys();
                     BuildHotkeyList();
                 }
                 return;
@@ -149,7 +152,7 @@ namespace SonicRoute
             _config.Hotkeys[action] = combo;
             ConfigService.Save(_config);
             // 先重载注册（让 registered 反映新组合），再按最新注册刷新显示
-            ((App)Application.Current).ReloadHotkeys();
+            _host.ReloadHotkeys();
             BuildHotkeyList();
         }
 
@@ -164,7 +167,7 @@ namespace SonicRoute
             _recordingAction = null;
             _config.Hotkeys[action] = combo;
             ConfigService.Save(_config);
-            ((App)Application.Current).ReloadHotkeys();
+            _host.ReloadHotkeys();
             BuildHotkeyList();
         }
 
@@ -179,7 +182,7 @@ namespace SonicRoute
             _recordingAction = null;
             _config.Hotkeys[action] = combo;
             ConfigService.Save(_config);
-            ((App)Application.Current).ReloadHotkeys();
+            _host.ReloadHotkeys();
             BuildHotkeyList();
         }
 
@@ -1325,10 +1328,10 @@ namespace SonicRoute
             ConfigService.Save(_config);
             // 即时生效（无需重启）：失效缓存 + 切语言 + 全量绑定刷新 + 重建托盘菜单 + 重刷代码动态文本
             L10n.Instance.ApplyImportedLanguage(code);
-            ((App)Application.Current).RebuildTrayMenu();
+            _host.RebuildTrayMenu();
             RefreshLangCombo(code);
             RefreshDynamicTexts();
-            ((App)Application.Current).ShowOsd(L10n.T("St.Language"), L10n.T("St.LangApplied"));
+            _host.ShowOsd(L10n.T("St.Language"), L10n.T("St.LangApplied"));
         }
 
         /// <summary>语言切换后刷新代码动态文本（XAML 绑定已由 PropertyChanged 自动刷新；
@@ -1641,11 +1644,11 @@ namespace SonicRoute
                     SettingsAutoStart.IsChecked = false;
                     _suppressSettings = false;
                 }
-                ((App)Application.Current).ShowOsd(L10n.T("St.AutoStartTitle"), L10n.T("St.CleanAutoStartDone"));
+                _host.ShowOsd(L10n.T("St.AutoStartTitle"), L10n.T("St.CleanAutoStartDone"));
             }
             catch
             {
-                ((App)Application.Current).ShowOsd(L10n.T("St.AutoStartTitle"), L10n.T("St.CleanAutoStartFail"));
+                _host.ShowOsd(L10n.T("St.AutoStartTitle"), L10n.T("St.CleanAutoStartFail"));
             }
         }
         // ==================================================================
@@ -1865,7 +1868,7 @@ namespace SonicRoute
 
             // 即时生效：失效缓存 + 切到最后成功导入的语言 + 全量绑定刷新 + 重建托盘菜单
             L10n.Instance.ApplyImportedLanguage(lastCode!);
-            ((App)Application.Current).RebuildTrayMenu();
+            _host.RebuildTrayMenu();
             RefreshLangCombo(lastCode!);
             RefreshCustomLangList();
 
@@ -1995,7 +1998,8 @@ namespace SonicRoute
             RestartApp();
         }
 
-        /// <summary>重启应用（供清理配置等需要全量重新初始化的场景使用）。</summary>
+        /// <summary>重启应用（供清理配置等需要全量重新初始化的场景使用）。双进程下带 --restart 重启 UI 进程：
+        /// 新 UI 经 IPC 通知旧 UI 退出并接管（Backend 进程不受影响，保持后台运行）。</summary>
         private void RestartApp()
         {
             try
@@ -2005,6 +2009,7 @@ namespace SonicRoute
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = exe,
+                    Arguments = "--restart",
                     UseShellExecute = true,
                 });
             }
@@ -2034,9 +2039,8 @@ namespace SonicRoute
         /// <summary>主题页 - 一键还原 OSD 位置到默认（右上角 + 零偏移 + 清空自定义坐标）。</summary>
         private void OsdReset_Click(object sender, RoutedEventArgs e)
         {
-            var app = (App)Application.Current;
             // 若处于调整模式先退出，否则 PreviewOsd 被 _osdAdjustMode 挡住不显示（还原位置不生效的根因）
-            if (_osdAdjusting) { _osdAdjusting = false; SetOsdAdjustLabel(L10n.T("Exp.OsdAdjust")); app.CancelOsdAdjust(); }
+            if (_osdAdjusting) { _osdAdjusting = false; SetOsdAdjustLabel(L10n.T("Exp.OsdAdjust")); _host.CancelOsdAdjust(); }
             _config.OsdPosition = "TR";
             _config.OsdOffsetX = 0;
             _config.OsdOffsetY = 0;
@@ -2047,7 +2051,7 @@ namespace SonicRoute
             ConfigService.Save(_config);
             SyncOsdSliders(); // 同步主题页滑条到还原值
             ShowToast(L10n.T("Exp.OsdResetDone"));
-            app.PreviewOsd(); // 立即预览还原后的默认位置与尺寸（内部按需重定位到主屏默认位置）
+            _host.PreviewOsd(); // 立即预览还原后的默认位置与尺寸（内部按需重定位到主屏默认位置）
         }
 
         private bool _osdAdjusting;
@@ -2056,19 +2060,18 @@ namespace SonicRoute
         /// <summary>主题页 - 「调整位置」：进入/取消 OSD 拖拽定位模式（拖动松手即保存为自定义坐标）。</summary>
         private void OsdAdjust_Click(object sender, RoutedEventArgs e)
         {
-            var app = (App)Application.Current;
             if (!_osdAdjusting)
             {
                 SubscribeOsdAdjust();
                 _osdAdjusting = true;
                 SetOsdAdjustLabel(L10n.T("Exp.OsdAdjustCancel"));
-                app.BeginOsdAdjust();
+                _host.BeginOsdAdjust();
             }
             else
             {
                 _osdAdjusting = false;
                 SetOsdAdjustLabel(L10n.T("Exp.OsdAdjust"));
-                app.CancelOsdAdjust();
+                _host.CancelOsdAdjust();
             }
         }
 
@@ -2082,7 +2085,7 @@ namespace SonicRoute
         {
             if (_osdAdjustSubscribed) return;
             _osdAdjustSubscribed = true;
-            ((App)Application.Current).OsdAdjustFinished += () =>
+            _host.OsdAdjustFinished += () =>
             {
                 // 拖拽松手已保存：复位主题页按钮状态
                 _osdAdjusting = false;
@@ -2096,33 +2099,31 @@ namespace SonicRoute
         /// <summary>主题页 - 「调整位置」：进入/取消快速面板拖拽定位模式（拖动松手即保存为自定义坐标）。</summary>
         private void PanelPosAdjust_Click(object sender, RoutedEventArgs e)
         {
-            var app = (App)Application.Current;
             if (!_panelPosAdjusting)
             {
                 SubscribePanelPosAdjust();
                 _panelPosAdjusting = true;
                 SetPanelPosAdjustLabel(L10n.T("Exp.PanelPosAdjustCancel"));
-                app.BeginQuickPanelAdjust();
+                _host.BeginQuickPanelAdjust();
             }
             else
             {
                 _panelPosAdjusting = false;
                 SetPanelPosAdjustLabel(L10n.T("Exp.PanelPosAdjust"));
-                app.CancelQuickPanelAdjust();
+                _host.CancelQuickPanelAdjust();
             }
         }
 
         /// <summary>主题页 - 「一键还原」：快速面板恢复任务栏右下角默认位置。</summary>
         private void PanelPosReset_Click(object sender, RoutedEventArgs e)
         {
-            var app = (App)Application.Current;
             if (_panelPosAdjusting)
             {
                 _panelPosAdjusting = false;
                 SetPanelPosAdjustLabel(L10n.T("Exp.PanelPosAdjust"));
-                app.CancelQuickPanelAdjust();
+                _host.CancelQuickPanelAdjust();
             }
-            app.ResetQuickPanelPosition();
+            _host.ResetQuickPanelPosition();
             ShowToast(L10n.T("Exp.PanelPosResetDone"));
         }
 
@@ -2136,7 +2137,7 @@ namespace SonicRoute
         {
             if (_panelPosAdjustSubscribed) return;
             _panelPosAdjustSubscribed = true;
-            ((App)Application.Current).QuickPanelAdjustFinished += () =>
+            _host.QuickPanelAdjustFinished += () =>
             {
                 // 拖拽松手已保存（或面板被关闭）：复位主题页按钮状态
                 _panelPosAdjusting = false;
@@ -2152,9 +2153,8 @@ namespace SonicRoute
             if (OsdWidthValue == null || !IsLoaded) return;
             int w = (int)Math.Round(OsdWidthSlider.Value);
             OsdWidthValue.Text = w + "px";
-            var app = (App)Application.Current;
             if (_config.OsdWidth != w) { _config.OsdWidth = w; ConfigService.Save(_config); }
-            app.SetOsdSize(w, _config.OsdFontScale);
+            _host.SetOsdSize(w, _config.OsdFontScale);
         }
 
         /// <summary>主题页 - OSD 字号倍率滑条：实时调整 OSD 字号并保存。</summary>
@@ -2164,9 +2164,8 @@ namespace SonicRoute
             if (OsdFontValue == null || !IsLoaded) return;
             double fs = Math.Round(OsdFontSlider.Value, 2);
             OsdFontValue.Text = (int)Math.Round(fs * 100) + "%";
-            var app = (App)Application.Current;
             if (Math.Abs(_config.OsdFontScale - fs) > 0.001) { _config.OsdFontScale = fs; ConfigService.Save(_config); }
-            app.SetOsdSize(_config.OsdWidth, fs);
+            _host.SetOsdSize(_config.OsdWidth, fs);
         }
 
         private bool _syncingOsdSliders;
@@ -2222,7 +2221,7 @@ namespace SonicRoute
                 _config.MicMuteOsdTrackInputMuted = on;
                 ConfigService.Save(_config);
             }
-            ((App)Application.Current).NotifyMicMuteOsdSettingChanged(_config.MicMuteOsdPersistent);
+            _host.NotifyMicMuteOsdSettingChanged(_config.MicMuteOsdPersistent);
         }
 
         /// <summary>主题页 - 常驻子选项「更多选项」折叠展开。</summary>
@@ -2243,13 +2242,13 @@ namespace SonicRoute
                 ConfigService.Save(_config);
             }
             ApplyMicMutePersistUi(on);
-            ((App)Application.Current).NotifyMicMuteOsdSettingChanged(on);
+            _host.NotifyMicMuteOsdSettingChanged(on);
         }
 
         /// <summary>右上角 OSD 通知（兼容主题/强调色/透明度）。</summary>
         private void ShowToast(string text)
         {
-            try { ((App)Application.Current).ShowOsd(L10n.T("St.Settings"), text); }
+            try { _host.ShowOsd(L10n.T("St.Settings"), text); }
             catch { /* 通知失败静默 */ }
         }
 
@@ -2314,7 +2313,7 @@ namespace SonicRoute
             HotkeyList.Items.Clear();
             // 实验模式隐藏动作：仅在"实验模式 + 麦克风选项"开启时显示（切换当前应用麦克风设备）
             bool expMicOn = _config.ExperimentalMic;
-            var registered = ((App)Application.Current).HotkeyRegistration;
+            var registered = _host.HotkeyRegistration;
             // 按分组渲染：每组先加分类标题，再渲染动作行
             foreach (var (l10nKey, groupActions) in HotkeyActions.Groups)
             {

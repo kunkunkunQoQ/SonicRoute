@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🙏 提问前先看 · 常见问题
+    url: https://github.com/kunkunkunQoQ/SonicRoute/discussions/3
+    about: 常见问题解答与使用指引，先看看这里可能已有答案
+  - name: 💬 讨论区
+    url: https://github.com/kunkunkunQoQ/SonicRoute/discussions
+    about: 交流、提问、建议、成果展示都可以去讨论区
+  - name: 📚 Wiki
+    url: https://github.com/kunkunkunQoQ/SonicRoute/wiki
+    about: 使用指南、功能特性、常见问题、版本信息等文档

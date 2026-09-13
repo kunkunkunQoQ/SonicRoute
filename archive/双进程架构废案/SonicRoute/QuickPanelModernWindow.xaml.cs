@@ -43,6 +43,8 @@ namespace SonicRoute
             public bool Expanded;
         }
 
+        /// <summary>宿主服务（阶段 0：App 直接实现；阶段 1 起由后台进程实现，经 IPC 代理调用）。</summary>
+        private readonly IHostServices _host;
         private readonly Dictionary<int, AppRow> _rows = new();
         private readonly Dictionary<int, int> _pendingVolume = new();
         private DispatcherTimer? _volDebounce;
@@ -63,6 +65,7 @@ namespace SonicRoute
         public QuickPanelModernWindow()
         {
             InitializeComponent();
+            _host = (IHostServices)Application.Current;
             VersionText.Text = App.DisplayVersion;
             // 只有面板真正获得过焦点（托盘点击等正常交互）才在失焦时关闭；
             // 启动/脚本等未获焦场景下保持打开，避免一闪而过
@@ -109,7 +112,7 @@ namespace SonicRoute
             {
                 CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
                 SystemParameters.StaticPropertyChanged -= OnSystemParamChanged;
-                if (_adjustMode) { _adjustMode = false; ((App)Application.Current).NotifyQuickPanelAdjustFinished(); }
+                if (_adjustMode) { _adjustMode = false; _host.NotifyQuickPanelAdjustFinished(); }
             };
         }
 
@@ -141,7 +144,7 @@ namespace SonicRoute
         internal void SetAdjustMode(bool on)
         {
             _adjustMode = on;
-            if (on) ((App)Application.Current).ShowOsd(L10n.T("Exp.PanelPosDragTitle"), L10n.T("Exp.PanelPosHint"));
+            if (on) _host.ShowOsd(L10n.T("Exp.PanelPosDragTitle"), L10n.T("Exp.PanelPosHint"));
         }
 
         /// <summary>一键还原默认位置（任务栏右下角），已打开则立即重定位。</summary>
@@ -158,8 +161,8 @@ namespace SonicRoute
             {
                 QuickPanelPosition.Save(this, ConfigService.Load());
                 _adjustMode = false;
-                ((App)Application.Current).ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
-                ((App)Application.Current).NotifyQuickPanelAdjustFinished();
+                _host.ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
+                _host.NotifyQuickPanelAdjustFinished();
             }
             catch { }
         }
@@ -268,7 +271,7 @@ namespace SonicRoute
                     var ok = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, dev.Id));
                     if (!ok.Success)
                     {
-                        ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
+                        _host.ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
                     }
                 }
             }
@@ -354,16 +357,16 @@ namespace SonicRoute
         }
 
         /// <summary>操作反馈改为右上角 OSD 通知（避免面板状态文本顶掉底部按钮）。</summary>
-        private void ShowOsd(string text) => ((App)Application.Current).ShowOsd(L10n.T("Ov.VolumeTitle"), text);
+        private void ShowOsd(string text) => _host.ShowOsd(L10n.T("Ov.VolumeTitle"), text);
 
         /// <summary>OSD 通知（自定义主标题 + 副标题）。</summary>
-        private void ShowOsd(string title, string text) => ((App)Application.Current).ShowOsd(title, text);
+        private void ShowOsd(string title, string text) => _host.ShowOsd(title, text);
 
         /// <summary>设备音量/静音 OSD：主标题显示当前所选系统设备名（跟随设置的自定义设备名，无则默认名）。</summary>
         private void ShowDeviceOsd(string text)
         {
             string title = (SystemDevCombo.SelectedItem as AudioDeviceInfo)?.DisplayName ?? L10n.T("App.NameFull");
-            ((App)Application.Current).ShowOsd(title, text);
+            _host.ShowOsd(title, text);
         }
 
         private async void MuteButton_Click(object sender, RoutedEventArgs e)
@@ -577,7 +580,6 @@ namespace SonicRoute
                         ApplyRowMutedVisual(row, false);
                     }
                 }
-
                 AppItem.LoadIconsAsync(pendingIcons);
 
                 UpdateRowHighlights();
@@ -811,7 +813,7 @@ namespace SonicRoute
             ApplyGlobalMuteVisual(muted);
             foreach (var (_, row) in _rows) ApplyRowMutedVisual(row, muted);
             // 全局输出静音 OSD 主标题显示「全部应用」（静音的是所有应用，不是音跃本身）
-            ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted"));
+            _host.ShowOsd(L10n.T("Qp.AllApps"), L10n.T(muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted"));
             return true;
         }
 
@@ -827,14 +829,14 @@ namespace SonicRoute
         {
             bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
             ApplyMicMuteVisual(muted);
-            ((App)Application.Current).ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted); // 统一入口：标题固定「麦克风静音」，静音且常驻开关开 → 常驻
+            _host.ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted); // 统一入口：标题固定「麦克风静音」，静音且常驻开关开 → 常驻
             return muted; // 返回真实静音状态（快捷键共用：切换后立即更新 OSD）
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
             Close();
-            ((App)Application.Current).ShowMainWindow();
+            _host.ShowMainWindow();
         }
 
         protected override void OnKeyDown(KeyEventArgs e)

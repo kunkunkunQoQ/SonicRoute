@@ -1,0 +1,49 @@
+# ===== 编译产物 =====
+bin/
+obj/
+
+# ===== 发布产物（解压即用包，不纳入源码仓库）=====
+dist/
+*.zip
+
+# ===== Visual Studio 用户设置 =====
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ===== 构建/调试临时文件 =====
+*.pdb
+*.cache
+*.log
+TestResults/
+
+# 临时附件
+_attach_tmp.bin
+屏幕截图 *.png
+
+# 根目录截图（已归档到 docs/images）
+/快速面板.png
+/默认调节的应用设置.png
+/多种快捷键.png
+/快捷键.png
+/设置.png
+
+# ===== 源码归档（本地备份，不入仓库）=====
+/SonicRoute源码/
+
+# Release 临时 JSON
+/rel*.json
+.preview/
+# 本地保留、不上传 GitHub 的多余文件
+/Probe/
+/SonicRoute.Selftest/
+/WpfUiSkeleton/
+/docs/
+/背景/
+/主题.png
+/图标.png
+
+# wiki 子仓库（独立 git 仓库，勿提交）
+SonicRoute.wiki/

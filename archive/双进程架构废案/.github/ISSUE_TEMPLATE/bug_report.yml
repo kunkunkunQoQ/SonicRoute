@@ -1,0 +1,79 @@
+name: 🐛 Bug 反馈
+description: 音跃 SonicRoute 出现问题？按此模板提交，便于快速定位修复
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 感谢反馈！
+        提交前建议先看 [Wiki 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki) 与 [讨论区置顶帖](https://github.com/kunkunkunQoQ/SonicRoute/discussions/3) 是否已有解答。
+  - type: input
+    id: version
+    attributes:
+      label: 音跃版本号
+      description: 设置页可查看
+      placeholder: "例如：1.13"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 版本
+      description: Win+R 输入 winver 可查看
+      placeholder: "例如：Windows 11 24H2"
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: 问题类型
+      description: 问题主要出在哪一块
+      options:
+        - 应用/全局设备切换
+        - 系统默认设备切换
+        - 快捷键
+        - 快速面板
+        - 音量/静音
+        - 麦克风静音
+        - OSD 显示
+        - 主题/界面
+        - 开机自启
+        - 性能/内存
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: desc
+    attributes:
+      label: 问题描述
+      description: 发生了什么？预期应该是什么？
+      placeholder: "简洁清楚地描述问题"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 重现步骤
+      description: 一步步说明如何复现（有助于更快修复）
+      placeholder: |
+        1. 打开音跃
+        2. ...
+        3. 出现问题
+    validations:
+      required: false
+  - type: input
+    id: device
+    attributes:
+      label: 涉及的应用 / 设备
+      description: 写明具体应用或设备名称
+      placeholder: "例如：某游戏 / 耳机 AUSDOM A3 Pro"
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 截图 / 录屏
+      description: 拖入截图或录屏文件（强烈建议，能大幅加快定位）
+    validations:
+      required: false

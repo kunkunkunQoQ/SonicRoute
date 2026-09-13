@@ -50,7 +50,11 @@ namespace SonicRoute
             set { lock (_lock) _lastForegroundAudio = value; }
         }
 
-        private static bool SameApp(AudioAppInfo? a, AudioAppInfo? b)
+        /// <summary>强制触发一次 CurrentChanged（当前应用未变但状态已变——如快捷键改音量/静音后，
+        /// 让面板/概览重读当前应用行的音量与静音状态）。</summary>
+        public static void NotifyRefresh() => CurrentChanged?.Invoke();
+
+private static bool SameApp(AudioAppInfo? a, AudioAppInfo? b)
         {
             if (a == null || b == null) return a == null && b == null;
             return a.ProcessId == b.ProcessId;
