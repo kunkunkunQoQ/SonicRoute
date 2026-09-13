@@ -45,6 +45,13 @@
 
 完整版本历史（版本规则 + 更新日志 + 已知问题）见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
+### ⚠️ 已知问题
+
+- **托盘区域滚轮**：部分场景可能无法调节当前应用音量（与内存优化相关，正在思考折中方案）
+- **无线屏幕设备**：无法切换至 Windows 官方「无线屏幕」播放设备（该设备不提供标准音频端点接口）
+
+> 📌 最近在快速迭代小版本优化体验与修复 bug，国庆后将进行大版本更新，完善大部分设计理念。
+
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
 ---
