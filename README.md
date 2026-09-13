@@ -6,7 +6,7 @@
 
 > Windows 10/11 **音频控制中心**：**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.14** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.15** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
 ---
 
@@ -27,15 +27,15 @@
 
 ## 🌐 多语言与翻译
 
-内置 9 种语言，应用内可**导出 / 编辑 / 导入**（实验设置 → 语言文件，支持自定义语言）。想**提交翻译**？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
+内置 9 种语言，应用内可**导出 / 编辑 / 导入**（设置 → 语言 → 语言文件，支持自定义语言），**切换 / 导入即时生效**。想**提交翻译**？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
 ## 📦 下载
 
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
 | 🛍 微软商店（推荐） | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
-| 🟢 含运行环境版本 | `SonicRoute-v1.14.exe` / `.zip` | ~237MB / ~85MB | 已内置运行环境 |
-| ⚡ 轻量版 | `SonicRoute-v1.14-Lite.exe` / `.zip` | ~27MB / ~6.7MB | 需 .NET 8 |
+| 🟢 含运行环境版本 | `SonicRoute-v1.15.exe` / `.zip` | ~237MB / ~85MB | 已内置运行环境 |
+| ⚡ 轻量版 | `SonicRoute-v1.15-Lite.exe` / `.zip` | ~27MB / ~6.7MB | 需 .NET 8 |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -43,15 +43,15 @@
 
 ## 📌 版本相关
 
+### 📋 更新日志 · v1.15（最新）
 
-### 🔮 下一版本预告（v1.15）
+- 🌐 **多语言体系重构**：9 语言独立 JSON（含繁中港澳台综合版），切换/导入**即时生效**，只加载当前语言+简中回退
+- 📦 **外置语言**：导出内置语言 JSON（自动打开文件夹）→ 编辑/导入；自定义语言（`Lang.Custom` 独立附加语言）；「打开语言文件夹」「还原默认语言」
+- 🔔 **OSD 首闪修复**：启动后第一次带 OSD 的操作直接出现在正确位置，不再从屏幕中央闪一下
+- 🧩 **快速面板定位优化**：展开收起不再跳动，自定义位置保持；主题页可拖拽调整面板位置
+- ⚙️ **设置 UI**：启动选项独立栏（开机自启/启动最小化/启动显示面板）；折叠选项移至设置默认开
 
-- 🎧 简洁面板可选更改系统默认设备选项
-- 🧩 优化快速面板，增加可移动位置
-- 🎨 优化 UI 排版
-- 🛠 修复 bug
-
-> ⏰ 下次更新时间预计 **9 月 16 号**
+完整版本历史见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
