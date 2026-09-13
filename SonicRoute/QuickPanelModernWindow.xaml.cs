@@ -433,10 +433,12 @@ namespace SonicRoute
                     return d;
                 });
 
+                var pendingIcons = new List<AppItem>();
                 foreach (var app in apps)
                 {
                     var pid = (int)app.ProcessId;
                     var item = AppItem.From(app);
+                    pendingIcons.Add(item);
                     var row = new AppRow { App = app };
 
                     // 行头：图标（可点击静音）+ 百分比 + ▾ + 音量条
@@ -452,11 +454,16 @@ namespace SonicRoute
                     var iconGrid = new Grid { Width = 30, Height = 30, Margin = new Thickness(0, 0, 2, 0) };
                     var img = new Image
                     {
-                        Source = item.Icon,
                         Width = 18,
                         Height = 18,
                         SnapsToDevicePixels = true
                     };
+                    // 懒加载图标：初始 Source 为空，后台加载完成后 AppItem.Icon 触发 PropertyChanged，
+                    // 通过 OneWay 绑定自动刷新（不能一次性赋值，否则图标永远空白）。
+                    img.DataContext = item;
+                    img.SetBinding(Image.SourceProperty,
+                        new System.Windows.Data.Binding(nameof(AppItem.Icon))
+                        { Mode = System.Windows.Data.BindingMode.OneWay });
                     RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
                     var iconBtn = new Button
                     {
@@ -573,6 +580,7 @@ namespace SonicRoute
                         ApplyRowMutedVisual(row, false);
                     }
                 }
+                AppItem.LoadIconsAsync(pendingIcons);
 
                 UpdateRowHighlights();
             }

@@ -228,6 +228,7 @@ namespace SonicRoute
             apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
                 && !hiddenPanel.Any(h => string.Equals(h, a.ProcessName, StringComparison.OrdinalIgnoreCase))).ToList();
             var items = apps.Select(AppItem.From).ToList();
+            AppItem.LoadIconsAsync(items);
 
             var cur = CurrentAppService.Current;
             var target = cur != null

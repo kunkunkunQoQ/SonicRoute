@@ -46,6 +46,7 @@ namespace SonicRoute
         private bool _lastMicMutedBaseline;
         private DispatcherTimer? _idleTimer;
         private CancellationTokenSource? _singleClickCts;
+        private Action? _trayWheelOsdHandler; // 持引用以便 Dispose 正确退订（匿名 lambda 无法 -=）
         private bool _disposed;
 
         /// <summary>启动后台宿主（必须 UI 线程调用）：Pipe 服务、托盘、热键、滚轮/OSD、麦克风监听、
@@ -103,7 +104,7 @@ namespace SonicRoute
             // 托盘滚轮调音量 + OSD（传入托盘图标：关闭"整片托盘区域"开关时仅音跃图标上滚轮响应）
             _trayWheel = new TrayWheelService(_trayIcon);
             _trayWheel.Start();
-            _trayWheel.OsdAdjustFinished += () => _ipc?.SendEvent(IpcEvt.OsdAdjustFinished, null);
+            _trayWheel.OsdAdjustFinished += _trayWheelOsdHandler = () => _ipc?.SendEvent(IpcEvt.OsdAdjustFinished, null);
 
             // 麦克风静音状态后台检测（2 秒低频轮询兜底）：首次 tick 只建立基线不弹 OSD，之后状态变化立即更新 OSD 并广播
             _micMuteWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -708,7 +709,8 @@ namespace SonicRoute
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _micMuteWatchTimer?.Stop();
             _micMuteWatchTimer = null;
-            if (_trayWheel != null) _trayWheel.OsdAdjustFinished -= () => _ipc?.SendEvent(IpcEvt.OsdAdjustFinished, null);
+            if (_trayWheel != null && _trayWheelOsdHandler != null)
+                _trayWheel.OsdAdjustFinished -= _trayWheelOsdHandler;
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();

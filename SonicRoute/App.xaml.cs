@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -56,7 +56,6 @@ namespace SonicRoute
         {
             base.OnStartup(e);
             var args = e.Args;
-            UiLog($"OnStartup args=[{string.Join(" ", args)}]");
 
             bool serviceMode = args.Contains("--service", StringComparer.OrdinalIgnoreCase);
             bool uiMode = args.Contains("--ui", StringComparer.OrdinalIgnoreCase);
@@ -120,38 +119,47 @@ namespace SonicRoute
             catch { }
         }
 
+
+        /// <summary>判断是否已有 SonicRoute 进程在运行（排除自身）：重连时仅当 Backend 确实已死才拉起，
+        /// 避免每轮重试重复 spawn。查询失败保守认为存活（不误 spawn）。</summary>
+        private static bool IsBackendProcessAlive()
+        {
+            try
+            {
+                int own = Environment.ProcessId;
+                return Process.GetProcessesByName("SonicRoute").Any(p => p.Id != own);
+            }
+            catch
+            {
+                return true;
+            }
+        }
         // ================= UI 进程 =================
 
         private void StartUi(string[] args)
         {
             _ipc = new IpcClient();
-            UiLog("StartUi: 开始连接");
 
             // 连接 Backend：失败则拉起（首次失败才拉起，避免反复 spawn），最多 5 次共约 10s
             bool connected = false;
             for (int i = 0; i < 5; i++)
             {
                 if (_ipc.TryConnect(2000)) { connected = true; break; }
-                UiLog($"StartUi: 连接失败第{i + 1}次");
                 if (i == 0) SpawnBackend();
                 Thread.Sleep(1500);
             }
             if (!connected)
             {
-                UiLog("StartUi: 连接彻底失败，退出");
                 System.Windows.MessageBox.Show("启动失败：无法连接到音跃后台服务。\n请重新启动音跃。", "音跃 SonicRoute");
                 Shutdown();
                 return;
             }
-            UiLog("StartUi: 连接成功");
 
             // Hello 会话判定：已有活动 UI → 已通知其激活（重复启动）或退出（--restart 重启），本进程决定是否退出
             var hello = _ipc.Request<HelloRespDto>(IpcReq.Hello,
                 new HelloDto { UiId = _ipc.UiId, Replace = args.Contains("--restart", StringComparer.OrdinalIgnoreCase) });
-            UiLog($"StartUi: Hello 完成 ExistsUi={hello?.ExistsUi}");
             if (hello?.ExistsUi == true)
             {
-                UiLog("StartUi: 已有活动 UI，本进程退出");
                 Shutdown();
                 return;
             }
@@ -159,7 +167,6 @@ namespace SonicRoute
             // 取回完整状态：配置快照 + 当前应用 + 麦克风静音
             var state = _ipc.Request<StateRespDto>(IpcReq.QueryState, null);
             var config = state?.Config ?? ConfigService.Load();
-            UiLog($"StartUi: QueryState 完成 config={config != null}");
 
             // 配置：UI 进程只读快照 + 写经 IPC（Backend 权威落盘并广播）
             ConfigService.SetSnapshot(config);
@@ -187,7 +194,6 @@ namespace SonicRoute
             L10n.Instance.SetLanguage(config.Language);
             ThemeService.Apply(config.ThemeMode, config.Accent);
             ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
-            UiLog("StartUi: 语言/主题应用完成");
 
             // 当前应用初始化（UI 面板/概览的当前应用行）
             if (state?.CurrentApp is AppInfoDto dto && dto.Pid > 0)
@@ -204,17 +210,14 @@ namespace SonicRoute
             // 事件订阅（Backend → UI 广播；回调在后台线程，必须切 Dispatcher）
             _ipc.EventReceived += OnIpcEvent;
             _ipc.Disconnected += OnIpcDisconnected;
-            UiLog("StartUi: 事件订阅完成，进入启动行为");
 
             // 启动行为：--panel → 快速面板；--main → 完整界面；否则按配置
             if (args.Contains("--panel", StringComparer.OrdinalIgnoreCase))
             {
-                UiLog("StartUi: --panel → ToggleQuickPanel");
                 Dispatcher.BeginInvoke(ToggleQuickPanel);
             }
             else if (args.Contains("--main", StringComparer.OrdinalIgnoreCase))
             {
-                UiLog("StartUi: --main → ShowMainWindow");
                 Dispatcher.BeginInvoke(ShowMainWindow);
             }
             else if (config.StartPanelOnStart)
@@ -313,8 +316,9 @@ namespace SonicRoute
 
         private async Task<bool> TryReconnectAsync()
         {
-            // 先确保 Backend 在（断线可能是其崩溃/被杀）
-            SpawnBackend();
+            // 确保 Backend 在：仅当系统里已没有其他 SonicRoute 进程（Backend 已死/被杀）时才拉起，
+            // 避免每轮重试重复 spawn 堆积多余进程（Hello 会话机制保证 UI 不会多开，但反复启动/退出仍浪费）
+            if (!IsBackendProcessAlive()) SpawnBackend();
             for (int i = 0; i < 3; i++)
             {
                 var c = new IpcClient();
@@ -465,18 +469,14 @@ namespace SonicRoute
 
         public void ShowMainWindow()
         {
-            UiLog("ShowMainWindow 开始");
             if (_mainWindow == null)
             {
                 try
                 {
-                    UiLog("ShowMainWindow: new MainWindow");
                     _mainWindow = new MainWindow();
-                    UiLog("ShowMainWindow: MainWindow 创建完成");
                 }
                 catch (Exception ex)
                 {
-                    UiLog("ShowMainWindow: 构造异常 " + ex);
                     _mainWindow = null;
                     throw;
                 }
@@ -484,30 +484,6 @@ namespace SonicRoute
                 {
                     _mainWindow = null;
                     AppIconService.Clear(); // 清空图标缓存（窗口关闭后残留的主要静态持有物），让 BitmapSource 可被 GC 回收
-                    // 实验设置「关闭 UI 释放内存」：窗口真正关闭后强制回收 UI 内存。
-                    // 立即回收一次，再延迟多次重试（1s/3s/5s）：窗口关闭瞬间可能有挂起的异步续体
-                    // （切设备/调音量/刷新应用等，闭包会捕获窗口对象），等它们跑完后窗口才真正可回收，
-                    // 此时再次 GC 确保窗口与视觉树被回收。
-                    Dispatcher.BeginInvoke(new Action(() =>
-                    {
-                        _ = Task.Run(async () =>
-                        {
-                            // 优化：GC 前先让 UI 线程排空 Dispatcher 队列（窗口关闭 + 挂起的异步续体
-                            // 闭包可能捕获窗口），队列清空后再 GC 才能把窗口与视觉树真正回收
-                            for (int i = 0; i < 3; i++)
-                            {
-                                Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                                await Task.Delay(200);
-                            }
-                            BackendHost.GcNow();
-                            foreach (var ms in new[] { 1000, 3000, 5000, 8000, 12000 })
-                            {
-                                await Task.Delay(ms);
-                                BackendHost.GcNow();
-                            }
-                            BackendHost.TrimWorkingSet(); // UI 残余渲染缓存无法托管回收，最后换出工作集，任务管理器"内存"列立即下降
-                        });
-                    }), DispatcherPriority.ApplicationIdle);
                     CheckUiExit();
                 };
             }
@@ -533,17 +509,6 @@ namespace SonicRoute
 
         // ================= 启动辅助 =================
 
-        /// <summary>临时启动日志（定位 UI 启动卡点；%TEMP%\sonicroute_ui.log）。</summary>
-        private static void UiLog(string msg)
-        {
-            try
-            {
-                System.IO.File.AppendAllText(
-                    System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sonicroute_ui.log"),
-                    $"{DateTime.Now:HH:mm:ss.fff} [{(Environment.ProcessId)}] {msg}\r\n");
-            }
-            catch { }
-        }
 
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
         private static bool IsPackaged()

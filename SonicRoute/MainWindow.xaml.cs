@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -298,20 +298,29 @@ namespace SonicRoute
 
         private async Task LoadDevicesAsync()
         {
-            var outputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eRender));
+            // 输出/输入两组并行枚举（各自含设备列表 + 默认设备），互不依赖
+            var outTask = Task.Run(() =>
+            {
+                var outputs = AudioService.GetDevices(EDataFlow.eRender);
+                string? defOut = AudioService.GetDefaultDeviceId(EDataFlow.eRender);
+                foreach (var d in outputs) d.IsDefault = string.Equals(d.Id, defOut, StringComparison.OrdinalIgnoreCase);
+                return outputs;
+            });
+            var inTask = Task.Run(() =>
+            {
+                var inputs = AudioService.GetDevices(EDataFlow.eCapture);
+                string? defIn = AudioService.GetDefaultDeviceId(EDataFlow.eCapture);
+                foreach (var d in inputs) d.IsDefault = string.Equals(d.Id, defIn, StringComparison.OrdinalIgnoreCase);
+                return inputs;
+            });
 
-            string? defOut = await Task.Run(() => AudioService.GetDefaultDeviceId(EDataFlow.eRender));
-            foreach (var d in outputs) d.IsDefault = string.Equals(d.Id, defOut, StringComparison.OrdinalIgnoreCase);
-
+            var outputs = await outTask;
             _outputs = outputs;
 
             // 输入设备（麦克风）：仅实验模式 + 麦克风选项使用（快速切换当前应用麦克风设备/保留设置）
             try
             {
-                var inputs = await Task.Run(() => AudioService.GetDevices(EDataFlow.eCapture));
-                string? defIn = await Task.Run(() => AudioService.GetDefaultDeviceId(EDataFlow.eCapture));
-                foreach (var d in inputs) d.IsDefault = string.Equals(d.Id, defIn, StringComparison.OrdinalIgnoreCase);
-                _inputs = inputs;
+                _inputs = await inTask;
             }
             catch { _inputs = new List<AudioDeviceInfo>(); }
 
@@ -363,6 +372,7 @@ namespace SonicRoute
         {
             var apps = await Task.Run(() => AudioService.GetApps(force));
             var items = apps.Select(AppItem.From).ToList();
+            AppItem.LoadIconsAsync(items);
             _suppressAppCombo = true;
             OverviewAppCombo.ItemsSource = null;
             OverviewAppCombo.ItemsSource = items;
@@ -430,10 +440,6 @@ namespace SonicRoute
 
         private async Task RefreshOverviewDevicesVolumeAsync()
         {
-            // 全局麦克风状态与应用无关，始终刷新按钮文案
-            bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
-            OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
-
             var outs = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
             // 输入下拉框显示全部设备（与输出下拉一致，不受「保留的设备」筛选影响）
             _inputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(_inputs), EDataFlow.eCapture, _config);
@@ -442,8 +448,11 @@ namespace SonicRoute
 
             if (_overviewApp == null)
             {
+                bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
+                // 全局麦克风状态与应用无关，始终刷新按钮文案
+                OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
                 OverviewOutputCurrentText.Text = "";
-            RenderQuickButtons(OverviewOutputQuickPanel, outs);
+                RenderQuickButtons(OverviewOutputQuickPanel, outs);
                 OverviewInputCurrentText.Text = "";
                 OverviewInputCurrentText.Tag = null;
                 RenderInputQuickButtons();
@@ -452,7 +461,21 @@ namespace SonicRoute
             }
 
             var pid = (int)_overviewApp.ProcessId;
-            var outId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
+            // 5 路音频查询并行（持久化端点×2、会话音量/静音、全局麦克风），互不依赖
+            var tMic = Task.Run(() => GlobalMicMuteService.IsMuted());
+            var tOut = Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
+            var tIn = Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture));
+            var tVol = Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
+            var tMuted = Task.Run(() => SessionVolumeService.IsMuted(pid));
+            await Task.WhenAll(tMic, tOut, tIn, tVol, tMuted);
+            bool micMuted = tMic.Result;
+            var outId = tOut.Result;
+            var inId = tIn.Result;
+            int vol = tVol.Result;
+            bool muted = tMuted.Result;
+
+            // 全局麦克风状态与应用无关，始终刷新按钮文案
+            OverviewMicMuteButton.Content = L10n.T(micMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
 
             string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
 
@@ -469,7 +492,6 @@ namespace SonicRoute
             _suppressDevCombo = false;
 
             // 输入设备（麦克风）：与输出一致读取持久化端点并刷新下拉/快捷按钮
-            var inId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture));
             string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
             OverviewInputCurrentText.Text = DescribeCurrent(_inputDisplay, inShort, false);
             OverviewInputCurrentText.Tag = inShort;
@@ -481,8 +503,6 @@ namespace SonicRoute
             OverviewInputCombo.SelectedItem = selectedIn;
             _suppressDevCombo = false;
 
-            int vol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
-            bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
             SetVolumeUi(vol >= 0 ? vol : null);
             OverviewMuteButton.Content = L10n.T(muted ? "Ov.Unmute" : "Ov.Mute");
         }
@@ -745,6 +765,7 @@ namespace SonicRoute
         {
             var apps = await Task.Run(() => AudioService.GetApps());
             _appItems = apps.Select(AppItem.From).ToList();
+            AppItem.LoadIconsAsync(_appItems);
             foreach (var item in _appItems) item.RefreshAutoSwitchState();
             AppsListBox.ItemsSource = null;
             AppsListBox.ItemsSource = _appItems;
@@ -1206,6 +1227,7 @@ namespace SonicRoute
                 try
                 {
                     apps = AudioService.GetApps().Select(AppItem.From).ToList();
+            AppItem.LoadIconsAsync(apps);
                 }
                 catch { }
                 _suppressAppCombo = true;

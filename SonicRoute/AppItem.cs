@@ -12,7 +12,21 @@ namespace SonicRoute
         public int ProcessId => (int)Info.ProcessId;
         public string ProcessName => Info.ProcessName ?? "";
         public string Label => AppDisplayName.Get(Info);
-        public ImageSource? Icon { get; init; }
+
+        private ImageSource? _icon;
+        /// <summary>应用图标（懒加载：列表构建时不提取，由 LoadIcon 后台填充后通知刷新，降低启动耗时与内存）。</summary>
+        public ImageSource? Icon
+        {
+            get => _icon;
+            private set
+            {
+                if (!ReferenceEquals(_icon, value))
+                {
+                    _icon = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Icon)));
+                }
+            }
+        }
 
         private bool _isAutoSwitchDisabled;
         private System.Windows.Media.Brush _dotBrush = System.Windows.Media.Brushes.Transparent;
@@ -62,10 +76,30 @@ namespace SonicRoute
         public void RefreshName() =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Label)));
 
-        public static AppItem From(AudioAppInfo a) => new()
+        public static AppItem From(AudioAppInfo a) => new() { Info = a };
+
+        /// <summary>后台线程提取图标，完成后切回 UI 线程通知绑定刷新（列表构建后批量调用）。</summary>
+        public void LoadIcon()
         {
-            Info = a,
-            Icon = AppIconService.GetIconForPid((int)a.ProcessId)
-        };
+            if (Icon != null) return;
+            var icon = AppIconService.GetIconForPid(ProcessId);
+            if (icon == null) return;
+            var disp = System.Windows.Application.Current?.Dispatcher;
+            if (disp != null && !disp.CheckAccess())
+                disp.Invoke(() => Icon = icon);
+            else
+                Icon = icon;
+        }
+
+        /// <summary>批量后台加载图标（不阻塞调用线程）。</summary>
+        public static void LoadIconsAsync(IEnumerable<AppItem> items)
+        {
+            var list = items.Where(i => i.Icon == null).ToList();
+            if (list.Count == 0) return;
+            _ = System.Threading.Tasks.Task.Run(() =>
+            {
+                foreach (var item in list) item.LoadIcon();
+            });
+        }
     }
 }

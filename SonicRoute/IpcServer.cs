@@ -51,18 +51,26 @@ namespace SonicRoute
         {
             while (_running && !_cts.IsCancellationRequested)
             {
-                var s = new NamedPipeServerStream(IpcProtocol.ReqPipe, PipeDirection.InOut,
-                    NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                NamedPipeServerStream? s = null;
                 try
                 {
+                    s = new NamedPipeServerStream(IpcProtocol.ReqPipe, PipeDirection.InOut,
+                        NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                     await s.WaitForConnectionAsync(_cts.Token);
                     lock (_lock) _reqStreams.Add(s);
                     _ = HandleReqAsync(s);
                 }
+                catch (OperationCanceledException)
+                {
+                    // 正常关闭（Dispose 取消）
+                    try { s?.Dispose(); } catch { }
+                    break;
+                }
                 catch
                 {
-                    try { s.Dispose(); } catch { }
-                    break;
+                    // 瞬时异常（管道实例数短暂占满等）：不终止监听，短暂延迟后继续接受新连接
+                    try { s?.Dispose(); } catch { }
+                    try { await Task.Delay(200, _cts.Token); } catch { break; }
                 }
             }
         }
@@ -104,17 +112,25 @@ namespace SonicRoute
         {
             while (_running && !_cts.IsCancellationRequested)
             {
-                var s = new NamedPipeServerStream(IpcProtocol.EvtPipe, PipeDirection.InOut,
-                    NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                NamedPipeServerStream? s = null;
                 try
                 {
+                    s = new NamedPipeServerStream(IpcProtocol.EvtPipe, PipeDirection.InOut,
+                        NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                     await s.WaitForConnectionAsync(_cts.Token);
                     _ = HandleEvtAsync(s);
                 }
+                catch (OperationCanceledException)
+                {
+                    // 正常关闭（Dispose 取消）
+                    try { s?.Dispose(); } catch { }
+                    break;
+                }
                 catch
                 {
-                    try { s.Dispose(); } catch { }
-                    break;
+                    // 瞬时异常（管道实例数短暂占满等）：不终止监听，短暂延迟后继续接受新连接
+                    try { s?.Dispose(); } catch { }
+                    try { await Task.Delay(200, _cts.Token); } catch { break; }
                 }
             }
         }
@@ -124,8 +140,11 @@ namespace SonicRoute
             string? uiId = null;
             try
             {
-                // 事件连接的第一条消息必须是 EvtHello（携带 UiId 注册）
-                var msg = await IpcProtocol.ReadAsync(s, _cts.Token);
+                // 事件连接的第一条消息必须是 EvtHello（携带 UiId 注册）。
+                // 10s 超时防坏连接（连上但不发 EvtHello）永久占住事件管道实例。
+                using var helloCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+                helloCts.CancelAfter(TimeSpan.FromSeconds(10));
+                var msg = await IpcProtocol.ReadAsync(s, helloCts.Token);
                 if (msg == null || msg.T != IpcProtocol.EvtHello) return;
                 uiId = IpcProtocol.Get<HelloDto>(msg.P)?.UiId;
                 if (string.IsNullOrEmpty(uiId)) return;

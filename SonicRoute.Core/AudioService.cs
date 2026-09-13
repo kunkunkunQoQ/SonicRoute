@@ -21,8 +21,39 @@ namespace SonicRoute.Core
         // 设备枚举
         // ------------------------------------------------------------------
 
-        /// <summary>枚举指定方向的激活设备（播放 eRender / 录音 eCapture）。</summary>
+        /// <summary>枚举指定方向的激活设备（播放 eRender / 录音 eCapture）。
+        /// 带极短 TTL 缓存：同一短时间内（如启动→打开面板、快捷键连续切换）避免重复 WASAPI 枚举。
+        /// 返回防御性副本，调用方修改（如 IsDefault 显示标记）不影响缓存。
+        /// 缓存不感知设备插拔/默认设备变化，TTL 极短（3s），过期后自动重新枚举。</summary>
         public static List<AudioDeviceInfo> GetDevices(EDataFlow flow)
+        {
+            lock (_deviceCacheLock)
+            {
+                var cache = flow == EDataFlow.eRender ? _deviceCacheRender : _deviceCaptureRender;
+                var at = flow == EDataFlow.eRender ? _deviceCacheRenderAt : _deviceCacheCaptureAt;
+                if (cache != null && Environment.TickCount64 - at < DeviceCacheTtlTicks)
+                    return CloneDevices(cache);
+            }
+
+            // 锁外枚举：输出/输入两组可并行（A1），不因缓存互斥重新串行化
+            var list = EnumerateDevices(flow);
+            lock (_deviceCacheLock)
+            {
+                if (flow == EDataFlow.eRender)
+                {
+                    _deviceCacheRender = list;
+                    _deviceCacheRenderAt = Environment.TickCount64;
+                }
+                else
+                {
+                    _deviceCaptureRender = list;
+                    _deviceCacheCaptureAt = Environment.TickCount64;
+                }
+                return CloneDevices(list);
+            }
+        }
+
+        private static List<AudioDeviceInfo> EnumerateDevices(EDataFlow flow)
         {
             var enumerator = CreateEnumerator();
             try
@@ -34,6 +65,16 @@ namespace SonicRoute.Core
                 Marshal.ReleaseComObject(enumerator);
             }
         }
+
+        private static List<AudioDeviceInfo> CloneDevices(List<AudioDeviceInfo> src) =>
+            src.Select(d => new AudioDeviceInfo { Id = d.Id, DisplayName = d.DisplayName, Flow = d.Flow }).ToList();
+
+        private static readonly object _deviceCacheLock = new();
+        private static List<AudioDeviceInfo>? _deviceCacheRender;
+        private static List<AudioDeviceInfo>? _deviceCaptureRender;
+        private static long _deviceCacheRenderAt;
+        private static long _deviceCacheCaptureAt;
+        private const long DeviceCacheTtlTicks = 3L * TimeSpan.TicksPerSecond;
 
         private static List<AudioDeviceInfo> GetDevicesCore(IMMDeviceEnumerator enumerator, EDataFlow flow)
         {
