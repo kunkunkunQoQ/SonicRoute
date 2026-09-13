@@ -29,6 +29,7 @@
     <ProjectReference Include="..\SonicRoute.Core\SonicRoute.Core.csproj" />
     <Resource Include="SonicRoute.png" />
     <Resource Include="SonicRoute.ico" />
+    <EmbeddedResource Include="Resources\Lang\*.json" />
   </ItemGroup>
 
 </Project>

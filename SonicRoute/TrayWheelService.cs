@@ -346,7 +346,7 @@ namespace SonicRoute
         private void AdjustVolume(int delta)
         {
             int pid = ResolveTargetPid();
-            if (pid <= 0) { ShowOsd("—", L10n.T("Ov.NoSession")); return; }
+            if (pid <= 0) { ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession")); return; }
 
             // OSD 应用名优先显示用户自定义名称（与快捷键/面板/通知一致），
             // 未设置自定义名则显示进程名本身，两者都拿不到才显示"应用"
@@ -680,7 +680,7 @@ namespace SonicRoute
             try
             {
                 _osdAdjustMode = true;
-                ShowOsd("📍", L10n.T("Exp.OsdDragHint"));
+                ShowOsd(L10n.T("Exp.OsdDragTitle"), L10n.T("Exp.OsdDragHint"));
                 _osdTimer.Stop(); // 调整模式常驻，不自动隐藏
             }
             catch { }

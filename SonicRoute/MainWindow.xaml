@@ -685,6 +685,24 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
+                        <!-- 快速面板位置：拖拽调整 + 一键还原（逻辑同 OSD 调整） -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Exp.PanelPosSection], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button x:Name="PanelPosAdjustBtn" Content="{Binding [Exp.PanelPosAdjust], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="32" Padding="14,0"
+                                            Margin="0,0,10,0" Click="PanelPosAdjust_Click"/>
+                                    <Button x:Name="PanelPosResetBtn" Content="{Binding [Exp.PanelPosReset], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="32" Padding="14,0"
+                                            Click="PanelPosReset_Click"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding [Exp.PanelPosHint2], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,8,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
@@ -839,20 +857,12 @@
                                            Margin="24,2,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
-                        <!-- ④ 语言 -->
+
+                        <!-- ⑤ 启动选项 -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                             <StackPanel>
-                                <TextBlock Text="{Binding [St.Language], Source={x:Static local:L10n.Instance}}"
+                                <TextBlock Text="{Binding [St.StartupSection], Source={x:Static local:L10n.Instance}}"
                                            Style="{StaticResource SectionTitle}"/>
-                                <ComboBox x:Name="LangCombo" Style="{StaticResource SelCombo}"
-                                          MaxWidth="300" HorizontalAlignment="Left" MinWidth="220"
-                                          SelectionChanged="Language_SelectionChanged"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- ⑤ 启动选项 + 关于 -->
-                        <Border Style="{StaticResource Card}">
-                            <StackPanel>
                                 <CheckBox x:Name="SettingsAutoStart"
                                           Content="{Binding [St.AutoStart], Source={x:Static local:L10n.Instance}}"
                                           FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
@@ -870,6 +880,32 @@
                                             Style="{StaticResource GhostButton}" FontSize="12.5" Margin="24,0,0,0"
                                             HorizontalAlignment="Left" Click="CleanAutoStart_Click"/>
                                 </StackPanel>
+                                <CheckBox x:Name="SettingsStartMinimized"
+                                          Content="{Binding [St.StartMinimized], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Margin="0,8,0,8"
+                                          Checked="SettingsStartMinimized_Changed" Unchecked="SettingsStartMinimized_Changed"/>
+                                <CheckBox x:Name="SettingsShowPanelOnStart"
+                                          Content="{Binding [St.StartPanel], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Checked="SettingsShowPanelOnStart_Changed" Unchecked="SettingsShowPanelOnStart_Changed"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 语言（置于作者名上方） -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [St.Language], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+                                <ComboBox x:Name="LangCombo" Style="{StaticResource SelCombo}"
+                                          MaxWidth="300" HorizontalAlignment="Left" MinWidth="220"
+                                          SelectionChanged="Language_SelectionChanged"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ⑥ 其他 + 关于 -->
+                        <Border Style="{StaticResource Card}">
+                            <StackPanel>
                                 <CheckBox x:Name="SettingsExperimentalMode"
                                           Content="{Binding [St.ExperimentalMode], Source={x:Static local:L10n.Instance}}"
                                           FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
@@ -898,16 +934,6 @@
                                               Checked="ExpMicPanel_Changed" Unchecked="ExpMicPanel_Changed"/>
                                 </StackPanel>
 
-                                <!-- 子选项：麦克风相关选项是否在快捷面板显示（麦克风选项开启才显示） -->
-                                <CheckBox x:Name="SettingsStartMinimized"
-                                          Content="{Binding [St.StartMinimized], Source={x:Static local:L10n.Instance}}"
-                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                          Margin="0,8,0,8"
-                                          Checked="SettingsStartMinimized_Changed" Unchecked="SettingsStartMinimized_Changed"/>
-                                <CheckBox x:Name="SettingsShowPanelOnStart"
-                                          Content="{Binding [St.StartPanel], Source={x:Static local:L10n.Instance}}"
-                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                          Checked="SettingsShowPanelOnStart_Changed" Unchecked="SettingsShowPanelOnStart_Changed"/>
                                 <!-- 快速面板样式：经典面板 / 简洁面板（默认简洁） -->
                                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                                     <TextBlock Text="{Binding [St.QuickPanelStyle], Source={x:Static local:L10n.Instance}}"
@@ -916,6 +942,16 @@
                                     <ComboBox x:Name="QuickPanelStyleCombo" Style="{StaticResource SelCombo}"
                                               MinWidth="160" HorizontalAlignment="Left"
                                               SelectionChanged="QuickPanelStyleCombo_Changed"/>
+                                </StackPanel>
+                                <!-- 简洁面板更改系统默认设备（默认关，仅简洁面板显示） -->
+                                <StackPanel x:Name="PanelChangeSysDefSection" Margin="0,10,0,0">
+                                    <CheckBox x:Name="SettingsPanelChangeSysDef"
+                                              Content="{Binding [St.PanelChangeSystemDefault], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                              Checked="SettingsPanelChangeSysDef_Changed" Unchecked="SettingsPanelChangeSysDef_Changed"/>
+                                    <TextBlock Text="{Binding [St.PanelChangeSystemDefaultHint], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                               Margin="0,-2,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <CheckBox x:Name="ExpCollapseCheck"
                                           Content="{Binding [Exp.Collapse], Source={x:Static local:L10n.Instance}}"
@@ -1007,6 +1043,24 @@
                                     <Button x:Name="ExpImportConfigButton" Content="{Binding [Exp.ImportConfig], Source={x:Static local:L10n.Instance}}"
                                             Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
                                             HorizontalAlignment="Left" Click="ExpImportConfig_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 语言文件：导出 / 导入（外置语言） -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Exp.LangFiles], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
+                                <TextBlock Text="{Binding [Exp.LangFilesHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="0,-4,0,10" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="ExpExportLangButton" Content="{Binding [Exp.ExportLang], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
+                                            Margin="0,0,10,0" HorizontalAlignment="Left" Click="ExpExportLang_Click"/>
+                                    <Button x:Name="ExpImportLangButton" Content="{Binding [Exp.ImportLang], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
+                                            HorizontalAlignment="Left" Click="ExpImportLang_Click"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

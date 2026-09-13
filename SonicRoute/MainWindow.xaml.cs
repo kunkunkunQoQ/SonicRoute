@@ -1233,9 +1233,13 @@ namespace SonicRoute
                 }
                 SettingsStartMinimized.IsChecked = _config.StartMinimized;
                 SettingsShowPanelOnStart.IsChecked = _config.StartPanelOnStart;
+                SettingsPanelChangeSysDef.IsChecked = _config.PanelChangeSystemDefault;
                 // 快速面板样式：经典面板 / 简洁面板（默认简洁）
                 QuickPanelStyleCombo.ItemsSource = new[] { L10n.T("St.PanelClassic"), L10n.T("St.PanelModern") };
                 QuickPanelStyleCombo.SelectedIndex = _config.QuickPanelStyle == "classic" ? 0 : 1;
+                // 简洁面板更改系统默认设备：仅"简洁面板"样式时显示
+                PanelChangeSysDefSection.Visibility = _config.QuickPanelStyle == "classic"
+                    ? Visibility.Collapsed : Visibility.Visible;
             VolumeStepBox.Text = Math.Clamp(_config.VolumeStep, 1, 20).ToString();
             SettingsTrayWheelEverywhere.IsChecked = _config.TrayWheelEverywhere;
 
@@ -1469,6 +1473,17 @@ namespace SonicRoute
             if (!IsLoaded || _suppressSettings || QuickPanelStyleCombo.SelectedIndex < 0) return;
             _config.QuickPanelStyle = QuickPanelStyleCombo.SelectedIndex == 0 ? "classic" : "modern";
             ConfigService.Save(_config);
+            // 简洁面板更改系统默认设备选项仅简洁面板样式显示
+            PanelChangeSysDefSection.Visibility = _config.QuickPanelStyle == "classic"
+                ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        /// <summary>简洁面板更改系统默认设备开关（默认关）：开启后简洁面板下拉框切换设备 = 更改系统默认输出设备。</summary>
+        private void SettingsPanelChangeSysDef_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            _config.PanelChangeSystemDefault = SettingsPanelChangeSysDef.IsChecked == true;
+            ConfigService.Save(_config);
         }
 
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
@@ -1573,11 +1588,11 @@ namespace SonicRoute
                     SettingsAutoStart.IsChecked = false;
                     _suppressSettings = false;
                 }
-                ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), L10n.T("St.CleanAutoStartDone"));
+                ((App)Application.Current).ShowOsd(L10n.T("St.AutoStartTitle"), L10n.T("St.CleanAutoStartDone"));
             }
             catch
             {
-                ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), L10n.T("St.CleanAutoStartFail"));
+                ((App)Application.Current).ShowOsd(L10n.T("St.AutoStartTitle"), L10n.T("St.CleanAutoStartFail"));
             }
         }
         // ==================================================================
@@ -1744,6 +1759,42 @@ namespace SonicRoute
             }
         }
 
+        /// <summary>实验设置 - 导出语言：把内置 9 语言文件写入用户选择的文件夹（可编辑后导入）。</summary>
+        private void ExpExportLang_Click(object sender, RoutedEventArgs e)
+        {
+            using var fbd = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = L10n.T("Exp.ExportLang"),
+                UseDescriptionForTitle = true,
+            };
+            if (fbd.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+            if (L10n.ExportBuiltinLanguages(fbd.SelectedPath))
+                ShowToast(L10n.T("Exp.LangExportDone"));
+            else
+                ShowToast(L10n.T("Exp.LangImportFail"));
+        }
+
+        /// <summary>实验设置 - 导入语言：加载外置语言文件（写入 %LocalAppData%\SonicRoute\Lang，重启生效）。</summary>
+        private void ExpImportLang_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = L10n.T("Exp.ImportLang"),
+                Filter = "JSON (*.json)|*.json",
+                DefaultExt = ".json",
+            };
+            if (dlg.ShowDialog() != true) return;
+            if (L10n.ImportLanguageFile(dlg.FileName).Ok)
+            {
+                ShowToast(L10n.T("Exp.LangImportDone"));
+                RestartApp();
+            }
+            else
+            {
+                ShowToast(L10n.T("Exp.LangImportFail"));
+            }
+        }
+
         /// <summary>重启应用（供清理配置等需要全量重新初始化的场景使用）。</summary>
         private void RestartApp()
         {
@@ -1839,10 +1890,65 @@ namespace SonicRoute
             };
         }
 
+        private bool _panelPosAdjusting;
+        private bool _panelPosAdjustSubscribed;
+
+        /// <summary>主题页 - 「调整位置」：进入/取消快速面板拖拽定位模式（拖动松手即保存为自定义坐标）。</summary>
+        private void PanelPosAdjust_Click(object sender, RoutedEventArgs e)
+        {
+            var app = (App)Application.Current;
+            if (!_panelPosAdjusting)
+            {
+                SubscribePanelPosAdjust();
+                _panelPosAdjusting = true;
+                SetPanelPosAdjustLabel(L10n.T("Exp.PanelPosAdjustCancel"));
+                app.BeginQuickPanelAdjust();
+            }
+            else
+            {
+                _panelPosAdjusting = false;
+                SetPanelPosAdjustLabel(L10n.T("Exp.PanelPosAdjust"));
+                app.CancelQuickPanelAdjust();
+            }
+        }
+
+        /// <summary>主题页 - 「一键还原」：快速面板恢复任务栏右下角默认位置。</summary>
+        private void PanelPosReset_Click(object sender, RoutedEventArgs e)
+        {
+            var app = (App)Application.Current;
+            if (_panelPosAdjusting)
+            {
+                _panelPosAdjusting = false;
+                SetPanelPosAdjustLabel(L10n.T("Exp.PanelPosAdjust"));
+                app.CancelQuickPanelAdjust();
+            }
+            app.ResetQuickPanelPosition();
+            ShowToast(L10n.T("Exp.PanelPosResetDone"));
+        }
+
+        /// <summary>同步主题页的「调整位置」按钮文字。</summary>
+        private void SetPanelPosAdjustLabel(string text)
+        {
+            if (PanelPosAdjustBtn != null) PanelPosAdjustBtn.Content = text;
+        }
+
+        private void SubscribePanelPosAdjust()
+        {
+            if (_panelPosAdjustSubscribed) return;
+            _panelPosAdjustSubscribed = true;
+            ((App)Application.Current).QuickPanelAdjustFinished += () =>
+            {
+                // 拖拽松手已保存（或面板被关闭）：复位主题页按钮状态
+                _panelPosAdjusting = false;
+                SetPanelPosAdjustLabel(L10n.T("Exp.PanelPosAdjust"));
+            };
+        }
+
 
         /// <summary>主题页 - OSD 宽度滑条：实时调整 OSD 宽度并保存。</summary>
         private void OsdWidthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_syncingOsdSliders) return; // 初始化/一键还原同步滑条值时不弹「已保存」OSD
             if (OsdWidthValue == null || !IsLoaded) return;
             int w = (int)Math.Round(OsdWidthSlider.Value);
             OsdWidthValue.Text = w + "px";
@@ -1854,6 +1960,7 @@ namespace SonicRoute
         /// <summary>主题页 - OSD 字号倍率滑条：实时调整 OSD 字号并保存。</summary>
         private void OsdFontSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_syncingOsdSliders) return; // 初始化/一键还原同步滑条值时不弹「已保存」OSD
             if (OsdFontValue == null || !IsLoaded) return;
             double fs = Math.Round(OsdFontSlider.Value, 2);
             OsdFontValue.Text = (int)Math.Round(fs * 100) + "%";
@@ -1862,12 +1969,16 @@ namespace SonicRoute
             app.SetOsdSize(_config.OsdWidth, fs);
         }
 
-        /// <summary>同步主题页 OSD 滑条与数值文本（页面加载与一键还原时调用）。</summary>
+        private bool _syncingOsdSliders;
+
+        /// <summary>同步主题页 OSD 滑条与数值文本（页面加载与一键还原时调用，不触发保存/OSD 提示）。</summary>
         private void SyncOsdSliders()
         {
             if (OsdWidthSlider == null) return;
+            _syncingOsdSliders = true;
             OsdWidthSlider.Value = _config.OsdWidth;
             OsdFontSlider.Value = _config.OsdFontScale;
+            _syncingOsdSliders = false;
             OsdWidthValue.Text = _config.OsdWidth + "px";
             OsdFontValue.Text = (int)Math.Round(_config.OsdFontScale * 100) + "%";
             if (MicMutePersistCheck != null) MicMutePersistCheck.IsChecked = _config.MicMuteOsdPersistent;
@@ -1938,7 +2049,7 @@ namespace SonicRoute
         /// <summary>右上角 OSD 通知（兼容主题/强调色/透明度）。</summary>
         private void ShowToast(string text)
         {
-            try { ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), text); }
+            try { ((App)Application.Current).ShowOsd(L10n.T("St.Settings"), text); }
             catch { /* 通知失败静默 */ }
         }
 

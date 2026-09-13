@@ -56,6 +56,14 @@ namespace SonicRoute.Core
         /// <summary>快速面板样式：modern(简洁面板，默认) / classic(经典面板)。</summary>
         public string QuickPanelStyle { get; set; } = "modern";
 
+        /// <summary>简洁面板顶部下拉框切换设备时更改系统默认输出设备（默认关；开启后下拉=改系统默认输出）。</summary>
+        public bool PanelChangeSystemDefault { get; set; } = false;
+
+        /// <summary>快速面板位置模式：default=任务栏右下角 / custom=自定义坐标（主题页拖拽调整，逻辑同 OSD）。</summary>
+        public string QuickPanelPosMode { get; set; } = "default";
+        public int QuickPanelCustomX { get; set; } = -1;
+        public int QuickPanelCustomY { get; set; } = -1;
+
         /// <summary>开机自启（写入 HKCU\...\Run，正常/绿色版）。</summary>
         public bool AutoStart { get; set; } = false;
 

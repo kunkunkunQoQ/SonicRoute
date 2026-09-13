@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -9,6 +9,7 @@ using System.Windows.Input;
 using Image = System.Windows.Controls.Image;
 using Brush = System.Windows.Media.Brush;
 using System.Windows.Media;
+using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
@@ -54,6 +55,11 @@ namespace SonicRoute
         private bool _suppressDevCombo;
         private bool _everFocused;
         private bool _micUiOn;
+        private bool _adjustMode;          // 主题页「调整快速面板位置」：可拖拽，松手保存
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+        private bool _adjustDragging;
+        private System.Windows.Point _adjustDragStart;
 
         public QuickPanelModernWindow()
         {
@@ -64,14 +70,82 @@ namespace SonicRoute
             Activated += (_, _) => _everFocused = true;
             Deactivated += (_, _) =>
             {
-                if (IsVisible && _everFocused) Close();
+                if (IsVisible && _everFocused && !_adjustMode) Close();
+            };
+            // 调整模式拖动：按住左键移动窗口，松手保存位置（逻辑同 OSD 调整）
+            MouseLeftButtonDown += (_, e) =>
+            {
+                if (!_adjustMode) return;
+                _adjustDragging = true;
+                _adjustDragStart = e.GetPosition(null);
+                CaptureMouse();
+                e.Handled = true;
+            };
+            MouseMove += (_, e) =>
+            {
+                if (!_adjustDragging) return;
+                var p = e.GetPosition(null);
+                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX; } catch { }
+                double vsX = GetSystemMetrics(76), vsY = GetSystemMetrics(77);
+                double vsW = GetSystemMetrics(78), vsH = GetSystemMetrics(79);
+                double minX = vsX / ws, maxX = (vsX + vsW) / ws - ActualWidth;
+                double minY = vsY / ws, maxY = (vsY + vsH) / ws - ActualHeight;
+                Left = Math.Clamp(Left + (p.X - _adjustDragStart.X), minX, Math.Max(minX, maxX));
+                Top = Math.Clamp(Top + (p.Y - _adjustDragStart.Y), minY, Math.Max(minY, maxY));
+                e.Handled = true;
+            };
+            MouseLeftButtonUp += (_, e) =>
+            {
+                if (!_adjustDragging) return;
+                _adjustDragging = false;
+                ReleaseMouseCapture();
+                e.Handled = true;
+                SaveAdjustPosition();
             };
             // 共享"当前应用"变化（前台自动跟随/概览切换）时同步面板高亮
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
-            Closed += (_, _) => CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+            Closed += (_, _) =>
+            {
+                CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+                if (_adjustMode) { _adjustMode = false; ((App)Application.Current).NotifyQuickPanelAdjustFinished(); }
+            };
             // SizeToContent 下 ActualHeight 异步更新（应用列表填充/▾ 展开都会变高），
-            // 尺寸变化时重定位到任务栏右下角，避免定位过早导致窗口下沉/超出屏幕
+            // 尺寸变化时重定位，避免定位过早导致窗口下沉/超出屏幕
             SizeChanged += (_, _) => { if (IsVisible) PositionPanel(); };
+        }
+
+        /// <summary>进入/退出位置调整模式（主题页调用）。</summary>
+        internal void SetAdjustMode(bool on)
+        {
+            _adjustMode = on;
+            if (on) ((App)Application.Current).ShowOsd(L10n.T("Exp.PanelPosDragTitle"), L10n.T("Exp.PanelPosHint"));
+        }
+
+        /// <summary>一键还原默认位置（任务栏右下角），已打开则立即重定位。</summary>
+        internal void ResetPosition()
+        {
+            if (_adjustMode) _adjustMode = false;
+            if (IsVisible) PositionPanel();
+        }
+
+        /// <summary>拖动松手：把当前窗口位置写入配置（Custom 模式），保存并通知主题页。</summary>
+        private void SaveAdjustPosition()
+        {
+            try
+            {
+                var cfg = ConfigService.Load();
+                cfg.QuickPanelPosMode = "custom";
+                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX; } catch { }
+                double vsX = GetSystemMetrics(76), vsY = GetSystemMetrics(77);
+                double vsW = GetSystemMetrics(78), vsH = GetSystemMetrics(79);
+                cfg.QuickPanelCustomX = (int)Math.Clamp(Left, vsX / ws, Math.Max(vsX / ws, (vsX + vsW) / ws - ActualWidth));
+                cfg.QuickPanelCustomY = (int)Math.Clamp(Top, vsY / ws, Math.Max(vsY / ws, (vsY + vsH) / ws - ActualHeight));
+                ConfigService.Save(cfg);
+                _adjustMode = false;
+                ((App)Application.Current).ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
+                ((App)Application.Current).NotifyQuickPanelAdjustFinished();
+            }
+            catch { }
         }
 
         private void OnSharedCurrentChanged()
@@ -98,6 +172,15 @@ namespace SonicRoute
 
         private void PositionPanel()
         {
+            if (_adjustMode) return; // 调整模式下不自动定位（让用户拖拽）
+            // 自定义位置：直接使用已保存坐标（DIP，限制在虚拟屏幕范围内）
+            var cfg = ConfigService.Load();
+            if (cfg.QuickPanelPosMode == "custom" && cfg.QuickPanelCustomX >= 0 && cfg.QuickPanelCustomY >= 0)
+            {
+                Left = cfg.QuickPanelCustomX;
+                Top = cfg.QuickPanelCustomY;
+                return;
+            }
             // 窗口已显示、内容已加载，ActualWidth/ActualHeight 即为最终尺寸，直接定位到任务栏右下角；
             // 展开 ▾ 后窗口变高时重定位，并做屏幕边界保护，避免下沉/溢出
             var work = SystemParameters.WorkArea;
@@ -140,7 +223,7 @@ namespace SonicRoute
             }
             catch (Exception ex)
             {
-                ShowOsd(L10n.T("Qp.LoadFail") + " " + ex.Message);
+                ShowOsd(L10n.T("Qp.Panel"), L10n.T("Qp.LoadFail"));
             }
         }
 
@@ -180,7 +263,19 @@ namespace SonicRoute
         private async void SystemDevCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressDevCombo) return;
-            if (SystemDevCombo.SelectedItem is AudioDeviceInfo dev) _systemDeviceId = dev.Id;
+            if (SystemDevCombo.SelectedItem is AudioDeviceInfo dev)
+            {
+                _systemDeviceId = dev.Id;
+                // 设置「简洁面板更改系统默认设备」开启时：下拉切换 = 更改系统默认输出设备（IPolicyConfig.SetDefaultEndpoint）
+                if (SonicRoute.Core.ConfigService.Load().PanelChangeSystemDefault)
+                {
+                    var ok = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, dev.Id));
+                    if (!ok.Success)
+                    {
+                        ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
+                    }
+                }
+            }
             await RefreshSystemVolumeAsync();
         }
 
@@ -263,7 +358,10 @@ namespace SonicRoute
         }
 
         /// <summary>操作反馈改为右上角 OSD 通知（避免面板状态文本顶掉底部按钮）。</summary>
-        private void ShowOsd(string text) => ((App)Application.Current).ShowOsd(L10n.T("App.NameFull"), text);
+        private void ShowOsd(string text) => ((App)Application.Current).ShowOsd(L10n.T("Ov.VolumeTitle"), text);
+
+        /// <summary>OSD 通知（自定义主标题 + 副标题）。</summary>
+        private void ShowOsd(string title, string text) => ((App)Application.Current).ShowOsd(title, text);
 
         /// <summary>设备音量/静音 OSD：主标题显示当前所选系统设备名（跟随设置的自定义设备名，无则默认名）。</summary>
         private void ShowDeviceOsd(string text)
@@ -550,7 +648,7 @@ namespace SonicRoute
             var pid = (int)row.App.ProcessId;
             bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
             ApplyRowMutedVisual(row, muted);
-            ShowOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted") + " · " + AppDisplayName.Get(row.App));
+            ShowOsd(AppDisplayName.Get(row.App), L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
         }
 
         private async void RowExpand_Changed(object sender, RoutedEventArgs e)
@@ -654,11 +752,9 @@ namespace SonicRoute
             var pid = (int)row.App.ProcessId;
             var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, flow, dev.Id));
             if (ok)
-                ShowOsd(string.Format(L10n.T("Qp.SwitchOk"),
-                    (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName,
-                    AppDisplayName.Get(row.App)));
+                ShowOsd(AppDisplayName.Get(row.App), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName);
             else
-                ShowOsd($"✗ {msg}");
+                ShowOsd(AppDisplayName.Get(row.App), $"✗ {msg}");
 
             // 仍展开时重建，刷新高亮
             if (row.Expanded) await BuildRowDevicesAsync(row);

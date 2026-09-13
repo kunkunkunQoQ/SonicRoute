@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -31,6 +32,11 @@ namespace SonicRoute
         private bool _volumeReady;
         private bool _suppressAppCombo;
         private bool _everFocused;
+        private bool _adjustMode;          // 主题页「调整快速面板位置」：可拖拽，松手保存
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+        private bool _adjustDragging;
+        private System.Windows.Point _adjustDragStart;
 
         public QuickPanelWindow()
         {
@@ -41,11 +47,79 @@ namespace SonicRoute
             Activated += (_, _) => _everFocused = true;
             Deactivated += (_, _) =>
             {
-                if (IsVisible && _everFocused) Close();
+                if (IsVisible && _everFocused && !_adjustMode) Close();
+            };
+            // 调整模式拖动：按住左键移动窗口，松手保存位置（逻辑同 OSD 调整）
+            MouseLeftButtonDown += (_, e) =>
+            {
+                if (!_adjustMode) return;
+                _adjustDragging = true;
+                _adjustDragStart = e.GetPosition(null);
+                CaptureMouse();
+                e.Handled = true;
+            };
+            MouseMove += (_, e) =>
+            {
+                if (!_adjustDragging) return;
+                var p = e.GetPosition(null);
+                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX; } catch { }
+                double vsX = GetSystemMetrics(76), vsY = GetSystemMetrics(77);
+                double vsW = GetSystemMetrics(78), vsH = GetSystemMetrics(79);
+                double minX = vsX / ws, maxX = (vsX + vsW) / ws - ActualWidth;
+                double minY = vsY / ws, maxY = (vsY + vsH) / ws - ActualHeight;
+                Left = Math.Clamp(Left + (p.X - _adjustDragStart.X), minX, Math.Max(minX, maxX));
+                Top = Math.Clamp(Top + (p.Y - _adjustDragStart.Y), minY, Math.Max(minY, maxY));
+                e.Handled = true;
+            };
+            MouseLeftButtonUp += (_, e) =>
+            {
+                if (!_adjustDragging) return;
+                _adjustDragging = false;
+                ReleaseMouseCapture();
+                e.Handled = true;
+                SaveAdjustPosition();
             };
             // 共享"当前应用"变化（前台自动跟随/概览切换）时同步面板显示
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
-            Closed += (_, _) => CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+            Closed += (_, _) =>
+            {
+                CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+                if (_adjustMode) { _adjustMode = false; ((App)Application.Current).NotifyQuickPanelAdjustFinished(); }
+            };
+        }
+
+        /// <summary>进入/退出位置调整模式（主题页调用）。</summary>
+        internal void SetAdjustMode(bool on)
+        {
+            _adjustMode = on;
+            if (on) ((App)Application.Current).ShowOsd(L10n.T("Exp.PanelPosDragTitle"), L10n.T("Exp.PanelPosHint"));
+        }
+
+        /// <summary>一键还原默认位置（任务栏右下角），已打开则立即重定位。</summary>
+        internal void ResetPosition()
+        {
+            if (_adjustMode) _adjustMode = false;
+            if (IsVisible) PositionPanel();
+        }
+
+        /// <summary>拖动松手：把当前窗口位置写入配置（Custom 模式），保存并通知主题页。</summary>
+        private void SaveAdjustPosition()
+        {
+            try
+            {
+                var cfg = ConfigService.Load();
+                cfg.QuickPanelPosMode = "custom";
+                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX; } catch { }
+                double vsX = GetSystemMetrics(76), vsY = GetSystemMetrics(77);
+                double vsW = GetSystemMetrics(78), vsH = GetSystemMetrics(79);
+                cfg.QuickPanelCustomX = (int)Math.Clamp(Left, vsX / ws, Math.Max(vsX / ws, (vsX + vsW) / ws - ActualWidth));
+                cfg.QuickPanelCustomY = (int)Math.Clamp(Top, vsY / ws, Math.Max(vsY / ws, (vsY + vsH) / ws - ActualHeight));
+                ConfigService.Save(cfg);
+                _adjustMode = false;
+                ((App)Application.Current).ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
+                ((App)Application.Current).NotifyQuickPanelAdjustFinished();
+            }
+            catch { }
         }
 
         private async void OnSharedCurrentChanged()
@@ -75,7 +149,16 @@ namespace SonicRoute
 
         private void PositionPanel()
         {
-            // 窗口已显示、内容已加载，ActualWidth/ActualHeight 即为最终尺寸，直接定位到任务栏右下角
+            if (_adjustMode) return; // 调整模式下不自动定位（让用户拖拽）
+            // 自定义位置：直接使用已保存坐标（DIP，限制在虚拟屏幕范围内）
+            var cfg = ConfigService.Load();
+            if (cfg.QuickPanelPosMode == "custom" && cfg.QuickPanelCustomX >= 0 && cfg.QuickPanelCustomY >= 0)
+            {
+                Left = cfg.QuickPanelCustomX;
+                Top = cfg.QuickPanelCustomY;
+                return;
+            }
+            // 默认：任务栏右下角
             var work = SystemParameters.WorkArea;
             Left = work.Right - ActualWidth - 12;
             Top = work.Bottom - ActualHeight - 10;

@@ -224,6 +224,44 @@ namespace SonicRoute
             add { if (_trayWheel != null) _trayWheel.OsdAdjustFinished += value; }
             remove { if (_trayWheel != null) _trayWheel.OsdAdjustFinished -= value; }
         }
+
+        /// <summary>快速面板位置调整（主题页，逻辑同 OSD）：打开面板并进入拖拽调整模式（松手即保存自定义坐标）。</summary>
+        internal void BeginQuickPanelAdjust()
+        {
+            if (_quickPanel == null) ToggleQuickPanel();
+            SetPanelAdjustMode(true);
+        }
+
+        /// <summary>取消快速面板位置调整（不保存，关闭面板）。</summary>
+        internal void CancelQuickPanelAdjust()
+        {
+            SetPanelAdjustMode(false);
+            _quickPanel?.Close();
+        }
+
+        /// <summary>一键还原快速面板位置：恢复任务栏右下角默认位置，已打开则立即重定位。</summary>
+        internal void ResetQuickPanelPosition()
+        {
+            var cfg = ConfigService.Load();
+            cfg.QuickPanelPosMode = "default";
+            cfg.QuickPanelCustomX = -1;
+            cfg.QuickPanelCustomY = -1;
+            ConfigService.Save(cfg);
+            if (_quickPanel is QuickPanelWindow c) c.ResetPosition();
+            else if (_quickPanel is QuickPanelModernWindow m) m.ResetPosition();
+        }
+
+        /// <summary>快速面板拖拽保存后通知（主题页复位按钮）。</summary>
+        internal event Action? QuickPanelAdjustFinished;
+
+        /// <summary>供面板窗口在拖拽保存/关闭时触发（外部类不能直接 Invoke 事件）。</summary>
+        internal void NotifyQuickPanelAdjustFinished() => QuickPanelAdjustFinished?.Invoke();
+
+        private void SetPanelAdjustMode(bool on)
+        {
+            if (_quickPanel is QuickPanelWindow c) c.SetAdjustMode(on);
+            else if (_quickPanel is QuickPanelModernWindow m) m.SetAdjustMode(on);
+        }
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
         private static bool IsPackaged()
         {
@@ -424,7 +462,7 @@ namespace SonicRoute
                     var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
                     _trayWheel?.ShowOsd(name, mr.Applied
                         ? (mr.Muted ? L10n.T("Ov.AppMuted") : L10n.T("Ov.AppUnmuted"))
-                        : "⚠ " + L10n.T("Ov.NoOutputSession"));
+                        : L10n.T("Ov.NoOutputSession"));
                     break;
 
                                 case HotkeyActions.ActMuteInput:
@@ -456,7 +494,7 @@ namespace SonicRoute
                         int nextVol = Math.Clamp(curVol + delta, 0, 100);
                         bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, nextVol));
                         int act = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
-                        _trayWheel?.ShowOsd(name, ok && act >= 0 ? $"🔉 {act}%" : "⚠ " + L10n.T("Ov.VolAdjustFail"));
+                        _trayWheel?.ShowOsd(name, ok && act >= 0 ? $"🔉 {act}%" : L10n.T("Ov.VolAdjustFail"));
                         break;
                     }
 
