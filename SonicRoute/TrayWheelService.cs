@@ -139,6 +139,7 @@ namespace SonicRoute
         // 位置脏标记与定位缓存：仅首次/重新显示、尺寸、位置配置、DPI、显示器变化时重新定位
         private bool _osdPositionDirty = true;
         private bool _osdRepositionPending;
+        private bool _osdShownOnce; // 是否已首次显示：首次 Show 后同步定位，避免先显示默认位置再跳正
         private double _lastDpiScale = 1.0;
         private double _lastWorkAreaLeft, _lastWorkAreaTop, _lastWorkAreaRight, _lastWorkAreaBottom;
         private string _lastOsdPos = "";
@@ -516,9 +517,19 @@ namespace SonicRoute
                 if (!_osd.IsVisible)
                 {
                     // 首次/重新显示：直接 Show（不创建动画对象，内存稳定优先）
+                    bool firstShow = !_osdShownOnce;
                     _osd.Show();
                     _osd.Topmost = true;
                     _osdPositionDirty = true; // 重新显示确保位置正确
+                    if (firstShow)
+                    {
+                        // 首次显示：同步定位。Show 后窗口已加载，RepositionOsd 内 UpdateLayout 强制布局取真实尺寸，
+                        // 首帧即显示在正确位置，避免先出现在 WPF 默认位置再跳到正确位置（零点几秒闪烁）
+                        _osdShownOnce = true;
+                        RepositionOsd();
+                        _osdPositionDirty = false;
+                        _osdRepositionPending = false;
+                    }
                 }
 
                 // 仅在必要时重新定位：首次/重新显示、尺寸变化、位置配置变化、DPI 或显示器变化

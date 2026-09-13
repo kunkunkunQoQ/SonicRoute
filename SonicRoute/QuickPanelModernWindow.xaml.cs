@@ -56,10 +56,9 @@ namespace SonicRoute
         private bool _everFocused;
         private bool _micUiOn;
         private bool _adjustMode;          // 主题页「调整快速面板位置」：可拖拽，松手保存
-        [DllImport("user32.dll")]
-        private static extern int GetSystemMetrics(int nIndex);
         private bool _adjustDragging;
         private System.Windows.Point _adjustDragStart;
+        private bool _positionPending;     // 合并定位请求：同帧多次触发（SizeChanged/列表刷新/展开收起）只定位一次
 
         public QuickPanelModernWindow()
         {
@@ -85,11 +84,7 @@ namespace SonicRoute
             {
                 if (!_adjustDragging) return;
                 var p = e.GetPosition(null);
-                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX; } catch { }
-                double vsX = GetSystemMetrics(76), vsY = GetSystemMetrics(77);
-                double vsW = GetSystemMetrics(78), vsH = GetSystemMetrics(79);
-                double minX = vsX / ws, maxX = (vsX + vsW) / ws - ActualWidth;
-                double minY = vsY / ws, maxY = (vsY + vsH) / ws - ActualHeight;
+                var (minX, maxX, minY, maxY) = QuickPanelPosition.DragBounds(this);
                 Left = Math.Clamp(Left + (p.X - _adjustDragStart.X), minX, Math.Max(minX, maxX));
                 Top = Math.Clamp(Top + (p.Y - _adjustDragStart.Y), minY, Math.Max(minY, maxY));
                 e.Handled = true;
@@ -102,16 +97,44 @@ namespace SonicRoute
                 e.Handled = true;
                 SaveAdjustPosition();
             };
+            // SizeToContent 下 ActualHeight 异步更新（应用列表填充/▾ 展开都会变高），
+            // 尺寸变化时合并请求重定位（默认模式锚定右下角；自定义位置保持用户设定不重设），
+            // 避免逐项填充/展开收起过程中窗口反复移动跳动
+            SizeChanged += (_, _) => { if (IsVisible && !_adjustMode) RequestPosition(); };
+            // 工作区变化（分辨率/任务栏位置/DPI 缩放）时重定位默认位置
+            SystemParameters.StaticPropertyChanged += OnSystemParamChanged;
             // 共享"当前应用"变化（前台自动跟随/概览切换）时同步面板高亮
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
             Closed += (_, _) =>
             {
                 CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+                SystemParameters.StaticPropertyChanged -= OnSystemParamChanged;
                 if (_adjustMode) { _adjustMode = false; ((App)Application.Current).NotifyQuickPanelAdjustFinished(); }
             };
-            // SizeToContent 下 ActualHeight 异步更新（应用列表填充/▾ 展开都会变高），
-            // 尺寸变化时重定位，避免定位过早导致窗口下沉/超出屏幕
-            SizeChanged += (_, _) => { if (IsVisible) PositionPanel(); };
+        }
+
+        /// <summary>工作区变化（分辨率/任务栏位置/DPI 缩放）时重定位默认位置；自定义位置保持用户设定。</summary>
+        private void OnSystemParamChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(SystemParameters.WorkArea)) return;
+            if (IsVisible && !_adjustMode) RequestPosition();
+        }
+
+        /// <summary>合并定位请求：同帧多次触发只定位一次，避免窗口反复移动/跳动。</summary>
+        private void RequestPosition()
+        {
+            if (_positionPending) return;
+            _positionPending = true;
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                _positionPending = false;
+                if (!IsVisible || _adjustDragging) return;
+                // 调整模式：面板已可见时不自动定位（让用户拖拽）；刚打开仍在屏幕外时仍先定位，确保可见可拖
+                if (_adjustMode && Left >= -5000 && Top >= -5000) return;
+                // Apply 内部：Custom 直接设回用户保存坐标（相同值 WPF 不移动窗口，仅完成首次定位/拉回偏离位置），
+                // 默认锚定主显示器工作区右下角
+                QuickPanelPosition.Apply(this, ConfigService.Load());
+            });
         }
 
         /// <summary>进入/退出位置调整模式（主题页调用）。</summary>
@@ -125,7 +148,7 @@ namespace SonicRoute
         internal void ResetPosition()
         {
             if (_adjustMode) _adjustMode = false;
-            if (IsVisible) PositionPanel();
+            if (IsVisible) QuickPanelPosition.Apply(this, ConfigService.Load());
         }
 
         /// <summary>拖动松手：把当前窗口位置写入配置（Custom 模式），保存并通知主题页。</summary>
@@ -133,14 +156,7 @@ namespace SonicRoute
         {
             try
             {
-                var cfg = ConfigService.Load();
-                cfg.QuickPanelPosMode = "custom";
-                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX; } catch { }
-                double vsX = GetSystemMetrics(76), vsY = GetSystemMetrics(77);
-                double vsW = GetSystemMetrics(78), vsH = GetSystemMetrics(79);
-                cfg.QuickPanelCustomX = (int)Math.Clamp(Left, vsX / ws, Math.Max(vsX / ws, (vsX + vsW) / ws - ActualWidth));
-                cfg.QuickPanelCustomY = (int)Math.Clamp(Top, vsY / ws, Math.Max(vsY / ws, (vsY + vsH) / ws - ActualHeight));
-                ConfigService.Save(cfg);
+                QuickPanelPosition.Save(this, ConfigService.Load());
                 _adjustMode = false;
                 ((App)Application.Current).ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
                 ((App)Application.Current).NotifyQuickPanelAdjustFinished();
@@ -168,26 +184,6 @@ namespace SonicRoute
             Show();
             Activate();
             _ = LoadAsync();
-        }
-
-        private void PositionPanel()
-        {
-            if (_adjustMode) return; // 调整模式下不自动定位（让用户拖拽）
-            // 自定义位置：直接使用已保存坐标（DIP，限制在虚拟屏幕范围内）
-            var cfg = ConfigService.Load();
-            if (cfg.QuickPanelPosMode == "custom" && cfg.QuickPanelCustomX >= 0 && cfg.QuickPanelCustomY >= 0)
-            {
-                Left = cfg.QuickPanelCustomX;
-                Top = cfg.QuickPanelCustomY;
-                return;
-            }
-            // 窗口已显示、内容已加载，ActualWidth/ActualHeight 即为最终尺寸，直接定位到任务栏右下角；
-            // 展开 ▾ 后窗口变高时重定位，并做屏幕边界保护，避免下沉/溢出
-            var work = SystemParameters.WorkArea;
-            Left = work.Right - ActualWidth - 12;
-            double top = work.Bottom - ActualHeight - 10;
-            if (top < work.Top) top = work.Top + 6;
-            Top = top;
         }
 
         private async Task LoadAsync()
@@ -219,7 +215,7 @@ namespace SonicRoute
                 ApplyMicMuteVisual(micMuted);
 
                 // 内容已就绪，重新定位到任务栏右下角（避免溢出屏幕）
-                PositionPanel();
+                RequestPosition();
             }
             catch (Exception ex)
             {
@@ -675,8 +671,8 @@ namespace SonicRoute
                 await BuildRowDevicesAsync(row);
             else
                 row.ExpandPanel.Children.Clear();
-            // 展开/收起后面板高度变化，重新定位避免下沉/溢出
-            PositionPanel();
+            // 展开/收起后面板高度变化，合并请求重定位避免下沉/溢出（SizeChanged 也会触发，合并只执行一次）
+            RequestPosition();
         }
 
         /// <summary>为某应用行构建输出/输入设备按钮（保留设备筛选 + 自定义名 + 当前设备高亮）。</summary>
