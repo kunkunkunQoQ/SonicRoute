@@ -27,9 +27,7 @@
 
 ## 🌐 多语言与翻译
 
-内置 9 种语言：简体中文 / 繁體中文 / English / 日本語 / 한국어 / Français / Deutsch / Español / Русский。应用内 **实验设置 → 语言文件** 可**导出**内置语言 JSON → 编辑后**导入**即生效（支持新增自定义语言，外置文件优先）。
-
-想**提交语言 / 翻译**？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)（注明语言与改动，或提交 `Resources/Lang/{语言代码}.json`，键与内置文件保持一致）。
+内置 9 种语言，应用内可**导出 / 编辑 / 导入**（实验设置 → 语言文件，支持自定义语言）。想**提交翻译**？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
 ## 📦 下载
 
