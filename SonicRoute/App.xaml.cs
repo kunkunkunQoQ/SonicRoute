@@ -435,6 +435,15 @@ namespace SonicRoute
                     : (HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "");
             }
             _hotkeys.Reload(map);
+            // 自动化规则快捷键：Rule:{Id} 动作并入同一注册通道；冲突/无效时不注册（RegistrationStatus 标记空）
+            foreach (var r in config.AutoRules)
+            {
+                if (r.Enabled && r.Trigger == AutoRuleTrigger.Hotkey && !string.IsNullOrWhiteSpace(r.Hotkey))
+                    map[AutoRuleService.HotkeyPrefix + r.Id] = r.Hotkey;
+            }
+            _hotkeys.Reload(map);
+            // 应用启动 / 前台切换触发监听：仅当存在启用规则时启动（无规则自动停止）
+            AutoRuleService.RefreshWatcher();
         }
 
         /// <summary>快捷键实际注册状态：动作 → 生效组合（用于设置页显示占用冲突）。</summary>
@@ -442,7 +451,15 @@ namespace SonicRoute
             _hotkeys?.RegistrationStatus ?? new Dictionary<string, string>();
 
         private async Task ExecuteHotkeyAsync(string action)
+
         {
+            // 自动化规则快捷键分发：Rule:{Id} → 规则引擎执行（无匹配规则时忽略）
+            if (action.StartsWith(AutoRuleService.HotkeyPrefix, StringComparison.Ordinal))
+            {
+                await AutoRuleService.ExecuteByHotkeyAsync(action[AutoRuleService.HotkeyPrefix.Length..]);
+                return;
+            }
+
             if (action == HotkeyActions.ActPanel)
             {
                 ToggleQuickPanel();
@@ -570,7 +587,7 @@ namespace SonicRoute
         {
             return config.DeviceNames.TryGetValue(dev.Id, out var n) && !string.IsNullOrWhiteSpace(n)
                 ? n
-                : dev.DisplayName;
+                : dev.DisplayName ?? string.Empty;
         }
 
         /// <summary>在当前应用的可见设备间循环切换，返回切换到的设备名；失败/无设备返回 null。

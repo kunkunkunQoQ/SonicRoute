@@ -11,7 +11,8 @@ namespace SonicRoute
     /// 全局快捷键服务：键盘绑定走 RegisterHotKey（隐藏宿主窗口承载消息循环），
     /// 鼠标键/滚轮绑定（MButton / XButton1 / XButton2 / WheelUp / WheelDown，可带修饰键）
     /// 走低级鼠标钩子（RegisterHotKey 对鼠标键支持不可靠）。
-    /// 支持：组合键（Ctrl+Alt+1）、单键（F2 / A / 5）、F 区 F1-F24。
+    /// 支持：组合键（Ctrl+Alt+1）、单键（F2 / A / 5 / Delete / NumPad1 / OemPlus 等）、
+    /// F 区 F1-F24、数字键盘、编辑键与 OEM 符号键（与 HotkeyActions.Format 输出完全对齐）。
     /// 配置为空的动作不注册（也不回退默认），用于"按 Esc 清除绑定"。
     /// </summary>
     public sealed class HotkeyService : IDisposable
@@ -92,6 +93,12 @@ namespace SonicRoute
                     && !string.Equals(def, kv.Value, StringComparison.OrdinalIgnoreCase))
                 {
                     TryRegister(kv.Key, def); // 配置组合冲突/无效 → 回退默认
+                }
+                else if (!RegistrationStatus.ContainsKey(kv.Key))
+                {
+                    // 无默认动作（如自动化规则 Rule:{Id}）冲突/无效：标记未注册成功，
+                    // 供规则列表显示"快捷键冲突/无效"，避免静默占用预期
+                    RegistrationStatus[kv.Key] = "";
                 }
             }
 
@@ -200,6 +207,45 @@ namespace SonicRoute
                     "f22" => 0x85,
                     "f23" => 0x86,
                     "f24" => 0x87,
+                    // 数字键盘
+                    "numpad0" => 0x60,
+                    "numpad1" => 0x61,
+                    "numpad2" => 0x62,
+                    "numpad3" => 0x63,
+                    "numpad4" => 0x64,
+                    "numpad5" => 0x65,
+                    "numpad6" => 0x66,
+                    "numpad7" => 0x67,
+                    "numpad8" => 0x68,
+                    "numpad9" => 0x69,
+                    "numlock" => 0x90,
+                    // 编辑键
+                    "insert" => 0x2D,
+                    "delete" => 0x2E,
+                    "home" => 0x24,
+                    "end" => 0x23,
+                    "pageup" => 0x21,
+                    "pagedown" => 0x22,
+                    "back" => 0x08,
+                    "backspace" => 0x08,
+                    "capslock" => 0x14,
+                    "scroll" => 0x91,
+                    "pause" => 0x13,
+                    "printscreen" => 0x2C,
+                    // OEM 符号键（与 HotkeyActions.Format 输出的 Key.ToString() 名一一对应）
+                    "oemplus" => 0xBB,
+                    "oemminus" => 0xBD,
+                    "oemcomma" => 0xBC,
+                    "oemperiod" => 0xBE,
+                    "oemquestion" => 0xBF,
+                    "oemopenbrackets" => 0xDB,
+                    "oemclosebrackets" => 0xDD,
+                    "oempipes" => 0xDC,
+                    "oembackslash" => 0xDC,
+                    "oemsemicolon" => 0xBA,
+                    "oemquotes" => 0xDE,
+                    "oemtilde" => 0xC0,
+                    "oem8" => 0xDF,
                     _ => 0
                 };
             }

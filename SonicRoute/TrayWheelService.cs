@@ -148,6 +148,7 @@ namespace SonicRoute
 // 麦克风静音 OSD 常驻状态：_micMutePersistentActive=当前常驻横幅显示中；_micMuteOverlayPending=普通 OSD 覆盖了常驻横幅，隐藏后需恢复
         private bool _micMutePersistentActive;
         private bool _micMuteOverlayPending;
+        private bool _osdFadingOut; // 淡出动画进行中（新消息到来时取消并立即恢复显示）
 
         public TrayWheelService(System.Windows.Forms.NotifyIcon? trayIcon)
         {
@@ -510,6 +511,14 @@ namespace SonicRoute
                     _osdPositionDirty = true; // 首次显示必须定位
                 }
 
+                // 新消息到来：若正在淡出则取消动画并立即恢复不透明（避免提前消失/闪烁）
+                if (_osdFadingOut)
+                {
+                    _osdFadingOut = false;
+                    _osd.BeginAnimation(Window.OpacityProperty, null);
+                    _osd.Opacity = 1;
+                }
+
                 // 连续操作：只更新文本，不重建视觉树、不重复 Show
                 if (_osdAppText != null) _osdAppText.Text = app;
                 if (_osdValueText != null) _osdValueText.Text = text;
@@ -531,6 +540,19 @@ namespace SonicRoute
                     }
                     _osd.Show();
                     _osd.Topmost = true;
+                    // 淡入：从隐藏到显示时 Opacity 0→1（时长 0 = 禁用，直接不透明）；先清旧动画避免残留
+                    _osd.BeginAnimation(Window.OpacityProperty, null);
+                    int fadeIn = Math.Clamp(ConfigService.Load().OsdFadeInMs, 0, 500);
+                    if (fadeIn > 0)
+                    {
+                        _osd.Opacity = 0;
+                        _osd.BeginAnimation(Window.OpacityProperty,
+                            new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(fadeIn)));
+                    }
+                    else
+                    {
+                        _osd.Opacity = 1;
+                    }
                     if (firstShow)
                     {
                         // Show 后布局完成、实际尺寸已确定，同步校准一次：尺寸无关位置（TR）结果与
@@ -630,6 +652,9 @@ namespace SonicRoute
             {
                 if (_osd != null)
                 {
+                    _osdFadingOut = false;
+                    _osd.BeginAnimation(Window.OpacityProperty, null); // 清除淡出/淡入动画，复位基础值
+                    _osd.Opacity = 1; // 复位为不透明，避免残留透明状态
                     _osd.Hide();
                     // 保留完整视觉树（Border/Grid/两个 TextBlock），下次显示只更新文本——不重复创建控件
                 }
@@ -644,14 +669,44 @@ namespace SonicRoute
             try
             {
                 _osdTimer.Stop();
-                HideOsd();
-                if (!_micMuteOverlayPending) return;
-                _micMuteOverlayPending = false;
-                bool muted = await Task.Run(() => GlobalMicMuteService.IsMuted());
-                if (muted && ConfigService.Load().MicMuteOsdPersistent)
-                    ShowMicMuteOsd(L10n.T("Ov.MuteMic"), true);
+                if (_osd == null || !_osd.IsVisible || _osdFadingOut)
+                {
+                    await RestoreMicOverlayIfNeededAsync();
+                    return;
+                }
+                // 淡出动画结束后再隐藏（时长 0 = 禁用淡出，直接隐藏）
+                int fadeOut = Math.Clamp(ConfigService.Load().OsdFadeOutMs, 0, 1000);
+                if (fadeOut <= 0)
+                {
+                    HideOsd();
+                    await RestoreMicOverlayIfNeededAsync();
+                    return;
+                }
+                _osdFadingOut = true;
+                var anim = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(fadeOut))
+                {
+                    FillBehavior = System.Windows.Media.Animation.FillBehavior.HoldEnd
+                };
+                anim.Completed += (_, _) =>
+                {
+                    if (!_osdFadingOut) return; // 淡出期间新消息已取消动画并恢复显示
+                    _osdFadingOut = false;
+                    HideOsd();
+                    _ = RestoreMicOverlayIfNeededAsync();
+                };
+                _osd.BeginAnimation(Window.OpacityProperty, anim);
             }
             catch { }
+        }
+
+        /// <summary>普通 OSD 隐藏（或淡出完成）后恢复被覆盖的麦克风静音常驻横幅（若仍静音且常驻开关开启）。</summary>
+        private async Task RestoreMicOverlayIfNeededAsync()
+        {
+            if (!_micMuteOverlayPending) return;
+            _micMuteOverlayPending = false;
+            bool muted = await Task.Run(() => GlobalMicMuteService.IsAnyMuted(ConfigService.Load().MicMuteOsdTrackInputMuted));
+            if (muted && ConfigService.Load().MicMuteOsdPersistent)
+                ShowMicMuteOsd(L10n.T("Ov.MuteMic"), true);
         }
 
         /// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 设置开关共用）。

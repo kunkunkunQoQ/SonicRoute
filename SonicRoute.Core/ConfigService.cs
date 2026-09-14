@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using SonicRoute.Core.Models;
 
 namespace SonicRoute.Core
 {
@@ -32,6 +33,9 @@ namespace SonicRoute.Core
         public List<string> HiddenPanelApps { get; set; } = new();
 
         /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
+        /// <summary>自动化规则列表（极简规则引擎，v1.16 新增）。</summary>
+        public List<AutoRule> AutoRules { get; set; } = new();
+
         public string Language { get; set; } = "";
 
         /// <summary>主题模式：system / light / dark。</summary>
@@ -114,6 +118,11 @@ namespace SonicRoute.Core
         public int OsdWidth { get; set; } = 240;
 
         /// <summary>主题 - OSD 字号倍率（0.7~2.0，默认 1.0；调整模式下拖手柄纵向调整）。</summary>
+        /// <summary>主题 - OSD 淡入时长（ms，0~500，默认 100；0 = 禁用淡入直接显示）。</summary>
+        public int OsdFadeInMs { get; set; } = 100;
+
+        /// <summary>主题 - OSD 淡出时长（ms，0~1000，默认 200；0 = 禁用淡出直接隐藏）。</summary>
+        public int OsdFadeOutMs { get; set; } = 200;
         /// <summary>主题 - 麦克风静音时 OSD 常驻（静音后持续显示状态，不自动隐藏；默认关闭 = 与旧版一致）。</summary>
         public bool MicMuteOsdPersistent { get; set; }
 

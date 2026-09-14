@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -47,6 +47,12 @@ namespace SonicRoute
         private bool _suppressRename;
         private List<AppItem> _appItems = new();
         private readonly AppConfig _config;
+        // ===== 鑷姩鍖栬鍒欙紙鏋佺畝鑷姩鍖栭〉锛?=====
+        private List<AudioAppInfo> _autoApps = new();
+        private string? _autoEditingId;
+        private bool _autoCapturingHotkey;
+        private string _autoHotkeyCombo = "";
+        private bool _suppressAutoUi;
 
         public MainWindow()
         {
@@ -126,6 +132,23 @@ namespace SonicRoute
 
         private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
+            if (_autoCapturingHotkey)
+            {
+                e.Handled = true;
+                if (e.Key == Key.Escape)
+                {
+                    _autoCapturingHotkey = false;
+                    _autoHotkeyCombo = "";
+                    UpdateAutoHotkeyHint();
+                    return;
+                }
+                var autoCombo = HotkeyActions.Format(e);
+                if (autoCombo == null) return;
+                _autoCapturingHotkey = false;
+                _autoHotkeyCombo = autoCombo;
+                UpdateAutoHotkeyHint();
+                return;
+            }
             if (_recordingAction == null) return;
             e.Handled = true;
             if (e.Key == Key.Escape)
@@ -156,6 +179,16 @@ namespace SonicRoute
         /// <summary>录制态下捕获鼠标键（中键/侧键）绑定为快捷键；左键/右键忽略（不吞事件，避免影响 UI 交互）。</summary>
         private void MainWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
         {
+            if (_autoCapturingHotkey)
+            {
+                var autoCombo = HotkeyActions.FormatMouse(e);
+                if (autoCombo == null) return;
+                e.Handled = true;
+                _autoCapturingHotkey = false;
+                _autoHotkeyCombo = autoCombo;
+                UpdateAutoHotkeyHint();
+                return;
+            }
             if (_recordingAction == null) return;
             var combo = HotkeyActions.FormatMouse(e);
             if (combo == null) return; // 左键/右键等不可绑定的鼠标键：忽略
@@ -171,6 +204,16 @@ namespace SonicRoute
         /// <summary>录制态下捕获鼠标滚轮：Ctrl+滚轮上 = Ctrl+WheelUp，滚轮下 = WheelDown（可带修饰键）。</summary>
         private void MainWindow_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
+            if (_autoCapturingHotkey)
+            {
+                var autoCombo = HotkeyActions.FormatWheel(e);
+                if (autoCombo == null) return;
+                e.Handled = true;
+                _autoCapturingHotkey = false;
+                _autoHotkeyCombo = autoCombo;
+                UpdateAutoHotkeyHint();
+                return;
+            }
             if (_recordingAction == null) return;
             var combo = HotkeyActions.FormatWheel(e);
             if (combo == null) return;
@@ -280,6 +323,7 @@ namespace SonicRoute
             ThemePage.Visibility = tag == "Theme" ? Visibility.Visible : Visibility.Collapsed;
             SettingsPage.Visibility = tag == "Settings" ? Visibility.Visible : Visibility.Collapsed;
             ExperimentalPage.Visibility = tag == "Experimental" ? Visibility.Visible : Visibility.Collapsed;
+            AutomationPage.Visibility = tag == "Automation" ? Visibility.Visible : Visibility.Collapsed;
 
             if (tag == "Overview") await RefreshOverviewAsync();
             else if (tag == "Apps") await LoadAppsAsync();
@@ -287,6 +331,7 @@ namespace SonicRoute
             else if (tag == "Theme") LoadTheme();
             else if (tag == "Settings") LoadSettings();
             else if (tag == "Experimental") LoadExperimentalSettings();
+            else if (tag == "Automation") ShowAutomationPage();
         }
 
         // ==================================================================
@@ -336,7 +381,20 @@ namespace SonicRoute
             }).ToList();
         }
 
-        private IEnumerable<AudioDeviceInfo> VisibleOutputs =>
+
+
+        /// <summary>应用自定义应用名称到副本（不改动原始应用项）。</summary>
+        private IEnumerable<AudioAppInfo> DisplayApps(IEnumerable<AudioAppInfo> apps)
+        {
+            return apps.Select(a =>
+            {
+                if (a.ProcessName != null
+                    && _config.AppNames.TryGetValue(a.ProcessName, out var n)
+                    && !string.IsNullOrWhiteSpace(n))
+                    return new AudioAppInfo { ProcessId = a.ProcessId, DisplayName = n, ProcessName = a.ProcessName, HasActiveSession = a.HasActiveSession };
+                return a;
+            }).ToList();
+        }        private IEnumerable<AudioDeviceInfo> VisibleOutputs =>
             _outputs.Where(d => !_config.HiddenOutputDevices.Contains(d.Id));
 
         private IEnumerable<AudioDeviceInfo> VisibleInputs =>
@@ -412,6 +470,8 @@ namespace SonicRoute
         {
             var name = app.ProcessName;
             if (string.IsNullOrWhiteSpace(name)) return;
+            // 与上次记录相同则跳过写盘（切设备/切应用高频点击时减少无谓的配置全量保存）
+            if (string.Equals(_config.LastUsedAppName, name, StringComparison.OrdinalIgnoreCase)) return;
             _config.LastUsedAppName = name;
             ConfigService.Save(_config);
         }
@@ -1362,7 +1422,7 @@ namespace SonicRoute
             try
             {
                 SetRadioByTag(ThemeSystem, ThemeLight, ThemeDark, _config.ThemeMode);
-                OpacitySlider.Value = Math.Clamp(_config.BackgroundOpacity, 60, 100);
+                OpacitySlider.Value = Math.Clamp(_config.BackgroundOpacity, 0, 100);
                 OpacityText.Text = $"{_config.BackgroundOpacity}%";
 
                 string accent = _config.Accent ?? "blue";
@@ -2044,6 +2104,8 @@ namespace SonicRoute
             _config.OsdCustomY = -1;
             _config.OsdWidth = 240;
             _config.OsdFontScale = 1.0;
+            _config.OsdFadeInMs = 100;
+            _config.OsdFadeOutMs = 200;
             ConfigService.Save(_config);
             SyncOsdSliders(); // 同步主题页滑条到还原值
             ShowToast(L10n.T("Exp.OsdResetDone"));
@@ -2169,6 +2231,26 @@ namespace SonicRoute
             app.SetOsdSize(_config.OsdWidth, fs);
         }
 
+        /// <summary>主题页 - OSD 淡入时长滑条：实时调整淡入动画时长并保存（0 = 禁用淡入直接显示）。</summary>
+        private void OsdFadeInSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_syncingOsdSliders) return; // 初始化/一键还原同步滑条值时不触发保存
+            if (OsdFadeInValue == null || !IsLoaded) return;
+            int ms = (int)Math.Round(OsdFadeInSlider.Value);
+            OsdFadeInValue.Text = ms + "ms";
+            if (_config.OsdFadeInMs != ms) { _config.OsdFadeInMs = ms; ConfigService.Save(_config); }
+        }
+
+        /// <summary>主题页 - OSD 淡出时长滑条：实时调整淡出动画时长并保存（0 = 禁用淡出直接隐藏）。</summary>
+        private void OsdFadeOutSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_syncingOsdSliders) return;
+            if (OsdFadeOutValue == null || !IsLoaded) return;
+            int ms = (int)Math.Round(OsdFadeOutSlider.Value);
+            OsdFadeOutValue.Text = ms + "ms";
+            if (_config.OsdFadeOutMs != ms) { _config.OsdFadeOutMs = ms; ConfigService.Save(_config); }
+        }
+
         private bool _syncingOsdSliders;
 
         /// <summary>同步主题页 OSD 滑条与数值文本（页面加载与一键还原时调用，不触发保存/OSD 提示）。</summary>
@@ -2178,9 +2260,13 @@ namespace SonicRoute
             _syncingOsdSliders = true;
             OsdWidthSlider.Value = _config.OsdWidth;
             OsdFontSlider.Value = _config.OsdFontScale;
+            if (OsdFadeInSlider != null) OsdFadeInSlider.Value = _config.OsdFadeInMs;
+            if (OsdFadeOutSlider != null) OsdFadeOutSlider.Value = _config.OsdFadeOutMs;
             _syncingOsdSliders = false;
             OsdWidthValue.Text = _config.OsdWidth + "px";
             OsdFontValue.Text = (int)Math.Round(_config.OsdFontScale * 100) + "%";
+            if (OsdFadeInValue != null) OsdFadeInValue.Text = _config.OsdFadeInMs + "ms";
+            if (OsdFadeOutValue != null) OsdFadeOutValue.Text = _config.OsdFadeOutMs + "ms";
             if (MicMutePersistCheck != null) MicMutePersistCheck.IsChecked = _config.MicMuteOsdPersistent;
             if (MicMuteTrackInputCheck != null) MicMuteTrackInputCheck.IsChecked = _config.MicMuteOsdTrackInputMuted;
             if (MicMuteMoreToggle != null) ApplyMicMutePersistUi(_config.MicMuteOsdPersistent);
@@ -2229,6 +2315,13 @@ namespace SonicRoute
         private void MicMuteMoreToggle_Click(object sender, RoutedEventArgs e)
         {
             MicMuteMorePanel.Visibility = MicMuteMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>主题页 - OSD 调整项（宽度/字号/淡入/淡出）「更多选项」折叠展开。</summary>
+        private void OsdMoreToggle_Click(object sender, RoutedEventArgs e)
+        {
+            if (OsdSlidersPanel == null) return;
+            OsdSlidersPanel.Visibility = OsdMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>主题页 - 「麦克风静音时 OSD 常驻」开关：保存配置并立即生效
@@ -2430,5 +2523,681 @@ namespace SonicRoute
             return head.Substring(0, 11) + "…";
         }
 
+
+        // ==================================================================
+        // 自动化规则（极简自动化页）
+        // ==================================================================
+
+        private List<AutoRuleStep> _autoSteps = new();
+
+        private void ShowAutomationPage()
+        {
+            FillAutoCombos();
+            _ = RefreshAutoRulesAsync();
+        }
+
+        private async Task RefreshAutoRulesAsync()
+        {
+            var cfg = await Task.Run(() => ConfigService.Load());
+            AutoRuleList.Items.Clear();
+            var rules = cfg.AutoRules ?? new List<AutoRule>();
+            AutoEmptyText.Visibility = rules.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var r in rules)
+                AutoRuleList.Items.Add(BuildAutoRuleRow(r));
+        }
+
+        private UIElement BuildAutoRuleRow(AutoRule r)
+        {
+            var panel = new StackPanel { Margin = new Thickness(0, 4, 0, 4) };
+            var nameBlock = new TextBlock
+            {
+                FontSize = 12.5,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = (Brush)FindResource("Theme.TextPrimary")
+            };
+            nameBlock.Inlines.Add(BuildAutoRuleSummary(r));
+            if (r.Trigger == AutoRuleTrigger.Hotkey && !string.IsNullOrWhiteSpace(r.Hotkey))
+            {
+                nameBlock.Inlines.Add(new System.Windows.Documents.Run("  "));
+                nameBlock.Inlines.Add(new System.Windows.Documents.Run(r.Hotkey)
+                {
+                    Foreground = (Brush)FindResource("Theme.Accent"),
+                    FontWeight = FontWeights.SemiBold
+                });
+            }
+            var editBtn = new Button { Content = L10n.T("Auto.Edit"), Tag = r.Id, Width = 64, Height = 28 };
+            editBtn.SetResourceReference(StyleProperty, "GhostButton");
+            editBtn.Click += AutoEdit_Click;
+            var delBtn = new Button
+            {
+                Content = L10n.T("Auto.Delete"), Tag = r.Id, Width = 64, Height = 28,
+                Margin = new Thickness(8, 0, 0, 0)
+            };
+            delBtn.SetResourceReference(StyleProperty, "GhostButton");
+            delBtn.Click += AutoDelete_Click;
+            var btns = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            btns.Children.Add(editBtn);
+            btns.Children.Add(delBtn);
+            var dock = new DockPanel();
+            DockPanel.SetDock(btns, Dock.Right);
+            dock.Children.Add(btns);
+            dock.Children.Add(nameBlock);
+            panel.Children.Add(dock);
+            if (IsAutoHotkeyConflict(r))
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = L10n.T("Auto.HotkeyConflict"),
+                    FontSize = 11,
+                    Foreground = (Brush)FindResource("Theme.TextSecondary"),
+                    Margin = new Thickness(0, 2, 0, 0)
+                });
+            }
+            return panel;
+        }
+
+        private string BuildAutoRuleSummary(AutoRule r)
+        {
+            string trigger = r.Trigger switch
+            {
+                AutoRuleTrigger.AppStart => L10n.T("Auto.TriggerAppStart"),
+                AutoRuleTrigger.AppSwitch => L10n.T("Auto.TriggerAppSwitch"),
+                _ => L10n.T("Auto.TriggerHotkey")
+            };
+            var actions = r.Actions.Count > 0
+                ? r.Actions.Select(s => s.Action).ToList()
+                : new List<AutoRuleAction> { r.Action };
+            var actionTexts = actions.Select(a => a switch
+            {
+                AutoRuleAction.SetSystemOutput => L10n.T("Auto.ActionSystemOutput"),
+                AutoRuleAction.SetSystemInput => L10n.T("Auto.ActionSystemInput"),
+                AutoRuleAction.SetSystemVolume => L10n.T("Auto.ActionSystemVolume"),
+                AutoRuleAction.ToggleSystemMute => L10n.T("Auto.ActionSystemMute"),
+                AutoRuleAction.SetAppVolume => L10n.T("Auto.ActionAppVolume"),
+                AutoRuleAction.ToggleAppMute => L10n.T("Auto.ActionAppMute"),
+                AutoRuleAction.SetAppOutput => L10n.T("Auto.ActionAppOutput"),
+                AutoRuleAction.SetAppInput => L10n.T("Auto.ActionAppInput"),
+                AutoRuleAction.LaunchProgram => L10n.T("Auto.ActionLaunch"),
+                _ => L10n.T("Auto.ActionPowerShell")
+            }).ToList();
+            var parts = new List<string> { r.Name, "·", trigger };
+            if (r.Trigger != AutoRuleTrigger.Hotkey && !string.IsNullOrEmpty(r.TriggerApp))
+                parts.Add(r.TriggerApp);
+            parts.Add("→");
+            parts.Add(string.Join("、", actionTexts));
+            return string.Join(" ", parts);
+        }
+
+        private bool IsAutoHotkeyConflict(AutoRule r)
+        {
+            if (string.IsNullOrWhiteSpace(r.Hotkey)) return false;
+            var reg = ((App)Application.Current).HotkeyRegistration;
+            return reg.TryGetValue(AutoRuleService.HotkeyPrefix + r.Id, out var actual)
+                && string.IsNullOrEmpty(actual);
+        }
+
+        private void AutoNew_Click(object sender, RoutedEventArgs e)
+        {
+            FillAutoCombos();
+            _autoEditingId = null;
+            _autoHotkeyCombo = "";
+            ResetAutoEditForm();
+            AutoEditTitle.Text = L10n.T("Auto.New");
+            AutoEditCard.Visibility = Visibility.Visible;
+        }
+
+        private void AutoEdit_Click(object sender, RoutedEventArgs e)
+        {
+            var id = (string)((FrameworkElement)sender).Tag;
+            var cfg = ConfigService.Load();
+            var rule = cfg.AutoRules.FirstOrDefault(r => r.Id == id);
+            if (rule == null) return;
+            FillAutoCombos();
+            _autoEditingId = rule.Id;
+            _suppressAutoUi = true;
+            AutoNameBox.Text = rule.Name;
+            AutoTriggerCombo.SelectedIndex = (int)rule.Trigger;
+            _autoHotkeyCombo = rule.Hotkey ?? "";
+            _autoSteps = rule.Actions.Count > 0
+                ? rule.Actions.Select(s => new AutoRuleStep
+                {
+                    Action = s.Action,
+                    TargetApp = s.TargetApp ?? "",
+                    TargetDeviceId = s.TargetDeviceId ?? "",
+                    Volume = s.Volume,
+                    ProgramPaths = new List<string>(s.ProgramPaths)
+                }).ToList()
+                : new List<AutoRuleStep>
+                {
+                    new AutoRuleStep
+                    {
+                        Action = rule.Action,
+                        TargetApp = rule.TargetApp ?? "",
+                        TargetDeviceId = rule.TargetDeviceId ?? "",
+                        Volume = rule.Volume,
+                        ProgramPaths = string.IsNullOrWhiteSpace(rule.ProgramPath)
+                            ? new List<string>()
+                            : new List<string> { rule.ProgramPath }
+                    }
+                };
+            _suppressAutoUi = false;
+            UpdateAutoTriggerPanels();
+            SelectAutoApp(AutoTriggerAppCombo, rule.TriggerApp);
+            RenderAutoSteps();
+            AutoEditTitle.Text = L10n.T("Auto.Edit");
+            AutoEditCard.Visibility = Visibility.Visible;
+            UpdateAutoHotkeyHint();
+        }
+
+        private void AutoDelete_Click(object sender, RoutedEventArgs e)
+        {
+            var id = (string)((FrameworkElement)sender).Tag;
+            var cfg = ConfigService.Load();
+            cfg.AutoRules.RemoveAll(r => r.Id == id);
+            ConfigService.Save(cfg);
+            ((App)Application.Current).ReloadHotkeys();
+            if (_autoEditingId == id)
+            {
+                _autoCapturingHotkey = false;
+                AutoEditCard.Visibility = Visibility.Collapsed;
+            }
+            _ = RefreshAutoRulesAsync();
+        }
+
+        private void AutoCancel_Click(object sender, RoutedEventArgs e)
+        {
+            _autoCapturingHotkey = false;
+            AutoEditCard.Visibility = Visibility.Collapsed;
+        }
+
+        private void FillAutoCombos()
+        {
+            if (_autoApps.Count == 0)
+                _autoApps = AudioService.GetApps();
+            LoadAutoAppCombo(AutoTriggerAppCombo, withAny: true);
+            if (AutoTriggerCombo.Items.Count == 0)
+            {
+                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerHotkey"), Tag = AutoRuleTrigger.Hotkey });
+                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppStart"), Tag = AutoRuleTrigger.AppStart });
+                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppSwitch"), Tag = AutoRuleTrigger.AppSwitch });
+            }
+        }
+
+        private void LoadAutoAppCombo(System.Windows.Controls.ComboBox combo, bool withAny)
+        {
+            combo.Items.Clear();
+            if (withAny)
+                combo.Items.Add(new AudioAppInfo { ProcessId = 0, DisplayName = L10n.T("Auto.AnyApp"), ProcessName = null });
+            foreach (var a in _autoApps)
+                combo.Items.Add(a);
+        }
+
+        private void SelectAutoApp(System.Windows.Controls.ComboBox combo, string? processName)
+        {
+            if (string.IsNullOrWhiteSpace(processName)) { combo.SelectedIndex = -1; return; }
+            foreach (var item in combo.Items)
+                if (item is AudioAppInfo a && string.Equals(a.ProcessName, processName, StringComparison.OrdinalIgnoreCase))
+                { combo.SelectedItem = item; return; }
+            combo.SelectedIndex = -1;
+        }
+
+        private static void SelectAutoDevice(System.Windows.Controls.ComboBox combo, string? deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId)) { combo.SelectedIndex = -1; return; }
+            foreach (var item in combo.Items)
+                if (item is AudioDeviceInfo d && string.Equals(d.Id, deviceId, StringComparison.OrdinalIgnoreCase))
+                { combo.SelectedItem = item; return; }
+            combo.SelectedIndex = -1;
+        }
+
+        private void AutoTriggerCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressAutoUi) return;
+            UpdateAutoTriggerPanels();
+        }
+
+
+        private void UpdateAutoTriggerPanels()
+        {
+            var trigger = AutoTriggerCombo.SelectedIndex < 0 ? AutoRuleTrigger.Hotkey : (AutoRuleTrigger)AutoTriggerCombo.SelectedIndex;
+            AutoHotkeyPanel.Visibility = trigger == AutoRuleTrigger.Hotkey ? Visibility.Visible : Visibility.Collapsed;
+            AutoTriggerAppPanel.Visibility = trigger == AutoRuleTrigger.Hotkey ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+
+        private void ResetAutoEditForm()
+        {
+            AutoNameBox.Text = "";
+            _autoHotkeyCombo = "";
+            _autoSteps = new List<AutoRuleStep> { new AutoRuleStep() };
+            _suppressAutoUi = true;
+            AutoTriggerCombo.SelectedIndex = 0;
+            _suppressAutoUi = false;
+            AutoTriggerAppCombo.SelectedIndex = -1;
+            UpdateAutoTriggerPanels();
+            RenderAutoSteps();
+            UpdateAutoHotkeyHint();
+        }
+
+        private void RenderAutoSteps()
+        {
+            AutoStepsHost.Items.Clear();
+            foreach (var step in _autoSteps)
+                AutoStepsHost.Items.Add(BuildAutoStepRow(step));
+        }
+
+        private static List<ComboBoxItem> AutoActionItems()
+        {
+            var list = new List<ComboBoxItem>();
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionSystemOutput"), Tag = AutoRuleAction.SetSystemOutput });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionSystemInput"), Tag = AutoRuleAction.SetSystemInput });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionSystemVolume"), Tag = AutoRuleAction.SetSystemVolume });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionSystemMute"), Tag = AutoRuleAction.ToggleSystemMute });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionAppVolume"), Tag = AutoRuleAction.SetAppVolume });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionAppMute"), Tag = AutoRuleAction.ToggleAppMute });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionAppOutput"), Tag = AutoRuleAction.SetAppOutput });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionAppInput"), Tag = AutoRuleAction.SetAppInput });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionLaunch"), Tag = AutoRuleAction.LaunchProgram });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionPowerShell"), Tag = AutoRuleAction.RunPowerShell });
+            return list;
+        }
+
+        private UIElement BuildAutoStepRow(AutoRuleStep step)
+        {
+            var row = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+            var head = new DockPanel();
+            var del = new Button { Content = L10n.T("Auto.Delete"), Tag = step, Width = 56, Height = 28 };
+            del.SetResourceReference(StyleProperty, "GhostButton");
+            del.Click += AutoStepDelete_Click;
+            DockPanel.SetDock(del, Dock.Right);
+            head.Children.Add(del);
+            var combo = new System.Windows.Controls.ComboBox
+            {
+                Style = (Style)FindResource("SelCombo"),
+                Width = 300,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Tag = step
+            };
+            combo.SelectionChanged += AutoStepAction_SelectionChanged;
+            foreach (var item in AutoActionItems())
+                combo.Items.Add(item);
+            combo.SelectedIndex = (int)step.Action;
+            head.Children.Add(combo);
+            row.Children.Add(head);
+            row.Children.Add(BuildStepParams(step));
+            return row;
+        }
+
+        private void AutoStepDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is AutoRuleStep step)
+            {
+                _autoSteps.Remove(step);
+                RenderAutoSteps();
+            }
+        }
+
+        private void AutoStepAction_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not System.Windows.Controls.ComboBox combo || combo.Tag is not AutoRuleStep step) return;
+            step.Action = combo.SelectedIndex < 0 ? AutoRuleAction.SetSystemOutput : (AutoRuleAction)combo.SelectedIndex;
+            var row = FindParent<StackPanel>(combo);
+            if (row == null || row.Children.Count < 2) return;
+            row.Children.RemoveAt(1);
+            row.Children.Insert(1, BuildStepParams(step));
+        }
+
+        private UIElement BuildStepParams(AutoRuleStep step)
+        {
+            var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+            bool app = step.Action is AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute
+                or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput;
+            bool dev = step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
+                or AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput;
+            bool vol = step.Action is AutoRuleAction.SetSystemVolume or AutoRuleAction.SetAppVolume;
+            bool prog = step.Action is AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell;
+            var secBrush = (Brush)FindResource("Theme.TextSecondary");
+
+            if (app)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = L10n.T("Auto.TargetApp"),
+                    FontSize = 12.5,
+                    Foreground = secBrush,
+                    Margin = new Thickness(0, 0, 0, 4)
+                });
+                var cb = new System.Windows.Controls.ComboBox
+                {
+                    Style = (Style)FindResource("SelCombo"),
+                    Width = 320,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    DisplayMemberPath = "Label",
+                    Tag = step
+                };
+                foreach (var a in DisplayApps(_autoApps)) cb.Items.Add(a);
+                SelectAutoApp(cb, step.TargetApp);
+                cb.SelectionChanged += (_, _) =>
+                {
+                    if (cb.SelectedItem is AudioAppInfo a) step.TargetApp = a.ProcessName ?? "";
+                };
+                panel.Children.Add(cb);
+            }
+            if (dev)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = L10n.T("Auto.TargetDevice"),
+                    FontSize = 12.5,
+                    Foreground = secBrush,
+                    Margin = new Thickness(0, 0, 0, 4)
+                });
+                var cb = new System.Windows.Controls.ComboBox
+                {
+                    Style = (Style)FindResource("SelCombo"),
+                    Width = 360,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    DisplayMemberPath = "DisplayLabel",
+                    Tag = step
+                };
+                var flow = step.Action is AutoRuleAction.SetAppInput or AutoRuleAction.SetSystemInput
+                    ? EDataFlow.eCapture : EDataFlow.eRender;
+                foreach (var d in DisplayDevices(AudioService.GetDevices(flow))) cb.Items.Add(d);
+                SelectAutoDevice(cb, step.TargetDeviceId);
+                cb.SelectionChanged += (_, _) =>
+                {
+                    if (cb.SelectedItem is AudioDeviceInfo d) step.TargetDeviceId = d.Id;
+                };
+                panel.Children.Add(cb);
+            }
+            if (vol)
+            {
+                var dp = new DockPanel();
+                var txt = new TextBlock
+                {
+                    Text = step.Volume + "%",
+                    FontSize = 13,
+                    FontWeight = FontWeights.SemiBold,
+                    Width = 46,
+                    TextAlignment = TextAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                DockPanel.SetDock(txt, Dock.Right);
+                var sl = new Slider
+                {
+                    Minimum = 0,
+                    Maximum = 100,
+                    Value = step.Volume,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsMoveToPointEnabled = true
+                };
+                sl.ValueChanged += (_, _) =>
+                {
+                    step.Volume = (int)Math.Round(sl.Value);
+                    txt.Text = step.Volume + "%";
+                };
+                dp.Children.Add(txt);
+                dp.Children.Add(sl);
+                panel.Children.Add(dp);
+            }
+            if (prog)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = L10n.T(step.Action == AutoRuleAction.LaunchProgram ? "Auto.Program" : "Auto.Script"),
+                    FontSize = 12.5,
+                    Foreground = secBrush,
+                    Margin = new Thickness(0, 0, 0, 4)
+                });
+                for (int i = 0; i < step.ProgramPaths.Count; i++)
+                    panel.Children.Add(BuildPathRow(step, i));
+                var addBtn = new Button
+                {
+                    Content = L10n.T("Auto.AddPath"),
+                    Tag = step,
+                    Width = 150,
+                    Height = 30,
+                    Margin = new Thickness(0, 6, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    AllowDrop = true,
+                    ToolTip = L10n.T("Auto.DragHint")
+                };
+                addBtn.SetResourceReference(StyleProperty, "GhostButton");
+                addBtn.Click += AutoAddPath_Click;
+                addBtn.PreviewDragOver += AutoAddPath_DragOver;
+                addBtn.PreviewDrop += AutoAddPath_Drop;
+                panel.Children.Add(addBtn);
+                panel.Children.Add(new TextBlock
+                {
+                    Text = L10n.T("Auto.DragHint"),
+                    FontSize = 11.5,
+                    Foreground = (Brush)FindResource("Theme.TextSecondary"),
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 6, 0, 0)
+                });
+            }
+            return panel;
+        }
+
+        private UIElement BuildPathRow(AutoRuleStep step, int index)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
+            var del = new Button
+            {
+                Content = "×",
+                Tag = step,
+                Width = 28,
+                Height = 26,
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+            del.SetResourceReference(StyleProperty, "GhostButton");
+            del.Click += AutoPathDelete_Click;
+            DockPanel.SetDock(del, Dock.Right);
+            var box = new TextBox
+            {
+                Text = index < step.ProgramPaths.Count ? step.ProgramPaths[index] : "",
+                FontSize = 12.5,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Padding = new Thickness(8, 4, 8, 4),
+                AllowDrop = true,
+                Tag = new Tuple<AutoRuleStep, int>(step, index)
+            };
+            box.PreviewDragOver += AutoPathBox_DragOver;
+            box.PreviewDrop += AutoPathBox_Drop;
+            box.TextChanged += (_, _) =>
+            {
+                if (box.Tag is Tuple<AutoRuleStep, int> tg
+                    && tg.Item2 < tg.Item1.ProgramPaths.Count)
+                    tg.Item1.ProgramPaths[tg.Item2] = box.Text;
+            };
+            row.Children.Add(del);
+            row.Children.Add(box);
+            return row;
+        }
+
+        private void AutoAddPath_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is AutoRuleStep step)
+            {
+                step.ProgramPaths.Add("");
+                RenderAutoSteps();
+            }
+        }
+
+        private void AutoPathDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is AutoRuleStep step)
+            {
+                var row = FindParent<DockPanel>(btn);
+                if (row != null && row.Children.Count > 1 && row.Children[1] is TextBox box)
+                {
+                    step.ProgramPaths.Remove(box.Text);
+                    RenderAutoSteps();
+                }
+            }
+        }
+
+        private void AutoPathBox_DragOver(object sender, System.Windows.DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)
+                ? System.Windows.DragDropEffects.Copy : System.Windows.DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void AutoAddPath_DragOver(object sender, System.Windows.DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop)
+                ? System.Windows.DragDropEffects.Copy : System.Windows.DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void AutoAddPath_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is AutoRuleStep step
+                && e.Data.GetData(System.Windows.DataFormats.FileDrop) is string[] files)
+            {
+                foreach (var f in files)
+                {
+                    if (!string.IsNullOrWhiteSpace(f) && !step.ProgramPaths.Contains(f))
+                        step.ProgramPaths.Add(f);
+                }
+                e.Handled = true;
+                RenderAutoSteps();
+            }
+        }
+
+        private void AutoPathBox_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            if (sender is TextBox box && box.Tag is Tuple<AutoRuleStep, int> tg
+                && e.Data.GetData(System.Windows.DataFormats.FileDrop) is string[] files)
+            {
+                foreach (var f in files)
+                {
+                    if (!string.IsNullOrWhiteSpace(f) && !tg.Item1.ProgramPaths.Contains(f))
+                        tg.Item1.ProgramPaths.Add(f);
+                }
+                e.Handled = true;
+                RenderAutoSteps();
+            }
+        }
+
+        private void AutoAddStep_Click(object sender, RoutedEventArgs e)
+        {
+            _autoSteps.Add(new AutoRuleStep());
+            RenderAutoSteps();
+        }
+
+        private static T? FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            var p = System.Windows.Media.VisualTreeHelper.GetParent(child);
+            while (p != null)
+            {
+                if (p is T t) return t;
+                p = System.Windows.Media.VisualTreeHelper.GetParent(p);
+            }
+            return null;
+        }
+        private void AutoHotkeyCapture_Click(object sender, RoutedEventArgs e)
+        {
+            _autoCapturingHotkey = !_autoCapturingHotkey;
+            UpdateAutoHotkeyHint();
+        }
+
+        private void UpdateAutoHotkeyHint()
+        {
+            if (_autoCapturingHotkey)
+            {
+                AutoHotkeyCapture.Content = L10n.T("Auto.HotkeyCapturing");
+                AutoHotkeyHintText.Text = L10n.T("Auto.HotkeyCapturing");
+                return;
+            }
+            AutoHotkeyHintText.Text = L10n.T("Auto.HotkeyHint");
+            if (string.IsNullOrEmpty(_autoHotkeyCombo))
+            {
+                AutoHotkeyCapture.Content = new TextBlock
+                {
+                    Text = L10n.T("Auto.HotkeyUnbound"),
+                    FontSize = 12.5,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = (Brush)FindResource("Theme.Accent")
+                };
+                return;
+            }
+            AutoHotkeyCapture.Content = new TextBlock
+            {
+                Text = _autoHotkeyCombo,
+                FontSize = 12.5,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = (Brush)FindResource("Theme.Accent")
+            };
+        }
+
+
+        private void AutoSave_Click(object sender, RoutedEventArgs e)
+        {
+            var name = AutoNameBox.Text.Trim();
+            if (string.IsNullOrEmpty(name)) { _ = System.Windows.MessageBox.Show(L10n.T("Auto.NameRequired")); return; }
+            var trigger = AutoTriggerCombo.SelectedIndex < 0 ? AutoRuleTrigger.Hotkey : (AutoRuleTrigger)AutoTriggerCombo.SelectedIndex;
+            var hotkey = _autoHotkeyCombo.Trim();
+            if (trigger == AutoRuleTrigger.Hotkey && string.IsNullOrEmpty(hotkey))
+            { _ = System.Windows.MessageBox.Show(L10n.T("Auto.HotkeyRequired")); return; }
+            string? triggerApp = (AutoTriggerAppCombo.SelectedItem as AudioAppInfo)?.ProcessName;
+            if (trigger != AutoRuleTrigger.Hotkey && string.IsNullOrEmpty(triggerApp))
+            { _ = System.Windows.MessageBox.Show(L10n.T("Auto.TriggerAppRequired")); return; }
+            foreach (var s in _autoSteps)
+            {
+                if (s.Action is AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute
+                    or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
+                    && string.IsNullOrWhiteSpace(s.TargetApp))
+                { _ = System.Windows.MessageBox.Show(L10n.T("Auto.ActionAppRequired")); return; }
+                if (s.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
+                    or AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput
+                    && string.IsNullOrWhiteSpace(s.TargetDeviceId))
+                { _ = System.Windows.MessageBox.Show(L10n.T("Auto.TargetDevice")); return; }
+                if (s.Action is AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell
+                    && s.ProgramPaths.All(string.IsNullOrWhiteSpace))
+                { _ = System.Windows.MessageBox.Show(L10n.T("Auto.ProgramRequired")); return; }
+            }
+            var cfg = ConfigService.Load();
+            var rule = _autoEditingId == null ? null : cfg.AutoRules.FirstOrDefault(r => r.Id == _autoEditingId);
+            if (rule == null)
+            {
+                rule = new AutoRule { Id = Guid.NewGuid().ToString("N"), Name = name };
+                cfg.AutoRules.Add(rule);
+            }
+            else
+            {
+                rule.Name = name;
+            }
+            rule.Trigger = trigger;
+            rule.Hotkey = hotkey;
+            rule.TriggerApp = triggerApp ?? "";
+            rule.Actions = _autoSteps.Select(s => new AutoRuleStep
+            {
+                Action = s.Action,
+                TargetApp = s.TargetApp ?? "",
+                TargetDeviceId = s.TargetDeviceId ?? "",
+                Volume = s.Volume,
+                ProgramPaths = new List<string>(s.ProgramPaths.Where(p => !string.IsNullOrWhiteSpace(p)))
+            }).ToList();
+            if (rule.Actions.Count > 0)
+            {
+                var f = rule.Actions[0];
+                rule.Action = f.Action;
+                rule.TargetApp = f.TargetApp;
+                rule.TargetDeviceId = f.TargetDeviceId;
+                rule.Volume = f.Volume;
+                rule.ProgramPath = f.ProgramPaths.FirstOrDefault() ?? "";
+            }
+            rule.Enabled = true;
+            ConfigService.Save(cfg);
+            ((App)Application.Current).ReloadHotkeys();
+            AutoEditCard.Visibility = Visibility.Collapsed;
+            _autoCapturingHotkey = false;
+            _ = RefreshAutoRulesAsync();
+        }
     }
 }

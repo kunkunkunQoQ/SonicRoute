@@ -300,10 +300,15 @@
                 <RadioButton x:Name="NavSettings" GroupName="Nav" Style="{StaticResource NavItem}"
                              Content="{Binding [Nav.Settings], Source={x:Static local:L10n.Instance}}"
                              Checked="Nav_Checked" Tag="Settings"/>
+                <RadioButton x:Name="NavAutomation" GroupName="Nav" Style="{StaticResource NavItem}"
+                    Content="{Binding [Nav.Automation], Source={x:Static local:L10n.Instance}}"
+                    Checked="Nav_Checked" Tag="Automation"/>
                 <RadioButton x:Name="NavExperimental" GroupName="Nav" Style="{StaticResource NavItem}"
+
                              Content="{Binding [Nav.Experimental], Source={x:Static local:L10n.Instance}}"
                              Checked="Nav_Checked" Tag="Experimental" Visibility="Collapsed"
                              Margin="0,6,0,0"/>
+
             </StackPanel>
         </Border>
 
@@ -620,7 +625,7 @@
                                     <TextBlock x:Name="OpacityText" Text="85%" DockPanel.Dock="Right"
                                                FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"
                                                VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
-                                    <Slider x:Name="OpacitySlider" Minimum="60" Maximum="100" IsMoveToPointEnabled="True"
+                                    <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" IsMoveToPointEnabled="True"
                                             ValueChanged="OpacitySlider_ValueChanged" VerticalAlignment="Center"/>
                                 </DockPanel>
                                 <TextBlock Text="{Binding [St.OpacityHint], Source={x:Static local:L10n.Instance}}"
@@ -644,7 +649,12 @@
                                            FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                            Margin="0,8,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <StackPanel Margin="0,14,0,0">
+                                <ToggleButton x:Name="OsdMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
+                                              Margin="0,6,0,0" Background="Transparent" BorderThickness="0"
+                                              HorizontalAlignment="Left" Padding="0"
+                                              Checked="OsdMoreToggle_Click" Unchecked="OsdMoreToggle_Click"/>
+                                <StackPanel x:Name="OsdSlidersPanel" Margin="0,14,0,0" Visibility="Collapsed">
                                     <DockPanel>
                                         <TextBlock x:Name="OsdWidthValue" DockPanel.Dock="Right" FontSize="11.5"
                                                    Foreground="{DynamicResource Theme.TextSecondary}"/>
@@ -662,6 +672,24 @@
                                     <Slider x:Name="OsdFontSlider" Minimum="0.7" Maximum="2.0" Value="1.0"
                                             SmallChange="0.05" LargeChange="0.1"
                                             Margin="0,2,0,0" ValueChanged="OsdFontSlider_ValueChanged"/>
+                                    <DockPanel Margin="0,12,0,0">
+                                        <TextBlock x:Name="OsdFadeInValue" DockPanel.Dock="Right" FontSize="11.5"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                        <TextBlock Text="{Binding [Exp.OsdFadeInLabel], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                    </DockPanel>
+                                    <Slider x:Name="OsdFadeInSlider" Minimum="0" Maximum="500" Value="100"
+                                            IsSnapToTickEnabled="True" TickFrequency="10" SmallChange="10" LargeChange="50"
+                                            Margin="0,2,0,0" ValueChanged="OsdFadeInSlider_ValueChanged"/>
+                                    <DockPanel Margin="0,12,0,0">
+                                        <TextBlock x:Name="OsdFadeOutValue" DockPanel.Dock="Right" FontSize="11.5"
+                                                   Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                        <TextBlock Text="{Binding [Exp.OsdFadeOutLabel], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"/>
+                                    </DockPanel>
+                                    <Slider x:Name="OsdFadeOutSlider" Minimum="0" Maximum="1000" Value="200"
+                                            IsSnapToTickEnabled="True" TickFrequency="50" SmallChange="50" LargeChange="100"
+                                            Margin="0,2,0,0" ValueChanged="OsdFadeOutSlider_ValueChanged"/>
                                 </StackPanel>
                                 <!-- 麦克风静音时 OSD 常驻（默认关闭 = 与旧版一致） -->
                                 <CheckBox x:Name="MicMutePersistCheck"
@@ -1066,6 +1094,98 @@
                                             Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
                                             HorizontalAlignment="Left" Click="ExpImportConfig_Click"/>
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+            <!-- 自动化（极简规则） -->
+            <Grid x:Name="AutomationPage" Visibility="Collapsed">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Nav.Automation], Source={x:Static local:L10n.Instance}}"
+                                   Style="{StaticResource PageTitle}"/>
+                        <TextBlock Text="{Binding [Auto.Hint], Source={x:Static local:L10n.Instance}}"
+                                   FontSize="12" Foreground="{DynamicResource Theme.TextSecondary}"
+                                   Margin="0,0,0,16" TextWrapping="Wrap"/>
+
+                        <!-- 规则列表 -->
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                            <StackPanel>
+                                <DockPanel Margin="0,0,0,10">
+                                    <Button x:Name="AutoNewButton"
+                                            Content="{Binding [Auto.New], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource PrimaryButton}" Click="AutoNew_Click"/>
+                                </DockPanel>
+                                <TextBlock x:Name="AutoEmptyText"
+                                           Text="{Binding [Auto.Empty], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Visibility="Collapsed" Margin="0,2,0,4"/>
+                                <ItemsControl x:Name="AutoRuleList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 新建 / 编辑规则 -->
+                        <Border x:Name="AutoEditCard" Style="{StaticResource Card}" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock x:Name="AutoEditTitle" Text="{Binding [Auto.New], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource SectionTitle}"/>
+
+                                <TextBlock Text="{Binding [Auto.Name], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="AutoNameBox" FontSize="12.5" VerticalContentAlignment="Center"
+                                         Padding="8,4" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="{Binding [Auto.Trigger], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+                                <ComboBox x:Name="AutoTriggerCombo" Style="{StaticResource SelCombo}" Width="300"
+                                          HorizontalAlignment="Left" SelectionChanged="AutoTriggerCombo_SelectionChanged"/>
+
+                                <!-- 快捷键区（触发 = 快捷键） -->
+                                <StackPanel x:Name="AutoHotkeyPanel" Margin="0,10,0,0">
+                                    <TextBlock Text="{Binding [Auto.Hotkey], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+                                    <Button x:Name="AutoHotkeyCapture"
+                                            Style="{StaticResource GhostButton}" Width="180" Height="32"
+                                            HorizontalAlignment="Left" Click="AutoHotkeyCapture_Click"/>
+                                    <TextBlock x:Name="AutoHotkeyHintText"
+                                               Text="{Binding [Auto.HotkeyHint], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                               Margin="0,4,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+
+                                <!-- 快捷键区（触发 = 快捷键） -->
+                                <StackPanel x:Name="AutoTriggerAppPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <TextBlock Text="{Binding [Auto.TriggerApp], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+                                    <ComboBox x:Name="AutoTriggerAppCombo" Style="{StaticResource SelCombo}" Width="320"
+                                              HorizontalAlignment="Left" DisplayMemberPath="Label"/>
+                                </StackPanel>
+
+                                <TextBlock Text="{Binding [Auto.Action], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,12,0,4"/>
+                                <ItemsControl x:Name="AutoStepsHost">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                                <Button x:Name="AutoAddStepBtn" Click="AutoAddStep_Click"
+                                        Content="{Binding [Auto.AddAction], Source={x:Static local:L10n.Instance}}"
+                                        Style="{StaticResource GhostButton}" Width="180" Height="32"
+                                        HorizontalAlignment="Left" Margin="0,10,0,0"/>
+
+                                <DockPanel Margin="0,16,0,0">
+                                    <Button x:Name="AutoSaveButton"
+                                            Content="{Binding [Auto.Save], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource PrimaryButton}" MinWidth="110" Click="AutoSave_Click"/>
+                                    <Button x:Name="AutoCancelButton"
+                                            Content="{Binding [Auto.Cancel], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" MinWidth="90" Margin="10,0,0,0" Click="AutoCancel_Click"/>
+                                </DockPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

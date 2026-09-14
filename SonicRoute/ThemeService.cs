@@ -125,12 +125,12 @@ namespace SonicRoute
         private static int _lastOpacity = 96;
 
         /// <summary>
-        /// 按百分比（60–100）把当前窗口/卡片背景色加上 alpha 写入 Theme.WindowBgAlpha /
+        /// 按百分比（0–100）把当前窗口/卡片背景色加上 alpha 写入 Theme.WindowBgAlpha /
         /// Theme.SurfaceBgAlpha，窗口背景、导航与卡片绑定后即可整体实现背景透明度。
         /// </summary>
         public static void ApplyBackgroundOpacity(int percent)
         {
-            percent = Math.Clamp(percent, 60, 100);
+            percent = Math.Clamp(percent, 0, 100);
             _lastOpacity = percent;
             byte a = (byte)(255 * percent / 100);
             if (Application.Current?.Resources["Theme.WindowBg"] is SolidColorBrush bg)

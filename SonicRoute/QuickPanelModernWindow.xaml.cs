@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -175,12 +175,29 @@ namespace SonicRoute
         }
 
         /// <summary>刷新数据并显示面板（定位到任务栏右下角）。</summary>
+        private bool _entrancePlayed;
+        
+        private void PlayEntranceAnimation()
+        {
+            if (PanelSlide == null) return;
+            PanelSlide.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+            PanelSlide.Y = 12;
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new System.Windows.Media.Animation.QuadraticEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+            PanelSlide.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, anim);
+        }
+
         public void ShowQuickPanel()
         {
             _everFocused = false;
             // 先放到屏幕外，内容加载完再由 LoadAsync 定位，避免闪烁/溢出
             Left = -10000;
             Top = -10000;
+            PanelSlide?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+            if (PanelSlide != null) PanelSlide.Y = 0;
+            _entrancePlayed = false;
             Show();
             Activate();
             _ = LoadAsync();
@@ -216,8 +233,9 @@ namespace SonicRoute
 
                 // 内容已就绪，重新定位到任务栏右下角（避免溢出屏幕）
                 RequestPosition();
+                if (!_entrancePlayed) { _entrancePlayed = true; PlayEntranceAnimation(); }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 ShowOsd(L10n.T("Qp.Panel"), L10n.T("Qp.LoadFail"));
             }
@@ -601,7 +619,7 @@ namespace SonicRoute
             row.Thumb.Margin = new Thickness(Math.Clamp(row.TrackFill.Width - 7, 0, thumbMax), 0, 0, 0);
         }
 
-        private async void RowSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void RowSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (sender is not Slider sl || sl.Tag is not AppRow row) return;
             int pct = (int)Math.Round(e.NewValue);
@@ -770,6 +788,8 @@ namespace SonicRoute
             var name = app.ProcessName;
             if (string.IsNullOrWhiteSpace(name)) return;
             var cfg = ConfigService.Load();
+            // 与上次记录相同则跳过写盘（减少无谓配置全量保存）
+            if (string.Equals(cfg.LastUsedAppName, name, StringComparison.OrdinalIgnoreCase)) return;
             cfg.LastUsedAppName = name;
             ConfigService.Save(cfg);
         }
