@@ -1,4 +1,4 @@
-﻿# 🎧 音跃 SonicRoute · Windows 音频枢纽
+# 🎧 音跃 SonicRoute · Windows 音频枢纽
 
 [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases)
@@ -47,7 +47,6 @@
 
 ### ⚠️ 已知问题
 
-- **托盘区域滚轮**：部分场景可能无法调节当前应用音量（测试版已修复）
 - **简洁面板动画**：动画生硬不流畅与内存优化有关（后续出性能和动画优先选项）
 - **无线屏幕设备**：无法切换至 Windows 官方「无线屏幕」播放设备（该设备不提供标准音频端点接口）
 
