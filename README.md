@@ -1,4 +1,4 @@
-# 🎧 音跃 SonicRoute · Windows 音频枢纽
+﻿# 🎧 音跃 SonicRoute · Windows 音频枢纽
 
 [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases)
@@ -6,7 +6,7 @@
 
 > Windows 10/11 **音频控制中心**：**当前应用 / 全局应用 / 系统默认**三档音频路由、按应用音量与静音、设备管理，一个托盘入口全盘掌控。
 
-作者：[困困困](https://github.com/kunkunkunQoQ) ｜ **v1.15** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+**v1.16** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
 
 ---
 
@@ -34,8 +34,8 @@
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
 | 🛍 微软商店（推荐） | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
-| 🟢 含运行环境版本 | `SonicRoute-v1.15.exe` / `.zip` | ~237MB / ~85MB | 已内置运行环境 |
-| ⚡ 轻量版 | `SonicRoute-v1.15-Lite.exe` / `.zip` | ~27MB / ~6.7MB | 需 .NET 8 |
+| 🟢 含运行环境版本 | `SonicRoute-v1.16.exe` / `.zip` | ~237MB / ~85MB | 已内置运行环境 |
+| ⚡ 轻量版 | `SonicRoute-v1.16-Lite.exe` / `.zip` | ~27MB / ~6.7MB | 需 .NET 8 |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -50,9 +50,8 @@
 - **托盘区域滚轮**：部分场景可能无法调节当前应用音量（测试版已修复）
 - **简洁面板动画**：动画生硬不流畅与内存优化有关（后续出性能和动画优先选项）
 - **无线屏幕设备**：无法切换至 Windows 官方「无线屏幕」播放设备（该设备不提供标准音频端点接口）
-- **部分分辨率兼容**：部分分辨率可能导致简洁面板音量条抽帧（这边无法复现需要更多数据）
 
-> 📌 最近在快速迭代小版本优化体验与修复 bug，国庆后将进行大版本更新，完善大部分设计理念。（原打算先去做MCmod的但体量较大26.2不适合先等待MC26.3更新）
+> 📌 最近在快速迭代小版本优化体验与修复 bug，国庆后将进行大版本更新，完善大部分设计理念。
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
