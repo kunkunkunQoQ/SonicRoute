@@ -40,7 +40,11 @@ _attach_tmp.bin
 /Probe/
 /SonicRoute.Selftest/
 /WpfUiSkeleton/
-/docs/
+/docs/*
+!/docs/images/
+/docs/images/*
+!/docs/images/*.png
+!/docs/images/*.gif
 /背景/
 /主题.png
 /图标.png
