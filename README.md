@@ -44,14 +44,9 @@
 
 ## 📌 版本相关
 
-完整版本历史（版本规则 + 更新日志 + 已知问题）见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
+完整版本历史（版本规则 + 更新日志）见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
-### ⚠️ 已知问题
-
-- **简洁面板动画**：动画生硬不流畅与内存优化有关（后续出性能和动画优先选项）
-- **无线屏幕设备**：无法切换至 Windows 官方「无线屏幕」播放设备（该设备不提供标准音频端点接口）
-
-> 📌 最近在快速迭代小版本优化体验与修复 bug，国庆后将进行大版本更新，完善大部分设计理念。
+> 📌 **下一版本设计理念**：优化自动化｜调整设置选项｜优化深色模式体验｜增加动画
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
