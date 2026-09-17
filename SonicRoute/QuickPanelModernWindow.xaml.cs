@@ -40,6 +40,7 @@ namespace SonicRoute
             public Thumb? Thumb;
             public ToggleButton ExpandButton = null!;
             public StackPanel ExpandPanel = null!;
+            public Border ExpandWrap = null!;
             public bool Expanded;
         }
 
@@ -569,15 +570,22 @@ namespace SonicRoute
                     dock.Children.Add(row.Slider);
                     header.Child = dock;
 
+                    // 内容面板：贴底对齐（收起动画裁剪顶部，实现从上面向下收），由外层裁剪容器控制显隐/高度
                     row.ExpandPanel = new StackPanel
                     {
                         Margin = new Thickness(26, 0, 0, 6),
-                        Visibility = Visibility.Collapsed
+                        VerticalAlignment = System.Windows.VerticalAlignment.Bottom
+                    };
+                    row.ExpandWrap = new Border
+                    {
+                        ClipToBounds = true,
+                        Visibility = Visibility.Collapsed,
+                        Child = row.ExpandPanel
                     };
 
                     var root = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
                     root.Children.Add(header);
-                    root.Children.Add(row.ExpandPanel);
+                    root.Children.Add(row.ExpandWrap);
                     AppListPanel.Items.Add(root);
 
                     row.HeaderBorder = header;
@@ -680,26 +688,102 @@ namespace SonicRoute
             bool expanded = tb.IsChecked == true;
             tb.Content = expanded ? "▴" : "▾";
             row.Expanded = expanded;
-            row.ExpandPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
-            // 展开新行时收起其他已展开的行（同一时间只保留一个折叠展开）
             if (expanded)
             {
+                // 展开新行时收起其他已展开的行（同一时间只保留一个折叠展开）
                 foreach (var kv in _rows)
                 {
                     var r = kv.Value;
                     if (r == row || !r.Expanded) continue;
                     r.Expanded = false;
-                    r.ExpandPanel.Visibility = Visibility.Collapsed;
-                    r.ExpandPanel.Children.Clear();
+                    AnimateRowPanelCollapse(r.ExpandWrap, () => r.ExpandPanel.Children.Clear());
                     if (r.ExpandButton != null) r.ExpandButton.IsChecked = false;
                 }
-            }
-            if (expanded)
+                // 展开动画：先可见+透明+上滑偏移，等设备按钮异步构建完成后再淡入滑入
+                // 若上一次收起动画未结束，先清除 Height 动画并恢复 Auto，避免高度继续收拢
+                row.ExpandWrap.BeginAnimation(FrameworkElement.HeightProperty, null);
+                row.ExpandWrap.Height = double.NaN;
+                row.ExpandWrap.Visibility = Visibility.Visible;
+                row.ExpandWrap.Opacity = 0;
+                var t = new TranslateTransform(0, -8);
+                row.ExpandWrap.RenderTransform = t;
                 await BuildRowDevicesAsync(row);
+                if (!row.Expanded) return; // 构建期间被收起，收起分支已处理
+                row.ExpandWrap.BeginAnimation(UIElement.OpacityProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(1, new Duration(TimeSpan.FromMilliseconds(130)))
+                    {
+                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                        {
+                            EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                        }
+                    });
+                t.BeginAnimation(TranslateTransform.YProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(130)))
+                    {
+                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                        {
+                            EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                        }
+                    });
+            }
             else
-                row.ExpandPanel.Children.Clear();
+            {
+                // 收起动画：内容保留到动画结束后再清空，避免瞬间消失
+                AnimateRowPanelCollapse(row.ExpandWrap, () => row.ExpandPanel.Children.Clear());
+            }
             // 展开/收起后面板高度变化，合并请求重定位避免下沉/溢出（SizeChanged 也会触发，合并只执行一次）
             RequestPosition();
+        }
+
+        /// <summary>应用行设备区收起动画：淡出 + 轻微下滑 + 高度收拢（下方行平滑上移），动画结束后再隐藏（并执行回调）。</summary>
+        private static void AnimateRowPanelCollapse(UIElement panel, Action? afterHide = null)
+        {
+            if (panel == null) { afterHide?.Invoke(); return; }
+            if (panel is not FrameworkElement fe || fe.ActualHeight <= 0)
+            {
+                panel.Visibility = Visibility.Collapsed;
+                afterHide?.Invoke();
+                return;
+            }
+            double startH = fe.ActualHeight;
+            fe.Height = startH;
+            var t = new TranslateTransform(0, 0);
+            panel.RenderTransform = t;
+            panel.BeginAnimation(UIElement.OpacityProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(100)))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                    {
+                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn
+                    }
+                });
+            t.BeginAnimation(TranslateTransform.YProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(-8, new Duration(TimeSpan.FromMilliseconds(100)))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                    {
+                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn
+                    }
+                });
+            // 高度从当前值收拢到 0，下方应用行随布局平滑上移
+            var hAnim = new System.Windows.Media.Animation.DoubleAnimation(startH, 0, new Duration(TimeSpan.FromMilliseconds(120)))
+            {
+                EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                {
+                    EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn
+                }
+            };
+            hAnim.Completed += (s, e2) =>
+            {
+                fe.BeginAnimation(FrameworkElement.HeightProperty, null);
+                fe.Height = double.NaN; // 恢复 Auto
+                panel.BeginAnimation(UIElement.OpacityProperty, null);
+                panel.RenderTransform = null;
+                panel.Opacity = 1;
+                panel.Visibility = Visibility.Collapsed;
+                afterHide?.Invoke();
+            };
+            fe.BeginAnimation(FrameworkElement.HeightProperty, hAnim);
         }
 
         /// <summary>为某应用行构建输出/输入设备按钮（保留设备筛选 + 自定义名 + 当前设备高亮）。</summary>

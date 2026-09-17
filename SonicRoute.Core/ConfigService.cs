@@ -33,9 +33,6 @@ namespace SonicRoute.Core
         public List<string> HiddenPanelApps { get; set; } = new();
 
         /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
-        /// <summary>自动化规则列表（极简规则引擎，v1.16 新增）。</summary>
-        public List<AutoRule> AutoRules { get; set; } = new();
-
         public string Language { get; set; } = "";
 
         /// <summary>主题模式：system / light / dark。</summary>
@@ -151,6 +148,8 @@ namespace SonicRoute.Core
             {
                 if (_cache != null) return _cache;
             }
+            // v1.17：旧版 config.json 中的 AutoRules 迁移到独立目录（%LocalAppData%\\SonicRoute\\Automation\\）
+            AutoRuleStore.MigrateLegacyIfNeeded();
             AppConfig cfg;
             try
             {

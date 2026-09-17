@@ -28,7 +28,7 @@ namespace SonicRoute
 
         /// <summary>按 Id 查规则。</summary>
         public static AutoRule? FindRule(string ruleId) =>
-            ConfigService.Load().AutoRules.FirstOrDefault(r => r.Id == ruleId);
+            AutoRuleStore.Find(ruleId);
 
         /// <summary>快捷键触发入口（App.ExecuteHotkeyAsync 分发）。</summary>
         public static async Task ExecuteByHotkeyAsync(string ruleId)
@@ -47,7 +47,7 @@ namespace SonicRoute
         /// <summary>根据启用规则刷新监听器（有启用触发规则才启动，无则停止，避免常驻开销）。</summary>
         public static void RefreshWatcher()
         {
-            bool need = ConfigService.Load().AutoRules.Any(
+            bool need = AutoRuleStore.LoadAll().Any(
                 r => r.Enabled && (r.Trigger == AutoRuleTrigger.AppStart || r.Trigger == AutoRuleTrigger.AppSwitch));
             if (need && _watchTimer == null)
             {
@@ -72,7 +72,7 @@ namespace SonicRoute
 
         private static async Task TickAsync()
         {
-            var rules = ConfigService.Load().AutoRules
+            var rules = AutoRuleStore.LoadAll()
                 .Where(r => r.Enabled && (r.Trigger == AutoRuleTrigger.AppStart || r.Trigger == AutoRuleTrigger.AppSwitch))
                 .ToList();
             if (rules.Count == 0) { RefreshWatcher(); return; }
@@ -140,6 +140,7 @@ namespace SonicRoute
                         TargetApp = rule.TargetApp,
                         TargetDeviceId = rule.TargetDeviceId,
                         Volume = rule.Volume,
+                        DelayMs = rule.DelayMs,
                         ProgramPaths = string.IsNullOrWhiteSpace(rule.ProgramPath)
                             ? new List<string>()
                             : new List<string> { rule.ProgramPath }
@@ -157,6 +158,10 @@ namespace SonicRoute
         {
             try
             {
+                // 步骤启动延时（ms，0 = 立即执行；执行前等待，支持按步骤错峰）
+                if (step.DelayMs > 0)
+                    await Task.Delay(step.DelayMs);
+
                 switch (step.Action)
                 {
                     case AutoRuleAction.SetSystemOutput:
@@ -196,6 +201,9 @@ namespace SonicRoute
 
                     case AutoRuleAction.RunPowerShell:
                         return await Task.Run(() => RunPowerShells(step.ProgramPaths));
+
+                    case AutoRuleAction.ShowOsd:
+                        return ShowCustomOsd(step.OsdTitle, step.OsdText);
                 }
             }
             catch
@@ -282,6 +290,24 @@ namespace SonicRoute
                 catch { }
             }
             return any;
+        }
+
+        /// <summary>显示自定义 OSD（主标题 / 副标题；空标题时用默认「自动化」）。</summary>
+        private static bool ShowCustomOsd(string title, string text)
+        {
+            try
+            {
+                var app = System.Windows.Application.Current as App;
+                if (app == null) return false;
+                var t = string.IsNullOrWhiteSpace(title) ? L10n.T("Auto.OsdDefaultTitle") : title;
+                var dispatcher = System.Windows.Application.Current.Dispatcher;
+                if (dispatcher.CheckAccess())
+                    app.ShowOsd(t, text ?? "");
+                else
+                    dispatcher.BeginInvoke(() => app.ShowOsd(t, text ?? ""));
+                return true;
+            }
+            catch { return false; }
         }
     }
 }

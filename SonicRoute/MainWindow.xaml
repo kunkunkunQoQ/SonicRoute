@@ -1,4 +1,4 @@
-<Window x:Class="SonicRoute.MainWindow"
+﻿<Window x:Class="SonicRoute.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SonicRoute"
@@ -861,10 +861,10 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ④ 音量与托盘滚轮 -->
+                        <!-- ④ 杂项（原音量与托盘滚轮，收纳实验/麦克风/快速面板/折叠等选项） -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                             <StackPanel>
-                                <TextBlock Text="{Binding [St.VolumeAndTrayWheel], Source={x:Static local:L10n.Instance}}"
+                                <TextBlock Text="{Binding [St.Misc], Source={x:Static local:L10n.Instance}}"
                                            Style="{StaticResource SectionTitle}"/>
                                 <DockPanel Margin="0,6,0,0">
                                     <TextBox x:Name="VolumeStepBox" FontSize="13" Width="64"
@@ -883,6 +883,58 @@
                                 <TextBlock Text="{Binding [St.TrayWheelEverywhereHint], Source={x:Static local:L10n.Instance}}"
                                            FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                            Margin="24,2,0,0" TextWrapping="Wrap"/>
+                                <!-- 实验选项 -->
+                                <CheckBox x:Name="SettingsExperimentalMode"
+                                          Content="{Binding [St.ExperimentalMode], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Margin="0,10,0,0" Visibility="Collapsed"
+                                          Checked="SettingsExperimentalMode_Changed" Unchecked="SettingsExperimentalMode_Changed"/>
+                                <TextBlock x:Name="ExperimentalModeHint"
+                                           Text="{Binding [St.ExperimentalModeHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           Margin="24,0,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
+                                <!-- 麦克风选项（设置页常驻，不依赖实验模式）：开启后概览/应用/设置显示麦克风 UI -->
+                                <CheckBox x:Name="ExpMicOptionCheck"
+                                          Content="{Binding [St.ExperimentalMic], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                          Margin="0,10,0,0"
+                                          Checked="ExpMicOption_Changed" Unchecked="ExpMicOption_Changed"/>
+                                <ToggleButton x:Name="MicMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
+                                              Margin="24,6,0,0" Background="Transparent" BorderThickness="0"
+                                              HorizontalAlignment="Left" Padding="0" Visibility="Collapsed"
+                                              Checked="MicMoreToggle_Click" Unchecked="MicMoreToggle_Click"/>
+                                <StackPanel x:Name="MicMorePanel" Margin="24,6,0,0" Visibility="Collapsed">
+                                    <CheckBox x:Name="ExpMicPanelCheck"
+                                              Content="{Binding [Exp.MicPanel], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                              Margin="0,8,0,0"
+                                              Checked="ExpMicPanel_Changed" Unchecked="ExpMicPanel_Changed"/>
+                                </StackPanel>
+
+                                <!-- 快速面板选项 -->
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <TextBlock Text="{Binding [St.QuickPanelStyle], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <ComboBox x:Name="QuickPanelStyleCombo" Style="{StaticResource SelCombo}"
+                                              MinWidth="160" HorizontalAlignment="Left"
+                                              SelectionChanged="QuickPanelStyleCombo_Changed"/>
+                                </StackPanel>
+                                <!-- 简洁面板更改系统默认设备（默认关，仅简洁面板显示） -->
+                                <StackPanel x:Name="PanelChangeSysDefSection" Margin="0,10,0,0">
+                                    <CheckBox x:Name="SettingsPanelChangeSysDef"
+                                              Content="{Binding [St.PanelChangeSystemDefault], Source={x:Static local:L10n.Instance}}"
+                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
+                                              Checked="SettingsPanelChangeSysDef_Changed" Unchecked="SettingsPanelChangeSysDef_Changed"/>
+                                    <TextBlock Text="{Binding [St.PanelChangeSystemDefaultHint], Source={x:Static local:L10n.Instance}}"
+                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                               Margin="0,-2,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox x:Name="ExpCollapseCheck"
+                                          Content="{Binding [Exp.Collapse], Source={x:Static local:L10n.Instance}}"
+                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,10,0,0"
+                                          Checked="ExpCollapse_Changed" Unchecked="ExpCollapse_Changed"/>
                             </StackPanel>
                         </Border>
 
@@ -929,13 +981,22 @@
                                     <ComboBox x:Name="LangCombo" Style="{StaticResource SelCombo}"
                                               MaxWidth="240" MinWidth="200" VerticalAlignment="Center"
                                               SelectionChanged="Language_SelectionChanged"/>
-                                    <StackPanel Orientation="Horizontal" Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <ToggleButton x:Name="LangMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
+                                                  FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
+                                                  Margin="12,0,0,0" Background="Transparent" BorderThickness="0"
+                                                  HorizontalAlignment="Left" Padding="0" VerticalAlignment="Center"
+                                                  Checked="LangMoreToggle_Click" Unchecked="LangMoreToggle_Click"/>
+                                </StackPanel>
+                                <!-- 语言文件管理（折叠）：导出/导入/打开语言文件夹/还原默认语言 -->
+                                <StackPanel x:Name="LangMorePanel" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <StackPanel Orientation="Horizontal">
                                         <Button x:Name="ExpExportLangButton" Content="{Binding [Exp.ExportLang], Source={x:Static local:L10n.Instance}}"
                                                 Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
                                                 Margin="0,0,8,0" HorizontalAlignment="Left" Click="ExpExportLang_Click"/>
                                         <Button x:Name="ExpImportLangButton" Content="{Binding [Exp.ImportLang], Source={x:Static local:L10n.Instance}}"
                                                 Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
-                                                Margin="0,0,8,0" HorizontalAlignment="Left" Click="ExpImportLang_Click"/>
+                                                Margin="0,0,8,0" HorizontalAlignment="Left" Click="ExpImportLang_Click"
+                                                AllowDrop="True" DragOver="ExpImportLangButton_DragOver" Drop="ExpImportLangButton_Drop"/>
                                         <Button x:Name="ExpOpenLangDirButton" Content="{Binding [Exp.OpenLangDir], Source={x:Static local:L10n.Instance}}"
                                                 Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
                                                 Margin="0,0,8,0" HorizontalAlignment="Left" Click="ExpOpenLangDir_Click"/>
@@ -956,57 +1017,6 @@
                         <!-- ⑥ 其他 + 关于 -->
                         <Border Style="{StaticResource Card}">
                             <StackPanel>
-                                <CheckBox x:Name="SettingsExperimentalMode"
-                                          Content="{Binding [St.ExperimentalMode], Source={x:Static local:L10n.Instance}}"
-                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                          Margin="0,0,0,4" Visibility="Collapsed"
-                                          Checked="SettingsExperimentalMode_Changed" Unchecked="SettingsExperimentalMode_Changed"/>
-                                <TextBlock x:Name="ExperimentalModeHint"
-                                           Text="{Binding [St.ExperimentalModeHint], Source={x:Static local:L10n.Instance}}"
-                                           FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                           Margin="24,-2,0,8" TextWrapping="Wrap" Visibility="Collapsed"/>
-                                <!-- 麦克风选项（设置页常驻，不依赖实验模式）：开启后概览/应用/设置显示麦克风 UI -->
-                                <CheckBox x:Name="ExpMicOptionCheck"
-                                          Content="{Binding [St.ExperimentalMic], Source={x:Static local:L10n.Instance}}"
-                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                          Margin="0,0,0,4"
-                                          Checked="ExpMicOption_Changed" Unchecked="ExpMicOption_Changed"/>
-                                <ToggleButton x:Name="MicMoreToggle" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}"
-                                              FontSize="11.5" Foreground="{DynamicResource Theme.Accent}"
-                                              Margin="24,6,0,0" Background="Transparent" BorderThickness="0"
-                                              HorizontalAlignment="Left" Padding="0" Visibility="Collapsed"
-                                              Checked="MicMoreToggle_Click" Unchecked="MicMoreToggle_Click"/>
-                                <StackPanel x:Name="MicMorePanel" Margin="24,6,0,0" Visibility="Collapsed">
-                                    <CheckBox x:Name="ExpMicPanelCheck"
-                                              Content="{Binding [Exp.MicPanel], Source={x:Static local:L10n.Instance}}"
-                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                              Margin="0,8,0,0"
-                                              Checked="ExpMicPanel_Changed" Unchecked="ExpMicPanel_Changed"/>
-                                </StackPanel>
-
-                                <!-- 快速面板样式：经典面板 / 简洁面板（默认简洁） -->
-                                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                    <TextBlock Text="{Binding [St.QuickPanelStyle], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                               VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                    <ComboBox x:Name="QuickPanelStyleCombo" Style="{StaticResource SelCombo}"
-                                              MinWidth="160" HorizontalAlignment="Left"
-                                              SelectionChanged="QuickPanelStyleCombo_Changed"/>
-                                </StackPanel>
-                                <!-- 简洁面板更改系统默认设备（默认关，仅简洁面板显示） -->
-                                <StackPanel x:Name="PanelChangeSysDefSection" Margin="0,10,0,0">
-                                    <CheckBox x:Name="SettingsPanelChangeSysDef"
-                                              Content="{Binding [St.PanelChangeSystemDefault], Source={x:Static local:L10n.Instance}}"
-                                              FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}"
-                                              Checked="SettingsPanelChangeSysDef_Changed" Unchecked="SettingsPanelChangeSysDef_Changed"/>
-                                    <TextBlock Text="{Binding [St.PanelChangeSystemDefaultHint], Source={x:Static local:L10n.Instance}}"
-                                               FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                               Margin="0,-2,0,0" TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox x:Name="ExpCollapseCheck"
-                                          Content="{Binding [Exp.Collapse], Source={x:Static local:L10n.Instance}}"
-                                          FontSize="13" Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,8,0,0"
-                                          Checked="ExpCollapse_Changed" Unchecked="ExpCollapse_Changed"/>
                                 <TextBlock x:Name="AboutAuthorText"
                                            FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                            Margin="0,16,0,0"
@@ -1035,6 +1045,12 @@
                                     <Hyperlink x:Name="GithubLink" Click="GithubLink_Click"
                                                Foreground="{DynamicResource Theme.Accent}">
                                         <Run Text="GitHub"/>
+                                    </Hyperlink>
+                                    <Run Text=" ‖ "/>
+                                    <Hyperlink x:Name="CheckUpdateLink" Click="CheckUpdate_Click"
+                                               Foreground="{DynamicResource Theme.Accent}">
+                                        <Run x:Name="CheckUpdateRun"
+                                             Text="{Binding [St.CheckUpdate], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                     </Hyperlink>
                                 </TextBlock>
                             </StackPanel>
@@ -1092,7 +1108,8 @@
                                             Margin="0,0,10,0" HorizontalAlignment="Left" Click="ExpExportConfig_Click"/>
                                     <Button x:Name="ExpImportConfigButton" Content="{Binding [Exp.ImportConfig], Source={x:Static local:L10n.Instance}}"
                                             Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                            HorizontalAlignment="Left" Click="ExpImportConfig_Click"/>
+                                            HorizontalAlignment="Left" Click="ExpImportConfig_Click"
+                                            AllowDrop="True" DragOver="ExpImportConfigButton_DragOver" Drop="ExpImportConfigButton_Drop"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>

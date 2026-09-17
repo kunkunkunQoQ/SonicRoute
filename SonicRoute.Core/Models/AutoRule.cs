@@ -47,7 +47,10 @@ namespace SonicRoute.Core.Models
         LaunchProgram = 8,
 
         /// <summary>运行 PowerShell 脚本</summary>
-        RunPowerShell = 9
+        RunPowerShell = 9,
+
+        /// <summary>显示 OSD（自定义主标题 / 副标题）</summary>
+        ShowOsd = 10
     }
 
     /// <summary>
@@ -67,13 +70,22 @@ namespace SonicRoute.Core.Models
         /// <summary>音量（SetSystemVolume / SetAppVolume，0~100）。</summary>
         public int Volume { get; set; } = 50;
 
+        /// <summary>执行该步骤前的启动延时（毫秒，0 = 立即执行）。</summary>
+        public int DelayMs { get; set; }
+
+        /// <summary>OSD 主标题（ShowOsd 操作）。</summary>
+        public string OsdTitle { get; set; } = "";
+
+        /// <summary>OSD 副标题（ShowOsd 操作）。</summary>
+        public string OsdText { get; set; } = "";
+
         /// <summary>启动程序的路径（LaunchProgram）或 PowerShell 脚本路径 / 命令（RunPowerShell），支持多个。</summary>
         public List<string> ProgramPaths { get; set; } = new();
     }
 
     /// <summary>
     /// 自动化规则（极简）：触发条件 + 一个或多个操作步骤。
-    /// 持久化于 %LocalAppData%\SonicRoute\config.json（AppConfig.AutoRules）。
+    /// 持久化于 %LocalAppData%\SonicRoute\Automation\{Id}.json（独立目录，v1.17 起；见 AutoRuleStore）。
     /// 应用/设备均按进程名 / 设备短 ID 记忆（不记 PID）。
     /// </summary>
     public sealed class AutoRule
@@ -110,6 +122,15 @@ namespace SonicRoute.Core.Models
 
         /// <summary>音量（旧字段，兼容旧配置；对应 Actions[0].Volume）。</summary>
         public int Volume { get; set; } = 50;
+
+        /// <summary>步骤启动延时毫秒（旧字段，兼容旧配置；对应 Actions[0].DelayMs）。</summary>
+        public int DelayMs { get; set; }
+
+        /// <summary>OSD 主标题（旧字段，兼容旧配置；对应 Actions[0].OsdTitle）。</summary>
+        public string OsdTitle { get; set; } = "";
+
+        /// <summary>OSD 副标题（旧字段，兼容旧配置；对应 Actions[0].OsdText）。</summary>
+        public string OsdText { get; set; } = "";
 
         /// <summary>启动程序路径 / PowerShell 脚本（旧字段，兼容旧配置；对应 Actions[0].ProgramPaths 首项）。</summary>
         public string ProgramPath { get; set; } = "";

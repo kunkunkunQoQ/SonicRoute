@@ -51,3 +51,9 @@ _attach_tmp.bin
 
 # wiki 子仓库（独立 git 仓库，勿提交）
 SonicRoute.wiki/
+
+# AI 交接摘要（本地维护，不推送 GitHub）
+/AI_CONTEXT.md
+
+# 本地配置编辑器（单文件 HTML 工具，不推送 GitHub）
+/config-editor/

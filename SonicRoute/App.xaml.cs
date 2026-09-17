@@ -436,7 +436,7 @@ namespace SonicRoute
             }
             _hotkeys.Reload(map);
             // 自动化规则快捷键：Rule:{Id} 动作并入同一注册通道；冲突/无效时不注册（RegistrationStatus 标记空）
-            foreach (var r in config.AutoRules)
+            foreach (var r in AutoRuleStore.LoadAll())
             {
                 if (r.Enabled && r.Trigger == AutoRuleTrigger.Hotkey && !string.IsNullOrWhiteSpace(r.Hotkey))
                     map[AutoRuleService.HotkeyPrefix + r.Id] = r.Hotkey;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -9,6 +9,9 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Net.Http;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
@@ -1663,16 +1666,82 @@ namespace SonicRoute
             }
         }
 
+        /// <summary>「更多选项」展开/收起统一动画：淡入淡出 + 轻微上滑/下滑（展开 130ms，收起 100ms）。</summary>
+        private static void AnimatePanelExpand(UIElement panel, bool expand)
+        {
+            if (panel == null) return;
+            if (expand)
+            {
+                // 取消可能挂起的收起动画
+                panel.BeginAnimation(UIElement.OpacityProperty, null);
+                panel.RenderTransform = null;
+                panel.Visibility = Visibility.Visible;
+                panel.Opacity = 0;
+                var t = new TranslateTransform(0, -8);
+                panel.RenderTransform = t;
+                panel.BeginAnimation(UIElement.OpacityProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(1, new Duration(TimeSpan.FromMilliseconds(130)))
+                    {
+                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                        {
+                            EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                        }
+                    });
+                t.BeginAnimation(TranslateTransform.YProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(130)))
+                    {
+                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                        {
+                            EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                        }
+                    });
+            }
+            else
+            {
+                var t = new TranslateTransform(0, 0);
+                panel.RenderTransform = t;
+                var fade = new System.Windows.Media.Animation.DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(100)))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                    {
+                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn
+                    }
+                };
+                fade.Completed += (s, e2) =>
+                {
+                    panel.BeginAnimation(UIElement.OpacityProperty, null);
+                    panel.RenderTransform = null;
+                    panel.Opacity = 1;
+                    panel.Visibility = Visibility.Collapsed;
+                };
+                panel.BeginAnimation(UIElement.OpacityProperty, fade);
+                t.BeginAnimation(TranslateTransform.YProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(-8, new Duration(TimeSpan.FromMilliseconds(100)))
+                    {
+                        EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                        {
+                            EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn
+                        }
+                    });
+            }
+        }
+
+        /// <summary>语言卡片「显示更多选项」折叠：展开/收起语言文件管理（导出/导入/打开/还原）。</summary>
+        private void LangMoreToggle_Click(object sender, RoutedEventArgs e)
+        {
+            AnimatePanelExpand(LangMorePanel, LangMoreToggle.IsChecked == true);
+        }
+
         /// <summary>设置页「显示更多选项」折叠：展开/收起清理自启项与麦克风子选项。</summary>
         private void SettingsMoreToggle_Click(object sender, RoutedEventArgs e)
         {
-            SettingsMorePanel.Visibility = SettingsMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            AnimatePanelExpand(SettingsMorePanel, SettingsMoreToggle.IsChecked == true);
         }
 
         /// <summary>麦克风子选项「显示更多选项」折叠：展开/收起「在快捷面板显示麦克风」。</summary>
         private void MicMoreToggle_Click(object sender, RoutedEventArgs e)
         {
-            MicMorePanel.Visibility = MicMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            AnimatePanelExpand(MicMorePanel, MicMoreToggle.IsChecked == true);
         }
         /// <summary>清理开机自启项（方案四B）：绿色版删 Run 键，商店版禁用 StartupTask；同步配置与 UI。</summary>
         private void CleanAutoStart_Click(object sender, RoutedEventArgs e)
@@ -1861,7 +1930,13 @@ namespace SonicRoute
                 DefaultExt = ".json",
             };
             if (dlg.ShowDialog() != true) return;
-            if (SonicRoute.Core.ConfigService.ImportFrom(dlg.FileName))
+            ImportConfigFile(dlg.FileName);
+        }
+
+        /// <summary>导入配置文件（点击对话框 / 拖入文件共用）：恢复全部设置并自动重启应用。</summary>
+        private void ImportConfigFile(string file)
+        {
+            if (SonicRoute.Core.ConfigService.ImportFrom(file))
             {
                 ShowToast(L10n.T("Exp.ImportDone"));
                 RestartApp();
@@ -1869,6 +1944,22 @@ namespace SonicRoute
             else
             {
                 ShowToast(L10n.T("Exp.TransferFail"));
+            }
+        }
+
+        /// <summary>导入配置文件按钮：拖入 json 文件直接导入。</summary>
+        private void ExpImportConfigButton_DragOver(object sender, System.Windows.DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop) ? System.Windows.DragDropEffects.Copy : System.Windows.DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void ExpImportConfigButton_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            if (e.Data.GetData(System.Windows.DataFormats.FileDrop) is string[] files)
+            {
+                var f = files.FirstOrDefault(x => x.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+                if (f != null) ImportConfigFile(f);
             }
         }
 
@@ -1913,9 +2004,16 @@ namespace SonicRoute
                 Multiselect = true,
             };
             if (dlg.ShowDialog() != true) return;
+            ImportLangFiles(dlg.FileNames);
+        }
+
+        /// <summary>导入语言文件（点击对话框 / 拖入文件共用）：批量导入 + 即时生效 + 覆盖率提示。</summary>
+        private void ImportLangFiles(string[] files)
+        {
+            if (files == null || files.Length == 0) return;
             int ok = 0, fail = 0;
             string? lastCode = null; int lastCov = 100;
-            foreach (var f in dlg.FileNames)
+            foreach (var f in files)
             {
                 var r = L10n.ImportLanguageFile(f);
                 if (r.Ok) { ok++; lastCode = r.Code; lastCov = r.CoveragePct; }
@@ -1929,7 +2027,7 @@ namespace SonicRoute
             RefreshLangCombo(lastCode!);
             RefreshCustomLangList();
 
-            if (dlg.FileNames.Length == 1)
+            if (files.Length == 1)
             {
                 // 单文件：显示键覆盖率；低于 80% 额外警告缺失键回退中文
                 if (lastCov >= 80) ShowToast(L10n.T("Exp.LangImportDone"));
@@ -1942,6 +2040,22 @@ namespace SonicRoute
             else
             {
                 ShowToast(L10n.T("Exp.LangImportDone"));
+            }
+        }
+
+        /// <summary>导入语言按钮：拖入 json 文件直接导入。</summary>
+        private void ExpImportLangButton_DragOver(object sender, System.Windows.DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(System.Windows.DataFormats.FileDrop) ? System.Windows.DragDropEffects.Copy : System.Windows.DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void ExpImportLangButton_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            if (e.Data.GetData(System.Windows.DataFormats.FileDrop) is string[] files)
+            {
+                var jsons = files.Where(x => x.EndsWith(".json", StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (jsons.Length > 0) ImportLangFiles(jsons);
             }
         }
 
@@ -2288,13 +2402,13 @@ namespace SonicRoute
         /// <summary>折叠/展开设置页"保留的设备"卡片（更多选项样式，实验设置-折叠开启时可见）。</summary>
         private void KeepDevicesMoreToggle_Click(object sender, RoutedEventArgs e)
         {
-            KeepDevicesBody.Visibility = KeepDevicesMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            AnimatePanelExpand(KeepDevicesBody, KeepDevicesMoreToggle.IsChecked == true);
         }
 
         /// <summary>折叠/展开设置页"设备名称"卡片（更多选项样式，实验设置-折叠开启时可见）。</summary>
         private void DeviceNamesMoreToggle_Click(object sender, RoutedEventArgs e)
         {
-            DeviceNamesBody.Visibility = DeviceNamesMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            AnimatePanelExpand(DeviceNamesBody, DeviceNamesMoreToggle.IsChecked == true);
         }
 
         /// <summary>主题页 - 常驻子选项「同时监听默认输入静音」：保存配置并让 OSD 重新评估常驻状态
@@ -2314,14 +2428,14 @@ namespace SonicRoute
         /// <summary>主题页 - 常驻子选项「更多选项」折叠展开。</summary>
         private void MicMuteMoreToggle_Click(object sender, RoutedEventArgs e)
         {
-            MicMuteMorePanel.Visibility = MicMuteMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            AnimatePanelExpand(MicMuteMorePanel, MicMuteMoreToggle.IsChecked == true);
         }
 
         /// <summary>主题页 - OSD 调整项（宽度/字号/淡入/淡出）「更多选项」折叠展开。</summary>
         private void OsdMoreToggle_Click(object sender, RoutedEventArgs e)
         {
             if (OsdSlidersPanel == null) return;
-            OsdSlidersPanel.Visibility = OsdMoreToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+            AnimatePanelExpand(OsdSlidersPanel, OsdMoreToggle.IsChecked == true);
         }
 
         /// <summary>主题页 - 「麦克风静音时 OSD 常驻」开关：保存配置并立即生效
@@ -2395,6 +2509,103 @@ namespace SonicRoute
             {
                 // 打开失败静默
             }
+        }
+
+        private bool _checkingUpdate;
+        private static readonly HttpClient _updateHttp = CreateUpdateHttp();
+
+        private static HttpClient CreateUpdateHttp()
+        {
+            var h = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            h.DefaultRequestHeaders.UserAgent.ParseAdd("SonicRoute");
+            return h;
+        }
+
+        /// <summary>检查更新：仅点击触发，不自动检测；商店版与非商店版行为不同。</summary>
+        private void CheckUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            if (_checkingUpdate) return;
+            _checkingUpdate = true;
+            try { CheckUpdateRun.Text = L10n.T("St.CheckingUpdate"); }
+            catch { /* 忽略 */ }
+            _ = CheckUpdateAsync();
+        }
+
+        private async Task CheckUpdateAsync()
+        {
+            string? remoteTag = null;
+            try
+            {
+                using var resp = await _updateHttp.GetAsync("https://api.github.com/repos/kunkunkunQoQ/SonicRoute/releases/latest");
+                if (!resp.IsSuccessStatusCode) { FinishCheck(null); return; }
+                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+                if (doc.RootElement.TryGetProperty("tag_name", out var tag)) remoteTag = tag.GetString();
+            }
+            catch
+            {
+                FinishCheck(null);
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(remoteTag)) { FinishCheck(null); return; }
+            var newer = IsNewerVersion(remoteTag);
+            if (newer == null) { FinishCheck(null); return; }
+            FinishCheck(newer.Value, remoteTag);
+        }
+
+        /// <summary>检查结果回 UI 线程弹窗：hasUpdate=null 失败；true 有新版（商店版引导去微软商店，非商店版去 GitHub）；false 已是最新。</summary>
+        private void FinishCheck(bool? hasUpdate, string? remoteTag = null)
+        {
+            _checkingUpdate = false;
+            try { CheckUpdateRun.Text = L10n.T("St.CheckUpdate"); }
+            catch { /* 忽略 */ }
+            var title = L10n.T("St.CheckUpdate");
+            if (hasUpdate == null)
+            {
+                System.Windows.MessageBox.Show(L10n.T("St.UpdateCheckFailed"), title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            if (hasUpdate.Value)
+            {
+                var msg = string.Format(L10n.T("St.UpdateAvailable"), remoteTag ?? string.Empty) + "\n" +
+                          (IsPackaged() ? L10n.T("St.UpdateOpenStore") : L10n.T("St.UpdateGoDownload"));
+                if (System.Windows.MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                {
+                    var url = IsPackaged()
+                        ? "ms-windows-store://pdp/?ProductId=9NQZGRTPM1NT"
+                        : "https://github.com/kunkunkunQoQ/SonicRoute/releases/latest";
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+                    }
+                    catch
+                    {
+                        // 打开失败静默
+                    }
+                }
+                return;
+            }
+            System.Windows.MessageBox.Show(L10n.T("St.UpdateLatest"), title, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private static bool? IsNewerVersion(string remoteTag)
+        {
+            var r = ParseVersion(remoteTag);
+            var l = ParseVersion(App.DisplayVersion);
+            if (r == null || l == null) return null;
+            return r.Value.CompareTo(l.Value) > 0;
+        }
+
+        /// <summary>解析 vX.Y[.Z][rN]（r 无数字=1）；返回 (主, 次, 修订, rN)。</summary>
+        private static (int Major, int Minor, int Rev, int R)? ParseVersion(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return null;
+            s = s.Trim();
+            if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
+            var m = Regex.Match(s, @"^(\d+)\.(\d+)(?:\.(\d+))?(?:r(\d*))?$");
+            if (!m.Success) return null;
+            int rev = m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0;
+            int rn = m.Groups[4].Success ? (m.Groups[4].Length == 0 ? 1 : int.Parse(m.Groups[4].Value)) : 0;
+            return (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), rev, rn);
         }
 
         // ==================================================================
@@ -2530,6 +2741,15 @@ namespace SonicRoute
 
         private List<AutoRuleStep> _autoSteps = new();
 
+        // 操作积木拖拽排序状态
+        private int _autoDragFrom = -1;
+        private AutoRuleStep? _autoDragStep;
+        private bool _autoDragging;
+        private double _autoDragStartY;
+        private int _autoDragTarget = -1;
+        private bool _autoReorderPending;
+        private FrameworkElement? _autoGrip;
+
         private void ShowAutomationPage()
         {
             FillAutoCombos();
@@ -2538,9 +2758,8 @@ namespace SonicRoute
 
         private async Task RefreshAutoRulesAsync()
         {
-            var cfg = await Task.Run(() => ConfigService.Load());
+            var rules = await Task.Run(() => AutoRuleStore.LoadAll());
             AutoRuleList.Items.Clear();
-            var rules = cfg.AutoRules ?? new List<AutoRule>();
             AutoEmptyText.Visibility = rules.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             foreach (var r in rules)
                 AutoRuleList.Items.Add(BuildAutoRuleRow(r));
@@ -2619,6 +2838,7 @@ namespace SonicRoute
                 AutoRuleAction.SetAppOutput => L10n.T("Auto.ActionAppOutput"),
                 AutoRuleAction.SetAppInput => L10n.T("Auto.ActionAppInput"),
                 AutoRuleAction.LaunchProgram => L10n.T("Auto.ActionLaunch"),
+                AutoRuleAction.ShowOsd => L10n.T("Auto.ActionShowOsd"),
                 _ => L10n.T("Auto.ActionPowerShell")
             }).ToList();
             var parts = new List<string> { r.Name, "·", trigger };
@@ -2650,8 +2870,7 @@ namespace SonicRoute
         private void AutoEdit_Click(object sender, RoutedEventArgs e)
         {
             var id = (string)((FrameworkElement)sender).Tag;
-            var cfg = ConfigService.Load();
-            var rule = cfg.AutoRules.FirstOrDefault(r => r.Id == id);
+            var rule = AutoRuleStore.Find(id);
             if (rule == null) return;
             FillAutoCombos();
             _autoEditingId = rule.Id;
@@ -2666,6 +2885,9 @@ namespace SonicRoute
                     TargetApp = s.TargetApp ?? "",
                     TargetDeviceId = s.TargetDeviceId ?? "",
                     Volume = s.Volume,
+                    DelayMs = s.DelayMs,
+                    OsdTitle = s.OsdTitle ?? "",
+                    OsdText = s.OsdText ?? "",
                     ProgramPaths = new List<string>(s.ProgramPaths)
                 }).ToList()
                 : new List<AutoRuleStep>
@@ -2676,6 +2898,9 @@ namespace SonicRoute
                         TargetApp = rule.TargetApp ?? "",
                         TargetDeviceId = rule.TargetDeviceId ?? "",
                         Volume = rule.Volume,
+                        DelayMs = rule.DelayMs,
+                        OsdTitle = rule.OsdTitle ?? "",
+                        OsdText = rule.OsdText ?? "",
                         ProgramPaths = string.IsNullOrWhiteSpace(rule.ProgramPath)
                             ? new List<string>()
                             : new List<string> { rule.ProgramPath }
@@ -2693,9 +2918,7 @@ namespace SonicRoute
         private void AutoDelete_Click(object sender, RoutedEventArgs e)
         {
             var id = (string)((FrameworkElement)sender).Tag;
-            var cfg = ConfigService.Load();
-            cfg.AutoRules.RemoveAll(r => r.Id == id);
-            ConfigService.Save(cfg);
+            AutoRuleStore.Delete(id);
             ((App)Application.Current).ReloadHotkeys();
             if (_autoEditingId == id)
             {
@@ -2800,18 +3023,87 @@ namespace SonicRoute
             list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionAppInput"), Tag = AutoRuleAction.SetAppInput });
             list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionLaunch"), Tag = AutoRuleAction.LaunchProgram });
             list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionPowerShell"), Tag = AutoRuleAction.RunPowerShell });
+            list.Add(new ComboBoxItem { Content = L10n.T("Auto.ActionShowOsd"), Tag = AutoRuleAction.ShowOsd });
             return list;
+        }
+
+        private (SolidColorBrush bg, SolidColorBrush border, SolidColorBrush fg) AutoBlockPalette(AutoRuleAction a)
+        {
+            bool dark = _config.ThemeMode switch { "light" => false, "dark" => true, _ => ThemeService.IsDarkMode() };
+            (byte R, byte G, byte B, byte BR, byte BG, byte BB, byte FR, byte FG, byte FB) =
+                a switch
+                {
+                    AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput
+                        or AutoRuleAction.SetSystemVolume or AutoRuleAction.ToggleSystemMute
+                        => dark ? ((byte)0x2A, (byte)0x3A, (byte)0x5C, (byte)0x4A, (byte)0x6F, (byte)0xA8, (byte)0xBF, (byte)0xD4, (byte)0xFF)
+                                : ((byte)0xE9, (byte)0xF1, (byte)0xFE, (byte)0xC7, (byte)0xD9, (byte)0xF8, (byte)0x1E, (byte)0x41, (byte)0x91),
+                    AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute
+                        or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
+                        => dark ? ((byte)0x4A, (byte)0x37, (byte)0x22, (byte)0x7A, (byte)0x5A, (byte)0x2E, (byte)0xFF, (byte)0xD9, (byte)0xA8)
+                                : ((byte)0xFD, (byte)0xF1, (byte)0xE4, (byte)0xF6, (byte)0xDC, (byte)0xBB, (byte)0x8C, (byte)0x4E, (byte)0x11),
+                    AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell
+                        => dark ? ((byte)0x3A, (byte)0x33, (byte)0x54, (byte)0x5E, (byte)0x4F, (byte)0x8F, (byte)0xD3, (byte)0xC4, (byte)0xFF)
+                                : ((byte)0xF1, (byte)0xED, (byte)0xFE, (byte)0xDE, (byte)0xD4, (byte)0xF9, (byte)0x5C, (byte)0x3F, (byte)0xAA),
+                    _ => dark ? ((byte)0x25, (byte)0x46, (byte)0x4A, (byte)0x3E, (byte)0x6E, (byte)0x70, (byte)0xB8, (byte)0xEC, (byte)0xE9)
+                              : ((byte)0xE6, (byte)0xF8, (byte)0xF6, (byte)0xC5, (byte)0xEA, (byte)0xE8, (byte)0x13, (byte)0x7B, (byte)0x77)
+                };
+            static SolidColorBrush Mk(byte r, byte g, byte b)
+            {
+                var b2 = new SolidColorBrush(Color.FromRgb(r, g, b));
+                b2.Freeze();
+                return b2;
+            }
+            return (Mk(R, G, B), Mk(BR, BG, BB), Mk(FR, FG, FB));
         }
 
         private UIElement BuildAutoStepRow(AutoRuleStep step)
         {
-            var row = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+            var (bg, border, fg) = AutoBlockPalette(step.Action);
+            var block = new Border
+            {
+                Background = bg,
+                BorderBrush = border,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(12, 9, 12, 8),
+                Margin = new Thickness(0, 8, 0, 0),
+                Tag = step
+            };
+            var body = new StackPanel();
+
+            // 头行：拖拽把手（左）+ 操作类型下拉 + 删除（右）
             var head = new DockPanel();
             var del = new Button { Content = L10n.T("Auto.Delete"), Tag = step, Width = 56, Height = 28 };
             del.SetResourceReference(StyleProperty, "GhostButton");
             del.Click += AutoStepDelete_Click;
             DockPanel.SetDock(del, Dock.Right);
             head.Children.Add(del);
+            var grip = new Border
+            {
+                Tag = block,
+                Width = 30,
+                Height = 28,
+                Cursor = System.Windows.Input.Cursors.SizeAll,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0),
+                Background = new SolidColorBrush(Color.FromArgb(20, 0, 0, 0)),
+                ToolTip = L10n.T("Auto.DragOrder")
+            };
+            var gripText = new TextBlock
+            {
+                Text = "⋮⋮",
+                FontSize = 14,
+                Foreground = fg,
+                Opacity = 0.75,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            grip.Child = gripText;
+            grip.MouseLeftButtonDown += AutoStepGrip_MouseLeftButtonDown;
+            grip.MouseMove += AutoStepGrip_MouseMove;
+            grip.MouseLeftButtonUp += AutoStepGrip_MouseLeftButtonUp;
+            DockPanel.SetDock(grip, Dock.Left);
+            head.Children.Add(grip);
             var combo = new System.Windows.Controls.ComboBox
             {
                 Style = (Style)FindResource("SelCombo"),
@@ -2824,9 +3116,241 @@ namespace SonicRoute
                 combo.Items.Add(item);
             combo.SelectedIndex = (int)step.Action;
             head.Children.Add(combo);
-            row.Children.Add(head);
-            row.Children.Add(BuildStepParams(step));
-            return row;
+            body.Children.Add(head);
+
+            // 参数区（内联积木）
+            body.Children.Add(BuildStepParams(step, fg));
+
+            // 延时行（底部，虚线分隔）
+            var delayRow = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
+            delayRow.Children.Add(new TextBlock
+            {
+                Text = L10n.T("Auto.Delay"),
+                FontSize = 11.5,
+                Foreground = fg,
+                Opacity = 0.85,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 5, 0)
+            });
+            var delayBox = new TextBox
+            {
+                Text = step.DelayMs.ToString(),
+                FontSize = 12,
+                Width = 64,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Padding = new Thickness(6, 2, 6, 2),
+                VerticalAlignment = VerticalAlignment.Center,
+                Tag = step
+            };
+            delayBox.TextChanged += AutoStepDelay_TextChanged;
+            delayRow.Children.Add(delayBox);
+            delayRow.Children.Add(new TextBlock
+            {
+                Text = L10n.T("Auto.DelayUnit"),
+                FontSize = 11,
+                Foreground = fg,
+                Opacity = 0.8,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(4, 0, 0, 0)
+            });
+            delayRow.Children.Add(new TextBlock
+            {
+                Text = L10n.T("Auto.DelayRange"),
+                FontSize = 10.5,
+                Foreground = fg,
+                Opacity = 0.6,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0)
+            });
+            body.Children.Add(delayRow);
+
+            block.Child = body;
+            return block;
+        }
+
+
+        private void AutoStepDelay_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (sender is not TextBox box || box.Tag is not AutoRuleStep step) return;
+            var text = box.Text.Trim();
+            // 空文本不处理：用户还在输入，保留上一次合法值
+            if (text.Length == 0) return;
+            // 超过 5 位数字（含在最前面继续输入的情况）：直接校验，超范围一律校准为 60000
+            if (text.Length > 5 || !int.TryParse(text, out var ms))
+            {
+                int target = int.TryParse(text, out var t)
+                    ? Math.Clamp(t, 0, 60000)
+                    : Math.Clamp(step.DelayMs, 0, 60000);
+                step.DelayMs = target;
+                SetDelayBoxText(box, target.ToString());
+                return;
+            }
+            var clamped = Math.Clamp(ms, 0, 60000);
+            step.DelayMs = clamped;
+            if (clamped != ms)
+            {
+                // 超出范围自动纠正显示（防重入 + 保留光标位置，避免前面输入时光标被重置到末尾）
+                SetDelayBoxText(box, clamped.ToString());
+            }
+        }
+
+        /// <summary>改写延时输入框文本，保留光标在用户输入位置附近（防重入）。</summary>
+        private void SetDelayBoxText(TextBox box, string display)
+        {
+            var caret = Math.Min(box.CaretIndex, display.Length);
+            box.TextChanged -= AutoStepDelay_TextChanged;
+            box.Text = display;
+            box.TextChanged += AutoStepDelay_TextChanged;
+            box.CaretIndex = caret;
+        }
+
+        private void AutoStepGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.Tag is not Border block) return;
+            if (block.Tag is not AutoRuleStep step) return;
+            _autoDragFrom = _autoSteps.IndexOf(step);
+            _autoDragStep = step;
+            _autoDragging = false;
+            _autoDragStartY = e.GetPosition(AutoStepsHost).Y;
+            _autoDragTarget = _autoDragFrom;
+            _autoGrip = fe;
+            fe.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void AutoStepGrip_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (_autoDragFrom < 0 || _autoDragStep == null) return;
+            var y = e.GetPosition(AutoStepsHost).Y;
+            if (!_autoDragging)
+            {
+                if (Math.Abs(y - _autoDragStartY) < 6) return;
+                _autoDragging = true;
+                if (_autoGrip?.Tag is Border gb) gb.Opacity = 0.75;
+            }
+            int cur = _autoSteps.IndexOf(_autoDragStep);
+            if (cur < 0) return;
+            int slot = AutoDragHitSlot(y);
+            int target = slot > cur ? slot - 1 : slot;
+            if (target == cur) { _autoDragTarget = cur; e.Handled = true; return; }
+            if (target == _autoDragTarget) { e.Handled = true; return; }
+            _autoDragTarget = target;
+            if (!_autoReorderPending)
+            {
+                _autoReorderPending = true;
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(ApplyAutoReorder));
+            }
+            e.Handled = true;
+        }
+
+        /// <summary>在消息循环（非事件栈）内安全执行积木实时换位，避免修改 Items 集合触发容器生成异常。</summary>
+        private void ApplyAutoReorder()
+        {
+            _autoReorderPending = false;
+            if (!_autoDragging || _autoDragStep == null || _autoGrip == null) return;
+            int cur = _autoSteps.IndexOf(_autoDragStep);
+            int target = _autoDragTarget;
+            if (cur < 0 || target < 0 || cur == target || target > _autoSteps.Count) return;
+            // Items 里存的是积木 Border（Tag=step），必须移动 Border 而不是 step 对象
+            Border? block = null;
+            foreach (var it in AutoStepsHost.Items)
+            {
+                if (it is Border b && ReferenceEquals(b.Tag, _autoDragStep)) { block = b; break; }
+            }
+            if (block == null) return;
+
+            // 记录移动前各积木的视觉 Y 位置，用于滑动动画
+            var before = new Dictionary<Border, double>();
+            foreach (var it in AutoStepsHost.Items)
+                if (it is Border b) before[b] = AutoItemY(b);
+
+            AutoStepsHost.Items.RemoveAt(cur);
+            AutoStepsHost.Items.Insert(target, block);
+            _autoSteps.RemoveAt(cur);
+            _autoSteps.Insert(target, _autoDragStep);
+
+            // 简单切换动画：积木从旧位置平滑滑到新位置
+            AutoStepsHost.UpdateLayout();
+            foreach (var kv in before)
+            {
+                double offset = kv.Value - AutoItemY(kv.Key);
+                if (Math.Abs(offset) < 0.5) continue;
+                var t = new TranslateTransform(0, offset);
+                kv.Key.RenderTransform = t;
+                var anim = new System.Windows.Media.Animation.DoubleAnimation(0, new Duration(TimeSpan.FromMilliseconds(150)))
+                {
+                    EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                    {
+                        EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                    }
+                };
+                t.BeginAnimation(TranslateTransform.YProperty, anim);
+            }
+
+            // 容器重建会丢鼠标捕获，恢复，保证后续 MouseMove 继续到达
+            if (_autoGrip.IsLoaded) _autoGrip.CaptureMouse();
+        }
+
+        /// <summary>积木在其容器（AutoStepsHost）中的视觉 Y 位置。</summary>
+        private double AutoItemY(Border b)
+        {
+            if (AutoStepsHost.ItemContainerGenerator.ContainerFromItem(b) is FrameworkElement c)
+                return c.TransformToAncestor(AutoStepsHost).Transform(new System.Windows.Point(0, 0)).Y;
+            return 0;
+        }
+
+        private void AutoStepGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement fe)
+            {
+                fe.ReleaseMouseCapture();
+                if (fe.Tag is Border b) b.Opacity = 1;
+            }
+            if (_autoDragging && _autoDragStep != null && _autoDragFrom >= 0)
+            {
+                int cur = _autoSteps.IndexOf(_autoDragStep);
+                if (cur >= 0)
+                {
+                    int slot = AutoDragHitSlot(e.GetPosition(AutoStepsHost).Y);
+                    int target = slot > cur ? slot - 1 : slot;
+                    if (target != cur)
+                    {
+                        _autoSteps.RemoveAt(cur);
+                        _autoSteps.Insert(Math.Clamp(target, 0, _autoSteps.Count), _autoDragStep);
+                        RenderAutoSteps();
+                    }
+                }
+            }
+            _autoDragFrom = -1;
+            _autoDragStep = null;
+            _autoDragging = false;
+            _autoDragTarget = -1;
+            _autoGrip = null;
+            e.Handled = true;
+        }
+
+        /// <summary>计算鼠标纵坐标 y 对应的插入槽位（0..N，插到该索引项之前）。</summary>
+        /// <summary>计算鼠标位置对应的插入槽位。排除被拖积木（避免拖动中自身移动干扰判定），
+        /// 阈值放宽到积木上 35% 高度即触发换位（比中线更灵敏、更容易落位）。</summary>
+        private int AutoDragHitSlot(double y)
+        {
+            int count = AutoStepsHost.Items.Count;
+            int insert = count; // 默认末尾（含被拖项序列 0..Count）
+            int cur = _autoDragStep != null ? _autoSteps.IndexOf(_autoDragStep) : -1;
+            for (int i = 0; i < count; i++)
+            {
+                if (AutoStepsHost.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement c) continue;
+                if (c is Border b && _autoDragStep != null && ReferenceEquals(b.Tag, _autoDragStep)) continue;
+                var p = c.TransformToAncestor(AutoStepsHost).Transform(new System.Windows.Point(0, 0));
+                if (y < p.Y + c.ActualHeight * 0.35)
+                {
+                    // 插入到悬停积木之前：若被拖积木本来就在其前面，插入位后移一位
+                    insert = cur >= 0 && cur < i ? i - 1 : i;
+                    break;
+                }
+                insert = i + 1;
+            }
+            return insert;
         }
 
         private void AutoStepDelete_Click(object sender, RoutedEventArgs e)
@@ -2842,37 +3366,59 @@ namespace SonicRoute
         {
             if (sender is not System.Windows.Controls.ComboBox combo || combo.Tag is not AutoRuleStep step) return;
             step.Action = combo.SelectedIndex < 0 ? AutoRuleAction.SetSystemOutput : (AutoRuleAction)combo.SelectedIndex;
-            var row = FindParent<StackPanel>(combo);
-            if (row == null || row.Children.Count < 2) return;
-            row.Children.RemoveAt(1);
-            row.Children.Insert(1, BuildStepParams(step));
+            var block = FindParent<Border>(combo);
+            if (block == null) return;
+            var (bg, border, fg) = AutoBlockPalette(step.Action);
+            block.Background = bg;
+            block.BorderBrush = border;
+            if (block.Child is StackPanel sp && sp.Children.Count >= 2)
+            {
+                sp.Children.RemoveAt(1);
+                sp.Children.Insert(1, BuildStepParams(step, fg));
+            }
         }
 
-        private UIElement BuildStepParams(AutoRuleStep step)
+
+        private UIElement BuildStepParams(AutoRuleStep step, SolidColorBrush fg)
         {
-            var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+            var wrap = new WrapPanel { Margin = new Thickness(0, 8, 0, 0) };
+            var labelBrush = new SolidColorBrush(Color.FromArgb(210, fg.Color.R, fg.Color.G, fg.Color.B));
+            labelBrush.Freeze();
+            UIElement MkLabel(string text) => new TextBlock
+            {
+                Text = text,
+                FontSize = 12,
+                Foreground = labelBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+            UIElement Group(string label, UIElement ctrl)
+            {
+                var sp = new StackPanel
+                {
+                    Orientation = System.Windows.Controls.Orientation.Horizontal,
+                    Margin = new Thickness(0, 0, 14, 8),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                sp.Children.Add(MkLabel(label));
+                sp.Children.Add(ctrl);
+                return sp;
+            }
+
             bool app = step.Action is AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute
                 or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput;
             bool dev = step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
                 or AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput;
             bool vol = step.Action is AutoRuleAction.SetSystemVolume or AutoRuleAction.SetAppVolume;
             bool prog = step.Action is AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell;
-            var secBrush = (Brush)FindResource("Theme.TextSecondary");
+            bool osd = step.Action == AutoRuleAction.ShowOsd;
 
             if (app)
             {
-                panel.Children.Add(new TextBlock
-                {
-                    Text = L10n.T("Auto.TargetApp"),
-                    FontSize = 12.5,
-                    Foreground = secBrush,
-                    Margin = new Thickness(0, 0, 0, 4)
-                });
                 var cb = new System.Windows.Controls.ComboBox
                 {
                     Style = (Style)FindResource("SelCombo"),
-                    Width = 320,
-                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Width = 240,
                     DisplayMemberPath = "Label",
                     Tag = step
                 };
@@ -2882,22 +3428,14 @@ namespace SonicRoute
                 {
                     if (cb.SelectedItem is AudioAppInfo a) step.TargetApp = a.ProcessName ?? "";
                 };
-                panel.Children.Add(cb);
+                wrap.Children.Add(Group(L10n.T("Auto.TargetApp"), cb));
             }
             if (dev)
             {
-                panel.Children.Add(new TextBlock
-                {
-                    Text = L10n.T("Auto.TargetDevice"),
-                    FontSize = 12.5,
-                    Foreground = secBrush,
-                    Margin = new Thickness(0, 0, 0, 4)
-                });
                 var cb = new System.Windows.Controls.ComboBox
                 {
                     Style = (Style)FindResource("SelCombo"),
-                    Width = 360,
-                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Width = 260,
                     DisplayMemberPath = "DisplayLabel",
                     Tag = step
                 };
@@ -2909,26 +3447,25 @@ namespace SonicRoute
                 {
                     if (cb.SelectedItem is AudioDeviceInfo d) step.TargetDeviceId = d.Id;
                 };
-                panel.Children.Add(cb);
+                wrap.Children.Add(Group(L10n.T("Auto.TargetDevice"), cb));
             }
             if (vol)
             {
-                var dp = new DockPanel();
                 var txt = new TextBlock
                 {
                     Text = step.Volume + "%",
                     FontSize = 13,
                     FontWeight = FontWeights.SemiBold,
-                    Width = 46,
+                    MinWidth = 44,
                     TextAlignment = TextAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                DockPanel.SetDock(txt, Dock.Right);
                 var sl = new Slider
                 {
                     Minimum = 0,
                     Maximum = 100,
                     Value = step.Volume,
+                    Width = 200,
                     VerticalAlignment = VerticalAlignment.Center,
                     IsMoveToPointEnabled = true
                 };
@@ -2937,27 +3474,40 @@ namespace SonicRoute
                     step.Volume = (int)Math.Round(sl.Value);
                     txt.Text = step.Volume + "%";
                 };
-                dp.Children.Add(txt);
-                dp.Children.Add(sl);
-                panel.Children.Add(dp);
+                // 鼠标滚轮调节音量（±5，阻止冒泡避免页面滚动）
+                sl.MouseWheel += (_, e) =>
+                {
+                    int delta = e.Delta > 0 ? 5 : -5;
+                    step.Volume = Math.Clamp(step.Volume + delta, 0, 100);
+                    sl.Value = step.Volume;
+                    e.Handled = true;
+                };
+                var g = new StackPanel
+                {
+                    Orientation = System.Windows.Controls.Orientation.Horizontal,
+                    Margin = new Thickness(0, 0, 14, 8),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                g.Children.Add(sl);
+                g.Children.Add(txt);
+                wrap.Children.Add(g);
             }
             if (prog)
             {
-                panel.Children.Add(new TextBlock
+                var pathPanel = new StackPanel
                 {
-                    Text = L10n.T(step.Action == AutoRuleAction.LaunchProgram ? "Auto.Program" : "Auto.Script"),
-                    FontSize = 12.5,
-                    Foreground = secBrush,
-                    Margin = new Thickness(0, 0, 0, 4)
-                });
+                    Margin = new Thickness(0, 0, 14, 8),
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                pathPanel.Children.Add(MkLabel(step.Action == AutoRuleAction.LaunchProgram ? L10n.T("Auto.Program") : L10n.T("Auto.Script")));
                 for (int i = 0; i < step.ProgramPaths.Count; i++)
-                    panel.Children.Add(BuildPathRow(step, i));
+                    pathPanel.Children.Add(BuildPathRow(step, i));
                 var addBtn = new Button
                 {
                     Content = L10n.T("Auto.AddPath"),
                     Tag = step,
                     Width = 150,
-                    Height = 30,
+                    Height = 28,
                     Margin = new Thickness(0, 6, 0, 0),
                     HorizontalAlignment = HorizontalAlignment.Left,
                     AllowDrop = true,
@@ -2967,18 +3517,51 @@ namespace SonicRoute
                 addBtn.Click += AutoAddPath_Click;
                 addBtn.PreviewDragOver += AutoAddPath_DragOver;
                 addBtn.PreviewDrop += AutoAddPath_Drop;
-                panel.Children.Add(addBtn);
-                panel.Children.Add(new TextBlock
+                pathPanel.Children.Add(addBtn);
+                pathPanel.Children.Add(new TextBlock
                 {
                     Text = L10n.T("Auto.DragHint"),
-                    FontSize = 11.5,
-                    Foreground = (Brush)FindResource("Theme.TextSecondary"),
+                    FontSize = 11,
+                    Foreground = labelBrush,
                     TextWrapping = TextWrapping.Wrap,
                     Margin = new Thickness(0, 6, 0, 0)
                 });
+                wrap.Children.Add(pathPanel);
             }
-            return panel;
+            if (osd)
+            {
+                var titleBox = new TextBox
+                {
+                    Text = step.OsdTitle,
+                    FontSize = 12.5,
+                    Width = 200,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Padding = new Thickness(8, 3, 8, 3),
+                    Tag = step
+                };
+                titleBox.TextChanged += (_, _) =>
+                {
+                    if (titleBox.Tag is AutoRuleStep s) s.OsdTitle = titleBox.Text;
+                };
+                wrap.Children.Add(Group(L10n.T("Auto.OsdTitle"), titleBox));
+                var textBox = new TextBox
+                {
+                    Text = step.OsdText,
+                    FontSize = 12.5,
+                    Width = 200,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Padding = new Thickness(8, 3, 8, 3),
+                    Tag = step
+                };
+                textBox.TextChanged += (_, _) =>
+                {
+                    if (textBox.Tag is AutoRuleStep s) s.OsdText = textBox.Text;
+                };
+                wrap.Children.Add(Group(L10n.T("Auto.OsdText"), textBox));
+            }
+            return wrap;
         }
+
 
         private UIElement BuildPathRow(AutoRuleStep step, int index)
         {
@@ -3161,12 +3744,10 @@ namespace SonicRoute
                     && s.ProgramPaths.All(string.IsNullOrWhiteSpace))
                 { _ = System.Windows.MessageBox.Show(L10n.T("Auto.ProgramRequired")); return; }
             }
-            var cfg = ConfigService.Load();
-            var rule = _autoEditingId == null ? null : cfg.AutoRules.FirstOrDefault(r => r.Id == _autoEditingId);
+            var rule = _autoEditingId == null ? null : AutoRuleStore.Find(_autoEditingId);
             if (rule == null)
             {
                 rule = new AutoRule { Id = Guid.NewGuid().ToString("N"), Name = name };
-                cfg.AutoRules.Add(rule);
             }
             else
             {
@@ -3181,6 +3762,9 @@ namespace SonicRoute
                 TargetApp = s.TargetApp ?? "",
                 TargetDeviceId = s.TargetDeviceId ?? "",
                 Volume = s.Volume,
+                DelayMs = s.DelayMs,
+                OsdTitle = s.OsdTitle ?? "",
+                OsdText = s.OsdText ?? "",
                 ProgramPaths = new List<string>(s.ProgramPaths.Where(p => !string.IsNullOrWhiteSpace(p)))
             }).ToList();
             if (rule.Actions.Count > 0)
@@ -3190,10 +3774,13 @@ namespace SonicRoute
                 rule.TargetApp = f.TargetApp;
                 rule.TargetDeviceId = f.TargetDeviceId;
                 rule.Volume = f.Volume;
+                rule.DelayMs = f.DelayMs;
+                rule.OsdTitle = f.OsdTitle ?? "";
+                rule.OsdText = f.OsdText ?? "";
                 rule.ProgramPath = f.ProgramPaths.FirstOrDefault() ?? "";
             }
             rule.Enabled = true;
-            ConfigService.Save(cfg);
+            AutoRuleStore.Save(rule);
             ((App)Application.Current).ReloadHotkeys();
             AutoEditCard.Visibility = Visibility.Collapsed;
             _autoCapturingHotkey = false;
