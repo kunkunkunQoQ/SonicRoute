@@ -1,0 +1,42 @@
+音跃 SonicRoute v1.17 备份说明（当前进度快照，未发布）
+================================================================
+
+备份时间：2026-09-15
+备份内容：当前工作区源码（SonicRoute 工程，单进程形态）+ Debug 构建产物
+相对基准：v1.16 备份（2026-09-14 22:14）
+构建状态：0 错误，冒烟启动正常
+
+一、版本号
+   - csproj <Version> 1.16 → 1.17（版本号由 csproj 联动 UI）
+   - 本版本为 1.17 起点快照，后续改动基于此备份继续
+
+二、本次备份前已完成的改动（相对 v1.16 正式版）
+   1. 自动化延时输入框防呆链（AutoStepDelay_TextChanged / SetDelayBoxText）
+      - ≤5 位且 ≤60000 接受；超 60000 clamp；6 位立即校验拉回；负数→0；非数字恢复旧值
+      - 纠正文本保留 CaretIndex（解决"在 60000 前面输入不校准"），删除失焦校准
+   2. 延时输入框旁范围小字「0 ~ 60000」（Auto.DelayRange × 9 语言）
+   3. 语言卡片折叠：导出/导入语言、打开语言文件夹、还原默认语言
+      收进「显示更多选项」（LangMoreToggle / LangMorePanel，默认收起）
+   4. 深色模式下拉框收起态文字修复：RoundedComboBox 模板
+      ToggleButton 补 Foreground 绑定 + ContentPresenter 补 TextElement.Foreground
+   5. 主题透明度提示改「建议 50 及以上」（St.OpacityHint × 9 语言）
+   6. 导入语言 / 导入配置文件按钮支持拖入 json 文件（AllowDrop + DragOver + Drop，
+      与点击弹窗共用 ImportLangFiles / ImportConfigFile；WinForms 混用需全限定 System.Windows 类型）
+   7. README：删除已知问题段、增加下一版本设计理念、顶部添加桌面预览动图 preview.gif
+      （docs/images 放行 gitignore，已推送 GitHub commit 373b240）
+
+三、文件清单（相对 SonicRoute 工程）
+   - SonicRoute\SonicRoute.csproj：版本号 1.17
+   - SonicRoute\MainWindow.xaml.cs：SetDelayBoxText / ImportLangFiles / ImportConfigFile /
+     拖放处理器 / AutoStepDelay_TextChanged
+   - SonicRoute\MainWindow.xaml：LangMoreToggle + LangMorePanel、两导入按钮 AllowDrop+拖放事件
+   - SonicRoute\App.xaml：RoundedComboBox Foreground 绑定
+   - SonicRoute\Resources\Lang\*.json × 9：St.OpacityHint 改文案、Auto.DelayRange 新增
+
+四、验证建议
+   - 延时输入框：60000 前输入数字、超 5 位、负数、非数字各试一次
+   - 语言卡片「显示更多选项」展开/收起；拖 json 到导入语言按钮
+   - 实验设置拖 json 到导入配置文件按钮
+   - 深色主题下展开/收起下拉框文字颜色一致
+v1.17 正式版源码快照（2026-09-17 发布前更新）：SonicRoute + SonicRoute.Core 全量源码（含 9-16/17 自动化积木、动画、检查更新、杂项卡片、config-editor 等全部改动）
+构建：含运行环境版 237MB / Lite 25.8MB / MSIX 1.17.0.0

@@ -1,0 +1,45 @@
+音跃 SonicRoute v1.16 正式版 备份说明
+======================================
+
+备份时间：2026-09-14
+版本：v1.16（csproj <Version>1.16，FileVersion 1.16.0.0）
+构建状态：Release 0 警告 0 错误；Lite / 含运行环境版均单进程启动正常
+相对基准：v1.15 正式版（单进程）
+
+一、v1.16 新增：极简自动化规则
+- 设置 → 自动化页（位于设置之后、实验设置之前；实验设置仍 Collapsed 门控）
+- 规则：名称 + 触发方式（按下快捷键 / 打开应用 / 切换应用）+ 一个或多个操作
+- 操作分类：音频控制（切换系统播放/录音设备、调整系统音量、系统静音/取消静音）、
+  应用控制（调整应用音量、应用静音/取消静音、切换应用播放/录音设备）、
+  高级操作（启动程序、运行 PowerShell 脚本）
+- 多操作顺序执行（AutoRule.Actions，List<AutoRuleStep>）；旧单操作字段兼容回退
+- 多路径：启动程序 / PowerShell 支持多条路径；路径输入框与「＋ 添加路径」按钮均
+  支持拖拽文件自动追加（多选全加、去重）；提示"可拖拽文件到此处"
+- 目标应用 / 设备下拉框显示设置页自定义名称
+- 规则列表行快捷键以主题强调色加粗显示；快捷键捕获按钮同风格
+- 文本精简 9 语言同步；删除提权提示；新增 AddAction/AddPath/DragHint 键
+
+二、其他改动
+- 快速面板（经典 + 简洁）启动滑入动画：TranslateTransform.Y 12px→0，180ms
+  QuadraticEase 缓出，仅内容就绪定位后播放一次，SizeChanged/折叠不重放
+- 修复自动化切换操作下拉框崩溃（WPF Children[i] 不支持替换已占用索引）
+- en-US JSON 转义引号损坏行修补
+
+三、发布产物
+- 含运行环境版：SonicRoute-v1.16.exe（237.4MB，self-contained 单文件）
+- 轻量版：SonicRoute-v1.16-Lite.exe（26.5MB，framework-dependent，需 .NET 8）
+- zip：SonicRoute-v1.16.zip（85.1MB）/ SonicRoute-v1.16-Lite.zip（6.8MB）
+- 微软商店 MSIX：SonicRoute-v1.16-Lite.msix（7.1MB，Version 1.16.0.0，
+  Publisher CN=1517F817-E0CD-44DA-8269-A50E0B6D7877，签名 SonicRouteStoreNew.pfx，
+  与 v1.15 状态一致可提交商店）
+
+四、GitHub 同步
+- 根 README.md 更新（核心功能新增自动化；已知问题移除旧面板动画条目）
+- Wiki 更新（功能特性 + 版本相关 + 使用指南）
+- Release v1.16：full exe/zip + lite exe/zip 四个资产
+- 源码 commit + push（自动化改动 + 面板动画）
+
+五、验证建议
+- Lite / 含运行环境版分别启动：单进程、托盘正常
+- 自动化规则：快捷键触发、打开/切换应用触发、多操作顺序、多路径拖拽
+- 面板滑入动画：经典/简洁各开一次

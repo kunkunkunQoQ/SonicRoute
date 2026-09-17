@@ -1,0 +1,61 @@
+音跃 SonicRoute v1.16-自动化 备份说明（当前进度快照，未发布）
+================================================================
+
+备份时间：2026-09-14
+备份内容：当前工作区源码（SonicRoute 工程，单进程形态）+ Debug 构建产物
+相对基准：v1.16 备份（2026-09-14 12:09）
+构建状态：0 警告 0 错误，冒烟启动正常
+
+一、本次进度：极简自动化规则（多操作 + 多路径）
+
+1. 执行操作支持多步骤
+   - 规则模型：AutoRule.Actions（List<AutoRuleStep>），每个步骤 = 操作 + 目标应用/设备/音量/路径
+   - 旧单操作字段（Action/TargetApp/TargetDeviceId/Volume/ProgramPath）保留作兼容回退，
+     Actions 为空时按旧字段单步执行，保存时同步旧字段
+   - 编辑卡片"执行操作"区改为动态步骤列表：每步一个操作下拉框 + 按需参数区 + 删除按钮
+   - 步骤顺序执行；摘要用"、"连接多操作
+
+2. 路径支持多条 + 拖拽
+   - 路径类操作（启动程序 / PowerShell）支持多条路径：每条一个输入框 + × 删除
+   - 「＋ 添加路径」按钮添加空路径行；路径输入框拖入文件自动追加
+   - 「＋ 添加路径」按钮本身支持拖放（AllowDrop + PreviewDragOver/Drop），
+     拖入文件/图标自动追加为新路径行，多选一次全加，自动去重
+   - 下方提示"可拖拽文件到此处"（Auto.DragHint）
+
+3. 自定义名称显示
+   - 目标设备下拉框：DisplayDevices() 应用设置页自定义设备名
+   - 目标应用下拉框：新增 DisplayApps() 应用设置页自定义应用名（与 DisplayDevices 对称）
+
+4. 快捷键显示主题化
+   - 规则列表行：快捷键触发的规则，摘要末尾追加强调色加粗快捷键（Run.Inlines）
+   - 快捷键捕获按钮：未绑定状态也改为强调色加粗文本（与绑定后一致）
+
+5. 文本精简（9 语言同步）
+   - Auto.* 文案整体精简（操作/切换应用播放设备/调整应用音量/运行 PowerShell 等）
+   - 删除提权提示 Auto.ExternalWarn（UI + 9 语言键）
+   - 新增 Auto.AddAction / Auto.AddPath / Auto.DragHint
+   - 9 语言逐一 ConvertFrom-Json 校验通过
+   - 注意：en-US 旧值含转义引号导致一次正则误截，已手工修补，其余语言无此问题
+
+6. 崩溃修复
+   - AutoStepAction_SelectionChanged 曾用 row.Children[1] = newPanel 替换参数面板，
+     WPF Children[i] 对已占用索引不支持替换（"指定的索引已经在使用"），
+     切操作下拉框即崩溃；已改为 RemoveAt(1) + Insert(1)
+
+二、导航结构（自动化页）
+   - 概览 → 应用 → 快捷键 → 主题 → 设置 → 自动化 → 实验设置（实验设置仍 Collapsed 门控）
+   - 自动化页新建/编辑：规则名称、触发方式（快捷键/打开应用/切换应用）、多步骤操作
+
+三、文件清单（相对 SonicRoute 工程）
+   - SonicRoute.Core\Models\AutoRule.cs：AutoRuleStep + Actions + 旧字段回退
+   - SonicRoute\AutoRuleService.cs：多步骤执行 + LaunchPrograms/RunPowerShells 循环
+   - SonicRoute\MainWindow.xaml：AutomationPage 动态步骤区（AutoStepsHost/AutoAddStepBtn）
+   - SonicRoute\MainWindow.xaml.cs：_autoSteps、RenderAutoSteps/BuildStepParams/拖拽处理等
+   - SonicRoute\Resources\Lang\*.json × 9：Auto.* 文本精简 + 新键
+
+四、验证建议
+   - 新建规则添加 2~3 个操作 → 触发快捷键确认按顺序执行
+   - 多路径增删、拖多文件到输入框/添加路径按钮
+   - 切换操作下拉框多步骤来回切不崩溃
+   - 目标应用/设备下拉框显示自定义名称
+   - 旧单操作规则读取/保存兼容
