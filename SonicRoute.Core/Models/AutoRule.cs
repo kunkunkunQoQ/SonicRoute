@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace SonicRoute.Core.Models
@@ -13,7 +13,13 @@ namespace SonicRoute.Core.Models
         AppStart = 1,
 
         /// <summary>切换到某个应用时（前台窗口变化）</summary>
-        AppSwitch = 2
+        AppSwitch = 2,
+
+        /// <summary>关闭某个应用时（进程退出）</summary>
+        AppExit = 3,
+
+        /// <summary>定时（计划任务：仅一次 / 每天 / 每周，见 Schedule* 字段）</summary>
+        Schedule = 4
     }
 
     /// <summary>自动化规则执行的操作。</summary>
@@ -105,8 +111,20 @@ namespace SonicRoute.Core.Models
         /// <summary>快捷键组合（Hotkey 触发；空 = 未绑定）。</summary>
         public string Hotkey { get; set; } = "";
 
-        /// <summary>触发目标应用进程名（AppStart / AppSwitch 触发；空 = 任意应用）。</summary>
+        /// <summary>触发目标应用进程名（AppStart / AppSwitch / AppExit 触发；空 = 任意应用）。</summary>
         public string TriggerApp { get; set; } = "";
+
+        /// <summary>定时计划模式（Schedule 触发）：0=仅一次 1=每天 2=每周。</summary>
+        public int ScheduleMode { get; set; }
+
+        /// <summary>执行时间（HH:mm，三种模式共用）。</summary>
+        public string ScheduleTime { get; set; } = "";
+
+        /// <summary>每周：执行星期（DayOfWeek 数值 0-6，可多选）。</summary>
+        public List<int> ScheduleWeekdays { get; set; } = new();
+
+        /// <summary>最近一次已执行的调度时刻（yyyy-MM-dd HH:mm），用于防止同一时刻重复执行。</summary>
+        public string LastRunKey { get; set; } = "";
 
         /// <summary>执行的操作步骤（多操作，按顺序执行；为空时兼容旧配置，回退用 Action 等单操作字段）。</summary>
         public List<AutoRuleStep> Actions { get; set; } = new();

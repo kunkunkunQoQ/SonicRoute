@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -16,7 +16,7 @@ namespace SonicRoute
     /// - 快捷键触发：规则快捷键以 "Rule:{Id}" 动作并入 HotkeyService 注册 map（App 构建），
     ///   HotkeyPressed 分发给 ExecuteByHotkeyAsync；冲突时该动作不注册（RegistrationStatus 无记录 = 冲突）。
     /// - 应用启动 / 前台切换触发：1 秒 DispatcherTimer 轮询（仅当存在启用规则时启动，无新依赖，
-    ///   与 CurrentAppService 前台监听机制一致）；应用启动 = 进程快照 diff，前台切换 = GetForegroundWindow。
+    ///   与 CurrentAppService 前台监听机制一致）；应用启动 = 进程快照 diff（新出现），应用退出 = 进程快照 diff（消失），前台切换 = GetForegroundWindow。
     /// - 执行全部复用 Core 现有静态服务（AudioService / SessionVolumeService / SystemVolumeService /
     ///   SystemDefaultDeviceService），不修改 OSD、主音量、设备枚举等无关功能。
     /// - 应用控制按进程名解析到当前有音频会话的 PID 执行（不误改其他应用或系统音量）。
@@ -48,7 +48,7 @@ namespace SonicRoute
         public static void RefreshWatcher()
         {
             bool need = AutoRuleStore.LoadAll().Any(
-                r => r.Enabled && (r.Trigger == AutoRuleTrigger.AppStart || r.Trigger == AutoRuleTrigger.AppSwitch));
+                r => r.Enabled && (r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit));
             if (need && _watchTimer == null)
             {
                 try
@@ -73,12 +73,13 @@ namespace SonicRoute
         private static async Task TickAsync()
         {
             var rules = AutoRuleStore.LoadAll()
-                .Where(r => r.Enabled && (r.Trigger == AutoRuleTrigger.AppStart || r.Trigger == AutoRuleTrigger.AppSwitch))
+                .Where(r => r.Enabled && (r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit))
                 .ToList();
             if (rules.Count == 0) { RefreshWatcher(); return; }
 
-            // 应用启动触发：进程快照 diff（只对新出现的进程名触发，启动时已存在的进程不触发）
-            if (rules.Any(r => r.Trigger == AutoRuleTrigger.AppStart))
+            // 应用启动 / 应用退出触发：进程快照 diff（新出现 = 启动；消失 = 退出）。
+            // 快照与 diff 独立于 AppStart——仅建 AppExit 规则时也必须检测退出。
+            if (rules.Any(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit))
             {
                 HashSet<string> now;
                 try
@@ -90,14 +91,32 @@ namespace SonicRoute
 
                 if (_runningSnapshot != null)
                 {
-                    foreach (var name in now)
+                    // 应用启动：只对"新出现"的进程名触发（启动时已存在的进程不触发）
+                    if (rules.Any(r => r.Trigger == AutoRuleTrigger.AppStart))
                     {
-                        if (_runningSnapshot.Contains(name)) continue;
-                        foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppStart
-                            && (string.IsNullOrWhiteSpace(x.TriggerApp)
-                                || string.Equals(x.TriggerApp, name, StringComparison.OrdinalIgnoreCase))))
+                        foreach (var name in now)
                         {
-                            await ExecuteAsync(r);
+                            if (_runningSnapshot.Contains(name)) continue;
+                            foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppStart
+                                && (string.IsNullOrWhiteSpace(x.TriggerApp)
+                                    || string.Equals(x.TriggerApp, name, StringComparison.OrdinalIgnoreCase))))
+                            {
+                                await ExecuteAsync(r);
+                            }
+                        }
+                    }
+                    // 应用退出：只对"上一秒存在、当前消失"的进程名触发
+                    if (rules.Any(r => r.Trigger == AutoRuleTrigger.AppExit))
+                    {
+                        foreach (var gone in _runningSnapshot)
+                        {
+                            if (now.Contains(gone)) continue;
+                            foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppExit
+                                && (string.IsNullOrWhiteSpace(x.TriggerApp)
+                                    || string.Equals(x.TriggerApp, gone, StringComparison.OrdinalIgnoreCase))))
+                            {
+                                await ExecuteAsync(r);
+                            }
                         }
                     }
                 }
@@ -130,6 +149,8 @@ namespace SonicRoute
         /// <summary>执行一条规则（多步骤按顺序执行）。返回是否至少有一个步骤成功。</summary>
         public static async Task<bool> ExecuteAsync(AutoRule rule)
         {
+            var name = rule?.Name ?? "?";
+            AutoRuleScheduler.Log($"Execute 开始: [{name}] 触发={rule?.Trigger} 步骤={rule?.Actions.Count}");
             var steps = rule.Actions.Count > 0
                 ? rule.Actions
                 : new List<AutoRuleStep>
@@ -149,8 +170,11 @@ namespace SonicRoute
             bool any = false;
             foreach (var s in steps)
             {
-                if (await ExecuteStepAsync(s)) any = true;
+                var ok = await ExecuteStepAsync(s);
+                AutoRuleScheduler.Log($"Execute 步骤: [{name}] Action={s.Action} 结果={ok}");
+                if (ok) any = true;
             }
+            AutoRuleScheduler.Log($"Execute 完成: [{name}] any={any}");
             return any;
         }
 

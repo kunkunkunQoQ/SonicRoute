@@ -1,0 +1,24 @@
+音跃 SonicRoute v1.17-固定高度面板 备份说明（当前进度快照，未发布）
+================================================================
+
+备份时间：2026-09-18
+备份内容：当前工作区源码（SonicRoute + SonicRoute.Core 工程，单进程形态，无 bin/obj）
+相对基准：v1.17 备份（2026-09-15）
+构建状态：0 错误 0 警告（Debug，net8.0-windows10.0.19041.0）
+
+本次进度相对 v1.17 的改动（详见 SonicRoute源码\改动记录.md 2026-09-18 条目）：
+1. 简洁面板改为固定高度 Grid 布局：
+   - Row0 标题 / Row1 输出设备 / Row2 主音量 / Row3 分隔+应用音量标题 /
+     Row4 应用区域(*)唯一伸缩滚动 / Row5 分隔 / Row6 底部操作栏(Auto 永远贴底)
+   - 窗口高度打开后永不变；展开/收起/切换应用只在应用区域内变化
+   - 删除整套窗口级高度动画/锚定逻辑
+2. 删除主题「最多显示应用数」设置（QuickPanelMaxApps 配置与 9 语言 key 全部清理，0 残留）
+3. 新增「快速面板高度」设置（主题 → 快速面板位置）：
+   - 范围 350–800 px、步进 10、默认 350、右侧显示当前值
+   - 配置 QuickPanelHeight，修改保存并立即应用（面板打开时实时生效）
+   - 9 语言新增 Exp.PanelHeight / Exp.PanelHeightHint
+4. 呼出动画优化：
+   - 只对 RootBorder 入场：TranslateTransform.Y 6→0 + Opacity 0→1，140ms QuadraticEase EaseOut
+   - Window 位置/高度全程不变；_entranceAnimating 防快速连呼重复动画/闪烁
+
+待办：以上改动均未发布、未提交 GitHub、未构建商店版本。

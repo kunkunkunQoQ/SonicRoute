@@ -9,6 +9,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
+using System.Windows.Shapes;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -52,6 +53,10 @@ namespace SonicRoute
         private readonly AppConfig _config;
         // ===== 鑷姩鍖栬鍒欙紙鏋佺畝鑷姩鍖栭〉锛?=====
         private List<AudioAppInfo> _autoApps = new();
+        /// <summary>自动化页低频自动刷新应用列表（慢更新：15s，仅页面可见时运行）。</summary>
+        private System.Windows.Threading.DispatcherTimer? _autoRefreshTimer;
+        /// <summary>当前已创建的步骤应用下拉（供慢刷新重填，RenderAutoSteps 重建时清理）。</summary>
+        private readonly List<System.Windows.Controls.ComboBox> _autoStepAppCombos = new();
         private string? _autoEditingId;
         private bool _autoCapturingHotkey;
         private string _autoHotkeyCombo = "";
@@ -80,6 +85,8 @@ namespace SonicRoute
             Closed += (_, _) =>
             {
                 _isClosed = true;
+                // 关闭面板：停止自动化页应用列表低频刷新（否则 Timer 随 Dispatcher 常驻并持有窗口引用）
+                StopAutoRefresh();
                 CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
                 PreviewKeyDown -= MainWindow_PreviewKeyDown;
                 _hwndSource?.RemoveHook(TaskbarMinimizeWndProc);
@@ -335,6 +342,7 @@ namespace SonicRoute
             else if (tag == "Settings") LoadSettings();
             else if (tag == "Experimental") LoadExperimentalSettings();
             else if (tag == "Automation") ShowAutomationPage();
+            else StopAutoRefresh();
         }
 
         // ==================================================================
@@ -1327,6 +1335,12 @@ namespace SonicRoute
                 // 简洁面板更改系统默认设备：仅"简洁面板"样式时显示
                 PanelChangeSysDefSection.Visibility = _config.QuickPanelStyle == "classic"
                     ? Visibility.Collapsed : Visibility.Visible;
+                // 简洁面板高度设置：经典面板不显示
+                PanelHeightSection.Visibility = _config.QuickPanelStyle == "classic"
+                    ? Visibility.Collapsed : Visibility.Visible;
+                // 简洁面板固定高度（px，400–800，默认 500）
+                PanelHeightSlider.Value = Math.Clamp(_config.QuickPanelHeight, 350, 800);
+                PanelHeightValue.Text = Math.Clamp(_config.QuickPanelHeight, 350, 800) + " px";
             VolumeStepBox.Text = Math.Clamp(_config.VolumeStep, 1, 20).ToString();
             SettingsTrayWheelEverywhere.IsChecked = _config.TrayWheelEverywhere;
 
@@ -1433,6 +1447,13 @@ namespace SonicRoute
                 AccentCustom.IsChecked = isCustom;
                 if (!isCustom) SetRadioByTag(AccentBlue, AccentGreen, AccentPurple, accent);
                 SyncRgbUi(accent);
+
+                // 快速面板高度（简洁面板固定高度，350–800，默认 350）：
+                // 该设置位于主题页，必须在 LoadTheme 初始化，否则会显示 XAML 硬编码初值；经典面板不显示
+                PanelHeightSection.Visibility = _config.QuickPanelStyle == "classic"
+                    ? Visibility.Collapsed : Visibility.Visible;
+                PanelHeightSlider.Value = Math.Clamp(_config.QuickPanelHeight, 350, 800);
+                PanelHeightValue.Text = Math.Clamp(_config.QuickPanelHeight, 350, 800) + " px";
             }
             finally
             {
@@ -1591,6 +1612,9 @@ namespace SonicRoute
             ConfigService.Save(_config);
             // 简洁面板更改系统默认设备选项仅简洁面板样式显示
             PanelChangeSysDefSection.Visibility = _config.QuickPanelStyle == "classic"
+                ? Visibility.Collapsed : Visibility.Visible;
+            // 简洁面板高度设置仅简洁面板样式显示
+            PanelHeightSection.Visibility = _config.QuickPanelStyle == "classic"
                 ? Visibility.Collapsed : Visibility.Visible;
         }
 
@@ -2289,6 +2313,19 @@ namespace SonicRoute
         }
 
         /// <summary>主题页 - 「一键还原」：快速面板恢复任务栏右下角默认位置。</summary>
+        /// <summary>主题页「快速面板高度」：简洁面板窗口固定高度（400–800px，默认 500），保存并立即应用（面板打开时）。</summary>
+        private void PanelHeightSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (!IsLoaded || _suppressSettings) return;
+            int v = Math.Clamp((int)Math.Round(e.NewValue), 350, 800);
+            if (PanelHeightValue != null) PanelHeightValue.Text = v + " px";
+            _config.QuickPanelHeight = v;
+            ConfigService.Save(_config);
+            // 简洁面板打开时立即应用固定高度
+            if (Application.Current is App app && app.QuickPanelInstance is QuickPanelModernWindow m && m.IsVisible)
+                m.ApplyPanelHeightFromConfig();
+        }
+
         private void PanelPosReset_Click(object sender, RoutedEventArgs e)
         {
             var app = (App)Application.Current;
@@ -2754,6 +2791,50 @@ namespace SonicRoute
         {
             FillAutoCombos();
             _ = RefreshAutoRulesAsync();
+            StartAutoRefresh();
+        }
+
+        /// <summary>启动自动化页应用列表低频刷新（8s 一次，离开页面自动停止）。</summary>
+        private void StartAutoRefresh()
+        {
+            if (_autoRefreshTimer != null) return;
+            _autoRefreshTimer = new System.Windows.Threading.DispatcherTimer
+            { Interval = TimeSpan.FromSeconds(8) };
+            _autoRefreshTimer.Tick += async (_, _) => await RefreshAutoAppsSlowAsync();
+            _autoRefreshTimer.Start();
+        }
+
+        private void StopAutoRefresh()
+        {
+            if (_autoRefreshTimer == null) return;
+            _autoRefreshTimer.Stop();
+            _autoRefreshTimer = null;
+        }
+
+        /// <summary>慢速刷新应用列表：新启动 / 退出的应用自动出现在自动化下拉中（保留选中项）。</summary>
+        private async Task RefreshAutoAppsSlowAsync()
+        {
+            try
+            {
+                var apps = await Task.Run(() => AudioService.GetApps());
+                _autoApps = apps;
+
+                // 触发应用下拉：重填并保留选中
+                var prevTrigger = (AutoTriggerAppCombo.SelectedItem as AppItem)?.Info.ProcessName;
+                LoadAutoAppCombo(AutoTriggerAppCombo, withAny: true);
+                SelectAutoApp(AutoTriggerAppCombo, prevTrigger);
+
+                // 已打开的步骤应用下拉：重填并保留选中
+                foreach (var combo in _autoStepAppCombos)
+                {
+                    var prev = (combo.SelectedItem as AppItem)?.Info.ProcessName;
+                    combo.Items.Clear();
+                    foreach (var a in DisplayApps(_autoApps)) combo.Items.Add(AppItem.From(a));
+                    AppItem.LoadIconsAsync(combo.Items.OfType<AppItem>());
+                    SelectAutoApp(combo, prev);
+                }
+            }
+            catch { /* 静默：单次刷新失败不影响页面 */ }
         }
 
         private async Task RefreshAutoRulesAsync()
@@ -2788,6 +2869,14 @@ namespace SonicRoute
             var editBtn = new Button { Content = L10n.T("Auto.Edit"), Tag = r.Id, Width = 64, Height = 28 };
             editBtn.SetResourceReference(StyleProperty, "GhostButton");
             editBtn.Click += AutoEdit_Click;
+            var toggleBtn = new Button
+            {
+                Content = r.Enabled ? L10n.T("Auto.Disable") : L10n.T("Auto.Enable"),
+                Tag = r.Id, Width = 64, Height = 28,
+                Margin = new Thickness(8, 0, 0, 0)
+            };
+            toggleBtn.SetResourceReference(StyleProperty, "GhostButton");
+            toggleBtn.Click += AutoToggle_Click;
             var delBtn = new Button
             {
                 Content = L10n.T("Auto.Delete"), Tag = r.Id, Width = 64, Height = 28,
@@ -2797,11 +2886,32 @@ namespace SonicRoute
             delBtn.Click += AutoDelete_Click;
             var btns = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             btns.Children.Add(editBtn);
+            btns.Children.Add(toggleBtn);
             btns.Children.Add(delBtn);
+            // 仅一次已执行 / 已禁用的规则：名称右上角显示主题色反色状态点
+            var nameHost = new Grid();
+            nameHost.Children.Add(nameBlock);
+            bool showStateDot = !r.Enabled
+                || (r.Trigger == AutoRuleTrigger.Schedule && r.ScheduleMode == 0 && !string.IsNullOrWhiteSpace(r.LastRunKey));
+            if (showStateDot)
+            {
+                var dot = new Ellipse
+                {
+                    Width = 6,
+                    Height = 6,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(0, -3, 0, 0),
+                    Fill = InvertAccentBrush()
+                };
+                ToolTipService.SetToolTip(dot, !r.Enabled ? L10n.T("Auto.Disabled") : L10n.T("Auto.OnceExecuted"));
+                nameHost.Children.Add(dot);
+                nameBlock.Margin = new Thickness(12, 0, 0, 0);
+            }
             var dock = new DockPanel();
             DockPanel.SetDock(btns, Dock.Right);
             dock.Children.Add(btns);
-            dock.Children.Add(nameBlock);
+            dock.Children.Add(nameHost);
             panel.Children.Add(dock);
             if (IsAutoHotkeyConflict(r))
             {
@@ -2816,12 +2926,29 @@ namespace SonicRoute
             return panel;
         }
 
+        /// <summary>主题强调色 RGB 反色（255 - 各通道），用于规则状态点。</summary>
+        private SolidColorBrush InvertAccentBrush()
+        {
+            try
+            {
+                if (FindResource("Theme.Accent") is SolidColorBrush b && b.Color.A > 0)
+                {
+                    var c = b.Color;
+                    return new SolidColorBrush(Color.FromRgb((byte)(255 - c.R), (byte)(255 - c.G), (byte)(255 - c.B)));
+                }
+            }
+            catch { }
+            return new SolidColorBrush(Colors.White);
+        }
+
         private string BuildAutoRuleSummary(AutoRule r)
         {
             string trigger = r.Trigger switch
             {
                 AutoRuleTrigger.AppStart => L10n.T("Auto.TriggerAppStart"),
                 AutoRuleTrigger.AppSwitch => L10n.T("Auto.TriggerAppSwitch"),
+                AutoRuleTrigger.AppExit => L10n.T("Auto.TriggerAppExit"),
+                AutoRuleTrigger.Schedule => BuildScheduleTriggerText(r),
                 _ => L10n.T("Auto.TriggerHotkey")
             };
             var actions = r.Actions.Count > 0
@@ -2842,11 +2969,27 @@ namespace SonicRoute
                 _ => L10n.T("Auto.ActionPowerShell")
             }).ToList();
             var parts = new List<string> { r.Name, "·", trigger };
-            if (r.Trigger != AutoRuleTrigger.Hotkey && !string.IsNullOrEmpty(r.TriggerApp))
+            if (r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit
+                && !string.IsNullOrEmpty(r.TriggerApp))
                 parts.Add(r.TriggerApp);
             parts.Add("→");
             parts.Add(string.Join("、", actionTexts));
             return string.Join(" ", parts);
+        }
+
+        private static string BuildScheduleTriggerText(AutoRule r)
+        {
+            string mode = r.ScheduleMode switch
+            {
+                1 => L10n.T("Auto.ScheduleDaily"),
+                2 => L10n.T("Auto.ScheduleWeekly"),
+                _ => L10n.T("Auto.ScheduleOnce")
+            };
+            var s = L10n.T("Auto.TriggerSchedule") + "·" + mode;
+            if (!string.IsNullOrWhiteSpace(r.ScheduleTime)) s += " " + r.ScheduleTime.Trim();
+            if (r.ScheduleMode == 2 && r.ScheduleWeekdays is { Count: > 0 })
+                s += " " + string.Join("/", r.ScheduleWeekdays.OrderBy(w => w).Select(w => L10n.T("Auto.Wd" + w)));
+            return s;
         }
 
         private bool IsAutoHotkeyConflict(AutoRule r)
@@ -2907,12 +3050,31 @@ namespace SonicRoute
                     }
                 };
             _suppressAutoUi = false;
+            AutoScheduleModeCombo.SelectedIndex = Math.Clamp(rule.ScheduleMode, 0, 2);
+            SetAutoScheduleTime(rule.ScheduleTime);
+            SetAutoWeekday(rule.ScheduleWeekdays);
             UpdateAutoTriggerPanels();
             SelectAutoApp(AutoTriggerAppCombo, rule.TriggerApp);
             RenderAutoSteps();
             AutoEditTitle.Text = L10n.T("Auto.Edit");
             AutoEditCard.Visibility = Visibility.Visible;
             UpdateAutoHotkeyHint();
+        }
+
+        private void AutoToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var id = (string)((FrameworkElement)sender).Tag;
+            var r = AutoRuleStore.Find(id);
+            if (r == null) return;
+            r.Enabled = !r.Enabled;
+            AutoRuleStore.Save(r);
+            ((App)Application.Current).ReloadHotkeys();
+            if (_autoEditingId == id)
+            {
+                _autoCapturingHotkey = false;
+                AutoEditCard.Visibility = Visibility.Collapsed;
+            }
+            _ = RefreshAutoRulesAsync();
         }
 
         private void AutoDelete_Click(object sender, RoutedEventArgs e)
@@ -2944,6 +3106,19 @@ namespace SonicRoute
                 AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerHotkey"), Tag = AutoRuleTrigger.Hotkey });
                 AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppStart"), Tag = AutoRuleTrigger.AppStart });
                 AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppSwitch"), Tag = AutoRuleTrigger.AppSwitch });
+                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppExit"), Tag = AutoRuleTrigger.AppExit });
+                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerSchedule"), Tag = AutoRuleTrigger.Schedule });
+            }
+            if (AutoScheduleModeCombo.Items.Count == 0)
+            {
+                AutoScheduleModeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.ScheduleOnce"), Tag = 0 });
+                AutoScheduleModeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.ScheduleDaily"), Tag = 1 });
+                AutoScheduleModeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.ScheduleWeekly"), Tag = 2 });
+            }
+            if (AutoScheduleHourCombo.Items.Count == 0)
+            {
+                for (int i = 0; i < 24; i++) AutoScheduleHourCombo.Items.Add(i.ToString("00"));
+                for (int i = 0; i < 60; i++) AutoScheduleMinuteCombo.Items.Add(i.ToString("00"));
             }
         }
 
@@ -2951,16 +3126,18 @@ namespace SonicRoute
         {
             combo.Items.Clear();
             if (withAny)
-                combo.Items.Add(new AudioAppInfo { ProcessId = 0, DisplayName = L10n.T("Auto.AnyApp"), ProcessName = null });
+                combo.Items.Add(new AppItem { Info = new AudioAppInfo { ProcessId = 0, DisplayName = L10n.T("Auto.AnyApp"), ProcessName = null } });
             foreach (var a in _autoApps)
-                combo.Items.Add(a);
+                combo.Items.Add(AppItem.From(a));
+            // 图标后台懒加载（列表先显示名称，图标就绪后自动出现，不阻塞 UI）
+            AppItem.LoadIconsAsync(combo.Items.OfType<AppItem>());
         }
 
         private void SelectAutoApp(System.Windows.Controls.ComboBox combo, string? processName)
         {
             if (string.IsNullOrWhiteSpace(processName)) { combo.SelectedIndex = -1; return; }
             foreach (var item in combo.Items)
-                if (item is AudioAppInfo a && string.Equals(a.ProcessName, processName, StringComparison.OrdinalIgnoreCase))
+                if (item is AppItem ai && string.Equals(ai.Info.ProcessName, processName, StringComparison.OrdinalIgnoreCase))
                 { combo.SelectedItem = item; return; }
             combo.SelectedIndex = -1;
         }
@@ -2985,7 +3162,71 @@ namespace SonicRoute
         {
             var trigger = AutoTriggerCombo.SelectedIndex < 0 ? AutoRuleTrigger.Hotkey : (AutoRuleTrigger)AutoTriggerCombo.SelectedIndex;
             AutoHotkeyPanel.Visibility = trigger == AutoRuleTrigger.Hotkey ? Visibility.Visible : Visibility.Collapsed;
-            AutoTriggerAppPanel.Visibility = trigger == AutoRuleTrigger.Hotkey ? Visibility.Collapsed : Visibility.Visible;
+            bool appBased = trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit;
+            AutoTriggerAppPanel.Visibility = appBased ? Visibility.Visible : Visibility.Collapsed;
+            AutoSchedulePanel.Visibility = trigger == AutoRuleTrigger.Schedule ? Visibility.Visible : Visibility.Collapsed;
+            UpdateAutoScheduleModePanels();
+        }
+
+        private void AutoScheduleModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressAutoUi) return;
+            UpdateAutoScheduleModePanels();
+        }
+
+        private void UpdateAutoScheduleModePanels()
+        {
+            int mode = AutoScheduleModeCombo.SelectedIndex < 0 ? 0 : AutoScheduleModeCombo.SelectedIndex;
+            AutoScheduleWeekdayPanel.Visibility = mode == 2 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void SetAutoScheduleTime(string? time)
+        {
+            int h = 8, m = 0;
+            if (!string.IsNullOrWhiteSpace(time) && TimeSpan.TryParse(time.Trim(), out var ts))
+            {
+                h = ts.Hours; m = ts.Minutes;
+            }
+            if (h < 0 || h > 23) h = 8;
+            if (m < 0 || m > 59) m = 0;
+            AutoScheduleHourCombo.SelectedIndex = h;
+            AutoScheduleMinuteCombo.SelectedIndex = m;
+        }
+
+        private string CollectAutoScheduleTime()
+        {
+            int h = AutoScheduleHourCombo.SelectedIndex < 0 ? 8 : AutoScheduleHourCombo.SelectedIndex;
+            int m = AutoScheduleMinuteCombo.SelectedIndex < 0 ? 0 : AutoScheduleMinuteCombo.SelectedIndex;
+            return h.ToString("00") + ":" + m.ToString("00");
+        }
+
+        private void SetAutoWeekday(List<int> days)
+        {
+            AutoWeekdayPanel.Children.Clear();
+            for (int i = 0; i < 7; i++)
+            {
+                var cb = new CheckBox
+                {
+                    Content = L10n.T("Auto.Wd" + i),
+                    Tag = i,
+                    IsChecked = days?.Contains(i) == true,
+                    Margin = new Thickness(0, 0, 14, 6),
+                    FontSize = 12.5,
+                    VerticalContentAlignment = VerticalAlignment.Center
+                };
+                AutoWeekdayPanel.Children.Add(cb);
+            }
+        }
+
+        private List<int> CollectAutoWeekday()
+        {
+            var list = new List<int>();
+            foreach (var child in AutoWeekdayPanel.Children)
+            {
+                if (child is CheckBox cb && cb.Tag is int i && cb.IsChecked == true)
+                    list.Add(i);
+            }
+            return list;
         }
 
 
@@ -2996,7 +3237,10 @@ namespace SonicRoute
             _autoSteps = new List<AutoRuleStep> { new AutoRuleStep() };
             _suppressAutoUi = true;
             AutoTriggerCombo.SelectedIndex = 0;
+            AutoScheduleModeCombo.SelectedIndex = 0;
             _suppressAutoUi = false;
+            SetAutoScheduleTime(null);
+            SetAutoWeekday(new List<int>());
             AutoTriggerAppCombo.SelectedIndex = -1;
             UpdateAutoTriggerPanels();
             RenderAutoSteps();
@@ -3005,6 +3249,7 @@ namespace SonicRoute
 
         private void RenderAutoSteps()
         {
+            _autoStepAppCombos.Clear();
             AutoStepsHost.Items.Clear();
             foreach (var step in _autoSteps)
                 AutoStepsHost.Items.Add(BuildAutoStepRow(step));
@@ -3419,14 +3664,16 @@ namespace SonicRoute
                 {
                     Style = (Style)FindResource("SelCombo"),
                     Width = 240,
-                    DisplayMemberPath = "Label",
+                    ItemTemplate = (DataTemplate)FindResource("AutoAppItemTemplate"),
                     Tag = step
                 };
-                foreach (var a in DisplayApps(_autoApps)) cb.Items.Add(a);
+                foreach (var a in DisplayApps(_autoApps)) cb.Items.Add(AppItem.From(a));
+                AppItem.LoadIconsAsync(cb.Items.OfType<AppItem>());
+                _autoStepAppCombos.Add(cb);
                 SelectAutoApp(cb, step.TargetApp);
                 cb.SelectionChanged += (_, _) =>
                 {
-                    if (cb.SelectedItem is AudioAppInfo a) step.TargetApp = a.ProcessName ?? "";
+                    if (cb.SelectedItem is AppItem ai) step.TargetApp = ai.Info.ProcessName ?? "";
                 };
                 wrap.Children.Add(Group(L10n.T("Auto.TargetApp"), cb));
             }
@@ -3727,9 +3974,18 @@ namespace SonicRoute
             var hotkey = _autoHotkeyCombo.Trim();
             if (trigger == AutoRuleTrigger.Hotkey && string.IsNullOrEmpty(hotkey))
             { _ = System.Windows.MessageBox.Show(L10n.T("Auto.HotkeyRequired")); return; }
-            string? triggerApp = (AutoTriggerAppCombo.SelectedItem as AudioAppInfo)?.ProcessName;
-            if (trigger != AutoRuleTrigger.Hotkey && string.IsNullOrEmpty(triggerApp))
+            string? triggerApp = (AutoTriggerAppCombo.SelectedItem as AppItem)?.Info.ProcessName;
+            if (trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit
+                && string.IsNullOrEmpty(triggerApp))
             { _ = System.Windows.MessageBox.Show(L10n.T("Auto.TriggerAppRequired")); return; }
+            int scheduleMode = AutoScheduleModeCombo.SelectedIndex < 0 ? 0 : AutoScheduleModeCombo.SelectedIndex;
+            var scheduleTime = CollectAutoScheduleTime();
+            var scheduleWeekdays = CollectAutoWeekday();
+            if (trigger == AutoRuleTrigger.Schedule && scheduleMode == 2 && scheduleWeekdays.Count == 0)
+            {
+                _ = System.Windows.MessageBox.Show(L10n.T("Auto.ScheduleWeekdayRequired"));
+                return;
+            }
             foreach (var s in _autoSteps)
             {
                 if (s.Action is AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute
@@ -3755,7 +4011,11 @@ namespace SonicRoute
             }
             rule.Trigger = trigger;
             rule.Hotkey = hotkey;
-            rule.TriggerApp = triggerApp ?? "";
+            rule.TriggerApp = trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit
+                ? triggerApp ?? "" : "";
+            rule.ScheduleMode = trigger == AutoRuleTrigger.Schedule ? scheduleMode : 0;
+            rule.ScheduleTime = trigger == AutoRuleTrigger.Schedule ? scheduleTime : "";
+            rule.ScheduleWeekdays = trigger == AutoRuleTrigger.Schedule ? scheduleWeekdays : new List<int>();
             rule.Actions = _autoSteps.Select(s => new AutoRuleStep
             {
                 Action = s.Action,

@@ -111,6 +111,15 @@
         <Style x:Key="SelCombo" TargetType="ComboBox" BasedOn="{StaticResource RoundedComboBox}">
         </Style>
 
+        <!-- 自动化应用下拉项：图标 + 名称（AppItem 懒加载图标） -->
+        <DataTemplate x:Key="AutoAppItemTemplate">
+            <StackPanel Orientation="Horizontal">
+                <Image Width="18" Height="18" Margin="0,0,6,0"
+                       Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
+            </StackPanel>
+        </DataTemplate>
+
         <!-- 卡片 -->
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBgAlpha}"/>
@@ -729,6 +738,20 @@
                                 <TextBlock Text="{Binding [Exp.PanelPosHint2], Source={x:Static local:L10n.Instance}}"
                                            FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                            Margin="0,8,0,0" TextWrapping="Wrap"/>
+                                <StackPanel x:Name="PanelHeightSection">
+                                    <DockPanel Margin="0,14,0,0">
+                                        <TextBlock Text="{Binding [Exp.PanelHeight], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="PanelHeightValue" Text="350 px" DockPanel.Dock="Right"
+                                                   FontSize="12" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Theme.TextPrimary}"
+                                                   VerticalAlignment="Center" Width="64" TextAlignment="Right"/>
+                                        <Slider x:Name="PanelHeightSlider" Minimum="350" Maximum="800" TickFrequency="10"
+                                                IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                                Margin="14,0,10,0" ValueChanged="PanelHeightSlider_Changed"/>
+                                    </DockPanel>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -1175,12 +1198,40 @@
                                                Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
 
-                                <!-- 快捷键区（触发 = 快捷键） -->
+                                <!-- 应用区（触发 = 应用启动/切换/退出） -->
                                 <StackPanel x:Name="AutoTriggerAppPanel" Margin="0,10,0,0" Visibility="Collapsed">
                                     <TextBlock Text="{Binding [Auto.TriggerApp], Source={x:Static local:L10n.Instance}}"
                                                FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
                                     <ComboBox x:Name="AutoTriggerAppCombo" Style="{StaticResource SelCombo}" Width="320"
-                                              HorizontalAlignment="Left" DisplayMemberPath="Label"/>
+                                              HorizontalAlignment="Left" ItemTemplate="{StaticResource AutoAppItemTemplate}"/>
+                                </StackPanel>
+
+                                <!-- 定时区（触发 = 定时：仅一次 / 每天 / 每周） -->
+                                <StackPanel x:Name="AutoSchedulePanel" Margin="0,10,0,0" Visibility="Collapsed">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding [Auto.ScheduleMode], Source={x:Static local:L10n.Instance}}"
+                                                       FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+                                            <ComboBox x:Name="AutoScheduleModeCombo" Style="{StaticResource SelCombo}" Width="140"
+                                                      HorizontalAlignment="Left" SelectionChanged="AutoScheduleModeCombo_SelectionChanged"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="14,0,0,0">
+                                            <TextBlock Text="{Binding [Auto.ScheduleTime], Source={x:Static local:L10n.Instance}}"
+                                                       FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <ComboBox x:Name="AutoScheduleHourCombo" Style="{StaticResource SelCombo}" Width="62"
+                                                          HorizontalAlignment="Left"/>
+                                                <TextBlock Text=":" FontSize="12.5" VerticalAlignment="Center" Margin="4,0"/>
+                                                <ComboBox x:Name="AutoScheduleMinuteCombo" Style="{StaticResource SelCombo}" Width="62"
+                                                          HorizontalAlignment="Left"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <StackPanel x:Name="AutoScheduleWeekdayPanel" Margin="0,0,0,0">
+                                        <TextBlock Text="{Binding [Auto.ScheduleWeekday], Source={x:Static local:L10n.Instance}}"
+                                                   FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,4"/>
+                                        <WrapPanel x:Name="AutoWeekdayPanel"/>
+                                    </StackPanel>
                                 </StackPanel>
 
                                 <TextBlock Text="{Binding [Auto.Action], Source={x:Static local:L10n.Instance}}"

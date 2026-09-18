@@ -1,0 +1,31 @@
+SonicRoute 配置编辑器（config-editor）进度备份
+备份时间：2026-09-16
+备份内容：E:\kunkun\SonarSwitch\config-editor\index.html（单文件自包含 HTML，本地网页配置编辑器）
+当前版本：v1.17 工作区（未发布）
+
+一、本备份包含的改动（对应 改动记录.md 2026-09-16 条目）
+1. 自动化规则编辑改为可视化积木式：
+   - 触发积木（绿色）「当 [类型] [参数] 时」，类型 = 按下快捷键 / 打开某个应用时 / 切换到某个应用时
+   - 操作积木（分类配色：系统音频=蓝、应用控制=橙、高级/OSD=紫/青），参数内联（设备 / 应用 / 音量滑块 / 路径多行 / OSD 标题 / 延时行）
+   - HTML5 拖拽排序（⋮⋮ 把手 + before/after 插入线 + drop 重排）
+   - 「＋ 添加操作」弹出分类菜单追加
+2. 删除死代码：OsdPosition 九宫格硬编码枚举（TL/T/TR/L/C/R/BL/B/BR/Custom）及提示文案、state.editingId
+3. 快捷键栏恢复可编辑：Hotkeys 键名可改、可添加键、可删除
+4. 音量滑块支持鼠标滚轮调节（wheel ±5，0-100，preventDefault 防页面滚动）
+5. 快捷键值改为按键录制输入框 makeHotkeyInput：点击聚焦进入录制态，直接按下组合键自动录入
+   （Ctrl+Alt+D 格式；支持修饰键 + 字母/数字/F1-F12/方向键；Esc/Backspace 清空；失焦后可手改；
+   WheelUp/WheelDown 与鼠标按键浏览器无法捕获，保留手填）
+   应用于：配置文件 Tab 的 Hotkeys 值栏 + 积木触发块的快捷键输入
+
+二、调试入口
+- index.html?demo=1 载入示例数据
+- index.html?demo=1&tab=rules&editrule=1 自动打开规则编辑模态（积木截图验证用）
+
+三、相关规范位置
+- SonicRoute源码\README.md「配置编辑器规范（config-editor，v1.17 起）」
+- SonicRoute源码\改动记录.md 2026-09-16 条目
+- AI_CONTEXT.md 功能清单「本地配置编辑器」行 + 当前开发状态
+
+四、下一步待办
+- 拖拽排序 / 按键录制 / 滚轮调节需用户实测验证手感
+- 待用户确认后再考虑后续迭代（如移动端触控拖拽支持）

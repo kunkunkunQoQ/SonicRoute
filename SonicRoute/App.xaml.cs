@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -23,6 +23,9 @@ namespace SonicRoute
         private NotifyIcon? _trayIcon;
         private MainWindow? _mainWindow;
         private IQuickPanel? _quickPanel;
+
+        /// <summary>当前快速面板实例（供设置页立即应用面板高度等）。</summary>
+        public IQuickPanel? QuickPanelInstance => _quickPanel;
         private HotkeyService? _hotkeys;
         private TrayWheelService? _trayWheel;
         private CancellationTokenSource? _singleClickCts;
@@ -114,6 +117,9 @@ namespace SonicRoute
             _hotkeys = new HotkeyService();
             _hotkeys.HotkeyPressed += action => Dispatcher.BeginInvoke(() => _ = ExecuteHotkeyAsync(action));
             ReloadHotkeys();
+
+            // 自动化定时调度器：挂接系统时间变化 / 睡眠恢复监听并开始调度
+            AutoRuleScheduler.Start();
 
             // 托盘滚轮调音量（传入托盘图标：关闭"整片托盘区域"开关时仅音跃图标上滚轮响应）
             _trayWheel = new TrayWheelService(_trayIcon);
@@ -444,6 +450,8 @@ namespace SonicRoute
             _hotkeys.Reload(map);
             // 应用启动 / 前台切换触发监听：仅当存在启用规则时启动（无规则自动停止）
             AutoRuleService.RefreshWatcher();
+            // 定时触发调度：规则增删改/启停后立即重新计算最近一次执行时刻
+            AutoRuleScheduler.RefreshScheduler();
         }
 
         /// <summary>快捷键实际注册状态：动作 → 生效组合（用于设置页显示占用冲突）。</summary>
@@ -698,6 +706,7 @@ namespace SonicRoute
         private void Quit()
         {
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            AutoRuleScheduler.Shutdown();
             _micMuteWatchTimer?.Stop();
             _trayWheel?.Dispose();
             _trayWheel = null;
@@ -710,6 +719,7 @@ namespace SonicRoute
         protected override void OnExit(ExitEventArgs e)
         {
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+            AutoRuleScheduler.Shutdown();
             _micMuteWatchTimer?.Stop();
             _trayWheel?.Dispose();
             _trayWheel = null;
