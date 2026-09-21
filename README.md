@@ -9,7 +9,7 @@
 
 ![预览](docs/images/preview.gif)
 
-**v1.18** ｜ Win10/11 x64 ｜ C# / .NET 8 / WPF
+**v1.19** ｜ Win10/11 x64（ARM64 实验） ｜ C# / .NET 8 / WPF
 
 ---
 
@@ -38,8 +38,8 @@
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
 | 🛍 微软商店（推荐） | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
-| 🟢 含运行环境版本 | `SonicRoute-v1.18.exe` / `.zip` | ~237MB / ~85MB | 已内置运行环境 |
-| ⚡ 轻量版 | `SonicRoute-v1.18-Lite.exe` / `.zip` | ~27MB / ~6.8MB | 需 .NET 8 |
+| 🟢 含运行环境版本 | `SonicRoute-v1.19-x64.exe` / `.zip`；ARM64：`SonicRoute-v1.19-arm64.exe` / `.zip`（🧪 实验） | ~237MB / ~85MB | 已内置运行环境 |
+| ⚡ 轻量版 | `SonicRoute-v1.19-Lite-x64.exe` / `.zip`；ARM64：`SonicRoute-v1.19-Lite-arm64.exe` / `.zip`（🧪 实验） | ~27MB / ~6.8MB | 需 .NET 8 |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
