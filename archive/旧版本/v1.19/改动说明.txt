@@ -1,0 +1,36 @@
+音跃 SonicRoute v1.19 源码快照（未发布 / 开发中）
+================================================================
+
+归档时间：2026-09-21
+来源：git commit a4d745c（v1.19，自动化页顶部 + ARM64 双架构，未发布）
+说明：v1.19 的两个改动（自动化页顶部、ARM64 双架构）在 git 中为
+      同一提交（a4d745c），无法拆成两个独立源码快照，故归档为一版，
+      改动说明内分列两部分。
+
+一、版本号
+   - csproj <Version> 1.18 → 1.19
+
+二、v1.19 改动一：自动化页顶部（用户界面）
+   - 自动化页面顶部重构（MainWindow.xaml / MainWindow.xaml.cs 大幅改动，
+     +458 行）：顶栏布局、操作入口调整
+   - 自动化相关：AutoRule.cs 扩展（+118 行）、AutoRuleService.cs 调整（+61 行）
+   - 九语言同步新增对应文案（Lang × 9 各 +15 行）
+   - 新增「打开方式」集成：OpenWithService.cs（145 行）、ShellOpen.cs（32 行）、
+     AssocHandlerInterop.cs（53 行）——为自动化启动项提供独立打开方式
+
+三、v1.19 改动二：Windows ARM64 原生支持（实验）
+   - 新增发布配置 Properties\PublishProfiles\win-arm64.pubxml（自包含单文件，
+     与 x64 同策略；RuntimeIdentifier 必须写在命令行，pubxml 不写 RID 以避免
+     SonicRoute.Core 混合架构 CS8012）
+   - 同步整理 win-x64.pubxml
+   - AppIconService.cs 适配（+12 行）
+   - SonicRoute.csproj / SonicRoute.Core.csproj 架构相关调整
+
+四、构建状态
+   - 0 错误；ARM64 为实验性支持，未发布
+   - v1.19 未创建 GitHub Release
+
+五、文件清单（源码带注释目录）
+   - SonicRoute + SonicRoute.Core 全量源码（单进程形态，平铺结构）
+   - 含 Interop / Models / Properties(PublishProfiles) / Resources(Lang×9) /
+     语言 JSON / csproj / sln / 图标
