@@ -355,21 +355,8 @@ namespace SonicRoute
             catch { return false; }
         }
 
-        /// <summary>打开外置语言目录（%LocalAppData%\SonicRoute\Lang，不存在则创建）。</summary>
-        public static bool OpenExternalLangDir()
-        {
-            try
-            {
-                Directory.CreateDirectory(ExternalLangDir);
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = ExternalLangDir,
-                    UseShellExecute = true,
-                });
-                return true;
-            }
-            catch { return false; }
-        }
+        /// <summary>打开外置语言目录（%LocalAppData%\SonicRoute\Lang，不存在则创建）。与自动化脚本文件夹共用 ShellOpen.Folder。</summary>
+        public static bool OpenExternalLangDir() => Core.ShellOpen.Folder(ExternalLangDir);
 
         /// <summary>还原被覆盖的内置语言：删除外置目录中与内置 9 语言同名的文件（附加语言带 Lang.Custom 的除外）；自定义语言保留。返回还原数量。</summary>
         public static (bool Ok, int Restored) RestoreBuiltinLanguages()

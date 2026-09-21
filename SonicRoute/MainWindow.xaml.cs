@@ -3010,6 +3010,16 @@ namespace SonicRoute
             AutoEditCard.Visibility = Visibility.Visible;
         }
 
+        /// <summary>
+        /// 自动化 - 打开脚本文件夹（%LocalAppData%\SonicRoute\Automation，不存在则创建后再打开）。
+        /// 与「设置 → 语言 → 打开语言文件夹」共用 Core 的 ShellOpen.Folder，行为与失败提示一致。
+        /// </summary>
+        private void AutoOpenRuleDir_Click(object sender, RoutedEventArgs e)
+        {
+            if (!ShellOpen.Folder(AutoRuleStore.RulesDir))
+                ShowToast(L10n.T("Auto.OpenFolderFail"));
+        }
+
         private void AutoEdit_Click(object sender, RoutedEventArgs e)
         {
             var id = (string)((FrameworkElement)sender).Tag;
@@ -3022,17 +3032,7 @@ namespace SonicRoute
             AutoTriggerCombo.SelectedIndex = (int)rule.Trigger;
             _autoHotkeyCombo = rule.Hotkey ?? "";
             _autoSteps = rule.Actions.Count > 0
-                ? rule.Actions.Select(s => new AutoRuleStep
-                {
-                    Action = s.Action,
-                    TargetApp = s.TargetApp ?? "",
-                    TargetDeviceId = s.TargetDeviceId ?? "",
-                    Volume = s.Volume,
-                    DelayMs = s.DelayMs,
-                    OsdTitle = s.OsdTitle ?? "",
-                    OsdText = s.OsdText ?? "",
-                    ProgramPaths = new List<string>(s.ProgramPaths)
-                }).ToList()
+                ? rule.Actions.Select(s => s.Clone()).ToList()
                 : new List<AutoRuleStep>
                 {
                     new AutoRuleStep
@@ -3049,6 +3049,8 @@ namespace SonicRoute
                             : new List<string> { rule.ProgramPath }
                     }
                 };
+            // 启动程序步骤统一规范化为启动项列表（旧配置由 ProgramPaths 转换，打开方式为空 = 默认方式）
+            NormalizeLaunchSteps(_autoSteps);
             _suppressAutoUi = false;
             AutoScheduleModeCombo.SelectedIndex = Math.Clamp(rule.ScheduleMode, 0, 2);
             SetAutoScheduleTime(rule.ScheduleTime);
@@ -3253,6 +3255,21 @@ namespace SonicRoute
             AutoStepsHost.Items.Clear();
             foreach (var step in _autoSteps)
                 AutoStepsHost.Items.Add(BuildAutoStepRow(step));
+        }
+
+        /// <summary>
+        /// 把启动程序步骤规范化为启动项列表（仅在「从未载入过启动项」时由旧的 ProgramPaths 转换一次，
+        /// 打开方式留空 = 默认方式），保证旧自动化规则读入编辑器后与执行行为一致。
+        /// 已有启动项时保持原列表对象不变——避免每次重渲染都替换列表，导致 UI 事件闭包持有失效对象。
+        /// </summary>
+        private static void NormalizeLaunchSteps(IEnumerable<AutoRuleStep> steps)
+        {
+            foreach (var s in steps)
+            {
+                if (s.Action != AutoRuleAction.LaunchProgram) continue;
+                if (s.LaunchItems.Count == 0 && s.ProgramPaths.Any(p => !string.IsNullOrWhiteSpace(p)))
+                    s.LaunchItems = s.EffectiveLaunchItems();
+            }
         }
 
         private static List<ComboBoxItem> AutoActionItems()
@@ -3611,6 +3628,7 @@ namespace SonicRoute
         {
             if (sender is not System.Windows.Controls.ComboBox combo || combo.Tag is not AutoRuleStep step) return;
             step.Action = combo.SelectedIndex < 0 ? AutoRuleAction.SetSystemOutput : (AutoRuleAction)combo.SelectedIndex;
+            NormalizeLaunchSteps(new[] { step });
             var block = FindParent<Border>(combo);
             if (block == null) return;
             var (bg, border, fg) = AutoBlockPalette(step.Action);
@@ -3741,39 +3759,47 @@ namespace SonicRoute
             }
             if (prog)
             {
-                var pathPanel = new StackPanel
+                if (step.Action == AutoRuleAction.LaunchProgram)
                 {
-                    Margin = new Thickness(0, 0, 14, 8),
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                pathPanel.Children.Add(MkLabel(step.Action == AutoRuleAction.LaunchProgram ? L10n.T("Auto.Program") : L10n.T("Auto.Script")));
-                for (int i = 0; i < step.ProgramPaths.Count; i++)
-                    pathPanel.Children.Add(BuildPathRow(step, i));
-                var addBtn = new Button
+                    // 启动程序（v1.18）：启动模式 + 启动列表，每个启动项独立打开方式
+                    wrap.Children.Add(BuildLaunchPanel(step, fg, labelBrush));
+                }
+                else
                 {
-                    Content = L10n.T("Auto.AddPath"),
-                    Tag = step,
-                    Width = 150,
-                    Height = 28,
-                    Margin = new Thickness(0, 6, 0, 0),
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    AllowDrop = true,
-                    ToolTip = L10n.T("Auto.DragHint")
-                };
-                addBtn.SetResourceReference(StyleProperty, "GhostButton");
-                addBtn.Click += AutoAddPath_Click;
-                addBtn.PreviewDragOver += AutoAddPath_DragOver;
-                addBtn.PreviewDrop += AutoAddPath_Drop;
-                pathPanel.Children.Add(addBtn);
-                pathPanel.Children.Add(new TextBlock
-                {
-                    Text = L10n.T("Auto.DragHint"),
-                    FontSize = 11,
-                    Foreground = labelBrush,
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 6, 0, 0)
-                });
-                wrap.Children.Add(pathPanel);
+                    var pathPanel = new StackPanel
+                    {
+                        Margin = new Thickness(0, 0, 14, 8),
+                        VerticalAlignment = VerticalAlignment.Center
+                    };
+                    pathPanel.Children.Add(MkLabel(L10n.T("Auto.Script")));
+                    for (int i = 0; i < step.ProgramPaths.Count; i++)
+                        pathPanel.Children.Add(BuildPathRow(step, i));
+                    var addBtn = new Button
+                    {
+                        Content = L10n.T("Auto.AddPath"),
+                        Tag = step,
+                        Width = 150,
+                        Height = 28,
+                        Margin = new Thickness(0, 6, 0, 0),
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        AllowDrop = true,
+                        ToolTip = L10n.T("Auto.DragHint")
+                    };
+                    addBtn.SetResourceReference(StyleProperty, "GhostButton");
+                    addBtn.Click += AutoAddPath_Click;
+                    addBtn.PreviewDragOver += AutoAddPath_DragOver;
+                    addBtn.PreviewDrop += AutoAddPath_Drop;
+                    pathPanel.Children.Add(addBtn);
+                    pathPanel.Children.Add(new TextBlock
+                    {
+                        Text = L10n.T("Auto.DragHint"),
+                        FontSize = 11,
+                        Foreground = labelBrush,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 6, 0, 0)
+                    });
+                    wrap.Children.Add(pathPanel);
+                }
             }
             if (osd)
             {
@@ -3809,6 +3835,334 @@ namespace SonicRoute
             return wrap;
         }
 
+        /// <summary>打开方式下拉中「选择其他程序…」项的哨兵值（不作为实际路径保存）。</summary>
+        private const string AutoLaunchPickTag = "__pick__";
+
+        /// <summary>启动程序动作参数区（v1.18）：启动模式 + 启动列表（每个启动项独立保存打开方式）。</summary>
+        private UIElement BuildLaunchPanel(AutoRuleStep step, SolidColorBrush fg, SolidColorBrush labelBrush)
+        {
+            var panel = new StackPanel
+            {
+                Margin = new Thickness(0, 0, 14, 8),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            UIElement MkLabel(string text) => new TextBlock
+            {
+                Text = text,
+                FontSize = 12,
+                Foreground = labelBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+
+            // 启动模式：全部启动 / 随机启动一个
+            var modeRow = new StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            modeRow.Children.Add(MkLabel(L10n.T("Auto.LaunchMode")));
+            var modeCombo = new System.Windows.Controls.ComboBox
+            {
+                Style = (Style)FindResource("SelCombo"),
+                Width = 160,
+                Height = 28,
+                Tag = step,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            modeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.LaunchModeAll") });
+            modeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.LaunchModeRandom") });
+            modeCombo.SelectedIndex = step.LaunchMode == 1 ? 1 : 0;
+            modeCombo.SelectionChanged += (_, _) => step.LaunchMode = modeCombo.SelectedIndex == 1 ? 1 : 0;
+            modeRow.Children.Add(modeCombo);
+            panel.Children.Add(modeRow);
+
+            // 启动列表
+            panel.Children.Add(new TextBlock
+            {
+                Text = L10n.T("Auto.LaunchList"),
+                FontSize = 12,
+                Foreground = labelBrush,
+                Margin = new Thickness(0, 8, 0, 0)
+            });
+            var listBorder = new Border
+            {
+                Width = 520,
+                Margin = new Thickness(0, 4, 0, 0),
+                Padding = new Thickness(8, 6, 8, 6),
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(70, fg.Color.R, fg.Color.G, fg.Color.B))
+            };
+            var listPanel = new StackPanel();
+            for (int i = 0; i < step.LaunchItems.Count; i++)
+                listPanel.Children.Add(BuildLaunchItemRow(step, step.LaunchItems[i], i));
+            listBorder.Child = listPanel;
+            panel.Children.Add(listBorder);
+
+            // 添加文件 / 程序（按钮本身支持拖放，与 PowerShell 路径区一致）
+            var addBtn = new Button
+            {
+                Content = L10n.T("Auto.AddFile"),
+                Tag = step,
+                Width = 150,
+                Height = 28,
+                Margin = new Thickness(0, 6, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                AllowDrop = true,
+                ToolTip = L10n.T("Auto.DragHint")
+            };
+            addBtn.SetResourceReference(StyleProperty, "GhostButton");
+            addBtn.Click += AutoLaunchAdd_Click;
+            addBtn.PreviewDragOver += AutoAddPath_DragOver;
+            addBtn.PreviewDrop += AutoLaunchAdd_Drop;
+            panel.Children.Add(addBtn);
+            panel.Children.Add(new TextBlock
+            {
+                Text = L10n.T("Auto.DragHint"),
+                FontSize = 11,
+                Foreground = labelBrush,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 6, 0, 0)
+            });
+            return panel;
+        }
+
+        /// <summary>
+        /// 「打开方式」下拉项：图标 + 显示名 + 实际 EXE 路径。
+        /// 属性名与 AutoAppItemTemplate（Icon / Label）一致，直接复用该模板，不新增 XAML。
+        /// </summary>
+        private sealed class OpenWithItem
+        {
+            public ImageSource? Icon { get; set; }
+            public string Label { get; set; } = "";
+            public string ExePath { get; set; } = "";
+        }
+
+        /// <summary>启动项一行：路径输入框（左）+ 打开方式下拉 + 删除（右）。</summary>
+        private UIElement BuildLaunchItemRow(AutoRuleStep step, AutoLaunchItem item, int index)
+        {
+            var tag = new Tuple<AutoRuleStep, AutoLaunchItem>(step, item);
+            var row = new DockPanel { Margin = new Thickness(0, index == 0 ? 0 : 6, 0, 0) };
+
+            var del = new Button
+            {
+                Content = "×",
+                Tag = tag,
+                Width = 28,
+                Height = 28,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 0, 0)
+            };
+            del.SetResourceReference(StyleProperty, "GhostButton");
+            del.Click += AutoLaunchDelete_Click;
+            DockPanel.SetDock(del, Dock.Right);
+            row.Children.Add(del);
+
+            // 打开方式：默认程序 / 系统关联应用（按该启动项的扩展名枚举）/ 选择其他应用…
+            var openCombo = new System.Windows.Controls.ComboBox
+            {
+                Style = (Style)FindResource("SelCombo"),
+                Width = 176,
+                Height = 28,
+                Tag = tag,
+                ItemTemplate = (DataTemplate)FindResource("AutoAppItemTemplate"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(6, 0, 0, 0),
+                ToolTip = string.IsNullOrWhiteSpace(item.OpenWith) ? L10n.T("Auto.OpenWith") : item.OpenWith
+            };
+
+            bool filling = false;        // 填充/恢复选中期间不写回配置
+            string lastExt = "\0";       // 已按哪个扩展名枚举过（路径改了要重枚举）
+
+            void Fill()
+            {
+                filling = true;
+                try
+                {
+                    openCombo.Items.Clear();
+                    openCombo.Items.Add(new OpenWithItem { Label = L10n.T("Auto.OpenWithDefault"), ExePath = "" });
+
+                    foreach (var app in OpenWithService.GetHandlers(item.Path))
+                    {
+                        openCombo.Items.Add(new OpenWithItem
+                        {
+                            Label = app.DisplayName,
+                            ExePath = app.ExePath,
+                            Icon = AppIconService.GetIconForPath(app.ExePath)
+                        });
+                    }
+
+                    // 已保存但不在系统列表中的应用也保留：程序被移动 / 关联变化时不丢配置
+                    if (!string.IsNullOrWhiteSpace(item.OpenWith)
+                        && !openCombo.Items.OfType<OpenWithItem>().Any(
+                            x => string.Equals(x.ExePath, item.OpenWith, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        openCombo.Items.Add(new OpenWithItem
+                        {
+                            Label = string.IsNullOrWhiteSpace(item.OpenWithName)
+                                ? ProgramDisplayName(item.OpenWith) : item.OpenWithName,
+                            ExePath = item.OpenWith,
+                            Icon = AppIconService.GetIconForPath(item.OpenWith)
+                        });
+                    }
+
+                    openCombo.Items.Add(new OpenWithItem { Label = L10n.T("Auto.OpenWithPick"), ExePath = AutoLaunchPickTag });
+
+                    int sel = 0;
+                    if (!string.IsNullOrWhiteSpace(item.OpenWith))
+                    {
+                        int hit = openCombo.Items.OfType<OpenWithItem>().ToList()
+                            .FindIndex(x => string.Equals(x.ExePath, item.OpenWith, StringComparison.OrdinalIgnoreCase));
+                        if (hit >= 0) sel = hit;
+                    }
+                    openCombo.SelectedIndex = sel;
+                }
+                finally { filling = false; }
+            }
+
+            // 路径被手动改过（扩展名变化）时，展开下拉前重新向系统查询关联应用
+            openCombo.DropDownOpened += (_, _) =>
+            {
+                var ext = OpenWithService.NormalizeExtension(item.Path);
+                if (ext == lastExt) return;
+                lastExt = ext;
+                Fill();
+            };
+            openCombo.SelectionChanged += (_, _) =>
+            {
+                if (filling || openCombo.SelectedItem is not OpenWithItem picked) return;
+                if (picked.ExePath == AutoLaunchPickTag)
+                {
+                    var exe = PickProgramExe();
+                    if (exe != null)
+                    {
+                        item.OpenWith = exe;
+                        item.OpenWithName = ProgramDisplayName(exe);
+                    }
+                    // 下拉正在关闭，延后重建列表避免在事件内改自身集合
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        lastExt = OpenWithService.NormalizeExtension(item.Path);
+                        Fill();
+                    }));
+                    return;
+                }
+                item.OpenWith = picked.ExePath;
+                item.OpenWithName = picked.ExePath.Length == 0 ? "" : picked.Label;
+                openCombo.ToolTip = picked.ExePath.Length == 0 ? L10n.T("Auto.OpenWith") : picked.ExePath;
+            };
+
+            // 构建时即按当前路径枚举系统关联应用：选完文件后打开方式立即可选，
+            // 同时避免在展开下拉的过程中改动集合
+            lastExt = OpenWithService.NormalizeExtension(item.Path);
+            Fill();
+            DockPanel.SetDock(openCombo, Dock.Right);
+            row.Children.Add(openCombo);
+
+            var box = new TextBox
+            {
+                Text = item.Path,
+                FontSize = 12.5,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Padding = new Thickness(8, 4, 8, 4),
+                AllowDrop = true,
+                Tag = tag
+            };
+            box.PreviewDragOver += AutoPathBox_DragOver;
+            box.PreviewDrop += AutoLaunchBox_Drop;
+            box.TextChanged += (_, _) => item.Path = box.Text;
+            row.Children.Add(box);
+            return row;
+        }
+
+        /// <summary>打开方式显示名（EXE 文件名，去掉扩展名）。</summary>
+        private static string ProgramDisplayName(string exePath)
+        {
+            if (string.IsNullOrWhiteSpace(exePath)) return "";
+            try
+            {
+                var n = System.IO.Path.GetFileNameWithoutExtension(exePath.Trim());
+                return string.IsNullOrWhiteSpace(n) ? exePath.Trim() : n;
+            }
+            catch { return exePath.Trim(); }
+        }
+
+        /// <summary>「添加文件/程序」文件选择过滤器：默认展示全部文件（程序只是其中一类）。</summary>
+        private static string AddFileFilter =>
+            L10n.T("Auto.FileFilterAll") + " (*.*)|*.*|" + L10n.T("Auto.FileFilterExe") + " (*.exe)|*.exe";
+
+        /// <summary>浏览本机 EXE（「选择其他应用…」）；取消返回 null。</summary>
+        private static string? PickProgramExe()
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = L10n.T("Auto.PickProgram"),
+                Filter = L10n.T("Auto.FileFilterExe") + " (*.exe)|*.exe|" + L10n.T("Auto.FileFilterAll") + " (*.*)|*.*",
+                CheckFileExists = true
+            };
+            return dlg.ShowDialog() == true ? dlg.FileName : null;
+        }
+
+        /// <summary>
+        /// 「＋ 添加文件/程序」：打开文件选择器（支持多选），选中的文件/程序逐个加入启动项，
+        /// 新增项打开方式一律为「默认程序」。与「选择打开方式」是两个独立操作，互不覆盖。
+        /// </summary>
+        private void AutoLaunchAdd_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not AutoRuleStep step) return;
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = L10n.T("Auto.AddFileTitle"),
+                Filter = AddFileFilter,
+                Multiselect = true,
+                CheckFileExists = true
+            };
+            if (dlg.ShowDialog() != true) return;
+            AddLaunchPaths(step, dlg.FileNames);
+            RenderAutoSteps();
+        }
+
+        /// <summary>把路径批量加入启动项（按路径去重，打开方式默认）。</summary>
+        private static void AddLaunchPaths(AutoRuleStep step, IEnumerable<string> paths)
+        {
+            foreach (var p in paths)
+            {
+                if (string.IsNullOrWhiteSpace(p)) continue;
+                if (step.LaunchItems.Any(i => string.Equals(i.Path, p, StringComparison.OrdinalIgnoreCase))) continue;
+                step.LaunchItems.Add(new AutoLaunchItem { Path = p });
+            }
+        }
+
+        private void AutoLaunchDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is Tuple<AutoRuleStep, AutoLaunchItem> tg)
+            {
+                tg.Item1.LaunchItems.Remove(tg.Item2);
+                RenderAutoSteps();
+            }
+        }
+
+        private void AutoLaunchAdd_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            if (sender is Button btn && btn.Tag is AutoRuleStep step)
+                AddLaunchItemsFromDrop(step, e);
+        }
+
+        private void AutoLaunchBox_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            if (sender is TextBox box && box.Tag is Tuple<AutoRuleStep, AutoLaunchItem> tg)
+                AddLaunchItemsFromDrop(tg.Item1, e);
+        }
+
+        /// <summary>拖入文件追加为新的启动项（按路径去重，打开方式保持默认）。</summary>
+        private void AddLaunchItemsFromDrop(AutoRuleStep step, System.Windows.DragEventArgs e)
+        {
+            if (e.Data.GetData(System.Windows.DataFormats.FileDrop) is not string[] files) return;
+            AddLaunchPaths(step, files);
+            e.Handled = true;
+            RenderAutoSteps();
+        }
 
         private UIElement BuildPathRow(AutoRuleStep step, int index)
         {
@@ -3996,8 +4350,8 @@ namespace SonicRoute
                     or AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput
                     && string.IsNullOrWhiteSpace(s.TargetDeviceId))
                 { _ = System.Windows.MessageBox.Show(L10n.T("Auto.TargetDevice")); return; }
-                if (s.Action is AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell
-                    && s.ProgramPaths.All(string.IsNullOrWhiteSpace))
+                if ((s.Action == AutoRuleAction.LaunchProgram && s.CurrentLaunchItems().Count == 0)
+                    || (s.Action == AutoRuleAction.RunPowerShell && s.ProgramPaths.All(string.IsNullOrWhiteSpace)))
                 { _ = System.Windows.MessageBox.Show(L10n.T("Auto.ProgramRequired")); return; }
             }
             var rule = _autoEditingId == null ? null : AutoRuleStore.Find(_autoEditingId);
@@ -4016,17 +4370,9 @@ namespace SonicRoute
             rule.ScheduleMode = trigger == AutoRuleTrigger.Schedule ? scheduleMode : 0;
             rule.ScheduleTime = trigger == AutoRuleTrigger.Schedule ? scheduleTime : "";
             rule.ScheduleWeekdays = trigger == AutoRuleTrigger.Schedule ? scheduleWeekdays : new List<int>();
-            rule.Actions = _autoSteps.Select(s => new AutoRuleStep
-            {
-                Action = s.Action,
-                TargetApp = s.TargetApp ?? "",
-                TargetDeviceId = s.TargetDeviceId ?? "",
-                Volume = s.Volume,
-                DelayMs = s.DelayMs,
-                OsdTitle = s.OsdTitle ?? "",
-                OsdText = s.OsdText ?? "",
-                ProgramPaths = new List<string>(s.ProgramPaths.Where(p => !string.IsNullOrWhiteSpace(p)))
-            }).ToList();
+            // 落盘映射统一走 AutoRuleStep.ToPersisted()（含 LaunchItems / LaunchMode 与 ProgramPaths 兼容镜像），
+            // 避免编辑器模型 → 存储模型的转换漏字段
+            rule.Actions = _autoSteps.Select(s => s.ToPersisted()).ToList();
             if (rule.Actions.Count > 0)
             {
                 var f = rule.Actions[0];

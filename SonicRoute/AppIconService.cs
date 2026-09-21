@@ -29,6 +29,18 @@ namespace SonicRoute
             catch { /* 系统/提升进程可能无权限 */ }
 
             if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) return null;
+            return GetOrExtract(exe);
+        }
+
+        /// <summary>取指定 EXE 的图标（自动化「打开方式」候选应用使用，与进程图标共用缓存）；失败返回 null。</summary>
+        public static ImageSource? GetIconForPath(string? exePath)
+        {
+            if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath)) return null;
+            return GetOrExtract(exePath);
+        }
+
+        private static ImageSource? GetOrExtract(string exe)
+        {
             var src = Cache.GetOrAdd(exe, path =>
             {
                 try

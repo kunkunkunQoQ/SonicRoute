@@ -1152,11 +1152,23 @@
                         <!-- 规则列表 -->
                         <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                             <StackPanel>
-                                <DockPanel Margin="0,0,0,10">
-                                    <Button x:Name="AutoNewButton"
+                                <!-- 顶部操作区：新建规则（左侧铺满至右侧按钮之前）+ 打开脚本文件夹（右，复用语言页「打开文件夹」GhostButton 样式） -->
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="AutoNewButton" Grid.Column="0"
                                             Content="{Binding [Auto.New], Source={x:Static local:L10n.Instance}}"
-                                            Style="{StaticResource PrimaryButton}" Click="AutoNew_Click"/>
-                                </DockPanel>
+                                            Style="{StaticResource PrimaryButton}"
+                                            Margin="0,0,8,0" VerticalAlignment="Center"
+                                            Click="AutoNew_Click"/>
+                                    <Button x:Name="AutoOpenRuleDirButton" Grid.Column="1"
+                                            Content="{Binding [Auto.OpenFolder], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource GhostButton}" Height="34" Padding="14,0"
+                                            VerticalAlignment="Center"
+                                            Click="AutoOpenRuleDir_Click"/>
+                                </Grid>
                                 <TextBlock x:Name="AutoEmptyText"
                                            Text="{Binding [Auto.Empty], Source={x:Static local:L10n.Instance}}"
                                            FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}"

@@ -6,7 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SonicRoute.Core</RootNamespace>
     <AssemblyName>SonicRoute.Core</AssemblyName>
-    <PlatformTarget>x64</PlatformTarget>
+    <!-- 与主工程一致：无 RID 构建保持 x64；带 RID 发布时由 SDK 按 RID 推导（x64 / arm64），不用 AnyCPU 代替 ARM64 -->
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
 </Project>

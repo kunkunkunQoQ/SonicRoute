@@ -21,6 +21,8 @@ namespace SonicRoute
     ///   SystemDefaultDeviceService），不修改 OSD、主音量、设备枚举等无关功能。
     /// - 应用控制按进程名解析到当前有音频会话的 PID 执行（不误改其他应用或系统音量）。
     /// - 高级操作（启动程序 / PowerShell）不默认提权；是否执行外部程序在 UI 编辑规则时明确提示。
+    /// - 启动程序（v1.18 起）：每个启动项独立保存路径 + 打开方式，打开方式为空 = Windows 默认方式，
+    ///   非空 = 用指定 EXE 打开并把目标路径作为参数；启动模式支持「全部启动 / 随机启动一个」。
     /// </summary>
     public static class AutoRuleService
     {
@@ -221,7 +223,7 @@ namespace SonicRoute
                         return await Task.Run(() => ApplyEndpointForApp(step.TargetApp, EDataFlow.eCapture, step.TargetDeviceId));
 
                     case AutoRuleAction.LaunchProgram:
-                        return await Task.Run(() => LaunchPrograms(step.ProgramPaths));
+                        return await Task.Run(() => LaunchPrograms(step.EffectiveLaunchItems(), step.LaunchMode));
 
                     case AutoRuleAction.RunPowerShell:
                         return await Task.Run(() => RunPowerShells(step.ProgramPaths));
@@ -270,20 +272,61 @@ namespace SonicRoute
             return r.Success;
         }
 
-        private static bool LaunchPrograms(List<string> paths)
+        /// <summary>
+        /// 执行启动程序动作（v1.18 起按启动项执行，每项独立打开方式）。
+        /// - 启动模式 0（全部启动）：逐个执行全部启动项；启动模式 1（随机启动一个）：随机选一个完整启动项执行。
+        /// - 单项执行见 <see cref="LaunchOne"/>：打开方式为空 = Windows 默认方式，非空 = 用该 EXE 打开并把目标路径作为参数。
+        /// </summary>
+        private static bool LaunchPrograms(List<AutoLaunchItem> items, int mode)
         {
+            if (items == null || items.Count == 0) return false;
+
+            // 随机启动一个：只随机挑选启动项，不改变该启动项自身的打开方式
+            if (mode == 1)
+                return LaunchOne(items[Random.Shared.Next(items.Count)]);
+
             bool any = false;
-            foreach (var path in paths)
+            foreach (var item in items)
             {
-                if (string.IsNullOrWhiteSpace(path)) continue;
-                try
-                {
-                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-                    any = true;
-                }
-                catch { }
+                if (LaunchOne(item)) any = true;
             }
             return any;
+        }
+
+        /// <summary>
+        /// 启动单个启动项。
+        /// 打开方式为空 → 默认方式（.exe 直接启动，其他文件交给 Windows 当前文件关联程序）；
+        /// 打开方式非空且该 EXE 存在 → 启动该 EXE，目标路径作为参数传入（QQ音乐.exe "音乐.mp3"）；
+        /// 打开方式指向的 EXE 已不存在时回退默认方式，避免启动项直接失效。
+        /// </summary>
+        private static bool LaunchOne(AutoLaunchItem item)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(item.Path)) return false;
+            try
+            {
+                var target = item.Path.Trim();
+                var openWith = (item.OpenWith ?? "").Trim();
+                if (openWith.Length > 0 && File.Exists(openWith))
+                {
+                    // 目标文件是参数，打开方式指定的 EXE 才是实际启动程序
+                    Process.Start(new ProcessStartInfo(openWith)
+                    {
+                        Arguments = QuoteArg(target),
+                        UseShellExecute = true
+                    });
+                    return true;
+                }
+                Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>参数加引号（含空格路径安全；内部双引号转义）。</summary>
+        private static string QuoteArg(string value)
+        {
+            var s = (value ?? "").Replace("\"", "\\\"");
+            return "\"" + s + "\"";
         }
 
         private static bool RunPowerShells(List<string> scripts)
