@@ -55,11 +55,9 @@
 
 ---
 
-## 💖 支持项目
+## 🧩 其他作品
 
-[![支持 爱发电](https://img.shields.io/badge/支持-爱发电-FF7A2F)](https://www.ifdian.net/a/koukou021)
-
-喜欢这个项目？点击上方按钮或到 [爱发电](https://www.ifdian.net/a/koukou021) 支持项目～ 仓库页右侧的 **Sponsor** 按钮同样直达爱发电。
+- 🎧 **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)** — 极简、静默、低资源占用的 Windows 音频播放器（C++17 / Win32 / Media Foundation，单 EXE，无第三方依赖）
 
 ---
 
