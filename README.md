@@ -41,6 +41,8 @@
 | ⚡ 轻量版 | `SonicRoute-v1.19-Lite-x64.exe` / `.zip`；ARM64：`SonicRoute-v1.19-Lite-arm64.exe` / `.zip`（🧪 实验） | ~27MB / ~6.8MB | 需 .NET 8 Desktop Runtime |
 | 🪟 兼容版（.NET Framework 4.8） | `SonicRoute-v1.19-Legacy-x64.zip` | ~0.8MB | 需 .NET Framework 4.8（Win10 1903+ / Win11 默认自带） |
 
+> ⚠️ **v1.19 为最后一个提供「含运行环境版本」的版本**（自包含 237–265MB，v1.19 资产中仍含 `-x64.exe` / `-arm64.exe`）；**自 v1.20 起不再提供**，无需安装运行时的用户请用上方 Legacy 版。
+
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 [📖 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)（安装 / 面板 / 完整界面 / 场景教程）｜ [✨ 功能特性](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) ｜ [⌨️ 快捷键](https://github.com/kunkunkunQoQ/SonicRoute/wiki/03-%E5%BF%AB%E6%8D%B7%E9%94%AE)（完整默认键表 + 绑定规则）｜ [❓ 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) ｜ [🛠 技术实现](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) ｜ [📌 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)（版本规则 + 更新日志）
