@@ -49,7 +49,7 @@
 
 完整版本历史（版本规则 + 更新日志）见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
-> 📌 **下一版本预告**：持续优化使用体验与维护项目 bug ｜ 大版本更新延后，时间不定，但一定会完成
+> 📌 **下一版本预告**：持续优化使用体验与维护项目 bug ｜ 大版本更新暂缓，时间未定，但一定不会缺席
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
