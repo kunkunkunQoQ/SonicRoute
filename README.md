@@ -15,7 +15,7 @@
 
 ## 🚀 快速开始
 
-🛍 **推荐**：从 [微软商店](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 安装（自动更新）；或 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载**含运行环境版本**（解压即用）/ 轻量版（需 .NET 8）→ 驻留托盘：**单击**快捷面板、**双击**完整界面、**任务栏滚轮**调当前应用音量。
+🛍 **推荐**：从 [微软商店](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 安装（自动更新）；或 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载**轻量版**（需 .NET 8 Desktop Runtime）/ **兼容版**（需 .NET Framework 4.8，体积仅 0.8MB）→ 驻留托盘：**单击**快捷面板、**双击**完整界面、**任务栏滚轮**调当前应用音量。
 
 ## ✨ 核心功能
 
@@ -38,8 +38,8 @@
 | 版本 | 文件 | 体积 | 需求 |
 |---|---|---|---|
 | 🛍 微软商店（推荐） | [Store 搜索 SonicRoute](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | — | 自动更新 |
-| 🟢 含运行环境版本 | `SonicRoute-v1.19-x64.exe` / `.zip`；ARM64：`SonicRoute-v1.19-arm64.exe` / `.zip`（🧪 实验） | ~237MB / ~85MB | 已内置运行环境 |
-| ⚡ 轻量版 | `SonicRoute-v1.19-Lite-x64.exe` / `.zip`；ARM64：`SonicRoute-v1.19-Lite-arm64.exe` / `.zip`（🧪 实验） | ~27MB / ~6.8MB | 需 .NET 8 |
+| ⚡ 轻量版 | `SonicRoute-v1.19-Lite-x64.exe` / `.zip`；ARM64：`SonicRoute-v1.19-Lite-arm64.exe` / `.zip`（🧪 实验） | ~27MB / ~6.8MB | 需 .NET 8 Desktop Runtime |
+| 🪟 兼容版（.NET Framework 4.8） | `SonicRoute-v1.19-Legacy-x64.zip` | ~0.8MB | 需 .NET Framework 4.8（Win10 1903+ / Win11 默认自带） |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -49,7 +49,7 @@
 
 完整版本历史（版本规则 + 更新日志）见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
-> 📌 **下一版本预告**：继续打磨自动化与面板体验 ｜ OSD / 面板动画与交互优化 ｜ 性能与内存优化 ｜ 国庆后大版本更新
+> 📌 **下一版本预告**：持续优化使用体验与维护项目 bug ｜ 大版本更新延后，时间不定，但一定会完成
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
