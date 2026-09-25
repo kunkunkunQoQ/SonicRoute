@@ -1,0 +1,30 @@
+音跃 SonicRoute v1.0.8 源码快照（正式版）
+================================================================
+
+归档时间：2026-09-25（补传）
+来源：git commit 285340f
+说明：本目录为 v1.0.8 完整源码快照（已排除 bin/obj），改动点摘要见下，
+      完整细节见「源码带注释\源码说明.md」。
+
+一、1080p 高清图标
+   - 新增 1080x1080 高清源图，重新生成全部图标资产（MSIX 各尺寸 +
+     项目 256x256 托盘/窗口图标），所有图标验证透明背景
+
+二、MSIX 任务栏图标透明修复
+   - 新增 Square44x44Logo.targetsize-16/24/32/48/256.png 五种尺寸
+     （targetsize-* 版本不会被系统加背景色块）
+
+三、MSIX 开机自启修复
+   - 原注册表写入被 MSIX 沙箱重定向导致开机自启失效；清单新增
+     windows.startupTask 扩展，代码新增 IsPackaged() 检测分环境控制
+
+四、TFM 升级（支持 WinRT API）
+   - TargetFramework：net8.0-windows → net8.0-windows10.0.19041.0
+     （调用 Windows.ApplicationModel.StartupTask 需要 Windows 10 1903+ TFM）
+
+五、版本号
+   - v1.0.7r2 → v1.0.8（csproj <Version> + MSIX 清单 1.0.8.0）
+
+六、新增 WpfUiSkeleton 模板项目
+   - 从 SonicRoute 抽离的可复用 WPF UI 骨架（无边框圆角窗口 + 主题 +
+     强调色 + 透明度 + 多语言），零第三方依赖

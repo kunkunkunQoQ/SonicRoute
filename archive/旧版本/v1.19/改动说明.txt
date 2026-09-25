@@ -26,11 +26,20 @@
    - AppIconService.cs 适配（+12 行）
    - SonicRoute.csproj / SonicRoute.Core.csproj 架构相关调整
 
-四、构建状态
+四、v1.19 改动三：Legacy 版（.NET Framework 4.8 兼容版）
+   - SonicRoute.Core.csproj 改为多目标 net8.0-windows;net48（Legacy 用 net48）
+   - 主程序仍为 net8.0-windows10.0.19041.0；Legacy 发布为多文件 x64
+     传统桌面程序（SonicRoute.exe + Core.dll + System.Text.Json.dll 等，
+     体积仅 ~0.8MB zip），SonicRoute.exe.config 声明 .NETFramework,Version=v4.8
+   - 功能与主版本完全一致（同一套 UI 源码、同一份配置格式），配置互通；
+     与主版本可同时安装、各自独立运行
+   - 资产：SonicRoute-v1.19-Legacy-x64.zip（仅 zip，不发布 exe 单文件）
+
+五、构建状态
    - 0 错误；ARM64 为实验性支持，未发布
    - v1.19 未创建 GitHub Release
 
-五、文件清单（源码带注释目录）
+六、文件清单（源码带注释目录）
    - SonicRoute + SonicRoute.Core 全量源码（单进程形态，平铺结构）
    - 含 Interop / Models / Properties(PublishProfiles) / Resources(Lang×9) /
      语言 JSON / csproj / sln / 图标
