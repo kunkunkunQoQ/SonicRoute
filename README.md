@@ -13,7 +13,7 @@ SonicRoute 是一个常驻托盘的 Windows 音频控制工具，可以快速控
 
 ![预览](docs/images/preview.gif)
 
-**v1.19** ｜ Windows 10 / 11 · x64 · ARM64 实验 · C# / WPF
+**v1.19** ｜ Windows 10 2004+ / Windows 11 · x64 · ARM64 实验 · C# / WPF
 
 📥 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) ｜ [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) ｜ [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -52,7 +52,7 @@ Windows 本身已经可以调整每个应用的音量和输出设备，SonicRout
 
 ## 🚀 快速开始
 
-🛍 **推荐**：从 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 安装，安装和更新最简单。
+🛍 **推荐**：从 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT)（x64，自动更新）安装。
 
 也可以从 [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载：
 
