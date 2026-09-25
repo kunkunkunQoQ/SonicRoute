@@ -1,0 +1,47 @@
+音跃 SonicRoute v1.19-Legacy 源码快照（.NET Framework 4.8 兼容版）
+================================================================
+
+归档时间：2026-09-25
+来源：当前工作区（正式发布 v1.19 时构建 Legacy 的源码形态）
+说明：Legacy 版与主版本共用同一套实现，不复制 UI 源码；本目录为
+      构建 Legacy 所需的全部源码快照（已排除 bin/obj）。
+
+一、为什么单独归档
+   - v1.19 主版本归档（v1.19/）基于 commit a4d745c（自动化页顶部 +
+     ARM64 双架构），当时 Core 仍为单目标 net8.0-windows
+   - Legacy 的源码改动（Core 多目标 net48 + SonicRoute.Legacy 工程）
+     晚于该 commit，故单独归档为 v1.19-Legacy/
+
+二、Legacy 工程（SonicRoute.Legacy\）
+   - SonicRoute.Legacy.csproj：TargetFramework net48，LangVersion latest
+     （net48 SDK 默认 C# 7.3 与 Nullable=enable 冲突 CS8630），
+     UseWPF + UseWindowsForms，AssemblyName=SonicRoute（与发布资产内命名一致）
+   - PlatformTarget x64 + Prefer32Bit=false（PROPVARIANT 按 x64 布局
+     StructLayout Size=24，严禁 x86）
+   - AutoGenerateBindingRedirects（System.Text.Json 传递依赖 System.Memory 等）
+   - 通过 **Compile/Page/ApplicationDefinition 的 Link** 直接复用
+     ..\SonicRoute\ 下同一批源文件与 XAML；差异只允许出现在
+     #if NET48 条件编译块内
+   - 只 ProjectReference ..\SonicRoute.Core\（自动解析到 net48 目标）
+   - 不参与 ARM64、不参与 Microsoft Store / MSIX、不做单文件发布
+   - 语言资源 EmbeddedResource LogicalName 固定为
+     SonicRoute.Resources.Lang.<code>.json（与 .NET 8 版完全一致）
+
+三、Core 多目标（SonicRoute.Core\）
+   - SonicRoute.Core.csproj：TargetFrameworks net8.0-windows;net48
+   - net48 条件块：LangVersion 提升、System.Text.Json 引包、
+     ComInterop 的 PROPVARIANT [StructLayout(Size=24)]（x64 布局）
+   - net8.0-windows 分支行为保持不变
+
+四、主程序（SonicRoute\）
+   - 与 v1.19 主版本同一份源码（net8.0-windows10.0.19041.0），
+     #if NET48 条件编译处为 Legacy 提供差异分支
+   - 含 Interop / Models / Properties(PublishProfiles) /
+     Resources(Lang×9) / csproj / sln / 图标
+
+五、发布形态
+   - 资产：SonicRoute-v1.19-Legacy-x64.zip（多文件，~0.8MB，
+     含 SonicRoute.exe 1.24MB + SonicRoute.Core.dll + System.Text.Json.dll 等）
+   - 仅 x64、仅 zip 发布；exe.config 声明 .NETFramework,Version=v4.8，
+     PerMonitorV2 DPI
+   - 配置 / 快捷键 / 自动化规则 / 主题 / OSD / 面板设置与主版本完全互通
