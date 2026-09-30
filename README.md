@@ -72,7 +72,7 @@ Windows 本身已经可以调整每个应用的音量和输出设备，SonicRout
 
 完整版本历史（版本规则 + 更新日志）见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
-**下一版本**：持续优化使用体验与维护 bug；当前重心为 ARM64 测试与 Legacy 优化，大版本更新时间确定于年底前。
+**下一版本：v1.20 国庆大版本**：此前已预告于国庆期间推出，当前计划于 **10 月中旬上线**。v1.20 发布后仍会继续迭代，**年底还会有下一次大版本更新**，具体内容以后续公告为准。
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
