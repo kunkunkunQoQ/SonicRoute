@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using SonicRoute.Core.Compat;
 
 namespace SonicRoute.Core.Interop
 {
@@ -61,7 +62,11 @@ namespace SonicRoute.Core.Interop
             _flow = flow;
         }
 
-        private bool IsWin11 => Environment.OSVersion.Version.Build >= BUILD_21H2;
+        // 真实 Build 号（RtlGetVersion）：net8 与 net48 结果一致。
+        // 不能用 Environment.OSVersion：net48 下受 app.manifest 的 supportedOS 声明限制，
+        // 未声明 Win10 时会返回兼容性版本（Build 9200）→ 在 Win11 上误走 Win10 IID → 按应用路由静默失败。
+        // 判定阈值（BUILD_21H2 = 22000）与改造前完全一致。
+        private bool IsWin11 => WindowsVersion.Build >= BUILD_21H2;
 
         /// <summary>取得策略接口指针（QI 后的目标接口，含正确 vtable）。进程内复用，不释放。</summary>
         private IntPtr EnsureFactory()

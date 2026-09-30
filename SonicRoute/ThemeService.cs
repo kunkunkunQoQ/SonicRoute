@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Media;
 using Microsoft.Win32;
+using SonicRoute.Core.Compat;
 using Application = System.Windows.Application;
 using Color = System.Windows.Media.Color;
 
@@ -130,7 +131,7 @@ namespace SonicRoute
         /// </summary>
         public static void ApplyBackgroundOpacity(int percent)
         {
-            percent = Math.Clamp(percent, 0, 100);
+            percent = MathEx.Clamp(percent, 0, 100);
             _lastOpacity = percent;
             byte a = (byte)(255 * percent / 100);
             if (Application.Current?.Resources["Theme.WindowBg"] is SolidColorBrush bg)
@@ -170,7 +171,7 @@ namespace SonicRoute
 
         private static Color Blend(Color a, Color b, double t)
         {
-            byte C(byte x, byte y) => (byte)Math.Clamp((int)Math.Round(x * (1 - t) + y * t), 0, 255);
+            byte C(byte x, byte y) => (byte)MathEx.Clamp((int)Math.Round(x * (1 - t) + y * t), 0, 255);
             return Color.FromRgb(C(a.R, b.R), C(a.G, b.G), C(a.B, b.B));
         }
     }

@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using Application = System.Windows.Application;
@@ -63,8 +64,8 @@ namespace SonicRoute
                 if (!_adjustDragging) return;
                 var p = e.GetPosition(null);
                 var (minX, maxX, minY, maxY) = QuickPanelPosition.DragBounds(this);
-                Left = Math.Clamp(Left + (p.X - _adjustDragStart.X), minX, Math.Max(minX, maxX));
-                Top = Math.Clamp(Top + (p.Y - _adjustDragStart.Y), minY, Math.Max(minY, maxY));
+                Left = MathEx.Clamp(Left + (p.X - _adjustDragStart.X), minX, Math.Max(minX, maxX));
+                Top = MathEx.Clamp(Top + (p.Y - _adjustDragStart.Y), minY, Math.Max(minY, maxY));
                 e.Handled = true;
             };
             MouseLeftButtonUp += (_, e) =>
@@ -512,7 +513,7 @@ namespace SonicRoute
             var pid = (int)_currentApp.ProcessId;
             int cur = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
             if (cur < 0) return -1;
-            int next = Math.Clamp(cur + delta, 0, 100);
+            int next = MathEx.Clamp(cur + delta, 0, 100);
             bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, next));
             int actual = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
             if (actual >= 0)
@@ -537,9 +538,9 @@ namespace SonicRoute
         private void Volume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (_currentApp == null || !_volumeReady) return;
-            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
             int pct = (int)Math.Round(VolumeSlider.Value) + (e.Delta > 0 ? step : -step);
-            VolumeSlider.Value = Math.Clamp(pct, 0, 100);
+            VolumeSlider.Value = MathEx.Clamp(pct, 0, 100);
             e.Handled = true;
         }
 

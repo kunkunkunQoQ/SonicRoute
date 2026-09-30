@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Threading;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Models;
 
 namespace SonicRoute
@@ -97,7 +98,7 @@ namespace SonicRoute
             }
 
             // 2) 直接前台应用（有音频、非本程序）——先精确 PID，再按进程名；MatchForeground 已跳过禁用应用
-            int own = Environment.ProcessId;
+            int own = AppInfo.CurrentProcessId;
             int fg = ForegroundAppService.GetForegroundProcessId();
             if (fg > 0 && fg != own)
             {
@@ -125,7 +126,7 @@ namespace SonicRoute
         /// 列表第一个（用户所说的"总是哔哩哔哩"）。</summary>
         public static void StartForegroundWatcher()
         {
-            _ownPid = Environment.ProcessId;
+            _ownPid = AppInfo.CurrentProcessId;
             TryRecordForeground(); // 窗口未显示，前台仍是用户正在用的应用
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
             timer.Tick += async (_, _) => await TickForegroundAsync();

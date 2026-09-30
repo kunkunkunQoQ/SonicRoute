@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Media;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 
 namespace SonicRoute
 {
@@ -49,8 +50,8 @@ namespace SonicRoute
         {
             var (minX, maxX, minY, maxY) = DragBounds(w);
             cfg.QuickPanelPosMode = "custom";
-            cfg.QuickPanelCustomX = (int)Math.Clamp(w.Left, minX, Math.Max(minX, maxX));
-            cfg.QuickPanelCustomY = (int)Math.Clamp(w.Top, minY, Math.Max(minY, maxY));
+            cfg.QuickPanelCustomX = (int)MathEx.Clamp(w.Left, minX, Math.Max(minX, maxX));
+            cfg.QuickPanelCustomY = (int)MathEx.Clamp(w.Top, minY, Math.Max(minY, maxY));
             ConfigService.Save(cfg);
         }
     }

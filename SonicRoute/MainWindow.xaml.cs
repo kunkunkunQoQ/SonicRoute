@@ -14,6 +14,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using Application = System.Windows.Application;
@@ -1339,9 +1340,9 @@ namespace SonicRoute
                 PanelHeightSection.Visibility = _config.QuickPanelStyle == "classic"
                     ? Visibility.Collapsed : Visibility.Visible;
                 // 简洁面板固定高度（px，400–800，默认 500）
-                PanelHeightSlider.Value = Math.Clamp(_config.QuickPanelHeight, 350, 800);
-                PanelHeightValue.Text = Math.Clamp(_config.QuickPanelHeight, 350, 800) + " px";
-            VolumeStepBox.Text = Math.Clamp(_config.VolumeStep, 1, 20).ToString();
+                PanelHeightSlider.Value = MathEx.Clamp(_config.QuickPanelHeight, 350, 800);
+                PanelHeightValue.Text = MathEx.Clamp(_config.QuickPanelHeight, 350, 800) + " px";
+            VolumeStepBox.Text = MathEx.Clamp(_config.VolumeStep, 1, 20).ToString();
             SettingsTrayWheelEverywhere.IsChecked = _config.TrayWheelEverywhere;
 
                 ExpCollapseCheck.IsChecked = _config.CollapseDeviceSections;
@@ -1439,7 +1440,7 @@ namespace SonicRoute
             try
             {
                 SetRadioByTag(ThemeSystem, ThemeLight, ThemeDark, _config.ThemeMode);
-                OpacitySlider.Value = Math.Clamp(_config.BackgroundOpacity, 0, 100);
+                OpacitySlider.Value = MathEx.Clamp(_config.BackgroundOpacity, 0, 100);
                 OpacityText.Text = $"{_config.BackgroundOpacity}%";
 
                 string accent = _config.Accent ?? "blue";
@@ -1452,8 +1453,8 @@ namespace SonicRoute
                 // 该设置位于主题页，必须在 LoadTheme 初始化，否则会显示 XAML 硬编码初值；经典面板不显示
                 PanelHeightSection.Visibility = _config.QuickPanelStyle == "classic"
                     ? Visibility.Collapsed : Visibility.Visible;
-                PanelHeightSlider.Value = Math.Clamp(_config.QuickPanelHeight, 350, 800);
-                PanelHeightValue.Text = Math.Clamp(_config.QuickPanelHeight, 350, 800) + " px";
+                PanelHeightSlider.Value = MathEx.Clamp(_config.QuickPanelHeight, 350, 800);
+                PanelHeightValue.Text = MathEx.Clamp(_config.QuickPanelHeight, 350, 800) + " px";
             }
             finally
             {
@@ -1549,18 +1550,18 @@ namespace SonicRoute
         private void OverviewVolume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (_suppressVolume || _overviewApp == null || !_overviewVolumeReady) return;
-            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
             int pct = (int)Math.Round(OverviewVolumeSlider.Value) + (e.Delta > 0 ? step : -step);
-            OverviewVolumeSlider.Value = Math.Clamp(pct, 0, 100);
+            OverviewVolumeSlider.Value = MathEx.Clamp(pct, 0, 100);
             e.Handled = true;
         }
 
         private void AppsVolume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (_suppressVolume || !_appsVolumeReady || _appsSelected == null) return;
-            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
             int pct = (int)Math.Round(AppsVolumeSlider.Value) + (e.Delta > 0 ? step : -step);
-            AppsVolumeSlider.Value = Math.Clamp(pct, 0, 100);
+            AppsVolumeSlider.Value = MathEx.Clamp(pct, 0, 100);
             e.Handled = true;
         }
 
@@ -1591,7 +1592,7 @@ namespace SonicRoute
         {
             if (_suppressSettings) return;
             if (!int.TryParse(VolumeStepBox.Text.Trim(), out int v)) { VolumeStepBox.Text = "4"; v = 4; }
-            int step = Math.Clamp(v, 1, 20);
+            int step = MathEx.Clamp(v, 1, 20);
             if (step != v) VolumeStepBox.Text = step.ToString();
             if (_config.VolumeStep == step) return;
             _config.VolumeStep = step;
@@ -1626,9 +1627,13 @@ namespace SonicRoute
             ConfigService.Save(_config);
         }
 
-        /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
+        /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。
+        /// net48 Legacy 为传统桌面程序，不依赖 WinRT / Windows App SDK，恒为 false。</summary>
         private static bool IsPackaged()
         {
+#if NET48
+            return false;
+#else
             try
             {
                 _ = Windows.ApplicationModel.Package.Current;
@@ -1638,16 +1643,25 @@ namespace SonicRoute
             {
                 return false;
             }
+#endif
         }
 
         /// <summary>开机自启：MSIX 环境用 StartupTask API，非 MSIX（绿色版）写注册表 Run 键。</summary>
+#if NET48
+        // net48 Legacy 无 MSIX 分支（方法内无 await 调用）：去掉 async 修饰符，避免 CS1998
+        private void SettingsAutoStart_Changed(object sender, RoutedEventArgs e)
+#else
         private async void SettingsAutoStart_Changed(object sender, RoutedEventArgs e)
+#endif
         {
             if (!IsLoaded || _suppressSettings) return;
             bool on = SettingsAutoStart.IsChecked == true;
             if (IsPackaged()) _config.AutoStartStore = on; else _config.AutoStart = on;
             ConfigService.Save(_config);
 
+#if NET48
+            // net48 Legacy 无 MSIX / Store 形态：不做 Store 自启，恒走绿色版 Run 键分支
+#else
             if (IsPackaged())
             {
                 // MSIX：注册表写入会被沙箱重定向，必须用 StartupTask API
@@ -1665,6 +1679,7 @@ namespace SonicRoute
                 }
             }
             else
+#endif
             {
                 // 绿色版：写 HKCU\...\Run
                 try
@@ -1674,7 +1689,7 @@ namespace SonicRoute
                     if (key == null) return;
                     if (on)
                     {
-                        var exe = Environment.ProcessPath;
+                        var exe = AppInfo.ExecutablePath;
                         if (!string.IsNullOrWhiteSpace(exe))
                             key.SetValue("SonicRoute", $"\"{exe}\"");
                     }
@@ -1772,12 +1787,16 @@ namespace SonicRoute
         {
             try
             {
+#if NET48
+                // net48 Legacy 无 MSIX / Store 形态：只清理绿色版 Run 键
+#else
                 if (IsPackaged())
                 {
                     var task = Windows.ApplicationModel.StartupTask.GetAsync("SonicRouteStartup").GetAwaiter().GetResult();
                     task.Disable();
                 }
                 else
+#endif
                 {
                     using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                         @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
@@ -1993,7 +2012,11 @@ namespace SonicRoute
             using var fbd = new System.Windows.Forms.FolderBrowserDialog
             {
                 Description = L10n.T("Exp.ExportLang"),
+#if !NET48
+                // UseDescriptionForTitle 是 .NET Core 3.0+ 新增属性；net48 无此属性，
+                // net48 下 Description 作为对话框内文本显示（功能等价，仅标题栏文案位置不同）
                 UseDescriptionForTitle = true,
+#endif
             };
             if (fbd.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
             if (L10n.ExportBuiltinLanguages(fbd.SelectedPath))
@@ -2198,8 +2221,7 @@ namespace SonicRoute
         {
             try
             {
-                var exe = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
-                          ?? Environment.ProcessPath ?? "SonicRoute.exe";
+                var exe = AppInfo.ExecutablePath ?? "SonicRoute.exe";
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = exe,
@@ -2317,7 +2339,7 @@ namespace SonicRoute
         private void PanelHeightSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (!IsLoaded || _suppressSettings) return;
-            int v = Math.Clamp((int)Math.Round(e.NewValue), 350, 800);
+            int v = MathEx.Clamp((int)Math.Round(e.NewValue), 350, 800);
             if (PanelHeightValue != null) PanelHeightValue.Text = v + " px";
             _config.QuickPanelHeight = v;
             ConfigService.Save(_config);
@@ -2821,7 +2843,7 @@ namespace SonicRoute
 
                 // 触发应用下拉：重填并保留选中
                 var prevTrigger = (AutoTriggerAppCombo.SelectedItem as AppItem)?.Info.ProcessName;
-                LoadAutoAppCombo(AutoTriggerAppCombo, withAny: true);
+                LoadAutoAppCombo(AutoTriggerAppCombo);
                 SelectAutoApp(AutoTriggerAppCombo, prevTrigger);
 
                 // 已打开的步骤应用下拉：重填并保留选中
@@ -3052,7 +3074,7 @@ namespace SonicRoute
             // 启动程序步骤统一规范化为启动项列表（旧配置由 ProgramPaths 转换，打开方式为空 = 默认方式）
             NormalizeLaunchSteps(_autoSteps);
             _suppressAutoUi = false;
-            AutoScheduleModeCombo.SelectedIndex = Math.Clamp(rule.ScheduleMode, 0, 2);
+            AutoScheduleModeCombo.SelectedIndex = MathEx.Clamp(rule.ScheduleMode, 0, 2);
             SetAutoScheduleTime(rule.ScheduleTime);
             SetAutoWeekday(rule.ScheduleWeekdays);
             UpdateAutoTriggerPanels();
@@ -3102,7 +3124,7 @@ namespace SonicRoute
         {
             if (_autoApps.Count == 0)
                 _autoApps = AudioService.GetApps();
-            LoadAutoAppCombo(AutoTriggerAppCombo, withAny: true);
+            LoadAutoAppCombo(AutoTriggerAppCombo);
             if (AutoTriggerCombo.Items.Count == 0)
             {
                 AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerHotkey"), Tag = AutoRuleTrigger.Hotkey });
@@ -3124,11 +3146,9 @@ namespace SonicRoute
             }
         }
 
-        private void LoadAutoAppCombo(System.Windows.Controls.ComboBox combo, bool withAny)
+        private void LoadAutoAppCombo(System.Windows.Controls.ComboBox combo)
         {
             combo.Items.Clear();
-            if (withAny)
-                combo.Items.Add(new AppItem { Info = new AudioAppInfo { ProcessId = 0, DisplayName = L10n.T("Auto.AnyApp"), ProcessName = null } });
             foreach (var a in _autoApps)
                 combo.Items.Add(AppItem.From(a));
             // 图标后台懒加载（列表先显示名称，图标就绪后自动出现，不阻塞 UI）
@@ -3441,13 +3461,13 @@ namespace SonicRoute
             if (text.Length > 5 || !int.TryParse(text, out var ms))
             {
                 int target = int.TryParse(text, out var t)
-                    ? Math.Clamp(t, 0, 60000)
-                    : Math.Clamp(step.DelayMs, 0, 60000);
+                    ? MathEx.Clamp(t, 0, 60000)
+                    : MathEx.Clamp(step.DelayMs, 0, 60000);
                 step.DelayMs = target;
                 SetDelayBoxText(box, target.ToString());
                 return;
             }
-            var clamped = Math.Clamp(ms, 0, 60000);
+            var clamped = MathEx.Clamp(ms, 0, 60000);
             step.DelayMs = clamped;
             if (clamped != ms)
             {
@@ -3578,7 +3598,7 @@ namespace SonicRoute
                     if (target != cur)
                     {
                         _autoSteps.RemoveAt(cur);
-                        _autoSteps.Insert(Math.Clamp(target, 0, _autoSteps.Count), _autoDragStep);
+                        _autoSteps.Insert(MathEx.Clamp(target, 0, _autoSteps.Count), _autoDragStep);
                         RenderAutoSteps();
                     }
                 }
@@ -3743,7 +3763,7 @@ namespace SonicRoute
                 sl.MouseWheel += (_, e) =>
                 {
                     int delta = e.Delta > 0 ? 5 : -5;
-                    step.Volume = Math.Clamp(step.Volume + delta, 0, 100);
+                    step.Volume = MathEx.Clamp(step.Volume + delta, 0, 100);
                     sl.Value = step.Volume;
                     e.Handled = true;
                 };

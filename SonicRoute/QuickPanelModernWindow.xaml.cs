@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Runtime.InteropServices;
 using System.Windows.Threading;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using Application = System.Windows.Application;
@@ -88,8 +89,8 @@ namespace SonicRoute
                 if (!_adjustDragging) return;
                 var p = e.GetPosition(null);
                 var (minX, maxX, minY, maxY) = QuickPanelPosition.DragBounds(this);
-                Left = Math.Clamp(Left + (p.X - _adjustDragStart.X), minX, Math.Max(minX, maxX));
-                Top = Math.Clamp(Top + (p.Y - _adjustDragStart.Y), minY, Math.Max(minY, maxY));
+                Left = MathEx.Clamp(Left + (p.X - _adjustDragStart.X), minX, Math.Max(minX, maxX));
+                Top = MathEx.Clamp(Top + (p.Y - _adjustDragStart.Y), minY, Math.Max(minY, maxY));
                 e.Handled = true;
             };
             MouseLeftButtonUp += (_, e) =>
@@ -156,7 +157,7 @@ namespace SonicRoute
                 AppListScroll.UpdateLayout();
                 double fixedH = RootBorder.DesiredSize.Height;
                 if (fixedH <= 0) fixedH = RootBorder.ActualHeight; // 兜底
-                double total = Math.Clamp(cfg.QuickPanelHeight, 350, 800);
+                double total = MathEx.Clamp(cfg.QuickPanelHeight, 350, 800);
                 var wa = SystemParameters.WorkArea;
                 double maxTotal = Math.Max(240, wa.Height - 16); // 不超屏幕限度
                 if (total > maxTotal) total = maxTotal;
@@ -459,9 +460,9 @@ namespace SonicRoute
         private void Volume_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (!_systemReady) return;
-            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
             int pct = (int)Math.Round(VolumeSlider.Value) + (e.Delta > 0 ? step : -step);
-            VolumeSlider.Value = Math.Clamp(pct, 0, 100);
+            VolumeSlider.Value = MathEx.Clamp(pct, 0, 100);
             e.Handled = true;
         }
 
@@ -494,7 +495,7 @@ namespace SonicRoute
             if (!_systemReady) return -1;
             int cur = await Task.Run(() => SystemVolumeService.GetVolumePercent(_systemDeviceId));
             if (cur < 0) return -1;
-            int next = Math.Clamp(cur + delta, 0, 100);
+            int next = MathEx.Clamp(cur + delta, 0, 100);
             bool ok = await Task.Run(() => SystemVolumeService.SetVolumePercent(_systemDeviceId, next));
             int actual = await Task.Run(() => SystemVolumeService.GetVolumePercent(_systemDeviceId));
             if (actual >= 0)
@@ -639,7 +640,7 @@ namespace SonicRoute
                             if (row.TrackBg == null || row.TrackBg.ActualWidth <= 0) return;
                             double range = row.Slider.Maximum - row.Slider.Minimum;
                             double left = (row.Thumb?.Margin.Left ?? 0) + e2.HorizontalChange;
-                            row.Slider.Value = Math.Clamp(row.Slider.Minimum + left / row.TrackBg.ActualWidth * range,
+                            row.Slider.Value = MathEx.Clamp(row.Slider.Minimum + left / row.TrackBg.ActualWidth * range,
                                 row.Slider.Minimum, row.Slider.Maximum);
                         };
                     }
@@ -650,7 +651,7 @@ namespace SonicRoute
                             if (row.TrackBg.ActualWidth <= 0) return;
                             double range = row.Slider.Maximum - row.Slider.Minimum;
                             double x = e2.GetPosition(row.TrackBg).X;
-                            row.Slider.Value = Math.Clamp(row.Slider.Minimum + x / row.TrackBg.ActualWidth * range,
+                            row.Slider.Value = MathEx.Clamp(row.Slider.Minimum + x / row.TrackBg.ActualWidth * range,
                                 row.Slider.Minimum, row.Slider.Maximum);
                             e2.Handled = true;
                         };
@@ -718,7 +719,7 @@ namespace SonicRoute
             double frac = range <= 0 ? 0 : (row.Slider.Value - row.Slider.Minimum) / range;
             row.TrackFill.Width = Math.Max(0, w * frac);
             double thumbMax = Math.Max(0, w - 14);
-            row.Thumb.Margin = new Thickness(Math.Clamp(row.TrackFill.Width - 7, 0, thumbMax), 0, 0, 0);
+            row.Thumb.Margin = new Thickness(MathEx.Clamp(row.TrackFill.Width - 7, 0, thumbMax), 0, 0, 0);
         }
 
         private void RowSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -742,9 +743,9 @@ namespace SonicRoute
         private void RowSlider_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (sender is not Slider sl || sl.Tag is not AppRow row) return;
-            int step = Math.Clamp(SonicRoute.Core.ConfigService.Load().VolumeStep, 1, 20);
+            int step = MathEx.Clamp(SonicRoute.Core.ConfigService.Load().VolumeStep, 1, 20);
             int pct = (int)Math.Round(sl.Value) + (e.Delta > 0 ? step : -step);
-            sl.Value = Math.Clamp(pct, 0, 100);
+            sl.Value = MathEx.Clamp(pct, 0, 100);
             e.Handled = true;
         }
         private async void VolDebounce_Tick(object? sender, EventArgs e)
@@ -1018,8 +1019,11 @@ namespace SonicRoute
         private void UpdateRowHighlights()
         {
             var cur = CurrentAppService.Current;
-            foreach (var (pid, row) in _rows)
+            // net48 无 KeyValuePair<K,V>.Deconstruct（.NET Core 2.0+）：显式取 Key/Value
+            foreach (var kv in _rows)
             {
+                int pid = kv.Key;
+                var row = kv.Value;
                 bool isCur = cur != null && pid == (int)cur.ProcessId;
                 if (isCur) row.HeaderBorder.SetResourceReference(BackgroundProperty, "Theme.Overlay");
                 else row.HeaderBorder.ClearValue(BackgroundProperty);
@@ -1049,7 +1053,8 @@ namespace SonicRoute
         {
             bool muted = await Task.Run(() => SessionVolumeService.ToggleAllMute());
             ApplyGlobalMuteVisual(muted);
-            foreach (var (_, row) in _rows) ApplyRowMutedVisual(row, muted);
+            // net48 无 KeyValuePair<K,V>.Deconstruct：显式取 Value
+            foreach (var kv in _rows) ApplyRowMutedVisual(kv.Value, muted);
             // 全局输出静音 OSD 主标题显示「全部应用」（静音的是所有应用，不是音跃本身）
             ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted"));
             return true;

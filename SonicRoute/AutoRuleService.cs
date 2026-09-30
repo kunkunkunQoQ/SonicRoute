@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 
@@ -27,6 +28,15 @@ namespace SonicRoute
     public static class AutoRuleService
     {
         public const string HotkeyPrefix = "Rule:";
+
+        /// <summary>随机启动用的随机源（net48 无 Random.Shared）。
+        /// Random 实例非线程安全，而规则执行可能来自后台线程，故统一加锁访问。</summary>
+        private static readonly Random _random = new();
+
+        private static int NextRandom(int maxExclusive)
+        {
+            lock (_random) return _random.Next(maxExclusive);
+        }
 
         /// <summary>按 Id 查规则。</summary>
         public static AutoRule? FindRule(string ruleId) =>
@@ -198,7 +208,7 @@ namespace SonicRoute
 
                     case AutoRuleAction.SetSystemVolume:
                         return await Task.Run(() =>
-                            SystemVolumeService.SetVolumePercent(null, Math.Clamp(step.Volume, 0, 100)));
+                            SystemVolumeService.SetVolumePercent(null, MathEx.Clamp(step.Volume, 0, 100)));
 
                     case AutoRuleAction.ToggleSystemMute:
                         return await Task.Run(() => SystemVolumeService.ToggleMute());
@@ -207,7 +217,7 @@ namespace SonicRoute
                         {
                             int pid = ResolveAppPid(step.TargetApp);
                             return pid > 0 && await Task.Run(() =>
-                                SessionVolumeService.SetVolumePercent(pid, Math.Clamp(step.Volume, 0, 100)));
+                                SessionVolumeService.SetVolumePercent(pid, MathEx.Clamp(step.Volume, 0, 100)));
                         }
 
                     case AutoRuleAction.ToggleAppMute:
@@ -283,7 +293,7 @@ namespace SonicRoute
 
             // 随机启动一个：只随机挑选启动项，不改变该启动项自身的打开方式
             if (mode == 1)
-                return LaunchOne(items[Random.Shared.Next(items.Count)]);
+                return LaunchOne(items[NextRandom(items.Count)]);
 
             bool any = false;
             foreach (var item in items)

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 
 namespace SonicRoute.Core
@@ -74,7 +75,7 @@ namespace SonicRoute.Core
                         if (attempt == 0) { Refresh(true); continue; }
                         return -1;
                     }
-                    return (int)Math.Round(Math.Clamp(f, 0f, 1f) * 100f);
+                    return (int)Math.Round(MathEx.Clamp(f, 0f, 1f) * 100f);
                 }
                 catch
                 {
@@ -93,7 +94,7 @@ namespace SonicRoute.Core
                 var list = FindRenderVolumes(pid, 5);
                 if (list == null || list.Count == 0) return false;
                 var g = Guid.Empty;
-                float val = Math.Clamp(percent / 100f, 0f, 1f);
+                float val = MathEx.Clamp(percent / 100f, 0f, 1f);
                 bool any = false;
                 try
                 {

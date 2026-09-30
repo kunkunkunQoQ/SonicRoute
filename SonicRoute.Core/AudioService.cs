@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 
@@ -31,7 +32,7 @@ namespace SonicRoute.Core
             {
                 var cache = flow == EDataFlow.eRender ? _deviceCacheRender : _deviceCaptureRender;
                 var at = flow == EDataFlow.eRender ? _deviceCacheRenderAt : _deviceCacheCaptureAt;
-                if (cache != null && Environment.TickCount64 - at < DeviceCacheTtlTicks)
+                if (cache != null && CompatEnv.TickCount64 - at < DeviceCacheTtlTicks)
                     return CloneDevices(cache);
             }
 
@@ -42,12 +43,12 @@ namespace SonicRoute.Core
                 if (flow == EDataFlow.eRender)
                 {
                     _deviceCacheRender = list;
-                    _deviceCacheRenderAt = Environment.TickCount64;
+                    _deviceCacheRenderAt = CompatEnv.TickCount64;
                 }
                 else
                 {
                     _deviceCaptureRender = list;
-                    _deviceCacheCaptureAt = Environment.TickCount64;
+                    _deviceCacheCaptureAt = CompatEnv.TickCount64;
                 }
                 return CloneDevices(list);
             }

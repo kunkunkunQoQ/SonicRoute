@@ -105,12 +105,21 @@ namespace SonicRoute
             _mouseHook.Reload(mouseBindings);
         }
 
+        /// <summary>拆分快捷键组合串（'+' 分隔）：去空段 + 逐段 Trim。
+        /// net48 无 StringSplitOptions.TrimEntries（.NET 5+），也无 Split(char, StringSplitOptions) 重载，
+        /// 故统一走本方法，保证 net8 与 net48 行为一致。</summary>
+        private static string[] SplitCombo(string combo) =>
+            combo.Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries)
+                 .Select(s => s.Trim())
+                 .Where(s => s.Length > 0)
+                 .ToArray();
+
         /// <summary>组合串最后一段是否为鼠标键/滚轮（这类绑定必须走低级鼠标钩子）。</summary>
         private static bool IsMouseCombo(string combo)
         {
-            var parts = combo.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var parts = SplitCombo(combo);
             if (parts.Length < 1) return false;
-            return parts[^1].ToLowerInvariant() switch
+            return parts[parts.Length - 1].ToLowerInvariant() switch
             {
                 "mbutton" or "xbutton1" or "xbutton2" or "wheelup" or "wheeldown" => true,
                 _ => false
@@ -150,10 +159,11 @@ namespace SonicRoute
         {
             mods = 0;
             vk = 0;
-            var parts = combo.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var parts = SplitCombo(combo);
             if (parts.Length < 1) return false;
 
-            foreach (var p in parts[..^1])
+            // net48 无 Index/Range（System.Index / System.Range 类型不存在）：用 Take 取"除最后一段之外"的修饰键
+            foreach (var p in parts.Take(parts.Length - 1))
             {
                 switch (p.ToLowerInvariant())
                 {
@@ -165,7 +175,7 @@ namespace SonicRoute
                 }
             }
 
-            var key = parts[^1];
+            var key = parts[parts.Length - 1];
             if (key.Length == 1 && key[0] is >= '0' and <= '9') vk = 0x30u + (uint)(key[0] - '0');
             else if (key.Length == 1 && key[0] is >= 'A' and <= 'Z') vk = 0x41u + (uint)(key[0] - 'A');
             else if (key.Length == 1 && key[0] is >= 'a' and <= 'z') vk = 0x41u + (uint)(key[0] - 'a');

@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Models;
 
 namespace SonicRoute
@@ -382,8 +383,8 @@ namespace SonicRoute
             string name = AppDisplayName.Get(proc, string.IsNullOrWhiteSpace(proc) ? "应用" : proc);
             int cur = SessionVolumeService.GetVolumePercent(pid);
             if (cur < 0) { ShowOsd(name, L10n.T("Ov.VolReadFail")); return; }
-            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
-            int next = Math.Clamp(cur + (delta > 0 ? step : -step), 0, 100);
+            int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int next = MathEx.Clamp(cur + (delta > 0 ? step : -step), 0, 100);
             SessionVolumeService.SetVolumePercent(pid, next);
             int actual = SessionVolumeService.GetVolumePercent(pid);
             if (actual < 0) actual = next;
@@ -425,8 +426,8 @@ namespace SonicRoute
                 if (_osd == null)
                 {
                     var _ocfg = ConfigService.Load();
-                    _osdWidth = Math.Clamp(_ocfg.OsdWidth, 180, 600);
-                    _osdFontScale = Math.Clamp(_ocfg.OsdFontScale, 0.7, 2.0);
+                    _osdWidth = MathEx.Clamp(_ocfg.OsdWidth, 180, 600);
+                    _osdFontScale = MathEx.Clamp(_ocfg.OsdFontScale, 0.7, 2.0);
                     _osd = new Window
                     {
                         WindowStyle = WindowStyle.None,
@@ -495,8 +496,8 @@ namespace SonicRoute
                         double maxX = (vsX + vsW) / ws - _osd.ActualWidth;
                         double minY = vsY / ws;
                         double maxY = (vsY + vsH) / ws - _osd.ActualHeight;
-                        _osd.Left = Math.Clamp(_osd.Left + (p.X - _osdDragStart.X), minX, Math.Max(minX, maxX));
-                        _osd.Top = Math.Clamp(_osd.Top + (p.Y - _osdDragStart.Y), minY, Math.Max(minY, maxY));
+                        _osd.Left = MathEx.Clamp(_osd.Left + (p.X - _osdDragStart.X), minX, Math.Max(minX, maxX));
+                        _osd.Top = MathEx.Clamp(_osd.Top + (p.Y - _osdDragStart.Y), minY, Math.Max(minY, maxY));
                         e.Handled = true;
                     };
                     _osd.MouseLeftButtonUp += (_, e) =>
@@ -542,7 +543,7 @@ namespace SonicRoute
                     _osd.Topmost = true;
                     // 淡入：从隐藏到显示时 Opacity 0→1（时长 0 = 禁用，直接不透明）；先清旧动画避免残留
                     _osd.BeginAnimation(Window.OpacityProperty, null);
-                    int fadeIn = Math.Clamp(ConfigService.Load().OsdFadeInMs, 0, 500);
+                    int fadeIn = MathEx.Clamp(ConfigService.Load().OsdFadeInMs, 0, 500);
                     if (fadeIn > 0)
                     {
                         _osd.Opacity = 0;
@@ -638,8 +639,8 @@ namespace SonicRoute
                 double top = wa.Top + 14;
                 // Clamp 在默认位置所在工作区（主显示器，WPF DIP）内，防跨屏残留/边缘闪烁；与九宫格同一坐标系
                 double waL = wa.Left, waT = wa.Top, waR = wa.Right, waB = wa.Bottom;
-                left = Math.Clamp(left + ox, waL, Math.Max(waL, waR - w - 4));
-                top = Math.Clamp(top + oy, waT, Math.Max(waT, waB - h - 4));
+                left = MathEx.Clamp(left + ox, waL, Math.Max(waL, waR - w - 4));
+                top = MathEx.Clamp(top + oy, waT, Math.Max(waT, waB - h - 4));
                 _osd.Left = left;
                 _osd.Top = top;
             }
@@ -675,7 +676,7 @@ namespace SonicRoute
                     return;
                 }
                 // 淡出动画结束后再隐藏（时长 0 = 禁用淡出，直接隐藏）
-                int fadeOut = Math.Clamp(ConfigService.Load().OsdFadeOutMs, 0, 1000);
+                int fadeOut = MathEx.Clamp(ConfigService.Load().OsdFadeOutMs, 0, 1000);
                 if (fadeOut <= 0)
                 {
                     HideOsd();
@@ -821,8 +822,8 @@ namespace SonicRoute
                 double vsY = GetSystemMetrics(77); // SM_YVIRTUALSCREEN
                 double vsW = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
                 double vsH = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
-                cfg.OsdCustomX = (int)Math.Clamp(_osd.Left, vsX / ws, Math.Max(vsX / ws, (vsX + vsW) / ws - _osd.ActualWidth));
-                cfg.OsdCustomY = (int)Math.Clamp(_osd.Top, vsY / ws, Math.Max(vsY / ws, (vsY + vsH) / ws - _osd.ActualHeight));
+                cfg.OsdCustomX = (int)MathEx.Clamp(_osd.Left, vsX / ws, Math.Max(vsX / ws, (vsX + vsW) / ws - _osd.ActualWidth));
+                cfg.OsdCustomY = (int)MathEx.Clamp(_osd.Top, vsY / ws, Math.Max(vsY / ws, (vsY + vsH) / ws - _osd.ActualHeight));
                 ConfigService.Save(cfg);
                 _osdAdjustMode = false;
                 _osdTimer.Stop();
@@ -839,8 +840,8 @@ namespace SonicRoute
             {
                 if (_osd == null) return;
                 _osdPositionDirty = true; // 尺寸变化后需重新定位（Custom 模式仍用已保存坐标，不跳回右上角）
-                _osdWidth = Math.Clamp(w, 180, 600);
-                _osdFontScale = Math.Clamp(fs, 0.7, 2.0);
+                _osdWidth = MathEx.Clamp(w, 180, 600);
+                _osdFontScale = MathEx.Clamp(fs, 0.7, 2.0);
                 _osd.Width = _osdWidth;
                 if (_osd.Content is Border b)
                 {
@@ -859,8 +860,8 @@ namespace SonicRoute
             try
             {
                 var cfg = ConfigService.Load();
-                cfg.OsdWidth = (int)Math.Clamp(w, 180, 600);
-                cfg.OsdFontScale = Math.Clamp(fs, 0.7, 2.0);
+                cfg.OsdWidth = (int)MathEx.Clamp(w, 180, 600);
+                cfg.OsdFontScale = MathEx.Clamp(fs, 0.7, 2.0);
                 ConfigService.Save(cfg); // 先保存，保证 OSD 创建时读到新值
                 _osdWidth = cfg.OsdWidth;
                 _osdFontScale = cfg.OsdFontScale;

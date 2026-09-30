@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute
@@ -99,14 +100,23 @@ namespace SonicRoute
             return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
         }
 
+        /// <summary>拆分快捷键组合串（'+' 分隔）：去空段 + 逐段 Trim。
+        /// net48 无 StringSplitOptions.TrimEntries（.NET 5+），也无 Split(char, StringSplitOptions) 重载。</summary>
+        private static string[] SplitCombo(string combo) =>
+            combo.Split(new[] { '+' }, StringSplitOptions.RemoveEmptyEntries)
+                 .Select(s => s.Trim())
+                 .Where(s => s.Length > 0)
+                 .ToArray();
+
         /// <summary>检查组合串（"Ctrl+XButton1"）在当前修饰键状态下是否匹配按下的键。</summary>
         private static bool ComboMatches(string combo, uint pressedMods, string pressedKey)
         {
-            var parts = combo.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var parts = SplitCombo(combo);
             if (parts.Length < 1) return false;
 
             uint needMods = 0;
-            foreach (var p in parts[..^1])
+            // net48 无 Index/Range（System.Index / System.Range 类型不存在）：用 Take 取"除最后一段之外"的修饰键
+            foreach (var p in parts.Take(parts.Length - 1))
             {
                 switch (p.ToLowerInvariant())
                 {
@@ -118,7 +128,7 @@ namespace SonicRoute
                 }
             }
             if (needMods != pressedMods) return false;
-            return string.Equals(parts[^1], pressedKey, StringComparison.OrdinalIgnoreCase);
+            return string.Equals(parts[parts.Length - 1], pressedKey, StringComparison.OrdinalIgnoreCase);
         }
 
         private static uint GetPressedMods()

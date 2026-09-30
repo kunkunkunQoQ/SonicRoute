@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 
 namespace SonicRoute.Core
@@ -44,7 +45,7 @@ namespace SonicRoute.Core
             try
             {
                 if (v.GetMasterVolumeLevelScalar(out float f) < 0) return -1;
-                return (int)Math.Round(Math.Clamp(f, 0f, 1f) * 100f);
+                return (int)Math.Round(MathEx.Clamp(f, 0f, 1f) * 100f);
             }
             catch { return -1; }
             finally { Marshal.ReleaseComObject(v); }
@@ -58,7 +59,7 @@ namespace SonicRoute.Core
             try
             {
                 var g = Guid.Empty;
-                return v.SetMasterVolumeLevelScalar(Math.Clamp(percent / 100f, 0f, 1f), ref g) >= 0;
+                return v.SetMasterVolumeLevelScalar(MathEx.Clamp(percent / 100f, 0f, 1f), ref g) >= 0;
             }
             catch { return false; }
             finally { Marshal.ReleaseComObject(v); }

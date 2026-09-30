@@ -271,7 +271,12 @@ namespace SonicRoute
                 try
                 {
                     File.Copy(file, tmp, true);
-                    File.Move(tmp, dest, true); // 原子替换：中途失败目标仍是完整旧文件
+                    // net48 无 File.Move(src, dst, overwrite) 三参重载（.NET Core 3.0+）。
+                    // 目标已存在 → File.Replace（原子覆盖替换，语义与原实现一致）；不存在 → File.Move。
+                    if (File.Exists(dest))
+                        File.Replace(tmp, dest, null);
+                    else
+                        File.Move(tmp, dest);
                 }
                 catch
                 {

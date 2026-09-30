@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Forms;
 using Microsoft.Win32;
 using SonicRoute.Core;
+using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using Application = System.Windows.Application;
@@ -53,16 +54,30 @@ namespace SonicRoute
         private bool _micMuteBaselineReady;
         private bool _lastMicMutedBaseline;
 
+        // ===== 单实例标识（net8 主版本 与 net48 Legacy 各自独立）=====
+        // 两版可能被同一用户同时安装。若共用同一互斥体名，先启动的一版会阻止另一版启动
+        // （第二实例会向第一实例投递"激活主窗口"消息后自行退出），表现为"点了没反应/弹错窗口"。
+        // 因此按 TFM 区分：net8 分支保持原有名称不变（行为零变化），Legacy 分支使用独立名称。
+#if NET48
+        private const string InstanceMutexName = @"Local\SonicRoute_Legacy_9NQZGRTPM1NT";
+        private const string ActivateSinkTitle = "SonicRoute_Legacy_ActivateSink";
+        private const string ActivateMessageName = "SonicRoute_Legacy_ActivateMain";
+#else
+        private const string InstanceMutexName = @"Local\SonicRoute_9NQZGRTPM1NT";
+        private const string ActivateSinkTitle = "SonicRoute_ActivateSink";
+        private const string ActivateMessageName = "SonicRoute_ActivateMain";
+#endif
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
 
             // single instance: notify existing instance to open main window, then exit
-            _activateMsg = NativeRegisterWindowMessage("SonicRoute_ActivateMain");
-            _instanceMutex = new Mutex(true, @"Local\SonicRoute_9NQZGRTPM1NT", out bool isFirstInstance);
+            _activateMsg = NativeRegisterWindowMessage(ActivateMessageName);
+            _instanceMutex = new Mutex(true, InstanceMutexName, out bool isFirstInstance);
             if (!isFirstInstance)
             {
-                var h = NativeFindWindow(null, "SonicRoute_ActivateSink");
+                var h = NativeFindWindow(null, ActivateSinkTitle);
                 if (h != IntPtr.Zero) NativePostMessage(h, _activateMsg, IntPtr.Zero, IntPtr.Zero);
                 Shutdown();
                 return;
@@ -155,7 +170,7 @@ namespace SonicRoute
 
 
             // single-instance activate sink (invisible): opens full UI on message
-            _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters("SonicRoute_ActivateSink")
+            _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters(ActivateSinkTitle)
             {
                 Width = 0, Height = 0, WindowStyle = 0,
             });
@@ -278,9 +293,13 @@ namespace SonicRoute
             if (_quickPanel is QuickPanelWindow c) c.SetAdjustMode(on);
             else if (_quickPanel is QuickPanelModernWindow m) m.SetAdjustMode(on);
         }
-        /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。</summary>
+        /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。
+        /// net48 Legacy 为传统桌面程序，不依赖 WinRT / Windows App SDK，恒为 false。</summary>
         private static bool IsPackaged()
         {
+#if NET48
+            return false;
+#else
             try
             {
                 _ = global::Windows.ApplicationModel.Package.Current;
@@ -290,6 +309,7 @@ namespace SonicRoute
             {
                 return false;
             }
+#endif
         }
 
         /// <summary>
@@ -304,7 +324,7 @@ namespace SonicRoute
                 using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
                     @"Software\Microsoft\Windows\CurrentVersion\Run", writable: true);
                 if (key == null) return;
-                var exe = Environment.ProcessPath;
+                var exe = AppInfo.ExecutablePath;
                 if (string.IsNullOrWhiteSpace(exe)) return;
                 var cur = key.GetValue("SonicRoute") as string;
                 if (string.IsNullOrWhiteSpace(cur)) return; // 自启项已被删，不重新加回
@@ -464,7 +484,8 @@ namespace SonicRoute
             // 自动化规则快捷键分发：Rule:{Id} → 规则引擎执行（无匹配规则时忽略）
             if (action.StartsWith(AutoRuleService.HotkeyPrefix, StringComparison.Ordinal))
             {
-                await AutoRuleService.ExecuteByHotkeyAsync(action[AutoRuleService.HotkeyPrefix.Length..]);
+                // net48 无 string[Range] 索引器（.NET Core 3.0+）：用 Substring 等价实现
+                await AutoRuleService.ExecuteByHotkeyAsync(action.Substring(AutoRuleService.HotkeyPrefix.Length));
                 return;
             }
 
@@ -517,7 +538,7 @@ namespace SonicRoute
                     // 调整面板/概览显示的当前应用音量（每次 ±5%）。面板打开时走面板路径
                     // （与 ± 按钮一致并同步滑块/状态行）；否则直接对共享当前应用调整并 OSD。
                     {
-                        int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+                        int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
                         int delta = action == HotkeyActions.ActVolUp ? step : -step;
                         if (_quickPanel is { IsVisible: true })
                         {
@@ -526,7 +547,7 @@ namespace SonicRoute
                         }
                         int curVol = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
                         if (curVol < 0) { _trayWheel?.ShowOsd(name, "⚠ " + L10n.T("Ov.NoOutputSession")); break; }
-                        int nextVol = Math.Clamp(curVol + delta, 0, 100);
+                        int nextVol = MathEx.Clamp(curVol + delta, 0, 100);
                         bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, nextVol));
                         int act = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
                         _trayWheel?.ShowOsd(name, ok && act >= 0 ? $"🔉 {act}%" : L10n.T("Ov.VolAdjustFail"));
