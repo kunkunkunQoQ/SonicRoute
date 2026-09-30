@@ -1,0 +1,15 @@
+音跃 SonicRoute v1.20 工作区阶段备份（实时电平性能优化前）
+备份日期：2026-09-30
+状态：本地开发快照，未发布；不覆盖 v1.19 正式归档。
+
+源码范围：SonicRoute、SonicRoute.Core、SonicRoute.Legacy 三工程及 SonicRoute.sln、图标.png、README.md、AI_CONTEXT.md、.gitignore；排除 bin/obj。包含当前尚未提交的 AudioMeterService.cs。
+可运行版本：Lite-x64 框架依赖单文件（优先测试）；Legacy-x64 Debug 运行目录（已去除 pdb）。ARM64 尚未为此阶段构建。
+
+当前工作区改动：
+- 版本号改为 1.20；自动化触发应用移除「任意应用」选项。
+- 简洁快速面板增加每应用实时电平，主题页 ShowAppPeakMeter 开关；关时停止探针并恢复 1.19 的滑块视觉。
+- 修复首次加载面板时模板 ScaleTransform 冻结造成的加载失败、首行未知应用问题。
+- 实时电平颜色随深浅模式调整：深色模式更亮，浅色模式更深，极亮/极暗自定义强调色反向调整。
+- 探针只采样面板已列出、未静音且滑块可用的应用；滚动出屏幕的行仍会采样。性能优化尚未写入此快照。
+
+构建验证：Lite x64 publish 成功，FileVersion 1.20.0.0；Legacy Debug 编译 0 错误、42 个可空性警告。未做本轮视觉验收。

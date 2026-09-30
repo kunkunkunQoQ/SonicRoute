@@ -1,0 +1,14 @@
+音跃 SonicRoute v1.20 工作区阶段备份（实时电平性能优化后）
+备份日期：2026-09-30
+状态：本地开发快照，未发布；优化前快照保存在相邻 v1.20-01-实时电平-优化前 目录。
+
+源码范围：SonicRoute、SonicRoute.Core、SonicRoute.Legacy 三工程及 SonicRoute.sln、图标.png、README.md、AI_CONTEXT.md、.gitignore；排除 bin/obj。包含当前尚未提交的 AudioMeterService.cs。
+可运行版本：Lite-x64 框架依赖单文件（优先测试）；Legacy-x64 Debug 运行目录（已去除 pdb）。ARM64 尚未为此阶段构建。
+
+相对优化前快照的改动：
+- AudioMeterService：目标 PID 集合只在目标版本变化时复制；旧 PID 显示缓存只在目标变化时清理；电平不变时不创建快照、不投递 UI，回零帧仍发送。
+- QuickPanelModernWindow：滑块布局由轨道 SizeChanged 与音量 ValueChanged 驱动，宽度和 Thumb 位置不变时不写属性。
+- 采样范围维持原状：排除快速面板中隐藏、静音或无可用音量滑块的应用；滚动出屏幕的行仍采样。采样频率约 30Hz、2 秒会话重扫、平滑参数不变。
+- 深浅模式实时电平颜色、主题开关和面板加载修复继续保留。
+
+构建验证：Lite x64 publish 成功，FileVersion 1.20.0.0；Legacy Debug 0 错误、47 个可空性警告。未做优化后运行时性能测量或视觉验收。
