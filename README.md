@@ -7,15 +7,17 @@
 
 更快捷地控制 Windows 每个应用的声音。
 
-SonicRoute 是一个常驻托盘的 Windows 音频控制工具，可以快速控制当前应用的输出/输入设备、音量和静音，并通过快捷键、任务栏滚轮、OSD 和自动化减少反复进入系统设置的操作。
+SonicRoute 是一个常驻托盘的 Windows 音频控制工具，可以快速控制当前应用的输出 / 输入设备、音量和静音，并通过快捷键、任务栏滚轮、OSD 和自动化减少反复进入系统设置的操作。
 
 按应用音频路由 · 任务栏滚轮 · 全局快捷键 · 托盘面板 · OSD · 自动化
 
 ![预览](docs/images/preview.gif)
 
-**v1.20 预览版** ｜ 稳定版 v1.19 ｜ Windows 10 2004+ / Windows 11 · x64 · ARM64 实验 · C# / WPF
+**v1.20 预览版已发布** ｜ 稳定版 v1.19 ｜ Windows 10 2004+ / Windows 11 · x64 · ARM64 实验 · C# / WPF
 
 📥 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) ｜ [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) ｜ [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+
+> 🧪 **v1.20 Preview** 已在 GitHub Releases 提供。它重点改进快速面板、OSD、自动化和后台性能；稳定版目前仍为 v1.19。
 
 ---
 
@@ -43,52 +45,80 @@ Windows 本身已经可以调整每个应用的音量和输出设备，SonicRout
 - 🎯 **应用音频路由**：为游戏、浏览器、播放器、语音软件等应用分别选择输出和输入设备；既可以只控制当前正在使用的应用，也可以统一管理所有应用或系统默认设备
 - 🖱 **快速控制**：通过托盘快捷面板管理正在运行或出声的应用；鼠标停在任务栏上滚轮即可调整当前应用音量
 - ⌨️ **全局快捷键**：不用切出游戏即可调整当前应用音量、静音、切换设备、控制麦克风等
-- 🖥 **OSD**：音量、设备切换和麦克风状态通过轻量 OSD 显示，支持位置、尺寸等自定义
-- 🤖 **自动化**：支持应用启动、退出、快捷键、定时等触发方式，自动切换设备、调整音量、静音或启动程序
-- 🧹 **轻量常驻**：按需加载界面，并尽量减少后台资源占用
+- 🖥 **OSD**：音量、设备切换和麦克风状态通过轻量 OSD 显示，支持位置、尺寸、音量进度条等自定义
+- 🤖 **自动化**：支持应用启动 / 退出、切换应用、快捷键、定时等触发方式，可切换设备、调整音量、静音、控制麦克风或启动程序
+- 📊 **实时音量电平**：v1.20 预览版可在快速面板显示每个应用的实时声音电平，并可在主题设置中关闭
+- 🧹 **轻量常驻**：界面按需加载，并持续优化空闲轮询、缓存、OSD 更新和后台资源占用
 - 🎨 **个性化与设备管理**：设备保留 / 改名、主题、透明度、多语言以及语言文件导入导出
 
 具体操作方式与完整设置项见 [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)。
 
-v1.20 预览版支持在任意目录用 `sr "规则名称或ID"` 调用运行中的软件执行规则，详见 [命令行调用说明](docs/automation-command-line.md)。
+v1.20 预览版还支持在任意目录使用 `sr "规则名称或ID"` 调用正在运行的 SonicRoute 执行自动化规则，详见 [命令行调用说明](docs/automation-command-line.md)。
+
+## 🧪 v1.20 预览版
+
+v1.20 是一次以**体验重构和性能优化**为主的更新。目前 GitHub 预览版已发布，正式稳定版会在预览测试与问题收敛后推出，不再以此前预告的“国庆中旬”作为固定上线日期。
+
+### 快速面板
+
+- 新增**每应用实时音量电平**，声音变化可直接显示在应用音量条中，并可在主题设置中关闭
+- 改进快速面板加载、更多选项展开、设备栏复用与入场动画，减少展开 / 切换时的闪动和重复创建
+- 简洁面板默认高度调整为 **450px**
+- 优化深色 / 浅色模式下的可见度和细节表现
+
+### OSD
+
+- 重做音量 OSD 的更新与动画逻辑，连续滚轮 / 快捷键调音量时更稳定
+- 新增可关闭的**音量进度条**，开启时音量数字移动到左侧
+- 优化多屏定位、布局稳定性、动画衔接和重复动画开销
+- 调整强调色、标题样式与 OSD 外观设置排版
+
+### 自动化
+
+- 新增**手动执行规则**
+- 支持复制规则与步骤
+- 新增**软件启动**触发方式
+- 新增明确静音 / 取消静音、相对音量调整、全局麦克风控制等操作
+- 操作菜单重新分组，并改进步骤拖动、边缘滚动和换位手感
+- 新增命令行调用：`sr "规则名称或ID"`，可从脚本、快捷方式或其他程序触发规则
+
+### 性能与响应
+
+- 优化自动化进程查询、麦克风静音兜底轮询、空闲内存回收与应用图标缓存
+- 优化实时电平刷新，减少没有必要的后台更新
+- 优化 Legacy 设置 / 自动化切页，以及滚轮、快捷键和 OSD 的响应路径
+- 合并和去重 OSD 高频更新，减少连续调音量时的重复动画与 UI 开销
+
+> 当前预览版的三种发布资产均已完成构建检查。ARM64 仍为实验版本，尚未完成 ARM64 真机完整验证；本轮性能优化也尚未进行完整运行时基准测量。
 
 ## 🚀 快速开始
 
-🛍 **推荐**：从 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT)（x64，自动更新）安装。
+🛍 **稳定使用推荐**：从 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT)（x64，自动更新）安装当前稳定版。
 
-也可以从 [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载：
-
-**[v1.20 预览版](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.20)** 已提供三个版本；预览版仍在完善，稳定版保持 v1.19。微软商店的 1.20 包已制作，商店更新以审核上架时间为准。
+想体验最新功能，可以从 [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.20) 下载 **v1.20 预览版**：
 
 | 版本 | 说明 |
 |---|---|
-| ⚡ Lite x64 | 主要便携版本，需 .NET 8 Desktop Runtime |
-| ⚡ Lite ARM64（实验） | 需 .NET 8 Desktop Runtime；实验版本，尚未完成 ARM64 真机完整验证 |
-| 🪟 Legacy x64 | 使用 .NET Framework 4.8，无需安装 .NET 8 |
+| ⚡ Lite x64 | 主要便携版本；单 EXE，需 x64 .NET 8 Desktop Runtime |
+| 🧪 Lite ARM64（实验） | 单 EXE，需 ARM64 .NET 8 Desktop Runtime；尚未完成 ARM64 真机完整验证 |
+| 🪟 Legacy x64 | .NET Framework 4.8 版本；解压完整目录后运行，无需安装 .NET 8 |
 
 > v1.19 Release Assets 中仍保留旧的自包含版本；自 v1.20 起不再提供这种发布形式。
+>
+> Microsoft Store 的 v1.20 x64 包已经完成本地打包与基础校验，但当前尚未提交 Partner Center；商店版本以上架状态为准。
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 [📖 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)（安装 / 面板 / 完整界面 / 场景教程）｜ [✨ 功能特性](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) ｜ [⌨️ 快捷键](https://github.com/kunkunkunQoQ/SonicRoute/wiki/03-%E5%BF%AB%E6%8D%B7%E9%94%AE) ｜ [❓ 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) ｜ [🛠 技术实现](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) ｜ [📌 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)（版本规则 + 更新日志）
 
-## 📌 版本相关
+## 📌 版本计划
+
+- **当前稳定版：v1.19**
+- **当前预览版：v1.20 Preview**（2026-10-01 已发布至 GitHub Releases）
+- **v1.20 正式版**：将在预览测试与问题收敛后发布，不再固定承诺“10 月中旬上线”
+- **年底大版本**：仍按计划保留，具体版本号与内容以后续公告为准
 
 完整版本历史（版本规则 + 更新日志）见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
-
-**下一版本：v1.20 国庆大版本**：此前已预告于国庆期间推出，当前计划于 **10 月中旬上线**。v1.20 发布后仍会继续迭代，**年底还会有下一次大版本更新**，具体内容以后续公告为准。
-
-### v1.20 预览版更新
-
-- 快速面板新增每应用实时音量电平，主题内可关闭；改进深浅模式的可见度与面板加载。
-- 优化空闲轮询、界面复用、图标缓存和内存回收，改善 Legacy 设置、自动化及 OSD 的响应。
-- 改进更多选项展开、面板入场和设备栏动画；简洁面板默认高度调整为 450px。
-- OSD 新增可关闭音量进度条，数字位于左侧；优化连续调音量时的更新与动画，调整强调色和外观设置排版。
-- 自动化支持手动执行、规则及步骤复制、软件启动触发、明确静音、相对音量及全局麦克风控制。
-- 新增短命令 `sr "规则名称或ID"`，可直接调用运行中的 SonicRoute 执行规则。
-- 自动化操作菜单分组，改进步骤拖动与边缘滚动，缩短上下换位所需的拖动距离。
-
-ARM64 为实验版本，尚未经过 ARM64 真机完整验证。上述性能改动尚未做本轮运行时测量。
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
