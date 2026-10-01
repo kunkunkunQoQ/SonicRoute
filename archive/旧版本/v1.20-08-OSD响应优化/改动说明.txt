@@ -1,0 +1,25 @@
+音跃 SonicRoute v1.20 OSD 响应优化阶段备份
+日期：2026-10-01；本地开发版，版本 1.20，未提交上传、未发布。
+前一阶段：v1.20-07-OSD响应优化前；基于 CPU 优化阶段 06。
+内容：三工程带注释源码 73 文件、Lite x64 单文件、Legacy x64 12 个运行文件、改动说明；无 bin/obj/pdb。
+
+改动：
+1. Legacy 进程名优先 OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION) + QueryFullProcessImageNameW，1024 字符缓冲不足才扩容；失败回退原 Process 查询，进程句柄自动释放。net8 保留原查询实现。
+2. 本轮应用枚举按 PID 缓存名称与存活状态，跨设备多会话只查询一次；不长期缓存 PID 名称，保留幽灵会话过滤和权限受限进程。
+3. 托盘滚轮的应用解析、音量读/写/实际值读回与静音查询移至一个后台任务；复用已知进程名，保留原滚轮符号合并步进。记录输入开始处理时的前台 PID，完成后 UI 显示；服务停止丢弃待处理输入与旧结果。
+4. 音量快捷键用 SemaphoreSlim 顺序执行；应用枚举/解析合为一轮后台任务，音量读写读回合为另一轮（普通路径 Task.Run 从 4 次降为 2 次）。
+5. Core 新增 SessionVolumeService.AdjustVolumePercent，增减串行且保留 5s 会话新鲜度与失效重试。SystemVolumeService.AdjustVolumePercent 在一次端点接口获取内完成读写读回，立即释放；不长期缓存 COM。
+6. 简洁/经典面板的快捷键增减 Task.Run 从 3 次降为 1 次；滑块写与实际值读回任务合并，读回时临时关闭就绪标志以避免 ValueChanged 重复写入，关闭窗口或目标改变后跳过旧 UI 结果。
+
+保持：
+OSD 外观、淡入/淡出动画时长、音量步长、当前应用选择规则。
+实时电平原采样范围、33ms 采样、2 秒扫描；滚出屏幕仍采样。
+
+构建与检查：
+- Lite x64 Release 单文件 publish 通过；产物位于 dist/SonicRoute-v1.20-Lite-x64-osd-opt。
+- Legacy Release build 0 错误、47 个既有可空性警告；干净运行目录位于 dist/SonicRoute-v1.20-Legacy-x64-osd-opt，共 12 文件。
+- 两版 exe 和 Legacy Core.dll 文件版本 1.20.0.0；两版 exe PE=0x8664/x64。
+- 源码差异静态检查与构建完成；本阶段未添加或运行测试，未做实际 OSD 响应延迟测量，不承诺具体流畅度/CPU 改善比例。
+- CPU 阶段 06 的各 41 项检查不作为本阶段运行时验证。
+- 用户仍运行阶段 06 Legacy，本轮未停止或替换运行中的进程。
+- AI_CONTEXT.md、本地主规范、改动记录、留档已同步。
