@@ -1,0 +1,59 @@
+{
+  "x64": {
+    "fileVersion": "1.20.0.0",
+    "bundlePeMachines": {
+      "0x8664": 2,
+      "0x014C": 2
+    },
+    "sha256": "F7D452928E4BB2A876D9AC05D294BF8DE7F76BE9771AE5258D5EEC21BE280B58",
+    "bytes": 28256515,
+    "frameworkDependent": true,
+    "machine": "0x8664",
+    "bundleFiles": [
+      "Microsoft.Windows.SDK.NET.dll",
+      "SonicRoute.Core.dll",
+      "SonicRoute.deps.json",
+      "SonicRoute.dll",
+      "SonicRoute.runtimeconfig.json",
+      "WinRT.Runtime.dll"
+    ]
+  },
+  "arm64": {
+    "fileVersion": "1.20.0.0",
+    "bundlePeMachines": {
+      "0x014C": 2,
+      "0xAA64": 2
+    },
+    "sha256": "B627A7B424E1C1A0EA5E91D8D126FA79DCCCAD3006FCA2F580069DD8F16B861F",
+    "bytes": 28412167,
+    "frameworkDependent": true,
+    "machine": "0xAA64",
+    "bundleFiles": [
+      "Microsoft.Windows.SDK.NET.dll",
+      "SonicRoute.Core.dll",
+      "SonicRoute.deps.json",
+      "SonicRoute.dll",
+      "SonicRoute.runtimeconfig.json",
+      "WinRT.Runtime.dll"
+    ]
+  },
+  "Legacy": {
+    "fileVersion": "1.20.0.0",
+    "framework": ".NET Framework 4.8",
+    "machine": "0x8664",
+    "files": [
+      "Microsoft.Bcl.AsyncInterfaces.dll",
+      "SonicRoute.Core.dll",
+      "SonicRoute.exe",
+      "SonicRoute.exe.config",
+      "System.Buffers.dll",
+      "System.Memory.dll",
+      "System.Numerics.Vectors.dll",
+      "System.Runtime.CompilerServices.Unsafe.dll",
+      "System.Text.Encodings.Web.dll",
+      "System.Text.Json.dll",
+      "System.Threading.Tasks.Extensions.dll",
+      "System.ValueTuple.dll"
+    ]
+  }
+}
