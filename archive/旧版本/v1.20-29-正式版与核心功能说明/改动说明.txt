@@ -1,4 +1,4 @@
-SonicRoute v1.20 正式版与核心功能说明（2026-10-01，阶段 29）
+SonicRoute v1.20 正式版与核心功能说明（2026-10-02，阶段 29）
 
 用户要求将 1.20 改为正式版，并优化根 README 的“✨ 核心功能”。
 GitHub Release 沿用 tag v1.20 和原三个资产，取消 prerelease 并设为 Latest，标题和说明改为正式版。
