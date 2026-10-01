@@ -1,0 +1,28 @@
+SonicRoute v1.20 预览版发布（2026-10-01，阶段 28）
+
+基于阶段 27 当前代码，发布 GitHub v1.20 预览版，稳定版保持 v1.19。
+版本号三个工程均为 1.20；文件版本 1.20.0.0，产品版本 1.20。
+
+【发布资产】
+1. SonicRoute-v1.20-Lite-x64.exe：框架依赖单文件，需 x64 .NET 8 Desktop Runtime。
+2. SonicRoute-v1.20-Lite-arm64.exe：框架依赖单文件，需 ARM64 .NET 8 Desktop Runtime；实验版本，尚未经过 ARM64 真机完整验证。
+3. SonicRoute-v1.20-Legacy-x64.zip：12 个运行文件，需 .NET Framework 4.8，解压完整目录后运行。
+不制作旧自包含版本。三个产物构建均 0 错误，既有可空性警告仍存在；本轮未启动软件、执行规则或测量性能。
+
+【静态构建检查】
+Lite 两版目录各只有一个 SonicRoute.exe；apphost 与 SonicRoute/Core 的 PE 架构分别为 x64/ARM64，ARM64 包内 AMD64 映像数为 0。
+包内 Microsoft.WindowsDesktop.App 框架引用存在，无 includedFrameworks/coreclr.dll；两项 0x014C 映像是既有托管 AnyCPU 支持程序集。
+Legacy EXE/Core 均为 x64，引用 mscorlib，不含 System.Private.CoreLib；ZIP 内 12 文件完整且无 PDB。
+源码与运行包哈希记录见本目录 JSON 文件；未添加或运行测试。
+
+【微软商店包，仅本地】
+SonicRoute-v1.20-Lite.msix：仅 x64 Lite；Identity=8B44F47E.SonicRoute，Publisher 与预留身份一致，Version=1.20.0.0。
+沿用 v1.19 包身份/版本递增方式，最低系统与当前代码统一为 Windows 10 2004（10.0.19041.0）；补齐 zh-tw 后九语言完整，保留 windows.startupTask。
+MSIX 内 EXE 与 Lite x64 发布资产 SHA256 一致；MakeAppx 打包/清单校验完成。
+使用已存在于 CurrentUser/My 的匹配签名证书；签名调用不传入证书密码，未导出私钥。CMS 密码学签名完整性检查通过；SignTool 信任链检查仅因自签根证书不受本机信任而失败，未导入根证书。
+MSIX 不上传 GitHub，归档在本目录安装包/。尚未提交 Partner Center，未进行商店认证、安装或启动验证；微软商店版本以上架状态为准。
+
+【归档】
+保留原阶段 22–27 本地备份；公开副本放到 archive/旧版本/，551 文件与原件 SHA256 一致，排除本地 AI_CONTEXT.md/config-editor 和签名私钥。
+当前阶段 28 同时保留源码快照、三个发布资产、商店安装包和构建资料；公开副本不含本地摘要、配置编辑器、MSIX/证书或编译中间文件。
+阶段历史说明中的“未上传/未发布”是原快照创建时状态，不改写历史记录。

@@ -1,0 +1,7 @@
+﻿音跃 SonicRoute v1.20 OSD 音量数字左移及 CPU 排查
+日期：2026-10-01，基线阶段 21，阶段 22 本地未上传、未发布。
+开启 OSD 音量条时，百分比从右侧移到左侧紧随音量图标，TextAlignment=Left、Grid 第 1 列；图标仍第 0 列，静音说明移到第 2 列使用剩余空间。复用原 Grid 和固定数字列宽，字号/强调色及音量逻辑不变。仅修改 OsdService.cs 的布局。
+用户确认 CPU 差异发生在连续按键/滚轮调音量时。代码对照：开启后每次输入会读取当前 ScaleX 并 StopBar；可见且同一目标、系统动画开启与渲染 Tier>0 时，可能再创建 90ms DoubleAnimation、QuadraticEase 和 Completed 回调；没有缓存上次目标百分比，旧动画未结束时相同目标也可能重启。关闭时移除专用控件、停条动画，更新原文字；没有因音量条开关增加音频采样/查询。动画额外绘制与对象分配为主要排查方向，更多控件及默认窗口逻辑高度 70→82 为附加成本；不能把透明窗口等同于固定软件渲染。建议去重同目标动画、同帧合并条更新、仅为条动画设置 30FPS 期望帧率，CPU 优化代码本次未实施。结论是代码分析，未做运行时 CPU 对照或 ETW 归因。
+修改前 OsdService.cs SHA256 与阶段 21 备份一致；阶段 22 完整备份 SonicRoute源码/v1.20-22-OSD音量数字左移/：77 源码、13 运行文件、改动说明及 CPU排查说明.md，共 92 文件；复制源码/运行文件 SHA256 逐一一致。基线为已上传 master 389b7efa4cbb4578f4144d55854ea2eee249b17f。
+Lite x64 publish / Legacy Release build 均 0 错误，Legacy 47 个既有可空性警告；exe 分别 28186883 / 1341952 字节，版本 1.20.0.0。运行目录 dist/SonicRoute-v1.20-Lite-x64-osd-volume-left/、dist/SonicRoute-v1.20-Legacy-x64-osd-volume-left/。
+已同步 AI_CONTEXT、主规范、流水和留档。未添加/运行测试、未启动软件做运行时视觉或 CPU 验收，未停止或替换用户进程；阶段 22 未提交 GitHub、未创建 Release。

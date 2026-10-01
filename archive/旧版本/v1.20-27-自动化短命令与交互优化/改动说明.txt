@@ -1,0 +1,17 @@
+音跃 SonicRoute v1.20 自动化短命令与交互优化
+基线阶段26；当前阶段27。
+
+【2026-10-01 v1.20 自动化短命令与交互优化，阶段 27】
+- 用户要求缩短命令、运行中的 SonicRoute 可在任意目录直接执行规则，并改善操作下拉排版与步骤拖动手感；随后明确“缩短向上/向下所需拖动距离”，最终使用相对位移累计，不再采用整张卡片高度/中心线作为换位距离。
+- 新短命令 sr "规则名称或ID"：正常启动在后台注册 %LocalAppData%\SonicRoute\Command 下 sr.cmd / sr-client.ps1 / sr-help.txt，按内容变化写文件；用户 PATH 只补本目录，保留原路径及 RegistryValueKind，已存在不重写；同步当前应用进程 PATH，通知 Explorer，新终端继承。首次使用须正常启动新版后重新打开终端（Windows Terminal 需结束旧宿主进程）。登记有当前用户互斥锁，避免 Lite/Legacy 同时写入。
+- sr 客户端仅连接既有管道，默认 Lite 优先、未连接到 Lite 时再找 Legacy，--legacy 可明确指定；每版连接最多等 250ms，收到连接后绝不向其他版本重试，不启动 SonicRoute 或打开主窗口。沿用帧大小/固定 JSON/退出码/实际步骤结果，支持长延时；写入最多 10s，结果无固定超时。短命令每次短暂启动 Windows PowerShell 客户端，无额外常驻进程或轮询；软件未运行返回通道不可用（6）。完整 EXE --run-rule 保留，并增加 -r 简写，保留原临时宿主逻辑。
+- 共享 Resources/RuleCommand.ps1 作为嵌入资源，两工程 LogicalName 一致；未新增工程或 NuGet 依赖，Legacy 不复制 UI 源码。Shell 客户端 Unicode 参数/UTF-8 输出、同步等待；脚本读取完整帧/限制长度，执行结果保留原 Code/RuleId/RuleName/Succeeded/Failed，直接调用可使用 $LASTEXITCODE，不再需要 GUI 程序的 Start-Process -Wait。
+- 操作下拉按系统音频（6）/应用音频（6）/麦克风（2）/程序与脚本（2）/通知（1）共 5 组展示；17 动作全部保留，5 个分组标题禁用且不可聚焦/选择。按 Tag 找 enum，显示顺序与持久化编号独立。复用 RoundedComboBox / RoundedComboItem 与主题资源，操作名称可换行、完整名称提供 tooltip，下拉铺满可用宽度，复制/删除按钮按文案自适应。共用模板 MaxDropDownHeight 改为可绑定，默认仍 320，只有操作下拉设 440。
+- 步骤标题显示本地化序号，整条标题作为拖动区域，与操作/复制/删除分行，避免点下拉时误拖。跨过系统拖动启动距离后，单次缓存行位置/高度/已有 Transform；被拖行跟随鼠标，其他行只用 RenderTransform 预览让位，模型及 Items 顺序保持到松手。换位按鼠标相对上次累积距离，每格为相邻行高度 18% 且裁剪到 18–32 DIP；反向需重新跨过一段距离，小幅手抖不回跳，首尾清多余位移。快速长距离可跨多格，序号随预览变化。
+- 松手在一次 Dispatcher Normal 回调内落位一次，复用全部步骤控件及参数，不全量 RenderAutoSteps、不强制 UpdateLayout、不反复移除/恢复鼠标捕获。按旧视觉坐标与新位置计算短暂落位过渡，复用冻结 QuadraticEase，邻居与落位 110ms、DesiredFrameRate=30；系统关闭动画或 Tier 0 直接终态。30 FPS 是期望值，未做实际流畅度/CPU/内存测量。
+- 鼠标移动请求按需 Rendering 一帧合并；中间静止立即解除，靠近视口上下 40 DIP 区域时才继续帧驱动滚动（最高 420 DIP/s，按帧间隔计算并限位），无新增常驻 Timer。Esc、鼠标捕获丢失、窗口失活、步骤区域尺寸变化、离开页面、关闭或重建步骤均取消并移除订阅/动画/排队回调，恢复原序与 Transform，代际防止旧落位回调覆盖新交互；完成清落位 Transform 防止多次拖动累积层数。
+- 新标题行导致参数区下移，动作切换同步更新参数子项索引和标题颜色，不替换操作栏。显示与复制/保存仍沿用阶段 25 行为，模型/enum/规则存储、Core、执行器、OSD、快速面板高度450、电平33ms/2s及本地 config-editor 均未改变。
+- 九语言新增 7 键（5 分组、步骤序号、短命令帮助），各 396 键；同步原拖动提示与 CLI 帮助，键集合/新增占位符一致。帮助跟随最近正常启动时语言，机器协议不本地化。PowerShell 静态 Parser 校验 0 错误，未执行客户端；根 README 与 docs/automation-command-line.md 改为短命令优先，保留完整 EXE、脚本结果和失败边界说明。
+- Lite x64 publish / Legacy Release build 均 0 错误；Lite 6 次既有警告输出、Legacy 40 个既有可空性警告，无新增相关源文件警告。版本仍 1.20.0.0；Lite 单 exe 28,346,627 字节，Legacy 12 运行文件、exe 1,409,536 字节。目录 dist/SonicRoute-v1.20-Lite-x64-automation-ux/、dist/SonicRoute-v1.20-Legacy-x64-automation-ux/。
+- 完整备份 SonicRoute源码/v1.20-27-自动化短命令与交互优化/：81 源码（阶段 26 的 80 文件 + Resources/RuleCommand.ps1）、13 运行文件、改动说明及使用/交互说明，共 96 文件；SHA256 逐一一致，无 bin/obj/pdb，旧备份保留。
+- 已同步 AI_CONTEXT、主规范、改动记录、留档。未添加/运行测试、未启动软件或执行规则，未运行登记逻辑/短命令脚本，实际用户 PATH/注册表/规则与运行中软件未改；命令注册、交互及音频效果/性能仍未运行时验收。本阶段未提交 GitHub、未创建 Release。

@@ -1,0 +1,14 @@
+音跃 SonicRoute v1.20 命令行直接执行规则
+基线：阶段 25；当前阶段 26。
+
+【2026-10-01 v1.20 命令行直接执行规则，阶段 26】
+- 用户追加要求：命令行直接调用已保存自动化规则，无需触发条件。新增 SonicRoute.exe --run-rule "规则名称或ID" 以及 --help，按 Id 优先、完整名称其次（忽略大小写），GUID 支持 N/D 形式；重名/重 Id 拒绝执行。与 --main/--panel 混用、参数缺失等返回参数错误。
+- 复用 AutoRuleService.ExecuteWithResultAsync，同一规则单飞、步骤快照/顺序/延时/失败后继续与 UI 手动执行一致；关闭自动触发的规则仍可直接执行，不修改 Enabled/Hotkey/LastRunKey，不需要先绑定快捷键或触发器。显式调用后台刷新规则磁盘缓存，无新增文件监听或配置字段。
+- 运行中实例通过同一用户/会话/版本的异步命名管道接收命令，在原 WPF Dispatcher 中执行并返回逐步结果，不打开主窗口。Lite 与 Legacy 通道独立，按用户限制管道访问（net8 CurrentUserOnly；net48 显式当前用户 ACL）。读写采用 4 字节长度前缀 + UTF-8、有 16KB 帧限额、完整读取和 IO 超时；监听只异步等待连接，不做轮询。连接启动中的主实例最多等待 5s，实际规则执行不设固定超时、不自动重试。
+- 未运行时创建临时执行宿主，仅初始化配置/语言/主题、音频预热及无鼠标钩子的 OSD 服务；不启动托盘、快捷键、应用触发监听、定时器、前台监听、麦克风观察器或内存巡检，也不顺带执行其他 Startup 规则。已接收的并发请求完成后停止通道，再让最后一条 OSD 按现有 1100ms / 用户淡出收尾并退出；复用既有 hide Timer，无新常驻 Timer。临时宿主的麦克风常驻提示只临时显示，硬件静音写入仍保持。
+- CLI 输出固定 JSON（ExitCode/Code/RuleId/RuleName/Succeeded/Failed）及退出码 0–8：成功、步骤失败、参数错误、不存在、歧义、忙碌、通道不可用、取消、内部异常。GUI 子系统保留 stdout 重定向，无句柄时附着父控制台；字符控制台用 WriteConsoleW，重定向为 UTF-8；无控制台不弹窗口。Result 使用显式 public 无参构造，兼容两版 System.Text.Json。
+- 新共享文件 SonicRoute/RuleCommandLine.cs，Legacy 自动 Link 引用，无额外包/工程改动。App 编排入口/转发/临时执行、退出清理命令通道与单实例句柄；TrayWheelService/OsdService 仅补临时 OSD 等待，正常常驻 OSD 行为和电平采样 33ms/2s 保持。模型 enum/字段、Core/MainWindow/配置编辑器与阶段 25 保持。
+- 九语言各补 Auto.CliHelp（总数均 389），帮助语言跟随软件，JSON 协议代码不本地化。根 README 添加使用入口，.gitignore 仅放行新命令行说明，保留其余 docs 忽略；新 docs/automation-command-line.md 提供直接调用、PowerShell Start-Process -Wait、stdout JSON 与退出码说明；指出通道断开可能已有步骤提交、旧实例需升级，启动程序/脚本不等待内部执行结束仍沿用原语义。
+- Lite x64 publish / Legacy Release build 均 0 错误，Lite 6 次既有警告输出、Legacy 40 个既有可空性警告；未新增相关文件警告。版本 1.20.0.0，Lite 单 exe 28,305,667 字节；Legacy 12 个运行文件，exe 1,387,520 字节。运行目录 dist/SonicRoute-v1.20-Lite-x64-rule-cli/、dist/SonicRoute-v1.20-Legacy-x64-rule-cli/。
+- 完整阶段备份 SonicRoute源码/v1.20-26-命令行执行规则/：80 源码文件（阶段 25 的 78 文件 + RuleCommandLine.cs + docs/automation-command-line.md）、13 运行文件、改动说明及命令行说明，共 95 文件，复制 SHA256 逐一一致，排除 bin/obj/pdb。阶段 25 及更早备份保留。
+- 已同步 AI_CONTEXT、主规范、改动记录、留档。未添加/运行测试、未启动应用或实际执行规则，未改用户实际配置/规则或停止用户进程；命令通道、音频/OSD 与性能仍未运行时验收。本阶段未提交 GitHub、未创建 Release。
