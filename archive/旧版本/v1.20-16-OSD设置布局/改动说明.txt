@@ -1,0 +1,8 @@
+﻿音跃 SonicRoute v1.20 OSD 设置布局与命名
+日期：2026-10-01，基线阶段 15，本地未上传、未发布。
+主题页 OSD 卡片顺序调整为：OSD 音量进度条 → 麦克风静音时 OSD 常驻 → 其附属「更多选项」及子设置 → OSD 外观设置。常驻开关与附属 Toggle / AnimatedExpandHost 整组上移，控件名称、事件、开关联动及折叠动画保留。
+宽度、字号、淡入/淡出时长的折叠入口由「更多选项」改为「OSD 外观设置」，绑定新键 Theme.OsdAppearanceSettings，已补齐全部 9 种语言（zh-TW：OSD 外觀設定）。使用实际内置 Resources/Lang/*.json，不改全局 Exp.MoreOptions；常驻子选项仍叫「更多选项」。
+外观设置入口顶部间距 14；无新运行逻辑、配置、采样，OSD 颜色保持。
+修改前 MainWindow.xaml 与 9 个语言文件 SHA256 均与阶段 15 备份一致。阶段 16 完整备份 SonicRoute源码/v1.20-16-OSD设置布局/：77 源码文件、13 运行文件及说明，复制文件 SHA256 逐一与当前文件一致。
+Lite x64 publish 与 Legacy Release build 均 0 错误，Legacy 42 个既有警告；exe 分别 28190979 / 1342464 字节，FileVersion 均 1.20.0.0。运行目录 dist/SonicRoute-v1.20-Lite-x64-osd-settings-layout/、dist/SonicRoute-v1.20-Legacy-x64-osd-settings-layout/。
+已同步 AI_CONTEXT、主规范、流水和留档。未添加/运行测试或启动软件做 UI/语言冒烟，未停止或替换用户进程，未上传 GitHub、未创建 Release。

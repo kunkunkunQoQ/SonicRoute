@@ -1,0 +1,7 @@
+﻿音跃 SonicRoute v1.20 OSD 外观分组
+日期：2026-10-01，基线阶段 17，本地未上传、未发布。
+按用户最新要求，主题页「OSD 外观设置」改为独立标题 + 下方「更多选项」，参照设置页「设备名称」。标题直接复用 SectionTitle（13、SemiBold、Theme.TextSecondary），仅上间距补 14；更多选项复用 Exp.MoreOptions、11.5、Theme.Accent、透明无边框、左对齐、0 padding、6 上间距；展开面板上间距改为 8，与设备名称一致，默认收起。
+保留 OsdMoreToggle / OsdSlidersPanel 的名称、Checked/Unchecked → OsdMoreToggle_Click → AnimatePanelExpand 与 AnimatedExpandHost，点击更多选项展开/收回宽度、字号、淡入/淡出时长；标题不再承担开关。复用现有主题和 9 语言资源，未添加新样式、事件、配置、计时器或音频采样。
+修改前 MainWindow.xaml SHA256 与阶段 17 完整备份一致；阶段 18 完整备份 SonicRoute源码/v1.20-18-OSD外观分组/（77 源码、13 运行文件及说明），复制文件 SHA256 逐一与当前文件一致。
+Lite x64 publish 与 Legacy Release build 均 0 错误，Legacy 42 个既有警告；exe 分别 28190979 / 1342464 字节，版本 1.20.0.0。运行目录 dist/SonicRoute-v1.20-Lite-x64-osd-appearance-section/、dist/SonicRoute-v1.20-Legacy-x64-osd-appearance-section/。
+已同步 AI_CONTEXT、主规范、流水和留档。未添加/运行测试、未启动软件做运行时界面检查，未停止或替换用户进程，未上传 GitHub、未创建 Release。

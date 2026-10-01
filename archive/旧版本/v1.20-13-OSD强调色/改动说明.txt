@@ -1,0 +1,9 @@
+音跃 SonicRoute v1.20 OSD 文字强调色修正
+日期：2026-10-01，基线为阶段 12（v1.20-12-OSD显示优化），本地未上传、未发布。
+用户要求：OSD 文字应使用主题强调色。
+修改：OsdService 中标题、提示正文、音量百分比、静音说明和文字图标直接动态绑定 Theme.Accent，使用预设/自定义强调色原值；删除未再使用的 Theme.OsdValue。进度条对比色只用于条形绘制。
+保持其他 OSD 性能、动画、多屏定位优化与音量进度条开关；关闭开关仍移除专用控件并停止其动画。
+三工程源码及 AI_CONTEXT 共 77 文件，Lite 单 exe / Legacy 12 文件及说明，共 91 文件，无 bin/obj/pdb；源码与运行文件 SHA256 逐一一致。
+Lite x64 publish 与 Legacy Release build 均 0 错误；Legacy 42 个既有警告。exe 分别 28,186,883 / 1,341,952 字节，版本 1.20.0.0。
+运行目录：dist/SonicRoute-v1.20-Lite-x64-osd-accent-fix 与 dist/SonicRoute-v1.20-Legacy-x64-osd-accent-fix。
+已同步 AI_CONTEXT、主规范、流水与留档。未添加/运行测试、未做运行时视觉验收，未停止或替换用户运行的软件，未推送 GitHub或创建 Release。

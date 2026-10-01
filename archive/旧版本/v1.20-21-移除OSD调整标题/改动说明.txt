@@ -1,0 +1,6 @@
+﻿音跃 SonicRoute v1.20 移除调整 OSD 标题
+日期：2026-10-01，基线阶段 20，本地未上传、未发布。
+按用户要求移除主题页 OSD 卡片顶部「调整 OSD」标题 TextBlock（Exp.Osd）及其占位间距，现在卡片直接从「OSD 外观设置」标题开始；仅删除 MainWindow.xaml 的两行。当前顺序：OSD 外观设置 → 更多选项及展开内容 → 调整 OSD 位置/还原按钮 → 音量进度条 → 静音常驻及附属更多选项。
+修改前 MainWindow.xaml SHA256 与阶段 20 完整备份一致；阶段 21 完整备份 SonicRoute源码/v1.20-21-移除OSD调整标题/（77 源码、13 运行文件及说明），复制文件 SHA256 逐一与当前文件一致。
+Lite x64 publish / Legacy Release build 均 0 错误，Legacy 42 个既有警告；exe 分别 28190979 / 1342464 字节，版本 1.20.0.0。运行目录 dist/SonicRoute-v1.20-Lite-x64-osd-heading-cleanup/、dist/SonicRoute-v1.20-Legacy-x64-osd-heading-cleanup/。
+已同步 AI_CONTEXT、主规范、流水和留档。未添加/运行测试、未启动软件做运行时界面检查，未停止或替换用户进程，未上传 GitHub、未创建 Release。

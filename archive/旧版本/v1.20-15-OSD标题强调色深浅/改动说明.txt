@@ -1,0 +1,7 @@
+﻿音跃 SonicRoute v1.20 OSD 主标题强调色深浅调整
+日期：2026-10-01，基线阶段 14，本地未上传、未发布。
+OSD 主标题以用户预设/自定义强调色为基础：浅色模式与黑色混合 30% 压深，深色模式与白色混合 30% 提亮。Theme.OsdTitleText 保持动态绑定，主题模式或强调色变化即时更新。正文、百分比、静音说明和文字图标仍直接使用 Theme.Accent 原值。
+仅主题应用时调色，复用冻结画刷缓存，无新设置、音频采样或计时器。
+修改前核对两文件 SHA256 与阶段 14 完整备份一致；完整阶段备份 SonicRoute源码/v1.20-15-OSD标题强调色深浅/（77 源码、13 运行文件及说明），复制文件 SHA256 与当前文件一致。
+Lite x64 publish 与 Legacy Release build 均 0 错误，Legacy 42 个既有警告；exe 分别 28186883 / 1341952 字节，版本 1.20.0.0。运行目录 dist/SonicRoute-v1.20-Lite-x64-osd-title-accent/ 与 dist/SonicRoute-v1.20-Legacy-x64-osd-title-accent/。
+已同步 AI_CONTEXT、主规范、流水和留档。未添加/运行测试，未做运行时视觉验收，未停止或替换用户运行的软件，未上传 GitHub或创建 Release。

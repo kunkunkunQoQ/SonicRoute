@@ -1,0 +1,9 @@
+﻿音跃 SonicRoute v1.20 OSD 主标题深浅色修正
+日期：2026-10-01，基线阶段 13，本地未上传、未发布。
+用户要求：主标题浅色模式黑色、深色模式白色。
+修改：OsdService 主标题动态绑定新增 Theme.OsdTitleText；ThemeService.Apply 按有效深浅模式设置 Colors.Black / Colors.White，复用冻结画刷。正文、音量百分比、静音说明和文字图标保留 Theme.Accent 原值。
+进度条对比色、其余 OSD 优化与主题开关不变；无新采样、计时器或配置项。
+三工程源码及 AI_CONTEXT 共 77 文件，Lite 1 文件 / Legacy 12 文件及说明，共 91 文件，无 bin/obj/pdb；复制源码和运行文件 SHA256 逐一与当前文件一致。
+Lite x64 publish 与 Legacy Release build 0 错误，Legacy 42 个既有警告；exe 分别 28,186,883 / 1,341,952 字节，版本 1.20.0.0。
+运行目录：dist/SonicRoute-v1.20-Lite-x64-osd-title-fix、dist/SonicRoute-v1.20-Legacy-x64-osd-title-fix。
+已同步 AI_CONTEXT、主规范、流水和留档。未添加/运行测试，未做运行时视觉验收，未停止或替换用户运行的软件，未上传 GitHub或创建 Release。

@@ -1,0 +1,7 @@
+﻿音跃 SonicRoute v1.20 OSD 外观卡片上移
+日期：2026-10-01，基线阶段 18，本地未上传、未发布。
+按用户追加要求，将「OSD 外观设置」标题、下方「更多选项」及完整展开面板作为独立卡片整体移到「调整 OSD」卡片及「调整 OSD 位置」按钮上方。复用既有 Card 样式，标题取消组内 14 上间距并完整复用 SectionTitle，与设置页设备名称一致。
+标题样式为 13 / SemiBold / Theme.TextSecondary；更多选项为 11.5 / Theme.Accent、透明无边框、左对齐，面板上间距 8、默认收起。保留 OsdMoreToggle / OsdSlidersPanel、原事件、AnimatePanelExpand / AnimatedExpandHost 与全部宽度/字号/淡入淡出设置；调整卡片内保留音量进度条下紧接常驻及其附属更多选项。仅修改 MainWindow.xaml，无新逻辑、配置、颜色资源、翻译、计时器或音频采样。
+修改前 MainWindow.xaml SHA256 与阶段 18 完整备份一致；阶段 19 完整备份 SonicRoute源码/v1.20-19-OSD外观位置/（77 源码、13 运行文件及说明），复制文件 SHA256 逐一与当前文件一致。
+Lite x64 publish 与 Legacy Release build 均 0 错误，Legacy 42 个既有警告；exe 分别 28190979 / 1342464 字节，版本 1.20.0.0。运行目录 dist/SonicRoute-v1.20-Lite-x64-osd-appearance-position/、dist/SonicRoute-v1.20-Legacy-x64-osd-appearance-position/。
+已同步 AI_CONTEXT、主规范、流水和留档。未添加/运行测试、未启动软件做运行时界面检查，未停止或替换用户进程，未上传 GitHub、未创建 Release。
