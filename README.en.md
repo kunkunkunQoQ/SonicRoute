@@ -42,15 +42,15 @@ Windows can already control each app's volume and output device. SonicRoute offe
 
 ## ✨ Core features
 
-- 🎯 **Audio routing for each app**: Choose separate output and input devices for games, browsers, players, and voice chat apps. You can also switch devices for all running apps or change the Windows default device.
-- 🖱 **Tray quick panel**: Click the tray icon to control app volume, mute, and devices. Choose a Compact or Classic panel, hide selected apps, and customize the panel's position and height.
-- 📊 **Live audio activity**: See each app's audio level in the Compact panel to identify which apps are producing sound. Colors adapt to light and dark themes; turning the feature off stops its sampling and UI updates.
-- ⌨️ **Hotkeys and tray wheel controls**: Adjust volume, switch devices, or control microphones while keeping your game active. Customize keyboard and mouse combinations and the volume step. Tray area wheel control has its own switch.
-- 🖥 **Customizable OSD**: See volume, device changes, and microphone status immediately. Adjust position, width, font size, and theme colors. Enable a volume bar or keep the notification visible while the microphone is muted.
-- 🤖 **Automation rules**: Run multiple steps on app launch, focus changes, app exit, hotkeys, a schedule, or SonicRoute startup. Run rules manually, copy rules or steps, and drag steps to reorder them. Actions cover devices, volume, mute, microphones, programs, and scripts.
-- 💻 **Command line access**: While SonicRoute is running, use `sr "Rule name or ID"` from any directory to execute a rule directly from scripts or other tools.
-- 🎨 **Themes, languages, and device management**: Light and dark themes, accent colors, opacity, device filtering, and custom names. Nine languages are included, with language file import and export.
-- 🧹 **Resource management**: The UI loads as needed, with caching and idle cleanup to manage resource use. Live audio activity and the OSD volume bar can each be turned off.
+- 🎯 **App audio routing**: Switch output/input devices for one app, all running apps, or Windows defaults.
+- 🖱 **Quick panel**: Compact and Classic layouts for volume, mute, and device controls.
+- 📊 **Live audio activity**: Optional app level meters in the Compact panel, with colors for light and dark themes.
+- ⌨️ **Hotkeys and tray wheel**: Customize controls for volume, device switching, and microphones.
+- 🖥 **OSD**: Customize appearance and position, with an optional volume bar and persistent microphone mute notice.
+- 🤖 **Automation**: Run steps on app events, hotkeys, schedules, or startup, with manual execution, copying, and reordering.
+- 💻 **Command line**: Execute rules in a running instance with `sr "Rule name or ID"`.
+- 🎨 **Appearance and languages**: Light/dark themes, nine languages, device filtering, and custom names.
+- 🧹 **Resource management**: UI loading as needed, caching, and idle cleanup.
 
 See the [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki) for detailed settings and instructions. The Wiki is currently in Chinese.
 
