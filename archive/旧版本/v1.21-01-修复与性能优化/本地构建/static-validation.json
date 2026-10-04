@@ -1,0 +1,455 @@
+{
+  "Date": "2026-10-03",
+  "Projects": [
+    {
+      "Project": "SonicRoute/SonicRoute.csproj",
+      "Version": "1.21"
+    },
+    {
+      "Project": "SonicRoute.Core/SonicRoute.Core.csproj",
+      "Version": "1.21"
+    },
+    {
+      "Project": "SonicRoute.Legacy/SonicRoute.Legacy.csproj",
+      "Version": "1.21"
+    }
+  ],
+  "LegacyManifest": "1.21.0.0",
+  "Languages": [
+    {
+      "Language": "de-DE.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "en-US.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "es-ES.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "fr-FR.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "ja-JP.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "ko-KR.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "ru-RU.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "zh-CN.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    },
+    {
+      "Language": "zh-TW.json",
+      "Parsed": true,
+      "SaveFailure": true,
+      "DeleteFailure": true
+    }
+  ],
+  "ProductionTestSeamMatches": [],
+  "LegacyAnimationBlockMatchesBaseline": true,
+  "GitDiffCheck": true,
+  "SnapshotFileCount": 75,
+  "SnapshotFiles": [
+    {
+      "Path": "SonicRoute.Core/AppDisplayName.cs",
+      "SHA256": "BB47C0D55C262582CFE6D86ED25E685499BFBD4C2B19929B0118534672513EE0",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/AtomicFile.cs",
+      "SHA256": "9229FB6FE5CF1612D621716CA0D38FB52D74E6662BAD7583D9099D6E9FFEEE1E",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/AudioMeterService.cs",
+      "SHA256": "3978B9E83B64A8B3EAA478D469A2CC4E47AB175C0A3AD24C2FD5938CCC5763FF",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/AudioService.cs",
+      "SHA256": "E1A73984C46DA576CCDCFB2CC1613E269DF5A96614C65BE94134B57DF09BC6C3",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/AutoRuleStore.cs",
+      "SHA256": "FEB62B356102FD7B1103347AFA1AD45A9EF33B846722CE078806A3E3B9A4551E",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Compat/AppInfo.cs",
+      "SHA256": "AAE93A8D5D01E8187C18A7C874925E724A7D00E94A99277730266284F5F7C5B6",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Compat/CompatEnv.cs",
+      "SHA256": "A1715D5BFF04E479AB91823FEDD31E983CE4A9C7B641ED5570DC6A382BB1E4B5",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Compat/MathEx.cs",
+      "SHA256": "A2A53A9C6A10F227557566940EAD7FBDC4D094491294475C2CD81D407711E049",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Compat/Net48CompilerShims.cs",
+      "SHA256": "ABAF5A7C7FCF847F9416C39D9557DE7BB2542931DA73E6980F88100F114F9A12",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Compat/WindowsVersion.cs",
+      "SHA256": "46089671822E5B95E488E6D72EF9A7F9E88CA393D2E75C7E83FDC1C9A334DD15",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/ConfigService.cs",
+      "SHA256": "6EF0E32F4AA14A390EC994BADFBB4402FB09FBB2FD645EA74C5F32F3A6661549",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/ForegroundAppService.cs",
+      "SHA256": "52DD7C885238D93B105B725BAFD977E354819897841B891469FEC5BFB1AF3729",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/GlobalMicMuteService.cs",
+      "SHA256": "159AA516BCAFC9E3E7D7142807D8DABBD74E52F2F62E60396BA00817A14EB2FC",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Interop/AssocHandlerInterop.cs",
+      "SHA256": "1E5DF9E69E98673BB5C85FEF671343B61406A8D13027035D2CE6C97BEE8F121F",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Interop/AudioPolicyConfig.cs",
+      "SHA256": "EC39343D4122499B8EEB665FB8754F00641827E8CECCB64D3EE8F12F48F69E67",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Interop/ComInterop.cs",
+      "SHA256": "F598823C91568750362B4591379DD9183A3ACBBE5D9ED15C1349974BB102B61F",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Interop/ISimpleAudioVolume.cs",
+      "SHA256": "E1754008F87E0626CB2B91F4601EBECF2CC889A8B8DB338E471137F55E96B40D",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Interop/PolicyConfigClient.cs",
+      "SHA256": "C97DB1E7469CDD0A24C37649043C3E8395AC033449492D322C0E8A83C58E5BAF",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Interop/WasapiInterfaces.cs",
+      "SHA256": "1CBA7C625F4851572698F7E52A85CAF19A7E7A290B1C195E57E3AC35B1F49AB9",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Models/AudioAppInfo.cs",
+      "SHA256": "8458204A63EABF8A1FAEF755CA1562DA972E15BAEEB19B6AEB3A844B4BBF088C",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Models/AudioDeviceInfo.cs",
+      "SHA256": "E8418E9BCD6D50B21D52928B75240830C8953EE2D49AD6DFAD51F01A04997364",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/Models/AutoRule.cs",
+      "SHA256": "4750A73B9EA9B0F158FEEE533B20807927789A518B072E22E3BE76C3972B5341",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/OpenWithService.cs",
+      "SHA256": "22E3BC154F034CCCDC24BC72FD459DA68E1E7C4317E6EDCE2513B3078E340B85",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/ProcessSnapshotService.cs",
+      "SHA256": "6AC248023005493FB280A208D3A8B37662111C8E578B5B4CD930444A97642DC6",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/SessionVolumeService.cs",
+      "SHA256": "19AC5C168C4C50E427F9128A218D9B1A9719755E3A34D56746EEB00DA8A0C4BB",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/ShellOpen.cs",
+      "SHA256": "90B4F354A112CD34E2DEA987FD8C0D582AE8D9D2D777806032D75A39BB6A0303",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/SonicRoute.Core.csproj",
+      "SHA256": "9DF0476CD88D8489676D1FA48DE471D01846C389F7786D9F9FFA7B61C569B419",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Core/SystemVolumeService.cs",
+      "SHA256": "9E203D5EA1A757C59C9659C386997537582716E92368041274148550D1D27DAA",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Legacy/App.config",
+      "SHA256": "3B2B34D93EAF8D2769406EA510CDAB522C5A9A1EBE5B7E0C766E3582FD332800",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Legacy/app.manifest",
+      "SHA256": "D7A48882D40479EFB86290BC7298F44ACDF65CF0D18B4DB4DBAB9F821F48DCE0",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute.Legacy/SonicRoute.Legacy.csproj",
+      "SHA256": "EFA36E5F45BCF0E1DCBF95D728F58347F75C0589EEBFD6A1B3A8B5D4EE3A8C52",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/AnimatedExpandHost.cs",
+      "SHA256": "20C67DA2218E9E70D916AFF5332023EB9CA2C1BFA95262EBA106C560470BFC64",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/App.xaml",
+      "SHA256": "F3E439FDCF8EF0EE7A1A24AED4A084C8274D7F6DB1BA46F1D97BC348F6C76E93",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/App.xaml.cs",
+      "SHA256": "FE0859CB923E23D2786035122DFE73C126FB6C6E42E7E1E0EAB081DE47A980E9",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/AppIconService.cs",
+      "SHA256": "279E9E64204B96DF3749342D749105B460F74339E114AD0B0B2AB5EAD1EFFC12",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/AppItem.cs",
+      "SHA256": "E49B1BBC54688749225F05696941A24F455B7110CB3C133DB6EEC6F29CDEE20E",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/AutoRuleScheduler.cs",
+      "SHA256": "F29E3835B6BD8AA68A717E642EED3870DB56782D1ACD030375F65C198CE66CC6",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/AutoRuleService.cs",
+      "SHA256": "FE69AC3721D8BBBFAD92E2AAF0526475899A54B9F041B548713E7198B022BC1C",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/CurrentAppService.cs",
+      "SHA256": "A13E25F65CDDA58439D2062CE841A4A42EA0DF550B4F90B53533DA8CBB7B60F4",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/HotkeyActions.cs",
+      "SHA256": "479EA75932000F48FF1FD2F4F3EDAF6AF712C428CD135C980981A7769215A44B",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/HotkeyService.cs",
+      "SHA256": "C18519B51431FCF405822644C81D14E8C047A94358AB9BA1786BDF855281B64D",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/IconFactory.cs",
+      "SHA256": "160F9AC076B106F7611736AFFCE1D4A337FCBF8E0E4C0EA1D5AD7EC3DBFAD15A",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/IQuickPanel.cs",
+      "SHA256": "710E062B73923C3D526435A0E1C9A79C090BF3AA2FC4FA4AA3DC5F6DFE8FDF4A",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/L10n.cs",
+      "SHA256": "DCA44F28FCE41E3CF8AD8AFCBC7CBB5FC15B8E3E4EE832AD940657BBCF23AD53",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/MainWindow.xaml",
+      "SHA256": "851BFE3153DDAFA4AC5A93182EA316B79155E075E7B2E36448FD79699A4F6504",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/MainWindow.xaml.cs",
+      "SHA256": "2FAB63903AD7231966DAC82EC87511378A0E0197DF7F2F10C50CCA5CA7D27F4A",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/MouseHotkeyHook.cs",
+      "SHA256": "4582A46741298C67820738EE11F94300FA79DA6483565C3B31BCDF25DC86F922",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/OsdPlacement.cs",
+      "SHA256": "3EDC5DF39172C37A3130E73549160D6E44476A6F780AE24B3902DE5667EE7BE7",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/OsdService.cs",
+      "SHA256": "C28A3CB8DE931D0A5EEB339D4B82CF9F5B0769E06E9B7DC2A6A00228A54D691E",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/PanelDevices.cs",
+      "SHA256": "87D5D472EBF5690424ABC17FA54DFFB3C4C8E079F68A4B25BBFB36B9FAD046F3",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Properties/PublishProfiles/win-arm64.pubxml",
+      "SHA256": "856F5485EFFD84986C43DEF2625F76A4F1A5584EC8296558EEA2D3276AB11306",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Properties/PublishProfiles/win-x64.pubxml",
+      "SHA256": "05125ECC13DC2AFE1226B2541436121C6C7FE8E92F8CCE599710EA6E6251B25E",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/QuickPanelModernWindow.xaml",
+      "SHA256": "FBD6AFFE2AF1748E650745199C98623A7CC22F97B95C709AA78A10FD16FD51F4",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/QuickPanelModernWindow.xaml.cs",
+      "SHA256": "0CBEBE55BC0E805908BFF447FD729D561DEC9CD6DADBC3B5103F4F1573A8198E",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/QuickPanelPosition.cs",
+      "SHA256": "EBEAEB48AD6714B1FF2F2413D2B311AF1E102355D936BC23C309551B425923A8",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/QuickPanelWindow.xaml",
+      "SHA256": "A7BA5AAD7290EAD8039042238968AD2D1E226D0193EE726F46F7022AF4A68A0B",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/QuickPanelWindow.xaml.cs",
+      "SHA256": "2B5819323DE717085D7F49152DEC62A89529BC656A53F37B4FBDE0F7700D9684",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/de-DE.json",
+      "SHA256": "D5E21BB8A30989E806E5C52DC84FCA36E27C42F2C4862909E13A13F5E5CDF10B",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/en-US.json",
+      "SHA256": "978FF6BD7C960BFFE894470D58430963D96BB1C2AF2AF7AD03CA6CD11BF979A8",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/es-ES.json",
+      "SHA256": "784BC21238ACF90F31781973CE876F7362AD50344C3BF58F921D4BDCB58E485B",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/fr-FR.json",
+      "SHA256": "40A62F14A99A6FFB8101DAFD666C9CEFB922E826F3D0A127A48185F7FEF52305",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/ja-JP.json",
+      "SHA256": "DF17071D0867D83E3D82FD4B766A355B3A03A528D00230D80FD724D348335B7A",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/ko-KR.json",
+      "SHA256": "EBC833AA58ED77E222C361ECAC9A169FD910CB805B7663B7B63BC51067E75E3F",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/ru-RU.json",
+      "SHA256": "0D173DF1F2AA1F7FADD785E94DBF12A6A7F6963094A0337EBBE4B467DB1DFD9F",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/zh-CN.json",
+      "SHA256": "0C9325CD4842FE635FE975EDF17DF351B8450976EAA096398216A6C2781D4D69",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/Lang/zh-TW.json",
+      "SHA256": "DC1640F8A6E41611D2D193C013656BC55DDB8D6E0804B1E8B49960C0D976348F",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/Resources/RuleCommand.ps1",
+      "SHA256": "88D5423CA205D2C25C64678BF7144B6D9552E191BE8B252EFABB87B4616D9258",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/RuleCommandLine.cs",
+      "SHA256": "C60ADA5AE8DF63B5023647F5C562470775F4C1876CA54CFA4FA46C435C07FF42",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/runtimeconfig.template.json",
+      "SHA256": "B54D5AF67ACA2DF22161272071CC21ED5279957667EBC947BF8D851B18D80137",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/SonicRoute.csproj",
+      "SHA256": "A0D61B7EC8209873989ABE3A9D138379A3F6A11F859E9DBC6E866FFFCB2BDA6A",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/SonicRoute.ico",
+      "SHA256": "BE6ABA294C6292AE58BC6A5EDEA547FB8F76EE6F461DC18F6AF296756F31E8C2",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/SonicRoute.png",
+      "SHA256": "10A72E312993B1F419CCACF85FD08047DA75A8B73166A70F8AE5A4DF220BE06B",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/ThemeService.cs",
+      "SHA256": "0811311F5235544B31680E19C257CFD6B1DD4A880EB218BB9844DBFB23E27337",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/TrayWheelService.cs",
+      "SHA256": "36F3393B45D6C66036396408F3024EF57B5B77A6DFCCF01547AFEB025D1B0E62",
+      "Matches": true
+    },
+    {
+      "Path": "SonicRoute/UiMotion.cs",
+      "SHA256": "E60867BDB32B6E32607F92C6220CF34554EC39B93218222B9CFFF0A8A80E5F79",
+      "Matches": true
+    }
+  ]
+}

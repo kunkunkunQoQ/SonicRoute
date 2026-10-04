@@ -1,0 +1,30 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET Framework 4.8.9336.0",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\legacy\\candidate\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\legacy\\candidate\\test-data\\Automation",
+    "ReadOnlyGuards": "System/session volume, mute, microphone, and default-device write APIs blocked by test-copy env guard.",
+    "Note": "Copied app; config/rules redirected under this binary directory; startup suppressed; DispatcherSynchronizationContext installed before app initialization."
+  },
+  {
+    "Case": "indexed-save-fixture",
+    "Files": 100,
+    "Reloaded": 100,
+    "RuleLoadedViaFind": true,
+    "StoreInvalidateAndReload": true
+  },
+  {
+    "Case": "automation-save-with-100-indexed-rules",
+    "Operations": 50,
+    "MeanMs": 30.714431999999988,
+    "MedianMs": 6.4024999999999999,
+    "P95Ms": 190.99109999999999,
+    "MaxMs": 590.66499999999996,
+    "CpuMs": 531.25,
+    "AllocatedBytesPerOperation": 34749.440000000002,
+    "Gen0Collections": 0
+  }
+]

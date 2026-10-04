@@ -1,0 +1,44 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\Automation",
+    "ReadOnlyGuards": "System/session volume, mute, microphone, and default-device write APIs blocked by test-copy env guard.",
+    "Note": "Copied app; config/rules redirected under this binary directory; startup suppressed; DispatcherSynchronizationContext installed before app initialization."
+  },
+  {
+    "Case": "atomic-persistent-sharing-lock",
+    "TargetPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\Automation\\V121 atomic sharing conflict.json",
+    "TargetExists": true,
+    "TargetAttributes": 32,
+    "HResult": "80070020",
+    "Win32Code": 32,
+    "Error": "System.IO.IOException: The process cannot access the file because it is being used by another process.\r\n   at System.IO.FileSystem.ReplaceFile(String sourceFullPath, String destFullPath, String destBackupFullPath, Boolean ignoreMetadataErrors)\r\n   at SonicRoute.Core.AtomicFile.WriteAllText(String path, String text) in E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\source\\candidate\\SonicRoute.Core\\AtomicFile.cs:line 34\r\n   at SonicRoute.Core.AutoRuleStore.Save(AutoRule rule) in E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\source\\candidate\\SonicRoute.Core\\AutoRuleStore.cs:line 177\r\n   at Program.RunAtomicConflictRegression() in E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\runner\\Program.cs:line 382",
+    "TempFileCount": 0,
+    "TempFiles": [],
+    "Extra": {
+      "ElapsedMs": 24.4958,
+      "TargetAttributesWhileLocked": 32,
+      "OldDiskPreserved": true,
+      "CachedOldValuePreserved": true,
+      "NoTemporaryFilesRemain": true,
+      "RemainingTempFiles": []
+    }
+  },
+  {
+    "Case": "atomic-short-sharing-lock",
+    "TargetPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\Automation\\V121 atomic sharing conflict.json",
+    "ReleasedAtMs": 10.7642,
+    "SaveElapsedMs": 37.6255,
+    "ReleaseError": null,
+    "ErrorHResult": null,
+    "DiskContainsNewValue": true,
+    "CacheContainsNewValue": true,
+    "NoTemporaryFilesRemain": true,
+    "RemainingTempFiles": [],
+    "Pass": true
+  }
+]

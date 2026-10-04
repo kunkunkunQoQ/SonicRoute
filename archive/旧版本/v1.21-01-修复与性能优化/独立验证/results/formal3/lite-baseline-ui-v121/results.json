@@ -1,0 +1,94 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\baseline\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\baseline\\test-data\\Automation",
+    "ReadOnlyGuards": "System/session volume, mute, microphone, and default-device write APIs blocked by test-copy env guard.",
+    "Note": "Copied app; config/rules redirected under this binary directory; startup suppressed; DispatcherSynchronizationContext installed before app initialization."
+  },
+  {
+    "Case": "ui-initial-100-rules",
+    "Rows": 100,
+    "Pass": true,
+    "LogicalUiOnly": true
+  },
+  {
+    "Case": "ui-100-rules-unchanged-refresh",
+    "Rows": 100,
+    "ReusedRows": 100,
+    "CompletionMs": 15.2829,
+    "UiThreadAllocatedBytes": 405304,
+    "LogicalUiOnly": true,
+    "DispatcherPumpSliceMs": 10
+  },
+  {
+    "Case": "ui-100-rules-running-status-refresh",
+    "Rows": 100,
+    "ReusedRows": 0,
+    "CompletionMs": 102.1328,
+    "UiThreadAllocatedBytes": 5183408,
+    "LogicalUiOnly": true,
+    "DispatcherPumpSliceMs": 10
+  },
+  {
+    "Case": "ui-running-button-state",
+    "CandidateRowMapAvailable": false,
+    "RunningButtonCorrect": null,
+    "Pass": true
+  },
+  {
+    "Case": "ui-100-rules-one-rule-change",
+    "Rows": 100,
+    "ReusedRows": 0,
+    "CompletionMs": 99.7673,
+    "UiThreadAllocatedBytes": 5176592,
+    "LogicalUiOnly": true,
+    "DispatcherPumpSliceMs": 10
+  },
+  {
+    "Case": "ui-row-reuse-contract",
+    "IsCandidate": false,
+    "RunningReused": 0,
+    "OneRuleChangeReused": 0,
+    "Pass": true
+  },
+  {
+    "Case": "ui-name-10-edits-save-count",
+    "ImmediateSaves": 10,
+    "SettledSaves": 10,
+    "FinalValue": "Name edit 10",
+    "HasDebounce": false,
+    "Pass": true
+  },
+  {
+    "Case": "ui-name-close-flush",
+    "FinalValue": "Name close flush",
+    "SavesSinceLastEdit": 1,
+    "Pass": true
+  },
+  {
+    "Case": "ui-quick-panel-load-fixture",
+    "ContentReady": true,
+    "AppRows": 8,
+    "Pass": true,
+    "SyntheticInactiveApps": true
+  },
+  {
+    "Case": "ui-quick-panel-meter-targets-and-disable",
+    "TargetCount": 2,
+    "ExpectedTargets": 2,
+    "TargetsCorrect": true,
+    "MeterReleased": true,
+    "WorkerStopped": true,
+    "Pass": true,
+    "SyntheticRowsAndPids": true,
+    "Note": "Includes every eligible row, without viewport filtering; muted/disabled rows excluded."
+  },
+  {
+    "Case": "ui-quick-panel-close-cleanup",
+    "Pass": true
+  }
+]

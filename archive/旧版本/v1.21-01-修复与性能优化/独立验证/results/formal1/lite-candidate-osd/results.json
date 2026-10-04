@@ -1,0 +1,73 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\Automation",
+    "ReadOnlyGuards": "System/session volume, mute, microphone, and default-device write APIs blocked by test-copy env guard.",
+    "Note": "Copied app; config/rules redirected under this binary directory; startup suppressed; DispatcherSynchronizationContext installed before app initialization."
+  },
+  {
+    "Case": "osd-30hz-bar-on",
+    "BarEnabled": true,
+    "RequestedInputHz": 30,
+    "InputCalls": 149,
+    "ActualInputHz": 21.26441311554179,
+    "RenderingEvents": 543,
+    "RenderingHz": 77.49380081704155,
+    "ScaleXChangedFrames": 156,
+    "ScaleXChangedFramesPerSecond": 22.2634123894263,
+    "WallMs": 7007.0121,
+    "CpuMs": 1187.5,
+    "MachineCpuPercent": 1.0592068194088033,
+    "UiThreadAllocatedBytes": 1897280,
+    "Gen0Collections": 0,
+    "WorkingSetMiB": 125.8046875,
+    "PrivateMiB": 77.08984375,
+    "RenderTier": 2
+  },
+  {
+    "Case": "osd-30hz-bar-off",
+    "BarEnabled": false,
+    "RequestedInputHz": 30,
+    "InputCalls": 149,
+    "ActualInputHz": 21.28710342126326,
+    "RenderingEvents": 510,
+    "RenderingHz": 72.86189761640445,
+    "ScaleXChangedFrames": 0,
+    "ScaleXChangedFramesPerSecond": 0,
+    "WallMs": 6999.5432,
+    "CpuMs": 296.875,
+    "MachineCpuPercent": 0.26508426292732934,
+    "UiThreadAllocatedBytes": 1828240,
+    "Gen0Collections": 0,
+    "WorkingSetMiB": 128.484375,
+    "PrivateMiB": 79.2109375,
+    "RenderTier": 2
+  },
+  {
+    "Case": "osd-final-value-and-animation-stop",
+    "PercentText": "77%",
+    "NoticeVolume": null,
+    "BarAnimating": false,
+    "PendingRenderUpdate": false,
+    "RenderingSubscribed": false,
+    "Pass": true
+  },
+  {
+    "Case": "osd-hidden-idle-state",
+    "IsVisible": false,
+    "BarAnimating": false,
+    "PendingRenderUpdate": false,
+    "RenderingSubscribed": false,
+    "Pass": true
+  },
+  {
+    "Case": "osd-hidden-idle-2500ms",
+    "WallMs": 2496.4693,
+    "CpuMs": 46.875,
+    "MachineCpuPercent": 0.11735323562761216
+  }
+]

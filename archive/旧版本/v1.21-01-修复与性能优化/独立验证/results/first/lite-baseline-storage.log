@@ -1,0 +1,10 @@
+{"Case":"environment","Runtime":".NET 8.0.30","LogicalProcessors":16,"RenderTier":2,"ConfigPath":"E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\baseline\\test-data\\config.json","RulesDir":"E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\baseline\\test-data\\Automation","ReadOnlyGuards":"System/session volume, mute, microphone, and default-device write APIs blocked by test-copy env guard.","Note":"Copied app; config/rules redirected under this binary directory; startup suppressed; DispatcherSynchronizationContext installed before app initialization."}
+{"Case":"rule-save-failure-retains-old","Failure":"UnauthorizedAccessException","OldFileExists":false,"RuleStillLoaded":false,"Pass":false,"Note":"Intentional write failure by creating a directory at the renamed target; test-data only."}
+{"Case":"rule-rename-migrates-file","OldExists":false,"NewExists":true,"UniqueLoadedRule":true,"Pass":true}
+{"Case":"rule-same-name-does-not-overwrite","Loaded":2,"Files":["V121 same name(1).json","V121 same name.json"],"Pass":true}
+{"Case":"rule-legacy-id-filename-migrates","Loaded":true,"OldIdFileExists":false,"NameFileExists":true,"Pass":true}
+{"Case":"rule-delete-invalidates-cache","FileCount":0,"StillLoaded":false,"Pass":true}
+{"Case":"rule-load-find-deep-copy","StoredName":"mutated copy","StoredActionText":"mutated nested copy","Pass":false}
+{"Case":"rule-snapshot-revision-and-external-change","Status":"not-supported"}
+{"Case":"all-muted-empty-set","Result":true,"Pass":false,"TestOnlyNoRefreshSeam":true,"Note":"Refresh was no-op only in these copied sources; empty render/capture collections set through reflection."}
+{"Case":"system-read-state-merged","Status":"not-supported"}

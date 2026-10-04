@@ -1,0 +1,102 @@
+[
+  {
+    "Flavor": "Lite-x64",
+    "Path": "E:\\kunkun\\SonarSwitch\\dist\\SonicRoute-v1.21-Lite-x64\\SonicRoute.exe",
+    "FileVersion": "1.21.0.0",
+    "ProductVersion": "1.21+a89ca5c348a3b18abeccd663f944bad2e35c7f34",
+    "Bytes": 28391683,
+    "SHA256": "738AC1881B075F3ADCD1756DEE80CFCB9EBD2B96F1EF6866E069CBC1F25917E1",
+    "Files": [
+      {
+        "Path": "SonicRoute.Core.pdb",
+        "Bytes": 39196,
+        "SHA256": "D45E1E30F544D11C6BC870EE57D3DB373D35BD0DEF0F6862440468565C3DF7B6"
+      },
+      {
+        "Path": "SonicRoute.exe",
+        "Bytes": 28391683,
+        "SHA256": "738AC1881B075F3ADCD1756DEE80CFCB9EBD2B96F1EF6866E069CBC1F25917E1"
+      }
+    ]
+  },
+  {
+    "Flavor": "Legacy-x64",
+    "Path": "E:\\kunkun\\SonarSwitch\\dist\\SonicRoute-v1.21-Legacy-x64\\SonicRoute.exe",
+    "FileVersion": "1.21.0.0",
+    "ProductVersion": "1.21+a89ca5c348a3b18abeccd663f944bad2e35c7f34",
+    "Bytes": 1420288,
+    "SHA256": "F93B0FCB94AD23E0CF4B0573112D1FAC137C277BC5191ACAAE2E30BB0257A30A",
+    "Files": [
+      {
+        "Path": "Microsoft.Bcl.AsyncInterfaces.dll",
+        "Bytes": 26904,
+        "SHA256": "80678203BD0203A6594F4E330B22543C0DE5059382BB1C9334B7868B8F31B1BC"
+      },
+      {
+        "Path": "SonicRoute.Core.dll",
+        "Bytes": 76288,
+        "SHA256": "F9FCC409BA5B339F8E07675FBDEF52E6C5FCDDACFCC67C9A4E4A9C7E03807747"
+      },
+      {
+        "Path": "SonicRoute.Core.pdb",
+        "Bytes": 30612,
+        "SHA256": "571E09839442F2CEF82F3FD906C2B062BB8A5B970F181F236DE80C27160EDA05"
+      },
+      {
+        "Path": "SonicRoute.exe",
+        "Bytes": 1420288,
+        "SHA256": "F93B0FCB94AD23E0CF4B0573112D1FAC137C277BC5191ACAAE2E30BB0257A30A"
+      },
+      {
+        "Path": "SonicRoute.exe.config",
+        "Bytes": 1395,
+        "SHA256": "87EA9FFEF5AAB19CBA1E313B5342CE90D36AAADEDC70E9164A44D1825A1B550E"
+      },
+      {
+        "Path": "SonicRoute.pdb",
+        "Bytes": 140048,
+        "SHA256": "3F3CAFEFC60DBA49E6E6449D98D4161313C522292FEE0AA0C1015F545408FB00"
+      },
+      {
+        "Path": "System.Buffers.dll",
+        "Bytes": 20856,
+        "SHA256": "ACCCCFBE45D9F08FFEED9916E37B33E98C65BE012CFFF6E7FA7B67210CE1FEFB"
+      },
+      {
+        "Path": "System.Memory.dll",
+        "Bytes": 142240,
+        "SHA256": "BF3FB84664F4097F1A8A9BC71A51DCF8CF1A905D4080A4D290DA1730866E856F"
+      },
+      {
+        "Path": "System.Numerics.Vectors.dll",
+        "Bytes": 115856,
+        "SHA256": "1D3EF8698281E7CF7371D1554AFEF5872B39F96C26DA772210A33DA041BA1183"
+      },
+      {
+        "Path": "System.Runtime.CompilerServices.Unsafe.dll",
+        "Bytes": 18024,
+        "SHA256": "37768488E8EF45729BC7D9A2677633C6450042975BB96516E186DA6CB9CD0DCF"
+      },
+      {
+        "Path": "System.Text.Encodings.Web.dll",
+        "Bytes": 79024,
+        "SHA256": "E9C4F5EED186CB129C527C4B8D67D163EA2F2396E9D8B96E30B5E7C12203CE84"
+      },
+      {
+        "Path": "System.Text.Json.dll",
+        "Bytes": 644888,
+        "SHA256": "86C3F263AE9B4469AB1266C80471087082447EB4A38E6B97BF5E84DE15C07A1D"
+      },
+      {
+        "Path": "System.Threading.Tasks.Extensions.dll",
+        "Bytes": 25984,
+        "SHA256": "4F81FFD0DC7204DB75AFC35EA4291769B07C440592F28894260EEA76626A23C6"
+      },
+      {
+        "Path": "System.ValueTuple.dll",
+        "Bytes": 25232,
+        "SHA256": "E905D102585B22C6DF04F219AF5CBDBFA7BC165979E9788B62DF6DCC165E10F4"
+      }
+    ]
+  }
+]

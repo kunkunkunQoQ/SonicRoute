@@ -1,0 +1,116 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\Automation",
+    "ReadOnlyGuards": "System/session volume, mute, microphone, and default-device write APIs blocked by test-copy env guard.",
+    "Note": "Copied app; config/rules redirected under this binary directory; startup suppressed; DispatcherSynchronizationContext installed before app initialization."
+  },
+  {
+    "Case": "ui-initial-100-rules",
+    "Rows": 100,
+    "Pass": true,
+    "LogicalUiOnly": true
+  },
+  {
+    "Case": "ui-100-rules-unchanged-refresh",
+    "Rows": 100,
+    "ReusedRows": 100,
+    "CompletionMs": 20.7928,
+    "UiThreadAllocatedBytes": 20800,
+    "LogicalUiOnly": true,
+    "DispatcherPumpSliceMs": 10
+  },
+  {
+    "Case": "ui-100-rules-running-status-refresh",
+    "Rows": 100,
+    "ReusedRows": 100,
+    "CompletionMs": 21.1717,
+    "UiThreadAllocatedBytes": 428256,
+    "LogicalUiOnly": true,
+    "DispatcherPumpSliceMs": 10
+  },
+  {
+    "Case": "ui-running-button-state",
+    "CandidateRowMapAvailable": true,
+    "RunningButtonCorrect": true,
+    "Pass": true
+  },
+  {
+    "Case": "ui-100-rules-one-rule-change",
+    "Rows": 100,
+    "ReusedRows": 99,
+    "CompletionMs": 7.8529,
+    "UiThreadAllocatedBytes": 475672,
+    "LogicalUiOnly": true,
+    "DispatcherPumpSliceMs": 10
+  },
+  {
+    "Case": "ui-row-reuse-contract",
+    "IsCandidate": true,
+    "RunningReused": 100,
+    "OneRuleChangeReused": 99,
+    "Pass": true
+  },
+  {
+    "Case": "ui-name-10-edits-save-count",
+    "ImmediateSaves": 0,
+    "SettledSaves": 1,
+    "FinalValue": "Name edit 10",
+    "HasDebounce": true,
+    "Pass": true
+  },
+  {
+    "Case": "ui-name-focus-flush",
+    "Pass": true,
+    "HandlerInvokedDirectly": true
+  },
+  {
+    "Case": "ui-device-rename-preserves-selection",
+    "OverviewId": "v121-device-a",
+    "AppsId": "v121-device-b",
+    "Pass": true,
+    "NativeWriteSuppressionAssessedBySource": true
+  },
+  {
+    "Case": "ui-name-close-flush",
+    "FinalValue": "Name close flush",
+    "SavesSinceLastEdit": 1,
+    "Pass": true
+  },
+  {
+    "Case": "ui-watcher-revision-cache",
+    "UnchangedReads": 1000,
+    "SameList": true,
+    "EnabledWatchRules": 1,
+    "DisabledWatchRules": 0,
+    "UiThreadAllocatedBytes": 401480,
+    "IncludesReflectionOverhead": true,
+    "Pass": true
+  },
+  {
+    "Case": "ui-quick-panel-load-fixture",
+    "ContentReady": true,
+    "AppRows": 8,
+    "Pass": true,
+    "SyntheticInactiveApps": true
+  },
+  {
+    "Case": "ui-quick-panel-meter-targets-and-disable",
+    "TargetCount": 2,
+    "ExpectedTargets": 2,
+    "TargetsCorrect": true,
+    "MeterReleased": true,
+    "WorkerStopped": true,
+    "Pass": true,
+    "SyntheticRowsAndPids": true,
+    "Note": "Includes every eligible row, without viewport filtering; muted/disabled rows excluded."
+  },
+  {
+    "Case": "ui-quick-panel-close-cleanup",
+    "Pass": true
+  }
+]

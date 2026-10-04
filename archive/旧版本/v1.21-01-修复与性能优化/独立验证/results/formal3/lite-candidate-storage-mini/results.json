@@ -1,0 +1,29 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-validation-agent\\bin\\lite\\candidate\\test-data\\Automation",
+    "ReadOnlyGuards": "System/session volume, mute, microphone, and default-device write APIs blocked by test-copy env guard.",
+    "Note": "Copied app; config/rules redirected under this binary directory; startup suppressed; DispatcherSynchronizationContext installed before app initialization."
+  },
+  {
+    "Case": "atomic-save-failure-preserves-loaded-rule",
+    "Failure": "IOException",
+    "OldFileExists": true,
+    "RuleStillLoaded": true,
+    "Pass": true,
+    "Note": "Directory at target path forces a write failure inside redirected test-data."
+  },
+  {
+    "Case": "snapshot-revision-watch",
+    "UnchangedReturnsNull": true,
+    "ExternalFileDetected": true,
+    "InitialRevision": 5,
+    "FinalRevision": 6,
+    "WaitMs": 41,
+    "Pass": true
+  }
+]

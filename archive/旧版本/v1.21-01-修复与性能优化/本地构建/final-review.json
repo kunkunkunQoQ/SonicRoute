@@ -1,0 +1,91 @@
+{
+  "Date": "2026-10-03",
+  "FinalCandidateRuns": [
+    {
+      "Run": "formal4/lite-candidate-storage-full",
+      "Records": 17,
+      "PassAssertions": 9,
+      "Failures": 0,
+      "ReadConsistent": true,
+      "PersistentLockPreservation": null,
+      "ResultSHA256": "47A7A706F705D68D03A6A6ED40D38BDD6451537638F98FC54E8B90808507A00F"
+    },
+    {
+      "Run": "formal4/legacy-candidate-storage-full",
+      "Records": 17,
+      "PassAssertions": 9,
+      "Failures": 0,
+      "ReadConsistent": true,
+      "PersistentLockPreservation": null,
+      "ResultSHA256": "15CE1ACD42C0CFFA38EB0F2312FB1471BB327C4C3FBF5DA55E11CA2534FFE18C"
+    },
+    {
+      "Run": "formal4/lite-candidate-ui-v121-final-atomic",
+      "Records": 15,
+      "PassAssertions": 11,
+      "Failures": 0,
+      "ReadConsistent": null,
+      "PersistentLockPreservation": null,
+      "ResultSHA256": "192C9376FCF90DA0B8A2944C67F42F8C9105689CC037AAAAB7B10B13CE4FC1F6"
+    },
+    {
+      "Run": "formal4/legacy-candidate-ui-v121-final-atomic",
+      "Records": 15,
+      "PassAssertions": 11,
+      "Failures": 0,
+      "ReadConsistent": null,
+      "PersistentLockPreservation": null,
+      "ResultSHA256": "2E083D2668D77C0959510B1548BECAD4683FEFE9FCC1BB9C1FACE453FE0A8D03"
+    },
+    {
+      "Run": "formal4/lite-candidate-atomic-conflict",
+      "Records": 3,
+      "PassAssertions": 1,
+      "Failures": 0,
+      "ReadConsistent": null,
+      "PersistentLockPreservation": true,
+      "ResultSHA256": "A70217197874D6AB2E35C75B1EAF8C6589A2FB3E8FDFAC590989192F32037992"
+    },
+    {
+      "Run": "formal4/legacy-candidate-atomic-conflict",
+      "Records": 3,
+      "PassAssertions": 1,
+      "Failures": 0,
+      "ReadConsistent": null,
+      "PersistentLockPreservation": true,
+      "ResultSHA256": "AC5396C46E52C73415D0B543B167313B6B3556FB628415AE7C6E882517DADEA7"
+    },
+    {
+      "Run": "formal4/lite-candidate-osd-onscreen-a",
+      "Records": 8,
+      "PassAssertions": 2,
+      "Failures": 0,
+      "ReadConsistent": null,
+      "PersistentLockPreservation": null,
+      "ResultSHA256": "B520D1F1148AAF2FB848DFA83053F074626012B51549C67B0876EEA2620BDD17"
+    },
+    {
+      "Run": "formal4/lite-candidate-osd-onscreen-b",
+      "Records": 8,
+      "PassAssertions": 2,
+      "Failures": 0,
+      "ReadConsistent": null,
+      "PersistentLockPreservation": null,
+      "ResultSHA256": "25D30237E080974F6D1E62F36A36DACA517083C6B830284ACBBAD6BC607B8DE0"
+    },
+    {
+      "Run": "formal6/legacy-candidate-restored-baseline-osd",
+      "Records": 8,
+      "PassAssertions": 2,
+      "Failures": 0,
+      "ReadConsistent": null,
+      "PersistentLockPreservation": null,
+      "ResultSHA256": "1C24DD9EC92196231E5179BE1CD637285A05FBAF6DF9E0D6ECE0CC353622D2A9"
+    }
+  ],
+  "TestProcessesRemaining": 0,
+  "SourceChangeAfterFinalBuild": false,
+  "BaselineCommit": "a89ca5c348a3b18abeccd663f944bad2e35c7f34",
+  "Scope": "Isolated storage/logical UI/onscreen OSD; no real audio writes or production startup acceptance",
+  "Limitations": "No overall working-set/private-memory reduction claim. ARM64 compile only."
+}
