@@ -42,15 +42,12 @@ Windows can already control each app's volume and output device. SonicRoute offe
 
 ## ✨ Core features
 
-- 🎯 **App audio routing**: Switch output/input devices for one app, all running apps, or Windows defaults.
-- 🖱 **Quick panel**: Compact and Classic layouts for volume, mute, and device controls.
-- 📊 **Live audio activity**: Optional app level meters in the Compact panel, with colors for light and dark themes.
-- ⌨️ **Hotkeys and tray wheel**: Customize controls for volume, device switching, and microphones.
-- 🖥 **OSD**: Customize appearance and position, with an optional volume bar and persistent microphone mute notice.
-- 🤖 **Automation**: Run steps on app events, hotkeys, schedules, or startup, with manual execution, copying, and reordering.
-- 💻 **Command line**: Execute rules in a running instance with `sr "Rule name or ID"`.
-- 🎨 **Appearance and languages**: Light/dark themes, nine languages, device filtering, and custom names.
-- 🧹 **Resource management**: UI loading as needed, caching, and idle cleanup.
+- 🎯 **Per-app audio routing**: Switch output/input devices for the current app, all running apps, or Windows defaults.
+- 🖱 **Quick controls**: Use the tray panel for volume, mute, device switching, and live audio activity, with Compact and Classic layouts.
+- ⌨️ **Hotkeys and taskbar wheel**: Adjust volume, switch devices, mute audio, or control the microphone without leaving the current window.
+- 🖥 **OSD feedback**: Show instant operation feedback with customizable appearance, position, volume bar, and microphone mute notice.
+- 🤖 **Automation and command line**: Run multi-step rules on app events, hotkeys, schedules, or startup, or trigger them with `sr "Rule name or ID"`.
+- 🎨 **Appearance and personalization**: Light/dark themes, nine languages, device filtering, and custom names.
 
 See the [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki) for detailed settings and instructions. The Wiki is currently in Chinese.
 
