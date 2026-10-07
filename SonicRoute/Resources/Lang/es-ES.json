@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "es-ES",
   "Theme.OsdAppearanceSettings": "Apariencia del OSD",
   "Theme.OsdVolumeVisual": "Barra de volumen OSD",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "Programas y scripts",
   "Auto.GroupNotice": "Notificaciones",
   "Auto.StepNumber": "Paso {0}",
-  "Auto.ShortCliHelp": "sr \"NOMBRE O ID DE LA REGLA\"\nEjecuta una regla en SonicRoute ya abierto desde cualquier carpeta. Usa comillas si el nombre contiene espacios.\nsr --legacy \"NOMBRE\": usar Legacy; se prioriza Lite cuando ambas versiones están abiertas.\nVuelve a abrir la terminal tras el primer inicio de esta versión. Si la aplicación no está abierta, falla sin iniciarla."
+  "Auto.ShortCliHelp": "sr \"NOMBRE O ID DE LA REGLA\"\nEjecuta una regla en SonicRoute ya abierto desde cualquier carpeta. Usa comillas si el nombre contiene espacios.\nsr --legacy \"NOMBRE\": usar Legacy; se prioriza Lite cuando ambas versiones están abiertas.\nVuelve a abrir la terminal tras el primer inicio de esta versión. Si la aplicación no está abierta, falla sin iniciarla.",
+  "Auto.Search": "Buscar nombres de reglas",
+  "Auto.FilterAllStates": "Todos los estados",
+  "Auto.Enabled": "Activada",
+  "Auto.FilterAllTriggers": "Todos los disparadores",
+  "Auto.NoMatches": "No hay reglas coincidentes",
+  "Auto.More": "Más acciones",
+  "Auto.CopyCommand": "Copiar comando de ejecución",
+  "Auto.CommandCopied": "Comando copiado",
+  "Auto.CommandCopyFailed": "No se pudo copiar el comando",
+  "Auto.Favorite": "Añadir a favoritos de la bandeja",
+  "Auto.Favorites": "Reglas favoritas",
+  "Auto.FavoritesEmpty": "Añade favoritos desde Más acciones de una regla",
+  "Auto.StopOnFailure": "Detener tras un paso fallido",
+  "Auto.StopOnFailureHint": "Opcional, sin marcar por defecto. Este paso siempre se ejecuta; solo si falla se omiten los siguientes. Las acciones completadas se mantienen; solo se comprueba el inicio de los scripts",
+  "Auto.RunStopped": "Detenido: {0} correctos, {1} fallidos, {2} omitidos",
+  "Auto.ActionExecuteRule": "Ejecutar otra regla",
+  "Auto.TargetRule": "Regla de destino",
+  "Auto.MissingRule": "Regla no encontrada",
+  "Auto.RuleRequired": "Selecciona otra regla existente; no puede llamarse a sí misma",
+  "Auto.RuleCallHint": "Ejecuta la regla directamente, incluso desactivada, y espera. Los ciclos o más de 16 niveles fallan",
+  "Auto.GroupAutomation": "Automatización"
 }

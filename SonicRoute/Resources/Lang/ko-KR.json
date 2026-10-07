@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "ko-KR",
   "Theme.OsdAppearanceSettings": "OSD 표시 설정",
   "Theme.OsdVolumeVisual": "OSD 볼륨 막대",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "프로그램과 스크립트",
   "Auto.GroupNotice": "알림",
   "Auto.StepNumber": "단계 {0}",
-  "Auto.ShortCliHelp": "sr \"규칙 이름 또는 ID\"\n어느 폴더에서나 실행 중인 SonicRoute의 규칙을 실행합니다. 공백이 있는 이름은 따옴표로 감쌉니다.\nsr --legacy \"규칙 이름\": Legacy 지정. 두 버전이 실행 중이면 Lite를 우선합니다.\n이 빌드를 처음 실행한 뒤 터미널을 다시 여세요. 앱이 실행 중이 아니면 실패하며 자동으로 시작하지 않습니다."
+  "Auto.ShortCliHelp": "sr \"규칙 이름 또는 ID\"\n어느 폴더에서나 실행 중인 SonicRoute의 규칙을 실행합니다. 공백이 있는 이름은 따옴표로 감쌉니다.\nsr --legacy \"규칙 이름\": Legacy 지정. 두 버전이 실행 중이면 Lite를 우선합니다.\n이 빌드를 처음 실행한 뒤 터미널을 다시 여세요. 앱이 실행 중이 아니면 실패하며 자동으로 시작하지 않습니다.",
+  "Auto.Search": "규칙 이름 검색",
+  "Auto.FilterAllStates": "모든 상태",
+  "Auto.Enabled": "활성화됨",
+  "Auto.FilterAllTriggers": "모든 트리거",
+  "Auto.NoMatches": "일치하는 규칙 없음",
+  "Auto.More": "추가 작업",
+  "Auto.CopyCommand": "실행 명령 복사",
+  "Auto.CommandCopied": "실행 명령을 복사했습니다",
+  "Auto.CommandCopyFailed": "실행 명령을 복사할 수 없습니다",
+  "Auto.Favorite": "트레이 즐겨찾기에 추가",
+  "Auto.Favorites": "즐겨찾는 규칙",
+  "Auto.FavoritesEmpty": "규칙의 추가 작업 메뉴에서 즐겨찾기를 추가하세요",
+  "Auto.StopOnFailure": "단계 실패 시 중지",
+  "Auto.StopOnFailureHint": "선택 사항이며 기본값은 선택 해제입니다. 이 단계는 항상 실행하며, 이 단계가 실패할 때만 이후 단계를 건너뜁니다. 완료된 작업은 유지되며 스크립트는 시작 성공만 확인합니다",
+  "Auto.RunStopped": "중지됨: 성공 {0}, 실패 {1}, 건너뜀 {2}",
+  "Auto.ActionExecuteRule": "다른 규칙 실행",
+  "Auto.TargetRule": "대상 규칙",
+  "Auto.MissingRule": "규칙을 찾을 수 없음",
+  "Auto.RuleRequired": "기존의 다른 규칙을 선택하세요. 자기 자신은 호출할 수 없습니다",
+  "Auto.RuleCallHint": "비활성 규칙도 직접 실행하고 완료를 기다립니다. 순환 호출 또는 16단계 초과 호출은 실패합니다",
+  "Auto.GroupAutomation": "자동화"
 }

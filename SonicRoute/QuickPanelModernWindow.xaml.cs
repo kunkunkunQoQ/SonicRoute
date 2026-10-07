@@ -94,6 +94,7 @@ namespace SonicRoute
         public QuickPanelModernWindow()
         {
             InitializeComponent();
+            VolumePresets.Attach(VolumeSlider);
             _entranceMotion = new PanelEntranceMotion(PanelSurface, PanelSlide);
             AppListScroll.PreviewMouseWheel += (_, _) => StopRowScroll();
             AppListScroll.PreviewMouseDown += (_, _) => StopRowScroll();
@@ -776,6 +777,7 @@ namespace SonicRoute
                         };
                     }
                     row.Slider.ValueChanged += RowSlider_ValueChanged;
+                    VolumePresets.Attach(row.Slider);
                     row.Slider.MouseWheel += RowSlider_MouseWheel;
 
                     dock.Children.Add(iconGrid);

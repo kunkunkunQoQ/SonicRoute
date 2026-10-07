@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "ja-JP",
   "Theme.OsdAppearanceSettings": "OSD の表示設定",
   "Theme.OsdVolumeVisual": "OSD の音量バー",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "プログラムとスクリプト",
   "Auto.GroupNotice": "通知",
   "Auto.StepNumber": "ステップ {0}",
-  "Auto.ShortCliHelp": "sr \"ルール名またはID\"\nどのフォルダーからでも、起動中の SonicRoute のルールを実行できます。名前に空白がある場合は引用符で囲みます。\nsr --legacy \"ルール名\"：Legacy を指定。両方が起動中の場合は Lite を優先します。\nこのビルドの初回起動後はターミナルを開き直してください。アプリが未起動の場合は失敗し、自動起動しません。"
+  "Auto.ShortCliHelp": "sr \"ルール名またはID\"\nどのフォルダーからでも、起動中の SonicRoute のルールを実行できます。名前に空白がある場合は引用符で囲みます。\nsr --legacy \"ルール名\"：Legacy を指定。両方が起動中の場合は Lite を優先します。\nこのビルドの初回起動後はターミナルを開き直してください。アプリが未起動の場合は失敗し、自動起動しません。",
+  "Auto.Search": "ルール名を検索",
+  "Auto.FilterAllStates": "すべての状態",
+  "Auto.Enabled": "有効",
+  "Auto.FilterAllTriggers": "すべてのトリガー",
+  "Auto.NoMatches": "一致するルールがありません",
+  "Auto.More": "その他の操作",
+  "Auto.CopyCommand": "実行コマンドをコピー",
+  "Auto.CommandCopied": "実行コマンドをコピーしました",
+  "Auto.CommandCopyFailed": "実行コマンドをコピーできません",
+  "Auto.Favorite": "トレイのお気に入りに追加",
+  "Auto.Favorites": "お気に入りのルール",
+  "Auto.FavoritesEmpty": "ルールのその他の操作から追加してください",
+  "Auto.StopOnFailure": "ステップ失敗時に停止",
+  "Auto.StopOnFailureHint": "任意、初期状態は未選択です。このステップは常に実行し、失敗した場合のみ後続を省略します。完了した操作は戻しません。スクリプトは起動成功のみを判定します",
+  "Auto.RunStopped": "停止：成功{0}、失敗{1}、省略{2}",
+  "Auto.ActionExecuteRule": "別のルールを実行",
+  "Auto.TargetRule": "対象ルール",
+  "Auto.MissingRule": "ルールが見つかりません",
+  "Auto.RuleRequired": "別の既存ルールを選択してください。自身は指定できません",
+  "Auto.RuleCallHint": "無効なルールも直接実行し完了を待ちます。循環または16階層を超える呼び出しは失敗します",
+  "Auto.GroupAutomation": "自動化"
 }

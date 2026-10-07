@@ -78,7 +78,10 @@ namespace SonicRoute.Core.Models
         SetGlobalMicMute = 15,
 
         /// <summary>切换全局麦克风静音。</summary>
-        ToggleGlobalMicMute = 16
+        ToggleGlobalMicMute = 16,
+
+        /// <summary>直接执行另一条已保存规则，不等待其自动触发。</summary>
+        ExecuteRule = 17
     }
 
     /// <summary>
@@ -111,6 +114,9 @@ namespace SonicRoute.Core.Models
         /// <summary>执行的操作。</summary>
         public AutoRuleAction Action { get; set; } = AutoRuleAction.SetSystemOutput;
 
+        /// <summary>ExecuteRule 的目标规则 Id；改名不影响调用。</summary>
+        public string TargetRuleId { get; set; } = "";
+
         /// <summary>应用控制的目标进程名（SetAppVolume / ToggleAppMute / SetAppOutput / SetAppInput）。</summary>
         public string TargetApp { get; set; } = "";
 
@@ -128,6 +134,9 @@ namespace SonicRoute.Core.Models
 
         /// <summary>执行该步骤前的启动延时（毫秒，0 = 立即执行）。</summary>
         public int DelayMs { get; set; }
+
+        /// <summary>可选：仅本步骤失败时停止本规则后续操作；缺少字段默认关闭。</summary>
+        public bool StopOnFailure { get; set; } = false;
 
         /// <summary>OSD 主标题（ShowOsd 操作）。</summary>
         public string OsdTitle { get; set; } = "";
@@ -191,12 +200,14 @@ namespace SonicRoute.Core.Models
         public AutoRuleStep Clone() => new()
         {
             Action = Action,
+            TargetRuleId = TargetRuleId ?? "",
             TargetApp = TargetApp ?? "",
             TargetDeviceId = TargetDeviceId ?? "",
             Volume = Volume,
             VolumeDelta = VolumeDelta,
             Muted = Muted,
             DelayMs = DelayMs,
+            StopOnFailure = StopOnFailure,
             OsdTitle = OsdTitle ?? "",
             OsdText = OsdText ?? "",
             ProgramPaths = new List<string>(ProgramPaths ?? new List<string>()),
@@ -219,12 +230,14 @@ namespace SonicRoute.Core.Models
             return new AutoRuleStep
             {
                 Action = Action,
+                TargetRuleId = TargetRuleId ?? "",
                 TargetApp = TargetApp ?? "",
                 TargetDeviceId = TargetDeviceId ?? "",
                 Volume = Volume,
                 VolumeDelta = Math.Max(-100, Math.Min(100, VolumeDelta)),
                 Muted = Muted,
                 DelayMs = DelayMs,
+                StopOnFailure = StopOnFailure,
                 OsdTitle = OsdTitle ?? "",
                 OsdText = OsdText ?? "",
                 LaunchItems = items,
@@ -279,6 +292,9 @@ namespace SonicRoute.Core.Models
         /// <summary>执行的操作（旧单操作字段，兼容旧配置；新数据与 Actions[0] 同步）。</summary>
         public AutoRuleAction Action { get; set; } = AutoRuleAction.SetSystemOutput;
 
+        /// <summary>首步骤规则目标的兼容镜像。</summary>
+        public string TargetRuleId { get; set; } = "";
+
         /// <summary>应用控制的目标进程名（旧字段，兼容旧配置；对应 Actions[0].TargetApp）。</summary>
         public string TargetApp { get; set; } = "";
 
@@ -314,7 +330,7 @@ namespace SonicRoute.Core.Models
             {
                 new AutoRuleStep
                 {
-                    Action = Action, TargetApp = TargetApp ?? "", TargetDeviceId = TargetDeviceId ?? "",
+                    Action = Action, TargetRuleId = TargetRuleId ?? "", TargetApp = TargetApp ?? "", TargetDeviceId = TargetDeviceId ?? "",
                     Volume = Volume, VolumeDelta = VolumeDelta, Muted = Muted, DelayMs = DelayMs,
                     OsdTitle = OsdTitle ?? "", OsdText = OsdText ?? "",
                     ProgramPaths = string.IsNullOrWhiteSpace(ProgramPath)
@@ -329,6 +345,7 @@ namespace SonicRoute.Core.Models
             Actions = steps.Select(step => step.ToPersisted()).ToList();
             if (Actions.Count == 0) return;
             var first = Actions[0];
+            TargetRuleId = first.TargetRuleId;
             Action = first.Action; TargetApp = first.TargetApp; TargetDeviceId = first.TargetDeviceId;
             Volume = first.Volume; VolumeDelta = first.VolumeDelta; Muted = first.Muted; DelayMs = first.DelayMs;
             OsdTitle = first.OsdTitle; OsdText = first.OsdText;

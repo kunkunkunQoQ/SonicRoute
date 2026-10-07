@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "en-US",
   "Theme.OsdAppearanceSettings": "OSD appearance settings",
   "Theme.OsdVolumeVisual": "OSD volume bar",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "Programs and scripts",
   "Auto.GroupNotice": "Notifications",
   "Auto.StepNumber": "Step {0}",
-  "Auto.ShortCliHelp": "sr \"RULE NAME OR ID\"\nRun a rule in an existing SonicRoute instance from any directory. Quote names containing spaces.\nsr --legacy \"RULE NAME\": target Legacy; Lite is preferred when both editions are running.\nReopen your terminal after the first launch of this build. Fails if the app is not running; never launches it."
+  "Auto.ShortCliHelp": "sr \"RULE NAME OR ID\"\nRun a rule in an existing SonicRoute instance from any directory. Quote names containing spaces.\nsr --legacy \"RULE NAME\": target Legacy; Lite is preferred when both editions are running.\nReopen your terminal after the first launch of this build. Fails if the app is not running; never launches it.",
+  "Auto.Search": "Search rule names",
+  "Auto.FilterAllStates": "All states",
+  "Auto.Enabled": "Enabled",
+  "Auto.FilterAllTriggers": "All triggers",
+  "Auto.NoMatches": "No matching rules",
+  "Auto.More": "More actions",
+  "Auto.CopyCommand": "Copy run command",
+  "Auto.CommandCopied": "Run command copied",
+  "Auto.CommandCopyFailed": "Could not copy run command",
+  "Auto.Favorite": "Add to tray favorites",
+  "Auto.Favorites": "Favorite rules",
+  "Auto.FavoritesEmpty": "Add favorites from a rule's More actions menu",
+  "Auto.StopOnFailure": "Stop after a failed step",
+  "Auto.StopOnFailureHint": "Optional, unchecked by default. This step always runs; skip later steps only if this step fails. Completed actions are not undone; scripts report launch success only",
+  "Auto.RunStopped": "Stopped: {0} succeeded, {1} failed, {2} skipped",
+  "Auto.ActionExecuteRule": "Run another rule",
+  "Auto.TargetRule": "Target rule",
+  "Auto.MissingRule": "Rule not found",
+  "Auto.RuleRequired": "Select an existing different rule; a rule cannot call itself",
+  "Auto.RuleCallHint": "Runs the target directly and waits for completion, including disabled rules. Cycles or more than 16 levels fail",
+  "Auto.GroupAutomation": "Automation"
 }

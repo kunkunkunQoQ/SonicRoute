@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "de-DE",
   "Theme.OsdAppearanceSettings": "OSD-Darstellung",
   "Theme.OsdVolumeVisual": "OSD-Lautstärkebalken",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "Programme und Skripte",
   "Auto.GroupNotice": "Benachrichtigungen",
   "Auto.StepNumber": "Schritt {0}",
-  "Auto.ShortCliHelp": "sr \"REGELNAME ODER ID\"\nFührt eine Regel in einer laufenden SonicRoute-Instanz aus jedem Verzeichnis aus. Namen mit Leerzeichen in Anführungszeichen setzen.\nsr --legacy \"REGELNAME\": Legacy verwenden; bei beiden laufenden Versionen wird Lite bevorzugt.\nNach dem ersten Start dieser Version das Terminal neu öffnen. Ohne laufende App schlägt der Aufruf fehl; die App wird nicht gestartet."
+  "Auto.ShortCliHelp": "sr \"REGELNAME ODER ID\"\nFührt eine Regel in einer laufenden SonicRoute-Instanz aus jedem Verzeichnis aus. Namen mit Leerzeichen in Anführungszeichen setzen.\nsr --legacy \"REGELNAME\": Legacy verwenden; bei beiden laufenden Versionen wird Lite bevorzugt.\nNach dem ersten Start dieser Version das Terminal neu öffnen. Ohne laufende App schlägt der Aufruf fehl; die App wird nicht gestartet.",
+  "Auto.Search": "Regelnamen suchen",
+  "Auto.FilterAllStates": "Alle Zustände",
+  "Auto.Enabled": "Aktiviert",
+  "Auto.FilterAllTriggers": "Alle Auslöser",
+  "Auto.NoMatches": "Keine passenden Regeln",
+  "Auto.More": "Weitere Aktionen",
+  "Auto.CopyCommand": "Ausführungsbefehl kopieren",
+  "Auto.CommandCopied": "Ausführungsbefehl kopiert",
+  "Auto.CommandCopyFailed": "Befehl konnte nicht kopiert werden",
+  "Auto.Favorite": "Zu Tray-Favoriten hinzufügen",
+  "Auto.Favorites": "Bevorzugte Regeln",
+  "Auto.FavoritesEmpty": "Favoriten über Weitere Aktionen einer Regel hinzufügen",
+  "Auto.StopOnFailure": "Nach fehlgeschlagenem Schritt stoppen",
+  "Auto.StopOnFailureHint": "Optional, standardmäßig aus. Dieser Schritt wird immer ausgeführt; nur bei seinem Fehler werden spätere Schritte übersprungen. Fertige Aktionen bleiben bestehen; bei Skripten zählt nur der Start",
+  "Auto.RunStopped": "Gestoppt: {0} erfolgreich, {1} fehlgeschlagen, {2} übersprungen",
+  "Auto.ActionExecuteRule": "Andere Regel ausführen",
+  "Auto.TargetRule": "Zielregel",
+  "Auto.MissingRule": "Regel nicht gefunden",
+  "Auto.RuleRequired": "Eine andere vorhandene Regel wählen; kein Selbstaufruf",
+  "Auto.RuleCallHint": "Führt auch deaktivierte Regeln direkt aus und wartet. Zyklen oder mehr als 16 Ebenen schlagen fehl",
+  "Auto.GroupAutomation": "Automatisierung"
 }

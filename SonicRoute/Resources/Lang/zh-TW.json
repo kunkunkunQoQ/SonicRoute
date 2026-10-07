@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "zh-TW",
   "Theme.OsdAppearanceSettings": "OSD 外觀設定",
   "Theme.OsdVolumeVisual": "OSD 音量進度條",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "程式與指令碼",
   "Auto.GroupNotice": "通知",
   "Auto.StepNumber": "步驟 {0}",
-  "Auto.ShortCliHelp": "sr \"規則名稱或ID\"\n可在任何目錄直接執行已啟動 SonicRoute 的規則，名稱包含空格時加引號。\nsr --legacy \"規則名稱\"：指定 Legacy；兩版同時執行時預設優先 Lite。\n首次啟動新版後需重新開啟終端機。軟體未啟動時傳回失敗，不會自動啟動。"
+  "Auto.ShortCliHelp": "sr \"規則名稱或ID\"\n可在任何目錄直接執行已啟動 SonicRoute 的規則，名稱包含空格時加引號。\nsr --legacy \"規則名稱\"：指定 Legacy；兩版同時執行時預設優先 Lite。\n首次啟動新版後需重新開啟終端機。軟體未啟動時傳回失敗，不會自動啟動。",
+  "Auto.Search": "搜尋規則名稱",
+  "Auto.FilterAllStates": "全部狀態",
+  "Auto.Enabled": "已啟用",
+  "Auto.FilterAllTriggers": "全部觸發方式",
+  "Auto.NoMatches": "沒有符合條件的規則",
+  "Auto.More": "更多操作",
+  "Auto.CopyCommand": "複製執行指令",
+  "Auto.CommandCopied": "執行指令已複製",
+  "Auto.CommandCopyFailed": "無法複製執行指令",
+  "Auto.Favorite": "加入系統匣常用規則",
+  "Auto.Favorites": "常用規則",
+  "Auto.FavoritesEmpty": "請先在規則的更多操作中加入收藏",
+  "Auto.StopOnFailure": "步驟失敗後停止",
+  "Auto.StopOnFailureHint": "可選，預設不勾選。勾選後僅本步驟失敗時停止後續操作；本步驟仍正常執行，已完成操作不撤銷，指令碼僅判斷啟動是否成功",
+  "Auto.RunStopped": "已停止：{0} 成功，{1} 失敗，{2} 略過",
+  "Auto.ActionExecuteRule": "執行另一條規則",
+  "Auto.TargetRule": "目標規則",
+  "Auto.MissingRule": "規則不存在",
+  "Auto.RuleRequired": "請選擇存在的其他規則，不能呼叫自身",
+  "Auto.RuleCallHint": "直接執行目標規則並等待完成；允許呼叫已停用規則，循環或超過16層會失敗",
+  "Auto.GroupAutomation": "自動化"
 }

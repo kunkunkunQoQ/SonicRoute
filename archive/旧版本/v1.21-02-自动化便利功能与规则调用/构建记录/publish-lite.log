@@ -1,0 +1,8 @@
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+  SonicRoute.Core -> E:\kunkun\SonarSwitch\SonicRoute.Core\bin\Release\net8.0-windows\win-x64\SonicRoute.Core.dll
+E:\kunkun\SonarSwitch\SonicRoute\MainWindow.xaml.cs(104,45): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\SonicRoute\SonicRoute.csproj]
+E:\kunkun\SonarSwitch\SonicRoute\MainWindow.xaml.cs(105,51): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\SonicRoute\SonicRoute.csproj]
+E:\kunkun\SonarSwitch\SonicRoute\MainWindow.xaml.cs(4380,38): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\SonicRoute\SonicRoute.csproj]
+  SonicRoute -> E:\kunkun\SonarSwitch\SonicRoute\bin\Release\net8.0-windows10.0.19041.0\win-x64\SonicRoute.dll
+  SonicRoute -> E:\kunkun\SonarSwitch\dist\SonicRoute-v1.21-Lite-x64-rule-extras\

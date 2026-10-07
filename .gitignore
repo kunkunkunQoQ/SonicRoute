@@ -42,6 +42,7 @@ _attach_tmp.bin
 /WpfUiSkeleton/
 /docs/*
 !/docs/automation-command-line.md
+!/docs/automation-convenience.md
 !/docs/images/
 /docs/images/*
 !/docs/images/*.png

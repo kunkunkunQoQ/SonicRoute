@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "zh-CN",
   "Theme.OsdAppearanceSettings": "OSD 外观设置",
   "Theme.OsdVolumeVisual": "OSD 音量进度条",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "程序与脚本",
   "Auto.GroupNotice": "通知",
   "Auto.StepNumber": "步骤 {0}",
-  "Auto.ShortCliHelp": "sr \"规则名称或ID\"\n在任意目录直接执行运行中的 SonicRoute 规则，名称含空格时加引号。\nsr --legacy \"规则名称\"：指定 Legacy；两版同时运行时默认优先 Lite。\n首次启动新版后需重新打开终端。软件未运行时返回失败，不会自动启动。"
+  "Auto.ShortCliHelp": "sr \"规则名称或ID\"\n在任意目录直接执行运行中的 SonicRoute 规则，名称含空格时加引号。\nsr --legacy \"规则名称\"：指定 Legacy；两版同时运行时默认优先 Lite。\n首次启动新版后需重新打开终端。软件未运行时返回失败，不会自动启动。",
+  "Auto.Search": "搜索规则名称",
+  "Auto.FilterAllStates": "全部状态",
+  "Auto.Enabled": "已启用",
+  "Auto.FilterAllTriggers": "全部触发方式",
+  "Auto.NoMatches": "没有符合条件的规则",
+  "Auto.More": "更多操作",
+  "Auto.CopyCommand": "复制执行命令",
+  "Auto.CommandCopied": "执行命令已复制",
+  "Auto.CommandCopyFailed": "无法复制执行命令",
+  "Auto.Favorite": "加入托盘常用规则",
+  "Auto.Favorites": "常用规则",
+  "Auto.FavoritesEmpty": "请先在规则的更多操作中添加收藏",
+  "Auto.StopOnFailure": "步骤失败后停止",
+  "Auto.StopOnFailureHint": "可选，默认不勾选。勾选后仅本步骤失败时停止后续操作；本步骤仍正常执行，已完成操作不撤销，脚本仅判断启动是否成功",
+  "Auto.RunStopped": "已停止：{0} 成功，{1} 失败，{2} 跳过",
+  "Auto.ActionExecuteRule": "执行另一条规则",
+  "Auto.TargetRule": "目标规则",
+  "Auto.MissingRule": "规则不存在",
+  "Auto.RuleRequired": "请选择存在的其他规则，不能调用自身",
+  "Auto.RuleCallHint": "直接执行目标规则并等待完成；允许调用已停用规则，循环或超过16层会失败",
+  "Auto.GroupAutomation": "自动化"
 }

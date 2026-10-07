@@ -98,6 +98,8 @@ namespace SonicRoute
         public MainWindow()
         {
             InitializeComponent();
+            VolumePresets.Attach(OverviewVolumeSlider);
+            VolumePresets.Attach(AppsVolumeSlider);
             AppsRenameBox.LostKeyboardFocus += NameEdit_LostKeyboardFocus;
             FixedAppCombo.DropDownOpened += AppCombo_DropDownOpened;
             AutoTriggerAppCombo.DropDownOpened += AppCombo_DropDownOpened;
@@ -105,6 +107,7 @@ namespace SonicRoute
             if (HeaderTitleText != null)
                 HeaderTitleText.Text = $"🎧 音跃 SonicRoute {App.DisplayVersion}";
             _config = ConfigService.Load();
+            InitializeAutoExtras();
             Loaded += async (_, _) =>
             {
                 await LoadDevicesAsync();
@@ -127,6 +130,7 @@ namespace SonicRoute
                 // 关闭面板：停止自动化页应用列表低频刷新（否则 Timer 随 Dispatcher 常驻并持有窗口引用）
                 StopAutoRefresh();
                 CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+                AutoRuleService.ExecutionStateChanged -= AutoExecutionStateChanged;
                 PreviewKeyDown -= MainWindow_PreviewKeyDown;
                 _hwndSource?.RemoveHook(TaskbarMinimizeWndProc);
                 _hwndSource = null;
@@ -3230,6 +3234,8 @@ namespace SonicRoute
                     _autoRuleFingerprints = result.Fingerprints!;
                     _autoRulesRevision = result.Revision;
                 }
+                _autoRunIds.Clear();
+                _autoRunIds.UnionWith(AutoRuleService.RunningRuleIds());
                 string conflicts = string.Join(",", _autoRules.Where(IsAutoHotkeyConflict).Select(r => r.Id));
                 string running = string.Join(",", _autoRunIds.OrderBy(id => id));
                 string signature = L10n.CurrentLanguage + "\n" + conflicts + "\n" + running + "\n" + _autoRulesRevision;
@@ -3272,6 +3278,7 @@ namespace SonicRoute
                             || AutomationPage.Visibility != Visibility.Visible) return;
                     }
                 }
+                ApplyAutoRuleFilters();
                 _autoRuleListSignature = signature;
             }
             catch { /* 单条规则文件异常不影响页面切换 */ }
@@ -3338,6 +3345,7 @@ namespace SonicRoute
             btns.Children.Add(copyBtn);
             btns.Children.Add(toggleBtn);
             btns.Children.Add(delBtn);
+            btns.Children.Add(BuildAutoExtrasButton(r.Id));
             // 仅一次已执行 / 已禁用的规则：名称右上角显示主题色反色状态点
             var nameHost = new Grid();
             nameHost.Children.Add(nameBlock);
@@ -3525,11 +3533,7 @@ namespace SonicRoute
             catch { result = new AutoRuleService.ExecutionResult(0, 1); }
             if (!owner.TryGetTarget(out var window) || window._isClosed || window.Dispatcher.HasShutdownStarted) return;
             window._autoRunIds.Remove(rule.Id);
-            string text = result.Busy ? L10n.T("Auto.Running")
-                : result.Canceled ? L10n.T("Auto.RunCanceled")
-                : result.Succeeded == 0 ? L10n.T("Auto.RunFailed")
-                : result.Failed > 0 ? string.Format(L10n.T("Auto.RunPartial"), result.Succeeded, result.Failed)
-                : string.Format(L10n.T("Auto.RunDone"), result.Succeeded);
+            string text = AutoRuleService.DescribeResult(result);
             window.ShowToast(text);
             window._autoRuleListSignature = null;
             _ = window.RefreshAutoRulesAsync();
@@ -3789,6 +3793,7 @@ namespace SonicRoute
                 AutoRuleAction.SetAppMute, AutoRuleAction.ToggleAppMute);
             Group("Auto.GroupMic", AutoRuleAction.SetGlobalMicMute, AutoRuleAction.ToggleGlobalMicMute);
             Group("Auto.GroupProgram", AutoRuleAction.LaunchProgram, AutoRuleAction.RunPowerShell);
+            Group("Auto.GroupAutomation", AutoRuleAction.ExecuteRule);
             Group("Auto.GroupNotice", AutoRuleAction.ShowOsd);
             return items;
         }
@@ -3805,6 +3810,7 @@ namespace SonicRoute
             AutoRuleAction.SetAppInput => "Auto.ActionAppInput",
             AutoRuleAction.LaunchProgram => "Auto.ActionLaunch",
             AutoRuleAction.RunPowerShell => "Auto.ActionPowerShell",
+            AutoRuleAction.ExecuteRule => "Auto.ActionExecuteRule",
             AutoRuleAction.ShowOsd => "Auto.ActionShowOsd",
             AutoRuleAction.SetSystemMute => "Auto.ActionSetSystemMute",
             AutoRuleAction.SetAppMute => "Auto.ActionSetAppMute",
@@ -4505,6 +4511,15 @@ namespace SonicRoute
                     wrap.Children.Add(pathPanel);
                 }
             }
+            if (step.Action == AutoRuleAction.ExecuteRule)
+            {
+                wrap.Children.Add(Group(L10n.T("Auto.TargetRule"), BuildTargetRuleCombo(step)));
+                wrap.Children.Add(new TextBlock
+                {
+                    Text = L10n.T("Auto.RuleCallHint"), FontSize = 11, Foreground = labelBrush,
+                    TextWrapping = TextWrapping.Wrap, MaxWidth = 360, Margin = new Thickness(0, 16, 0, 8)
+                });
+            }
             if (osd)
             {
                 var titleBox = new TextBox
@@ -4536,7 +4551,21 @@ namespace SonicRoute
                 };
                 wrap.Children.Add(Group(L10n.T("Auto.OsdText"), textBox));
             }
-            return wrap;
+            var stopOnFailure = new CheckBox
+            {
+                Content = L10n.T("Auto.StopOnFailure"),
+                ToolTip = L10n.T("Auto.StopOnFailureHint"),
+                IsChecked = step.StopOnFailure,
+                Foreground = fg,
+                FontSize = 11.5,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            stopOnFailure.Checked += (_, _) => step.StopOnFailure = true;
+            stopOnFailure.Unchecked += (_, _) => step.StopOnFailure = false;
+            var parameters = new StackPanel();
+            parameters.Children.Add(wrap);
+            parameters.Children.Add(stopOnFailure);
+            return parameters;
         }
 
         /// <summary>打开方式下拉中「选择其他程序…」项的哨兵值（不作为实际路径保存）。</summary>
@@ -5046,6 +5075,9 @@ namespace SonicRoute
             }
             foreach (var s in _autoSteps)
             {
+                if (s.Action == AutoRuleAction.ExecuteRule && (string.IsNullOrWhiteSpace(s.TargetRuleId)
+                    || s.TargetRuleId == _autoEditingId || AutoRuleStore.Find(s.TargetRuleId) == null))
+                { _ = System.Windows.MessageBox.Show(L10n.T("Auto.RuleRequired")); return; }
                 if (s.Action is AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute
                     or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
                     or AutoRuleAction.SetAppMute or AutoRuleAction.AdjustAppVolume

@@ -342,9 +342,12 @@ namespace SonicRoute
                 var menu = new ContextMenuStrip();
                 menu.Items.Add(L10n.T("St.Settings"), null, (_, _) => ShowMainWindow());
                 menu.Items.Add(L10n.T("Tray.OpenPanel"), null, (_, _) => ToggleQuickPanel());
+                menu.Items.Add(BuildFavoriteRulesMenu(menu));
                 menu.Items.Add(new ToolStripSeparator());
                 menu.Items.Add(L10n.T("Tray.Exit"), null, (_, _) => Quit());
+                var previous = _trayIcon.ContextMenuStrip;
                 _trayIcon.ContextMenuStrip = menu;
+                previous?.Dispose();
             }
             catch { }
         }

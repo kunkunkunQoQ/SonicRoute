@@ -1,0 +1,20 @@
+[
+  {
+    "Path": "dist/SonicRoute-v1.21-Lite-x64-rule-extras/SonicRoute.exe",
+    "Bytes": 28469507,
+    "FileVersion": "1.21.0.0",
+    "SHA256": "D23075529722F6DFD9F5873593F8B413CCF1FB89822AFB0C501B0D62F8790E83"
+  },
+  {
+    "Path": "dist/SonicRoute-v1.21-Legacy-x64-rule-extras/SonicRoute.exe",
+    "Bytes": 1447424,
+    "FileVersion": "1.21.0.0",
+    "SHA256": "C71EA0157335263781120F62B0F7AE6551AE15C570A1ED2F27F099942B0F1161"
+  },
+  {
+    "Path": "dist/SonicRoute-v1.21-Legacy-x64-rule-extras/SonicRoute.Core.dll",
+    "Bytes": 76800,
+    "FileVersion": "1.21.0.0",
+    "SHA256": "E5A903D81D7246C75C98E7727E1091120668CBB7480AD638155DCED1A32C1D8E"
+  }
+]

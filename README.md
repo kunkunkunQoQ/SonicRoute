@@ -53,6 +53,8 @@ Windows 本身已经可以调整每个应用的音量和输出设备，SonicRout
 
 具体操作方式与完整设置项见 [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)。
 
+**1.21 工作区（开发中）**：新增规则搜索筛选、复制执行命令、托盘常用规则、音量档位、每步可选失败停止及规则间调用，见 [开发功能说明](docs/automation-convenience.md)。当前正式下载仍为 1.20。
+
 首次使用短命令需正常启动新版一次，再重新打开终端；完整用法见 [命令行调用说明](docs/automation-command-line.md)。
 
 ## 🚀 快速开始

@@ -3,6 +3,36 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
+        <Style x:Key="ConvenienceMenu" TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+        <Style x:Key="ConvenienceMenuItem" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="8,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="CheckMark" Text="✓" Visibility="Hidden" Foreground="{TemplateBinding Foreground}"/>
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True"><Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/></Trigger>
+                            <Trigger Property="IsHighlighted" Value="True"><Setter Property="Background" Value="{DynamicResource Theme.NavHover}"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- 主题颜色：由 ThemeService 在启动时按系统深浅色填充，XAML 用 DynamicResource 引用 -->
         <SolidColorBrush x:Key="Theme.WindowBg" Color="#F7F8FA"/>
         <SolidColorBrush x:Key="Theme.WindowBgAlpha" Color="#F7F8FA"/>

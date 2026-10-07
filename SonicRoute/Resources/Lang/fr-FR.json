@@ -1,4 +1,4 @@
-﻿{
+{
   "Lang.Code": "fr-FR",
   "Theme.OsdAppearanceSettings": "Apparence de l’OSD",
   "Theme.OsdVolumeVisual": "Barre de volume OSD",
@@ -396,5 +396,26 @@
   "Auto.GroupProgram": "Programmes et scripts",
   "Auto.GroupNotice": "Notifications",
   "Auto.StepNumber": "Étape {0}",
-  "Auto.ShortCliHelp": "sr \"NOM OU ID DE LA RÈGLE\"\nExécute une règle dans SonicRoute déjà ouvert, depuis n’importe quel dossier. Mettez entre guillemets les noms contenant des espaces.\nsr --legacy \"NOM\" : utiliser Legacy ; Lite est prioritaire si les deux versions sont ouvertes.\nRouvrez le terminal après le premier lancement de cette version. Si l’application n’est pas ouverte, la commande échoue sans la lancer."
+  "Auto.ShortCliHelp": "sr \"NOM OU ID DE LA RÈGLE\"\nExécute une règle dans SonicRoute déjà ouvert, depuis n’importe quel dossier. Mettez entre guillemets les noms contenant des espaces.\nsr --legacy \"NOM\" : utiliser Legacy ; Lite est prioritaire si les deux versions sont ouvertes.\nRouvrez le terminal après le premier lancement de cette version. Si l’application n’est pas ouverte, la commande échoue sans la lancer.",
+  "Auto.Search": "Rechercher un nom de règle",
+  "Auto.FilterAllStates": "Tous les états",
+  "Auto.Enabled": "Activée",
+  "Auto.FilterAllTriggers": "Tous les déclencheurs",
+  "Auto.NoMatches": "Aucune règle correspondante",
+  "Auto.More": "Autres actions",
+  "Auto.CopyCommand": "Copier la commande",
+  "Auto.CommandCopied": "Commande copiée",
+  "Auto.CommandCopyFailed": "Impossible de copier la commande",
+  "Auto.Favorite": "Ajouter aux favoris de la zone de notification",
+  "Auto.Favorites": "Règles favorites",
+  "Auto.FavoritesEmpty": "Ajoutez des favoris depuis Autres actions d'une règle",
+  "Auto.StopOnFailure": "Arrêter après un échec",
+  "Auto.StopOnFailureHint": "Facultatif, décoché par défaut. Cette étape s’exécute toujours ; les suivantes sont ignorées seulement si elle échoue. Les actions terminées restent appliquées ; seul le lancement des scripts est vérifié",
+  "Auto.RunStopped": "Arrêt : {0} réussies, {1} échouées, {2} ignorées",
+  "Auto.ActionExecuteRule": "Exécuter une autre règle",
+  "Auto.TargetRule": "Règle cible",
+  "Auto.MissingRule": "Règle introuvable",
+  "Auto.RuleRequired": "Choisissez une autre règle existante ; aucun appel à soi-même",
+  "Auto.RuleCallHint": "Exécute directement la cible, même désactivée, et attend sa fin. Les cycles ou plus de 16 niveaux échouent",
+  "Auto.GroupAutomation": "Automatisation"
 }

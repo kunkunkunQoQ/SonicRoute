@@ -1201,6 +1201,22 @@
                                             VerticalAlignment="Center"
                                             Click="AutoOpenRuleDir_Click"/>
                                 </Grid>
+                                <TextBlock Text="{Binding [Auto.Search], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,2,0,4"/>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="AutoSearchBox" Grid.Column="0" Padding="8,4" FontSize="12.5"
+                                             MinHeight="32" VerticalContentAlignment="Center" VerticalAlignment="Center"
+                                             TextChanged="AutoSearch_TextChanged" Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="AutoStateFilter" Grid.Column="1" Style="{StaticResource SelCombo}" Width="150"
+                                              VerticalAlignment="Center" SelectionChanged="AutoFilter_SelectionChanged" Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="AutoTriggerFilter" Grid.Column="2" Style="{StaticResource SelCombo}" Width="210"
+                                              VerticalAlignment="Center" SelectionChanged="AutoFilter_SelectionChanged"/>
+                                </Grid>
                                 <TextBlock x:Name="AutoEmptyText"
                                            Text="{Binding [Auto.Empty], Source={x:Static local:L10n.Instance}}"
                                            FontSize="12.5" Foreground="{DynamicResource Theme.TextSecondary}"

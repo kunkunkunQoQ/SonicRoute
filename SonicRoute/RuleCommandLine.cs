@@ -32,6 +32,8 @@ namespace SonicRoute
             public string RuleName { get; set; } = "";
             public int Succeeded { get; set; }
             public int Failed { get; set; }
+            public bool Stopped { get; set; }
+            public int Skipped { get; set; }
         }
 
         internal static Mode Parse(string[] args, out string selector)
@@ -113,6 +115,16 @@ namespace SonicRoute
 
         internal static Result Error(int exitCode, string code) => new() { ExitCode = exitCode, Code = code };
 
+        internal static string BuildShortCommand(string id)
+        {
+            string selector = Guid.TryParse(id, out var guid) ? "\"" + guid.ToString("N") + "\"" : "'" + id.Replace("'", "''") + "'";
+#if NET48
+            return "sr --legacy " + selector;
+#else
+            return "sr " + selector;
+#endif
+        }
+
         /// <summary>只匹配 Id / 完整名称；名称不唯一时拒绝执行，避免误执行另一条规则。</summary>
         internal static async Task<Result> ExecuteAsync(string selector)
         {
@@ -138,7 +150,8 @@ namespace SonicRoute
                     Code = execution.Busy ? "rule_busy" : execution.Canceled ? "canceled"
                         : execution.Failed > 0 ? "step_failed" : "ok",
                     RuleId = rule.Id, RuleName = rule.Name,
-                    Succeeded = execution.Succeeded, Failed = execution.Failed
+                    Succeeded = execution.Succeeded, Failed = execution.Failed,
+                    Stopped = execution.Stopped, Skipped = execution.Skipped
                 };
             }
             catch (Exception ex)

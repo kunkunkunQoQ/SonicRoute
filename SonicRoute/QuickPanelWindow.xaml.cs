@@ -47,6 +47,7 @@ namespace SonicRoute
         public QuickPanelWindow()
         {
             InitializeComponent();
+            VolumePresets.Attach(VolumeSlider);
             _entranceMotion = new PanelEntranceMotion(PanelSurface, PanelSlide);
             VersionText.Text = App.DisplayVersion;
             // 只有面板真正获得过焦点（托盘点击等正常交互）才在失焦时关闭；

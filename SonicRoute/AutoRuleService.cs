@@ -33,14 +33,33 @@ namespace SonicRoute
         private static readonly CancellationTokenSource _executionLifetime = new();
         private static volatile bool _shuttingDown;
         private static int _startupExecuted;
+        internal static event Action? ExecutionStateChanged;
+
+        internal static string[] RunningRuleIds()
+        {
+            lock (_executingRules) return _executingRules.ToArray();
+        }
+
+        private static void NotifyExecutionStateChanged()
+        {
+            try { ExecutionStateChanged?.Invoke(); }
+            catch (Exception error) { AutoRuleScheduler.Log("执行状态通知失败: " + error.Message); }
+        }
 
         internal readonly struct ExecutionResult
         {
-            internal ExecutionResult(int succeeded, int failed, bool busy = false, bool canceled = false)
-            { Succeeded = succeeded; Failed = failed; Busy = busy; Canceled = canceled; }
-            internal readonly int Succeeded, Failed;
-            internal readonly bool Busy, Canceled;
+            internal ExecutionResult(int succeeded, int failed, bool busy = false, bool canceled = false, bool stopped = false, int skipped = 0)
+            { Succeeded = succeeded; Failed = failed; Busy = busy; Canceled = canceled; Stopped = stopped; Skipped = skipped; }
+            internal readonly int Succeeded, Failed, Skipped;
+            internal readonly bool Busy, Canceled, Stopped;
         }
+
+        internal static string DescribeResult(ExecutionResult result) => result.Busy ? L10n.T("Auto.Running")
+            : result.Canceled ? L10n.T("Auto.RunCanceled")
+            : result.Stopped ? string.Format(L10n.T("Auto.RunStopped"), result.Succeeded, result.Failed, result.Skipped)
+            : result.Succeeded == 0 ? L10n.T("Auto.RunFailed")
+            : result.Failed > 0 ? string.Format(L10n.T("Auto.RunPartial"), result.Succeeded, result.Failed)
+            : string.Format(L10n.T("Auto.RunDone"), result.Succeeded);
 
         internal static bool IsRunning(string id)
         {
@@ -308,29 +327,46 @@ namespace SonicRoute
         public static async Task<bool> ExecuteAsync(AutoRule rule)
             => (await ExecuteWithResultAsync(rule)).Succeeded > 0;
 
-        /// <summary>各入口共享单飞、步骤快照和结果计数；失败后仍继续后续步骤。</summary>
-        internal static async Task<ExecutionResult> ExecuteWithResultAsync(AutoRule rule)
+        /// <summary>各入口共享单飞、步骤快照、失败策略及结果计数。</summary>
+        internal static Task<ExecutionResult> ExecuteWithResultAsync(AutoRule rule)
+            => ExecuteCoreAsync(rule, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        private static async Task<ExecutionResult> ExecuteCoreAsync(AutoRule rule, HashSet<string> ancestors)
         {
             if (rule == null || string.IsNullOrWhiteSpace(rule.Id)) return new ExecutionResult(0, 1);
             if (_shuttingDown) return new ExecutionResult(0, 0, canceled: true);
             string id = rule.Id, name = rule.Name;
+            if (ancestors.Contains(id) || ancestors.Count >= 16)
+            {
+                AutoRuleScheduler.Log($"Execute 拒绝循环或过深调用: [{name}] Id={id}");
+                return new ExecutionResult(0, 1);
+            }
             lock (_executingRules)
             {
                 if (!_executingRules.Add(id)) return new ExecutionResult(0, 0, busy: true);
             }
             int succeeded = 0, failed = 0;
+            var path = new HashSet<string>(ancestors, StringComparer.OrdinalIgnoreCase) { id };
             var token = _executionLifetime.Token;
             try
             {
                 var steps = rule.CloneSteps();
+                NotifyExecutionStateChanged();
                 AutoRuleScheduler.Log($"Execute 开始: [{name}] 触发={rule.Trigger} 步骤={steps.Count}");
-                foreach (var step in steps)
+                for (int index = 0; index < steps.Count; index++)
                 {
+                    var step = steps[index];
                     if (token.IsCancellationRequested) return new ExecutionResult(succeeded, failed, canceled: true);
-                    bool ok = await ExecuteStepAsync(step, token);
+                    bool ok = await ExecuteStepAsync(step, token, path);
                     if (token.IsCancellationRequested) return new ExecutionResult(succeeded, failed, canceled: true);
                     if (ok) succeeded++; else failed++;
                     AutoRuleScheduler.Log($"Execute 步骤: [{name}] Action={step.Action} 结果={ok}");
+                    if (!ok && step.StopOnFailure)
+                    {
+                        int skipped = steps.Count - index - 1;
+                        AutoRuleScheduler.Log($"Execute 失败后停止: [{name}] 跳过={skipped}");
+                        return new ExecutionResult(succeeded, failed, stopped: true, skipped: skipped);
+                    }
                 }
                 AutoRuleScheduler.Log($"Execute 完成: [{name}] 成功={succeeded} 失败={failed}");
                 return new ExecutionResult(succeeded, failed);
@@ -344,10 +380,11 @@ namespace SonicRoute
             finally
             {
                 lock (_executingRules) _executingRules.Remove(id);
+                NotifyExecutionStateChanged();
             }
         }
 
-        private static async Task<bool> ExecuteStepAsync(AutoRuleStep step, CancellationToken token)
+        private static async Task<bool> ExecuteStepAsync(AutoRuleStep step, CancellationToken token, HashSet<string> path)
         {
             try
             {
@@ -358,6 +395,15 @@ namespace SonicRoute
 
                 switch (step.Action)
                 {
+                    case AutoRuleAction.ExecuteRule:
+                        {
+                            var target = await Task.Run(() => AutoRuleStore.Find(step.TargetRuleId));
+                            token.ThrowIfCancellationRequested();
+                            if (target == null) return false;
+                            var result = await ExecuteCoreAsync(target, path);
+                            return !result.Busy && !result.Canceled && result.Failed == 0 && result.Succeeded > 0;
+                        }
+
                     case AutoRuleAction.SetSystemOutput:
                         return await Task.Run(() => SetSystemDevice(EDataFlow.eRender, step.TargetDeviceId));
 

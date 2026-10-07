@@ -51,6 +51,8 @@ Windows can already control each app's volume and output device. SonicRoute offe
 
 See the [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki) for detailed settings and instructions. The Wiki is currently in Chinese.
 
+**1.21 workspace (in development)**: Adds rule search and filters, command copying, tray favorites, volume presets, an optional stop on failure for each step (off by default), and rule calling. See the [development feature guide (Chinese)](docs/automation-convenience.md). The stable download is still 1.20.
+
 Before using `sr` for the first time, start the new version normally once, then reopen your terminal. See the [command line guide (Chinese)](docs/automation-command-line.md) for full usage details.
 
 ## 🚀 Quick start
