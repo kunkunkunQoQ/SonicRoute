@@ -40,6 +40,7 @@ namespace SonicRoute
         private void ApplyAutoRuleFilters()
         {
             if (AutoSearchBox == null || AutoEmptyText == null) return;
+            EndAutomationRuleDrag(false);
             string query = AutoSearchBox.Text.Trim();
             int state = (AutoStateFilter?.SelectedItem as ComboBoxItem)?.Tag is int s ? s : 0;
             int trigger = (AutoTriggerFilter?.SelectedItem as ComboBoxItem)?.Tag is int t ? t : -1;
@@ -67,8 +68,7 @@ namespace SonicRoute
 
         private Button BuildAutoExtrasButton(string id)
         {
-            var button = new Button { Content = "⋯", ToolTip = L10n.T("Auto.More"), Width = 32, Height = 28, Margin = new Thickness(8, 0, 0, 6) };
-            button.SetResourceReference(StyleProperty, "GhostButton");
+            var button = BuildAutomationIconButton(AutomationIcons.More, "Auto.More", id);
             button.Click += (_, _) =>
             {
                 var menu = ConvenienceMenus.Create();

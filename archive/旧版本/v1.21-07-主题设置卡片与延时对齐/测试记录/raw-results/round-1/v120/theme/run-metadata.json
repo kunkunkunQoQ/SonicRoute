@@ -1,0 +1,13 @@
+{
+  "Round": 1,
+  "Variant": "v120",
+  "Scenario": "theme",
+  "Page": "theme",
+  "DisabledFixtureRules": 0,
+  "WarmupSeconds": 10,
+  "SampleSeconds": 30,
+  "RequestedActivityHz": 0,
+  "RunnerSha256": "86B4D2FA756912FBBB26B060DEB2361B2546623ADAB72954F599FCA6F78D5902",
+  "StartedAt": "2026-10-08T13:17:59.1563176+08:00",
+  "FinishedAt": "2026-10-08T13:18:43.2866173+08:00"
+}

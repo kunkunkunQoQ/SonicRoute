@@ -1,8 +1,8 @@
-﻿<Window x:Class="SonicRoute.QuickPanelModernWindow"
+<Window x:Class="SonicRoute.QuickPanelModernWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SonicRoute"
-        Title="音跃 - 简洁面板"
+        Title="音跃 - 快捷面板"
         Width="372"
         Height="450"
         WindowStyle="None"
@@ -113,30 +113,7 @@
             </Setter>
         </Style>
 
-        <!-- 系统音频设备项模板（顶部系统设备下拉） -->
-        <!-- 系统音频设备项模板（顶部系统设备下拉） -->
-        <DataTemplate x:Key="SystemDevItemTemplate">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="🔊" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                <TextBlock VerticalAlignment="Center" FontSize="12.5" Text="{Binding DisplayName}"
-                           TextTrimming="CharacterEllipsis" MaxWidth="210"/>
-                <TextBlock Text="（默认）" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
-                           Margin="4,0,0,0" VerticalAlignment="Center">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsDefault}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </StackPanel>
-        </DataTemplate>
-
-        <!-- 应用行音量条：简化模板（进度/圆点用 Foreground 着色，静音时反色） -->
+<!-- 应用行音量条：简化模板（进度/圆点用 Foreground 着色，静音时反色） -->
         <Style x:Key="RowSliderStyle" TargetType="Slider">
             <Setter Property="Height" Value="26"/>
             <Setter Property="Minimum" Value="0"/>

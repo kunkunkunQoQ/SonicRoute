@@ -1,0 +1,66 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET Framework 4.8.9345.0",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\legacy-final\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\legacy-final\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "settings-controls",
+    "Language": "zh-CN",
+    "Theme": "light",
+    "WindowWidth": 780,
+    "WindowHeight": 760,
+    "ResourceDictionaryLoaded": true,
+    "KeepDeviceCount": 10,
+    "InputDeviceCount": 7,
+    "DeviceSectionCollapsedDefault": true,
+    "DeviceSectionsOpen": true,
+    "DeviceSectionsClose": true,
+    "SharedMoreOptionsStyle": true,
+    "MoreOptionsUsesThemeAccent": true,
+    "OutputSelectAllOff": true,
+    "OutputSelectAllOn": true,
+    "OutputSingleOff": true,
+    "OutputSingleRestored": true,
+    "InputSelectAllOff": true,
+    "InputSelectAllOn": true,
+    "InputSingleOff": true,
+    "InputSingleRestored": true,
+    "NameSaved": true,
+    "NameCleared": true,
+    "RecentModeDropdownDisabled": true,
+    "LastModeDropdownDisabled": true,
+    "FixedModeDropdownEnabled": true,
+    "StartMinimizedClicked": true,
+    "StartMinimizedRestored": true,
+    "CleanAutoStartLayoutVisible": true,
+    "StartMinimizedRowHitTestVisible": true,
+    "NoHorizontalOverflowAt780Dip": true,
+    "SettingsExtentWidth": 512.27999999999997,
+    "SettingsViewportWidth": 512.66666666666663,
+    "UntouchedRegistryControls": [
+      {
+        "Name": "SettingsAutoStart",
+        "Present": true,
+        "Visibility": "Visible",
+        "Width": 474.66666666666663,
+        "Height": 55.923333333333332
+      },
+      {
+        "Name": "CleanAutoStartBtn",
+        "Present": true,
+        "Visibility": "Visible",
+        "Width": 77,
+        "Height": 36
+      }
+    ],
+    "Screenshot": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\raw-results\\legacy-resource-check\\settings-page.png",
+    "FullPageScreenshot": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\raw-results\\legacy-resource-check\\settings-page-full.png",
+    "FullPageLogicalHeight": 3063.3466666666664,
+    "Note": "Isolated source-copy runtime check. The AutoStart/CleanAutoStart controls were inspected only and never clicked; other system, panel, and audio effect settings were inspected only. ExperimentalMic=true only in isolated test Config to expose input device cards. No real volume or registry changes."
+  }
+]

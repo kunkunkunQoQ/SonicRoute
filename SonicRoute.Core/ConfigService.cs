@@ -35,6 +35,9 @@ namespace SonicRoute.Core
         /// <summary>托盘常用规则，按规则 Id 保存，顺序与收藏顺序一致。</summary>
         public List<string> FavoriteRuleIds { get; set; } = new();
 
+        /// <summary>自动化列表的自定义展示顺序（规则 Id）；空列表按名称排序，不影响触发执行顺序。</summary>
+        public List<string> AutomationRuleOrder { get; set; } = new();
+
         /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
         public string Language { get; set; } = "";
 

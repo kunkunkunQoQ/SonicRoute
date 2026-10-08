@@ -1,0 +1,36 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET Framework 4.8.9345.0",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\legacy-final\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\legacy-final\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "theme-controls",
+    "Language": "zh-CN",
+    "ThemeAtScreenshot": "light",
+    "RgbAdvancedExpanded": false,
+    "SystemMode": true,
+    "LightMode": true,
+    "DarkMode": true,
+    "GreenAccent": true,
+    "PurpleAccent": true,
+    "BlueAccent": true,
+    "FocusOnlyPreservesPreset": true,
+    "ValidHexWithoutPrefix": true,
+    "ValidHexWithPrefix": true,
+    "InvalidHexRejected": true,
+    "EmbeddedWhitespaceHexRejected": true,
+    "AdvancedOpens": true,
+    "RgbSlidersApply": true,
+    "AdvancedCloses": true,
+    "OpacityResponds": true,
+    "Screenshot": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\raw-results\\legacy-theme-check\\theme-page.png",
+    "FullPageScreenshot": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\raw-results\\legacy-theme-check\\theme-page-full.png",
+    "FullPageLogicalHeight": 1011.3766666666667,
+    "Note": "Theme page exercised in an isolated source-copy test process. The system color dialog and audio controls were not opened or changed."
+  }
+]

@@ -1,0 +1,65 @@
+[
+  {
+    "Language": "de-DE",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "Regel"
+  },
+  {
+    "Language": "en-US",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "Rule"
+  },
+  {
+    "Language": "es-ES",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "Regla"
+  },
+  {
+    "Language": "fr-FR",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "Règle"
+  },
+  {
+    "Language": "ja-JP",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "ルール"
+  },
+  {
+    "Language": "ko-KR",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "규칙"
+  },
+  {
+    "Language": "ru-RU",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "Правило"
+  },
+  {
+    "Language": "zh-CN",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "规则"
+  },
+  {
+    "Language": "zh-TW",
+    "Keys": 453,
+    "UTF8BOM": true,
+    "SameKeys": true,
+    "DefaultNamePrefix": "規則"
+  }
+]

@@ -1,0 +1,781 @@
+{
+  "Stage": 45,
+  "Version": "1.21",
+  "Date": "2026-10-08",
+  "BaselineArchive": "v1.21-08-主题精简与设置提示修复",
+  "ProjectFiles": 88,
+  "SourceFiles": 96,
+  "Validation": "Lite and Legacy each passed 40 isolated UI checks; three builds passed; no resource benchmark",
+  "Files": [
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/Microsoft.Bcl.AsyncInterfaces.dll",
+      "Bytes": 26904,
+      "SHA256": "80678203BD0203A6594F4E330B22543C0DE5059382BB1C9334B7868B8F31B1BC"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/SonicRoute.Core.dll",
+      "Bytes": 76800,
+      "SHA256": "BAB8427BA5D6E6DEB2A5C2384D489D95C64E7C89B12CA81CBE8139AD6F110994"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/SonicRoute.Core.pdb",
+      "Bytes": 30912,
+      "SHA256": "0CDF57B6C104F59BC7FDA6351EFBB577E8CF99C3851D8F6FE32CEA6CB5D4134E"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/SonicRoute.exe",
+      "Bytes": 1513472,
+      "SHA256": "A8E3C3DC4DFDC92E7EE97778595D836D6AD8B242231E50A7F7F9D76844CDEA57"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/SonicRoute.exe.config",
+      "Bytes": 1395,
+      "SHA256": "87EA9FFEF5AAB19CBA1E313B5342CE90D36AAADEDC70E9164A44D1825A1B550E"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/SonicRoute.pdb",
+      "Bytes": 155932,
+      "SHA256": "A5B73CEBF2B61FAEAD41D031E7C344362F245CE1583122305404AE0CEBFC3C22"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.Buffers.dll",
+      "Bytes": 20856,
+      "SHA256": "ACCCCFBE45D9F08FFEED9916E37B33E98C65BE012CFFF6E7FA7B67210CE1FEFB"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.Memory.dll",
+      "Bytes": 142240,
+      "SHA256": "BF3FB84664F4097F1A8A9BC71A51DCF8CF1A905D4080A4D290DA1730866E856F"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.Numerics.Vectors.dll",
+      "Bytes": 115856,
+      "SHA256": "1D3EF8698281E7CF7371D1554AFEF5872B39F96C26DA772210A33DA041BA1183"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.Runtime.CompilerServices.Unsafe.dll",
+      "Bytes": 18024,
+      "SHA256": "37768488E8EF45729BC7D9A2677633C6450042975BB96516E186DA6CB9CD0DCF"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.Text.Encodings.Web.dll",
+      "Bytes": 79024,
+      "SHA256": "E9C4F5EED186CB129C527C4B8D67D163EA2F2396E9D8B96E30B5E7C12203CE84"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.Text.Json.dll",
+      "Bytes": 644888,
+      "SHA256": "86C3F263AE9B4469AB1266C80471087082447EB4A38E6B97BF5E84DE15C07A1D"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.Threading.Tasks.Extensions.dll",
+      "Bytes": 25984,
+      "SHA256": "4F81FFD0DC7204DB75AFC35EA4291769B07C440592F28894260EEA76626A23C6"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-input-picker/System.ValueTuple.dll",
+      "Bytes": 25232,
+      "SHA256": "E905D102585B22C6DF04F219AF5CBDBFA7BC165979E9788B62DF6DCC165E10F4"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Lite-x64-input-picker/SonicRoute.Core.pdb",
+      "Bytes": 39496,
+      "SHA256": "29CE161A20DF9D60086BBEC0BCA6F0A4F8AFA479F0954B1A404600E7D0FE707C"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Lite-x64-input-picker/SonicRoute.exe",
+      "Bytes": 28481795,
+      "SHA256": "2779A72BBA180A828C4FD927E5976B4F5577A1CFD0C244FBA4BB6D0B99B4F704"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Lite-x64-input-picker/SonicRoute.pdb",
+      "Bytes": 166320,
+      "SHA256": "12BE502AFEF52C32F90C86E192DE9BB34CAE05ECB9D24749FC36C96CCD9B1A5B"
+    },
+    {
+      "Path": "测试/Capture-UserDataHashes.ps1",
+      "Bytes": 1475,
+      "SHA256": "D1C2C585B374FED1C86670A0725F4D99122CB91FE791C61D9246B99BA30620AB"
+    },
+    {
+      "Path": "测试/isolation-source/SonicRoute.Core/AutoRuleStore.cs",
+      "Bytes": 12704,
+      "SHA256": "0859EF9EEEAFC01A2F82AD268CD39C62783053849A3E5F5AFE00B516A5DEB122"
+    },
+    {
+      "Path": "测试/isolation-source/SonicRoute.Core/ConfigService.cs",
+      "Bytes": 13061,
+      "SHA256": "4C76B47203F3FA2B16D4FBAD6B84BE74A829699A113C704B12ADC58B7D0E3816"
+    },
+    {
+      "Path": "测试/isolation-source/SonicRoute/App.xaml.cs",
+      "Bytes": 52921,
+      "SHA256": "0A5FE498248CA745DA53C954BBAF03187B8BBEBA7F774DA0E9471BD8C0BD48FE"
+    },
+    {
+      "Path": "测试/isolation-source/SonicRoute/AutoRuleScheduler.cs",
+      "Bytes": 11324,
+      "SHA256": "B54E5AD6DD9D332754861A87B4C44AF9BCD158B646556A39875D8866CECDF2A0"
+    },
+    {
+      "Path": "测试/isolation-source/SonicRoute/L10n.cs",
+      "Bytes": 19991,
+      "SHA256": "AB5ACAF10F56C0D48FCB4A13E3898A55C9829B721FD71F4443E6671FE61B81E2"
+    },
+    {
+      "Path": "测试/isolation-source/SonicRoute/RuleCommandLine.cs",
+      "Bytes": 20090,
+      "SHA256": "4E79C98B868A83150F644813C2FA5077AFD1C9AD42CDB1F4C9EBBDF573615400"
+    },
+    {
+      "Path": "测试/Reproduce-Checks.ps1",
+      "Bytes": 3103,
+      "SHA256": "35DEAF822062028A3E31944CE53EF666395E87FC87C8DF4277FA5E90C8B95C9C"
+    },
+    {
+      "Path": "测试/runner/InputPickerCheck.cs",
+      "Bytes": 16268,
+      "SHA256": "36D5D5228E69A1E429C96D8E79C17D2BFE3995C5500BA2436A8B3DB65CA4FB0F"
+    },
+    {
+      "Path": "测试/runner/PerfReview.csproj",
+      "Bytes": 844,
+      "SHA256": "32C8AAC2B941F62709352E922D79DF423BC143F50F7D0CDD65DB8BFF5C001920"
+    },
+    {
+      "Path": "测试/runner/Program.cs",
+      "Bytes": 80637,
+      "SHA256": "F7D6C3A2B352B95B289F963BB352B84264935167E5EECCAF10BE32906B6B3864"
+    },
+    {
+      "Path": "检查记录/Archive-InputPicker.ps1",
+      "Bytes": 6213,
+      "SHA256": "B16EBE0C6BE2BB652980D90A7D64F95993C4CD26D2D9F5A3281ECC96E0FEFFBE"
+    },
+    {
+      "Path": "检查记录/build-arm64.log",
+      "Bytes": 6116,
+      "SHA256": "77A27A5C1711BD55F6397097A77A569D630E4475DA49D7637018A58012D82633"
+    },
+    {
+      "Path": "检查记录/build-legacy.log",
+      "Bytes": 21374,
+      "SHA256": "944ED94A5B3207235C40811150B9746363D1E7D166D8EEB8B2F2F45BF1D52B1C"
+    },
+    {
+      "Path": "检查记录/color-logic-audit.json",
+      "Bytes": 246,
+      "SHA256": "657A90553B34DCE66783643D872B8ADF95FD5D36D6500A57CF86348A18FF0A20"
+    },
+    {
+      "Path": "检查记录/language-audit.json",
+      "Bytes": 896,
+      "SHA256": "A4876FCCA57EDCA5F8CE19E5E3268ECBF6B88B0031C985C4C74ABC50BA6B5849"
+    },
+    {
+      "Path": "检查记录/publish-lite.log",
+      "Bytes": 3342,
+      "SHA256": "5F14BA11E5496DB3002F55BE71E428F29E9938348EF1BE53673DBE37F3D362FF"
+    },
+    {
+      "Path": "检查记录/REPORT.md",
+      "Bytes": 3172,
+      "SHA256": "256A5FAC6FA2707D8DF803EBE696286C9B7CC56164A1FCA85EB074DD8DBF6B9F"
+    },
+    {
+      "Path": "检查记录/results-legacy/color-picker-dark.png",
+      "Bytes": 49692,
+      "SHA256": "C88F1F0C975C1E8FD870C8B5653EE95D3489BBCA198C7A75CA40FB259C8BC9B5"
+    },
+    {
+      "Path": "检查记录/results-legacy/color-picker-light.png",
+      "Bytes": 50051,
+      "SHA256": "79DB8B79228210E436FA6E64F661C499BDC4722A805A98BE742966CF648B75E5"
+    },
+    {
+      "Path": "检查记录/results-legacy/results.json",
+      "Bytes": 5224,
+      "SHA256": "643C87ECDFE1BD2F846EB5ADB8AD4EB5257AE9B5BD7C36B7C498DA5774F038E7"
+    },
+    {
+      "Path": "检查记录/results-legacy/settings-modern-inputs.png",
+      "Bytes": 59414,
+      "SHA256": "B44DA5502247DFA7A37CAFA75A412160672F61148C110B4D65CDEE91CBE674A2"
+    },
+    {
+      "Path": "检查记录/results-legacy/theme-osd-short-reset.png",
+      "Bytes": 56166,
+      "SHA256": "327FBAC9E5A7515A9FE1C0AA987112CAEAE867C125CDDAEE9C2BDED771CFC7D0"
+    },
+    {
+      "Path": "检查记录/results-lite/color-picker-dark.png",
+      "Bytes": 49692,
+      "SHA256": "C88F1F0C975C1E8FD870C8B5653EE95D3489BBCA198C7A75CA40FB259C8BC9B5"
+    },
+    {
+      "Path": "检查记录/results-lite/color-picker-light.png",
+      "Bytes": 50051,
+      "SHA256": "79DB8B79228210E436FA6E64F661C499BDC4722A805A98BE742966CF648B75E5"
+    },
+    {
+      "Path": "检查记录/results-lite/results.json",
+      "Bytes": 5190,
+      "SHA256": "26B3447CC4290829993BE9052A96BF354B7DCDA58B21C34AE09004CF7DE20C66"
+    },
+    {
+      "Path": "检查记录/results-lite/settings-modern-inputs.png",
+      "Bytes": 59414,
+      "SHA256": "B44DA5502247DFA7A37CAFA75A412160672F61148C110B4D65CDEE91CBE674A2"
+    },
+    {
+      "Path": "检查记录/results-lite/theme-osd-short-reset.png",
+      "Bytes": 56166,
+      "SHA256": "327FBAC9E5A7515A9FE1C0AA987112CAEAE867C125CDDAEE9C2BDED771CFC7D0"
+    },
+    {
+      "Path": "检查记录/review-build-legacy.log",
+      "Bytes": 24949,
+      "SHA256": "E1A3CA7426B51C22CE6C32D66B2F917F144FE3FF137DB9BC2C86231440A830C7"
+    },
+    {
+      "Path": "检查记录/review-build-lite.log",
+      "Bytes": 5811,
+      "SHA256": "4048C8E075F34CBF7DFE24022DCF7ADAC0704C1F84600C04D2A85E73012B1365"
+    },
+    {
+      "Path": "检查记录/source-audit.json",
+      "Bytes": 227,
+      "SHA256": "47683DB7028748F46DC8900B4111240FEAA71B2CB7534DBD4EF04C9A811016D0"
+    },
+    {
+      "Path": "检查记录/stage-note.txt",
+      "Bytes": 2276,
+      "SHA256": "96D1840F0A9EE56261D1EC71AB198F38599296CF3C31EC6D7AEEB76817031114"
+    },
+    {
+      "Path": "检查记录/user-data-after.json",
+      "Bytes": 338,
+      "SHA256": "473133926D3A58582BFE20AB88507B35270EB5B1F7C66BBD86CF37D3DCC82301"
+    },
+    {
+      "Path": "检查记录/user-data-audit.json",
+      "Bytes": 60,
+      "SHA256": "676767324EAF94D5C37870293F7DC19991BD34D4F14C2D213E8F57EF4F1F8FA2"
+    },
+    {
+      "Path": "检查记录/user-data-before.json",
+      "Bytes": 338,
+      "SHA256": "E13896780EA868ECF6C700A794C0EB3CA6DA56DD41626252C5FCD56E180F9A70"
+    },
+    {
+      "Path": "用户补充-保留完整色谱.png",
+      "Bytes": 38583,
+      "SHA256": "E3A10DDCEF3DB741E9357F883E27CCFFFDBCFE2861F3EFC3C1C120937BC70B55"
+    },
+    {
+      "Path": "用户参考-新输入框.png",
+      "Bytes": 13915,
+      "SHA256": "A912A7060481CAD87A5C8066E1FFC18703E8C27E0C9CC8FFEA4A32CE2E45D291"
+    },
+    {
+      "Path": "用户参考-颜色选择.png",
+      "Bytes": 34910,
+      "SHA256": "41F9A1270CBC4C8DC20F0B18FC2778D7CC9D20386A7D110DF90723B7B56E297A"
+    },
+    {
+      "Path": "用户参考-OSD按钮.png",
+      "Bytes": 67598,
+      "SHA256": "2E7A4F435D0237CAE45F7360FC1EDEE9D2D60FB2893D082A40DF061B890B6055"
+    },
+    {
+      "Path": "源码快照/.gitignore",
+      "Bytes": 1197,
+      "SHA256": "D87037CFAC87BD9381B2F6CA21E59BC510C41CFD2025FE5ADC05687EAF9FE8B0"
+    },
+    {
+      "Path": "源码快照/docs/automation-command-line.md",
+      "Bytes": 4971,
+      "SHA256": "16EC3FE431419BC86B2FE0F5F0EADB86D4B284FB8B9CD10E9C2D61B8575E8F9B"
+    },
+    {
+      "Path": "源码快照/docs/automation-convenience.md",
+      "Bytes": 9504,
+      "SHA256": "453D955F870F2B1D0C79256822DD13C960B1380C14C6D0AA69B882F6463BE3DA"
+    },
+    {
+      "Path": "源码快照/docs/theme-settings.md",
+      "Bytes": 4236,
+      "SHA256": "8FC57C3638490B6B7E58EEB4198BA0FE0863D14324FF961B7840210C05EBB1E4"
+    },
+    {
+      "Path": "源码快照/LICENSE",
+      "Bytes": 1069,
+      "SHA256": "F7443BFFD3E17541D03E806CFB2967F0E39C613C80E70DF490C952D3430C0B0C"
+    },
+    {
+      "Path": "源码快照/README.en.md",
+      "Bytes": 8540,
+      "SHA256": "8BAFE757DB24E7B8AC38F1FD9D3F7EF9BEFCF9EB082C5AD25CCAFB4E5D0747AF"
+    },
+    {
+      "Path": "源码快照/README.md",
+      "Bytes": 7808,
+      "SHA256": "AC699EA94F3E3C04E59EF96101447CBF8CD7A2A6C7E9D73327559DF989058A33"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AppDisplayName.cs",
+      "Bytes": 1195,
+      "SHA256": "BB47C0D55C262582CFE6D86ED25E685499BFBD4C2B19929B0118534672513EE0"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AtomicFile.cs",
+      "Bytes": 3045,
+      "SHA256": "9229FB6FE5CF1612D621716CA0D38FB52D74E6662BAD7583D9099D6E9FFEEE1E"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AudioMeterService.cs",
+      "Bytes": 11984,
+      "SHA256": "3978B9E83B64A8B3EAA478D469A2CC4E47AB175C0A3AD24C2FD5938CCC5763FF"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AudioService.cs",
+      "Bytes": 21161,
+      "SHA256": "E1A73984C46DA576CCDCFB2CC1613E269DF5A96614C65BE94134B57DF09BC6C3"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AutoRuleStore.cs",
+      "Bytes": 12564,
+      "SHA256": "FEB62B356102FD7B1103347AFA1AD45A9EF33B846722CE078806A3E3B9A4551E"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/AppInfo.cs",
+      "Bytes": 2100,
+      "SHA256": "AAE93A8D5D01E8187C18A7C874925E724A7D00E94A99277730266284F5F7C5B6"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/CompatEnv.cs",
+      "Bytes": 1709,
+      "SHA256": "A1715D5BFF04E479AB91823FEDD31E983CE4A9C7B641ED5570DC6A382BB1E4B5"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/MathEx.cs",
+      "Bytes": 1718,
+      "SHA256": "A2A53A9C6A10F227557566940EAD7FBDC4D094491294475C2CD81D407711E049"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/Net48CompilerShims.cs",
+      "Bytes": 2678,
+      "SHA256": "ABAF5A7C7FCF847F9416C39D9557DE7BB2542931DA73E6980F88100F114F9A12"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/WindowsVersion.cs",
+      "Bytes": 2744,
+      "SHA256": "46089671822E5B95E488E6D72EF9A7F9E88CA393D2E75C7E83FDC1C9A334DD15"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ConfigService.cs",
+      "Bytes": 12921,
+      "SHA256": "4AF9D64A61E89716D7F5E62AE0B5C8B571F98D7076DB84E33406E939D53DCE25"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ForegroundAppService.cs",
+      "Bytes": 3031,
+      "SHA256": "52DD7C885238D93B105B725BAFD977E354819897841B891469FEC5BFB1AF3729"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/GlobalMicMuteService.cs",
+      "Bytes": 7132,
+      "SHA256": "159AA516BCAFC9E3E7D7142807D8DABBD74E52F2F62E60396BA00817A14EB2FC"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/AssocHandlerInterop.cs",
+      "Bytes": 2375,
+      "SHA256": "1E5DF9E69E98673BB5C85FEF671343B61406A8D13027035D2CE6C97BEE8F121F"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/AudioPolicyConfig.cs",
+      "Bytes": 10740,
+      "SHA256": "EC39343D4122499B8EEB665FB8754F00641827E8CECCB64D3EE8F12F48F69E67"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/ComInterop.cs",
+      "Bytes": 3182,
+      "SHA256": "F598823C91568750362B4591379DD9183A3ACBBE5D9ED15C1349974BB102B61F"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/ISimpleAudioVolume.cs",
+      "Bytes": 786,
+      "SHA256": "E1754008F87E0626CB2B91F4601EBECF2CC889A8B8DB338E471137F55E96B40D"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/PolicyConfigClient.cs",
+      "Bytes": 3812,
+      "SHA256": "C97DB1E7469CDD0A24C37649043C3E8395AC033449492D322C0E8A83C58E5BAF"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/WasapiInterfaces.cs",
+      "Bytes": 8816,
+      "SHA256": "1CBA7C625F4851572698F7E52A85CAF19A7E7A290B1C195E57E3AC35B1F49AB9"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Models/AudioAppInfo.cs",
+      "Bytes": 902,
+      "SHA256": "8458204A63EABF8A1FAEF755CA1562DA972E15BAEEB19B6AEB3A844B4BBF088C"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Models/AudioDeviceInfo.cs",
+      "Bytes": 1046,
+      "SHA256": "E8418E9BCD6D50B21D52928B75240830C8953EE2D49AD6DFAD51F01A04997364"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Models/AutoRule.cs",
+      "Bytes": 17516,
+      "SHA256": "B1A990C91E00AA5E377FBD1D2FFC25D07ADCEFAF9C4D7885EF3A4F179DB4F092"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/OpenWithService.cs",
+      "Bytes": 6372,
+      "SHA256": "22E3BC154F034CCCDC24BC72FD459DA68E1E7C4317E6EDCE2513B3078E340B85"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ProcessSnapshotService.cs",
+      "Bytes": 3635,
+      "SHA256": "6AC248023005493FB280A208D3A8B37662111C8E578B5B4CD930444A97642DC6"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/SessionVolumeService.cs",
+      "Bytes": 22402,
+      "SHA256": "19AC5C168C4C50E427F9128A218D9B1A9719755E3A34D56746EEB00DA8A0C4BB"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ShellOpen.cs",
+      "Bytes": 995,
+      "SHA256": "90B4F354A112CD34E2DEA987FD8C0D582AE8D9D2D777806032D75A39BB6A0303"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/SonicRoute.Core.csproj",
+      "Bytes": 1926,
+      "SHA256": "9DF0476CD88D8489676D1FA48DE471D01846C389F7786D9F9FFA7B61C569B419"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/SystemVolumeService.cs",
+      "Bytes": 7007,
+      "SHA256": "9E203D5EA1A757C59C9659C386997537582716E92368041274148550D1D27DAA"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Legacy/App.config",
+      "Bytes": 1027,
+      "SHA256": "3B2B34D93EAF8D2769406EA510CDAB522C5A9A1EBE5B7E0C766E3582FD332800"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Legacy/app.manifest",
+      "Bytes": 2027,
+      "SHA256": "D7A48882D40479EFB86290BC7298F44ACDF65CF0D18B4DB4DBAB9F821F48DCE0"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Legacy/SonicRoute.Legacy.csproj",
+      "Bytes": 4396,
+      "SHA256": "A0FC8428CC31429409DF3EF8D6AF3F2776E945BFB890FF079261BFF67E135AA5"
+    },
+    {
+      "Path": "源码快照/SonicRoute.sln",
+      "Bytes": 2304,
+      "SHA256": "391C6C60CB55952DF75FEA0B986B8011F5B80340585E328164170840EDC52D30"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AnimatedExpandHost.cs",
+      "Bytes": 7416,
+      "SHA256": "20C67DA2218E9E70D916AFF5332023EB9CA2C1BFA95262EBA106C560470BFC64"
+    },
+    {
+      "Path": "源码快照/SonicRoute/App.AutomationExtras.cs",
+      "Bytes": 2841,
+      "SHA256": "FBE563F0E1B0A7B1CF218508C2DF7F5C9E5EB9E506F72E18C6174221AC9FAF7C"
+    },
+    {
+      "Path": "源码快照/SonicRoute/App.xaml",
+      "Bytes": 31471,
+      "SHA256": "1E47C15F3A04B66A1145865B0ECFC32AD4AE4D76053E0FB5F51A3B7DCA987C75"
+    },
+    {
+      "Path": "源码快照/SonicRoute/App.xaml.cs",
+      "Bytes": 52825,
+      "SHA256": "69340E29D1602F6D4430FE0403F927A04D51110A8964EAF080EFD9627577B04F"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AppIconService.cs",
+      "Bytes": 4500,
+      "SHA256": "279E9E64204B96DF3749342D749105B460F74339E114AD0B0B2AB5EAD1EFFC12"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AppItem.cs",
+      "Bytes": 5201,
+      "SHA256": "E49B1BBC54688749225F05696941A24F455B7110CB3C133DB6EEC6F29CDEE20E"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AutomationIcons.cs",
+      "Bytes": 6492,
+      "SHA256": "4715BFBB1573B69B24CA187579833DB2BFC36F87B6FCAAD747B90DA052430BBA"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AutoRuleScheduler.cs",
+      "Bytes": 11169,
+      "SHA256": "F29E3835B6BD8AA68A717E642EED3870DB56782D1ACD030375F65C198CE66CC6"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AutoRuleService.cs",
+      "Bytes": 31798,
+      "SHA256": "98FC7C2688F3CB015D4BBC35945B63D105B500756DF0E3A598A0E99F5B39A25C"
+    },
+    {
+      "Path": "源码快照/SonicRoute/ConvenienceMenus.cs",
+      "Bytes": 738,
+      "SHA256": "700CFBFC835E87409FBD7727B9CC329A215FDF2B2D5998AA6A179ED14D5CE12A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/CurrentAppService.cs",
+      "Bytes": 9253,
+      "SHA256": "A13E25F65CDDA58439D2062CE841A4A42EA0DF550B4F90B53533DA8CBB7B60F4"
+    },
+    {
+      "Path": "源码快照/SonicRoute/HotkeyActions.cs",
+      "Bytes": 8459,
+      "SHA256": "479EA75932000F48FF1FD2F4F3EDAF6AF712C428CD135C980981A7769215A44B"
+    },
+    {
+      "Path": "源码快照/SonicRoute/HotkeyService.cs",
+      "Bytes": 10961,
+      "SHA256": "C18519B51431FCF405822644C81D14E8C047A94358AB9BA1786BDF855281B64D"
+    },
+    {
+      "Path": "源码快照/SonicRoute/IconFactory.cs",
+      "Bytes": 5270,
+      "SHA256": "160F9AC076B106F7611736AFFCE1D4A337FCBF8E0E4C0EA1D5AD7EC3DBFAD15A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/InputAppearance.cs",
+      "Bytes": 1096,
+      "SHA256": "193C64428E1EC0E32082E591927B62D9DD736A743441CE2DF1B8AC240B6902B7"
+    },
+    {
+      "Path": "源码快照/SonicRoute/IQuickPanel.cs",
+      "Bytes": 625,
+      "SHA256": "710E062B73923C3D526435A0E1C9A79C090BF3AA2FC4FA4AA3DC5F6DFE8FDF4A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/L10n.cs",
+      "Bytes": 19845,
+      "SHA256": "DCA44F28FCE41E3CF8AD8AFCBC7CBB5FC15B8E3E4EE832AD940657BBCF23AD53"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.AutomationEditor.cs",
+      "Bytes": 10554,
+      "SHA256": "332947003155B88FA4467F3CD62FC496774333C7AD0322926B2E288AB788CAED"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.AutomationExtras.cs",
+      "Bytes": 6261,
+      "SHA256": "0C70047F48CB054CC5E5E587938B39A11F05918D25D369E1FE80044BAB2191FE"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.AutomationLayout.cs",
+      "Bytes": 21061,
+      "SHA256": "5AD12410FD641F0818F7C5CD478B5E7512471475CDB93EBC47C887852C1A37E4"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.SettingsLayout.cs",
+      "Bytes": 4857,
+      "SHA256": "EB007D399D71ED34750638F5A6B32EC585CAA479A5B503C740B7AD323C7FAA64"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.ThemeLayout.cs",
+      "Bytes": 3320,
+      "SHA256": "560FA719658BC47F936998B84B89F14FC9359D3D9442312A169AA48C78FDE49F"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.xaml",
+      "Bytes": 106416,
+      "SHA256": "3F3ECA69622D44D3B4CB8329E5A9FE1B6EFBAC68207BE77DF08AAC41EB0F7187"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.xaml.cs",
+      "Bytes": 226377,
+      "SHA256": "9509A80C5191ED1BBD6D546CFD3174075A702E13F7A419E0AE7951F04FDE2DE1"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MouseHotkeyHook.cs",
+      "Bytes": 7704,
+      "SHA256": "4582A46741298C67820738EE11F94300FA79DA6483565C3B31BCDF25DC86F922"
+    },
+    {
+      "Path": "源码快照/SonicRoute/OsdPlacement.cs",
+      "Bytes": 8224,
+      "SHA256": "3EDC5DF39172C37A3130E73549160D6E44476A6F780AE24B3902DE5667EE7BE7"
+    },
+    {
+      "Path": "源码快照/SonicRoute/OsdService.cs",
+      "Bytes": 37272,
+      "SHA256": "C28A3CB8DE931D0A5EEB339D4B82CF9F5B0769E06E9B7DC2A6A00228A54D691E"
+    },
+    {
+      "Path": "源码快照/SonicRoute/PanelDevices.cs",
+      "Bytes": 2084,
+      "SHA256": "87D5D472EBF5690424ABC17FA54DFFB3C4C8E079F68A4B25BBFB36B9FAD046F3"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Properties/PublishProfiles/win-arm64.pubxml",
+      "Bytes": 1254,
+      "SHA256": "856F5485EFFD84986C43DEF2625F76A4F1A5584EC8296558EEA2D3276AB11306"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Properties/PublishProfiles/win-x64.pubxml",
+      "Bytes": 1242,
+      "SHA256": "05125ECC13DC2AFE1226B2541436121C6C7FE8E92F8CCE599710EA6E6251B25E"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelModernWindow.xaml",
+      "Bytes": 15953,
+      "SHA256": "F4407C5526496479793440A364DFDF2AFA86887D6423FA58C2738643E49310E1"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelModernWindow.xaml.cs",
+      "Bytes": 64136,
+      "SHA256": "C6F39F1193B46E822D0A8D710A2CDF97355027B9C245F60586DCC8F5C2A0EA78"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelPosition.cs",
+      "Bytes": 2820,
+      "SHA256": "EBEAEB48AD6714B1FF2F2413D2B311AF1E102355D936BC23C309551B425923A8"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelWindow.xaml",
+      "Bytes": 12671,
+      "SHA256": "5A554DB69BAC90D25F129DDAC14F6D9C6D7541B087381AA90F5B255BCB635FCC"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelWindow.xaml.cs",
+      "Bytes": 29318,
+      "SHA256": "575D04EEC7D086840BCF59864C296B4BF0F6CEB79C8FD064A17796C30CE8E4A7"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/de-DE.json",
+      "Bytes": 24841,
+      "SHA256": "5456F93EF53B89FB1F24EBD932D0E3201CBE52C6F51DBC19EDAEC3321D270FA0"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/en-US.json",
+      "Bytes": 22364,
+      "SHA256": "9D4CDDF3C2519B7BF762A31BD11B07CA4F6F0DD1DA90125F47A9DF0353E3184F"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/es-ES.json",
+      "Bytes": 24796,
+      "SHA256": "E86A40D8FCD9A63F2524A72D86D3D7E951ED1A0C80BCC5D14CB3C04DDB47DE72"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/fr-FR.json",
+      "Bytes": 25787,
+      "SHA256": "D4C0C34B32B4BBD0832007635259C902D60A925651225E185258C95D26BFE897"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/ja-JP.json",
+      "Bytes": 27188,
+      "SHA256": "F76BCDE9FAE59E1F570B6522DB60C3E63C83242CC629CD94881A66B036A43E81"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/ko-KR.json",
+      "Bytes": 24980,
+      "SHA256": "FFB0FA2D0FF78C3F3E917995D338262E79BA1E4FEA7EA245185F852013C01595"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/ru-RU.json",
+      "Bytes": 34931,
+      "SHA256": "9C44F7646A0BC2565A77232E50F15054C9E9779619D5BAEB75EC8EFC52A38E06"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/zh-CN.json",
+      "Bytes": 22511,
+      "SHA256": "FD2CE853A25BB593581703729E82AFA41B6651A275369B225819C6BBA754273D"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/zh-TW.json",
+      "Bytes": 22685,
+      "SHA256": "8879E7EC06A3ECC4F9C644CDD147C19BB5B1F28F61BA8C81CA4C4C527E0853F9"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/RuleCommand.ps1",
+      "Bytes": 3107,
+      "SHA256": "88D5423CA205D2C25C64678BF7144B6D9552E191BE8B252EFABB87B4616D9258"
+    },
+    {
+      "Path": "源码快照/SonicRoute/RuleCommandLine.cs",
+      "Bytes": 19915,
+      "SHA256": "164F61CE201B41B61231CCDBB87A3A664CEE3368E868C0267D7E6B2F9E8421BC"
+    },
+    {
+      "Path": "源码快照/SonicRoute/runtimeconfig.template.json",
+      "Bytes": 68,
+      "SHA256": "B54D5AF67ACA2DF22161272071CC21ED5279957667EBC947BF8D851B18D80137"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SettingsControls.xaml",
+      "Bytes": 10010,
+      "SHA256": "0BD6AC34CD153AD9F5C7B23EED62D777671944EDF2DCCB0E30069018F77A46B6"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SonicRoute.csproj",
+      "Bytes": 2571,
+      "SHA256": "A0D61B7EC8209873989ABE3A9D138379A3F6A11F859E9DBC6E866FFFCB2BDA6A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SonicRoute.ico",
+      "Bytes": 361102,
+      "SHA256": "BE6ABA294C6292AE58BC6A5EDEA547FB8F76EE6F461DC18F6AF296756F31E8C2"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SonicRoute.png",
+      "Bytes": 69272,
+      "SHA256": "10A72E312993B1F419CCACF85FD08047DA75A8B73166A70F8AE5A4DF220BE06B"
+    },
+    {
+      "Path": "源码快照/SonicRoute/ThemeColorPickerWindow.cs",
+      "Bytes": 19274,
+      "SHA256": "16F406C83F15D1F6D1CCA5155E92BEAC2AE38ACE398C0F6E1AC5C23A39D249B7"
+    },
+    {
+      "Path": "源码快照/SonicRoute/ThemeControls.xaml",
+      "Bytes": 9330,
+      "SHA256": "50924BE2D1EB087810A2A2F092BA7335F288C608F6EE2BC1A6470A2D84ED9A00"
+    },
+    {
+      "Path": "源码快照/SonicRoute/ThemeService.cs",
+      "Bytes": 11288,
+      "SHA256": "8EE1A32CAC84BB32AB9FD050CAFF9D053FF4791D14C240D41C36AEEA9BB1F475"
+    },
+    {
+      "Path": "源码快照/SonicRoute/TrayWheelService.cs",
+      "Bytes": 20342,
+      "SHA256": "36F3393B45D6C66036396408F3024EF57B5B77A6DFCCF01547AFEB025D1B0E62"
+    },
+    {
+      "Path": "源码快照/SonicRoute/UiMotion.cs",
+      "Bytes": 3043,
+      "SHA256": "E60867BDB32B6E32607F92C6220CF34554EC39B93218222B9CFFF0A8A80E5F79"
+    },
+    {
+      "Path": "源码快照/SonicRoute/VolumePresets.cs",
+      "Bytes": 1408,
+      "SHA256": "34C96E4BE41C304D88AE5BC8B9F6BABBFF1C0D061B4D5DBE6F16D8A090CC7067"
+    },
+    {
+      "Path": "AI_CONTEXT.md",
+      "Bytes": 164890,
+      "SHA256": "38F1ED3256FC41222FECAF2A17B8322D2D956D48F4C0FA24A1B6D212457A5DC8"
+    },
+    {
+      "Path": "README.md",
+      "Bytes": 2524,
+      "SHA256": "30D2CAC07375039F6EB2E73FD43E9B7239D313C1381AE1A42A16D400EC74B286"
+    }
+  ]
+}

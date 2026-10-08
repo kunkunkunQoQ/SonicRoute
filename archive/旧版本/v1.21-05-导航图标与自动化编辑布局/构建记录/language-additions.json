@@ -1,0 +1,11 @@
+{
+  "zh-CN": {"Auto.EditorNew":"新建自动化","Auto.EditorEdit":"编辑自动化","Auto.EditorHint":"设置触发方式与执行的操作，打造属于你的自动化流程。","Auto.BasicInfo":"基本信息","Auto.ActionsHint":"按顺序执行以下操作，可拖动调整顺序。"},
+  "zh-TW": {"Auto.EditorNew":"新增自動化","Auto.EditorEdit":"編輯自動化","Auto.EditorHint":"設定觸發方式與執行的操作，打造專屬的自動化流程。","Auto.BasicInfo":"基本資訊","Auto.ActionsHint":"依序執行以下操作，可拖曳調整順序。"},
+  "en-US": {"Auto.EditorNew":"Create automation","Auto.EditorEdit":"Edit automation","Auto.EditorHint":"Choose a trigger and actions to build your automation workflow.","Auto.BasicInfo":"Basic information","Auto.ActionsHint":"Actions run in order. Drag to reorder."},
+  "ja-JP": {"Auto.EditorNew":"自動化を作成","Auto.EditorEdit":"自動化を編集","Auto.EditorHint":"トリガーと実行する操作を設定して、自動化フローを作成します。","Auto.BasicInfo":"基本情報","Auto.ActionsHint":"操作は順番に実行されます。ドラッグで並べ替えできます。"},
+  "ko-KR": {"Auto.EditorNew":"자동화 만들기","Auto.EditorEdit":"자동화 편집","Auto.EditorHint":"실행 조건과 작업을 설정하여 자동화 흐름을 만드세요.","Auto.BasicInfo":"기본 정보","Auto.ActionsHint":"작업은 순서대로 실행됩니다. 끌어서 순서를 바꾸세요."},
+  "fr-FR": {"Auto.EditorNew":"Créer une automatisation","Auto.EditorEdit":"Modifier l’automatisation","Auto.EditorHint":"Choisissez un déclencheur et des actions pour créer votre automatisation.","Auto.BasicInfo":"Informations générales","Auto.ActionsHint":"Les actions s’exécutent dans l’ordre. Faites glisser pour les réorganiser."},
+  "de-DE": {"Auto.EditorNew":"Automatisierung erstellen","Auto.EditorEdit":"Automatisierung bearbeiten","Auto.EditorHint":"Wählen Sie einen Auslöser und Aktionen für Ihren automatischen Ablauf.","Auto.BasicInfo":"Grundinformationen","Auto.ActionsHint":"Aktionen werden der Reihe nach ausgeführt. Zum Sortieren ziehen."},
+  "es-ES": {"Auto.EditorNew":"Crear automatización","Auto.EditorEdit":"Editar automatización","Auto.EditorHint":"Elige un activador y las acciones para crear tu automatización.","Auto.BasicInfo":"Información básica","Auto.ActionsHint":"Las acciones se ejecutan en orden. Arrastra para reordenarlas."},
+  "ru-RU": {"Auto.EditorNew":"Создать автоматизацию","Auto.EditorEdit":"Изменить автоматизацию","Auto.EditorHint":"Выберите условие запуска и действия для своего сценария автоматизации.","Auto.BasicInfo":"Основные сведения","Auto.ActionsHint":"Действия выполняются по порядку. Перетащите, чтобы изменить порядок."}
+}

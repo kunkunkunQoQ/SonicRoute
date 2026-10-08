@@ -132,6 +132,10 @@ namespace SonicRoute
             }
 
             Set("Theme.Accent", accentColor);
+            // 禁用状态共用现有 RGB 反色及冻结画刷缓存，动态资源随主题一起更新。
+            var invertedAccent = GetInvertedAccentBrush();
+            if (!ReferenceEquals(Application.Current.Resources["Theme.AccentInverse"], invertedAccent))
+                Application.Current.Resources["Theme.AccentInverse"] = invertedAccent;
             // 主标题保留强调色：浅色模式压深、深色模式提亮，各混合 30%。
             Set("Theme.OsdTitleText", Blend(accentColor, dark ? Colors.White : Colors.Black, 0.30));
             var osdBackground = dark ? Color.FromRgb(0x2B, 0x2B, 0x2B) : Colors.White;

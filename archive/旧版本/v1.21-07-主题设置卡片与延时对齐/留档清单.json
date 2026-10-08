@@ -1,0 +1,1317 @@
+{
+  "Stage": 43,
+  "Version": "1.21",
+  "Date": "2026-10-08",
+  "BaselineArchive": "v1.21-06-启动模式对齐与禁用图标反色",
+  "BaselineCommit": "077b6e2261fa85c3fa1b69c2fcbfe4161b997ecc",
+  "ProjectFiles": 86,
+  "SourceFiles": 94,
+  "RuntimeTests": "isolated source UI; see 测试记录/REPORT.md",
+  "Files": [
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/Microsoft.Bcl.AsyncInterfaces.dll",
+      "Bytes": 26904,
+      "SHA256": "80678203BD0203A6594F4E330B22543C0DE5059382BB1C9334B7868B8F31B1BC"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/SonicRoute.Core.dll",
+      "Bytes": 76800,
+      "SHA256": "BAB8427BA5D6E6DEB2A5C2384D489D95C64E7C89B12CA81CBE8139AD6F110994"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/SonicRoute.Core.pdb",
+      "Bytes": 30912,
+      "SHA256": "0CDF57B6C104F59BC7FDA6351EFBB577E8CF99C3851D8F6FE32CEA6CB5D4134E"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/SonicRoute.exe",
+      "Bytes": 1506304,
+      "SHA256": "EA4098D7D074CC6D4EBDFEA33E5D4D9BA83730FE3BF3AC217861A5E72894D024"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/SonicRoute.exe.config",
+      "Bytes": 1395,
+      "SHA256": "87EA9FFEF5AAB19CBA1E313B5342CE90D36AAADEDC70E9164A44D1825A1B550E"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/SonicRoute.pdb",
+      "Bytes": 153480,
+      "SHA256": "3C095FEDAFC658F286297AEF77267368C66CC50AA834180DCA8154A10144521F"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.Buffers.dll",
+      "Bytes": 20856,
+      "SHA256": "ACCCCFBE45D9F08FFEED9916E37B33E98C65BE012CFFF6E7FA7B67210CE1FEFB"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.Memory.dll",
+      "Bytes": 142240,
+      "SHA256": "BF3FB84664F4097F1A8A9BC71A51DCF8CF1A905D4080A4D290DA1730866E856F"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.Numerics.Vectors.dll",
+      "Bytes": 115856,
+      "SHA256": "1D3EF8698281E7CF7371D1554AFEF5872B39F96C26DA772210A33DA041BA1183"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.Runtime.CompilerServices.Unsafe.dll",
+      "Bytes": 18024,
+      "SHA256": "37768488E8EF45729BC7D9A2677633C6450042975BB96516E186DA6CB9CD0DCF"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.Text.Encodings.Web.dll",
+      "Bytes": 79024,
+      "SHA256": "E9C4F5EED186CB129C527C4B8D67D163EA2F2396E9D8B96E30B5E7C12203CE84"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.Text.Json.dll",
+      "Bytes": 644888,
+      "SHA256": "86C3F263AE9B4469AB1266C80471087082447EB4A38E6B97BF5E84DE15C07A1D"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.Threading.Tasks.Extensions.dll",
+      "Bytes": 25984,
+      "SHA256": "4F81FFD0DC7204DB75AFC35EA4291769B07C440592F28894260EEA76626A23C6"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Legacy-x64-settings-layout/System.ValueTuple.dll",
+      "Bytes": 25232,
+      "SHA256": "E905D102585B22C6DF04F219AF5CBDBFA7BC165979E9788B62DF6DCC165E10F4"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Lite-x64-settings-layout/SonicRoute.Core.pdb",
+      "Bytes": 39496,
+      "SHA256": "29CE161A20DF9D60086BBEC0BCA6F0A4F8AFA479F0954B1A404600E7D0FE707C"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Lite-x64-settings-layout/SonicRoute.exe",
+      "Bytes": 28453123,
+      "SHA256": "DDC828FF2D3945B297EAC2EFB7DC3830274E951998A43D61DBEAD3F14003CBCA"
+    },
+    {
+      "Path": "本地构建/SonicRoute-v1.21-Lite-x64-settings-layout/SonicRoute.pdb",
+      "Bytes": 163876,
+      "SHA256": "3557FF7168F1B20065976BEEF6388C6B3BBF4F5F2B7045C39A954930DE8B1FA6"
+    },
+    {
+      "Path": "测试记录/Capture-UserDataHashes.ps1",
+      "Bytes": 1472,
+      "SHA256": "B5B71DC5CE01EA2818EF8F75F0DF524DE5060A074536E8C38AF05EF99E482CF0"
+    },
+    {
+      "Path": "测试记录/isolation-patches.md",
+      "Bytes": 3995,
+      "SHA256": "063B176BF2001A506B0A86E2194279F8809C251019DC82911482370F3BEA6542"
+    },
+    {
+      "Path": "测试记录/raw-results/builds/v120.log",
+      "Bytes": 7570,
+      "SHA256": "B80A0FE14A3120331AFE6A1C6F8FA17C929C0479EB84CF153A96A0C160B99F5C"
+    },
+    {
+      "Path": "测试记录/raw-results/builds/v121-theme-light.log",
+      "Bytes": 7614,
+      "SHA256": "BD9FB3303807F3463A63C53FE626CB074FF086FA14C52AF89F901BBB6B18F33F"
+    },
+    {
+      "Path": "测试记录/raw-results/builds/v121.log",
+      "Bytes": 7614,
+      "SHA256": "3E7957BA26121029BAC0E0F5A42EB9218D4FFB9A960B5E130DA317DED6E219F2"
+    },
+    {
+      "Path": "测试记录/raw-results/delay-alignment/results.json",
+      "Bytes": 1191,
+      "SHA256": "CE67067EDCACC893B2C20DE69AC5CC9D10D24FBB0EC4D569244148893B2BFF01"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-1/baseline/console.log",
+      "Bytes": 2388,
+      "SHA256": "22248A638042DAA0BB2838A66573B531C900148600A4B46A6C4290AF149A9886"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-1/baseline/results.json",
+      "Bytes": 2825,
+      "SHA256": "F5870B3B2DECF87C4B6B53C930AE5345DE4C989E4E8396345D9419071F32CC8D"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-1/baseline/samples-active-osd-000.json",
+      "Bytes": 31060,
+      "SHA256": "4A92F5EE69408DBD093C157EAD61B9EAC0E909EED53A3A9A380761D0F3E8049A"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-1/candidate/console.log",
+      "Bytes": 2395,
+      "SHA256": "D309B0965CD30EA1FA5C3C6704C2B1BE8C6BD4CD0D5EDAA7975F788688117DE1"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-1/candidate/results.json",
+      "Bytes": 2832,
+      "SHA256": "5B44CD6E287D8009F3283730D71A5E139FB28995D9A143D0D38BC9719F4BB29D"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-1/candidate/samples-active-osd-000.json",
+      "Bytes": 31118,
+      "SHA256": "D9E9D28073FAF806AD7A3EF6C933388FDC9A16153F2718D5568BDBCEF8A8023E"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-2/candidate/console.log",
+      "Bytes": 494,
+      "SHA256": "597BF0170E2AB20047FE563733BD5837F5338849E05904CD5F0C31C3BA32DEF9"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-2/candidate/INCOMPLETE.txt",
+      "Bytes": 164,
+      "SHA256": "801C2DBEC6EA536531B5A9D536A84B8291D7D108CDF60ECF16860F4FD94E08A0"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/active-osd-15hz/round-2/candidate/results.json",
+      "Bytes": 553,
+      "SHA256": "EAA10CE9627C0B0FD113575A402FDF205A2B719663AB7D1A832B6ED43785F2E1"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-1/baseline/console.log",
+      "Bytes": 2290,
+      "SHA256": "F940831E484F3E439303A9160D5E7064E9483EA9D265C6DA26E35F581BB68CDC"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-1/baseline/results.json",
+      "Bytes": 2727,
+      "SHA256": "F95F6E7841D3FA66B9416E48B70A2FC1764EEEA9F161C28E7E3174C7DCD66432"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-1/baseline/samples-automation-050.json",
+      "Bytes": 15143,
+      "SHA256": "10CC194B036AF8601AA34BC19EA36A96CCDABD71489B33C8BC8679C55FDF1400"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-1/candidate/console.log",
+      "Bytes": 2307,
+      "SHA256": "8E869E9337E3CF103366945CC825792BDC5DF9658F23FDEBC3AF34101F237002"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-1/candidate/results.json",
+      "Bytes": 2744,
+      "SHA256": "41BCF17678F40A0C145F244DF6752B5DDD53742FB31CC5BEF9750A675039E788"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-1/candidate/samples-automation-050.json",
+      "Bytes": 15093,
+      "SHA256": "BA9F6C7495B08DB35CC0EA000C862DDBBD5AD63F962276AAE37419017E84C50E"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-2/baseline/console.log",
+      "Bytes": 2290,
+      "SHA256": "D3376ED646534DE76A968FB4E7A3AD2E7AEADE5C5800C647798CC06164AC6934"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-2/baseline/results.json",
+      "Bytes": 2727,
+      "SHA256": "9260522424A6F26D7EA2D8F0FD05676BB751F278A788A1AF97F526B9C08E909C"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-2/baseline/samples-automation-050.json",
+      "Bytes": 14730,
+      "SHA256": "0B41248AA68AFDA2A4727B2B7D55A8C2BC8D71CAB561B4576B1D9B014876BFAF"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-2/candidate/console.log",
+      "Bytes": 2297,
+      "SHA256": "61062CAD866A2055C7FDF339E50F458799F9085733A917DE56E62E8D190767A7"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-2/candidate/results.json",
+      "Bytes": 2734,
+      "SHA256": "525474AC075C92489672588E7C367C7EF388AEF04BB93A4002837831DE2FDE6F"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-2/candidate/samples-automation-050.json",
+      "Bytes": 14986,
+      "SHA256": "69A4D28106F8929F6F4004D1A4F5B1CE28E4B475AFCF5C080C37AF19A618B896"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-3/baseline/console.log",
+      "Bytes": 2289,
+      "SHA256": "B3F6E9029CC7ED1822E2E27DC99A21BB14F7C9646F72CE4EAEBB33167B677B8C"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-3/baseline/results.json",
+      "Bytes": 2726,
+      "SHA256": "4A3759CFCEECD55F531C1ADE71F9DF8C7B2800EF0FBA431479115763534804F5"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-3/baseline/samples-automation-050.json",
+      "Bytes": 14987,
+      "SHA256": "3D75ED1DC401EA89A3112A681AA8FA2190E940512B916C91D767AF47C54DB6FF"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-3/candidate/console.log",
+      "Bytes": 2281,
+      "SHA256": "E3C5E663B744088624D899DDB0603ED1CEEE2A78E0D555BFA40298158379DFB5"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-3/candidate/results.json",
+      "Bytes": 2718,
+      "SHA256": "5AC9A864B237B01D8ED41245962BA8DED263B2C5E2FA56E9199CE2071721A393"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/automation-50-disabled/round-3/candidate/samples-automation-050.json",
+      "Bytes": 14590,
+      "SHA256": "A72240B51EE3AB335C54BE01634CEA8F00B898CA6149DBACA2EA1444DD9D76B4"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/build-baseline.log",
+      "Bytes": 8029,
+      "SHA256": "345E54E80C938AEBBEDC30DC88C065C7B18FFCC138B222C0436CF99F64ABA305"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/build-candidate.log",
+      "Bytes": 8076,
+      "SHA256": "F9FCB9D4D740C79174ED749AC663D0E72DA929F82FF6324DED7BC00FD1D94D6B"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/progress.jsonl",
+      "Bytes": 9647,
+      "SHA256": "86FD23172CDFB8B3ABDD2D01B88388A8404324C26D0CA4FF6F4C6C37CC79B668"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/runner-hashes.json",
+      "Bytes": 442,
+      "SHA256": "BDE2EAC2AA52BFD3C056EE2A79A718D8C92BF0808709A5BBCC103005EDC12CA9"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-1/baseline/console.log",
+      "Bytes": 2287,
+      "SHA256": "BD2F78C86CE49BC2DE71FB1165F15A8E05E35C3BCD99911FF258EB6F8C5B960C"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-1/baseline/results.json",
+      "Bytes": 2724,
+      "SHA256": "4A8BC77B280550970BCC5ED8F9790AEE53E8B1CF684D5DE5A2E6761F132319AA"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-1/baseline/samples-settings-000.json",
+      "Bytes": 15179,
+      "SHA256": "BB7F5DFF7C18103283F6F644C1B2181FBB8456CF8AD4995E379C52537D3EB1F9"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-1/candidate/console.log",
+      "Bytes": 2284,
+      "SHA256": "8EDA48DA2F4A7401F0ABBA16AC93BD4F81B2048BE7F6D4EED6AC7E10588F36E8"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-1/candidate/results.json",
+      "Bytes": 2721,
+      "SHA256": "695A613757A83DED86741D94A866B388E97BA2657AFFBD2AD829547920DB4157"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-1/candidate/samples-settings-000.json",
+      "Bytes": 14995,
+      "SHA256": "1525518C10A70958F3B0D52690DACBCCD47C53A97E2EA339A2176BC238894FDD"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-2/baseline/console.log",
+      "Bytes": 2276,
+      "SHA256": "4E7049DEA0B35EBEC509F97B7C85442D1557FA138D7B4A1D43A26CCED986E8D1"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-2/baseline/results.json",
+      "Bytes": 2713,
+      "SHA256": "B7DCCCC7FE95581CA78E2E13589B927B54E1E2D6BA987847F4DA877A3997CD01"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-2/baseline/samples-settings-000.json",
+      "Bytes": 15217,
+      "SHA256": "DB1D99B63C4156BC2DD3D42AFDF9EC8F704909DB4618DB7B04C1C9AA52703B9A"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-2/candidate/console.log",
+      "Bytes": 2295,
+      "SHA256": "D79495780280B38BB98D337019B350FCA28937A488AA477B0A8EEB21415EE9DC"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-2/candidate/results.json",
+      "Bytes": 2732,
+      "SHA256": "A43785AA4B10F5416374B51A3C2302752A10F765C3DAB390F027E223319DAFFA"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-2/candidate/samples-settings-000.json",
+      "Bytes": 14845,
+      "SHA256": "CD1537BF9A9ADA461691AABC09455AF25B9A8FF9E6E48C93BF3393B8B03058B8"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-3/baseline/console.log",
+      "Bytes": 2300,
+      "SHA256": "00CB9AA91895FE84935FC5216C05E601588ED3E4C456B2F6A70146EF9ABF846B"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-3/baseline/results.json",
+      "Bytes": 2737,
+      "SHA256": "2AAC76026EDDA0DD711F000CC0E6BF63B78DFF71819A6A4DB295315C71360389"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-3/baseline/samples-settings-000.json",
+      "Bytes": 15061,
+      "SHA256": "A9036163ED15877B183F458E8319F4C36521A8244AEFF71E463DFB9BA7F02658"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-3/candidate/console.log",
+      "Bytes": 2296,
+      "SHA256": "7300159F86529A25AE5237C2490538FF508BAEE744DD4985A505BA09264AE990"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-3/candidate/results.json",
+      "Bytes": 2733,
+      "SHA256": "6795BF3564D8CE6B4903C345777A410E679360C7FE9448C01AF235DF6AAD4EEC"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/settings/round-3/candidate/samples-settings-000.json",
+      "Bytes": 15138,
+      "SHA256": "BD83203229BAD69AAE1A66A722A56BC638ABB74A563145A34641486A3229036D"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-1/baseline/console.log",
+      "Bytes": 2296,
+      "SHA256": "175E760329EEBFDC50856355AF3DCE820E6109C1E7205530DCB84F0281C5E27F"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-1/baseline/results.json",
+      "Bytes": 2733,
+      "SHA256": "3C08AE8BA19565418C00A174BBBF8716D91F0F8EF8AF76D0400D95EA6ECEB866"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-1/baseline/samples-theme-000.json",
+      "Bytes": 15157,
+      "SHA256": "B8DEEA4DD25F500A0F940B6EB6419795309172794A29D049BB7905A4135463DE"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-1/candidate/console.log",
+      "Bytes": 2282,
+      "SHA256": "221071406ED47F7177427B99C873895FF4DB996182504DC8FD851B68364D0EEB"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-1/candidate/results.json",
+      "Bytes": 2719,
+      "SHA256": "6A3E6574CAABC0E41F087E846F5E835FAC58DB1E13FE9878D83C9E90EAE2E8A0"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-1/candidate/samples-theme-000.json",
+      "Bytes": 14893,
+      "SHA256": "718E2F73B44A17DC87E0AB3A8ABA0B5688E533E0E0707D35EBFBD0DDDD464371"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-2/baseline/console.log",
+      "Bytes": 2292,
+      "SHA256": "5608AEB2741E86843091B84FFE9452D5F7125FA13DD6735EB88F48CC24522378"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-2/baseline/results.json",
+      "Bytes": 2729,
+      "SHA256": "DAABE9E196AD7D4FC0938ECBFF91C3A9EF979FF706806AE88B3DF417F9A2530F"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-2/baseline/samples-theme-000.json",
+      "Bytes": 15111,
+      "SHA256": "5D271534F0E15D7622F7F9C1AD7327250372FE82DE172474D745EFF63ABDB2CB"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-2/candidate/console.log",
+      "Bytes": 2292,
+      "SHA256": "CB206A7BB27D4467420B5E4D92CEC5731E055E3B9C660D0729131C2EE3AAB29F"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-2/candidate/results.json",
+      "Bytes": 2729,
+      "SHA256": "486D6F55353706057B2045034A35A478EDC721248A97E01049D4B7CEA7211484"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-2/candidate/samples-theme-000.json",
+      "Bytes": 14555,
+      "SHA256": "7A023D94CA543CC2B9C1E6C799B958A548F3511DF8BF76ABB9586AB3A17E1EE2"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-3/baseline/console.log",
+      "Bytes": 2294,
+      "SHA256": "7D1C42A7910626D78DF6A51755B46C4DE700B6DE215D4E9BD687BA364241EC46"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-3/baseline/results.json",
+      "Bytes": 2731,
+      "SHA256": "BE1F82126CDB4ECEC2274190D78FA298C5135D714D75DA169C9C31A4E46F27FD"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-3/baseline/samples-theme-000.json",
+      "Bytes": 14619,
+      "SHA256": "36BBB61224987D2CC86320A15A8A04053AB52005D3BA13C864AA13DDBA4F5FE4"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-3/candidate/console.log",
+      "Bytes": 2299,
+      "SHA256": "1E7B7B6B372B16EA7CDC32C0C2230BAF7CB8655BDEDCF9CC9E1C3A527AF3AE33"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-3/candidate/results.json",
+      "Bytes": 2736,
+      "SHA256": "C8763F1EE986357F551E73C40809DA17984F4026FF82EA7AB63AB186A9D401BE"
+    },
+    {
+      "Path": "测试记录/raw-results/final-stage43-20261008-01/theme/round-3/candidate/samples-theme-000.json",
+      "Bytes": 15137,
+      "SHA256": "9155BC35F4E17049E65E03783606E5F734B9E17652B25CE77E36405FCD186F72"
+    },
+    {
+      "Path": "测试记录/raw-results/legacy-resource-check/results.json",
+      "Bytes": 2747,
+      "SHA256": "E6F5815658109939D83E8553EF2A76FC3CE708A1F366A063B3F9014E647A86A9"
+    },
+    {
+      "Path": "测试记录/raw-results/legacy-resource-check/settings-page-full.png",
+      "Bytes": 412238,
+      "SHA256": "EBA2A7D3E067A43BEB0DC4918EA6A1B907CCDB367C4C6C053B208D74F1BAD3AB"
+    },
+    {
+      "Path": "测试记录/raw-results/legacy-resource-check/settings-page.png",
+      "Bytes": 122687,
+      "SHA256": "F85C73C9E228E45D67510CF715E7B2E5BB98D74CE396935E25DF516BD2B98A83"
+    },
+    {
+      "Path": "测试记录/raw-results/legacy-theme-check/results.json",
+      "Bytes": 1608,
+      "SHA256": "A53584CAE274F1AA0353C78364B43D49D6F526D4233AFF45B44106083F53F55D"
+    },
+    {
+      "Path": "测试记录/raw-results/legacy-theme-check/theme-page-full.png",
+      "Bytes": 138748,
+      "SHA256": "6B2A1CBB207E8FB51478D976DCB4F43D6A8D7A69CA032A544C7F2337E855D347"
+    },
+    {
+      "Path": "测试记录/raw-results/legacy-theme-check/theme-page.png",
+      "Bytes": 104052,
+      "SHA256": "6164864C421A40183A12BCB043323522752734C9F9C1D6FEA460B1F2A0FAE6FF"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/active_osd_volume_30hz/console.log",
+      "Bytes": 2060,
+      "SHA256": "364303E453CA782B8D94C5E7738812CF903B7FB49349C28DE6119FD5F65505C5"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/active_osd_volume_30hz/results.json",
+      "Bytes": 2420,
+      "SHA256": "5F9F952165009C65B8D29C13BA8FD7331BE2FA24EE9FE89A8FC3A3A4B014EFC8"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/active_osd_volume_30hz/run-metadata.json",
+      "Bytes": 410,
+      "SHA256": "CBC5D4D9DDCE8A0045697BAEE5D261118699AE12A9506DD951E8B02CB309CA3C"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/active_osd_volume_30hz/samples-active-osd-000.json",
+      "Bytes": 23261,
+      "SHA256": "FE180F33B24C4596E2E7577B2FC6C6B12944379C181492C52C3C2F4B9337D674"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_50_disabled/console.log",
+      "Bytes": 1943,
+      "SHA256": "1F90AAF087E907DF8B2D05A7D6B9DED7A700C4A5EB0E659B3459D10AF3719EE2"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_50_disabled/results.json",
+      "Bytes": 2303,
+      "SHA256": "A0DB26318AB880B70EF1A53AC41AB74E9536FAA27866EBF5EF0F1752EF5D2B0F"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_50_disabled/run-metadata.json",
+      "Bytes": 410,
+      "SHA256": "3083347792CA542B00121BF6658A9A0A4426B6EB08D97857B6F0C7236D291A0B"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_50_disabled/samples-automation-050.json",
+      "Bytes": 10937,
+      "SHA256": "8CF206E73FF412FB8185B2116A165CA95CAFA38D08227E17DB1F1656EF1D1B7D"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_empty/console.log",
+      "Bytes": 1932,
+      "SHA256": "6D7C1DE8EC31E313D83BC95715AB1717585BBA275C60B3FDDACD79F3E1EDAFFA"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_empty/results.json",
+      "Bytes": 2292,
+      "SHA256": "6E83D511240CC245AD58E5DB06C5EBE4FDDBF0C0E73C86C58463A33CC21C92FF"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_empty/run-metadata.json",
+      "Bytes": 403,
+      "SHA256": "2A78C6E22EE3FD1D716C83FD35437194888337075E8DEC0ACC87C685A84CC315"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/automation_empty/samples-automation-000.json",
+      "Bytes": 11439,
+      "SHA256": "DBFF6D53D62701711527C89A5FD2B2A29E8D6A8910BCA5D7749B3B15A4C3FC46"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/theme/console.log",
+      "Bytes": 1908,
+      "SHA256": "E7F3157676DE708A4AD57A0D76743AD5A8FC66AE2684B4F11424D405FA560993"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/theme/results.json",
+      "Bytes": 2268,
+      "SHA256": "67DFB66E609B7F5E8877FB377C22B35C90D207A857D91F54F1BA6FC38DC4DA6B"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/theme/run-metadata.json",
+      "Bytes": 387,
+      "SHA256": "6BCCB7D733400063936200870F81774CCD966FE5430DA63A260C9217B0C12DC1"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v120/theme/samples-theme-000.json",
+      "Bytes": 11044,
+      "SHA256": "3884B0B31A2C3EDF4E74CC6D67693C76512AE9F4C0F456405C501713E423EC80"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/active_osd_volume_30hz/console.log",
+      "Bytes": 2015,
+      "SHA256": "FF9BDCDD5A56A0AB79F3EB821CDEA7E1E12D565DE1181B3509977CDD5B003FC0"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/active_osd_volume_30hz/results.json",
+      "Bytes": 2375,
+      "SHA256": "CCA7F9A56A63FC101E416B773CA908FF047AA04E9D012CF4B890DD862030B4FA"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/active_osd_volume_30hz/run-metadata.json",
+      "Bytes": 410,
+      "SHA256": "4CEF7B8B0A88168B0AB41F5D9C6074F9457ADD53F58A7865BDF45E0FCF81A06B"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/active_osd_volume_30hz/samples-active-osd-000.json",
+      "Bytes": 23303,
+      "SHA256": "FDFCF1C8CAEA454FE21C4FB05EDF7C6A6F05DCF78DC53379D3134C58F02CCBEA"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_50_disabled/console.log",
+      "Bytes": 1939,
+      "SHA256": "012916E55FF151AD120B056607754FF4EB688971C9585C6768069F2A35C2F5C9"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_50_disabled/results.json",
+      "Bytes": 2299,
+      "SHA256": "4833E681D2AFB26909F1F480E76BB4989948A76D5E92F8F573E4C142629B493D"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_50_disabled/run-metadata.json",
+      "Bytes": 410,
+      "SHA256": "233C322B41EE3C76FF7D9336ABBCB27249C4C3AEFB24C410B404C415220F279D"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_50_disabled/samples-automation-050.json",
+      "Bytes": 11184,
+      "SHA256": "E0DF282EEF216DA34C5ACEBCF2264BCA8028E1771FFA3B87EBCEB4438D0BF47A"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_empty/console.log",
+      "Bytes": 1942,
+      "SHA256": "8DAD9B46278C9ADFA255135B0052C7861C6B61C59DFC4E6E4E94BA8BFD781737"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_empty/results.json",
+      "Bytes": 2302,
+      "SHA256": "288E8F31E43F3CD14B907B4C76F5149091FDB430C7D5F5526C6FB7FC29C98B3F"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_empty/run-metadata.json",
+      "Bytes": 403,
+      "SHA256": "F4DA3D0263C93133B6D9F4F66E6E00BD3FA7E291D2D930E84D00CC0CE8674AB0"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/automation_empty/samples-automation-000.json",
+      "Bytes": 10935,
+      "SHA256": "3B037DCFABB83DE1000C58529C399D13978696DECFB8C3918668E6512C912152"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/theme/console.log",
+      "Bytes": 1949,
+      "SHA256": "2F0B10070643A0EEE94EEEA71AB6756FE22A5154A811D82C0E1D96B0CDA4CA2C"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/theme/results.json",
+      "Bytes": 2309,
+      "SHA256": "F33EA467FD29A4F2407F31AD651EF95255D3FB453AACB979AE15DE14F0D13EF6"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/theme/run-metadata.json",
+      "Bytes": 387,
+      "SHA256": "1713023C2D723F79F78EBC5F0B64130DFF383BFE8208662EA06AEFFC6CEE8A99"
+    },
+    {
+      "Path": "测试记录/raw-results/round-1/v121/theme/samples-theme-000.json",
+      "Bytes": 11649,
+      "SHA256": "744883C84E533C857A1FA76DAC336694E43A92D5349BD84FCBBA4DBEC0D629BC"
+    },
+    {
+      "Path": "测试记录/raw-results/Run-ResourceBenchmarks.ps1",
+      "Bytes": 3468,
+      "SHA256": "31959CEC6ADE6924F3AA1239BD2307B2327337387B8F0815F7E47D579A9FA64B"
+    },
+    {
+      "Path": "测试记录/raw-results/settings-check-final/results.json",
+      "Bytes": 2733,
+      "SHA256": "AE782F9086C5864A12A476342805A11CCAB19979FF0EC0539473F4217A5C52CF"
+    },
+    {
+      "Path": "测试记录/raw-results/settings-check-final/settings-page-full.png",
+      "Bytes": 411714,
+      "SHA256": "97D20845F0FEAAC54B04BDE144282DB4DD25EA8AFF1569C0EEC318EFF93B0F70"
+    },
+    {
+      "Path": "测试记录/raw-results/settings-check-final/settings-page.png",
+      "Bytes": 121933,
+      "SHA256": "33DC97EF0E965AB15563253017C735654B32D3E6CBC95BEB780E0FD9038A0DF5"
+    },
+    {
+      "Path": "测试记录/raw-results/settings-check/results.json",
+      "Bytes": 2631,
+      "SHA256": "C968CCDECEDB1F06CBF41823D71F6F5AA3B6CDBCE3927F50384E40001A9B8775"
+    },
+    {
+      "Path": "测试记录/raw-results/settings-check/settings-page-full.png",
+      "Bytes": 411151,
+      "SHA256": "0C895BB4A4821687C229B9D263F7E39930F79E72C97C69C0E1E6410E827AA925"
+    },
+    {
+      "Path": "测试记录/raw-results/settings-check/settings-page.png",
+      "Bytes": 121520,
+      "SHA256": "45A501652B6397249B7E590ADDFF08287607AE8C30ABD12D3EDD489C98DFD167"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/full-1/results.json",
+      "Bytes": 2526,
+      "SHA256": "FA3C03CE8840E1BC1927996930B1C45EF636C82E25A0DC44B4BB191CBAC79A98"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/full-1/samples-theme-000.json",
+      "Bytes": 14438,
+      "SHA256": "60263F0271BD06B989F64650578CFCE80E3615DB214581CD43C9B3F4D116D965"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/full-2/results.json",
+      "Bytes": 2625,
+      "SHA256": "AEC4D3489B15DDB2D326FF92B8D69BA05C48F983E431577FC4859A23A881AB1F"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/full-2/samples-theme-000.json",
+      "Bytes": 15333,
+      "SHA256": "37985CBBADA8721285A8E4AF6A28B7585868D63FD88BB69C631D99D45C7C8639"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/full-3/results.json",
+      "Bytes": 2630,
+      "SHA256": "D3B62D11B0B81C922E1503EA9D9A75AB85631520D0BE1C0829651F2F681CE6F8"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/full-3/samples-theme-000.json",
+      "Bytes": 14915,
+      "SHA256": "7DFF0276C54CFC787099D0FF7611293FE5A6507F00F0FE425FC71231ED0446C6"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/smoke/results.json",
+      "Bytes": 2624,
+      "SHA256": "9D5EF680789BA878D5146EC94BE12743826833E4A309A08CA02E46EDB9FFB9F5"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-diagnostic/smoke/samples-theme-000.json",
+      "Bytes": 4916,
+      "SHA256": "683AB6A41E419E9ABA46A1B92D6988B0049F277388FD61B145B79A5FA3B3C252"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-light-check/results.json",
+      "Bytes": 1415,
+      "SHA256": "F760030C3A1C385293B71D610229A96225458A734E82EC4ADADB528D2FFADFB7"
+    },
+    {
+      "Path": "测试记录/raw-results/theme-light-check/theme-page.png",
+      "Bytes": 104009,
+      "SHA256": "4B19033E80EAF6466687EB2C7F9D8E92BCC3728AB83F37FC416A59EE02475CDA"
+    },
+    {
+      "Path": "测试记录/raw-results/user-data-hashes-after-stage42.json",
+      "Bytes": 338,
+      "SHA256": "64F931D7BDCF0B4E2E5BAF3F036AD41B341A3FD8B1ADDCA25C1ED9D2B65FEE7E"
+    },
+    {
+      "Path": "测试记录/REPORT.md",
+      "Bytes": 4411,
+      "SHA256": "F87108E16D08B900B55743A26C4A289981857933B4D66B564FB6D74AFAB3143C"
+    },
+    {
+      "Path": "测试记录/reproduction/isolation-patches.md",
+      "Bytes": 3995,
+      "SHA256": "063B176BF2001A506B0A86E2194279F8809C251019DC82911482370F3BEA6542"
+    },
+    {
+      "Path": "测试记录/reproduction/Run-Comparison.ps1",
+      "Bytes": 6420,
+      "SHA256": "EFD9C39E400B14FDE6A989CB2E146F92EEEBB279FEB10B9B13E44E81A6F99204"
+    },
+    {
+      "Path": "测试记录/reproduction/runner/PerfReview.csproj",
+      "Bytes": 844,
+      "SHA256": "32C8AAC2B941F62709352E922D79DF423BC143F50F7D0CDD65DB8BFF5C001920"
+    },
+    {
+      "Path": "测试记录/reproduction/runner/Program.cs",
+      "Bytes": 80555,
+      "SHA256": "2FC74B5E751A29522B4B891DB47AA9776FFD94FBBFB9D44C51FE35443C1D39E9"
+    },
+    {
+      "Path": "测试记录/reproduction/user-data-hashes-final.json",
+      "Bytes": 338,
+      "SHA256": "49C549989578CD341867F948841A79E25825851C202EF9548ACD108D88A50CCB"
+    },
+    {
+      "Path": "测试记录/Run-Final-Resource-Batch.ps1",
+      "Bytes": 6399,
+      "SHA256": "F7AE0EC8A233DF0AC3837844AF4BBE9F048AE81302C094EB9EC31E7563A276BC"
+    },
+    {
+      "Path": "测试记录/user-data-hashes-after.json",
+      "Bytes": 338,
+      "SHA256": "49C549989578CD341867F948841A79E25825851C202EF9548ACD108D88A50CCB"
+    },
+    {
+      "Path": "测试记录/user-data-hashes-before.json",
+      "Bytes": 338,
+      "SHA256": "387BDDE49C88049F3AE66E735A0770EE8D4B2942B51D697077AD791DBAACF56C"
+    },
+    {
+      "Path": "构建记录/Archive-SettingsLayout.ps1",
+      "Bytes": 6073,
+      "SHA256": "24413CE5B2237BAE7206E50CFF24CED20F7A06D07675E8C69EBD7A1895F33AB1"
+    },
+    {
+      "Path": "构建记录/artifact-metadata.json",
+      "Bytes": 3928,
+      "SHA256": "558A8B52911C5575851BBE172DFAF237D114A80B829C38DA03F0C94EEA7D09C1"
+    },
+    {
+      "Path": "构建记录/build-arm64.log",
+      "Bytes": 6157,
+      "SHA256": "BB7BA8BA433819E2FA3B983680E584D997FCBAD74D302F392B689A787ABA37BE"
+    },
+    {
+      "Path": "构建记录/build-legacy.log",
+      "Bytes": 21276,
+      "SHA256": "DA90423EE62CFCC8EAC7C890F54F0B185E2E305823527EA47830AC71D0256874"
+    },
+    {
+      "Path": "构建记录/language-validation.json",
+      "Bytes": 905,
+      "SHA256": "501AAC5FEFEFE606334F3B2DDB2C66341AFF25A0AF72467B9FF7502F4D3CFA6A"
+    },
+    {
+      "Path": "构建记录/publish-lite.log",
+      "Bytes": 3345,
+      "SHA256": "453E81023E8909ACCDDD6B1FB2DECC584D6E4AD045D66533F33DAFC3ECD69FCB"
+    },
+    {
+      "Path": "构建记录/stage-note.txt",
+      "Bytes": 4365,
+      "SHA256": "E386D099CD72A0EADAC99F79B03CCE67B4803B7CD61038625389C32CC0600D1B"
+    },
+    {
+      "Path": "构建记录/UI-CLEANUP.md",
+      "Bytes": 1460,
+      "SHA256": "62A921A3B55622D1C958103F1873731DAD02F6ABAB7FFD4EF8A330F4DC643C6C"
+    },
+    {
+      "Path": "用户参考-设置卡片.png",
+      "Bytes": 1675917,
+      "SHA256": "A592C239EB3DAF52E8F10B5AA26173E78DDD0E6A0EB36C5059BD07121645B92B"
+    },
+    {
+      "Path": "用户参考-主题卡片.png",
+      "Bytes": 1612937,
+      "SHA256": "A744857EEAD3EC21706B26B4DE1DC7F3459C896AEA112EF242F43225CA50584E"
+    },
+    {
+      "Path": "源码快照/.gitignore",
+      "Bytes": 1197,
+      "SHA256": "D87037CFAC87BD9381B2F6CA21E59BC510C41CFD2025FE5ADC05687EAF9FE8B0"
+    },
+    {
+      "Path": "源码快照/docs/automation-command-line.md",
+      "Bytes": 4971,
+      "SHA256": "16EC3FE431419BC86B2FE0F5F0EADB86D4B284FB8B9CD10E9C2D61B8575E8F9B"
+    },
+    {
+      "Path": "源码快照/docs/automation-convenience.md",
+      "Bytes": 9504,
+      "SHA256": "453D955F870F2B1D0C79256822DD13C960B1380C14C6D0AA69B882F6463BE3DA"
+    },
+    {
+      "Path": "源码快照/docs/theme-settings.md",
+      "Bytes": 4589,
+      "SHA256": "6962BCADAAF3A5424A973F6BD4BD4FEE3E4105CBCCB7C0E5D176997DD59BC6CA"
+    },
+    {
+      "Path": "源码快照/LICENSE",
+      "Bytes": 1069,
+      "SHA256": "F7443BFFD3E17541D03E806CFB2967F0E39C613C80E70DF490C952D3430C0B0C"
+    },
+    {
+      "Path": "源码快照/README.en.md",
+      "Bytes": 8508,
+      "SHA256": "772D1A623026D1CD030496C921AC10C63091CB3814AA987E02A7BBC5038C9D09"
+    },
+    {
+      "Path": "源码快照/README.md",
+      "Bytes": 7778,
+      "SHA256": "CFA474771CA57EF08AD2007AEB809AFE4C7483D5E084E0ECF9EDF1DAF1BCAC2F"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AppDisplayName.cs",
+      "Bytes": 1195,
+      "SHA256": "BB47C0D55C262582CFE6D86ED25E685499BFBD4C2B19929B0118534672513EE0"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AtomicFile.cs",
+      "Bytes": 3045,
+      "SHA256": "9229FB6FE5CF1612D621716CA0D38FB52D74E6662BAD7583D9099D6E9FFEEE1E"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AudioMeterService.cs",
+      "Bytes": 11984,
+      "SHA256": "3978B9E83B64A8B3EAA478D469A2CC4E47AB175C0A3AD24C2FD5938CCC5763FF"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AudioService.cs",
+      "Bytes": 21161,
+      "SHA256": "E1A73984C46DA576CCDCFB2CC1613E269DF5A96614C65BE94134B57DF09BC6C3"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/AutoRuleStore.cs",
+      "Bytes": 12564,
+      "SHA256": "FEB62B356102FD7B1103347AFA1AD45A9EF33B846722CE078806A3E3B9A4551E"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/AppInfo.cs",
+      "Bytes": 2100,
+      "SHA256": "AAE93A8D5D01E8187C18A7C874925E724A7D00E94A99277730266284F5F7C5B6"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/CompatEnv.cs",
+      "Bytes": 1709,
+      "SHA256": "A1715D5BFF04E479AB91823FEDD31E983CE4A9C7B641ED5570DC6A382BB1E4B5"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/MathEx.cs",
+      "Bytes": 1718,
+      "SHA256": "A2A53A9C6A10F227557566940EAD7FBDC4D094491294475C2CD81D407711E049"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/Net48CompilerShims.cs",
+      "Bytes": 2678,
+      "SHA256": "ABAF5A7C7FCF847F9416C39D9557DE7BB2542931DA73E6980F88100F114F9A12"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Compat/WindowsVersion.cs",
+      "Bytes": 2744,
+      "SHA256": "46089671822E5B95E488E6D72EF9A7F9E88CA393D2E75C7E83FDC1C9A334DD15"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ConfigService.cs",
+      "Bytes": 12921,
+      "SHA256": "4AF9D64A61E89716D7F5E62AE0B5C8B571F98D7076DB84E33406E939D53DCE25"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ForegroundAppService.cs",
+      "Bytes": 3031,
+      "SHA256": "52DD7C885238D93B105B725BAFD977E354819897841B891469FEC5BFB1AF3729"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/GlobalMicMuteService.cs",
+      "Bytes": 7132,
+      "SHA256": "159AA516BCAFC9E3E7D7142807D8DABBD74E52F2F62E60396BA00817A14EB2FC"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/AssocHandlerInterop.cs",
+      "Bytes": 2375,
+      "SHA256": "1E5DF9E69E98673BB5C85FEF671343B61406A8D13027035D2CE6C97BEE8F121F"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/AudioPolicyConfig.cs",
+      "Bytes": 10740,
+      "SHA256": "EC39343D4122499B8EEB665FB8754F00641827E8CECCB64D3EE8F12F48F69E67"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/ComInterop.cs",
+      "Bytes": 3182,
+      "SHA256": "F598823C91568750362B4591379DD9183A3ACBBE5D9ED15C1349974BB102B61F"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/ISimpleAudioVolume.cs",
+      "Bytes": 786,
+      "SHA256": "E1754008F87E0626CB2B91F4601EBECF2CC889A8B8DB338E471137F55E96B40D"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/PolicyConfigClient.cs",
+      "Bytes": 3812,
+      "SHA256": "C97DB1E7469CDD0A24C37649043C3E8395AC033449492D322C0E8A83C58E5BAF"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Interop/WasapiInterfaces.cs",
+      "Bytes": 8816,
+      "SHA256": "1CBA7C625F4851572698F7E52A85CAF19A7E7A290B1C195E57E3AC35B1F49AB9"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Models/AudioAppInfo.cs",
+      "Bytes": 902,
+      "SHA256": "8458204A63EABF8A1FAEF755CA1562DA972E15BAEEB19B6AEB3A844B4BBF088C"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Models/AudioDeviceInfo.cs",
+      "Bytes": 1046,
+      "SHA256": "E8418E9BCD6D50B21D52928B75240830C8953EE2D49AD6DFAD51F01A04997364"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/Models/AutoRule.cs",
+      "Bytes": 17516,
+      "SHA256": "B1A990C91E00AA5E377FBD1D2FFC25D07ADCEFAF9C4D7885EF3A4F179DB4F092"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/OpenWithService.cs",
+      "Bytes": 6372,
+      "SHA256": "22E3BC154F034CCCDC24BC72FD459DA68E1E7C4317E6EDCE2513B3078E340B85"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ProcessSnapshotService.cs",
+      "Bytes": 3635,
+      "SHA256": "6AC248023005493FB280A208D3A8B37662111C8E578B5B4CD930444A97642DC6"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/SessionVolumeService.cs",
+      "Bytes": 22402,
+      "SHA256": "19AC5C168C4C50E427F9128A218D9B1A9719755E3A34D56746EEB00DA8A0C4BB"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/ShellOpen.cs",
+      "Bytes": 995,
+      "SHA256": "90B4F354A112CD34E2DEA987FD8C0D582AE8D9D2D777806032D75A39BB6A0303"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/SonicRoute.Core.csproj",
+      "Bytes": 1926,
+      "SHA256": "9DF0476CD88D8489676D1FA48DE471D01846C389F7786D9F9FFA7B61C569B419"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Core/SystemVolumeService.cs",
+      "Bytes": 7007,
+      "SHA256": "9E203D5EA1A757C59C9659C386997537582716E92368041274148550D1D27DAA"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Legacy/App.config",
+      "Bytes": 1027,
+      "SHA256": "3B2B34D93EAF8D2769406EA510CDAB522C5A9A1EBE5B7E0C766E3582FD332800"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Legacy/app.manifest",
+      "Bytes": 2027,
+      "SHA256": "D7A48882D40479EFB86290BC7298F44ACDF65CF0D18B4DB4DBAB9F821F48DCE0"
+    },
+    {
+      "Path": "源码快照/SonicRoute.Legacy/SonicRoute.Legacy.csproj",
+      "Bytes": 4396,
+      "SHA256": "A0FC8428CC31429409DF3EF8D6AF3F2776E945BFB890FF079261BFF67E135AA5"
+    },
+    {
+      "Path": "源码快照/SonicRoute.sln",
+      "Bytes": 2304,
+      "SHA256": "391C6C60CB55952DF75FEA0B986B8011F5B80340585E328164170840EDC52D30"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AnimatedExpandHost.cs",
+      "Bytes": 7416,
+      "SHA256": "20C67DA2218E9E70D916AFF5332023EB9CA2C1BFA95262EBA106C560470BFC64"
+    },
+    {
+      "Path": "源码快照/SonicRoute/App.AutomationExtras.cs",
+      "Bytes": 2841,
+      "SHA256": "FBE563F0E1B0A7B1CF218508C2DF7F5C9E5EB9E506F72E18C6174221AC9FAF7C"
+    },
+    {
+      "Path": "源码快照/SonicRoute/App.xaml",
+      "Bytes": 25714,
+      "SHA256": "1A1C3D2C5A077014885C613930636C7D6EE55E7C1BB19ECE561A03052B04C331"
+    },
+    {
+      "Path": "源码快照/SonicRoute/App.xaml.cs",
+      "Bytes": 52825,
+      "SHA256": "69340E29D1602F6D4430FE0403F927A04D51110A8964EAF080EFD9627577B04F"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AppIconService.cs",
+      "Bytes": 4500,
+      "SHA256": "279E9E64204B96DF3749342D749105B460F74339E114AD0B0B2AB5EAD1EFFC12"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AppItem.cs",
+      "Bytes": 5201,
+      "SHA256": "E49B1BBC54688749225F05696941A24F455B7110CB3C133DB6EEC6F29CDEE20E"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AutomationIcons.cs",
+      "Bytes": 6201,
+      "SHA256": "3BD1973B186524E59C336C5ADF53BDB4BAA3B4A4B01D1F7F0E9C5AAC9C03D577"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AutoRuleScheduler.cs",
+      "Bytes": 11169,
+      "SHA256": "F29E3835B6BD8AA68A717E642EED3870DB56782D1ACD030375F65C198CE66CC6"
+    },
+    {
+      "Path": "源码快照/SonicRoute/AutoRuleService.cs",
+      "Bytes": 31798,
+      "SHA256": "98FC7C2688F3CB015D4BBC35945B63D105B500756DF0E3A598A0E99F5B39A25C"
+    },
+    {
+      "Path": "源码快照/SonicRoute/ConvenienceMenus.cs",
+      "Bytes": 738,
+      "SHA256": "700CFBFC835E87409FBD7727B9CC329A215FDF2B2D5998AA6A179ED14D5CE12A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/CurrentAppService.cs",
+      "Bytes": 9253,
+      "SHA256": "A13E25F65CDDA58439D2062CE841A4A42EA0DF550B4F90B53533DA8CBB7B60F4"
+    },
+    {
+      "Path": "源码快照/SonicRoute/HotkeyActions.cs",
+      "Bytes": 8459,
+      "SHA256": "479EA75932000F48FF1FD2F4F3EDAF6AF712C428CD135C980981A7769215A44B"
+    },
+    {
+      "Path": "源码快照/SonicRoute/HotkeyService.cs",
+      "Bytes": 10961,
+      "SHA256": "C18519B51431FCF405822644C81D14E8C047A94358AB9BA1786BDF855281B64D"
+    },
+    {
+      "Path": "源码快照/SonicRoute/IconFactory.cs",
+      "Bytes": 5270,
+      "SHA256": "160F9AC076B106F7611736AFFCE1D4A337FCBF8E0E4C0EA1D5AD7EC3DBFAD15A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/IQuickPanel.cs",
+      "Bytes": 625,
+      "SHA256": "710E062B73923C3D526435A0E1C9A79C090BF3AA2FC4FA4AA3DC5F6DFE8FDF4A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/L10n.cs",
+      "Bytes": 19845,
+      "SHA256": "DCA44F28FCE41E3CF8AD8AFCBC7CBB5FC15B8E3E4EE832AD940657BBCF23AD53"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.AutomationEditor.cs",
+      "Bytes": 10554,
+      "SHA256": "332947003155B88FA4467F3CD62FC496774333C7AD0322926B2E288AB788CAED"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.AutomationExtras.cs",
+      "Bytes": 6261,
+      "SHA256": "0C70047F48CB054CC5E5E587938B39A11F05918D25D369E1FE80044BAB2191FE"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.AutomationLayout.cs",
+      "Bytes": 21061,
+      "SHA256": "5AD12410FD641F0818F7C5CD478B5E7512471475CDB93EBC47C887852C1A37E4"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.SettingsLayout.cs",
+      "Bytes": 5640,
+      "SHA256": "D1C4CC17CA378F39D057D2A08B4602D0757B1759F3D38895277C084AEF794244"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.ThemeLayout.cs",
+      "Bytes": 5188,
+      "SHA256": "A969A354CD77187CFA6BAC22D353549EBD47C59F1CDC30A246B8124F706E0C2A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.xaml",
+      "Bytes": 115708,
+      "SHA256": "370ADE6F2C6A20ECF3940A18F810729C1F7DE16F1B0E83C4E049BB163313AB7B"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MainWindow.xaml.cs",
+      "Bytes": 235261,
+      "SHA256": "CB81F0E34C03EA902CC07B2EA56C993E55EC8C161F6822778E5A43DB45F7DDF9"
+    },
+    {
+      "Path": "源码快照/SonicRoute/MouseHotkeyHook.cs",
+      "Bytes": 7704,
+      "SHA256": "4582A46741298C67820738EE11F94300FA79DA6483565C3B31BCDF25DC86F922"
+    },
+    {
+      "Path": "源码快照/SonicRoute/OsdPlacement.cs",
+      "Bytes": 8224,
+      "SHA256": "3EDC5DF39172C37A3130E73549160D6E44476A6F780AE24B3902DE5667EE7BE7"
+    },
+    {
+      "Path": "源码快照/SonicRoute/OsdService.cs",
+      "Bytes": 37272,
+      "SHA256": "C28A3CB8DE931D0A5EEB339D4B82CF9F5B0769E06E9B7DC2A6A00228A54D691E"
+    },
+    {
+      "Path": "源码快照/SonicRoute/PanelDevices.cs",
+      "Bytes": 2084,
+      "SHA256": "87D5D472EBF5690424ABC17FA54DFFB3C4C8E079F68A4B25BBFB36B9FAD046F3"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Properties/PublishProfiles/win-arm64.pubxml",
+      "Bytes": 1254,
+      "SHA256": "856F5485EFFD84986C43DEF2625F76A4F1A5584EC8296558EEA2D3276AB11306"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Properties/PublishProfiles/win-x64.pubxml",
+      "Bytes": 1242,
+      "SHA256": "05125ECC13DC2AFE1226B2541436121C6C7FE8E92F8CCE599710EA6E6251B25E"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelModernWindow.xaml",
+      "Bytes": 15953,
+      "SHA256": "36F2E885A66B1E6CF1DE77C35C464BC32B78E14009E2BDC44A2A5664065A2E2D"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelModernWindow.xaml.cs",
+      "Bytes": 64136,
+      "SHA256": "C6F39F1193B46E822D0A8D710A2CDF97355027B9C245F60586DCC8F5C2A0EA78"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelPosition.cs",
+      "Bytes": 2820,
+      "SHA256": "EBEAEB48AD6714B1FF2F2413D2B311AF1E102355D936BC23C309551B425923A8"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelWindow.xaml",
+      "Bytes": 12671,
+      "SHA256": "A7BA5AAD7290EAD8039042238968AD2D1E226D0193EE726F46F7022AF4A68A0B"
+    },
+    {
+      "Path": "源码快照/SonicRoute/QuickPanelWindow.xaml.cs",
+      "Bytes": 29318,
+      "SHA256": "575D04EEC7D086840BCF59864C296B4BF0F6CEB79C8FD064A17796C30CE8E4A7"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/de-DE.json",
+      "Bytes": 24905,
+      "SHA256": "47C5812DB2B00630259FF82A7BB63F378C061B39E53076DDECA36246A008F2D0"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/en-US.json",
+      "Bytes": 22420,
+      "SHA256": "29C6C5CE9D93E7120DBDF24157B6C6C7723B87B58D82B512897151B4505F39D3"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/es-ES.json",
+      "Bytes": 24834,
+      "SHA256": "5E8E341746B34719290E6003F6A3CC37D89AE6D323B38597FEC7175FD144DDB1"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/fr-FR.json",
+      "Bytes": 25859,
+      "SHA256": "4ED0B6F5E4DBEAC536A3C0B5CB4A1B6D90E5FD6B50F0F018FED113A8F597AFC4"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/ja-JP.json",
+      "Bytes": 27324,
+      "SHA256": "DDEB3AA604C83422C0ECD35BE48A56540B3DA29592E1F5D2F1BABCC64AB14239"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/ko-KR.json",
+      "Bytes": 25069,
+      "SHA256": "215447688968501BEC8FC4487329F0FC2BF6AC307CC932589572DF0979CBF423"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/ru-RU.json",
+      "Bytes": 35108,
+      "SHA256": "C256D861546310B4FFC0508AD2419E02AA5788846C179A2836DD15C35F5FE277"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/zh-CN.json",
+      "Bytes": 22604,
+      "SHA256": "6250AB66DDB3CB7B5317455FE0277B6688C146CDB5CBF3DE3A46BF993FCE5CDC"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/Lang/zh-TW.json",
+      "Bytes": 22769,
+      "SHA256": "E0EE9A44DA63EC6163690FF7AA509A81092CA69D7870B475296F14E6B4FD1720"
+    },
+    {
+      "Path": "源码快照/SonicRoute/Resources/RuleCommand.ps1",
+      "Bytes": 3107,
+      "SHA256": "88D5423CA205D2C25C64678BF7144B6D9552E191BE8B252EFABB87B4616D9258"
+    },
+    {
+      "Path": "源码快照/SonicRoute/RuleCommandLine.cs",
+      "Bytes": 19915,
+      "SHA256": "164F61CE201B41B61231CCDBB87A3A664CEE3368E868C0267D7E6B2F9E8421BC"
+    },
+    {
+      "Path": "源码快照/SonicRoute/runtimeconfig.template.json",
+      "Bytes": 68,
+      "SHA256": "B54D5AF67ACA2DF22161272071CC21ED5279957667EBC947BF8D851B18D80137"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SettingsControls.xaml",
+      "Bytes": 10010,
+      "SHA256": "0BD6AC34CD153AD9F5C7B23EED62D777671944EDF2DCCB0E30069018F77A46B6"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SonicRoute.csproj",
+      "Bytes": 2571,
+      "SHA256": "A0D61B7EC8209873989ABE3A9D138379A3F6A11F859E9DBC6E866FFFCB2BDA6A"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SonicRoute.ico",
+      "Bytes": 361102,
+      "SHA256": "BE6ABA294C6292AE58BC6A5EDEA547FB8F76EE6F461DC18F6AF296756F31E8C2"
+    },
+    {
+      "Path": "源码快照/SonicRoute/SonicRoute.png",
+      "Bytes": 69272,
+      "SHA256": "10A72E312993B1F419CCACF85FD08047DA75A8B73166A70F8AE5A4DF220BE06B"
+    },
+    {
+      "Path": "源码快照/SonicRoute/ThemeControls.xaml",
+      "Bytes": 11137,
+      "SHA256": "9FA2663F4D0BEDA57CC8B7A5F4F33DF853FE04E7A2DC298915AEC081E10F6CA2"
+    },
+    {
+      "Path": "源码快照/SonicRoute/ThemeService.cs",
+      "Bytes": 11288,
+      "SHA256": "8EE1A32CAC84BB32AB9FD050CAFF9D053FF4791D14C240D41C36AEEA9BB1F475"
+    },
+    {
+      "Path": "源码快照/SonicRoute/TrayWheelService.cs",
+      "Bytes": 20342,
+      "SHA256": "36F3393B45D6C66036396408F3024EF57B5B77A6DFCCF01547AFEB025D1B0E62"
+    },
+    {
+      "Path": "源码快照/SonicRoute/UiMotion.cs",
+      "Bytes": 3043,
+      "SHA256": "E60867BDB32B6E32607F92C6220CF34554EC39B93218222B9CFFF0A8A80E5F79"
+    },
+    {
+      "Path": "源码快照/SonicRoute/VolumePresets.cs",
+      "Bytes": 1408,
+      "SHA256": "34C96E4BE41C304D88AE5BC8B9F6BABBFF1C0D061B4D5DBE6F16D8A090CC7067"
+    },
+    {
+      "Path": "AI_CONTEXT.md",
+      "Bytes": 158225,
+      "SHA256": "E98057353E516CC0A679B6E55778A08F2FD2FFD1FB2ECF3BF1DCC826A6B4670B"
+    },
+    {
+      "Path": "README.md",
+      "Bytes": 4552,
+      "SHA256": "F26BDDAE23390CD50CC64D2508E7B8D31C3AA286D48D770EA9A873E6927ED1CF"
+    }
+  ]
+}

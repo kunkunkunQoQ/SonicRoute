@@ -1,0 +1,30 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\delay-check\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\delay-check\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "delay-alignment",
+    "Language": "zh-CN",
+    "Theme": "light",
+    "WindowWidth": 920,
+    "WindowHeight": 620,
+    "WindowLeft": 20,
+    "WindowTop": 20,
+    "PointerOutsideWindow": true,
+    "DelayText": "125",
+    "DelayTextAlignment": "Left",
+    "LaunchModeHorizontalAlignment": "Left",
+    "DelayLeftDip": 349,
+    "LaunchModeLeftDip": 349,
+    "LeftEdgeDeltaDip": 0,
+    "LeftEdgesMatch": true,
+    "StorageIsolated": true,
+    "Note": "Runtime coordinates measured from the actual automation editor step row. Synthetic LaunchProgram step was rendered only; it was not saved, executed, or launched."
+  }
+]

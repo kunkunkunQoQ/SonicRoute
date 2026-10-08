@@ -1,0 +1,56 @@
+[
+  {
+    "Language": "de-DE",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "en-US",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "es-ES",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "fr-FR",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "ja-JP",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "ko-KR",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "ru-RU",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "zh-CN",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  },
+  {
+    "Language": "zh-TW",
+    "Keys": 452,
+    "UTF8BOM": true,
+    "SameKeys": true
+  }
+]

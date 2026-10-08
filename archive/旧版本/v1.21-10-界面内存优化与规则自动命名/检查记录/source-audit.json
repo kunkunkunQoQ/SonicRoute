@@ -1,0 +1,45 @@
+{
+  "ProjectFiles": 89,
+  "MatchingReviewFiles": 82,
+  "IsolationOverrides": [
+    "SonicRoute/App.xaml.cs",
+    "SonicRoute.Core/ConfigService.cs",
+    "SonicRoute.Core/AutoRuleStore.cs",
+    "SonicRoute/AutoRuleScheduler.cs",
+    "SonicRoute/L10n.cs",
+    "SonicRoute/RuleCommandLine.cs",
+    "SonicRoute/MainWindow.xaml.cs"
+  ],
+  "UnchangedFromStage45": [
+    "SonicRoute/App.xaml",
+    "SonicRoute/ThemeService.cs",
+    "SonicRoute/ThemeColorPickerWindow.cs",
+    "SonicRoute/AppItem.cs",
+    "SonicRoute/QuickPanelWindow.xaml",
+    "SonicRoute/QuickPanelWindow.xaml.cs",
+    "SonicRoute/QuickPanelModernWindow.xaml",
+    "SonicRoute/QuickPanelModernWindow.xaml.cs"
+  ],
+  "Checks": [
+    {
+      "Target": "lite",
+      "Passed": 34,
+      "Failed": 0
+    },
+    {
+      "Target": "legacy",
+      "Passed": 34,
+      "Failed": 0
+    }
+  ],
+  "BuildVersions": [
+    {
+      "Target": "Lite",
+      "ProductVersion": "1.21+077b6e2261fa85c3fa1b69c2fcbfe4161b997ecc"
+    },
+    {
+      "Target": "Legacy",
+      "ProductVersion": "1.21+077b6e2261fa85c3fa1b69c2fcbfe4161b997ecc"
+    }
+  ]
+}

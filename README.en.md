@@ -26,7 +26,7 @@ Windows already has a volume mixer, but frequently switching devices or controll
 ## ✨ Core features
 
 - 🎯 **Per-app audio routing**: Switch output/input devices for the current app, all running apps, or Windows defaults.
-- 🖱 **Quick controls**: Use the tray panel for volume, mute, device switching, and live audio activity, with Compact and Classic layouts.
+- 🖱 **Quick controls**: Use the tray panel for volume, mute, device switching, and live audio activity, with Quick and App panel layouts.
 - ⌨️ **Hotkeys and taskbar wheel**: Adjust volume, switch devices, mute audio, or control the microphone without leaving the current window.
 - 🖥 **OSD feedback**: Show instant operation feedback with customizable appearance, position, volume bar, and microphone mute notice.
 - 🤖 **Automation and command line**: Run multi-step rules on app events, hotkeys, schedules, or startup, or trigger them with `sr "Rule name or ID"`.
@@ -70,7 +70,7 @@ Future improvements will be delivered in stages rather than held for one major r
 - **v1.23 · Performance and stability**: Improve background resource usage, responsiveness, and compatibility.
 - **Later stages**: Continue refining existing features based on feedback.
 
-Automation conveniences already in development for v1.21 are described in the [development guide (Chinese)](docs/automation-convenience.md). Scope and timing may change before release.
+See the [theme and settings guide (Chinese)](docs/theme-settings.md) and [automation development guide (Chinese)](docs/automation-convenience.md), including automatic rule names, for v1.21 work in progress. Scope and timing may change before release.
 
 💡 Have an idea or feedback? [Open an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

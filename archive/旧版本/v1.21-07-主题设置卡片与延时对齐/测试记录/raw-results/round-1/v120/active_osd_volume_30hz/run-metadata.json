@@ -1,0 +1,13 @@
+{
+  "Round": 1,
+  "Variant": "v120",
+  "Scenario": "active_osd_volume_30hz",
+  "Page": "active-osd",
+  "DisabledFixtureRules": 0,
+  "WarmupSeconds": 15,
+  "SampleSeconds": 60,
+  "RequestedActivityHz": 30,
+  "RunnerSha256": "86B4D2FA756912FBBB26B060DEB2361B2546623ADAB72954F599FCA6F78D5902",
+  "StartedAt": "2026-10-08T13:22:24.6602078+08:00",
+  "FinishedAt": "2026-10-08T13:23:43.8430916+08:00"
+}

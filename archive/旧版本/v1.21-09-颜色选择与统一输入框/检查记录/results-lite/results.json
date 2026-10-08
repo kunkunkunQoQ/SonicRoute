@@ -1,0 +1,218 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-input-picker\\review\\bin-lite\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-input-picker\\review\\bin-lite\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "isolated-config",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "first-settings-no-experimental-toast",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "settings-initial-values-preserved",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "settings-share-modern-input-template",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "device-name-save",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "empty-device-name-restores-default",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "theme-hex-modern-template",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "theme-hex-commit-and-save",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "invalid-hex-restores-color",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "short-reset-text-without-symbol",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "search-shares-template-and-icon",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "text-selection-replacement-and-undo-available",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "undo-keeps-original-text",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "redo",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "dynamic-automation-inputs-share-template",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "automation-osd-fields-write-back",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "automation-delay-write-back",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "automation-delay-clamp",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "automation-path-write-back-and-drop-enabled",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "multiline-native-content-host",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "readonly-input-rejects-edit",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "96-basic-colors",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "picker-inputs-share-template",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "no-custom-color-collection-controls",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "picker-hex-selection",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "rgb-byte-input",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "invalid-rgb-restored",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "full-rainbow-spectrum-retained",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "spectrum-selects-green",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "spectrum-selects-blue",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "lightness-white-endpoint",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "lightness-black-endpoint",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "lightness-preserves-hue-and-saturation",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "hsl-input-updates-selection",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "invalid-hsl-restores-selection",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "unconfirmed-picker-never-writes-theme",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "picker-confirm-result",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "picker-cancel-does-not-apply",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "4096-rgb-hsv-round-trips",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-check",
+    "Name": "4096-rgb-hsl-round-trips",
+    "Passed": true
+  },
+  {
+    "Case": "input-picker-summary",
+    "Passed": true,
+    "Runtime": ".NET 8.0.30",
+    "ScreenshotDirectory": "E:\\kunkun\\SonarSwitch\\dist\\v121-input-picker\\results-lite",
+    "Note": "Isolated UI only; no real rules/audio/autostart/clipboard writes. IME not simulated."
+  }
+]

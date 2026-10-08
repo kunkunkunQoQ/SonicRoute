@@ -1,0 +1,8 @@
+{
+  "SharedTextBoxTemplates": 1,
+  "Locations": [
+    "SonicRoute\\App.xaml:364:                <ControlTemplate TargetType=\"TextBox\">"
+  ],
+  "NativeColorDialogReferences": 0,
+  "AdvancedColorSettingReferences": 0
+}

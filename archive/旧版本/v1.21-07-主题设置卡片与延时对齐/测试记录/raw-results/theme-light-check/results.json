@@ -1,0 +1,34 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\theme-light-check\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\candidate-harness\\bin\\theme-light-check\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "theme-controls",
+    "Language": "zh-CN",
+    "ThemeAtScreenshot": "light",
+    "RgbAdvancedExpanded": false,
+    "SystemMode": true,
+    "LightMode": true,
+    "DarkMode": true,
+    "GreenAccent": true,
+    "PurpleAccent": true,
+    "BlueAccent": true,
+    "FocusOnlyPreservesPreset": true,
+    "ValidHexWithoutPrefix": true,
+    "ValidHexWithPrefix": true,
+    "InvalidHexRejected": true,
+    "EmbeddedWhitespaceHexRejected": true,
+    "AdvancedOpens": true,
+    "RgbSlidersApply": true,
+    "AdvancedCloses": true,
+    "OpacityResponds": true,
+    "Screenshot": "E:\\kunkun\\SonarSwitch\\dist\\v121-theme-layout-perf\\raw-results\\theme-light-check\\theme-page.png",
+    "Note": "Theme page exercised in an isolated source-copy test process. The system color dialog and audio controls were not opened or changed."
+  }
+]

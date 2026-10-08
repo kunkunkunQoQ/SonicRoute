@@ -1,0 +1,26 @@
+  正在确定要还原的项目…
+  已还原 E:\kunkun\SonarSwitch\dist\v121-input-picker\review\runner\PerfReview.csproj (用时 222 毫秒)。
+  已还原 E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute.Legacy\SonicRoute.Legacy.csproj (用时 222 毫秒)。
+  2 个项目(共 4 个)是最新的，无法还原。
+  SonicRoute.Core -> E:\kunkun\SonarSwitch\dist\v121-input-picker\review\bin-lite\SonicRoute.Core.dll
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(104,45): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute_2n15s2bq_wpftmp.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(105,51): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute_2n15s2bq_wpftmp.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(3972,38): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute_2n15s2bq_wpftmp.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(104,45): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(105,51): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(3972,38): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute.csproj]
+  SonicRoute -> E:\kunkun\SonarSwitch\dist\v121-input-picker\review\bin-lite\SonicRoute.dll
+  PerfReview -> E:\kunkun\SonarSwitch\dist\v121-input-picker\review\bin-lite\PerfReview.dll
+
+已成功生成。
+
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(104,45): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute_2n15s2bq_wpftmp.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(105,51): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute_2n15s2bq_wpftmp.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(3972,38): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute_2n15s2bq_wpftmp.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(104,45): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(105,51): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute.csproj]
+E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\MainWindow.xaml.cs(3972,38): warning CS8622: “void MainWindow.AppCombo_DropDownOpened(object sender, EventArgs e)”的参数“sender”类型中引用类型的为 Null 性与目标委托“EventHandler”不匹配(可能是由于为 Null 性特性)。 [E:\kunkun\SonarSwitch\dist\v121-input-picker\review\source\SonicRoute\SonicRoute.csproj]
+    6 个警告
+    0 个错误
+
+已用时间 00:00:02.11
