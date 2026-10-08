@@ -9,38 +9,19 @@
 
 更快捷地控制 Windows 每个应用的声音。
 
-SonicRoute 是一个常驻托盘的 Windows 音频控制工具，可以快速控制当前应用的输出 / 输入设备、音量和静音，并通过快捷键、任务栏滚轮、OSD 和自动化减少反复进入系统设置的操作。
-
-按应用音频路由 · 任务栏滚轮 · 全局快捷键 · 托盘面板 · OSD · 自动化
+SonicRoute 是一款常驻托盘的 Windows 音频工具，支持按应用切换输入 / 输出设备、调整音量和静音。通过快捷键、任务栏滚轮、快速面板、OSD 与自动化，让常用操作更简单。
 
 ![预览](docs/images/preview.gif)
 
-**v1.20 正式版已发布** ｜ Windows 10 2004+ / Windows 11 · x64 · ARM64 实验 · C# / WPF
+Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · C# / WPF
 
 📥 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) ｜ [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) ｜ [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-> 🎉 **[v1.20 正式版](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.20)** 已发布：每应用实时声音活动、更灵活的自动化与命令行调用，以及快速面板、OSD 和后台处理改进。
-
 ---
 
-## 为什么做 SonicRoute？
+## 为什么选择 SonicRoute？
 
-玩游戏、看视频或同时使用多个音频应用时，经常需要切换耳机 / 音箱、调整某个应用的音量、切换输入设备。Windows 本身具备这些能力，但这些操作通常需要进入系统音频界面才能完成。
-
-SonicRoute 的出发点是把这些高频操作从系统设置里解放出来——让控制声音像按快捷键一样快，而不是打开一层层菜单。
-
-## 和 Windows 音量合成器有什么不同？
-
-Windows 本身已经可以调整每个应用的音量和输出设备，SonicRoute 提供的是更快捷的交互方式：
-
-- 用快捷键直接操作当前应用，无需切出游戏或窗口
-- 鼠标停在任务栏上滚轮即可调整当前应用音量
-- 托盘快速面板查看和控制正在出声的应用
-- 输出 / 输入设备快速切换
-- OSD 即时反馈
-- 自动化按条件执行操作
-
-不需要频繁打开系统设置页面。
+Windows 已提供音量合成器，但切换设备、调整单个应用音量等操作仍可能需要打开设置。SonicRoute 将这些高频操作集中到快捷键、任务栏与托盘中，尤其适合希望在游戏或全屏应用中快速操作、不切换窗口的场景。
 
 ## ✨ 核心功能
 
@@ -51,27 +32,18 @@ Windows 本身已经可以调整每个应用的音量和输出设备，SonicRout
 - 🤖 **自动化与命令行**：按应用事件、快捷键、定时或启动执行多步规则，也可用 `sr "规则名称或ID"` 直接调用
 - 🎨 **外观与个性化**：深浅主题、九种语言、设备筛选与自定义名称
 
-具体操作方式与完整设置项见 [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)。
-
-**v1.21（开发中）**：以 UI 与交互体验优化为重点，包括界面布局、视觉一致性与操作流畅度；工作区也已加入规则搜索筛选、复制执行命令、托盘常用规则等便捷功能，详见 [开发功能说明](docs/automation-convenience.md)。当前正式下载仍为 v1.20。
-
-首次使用短命令需正常启动新版一次，再重新打开终端；完整用法见 [命令行调用说明](docs/automation-command-line.md)。
+详细设置与使用方法参见 [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)。
 
 ## 🚀 快速开始
 
-🛍 **商店安装**：从 [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT)（x64，自动更新）获取，版本以上架状态为准。
-
-从 [GitHub Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.20) 下载 **v1.20 正式版**：
+- **Microsoft Store**：[商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT)，支持自动更新（x64）。
+- **GitHub**：从 [Releases](https://github.com/kunkunkunQoQ/SonicRoute/releases) 下载最新版本。
 
 | 版本 | 说明 |
 |---|---|
-| ⚡ Lite x64 | 主要便携版本；单 EXE，需 x64 .NET 8 Desktop Runtime |
-| 🧪 Lite ARM64（实验） | 单 EXE，需 ARM64 .NET 8 Desktop Runtime；尚未完成 ARM64 真机完整验证 |
-| 🪟 Legacy x64 | .NET Framework 4.8 版本；解压完整目录后运行，无需安装 .NET 8 |
-
-> v1.19 Release Assets 中仍保留旧的自包含版本；自 v1.20 起不再提供这种发布形式。
->
-> Microsoft Store 的 **v1.20 x64 Lite 包已提交审核**，商店版本以上架状态为准。
+| ⚡ Lite x64 | 单 EXE，需安装 x64 .NET 8 Desktop Runtime |
+| 🧪 Lite ARM64（实验） | 单 EXE，需安装 ARM64 .NET 8 Desktop Runtime；尚未完成 ARM64 真机完整验证 |
+| 🪟 Legacy x64 | .NET Framework 4.8；解压完整目录后运行，无需安装 .NET 8 |
 
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -84,20 +56,19 @@ Windows 本身已经可以调整每个应用的音量和输出设备，SonicRout
 | [05 · 命令行执行规则](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E5%91%BD%E4%BB%A4%E8%A1%8C%E6%89%A7%E8%A1%8C%E8%A7%84%E5%88%99) | sr 用法、执行结果与退出码 |
 | [06 · 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) | 安装、设备、音量、自动化与性能排查 |
 | [07 · 技术实现](https://github.com/kunkunkunQoQ/SonicRoute/wiki/07-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) | 源码结构、音频接口与构建方法 |
-| [08 · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3) | 当前下载、1.20 更新与发布规则 |
+| [08 · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3) | 下载方式、版本说明与发布规则 |
 | [09 · 版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) | 旧版更新日志与版本索引 |
 
-## 📌 版本计划
+## 📌 更新计划
 
-- **当前稳定版：v1.20**（2026-10-02 转为正式发布）
-- **v1.21 · UI 优化**：调整界面布局、视觉细节与交互流程，提升操作流畅度。
-- **v1.22 · 体验打磨**：继续改善快速面板、OSD 与全屏使用体验。
-- **v1.23 · 性能与稳定性**：优化后台资源占用、响应速度与兼容性。
-- **后续阶段**：结合使用反馈，逐步完善现有功能和整体体验。
+后续改进将分阶段持续推出，不再集中到单次大版本发布。
 
-原定年底集中推出的改进将拆分到多个版本中逐步交付，不再等待单次大版本统一发布。以上为规划方向，具体内容及版本安排将根据开发与测试进度调整。
+- **v1.21 · UI 优化**：优化布局、视觉细节、动画流畅度和操作路径。
+- **v1.22 · 体验打磨**：改善快速面板、OSD 与全屏操作体验。
+- **v1.23 · 性能与稳定性**：优化后台资源占用、响应速度及兼容性。
+- **后续阶段**：根据反馈持续完善现有功能。
 
-当前下载、1.20 更新和发布规则见 [Wiki 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)，旧版日志见 [Wiki 版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.21 工作区已开展的自动化便捷功能见 [开发功能说明](docs/automation-convenience.md)。具体更新内容与时间以实际发布为准。
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 
