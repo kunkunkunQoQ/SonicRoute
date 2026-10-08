@@ -1,0 +1,14 @@
+[
+  {
+    "File": "E:\\kunkun\\SonarSwitch\\dist\\SonicRoute-v1.21-Lite-x64-close-resources\\SonicRoute.exe",
+    "Version": "1.21.0.0",
+    "Bytes": 28522755,
+    "Sha256": "21D3D54AF7DB985D9191623A44D982C6F0664D1600577C088246D8E45DE112A3"
+  },
+  {
+    "File": "E:\\kunkun\\SonarSwitch\\dist\\SonicRoute-v1.21-Legacy-x64-close-resources\\SonicRoute.exe",
+    "Version": "1.21.0.0",
+    "Bytes": 1523200,
+    "Sha256": "E7DA30134ACA61B52239B3588DC463DA7B57D05BF8D087C3C837E2E97665DBFC"
+  }
+]

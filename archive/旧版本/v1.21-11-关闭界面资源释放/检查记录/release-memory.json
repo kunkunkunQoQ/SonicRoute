@@ -1,0 +1,394 @@
+[
+  {
+    "Seconds": 2.2962216,
+    "Phase": "startup",
+    "PrivateMiB": 75.078125,
+    "PrivateWorkingSetMiB": 37.6328125,
+    "WorkingSetMiB": 137.203125,
+    "Handles": 743
+  },
+  {
+    "Seconds": 4.6239983,
+    "Phase": "startup",
+    "PrivateMiB": 75.05859375,
+    "PrivateWorkingSetMiB": 37.69921875,
+    "WorkingSetMiB": 137.39453125,
+    "Handles": 743
+  },
+  {
+    "Seconds": 6.6459345,
+    "Phase": "startup",
+    "PrivateMiB": 75.0546875,
+    "PrivateWorkingSetMiB": 37.69921875,
+    "WorkingSetMiB": 137.4375,
+    "Handles": 744
+  },
+  {
+    "Seconds": 8.6725854,
+    "Phase": "main-open-0",
+    "PrivateMiB": 64.24609375,
+    "PrivateWorkingSetMiB": 26.1328125,
+    "WorkingSetMiB": 128.15625,
+    "Handles": 744
+  },
+  {
+    "Seconds": 10.6936223,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 147.453125,
+    "PrivateWorkingSetMiB": 60.1796875,
+    "WorkingSetMiB": 175.03515625,
+    "Handles": 798
+  },
+  {
+    "Seconds": 12.7239985,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 147.47265625,
+    "PrivateWorkingSetMiB": 5.60546875,
+    "WorkingSetMiB": 16.98046875,
+    "Handles": 804
+  },
+  {
+    "Seconds": 14.7836064,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 147.47265625,
+    "PrivateWorkingSetMiB": 6.4296875,
+    "WorkingSetMiB": 21.55078125,
+    "Handles": 798
+  },
+  {
+    "Seconds": 16.8145411,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 131.92578125,
+    "PrivateWorkingSetMiB": 5.828125,
+    "WorkingSetMiB": 21.06640625,
+    "Handles": 798
+  },
+  {
+    "Seconds": 18.8416569,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 131.92578125,
+    "PrivateWorkingSetMiB": 5.86328125,
+    "WorkingSetMiB": 21.25390625,
+    "Handles": 798
+  },
+  {
+    "Seconds": 20.8598042,
+    "Phase": "modern-open-0",
+    "PrivateMiB": 160.140625,
+    "PrivateWorkingSetMiB": 26.62890625,
+    "WorkingSetMiB": 84,
+    "Handles": 818
+  },
+  {
+    "Seconds": 22.8891988,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 162.74609375,
+    "PrivateWorkingSetMiB": 4.31640625,
+    "WorkingSetMiB": 12.48828125,
+    "Handles": 805
+  },
+  {
+    "Seconds": 24.9411444,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 102.203125,
+    "PrivateWorkingSetMiB": 4.6796875,
+    "WorkingSetMiB": 13.51171875,
+    "Handles": 805
+  },
+  {
+    "Seconds": 26.9832876,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 102.078125,
+    "PrivateWorkingSetMiB": 4.84765625,
+    "WorkingSetMiB": 14.03125,
+    "Handles": 805
+  },
+  {
+    "Seconds": 29.0291053,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 102.078125,
+    "PrivateWorkingSetMiB": 6.0234375,
+    "WorkingSetMiB": 15.6953125,
+    "Handles": 805
+  },
+  {
+    "Seconds": 31.1080988,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 149.03515625,
+    "PrivateWorkingSetMiB": 37.203125,
+    "WorkingSetMiB": 86.6640625,
+    "Handles": 785
+  },
+  {
+    "Seconds": 33.1873142,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 148.84765625,
+    "PrivateWorkingSetMiB": 3.921875,
+    "WorkingSetMiB": 12.53515625,
+    "Handles": 785
+  },
+  {
+    "Seconds": 35.2815449,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 148.26953125,
+    "PrivateWorkingSetMiB": 4.17578125,
+    "WorkingSetMiB": 12.859375,
+    "Handles": 785
+  },
+  {
+    "Seconds": 37.3056697,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 148.26953125,
+    "PrivateWorkingSetMiB": 4.29296875,
+    "WorkingSetMiB": 13.30078125,
+    "Handles": 785
+  },
+  {
+    "Seconds": 39.3957355,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 146.91015625,
+    "PrivateWorkingSetMiB": 3.7734375,
+    "WorkingSetMiB": 12.78125,
+    "Handles": 785
+  },
+  {
+    "Seconds": 41.4382438,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 180.0078125,
+    "PrivateWorkingSetMiB": 33.0546875,
+    "WorkingSetMiB": 82.38671875,
+    "Handles": 803
+  },
+  {
+    "Seconds": 43.4859426,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 118.9453125,
+    "PrivateWorkingSetMiB": 3.953125,
+    "WorkingSetMiB": 12.08984375,
+    "Handles": 803
+  },
+  {
+    "Seconds": 45.505559,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 118.9453125,
+    "PrivateWorkingSetMiB": 4.10546875,
+    "WorkingSetMiB": 12.4609375,
+    "Handles": 803
+  },
+  {
+    "Seconds": 47.5834075,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 110.88671875,
+    "PrivateWorkingSetMiB": 4.19140625,
+    "WorkingSetMiB": 13.7265625,
+    "Handles": 803
+  },
+  {
+    "Seconds": 49.5995622,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 110.88671875,
+    "PrivateWorkingSetMiB": 4.23828125,
+    "WorkingSetMiB": 14.00390625,
+    "Handles": 803
+  },
+  {
+    "Seconds": 51.6321845,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 146.98828125,
+    "PrivateWorkingSetMiB": 22.41015625,
+    "WorkingSetMiB": 65.1796875,
+    "Handles": 806
+  },
+  {
+    "Seconds": 53.6481561,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 147.80078125,
+    "PrivateWorkingSetMiB": 3.68359375,
+    "WorkingSetMiB": 11.046875,
+    "Handles": 806
+  },
+  {
+    "Seconds": 55.671299,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 145.703125,
+    "PrivateWorkingSetMiB": 3.22265625,
+    "WorkingSetMiB": 10.671875,
+    "Handles": 806
+  },
+  {
+    "Seconds": 57.6889138,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 145.6328125,
+    "PrivateWorkingSetMiB": 4.1796875,
+    "WorkingSetMiB": 13.203125,
+    "Handles": 803
+  },
+  {
+    "Seconds": 59.7519336,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 145.0703125,
+    "PrivateWorkingSetMiB": 4.08203125,
+    "WorkingSetMiB": 13.10546875,
+    "Handles": 803
+  },
+  {
+    "Seconds": 61.839782,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 156.25,
+    "PrivateWorkingSetMiB": 21.10546875,
+    "WorkingSetMiB": 60.578125,
+    "Handles": 802
+  },
+  {
+    "Seconds": 63.8548527,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 131.54296875,
+    "PrivateWorkingSetMiB": 3.36328125,
+    "WorkingSetMiB": 11.078125,
+    "Handles": 800
+  },
+  {
+    "Seconds": 65.8744285,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 120.98046875,
+    "PrivateWorkingSetMiB": 3.59765625,
+    "WorkingSetMiB": 11.546875,
+    "Handles": 800
+  },
+  {
+    "Seconds": 67.9088648,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 120.91796875,
+    "PrivateWorkingSetMiB": 4.39453125,
+    "WorkingSetMiB": 14.02734375,
+    "Handles": 797
+  },
+  {
+    "Seconds": 69.9469803,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 120.8828125,
+    "PrivateWorkingSetMiB": 4.59375,
+    "WorkingSetMiB": 14.37109375,
+    "Handles": 793
+  },
+  {
+    "Seconds": 72.005094,
+    "Phase": "steady-idle",
+    "PrivateMiB": 118.98046875,
+    "PrivateWorkingSetMiB": 4.51953125,
+    "WorkingSetMiB": 14.94921875,
+    "Handles": 793
+  },
+  {
+    "Seconds": 74.041251,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.13671875,
+    "PrivateWorkingSetMiB": 4.953125,
+    "WorkingSetMiB": 16.26171875,
+    "Handles": 796
+  },
+  {
+    "Seconds": 76.059196,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.13671875,
+    "PrivateWorkingSetMiB": 4.95703125,
+    "WorkingSetMiB": 16.265625,
+    "Handles": 796
+  },
+  {
+    "Seconds": 78.0793478,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.09765625,
+    "PrivateWorkingSetMiB": 4.93359375,
+    "WorkingSetMiB": 16.2421875,
+    "Handles": 793
+  },
+  {
+    "Seconds": 80.102303,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.09765625,
+    "PrivateWorkingSetMiB": 4.9375,
+    "WorkingSetMiB": 16.24609375,
+    "Handles": 793
+  },
+  {
+    "Seconds": 82.1177072,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.09765625,
+    "PrivateWorkingSetMiB": 4.9609375,
+    "WorkingSetMiB": 16.26953125,
+    "Handles": 793
+  },
+  {
+    "Seconds": 84.1255507,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.0703125,
+    "PrivateWorkingSetMiB": 5.0625,
+    "WorkingSetMiB": 16.421875,
+    "Handles": 789
+  },
+  {
+    "Seconds": 86.2807098,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.0703125,
+    "PrivateWorkingSetMiB": 5.0625,
+    "WorkingSetMiB": 16.421875,
+    "Handles": 789
+  },
+  {
+    "Seconds": 88.3735881,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.0703125,
+    "PrivateWorkingSetMiB": 5.08203125,
+    "WorkingSetMiB": 16.44140625,
+    "Handles": 789
+  },
+  {
+    "Seconds": 90.4205183,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.10546875,
+    "PrivateWorkingSetMiB": 5.265625,
+    "WorkingSetMiB": 16.7109375,
+    "Handles": 792
+  },
+  {
+    "Seconds": 92.4399228,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.41796875,
+    "PrivateWorkingSetMiB": 5.69921875,
+    "WorkingSetMiB": 17.6015625,
+    "Handles": 792
+  },
+  {
+    "Seconds": 94.4543397,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.41796875,
+    "PrivateWorkingSetMiB": 5.7265625,
+    "WorkingSetMiB": 17.65625,
+    "Handles": 792
+  },
+  {
+    "Seconds": 96.4682193,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.375,
+    "PrivateWorkingSetMiB": 5.70703125,
+    "WorkingSetMiB": 17.63671875,
+    "Handles": 789
+  },
+  {
+    "Seconds": 98.5007544,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.41796875,
+    "PrivateWorkingSetMiB": 5.75390625,
+    "WorkingSetMiB": 17.69921875,
+    "Handles": 792
+  },
+  {
+    "Seconds": 100.5581719,
+    "Phase": "steady-idle",
+    "PrivateMiB": 119.41796875,
+    "PrivateWorkingSetMiB": 5.796875,
+    "WorkingSetMiB": 17.89453125,
+    "Handles": 769
+  }
+]

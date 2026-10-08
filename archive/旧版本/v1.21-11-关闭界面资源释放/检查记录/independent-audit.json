@@ -1,0 +1,92 @@
+{
+  "languages": {
+    "fileCount": 9,
+    "keyCountReference": 453,
+    "keySetsMatch": true,
+    "allUtf8Bom": true,
+    "files": [
+      {
+        "file": "de-DE.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "en-US.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "es-ES.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "fr-FR.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "ja-JP.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "ko-KR.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "ru-RU.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "zh-CN.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      },
+      {
+        "file": "zh-TW.json",
+        "keyCount": 453,
+        "utf8Bom": true,
+        "keySetMatchesReference": true,
+        "missingKeys": [],
+        "extraKeys": []
+      }
+    ]
+  },
+  "productionCandidate": {
+    "productionFileCount": 83,
+    "candidateFileCount": 83,
+    "hashMismatches": [],
+    "missingFromCandidate": [],
+    "extraInCandidate": [],
+    "releaseProbeAllowed": false,
+    "pass": true
+  },
+  "overallPass": true
+}

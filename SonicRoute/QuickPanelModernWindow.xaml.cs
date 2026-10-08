@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -144,19 +144,7 @@ namespace SonicRoute
             SystemParameters.StaticPropertyChanged += OnSystemParamChanged;
             // 共享"当前应用"变化（前台自动跟随/概览切换）时同步面板高亮
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
-            Closed += (_, _) =>
-            {
-                _isClosed = true;
-                ++_loadVersion;
-                _entranceMotion.Stop();
-                ClearRowVisuals();
-                StopMeter();
-                _volDebounce?.Stop();
-                if (_volDebounce != null) _volDebounce.Tick -= VolDebounce_Tick;
-                CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
-                SystemParameters.StaticPropertyChanged -= OnSystemParamChanged;
-                if (_adjustMode) { _adjustMode = false; ((App)Application.Current).NotifyQuickPanelAdjustFinished(); }
-            };
+            Closed += (_, _) => CleanupClosedWindow();
         }
 
         /// <summary>工作区变化（分辨率/任务栏位置/DPI 缩放）时重定位默认位置；自定义位置保持用户设定。</summary>
@@ -172,7 +160,7 @@ namespace SonicRoute
             if (!_contentReady || _isClosed) return;
             if (_positionPending) return;
             _positionPending = true;
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            _uiLifetime.Post(Dispatcher, () =>
             {
                 _positionPending = false;
                 if (_isClosed || !IsVisible || _adjustDragging) return;
@@ -222,7 +210,7 @@ namespace SonicRoute
         /// <summary>展开后滚动应用列表，使目标行（含设备区）可见；列表区高度固定，超出的行滚动查看。</summary>
         private void ScrollRowIntoView(AppRow row)
         {
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            _uiLifetime.Post(Dispatcher, () =>
             {
                 try
                 {
@@ -331,6 +319,7 @@ namespace SonicRoute
 
         private async Task LoadCoreAsync()
         {
+            if (_isClosed) return;
             try
             {
                 var cfg = ConfigService.Load();
@@ -338,10 +327,10 @@ namespace SonicRoute
                 _micUiOn = cfg.ExperimentalMic && cfg.MicInPanel;
                 GlobalMuteButton.IsEnabled = false;
                 MicMuteButton.IsEnabled = false;
-                var devices = await Task.Run(() =>
+                var devices = await _uiLifetime.ReadAsync(cfg.ExperimentalMic, static includeInputs =>
                 {
                     var outputs = AudioService.GetDevices(EDataFlow.eRender);
-                    var inputs = cfg.ExperimentalMic ? AudioService.GetDevices(EDataFlow.eCapture) : new List<AudioDeviceInfo>();
+                    var inputs = includeInputs ? AudioService.GetDevices(EDataFlow.eCapture) : new List<AudioDeviceInfo>();
                     return (Outputs: outputs, Inputs: inputs, DefaultId: AudioService.GetDefaultDeviceId(EDataFlow.eRender));
                 });
                 if (_isClosed) return;
@@ -354,20 +343,20 @@ namespace SonicRoute
                 await LoadSystemDevicesAsync(devices.Outputs, devices.DefaultId);
                 if (_isClosed) return;
 
-                var apps = await Task.Run(() => AudioService.GetApps());
+                var apps = await _uiLifetime.ReadAsync(() => AudioService.GetApps());
                 if (_isClosed) return;
                 await BuildAppRowsAsync(apps);
                 if (_isClosed) return;
                 SetMeterEnabled(ConfigService.Load().ShowAppPeakMeter);
                 ApplyFixedPanelHeight(cfg);
                 // 先让 WPF 完成布局；最终定位与动画在同一个回调中执行，避免动画在屏幕外提前运行。
-                await Dispatcher.InvokeAsync(() =>
+                await _uiLifetime.Post(Dispatcher, () =>
                 {
                     if (_isClosed || !IsVisible || loadVersion != _loadVersion) return;
                     _contentReady = true;
                     QuickPanelPosition.Apply(this, cfg);
                     if (!_entrancePlayed) { _entrancePlayed = true; PlayEntranceAnimation(); }
-                }, DispatcherPriority.Background);
+                }).Task;
                 if (_isClosed) return;
                 await RefreshGlobalMuteStateAsync(loadVersion);
             }
@@ -375,14 +364,16 @@ namespace SonicRoute
             {
                 if (!_isClosed) ShowOsd(L10n.T("Qp.Panel"), L10n.T("Qp.LoadFail"));
             }
+
         }
 
         private async Task RefreshGlobalMuteStateAsync(int loadVersion)
         {
+            if (_isClosed) return;
             int outputVersion = _globalMuteVersion, micVersion = _micMuteVersion;
             try
             {
-                var state = await Task.Run(() => (Output: SessionVolumeService.AllMuted(), Mic: GlobalMicMuteService.IsMuted()));
+                var state = await _uiLifetime.ReadAsync(static () => (Output: SessionVolumeService.AllMuted(), Mic: GlobalMicMuteService.IsMuted()));
                 if (_isClosed || loadVersion != _loadVersion) return;
                 if (outputVersion == _globalMuteVersion) { ApplyGlobalMuteVisual(state.Output); GlobalMuteButton.IsEnabled = true; }
                 if (micVersion == _micMuteVersion) { ApplyMicMuteVisual(state.Mic); MicMuteButton.IsEnabled = true; }
@@ -467,28 +458,34 @@ namespace SonicRoute
         /// <summary>读取所选系统设备的音量/静音，同步顶部滑块/百分比/按钮。</summary>
         private async Task RefreshSystemVolumeAsync()
         {
-            int request = ++_systemVolumeRequest;
-            string? deviceId = _systemDeviceId;
-            var (vol, muted) = await Task.Run(() => SystemVolumeService.ReadState(deviceId));
-            if (_isClosed || request != _systemVolumeRequest || !string.Equals(deviceId, _systemDeviceId, StringComparison.OrdinalIgnoreCase)) return;
-
-            _systemReady = false;
-            if (vol < 0)
+            if (_isClosed) return;
+            try
             {
-                VolumeSlider.Value = 0;
-                VolumePercentText.Text = "—";
-                VolumeSlider.IsEnabled = false;
-                MuteButton.IsEnabled = false;
-                MuteButton.Content = L10n.T("Qp.Mute");
-                MuteButton.ClearValue(Button.ForegroundProperty);
-                return;
+                int request = ++_systemVolumeRequest;
+                string? deviceId = _systemDeviceId;
+                var (vol, muted) = await _uiLifetime.ReadAsync(() => SystemVolumeService.ReadState(deviceId));
+                if (_isClosed || request != _systemVolumeRequest || !string.Equals(deviceId, _systemDeviceId, StringComparison.OrdinalIgnoreCase)) return;
+
+                _systemReady = false;
+                if (vol < 0)
+                {
+                    VolumeSlider.Value = 0;
+                    VolumePercentText.Text = "—";
+                    VolumeSlider.IsEnabled = false;
+                    MuteButton.IsEnabled = false;
+                    MuteButton.Content = L10n.T("Qp.Mute");
+                    MuteButton.ClearValue(Button.ForegroundProperty);
+                    return;
+                }
+                VolumeSlider.Value = vol;
+                VolumePercentText.Text = $"{vol}%";
+                ApplySystemMuteVisual(muted);
+                VolumeSlider.IsEnabled = true;
+                MuteButton.IsEnabled = true;
+                _systemReady = true;
+
             }
-            VolumeSlider.Value = vol;
-            VolumePercentText.Text = $"{vol}%";
-            ApplySystemMuteVisual(muted);
-            VolumeSlider.IsEnabled = true;
-            MuteButton.IsEnabled = true;
-            _systemReady = true;
+            catch (OperationCanceledException) when (_isClosed) { }
         }
 
         private async void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -555,7 +552,9 @@ namespace SonicRoute
         private async void MuteButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_systemReady) return;
-            bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(_systemDeviceId));
+            string? deviceId = _systemDeviceId;
+            bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(deviceId));
+            if (_isClosed || deviceId != _systemDeviceId) return;
             ApplySystemMuteVisual(muted);
             ShowDeviceOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
         }
@@ -582,7 +581,9 @@ namespace SonicRoute
         public async Task<bool> MuteCurrentAppAsync()
         {
             if (!_systemReady) return false;
-            bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(_systemDeviceId));
+            string? deviceId = _systemDeviceId;
+            bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(deviceId));
+            if (_isClosed || deviceId != _systemDeviceId) return true;
             ApplySystemMuteVisual(muted);
             ShowDeviceOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
             return true;
@@ -608,6 +609,7 @@ namespace SonicRoute
 
         private async Task BuildAppRowsAsync(List<AudioAppInfo> apps)
         {
+            if (_isClosed) return;
             try
             {
                 // 过滤：完整界面「应用」里关闭"在快速面板显示"的应用不列出
@@ -618,11 +620,11 @@ namespace SonicRoute
                 string signature = GetAppRowsSignature(apps, cfg);
 
                 // 批量读各应用音量/静音（UI 线程外，避免逐行 COM 开销）
-                var vols = await Task.Run(() =>
+                var vols = await _uiLifetime.ReadAsync(apps, static applications =>
                 {
                     SessionVolumeService.Refresh();
                     var d = new Dictionary<int, (int vol, bool muted)>();
-                    foreach (var a in apps)
+                    foreach (var a in applications)
                     {
                         var pid = (int)a.ProcessId;
                         d[pid] = (SessionVolumeService.GetVolumePercent(pid), SessionVolumeService.IsMuted(pid));
@@ -828,6 +830,7 @@ namespace SonicRoute
                 ShowOsd(L10n.T("Qp.LoadFail") + " " + ex.Message);
             }
             finally { _updatingRowVolumes = false; }
+
         }
 
         /// <summary>更新行滑块进度条/圆点的布局（Value → 填充宽度 + 圆点位置）。</summary>
@@ -852,7 +855,7 @@ namespace SonicRoute
             if (sender is not Slider sl || sl.Tag is not AppRow row) return;
             int pct = (int)Math.Round(e.NewValue);
             UpdateRowSliderLayout(row);
-            if (_updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
+            if (_isClosed || _updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
             _pendingVolume[(int)row.App.ProcessId] = pct;
 
             _volDebounce ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
@@ -874,16 +877,9 @@ namespace SonicRoute
             sl.Value = MathEx.Clamp(pct, 0, 100);
             e.Handled = true;
         }
-        private async void VolDebounce_Tick(object? sender, EventArgs e)
+        private void VolDebounce_Tick(object? sender, EventArgs e)
         {
-            _volDebounce!.Stop();
-            if (_pendingVolume.Count == 0) return;
-            var items = _pendingVolume.ToArray();
-            _pendingVolume.Clear();
-            await Task.Run(() =>
-            {
-                foreach (var kv in items) SessionVolumeService.SetVolumePercent(kv.Key, kv.Value);
-            });
+            FlushPendingVolumes();
         }
 
         /// <summary>行静音视觉：静音后音量条/百分比变强调色 RGB 反色，图标右上显示反色圆点。</summary>
@@ -942,7 +938,7 @@ namespace SonicRoute
             if (Interlocked.Exchange(ref _peakDispatchPending, 1) != 0) return;
             try
             {
-                Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+                _uiLifetime.Post(Dispatcher, new Action(() =>
                 {
                     IReadOnlyDictionary<int, float>? latest;
                     lock (_peakGate) { latest = _latestPeaks; _latestPeaks = null; }
@@ -957,7 +953,7 @@ namespace SonicRoute
                         row.PeakLevel = next;
                         UpdatePeakVisual(row);
                     }
-                }));
+                }), DispatcherPriority.Render);
             }
             catch { Interlocked.Exchange(ref _peakDispatchPending, 0); }
         }
@@ -985,6 +981,7 @@ namespace SonicRoute
         {
             var pid = (int)row.App.ProcessId;
             bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
+            if (_isClosed) return;
             ApplyRowMutedVisual(row, muted);
             ShowOsd(AppDisplayName.Get(row.App), L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
         }
@@ -1128,10 +1125,10 @@ namespace SonicRoute
             foreach (var cached in row.DeviceButtons) cached.Button.IsEnabled = false;
             try
             {
-                var selected = await Task.Run(() =>
+                var selected = await _uiLifetime.ReadAsync((Pid: pid, MicOn: micOn), static target =>
                 {
-                    var output = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
-                    var input = micOn ? AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture) : null;
+                    var output = AudioService.GetPersistedEndpoint(target.Pid, EDataFlow.eRender);
+                    var input = target.MicOn ? AudioService.GetPersistedEndpoint(target.Pid, EDataFlow.eCapture) : null;
                     return (Output: output == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(output),
                         Input: input == null ? AudioService.SystemDefaultInputDeviceId : AudioPolicyConfig.UnpackDeviceId(input));
                 });
@@ -1145,7 +1142,9 @@ namespace SonicRoute
                     {
                         var label = new TextBlock
                         {
-                            Text = L10n.T(title), FontSize = 11, FontWeight = FontWeights.SemiBold,
+                            Text = L10n.T(title),
+                            FontSize = 11,
+                            FontWeight = FontWeights.SemiBold,
                             Margin = new Thickness(0, 2, 0, 3)
                         };
                         label.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");

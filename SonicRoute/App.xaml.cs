@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Runtime;
 using System.Windows;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -40,6 +39,7 @@ namespace SonicRoute
         private long _lastUiReclaimManagedBytes;
         private long _lastUiReclaimPrivateBytes;
         private int _uiReclaimRunning;
+        private bool _uiWorkingSetDirty;
         private const long IdleManagedGrowthBytes = 8 * 1024 * 1024;
         private const long IdlePrivateGrowthBytes = 16 * 1024 * 1024;
         private System.Windows.Threading.DispatcherTimer? _idleTimer;
@@ -63,7 +63,7 @@ namespace SonicRoute
             }
         }
         private System.Windows.Interop.HwndSource? _activateSink;
-// 麦克风静音状态后台检测（低频轮询兜底）：外部程序/Windows 修改静音状态时立即更新 OSD
+        // 麦克风静音状态后台检测（低频轮询兜底）：外部程序/Windows 修改静音状态时立即更新 OSD
         private System.Windows.Threading.DispatcherTimer? _micMuteWatchTimer;
         private bool _micMuteBaselineReady;
         private bool _lastMicMutedBaseline;
@@ -226,7 +226,9 @@ namespace SonicRoute
             // single-instance activate sink (invisible): opens full UI on message
             _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters(ActivateSinkTitle)
             {
-                Width = 0, Height = 0, WindowStyle = 0,
+                Width = 0,
+                Height = 0,
+                WindowStyle = 0,
             });
             _activateSink.AddHook((IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
             {
@@ -234,7 +236,7 @@ namespace SonicRoute
                 return IntPtr.Zero;
             });
 
-            // 空闲只检查内存增长；稳定的托盘进程不反复执行完整 GC。
+            // 稳定的托盘进程只检查内存增长，不主动触发 GC。
             _idleTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
             bool firstTrim = true;
             _idleTimer.Tick += (_, _) =>
@@ -351,7 +353,7 @@ namespace SonicRoute
             }
             catch { }
         }
-/// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 面板共用）：静音且常驻开关开启 → 常驻显示。</summary>
+        /// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 面板共用）：静音且常驻开关开启 → 常驻显示。</summary>
         internal void ShowMicMuteOsd(string app, bool muted)
         {
             _lastMicMutedBaseline = muted;
@@ -366,8 +368,8 @@ namespace SonicRoute
         internal void CancelOsdAdjust() => _trayWheel?.CancelOsdAdjust();
         /// <summary>实时位置预览（偏移滑块/坐标输入联动）。</summary>
         internal void PreviewOsd() => _trayWheel?.PreviewOsd();
-    internal void ApplyOsdSize(double w, double fs) => _trayWheel?.ApplyOsdSize(w, fs);
-    internal void SetOsdSize(int w, double fs) => _trayWheel?.SetOsdSize(w, fs);
+        internal void ApplyOsdSize(double w, double fs) => _trayWheel?.ApplyOsdSize(w, fs);
+        internal void SetOsdSize(int w, double fs) => _trayWheel?.SetOsdSize(w, fs);
         /// <summary>OSD 拖拽保存后通知（设置页复位按钮/同步输入框）。</summary>
         internal event Action? OsdAdjustFinished
         {
@@ -461,6 +463,7 @@ namespace SonicRoute
         {
             if (_quickPanel == null)
             {
+                _uiWorkingSetDirty = true;
                 CancelUiReclaim();
                 AppIconService.Resume();
                 // 按设置选择面板样式：modern=简洁面板（默认）/ classic=经典面板
@@ -490,6 +493,7 @@ namespace SonicRoute
         {
             if (_mainWindow == null)
             {
+                _uiWorkingSetDirty = true;
                 CancelUiReclaim();
                 AppIconService.Resume();
                 _mainWindow = new MainWindow();
@@ -530,8 +534,11 @@ namespace SonicRoute
 
         private bool ShouldReclaimIdle()
         {
+            // Each closed UI can leave new inactive pages. The old 120s gate guarded forced GC;
+            // a fresh UI close now gets one delayed working-set pass without collecting the heap.
+            if (_uiWorkingSetDirty) return true;
             long last = Interlocked.Read(ref _lastUiReclaimUtcTicks);
-            if (last == 0) return true; // 首次最小化启动仍回收一次启动临时对象。
+            if (last == 0) return true; // 首次最小化启动整理一次不活跃工作集。
             if (DateTime.UtcNow.Ticks - last < TimeSpan.FromSeconds(120).Ticks) return false;
             if (GC.GetTotalMemory(false) - Interlocked.Read(ref _lastUiReclaimManagedBytes) >= IdleManagedGrowthBytes)
                 return true;
@@ -545,6 +552,7 @@ namespace SonicRoute
 
         private void RecordUiReclaimBaseline()
         {
+            _uiWorkingSetDirty = false;
             Interlocked.Exchange(ref _lastUiReclaimManagedBytes, GC.GetTotalMemory(false));
             try
             {
@@ -562,22 +570,17 @@ namespace SonicRoute
             try
             {
                 await Task.Delay(1500, token).ConfigureAwait(false);
-                // 等待窗口关闭事件及排队的 UI 续体执行完。
-                bool closed = await Dispatcher.InvokeAsync(
-                    () => _mainWindow == null && _quickPanel == null,
-                    System.Windows.Threading.DispatcherPriority.ApplicationIdle, token).Task.ConfigureAwait(false);
-                if (!closed || token.IsCancellationRequested || !ShouldReclaimIdle()) return;
                 if (Interlocked.CompareExchange(ref _uiReclaimRunning, 1, 0) != 0) return;
                 acquired = true;
-                GcNow();
-                // 已发生的 GC 同样计入节流，即使用户此时重新打开窗口而跳过工作集收缩。
-                RecordUiReclaimBaseline();
-                closed = await Dispatcher.InvokeAsync(
-                    () => _mainWindow == null && _quickPanel == null,
+                // Check and trim in one dispatcher turn so reopening cannot race the idle pass.
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    if (_mainWindow != null || _quickPanel != null || token.IsCancellationRequested || !ShouldReclaimIdle()) return;
+                    // This pages out inactive working-set memory; it does not collect managed objects.
+                    TrimWorkingSet();
+                    RecordUiReclaimBaseline();
+                },
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle, token).Task.ConfigureAwait(false);
-                if (!closed || token.IsCancellationRequested) return;
-                TrimWorkingSet();
-                RecordUiReclaimBaseline();
             }
             catch (OperationCanceledException) { }
             catch (InvalidOperationException) { /* Dispatcher 正在关闭 */ }
@@ -598,7 +601,7 @@ namespace SonicRoute
             }
         }
 
-        /// <summary>强制回收：GC 两轮（含终结器队列），用于「关闭 UI 释放内存」时尽快回收窗口与 UI 资源。</summary>
+        // Single-instance activation uses a hidden message window.
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "FindWindowW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
         private static extern IntPtr NativeFindWindow(string? cls, string? win);
 
@@ -608,23 +611,7 @@ namespace SonicRoute
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
         private static extern int NativeRegisterWindowMessage(string name);
 
-        /// <summary>Forced GC (two rounds incl. finalizer queue) to reclaim window and UI resources after closing UI.</summary>
-        private static void GcNow()
-        {
-            try
-            {
-                // 压缩 LOH（大对象堆）：WPF 视觉树/位图可能产生 >85KB 的大对象，
-                // 默认 LOH 不压缩，回收后内存碎片不归还给 OS，导致残留 1-4MB
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(2, GCCollectionMode.Forced, true, true); // 强制阻塞压缩式完整GC
-                GC.WaitForPendingFinalizers();
-                GC.Collect(2, GCCollectionMode.Forced, true, true);
-            }
-            catch { }
-        }
-
-        /// <summary>将进程工作集换出到磁盘。WPF Milcore 渲染缓存（native、进程级共享）无法被托管 GC 回收，
-        /// 关闭 UI 后残余的十几 MB 只能靠换出；换出的不活跃页面不再换回（无访问），任务管理器"内存"列立即下降。</summary>
+        /// <summary>请求系统移出不活跃的工作集页面；不释放私有提交量，也不保证页面不会重新进入工作集。</summary>
         private static void TrimWorkingSet()
         {
             try
@@ -730,7 +717,7 @@ namespace SonicRoute
                         : L10n.T("Ov.NoOutputSession"));
                     break;
 
-                                case HotkeyActions.ActMuteInput:
+                case HotkeyActions.ActMuteInput:
                     // 全局麦克风静音：静音/取消静音系统所有录音设备（与当前应用无关）。
                     // 面板打开时走面板路径（同步按钮/状态行并返回真实状态），否则直接全局静音；
                     // 切换后立即用真实状态更新 OSD（静音且常驻开关开启 → 常驻显示，不等待后台检测）。
@@ -839,8 +826,8 @@ namespace SonicRoute
 
                 var persisted = AudioService.GetPersistedEndpoint(pid, flow);
                 string? curShort = persisted == null ? null : AudioPolicyConfig.UnpackDeviceId(persisted);
-            // 跟随系统默认（无持久化）→ 位于"系统默认"虚拟项（首位），按下切到第一个真实设备
-            int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
+                // 跟随系统默认（无持久化）→ 位于"系统默认"虚拟项（首位），按下切到第一个真实设备
+                int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
                 if (idx < 0 && persisted == null && AudioService.IsSystemDefault(visible[0].Id)) idx = 0;  // 仅当"系统默认"虚拟项在列表首位时（未被隐藏），从它开始循环
                 int next = idx < 0 ? 0 : (idx + 1) % visible.Count;
                 var target = visible[next];

@@ -1,0 +1,106 @@
+{
+  "checkedAt": "2026-10-08",
+  "checkCounts": {
+    "items": {
+      "legacyRegression": {
+        "file": "regression-legacy\\results.json",
+        "assertions": 35,
+        "passed": 35,
+        "failed": 0,
+        "matchesReport": true
+      },
+      "liteClose": {
+        "file": "results-lite-verified\\results.json",
+        "assertions": 30,
+        "passed": 30,
+        "failed": 0,
+        "matchesReport": true
+      },
+      "legacyClose": {
+        "file": "results-legacy-verified\\results.json",
+        "assertions": 30,
+        "passed": 30,
+        "failed": 0,
+        "matchesReport": true
+      },
+      "liteRegression": {
+        "file": "regression-lite\\results.json",
+        "assertions": 35,
+        "passed": 35,
+        "failed": 0,
+        "matchesReport": true
+      }
+    },
+    "allMatch": true
+  },
+  "releaseStableIdle": {
+    "actualPhaseLabel": "steady-idle",
+    "sampleCount": 15,
+    "fileRecordCount": 49,
+    "metrics": [
+      {
+        "metric": "PrivateWorkingSetMiB",
+        "samples": 15,
+        "actualMin": 4.51953125,
+        "actualMax": 5.796875,
+        "actualAverage": 5.227864583333333,
+        "reportRoundedMin": 4.52,
+        "reportRoundedMax": 5.8,
+        "reportRoundedAverage": 5.23,
+        "matchesRoundedReport": true
+      },
+      {
+        "metric": "WorkingSetMiB",
+        "samples": 15,
+        "actualMin": 14.94921875,
+        "actualMax": 17.89453125,
+        "actualAverage": 16.714583333333334,
+        "reportRoundedMin": 14.95,
+        "reportRoundedMax": 17.89,
+        "reportRoundedAverage": 16.71,
+        "matchesRoundedReport": true
+      },
+      {
+        "metric": "PrivateMiB",
+        "samples": 15,
+        "actualMin": 118.98046875,
+        "actualMax": 119.41796875,
+        "actualAverage": 119.19401041666667,
+        "reportRoundedMin": 118.98,
+        "reportRoundedMax": 119.42,
+        "reportRoundedAverage": 119.19,
+        "matchesRoundedReport": true
+      }
+    ],
+    "allMatchRoundedReport": true
+  },
+  "reopenMedians": {
+    "comparisons": [
+      {
+        "source": "final-baseline-existing\\results.json",
+        "samples": 5,
+        "medianMilliseconds": 150.635,
+        "reportRoundedMedianMilliseconds": 150.64,
+        "matchesRoundedReport": true
+      },
+      {
+        "source": "final-candidate-idle\\results.json",
+        "samples": 5,
+        "medianMilliseconds": 98.4763,
+        "reportRoundedMedianMilliseconds": 98.48,
+        "matchesRoundedReport": true
+      }
+    ],
+    "allMatchRoundedReport": true
+  },
+  "agentsAuthorization": {
+    "file": "AGENTS.md",
+    "stillPresent": true
+  },
+  "uncertainties": [
+    "release-memory.json 共49条记录，其中Phase=steady-idle为15条；报告稳定表与这15条的四舍五入汇总相符。",
+    "回归JSON每版含34条ui-memory-check及1条ui-memory-summary；按35条断言计数均通过。",
+    "本次只核对报告和指定证据的记录与汇总；未验证底层运行过程，也未读取配置文件内容。"
+  ],
+  "overallPass": true
+}

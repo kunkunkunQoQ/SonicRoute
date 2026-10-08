@@ -90,15 +90,7 @@ namespace SonicRoute
             SystemParameters.StaticPropertyChanged += OnSystemParamChanged;
             // 共享"当前应用"变化（前台自动跟随/概览切换）时同步面板显示
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
-            Closed += (_, _) =>
-            {
-                _isClosed = true;
-                ++_loadVersion;
-                _entranceMotion.Stop();
-                CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
-                SystemParameters.StaticPropertyChanged -= OnSystemParamChanged;
-                if (_adjustMode) { _adjustMode = false; ((App)Application.Current).NotifyQuickPanelAdjustFinished(); }
-            };
+            Closed += (_, _) => CleanupClosedWindow();
         }
 
         /// <summary>工作区变化（分辨率/任务栏位置/DPI 缩放）时重定位默认位置；自定义位置保持用户设定。</summary>
@@ -114,7 +106,7 @@ namespace SonicRoute
             if (!_contentReady || _isClosed) return;
             if (_positionPending) return;
             _positionPending = true;
-            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            _uiLifetime.Post(Dispatcher, () =>
             {
                 _positionPending = false;
                 if (_isClosed || !IsVisible || _adjustDragging) return;
@@ -168,7 +160,7 @@ namespace SonicRoute
 
         /// <summary>刷新数据并显示面板（先放到屏幕外，内容加载完再定位，避免闪烁/溢出）。</summary>
         private bool _entrancePlayed;
-        
+
         private void PlayEntranceAnimation()
         {
             _entranceMotion.Play();
@@ -198,14 +190,15 @@ namespace SonicRoute
 
         private async Task LoadCoreAsync()
         {
+            if (_isClosed) return;
             try
             {
                 int loadVersion = ++_loadVersion;
                 var cfg = ConfigService.Load();
-                var devices = await Task.Run(() =>
+                var devices = await _uiLifetime.ReadAsync(cfg.ExperimentalMic, static includeInputs =>
                 {
                     var outputs = AudioService.GetDevices(EDataFlow.eRender);
-                    var inputs = cfg.ExperimentalMic ? AudioService.GetDevices(EDataFlow.eCapture) : new List<AudioDeviceInfo>();
+                    var inputs = includeInputs ? AudioService.GetDevices(EDataFlow.eCapture) : new List<AudioDeviceInfo>();
                     return (Outputs: outputs, Inputs: inputs);
                 });
                 if (_isClosed) return;
@@ -233,13 +226,13 @@ namespace SonicRoute
                 if (_isClosed) return;
 
                 // 内容已就绪，重新定位到任务栏右下角（避免溢出屏幕）
-                await Dispatcher.InvokeAsync(() =>
+                await _uiLifetime.Post(Dispatcher, () =>
                 {
                     if (_isClosed || !IsVisible || loadVersion != _loadVersion) return;
                     _contentReady = true;
                     QuickPanelPosition.Apply(this, cfg);
                     if (!_entrancePlayed) { _entrancePlayed = true; PlayEntranceAnimation(); }
-                }, DispatcherPriority.Background);
+                }).Task;
             }
             catch (Exception ex)
             {
@@ -247,6 +240,7 @@ namespace SonicRoute
                 AppNameText.Text = L10n.T("Qp.LoadFail");
                 PanelStatusText.Text = ex.Message;
             }
+
         }
 
         private List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs)
@@ -264,29 +258,35 @@ namespace SonicRoute
         /// <summary>按配置决定当前应用（与托盘滚轮/概览统一规则，优先共享的当前应用）。</summary>
         private async Task ResolveDefaultAppAsync()
         {
-            var cfg = ConfigService.Load();
-            var apps = await Task.Run(() => AudioService.GetApps());
             if (_isClosed) return;
-            // 过滤：完整界面「应用」里关闭"在快速面板显示"的应用
-            var hiddenPanel = cfg.HiddenPanelApps;
-            apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
-                && !hiddenPanel.Any(h => string.Equals(h, a.ProcessName, StringComparison.OrdinalIgnoreCase))).ToList();
-            var items = apps.Select(AppItem.From).ToList();
-            AppItem.LoadIconsAsync(items);
+            try
+            {
+                var cfg = ConfigService.Load();
+                var apps = await _uiLifetime.ReadAsync(() => AudioService.GetApps());
+                if (_isClosed) return;
+                // 过滤：完整界面「应用」里关闭"在快速面板显示"的应用
+                var hiddenPanel = cfg.HiddenPanelApps;
+                apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
+                    && !hiddenPanel.Any(h => string.Equals(h, a.ProcessName, StringComparison.OrdinalIgnoreCase))).ToList();
+                var items = apps.Select(AppItem.From).ToList();
+                AppItem.LoadIconsAsync(items);
 
-            var cur = CurrentAppService.Current;
-            var target = cur != null
-                ? apps.FirstOrDefault(a => a.ProcessId == cur.ProcessId)
-                : null;
-            target ??= CurrentAppService.Resolve(apps, cfg);
+                var cur = CurrentAppService.Current;
+                var target = cur != null
+                    ? apps.FirstOrDefault(a => a.ProcessId == cur.ProcessId)
+                    : null;
+                target ??= CurrentAppService.Resolve(apps, cfg);
 
-            _suppressAppCombo = true;
-            AppCombo.ItemsSource = null;
-            AppCombo.ItemsSource = items;
-            AppCombo.SelectedItem = target == null ? null : items.FirstOrDefault(i => i.ProcessId == (int)target.ProcessId);
-            _suppressAppCombo = false;
+                _suppressAppCombo = true;
+                AppCombo.ItemsSource = null;
+                AppCombo.ItemsSource = items;
+                AppCombo.SelectedItem = target == null ? null : items.FirstOrDefault(i => i.ProcessId == (int)target.ProcessId);
+                _suppressAppCombo = false;
 
-            SetCurrentApp(target);
+                SetCurrentApp(target);
+
+            }
+            catch (OperationCanceledException) when (_isClosed) { }
         }
 
         private async void AppCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -313,7 +313,7 @@ namespace SonicRoute
 
         private void SetCurrentApp(AudioAppInfo? app)
         {
-            _currentApp = app;
+            ++_appStateRequest; _currentApp = app;
             CurrentAppService.Current = app; // 共享给快捷键/概览/托盘
             if (app == null)
                 AppNameText.Text = L10n.T("Qp.NoAudio");
@@ -323,62 +323,72 @@ namespace SonicRoute
 
         private async Task RefreshCurrentAppDataAsync()
         {
-            if (_currentApp == null)
+            int request = ++_appStateRequest;
+            if (_isClosed) return;
+            try
             {
-                OutputCurrentText.Text = "—";
-                InputCurrentText.Text = "—";
-                VolumeSlider.Value = 0;
-                VolumePercentText.Text = "0%";
-                return;
+                if (_currentApp == null)
+                {
+                    OutputCurrentText.Text = "—";
+                    InputCurrentText.Text = "—";
+                    VolumeSlider.Value = 0;
+                    VolumePercentText.Text = "0%";
+                    return;
+                }
+
+                var pid = (int)_currentApp.ProcessId;
+                var outId = await _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
+
+                if (_isClosed || request != _appStateRequest) return;
+                _currentOutId = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
+
+                OutputCurrentText.Text = DescribeCurrent(_outputDisplay, _currentOutId);
+
+                HighlightActive(OutputButtonsPanel, _currentOutId);
+
+                // 输入设备（麦克风）：与输出对称
+                var inId = await _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture));
+                if (_isClosed || request != _appStateRequest) return;
+                _currentInId = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
+                InputCurrentText.Text = DescribeCurrent(_inputDisplay, _currentInId);
+                HighlightInputActive();
+
+                var vol = await _uiLifetime.ReadAsync(() =>
+                {
+                    SessionVolumeService.Refresh();
+                    return (pct: SessionVolumeService.GetVolumePercent(pid), muted: SessionVolumeService.IsMuted(pid));
+                });
+
+                // 无论有无输出会话，都同步麦克风静音按钮文案（全局状态与应用无关，切换应用后不残留旧状态）
+                bool globalMicMuted = await _uiLifetime.ReadAsync(() => GlobalMicMuteService.IsMuted());
+                if (_isClosed || request != _appStateRequest) return;
+                ApplyMicMuteVisual(globalMicMuted);
+
+                if (vol.pct >= 0)
+                {
+                    VolumeSlider.Value = vol.pct;   // 此时 _volumeReady 仍为 false，ValueChanged 不会写回
+                    VolumePercentText.Text = $"{vol.pct}%";
+                    ApplyMuteVisual(vol.muted);
+                    _volumeReady = true;
+                    VolumeSlider.IsEnabled = true;
+                    MinusButton.IsEnabled = true;
+                    PlusButton.IsEnabled = true;
+                    MuteButton.IsEnabled = true;
+                }
+                else
+                {
+                    _volumeReady = false;
+                    VolumeSlider.Value = 0;
+                    VolumePercentText.Text = "—";
+                    ApplyMuteVisual(false);
+                    VolumeSlider.IsEnabled = false;
+                    MinusButton.IsEnabled = false;
+                    PlusButton.IsEnabled = false;
+                    MuteButton.IsEnabled = false;
+                }
+
             }
-
-            var pid = (int)_currentApp.ProcessId;
-            var outId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
-
-            _currentOutId = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
-
-            OutputCurrentText.Text = DescribeCurrent(_outputDisplay, _currentOutId);
-
-            HighlightActive(OutputButtonsPanel, _currentOutId);
-
-            // 输入设备（麦克风）：与输出对称
-            var inId = await Task.Run(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture));
-            _currentInId = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
-            InputCurrentText.Text = DescribeCurrent(_inputDisplay, _currentInId);
-            HighlightInputActive();
-
-            var vol = await Task.Run(() =>
-            {
-                SessionVolumeService.Refresh();
-                return (pct: SessionVolumeService.GetVolumePercent(pid), muted: SessionVolumeService.IsMuted(pid));
-            });
-
-            // 无论有无输出会话，都同步麦克风静音按钮文案（全局状态与应用无关，切换应用后不残留旧状态）
-            bool globalMicMuted = await Task.Run(() => GlobalMicMuteService.IsMuted());
-            ApplyMicMuteVisual(globalMicMuted);
-
-            if (vol.pct >= 0)
-            {
-                VolumeSlider.Value = vol.pct;   // 此时 _volumeReady 仍为 false，ValueChanged 不会写回
-                VolumePercentText.Text = $"{vol.pct}%";
-                ApplyMuteVisual(vol.muted);
-                _volumeReady = true;
-                VolumeSlider.IsEnabled = true;
-                MinusButton.IsEnabled = true;
-                PlusButton.IsEnabled = true;
-                MuteButton.IsEnabled = true;
-            }
-            else
-            {
-                _volumeReady = false;
-                VolumeSlider.Value = 0;
-                VolumePercentText.Text = "—";
-                ApplyMuteVisual(false);
-                VolumeSlider.IsEnabled = false;
-                MinusButton.IsEnabled = false;
-                PlusButton.IsEnabled = false;
-                MuteButton.IsEnabled = false;
-            }
+            catch (OperationCanceledException) when (_isClosed) { }
         }
 
         private static string DescribeCurrent(List<AudioDeviceInfo> devices, string? currentShortId)
@@ -613,7 +623,9 @@ namespace SonicRoute
         {
             if (_currentApp == null || !_volumeReady) return false;
             MarkLastUsed(_currentApp);
-            bool muted = await Task.Run(() => SessionVolumeService.ToggleMute((int)_currentApp.ProcessId));
+            int pid = (int)_currentApp.ProcessId;
+            bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
+            if (_isClosed || _currentApp?.ProcessId != (uint)pid) return true;
             ApplyMuteVisual(muted);
             PanelStatusText.Text = L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted");
             return true;
@@ -630,6 +642,7 @@ namespace SonicRoute
         public async Task<bool> ToggleGlobalMicMuteAsync()
         {
             bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
+            if (_isClosed) return muted;
             ApplyMicMuteVisual(muted);
             PanelStatusText.Text = L10n.T(muted ? "Qp.MicMuted" : "Qp.MicUnmuted");
             return muted; // 返回真实静音状态（快捷键共用：切换后立即更新 OSD）

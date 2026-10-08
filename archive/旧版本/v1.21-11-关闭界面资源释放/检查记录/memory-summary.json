@@ -1,0 +1,29 @@
+[
+  {
+    "Scenario": "final-baseline-natural",
+    "PrivateMean": 148.0126953125,
+    "TaskManagerMin": 81.8203125,
+    "TaskManagerMax": 86.3203125,
+    "ManagedLast": 40.381988525390625,
+    "Gen2Last": 2,
+    "ReopenMedian": 78.0605
+  },
+  {
+    "Scenario": "final-candidate-natural",
+    "PrivateMean": 114.22102864583333,
+    "TaskManagerMin": 64.84765625,
+    "TaskManagerMax": 70.15625,
+    "ManagedLast": 13.39630126953125,
+    "Gen2Last": 3,
+    "ReopenMedian": 68.9333
+  },
+  {
+    "Scenario": "final-candidate-idle",
+    "PrivateMean": 141.71126302083334,
+    "TaskManagerMin": 3.8828125,
+    "TaskManagerMax": 11.37890625,
+    "ManagedLast": 16.725318908691406,
+    "Gen2Last": 2,
+    "ReopenMedian": 98.4763
+  }
+]

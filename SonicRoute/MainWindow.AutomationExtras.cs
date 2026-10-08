@@ -59,7 +59,7 @@ namespace SonicRoute
         private void AutoExecutionStateChanged()
         {
             if (_isClosed || Dispatcher.HasShutdownStarted || Interlocked.Exchange(ref _autoExecutionRefreshPending, 1) != 0) return;
-            Dispatcher.BeginInvoke(new Action(() =>
+            _uiLifetime.Post(Dispatcher, new Action(() =>
             {
                 Interlocked.Exchange(ref _autoExecutionRefreshPending, 0);
                 if (!_isClosed && AutomationPage.Visibility == Visibility.Visible) _ = RefreshAutoRulesAsync();
