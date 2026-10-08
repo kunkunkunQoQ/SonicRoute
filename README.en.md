@@ -51,7 +51,7 @@ Windows can already control each app's volume and output device. SonicRoute offe
 
 See the [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki) for detailed settings and instructions. The Wiki is currently in Chinese.
 
-**1.21 workspace (in development)**: Adds rule search and filters, command copying, tray favorites, volume presets, an optional stop on failure for each step (off by default), and rule calling. See the [development feature guide (Chinese)](docs/automation-convenience.md). The stable download is still 1.20.
+**v1.21 (in development)**: Focuses on UI and interaction improvements, including layout, visual consistency, and smoother workflows. The workspace also includes conveniences such as rule search and filters, command copying, and tray favorites. See the [development feature guide (Chinese)](docs/automation-convenience.md). The current stable release remains v1.20.
 
 Before using `sr` for the first time, start the new version normally once, then reopen your terminal. See the [command line guide (Chinese)](docs/automation-command-line.md) for full usage details.
 
@@ -90,7 +90,12 @@ The following Wiki pages are in Chinese.
 ## 📌 Roadmap
 
 - **Current stable release: v1.20**, promoted to stable on October 2, 2026.
-- **A major release is planned for the end of the year**. Its version number and scope will be announced later.
+- **v1.21 · UI improvements**: Refine layouts, visual details, and interaction flows for a smoother experience.
+- **v1.22 · Experience refinements**: Further improve the quick panel, OSD, and fullscreen usability.
+- **v1.23 · Performance and stability**: Improve background resource usage, responsiveness, and compatibility.
+- **Later stages**: Continue refining existing features and usability based on feedback.
+
+Improvements previously planned for a single year-end major release will now roll out across multiple smaller releases. These are roadmap directions, not fixed release commitments; exact scope and version timing may change as development and testing progress.
 
 See [Release information](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3) for current downloads, v1.20 changes, and release guidelines. Earlier changelogs are in [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
