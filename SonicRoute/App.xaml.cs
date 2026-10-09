@@ -329,7 +329,11 @@ namespace SonicRoute
             _trayWheel?.ShowMicMuteOsd(app, muted);
         }
         /// <summary>设置页「麦克风静音时 OSD 常驻」开关变化：立即生效（开启且已静音 → 常驻；关闭 → 退出常驻）。</summary>
-        internal void NotifyMicMuteOsdSettingChanged(bool on) => _trayWheel?.NotifyMicMuteOsdSettingChanged(on);
+        internal void NotifyMicMuteOsdSettingChanged(bool on)
+        {
+            _trayWheel?.NotifyMicMuteOsdSettingChanged(on);
+            RefreshMicMonitoringState();
+        }
         /// <summary>进入 OSD 调整模式（实验设置「调整位置」）。</summary>
         internal void BeginOsdAdjust() => _trayWheel?.BeginOsdAdjust();
         /// <summary>取消 OSD 调整（不保存）。</summary>

@@ -175,6 +175,8 @@
   "Exp.CollapseTip": "折叠 / 展开",
   "St.ExpMicPanelNeedRestart": "快捷面板显示部分功能可能重启生效",
   "St.ExpCollapseNeedRestart": "折叠部分功能可能重启生效",
+  "Exp.BackgroundPolling": "后台定时检查兜底",
+  "Exp.BackgroundPollingHint": "默认关闭。开启后定时校验前台应用与麦克风状态，可增加兼容性；关闭后正常依靠通知，异常时仍会自动尝试恢复。立即生效。",
   "Exp.ResetAll": "一键还原全部应用输出/输入默认设备",
   "Exp.ResetAllHint": "清除所有应用持久化的输出/输入设备设置，恢复为跟随系统默认",
   "Exp.ResetAllTip": "提示：建议使用 Windows 音量合成器自带的「重置」，效果更完整",

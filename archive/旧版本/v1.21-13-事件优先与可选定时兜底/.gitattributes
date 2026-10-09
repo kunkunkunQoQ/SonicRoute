@@ -1,0 +1,2 @@
+# Preserve the historical bytes used by SHA256SUMS.json.
+* -text whitespace=cr-at-eol,-blank-at-eof

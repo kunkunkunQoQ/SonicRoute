@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SonicRoute"
-        Title="音跃 - 快捷面板"
+        Title="SonicRoute"
         Width="372"
         Height="450"
         WindowStyle="None"
@@ -197,7 +197,7 @@
 
             <!-- 标题行 -->
             <DockPanel Grid.Row="0">
-                <TextBlock Text="🎧 音跃 SonicRoute"
+                <TextBlock Text="SonicRoute"
                            FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Theme.TextPrimary}"/>
                 <TextBlock x:Name="VersionText" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
                            VerticalAlignment="Center" HorizontalAlignment="Right"/>

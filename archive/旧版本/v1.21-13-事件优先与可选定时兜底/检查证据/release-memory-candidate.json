@@ -1,0 +1,434 @@
+[
+  {
+    "Seconds": 2.0166483,
+    "Phase": "startup",
+    "PrivateMiB": 74.140625,
+    "PrivateWorkingSetMiB": 36.921875,
+    "WorkingSetMiB": 134.828125,
+    "Handles": 674,
+    "CpuMs": 1000.0
+  },
+  {
+    "Seconds": 4.0368287,
+    "Phase": "startup",
+    "PrivateMiB": 74.05078125,
+    "PrivateWorkingSetMiB": 36.97265625,
+    "WorkingSetMiB": 135.015625,
+    "Handles": 674,
+    "CpuMs": 1015.625
+  },
+  {
+    "Seconds": 6.04626,
+    "Phase": "startup",
+    "PrivateMiB": 74.0546875,
+    "PrivateWorkingSetMiB": 36.9765625,
+    "WorkingSetMiB": 135.0390625,
+    "Handles": 675,
+    "CpuMs": 1015.625
+  },
+  {
+    "Seconds": 8.0544936,
+    "Phase": "startup",
+    "PrivateMiB": 74.05078125,
+    "PrivateWorkingSetMiB": 36.9765625,
+    "WorkingSetMiB": 135.0546875,
+    "Handles": 675,
+    "CpuMs": 1015.625
+  },
+  {
+    "Seconds": 10.0640924,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 147.68359375,
+    "PrivateWorkingSetMiB": 59.5625,
+    "WorkingSetMiB": 176.171875,
+    "Handles": 715,
+    "CpuMs": 2093.75
+  },
+  {
+    "Seconds": 12.074201,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 147.671875,
+    "PrivateWorkingSetMiB": 3.12109375,
+    "WorkingSetMiB": 8.62109375,
+    "Handles": 717,
+    "CpuMs": 2109.375
+  },
+  {
+    "Seconds": 14.0822727,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 147.671875,
+    "PrivateWorkingSetMiB": 3.71875,
+    "WorkingSetMiB": 10.625,
+    "Handles": 717,
+    "CpuMs": 2109.375
+  },
+  {
+    "Seconds": 16.0954166,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 147.671875,
+    "PrivateWorkingSetMiB": 4.04296875,
+    "WorkingSetMiB": 11.4375,
+    "Handles": 717,
+    "CpuMs": 2109.375
+  },
+  {
+    "Seconds": 18.1044463,
+    "Phase": "main-idle-0",
+    "PrivateMiB": 131.5078125,
+    "PrivateWorkingSetMiB": 3.4375,
+    "WorkingSetMiB": 10.85546875,
+    "Handles": 717,
+    "CpuMs": 2109.375
+  },
+  {
+    "Seconds": 20.112745,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 164.44921875,
+    "PrivateWorkingSetMiB": 29.9296875,
+    "WorkingSetMiB": 82.36328125,
+    "Handles": 724,
+    "CpuMs": 2875.0
+  },
+  {
+    "Seconds": 22.1208219,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 108.66015625,
+    "PrivateWorkingSetMiB": 2.41796875,
+    "WorkingSetMiB": 6.4375,
+    "Handles": 724,
+    "CpuMs": 2890.625
+  },
+  {
+    "Seconds": 24.1292054,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 102.90234375,
+    "PrivateWorkingSetMiB": 3.47265625,
+    "WorkingSetMiB": 8.77734375,
+    "Handles": 724,
+    "CpuMs": 2890.625
+  },
+  {
+    "Seconds": 26.1372649,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 99.6015625,
+    "PrivateWorkingSetMiB": 4.72265625,
+    "WorkingSetMiB": 12.50390625,
+    "Handles": 724,
+    "CpuMs": 2906.25
+  },
+  {
+    "Seconds": 28.1461372,
+    "Phase": "modern-idle-0",
+    "PrivateMiB": 99.6015625,
+    "PrivateWorkingSetMiB": 4.74609375,
+    "WorkingSetMiB": 12.53125,
+    "Handles": 724,
+    "CpuMs": 2906.25
+  },
+  {
+    "Seconds": 30.1548633,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 149.76953125,
+    "PrivateWorkingSetMiB": 36.20703125,
+    "WorkingSetMiB": 84.5390625,
+    "Handles": 708,
+    "CpuMs": 3453.125
+  },
+  {
+    "Seconds": 32.1635593,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 149.7265625,
+    "PrivateWorkingSetMiB": 1.83203125,
+    "WorkingSetMiB": 3.54296875,
+    "Handles": 706,
+    "CpuMs": 3453.125
+  },
+  {
+    "Seconds": 34.1719515,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 149.7265625,
+    "PrivateWorkingSetMiB": 2.98046875,
+    "WorkingSetMiB": 7.94140625,
+    "Handles": 706,
+    "CpuMs": 3453.125
+  },
+  {
+    "Seconds": 36.1798616,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 149.7265625,
+    "PrivateWorkingSetMiB": 2.984375,
+    "WorkingSetMiB": 7.9453125,
+    "Handles": 706,
+    "CpuMs": 3453.125
+  },
+  {
+    "Seconds": 38.1870651,
+    "Phase": "classic-idle-0",
+    "PrivateMiB": 146.80859375,
+    "PrivateWorkingSetMiB": 2.828125,
+    "WorkingSetMiB": 9.1171875,
+    "Handles": 706,
+    "CpuMs": 3453.125
+  },
+  {
+    "Seconds": 40.1954415,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 179.37109375,
+    "PrivateWorkingSetMiB": 34.296875,
+    "WorkingSetMiB": 84.16796875,
+    "Handles": 721,
+    "CpuMs": 3890.625
+  },
+  {
+    "Seconds": 42.2026628,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 117.1484375,
+    "PrivateWorkingSetMiB": 2.21875,
+    "WorkingSetMiB": 5.77734375,
+    "Handles": 721,
+    "CpuMs": 3906.25
+  },
+  {
+    "Seconds": 44.2105982,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 117.1484375,
+    "PrivateWorkingSetMiB": 2.515625,
+    "WorkingSetMiB": 6.82421875,
+    "Handles": 721,
+    "CpuMs": 3906.25
+  },
+  {
+    "Seconds": 46.2195624,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 109.3671875,
+    "PrivateWorkingSetMiB": 2.2578125,
+    "WorkingSetMiB": 7.27734375,
+    "Handles": 721,
+    "CpuMs": 3906.25
+  },
+  {
+    "Seconds": 48.2276649,
+    "Phase": "main-idle-1",
+    "PrivateMiB": 109.65234375,
+    "PrivateWorkingSetMiB": 2.74609375,
+    "WorkingSetMiB": 8.8671875,
+    "Handles": 721,
+    "CpuMs": 3906.25
+  },
+  {
+    "Seconds": 50.2350166,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 143.640625,
+    "PrivateWorkingSetMiB": 23.7109375,
+    "WorkingSetMiB": 65.9453125,
+    "Handles": 724,
+    "CpuMs": 4156.25
+  },
+  {
+    "Seconds": 52.2435809,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 144.51171875,
+    "PrivateWorkingSetMiB": 2.5703125,
+    "WorkingSetMiB": 7.296875,
+    "Handles": 724,
+    "CpuMs": 4187.5
+  },
+  {
+    "Seconds": 54.2513501,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 141.3984375,
+    "PrivateWorkingSetMiB": 2.015625,
+    "WorkingSetMiB": 6.83203125,
+    "Handles": 724,
+    "CpuMs": 4187.5
+  },
+  {
+    "Seconds": 56.2585037,
+    "Phase": "modern-idle-1",
+    "PrivateMiB": 141.3984375,
+    "PrivateWorkingSetMiB": 2.16796875,
+    "WorkingSetMiB": 7.4375,
+    "Handles": 724,
+    "CpuMs": 4187.5
+  },
+  {
+    "Seconds": 58.265826,
+    "Phase": "classic-open-1",
+    "PrivateMiB": 162.1328125,
+    "PrivateWorkingSetMiB": 19.25,
+    "WorkingSetMiB": 53.53515625,
+    "Handles": 726,
+    "CpuMs": 4265.625
+  },
+  {
+    "Seconds": 60.27443,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 163.5390625,
+    "PrivateWorkingSetMiB": 21.9765625,
+    "WorkingSetMiB": 61.34375,
+    "Handles": 715,
+    "CpuMs": 4406.25
+  },
+  {
+    "Seconds": 62.2820328,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 118.45703125,
+    "PrivateWorkingSetMiB": 1.890625,
+    "WorkingSetMiB": 3.9609375,
+    "Handles": 715,
+    "CpuMs": 4406.25
+  },
+  {
+    "Seconds": 64.2905001,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 118.45703125,
+    "PrivateWorkingSetMiB": 3.7265625,
+    "WorkingSetMiB": 10.03515625,
+    "Handles": 715,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 66.2987814,
+    "Phase": "classic-idle-1",
+    "PrivateMiB": 114.67578125,
+    "PrivateWorkingSetMiB": 3.1796875,
+    "WorkingSetMiB": 9.70703125,
+    "Handles": 715,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 68.3069629,
+    "Phase": "steady-idle",
+    "PrivateMiB": 114.67578125,
+    "PrivateWorkingSetMiB": 3.54296875,
+    "WorkingSetMiB": 11.23828125,
+    "Handles": 715,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 70.3144177,
+    "Phase": "steady-idle",
+    "PrivateMiB": 114.67578125,
+    "PrivateWorkingSetMiB": 3.55078125,
+    "WorkingSetMiB": 11.25,
+    "Handles": 715,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 72.3231893,
+    "Phase": "steady-idle",
+    "PrivateMiB": 114.60546875,
+    "PrivateWorkingSetMiB": 4.3828125,
+    "WorkingSetMiB": 13.66015625,
+    "Handles": 712,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 74.3305736,
+    "Phase": "steady-idle",
+    "PrivateMiB": 114.78515625,
+    "PrivateWorkingSetMiB": 4.39453125,
+    "WorkingSetMiB": 13.671875,
+    "Handles": 712,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 76.3383013,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115.0546875,
+    "PrivateWorkingSetMiB": 5.0390625,
+    "WorkingSetMiB": 15.2890625,
+    "Handles": 715,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 78.3460197,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115.00390625,
+    "PrivateWorkingSetMiB": 5.2734375,
+    "WorkingSetMiB": 15.65625,
+    "Handles": 711,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 80.3534324,
+    "Phase": "steady-idle",
+    "PrivateMiB": 114.9609375,
+    "PrivateWorkingSetMiB": 5.26171875,
+    "WorkingSetMiB": 15.64453125,
+    "Handles": 708,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 82.36248,
+    "Phase": "steady-idle",
+    "PrivateMiB": 114.9609375,
+    "PrivateWorkingSetMiB": 5.26171875,
+    "WorkingSetMiB": 15.64453125,
+    "Handles": 708,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 84.3704746,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115,
+    "PrivateWorkingSetMiB": 5.3984375,
+    "WorkingSetMiB": 15.98046875,
+    "Handles": 711,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 86.3815078,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115,
+    "PrivateWorkingSetMiB": 5.47265625,
+    "WorkingSetMiB": 16.07421875,
+    "Handles": 711,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 88.3885508,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115,
+    "PrivateWorkingSetMiB": 5.53515625,
+    "WorkingSetMiB": 16.28125,
+    "Handles": 711,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 90.3960002,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115,
+    "PrivateWorkingSetMiB": 5.5859375,
+    "WorkingSetMiB": 16.43359375,
+    "Handles": 710,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 92.4042066,
+    "Phase": "steady-idle",
+    "PrivateMiB": 114.9609375,
+    "PrivateWorkingSetMiB": 5.5625,
+    "WorkingSetMiB": 16.41015625,
+    "Handles": 707,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 94.4116576,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115,
+    "PrivateWorkingSetMiB": 5.609375,
+    "WorkingSetMiB": 16.59375,
+    "Handles": 710,
+    "CpuMs": 4421.875
+  },
+  {
+    "Seconds": 96.4201031,
+    "Phase": "steady-idle",
+    "PrivateMiB": 115.00390625,
+    "PrivateWorkingSetMiB": 5.62109375,
+    "WorkingSetMiB": 16.61328125,
+    "Handles": 710,
+    "CpuMs": 4421.875
+  }
+]

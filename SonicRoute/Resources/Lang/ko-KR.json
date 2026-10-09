@@ -169,6 +169,8 @@
   "Exp.Collapse": "설정의 장치 섹션 접기",
   "Exp.CollapseHint": "켜면「유지 장치 / 장치 이름」섹션이 기본적으로 접히고, 제목 오른쪽 버튼으로 펼칠 수 있음（즉시 적용）",
   "Exp.CollapseTip": "접기 / 펼치기",
+  "Exp.BackgroundPolling": "백그라운드 주기적 확인",
+  "Exp.BackgroundPollingHint": "기본값은 꺼짐입니다. 켜면 호환성을 위해 활성 앱과 마이크 상태를 주기적으로 확인합니다. 끄면 평소에는 알림으로 갱신하고 오류 시 복구를 시도합니다. 즉시 적용됩니다.",
   "Exp.ResetAll": "전체 앱 출력/입력 장치를 기본으로 일괄 복원",
   "Exp.ResetAllHint": "모든 앱의 영구 출력/입력 설정을 지우고 시스템 기본 따르기",
   "Exp.ResetAllTip": "팁: Windows 볼륨 믹서 내장 초기화가 더 완벽함",

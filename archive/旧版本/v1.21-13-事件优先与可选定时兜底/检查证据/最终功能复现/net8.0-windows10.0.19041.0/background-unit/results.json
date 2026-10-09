@@ -1,0 +1,356 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "background-check",
+    "Name": "mouse-hook-absent-with-no-bindings",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "mouse-hook-installs-on-demand",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "mouse-move-rejected-before-structure-read",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "mouse-modifiers-remain-exact",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "mouse-hook-uninstalls-after-last-binding",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "disposed-mouse-hook-cannot-reinstall",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "controlled-query-started",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "latest-only-coalescing-no-stale-publication",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "same-foreground-late-audio-retries",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "subscriber-failure-does-not-break-foreground-worker",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "healthy-foreground-has-no-periodic-timer",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "healthy-foreground-idle-does-not-query-audio",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "foreground-query-failure-enables-recovery",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "same-pid-query-recovers-and-stops-checking",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "no-audio-foreground-arms-short-retry",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "own-foreground-cancels-audio-retries",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "foreground-registration-failure-enables-temporary-checks",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "temporary-checks-follow-target-while-registration-fails",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "foreground-reregistration-succeeds-and-stops-checks",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "no-audio-foreground-retries-are-bounded-and-timer-stops",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "visible-automation-refresh-enabled",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "minimized-candidate-refresh-paused",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "restore-candidate-refresh-resumed",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "hidden-candidate-refresh-paused",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "minimize-restore-hide-preserves-unsaved-draft",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "external-first-rule-notifies-inactive-consumers",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "unchanged-revision-does-not-clone",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "external-rule-removal-invalidates",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "deleted-and-recreated-rule-directory-recovers",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "recreated-directory-does-not-retain-old-rules",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "no-app-rules-keeps-watcher-inactive",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "external-first-app-rule-wakes-real-inactive-watcher",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "external-last-app-rule-removal-stops-watcher",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "rule-notification-wakes-scheduler-and-preserves-last-run-key",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "removing-last-schedule-stops-scheduler",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "multi-specific-targets-initial-presence",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "exited-known-instance-with-other-instance-does-not-report-exit",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "last-instance-exit-detected",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "missing-target-start-detected-on-next-snapshot",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "disposed-process-snapshot-rejects-reads",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "large-target-set-falls-back-to-full-snapshot",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "periodic-fallback-default-and-old-config-are-off",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "native-mic-registration-disables-recovery-timer",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "rule-directory-recovery-retains-separate-timer",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "monitor-start-is-idempotent",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "healthy-mic-idle-has-no-periodic-reads",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "mic-callback-updates-without-periodic-checks",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "mic-policy-change-refreshes-without-volume-event",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "failed-device-notification-registration-enables-mic-recovery",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "device-reregistration-recovers-and-stops-mic-timer",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "partial-volume-registration-keeps-recovery-active",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "volume-reregistration-recovers-and-stops-checks",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "com-read-failure-enables-temporary-mic-checks",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "persistent-com-failure-does-not-create-immediate-read-loop",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "com-read-recovery-stops-checks",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "recovered-mic-returns-to-zero-idle-reads",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "experimental-fallback-switch-initially-off",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "switch-on-immediately-restores-both-periodic-checks",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "original-periodic-check-intervals-retained",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "fallback-switch-is-persisted",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "opt-in-fallback-continues-periodic-microphone-reads",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "reopened-experimental-page-restores-switch-without-saving-on-load",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "fallback-setting-row-and-localized-hint-layout",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "switch-off-immediately-restores-event-only-healthy-mode",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "switch-off-removes-periodic-microphone-reads",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "disabled-fallback-persists-after-window-close",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "resume-replaces-and-unhooks-foreground-registration",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "resume-rebuild-finishes-without-polling",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "shutdown-cancels-timers-and-ignores-late-callback",
+    "Passed": true
+  }
+]

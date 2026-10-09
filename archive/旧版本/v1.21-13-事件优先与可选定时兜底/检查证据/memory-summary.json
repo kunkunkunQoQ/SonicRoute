@@ -1,0 +1,20 @@
+{
+  "Samples": 15,
+  "PrivateWorkingSetMiB": {
+    "Minimum": 3.54296875,
+    "Maximum": 5.62109375,
+    "Mean": 5.0328125
+  },
+  "TotalWorkingSetMiB": {
+    "Minimum": 11.23828125,
+    "Maximum": 16.61328125,
+    "Mean": 15.09609375
+  },
+  "PrivateCommitMiB": {
+    "Minimum": 114.60546875,
+    "Maximum": 115.0546875,
+    "Mean": 114.9125
+  },
+  "CpuMs": 0.0,
+  "Seconds": 28.113140200000004
+}

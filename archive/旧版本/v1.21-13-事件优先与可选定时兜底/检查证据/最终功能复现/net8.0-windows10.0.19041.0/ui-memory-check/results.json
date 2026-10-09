@@ -1,0 +1,189 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "isolated-rule-directory",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "fresh-isolated-rules",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "main-open-creates-no-settings-device-rows",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "collapsed-settings-creates-no-device-rows",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "expanding-names-creates-only-name-rows",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "unchanged-name-rows-reused",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "deferred-name-edit-still-saves",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "expanding-filter-builds-device-rows",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "deferred-filter-writes-config",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "deferred-filter-restores-config",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "hidden-device-change-does-not-build-rows",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "device-change-applies-on-next-expand",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "language-invalidates-name-rows",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "twenty-app-combos-share-one-list",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "two-thousand-options-use-one-hundred-app-items",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "shared-list-selections-independent",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "shared-view-currency-disabled",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "missing-app-target-preserved",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "unchanged-candidate-snapshot-reused",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "settings-and-automation-share-app-candidates",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "action-definitions-shared-between-steps",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "all-eighteen-actions-retained",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "selected-action-label-rendered",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "data-action-selection-updates-step",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "temporary-page-switch-preserves-draft",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "cancel-releases-editor-rows-and-references",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "blank-ui-name-saves-rule-one-and-content",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "successful-save-releases-editor",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "default-name-increments",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "default-name-skips-occupied-invalid-file",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "explicit-name-unchanged",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "localized-prefix-supported",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "failed-save-keeps-editor-and-draft",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-check",
+    "Name": "cancel-after-failed-save-releases-editor",
+    "Passed": true
+  },
+  {
+    "Case": "ui-memory-summary",
+    "Passed": true,
+    "Runtime": ".NET 8.0.30",
+    "SharedCandidateItems": 100,
+    "CandidateReferences": 2000,
+    "Note": "Object reuse verified; no process memory benchmark or real rule/audio/hotkey writes."
+  }
+]

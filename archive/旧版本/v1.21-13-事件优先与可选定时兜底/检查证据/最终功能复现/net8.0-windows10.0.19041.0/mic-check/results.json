@@ -1,0 +1,81 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "background-check",
+    "Name": "real-device-state-matches-old-aggregation",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "native-IMMNotificationClient-registration-succeeded",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "native-volume-callback-registrations-succeeded",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "unmanaged-volume-callback-vtable-round-trip",
+    "Passed": true
+  },
+  {
+    "Case": "mic-read-reuse-benchmark",
+    "Endpoints": 6,
+    "Registered": 6,
+    "Old60ReadsMs": [
+      364.2047,
+      362.2598,
+      384.085
+    ],
+    "New60ReadsMs": [
+      9.2216,
+      7.0272,
+      6.5674
+    ]
+  },
+  {
+    "Case": "background-check",
+    "Name": "mixed-unmuted-captures-not-globally-muted",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "track-default-input-preserves-aggregation-semantics",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "all-capture-endpoints-muted-is-global-mute",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "no-capture-endpoints-is-unmuted",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "device-notification-invalidates-without-blocking-com-work",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "topology-invalidated-endpoints-rebuilt",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "dispose-unregisters-and-releases-endpoints",
+    "Passed": true
+  }
+]

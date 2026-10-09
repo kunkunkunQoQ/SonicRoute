@@ -119,23 +119,59 @@ namespace SonicRoute
 
         private static int _ownPid, _lastCheckedFgPid, _foregroundRetryBudget;
         private static long _foregroundGeneration;
-        private static bool _started, _requested, _needsRetry;
+        private static bool _started, _requested, _needsRetry, _foregroundQueryFailed;
         private static Task _foregroundWork = Task.CompletedTask;
         private static ForegroundChangeSource? _foregroundSource;
         private static DispatcherTimer? _foregroundTimer;
 
-        /// <summary>前台通知立即匹配，1.5s 廉价 PID 检查兜底；音频查询只保留最新请求。</summary>
+        /// <summary>正常时仅前台通知；无音频短期重试，注册或查询失败时临时检查并恢复。</summary>
         public static Task StartForegroundWatcher()
         {
             if (_started) return _foregroundWork;
             _started = true;
             _ownPid = AppInfo.CurrentProcessId;
             _lastCheckedFgPid = -1;
+            _needsRetry = _foregroundQueryFailed = false;
             _foregroundSource = new ForegroundChangeSource(() => { _ = RequestForegroundAsync(); });
             _foregroundTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
-            _foregroundTimer.Tick += (_, _) => { _ = RequestForegroundAsync(); };
-            _foregroundTimer.Start();
+            _foregroundTimer.Tick += (_, _) =>
+            {
+                _foregroundTimer?.Stop();
+                if (!_started) return;
+                bool restoreHook = _foregroundSource?.IsInstalled != true;
+                bool restored = _foregroundSource?.TryRegister() == true;
+                if (!_foregroundWork.IsCompleted) { UpdateForegroundTimer(); return; }
+                _ = QueueForegroundAsync(_foregroundQueryFailed || (restoreHook && restored));
+                UpdateForegroundTimer();
+            };
+            UpdateForegroundTimer();
             return RequestForegroundAsync();
+        }
+
+        // 系统恢复等明确失效信号到来时重新挂接；不以常驻轮询判断健康接口。
+        internal static void RecoverForegroundWatcher()
+        {
+            if (!_started) return;
+            _foregroundSource?.Dispose();
+            _foregroundSource = new ForegroundChangeSource(() => { _ = RequestForegroundAsync(); });
+            _ = QueueForegroundAsync(true);
+            UpdateForegroundTimer();
+        }
+
+        private static void UpdateForegroundTimer()
+        {
+            if (_foregroundTimer == null) return;
+            if (_started && (ConfigService.Load().BackgroundPollingFallbackEnabled
+                || _foregroundSource?.IsInstalled != true || _needsRetry || _foregroundQueryFailed))
+                _foregroundTimer.Start();
+            else _foregroundTimer.Stop();
+        }
+
+        internal static void RefreshMonitoringPolicy()
+        {
+            if (!_started) return;
+            UpdateForegroundTimer();
+            _ = QueueForegroundAsync(true);
         }
 
         public static void StopForegroundWatcher()
@@ -143,21 +179,26 @@ namespace SonicRoute
             _started = false;
             ++_foregroundGeneration;
             _requested = false;
+            _needsRetry = _foregroundQueryFailed = false;
             _foregroundTimer?.Stop(); _foregroundTimer = null;
             _foregroundSource?.Dispose(); _foregroundSource = null;
         }
 
-        private static Task RequestForegroundAsync()
+        private static Task RequestForegroundAsync() => QueueForegroundAsync(false);
+
+        private static Task QueueForegroundAsync(bool force)
         {
             if (!_started) return Task.CompletedTask;
             int fg = ForegroundAppService.GetForegroundProcessId();
-            if (fg == _lastCheckedFgPid && !_needsRetry) return _foregroundWork;
-            if (fg == _lastCheckedFgPid && !_foregroundWork.IsCompleted) return _foregroundWork;
-            if (fg != _lastCheckedFgPid) _foregroundRetryBudget = 2;
+            if (!force && fg == _lastCheckedFgPid && !_needsRetry) return _foregroundWork;
+            if (!force && fg == _lastCheckedFgPid && !_foregroundWork.IsCompleted) return _foregroundWork;
+            if (force || fg != _lastCheckedFgPid) _foregroundRetryBudget = 2;
             _lastCheckedFgPid = fg;
             ++_foregroundGeneration;
             _needsRetry = false;
             _requested = fg > 0 && fg != _ownPid;
+            if (!_requested) _foregroundQueryFailed = false;
+            UpdateForegroundTimer();
             if (_requested && _foregroundWork.IsCompleted) _foregroundWork = ProcessForegroundAsync();
             return _foregroundWork;
         }
@@ -170,15 +211,18 @@ namespace SonicRoute
                 int fg = _lastCheckedFgPid;
                 long generation = _foregroundGeneration;
                 AudioAppInfo? app = null;
+                bool failed = false;
                 try { app = await Task.Run(() => MatchForeground(AudioService.GetApps(), fg)); }
-                catch { }
+                catch { failed = true; }
                 if (!_started || generation != _foregroundGeneration) continue;
                 if (fg != ForegroundAppService.GetForegroundProcessId())
                 { _ = RequestForegroundAsync(); continue; }
                 // 覆盖启动会话的短延迟；长期停在无音频应用时不持续枚举 COM。
-                _needsRetry = app == null && _foregroundRetryBudget-- > 0;
+                _foregroundQueryFailed = failed;
+                _needsRetry = !failed && app == null && _foregroundRetryBudget-- > 0;
                 if (app != null)
                     try { ApplyForeground(app); } catch { /* 订阅方失败不停止前台监听。 */ }
+                UpdateForegroundTimer();
             }
         }
         private static void ApplyForeground(AudioAppInfo app)

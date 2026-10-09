@@ -1,0 +1,488 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\candidate\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\candidate\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "background-check",
+    "Name": "owned-real-target-window-SRTargetA",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "owned-real-target-window-SRTargetB",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "both-owned-targets-have-real-silent-audio-sessions",
+    "Passed": true
+  },
+  {
+    "Case": "initial-focus",
+    "Succeeded": true,
+    "Foreground": 62940,
+    "Target": 62940
+  },
+  {
+    "Case": "initial-selection",
+    "Foreground": 62940,
+    "Selected": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "startup-captures-actual-foreground-target",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 0,
+    "Target": 71292,
+    "ActualForeground": 71292,
+    "Selected": 71292,
+    "Last": 71292,
+    "ElapsedMs": 33.0941,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-0",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 1,
+    "Target": 62940,
+    "ActualForeground": 62940,
+    "Selected": 62940,
+    "Last": 62940,
+    "ElapsedMs": 29.1025,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-1",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 2,
+    "Target": 71292,
+    "ActualForeground": 71292,
+    "Selected": 71292,
+    "Last": 71292,
+    "ElapsedMs": 28.4655,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-2",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 3,
+    "Target": 62940,
+    "ActualForeground": 62940,
+    "Selected": 62940,
+    "Last": 62940,
+    "ElapsedMs": 34.5366,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-3",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 4,
+    "Target": 71292,
+    "ActualForeground": 71292,
+    "Selected": 71292,
+    "Last": 71292,
+    "ElapsedMs": 32.1448,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-4",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 5,
+    "Target": 62940,
+    "ActualForeground": 62940,
+    "Selected": 62940,
+    "Last": 62940,
+    "ElapsedMs": 27.9111,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-5",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 6,
+    "Target": 71292,
+    "ActualForeground": 71292,
+    "Selected": 71292,
+    "Last": 71292,
+    "ElapsedMs": 32.783,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-6",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 7,
+    "Target": 62940,
+    "ActualForeground": 62940,
+    "Selected": 62940,
+    "Last": 62940,
+    "ElapsedMs": 31.4194,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-7",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 8,
+    "Target": 71292,
+    "ActualForeground": 71292,
+    "Selected": 71292,
+    "Last": 71292,
+    "ElapsedMs": 28.6482,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-8",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 9,
+    "Target": 62940,
+    "ActualForeground": 62940,
+    "Selected": 62940,
+    "Last": 62940,
+    "ElapsedMs": 32.6288,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-9",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 10,
+    "Target": 71292,
+    "ActualForeground": 71292,
+    "Selected": 71292,
+    "Last": 71292,
+    "ElapsedMs": 31.8236,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-10",
+    "Passed": true
+  },
+  {
+    "Case": "real-switch-observation",
+    "Index": 11,
+    "Target": 62940,
+    "ActualForeground": 62940,
+    "Selected": 62940,
+    "Last": 62940,
+    "ElapsedMs": 29.7754,
+    "UnexpectedSelections": 0
+  },
+  {
+    "Case": "background-check",
+    "Name": "accurate-current-after-real-switch-11",
+    "Passed": true
+  },
+  {
+    "Case": "real-foreground-switch-metrics",
+    "Variant": "candidate",
+    "Count": 12,
+    "LatencyMs": [
+      33.0941,
+      29.1025,
+      28.4655,
+      34.5366,
+      32.1448,
+      27.9111,
+      32.783,
+      31.4194,
+      28.6482,
+      32.6288,
+      31.8236,
+      29.7754
+    ],
+    "MedianMs": 31.8236,
+    "MaxMs": 34.5366,
+    "CpuMs": 343.75,
+    "Seconds": 26.4644966,
+    "OneCorePercent": 1.2989100223470338,
+    "ExcludedFocusInterference": 0,
+    "ValidTrialCpuMs": 343.75,
+    "ValidTrialSeconds": 26.462309,
+    "ValidOneCorePercent": 1.2990174062286097
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 0,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-0",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 1,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-1",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 2,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-2",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 3,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-3",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 4,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-4",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 5,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-5",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 6,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-6",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 7,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-7",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 8,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-8",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 9,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-9",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 10,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-10",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 11,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-11",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 12,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-12",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 13,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-13",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 14,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-14",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 15,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-15",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 16,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-16",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 17,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-17",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 18,
+    "Expected": 62940,
+    "Actual": 62940
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-18",
+    "Passed": true
+  },
+  {
+    "Case": "rapid-foreground-confirmation",
+    "Index": 19,
+    "Expected": 71292,
+    "Actual": 71292
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-os-switch-19",
+    "Passed": true
+  },
+  {
+    "Case": "real-rapid-foreground-cpu",
+    "Variant": "candidate",
+    "Switches": 20,
+    "CpuMs": 187.5,
+    "Seconds": 3.3637911
+  },
+  {
+    "Case": "background-check",
+    "Name": "rapid-switch-final-actual-target-accurate",
+    "Passed": true
+  },
+  {
+    "Case": "foreground-stable-cpu",
+    "Variant": "candidate",
+    "CpuMs": 0,
+    "Seconds": 19.9990704
+  }
+]

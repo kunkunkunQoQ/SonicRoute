@@ -169,6 +169,8 @@
   "Exp.Collapse": "Geräteabschnitte in Einstellungen einklappen",
   "Exp.CollapseHint": "Wenn aktiviert, sind die Bereiche «Behaltene Geräte / Gerätenamen» standardmäßig eingeklappt; über die Schaltfläche rechts neben dem Titel aufklappen (sofort wirksam)",
   "Exp.CollapseTip": "Einklappen / Aufklappen",
+  "Exp.BackgroundPolling": "Regelmäßige Hintergrundprüfungen",
+  "Exp.BackgroundPollingHint": "Standardmäßig aus. Prüft die Vordergrund-App und den Mikrofonstatus regelmäßig, um die Kompatibilität zu verbessern. Bei deaktivierter Option erfolgen Aktualisierungen über Benachrichtigungen; bei Fehlern wird eine Wiederherstellung versucht. Wirkt sofort.",
   "Exp.ResetAll": "Alle Apps (Ausgabe/Eingabe) auf Standard zurücksetzen",
   "Exp.ResetAllHint": "Löscht persistente Ausgabe-/Eingabeeinstellungen aller Apps",
   "Exp.ResetAllTip": "Tipp: Der integrierte Reset des Windows-Lautstärkemischers ist vollständiger",

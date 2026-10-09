@@ -105,9 +105,9 @@ namespace SonicRoute
             AppsRenameBox.LostKeyboardFocus += NameEdit_LostKeyboardFocus;
             FixedAppCombo.DropDownOpened += AppCombo_DropDownOpened;
             AutoTriggerAppCombo.DropDownOpened += AppCombo_DropDownOpened;
-            Title = $"音跃 SonicRoute {App.DisplayVersion}";
+            Title = $"SonicRoute {App.DisplayVersion}";
             if (HeaderTitleText != null)
-                HeaderTitleText.Text = $"🎧 音跃 SonicRoute {App.DisplayVersion}";
+                HeaderTitleText.Text = $"SonicRoute {App.DisplayVersion}";
             _config = ConfigService.Load();
             InitializeAutoExtras();
             Loaded += async (_, _) =>
@@ -1949,6 +1949,7 @@ namespace SonicRoute
             {
                 bool expOn = _config.ExperimentalMode;
                 ApplyExpMicUi(_config.ExperimentalMic);
+                ExpBackgroundPollingCheck.IsChecked = _config.BackgroundPollingFallbackEnabled;
 
             }
             finally
@@ -1957,6 +1958,13 @@ namespace SonicRoute
             }
         }
 
+        private void ExpBackgroundPolling_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsSettingsChange(sender, e)) return;
+            _config.BackgroundPollingFallbackEnabled = ExpBackgroundPollingCheck.IsChecked == true;
+            ConfigService.Save(_config);
+            ((App)Application.Current).RefreshBackgroundMonitoringPolicy();
+        }
 
         private void ExpMicOption_Changed(object sender, RoutedEventArgs e)
         {

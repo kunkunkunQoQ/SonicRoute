@@ -1,0 +1,390 @@
+[
+  {
+    "File": "SonicRoute.Legacy\\SonicRoute.Legacy.csproj",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Legacy\\app.manifest",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Legacy\\App.config",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\SystemVolumeService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\SonicRoute.Core.csproj",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\ShellOpen.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\SessionVolumeService.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\ProcessSnapshotService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\OpenWithService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\WindowUiLifetime.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\VolumePresets.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\UiMotion.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\TrayWheelService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\ThemeService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\ThemeControls.xaml",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\ThemeColorPickerWindow.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\SonicRoute.png",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\SonicRoute.ico",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\SonicRoute.csproj",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\SettingsControls.xaml",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\runtimeconfig.template.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\RuleCommandLine.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\Models\\AutoRule.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Models\\AudioDeviceInfo.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Models\\AudioAppInfo.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\MicrophoneStateMonitor.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\Interop\\WasapiInterfaces.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Interop\\PolicyConfigClient.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\Interop\\ISimpleAudioVolume.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Interop\\ComInterop.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Interop\\AudioPolicyConfig.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Interop\\AudioNotificationInterfaces.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Interop\\AssocHandlerInterop.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\GlobalMicMuteService.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\ForegroundAppService.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\ConfigService.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute\\Resources\\RuleCommand.ps1",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Compat\\WindowsVersion.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Compat\\Net48CompilerShims.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Compat\\MathEx.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Compat\\CompatEnv.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\Compat\\AppInfo.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\AutoRuleStore.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\AudioService.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute.Core\\AudioMeterService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\AtomicFile.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute.Core\\AppDisplayName.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.AutomationLayout.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.AutomationExtras.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.AutomationEditor.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\L10n.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute\\IQuickPanel.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\InputAppearance.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\IconFactory.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\HotkeyService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\HotkeyActions.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\ForegroundChangeSource.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute\\CurrentAppService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\ConvenienceMenus.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\AutoRuleService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\AutoRuleScheduler.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute\\AutomationIcons.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\AppItem.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\AppIconService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\App.xaml.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute\\App.xaml",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\App.BackgroundMonitoring.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\App.AutomationExtras.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\AnimatedExpandHost.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\zh-TW.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\QuickPanelModernWindow.xaml.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\zh-CN.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\QuickPanelModernWindow.xaml",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\QuickPanelModernWindow.Lifetime.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\ru-RU.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\ko-KR.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\ja-JP.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\fr-FR.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\es-ES.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\en-US.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Resources\\Lang\\de-DE.json",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\QuickPanelWindow.xaml.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\QuickPanelWindow.xaml",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\QuickPanelWindow.Lifetime.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\QuickPanelPosition.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.xaml",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.ThemeLayout.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.SettingsLayout.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.MemoryLayout.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.Lifetime.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\OsdPlacement.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MouseHotkeyHook.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\MainWindow.xaml.cs",
+    "ProductionMatch": false
+  },
+  {
+    "File": "SonicRoute\\OsdService.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\PanelDevices.cs",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Properties\\PublishProfiles\\win-x64.pubxml",
+    "ProductionMatch": true
+  },
+  {
+    "File": "SonicRoute\\Properties\\PublishProfiles\\win-arm64.pubxml",
+    "ProductionMatch": true
+  }
+]

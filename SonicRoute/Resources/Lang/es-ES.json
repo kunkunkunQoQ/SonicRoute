@@ -169,6 +169,8 @@
   "Exp.Collapse": "Plegar secciones de dispositivos en Ajustes",
   "Exp.CollapseHint": "Al activarse, las secciones «Dispositivos conservados / Nombres de dispositivos» se pliegan por defecto; haga clic en el botón junto al título para desplegar (efecto inmediato)",
   "Exp.CollapseTip": "Plegar / Expandir",
+  "Exp.BackgroundPolling": "Comprobaciones periódicas en segundo plano",
+  "Exp.BackgroundPollingHint": "Desactivadas de forma predeterminada. Comprueba periódicamente la aplicación en primer plano y el micrófono para mejorar la compatibilidad. Al desactivarlas, las notificaciones actualizan el estado y se intenta recuperar tras errores. Se aplica al instante.",
   "Exp.ResetAll": "Restablecer todas las apps (salida/entrada) por defecto",
   "Exp.ResetAllHint": "Borra ajustes persistentes de salida/entrada de todas las apps",
   "Exp.ResetAllTip": "Consejo: el reinicio integrado del mezclador de Windows es más completo",

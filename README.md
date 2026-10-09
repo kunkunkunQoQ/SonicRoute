@@ -45,6 +45,22 @@ Windows 已提供音量合成器，但切换设备、调整单个应用音量等
 | 🧪 Lite ARM64（实验） | 单 EXE，需安装 ARM64 .NET 8 Desktop Runtime；尚未完成 ARM64 真机完整验证 |
 | 🪟 Legacy x64 | .NET Framework 4.8；解压完整目录后运行，无需安装 .NET 8 |
 
+### v1.21 · 2026-10-09
+
+[查看 v1.21 正式版](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.21) · [更新说明](docs/release-v1.21.md)
+
+- 改进界面、主题设置和自动化操作；自动化现有六种触发、十八种操作，新增“执行另一条规则”。
+- 前台应用与麦克风状态优先由事件更新；实验性后台定时兜底默认关闭，可即时切换。程序不主动强制 GC。
+- 更新透明耳机图标，并将主界面与两种快速面板顶部名称统一为 `SonicRoute`。
+
+| v1.21 资产 | 下载 |
+|---|---|
+| Lite x64 | [SonicRoute-v1.21-Lite-x64.exe](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.21/SonicRoute-v1.21-Lite-x64.exe) |
+| Lite ARM64（实验） | [SonicRoute-v1.21-Lite-arm64.exe](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.21/SonicRoute-v1.21-Lite-arm64.exe) |
+| Legacy x64 | [SonicRoute-v1.21-Legacy-x64.zip](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.21/SonicRoute-v1.21-Legacy-x64.zip) |
+
+Lite 版本需要匹配架构的 .NET 8 Desktop Runtime；ARM64 尚未完成真机完整验证。Legacy 需完整解压后运行。Microsoft Store 用户可从 [商店页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) 获取上架版本。
+
 ## 📚 完整文档 → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 | 文档 | 内容 |
@@ -52,23 +68,22 @@ Windows 已提供音量合成器，但切换设备、调整单个应用音量等
 | [01 · 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) | 安装、面板、完整界面与场景教程 |
 | [02 · 功能特性](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) | 功能介绍与控制范围 |
 | [03 · 快捷键](https://github.com/kunkunkunQoQ/SonicRoute/wiki/03-%E5%BF%AB%E6%8D%B7%E9%94%AE) | 默认按键、绑定和使用场景 |
-| [04 · 自动化规则](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) | 六种触发、十七种操作、复制与排序 |
+| [04 · 自动化规则](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) | 六种触发、十八种操作、复制与排序 |
 | [05 · 命令行执行规则](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E5%91%BD%E4%BB%A4%E8%A1%8C%E6%89%A7%E8%A1%8C%E8%A7%84%E5%88%99) | sr 用法、执行结果与退出码 |
 | [06 · 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) | 安装、设备、音量、自动化与性能排查 |
 | [07 · 技术实现](https://github.com/kunkunkunQoQ/SonicRoute/wiki/07-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) | 源码结构、音频接口与构建方法 |
 | [08 · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3) | 下载方式、版本说明与发布规则 |
 | [09 · 版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) | 旧版更新日志与版本索引 |
 
-## 📌 更新计划
+## 📌 后续计划
 
 后续改进将分阶段持续推出，不再集中到单次大版本发布。
 
-- **v1.21 · UI 优化**：优化布局、视觉细节、动画流畅度和操作路径。
 - **v1.22 · 体验打磨**：改善快速面板、OSD 与全屏操作体验。
 - **v1.23 · 性能与稳定性**：优化后台资源占用、响应速度及兼容性。
 - **后续阶段**：根据反馈持续完善现有功能。
 
-v1.21 工作区进展见 [主题与设置界面](docs/theme-settings.md) 和 [自动化功能说明](docs/automation-convenience.md)（含规则自动命名）。具体更新内容与时间以实际发布为准。
+v1.21 的主题与设置说明见 [主题与设置界面](docs/theme-settings.md)，自动化说明见 [自动化功能说明](docs/automation-convenience.md)。后续计划可能根据反馈调整。
 
 💡 有建议或反馈？→ [提交建议](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
 

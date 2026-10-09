@@ -45,6 +45,22 @@ See the [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki) for settings and
 | 🧪 Lite ARM64 (experimental) | Single EXE; requires the ARM64 .NET 8 Desktop Runtime; not yet fully validated on ARM64 hardware |
 | 🪟 Legacy x64 | .NET Framework 4.8; extract the entire folder; .NET 8 is not required |
 
+### v1.21 · 2026-10-09
+
+[View the v1.21 release](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.21) · [Release notes](docs/release-v1.21.md)
+
+- Refines the UI, theme settings, and automation workflow. Automation supports six triggers and 18 actions, including the new “Execute another rule” action.
+- Foreground app and microphone state updates are event-driven by default. The experimental background polling fallback is off by default and takes effect immediately when toggled. The app does not force garbage collection.
+- Adds a new transparent headphone icon and uses `SonicRoute` in the main window and both quick panels.
+
+| v1.21 asset | Download |
+|---|---|
+| Lite x64 | [SonicRoute-v1.21-Lite-x64.exe](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.21/SonicRoute-v1.21-Lite-x64.exe) |
+| Lite ARM64 (experimental) | [SonicRoute-v1.21-Lite-arm64.exe](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.21/SonicRoute-v1.21-Lite-arm64.exe) |
+| Legacy x64 | [SonicRoute-v1.21-Legacy-x64.zip](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.21/SonicRoute-v1.21-Legacy-x64.zip) |
+
+Lite builds require the matching .NET 8 Desktop Runtime. ARM64 has not yet been fully validated on physical hardware. Extract the complete Legacy archive before running it. You can also install and update through the [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT).
+
 ## 📚 Full documentation → [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 The following Wiki pages are in Chinese.
@@ -54,7 +70,7 @@ The following Wiki pages are in Chinese.
 | [01 · User guide](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) | Installation, panels, the main window, and usage examples |
 | [02 · Features](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) | Features and what each control affects |
 | [03 · Hotkeys](https://github.com/kunkunkunQoQ/SonicRoute/wiki/03-%E5%BF%AB%E6%8D%B7%E9%94%AE) | Default keys, custom bindings, and usage examples |
-| [04 · Automation rules](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) | Six triggers, seventeen actions, copying, and step ordering |
+| [04 · Automation rules](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) | Six triggers, 18 actions, copying, and step ordering |
 | [05 · Execute rules from the command line](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E5%91%BD%E4%BB%A4%E8%A1%8C%E6%89%A7%E8%A1%8C%E8%A7%84%E5%88%99) | sr usage, execution results, and exit codes |
 | [06 · FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) | Installation, devices, volume, automation, and performance troubleshooting |
 | [07 · Technical implementation](https://github.com/kunkunkunQoQ/SonicRoute/wiki/07-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) | Source structure, audio interfaces, and build instructions |
@@ -65,12 +81,11 @@ The following Wiki pages are in Chinese.
 
 Future improvements will be delivered in stages rather than held for one major release.
 
-- **v1.21 · UI improvements**: Refine layouts, visual details, animation smoothness, and everyday workflows.
 - **v1.22 · Experience refinements**: Improve the quick panel, OSD, and fullscreen interactions.
 - **v1.23 · Performance and stability**: Improve background resource usage, responsiveness, and compatibility.
 - **Later stages**: Continue refining existing features based on feedback.
 
-See the [theme and settings guide (Chinese)](docs/theme-settings.md) and [automation development guide (Chinese)](docs/automation-convenience.md), including automatic rule names, for v1.21 work in progress. Scope and timing may change before release.
+See the [theme and settings guide (Chinese)](docs/theme-settings.md) and [automation guide (Chinese)](docs/automation-convenience.md) for v1.21 details. Later plans may change based on feedback.
 
 💡 Have an idea or feedback? [Open an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

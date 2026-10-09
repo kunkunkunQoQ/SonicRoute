@@ -1,0 +1,107 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET Framework 4.8.9345.0",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\candidate\\runner\\bin\\Release\\net48\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\candidate\\runner\\bin\\Release\\net48\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "background-check",
+    "Name": "owned-real-target-window-SRTargetA",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "owned-real-target-window-SRTargetB",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "both-owned-targets-have-real-silent-audio-sessions",
+    "Passed": true
+  },
+  {
+    "Case": "initial-focus",
+    "Succeeded": true,
+    "Foreground": 66204,
+    "Target": 66204
+  },
+  {
+    "Case": "initial-selection",
+    "Foreground": 66204,
+    "Selected": 66204
+  },
+  {
+    "Case": "background-check",
+    "Name": "startup-captures-actual-foreground-target",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "ui-real-foreground-switch-0",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "main-overview-shows-actual-foreground-target-0",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "ui-real-foreground-switch-1",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "main-overview-shows-actual-foreground-target-1",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "ui-real-foreground-switch-2",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "main-overview-shows-actual-foreground-target-2",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "ui-real-foreground-switch-3",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "main-overview-shows-actual-foreground-target-3",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "ui-real-foreground-switch-4",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "main-overview-shows-actual-foreground-target-4",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "ui-real-foreground-switch-5",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "main-overview-shows-actual-foreground-target-5",
+    "Passed": true
+  },
+  {
+    "Case": "background-check",
+    "Name": "following-and-painting-ui-does-not-write-audio",
+    "Passed": true
+  }
+]

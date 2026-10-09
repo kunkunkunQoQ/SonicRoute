@@ -1,0 +1,46 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\candidate\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\candidate\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "native-idle-setup",
+    "PeriodicFallback": true,
+    "MicRecovery": false,
+    "ForegroundTimer": true,
+    "MicTimer": true
+  },
+  {
+    "Case": "native-idle-metrics",
+    "Sample": 0,
+    "Seconds": 11.9939142,
+    "CpuMs": 93.75,
+    "LogicalProcessors": 16,
+    "WholeMachinePercent": 0.04885289382427636,
+    "MicReads": 6,
+    "ForegroundPidReads": 8,
+    "InitialForeground": 62960,
+    "FinalForeground": 62960,
+    "ForegroundTimer": true,
+    "MicTimer": true
+  },
+  {
+    "Case": "native-idle-metrics",
+    "Sample": 1,
+    "Seconds": 11.993264,
+    "CpuMs": 93.75,
+    "LogicalProcessors": 16,
+    "WholeMachinePercent": 0.04885554517472932,
+    "MicReads": 6,
+    "ForegroundPidReads": 8,
+    "InitialForeground": 62960,
+    "FinalForeground": 62960,
+    "ForegroundTimer": true,
+    "MicTimer": true
+  }
+]

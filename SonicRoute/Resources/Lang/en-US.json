@@ -169,6 +169,8 @@
   "Exp.Collapse": "Collapse device sections in Settings",
   "Exp.CollapseHint": "When enabled, the 'Kept devices / Device names' sections collapse by default; click the button next to the title to expand (takes effect immediately)",
   "Exp.CollapseTip": "Collapse / Expand",
+  "Exp.BackgroundPolling": "Periodic background checks",
+  "Exp.BackgroundPollingHint": "Off by default. Enable to periodically check the foreground app and microphone state for compatibility. When off, notifications handle normal updates and recovery is attempted after errors. Takes effect immediately.",
   "Exp.ResetAll": "Reset all apps output/input to system default",
   "Exp.ResetAllHint": "Clears all apps persisted output/input settings, restoring system default",
   "Exp.ResetAllTip": "Tip: Windows Volume Mixer built-in Reset is more complete",

@@ -44,6 +44,7 @@ _attach_tmp.bin
 !/docs/automation-command-line.md
 !/docs/automation-convenience.md
 !/docs/theme-settings.md
+!/docs/release-v1.21.md
 !/docs/images/
 /docs/images/*
 !/docs/images/*.png

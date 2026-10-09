@@ -97,6 +97,9 @@ namespace SonicRoute.Core
         /// <summary>实验模式开关（需先解锁，重启生效）。</summary>
         public bool ExperimentalMode { get; set; }
 
+        /// <summary>实验设置 - 持续定时校验前台与麦克风；默认关闭，通知异常时仍临时恢复。</summary>
+        public bool BackgroundPollingFallbackEnabled { get; set; } = false;
+
         /// <summary>实验模式 - 麦克风选项（需开启实验模式，重启生效；开启后显示麦克风相关设置与快捷键）。</summary>
         public bool ExperimentalMic { get; set; } = true;
 

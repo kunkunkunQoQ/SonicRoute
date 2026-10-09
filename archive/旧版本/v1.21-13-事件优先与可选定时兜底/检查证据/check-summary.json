@@ -1,0 +1,87 @@
+[
+  {
+    "Group": "unit-lite-final",
+    "Assertions": 69,
+    "Failures": 0
+  },
+  {
+    "Group": "background-unit-legacy",
+    "Assertions": 69,
+    "Failures": 0
+  },
+  {
+    "Group": "mic-check-lite",
+    "Assertions": 11,
+    "Failures": 0
+  },
+  {
+    "Group": "mic-check-legacy",
+    "Assertions": 11,
+    "Failures": 0
+  },
+  {
+    "Group": "close-check-lite",
+    "Assertions": 30,
+    "Failures": 0
+  },
+  {
+    "Group": "close-check-legacy",
+    "Assertions": 30,
+    "Failures": 0
+  },
+  {
+    "Group": "ui-memory-check-lite-fresh",
+    "Assertions": 34,
+    "Failures": 0
+  },
+  {
+    "Group": "ui-memory-check-legacy",
+    "Assertions": 34,
+    "Failures": 0
+  },
+  {
+    "Group": "real-ui-off-lite",
+    "Assertions": 17,
+    "Failures": 0
+  },
+  {
+    "Group": "real-ui-on-lite",
+    "Assertions": 17,
+    "Failures": 0
+  },
+  {
+    "Group": "real-ui-off-legacy",
+    "Assertions": 17,
+    "Failures": 0
+  },
+  {
+    "Group": "real-ui-on-legacy",
+    "Assertions": 17,
+    "Failures": 0
+  },
+  {
+    "Group": "foreground-off-lite",
+    "Assertions": 37,
+    "Failures": 0
+  },
+  {
+    "Group": "foreground-on-lite",
+    "Assertions": 37,
+    "Failures": 0
+  },
+  {
+    "Group": "idle-off-lite",
+    "Assertions": 0,
+    "Failures": 0
+  },
+  {
+    "Group": "idle-on-lite",
+    "Assertions": 0,
+    "Failures": 0
+  },
+  {
+    "Group": "idle-baseline-lite",
+    "Assertions": 0,
+    "Failures": 0
+  }
+]

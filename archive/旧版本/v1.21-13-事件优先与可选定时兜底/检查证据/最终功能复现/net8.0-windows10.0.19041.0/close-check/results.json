@@ -1,0 +1,176 @@
+[
+  {
+    "Case": "environment",
+    "Runtime": ".NET 8.0.30",
+    "LogicalProcessors": 16,
+    "RenderTier": 2,
+    "ConfigPath": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\config.json",
+    "RulesDir": "E:\\kunkun\\SonarSwitch\\dist\\v121-event-only\\fresh-repro-final\\runner\\bin\\Release\\net8.0-windows10.0.19041.0\\test-data\\Automation",
+    "Note": "Production source copy; config and rule directory paths redirected, App.OnStartup suppressed. No rules, routes, or volume writes."
+  },
+  {
+    "Case": "close-check",
+    "Name": "real-osd-event-publisher-created",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "osd-real-subscription-once",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "panel-real-subscription-once",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "completion-resets-adjust-buttons",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "closing-without-edits-does-not-save-config",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "closed-unsubscribes-real-osd-event",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "closed-unsubscribes-panel-event",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "closing-active-adjust-mode-clears-state",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-detaches-OverviewAppCombo",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-detaches-AppsListBox",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-detaches-FixedAppCombo",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-detaches-AutoRuleList",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "close-aborts-queued-ui-callback",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-clears-dynamic-items",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-cleanup-idempotent",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "modern-clears-dynamic-items",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "modern-cleanup-idempotent",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "classic-clears-dynamic-items",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "classic-cleanup-idempotent",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-loaded-window-collectible",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "main-immediate-window-collectible",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "modern-loaded-window-collectible",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "modern-immediate-window-collectible",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "classic-loaded-window-collectible",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "classic-immediate-window-collectible",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "blocked-read-really-started",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "blocked-read-does-not-retain-closed-window",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "closing-does-not-write-audio",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "closing-does-not-write-audio-routing",
+    "Passed": true
+  },
+  {
+    "Case": "close-check",
+    "Name": "pending-volume-committed-after-close",
+    "Passed": true
+  },
+  {
+    "Case": "memory",
+    "Label": "diagnostic-end",
+    "Seconds": 10.7455373,
+    "PrivateMiB": 119.5703125,
+    "WorkingSetMiB": 173.07421875,
+    "PrivateWorkingSetMiB": 61.87109375,
+    "ManagedMiB": 5.7907562255859375,
+    "Gen0": 15,
+    "Gen1": 14,
+    "Gen2": 14,
+    "Handles": 728,
+    "Threads": 26,
+    "CpuMs": 4984.375
+  }
+]

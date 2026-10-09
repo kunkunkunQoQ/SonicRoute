@@ -169,6 +169,8 @@
   "Exp.Collapse": "Replier les sections d'appareils des réglages",
   "Exp.CollapseHint": "Lorsqu'activé, les sections « Appareils conservés / Noms d'appareils » sont repliées par défaut ; cliquez sur le bouton à droite du titre pour déplier (effet immédiat)",
   "Exp.CollapseTip": "Replier / Déplier",
+  "Exp.BackgroundPolling": "Vérifications périodiques en arrière-plan",
+  "Exp.BackgroundPollingHint": "Désactivées par défaut. Vérifiez périodiquement l’application au premier plan et le microphone pour améliorer la compatibilité. Sinon, les notifications assurent les mises à jour et une récupération est tentée en cas d’erreur. Effet immédiat.",
   "Exp.ResetAll": "Restaurer toutes les apps (sortie/entrée) par défaut",
   "Exp.ResetAllHint": "Efface les réglages persistants sortie/entrée de toutes les apps",
   "Exp.ResetAllTip": "Astuce : la réinitialisation intégrée du mixeur Windows est plus complète",

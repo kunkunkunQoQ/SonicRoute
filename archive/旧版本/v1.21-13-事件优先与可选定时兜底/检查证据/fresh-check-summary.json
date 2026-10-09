@@ -1,0 +1,50 @@
+[
+  {
+    "Framework": "net48",
+    "Group": "background-unit",
+    "Assertions": 69,
+    "Failures": 0
+  },
+  {
+    "Framework": "net48",
+    "Group": "close-check",
+    "Assertions": 30,
+    "Failures": 0
+  },
+  {
+    "Framework": "net48",
+    "Group": "mic-check",
+    "Assertions": 11,
+    "Failures": 0
+  },
+  {
+    "Framework": "net48",
+    "Group": "ui-memory-check",
+    "Assertions": 34,
+    "Failures": 0
+  },
+  {
+    "Framework": "net8.0-windows10.0.19041.0",
+    "Group": "background-unit",
+    "Assertions": 69,
+    "Failures": 0
+  },
+  {
+    "Framework": "net8.0-windows10.0.19041.0",
+    "Group": "close-check",
+    "Assertions": 30,
+    "Failures": 0
+  },
+  {
+    "Framework": "net8.0-windows10.0.19041.0",
+    "Group": "mic-check",
+    "Assertions": 11,
+    "Failures": 0
+  },
+  {
+    "Framework": "net8.0-windows10.0.19041.0",
+    "Group": "ui-memory-check",
+    "Assertions": 34,
+    "Failures": 0
+  }
+]
