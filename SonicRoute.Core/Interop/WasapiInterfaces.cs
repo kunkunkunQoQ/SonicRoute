@@ -23,9 +23,9 @@ namespace SonicRoute.Core.Interop
         [PreserveSig]
         int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string pwstrId, out IMMDevice ppDevice);
         [PreserveSig]
-        int RegisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] object pClient);
+        int RegisterEndpointNotificationCallback(IMMNotificationClient pClient);
         [PreserveSig]
-        int UnregisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] object pClient);
+        int UnregisterEndpointNotificationCallback(IMMNotificationClient pClient);
     }
 
     // IMMDevice : {D666063F-1587-4E43-81F1-B948E807363F}
@@ -166,9 +166,9 @@ namespace SonicRoute.Core.Interop
     public interface IAudioEndpointVolume
     {
         [PreserveSig]
-        int RegisterControlChangeNotify([MarshalAs(UnmanagedType.Interface)] object pNotify);
+        int RegisterControlChangeNotify(IAudioEndpointVolumeCallback pNotify);
         [PreserveSig]
-        int UnregisterControlChangeNotify([MarshalAs(UnmanagedType.Interface)] object pNotify);
+        int UnregisterControlChangeNotify(IAudioEndpointVolumeCallback pNotify);
         [PreserveSig]
         int GetChannelCount(out uint pnChannelCount);
         [PreserveSig]

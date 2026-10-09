@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using SonicRoute.Core.Models;
 
 namespace SonicRoute.Core
@@ -37,6 +38,37 @@ namespace SonicRoute.Core
         private static FileSystemWatcher? _watcher;
         private static long _revision;
         private static long _directoryWritten;
+        private static int _notificationQueued;
+        public static event Action? Changed;
+
+        private static void NotifyChanged()
+        {
+            if (Interlocked.Exchange(ref _notificationQueued, 1) != 0) return;
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                Interlocked.Exchange(ref _notificationQueued, 0);
+                try { Changed?.Invoke(); } catch { }
+            });
+        }
+
+        /// <summary>由应用低频后台检查调用；缓存读取本身不再查询目录元数据。</summary>
+        public static void CheckForExternalChanges()
+        {
+            lock (_lock)
+            {
+                bool exists = Directory.Exists(RulesDir);
+                long written = exists ? Directory.GetLastWriteTimeUtc(RulesDir).Ticks : 0;
+                if (written != _directoryWritten || (exists && _watcher == null))
+                {
+                    StopWatcher(); _cache = null;
+                    _directoryWritten = written;
+                    NotifyChanged();
+                }
+            }
+        }
+
+        public static void Shutdown()
+        { lock (_lock) { StopWatcher(); Changed = null; } }
 
         /// <summary>相同修订号不复制列表，供 UI 跳过未变化的规则数据。</summary>
         public static (long Revision, List<AutoRule>? Rules) ReadSnapshot(long knownRevision = -1)
@@ -50,6 +82,7 @@ namespace SonicRoute.Core
 
         private static void EnsureLoaded()
         {
+            if (_cache != null) return;
             bool exists = Directory.Exists(RulesDir);
             long directoryWritten = exists ? Directory.GetLastWriteTimeUtc(RulesDir).Ticks : 0;
             // 目录删掉再创建会使旧监听句柄失效；目录元数据同时提供事件丢失的兜底。
@@ -72,7 +105,7 @@ namespace SonicRoute.Core
                     {
                         lock (_lock)
                         {
-                            if (ReferenceEquals(_watcher, watcher)) { StopWatcher(); _cache = null; }
+                            if (ReferenceEquals(_watcher, watcher)) { StopWatcher(); _cache = null; NotifyChanged(); }
                         }
                     };
                     watcher.EnableRaisingEvents = true;
@@ -126,6 +159,7 @@ namespace SonicRoute.Core
                 }
                 catch { }
                 _cache = null;
+                NotifyChanged();
             }
         }
 
@@ -139,6 +173,7 @@ namespace SonicRoute.Core
                 .Select(path => _files[path].Rule!).ToList();
             _directoryWritten = Directory.Exists(RulesDir) ? Directory.GetLastWriteTimeUtc(RulesDir).Ticks : 0;
             ++_revision;
+            NotifyChanged();
         }
 
         /// <summary>加载全部规则（带缓存；返回副本，外部修改不影响缓存）。</summary>
@@ -226,7 +261,7 @@ namespace SonicRoute.Core
         /// <summary>失效缓存（导入 / 外部修改后调用）。</summary>
         public static void Invalidate()
         {
-            lock (_lock) { _cache = null; }
+            lock (_lock) { _cache = null; NotifyChanged(); }
         }
 
         /// <summary>清洗规则名称中的 Windows 非法文件名字符；空结果回退 "rule"。</summary>

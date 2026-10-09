@@ -35,6 +35,8 @@ namespace SonicRoute
         private readonly LowLevelMouseProc _proc;
         private IntPtr _hook;
         private readonly Dictionary<string, string> _actionsByCombo = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<(uint Mods, string Key, string Action)> _bindings = new();
+        public bool IsInstalled => _hook != IntPtr.Zero;
         private bool _disposed;
 
         public event Action<string>? HotkeyPressed;
@@ -42,7 +44,6 @@ namespace SonicRoute
         public MouseHotkeyHook()
         {
             _proc = MouseProc;
-            _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
         }
 
         /// <summary>替换鼠标绑定集合（combo → action）。combo 形如 "Ctrl+XButton1"、"WheelUp"。</summary>
@@ -51,16 +52,39 @@ namespace SonicRoute
             _actionsByCombo.Clear();
             foreach (var kv in bindings)
                 _actionsByCombo[kv.Key] = kv.Value;
+            _bindings.Clear();
+            foreach (var kv in _actionsByCombo)
+            {
+                var parts = SplitCombo(kv.Key);
+                if (parts.Length == 0) continue;
+                string key = parts[parts.Length - 1];
+                if (!(key.Equals("MButton", StringComparison.OrdinalIgnoreCase)
+                    || key.Equals("XButton1", StringComparison.OrdinalIgnoreCase)
+                    || key.Equals("XButton2", StringComparison.OrdinalIgnoreCase)
+                    || key.Equals("WheelUp", StringComparison.OrdinalIgnoreCase)
+                    || key.Equals("WheelDown", StringComparison.OrdinalIgnoreCase))) continue;
+                for (uint mods = 0; mods < 16; mods++)
+                    if (ComboMatches(kv.Key, mods, key)) { _bindings.Add((mods, key, kv.Value)); break; }
+            }
+            if (_disposed) return;
+            if (_bindings.Count == 0)
+            {
+                if (_hook != IntPtr.Zero) UnhookWindowsHookEx(_hook);
+                _hook = IntPtr.Zero;
+            }
+            else if (_hook == IntPtr.Zero)
+                _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
         }
 
         private IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && !_disposed && _actionsByCombo.Count > 0)
+            uint msg = (uint)wParam.ToInt64();
+            if (nCode >= 0 && !_disposed && _bindings.Count > 0
+                && (msg == WM_MBUTTONDOWN || msg == WM_XBUTTONDOWN || msg == WM_MOUSEWHEEL))
             {
                 try
                 {
                     var ms = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                    uint msg = (uint)wParam.ToInt64();
 
                     // 只有按下事件参与匹配（滚轮/中键无"按下"语义，直接处理；XButton 需按下）
                     if (msg == WM_MBUTTONDOWN || msg == WM_XBUTTONDOWN || msg == WM_MOUSEWHEEL)
@@ -81,11 +105,11 @@ namespace SonicRoute
                         if (pressed != null)
                         {
                             uint mods = GetPressedMods();
-                            foreach (var combo in _actionsByCombo.Keys)
+                            foreach (var binding in _bindings)
                             {
-                                if (ComboMatches(combo, mods, pressed))
+                                if (binding.Mods == mods && string.Equals(binding.Key, pressed, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    HotkeyPressed?.Invoke(_actionsByCombo[combo]);
+                                    HotkeyPressed?.Invoke(binding.Action);
                                     return new IntPtr(1); // 吞掉事件，避免同时触发系统默认行为（如侧键=浏览器后退）
                                 }
                             }
@@ -163,6 +187,8 @@ namespace SonicRoute
         public void Dispose()
         {
             _disposed = true;
+            _bindings.Clear();
+            _actionsByCombo.Clear();
             if (_hook != IntPtr.Zero)
             {
                 UnhookWindowsHookEx(_hook);

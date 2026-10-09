@@ -125,6 +125,8 @@ namespace SonicRoute
             // 共享"当前应用"变化（前台自动跟随/面板切换）时同步概览
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
             Closed += (_, _) => CleanupClosedWindow();
+            StateChanged += AutoRefreshWindowStateChanged;
+            IsVisibleChanged += AutoRefreshVisibilityChanged;
             // 快捷键内联录音：在窗口内直接捕获按键，免弹窗
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             Deactivated += (_, _) => { EndAutoDrag(commit: false); EndAutomationRuleDrag(false); };
@@ -2970,11 +2972,24 @@ namespace SonicRoute
         /// <summary>启动自动化页应用列表低频刷新（8s 一次，离开页面自动停止）。</summary>
         private void StartAutoRefresh()
         {
+            if (!AutoRefreshWindowVisible) return;
             if (_autoRefreshTimer != null) return;
             _autoRefreshTimer = new System.Windows.Threading.DispatcherTimer
             { Interval = TimeSpan.FromSeconds(8) };
             _autoRefreshTimer.Tick += async (_, _) => await RefreshAutoAppsSlowAsync(_navigationVersion);
             _autoRefreshTimer.Start();
+        }
+
+        private bool AutoRefreshWindowVisible => !_isClosed && IsVisible && WindowState != WindowState.Minimized
+            && AutomationPage.Visibility == Visibility.Visible;
+
+        private void AutoRefreshWindowStateChanged(object? sender, EventArgs e) => UpdateAutoRefreshVisibility();
+        private void AutoRefreshVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateAutoRefreshVisibility();
+        private void UpdateAutoRefreshVisibility()
+        {
+            if (!AutoRefreshWindowVisible) { StopAutoRefresh(); return; }
+            StartAutoRefresh();
+            _ = RefreshAutoAppsSlowAsync(_navigationVersion, ensureFresh: true);
         }
 
         private void StopAutoRefresh()
@@ -2994,7 +3009,7 @@ namespace SonicRoute
         {
             if (_isClosed) return;
             if (_isClosed || navigationVersion != _navigationVersion
-                || AutomationPage.Visibility != Visibility.Visible) return;
+                || !AutoRefreshWindowVisible) return;
             if (_autoRefreshInProgress)
             {
                 if (ensureFresh) _autoRefreshPending = true;
@@ -3005,11 +3020,11 @@ namespace SonicRoute
             {
                 var apps = await _uiLifetime.ReadAsync(() => AudioService.GetApps());
                 if (_isClosed || navigationVersion != _navigationVersion
-                    || AutomationPage.Visibility != Visibility.Visible) return;
+                    || !AutoRefreshWindowVisible) return;
                 if (SameAutoApps(_autoApps, apps)) return;
                 await _uiLifetime.Post(Dispatcher, () => { }).Task;
                 if (_isClosed || navigationVersion != _navigationVersion
-                    || AutomationPage.Visibility != Visibility.Visible) return;
+                    || !AutoRefreshWindowVisible) return;
                 _autoApps = apps;
 
                 // 触发应用下拉：重填并保留选中
@@ -3028,7 +3043,7 @@ namespace SonicRoute
             finally
             {
                 _autoRefreshInProgress = false;
-                if (_autoRefreshPending && !_isClosed && AutomationPage.Visibility == Visibility.Visible)
+                if (_autoRefreshPending && AutoRefreshWindowVisible)
                 {
                     _autoRefreshPending = false;
                     _ = RefreshAutoAppsSlowAsync(_navigationVersion);

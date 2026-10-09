@@ -36,6 +36,8 @@ namespace SonicRoute
             FlushNameChanges(refreshDisplay: false);
             FlushThemeChanges();
             StopAutoRefresh();
+            StateChanged -= AutoRefreshWindowStateChanged;
+            IsVisibleChanged -= AutoRefreshVisibilityChanged;
             CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
             AutoRuleService.ExecutionStateChanged -= AutoExecutionStateChanged;
             PreviewKeyDown -= MainWindow_PreviewKeyDown;

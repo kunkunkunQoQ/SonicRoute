@@ -591,7 +591,8 @@ namespace SonicRoute
                 return _micQuery;
             _micQueryTrackInput = trackInput;
             _micQueryVersion = _micVersion;
-            return _micQuery = Task.Run(() => GlobalMicMuteService.IsAnyMuted(trackInput));
+            return _micQuery = (System.Windows.Application.Current as App)?.MicMonitor?.ReadAsync(trackInput)
+                ?? Task.Run(() => GlobalMicMuteService.IsAnyMuted(trackInput));
         }
 
         internal void ShowMic(string title, bool muted)

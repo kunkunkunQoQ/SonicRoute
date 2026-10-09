@@ -179,6 +179,7 @@ namespace SonicRoute
             // 全局快捷键
             _hotkeys = new HotkeyService();
             _hotkeys.HotkeyPressed += action => Dispatcher.BeginInvoke(() => _ = ExecuteHotkeyAsync(action));
+            AutoRuleStore.Changed += RulesChanged;
             ReloadHotkeys();
 
             // 自动化定时调度器：挂接系统时间变化 / 睡眠恢复监听并开始调度
@@ -188,40 +189,7 @@ namespace SonicRoute
             _trayWheel = new TrayWheelService(_trayIcon);
             _trayWheel.Start();
 
-            // 麦克风静音状态后台检测（2 秒低频轮询）：首次 tick 只建立基线不弹 OSD，之后状态变化立即更新 OSD
-            _micMuteWatchTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            _micMuteWatchTimer.Tick += async (_, _) =>
-            {
-                if (_micMuteWatchInProgress) return;
-                _micMuteWatchInProgress = true;
-                try
-                {
-                    bool trackInput = ConfigService.Load().MicMuteOsdTrackInputMuted;
-                    long micVersion = _trayWheel?.MicStateVersion ?? 0;
-                    bool muted = _trayWheel != null
-                        ? await _trayWheel.QueryMicMuteAsync(trackInput)
-                        : await Task.Run(() => GlobalMicMuteService.IsAnyMuted(trackInput));
-                    if (_micMuteWatchTimer?.IsEnabled != true || Dispatcher.HasShutdownStarted
-                        || ConfigService.Load().MicMuteOsdTrackInputMuted != trackInput
-                        || (_trayWheel?.MicStateVersion ?? 0) != micVersion) return;
-                    if (!_micMuteBaselineReady)
-                    {
-                        _micMuteBaselineReady = true;
-                        _lastMicMutedBaseline = muted;
-                        return; // 首次只建立基线，不弹 OSD（保持启动行为与旧版一致）
-                    }
-                    if (muted != _lastMicMutedBaseline)
-                    {
-                        _lastMicMutedBaseline = muted;
-                        ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted);
-                    }
-                }
-                catch { }
-                finally { _micMuteWatchInProgress = false; }
-            };
-            _micMuteWatchTimer.Start();
-
-
+            StartBackgroundMonitoring();
 
             // single-instance activate sink (invisible): opens full UI on message
             _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters(ActivateSinkTitle)
@@ -928,7 +896,7 @@ namespace SonicRoute
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();
             _ruleCommandServer?.Dispose(); _ruleCommandServer = null;
-            _micMuteWatchTimer?.Stop();
+            StopBackgroundMonitoring();
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();
@@ -946,7 +914,7 @@ namespace SonicRoute
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();
             _ruleCommandServer?.Dispose(); _ruleCommandServer = null;
-            _micMuteWatchTimer?.Stop();
+            StopBackgroundMonitoring();
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();

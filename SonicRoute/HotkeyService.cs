@@ -103,6 +103,8 @@ namespace SonicRoute
             }
 
             _mouseHook.Reload(mouseBindings);
+            if (!_mouseHook.IsInstalled)
+                foreach (var binding in mouseBindings) RegistrationStatus[binding.Value] = "";
         }
 
         /// <summary>拆分快捷键组合串（'+' 分隔）：去空段 + 逐段 Trim。

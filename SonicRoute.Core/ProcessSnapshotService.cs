@@ -1,24 +1,36 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace SonicRoute.Core
 {
-    /// <summary>按进程名存在性生成快照；单个指定目标只创建匹配的 Process 对象。</summary>
+    /// <summary>按进程名存在性生成快照；少量指定目标复用存活句柄，缺失时统一扫描。</summary>
     public sealed class ProcessSnapshotService : IDisposable
     {
         private readonly object _gate = new object();
         private readonly string? _targetName;
         private Process? _knownProcess;
+        private string[]? _targets;
+        private readonly Dictionary<string, Process> _knownTargets = new(StringComparer.OrdinalIgnoreCase);
         private bool _disposed;
 
         public ProcessSnapshotService(string? targetName = null) { _targetName = targetName; }
+
+        public static ProcessSnapshotService ForTargets(IEnumerable<string> targets)
+        {
+            var names = targets.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (names.Length == 1) return new ProcessSnapshotService(names[0]);
+            // 大规则集使用原有单次全量枚举，限制常驻句柄数量。
+            return new ProcessSnapshotService { _targets = names.Length <= 32 ? names : null };
+        }
 
         public HashSet<string> Capture()
         {
             lock (_gate)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(ProcessSnapshotService));
+                if (_targets != null) return CaptureTargets();
                 if (_targetName == null) return CaptureNames();
                 var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (_knownProcess != null)
@@ -55,6 +67,36 @@ namespace SonicRoute.Core
             }
         }
 
+        private HashSet<string> CaptureTargets()
+        {
+            bool allLive = _knownTargets.Count == _targets!.Length;
+            foreach (var process in _knownTargets.Values)
+                try { if (process.HasExited) allLive = false; } catch { allLive = false; }
+            if (allLive) return new HashSet<string>(_targets, StringComparer.OrdinalIgnoreCase);
+            foreach (var process in _knownTargets.Values) process.Dispose();
+            _knownTargets.Clear();
+            var targets = new HashSet<string>(_targets, StringComparer.OrdinalIgnoreCase);
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            // 任一目标缺失或旧实例退出时统一扫描一次；同名其它实例仍在则不误报退出。
+            foreach (var process in Process.GetProcesses())
+            {
+                bool retained = false;
+                try
+                {
+                    string name = process.ProcessName;
+                    if (targets.Contains(name))
+                    {
+                        names.Add(name);
+                        if (!_knownTargets.ContainsKey(name) && !process.HasExited)
+                        { _knownTargets.Add(name, process); retained = true; }
+                    }
+                }
+                catch { }
+                finally { if (!retained) process.Dispose(); }
+            }
+            return names;
+        }
+
         public void Dispose()
         {
             lock (_gate)
@@ -62,6 +104,8 @@ namespace SonicRoute.Core
                 _disposed = true;
                 _knownProcess?.Dispose();
                 _knownProcess = null;
+                foreach (var process in _knownTargets.Values) process.Dispose();
+                _knownTargets.Clear();
             }
         }
 

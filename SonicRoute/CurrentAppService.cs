@@ -18,7 +18,7 @@ namespace SonicRoute
     ///  3. 最近一次有音频的前台应用（前台监听维护；解决面板/概览抢焦点后永远落回列表第一个的问题）；
     ///  4. 上次操作的应用；5. 任意第一个有音频应用。
     ///
-    /// 前台监听（StartForegroundWatcher）：每 1.2s 记录"最近有音频的前台应用"；
+    /// 前台监听（StartForegroundWatcher）：通过前台通知记录"最近有音频的前台应用"；
     /// 在 recent 模式下自动把当前应用切到该应用，实现"最近使用的程序"自动跟随抖音/游戏等。
     /// </summary>
     public static class CurrentAppService
@@ -117,73 +117,70 @@ namespace SonicRoute
             return apps.FirstOrDefault(a => !Off(a)) ?? apps[0];
         }
 
-        private static int _ownPid;
-        private static int _lastCheckedFgPid;
+        private static int _ownPid, _lastCheckedFgPid, _foregroundRetryBudget;
+        private static long _foregroundGeneration;
+        private static bool _started, _requested, _needsRetry;
+        private static Task _foregroundWork = Task.CompletedTask;
+        private static ForegroundChangeSource? _foregroundSource;
         private static DispatcherTimer? _foregroundTimer;
 
-        /// <summary>启动前台监听（App 启动时在 UI 线程调用）。每 1.5s 只做一次廉价的前台 PID
-        /// 查询；仅当前台应用发生变化时才在后台线程做音频会话匹配，避免高频全量 COM 枚举拖慢
-        /// UI（这是此前 CPU/内存占用偏高的根因）。recent 模式下把当前应用切到该应用。
-        /// 启动时窗口尚未显示，先立即记录一次当前前台，避免 --panel/--main 直接启动落到
-        /// 列表第一个（用户所说的"总是哔哩哔哩"）。</summary>
+        /// <summary>前台通知立即匹配，1.5s 廉价 PID 检查兜底；音频查询只保留最新请求。</summary>
         public static Task StartForegroundWatcher()
         {
+            if (_started) return _foregroundWork;
+            _started = true;
             _ownPid = AppInfo.CurrentProcessId;
-            if (_foregroundTimer != null) return Task.CompletedTask;
-            var initial = RecordInitialForegroundAsync(); // await 前捕获 PID，枚举在后台执行。
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
-            timer.Tick += async (_, _) => await TickForegroundAsync();
-            _foregroundTimer = timer;
-            timer.Start();
-            return initial;
+            _lastCheckedFgPid = -1;
+            _foregroundSource = new ForegroundChangeSource(() => { _ = RequestForegroundAsync(); });
+            _foregroundTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+            _foregroundTimer.Tick += (_, _) => { _ = RequestForegroundAsync(); };
+            _foregroundTimer.Start();
+            return RequestForegroundAsync();
         }
 
-        private static async Task TickForegroundAsync()
+        public static void StopForegroundWatcher()
         {
-            try
-            {
-                int fg = ForegroundAppService.GetForegroundProcessId();
-                if (fg <= 0 || fg == _ownPid) return; // 无前台或本程序在前台：保持当前应用不变
-                if (fg == _lastCheckedFgPid) return;  // 前台未变：不重复枚举
-                _lastCheckedFgPid = fg;
-
-                var app = await Task.Run(() =>
-                {
-                    try
-                    {
-                        var apps = AudioService.GetApps(); // 1s 缓存
-                        return MatchForeground(apps, fg);
-                    }
-                    catch { return null; }
-                });
-                if (app == null || fg != _lastCheckedFgPid) return; // 前台应用没有会话或查询已过期。
-                ApplyForeground(app);
-            }
-            catch
-            {
-                // 前台监听失败不影响核心功能
-            }
+            _started = false;
+            ++_foregroundGeneration;
+            _requested = false;
+            _foregroundTimer?.Stop(); _foregroundTimer = null;
+            _foregroundSource?.Dispose(); _foregroundSource = null;
         }
 
-        /// <summary>显示窗口前捕获前台 PID，后台匹配会话，不阻塞启动 Dispatcher。</summary>
-        private static async Task RecordInitialForegroundAsync()
+        private static Task RequestForegroundAsync()
         {
-            try
-            {
-                int fg = ForegroundAppService.GetForegroundProcessId();
-                if (fg <= 0 || fg == _ownPid) return;
-                if (fg == _lastCheckedFgPid) return;
-                _lastCheckedFgPid = fg;
-                var app = await Task.Run(() => MatchForeground(AudioService.GetApps(), fg));
-                if (app == null || fg != _lastCheckedFgPid) return;
-                ApplyForeground(app);
-            }
-            catch
-            {
-                // 前台记录失败不影响核心功能
-            }
+            if (!_started) return Task.CompletedTask;
+            int fg = ForegroundAppService.GetForegroundProcessId();
+            if (fg == _lastCheckedFgPid && !_needsRetry) return _foregroundWork;
+            if (fg == _lastCheckedFgPid && !_foregroundWork.IsCompleted) return _foregroundWork;
+            if (fg != _lastCheckedFgPid) _foregroundRetryBudget = 2;
+            _lastCheckedFgPid = fg;
+            ++_foregroundGeneration;
+            _needsRetry = false;
+            _requested = fg > 0 && fg != _ownPid;
+            if (_requested && _foregroundWork.IsCompleted) _foregroundWork = ProcessForegroundAsync();
+            return _foregroundWork;
         }
 
+        private static async Task ProcessForegroundAsync()
+        {
+            while (_started && _requested)
+            {
+                _requested = false;
+                int fg = _lastCheckedFgPid;
+                long generation = _foregroundGeneration;
+                AudioAppInfo? app = null;
+                try { app = await Task.Run(() => MatchForeground(AudioService.GetApps(), fg)); }
+                catch { }
+                if (!_started || generation != _foregroundGeneration) continue;
+                if (fg != ForegroundAppService.GetForegroundProcessId())
+                { _ = RequestForegroundAsync(); continue; }
+                // 覆盖启动会话的短延迟；长期停在无音频应用时不持续枚举 COM。
+                _needsRetry = app == null && _foregroundRetryBudget-- > 0;
+                if (app != null)
+                    try { ApplyForeground(app); } catch { /* 订阅方失败不停止前台监听。 */ }
+            }
+        }
         private static void ApplyForeground(AudioAppInfo app)
         {
             var prev = LastForegroundAudio;

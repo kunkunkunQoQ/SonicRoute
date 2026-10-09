@@ -141,17 +141,16 @@ namespace SonicRoute
 
         private static string? GetSnapshotTarget(List<AutoRule> rules)
         {
-            string? target = null;
+            var targets = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var rule in rules)
             {
                 if (rule.Trigger is not (AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)) continue;
-                // 空目标旧规则仍支持任意应用；多目标共用一次全量枚举。
+                // 空目标旧规则仍支持任意应用；多目标在缺失时共用一次全量枚举。
                 if (string.IsNullOrWhiteSpace(rule.TriggerApp)
                     || rule.TriggerApp.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return null;
-                if (target != null && !string.Equals(target, rule.TriggerApp, StringComparison.OrdinalIgnoreCase)) return null;
-                target = rule.TriggerApp;
+                targets.Add(rule.TriggerApp);
             }
-            return target;
+            return targets.Count == 0 ? null : string.Join("|", targets);
         }
 
         private static void StartSnapshotBaseline(string? target)
@@ -159,7 +158,8 @@ namespace SonicRoute
             _snapshotTargetName = target;
             _runningSnapshot = null;
             _processSnapshot?.Dispose();
-            var snapshot = _processSnapshot = new ProcessSnapshotService(target);
+            var snapshot = _processSnapshot = target == null ? new ProcessSnapshotService()
+                : ProcessSnapshotService.ForTargets(target.Split('|'));
             _snapshotBaselineTask = Task.Run(() =>
             {
                 try { return snapshot.Capture(); }
