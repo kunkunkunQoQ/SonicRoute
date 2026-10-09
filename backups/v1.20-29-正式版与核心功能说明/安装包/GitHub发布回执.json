@@ -1,0 +1,30 @@
+{
+  "id": 400907761,
+  "tag_name": "v1.20",
+  "name": "v1.20 正式版",
+  "draft": false,
+  "prerelease": false,
+  "html_url": "https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.20",
+  "updated_at": "2026-10-01T16:02:21Z",
+  "latest": true,
+  "assets": [
+    {
+      "name": "SonicRoute-v1.20-Legacy-x64.zip",
+      "id": 603128918,
+      "digest": "sha256:8b77dc20f3e325a443e3d0db7e8a547c7aa8c6129a3230a9c5ec71a148e32545",
+      "size": 879501
+    },
+    {
+      "name": "SonicRoute-v1.20-Lite-arm64.exe",
+      "id": 603128917,
+      "digest": "sha256:b627a7b424e1c1a0ea5e91d8d126fa79dcccad3006fca2f580069dd8f16b861f",
+      "size": 28412167
+    },
+    {
+      "name": "SonicRoute-v1.20-Lite-x64.exe",
+      "id": 603128919,
+      "digest": "sha256:f7d452928e4bb2a876d9ac05d294bf8de7f76be9771ae5258d5eec21be280b58",
+      "size": 28256515
+    }
+  ]
+}

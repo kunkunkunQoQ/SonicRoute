@@ -1,0 +1,7 @@
+{
+  "SignerSubject": "CN=1517F817-E0CD-44DA-8269-A50E0B6D7877",
+  "SignerThumbprint": "142AA0A113D99A5609BB8CF2DE3FC24D30CF7640",
+  "NotAfter": "2031-08-29T01:04:14+08:00",
+  "CryptographicSignatureValid": true,
+  "LocalTrustVerified": false
+}
