@@ -1,0 +1,20 @@
+{
+  "Version": "v1.0.9",
+  "File": "backups/v1.0.9/安装包/SonicRoute-v1.0.9.msix",
+  "Bytes": 72903407,
+  "SHA256": "E847EF3B8F7A29DBB2D3F69372DF97AD1AD822E2D6DDA59B44306CD0E73AC428",
+  "Storage": "Parts",
+  "Runtime": true,
+  "Parts": [
+    {
+      "File": "large-files/e847ef3b8f7a29dbb2d3f69372df97ad1ad822e2d6dda59b44306cd0e73ac428/part-0001",
+      "Bytes": 41943040,
+      "SHA256": "F4235CE1B256D81A0227BE97B2D064BE9D98E1BFA6E58CF68E041592A7D29D02"
+    },
+    {
+      "File": "large-files/e847ef3b8f7a29dbb2d3f69372df97ad1ad822e2d6dda59b44306cd0e73ac428/part-0002",
+      "Bytes": 30960367,
+      "SHA256": "77F9D4BFC60F4A43BCB6180C24A794B94281F98DE7612E334FF712836A3B3484"
+    }
+  ]
+}

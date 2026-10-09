@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音跃 SonicRoute 配置编辑器</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233b6ef6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 14v-4a9 9 0 0 1 18 0v4'/%3E%3Crect x='3' y='14' width='4' height='7' rx='2'/%3E%3Crect x='17' y='14' width='4' height='7' rx='2'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f6f6f4; --card:#ffffff; --text:#1c1e21; --muted:#6b7280; --line:#e7e7e3;
+  --accent:#3b6ef6; --accent-weak:#eef2fe; --accent-text:#2c55c9;
+  --danger:#d64545; --danger-weak:#fdeeee; --ok:#2e9e5b; --warn:#b7791f; --warn-weak:#fdf3e3;
+  --shadow:0 1px 2px rgba(20,22,28,.05),0 4px 16px rgba(20,22,28,.05);
+  --radius:10px; --radius-s:7px;
+}
+html[data-theme="dark"]{
+  --bg:#18181b; --card:#212126; --text:#ececf0; --muted:#9a9aa3; --line:#33333a;
+  --accent:#6c8efb; --accent-weak:#262d40; --accent-text:#9db4ff;
+  --danger:#e06c6c; --danger-weak:#3a2527; --ok:#4cbf7a; --warn:#d9a44a; --warn-weak:#382f20;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  background:var(--bg);color:var(--text);
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+::selection{background:var(--accent);color:#fff}
+
+/* ===== 顶部导航 ===== */
+.topbar{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+  height:52px;padding:0 16px;background:var(--card);border-bottom:1px solid var(--line);
+}
+.logo{display:flex;align-items:center;gap:9px;min-width:0}
+.logo svg{flex:none}
+.logo b{font-size:15px;font-weight:650;white-space:nowrap}
+.logo small{color:var(--muted);font-size:12px;white-space:nowrap}
+.fileinfo{display:flex;align-items:center;gap:8px;margin-left:4px;color:var(--muted);font-size:13px;min-width:0}
+.fileinfo .fname{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500;color:var(--text)}
+.save-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.save-dot.clean{background:var(--ok)}
+.save-dot.dirty{background:var(--warn);box-shadow:0 0 0 3px var(--warn-weak)}
+.topbar .spacer{flex:1}
+.icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+  border-radius:var(--radius-s);color:var(--muted);
+}
+.icon-btn:hover{background:var(--accent-weak);color:var(--accent-text)}
+.icon-btn svg{width:18px;height:18px}
+
+/* ===== Tab 栏 ===== */
+.tabs{
+  display:flex;gap:2px;padding:8px 16px 0;background:var(--bg);
+  border-bottom:1px solid var(--line);
+}
+.tab{
+  display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:var(--radius-s) var(--radius-s) 0 0;
+  color:var(--muted);font-size:13.5px;font-weight:500;border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.tab:hover{color:var(--text);background:var(--card)}
+.tab.active{color:var(--accent-text);border-bottom-color:var(--accent);background:var(--card)}
+.tab svg{width:15px;height:15px}
+.badge{background:var(--accent-weak);color:var(--accent-text);font-size:11px;font-weight:600;border-radius:99px;padding:1px 7px}
+
+/* ===== 布局 ===== */
+.page{max-width:980px;margin:0 auto;padding:20px 16px 60px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.btn{
+  display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--radius-s);
+  background:var(--card);border:1px solid var(--line);color:var(--text);
+  font-size:13px;font-weight:500;transition:background .12s,border-color .12s;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent-text)}
+.btn svg{width:15px;height:15px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.06);color:#fff}
+.btn.danger{color:var(--danger);border-color:var(--line)}
+.btn.danger:hover{border-color:var(--danger);background:var(--danger-weak)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--text);background:var(--accent-weak)}
+.btn.sm{padding:5px 10px;font-size:12.5px;border-radius:6px}
+
+/* ===== 卡片 / 分组 ===== */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.group{margin-bottom:16px;overflow:hidden}
+.group-hd{display:flex;align-items:center;gap:8px;padding:11px 14px;font-size:13px;font-weight:600;border-bottom:1px solid var(--line)}
+.group-hd .cnt{color:var(--muted);font-weight:400;font-size:12px}
+.group-bd{padding:4px 14px 12px}
+.row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.row:last-child{border-bottom:none}
+.row label{width:210px;flex:none;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:1px;min-width:0}
+.row label .hint{font-size:11px;color:var(--muted);opacity:.75}
+.row .ctl{flex:1;min-width:0}
+.inp{
+  width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:var(--radius-s);
+  background:var(--bg);font-size:13px;outline:none;transition:border-color .12s;
+}
+.inp:focus{border-color:var(--accent)}
+.inp.err{border-color:var(--danger);background:var(--danger-weak)}
+select.inp{cursor:pointer}
+input[type="color"].inp{height:34px;padding:2px 4px;cursor:pointer}
+input[type="range"]{accent-color:var(--accent);width:120px}
+.range-ctl{display:flex;align-items:center;gap:10px}
+.range-ctl .val{font-size:12.5px;color:var(--muted);min-width:34px;font-variant-numeric:tabular-nums}
+.num-ctl{display:flex;align-items:center;gap:8px}
+.num-ctl .inp{width:110px}
+
+/* ===== 开关 ===== */
+.switch{position:relative;display:inline-flex;width:36px;height:21px;flex:none}
+.switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.switch .tk{position:absolute;inset:0;background:var(--line);border-radius:99px;transition:background .15s}
+.switch .tk::after{content:"";position:absolute;top:2.5px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s}
+.switch input:checked + .tk{background:var(--accent)}
+.switch input:checked + .tk::after{transform:translateX(14px)}
+.switch input:disabled + .tk{opacity:.5}
+
+/* ===== 空状态 ===== */
+.empty{
+  text-align:center;padding:64px 20px;color:var(--muted);
+}
+.empty svg{width:44px;height:44px;stroke-width:1.4;margin-bottom:14px;opacity:.7}
+.empty h3{color:var(--text);font-size:16px;font-weight:600;margin-bottom:6px}
+.empty p{font-size:13.5px;max-width:420px;margin:0 auto 18px}
+.empty .btn{display:inline-flex}
+
+/* ===== 规则卡片 ===== */
+.rules-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.rules-head h2{font-size:15px;font-weight:650}
+.rule-card{margin-bottom:12px}
+.rule-top{display:flex;align-items:center;gap:10px;padding:12px 14px}
+.rule-name{flex:1;min-width:0;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rule-name .off{color:var(--muted);font-weight:400}
+.rule-btns{display:flex;gap:2px;flex:none}
+.rule-btns .icon-btn{width:30px;height:30px}
+.rule-body{padding:2px 14px 13px;display:flex;flex-direction:column;gap:7px}
+.flow{display:flex;align-items:flex-start;gap:8px;font-size:13px;flex-wrap:wrap}
+.flow .when{color:var(--muted)}
+.flow .arr{color:var(--muted);flex:none;line-height:1.7}
+.flow .then{font-weight:500;color:var(--accent-text)}
+.flow .then .multi{color:var(--text);font-weight:400}
+.flow .st{background:var(--accent-weak);color:var(--accent-text);border-radius:6px;padding:2px 9px;font-size:12.5px;line-height:1.6}
+.flow .st.multi{background:var(--bg);border:1px solid var(--line);color:var(--text)}
+.rule-foot{padding:8px 14px;border-top:1px dashed var(--line);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.chip{font-size:11.5px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:2px 9px}
+
+/* ===== 模态 ===== */
+.overlay{
+  position:fixed;inset:0;background:rgba(15,17,22,.42);z-index:50;display:flex;
+  align-items:flex-start;justify-content:center;padding:44px 16px;overflow:auto;
+  animation:fade .14s ease;
+}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+  width:100%;max-width:640px;animation:pop .16s ease;
+}
+@keyframes pop{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+.modal-hd{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.modal-hd h3{font-size:15px;font-weight:650;flex:1}
+.modal-bd{padding:16px 18px;max-height:62vh;overflow:auto}
+.modal-ft{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--line)}
+.form-item{margin-bottom:13px}
+.form-item>label{display:block;font-size:13px;font-weight:500;margin-bottom:5px}
+.form-item .sub{font-size:11.5px;color:var(--muted);margin-top:4px}
+/* ===== 积木编辑器 ===== */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.path-list{display:flex;flex-direction:column;gap:5px;margin-top:4px}
+.path-row{display:flex;gap:5px;align-items:center}
+.path-row .inp{flex:1;min-width:140px}
+.path-row .icon-btn{width:26px;height:26px}
+.blk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;border-radius:10px;margin-bottom:9px;border:1px solid;box-shadow:var(--shadow);user-select:none;transition:opacity .12s,box-shadow .12s}
+.blk.dragging{opacity:.4}
+.blk .blk-keyword{font-size:12.5px;font-weight:700;opacity:.92;flex:none}
+.blk .blk-keyword.right{margin-left:auto}
+.blk-select{background:rgba(255,255,255,.8);border:1px solid rgba(0,0,0,.14);border-radius:6px;padding:5px 8px;font-size:12.5px;cursor:pointer;max-width:190px;color:inherit}
+.blk .inp{border-color:rgba(0,0,0,.14);background:rgba(255,255,255,.8);font-size:12.5px;padding:5px 8px;border-radius:6px}
+.blk-param{display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center;min-width:0}
+.blk .vol-range{width:92px;accent-color:currentColor}
+.blk .vol-val{font-size:12px;font-variant-numeric:tabular-nums;min-width:26px}
+.blk-delay{display:flex;align-items:center;gap:5px;font-size:11.5px;opacity:.8;flex:1 1 100%;margin-top:2px;padding-top:5px;border-top:1px dashed rgba(0,0,0,.12)}
+.blk-delay .inp{width:70px;padding:3px 6px}
+.blk-hk{width:215px}
+.hotkey-inp{font-variant-numeric:tabular-nums}
+.hotkey-inp.recording{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-weak);background:var(--accent-weak);color:var(--accent-text)}
+.blk-grip{cursor:grab;color:rgba(0,0,0,.38);font-size:13px;letter-spacing:1px;flex:none;padding:2px 3px;touch-action:none}
+.blk-grip:active{cursor:grabbing}
+.blk-del{cursor:pointer;color:rgba(0,0,0,.42);font-weight:600;font-size:15px;line-height:1;padding:4px 7px;border-radius:6px;flex:none}
+.blk-del:hover{background:rgba(0,0,0,.14)}
+.blk.drop-before{box-shadow:0 -3px 0 0 var(--accent)}
+.blk.drop-after{box-shadow:0 3px 0 0 var(--accent)}
+/* 类别配色 */
+.blk.blue{background:#e9f1fe;border-color:#c7d9f8;color:#1e4191}
+.blk.orange{background:#fdf1e4;border-color:#f6dcbb;color:#8c4e11}
+.blk.violet{background:#f1edfe;border-color:#ded4f9;color:#5c3faa}
+.blk.cyan{background:#e6f8f6;border-color:#c5eae8;color:#137b77}
+.blk-trigger{background:#e8f7ee;border-color:#c7e9d3;color:#1e6c3b}
+html[data-theme="dark"] .blk.blue{background:#232c42;border-color:#37466b;color:#abc4f3}
+html[data-theme="dark"] .blk.orange{background:#3e3023;border-color:#5e4629;color:#f1c594}
+html[data-theme="dark"] .blk.violet{background:#302a43;border-color:#4b3f67;color:#c6b6f1}
+html[data-theme="dark"] .blk.cyan{background:#203637;border-color:#325150;color:#a5dfdc}
+html[data-theme="dark"] .blk-trigger{background:#23362b;border-color:#36513f;color:#a0d9b3}
+html[data-theme="dark"] .blk .inp,html[data-theme="dark"] .blk-select{background:#1b1d22;border-color:#45494f;color:var(--text)}
+html[data-theme="dark"] .blk-delay{border-top-color:rgba(255,255,255,.14)}
+/* 添加操作菜单 */
+.add-op-row{position:relative;margin-top:2px}
+.op-menu{position:absolute;bottom:calc(100% + 6px);left:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);padding:10px;width:min(430px,92vw)}
+.op-chip{font-size:12.5px;padding:6px 11px;border-radius:99px;border:1px solid var(--line);background:var(--bg);cursor:pointer;transition:all .12s;color:var(--text)}
+.op-chip:hover{border-color:var(--accent);color:var(--accent-text);background:var(--accent-weak)}
+
+/* ===== JSON 视图 ===== */
+.json-wrap{position:relative}
+.json-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.json-err{
+  display:none;margin-top:8px;padding:9px 12px;border-radius:var(--radius-s);
+  background:var(--danger-weak);color:var(--danger);font-size:12.5px;white-space:pre-wrap;
+}
+#jsonArea{
+  width:100%;min-height:460px;resize:vertical;padding:14px;border:1px solid var(--line);
+  border-radius:var(--radius);background:var(--bg);font:13px/1.6 ui-monospace,Consolas,Menlo,monospace;
+  outline:none;tab-size:2;
+}
+#jsonArea:focus{border-color:var(--accent)}
+#jsonArea.err{border-color:var(--danger)}
+
+/* ===== toast / 拖拽遮罩 ===== */
+#toast{
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(12px);z-index:99;
+  background:var(--text);color:var(--bg);padding:9px 18px;border-radius:99px;font-size:13px;
+  opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;max-width:88vw;text-align:center;
+}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{background:var(--ok);color:#fff}
+#toast.err{background:var(--danger);color:#fff}
+.drop-overlay{
+  position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb, var(--accent) 7%, transparent);pointer-events:none;
+}
+.drop-box{
+  border:2px dashed var(--accent);border-radius:16px;background:var(--card);box-shadow:var(--shadow);
+  padding:30px 46px;text-align:center;font-size:15px;font-weight:600;
+}
+.drop-box svg{width:34px;height:34px;stroke:var(--accent);margin-bottom:10px}
+.drop-box p{margin-top:6px;font-size:12.5px;color:var(--muted);font-weight:400;word-break:break-all;max-width:420px}
+
+.hidden{display:none!important}
+.row-actions{display:flex;gap:2px;flex:none}
+.row-actions .icon-btn{width:28px;height:28px}
+.icon-btn svg{width:16px;height:16px}
+a{color:var(--accent-text)}
+.foot{text-align:center;color:var(--muted);font-size:12px;padding:20px 0 8px}
+
+@media (max-width:720px){
+  .page{padding:14px 12px 50px}
+  body{font-size:15px}
+  .inp,#jsonArea{font-size:16px}
+  .btn{min-height:40px}
+  .icon-btn{min-width:38px;min-height:38px}
+  .row{flex-direction:column;align-items:stretch;gap:6px;padding:10px 0}
+  .row label{width:100%}
+  .row-actions{align-self:flex-end}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .logo small{display:none}
+  .fileinfo .fname{max-width:110px}
+  .topbar{padding:0 10px}
+  .tab{padding:8px 12px}
+  .range-ctl{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14v-4a9 9 0 0 1 18 0v4"/><rect x="3" y="14" width="4" height="7" rx="2"/><rect x="17" y="14" width="4" height="7" rx="2"/></svg>
+    <b>音跃 SonicRoute</b>
+    <small>配置编辑器</small>
+  </div>
+  <div class="fileinfo" id="fileinfo">
+    <span class="fname" id="fname">未导入文件</span>
+    <span class="save-dot clean" id="saveDot" title="保存状态"></span>
+    <span id="saveText" style="font-size:12px"></span>
+  </div>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="themeBtn" title="切换深色 / 浅色主题"></button>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" id="tabConfig" data-tab="config">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    配置文件
+  </button>
+  <button class="tab" id="tabRules" data-tab="rules">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    自动化规则
+    <span class="badge hidden" id="ruleCount"></span>
+  </button>
+</nav>
+
+<main class="page">
+
+  <!-- ===== 配置文件视图 ===== -->
+  <section id="viewConfig">
+    <div class="actions">
+      <button class="btn primary" id="importCfgBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        导入配置
+      </button>
+      <button class="btn" id="exportCfgBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导出配置
+      </button>
+      <button class="btn" id="jsonModeBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span id="jsonModeLabel">JSON 源码</span>
+      </button>
+      <button class="btn ghost" id="resetCfgBtn" disabled>重置示例</button>
+    </div>
+
+    <!-- 空状态 -->
+    <div class="empty" id="cfgEmpty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <h3>导入配置文件开始编辑</h3>
+      <p>选择 SonicRoute 的 config.json（位于 %LocalAppData%\SonicRoute\config.json），导入后将自动生成可视化表单。所有操作都在本地完成，不会上传任何数据。</p>
+      <button class="btn primary" id="importCfgBtn2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        选择 config.json
+      </button>
+    </div>
+
+    <!-- 表单视图 -->
+    <div id="cfgForm" class="hidden"></div>
+
+    <!-- JSON 视图 -->
+    <div id="cfgJson" class="hidden">
+      <div class="json-wrap">
+        <div class="json-toolbar">
+          <button class="btn sm" id="jsonApplyBtn">应用修改</button>
+          <button class="btn sm" id="jsonFormatBtn">格式化</button>
+          <button class="btn sm ghost" id="jsonBackBtn">返回表单视图</button>
+        </div>
+        <textarea id="jsonArea" spellcheck="false" placeholder="{ }"></textarea>
+        <div class="json-err" id="jsonErr"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 自动化规则视图 ===== -->
+  <section id="viewRules" class="hidden">
+    <div class="rules-head">
+      <h2>自动化规则</h2>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn ghost" id="loadSampleBtn">加载示例</button>
+      <button class="btn" id="importRuleBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        导入规则
+      </button>
+      <button class="btn" id="exportAllRulesBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        导出全部
+      </button>
+      <button class="btn primary" id="newRuleBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        新建规则
+      </button>
+    </div>
+
+    <div class="empty" id="rulesEmpty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <h3>暂无自动化规则</h3>
+      <p>创建「当……时 → 执行……」规则：例如当游戏启动时自动切换播放设备、调整音量、静音或启动程序。</p>
+      <button class="btn primary" id="newRuleBtn2">新建规则</button>
+    </div>
+
+    <div id="rulesList"></div>
+    <p class="foot">规则独立存储于 %LocalAppData%\SonicRoute\Automation\ 目录，文件名 = 规则名称</p>
+  </section>
+</main>
+
+<!-- 规则编辑模态 -->
+<div class="overlay hidden" id="ruleModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <h3 id="ruleModalTitle">新建规则</h3>
+      <button class="icon-btn" id="ruleModalClose">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-bd">
+      <div class="form-item">
+        <label>规则名称</label>
+        <input class="inp" id="fName" maxlength="60" placeholder="例如：游戏静音">
+      </div>
+      <div class="form-item" style="display:flex;align-items:center;gap:10px">
+        <label style="margin:0;flex:1">启用规则</label>
+        <span class="switch"><input type="checkbox" id="fEnabled" checked><span class="tk"></span></span>
+      </div>
+      <div class="form-item">
+        <label>触发条件</label>
+        <div id="triggerWrap"></div>
+      </div>
+      <div class="form-item">
+        <label>执行操作 <span class="sub" style="display:inline;margin-left:6px">拖动积木可调整顺序</span></label>
+        <div id="stepsWrap"></div>
+        <div class="add-op-row">
+          <button class="btn sm" id="addStepBtn">＋ 添加操作</button>
+          <div class="op-menu hidden" id="opMenu"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn ghost" id="ruleModalCancel">取消</button>
+      <button class="btn primary" id="ruleModalSave">保存规则</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".json,application/json" class="hidden">
+<input type="file" id="ruleFileInput" accept=".json,application/json" class="hidden">
+
+<div class="drop-overlay hidden" id="dropOverlay">
+  <div class="drop-box">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div>松开以导入文件</div>
+    <p id="dropName"></p>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* =========================================================
+   音跃 SonicRoute 配置编辑器 —— 原生单文件实现
+   配置表单：根据导入 JSON 实际结构递归生成，不预设字段
+   自动化规则：规则卡片 + 模态表单，导出与音跃 AutoRule 模型一致
+   ========================================================= */
+
+/* ---------- 工具 ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "") : "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+const download = (name, text, type = "application/json") => {
+  const blob = new Blob([text], { type });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+};
+let toastTimer = null;
+function toast(msg, type = "") {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "show " + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = ""), 2400);
+}
+const sanitizeName = n => {
+  const s = String(n ?? "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").replace(/[. ]+$/g, "");
+  return s || "rule";
+};
+
+/* ---------- 状态 ---------- */
+const state = {
+  config: null, fileName: null, dirty: false,
+  rules: [], rulesDirty: false,
+  view: "config", mode: "form",
+};
+const SAMPLE_CONFIG = {
+  Language: "zh-CN", ThemeMode: "system", Accent: "#3b6ef6", VolumeStep: 5, StartMinimized: true,
+  Hotkeys: { "增大当前应用音量": "Ctrl+Alt+WheelUp", "减小当前应用音量": "Ctrl+Alt+WheelDown", "切换当前应用快捷设备": "Ctrl+Alt+D" },
+  DeviceNames: {}, AppNames: {}, HiddenOutputDevices: [], HiddenInputDevices: [],
+  DisabledAutoSwitchApps: [], HiddenPanelApps: [],
+};
+
+/* ---------- 主题 ---------- */
+function applyTheme() {
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  $("#themeBtn").innerHTML = dark
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.2" y1="4.2" x2="5.6" y2="5.6"/><line x1="18.4" y1="18.4" x2="19.8" y2="19.8"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.2" y1="19.8" x2="5.6" y2="18.4"/><line x1="18.4" y1="5.6" x2="19.8" y2="4.2"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>';
+}
+$("#themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", cur);
+  try { localStorage.setItem("sr-editor-theme", cur); } catch (e) {}
+  applyTheme();
+});
+try {
+  const saved = localStorage.getItem("sr-editor-theme");
+  if (saved) document.documentElement.setAttribute("data-theme", saved);
+} catch (e) {}
+applyTheme();
+
+/* ---------- 字段元数据（仅标注音跃真实字段，未知字段走通用渲染） ---------- */
+const ENUMS = {
+  Language: { "zh-CN": "简体中文", "zh-TW": "繁體中文", "en-US": "English", "ja-JP": "日本語", "ko-KR": "한국어", "fr-FR": "Français", "de-DE": "Deutsch", "ru-RU": "Русский", "es-ES": "Español" },
+  ThemeMode: { system: "跟随系统", light: "浅色", dark: "深色" },
+  DefaultAppMode: { recent: "最近打开", last: "上次操作", fixed: "指定应用" },
+  QuickPanelStyle: { modern: "简洁面板", classic: "经典面板" },
+  QuickPanelPosMode: { default: "默认位置", custom: "自定义位置" },
+};
+const LABELS = {
+  HiddenOutputDevices: "隐藏的输出设备", HiddenInputDevices: "隐藏的输入设备",
+  StartMinimized: "启动时最小化", Hotkeys: "快捷键", DeviceNames: "设备自定义名称",
+  AppNames: "应用自定义名称", DisabledAutoSwitchApps: "禁止自动切换的应用",
+  HiddenPanelApps: "快速面板隐藏的应用", AutoRules: "自动化规则（旧字段）",
+  Language: "语言", ThemeMode: "主题模式", Accent: "强调色",
+  DefaultAppMode: "默认应用模式", FixedAppName: "固定应用", LastUsedAppName: "上次使用应用",
+  StartPanelOnStart: "启动时显示快速面板", QuickPanelStyle: "快速面板样式",
+  PanelChangeSystemDefault: "简洁面板更改系统默认设备", QuickPanelPosMode: "面板位置模式",
+  QuickPanelCustomX: "面板自定义 X", QuickPanelCustomY: "面板自定义 Y",
+  AutoStart: "开机自启", AutoStartStore: "开机自启（商店版清理）",
+  VolumeStep: "音量步进", TrayWheelEverywhere: "托盘区域滚轮调音量",
+  BackgroundOpacity: "背景透明度", ExperimentalUnlocked: "实验模式已解锁",
+  ExperimentalMode: "实验模式", ExperimentalMic: "麦克风选项（实验）",
+  MicInPanel: "快速面板显示麦克风", CollapseDeviceSections: "折叠设备区块",
+  OsdPosition: "OSD 位置", OsdOffsetX: "OSD 水平偏移", OsdOffsetY: "OSD 垂直偏移",
+  OsdCustomX: "OSD 自定义 X", OsdCustomY: "OSD 自定义 Y",
+  OsdWidth: "OSD 宽度", OsdFadeInMs: "OSD 淡入时长 (ms)", OsdFadeOutMs: "OSD 淡出时长 (ms)",
+  MicMuteOsdPersistent: "麦克风静音时 OSD 常驻", MicMuteOsdTrackInputMuted: "监听默认输入静音",
+  OsdFontScale: "OSD 字号倍率",
+};
+const HINTS = {
+  Hotkeys: "键位组合 → 动作，例如 Ctrl+Alt+D",
+  DeviceNames: "设备 ID → 自定义名称",
+  AppNames: "进程名 → 自定义名称",
+  DisabledAutoSwitchApps: "这些应用不会自动切换为当前应用",
+  HiddenPanelApps: "这些应用不在快速面板中显示",
+  AutoRules: "该字段自 v1.17 起已迁移到独立目录，请到「自动化规则」页编辑",
+  DefaultAppMode: "面板 / 概览默认选中的应用",
+  BackgroundOpacity: "0–100，越低越透明（建议 50 及以上）",
+  OsdWidth: "180–500", OsdFontScale: "0.7–2.0", VolumeStep: "1–100",
+  ExperimentalMic: "需要开启实验模式",
+};
+
+/* ---------- 配置表单生成（递归） ---------- */
+const fieldLabel = k => LABELS[k] || k;
+const fieldHint = k => HINTS[k] || "";
+const isEnum = k => ENUMS[k] !== undefined;
+
+function fieldControl(k, v, onchange) {
+  const wrap = document.createElement("div");
+  wrap.className = "ctl";
+  if (typeof v === "boolean") {
+    wrap.innerHTML = '<span class="switch"><input type="checkbox"><span class="tk"></span></span>';
+    const cb = wrap.querySelector("input");
+    cb.checked = v;
+    cb.addEventListener("change", () => onchange(cb.checked));
+  } else if (typeof v === "number") {
+    wrap.innerHTML = '<input class="inp" type="number" style="width:140px">';
+    const inp = wrap.querySelector("input");
+    inp.value = v;
+    inp.addEventListener("input", () => onchange(inp.value === "" ? 0 : Number(inp.value)));
+    inp.addEventListener("blur", () => { if (inp.value === "" || isNaN(Number(inp.value))) { inp.value = 0; onchange(0); } });
+  } else if (typeof v === "string" && isEnum(k)) {
+    wrap.innerHTML = '<select class="inp"></select>';
+    const sel = wrap.querySelector("select");
+    const map = ENUMS[k];
+    Object.keys(map).forEach(code => {
+      const o = document.createElement("option");
+      o.value = code; o.textContent = map[code] + (code === v ? "" : "");
+      sel.appendChild(o);
+    });
+    sel.value = v;
+    if (!sel.value) { const o = document.createElement("option"); o.value = v; o.textContent = v + "（自定义）"; sel.appendChild(o); sel.value = v; }
+    sel.addEventListener("change", () => onchange(sel.value));
+  } else if (typeof v === "string" && k === "Accent") {
+    wrap.innerHTML = '<div class="range-ctl"><input class="inp" type="color"><span class="val"></span></div>';
+    const col = wrap.querySelector("input[type=color]"), val = wrap.querySelector(".val");
+    const norm = /^#[0-9a-fA-F]{6}$/.test(v) ? v : "#3b6ef6";
+    col.value = norm; val.textContent = v;
+    col.addEventListener("input", () => { val.textContent = col.value.toUpperCase(); onchange(col.value.toUpperCase()); });
+  } else {
+    wrap.innerHTML = '<input class="inp" type="text">';
+    const inp = wrap.querySelector("input");
+    inp.value = typeof v === "string" ? v : JSON.stringify(v);
+    inp.addEventListener("change", () => onchange(inp.value));
+  }
+  return wrap;
+}
+
+function renderGroup(title, cnt) {
+  const g = document.createElement("div");
+  g.className = "card group";
+  g.innerHTML = '<div class="group-hd"><span class="gt"></span><span class="cnt"></span></div><div class="group-bd"></div>';
+  g.querySelector(".gt").textContent = title;
+  g.querySelector(".cnt").textContent = cnt || "";
+  return g;
+}
+
+function renderDict(container, obj, label, hintText, opts) {
+  opts = opts || {};
+  const canEditKeys = opts.editKeys !== false;
+  const canDelete = opts.deletable !== false;
+  const canAdd = opts.addable !== false;
+  const g = renderGroup(label, Object.keys(obj).length + " 项");
+  if (hintText) g.querySelector(".cnt").textContent += " · " + hintText;
+  if (!canAdd) g.querySelector(".cnt").textContent += " · 键固定，仅可修改值";
+  const bd = g.querySelector(".group-bd");
+  Object.keys(obj).forEach(key => {
+    const row = document.createElement("div");
+    row.className = "row";
+    const keyPart = canEditKeys
+      ? '<input class="inp" style="width:42%;flex:none" type="text" placeholder="键">'
+      : '<div style="width:42%;flex:none;font-size:13px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(key) + '">' + esc(key) + "</div>";
+    row.innerHTML = keyPart +
+      '<div style="flex:1;min-width:0"></div>' +
+      (canDelete ? '<div class="row-actions"><button class="icon-btn del" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>' : "");
+    if (canEditKeys) {
+      const keyInp = row.querySelector("input");
+      keyInp.value = key;
+      keyInp.addEventListener("change", e => {
+        const nk = e.target.value.trim();
+        if (!nk || nk === key) return;
+        if (nk in obj) { toast("键已存在：" + nk, "err"); e.target.value = key; return; }
+        const v = obj[key];
+        delete obj[key];
+        obj[nk] = v;
+        markDirty(); renderCfgForm();
+      });
+    }
+    const valBox = row.querySelector("div[style*='flex:1']");
+    if (opts.hotkeyValues) {
+      valBox.appendChild(makeHotkeyInput(String(obj[key]), v => { obj[key] = v; markDirty(); }));
+    } else {
+      const valInp = document.createElement("input");
+      valInp.className = "inp";
+      valInp.type = "text";
+      valInp.placeholder = "值";
+      valInp.value = String(obj[key]);
+      valInp.addEventListener("change", e => { obj[key] = e.target.value; markDirty(); });
+      valBox.appendChild(valInp);
+    }
+    if (canDelete) row.querySelector(".del").addEventListener("click", () => { delete obj[key]; markDirty(); renderCfgForm(); });
+    bd.appendChild(row);
+  });
+  if (canAdd) {
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn sm";
+    addBtn.style.marginTop = "10px";
+    addBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 添加键';
+    addBtn.addEventListener("click", () => {
+      const k = prompt("新键名称：");
+      if (!k || !k.trim()) return;
+      if (k.trim() in obj) { toast("键已存在：" + k, "err"); return; }
+      obj[k.trim()] = "";
+      markDirty(); renderCfgForm();
+    });
+    bd.appendChild(addBtn);
+  }
+  container.appendChild(g);
+}
+
+function renderStrList(container, arr, label, hintText) {
+  const g = renderGroup(label, arr.length + " 项");
+  if (hintText) g.querySelector(".cnt").textContent += " · " + hintText;
+  const bd = g.querySelector(".group-bd");
+  arr.forEach((item, i) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.innerHTML = '<input class="inp" type="text"><div class="row-actions"><button class="icon-btn del" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button></div>';
+    row.querySelector("input").value = item;
+    row.querySelector("input").addEventListener("change", e => { arr[i] = e.target.value; markDirty(); });
+    row.querySelector(".del").addEventListener("click", () => { arr.splice(i, 1); markDirty(); renderCfgForm(); });
+    bd.appendChild(row);
+  });
+  const addBtn = document.createElement("button");
+  addBtn.className = "btn sm";
+  addBtn.style.marginTop = "10px";
+  addBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> 添加';
+  addBtn.addEventListener("click", () => { arr.push(""); markDirty(); renderCfgForm(); });
+  bd.appendChild(addBtn);
+  container.appendChild(g);
+}
+
+function renderObjGroup(container, obj, label) {
+  const g = renderGroup(label, Object.keys(obj).length + " 项");
+  const bd = g.querySelector(".group-bd");
+  Object.keys(obj).forEach(k => {
+    const v = obj[k];
+    if (v === null || v === undefined) return;
+    const row = document.createElement("div");
+    row.className = "row";
+    const l = document.createElement("label");
+    l.textContent = k;
+    row.appendChild(l);
+    row.appendChild(fieldControl(k, v, nv => { obj[k] = nv; markDirty(); }));
+    bd.appendChild(row);
+  });
+  container.appendChild(g);
+}
+
+function renderAutoRulesSpecial(container) {
+  const g = renderGroup("自动化规则（旧字段）", "");
+  g.querySelector(".cnt").textContent = "v1.17 起已迁移";
+  const bd = g.querySelector(".group-bd");
+  const p = document.createElement("p");
+  p.style.cssText = "font-size:13px;color:var(--muted);padding:4px 0";
+  p.textContent = "该字段已从 config.json 独立到 Automation 目录。请切换到「自动化规则」页编辑，或保持为空数组。如需保留旧值，请使用 JSON 源码模式手动修改。";
+  bd.appendChild(p);
+  container.appendChild(g);
+}
+
+function renderCfgForm() {
+  if (!state.config) return;
+  const box = $("#cfgForm");
+  box.innerHTML = "";
+  const root = state.config;
+  Object.keys(root).forEach(k => {
+    const v = root[k];
+    if (k === "AutoRules" && Array.isArray(v)) { renderAutoRulesSpecial(box); return; }
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+      const allScalar = Object.keys(v).every(kk => v[kk] === null || typeof v[kk] !== "object");
+      if (allScalar && Object.keys(v).length > 0) {
+        // 键值对字典（设备名 / 应用名 / 快捷键），均可新建 / 删除 / 改名；Hotkeys 值支持按键录制
+        renderDict(box, v, fieldLabel(k), fieldHint(k), k === "Hotkeys" ? { hotkeyValues: true } : {});
+      } else {
+        // 嵌套对象
+        const g = renderGroup(fieldLabel(k), Object.keys(v).length + " 项");
+        if (fieldHint(k)) g.querySelector(".cnt").textContent += " · " + fieldHint(k);
+        renderObjGroup(g.querySelector(".group-bd"), v, "");
+      }
+      return;
+    }
+    if (Array.isArray(v)) {
+      if (v.every(x => x === null || typeof x !== "object")) {
+        renderStrList(box, v, fieldLabel(k), fieldHint(k));
+      } else {
+        // 复杂数组：折叠展示为只读摘要，提示用 JSON 模式编辑
+        const g = renderGroup(fieldLabel(k), v.length + " 项");
+        const bd = g.querySelector(".group-bd");
+        const p = document.createElement("p");
+        p.style.cssText = "font-size:12.5px;color:var(--muted);padding:4px 0";
+        p.textContent = "复杂数组字段请使用 JSON 源码模式编辑（不影响保存）。";
+        bd.appendChild(p);
+        box.appendChild(g);
+      }
+      return;
+    }
+    // 标量
+    const row = document.createElement("div");
+    row.className = "row";
+    const l = document.createElement("label");
+    l.innerHTML = esc(fieldLabel(k)) + (fieldHint(k) ? '<span class="hint">' + esc(fieldHint(k)) + "</span>" : "");
+    row.appendChild(l);
+    row.appendChild(fieldControl(k, v, nv => { root[k] = nv; markDirty(); }));
+    box.appendChild(row);
+  });
+}
+
+/* ---------- JSON 模式 ---------- */
+function openJson() {
+  state.mode = "json";
+  $("#cfgForm").classList.add("hidden");
+  $("#cfgJson").classList.remove("hidden");
+  $("#jsonModeLabel").textContent = "表单视图";
+  $("#jsonArea").value = JSON.stringify(state.config, null, 2);
+  $("#jsonErr").style.display = "none";
+  $("#jsonArea").classList.remove("err");
+  checkJsonLive();
+}
+function closeJson() {
+  state.mode = "form";
+  $("#cfgJson").classList.add("hidden");
+  $("#cfgForm").classList.remove("hidden");
+  $("#jsonModeLabel").textContent = "JSON 源码";
+  renderCfgForm();
+}
+function checkJsonLive() {
+  const area = $("#jsonArea");
+  const err = $("#jsonErr");
+  try { JSON.parse(area.value); area.classList.remove("err"); err.style.display = "none"; return true; }
+  catch (e) {
+    area.classList.add("err");
+    let line = 0, col = 0, pos = 0;
+    const m = /position (\d+)/.exec(e.message);
+    if (m) {
+      pos = Number(m[1]);
+      const upTo = area.value.slice(0, pos);
+      line = upTo.split("\n").length;
+      col = pos - upTo.lastIndexOf("\n");
+    }
+    err.textContent = "JSON 错误：" + e.message + (m ? "\n位置：第 " + line + " 行，第 " + col + " 列" : "");
+    err.style.display = "block";
+    return false;
+  }
+}
+function applyJson() {
+  if (!checkJsonLive()) { toast("JSON 存在错误，无法应用", "err"); return; }
+  try {
+    state.config = JSON.parse($("#jsonArea").value);
+    if (state.config === null || typeof state.config !== "object" || Array.isArray(state.config)) {
+      throw new Error("配置必须是 JSON 对象");
+    }
+    markDirty();
+    closeJson();
+    toast("已应用 JSON 修改");
+  } catch (e) {
+    toast("配置无效：" + e.message, "err");
+  }
+}
+
+/* ---------- 导入 / 导出配置 ---------- */
+function importConfig(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const obj = JSON.parse(reader.result);
+      if (obj === null || typeof obj !== "object" || Array.isArray(obj)) throw new Error("配置必须是 JSON 对象");
+      state.config = obj;
+      state.fileName = file.name || "config.json";
+      state.dirty = false;
+      $("#cfgEmpty").classList.add("hidden");
+      $("#cfgForm").classList.remove("hidden");
+      $("#exportCfgBtn").disabled = false;
+      $("#jsonModeBtn").disabled = false;
+      $("#resetCfgBtn").disabled = false;
+      closeJson();
+      updateFileInfo();
+      toast("已导入 " + state.fileName + "，共 " + Object.keys(obj).length + " 个配置项");
+    } catch (e) {
+      toast("无法解析该 JSON 文件：" + e.message, "err");
+    }
+  };
+  reader.readAsText(file);
+}
+function exportConfig() {
+  if (!state.config) return;
+  download(state.fileName || "config.json", JSON.stringify(state.config, null, 2));
+  state.dirty = false;
+  updateFileInfo();
+  toast("已导出配置文件");
+}
+function markDirty() {
+  state.dirty = true;
+  updateFileInfo();
+}
+function updateFileInfo() {
+  $("#fname").textContent = state.fileName || "未导入文件";
+  const dot = $("#saveDot");
+  if (state.dirty) { dot.className = "save-dot dirty"; $("#saveText").textContent = "有未导出的修改"; }
+  else { dot.className = "save-dot clean"; $("#saveText").textContent = state.config ? "已保存" : ""; }
+}
+
+/* ---------- 自动化规则 ---------- */
+const ACTIONS = [
+  [0, "切换系统播放设备"], [1, "切换系统录音设备"], [2, "调整系统音量"],
+  [3, "系统静音 / 取消静音"], [4, "调整应用音量"], [5, "应用静音 / 取消静音"],
+  [6, "切换应用播放设备"], [7, "切换应用录音设备"], [8, "启动程序"],
+  [9, "运行 PowerShell"], [10, "显示 OSD"],
+];
+const ACTION_LABEL = Object.fromEntries(ACTIONS);
+const actionLabel = a => ACTION_LABEL[a] !== undefined ? ACTION_LABEL[a] : ("操作(" + a + ")");
+const newStep = () => ({ Action: 4, TargetApp: "", TargetDeviceId: "", Volume: 50, DelayMs: 0, OsdTitle: "", OsdText: "", ProgramPaths: [] });
+const newRule = () => ({ Id: uuid(), Name: "新规则", Enabled: true, Trigger: 0, Hotkey: "", TriggerApp: "", Actions: [newStep()] });
+
+function syncLegacy(r) {
+  // 同步旧单操作字段（Actions[0]），兼容旧版音跃读取
+  const s = r.Actions && r.Actions.length ? r.Actions[0] : newStep();
+  r.Action = s.Action; r.TargetApp = s.TargetApp; r.TargetDeviceId = s.TargetDeviceId;
+  r.Volume = s.Volume; r.DelayMs = s.DelayMs; r.OsdTitle = s.OsdTitle; r.OsdText = s.OsdText;
+  r.ProgramPath = s.ProgramPaths && s.ProgramPaths.length ? s.ProgramPaths[0] : "";
+  return r;
+}
+
+function triggerText(r) {
+  if (r.Trigger === 1) return "打开 " + (r.TriggerApp || "任意应用") + " 时";
+  if (r.Trigger === 2) return "切换到 " + (r.TriggerApp || "任意应用") + " 时";
+  return "按下快捷键" + (r.Hotkey ? " " + r.Hotkey : "（未绑定）");
+}
+const shortId = id => (id && id.length > 32 ? id.slice(0, 6) + "…" + id.slice(-6) : id);
+function actionSummary(s) {
+  const p = s.TargetDeviceId ? shortId(s.TargetDeviceId) : "";
+  switch (s.Action) {
+    case 0: return "切换系统播放设备" + (p ? " → " + p : "（跟随默认）");
+    case 1: return "切换系统录音设备" + (p ? " → " + p : "（跟随默认）");
+    case 2: return "调整系统音量至 " + s.Volume + "%";
+    case 3: return "系统静音 / 取消静音";
+    case 4: return "调整应用音量" + (s.TargetApp ? " " + s.TargetApp : "") + " 至 " + s.Volume + "%";
+    case 5: return "应用静音 / 取消静音" + (s.TargetApp ? " " + s.TargetApp : "");
+    case 6: return "切换应用播放设备" + (s.TargetApp ? " " + s.TargetApp : "") + (p ? " → " + p : "");
+    case 7: return "切换应用录音设备" + (s.TargetApp ? " " + s.TargetApp : "") + (p ? " → " + p : "");
+    case 8: return "启动程序" + (s.ProgramPaths && s.ProgramPaths.length ? " ×" + s.ProgramPaths.length : "");
+    case 9: return "运行 PowerShell" + (s.ProgramPaths && s.ProgramPaths.length ? " ×" + s.ProgramPaths.length : "");
+    case 10: return "显示 OSD" + (s.OsdTitle ? "：「" + s.OsdTitle + "」" : "") + (s.OsdText ? " / " + s.OsdText : "");
+    default: return actionLabel(s.Action);
+  }
+}
+
+function renderRules() {
+  const list = $("#rulesList");
+  list.innerHTML = "";
+  const empty = $("#rulesEmpty");
+  const cnt = $("#ruleCount");
+  $("#exportAllRulesBtn").disabled = state.rules.length === 0;
+  if (state.rules.length === 0) { empty.classList.remove("hidden"); list.classList.add("hidden"); cnt.classList.add("hidden"); return; }
+  empty.classList.add("hidden");
+  list.classList.remove("hidden");
+  cnt.textContent = state.rules.length;
+  cnt.classList.remove("hidden");
+  state.rules.forEach(r => list.appendChild(renderRuleCard(r)));
+}
+function renderRuleCard(r) {
+  const card = document.createElement("div");
+  card.className = "card rule-card";
+  const multi = r.Actions && r.Actions.length > 1;
+  const summary = (r.Actions && r.Actions.length ? r.Actions : [r]).map(actionSummary);
+  card.innerHTML =
+    '<div class="rule-top">' +
+      '<span class="switch"><input type="checkbox" ' + (r.Enabled ? "checked" : "") + '><span class="tk"></span></span>' +
+      '<div class="rule-name">' + esc(r.Name || "未命名规则") + (r.Enabled ? "" : ' <span class="off">（已停用）</span>') + "</div>" +
+      '<div class="rule-btns">' +
+        '<button class="icon-btn ed" title="编辑"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></button>' +
+        '<button class="icon-btn cp" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>' +
+        '<button class="icon-btn dl" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' +
+      "</div>" +
+    "</div>" +
+    '<div class="rule-body"><div class="flow"><span class="when">当</span><span class="st">' + esc(triggerText(r)) + "</span>" +
+    '<span class="arr">→</span><span class="then">执行</span>' +
+    summary.map((s, i) => '<span class="st' + (multi ? " multi" : "") + '">' + esc(s) + (i < summary.length - 1 ? "</span><span class='arr' style='font-size:11px'>·</span><span class='st multi'>" : "") + "</span>").join("") +
+    "</div>" +
+    (multi ? '<div class="rule-foot">' + r.Actions.map((_, i) => '<span class="chip">步骤 ' + (i + 1) + "</span>").join("") + "</div>" : "") +
+    "</div>";
+  card.querySelector("input[type=checkbox]").addEventListener("change", e => { r.Enabled = e.target.checked; markRulesDirty(); renderRules(); });
+  card.querySelector(".ed").addEventListener("click", () => openRuleEditor(r));
+  card.querySelector(".cp").addEventListener("click", () => {
+    const c = JSON.parse(JSON.stringify(r));
+    c.Id = uuid(); c.Name = (c.Name || "规则") + " 副本";
+    state.rules.push(c); markRulesDirty(); renderRules(); toast("已复制规则");
+  });
+  card.querySelector(".dl").addEventListener("click", () => {
+    if (!confirm("删除规则「" + (r.Name || "") + "」？此操作不可撤销。")) return;
+    state.rules = state.rules.filter(x => x.Id !== r.Id);
+    markRulesDirty(); renderRules(); toast("已删除规则");
+  });
+  return card;
+}
+function markRulesDirty() {
+  state.rulesDirty = true;
+  updateFileInfo();
+}
+
+/* ---------- 规则编辑模态（积木式） ---------- */
+let editingRule = null;
+const ACTION_COLOR = { 0:"blue",1:"blue",2:"blue",3:"blue", 4:"orange",5:"orange",6:"orange",7:"orange", 8:"violet",9:"violet",10:"cyan" };
+let dragIdx = -1, dropIdx = -1, dropPos = "";
+const mkKey = t => { const s = document.createElement("span"); s.className = "blk-keyword"; s.textContent = t; return s; };
+const blkInp = (placeholder, width) => {
+  const inp = document.createElement("input");
+  inp.className = "inp";
+  inp.type = "text";
+  inp.placeholder = placeholder;
+  if (width) inp.style.width = width;
+  return inp;
+};
+const blkSel = (pairs, cur) => {
+  const sel = document.createElement("select");
+  sel.className = "blk-select";
+  pairs.forEach(([v, l]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = l;
+    sel.appendChild(o);
+  });
+  sel.value = String(cur);
+  if (!sel.value) { const o = document.createElement("option"); o.value = cur; o.textContent = actionLabel(cur); sel.appendChild(o); sel.value = cur; }
+  return sel;
+};
+
+function openRuleEditor(r) {
+  editingRule = r ? JSON.parse(JSON.stringify(r)) : newRule();
+  if (!editingRule.Actions || !editingRule.Actions.length) editingRule.Actions = [newStep()];
+  $("#ruleModalTitle").textContent = r ? "编辑规则" : "新建规则";
+  $("#fName").value = editingRule.Name || "";
+  $("#fEnabled").checked = editingRule.Enabled !== false;
+  renderTrigger();
+  renderBlocks();
+  $("#ruleModal").classList.remove("hidden");
+  $("#fName").focus();
+}
+function renderTrigger() {
+  const wrap = $("#triggerWrap");
+  wrap.innerHTML = "";
+  const b = document.createElement("div");
+  b.className = "blk blk-trigger";
+  const sel = blkSel([[0, "按下快捷键"], [1, "打开某个应用时"], [2, "切换到某个应用时"]], editingRule.Trigger ?? 0);
+  sel.addEventListener("change", () => { editingRule.Trigger = Number(sel.value); renderTrigger(); });
+  b.appendChild(mkKey("当"));
+  b.appendChild(sel);
+  const param = document.createElement("span");
+  param.className = "blk-param";
+  if ((editingRule.Trigger ?? 0) === 0) {
+    param.appendChild(makeHotkeyInput(editingRule.Hotkey || "", v => { editingRule.Hotkey = v; }, "blk-hk"));
+  } else {
+    const inp = blkInp("进程名，留空 = 任意应用", "180px");
+    inp.value = editingRule.TriggerApp || "";
+    inp.addEventListener("change", e => (editingRule.TriggerApp = e.target.value.trim()));
+    param.appendChild(inp);
+  }
+  b.appendChild(param);
+  b.appendChild(mkKey("时"));
+  wrap.appendChild(b);
+}
+function clearDrop() {
+  if (dropIdx >= 0) {
+    const el = $("#stepsWrap").children[dropIdx];
+    if (el) el.classList.remove("drop-before", "drop-after");
+  }
+  dropIdx = -1; dropPos = "";
+}
+function bindBlockDnD(el, i) {
+  el.draggable = true;
+  el.addEventListener("dragstart", e => {
+    dragIdx = i;
+    el.classList.add("dragging");
+    try { e.dataTransfer.setData("text/plain", String(i)); e.dataTransfer.effectAllowed = "move"; } catch (err) {}
+  });
+  el.addEventListener("dragend", () => { el.classList.remove("dragging"); clearDrop(); dragIdx = -1; });
+  el.addEventListener("dragover", e => {
+    e.preventDefault();
+    if (dragIdx < 0) return;
+    e.dataTransfer.dropEffect = "move";
+    const r = el.getBoundingClientRect();
+    const before = e.clientY < r.top + r.height / 2;
+    const pos = before ? "before" : "after";
+    if (dropIdx !== i || dropPos !== pos) {
+      clearDrop();
+      dropIdx = i; dropPos = pos;
+      el.classList.add("drop-" + pos);
+    }
+  });
+  el.addEventListener("dragleave", () => { if (dropIdx === i) clearDrop(); });
+  el.addEventListener("drop", e => {
+    e.preventDefault();
+    const from = dragIdx, target = dropIdx, pos = dropPos;
+    clearDrop();
+    dragIdx = -1;
+    if (from < 0 || target < 0 || from === target) return;
+    const arr = editingRule.Actions;
+    const [item] = arr.splice(from, 1);
+    let ins;
+    if (from < target) ins = (pos === "before") ? target - 1 : target;
+    else ins = (pos === "before") ? target : target + 1;
+    ins = Math.max(0, Math.min(ins, arr.length));
+    arr.splice(ins, 0, item);
+    renderBlocks();
+  });
+}
+function renderBlocks() {
+  const wrap = $("#stepsWrap");
+  wrap.innerHTML = "";
+  if (!editingRule.Actions.length) editingRule.Actions.push(newStep());
+  editingRule.Actions.forEach((step, i) => {
+    const el = renderOpBlock(step, i);
+    bindBlockDnD(el, i);
+    wrap.appendChild(el);
+  });
+}
+function renderOpBlock(step, i) {
+  const b = document.createElement("div");
+  b.className = "blk blk-op " + (ACTION_COLOR[step.Action] || "blue");
+  const sel = blkSel(ACTIONS, step.Action);
+  sel.addEventListener("change", () => { step.Action = Number(sel.value); renderBlocks(); });
+  b.appendChild(mkGrip());
+  b.appendChild(sel);
+  const param = document.createElement("span");
+  param.className = "blk-param";
+  renderOpParams(param, step);
+  b.appendChild(param);
+  const del = document.createElement("span");
+  del.className = "blk-del";
+  del.textContent = "×";
+  del.title = "删除此操作";
+  del.addEventListener("click", () => {
+    editingRule.Actions.splice(i, 1);
+    if (!editingRule.Actions.length) editingRule.Actions.push(newStep());
+    renderBlocks();
+  });
+  b.appendChild(del);
+  // 延时行
+  const dl = document.createElement("span");
+  dl.className = "blk-delay";
+  dl.innerHTML = "延时";
+  const dInp = document.createElement("input");
+  dInp.className = "inp";
+  dInp.type = "number";
+  dInp.min = "0"; dInp.max = "60000";
+  dInp.value = step.DelayMs || 0;
+  const clamp = () => {
+    let v = Number(dInp.value);
+    if (isNaN(v) || v < 0) v = 0;
+    if (v > 60000) v = 60000;
+    step.DelayMs = v;
+  };
+  dInp.addEventListener("input", clamp);
+  dInp.addEventListener("blur", () => { clamp(); dInp.value = step.DelayMs; });
+  dl.appendChild(dInp);
+  dl.appendChild(document.createTextNode("ms"));
+  b.appendChild(dl);
+  return b;
+}
+function mkGrip() {
+  const g = document.createElement("span");
+  g.className = "blk-grip";
+  g.textContent = "⋮⋮";
+  g.title = "拖动排序";
+  return g;
+}
+/* 按键录制输入框：点击后直接按下组合键录入 */
+function makeHotkeyInput(value, onCommit, extraClass) {
+  const inp = document.createElement("input");
+  inp.className = "inp hotkey-inp" + (extraClass ? " " + extraClass : "");
+  inp.type = "text";
+  inp.autocomplete = "off";
+  inp.spellcheck = false;
+  inp.value = value || "";
+  inp.placeholder = "点击后按下按键组合";
+  inp.title = "点击输入框后直接按下按键组合即可录入（支持 Ctrl/Alt/Shift/Win + 字母/数字/F1-F12 等）；WheelUp/WheelDown 及鼠标按键请手动输入";
+  let recording = false;
+  inp.addEventListener("focus", () => {
+    recording = true;
+    inp.classList.add("recording");
+    inp.placeholder = "请按下按键组合…（Esc 清空）";
+    inp.select();
+  });
+  inp.addEventListener("blur", () => {
+    recording = false;
+    inp.classList.remove("recording");
+    inp.placeholder = "点击后按下按键组合";
+    if (onCommit) onCommit(inp.value);
+  });
+  inp.addEventListener("keydown", e => {
+    if (!recording) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape" || e.key === "Backspace") {
+      inp.value = "";
+      if (onCommit) onCommit("");
+      return;
+    }
+    if (["Control", "Alt", "Shift", "Meta"].includes(e.key)) return;
+    const main = hotkeyKeyName(e.key);
+    if (!main) return;
+    const mods = [];
+    if (e.ctrlKey) mods.push("Ctrl");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey) mods.push("Shift");
+    if (e.metaKey) mods.push("Win");
+    const combo = mods.concat(main).join("+");
+    inp.value = combo;
+    if (onCommit) onCommit(combo);
+    inp.blur();
+  });
+  return inp;
+}
+function hotkeyKeyName(k) {
+  const map = {
+    " ": "Space", "Enter": "Enter", "Tab": "Tab",
+    "ArrowUp": "Up", "ArrowDown": "Down", "ArrowLeft": "Left", "ArrowRight": "Right",
+    "Home": "Home", "End": "End", "PageUp": "PageUp", "PageDown": "PageDown",
+    "Insert": "Insert", "Delete": "Delete", "CapsLock": "CapsLock", "NumLock": "NumLock", "ScrollLock": "ScrollLock",
+    "PrintScreen": "PrintScreen", "Pause": "Pause", "ContextMenu": "Menu"
+  };
+  if (map[k]) return map[k];
+  if (/^F([1-9]|1[0-2])$/.test(k)) return k;
+  if (/^[A-Za-z0-9]$/.test(k)) return k.toUpperCase();
+  if (/^[+\-=.,;'[\]\\/`~!@#$%^&*()_<>?:"]$/.test(k)) return k;
+  return null;
+}
+function renderOpParams(dyn, step) {
+  dyn.innerHTML = "";
+  const mkLabel = t => {
+    const s = document.createElement("span");
+    s.style.cssText = "font-size:11.5px;opacity:.8;flex:none";
+    s.textContent = t;
+    return s;
+  };
+  const mkApp = () => {
+    dyn.appendChild(mkLabel("应用"));
+    const inp = blkInp("进程名", "120px");
+    inp.value = step.TargetApp || "";
+    inp.addEventListener("change", e => (step.TargetApp = e.target.value.trim()));
+    dyn.appendChild(inp);
+  };
+  const mkDev = () => {
+    dyn.appendChild(mkLabel("设备"));
+    const inp = blkInp("设备短 ID，留空 = 默认", "150px");
+    inp.value = step.TargetDeviceId || "";
+    inp.addEventListener("change", e => (step.TargetDeviceId = e.target.value.trim()));
+    dyn.appendChild(inp);
+  };
+  const mkVol = () => {
+    dyn.appendChild(mkLabel("音量"));
+    const range = document.createElement("input");
+    range.className = "vol-range";
+    range.type = "range";
+    range.min = "0"; range.max = "100";
+    range.value = step.Volume ?? 50;
+    const val = document.createElement("span");
+    val.className = "vol-val";
+    val.textContent = (step.Volume ?? 50) + "%";
+    const setVol = v => { step.Volume = v; range.value = v; val.textContent = v + "%"; };
+    range.addEventListener("input", () => setVol(Number(range.value)));
+    range.addEventListener("wheel", e => {
+      e.preventDefault();
+      setVol(Math.max(0, Math.min(100, Number(range.value) + (e.deltaY < 0 ? 5 : -5))));
+    }, { passive: false });
+    range.title = "支持鼠标滚轮调节";
+    dyn.appendChild(range);
+    dyn.appendChild(val);
+  };
+  const mkPaths = () => {
+    dyn.appendChild(mkLabel(step.Action === 9 ? "命令" : "路径"));
+    const list = document.createElement("span");
+    list.className = "blk-param";
+    const addRow = v => {
+      const row = document.createElement("span");
+      row.style.cssText = "display:flex;gap:4px;align-items:center";
+      const inp = blkInp("文件路径 / exe / 命令", "210px");
+      inp.value = v || "";
+      const rm = document.createElement("span");
+      rm.className = "blk-del";
+      rm.textContent = "×";
+      rm.addEventListener("click", () => {
+        row.remove();
+        step.ProgramPaths = Array.from(list.querySelectorAll("input")).map(x => x.value);
+      });
+      inp.addEventListener("change", () => {
+        const arr = step.ProgramPaths || (step.ProgramPaths = []);
+        arr[Array.from(list.children).indexOf(row)] = inp.value;
+      });
+      row.appendChild(inp);
+      row.appendChild(rm);
+      list.appendChild(row);
+    };
+    (step.ProgramPaths && step.ProgramPaths.length ? step.ProgramPaths : [""]).forEach(addRow);
+    dyn.appendChild(list);
+    const add = document.createElement("span");
+    add.className = "blk-del";
+    add.textContent = "＋";
+    add.title = "添加路径";
+    add.addEventListener("click", () => addRow(""));
+    dyn.appendChild(add);
+  };
+  const mkOsd = () => {
+    dyn.appendChild(mkLabel("标题"));
+    const t1 = blkInp("OSD 主标题", "120px");
+    t1.value = step.OsdTitle || "";
+    t1.addEventListener("change", e => (step.OsdTitle = e.target.value));
+    dyn.appendChild(t1);
+    dyn.appendChild(mkLabel("副标题"));
+    const t2 = blkInp("OSD 副标题", "120px");
+    t2.value = step.OsdText || "";
+    t2.addEventListener("change", e => (step.OsdText = e.target.value));
+    dyn.appendChild(t2);
+  };
+  switch (step.Action) {
+    case 0: case 1: mkDev(); break;
+    case 2: mkVol(); break;
+    case 3: dyn.appendChild(mkLabel("切换系统静音 / 取消静音")); break;
+    case 4: mkApp(); mkVol(); break;
+    case 5: mkApp(); break;
+    case 6: case 7: mkApp(); mkDev(); break;
+    case 8: case 9: mkPaths(); break;
+    case 10: mkOsd(); break;
+    default: dyn.appendChild(mkLabel(actionLabel(step.Action))); break;
+  }
+}
+function saveRuleForm() {
+  const name = $("#fName").value.trim();
+  if (!name) { toast("请输入规则名称", "err"); $("#fName").focus(); return; }
+  editingRule.Name = name;
+  editingRule.Enabled = $("#fEnabled").checked;
+  editingRule.Hotkey = (editingRule.Hotkey || "").trim();
+  editingRule.TriggerApp = (editingRule.TriggerApp || "").trim();
+  editingRule.Actions = editingRule.Actions.filter(s => s && s.Action !== undefined);
+  if (!editingRule.Actions.length) editingRule.Actions = [newStep()];
+  syncLegacy(editingRule);
+  const idx = state.rules.findIndex(x => x.Id === editingRule.Id);
+  if (idx >= 0) state.rules[idx] = editingRule;
+  else state.rules.push(editingRule);
+  closeRuleModal();
+  markRulesDirty();
+  renderRules();
+  toast("已保存规则「" + name + "」");
+}
+function closeRuleModal() {
+  $("#ruleModal").classList.add("hidden");
+  editingRule = null;
+}
+
+/* ---------- 规则导入 / 导出 ---------- */
+function exportOneRule(r) {
+  download(sanitizeName(r.Name) + ".json", JSON.stringify(syncLegacy(JSON.parse(JSON.stringify(r))), null, 2));
+  toast("已导出「" + (r.Name || "规则") + "」");
+}
+function exportAllRules() {
+  if (!state.rules.length) return;
+  const all = state.rules.map(r => syncLegacy(JSON.parse(JSON.stringify(r))));
+  download("SonicRoute-Automation-全部规则.json", JSON.stringify(all, null, 2));
+  toast("已导出 " + all.length + " 条规则");
+}
+function importRuleFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const items = Array.isArray(data) ? data : [data];
+      let added = 0, skipped = 0;
+      items.forEach(item => {
+        if (!item || typeof item !== "object" || (!item.Id && !item.Name)) { skipped++; return; }
+        const copy = JSON.parse(JSON.stringify(item));
+        if (!copy.Id) copy.Id = uuid();
+        if (state.rules.some(x => x.Id === copy.Id)) { copy.Id = uuid(); }
+        if (!copy.Actions || !copy.Actions.length) {
+          copy.Actions = [{ Action: copy.Action ?? 0, TargetApp: copy.TargetApp || "", TargetDeviceId: copy.TargetDeviceId || "", Volume: copy.Volume ?? 50, DelayMs: copy.DelayMs || 0, OsdTitle: copy.OsdTitle || "", OsdText: copy.OsdText || "", ProgramPaths: copy.ProgramPath ? [copy.ProgramPath] : [] }];
+        }
+        if (!copy.Enabled && copy.Enabled !== false) copy.Enabled = true;
+        state.rules.push(copy);
+        added++;
+      });
+      markRulesDirty();
+      renderRules();
+      toast(added ? "已导入 " + added + " 条规则" + (skipped ? "，跳过 " + skipped + " 条无效数据" : "") : "未导入任何有效规则", added ? "" : "err");
+    } catch (e) {
+      toast("规则文件解析失败：" + e.message, "err");
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- 示例规则 ---------- */
+function loadSamples() {
+  const samples = [
+    { Name: "示例：游戏自动切设备", Enabled: true, Trigger: 2, TriggerApp: "game.exe", Actions: [{ Action: 0, TargetDeviceId: "", Volume: 50, DelayMs: 0, OsdTitle: "", OsdText: "", ProgramPaths: [] }, { Action: 4, TargetApp: "game.exe", TargetDeviceId: "", Volume: 80, DelayMs: 300, OsdTitle: "", OsdText: "", ProgramPaths: [] }] },
+    { Name: "示例：一键游戏静音", Enabled: true, Trigger: 0, Hotkey: "Ctrl+Alt+Shift+M", Actions: [{ Action: 5, TargetApp: "game.exe", Volume: 50, DelayMs: 0, OsdTitle: "", OsdText: "", ProgramPaths: [] }] },
+  ];
+  samples.forEach(s => { s.Id = uuid(); state.rules.push(s); });
+  markRulesDirty();
+  renderRules();
+  toast("已添加 2 条示例规则（可编辑或删除）");
+}
+
+/* ---------- Tab 切换 ---------- */
+function switchView(v) {
+  state.view = v;
+  $("#tabConfig").classList.toggle("active", v === "config");
+  $("#tabRules").classList.toggle("active", v === "rules");
+  $("#viewConfig").classList.toggle("hidden", v !== "config");
+  $("#viewRules").classList.toggle("hidden", v !== "rules");
+}
+
+/* ---------- 事件绑定 ---------- */
+$("#tabConfig").addEventListener("click", () => switchView("config"));
+$("#tabRules").addEventListener("click", () => switchView("rules"));
+$("#importCfgBtn").addEventListener("click", () => $("#fileInput").click());
+$("#importCfgBtn2").addEventListener("click", () => $("#fileInput").click());
+$("#fileInput").addEventListener("change", e => {
+  if (e.target.files[0]) importConfig(e.target.files[0]);
+  e.target.value = "";
+});
+$("#exportCfgBtn").addEventListener("click", exportConfig);
+$("#jsonModeBtn").addEventListener("click", () => (state.mode === "form" ? openJson() : closeJson()));
+$("#jsonApplyBtn").addEventListener("click", applyJson);
+$("#jsonFormatBtn").addEventListener("click", () => {
+  if (checkJsonLive()) { $("#jsonArea").value = JSON.stringify(JSON.parse($("#jsonArea").value), null, 2); toast("已格式化"); }
+});
+$("#jsonBackBtn").addEventListener("click", closeJson);
+$("#jsonArea").addEventListener("input", checkJsonLive);
+$("#resetCfgBtn").addEventListener("click", () => {
+  if (!state.config || !confirm("用示例配置覆盖当前编辑内容？此操作不可撤销。")) return;
+  state.config = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
+  state.fileName = "config.json（示例）";
+  markDirty();
+  renderCfgForm();
+  toast("已加载示例配置");
+});
+
+// 规则
+$("#newRuleBtn").addEventListener("click", () => openRuleEditor(null));
+$("#newRuleBtn2").addEventListener("click", () => openRuleEditor(null));
+$("#loadSampleBtn").addEventListener("click", loadSamples);
+$("#importRuleBtn").addEventListener("click", () => $("#ruleFileInput").click());
+$("#ruleFileInput").addEventListener("change", e => {
+  if (e.target.files[0]) importRuleFile(e.target.files[0]);
+  e.target.value = "";
+});
+$("#exportAllRulesBtn").addEventListener("click", exportAllRules);
+$("#ruleModalClose").addEventListener("click", closeRuleModal);
+$("#ruleModalCancel").addEventListener("click", closeRuleModal);
+$("#ruleModalSave").addEventListener("click", saveRuleForm);
+$("#addStepBtn").addEventListener("click", () => {
+  const menu = $("#opMenu");
+  const open = !menu.classList.contains("hidden");
+  menu.classList.add("hidden");
+  if (open) return;
+  menu.innerHTML = "";
+  ACTIONS.forEach(([v, label]) => {
+    const c = document.createElement("button");
+    c.className = "op-chip";
+    c.textContent = label;
+    c.addEventListener("click", () => {
+      const s = newStep();
+      s.Action = v;
+      editingRule.Actions.push(s);
+      menu.classList.add("hidden");
+      renderBlocks();
+      const wrap = $("#stepsWrap");
+      if (wrap.lastElementChild) wrap.lastElementChild.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    menu.appendChild(c);
+  });
+  menu.classList.remove("hidden");
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest(".add-op-row")) $("#opMenu").classList.add("hidden");
+});
+$("#ruleModal").addEventListener("click", e => { if (e.target === $("#ruleModal")) closeRuleModal(); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("#ruleModal").classList.contains("hidden")) closeRuleModal();
+});
+
+/* ---------- 拖拽导入 + 文件类型检测 ---------- */
+function detectKind(text, name) {
+  let data;
+  try { data = JSON.parse(text); } catch (e) { return null; }
+  if (data === null || typeof data !== "object") return null;
+  if (Array.isArray(data)) return "rules"; // 批量导出的规则数组
+  const keys = Object.keys(data);
+  const ruleSig = keys.some(k => ["Trigger", "Actions", "Action", "TargetApp", "TargetDeviceId"].includes(k)) ||
+                  (keys.includes("Id") && keys.includes("Name") && keys.includes("Enabled"));
+  const cfgSig = ["Hotkeys", "Language", "ThemeMode", "Accent", "VolumeStep", "OsdPosition", "QuickPanelStyle", "DeviceNames", "AppNames", "StartMinimized", "AutoRules", "BackgroundOpacity"].some(k => k in data);
+  if (ruleSig && !cfgSig) return "rules";
+  if (cfgSig) return "config";
+  if (ruleSig) return "rules";
+  return null;
+}
+const dropOverlay = $("#dropOverlay");
+let dragDepth = 0;
+const dragHasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files");
+const dragFileName = e => {
+  try { return e.dataTransfer.files && e.dataTransfer.files[0] ? e.dataTransfer.files[0].name : ""; } catch (err) { return ""; }
+};
+document.addEventListener("dragenter", e => {
+  e.preventDefault();
+  if (!dragHasFiles(e)) return;
+  dragDepth++;
+  $("#dropName").textContent = dragFileName(e);
+  dropOverlay.classList.remove("hidden");
+});
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("dragleave", e => {
+  e.preventDefault();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) dropOverlay.classList.add("hidden");
+});
+document.addEventListener("drop", e => {
+  e.preventDefault();
+  dragDepth = 0;
+  dropOverlay.classList.add("hidden");
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const kind = detectKind(reader.result, file.name);
+    if (kind === "config") {
+      importConfig(file);
+      switchView("config");
+    } else if (kind === "rules") {
+      importRuleFile(file);
+      switchView("rules");
+    } else {
+      toast("无法识别文件类型：请导入 SonicRoute 的 config.json 或自动化规则 JSON", "err");
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* ---------- 初始化 ---------- */
+renderRules();
+updateFileInfo();
+
+// ?demo=1：自动加载示例数据，便于预览界面（不影响正常使用）
+if (new URLSearchParams(location.search).get("demo") === "1") {
+  state.config = JSON.parse(JSON.stringify(SAMPLE_CONFIG));
+  state.fileName = "config.json（示例）";
+  $("#cfgEmpty").classList.add("hidden");
+  $("#cfgForm").classList.remove("hidden");
+  $("#exportCfgBtn").disabled = false;
+  $("#jsonModeBtn").disabled = false;
+  $("#resetCfgBtn").disabled = false;
+  renderCfgForm();
+  loadSamples();
+  if (new URLSearchParams(location.search).get("tab") === "rules") switchView("rules");
+  if (new URLSearchParams(location.search).get("editrule") === "1" && state.rules.length) {
+    switchView("rules");
+    openRuleEditor(state.rules[0]);
+  }
+}
+</script>
+</body>
+</html>

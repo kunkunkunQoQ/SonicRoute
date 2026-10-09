@@ -1,0 +1,25 @@
+{
+  "Version": "v1.17",
+  "File": "backups/v1.17/可运行版本/SonicRoute-v1.17.zip",
+  "Bytes": 89327552,
+  "SHA256": "4AA17B32FAE9039D94E19F3CBF3926FDA4933C2A2EF5FE4A7B479D1B1F52EAF5",
+  "Storage": "Parts",
+  "Runtime": true,
+  "Parts": [
+    {
+      "File": "large-files/4aa17b32fae9039d94e19f3cbf3926fda4933c2a2ef5fe4a7b479d1b1f52eaf5/part-0001",
+      "Bytes": 41943040,
+      "SHA256": "8AB8D85E4CF83A570C6FD0D6D91E5E5B0F1A05A8950DE883FFBC0304B818FE04"
+    },
+    {
+      "File": "large-files/4aa17b32fae9039d94e19f3cbf3926fda4933c2a2ef5fe4a7b479d1b1f52eaf5/part-0002",
+      "Bytes": 41943040,
+      "SHA256": "05A7739D4C052553D273F1686F479AA5C5F3FB25CD29DC6177813F266A5B8047"
+    },
+    {
+      "File": "large-files/4aa17b32fae9039d94e19f3cbf3926fda4933c2a2ef5fe4a7b479d1b1f52eaf5/part-0003",
+      "Bytes": 5441472,
+      "SHA256": "0ECC410B4E92C0B2F2A2609841F0E057D30FDA7483A644738F64D87A41E1AC55"
+    }
+  ]
+}

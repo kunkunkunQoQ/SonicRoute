@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    SonicRoute.Legacy —— .NET Framework 4.8 兼容版（x64）
+
+    设计要点：
+      1) 本工程**不复制任何 UI 源码**：通过 Compile/Page/ApplicationDefinition 的 Link
+         直接复用 ..\SonicRoute\ 下的同一批源文件，.NET 8 与 Legacy 共用一份实现，
+         差异只允许出现在 #if NET48 条件编译块内。
+      2) 只通过 ProjectReference 引用 SonicRoute.Core（自动解析到其 net48 目标）。
+      3) 不参与 ARM64、不参与 Microsoft Store / MSIX、不做单文件发布。
+      4) PROPVARIANT 在 Core 中按 x64 布局声明（StructLayout Size = 24），
+         因此必须锁定 x64 且 Prefer32Bit=false，严禁生成 x86。
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <!-- net48 的 SDK 默认 LangVersion 为 C# 7.3，与 Nullable=enable 直接冲突（CS8630），必须显式提升 -->
+    <LangVersion>latest</LangVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SonicRoute</RootNamespace>
+    <!-- 产物名保持 SonicRoute.exe（与发布资产 SonicRoute-vX.Y.Z-Legacy-x64.zip 内的命名一致） -->
+    <AssemblyName>SonicRoute</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <ApplicationIcon>..\SonicRoute\SonicRoute.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- System.Text.Json 在 net48 上需要程序集绑定重定向（其传递依赖含 System.Memory 等） -->
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+    <!-- 版本号与 .NET 8 主版本保持一致（UI 显示联动，配置/规则格式互通） -->
+    <Version>1.19</Version>
+    <AssemblyTitle>SonicRoute</AssemblyTitle>
+    <Product>音跃 SonicRoute</Product>
+    <Authors>困困困</Authors>
+    <Company>困困困</Company>
+    <Description>音跃 SonicRoute（.NET Framework 4.8 兼容版）— 按应用切换 Windows 音频输出/输入设备，快速面板 + 完整管理界面</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SonicRoute.Core\SonicRoute.Core.csproj" />
+  </ItemGroup>
+
+  <!-- net48 的 SDK 不会自动引用 System.Net.Http（.NET Core 才有隐式引用），MainWindow 的更新检查需要它 -->
+  <ItemGroup>
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <!-- ============ 共享源码（Link，不复制） ============ -->
+  <ItemGroup>
+    <Compile Include="..\SonicRoute\**\*.cs"
+             Exclude="..\SonicRoute\bin\**;..\SonicRoute\obj\**"
+             Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <ApplicationDefinition Include="..\SonicRoute\App.xaml" Link="App.xaml" />
+    <Page Include="..\SonicRoute\MainWindow.xaml" Link="MainWindow.xaml" />
+    <Page Include="..\SonicRoute\QuickPanelWindow.xaml" Link="QuickPanelWindow.xaml" />
+    <Page Include="..\SonicRoute\QuickPanelModernWindow.xaml" Link="QuickPanelModernWindow.xaml" />
+  </ItemGroup>
+
+  <!-- ============ 共享资源 ============ -->
+  <ItemGroup>
+    <Resource Include="..\SonicRoute\SonicRoute.png" Link="SonicRoute.png" />
+    <Resource Include="..\SonicRoute\SonicRoute.ico" Link="SonicRoute.ico" />
+    <!-- LogicalName 显式指定为 SonicRoute.Resources.Lang.<code>.json：
+         L10n 通过 typeof(L10n).Assembly.GetManifestResourceStream("SonicRoute.Resources.Lang.zh-CN.json") 读取，
+         名称必须与 .NET 8 版本完全一致，否则 9 语言全部回退空表 -->
+    <EmbeddedResource Include="..\SonicRoute\Resources\Lang\*.json">
+      <Link>Resources\Lang\%(Filename)%(Extension)</Link>
+      <LogicalName>SonicRoute.Resources.Lang.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SonicRoute</RootNamespace>
+    <AssemblyName>SonicRoute</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget>
+    <Version>1.0.2</Version>
+    <AssemblyTitle>SonicRoute</AssemblyTitle>
+    <Product>音跃 SonicRoute</Product>
+    <Authors>困困困</Authors>
+    <Company>困困困</Company>
+    <Description>音跃 SonicRoute — 按应用切换 Windows 音频输出/输入设备，快速面板 + 完整管理界面</Description>
+    <ApplicationIcon>SonicRoute.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SonicRoute.Core\SonicRoute.Core.csproj" />
+    <Resource Include="SonicRoute.png"/>
+    <None Include="SonicRoute.ico" CopyToOutputDirectory="PreserveNewest"/>
+  </ItemGroup>
+
+</Project>

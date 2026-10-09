@@ -1,0 +1,234 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using SonicRoute.Core.Models;
+
+namespace SonicRoute.Core
+{
+    /// <summary>应用配置（持久化到 %LocalAppData%\SonicRoute\config.json）。</summary>
+    public sealed class AppConfig
+    {
+        /// <summary>快速界面隐藏的播放设备（短 ID 列表）。</summary>
+        public List<string> HiddenOutputDevices { get; set; } = new();
+
+        /// <summary>快速界面隐藏的录音设备（短 ID 列表）。</summary>
+        public List<string> HiddenInputDevices { get; set; } = new();
+
+        public bool StartMinimized { get; set; } = true;
+
+        /// <summary>全局快捷键：动作名 → 组合键描述（如 "Ctrl+Alt+1"）。</summary>
+        public Dictionary<string, string> Hotkeys { get; set; } = new();
+
+        /// <summary>设备自定义名称：短 ID → 显示名（空则用默认名称）。</summary>
+        public Dictionary<string, string> DeviceNames { get; set; } = new();
+
+        /// <summary>应用自定义名称：进程名 → 显示名（空则用默认名称）。通知/列表/面板/概览统一显示。</summary>
+        public Dictionary<string, string> AppNames { get; set; } = new();
+
+        /// <summary>禁用自动切换的应用（进程名列表）：这些应用不会被自动选为"当前应用"（前台跟随/最近使用等），但仍可手动选择。</summary>
+        public List<string> DisabledAutoSwitchApps { get; set; } = new();
+
+        /// <summary>不在快速面板显示的应用（进程名列表，不区分大小写）：隐藏后不出现在简洁/经典面板的应用列表/下拉中。</summary>
+        public List<string> HiddenPanelApps { get; set; } = new();
+
+        /// <summary>界面语言：空 = 首次启动跟随系统（zh-CN / en-US / ja-JP / ko-KR / fr-FR / de-DE / es-ES / ru-RU）。</summary>
+        public string Language { get; set; } = "";
+
+        /// <summary>主题模式：system / light / dark。</summary>
+        public string ThemeMode { get; set; } = "system";
+
+        /// <summary>强调色：blue / green / purple。</summary>
+        public string Accent { get; set; } = "blue";
+
+
+        /// <summary>默认打开的应用：recent(最近使用) / last(上次操作) / fixed(指定)。</summary>
+        public string DefaultAppMode { get; set; } = "recent";
+
+        /// <summary>指定默认应用（进程名）。</summary>
+        public string FixedAppName { get; set; } = "";
+
+        /// <summary>上次操作的应用（进程名），用于 last 模式。</summary>
+        public string LastUsedAppName { get; set; } = "";
+
+        /// <summary>启动时显示快速面板。</summary>
+        public bool StartPanelOnStart { get; set; } = false;
+
+        /// <summary>快速面板样式：modern(简洁面板，默认) / classic(经典面板)。</summary>
+        public string QuickPanelStyle { get; set; } = "modern";
+
+        /// <summary>简洁面板顶部下拉框切换设备时更改系统默认输出设备（默认关；开启后下拉=改系统默认输出）。</summary>
+        public bool PanelChangeSystemDefault { get; set; } = false;
+
+        /// <summary>快速面板位置模式：default=任务栏右下角 / custom=自定义坐标（主题页拖拽调整，逻辑同 OSD）。</summary>
+        public string QuickPanelPosMode { get; set; } = "default";
+        public int QuickPanelCustomX { get; set; } = -1;
+        public int QuickPanelCustomY { get; set; } = -1;
+
+        /// <summary>开机自启（写入 HKCU\...\Run，正常/绿色版）。</summary>
+        public bool AutoStart { get; set; } = false;
+
+        /// <summary>开机自启（商店版 MSIX StartupTask，与正常版 AutoStart 分开存储，互不影响）。</summary>
+        public bool AutoStartStore { get; set; } = false;
+
+        /// <summary>音量调节步进（1–20%，默认 4）：托盘滚轮、面板行滑块滚轮、音量±快捷键共用，设置页可自定义。</summary>
+        public int VolumeStep { get; set; } = 4;
+
+        /// <summary>托盘滚轮调音量区域：true=整个托盘通知区滚轮均可调当前应用音量（默认）；false=仅音跃托盘图标上滚轮可调。</summary>
+        public bool TrayWheelEverywhere { get; set; } = true;
+        /// <summary>窗口/面板背景透明度（60–100，默认 85：适当通透、保持可读）。</summary>
+        public int BackgroundOpacity { get; set; } = 85;
+
+        /// <summary>实验模式已解锁（设置页底部点击作者名 5 次触发，持久化后显示实验模式开关）。</summary>
+        public bool ExperimentalUnlocked { get; set; }
+
+        /// <summary>实验模式开关（需先解锁，重启生效）。</summary>
+        public bool ExperimentalMode { get; set; }
+
+        /// <summary>实验模式 - 麦克风选项（需开启实验模式，重启生效；开启后显示麦克风相关设置与快捷键）。</summary>
+        public bool ExperimentalMic { get; set; } = true;
+
+        /// <summary>实验设置 - 麦克风相关选项是否在快捷面板显示（需实验模式+麦克风选项，重启生效）。</summary>
+        public bool MicInPanel { get; set; } = false;
+
+        /// <summary>折叠设置页"保留的设备/设备名称"区块（含麦克风），默认开启；开关位于设置页（不依赖实验模式）。</summary>
+        public bool CollapseDeviceSections { get; set; } = true;
+
+        /// <summary>主题 - OSD 显示位置（"TR"=主显示器右上角；"Custom"=用户拖拽保存的自定义坐标）。</summary>
+        public string OsdPosition { get; set; } = "TR";
+
+
+
+        /// <summary>实验设置 - OSD 水平偏移（像素，右/下为正；非自定义模式生效）。</summary>
+        public int OsdOffsetX { get; set; }
+
+        /// <summary>实验设置 - OSD 垂直偏移（像素，右/下为正；非自定义模式生效）。</summary>
+        public int OsdOffsetY { get; set; }
+
+        /// <summary>实验设置 - 自定义 OSD 位置 X（屏幕像素坐标，-1 表示未设置回退默认）。</summary>
+        public int OsdCustomX { get; set; } = -1;
+
+        /// <summary>实验设置 - 自定义 OSD 位置 Y（屏幕像素坐标，-1 表示未设置回退默认）。</summary>
+        public int OsdCustomY { get; set; } = -1;
+
+        /// <summary>主题 - OSD 显示宽度（逻辑像素，180~600，默认 240；调整模式下拖手柄横向自由拉长缩短）。</summary>
+        public int OsdWidth { get; set; } = 240;
+
+        /// <summary>主题 - OSD 字号倍率（0.7~2.0，默认 1.0；调整模式下拖手柄纵向调整）。</summary>
+        /// <summary>主题 - OSD 淡入时长（ms，0~500，默认 100；0 = 禁用淡入直接显示）。</summary>
+        public int OsdFadeInMs { get; set; } = 100;
+
+        /// <summary>主题 - OSD 淡出时长（ms，0~1000，默认 200；0 = 禁用淡出直接隐藏）。</summary>
+        public int OsdFadeOutMs { get; set; } = 200;
+        /// <summary>主题 - 麦克风静音时 OSD 常驻（静音后持续显示状态，不自动隐藏；默认关闭 = 与旧版一致）。</summary>
+        public bool MicMuteOsdPersistent { get; set; }
+
+        /// <summary>主题 - 常驻子选项「同时监听默认输入静音」：默认输入设备静音时也常驻显示麦克风静音 OSD（默认开启）。</summary>
+        public bool MicMuteOsdTrackInputMuted { get; set; } = true;
+
+        public double OsdFontScale { get; set; } = 1.0;
+    }
+
+    public static class ConfigService
+    {
+        public static string ConfigPath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SonicRoute",
+            "config.json");
+
+        // 内存缓存：单实例进程内唯一写者是本进程，Save 时同步更新缓存；
+        // 高频调用（托盘滚轮每格、快捷键每次、设备名称每键）直接读缓存，
+        // 避免反复读盘 + 反序列化，降低 GC 压力与内存波动。
+        private static AppConfig? _cache;
+        private static readonly object _lock = new();
+
+        public static AppConfig Load()
+        {
+            lock (_lock)
+            {
+                if (_cache != null) return _cache;
+            }
+            // v1.17：旧版 config.json 中的 AutoRules 迁移到独立目录（%LocalAppData%\\SonicRoute\\Automation\\）
+            AutoRuleStore.MigrateLegacyIfNeeded();
+            AppConfig cfg;
+            try
+            {
+                if (File.Exists(ConfigPath))
+                {
+                    var json = File.ReadAllText(ConfigPath);
+                    cfg = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+                }
+                else
+                {
+                    cfg = new AppConfig();
+                }
+            }
+            catch
+            {
+                // 读取失败回退默认
+                cfg = new AppConfig();
+            }
+            lock (_lock)
+            {
+                return _cache ??= cfg;
+            }
+        }
+
+        public static void Save(AppConfig config)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(ConfigPath);
+                if (dir != null) Directory.CreateDirectory(dir);
+                File.WriteAllText(ConfigPath,
+                    JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            catch
+            {
+                // 保存失败不阻断运行
+            }
+            lock (_lock)
+            {
+                _cache = config;
+            }
+        }
+
+        /// <summary>一键清理配置文件：删除 config.json 并重置内存缓存为全新默认配置（实验设置功能）。</summary>
+        public static AppConfig ResetToDefault()
+        {
+            lock (_lock)
+            {
+                try { if (File.Exists(ConfigPath)) File.Delete(ConfigPath); } catch { }
+                var cfg = new AppConfig();
+                _cache = cfg;
+                return cfg;
+            }
+        }
+
+        /// <summary>导出配置副本到指定路径（先落盘当前内存配置再复制）。</summary>
+        public static bool ExportTo(string destPath)
+        {
+            try
+            {
+                Save(Load());
+                File.Copy(ConfigPath, destPath, true);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>从指定文件导入配置：复制到配置路径并清空内存缓存，下次 Load 重新读取（调用方负责重启应用）。</summary>
+        public static bool ImportFrom(string srcPath)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(ConfigPath);
+                if (dir != null) Directory.CreateDirectory(dir);
+                File.Copy(srcPath, ConfigPath, true);
+                lock (_lock) { _cache = null; }
+                return true;
+            }
+            catch { return false; }
+        }
+    }
+}

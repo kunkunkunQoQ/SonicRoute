@@ -1,0 +1,890 @@
+using System;
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Threading;
+using SonicRoute.Core;
+using SonicRoute.Core.Models;
+
+namespace SonicRoute
+{
+    /// <summary>
+    /// 托盘滚轮调音量：安装 WH_MOUSE_LL 低层鼠标钩子，当滚轮事件发生时光标位于
+    /// 系统托盘通知区（TrayNotifyWnd / 溢出窗口）内，就对当前前台应用调节音量，
+    /// 并显示一个小型 OSD 反馈。只调前台应用自己的会话音量，不动系统主音量。
+    /// </summary>
+    internal sealed class TrayWheelService : IDisposable
+    {
+        private const int WH_MOUSE_LL = 14;
+        private const int WM_MOUSEWHEEL = 0x020A;
+
+        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT { public int x, y; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSLLHOOKSTRUCT
+        {
+            public POINT pt;
+            public uint mouseData;
+            public uint flags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string? lpszWindow);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool PtInRect(ref RECT lprc, POINT pt);
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+        private const int SM_CXSCREEN = 0;
+        private const int SM_CYSCREEN = 1;
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+        // 仅音跃图标模式：Shell_NotifyIconGetRect 获取托盘图标矩形（物理像素，与钩子坐标一致）
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NOTIFYICONIDENTIFIER
+        {
+            public int cbSize;
+            public IntPtr hWnd;
+            public int uID;
+            public Guid guidItem;
+        }
+
+        [DllImport("shell32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER identifier, out RECT iconLocation);
+
+        private readonly System.Windows.Forms.NotifyIcon? _trayIcon;
+
+        private readonly LowLevelMouseProc _proc;
+        private IntPtr _hook;
+        private bool _disposed;
+
+        // 滚轮合并派发（钩子线程只做检测，音量操作在 UI 线程执行）
+        private int _pendingDelta;
+        private bool _dispatchScheduled;
+
+        // 目标应用解析缓存（与快捷面板一致，避免每次滚轮全量枚举）
+        private readonly object _appsLock = new();
+        private List<AudioAppInfo>? _cachedApps;
+        private DateTime _cachedAt;
+
+        // OSD
+        private Window? _osd;
+        private readonly DispatcherTimer _osdTimer;
+
+        // OSD 调整模式（主题「调整 OSD」：拖动主体移动位置，松手保存；宽度/字号在主题页滑条调整）
+        private bool _osdAdjustMode;
+        private bool _osdDragging;
+        private System.Windows.Point _osdDragStart;
+        /// <summary>拖拽松手已保存位置后触发（UI 线程），用于设置页复位按钮状态与同步输入框。</summary>
+        internal event Action? OsdAdjustFinished;
+        private TextBlock? _osdAppText;
+        private TextBlock? _osdValueText;
+        private double _osdWidth = 240;       // 当前 OSD 逻辑宽度（主题页滑条调整）
+        private double _osdFontScale = 1.0;   // 当前字号倍率（主题页滑条调整）
+        // 位置脏标记与定位缓存：仅首次/重新显示、尺寸、位置配置、DPI、显示器变化时重新定位
+        private bool _osdPositionDirty = true;
+        private bool _osdRepositionPending;
+        private bool _osdShownOnce; // 是否已首次显示：首次 Show 后同步定位，避免先显示默认位置再跳正
+        private double _lastDpiScale = 1.0;
+        private double _lastWorkAreaLeft, _lastWorkAreaTop, _lastWorkAreaRight, _lastWorkAreaBottom;
+        private string _lastOsdPos = "";
+        private double _lastOsdOx, _lastOsdOy;
+        private int _lastOsdCx = -1, _lastOsdCy = -1;
+// 麦克风静音 OSD 常驻状态：_micMutePersistentActive=当前常驻横幅显示中；_micMuteOverlayPending=普通 OSD 覆盖了常驻横幅，隐藏后需恢复
+        private bool _micMutePersistentActive;
+        private bool _micMuteOverlayPending;
+        private bool _osdFadingOut; // 淡出动画进行中（新消息到来时取消并立即恢复显示）
+
+        public TrayWheelService(System.Windows.Forms.NotifyIcon? trayIcon)
+        {
+            _trayIcon = trayIcon;
+            _proc = HookProc;
+            _osdTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1100) };
+            _osdTimer.Tick += (_, _) => OnOsdTimerElapsed();
+        }
+
+        /// <summary>必须在 UI 线程调用（钩子回调将运行在安装线程的消息循环上）。</summary>
+        public void Start()
+        {
+            if (_hook != IntPtr.Zero) return;
+            _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
+        }
+
+        private IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (!_disposed && nCode >= 0 && (int)wParam == WM_MOUSEWHEEL)
+            {
+                var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                if (IsOverTray(data.pt))
+                {
+                    int delta = (short)((data.mouseData >> 16) & 0xFFFF);
+                    // 钩子线程绝不做 COM/音频调用：合并滚轮量并派发到 UI 线程
+                    System.Threading.Interlocked.Add(ref _pendingDelta, delta);
+                    if (!_dispatchScheduled)
+                    {
+                        _dispatchScheduled = true;
+                        var app = (App)System.Windows.Application.Current;
+                        app.Dispatcher.BeginInvoke(new Action(ProcessPendingWheel));
+                    }
+                }
+            }
+            return CallNextHookEx(_hook, nCode, wParam, lParam);
+        }
+
+        private void ProcessPendingWheel()
+        {
+            _dispatchScheduled = false;
+            int d = System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
+            if (d != 0) AdjustVolume(d);
+        }
+
+        /// <summary>
+        /// 判断光标是否在"可调音量区域"：
+        /// 配置 TrayWheelEverywhere=true（默认）→ 整个托盘通知区（含溢出区、第二任务栏）都响应；
+        /// false → 仅音跃自己的托盘图标矩形内响应（Shell_NotifyIconGetRect）。
+        /// </summary>
+        private bool IsOverTray(POINT pt)
+        {
+            try
+            {
+                if (!ConfigService.Load().TrayWheelEverywhere)
+                    return IsOverOurIcon(pt);
+            }
+            catch { }
+
+            IntPtr tray = FindWindow("Shell_TrayWnd", null);
+            if (tray != IntPtr.Zero)
+            {
+                IntPtr notify = FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
+                if (notify != IntPtr.Zero && GetWindowRect(notify, out var r) && PtInRect(ref r, pt))
+                    return true;
+                IntPtr overflow = FindWindowEx(tray, IntPtr.Zero, "NotifyContainerOverflowWindow", null);
+                if (overflow != IntPtr.Zero && GetWindowRect(overflow, out var r2) && PtInRect(ref r2, pt))
+                    return true;
+            }
+            // 第二任务栏（多显示器）
+            IntPtr tray2 = FindWindow("Shell_SecondaryTrayWnd", null);
+            if (tray2 != IntPtr.Zero)
+            {
+                IntPtr notify2 = FindWindowEx(tray2, IntPtr.Zero, "TrayNotifyWnd", null);
+                if (notify2 != IntPtr.Zero && GetWindowRect(notify2, out var r3) && PtInRect(ref r3, pt))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>仅音跃图标模式：优先 Shell_NotifyIconGetRect 获取当前托盘图标矩形（物理像素），
+        /// 失败则回退到托盘 Toolbar 按钮枚举。反射取 NotifyIcon 内部消息窗口句柄与图标 ID
+        /// （.NET 8 字段名为 _window/_id，兼容旧版 window/id）。</summary>
+        private bool IsOverOurIcon(POINT pt)
+        {
+            try
+            {
+                if (_trayIcon == null) return false;
+                var t = _trayIcon.GetType();
+                IntPtr hwnd = IntPtr.Zero;
+                int id = 1;
+
+                var winField = t.GetField("_window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                            ?? t.GetField("window", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (winField != null && winField.GetValue(_trayIcon) is { } win)
+                {
+                    var hp = win.GetType().GetProperty("Handle", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    if (hp != null && hp.GetValue(win) is IntPtr h) hwnd = h;
+                }
+                var idField = t.GetField("_id", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                           ?? t.GetField("id", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (idField != null && idField.GetValue(_trayIcon) is { } v)
+                {
+                    long l = v is IntPtr ip ? ip.ToInt64() : Convert.ToInt64(v);
+                    id = (int)l;
+                }
+                if (hwnd == IntPtr.Zero) return false;
+
+                // 主方案：Shell_NotifyIconGetRect（官方 API，含溢出区/多任务栏）。
+                // 注意：部分系统（含本机 Win11）返回值为 False 但 out 矩形实际有效
+                // （图标物理像素矩形）。必须【先调用再检查矩形】——若写成
+                // GetRect() && rect>0 的短路形式，GetRect 返回 False 时矩形检查
+                // 不会执行、out 参数保持全 0，导致有效矩形被丢弃。
+                var nii = new NOTIFYICONIDENTIFIER { cbSize = Marshal.SizeOf<NOTIFYICONIDENTIFIER>(), hWnd = hwnd, uID = id };
+                Shell_NotifyIconGetRect(ref nii, out var r);
+                if ((r.Right - r.Left) > 0 && (r.Bottom - r.Top) > 0)
+                {
+                    _cachedIconRect = r;
+                    _cachedIconRectAt = DateTime.UtcNow;
+                    var ir = InflateRect(r, 4);
+                    return PtInRect(ref ir, pt);
+                }
+
+                // API 完全失败（返回 False 且矩形无效）：图标位置短期不变，
+                // 用最近一次成功矩形（30s 内）判定，避免 Win11 上不可靠的 Toolbar 回退造成偶发失灵
+                if ((DateTime.UtcNow - _cachedIconRectAt).TotalSeconds < 30
+                    && (_cachedIconRect.Right - _cachedIconRect.Left) > 0
+                    && (_cachedIconRect.Bottom - _cachedIconRect.Top) > 0)
+                {
+                    var ir2 = InflateRect(_cachedIconRect, 4);
+                    return PtInRect(ref ir2, pt);
+                }
+
+                // 回退：托盘 Toolbar 按钮枚举（匹配 hWnd/uID 后取按钮矩形；Win11 可能无按钮窗口）
+                return IsOverOurIconByToolbar(pt, hwnd, id);
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>图标矩形缓存：Shell_NotifyIconGetRect 偶发失败（返回 False 且矩形无效）时，用最近一次成功矩形判定。</summary>
+        private RECT _cachedIconRect;
+        private DateTime _cachedIconRectAt;
+
+        /// <summary>矩形外扩 n 像素（物理像素坐标，减少图标边缘 1-2px 漏判）。</summary>
+        private static RECT InflateRect(RECT r, int n)
+        {
+            r.Left -= n; r.Top -= n; r.Right += n; r.Bottom += n;
+            return r;
+        }
+
+        private const int TB_BUTTONCOUNT = 0x418;
+        private const int TB_GETBUTTON = 0x417;
+        private const int TB_GETITEMRECT = 0x41D;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct TBBUTTON
+        {
+            public int iBitmap;
+            public int idCommand;
+            public byte fsState;
+            public byte fsStyle;
+            public byte bReserved;
+            public IntPtr dwData;   // 指向 NOTIFYICONDATA（本进程添加时传入）
+            public IntPtr iString;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref TBBUTTON lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, ref RECT lParam);
+
+        /// <summary>托盘 Toolbar 按钮枚举：遍历 TrayNotifyWnd/溢出窗口/第二任务栏的 ToolbarWindow32，
+        /// 匹配按钮注册的 hWnd+uID（NOTIFYICONDATA，x64 布局：hWnd@8、uID@16），取按钮矩形判定光标。</summary>
+        private static bool IsOverOurIconByToolbar(POINT pt, IntPtr hwnd, int id)
+        {
+            try
+            {
+                IntPtr[] trays = { FindWindow("Shell_TrayWnd", null), FindWindow("Shell_SecondaryTrayWnd", null) };
+                foreach (var tray in trays)
+                {
+                    if (tray == IntPtr.Zero) continue;
+                    IntPtr notify = FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
+                    if (notify != IntPtr.Zero && CheckTrayToolbar(notify, pt, hwnd, id)) return true;
+                    IntPtr overflow = FindWindowEx(tray, IntPtr.Zero, "NotifyContainerOverflowWindow", null);
+                    if (overflow != IntPtr.Zero && CheckTrayToolbar(overflow, pt, hwnd, id)) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool CheckTrayToolbar(IntPtr parent, POINT pt, IntPtr hwnd, int id)
+        {
+            try
+            {
+                IntPtr tb = FindWindowEx(parent, IntPtr.Zero, "ToolbarWindow32", null);
+                if (tb == IntPtr.Zero) return false;
+                int count = (int)SendMessage(tb, TB_BUTTONCOUNT, IntPtr.Zero, IntPtr.Zero);
+                if (count <= 0) return false;
+                for (int i = 0; i < count; i++)
+                {
+                    TBBUTTON b = default;
+                    if (SendMessage(tb, TB_GETBUTTON, (IntPtr)i, ref b) == IntPtr.Zero) continue;
+                    if (b.dwData == IntPtr.Zero) continue;
+                    IntPtr bh = (IntPtr)Marshal.ReadInt64(b.dwData, 8); // NOTIFYICONDATA.hWnd (x64)
+                    int bid = Marshal.ReadInt32(b.dwData, 16);           // NOTIFYICONDATA.uID
+                    if (bh == hwnd && bid == id)
+                    {
+                        RECT r = default;
+                        if (SendMessage(tb, TB_GETITEMRECT, (IntPtr)i, ref r) != IntPtr.Zero)
+                            return PtInRect(ref r, pt);
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private void AdjustVolume(int delta)
+        {
+            int pid = ResolveTargetPid();
+            if (pid <= 0) { ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession")); return; }
+
+            // OSD 应用名优先显示用户自定义名称（与快捷键/面板/通知一致），
+            // 未设置自定义名则显示进程名本身，两者都拿不到才显示"应用"
+            string proc = ForegroundAppService.GetProcessNameSafe(pid) ?? "";
+            string name = AppDisplayName.Get(proc, string.IsNullOrWhiteSpace(proc) ? "应用" : proc);
+            int cur = SessionVolumeService.GetVolumePercent(pid);
+            if (cur < 0) { ShowOsd(name, L10n.T("Ov.VolReadFail")); return; }
+            int step = Math.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            int next = Math.Clamp(cur + (delta > 0 ? step : -step), 0, 100);
+            SessionVolumeService.SetVolumePercent(pid, next);
+            int actual = SessionVolumeService.GetVolumePercent(pid);
+            if (actual < 0) actual = next;
+            bool muted = SessionVolumeService.IsMuted(pid);
+            ShowOsd(name, muted ? string.Format(L10n.T("Ov.MutedVol"), actual) : $"🔊 {actual}%");
+        }
+
+        /// <summary>
+        /// 目标应用与快捷面板完全一致（CurrentAppService 同一套规则：recent/last/fixed → 前台 → 第一个）。
+        /// 应用列表走 AudioService 的 1 秒缓存，避免每次滚轮全量枚举音频会话。
+        /// </summary>
+        private int ResolveTargetPid()
+        {
+            List<AudioAppInfo> apps;
+            lock (_appsLock)
+            {
+                if (_cachedApps == null || (DateTime.UtcNow - _cachedAt).TotalMilliseconds > 1500)
+                {
+                    _cachedApps = AudioService.GetApps();
+                    _cachedAt = DateTime.UtcNow;
+                }
+                apps = _cachedApps;
+            }
+            var cfg = ConfigService.Load();
+            var target = CurrentAppService.Resolve(apps, cfg);
+            return target == null ? 0 : (int)target.ProcessId;
+        }
+
+        // ==================== OSD ====================
+
+        /// <summary>右上角 OSD 提示（托盘滚轮/全局快捷键共用）。必须在 UI 线程调用。
+        /// 外观跟随主题：背景/边框/文字用主题资源（含用户设置的透明度与强调色），换肤即生效。</summary>
+        internal void ShowOsd(string app, string text, bool persistent = false)
+        {
+            try
+            {
+                // 普通 OSD 显示时若常驻麦克风横幅正显示 → 记覆盖标记，普通 OSD 隐藏后恢复常驻横幅
+                if (!persistent && _micMutePersistentActive) _micMuteOverlayPending = true;
+                if (_osd == null)
+                {
+                    var _ocfg = ConfigService.Load();
+                    _osdWidth = Math.Clamp(_ocfg.OsdWidth, 180, 600);
+                    _osdFontScale = Math.Clamp(_ocfg.OsdFontScale, 0.7, 2.0);
+                    _osd = new Window
+                    {
+                        WindowStyle = WindowStyle.None,
+                        AllowsTransparency = true,
+                        Background = System.Windows.Media.Brushes.Transparent,
+                        ShowInTaskbar = false,
+                        ShowActivated = false,
+                        Topmost = true,
+                        ResizeMode = ResizeMode.NoResize,
+                        SizeToContent = SizeToContent.Height,
+                        Width = _osdWidth,   // 固定宽度：文本长短不影响窗口尺寸 → 位置稳定不闪烁
+                        Focusable = false
+                    };
+                    var border = new Border
+                    {
+                        CornerRadius = new CornerRadius(10 * _osdFontScale),
+                        Padding = new Thickness(16 * _osdFontScale, 10 * _osdFontScale, 16 * _osdFontScale, 10 * _osdFontScale),
+                        BorderThickness = new Thickness(1)
+                    };
+                    // 主题化：背景/边框/文字全部绑主题资源，透明度随 Theme.SurfaceBgAlpha
+                    border.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceBgAlpha");
+                    border.SetResourceReference(Border.BorderBrushProperty, "Theme.Border");
+
+                    // 视觉树只创建一次（1 Border + 2 TextBlock），之后 ShowOsd 只改文本，不再重建
+                    var grid = new Grid();
+                    var stack = new StackPanel();
+                    _osdAppText = new TextBlock
+                    {
+                        Text = app, FontSize = 12 * _osdFontScale,
+                        MaxWidth = _osdWidth - 32 * _osdFontScale, TextTrimming = TextTrimming.CharacterEllipsis
+                    };
+                    _osdAppText.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
+                    _osdValueText = new TextBlock
+                    {
+                        Text = text, FontSize = 18 * _osdFontScale, FontWeight = FontWeights.SemiBold,
+                        Margin = new Thickness(0, 3, 0, 0),
+                        MaxWidth = _osdWidth - 32 * _osdFontScale, TextTrimming = TextTrimming.CharacterEllipsis
+                    };
+                    _osdValueText.SetResourceReference(TextBlock.ForegroundProperty, "Theme.Accent");
+                    stack.Children.Add(_osdAppText);
+                    stack.Children.Add(_osdValueText);
+                    grid.Children.Add(stack);
+                    border.Child = grid;
+                    _osd.Content = border;
+
+                    // 调整模式拖动：按住左键移动窗口，松手保存位置（仅调整模式生效）
+                    _osd.MouseLeftButtonDown += (_, e) =>
+                    {
+                        if (!_osdAdjustMode) return;
+                        _osdDragging = true;
+                        _osdDragStart = e.GetPosition(null);
+                        _osd.CaptureMouse();
+                        e.Handled = true;
+                    };
+                    _osd.MouseMove += (_, e) =>
+                    {
+                        if (!_osdDragging) return;
+                        var p = e.GetPosition(null);
+                        // 拖动中限制在虚拟屏幕（全部显示器）范围内，多屏时允许拖到副屏
+                        double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                        double vsX = GetSystemMetrics(76); // SM_XVIRTUALSCREEN
+                        double vsY = GetSystemMetrics(77); // SM_YVIRTUALSCREEN
+                        double vsW = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
+                        double vsH = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
+                        double minX = vsX / ws;
+                        double maxX = (vsX + vsW) / ws - _osd.ActualWidth;
+                        double minY = vsY / ws;
+                        double maxY = (vsY + vsH) / ws - _osd.ActualHeight;
+                        _osd.Left = Math.Clamp(_osd.Left + (p.X - _osdDragStart.X), minX, Math.Max(minX, maxX));
+                        _osd.Top = Math.Clamp(_osd.Top + (p.Y - _osdDragStart.Y), minY, Math.Max(minY, maxY));
+                        e.Handled = true;
+                    };
+                    _osd.MouseLeftButtonUp += (_, e) =>
+                    {
+                        if (!_osdDragging) return;
+                        _osdDragging = false;
+                        _osd.ReleaseMouseCapture();
+                        e.Handled = true;
+                        if (_osdAdjustMode) SaveOsdDragPosition();
+                    };
+
+                    _osdPositionDirty = true; // 首次显示必须定位
+                }
+
+                // 新消息到来：若正在淡出则取消动画并立即恢复不透明（避免提前消失/闪烁）
+                if (_osdFadingOut)
+                {
+                    _osdFadingOut = false;
+                    _osd.BeginAnimation(Window.OpacityProperty, null);
+                    _osd.Opacity = 1;
+                }
+
+                // 连续操作：只更新文本，不重建视觉树、不重复 Show
+                if (_osdAppText != null) _osdAppText.Text = app;
+                if (_osdValueText != null) _osdValueText.Text = text;
+
+                if (!_osd.IsVisible)
+                {
+                    // 首次/重新显示：直接 Show（不创建动画对象，内存稳定优先）
+                    bool firstShow = !_osdShownOnce;
+                    if (firstShow)
+                    {
+                        // 首次显示：先定位再 Show——Show 前设置 Left/Top，窗口直接以正确位置创建，
+                        // 首帧即显示在正确位置，避免先以 WPF 默认位置（屏幕中央）渲染一帧再跳到右上角
+                        // （启动后首次快捷键/滚轮调音量"从别处闪一下"）。TR 只需固定宽度 OsdWidth，
+                        // 未布局也能算准；Custom 用已保存坐标；其余九宫格依赖高度，Show 后再校准一次。
+                        _osdShownOnce = true;
+                        RepositionOsd();
+                        _osdPositionDirty = false;
+                        _osdRepositionPending = false;
+                    }
+                    _osd.Show();
+                    _osd.Topmost = true;
+                    // 淡入：从隐藏到显示时 Opacity 0→1（时长 0 = 禁用，直接不透明）；先清旧动画避免残留
+                    _osd.BeginAnimation(Window.OpacityProperty, null);
+                    int fadeIn = Math.Clamp(ConfigService.Load().OsdFadeInMs, 0, 500);
+                    if (fadeIn > 0)
+                    {
+                        _osd.Opacity = 0;
+                        _osd.BeginAnimation(Window.OpacityProperty,
+                            new System.Windows.Media.Animation.DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(fadeIn)));
+                    }
+                    else
+                    {
+                        _osd.Opacity = 1;
+                    }
+                    if (firstShow)
+                    {
+                        // Show 后布局完成、实际尺寸已确定，同步校准一次：尺寸无关位置（TR）结果与
+                        // Show 前一致不产生移动；尺寸依赖位置（Center/B 等）在此取真实高度精确定位。
+                        RepositionOsd();
+                        _osdPositionDirty = false;
+                        _osdRepositionPending = false;
+                    }
+                    else
+                    {
+                        _osdPositionDirty = true; // 重新显示确保位置正确
+                    }
+                }
+
+                // 仅在必要时重新定位：首次/重新显示、尺寸变化、位置配置变化、DPI 或显示器变化
+                // 普通文字变化（50%→51%→…）不重新定位 → 位置完全不跳动
+                if (_osdPositionDirty || ShouldRepositionOsd())
+                {
+                    _osdPositionDirty = false;
+                    if (!_osdRepositionPending)
+                    {
+                        // 防 Dispatcher 队列堆积：同一时刻只排一个定位任务，连续快捷键更新只重算一次
+                        _osdRepositionPending = true;
+                        _osd.Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            _osdRepositionPending = false;
+                            if (_osd != null && _osd.IsVisible) RepositionOsd();
+                        }), DispatcherPriority.Background);
+                    }
+                }
+
+                _osdTimer.Stop();
+                if (!persistent) _osdTimer.Start(); // 常驻模式（麦克风静音横幅）不启动自动隐藏
+            }
+            catch { }
+        }
+
+        private void RepositionOsd()
+        {
+            try
+            {
+                if (_osd == null) return;
+                // 记录窗口自身 DPI 仅用于 ShouldRepositionOsd 的 DPI 变化检测，不参与坐标换算
+                double winScale = 1.0;
+                try { winScale = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                if (winScale <= 0) winScale = 1.0;
+
+                // 关键修正：WPF 的 SystemParameters.WorkArea 本身就是 WPF 逻辑坐标（DIP），
+                // 与 Window.Left/Top/Width/Height 同一坐标系。禁止再次除以 DPI（此前错误缩小导致 TR 偏到屏幕中央）。
+                var wa = SystemParameters.WorkArea; // WPF DIP
+
+                // 只在需要重新定位的时机（首次显示/尺寸变化/配置变化）调用，确保 SizeToContent=Height 下取到最终布局尺寸
+                _osd.UpdateLayout();
+                double w = _osd.ActualWidth > 0 ? _osd.ActualWidth : _osdWidth;
+                double h = _osd.ActualHeight > 0 ? _osd.ActualHeight : 80;
+
+                // 9 宫格位置 + X/Y 偏移（默认右上角 TR）；"Custom" 用自定义坐标直接定位
+                var cfg = ConfigService.Load();
+                string pos = string.IsNullOrWhiteSpace(cfg.OsdPosition) ? "TR" : cfg.OsdPosition;
+                double ox = cfg.OsdOffsetX;
+                double oy = cfg.OsdOffsetY;
+                // 记录当前定位状态，供 ShouldRepositionOsd 对比（DPI/工作区/位置配置变化才重新定位）
+                _lastDpiScale = winScale;
+                _lastWorkAreaLeft = wa.Left; _lastWorkAreaTop = wa.Top;
+                _lastWorkAreaRight = wa.Right; _lastWorkAreaBottom = wa.Bottom;
+                _lastOsdPos = pos; _lastOsdOx = ox; _lastOsdOy = oy;
+                _lastOsdCx = cfg.OsdCustomX; _lastOsdCy = cfg.OsdCustomY;
+
+                // 自定义模式：只使用用户保存的 WPF DIP 坐标（拖拽保存时已由物理像素换算为 DIP，读取时直接设置，不再换算）
+                if (string.Equals(pos, "Custom", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (cfg.OsdCustomX >= 0 && cfg.OsdCustomY >= 0)
+                    {
+                        _osd.Left = cfg.OsdCustomX;
+                        _osd.Top = cfg.OsdCustomY;
+                        return;
+                    }
+                    pos = "TR";
+                }
+
+                // 默认位置：TR（主显示器右上角），全部在 WorkArea（WPF DIP）内计算，不混入物理像素 / GetSystemMetrics
+                double left = wa.Right - w - 16;
+                double top = wa.Top + 14;
+                // Clamp 在默认位置所在工作区（主显示器，WPF DIP）内，防跨屏残留/边缘闪烁；与九宫格同一坐标系
+                double waL = wa.Left, waT = wa.Top, waR = wa.Right, waB = wa.Bottom;
+                left = Math.Clamp(left + ox, waL, Math.Max(waL, waR - w - 4));
+                top = Math.Clamp(top + oy, waT, Math.Max(waT, waB - h - 4));
+                _osd.Left = left;
+                _osd.Top = top;
+            }
+            catch { }
+        }
+
+        private void HideOsd()
+        {
+            try
+            {
+                if (_osd != null)
+                {
+                    _osdFadingOut = false;
+                    _osd.BeginAnimation(Window.OpacityProperty, null); // 清除淡出/淡入动画，复位基础值
+                    _osd.Opacity = 1; // 复位为不透明，避免残留透明状态
+                    _osd.Hide();
+                    // 保留完整视觉树（Border/Grid/两个 TextBlock），下次显示只更新文本——不重复创建控件
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>普通 OSD 隐藏计时器到期：隐藏普通 OSD；若此前普通 OSD 覆盖了麦克风静音常驻横幅，
+        /// 且麦克风仍静音、常驻开关仍开启 → 恢复常驻横幅（静音状态不因普通 OSD 出现而丢失）。</summary>
+        private async void OnOsdTimerElapsed()
+        {
+            try
+            {
+                _osdTimer.Stop();
+                if (_osd == null || !_osd.IsVisible || _osdFadingOut)
+                {
+                    await RestoreMicOverlayIfNeededAsync();
+                    return;
+                }
+                // 淡出动画结束后再隐藏（时长 0 = 禁用淡出，直接隐藏）
+                int fadeOut = Math.Clamp(ConfigService.Load().OsdFadeOutMs, 0, 1000);
+                if (fadeOut <= 0)
+                {
+                    HideOsd();
+                    await RestoreMicOverlayIfNeededAsync();
+                    return;
+                }
+                _osdFadingOut = true;
+                var anim = new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(fadeOut))
+                {
+                    FillBehavior = System.Windows.Media.Animation.FillBehavior.HoldEnd
+                };
+                anim.Completed += (_, _) =>
+                {
+                    if (!_osdFadingOut) return; // 淡出期间新消息已取消动画并恢复显示
+                    _osdFadingOut = false;
+                    HideOsd();
+                    _ = RestoreMicOverlayIfNeededAsync();
+                };
+                _osd.BeginAnimation(Window.OpacityProperty, anim);
+            }
+            catch { }
+        }
+
+        /// <summary>普通 OSD 隐藏（或淡出完成）后恢复被覆盖的麦克风静音常驻横幅（若仍静音且常驻开关开启）。</summary>
+        private async Task RestoreMicOverlayIfNeededAsync()
+        {
+            if (!_micMuteOverlayPending) return;
+            _micMuteOverlayPending = false;
+            bool muted = await Task.Run(() => GlobalMicMuteService.IsAnyMuted(ConfigService.Load().MicMuteOsdTrackInputMuted));
+            if (muted && ConfigService.Load().MicMuteOsdPersistent)
+                ShowMicMuteOsd(L10n.T("Ov.MuteMic"), true);
+        }
+
+        /// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 设置开关共用）。
+        /// 静音且「常驻」开关开启 → 常驻显示（不自动隐藏）；否则按普通 OSD 生命周期自动隐藏。
+        /// 必须在 UI 线程调用。</summary>
+        internal void ShowMicMuteOsd(string app, bool muted)
+        {
+            try
+            {
+                var cfg = ConfigService.Load();
+                if (muted && cfg.MicMuteOsdPersistent)
+                {
+                    _micMutePersistentActive = true;
+                    ShowOsd(app, L10n.T("Ov.MicMuted"), persistent: true);
+                }
+                else
+                {
+                    _micMutePersistentActive = false;
+                    ShowOsd(app, muted ? L10n.T("Ov.MicMuted") : L10n.T("Ov.MicUnmuted"));
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>设置页「麦克风静音时 OSD 常驻」开关变化：
+        /// 开启且当前已静音 → 立即常驻显示；关闭且正在常驻 → 立即退出常驻，按普通 OSD 生命周期自动隐藏。</summary>
+        internal void NotifyMicMuteOsdSettingChanged(bool on)
+        {
+            try
+            {
+                if (on)
+                {
+                    if (_micMutePersistentActive && _osd != null && _osd.IsVisible) return; // 已在常驻
+                    bool muted = Task.Run(() => GlobalMicMuteService.IsAnyMuted(ConfigService.Load().MicMuteOsdTrackInputMuted)).GetAwaiter().GetResult();
+                    if (muted) ShowMicMuteOsd(L10n.T("Ov.MuteMic"), true);
+                }
+                else
+                {
+                    if (_micMutePersistentActive)
+                    {
+                        _micMutePersistentActive = false;
+                        _micMuteOverlayPending = false;
+                        _osdTimer.Stop();
+                        _osdTimer.Start(); // 当前常驻横幅转为普通生命周期，自动隐藏
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>检测是否需要重新定位：仅 DPI 变化 / 工作区（显示器布局）变化 / OSD 位置配置变化时返回 true。
+        /// 普通文字变化（连续滚动音量 50%→51%→…）不重新定位 → 位置完全不跳动。</summary>
+        private bool ShouldRepositionOsd()
+        {
+            try
+            {
+                if (_osd == null) return false;
+                double ws = 1.0;
+                try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                var _swa = SystemParameters.WorkArea;
+                if (Math.Abs(ws - _lastDpiScale) > 0.001) return true;
+                if (_swa.Left != _lastWorkAreaLeft || _swa.Top != _lastWorkAreaTop ||
+                    _swa.Right != _lastWorkAreaRight || _swa.Bottom != _lastWorkAreaBottom) return true;
+                var cfg = ConfigService.Load();
+                string pos = string.IsNullOrWhiteSpace(cfg.OsdPosition) ? "TR" : cfg.OsdPosition;
+                if (pos != _lastOsdPos || cfg.OsdOffsetX != _lastOsdOx || cfg.OsdOffsetY != _lastOsdOy ||
+                    cfg.OsdCustomX != _lastOsdCx || cfg.OsdCustomY != _lastOsdCy) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>进入 OSD 调整模式：显示常驻可拖动 OSD（不自动消失），拖动松手即保存位置。</summary>
+        internal void BeginOsdAdjust()
+        {
+            try
+            {
+                _osdAdjustMode = true;
+                ShowOsd(L10n.T("Exp.OsdDragTitle"), L10n.T("Exp.OsdDragHint"));
+                _osdTimer.Stop(); // 调整模式常驻，不自动隐藏
+            }
+            catch { }
+        }
+
+        /// <summary>退出 OSD 调整模式（不保存当前拖动位置，隐藏 OSD）。</summary>
+        internal void CancelOsdAdjust()
+        {
+            _osdAdjustMode = false;
+            _osdDragging = false;
+            _osdTimer.Stop();
+            HideOsd();
+        }
+
+        /// <summary>实时位置预览：按当前配置立即显示 OSD（用于偏移滑块/坐标输入联动）。</summary>
+        internal void PreviewOsd()
+        {
+            if (_osdAdjustMode) return;
+            ShowOsd("📍", L10n.T("Exp.OsdPreview"));
+        }
+
+        /// <summary>拖动松手：把当前窗口位置写入配置（Custom 模式），保存并通知设置页。</summary>
+        private void SaveOsdDragPosition()
+        {
+            try
+            {
+                if (_osd == null) return;
+                var cfg = ConfigService.Load();
+                cfg.OsdPosition = "Custom";
+                // 保存前限制在虚拟屏幕（全部显示器）范围内，多屏时允许存副屏坐标
+                double ws = 1.0; try { ws = System.Windows.Media.VisualTreeHelper.GetDpi(_osd).DpiScaleX; } catch { }
+                double vsX = GetSystemMetrics(76); // SM_XVIRTUALSCREEN
+                double vsY = GetSystemMetrics(77); // SM_YVIRTUALSCREEN
+                double vsW = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
+                double vsH = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
+                cfg.OsdCustomX = (int)Math.Clamp(_osd.Left, vsX / ws, Math.Max(vsX / ws, (vsX + vsW) / ws - _osd.ActualWidth));
+                cfg.OsdCustomY = (int)Math.Clamp(_osd.Top, vsY / ws, Math.Max(vsY / ws, (vsY + vsH) / ws - _osd.ActualHeight));
+                ConfigService.Save(cfg);
+                _osdAdjustMode = false;
+                _osdTimer.Stop();
+                ShowOsd("📍", L10n.T("Exp.OsdSaved"));
+                OsdAdjustFinished?.Invoke();
+            }
+            catch { }
+        }
+
+        /// <summary>应用 OSD 尺寸（宽度 + 字号倍率）到窗口与内容（主题页滑条实时调用）。</summary>
+        internal void ApplyOsdSize(double w, double fs)
+        {
+            try
+            {
+                if (_osd == null) return;
+                _osdPositionDirty = true; // 尺寸变化后需重新定位（Custom 模式仍用已保存坐标，不跳回右上角）
+                _osdWidth = Math.Clamp(w, 180, 600);
+                _osdFontScale = Math.Clamp(fs, 0.7, 2.0);
+                _osd.Width = _osdWidth;
+                if (_osd.Content is Border b)
+                {
+                    b.Padding = new Thickness(16 * _osdFontScale, 10 * _osdFontScale, 16 * _osdFontScale, 10 * _osdFontScale);
+                    b.CornerRadius = new CornerRadius(10 * _osdFontScale);
+                }
+                if (_osdAppText != null) { _osdAppText.FontSize = 12 * _osdFontScale; _osdAppText.MaxWidth = _osdWidth - 32 * _osdFontScale; }
+                if (_osdValueText != null) { _osdValueText.FontSize = 18 * _osdFontScale; _osdValueText.MaxWidth = _osdWidth - 32 * _osdFontScale; }
+            }
+            catch { }
+        }
+
+        /// <summary>应用并保存 OSD 尺寸（主题页滑条调用）：宽度 180~600、字号倍率 0.7~2.0，立即预览。</summary>
+        internal void SetOsdSize(int w, double fs)
+        {
+            try
+            {
+                var cfg = ConfigService.Load();
+                cfg.OsdWidth = (int)Math.Clamp(w, 180, 600);
+                cfg.OsdFontScale = Math.Clamp(fs, 0.7, 2.0);
+                ConfigService.Save(cfg); // 先保存，保证 OSD 创建时读到新值
+                _osdWidth = cfg.OsdWidth;
+                _osdFontScale = cfg.OsdFontScale;
+                ApplyOsdSize(_osdWidth, _osdFontScale);
+                if (!_osdAdjustMode)
+                {
+                    _osdTimer.Stop();
+                    ShowOsd("📍", L10n.T("Exp.OsdScaleSaved"));
+                }
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+            _osdTimer.Stop();
+            try { _osd?.Close(); } catch { }
+            _osd = null;
+            if (_hook != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_hook);
+                _hook = IntPtr.Zero;
+            }
+        }
+    }
+}

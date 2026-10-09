@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.19.0.0" name="SonicRoute.Legacy.app" />
+
+  <!-- 权限：普通用户即可，不要求管理员（与 .NET 8 版本一致） -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <!--
+    Windows 兼容性声明：只声明 Windows 10 / 11（GUID 8e0f7a12 为 Windows 10，Win11 共用同一 GUID）。
+    该声明是必需的，不是可选优化：
+      .NET Framework 的 Environment.OSVersion 走 GetVersionEx，未声明 supportedOS 时会返回
+      兼容性版本（6.2 / Build 9200），导致按应用音频路由的 Win11 分支判断失败。
+      （Core 的 WindowsVersion 已改用 RtlGetVersion 取真实 Build 作为主路径，
+        此处声明同时保证第三方库/系统 API 看到的版本正确。）
+    不声明 Windows 7 / 8.1：Legacy 的目标系统仅为 Windows 10 / 11。
+  -->
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+
+  <!-- DPI：Per-Monitor V2（多显示器 / 125% / 150% / 175% / 200% 下窗口、快速面板、OSD、托盘菜单定位一致） -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!-- 旧式声明（Windows 8.1 及更早识别）：true/PM = 每显示器 DPI 感知 -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>
+      <!-- 新式声明（Windows 10 1607+ 识别，优先级更高） -->
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>

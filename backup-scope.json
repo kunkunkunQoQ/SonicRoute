@@ -1,0 +1,722 @@
+[
+  {
+    "Version": "废案",
+    "Directory": "backups/废案",
+    "SourceFiles": 57,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1195745.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.2",
+    "Directory": "backups/v1.0.2",
+    "SourceFiles": 36,
+    "RuntimeFiles": 3,
+    "OriginalBytes": 71439908.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.3",
+    "Directory": "backups/v1.0.3",
+    "SourceFiles": 40,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 236561527.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.4",
+    "Directory": "backups/v1.0.4",
+    "SourceFiles": 40,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 240836655.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.5",
+    "Directory": "backups/v1.0.5",
+    "SourceFiles": 42,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 239366338.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.5r",
+    "Directory": "backups/v1.0.5r",
+    "SourceFiles": 43,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 237413209.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.5r2",
+    "Directory": "backups/v1.0.5r2",
+    "SourceFiles": 43,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 237415328.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.5r3",
+    "Directory": "backups/v1.0.5r3",
+    "SourceFiles": 43,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 237415268.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.5r4",
+    "Directory": "backups/v1.0.5r4",
+    "SourceFiles": 42,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 237263169.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.6",
+    "Directory": "backups/v1.0.6",
+    "SourceFiles": 42,
+    "RuntimeFiles": 8,
+    "OriginalBytes": 359371331.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.7",
+    "Directory": "backups/v1.0.7",
+    "SourceFiles": 42,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 233166790.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.7r",
+    "Directory": "backups/v1.0.7r",
+    "SourceFiles": 42,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 233176860.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.7r2",
+    "Directory": "backups/v1.0.7r2",
+    "SourceFiles": 42,
+    "RuntimeFiles": 6,
+    "OriginalBytes": 314350526.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.8",
+    "Directory": "backups/v1.0.8",
+    "SourceFiles": 54,
+    "RuntimeFiles": 6,
+    "OriginalBytes": 378610143.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.0.9",
+    "Directory": "backups/v1.0.9",
+    "SourceFiles": 33,
+    "RuntimeFiles": 6,
+    "OriginalBytes": 266069437.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.10",
+    "Directory": "backups/v1.10",
+    "SourceFiles": 55,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 305378645.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.11",
+    "Directory": "backups/v1.11",
+    "SourceFiles": 57,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 305482349.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.12",
+    "Directory": "backups/v1.12",
+    "SourceFiles": 40,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 380941857.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.12r",
+    "Directory": "backups/v1.12r",
+    "SourceFiles": 41,
+    "RuntimeFiles": 6,
+    "OriginalBytes": 388634262.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.13",
+    "Directory": "backups/v1.13",
+    "SourceFiles": 41,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 381324952.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.14",
+    "Directory": "backups/v1.14",
+    "SourceFiles": 41,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 381304350.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.15",
+    "Directory": "backups/v1.15",
+    "SourceFiles": 51,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 381242783.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.15-双进程阶段2",
+    "Directory": "backups/v1.15-双进程阶段2",
+    "SourceFiles": 56,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1247866.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.15a",
+    "Directory": "backups/v1.15a",
+    "SourceFiles": 51,
+    "RuntimeFiles": 2,
+    "OriginalBytes": 35855976.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.16",
+    "Directory": "backups/v1.16",
+    "SourceFiles": 52,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 381903710.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.16-自动化",
+    "Directory": "backups/v1.16-自动化",
+    "SourceFiles": 51,
+    "RuntimeFiles": 1,
+    "OriginalBytes": 1732961.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.17",
+    "Directory": "backups/v1.17",
+    "SourceFiles": 53,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 382177356.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.17-config-editor",
+    "Directory": "backups/v1.17-config-editor",
+    "SourceFiles": 1,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 73353.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.18",
+    "Directory": "backups/v1.18",
+    "SourceFiles": 54,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 382684536.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.18-定时",
+    "Directory": "backups/v1.18-定时",
+    "SourceFiles": 53,
+    "RuntimeFiles": 1,
+    "OriginalBytes": 1839040.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.18-启动项打开方式",
+    "Directory": "backups/v1.18-启动项打开方式",
+    "SourceFiles": 55,
+    "RuntimeFiles": 1,
+    "OriginalBytes": 1877353.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.18-自动化",
+    "Directory": "backups/v1.18-自动化",
+    "SourceFiles": 52,
+    "RuntimeFiles": 1,
+    "OriginalBytes": 1809237.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.19",
+    "Directory": "backups/v1.19",
+    "SourceFiles": 60,
+    "RuntimeFiles": 9,
+    "OriginalBytes": 779102328.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.19-自动化页顶部",
+    "Directory": "backups/v1.19-自动化页顶部",
+    "SourceFiles": 56,
+    "RuntimeFiles": 1,
+    "OriginalBytes": 1880761.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.19-ARM64双架构",
+    "Directory": "backups/v1.19-ARM64双架构",
+    "SourceFiles": 58,
+    "RuntimeFiles": 4,
+    "OriginalBytes": 536591594.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.19-config-editor",
+    "Directory": "backups/v1.19-config-editor",
+    "SourceFiles": 1,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 97333.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.19-Legacy（.NET Framework 4.8）",
+    "Directory": "backups/v1.19-Legacy（.NET Framework 4.8）",
+    "SourceFiles": 67,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 4674418.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-01-实时电平-优化前",
+    "Directory": "backups/v1.20-01-实时电平-优化前",
+    "SourceFiles": 70,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32004184.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-02-实时电平-性能优化",
+    "Directory": "backups/v1.20-02-实时电平-性能优化",
+    "SourceFiles": 70,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32005345.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-03-UI内存优化",
+    "Directory": "backups/v1.20-03-UI内存优化",
+    "SourceFiles": 70,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 31956730.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-04-Legacy切页优化",
+    "Directory": "backups/v1.20-04-Legacy切页优化",
+    "SourceFiles": 70,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 31985161.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-05-CPU优化前",
+    "Directory": "backups/v1.20-05-CPU优化前",
+    "SourceFiles": 70,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 31985161.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-06-CPU优化",
+    "Directory": "backups/v1.20-06-CPU优化",
+    "SourceFiles": 71,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32031408.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-07-OSD响应优化前",
+    "Directory": "backups/v1.20-07-OSD响应优化前",
+    "SourceFiles": 71,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32031408.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-08-OSD响应优化",
+    "Directory": "backups/v1.20-08-OSD响应优化",
+    "SourceFiles": 71,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32055151.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-09-动画优化前",
+    "Directory": "backups/v1.20-09-动画优化前",
+    "SourceFiles": 71,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32055832.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-10-动画优化",
+    "Directory": "backups/v1.20-10-动画优化",
+    "SourceFiles": 73,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32101857.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-11-OSD显示优化前",
+    "Directory": "backups/v1.20-11-OSD显示优化前",
+    "SourceFiles": 73,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32101857.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-12-OSD显示优化",
+    "Directory": "backups/v1.20-12-OSD显示优化",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32250779.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-13-OSD强调色",
+    "Directory": "backups/v1.20-13-OSD强调色",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32250814.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-14-OSD标题深浅色",
+    "Directory": "backups/v1.20-14-OSD标题深浅色",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32250905.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-15-OSD标题强调色深浅",
+    "Directory": "backups/v1.20-15-OSD标题强调色深浅",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32251042.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-16-OSD设置布局",
+    "Directory": "backups/v1.20-16-OSD设置布局",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32256197.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-17-OSD外观标题样式",
+    "Directory": "backups/v1.20-17-OSD外观标题样式",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32256220.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-18-OSD外观分组",
+    "Directory": "backups/v1.20-18-OSD外观分组",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32256415.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-19-OSD外观位置",
+    "Directory": "backups/v1.20-19-OSD外观位置",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32256599.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-20-OSD外观顺序修正",
+    "Directory": "backups/v1.20-20-OSD外观顺序修正",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32256397.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-21-移除OSD调整标题",
+    "Directory": "backups/v1.20-21-移除OSD调整标题",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32256203.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-22-OSD音量数字左移",
+    "Directory": "backups/v1.20-22-OSD音量数字左移",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32251697.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-23-OSD音量条CPU优化",
+    "Directory": "backups/v1.20-23-OSD音量条CPU优化",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32265933.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-24-简洁面板默认高度450",
+    "Directory": "backups/v1.20-24-简洁面板默认高度450",
+    "SourceFiles": 75,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32265435.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-25-自动化复用功能扩展",
+    "Directory": "backups/v1.20-25-自动化复用功能扩展",
+    "SourceFiles": 76,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32462541.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-26-命令行执行规则",
+    "Directory": "backups/v1.20-26-命令行执行规则",
+    "SourceFiles": 77,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32572277.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-27-自动化短命令与交互优化",
+    "Directory": "backups/v1.20-27-自动化短命令与交互优化",
+    "SourceFiles": 78,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 32665552.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-28-预览版发布",
+    "Directory": "backups/v1.20-28-预览版发布",
+    "SourceFiles": 78,
+    "RuntimeFiles": 17,
+    "OriginalBytes": 67257361.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-29-正式版与核心功能说明",
+    "Directory": "backups/v1.20-29-正式版与核心功能说明",
+    "SourceFiles": 78,
+    "RuntimeFiles": 17,
+    "OriginalBytes": 67257054.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-30-Wiki整理",
+    "Directory": "backups/v1.20-30-Wiki整理",
+    "SourceFiles": 0,
+    "RuntimeFiles": 0,
+    "OriginalBytes": null,
+    "Note": "原备份仅含文档或内部记录，没有独立的生产源码及可运行文件。"
+  },
+  {
+    "Version": "v1.20-31-商店提交与文档顺序",
+    "Directory": "backups/v1.20-31-商店提交与文档顺序",
+    "SourceFiles": 0,
+    "RuntimeFiles": 0,
+    "OriginalBytes": null,
+    "Note": "原备份仅含文档或内部记录，没有独立的生产源码及可运行文件。"
+  },
+  {
+    "Version": "v1.20-32-英文README",
+    "Directory": "backups/v1.20-32-英文README",
+    "SourceFiles": 0,
+    "RuntimeFiles": 0,
+    "OriginalBytes": null,
+    "Note": "原备份仅含文档或内部记录，没有独立的生产源码及可运行文件。"
+  },
+  {
+    "Version": "v1.20-33-GitHubAbout优化",
+    "Directory": "backups/v1.20-33-GitHubAbout优化",
+    "SourceFiles": 0,
+    "RuntimeFiles": 0,
+    "OriginalBytes": null,
+    "Note": "原备份仅含文档或内部记录，没有独立的生产源码及可运行文件。"
+  },
+  {
+    "Version": "v1.20-34-核心功能精简",
+    "Directory": "backups/v1.20-34-核心功能精简",
+    "SourceFiles": 0,
+    "RuntimeFiles": 0,
+    "OriginalBytes": null,
+    "Note": "原备份仅含文档或内部记录，没有独立的生产源码及可运行文件。"
+  },
+  {
+    "Version": "v1.20-35-代码审查与性能测试",
+    "Directory": "backups/v1.20-35-代码审查与性能测试",
+    "SourceFiles": 150,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 3163508.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.20-Legacy切页优化",
+    "Directory": "backups/v1.20-Legacy切页优化",
+    "SourceFiles": 0,
+    "RuntimeFiles": 0,
+    "OriginalBytes": null,
+    "Note": "原备份的可运行版本目录为空，没有可上传的源码或程序。"
+  },
+  {
+    "Version": "v1.21-01-修复与性能优化",
+    "Directory": "backups/v1.21-01-修复与性能优化",
+    "SourceFiles": 227,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 4830675.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-02-自动化便利功能与规则调用",
+    "Directory": "backups/v1.21-02-自动化便利功能与规则调用",
+    "SourceFiles": 82,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1628400.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-03-步骤失败策略与筛选布局",
+    "Directory": "backups/v1.21-03-步骤失败策略与筛选布局",
+    "SourceFiles": 82,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1629529.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-04-自动化卡片布局",
+    "Directory": "backups/v1.21-04-自动化卡片布局",
+    "SourceFiles": 84,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1658326.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-05-导航图标与自动化编辑布局",
+    "Directory": "backups/v1.21-05-导航图标与自动化编辑布局",
+    "SourceFiles": 85,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1675244.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-06-启动模式对齐与禁用图标反色",
+    "Directory": "backups/v1.21-06-启动模式对齐与禁用图标反色",
+    "SourceFiles": 85,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1675397.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-07-主题设置卡片与延时对齐",
+    "Directory": "backups/v1.21-07-主题设置卡片与延时对齐",
+    "SourceFiles": 91,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1798235.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-08-主题精简与设置提示修复",
+    "Directory": "backups/v1.21-08-主题精简与设置提示修复",
+    "SourceFiles": 89,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1695170.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-09-颜色选择与统一输入框",
+    "Directory": "backups/v1.21-09-颜色选择与统一输入框",
+    "SourceFiles": 91,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1719811.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-10-界面内存优化与规则自动命名",
+    "Directory": "backups/v1.21-10-界面内存优化与规则自动命名",
+    "SourceFiles": 92,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1725536.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-11-关闭界面资源释放",
+    "Directory": "backups/v1.21-11-关闭界面资源释放",
+    "SourceFiles": 377,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 38284971.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-12-后台事件与监听优化",
+    "Directory": "backups/v1.21-12-后台事件与监听优化",
+    "SourceFiles": 98,
+    "RuntimeFiles": 13,
+    "OriginalBytes": 33034058.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21-13-事件优先与可选定时兜底",
+    "Directory": "backups/v1.21-13-事件优先与可选定时兜底",
+    "SourceFiles": 101,
+    "RuntimeFiles": 63,
+    "OriginalBytes": 38518689.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.21正式版",
+    "Directory": "backups/v1.21正式版",
+    "SourceFiles": 104,
+    "RuntimeFiles": 17,
+    "OriginalBytes": 114561011.0,
+    "Note": "保留该阶段必要源码、资源及已有可运行/安装文件；原文件内容保持不变。"
+  },
+  {
+    "Version": "v1.17-固定高度面板",
+    "Directory": "supplementary-source/v1.17-固定高度面板",
+    "SourceFiles": 52,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1289632.0,
+    "Note": "补充的公开源码或现有安装包。"
+  },
+  {
+    "Version": "v1.19-Legacy",
+    "Directory": "supplementary-source/v1.19-Legacy",
+    "SourceFiles": 71,
+    "RuntimeFiles": 0,
+    "OriginalBytes": 1957930.0,
+    "Note": "补充的公开源码或现有安装包。"
+  },
+  {
+    "Version": "商店安装包",
+    "Directory": "store-packages",
+    "SourceFiles": 0,
+    "RuntimeFiles": 5,
+    "OriginalBytes": 38177800.0,
+    "Note": "补充的公开源码或现有安装包。"
+  }
+]
