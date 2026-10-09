@@ -1,2 +1,136 @@
-# Locally reconstructed originals and temporary output.
+# ===== 编译产物 =====
+bin/
+obj/
+
+# ===== 发布产物（解压即用包，不纳入源码仓库）=====
+dist/
+*.zip
+
+# ===== Visual Studio 用户设置 =====
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ===== 构建/调试临时文件 =====
+*.pdb
+*.cache
+*.log
+TestResults/
+
+# 临时附件
+_attach_tmp.bin
+屏幕截图 *.png
+
+# 根目录截图（已归档到 docs/images）
+/快速面板.png
+/默认调节的应用设置.png
+/多种快捷键.png
+/快捷键.png
+/设置.png
+
+# ===== 源码归档（本地备份，不入仓库）=====
+/SonicRoute源码/
+
+# Release 临时 JSON
+/rel*.json
+.preview/
+# 本地保留、不上传 GitHub 的多余文件
+/Probe/
+/SonicRoute.Selftest/
+/WpfUiSkeleton/
+/docs/*
+!/docs/automation-command-line.md
+!/docs/automation-convenience.md
+!/docs/theme-settings.md
+!/docs/release-v1.21.md
+!/docs/images/
+/docs/images/*
+!/docs/images/*.png
+!/docs/images/*.gif
+/背景/
+/主题.png
+/图标.png
+
+# wiki 子仓库（独立 git 仓库，勿提交）
+SonicRoute.wiki/
+
+# AI 交接摘要（本地维护，不推送 GitHub）
+/AI_CONTEXT.md
+
+# 本地配置编辑器（单文件 HTML 工具，不推送 GitHub）
+/config-editor/
+
+# Private materials and local reconstruction output
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
+*.snk
+config.json
+settings.json
+rules.json
+/.workbuddy-ai/
+/动画/
 *.restore-tmp
+/backups/v1.0.2/可运行版本/SonicRoute-v1.0.2-解压即用.zip
+/backups/v1.0.3/可运行版本/SonicRoute-v1.0.3.exe
+/backups/v1.0.3/可运行版本/SonicRoute-v1.0.3.zip
+/backups/v1.0.4/可运行版本/SonicRoute-v1.0.4.exe
+/backups/v1.0.4/可运行版本/SonicRoute-v1.0.4.zip
+/backups/v1.0.5/可运行版本/SonicRoute-v1.0.5.exe
+/backups/v1.0.5/可运行版本/SonicRoute-v1.0.5.zip
+/backups/v1.0.5r/可运行版本/SonicRoute-v1.0.5r.exe
+/backups/v1.0.5r/可运行版本/SonicRoute-v1.0.5r.zip
+/backups/v1.0.5r2/可运行版本/SonicRoute-v1.0.5r2.exe
+/backups/v1.0.5r2/可运行版本/SonicRoute-v1.0.5r2.zip
+/backups/v1.0.5r3/可运行版本/SonicRoute-v1.0.5r3.exe
+/backups/v1.0.5r3/可运行版本/SonicRoute-v1.0.5r3.zip
+/backups/v1.0.5r4/可运行版本/SonicRoute-v1.0.5r4.exe
+/backups/v1.0.5r4/可运行版本/SonicRoute-v1.0.5r4.zip
+/backups/v1.0.6/安装包/SonicRoute-v1.0.6.msi
+/backups/v1.0.6/安装包/SonicRoute-v1.0.6.msix
+/backups/v1.0.6/可运行版本/SonicRoute-v1.0.6.exe
+/backups/v1.0.6/可运行版本/SonicRoute-v1.0.6.zip
+/backups/v1.0.7/可运行版本/SonicRoute-v1.0.7.exe
+/backups/v1.0.7/可运行版本/SonicRoute-v1.0.7.zip
+/backups/v1.0.7r/可运行版本/SonicRoute-v1.0.7r.exe
+/backups/v1.0.7r/可运行版本/SonicRoute-v1.0.7r.zip
+/backups/v1.0.7r2/安装包/SonicRoute-v1.0.7r2.msix
+/backups/v1.0.7r2/可运行版本/SonicRoute-v1.0.7r2.exe
+/backups/v1.0.7r2/可运行版本/SonicRoute-v1.0.7r2.zip
+/backups/v1.0.8/安装包/SonicRoute-v1.0.8.msix
+/backups/v1.0.8/可运行版本/SonicRoute-v1.0.8.exe
+/backups/v1.0.8/可运行版本/SonicRoute-v1.0.8.zip
+/backups/v1.0.9/安装包/SonicRoute-v1.0.9.msix
+/backups/v1.0.9/可运行版本/SonicRoute-v1.0.9.exe
+/backups/v1.0.9/可运行版本/SonicRoute-v1.0.9.zip
+/backups/v1.10/可运行版本/SonicRoute-v1.10.exe
+/backups/v1.10/可运行版本/SonicRoute-v1.10.zip
+/backups/v1.11/可运行版本/SonicRoute-v1.11.exe
+/backups/v1.11/可运行版本/SonicRoute-v1.11.zip
+/backups/v1.12/可运行版本/SonicRoute-v1.12.exe
+/backups/v1.12/可运行版本/SonicRoute-v1.12.zip
+/backups/v1.12r/可运行版本/SonicRoute-v1.12r.exe
+/backups/v1.12r/可运行版本/SonicRoute-v1.12r.zip
+/backups/v1.13/可运行版本/SonicRoute-v1.13.exe
+/backups/v1.13/可运行版本/SonicRoute-v1.13.zip
+/backups/v1.14/可运行版本/SonicRoute-v1.14.exe
+/backups/v1.14/可运行版本/SonicRoute-v1.14.zip
+/backups/v1.15/可运行版本/SonicRoute-v1.15.exe
+/backups/v1.15/可运行版本/SonicRoute-v1.15.zip
+/backups/v1.16/可运行版本/SonicRoute-v1.16.exe
+/backups/v1.16/可运行版本/SonicRoute-v1.16.zip
+/backups/v1.17/可运行版本/SonicRoute-v1.17.exe
+/backups/v1.17/可运行版本/SonicRoute-v1.17.zip
+/backups/v1.18/可运行版本/SonicRoute-v1.18.exe
+/backups/v1.18/可运行版本/SonicRoute-v1.18.zip
+/backups/v1.19-ARM64双架构/可运行版本/含运行环境版-win-arm64/SonicRoute.exe
+/backups/v1.19-ARM64双架构/可运行版本/含运行环境版-win-x64/SonicRoute.exe
+/backups/v1.19/可运行版本/SonicRoute-v1.19-arm64.exe
+/backups/v1.19/可运行版本/SonicRoute-v1.19-arm64.zip
+/backups/v1.19/可运行版本/SonicRoute-v1.19-x64.exe
+/backups/v1.19/可运行版本/SonicRoute-v1.19-x64.zip

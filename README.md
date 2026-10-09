@@ -25,5 +25,5 @@
 此分支独立于主分支，不改变应用行为；包含历史二进制会增加仓库克隆体积。只需此备份时可单独克隆分支：
 
 ```text
-git clone --single-branch --branch codex/history-backup-20261009 https://github.com/kunkunkunQoQ/SonicRoute.git SonicRoute-History
+git clone --single-branch --branch backup/history https://github.com/kunkunkunQoQ/SonicRoute.git SonicRoute-History
 ```
