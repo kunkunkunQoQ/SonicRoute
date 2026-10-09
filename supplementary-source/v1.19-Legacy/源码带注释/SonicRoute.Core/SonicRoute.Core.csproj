@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net48 双目标（Spike）：net8.0-windows 行为保持不变；net48 为 .NET Framework 4.8 兼容分支 -->
+    <TargetFrameworks>net8.0-windows;net48</TargetFrameworks>
+    <!-- net48 的 SDK 默认 LangVersion 为 C# 7.3，必须显式提升（switch 表达式 / using var / new() / ??= / 模式匹配等） -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SonicRoute.Core</RootNamespace>
+    <AssemblyName>SonicRoute.Core</AssemblyName>
+    <!-- 版本号与主工程 / Legacy 保持完全一致（第三阶段「发布版本统一」要求）：
+         否则随包发布的 SonicRoute.Core.dll 文件属性会显示 1.0.0.0，与产品版本 1.19 不一致 -->
+    <Version>1.19</Version>
+    <!-- 与主工程一致：无 RID 构建保持 x64；带 RID 发布时由 SDK 按 RID 推导（x64 / arm64），不用 AnyCPU 代替 ARM64 -->
+    <PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!-- net48 无 RID 概念；ComInterop 的 PROPVARIANT 声明为 [StructLayout(Size = 24)]（x64 布局），
+         必须锁 x64 且禁用 Prefer32Bit，否则 32 位进程下 PropVariantClear 会读越界 -->
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <!-- Core 直接依赖 System.Text.Json（ConfigService / AutoRuleStore），net48 不含该程序集，
+       仅对 net48 目标条件引入；net8.0-windows 分支不引包，行为不变 -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+</Project>
