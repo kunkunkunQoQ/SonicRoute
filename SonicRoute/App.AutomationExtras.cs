@@ -14,6 +14,11 @@ namespace SonicRoute
         private ToolStripMenuItem BuildFavoriteRulesMenu(ContextMenuStrip owner)
         {
             var favorites = new ToolStripMenuItem(L10n.T("Auto.Favorites"));
+            if (favorites.DropDown is ToolStripDropDownMenu dropdown)
+            {
+                dropdown.ShowImageMargin = false;
+                dropdown.ShowCheckMargin = false;
+            }
             favorites.DropDownItems.Add(L10n.T("Auto.FavoritesEmpty")).Enabled = false;
             owner.Opening += async (_, _) =>
             {

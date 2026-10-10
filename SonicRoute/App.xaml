@@ -10,6 +10,19 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="4"/>
+            <Setter Property="ItemContainerStyle" Value="{DynamicResource ConvenienceMenuItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" CornerRadius="6">
+                            <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </ScrollViewer>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="ConvenienceMenuItem" TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
@@ -20,9 +33,9 @@
                     <ControlTemplate TargetType="MenuItem">
                         <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="8,6">
                             <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="CheckMark" Text="✓" Visibility="Hidden" Foreground="{TemplateBinding Foreground}"/>
-                                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"/>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+                                <TextBlock x:Name="CheckMark" Grid.Column="1" Margin="10,0,0,0" Text="✓" Visibility="Collapsed" Foreground="{TemplateBinding Foreground}"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="1.21.0.0" name="SonicRoute.Legacy.app" />
+  <assemblyIdentity version="1.22.0.0" name="SonicRoute.Legacy.app" />
 
   <!-- 权限：普通用户即可，不要求管理员（与 .NET 8 版本一致） -->
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">

@@ -33,7 +33,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <!-- 版本号与 .NET 8 主版本保持一致（UI 显示联动，配置/规则格式互通） -->
-    <Version>1.21</Version>
+    <Version>1.22</Version>
     <AssemblyTitle>SonicRoute</AssemblyTitle>
     <Product>音跃 SonicRoute</Product>
     <Authors>困困困</Authors>

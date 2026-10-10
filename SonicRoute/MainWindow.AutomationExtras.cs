@@ -8,7 +8,6 @@ using SonicRoute.Core;
 using SonicRoute.Core.Models;
 using Button = System.Windows.Controls.Button;
 using ComboBox = System.Windows.Controls.ComboBox;
-using Clipboard = System.Windows.Clipboard;
 using Binding = System.Windows.Data.Binding;
 
 namespace SonicRoute
@@ -74,10 +73,15 @@ namespace SonicRoute
                 var menu = ConvenienceMenus.Create();
                 menu.PlacementTarget = button;
                 var command = ConvenienceMenus.Item(L10n.T("Auto.CopyCommand"));
-                command.Click += (_, _) =>
+                command.Click += async (_, _) =>
                 {
-                    try { Clipboard.SetText(RuleCommandLine.BuildShortCommand(id)); ShowToast(L10n.T("Auto.CommandCopied")); }
-                    catch { ShowToast(L10n.T("Auto.CommandCopyFailed")); }
+                    command.IsEnabled = false;
+                    bool copied = false;
+                    try { copied = await ClipboardWriter.TryWriteTextAsync(RuleCommandLine.BuildShortCommand(id)); }
+                    catch { /* Thread startup can also fail; report through the same UI message. */ }
+                    finally { command.IsEnabled = true; }
+                    if (!_isClosed)
+                        ShowToast(L10n.T(copied ? "Auto.CommandCopied" : "Auto.CommandCopyFailed"));
                 };
                 var favorites = _config.FavoriteRuleIds ??= new();
                 var favorite = ConvenienceMenus.Item(L10n.T("Auto.Favorite"));

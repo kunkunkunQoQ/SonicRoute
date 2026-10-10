@@ -1,7 +1,7 @@
 param(
-    [string]$PublishDirectory=(Join-Path $PSScriptRoot '../../dist/SonicRoute-v1.21-Lite-x64-event-only'),
-    [string]$OutputDirectory=(Join-Path $PSScriptRoot '../../dist/msix/event-only-new-icon'),
-    [string]$PackageVersion='1.21.0.0',
+    [string]$PublishDirectory=(Join-Path $PSScriptRoot '../../dist/SonicRoute-v1.22-Lite-x64-event-only'),
+    [string]$OutputDirectory=(Join-Path $PSScriptRoot '../../dist/msix/v1.22'),
+    [string]$PackageVersion='1.22.0.0',
     [string]$SdkDirectory
 )
 $ErrorActionPreference='Stop'

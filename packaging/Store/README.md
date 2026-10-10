@@ -5,7 +5,7 @@
 先发布 Lite x64 框架依赖单文件，再在仓库根目录运行：
 
 ```powershell
-dotnet publish SonicRoute/SonicRoute.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/SonicRoute-v1.21-Lite-x64-event-only
+dotnet publish SonicRoute/SonicRoute.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist/SonicRoute-v1.22-Lite-x64-event-only
 & ./packaging/Store/Build-Package.ps1
 ```
 

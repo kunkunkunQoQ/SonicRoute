@@ -309,7 +309,7 @@ namespace SonicRoute
             try
             {
                 if (_trayIcon == null) return;
-                var menu = new ContextMenuStrip();
+                var menu = new ContextMenuStrip { ShowImageMargin = false, ShowCheckMargin = false };
                 menu.Items.Add(L10n.T("St.Settings"), null, (_, _) => ShowMainWindow());
                 menu.Items.Add(L10n.T("Tray.OpenPanel"), null, (_, _) => ToggleQuickPanel());
                 menu.Items.Add(BuildFavoriteRulesMenu(menu));
