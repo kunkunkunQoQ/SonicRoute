@@ -23,16 +23,10 @@ namespace SonicRoute.Core.Compat
         public static int Clamp(int value, int min, int max) =>
             value < min ? min : (value > max ? max : value);
 
-        public static long Clamp(long value, long min, long max) =>
-            value < min ? min : (value > max ? max : value);
-
         public static float Clamp(float value, float min, float max) =>
             value < min ? min : (value > max ? max : value);
 
         public static double Clamp(double value, double min, double max) =>
-            value < min ? min : (value > max ? max : value);
-
-        public static decimal Clamp(decimal value, decimal min, decimal max) =>
             value < min ? min : (value > max ? max : value);
     }
 }

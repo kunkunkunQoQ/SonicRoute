@@ -104,10 +104,5 @@ namespace SonicRoute
         [System.Runtime.InteropServices.DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
 
-        /// <summary>显式清空全部图标缓存；通常关闭 UI 使用 TrimForIdle 保留少量常用图标。</summary>
-        public static void Clear()
-        {
-            Cache.Clear();
-        }
     }
 }

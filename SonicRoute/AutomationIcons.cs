@@ -15,7 +15,6 @@ namespace SonicRoute
             return geometry;
         }
 
-        public static Geometry Search { get; } = Frozen("M10,3 A7,7 0 1 0 10,17 A7,7 0 1 0 10,3 M15,15 L21,21");
         public static Geometry Play { get; } = Frozen("M6,3 L21,12 L6,21 Z");
         public static Geometry Waiting { get; } = Frozen("M5,3 L19,3 M5,21 L19,21 M7,3 L7,7 L17,17 L17,21 M17,3 L17,7 L7,17 L7,21");
         public static Geometry Edit { get; } = Frozen("M4,16 L16,4 Q18,2 20,4 Q22,6 20,8 L8,20 L3,21 Z M14,6 L18,10");

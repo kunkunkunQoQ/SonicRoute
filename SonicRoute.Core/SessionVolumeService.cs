@@ -51,18 +51,6 @@ namespace SonicRoute.Core
             }
         }
 
-        /// <summary>返回任意一个有可用输出会话的 PID；没有返回 0（托盘滚轮兜底用）。</summary>
-        public static int FirstSessionPid()
-        {
-            Refresh(true);
-            lock (_lock)
-            {
-                foreach (var kv in _renderVolumes)
-                    if (kv.Value is { Count: > 0 }) return kv.Key;
-            }
-            return 0;
-        }
-
         /// <summary>读取音量百分比（0–100）；无会话返回 -1。</summary>
         public static int GetVolumePercent(int pid)
         {

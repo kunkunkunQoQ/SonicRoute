@@ -59,8 +59,5 @@ namespace SonicRoute.Core.Compat
 
         /// <summary>真实 Windows Build 号（Win10 19045 / Win11 22621 等）；取不到返回 0。</summary>
         public static int Build => _build;
-
-        /// <summary>是否为 Windows 11（Build ≥ 22000）。</summary>
-        public static bool IsWindows11 => _build >= 22000;
     }
 }

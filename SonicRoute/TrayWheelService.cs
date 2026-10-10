@@ -96,7 +96,6 @@ namespace SonicRoute
             remove => _osdService.AdjustFinished -= value;
         }
         internal long MicStateVersion => _osdService.MicStateVersion;
-        internal Task<bool> QueryMicMuteAsync(bool trackInput) => _osdService.QueryMicMuteAsync(trackInput);
 
         public TrayWheelService(System.Windows.Forms.NotifyIcon? trayIcon)
         {

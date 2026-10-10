@@ -11,7 +11,16 @@ Faster control of audio for every Windows app.
 
 SonicRoute is a Windows audio utility that lives in the system tray. Route audio for individual apps, adjust volume, or mute audio with hotkeys, taskbar scrolling, a quick panel, OSD feedback, and automation.
 
-![Preview](docs/images/preview.gif)
+<table>
+  <tr>
+    <th width="35%" align="left">Quick panel</th>
+    <th width="65%" align="left">Theme and full interface</th>
+  </tr>
+  <tr>
+    <td valign="top"><a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" alt="SonicRoute quick panel with device selection, per-app volume, and live audio activity"></a></td>
+    <td valign="top"><a href="docs/images/theme-settings.png"><img src="docs/images/theme-settings.png" width="500" alt="SonicRoute theme settings with appearance mode, accent color, and background opacity"></a></td>
+  </tr>
+</table>
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · C# / WPF
 
@@ -81,7 +90,7 @@ The following Wiki pages are in Chinese.
 
 Future improvements will be delivered in stages rather than held for one major release.
 
-- **v1.22 · Experience refinements**: Improve the quick panel, OSD, and fullscreen interactions.
+- **v1.22 · Experience refinements (current source)**: Fix command-copy stalls and menu gutters, and continue improving the quick panel, OSD, and fullscreen interactions.
 - **v1.23 · Performance and stability**: Improve background resource usage, responsiveness, and compatibility.
 - **Later stages**: Continue refining existing features based on feedback.
 

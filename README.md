@@ -11,7 +11,16 @@
 
 SonicRoute 是一款常驻托盘的 Windows 音频工具，支持按应用切换输入 / 输出设备、调整音量和静音。通过快捷键、任务栏滚轮、快速面板、OSD 与自动化，让常用操作更简单。
 
-![预览](docs/images/preview.gif)
+<table>
+  <tr>
+    <th width="35%" align="left">快速面板</th>
+    <th width="65%" align="left">主题与完整界面</th>
+  </tr>
+  <tr>
+    <td valign="top"><a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" alt="SonicRoute 快速面板：设备切换、应用音量与实时声音活动"></a></td>
+    <td valign="top"><a href="docs/images/theme-settings.png"><img src="docs/images/theme-settings.png" width="500" alt="SonicRoute 主题设置：主题模式、强调色与背景透明度"></a></td>
+  </tr>
+</table>
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · C# / WPF
 
@@ -79,7 +88,7 @@ Lite 版本需要匹配架构的 .NET 8 Desktop Runtime；ARM64 尚未完成真�
 
 后续改进将分阶段持续推出，不再集中到单次大版本发布。
 
-- **v1.22 · 体验打磨**：改善快速面板、OSD 与全屏操作体验。
+- **v1.22 · 体验打磨（当前源码）**：修复复制命令卡顿与菜单留白，持续改善快速面板、OSD 与全屏操作体验。
 - **v1.23 · 性能与稳定性**：优化后台资源占用、响应速度及兼容性。
 - **后续阶段**：根据反馈持续完善现有功能。
 

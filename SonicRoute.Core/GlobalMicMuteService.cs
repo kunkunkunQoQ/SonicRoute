@@ -80,22 +80,6 @@ namespace SonicRoute.Core
             }
         }
 
-        /// <summary>系统默认输入设备（eCapture 默认端点）是否静音；检测方式与麦克风一致
-        /// （IAudioEndpointVolume.GetMute），供「同时监听默认输入静音」常驻 OSD 使用。</summary>
-        public static bool IsDefaultInputMuted()
-        {
-            try
-            {
-                var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
-                try
-                {
-                    return IsDefaultInputMuted(enumerator);
-                }
-                finally { Marshal.ReleaseComObject(enumerator); }
-            }
-            catch { return false; }
-        }
-
         /// <summary>统一静音状态（麦克风静音 OSD 常驻用）：全局麦克风静音，
         /// 或（trackInput=true 时）系统默认输入设备静音。检测逻辑与各单项一致。</summary>
         public static bool IsAnyMuted(bool trackInput)

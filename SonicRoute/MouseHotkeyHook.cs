@@ -18,7 +18,6 @@ namespace SonicRoute
         private const uint WM_MOUSEWHEEL = 0x020A;
         private const uint WM_MBUTTONDOWN = 0x0207;
         private const uint WM_XBUTTONDOWN = 0x020B;
-        private const uint WM_XBUTTONUP = 0x020C;
 
         private const uint MOD_ALT = 0x1;
         private const uint MOD_CONTROL = 0x2;
