@@ -256,6 +256,13 @@ namespace SonicRoute
         }
 
         /// <summary>按配置决定当前应用（与托盘滚轮/概览统一规则，优先共享的当前应用）。</summary>
+        internal void RefreshAppIcons(string processName)
+        {
+            if (_isClosed) return;
+            foreach (var item in AppCombo.Items.OfType<AppItem>())
+                if (string.Equals(item.ProcessName, processName, StringComparison.OrdinalIgnoreCase)) item.ReloadIcon();
+        }
+
         private async Task ResolveDefaultAppAsync()
         {
             if (_isClosed) return;

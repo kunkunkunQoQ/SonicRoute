@@ -169,19 +169,9 @@
         <!-- 自动化应用下拉项：图标 + 名称（AppItem 懒加载图标） -->
         <DataTemplate x:Key="AutoAppItemTemplate">
             <StackPanel Orientation="Horizontal">
-                <Grid Width="18" Height="18" Margin="0,0,6,0">
-                    <Viewbox>
-                        <Path Data="{x:Static local:AutomationIcons.Apps}" Width="24" Height="24" Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.8">
-                            <Path.Style>
-                                <Style TargetType="Path">
-                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers><DataTrigger Binding="{Binding Icon}" Value="{x:Null}"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
-                                </Style>
-                            </Path.Style>
-                        </Path>
-                    </Viewbox>
-                    <Image Source="{Binding Icon}" RenderOptions.BitmapScalingMode="HighQuality"/>
-                </Grid>
+                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AppIconTemplate}"
+                                Width="18" Height="18" Margin="0,0,6,0" Focusable="False"
+                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center"/>
             </StackPanel>
         </DataTemplate>
@@ -369,8 +359,8 @@
         <DataTemplate x:Key="AppItemTemplate">
             <StackPanel Orientation="Horizontal">
                 <Grid Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center">
-                    <Image Source="{Binding Icon}" Width="18" Height="18"
-                           SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AppIconTemplate}"
+                                    Focusable="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
                     <!-- 禁用自动切换的应用：图标右上角主题色 RGB 反色小圆点 -->
                     <Ellipse Width="6" Height="6" HorizontalAlignment="Right" VerticalAlignment="Top"
                              Margin="0,-1,-1,0" Fill="{Binding DotBrush}"
@@ -1213,6 +1203,15 @@
                         <TextBlock Text="{Binding [Apps.RenameHint], Source={x:Static local:L10n.Instance}}"
                                    FontSize="11" Foreground="{DynamicResource Theme.TextSecondary}"
                                    Margin="0,0,0,12" TextWrapping="Wrap"/>
+                        <DockPanel Margin="0,0,0,12" LastChildFill="True" ToolTip="{Binding [AppIcons.Hint], Source={x:Static local:L10n.Instance}}">
+                            <ContentControl x:Name="AppsIconPreview" ContentTemplate="{StaticResource AppIconTemplate}"
+                                            Width="24" Height="24" Margin="0,0,8,0" DockPanel.Dock="Left" Focusable="False"
+                                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                            <WrapPanel>
+                                <Button x:Name="IconImportButton" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Click="IconImport_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Import], Source={x:Static local:L10n.Instance}}" Margin="10,0"/></Button>
+                                <Button x:Name="IconResetButton" Style="{StaticResource GhostButton}" Click="IconReset_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Reset], Source={x:Static local:L10n.Instance}}" Margin="10,0"/></Button>
+                            </WrapPanel>
+                        </DockPanel>
                         <TextBlock x:Name="AppsDetailPid" Text=""
                                    FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                    Margin="0,0,0,14"/>

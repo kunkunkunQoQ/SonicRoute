@@ -531,5 +531,13 @@
   "Template.Music.Name": "Musik beim Wechsel zum Spiel leiser stellen",
   "Template.Music.Description": "Beim Wechsel zum Spiel die Lautstärke der gewählten Musik-App auf 20 % setzen. Die Musik-App benötigt eine bestehende Audiositzung. Die Lautstärke wird nicht automatisch zurückgesetzt.",
   "Template.Night.Name": "Systemlautstärke jeden Abend senken",
-  "Template.Night.Description": "Die Lautstärke der Standardausgabe täglich um 22:00 Uhr auf 15 % setzen. Uhrzeit und Lautstärke sind anpassbar. Die Lautstärke wird nicht automatisch zurückgesetzt."
+  "Template.Night.Description": "Die Lautstärke der Standardausgabe täglich um 22:00 Uhr auf 15 % setzen. Uhrzeit und Lautstärke sind anpassbar. Die Lautstärke wird nicht automatisch zurückgesetzt.",
+  "AppIcons.Import": "Symbol importieren…",
+  "AppIcons.Reset": "Automatisches Symbol",
+  "AppIcons.Hint": "PNG, JPG oder ICO. Apps mit gleichem Prozessnamen teilen das Symbol. Die Einstellung bleibt nach einem Neustart erhalten; ohne Anpassung gilt das Standardsymbol.",
+  "AppIcons.Limit": "Symbole können für bis zu 256 Apps festgelegt werden. Stellen Sie zunächst einige automatische Symbole wieder her.",
+  "AppIcons.Invalid": "Das Bild kann nicht gelesen werden. Verwenden Sie PNG, JPG oder ICO mit höchstens 8 MB und 4096 Pixeln pro Seite.",
+  "AppIcons.SaveFailed": "Das Symbol konnte nicht gespeichert werden. Prüfen Sie, ob der Datenordner beschreibbar ist.",
+  "AppIcons.Imported": "App-Symbol aktualisiert",
+  "AppIcons.ResetDone": "Automatisches Symbol wiederhergestellt"
 }

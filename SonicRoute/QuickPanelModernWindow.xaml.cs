@@ -35,6 +35,7 @@ namespace SonicRoute
         private sealed class AppRow
         {
             public AudioAppInfo App = null!;
+            public AppItem IconItem = null!;
             public Border HeaderBorder = null!;
             public Slider Slider = null!;
             public Border MuteDot = null!;
@@ -684,7 +685,7 @@ namespace SonicRoute
                     var pid = (int)app.ProcessId;
                     var item = AppItem.From(app);
                     pendingIcons.Add(item);
-                    var row = new AppRow { App = app };
+                    var row = new AppRow { App = app, IconItem = item };
 
                     // 行头：图标（可点击静音）+ 百分比 + ▾ + 音量条
                     var header = new Border
@@ -697,22 +698,20 @@ namespace SonicRoute
 
                     // 图标按钮（点击静音/取消静音），右上角静音点
                     var iconGrid = new Grid { Width = 30, Height = 30, Margin = new Thickness(0, 0, 2, 0) };
-                    var img = new Image
+                    var appIcon = new System.Windows.Controls.ContentControl
                     {
                         Width = 18,
                         Height = 18,
-                        SnapsToDevicePixels = true
+                        Focusable = false,
+                        HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
+                        VerticalContentAlignment = System.Windows.VerticalAlignment.Stretch,
+                        Content = item,
+                        ContentTemplate = (DataTemplate)FindResource("AppIconTemplate")
                     };
-                    // 懒加载图标：初始 Source 为空，后台加载完成后 AppItem.Icon 触发 PropertyChanged，
-                    // 通过 OneWay 绑定自动刷新（不能一次性赋值，否则图标永远空白）。
-                    img.DataContext = item;
-                    img.SetBinding(Image.SourceProperty,
-                        new System.Windows.Data.Binding(nameof(AppItem.Icon))
-                        { Mode = System.Windows.Data.BindingMode.OneWay });
-                    RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+                    // 图标与首字兜底共用模板；AppItem.Icon 的异步通知仍会自动刷新。
                     var iconBtn = new Button
                     {
-                        Content = img,
+                        Content = appIcon,
                         Style = (Style)FindResource("RowIconButton"),
                         Tag = row,
                         ToolTip = item.Label,
@@ -974,6 +973,13 @@ namespace SonicRoute
         }
 
         /// <summary>点击行图标：静音/取消静音该应用。</summary>
+        internal void RefreshAppIcons(string processName)
+        {
+            if (_isClosed) return;
+            foreach (var row in _rows.Values)
+                if (string.Equals(row.IconItem.ProcessName, processName, StringComparison.OrdinalIgnoreCase)) row.IconItem.ReloadIcon();
+        }
+
         private async Task RowIconToggleMuteAsync(AppRow row)
         {
             var pid = (int)row.App.ProcessId;

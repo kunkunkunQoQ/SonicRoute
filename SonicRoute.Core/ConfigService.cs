@@ -26,6 +26,9 @@ namespace SonicRoute.Core
         /// <summary>应用自定义名称：进程名 → 显示名（空则用默认名称）。通知/列表/面板/概览统一显示。</summary>
         public Dictionary<string, string> AppNames { get; set; } = new();
 
+        /// <summary>应用自定义图标：进程名 → Icons 目录中的受管 PNG 文件名。</summary>
+        public Dictionary<string, string> AppIcons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>禁用自动切换的应用（进程名列表）：这些应用不会被自动选为"当前应用"（前台跟随/最近使用等），但仍可手动选择。</summary>
         public List<string> DisabledAutoSwitchApps { get; set; } = new();
 
@@ -198,6 +201,7 @@ namespace SonicRoute.Core
             }
             lock (_lock)
             {
+                cfg.AppIcons = AppIconFiles.NormalizeMappings(cfg.AppIcons);
                 return _cache ??= cfg;
             }
         }
@@ -228,6 +232,28 @@ namespace SonicRoute.Core
 
         private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
 
+        /// <summary>替换整份小映射，后台图标读取可继续使用旧快照；保存失败则恢复旧映射。</summary>
+        public static bool TrySetAppIcon(string processName, string? fileName)
+        {
+            if (string.IsNullOrWhiteSpace(processName) || (fileName != null && !AppIconFiles.IsFileName(fileName))) return false;
+            lock (_lock)
+            {
+                var config = Load();
+                var previous = config.AppIcons;
+                var next = AppIconFiles.NormalizeMappings(previous);
+                if (fileName == null) next.Remove(processName);
+                else
+                {
+                    if (next.Count >= AppIconFiles.MaxIcons && !next.ContainsKey(processName)) return false;
+                    next[processName] = fileName;
+                }
+                config.AppIcons = next;
+                if (TrySave(config)) return true;
+                config.AppIcons = previous;
+                return false;
+            }
+        }
+
         /// <summary>一键清理配置文件：删除 config.json 并重置内存缓存为全新默认配置（实验设置功能）。</summary>
         public static AppConfig ResetToDefault()
         {
@@ -245,8 +271,12 @@ namespace SonicRoute.Core
         {
             try
             {
-                Save(Load());
-                File.Copy(ConfigPath, destPath, true);
+                var config = Load();
+                if (string.Equals(Path.GetFullPath(destPath), Path.GetFullPath(ConfigPath), StringComparison.OrdinalIgnoreCase)) return false;
+                if (!TrySave(config)) return false;
+                var assets = AppIconFiles.ExportAssets(config);
+                using var document = JsonDocument.Parse(JsonSerializer.Serialize(config, SaveOptions));
+                AtomicFile.WriteAllText(destPath, TransferJson(document.RootElement, config, assets));
                 return true;
             }
             catch { return false; }
@@ -257,13 +287,43 @@ namespace SonicRoute.Core
         {
             try
             {
+                if (new FileInfo(srcPath).Length > AppIconFiles.MaxTransferBytes) return false;
+                string json = File.ReadAllText(srcPath);
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
+                var config = JsonSerializer.Deserialize<AppConfig>(json);
+                if (config == null || (config.AppIcons?.Count ?? 0) > AppIconFiles.MaxIcons) return false;
+                config.AppIcons = AppIconFiles.NormalizeMappings(config.AppIcons);
+                AppIconFiles.ImportAssets(document.RootElement, config);
                 var dir = Path.GetDirectoryName(ConfigPath);
                 if (dir != null) Directory.CreateDirectory(dir);
-                File.Copy(srcPath, ConfigPath, true);
+                AtomicFile.WriteAllText(ConfigPath, TransferJson(document.RootElement, config, null));
                 lock (_lock) { _cache = null; }
                 return true;
             }
             catch { return false; }
+        }
+
+        // Asset data exists only in explicit backups, never in the frequently loaded/saved config.json.
+        private static string TransferJson(JsonElement root, AppConfig config, Dictionary<string, string>? assets)
+        {
+            using var buffer = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+            {
+                writer.WriteStartObject();
+                foreach (var property in root.EnumerateObject())
+                    if (property.Name != "AppIconAssets" && property.Name != nameof(AppConfig.AppIcons)) property.WriteTo(writer);
+                writer.WritePropertyName(nameof(AppConfig.AppIcons));
+                JsonSerializer.Serialize(writer, config.AppIcons);
+                if (assets != null && assets.Count > 0)
+                {
+                    writer.WritePropertyName("AppIconAssets");
+                    JsonSerializer.Serialize(writer, assets);
+                }
+                writer.WriteEndObject();
+            }
+            if (buffer.Length > AppIconFiles.MaxTransferBytes) throw new InvalidDataException("Configuration backup too large.");
+            return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
         }
     }
 }

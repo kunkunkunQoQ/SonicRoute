@@ -91,8 +91,9 @@
         <!-- 应用项模板 -->
         <DataTemplate x:Key="AppItemTemplate">
             <StackPanel Orientation="Horizontal">
-                <Image Source="{Binding Icon}" Width="16" Height="16" Margin="0,0,8,0"
-                       SnapsToDevicePixels="True" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AppIconTemplate}"
+                                Width="16" Height="16" Margin="0,0,8,0" Focusable="False"
+                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="12.5"
                            TextTrimming="CharacterEllipsis" MaxWidth="210"/>
             </StackPanel>

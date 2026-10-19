@@ -367,6 +367,13 @@ namespace SonicRoute
         /// <summary>供面板窗口在拖拽保存/关闭时触发（外部类不能直接 Invoke 事件）。</summary>
         internal void NotifyQuickPanelAdjustFinished() => QuickPanelAdjustFinished?.Invoke();
 
+        internal void NotifyAppIconChanged(string processName)
+        {
+            _mainWindow?.RefreshAppIcons(processName);
+            if (_quickPanel is QuickPanelModernWindow modern) modern.RefreshAppIcons(processName);
+            else if (_quickPanel is QuickPanelWindow classic) classic.RefreshAppIcons(processName);
+        }
+
         private void SetPanelAdjustMode(bool on)
         {
             if (_quickPanel is QuickPanelWindow c) c.SetAdjustMode(on);

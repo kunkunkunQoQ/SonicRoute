@@ -531,5 +531,13 @@
   "Template.Music.Name": "进入游戏时降低音乐音量",
   "Template.Music.Description": "切到游戏时把指定音乐应用设为 20% 音量。音乐应用需已有音频会话，不会自动恢复音量。",
   "Template.Night.Name": "每晚降低系统音量",
-  "Template.Night.Description": "每天 22:00 将系统默认输出音量设为 15%。时间和音量均可修改，不会自动恢复音量。"
+  "Template.Night.Description": "每天 22:00 将系统默认输出音量设为 15%。时间和音量均可修改，不会自动恢复音量。",
+  "AppIcons.Import": "导入图标…",
+  "AppIcons.Reset": "恢复自动图标",
+  "AppIcons.Hint": "支持 PNG、JPG、ICO；同名应用共用，重启后保留。未设置时使用默认图标。",
+  "AppIcons.Limit": "最多可为 256 个应用设置图标，请先恢复部分应用的自动图标。",
+  "AppIcons.Invalid": "无法读取图片。支持 PNG、JPG、ICO，最大 8 MB，宽高不超过 4096 像素。",
+  "AppIcons.SaveFailed": "图标保存失败，请检查数据文件夹是否可写。",
+  "AppIcons.Imported": "应用图标已更新",
+  "AppIcons.ResetDone": "已恢复自动图标"
 }

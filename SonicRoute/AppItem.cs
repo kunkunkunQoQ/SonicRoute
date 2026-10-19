@@ -15,6 +15,7 @@ namespace SonicRoute
 
         private ImageSource? _icon;
         private int _iconLoading;
+        private int _iconVersion;
         /// <summary>应用图标（懒加载：列表构建时不提取，由 LoadIcon 后台填充后通知刷新，降低启动耗时与内存）。</summary>
         public ImageSource? Icon
         {
@@ -79,15 +80,24 @@ namespace SonicRoute
 
         public static AppItem From(AudioAppInfo a) => new() { Info = a };
 
+        /// <summary>只由 UI 调用；废弃旧请求，并复用普通加载流程。</summary>
+        internal void ReloadIcon()
+        {
+            System.Threading.Interlocked.Increment(ref _iconVersion);
+            Icon = null;
+            _ = System.Threading.Tasks.Task.Run(LoadIcon);
+        }
+
         /// <summary>后台线程提取图标，完成后切回 UI 线程通知绑定刷新（列表构建后批量调用）。</summary>
         public void LoadIcon()
         {
             if (Icon != null || System.Threading.Interlocked.Exchange(ref _iconLoading, 1) != 0) return;
+            int version = System.Threading.Volatile.Read(ref _iconVersion);
             bool queued = false;
             try
             {
-                var icon = AppIconService.GetIconForPid(ProcessId);
-                if (icon == null) return;
+                var icon = AppIconService.GetIconForApp(ProcessId, ProcessName);
+                if (icon == null) return; // Preserve the original no-dispatch path for missing/default icons.
                 var disp = System.Windows.Application.Current?.Dispatcher;
                 if (disp != null && !disp.CheckAccess())
                 {
@@ -95,16 +105,23 @@ namespace SonicRoute
                     {
                         disp.BeginInvoke(new System.Action(() =>
                         {
-                            try { Icon = icon; }
-                            finally { System.Threading.Interlocked.Exchange(ref _iconLoading, 0); }
+                            try { if (version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon; }
+                            finally { FinishIconLoading(version); }
                         }), System.Windows.Threading.DispatcherPriority.Background);
                         queued = true;
                     }
                 }
-                else Icon = icon;
+                else if (version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon;
             }
             catch (System.InvalidOperationException) { /* 退出期间 Dispatcher 已关闭 */ }
-            finally { if (!queued) System.Threading.Interlocked.Exchange(ref _iconLoading, 0); }
+            finally { if (!queued) FinishIconLoading(version); }
+        }
+
+        private void FinishIconLoading(int version)
+        {
+            System.Threading.Interlocked.Exchange(ref _iconLoading, 0);
+            if (version != System.Threading.Volatile.Read(ref _iconVersion))
+                _ = System.Threading.Tasks.Task.Run(LoadIcon);
         }
 
         /// <summary>批量后台加载图标（不阻塞调用线程）。</summary>

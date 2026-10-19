@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using SonicRoute.Core;
 
 namespace SonicRoute
 {
@@ -24,14 +25,35 @@ namespace SonicRoute
         {
             public readonly Lazy<ImageSource?> Image;
             public long LastUsed;
-            public CacheEntry(string path) { Image = new Lazy<ImageSource?>(() => ExtractIcon(path)); }
+            public CacheEntry(string key)
+            {
+                Image = new Lazy<ImageSource?>(() => key.StartsWith("png|", StringComparison.Ordinal)
+                    ? CustomAppIconStore.Load(key.Substring(4)) : ExtractIcon(key.Substring(4)));
+            }
         }
 
         private static readonly ConcurrentDictionary<string, CacheEntry> Cache = new(StringComparer.OrdinalIgnoreCase);
 
+        public static ImageSource? GetIconForApp(int pid, string processName)
+        {
+            string? custom = AppIconFiles.GetFileName(ConfigService.Load(), processName);
+            if (custom != null)
+            {
+                var image = GetOrExtract("png|" + custom);
+                if (image != null) return image;
+            }
+            return GetIconForPid(pid);
+        }
+
+        internal static void InvalidateCustom(string? fileName)
+        {
+            if (fileName != null) Cache.TryRemove("png|" + fileName, out _);
+        }
+
         /// <summary>取 PID 对应进程的图标；失败时返回 null（调用方显示默认图标）。</summary>
         public static ImageSource? GetIconForPid(int pid)
         {
+            if (pid <= 0) return null;
             string? exe = null;
             try
             {
@@ -41,14 +63,14 @@ namespace SonicRoute
             catch { /* 系统/提升进程可能无权限 */ }
 
             if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) return null;
-            return GetOrExtract(exe);
+            return GetOrExtract("exe|" + exe);
         }
 
         /// <summary>取指定 EXE 的图标（自动化「打开方式」候选应用使用，与进程图标共用缓存）；失败返回 null。</summary>
         public static ImageSource? GetIconForPath(string? exePath)
         {
             if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath)) return null;
-            return GetOrExtract(exePath);
+            return GetOrExtract("exe|" + exePath);
         }
 
         private static ImageSource? GetOrExtract(string exe)

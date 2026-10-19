@@ -950,6 +950,8 @@ namespace SonicRoute
         {
             ++_appsStateRequest;
             _appsSelected = (AppsListBox.SelectedItem as AppItem)?.Info;
+            AppsIconPreview.Content = AppsListBox.SelectedItem;
+            UpdateIconSettingsState();
             if (_appsSelected == null)
             {
                 AppsDetailTitle.Text = L10n.T("Apps.SelectHint");

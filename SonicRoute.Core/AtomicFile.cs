@@ -11,6 +11,14 @@ namespace SonicRoute.Core
         private static readonly Encoding Utf8 = new UTF8Encoding(false);
         internal static void WriteAllText(string path, string text)
         {
+            Write(path, text, null);
+        }
+
+        internal static void WriteAllBytes(string path, byte[] bytes) =>
+            Write(path, null, bytes);
+
+        private static void Write(string path, string? text, byte[]? bytes)
+        {
             string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             string rollback = temporary + ".rollback";
             bool committed = false;
@@ -19,8 +27,10 @@ namespace SonicRoute.Core
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
                     // 小缓冲编码，避免大配置/长规则再分配一份完整 UTF8 字节数组。
-                    using (var writer = new StreamWriter(stream, Utf8, 1024, true))
+                    if (bytes != null) stream.Write(bytes, 0, bytes.Length);
+                    else
                     {
+                        using var writer = new StreamWriter(stream, Utf8, 1024, true);
                         writer.Write(text);
                         writer.Flush();
                     }

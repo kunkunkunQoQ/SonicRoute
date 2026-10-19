@@ -531,5 +531,13 @@
   "Template.Music.Name": "Baisser la musique en passant au jeu",
   "Template.Music.Description": "En passant au jeu, régler le volume de l’application de musique choisie à 20 %. Celle-ci doit déjà avoir une session audio. Le volume n’est pas rétabli automatiquement.",
   "Template.Night.Name": "Baisser le volume système chaque soir",
-  "Template.Night.Description": "Régler le volume de la sortie système par défaut à 15 % chaque jour à 22 h. L’heure et le volume sont modifiables. Le volume n’est pas rétabli automatiquement."
+  "Template.Night.Description": "Régler le volume de la sortie système par défaut à 15 % chaque jour à 22 h. L’heure et le volume sont modifiables. Le volume n’est pas rétabli automatiquement.",
+  "AppIcons.Import": "Importer une icône…",
+  "AppIcons.Reset": "Icône automatique",
+  "AppIcons.Hint": "PNG, JPG ou ICO. Les applications ayant le même nom de processus partagent cette icône. Le choix est conservé après redémarrage ; sinon, l’icône par défaut est utilisée.",
+  "AppIcons.Limit": "Vous pouvez définir une icône pour 256 applications au maximum. Rétablissez d’abord certaines icônes automatiques.",
+  "AppIcons.Invalid": "Impossible de lire cette image. Choisissez un fichier PNG, JPG ou ICO de 8 Mo maximum et de 4096 pixels maximum par côté.",
+  "AppIcons.SaveFailed": "Impossible d’enregistrer l’icône. Vérifiez que le dossier de données est accessible en écriture.",
+  "AppIcons.Imported": "Icône de l’application mise à jour",
+  "AppIcons.ResetDone": "Icône automatique rétablie"
 }

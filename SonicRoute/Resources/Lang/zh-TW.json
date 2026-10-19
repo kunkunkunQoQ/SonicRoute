@@ -531,5 +531,13 @@
   "Template.Music.Name": "進入遊戲時降低音樂音量",
   "Template.Music.Description": "切換至遊戲時，將指定音樂應用程式的音量設為 20%。音樂應用程式需已有音訊工作階段，不會自動還原音量。",
   "Template.Night.Name": "每晚降低系統音量",
-  "Template.Night.Description": "每天 22:00 將系統預設輸出音量設為 15%。時間與音量皆可修改，不會自動還原音量。"
+  "Template.Night.Description": "每天 22:00 將系統預設輸出音量設為 15%。時間與音量皆可修改，不會自動還原音量。",
+  "AppIcons.Import": "匯入圖示…",
+  "AppIcons.Reset": "恢復自動圖示",
+  "AppIcons.Hint": "支援 PNG、JPG、ICO；同名應用程式共用設定，重新啟動後保留。未設定時使用預設圖示。",
+  "AppIcons.Limit": "最多可為 256 個應用程式設定圖示，請先將部分應用程式恢復為自動圖示。",
+  "AppIcons.Invalid": "無法讀取圖片。支援 PNG、JPG、ICO，最大 8 MB，寬高不超過 4096 像素。",
+  "AppIcons.SaveFailed": "圖示儲存失敗，請檢查資料夾是否可寫入。",
+  "AppIcons.Imported": "應用程式圖示已更新",
+  "AppIcons.ResetDone": "已恢復自動圖示"
 }

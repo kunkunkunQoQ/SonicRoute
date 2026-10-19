@@ -531,5 +531,13 @@
   "Template.Music.Name": "ゲームに切り替えたら音楽を小さくする",
   "Template.Music.Description": "ゲームに切り替えたとき、指定した音楽アプリの音量を 20% にします。音楽アプリには音声セッションが必要です。音量は自動では元に戻りません。",
   "Template.Night.Name": "毎晩システム音量を下げる",
-  "Template.Night.Description": "毎日 22:00 にシステムの既定の出力音量を 15% にします。時刻と音量は変更できます。音量は自動では元に戻りません。"
+  "Template.Night.Description": "毎日 22:00 にシステムの既定の出力音量を 15% にします。時刻と音量は変更できます。音量は自動では元に戻りません。",
+  "AppIcons.Import": "アイコンを読み込む…",
+  "AppIcons.Reset": "自動取得に戻す",
+  "AppIcons.Hint": "PNG・JPG・ICO に対応。同じプロセス名のアプリで共有し、再起動後も保持します。未設定の場合は既定のアイコンを使います。",
+  "AppIcons.Limit": "アイコンを設定できるのは 256 個のアプリまでです。一部を自動取得に戻してください。",
+  "AppIcons.Invalid": "画像を読み込めません。8 MB 以下、縦横 4096 ピクセル以下の PNG・JPG・ICO を選んでください。",
+  "AppIcons.SaveFailed": "アイコンを保存できませんでした。データフォルダーへの書き込み権限を確認してください。",
+  "AppIcons.Imported": "アプリのアイコンを更新しました",
+  "AppIcons.ResetDone": "アイコンの自動取得に戻しました"
 }

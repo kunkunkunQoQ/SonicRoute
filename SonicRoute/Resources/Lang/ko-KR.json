@@ -531,5 +531,13 @@
   "Template.Music.Name": "게임으로 전환할 때 음악 볼륨 줄이기",
   "Template.Music.Description": "게임으로 전환하면 지정한 음악 앱의 볼륨을 20%로 설정합니다. 음악 앱에 오디오 세션이 있어야 하며, 볼륨은 자동으로 복원되지 않습니다.",
   "Template.Night.Name": "매일 밤 시스템 볼륨 줄이기",
-  "Template.Night.Description": "매일 22:00에 시스템 기본 출력 볼륨을 15%로 설정합니다. 시간과 볼륨은 변경할 수 있으며, 볼륨은 자동으로 복원되지 않습니다."
+  "Template.Night.Description": "매일 22:00에 시스템 기본 출력 볼륨을 15%로 설정합니다. 시간과 볼륨은 변경할 수 있으며, 볼륨은 자동으로 복원되지 않습니다.",
+  "AppIcons.Import": "아이콘 가져오기…",
+  "AppIcons.Reset": "자동 아이콘 복원",
+  "AppIcons.Hint": "PNG, JPG, ICO를 지원합니다. 프로세스 이름이 같은 앱에 함께 적용되며 재시작 후에도 유지됩니다. 설정하지 않으면 기본 아이콘을 사용합니다.",
+  "AppIcons.Limit": "최대 256개 앱에 아이콘을 설정할 수 있습니다. 일부 앱을 자동 아이콘으로 복원해 주세요.",
+  "AppIcons.Invalid": "이미지를 읽을 수 없습니다. 8 MB 이하, 가로·세로 각각 4096픽셀 이하인 PNG, JPG, ICO 파일을 선택해 주세요.",
+  "AppIcons.SaveFailed": "아이콘을 저장하지 못했습니다. 데이터 폴더에 쓸 수 있는지 확인해 주세요.",
+  "AppIcons.Imported": "앱 아이콘을 변경했습니다",
+  "AppIcons.ResetDone": "자동 아이콘을 복원했습니다"
 }

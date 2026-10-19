@@ -531,5 +531,13 @@
   "Template.Music.Name": "Bajar la música al cambiar al juego",
   "Template.Music.Description": "Al cambiar al juego, ajusta al 20 % el volumen de la aplicación de música elegida. Esta debe tener ya una sesión de audio. El volumen no se restaura automáticamente.",
   "Template.Night.Name": "Bajar el volumen del sistema cada noche",
-  "Template.Night.Description": "Ajusta al 15 % el volumen de la salida predeterminada del sistema todos los días a las 22:00. Puedes cambiar la hora y el volumen. El volumen no se restaura automáticamente."
+  "Template.Night.Description": "Ajusta al 15 % el volumen de la salida predeterminada del sistema todos los días a las 22:00. Puedes cambiar la hora y el volumen. El volumen no se restaura automáticamente.",
+  "AppIcons.Import": "Importar icono…",
+  "AppIcons.Reset": "Icono automático",
+  "AppIcons.Hint": "PNG, JPG o ICO. Las aplicaciones con el mismo nombre de proceso comparten el icono. Se conserva al reiniciar; si no lo cambias, se usa el icono predeterminado.",
+  "AppIcons.Limit": "Puedes asignar iconos a un máximo de 256 aplicaciones. Restablece primero algunos iconos automáticos.",
+  "AppIcons.Invalid": "No se puede leer esta imagen. Usa un archivo PNG, JPG o ICO de hasta 8 MB y 4096 píxeles por lado.",
+  "AppIcons.SaveFailed": "No se pudo guardar el icono. Comprueba que se pueda escribir en la carpeta de datos.",
+  "AppIcons.Imported": "Icono de la aplicación actualizado",
+  "AppIcons.ResetDone": "Icono automático restablecido"
 }

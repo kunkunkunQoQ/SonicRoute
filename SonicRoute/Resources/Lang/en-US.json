@@ -531,5 +531,13 @@
   "Template.Music.Name": "Lower music volume while gaming",
   "Template.Music.Description": "When you switch to the game, set the chosen music app to 20% volume. The music app needs an existing audio session. Volume is not restored automatically.",
   "Template.Night.Name": "Lower system volume each night",
-  "Template.Night.Description": "Set the default system output volume to 15% every day at 22:00. You can change the time and volume. Volume is not restored automatically."
+  "Template.Night.Description": "Set the default system output volume to 15% every day at 22:00. You can change the time and volume. Volume is not restored automatically.",
+  "AppIcons.Import": "Import icon…",
+  "AppIcons.Reset": "Use automatic icon",
+  "AppIcons.Hint": "PNG, JPG or ICO. Apps with the same process name share the icon. Saved across restarts; the default icon is used unless you set one.",
+  "AppIcons.Limit": "You can set icons for up to 256 apps. Restore some automatic icons first.",
+  "AppIcons.Invalid": "Cannot read this image. Use PNG, JPG or ICO, up to 8 MB and 4096 pixels on each side.",
+  "AppIcons.SaveFailed": "Could not save the icon. Check that the data folder is writable.",
+  "AppIcons.Imported": "App icon updated",
+  "AppIcons.ResetDone": "Automatic icon restored"
 }
