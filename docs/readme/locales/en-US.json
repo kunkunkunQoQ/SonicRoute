@@ -53,7 +53,7 @@
   "automationExample": "For example, set a game-start rule to send the game’s audio to headphones → set the game’s volume to 50% → open voice chat, then enable the rule.",
   "useCaseExample": "Teammates too loud? Lower just the voice chat app’s slider and leave the game’s volume alone.",
   "currentRelease": "Current release",
-  "releaseSummary": "Version {version} adds direct default-output selection from the tray, controls for the pinned current app’s volume, mute and routing, mute-all-microphones control, and a tray-wheel pause setting saved across restarts. The default hotkey for system-default volume is Ctrl+Alt+Shift+Wheel, distinct from the default Ctrl+Alt+Wheel hotkey for the current app. Settings toggles have been rearranged and pages now load on demand. The Store page shows the version currently available there. See {history} for earlier changes.",
+  "releaseSummary": "Version {version} adds starter templates for automation, optional recent execution details (off by default, with a storage limit), and per-app icon imports. Missing or generic app icons fall back to the first character of the app’s name. Configuration backups include imported icons. See {history} for earlier changes.",
   "docTopic": "Topic",
   "docGuides": "Guides",
   "docTopics": [

@@ -38,15 +38,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de 
 
 ## 🚀 Descarga y primeros pasos
 
-**Versión actual: [v1.23](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.23)** · 2026-10-15 · [Notas de la versión (en chino)](docs/release-v1.23.md)
+**Versión actual: [v1.24](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.24)** · 2026-10-20 · [Notas de la versión (en chino)](docs/release-v1.24.md)
 
-Para la mayoría de equipos Windows x64, la versión de Microsoft Store ofrece una instalación cómoda y actualizaciones automáticas. Elige Lite x64 si quieres un único ejecutable o Legacy x64 si no te resulta práctico instalar .NET 8. El enlace de descarga superior siempre lleva a la última versión; los enlaces directos de abajo corresponden a v1.23.
+Para la mayoría de equipos Windows x64, la versión de Microsoft Store ofrece una instalación cómoda y actualizaciones automáticas. Elige Lite x64 si quieres un único ejecutable o Legacy x64 si no te resulta práctico instalar .NET 8. El enlace de descarga superior siempre lleva a la última versión; los enlaces directos de abajo corresponden a v1.24.
 
 | Edición | Descargar | Requisitos |
 |---|---|---|
-| Lite x64 | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Lite-x64.exe) | .NET 8 Desktop Runtime para x64 |
-| Lite ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Lite-arm64.exe) | .NET 8 Desktop Runtime para ARM64 |
-| Legacy x64 | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Legacy-x64.zip) | .NET Framework 4.8; extrae el ZIP completo antes de ejecutar |
+| Lite x64 | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | .NET 8 Desktop Runtime para x64 |
+| Lite ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | .NET 8 Desktop Runtime para ARM64 |
+| Legacy x64 | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8; extrae el ZIP completo antes de ejecutar |
 | Microsoft Store | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64; actualizaciones automáticas; la versión disponible se muestra en Store |
 
 Lite necesita el [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) correspondiente. Legacy no requiere .NET 8.
@@ -57,7 +57,7 @@ Lite necesita el [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/
 
 Antes de usar `sr` por primera vez, inicia SonicRoute con normalidad para registrar el comando y vuelve a abrir el terminal. Si el cambio de dispositivo no funciona como esperabas, consulta las [Preguntas frecuentes](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
-La versión 1.23 permite elegir la salida predeterminada desde el área de notificación, controlar el volumen, el silencio y el enrutamiento de la aplicación actual fijada, silenciar todos los micrófonos y pausar la rueda con una opción que se conserva tras reiniciar. El atajo predeterminado para el volumen predeterminado del sistema es Ctrl+Alt+Mayús+rueda, distinto del atajo predeterminado Ctrl+Alt+rueda para la aplicación actual. Se ha reorganizado la disposición de los ajustes y las páginas se cargan bajo demanda. Consulta el [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) para ver cambios anteriores.
+La versión 1.24 añade plantillas de automatización, un registro detallado de las ejecuciones recientes (desactivado de forma predeterminada, con límite de almacenamiento configurable) e iconos personalizados por aplicación. Si falta el icono o es genérico, se muestra el primer carácter del nombre de la aplicación. Las copias de seguridad de la configuración incluyen los iconos importados. Consulta [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) para ver los cambios anteriores.
 
 ## 📚 Documentación
 
@@ -73,7 +73,7 @@ La Wiki está actualmente en chino simplificado.
 
 ## 📌 Hoja de ruta
 
-- **v1.24 · Rendimiento y estabilidad:** mejorar el uso de recursos en segundo plano, la capacidad de respuesta y la compatibilidad.
+- **v1.25 · Rendimiento y estabilidad:** mejorar el uso de recursos en segundo plano, la capacidad de respuesta y la compatibilidad.
 - **Etapas posteriores:** seguir perfeccionando las funciones existentes según los comentarios. Los planes pueden cambiar a medida que recibamos sugerencias.
 
 [Comparte una idea o informa de un problema](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).

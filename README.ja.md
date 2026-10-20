@@ -38,15 +38,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 
 ## 🚀 ダウンロードと使い始め方
 
-**現在のリリース：[v1.23](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.23)** · 2026-10-15 · [リリースノート（簡体字中国語）](docs/release-v1.23.md)
+**現在のリリース：[v1.24](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.24)** · 2026-10-20 · [リリースノート（簡体字中国語）](docs/release-v1.24.md)
 
-Windows x64 をお使いの方には、インストールが簡単で自動更新にも対応する Microsoft Store 版がおすすめです。単体の実行ファイルなら Lite x64、.NET 8 のインストールが難しい場合は Legacy x64 を選んでください。上のダウンロードリンクは常に最新リリースを示し、下の直接リンクは v1.23 用です。
+Windows x64 をお使いの方には、インストールが簡単で自動更新にも対応する Microsoft Store 版がおすすめです。単体の実行ファイルなら Lite x64、.NET 8 のインストールが難しい場合は Legacy x64 を選んでください。上のダウンロードリンクは常に最新リリースを示し、下の直接リンクは v1.24 用です。
 
 | エディション | ダウンロード | 要件 |
 |---|---|---|
-| Lite x64 | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Lite-x64.exe) | x64 .NET 8 Desktop Runtime |
-| Lite ARM64（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Lite-arm64.exe) | ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Legacy-x64.zip) | .NET Framework 4.8。実行前に ZIP 全体を展開してください |
+| Lite x64 | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | x64 .NET 8 Desktop Runtime |
+| Lite ARM64（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | ARM64 .NET 8 Desktop Runtime |
+| Legacy x64 | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8。実行前に ZIP 全体を展開してください |
 | Microsoft Store | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64；自動更新；Store に現在提供中のバージョンが表示されます |
 
 Lite には対応する [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) が必要です。Legacy に .NET 8 は必要ありません。
@@ -57,7 +57,7 @@ Lite には対応する [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/do
 
 `sr` を初めて使う前に、SonicRoute を通常起動してコマンドを登録し、ターミナルを開き直してください。デバイス切り替えが想定どおりに動作しない場合は [よくある質問](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) をご覧ください。
 
-1.23 では通知領域から既定の出力デバイスを直接選べるようになり、固定した現在のアプリの音量・ミュート・ルーティング操作、全マイクのミュート、再起動後も保持される通知領域ホイールの一時停止設定を追加しました。システム既定音量のデフォルトのホットキーは Ctrl+Alt+Shift+ホイールで、現在のアプリ用のデフォルトの Ctrl+Alt+ホイールと区別されます。設定スイッチの配置を調整し、ページを必要に応じて読み込むようにしました。以前の変更は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) をご覧ください。
+1.24 では、自動化のひな形、最近の実行履歴（初期設定はオフ、保存容量を設定可能）、アプリごとのアイコン読み込みを追加しました。アイコンがない場合や汎用アイコンの場合は、アプリ名の先頭文字を表示します。設定のバックアップには読み込んだアイコンも含まれます。過去の変更は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) を参照してください。
 
 ## 📚 ドキュメント
 
@@ -73,7 +73,7 @@ Lite には対応する [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/do
 
 ## 📌 ロードマップ
 
-- **v1.24 · パフォーマンスと安定性：** バックグラウンドのリソース使用量、応答性、互換性を改善します。
+- **v1.25 · パフォーマンスと安定性：** バックグラウンドのリソース使用量、応答性、互換性を改善します。
 - **今後の段階：** フィードバックをもとに既存機能を継続的に改善します。計画はフィードバックに応じて変更される場合があります。
 
 [アイデアの共有・問題の報告](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。

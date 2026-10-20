@@ -53,7 +53,7 @@
   "automationExample": "Par exemple, configurez au lancement du jeu : envoyer le son du jeu au casque → régler son volume à 50 % → ouvrir le chat vocal. Activez ensuite la règle.",
   "useCaseExample": "Vos coéquipiers parlent trop fort ? Baissez uniquement le curseur de l’application de chat vocal, sans changer le volume du jeu.",
   "currentRelease": "Version actuelle",
-  "releaseSummary": "La version {version} permet de choisir directement la sortie par défaut depuis la zone de notification, de régler le volume, la coupure et le routage de l’application active épinglée, de couper tous les microphones et de mettre en pause la molette avec un réglage conservé après redémarrage. Le raccourci par défaut du volume système est Ctrl+Alt+Maj+molette, distinct du raccourci par défaut Ctrl+Alt+molette pour l’application active. La disposition des options a été revue et les pages se chargent à la demande. Consultez l’{history} pour les changements précédents.",
+  "releaseSummary": "La version {version} ajoute des modèles d’automatisation, un historique détaillé des exécutions récentes (désactivé par défaut, avec une limite de stockage réglable) et l’importation d’icônes par application. Lorsqu’une icône est absente ou générique, le premier caractère du nom de l’application s’affiche. Les sauvegardes des paramètres incluent les icônes importées. Consultez {history} pour les changements précédents.",
   "docTopic": "Sujet",
   "docGuides": "Guides",
   "docTopics": [

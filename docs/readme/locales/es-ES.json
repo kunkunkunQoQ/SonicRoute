@@ -53,7 +53,7 @@
   "automationExample": "Por ejemplo, configura al iniciar un juego: enviar el sonido del juego a los auriculares → poner su volumen al 50 % → abrir el chat de voz. Después, activa la regla.",
   "useCaseExample": "¿Se oye demasiado alto a tus compañeros? Baja solo el control de volumen del chat de voz, sin cambiar el del juego.",
   "currentRelease": "Versión actual",
-  "releaseSummary": "La versión {version} permite elegir la salida predeterminada desde el área de notificación, controlar el volumen, el silencio y el enrutamiento de la aplicación actual fijada, silenciar todos los micrófonos y pausar la rueda con una opción que se conserva tras reiniciar. El atajo predeterminado para el volumen predeterminado del sistema es Ctrl+Alt+Mayús+rueda, distinto del atajo predeterminado Ctrl+Alt+rueda para la aplicación actual. Se ha reorganizado la disposición de los ajustes y las páginas se cargan bajo demanda. Consulta el {history} para ver cambios anteriores.",
+  "releaseSummary": "La versión {version} añade plantillas de automatización, un registro detallado de las ejecuciones recientes (desactivado de forma predeterminada, con límite de almacenamiento configurable) e iconos personalizados por aplicación. Si falta el icono o es genérico, se muestra el primer carácter del nombre de la aplicación. Las copias de seguridad de la configuración incluyen los iconos importados. Consulta {history} para ver los cambios anteriores.",
   "docTopic": "Tema",
   "docGuides": "Guías",
   "docTopics": [

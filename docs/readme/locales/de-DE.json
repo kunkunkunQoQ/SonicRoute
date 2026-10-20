@@ -53,7 +53,7 @@
   "automationExample": "Lege zum Beispiel für den Spielstart fest: Spielton auf Kopfhörer → Spiellautstärke auf 50% → Sprachchat öffnen. Aktiviere anschließend die Regel.",
   "useCaseExample": "Sind deine Mitspieler zu laut? Senke nur den Regler der Sprachchat-App; die Spiellautstärke bleibt unverändert.",
   "currentRelease": "Aktuelle Version",
-  "releaseSummary": "Version {version} bietet die direkte Auswahl des Windows-Standardausgabegeräts im Infobereich, Steuerelemente für Lautstärke, Stummschaltung und Routing der fixierten aktuellen App, eine Stummschaltung aller Mikrofone sowie eine nach Neustarts gespeicherte Pause für die Mausradsteuerung. Die Standard-Tastenkombination für die Windows-Standardlautstärke lautet Strg+Alt+Umschalt+Mausrad und unterscheidet sich von der Standardkombination Strg+Alt+Mausrad für die aktuelle App. Die Anordnung der Einstellungsschalter wurde überarbeitet und Seiten werden bei Bedarf geladen. Frühere Änderungen findest du im {history}.",
+  "releaseSummary": "Version {version} ergänzt Vorlagen für Automatisierungsregeln, ein optionales Ausführungsprotokoll (standardmäßig aus, mit einstellbarer Speichergrenze) und eigene App-Symbole. Fehlt ein Symbol oder wird nur ein Standardsymbol erkannt, erscheint das erste Zeichen des App-Namens. Importierte Symbole sind in der Einstellungssicherung enthalten. Frühere Änderungen stehen unter {history}.",
   "docTopic": "Thema",
   "docGuides": "Anleitungen",
   "docTopics": [

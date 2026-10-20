@@ -38,15 +38,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 ## 🚀 下載與快速入門
 
-**目前版本：[v1.23](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.23)** · 2026-10-15 · [發布說明（簡體中文）](docs/release-v1.23.md)
+**目前版本：[v1.24](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.24)** · 2026-10-20 · [發布說明（簡體中文）](docs/release-v1.24.md)
 
-大多數 Windows x64 使用者可優先選擇 Microsoft Store 版本，安裝方便並支援自動更新。需要單一執行檔可選 Lite x64；不方便安裝 .NET 8 則可選 Legacy x64。上方下載連結一律指向最新版本；下方的直連下載對應 v1.23。
+大多數 Windows x64 使用者可優先選擇 Microsoft Store 版本，安裝方便並支援自動更新。需要單一執行檔可選 Lite x64；不方便安裝 .NET 8 則可選 Legacy x64。上方下載連結一律指向最新版本；下方的直連下載對應 v1.24。
 
 | 版本 | 下載 | 需求 |
 |---|---|---|
-| Lite x64 | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Lite-x64.exe) | x64 .NET 8 Desktop Runtime |
-| Lite ARM64（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Lite-arm64.exe) | ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.23/SonicRoute-v1.23-Legacy-x64.zip) | .NET Framework 4.8；執行前請解壓縮整個 ZIP |
+| Lite x64 | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | x64 .NET 8 Desktop Runtime |
+| Lite ARM64（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | ARM64 .NET 8 Desktop Runtime |
+| Legacy x64 | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8；執行前請解壓縮整個 ZIP |
 | Microsoft Store | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64；自動更新；Store 上會顯示目前提供的版本 |
 
 Lite 需要相符的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)。Legacy 不需要 .NET 8。
@@ -57,7 +57,7 @@ Lite 需要相符的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/downl
 
 首次使用 `sr` 前，請先正常啟動 SonicRoute 以註冊指令，然後重新開啟終端機。若裝置切換未如預期運作，請參閱 [常見問題](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)。
 
-1.23 新增從系統匣直接選擇預設輸出、固定目前應用程式的音量／靜音／路由控制、靜音所有麥克風，以及重新啟動後仍會保留的系統匣滾輪暫停設定。系統預設音量的預設快速鍵為 Ctrl+Alt+Shift+滾輪，與控制目前應用程式的預設快速鍵 Ctrl+Alt+滾輪區分。設定開關配置已調整，頁面改為按需載入。舊版變更請參閱 [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+1.24 新增自動化入門範本、可設定儲存上限的最近執行詳細資料（預設關閉），以及個別應用程式圖示匯入。缺少圖示或只有系統通用圖示時，顯示應用程式名稱的第一個字；設定備份包含匯入的圖示。舊版變更請參閱 [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ## 📚 文件
 
@@ -73,7 +73,7 @@ Lite 需要相符的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/downl
 
 ## 📌 開發規劃
 
-- **v1.24 · 效能與穩定性：** 改善背景資源使用量、回應速度與相容性。
+- **v1.25 · 效能與穩定性：** 改善背景資源使用量、回應速度與相容性。
 - **後續階段：** 根據回饋持續改進現有功能。計畫可能隨回饋調整。
 
 [分享想法或回報問題](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。

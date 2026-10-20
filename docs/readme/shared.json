@@ -3,9 +3,9 @@
   "store": "https://apps.microsoft.com/detail/9NQZGRTPM1NT",
   "runtime": "https://dotnet.microsoft.com/download/dotnet/8.0",
   "minimumWindows": "Windows 10 2004+ / Windows 11",
-  "release": "v1.23",
-  "releaseDate": "2026-10-15",
-  "releaseNotes": "docs/release-v1.23.md",
+  "release": "v1.24",
+  "releaseDate": "2026-10-20",
+  "releaseNotes": "docs/release-v1.24.md",
   "author": {
     "bilibili": "https://b23.tv/TDqSAKM",
     "afdian": "https://www.ifdian.net/a/koukou021",
@@ -67,7 +67,7 @@
       "automationMascot": "mascot-automation-ru.png"
     }
   ],
-  "nextRelease": "v1.24",
+  "nextRelease": "v1.25",
   "triggerCount": 6,
   "actionCount": 18,
   "wikiPages": {
