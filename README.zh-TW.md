@@ -73,7 +73,7 @@ Lite 需要相符的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/downl
 
 ## 📌 開發規劃
 
-- **v1.25 · 效能與穩定性：** 改善背景資源使用量、回應速度與相容性。
+- **v1.25 · 重大更新：** 具體內容將於後續更新說明公布。
 - **後續階段：** 根據回饋持續改進現有功能。計畫可能隨回饋調整。
 
 [分享想法或回報問題](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。

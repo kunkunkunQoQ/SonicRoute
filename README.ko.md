@@ -73,7 +73,7 @@ Lite에는 호환되는 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/do
 
 ## 📌 로드맵
 
-- **v1.25 · 성능 및 안정성:** 백그라운드 리소스 사용량, 응답성 및 호환성을 개선합니다.
+- **v1.25 · 대규모 업데이트:** 자세한 내용은 추후 릴리스 노트에서 안내합니다.
 - **향후 단계:** 의견을 바탕으로 기존 기능을 계속 다듬습니다. 계획은 피드백에 따라 변경될 수 있습니다.
 
 [아이디어 공유 또는 문제 제보](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).

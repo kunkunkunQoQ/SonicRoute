@@ -73,7 +73,7 @@ Das Wiki ist derzeit auf vereinfachtem Chinesisch.
 
 ## 📌 Roadmap
 
-- **v1.25 · Leistung und Stabilität:** Ressourcenverbrauch im Hintergrund, Reaktionsfähigkeit und Kompatibilität verbessern.
+- **v1.25 · Großes Update:** Details folgen in den kommenden Versionshinweisen.
 - **Weitere Schritte:** Bestehende Funktionen anhand von Rückmeldungen weiterentwickeln. Die Pläne können sich mit dem Feedback ändern.
 
 [Idee teilen oder Problem melden](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).

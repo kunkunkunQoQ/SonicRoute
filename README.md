@@ -71,7 +71,7 @@ Lite 请安装对应架构的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.
 
 ## 📌 后续计划
 
-- **v1.25 · 性能与稳定性**：继续改善后台资源占用、响应速度与兼容性。
+- **v1.25 · 重大更新**：具体内容将在后续更新说明中公布。
 - **后续阶段**：根据反馈持续完善现有功能。计划可能随反馈调整。
 
 [提交建议或问题](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。

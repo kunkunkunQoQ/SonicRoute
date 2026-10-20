@@ -73,7 +73,7 @@ La Wiki está actualmente en chino simplificado.
 
 ## 📌 Hoja de ruta
 
-- **v1.25 · Rendimiento y estabilidad:** mejorar el uso de recursos en segundo plano, la capacidad de respuesta y la compatibilidad.
+- **v1.25 · Actualización importante:** los detalles se anunciarán en las próximas notas de la versión.
 - **Etapas posteriores:** seguir perfeccionando las funciones existentes según los comentarios. Los planes pueden cambiar a medida que recibamos sugerencias.
 
 [Comparte una idea o informa de un problema](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).

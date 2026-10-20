@@ -73,7 +73,7 @@ Le Wiki est actuellement en chinois simplifié.
 
 ## 📌 Feuille de route
 
-- **v1.25 · Performances et stabilité :** améliorer l’utilisation des ressources en arrière-plan, la réactivité et la compatibilité.
+- **v1.25 · Mise à jour majeure :** les détails seront présentés dans les prochaines notes de version.
 - **Étapes suivantes :** continuer à améliorer les fonctions existantes selon vos retours. Les projets peuvent évoluer en fonction des commentaires reçus.
 
 [Partager une idée ou signaler un problème](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
