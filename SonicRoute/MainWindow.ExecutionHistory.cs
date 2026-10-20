@@ -179,9 +179,13 @@ namespace SonicRoute
             var source = _historyReadCancellation = new CancellationTokenSource();
             try
             {
-                var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                using (source.Token.Register(() => canceled.TrySetResult(true)))
-                    await Task.WhenAny(store.WhenIdleAsync(), canceled.Task);
+                var idle = store.WhenIdleAsync();
+                if (!idle.IsCompleted)
+                {
+                    var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    using (source.Token.Register(() => canceled.TrySetResult(true)))
+                        await Task.WhenAny(idle, canceled.Task);
+                }
                 source.Token.ThrowIfCancellationRequested();
                 var entries = await store.ReadRecentAsync(source.Token);
                 if (_isClosed || _historyWindow != window || version != _historyReadVersion || !_config.ExecutionHistoryEnabled || !_config.ExperimentalMode) return;

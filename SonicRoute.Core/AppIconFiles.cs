@@ -44,6 +44,14 @@ namespace SonicRoute.Core
         public static byte[] ReadPng(string name)
         {
             if (!IsFileName(name)) throw new InvalidDataException("Invalid icon name.");
+            var bytes = ReadBytes(name);
+            ValidatePng(bytes);
+            if (NameFor(bytes) != name) throw new InvalidDataException("Icon content does not match its name.");
+            return bytes;
+        }
+
+        private static byte[] ReadBytes(string name)
+        {
             var path = Path.Combine(DirectoryPath, name);
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (stream.Length > MaxIconBytes || stream.Length < 33) throw new InvalidDataException("Invalid icon size.");
@@ -55,8 +63,6 @@ namespace SonicRoute.Core
                 if (count == 0) throw new EndOfStreamException();
                 offset += count;
             }
-            ValidatePng(bytes);
-            if (NameFor(bytes) != name) throw new InvalidDataException("Icon content does not match its name.");
             return bytes;
         }
 
@@ -66,14 +72,21 @@ namespace SonicRoute.Core
         {
             ValidatePng(bytes);
             string name = NameFor(bytes);
+            SaveValidatedPng(name, bytes, out changed);
+            return name;
+        }
+
+        // Private callers have already validated both the PNG and its content-addressed name.
+        private static void SaveValidatedPng(string name, byte[] bytes, out bool changed)
+        {
             changed = false;
-            try { if (ReadPng(name).SequenceEqual(bytes)) return name; }
+            // Equality with the validated input also proves the existing file is intact.
+            try { if (ReadBytes(name).SequenceEqual(bytes)) return; }
             catch { /* Missing or damaged files are repaired by the normal atomic write. */ }
             Directory.CreateDirectory(DirectoryPath);
             // Also repairs an existing damaged file with the same original content hash.
             AtomicFile.WriteAllBytes(Path.Combine(DirectoryPath, name), bytes);
             changed = true;
-            return name;
         }
 
         public static void CleanupUnused(AppConfig config)
@@ -102,7 +115,7 @@ namespace SonicRoute.Core
             if (!root.TryGetProperty("AppIconAssets", out var assets)) return; // Old JSON backups remain valid.
             if (assets.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Invalid icon assets.");
             var used = new HashSet<string>(config.AppIcons.Values, StringComparer.Ordinal);
-            var pending = new List<byte[]>();
+            var pending = new List<KeyValuePair<string, byte[]>>();
             int count = 0;
             foreach (var asset in assets.EnumerateObject())
             {
@@ -113,10 +126,10 @@ namespace SonicRoute.Core
                 byte[] bytes = Convert.FromBase64String(value);
                 ValidatePng(bytes);
                 if (NameFor(bytes) != asset.Name) throw new InvalidDataException("Icon content does not match its name.");
-                if (used.Contains(asset.Name)) pending.Add(bytes);
+                if (used.Contains(asset.Name)) pending.Add(new KeyValuePair<string, byte[]>(asset.Name, bytes));
             }
             // Validate every asset before creating files or changing the current configuration.
-            foreach (byte[] bytes in pending) SavePng(bytes);
+            foreach (var asset in pending) SaveValidatedPng(asset.Key, asset.Value, out _);
         }
 
         private static string NameFor(byte[] bytes)
