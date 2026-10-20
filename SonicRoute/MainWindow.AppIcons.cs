@@ -1,8 +1,11 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using SonicRoute.Core;
+using DataFormats = System.Windows.DataFormats;
+using DragDropEffects = System.Windows.DragDropEffects;
 
 namespace SonicRoute
 {
@@ -19,9 +22,39 @@ namespace SonicRoute
             IconResetButton.IsEnabled = !_appIconImportBusy && selected && AppIconFiles.GetFileName(_config, name!) != null;
         }
 
-        private async void IconImport_Click(object sender, RoutedEventArgs e)
+        private async void IconImport_Click(object sender, RoutedEventArgs e) => await ImportAppIconAsync();
+
+        private void IconImport_DragOver(object sender, System.Windows.DragEventArgs e)
         {
-            if (_appIconImportBusy || _configTransferBusy || AppsListBox.SelectedItem is not AppItem item) return;
+            e.Effects = DroppedAppIconPath(e) == null ? DragDropEffects.None : DragDropEffects.Copy;
+            e.Handled = true;
+        }
+
+        private async void IconImport_Drop(object sender, System.Windows.DragEventArgs e)
+        {
+            string? path = DroppedAppIconPath(e);
+            e.Effects = path == null ? DragDropEffects.None : DragDropEffects.Copy;
+            e.Handled = true;
+            if (path != null) await ImportAppIconAsync(path);
+        }
+
+        private string? DroppedAppIconPath(System.Windows.DragEventArgs e)
+        {
+            if (_appIconImportBusy || _configTransferBusy || _isClosed || AppsListBox.SelectedItem is not AppItem item
+                || string.IsNullOrWhiteSpace(item.ProcessName) || (e.AllowedEffects & DragDropEffects.Copy) == 0) return null;
+            try
+            {
+                if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length != 1) return null;
+                string extension = Path.GetExtension(paths[0]);
+                return extension.Equals(".png", StringComparison.OrdinalIgnoreCase) || extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+                    || extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) || extension.Equals(".ico", StringComparison.OrdinalIgnoreCase) ? paths[0] : null;
+            }
+            catch { return null; }
+        }
+
+        private async Task ImportAppIconAsync(string? sourcePath = null)
+        {
+            if (_appIconImportBusy || _configTransferBusy || _isClosed || AppsListBox.SelectedItem is not AppItem item) return;
             string processName = item.ProcessName;
             if (string.IsNullOrWhiteSpace(processName)) return;
             if (_config.AppIcons.Count >= AppIconFiles.MaxIcons && !_config.AppIcons.ContainsKey(processName))
@@ -29,18 +62,22 @@ namespace SonicRoute
                 ShowToast(L10n.T("AppIcons.Limit"));
                 return;
             }
-            var dialog = new Microsoft.Win32.OpenFileDialog
+            if (sourcePath == null)
             {
-                Title = L10n.T("AppIcons.Import"), Filter = "PNG / JPEG / ICO|*.png;*.jpg;*.jpeg;*.ico",
-                CheckFileExists = true, Multiselect = false
-            };
-            if (dialog.ShowDialog(this) != true) return;
+                var dialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Title = L10n.T("AppIcons.Import"), Filter = "PNG / JPEG / ICO|*.png;*.jpg;*.jpeg;*.ico",
+                    CheckFileExists = true, Multiselect = false
+                };
+                if (dialog.ShowDialog(this) != true) return;
+                sourcePath = dialog.FileName;
+            }
             _appIconImportBusy = true;
             UpdateIconSettingsState();
             try
             {
                 byte[] bytes;
-                try { bytes = await Task.Run(() => CustomAppIconStore.Prepare(dialog.FileName)); }
+                try { bytes = await Task.Run(() => CustomAppIconStore.Prepare(sourcePath)); }
                 catch { if (!_isClosed) ShowToast(L10n.T("AppIcons.Invalid")); return; }
                 if (_isClosed) return;
                 string fileName;

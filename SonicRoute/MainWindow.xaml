@@ -1214,7 +1214,8 @@
                             </StackPanel>
                             <WrapPanel Grid.Column="2" MaxWidth="190" HorizontalAlignment="Right" VerticalAlignment="Center"
                                        ToolTip="{Binding [AppIcons.Hint], Source={x:Static local:L10n.Instance}}">
-                                <Button x:Name="IconImportButton" Style="{StaticResource GhostButton}" Margin="0,0,6,4" Click="IconImport_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Import], Source={x:Static local:L10n.Instance}}" Margin="8,0"/></Button>
+                                <Button x:Name="IconImportButton" Style="{StaticResource GhostButton}" Margin="0,0,6,4" Click="IconImport_Click" IsEnabled="False"
+                                        AllowDrop="True" PreviewDragOver="IconImport_DragOver" PreviewDrop="IconImport_Drop"><TextBlock Text="{Binding [AppIcons.Import], Source={x:Static local:L10n.Instance}}" Margin="8,0"/></Button>
                                 <Button x:Name="IconResetButton" Style="{StaticResource GhostButton}" Margin="0,0,0,4" Click="IconReset_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Reset], Source={x:Static local:L10n.Instance}}" Margin="8,0"/></Button>
                             </WrapPanel>
                         </Grid>
