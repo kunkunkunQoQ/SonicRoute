@@ -1172,8 +1172,8 @@
             <!-- 应用 -->
             <Grid x:Name="AppsPage" Visibility="Collapsed">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="240"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="0.65*" MinWidth="150" MaxWidth="240"/>
+                    <ColumnDefinition Width="1.35*"/>
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,12,0" Padding="10">
@@ -1192,29 +1192,40 @@
                 </Border>
 
                 <Border Grid.Column="1" Style="{StaticResource Card}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <TextBlock x:Name="AppsDetailTitle"
-                                   Text="{Binding [Apps.SelectHint], Source={x:Static local:L10n.Instance}}"
-                                   FontSize="15" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,0,0,4"/>
+                        <Grid Margin="0,0,0,18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Width="56" Height="56" Margin="0,0,12,0">
+                                <ContentControl x:Name="AppsIconPreview" ContentTemplate="{StaticResource AppIconTemplate}"
+                                                Width="24" Height="24" Focusable="False"
+                                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                            </Viewbox>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <TextBlock x:Name="AppsDetailTitle" Text="{Binding [Apps.SelectHint], Source={x:Static local:L10n.Instance}}"
+                                           FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource Theme.TextPrimary}"/>
+                                <TextBlock x:Name="AppsDetailPid" Text="" FontSize="11"
+                                           Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,4,0,0"/>
+                            </StackPanel>
+                            <WrapPanel Grid.Column="2" MaxWidth="190" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                       ToolTip="{Binding [AppIcons.Hint], Source={x:Static local:L10n.Instance}}">
+                                <Button x:Name="IconImportButton" Style="{StaticResource GhostButton}" Margin="0,0,6,4" Click="IconImport_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Import], Source={x:Static local:L10n.Instance}}" Margin="8,0"/></Button>
+                                <Button x:Name="IconResetButton" Style="{StaticResource GhostButton}" Margin="0,0,0,4" Click="IconReset_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Reset], Source={x:Static local:L10n.Instance}}" Margin="8,0"/></Button>
+                            </WrapPanel>
+                        </Grid>
+                        <TextBlock Text="{Binding [Apps.Rename], Source={x:Static local:L10n.Instance}}"
+                                   Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
                         <TextBox x:Name="AppsRenameBox" FontSize="12.5"
                                  VerticalContentAlignment="Center" Padding="8,4"
                                  TextChanged="AppsRenameBox_TextChanged"/>
                         <TextBlock Text="{Binding [Apps.RenameHint], Source={x:Static local:L10n.Instance}}"
                                    FontSize="11" Foreground="{DynamicResource Theme.TextSecondary}"
-                                   Margin="0,0,0,12" TextWrapping="Wrap"/>
-                        <DockPanel Margin="0,0,0,12" LastChildFill="True" ToolTip="{Binding [AppIcons.Hint], Source={x:Static local:L10n.Instance}}">
-                            <ContentControl x:Name="AppsIconPreview" ContentTemplate="{StaticResource AppIconTemplate}"
-                                            Width="24" Height="24" Margin="0,0,8,0" DockPanel.Dock="Left" Focusable="False"
-                                            HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
-                            <WrapPanel>
-                                <Button x:Name="IconImportButton" Style="{StaticResource GhostButton}" Margin="0,0,8,0" Click="IconImport_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Import], Source={x:Static local:L10n.Instance}}" Margin="10,0"/></Button>
-                                <Button x:Name="IconResetButton" Style="{StaticResource GhostButton}" Click="IconReset_Click" IsEnabled="False"><TextBlock Text="{Binding [AppIcons.Reset], Source={x:Static local:L10n.Instance}}" Margin="10,0"/></Button>
-                            </WrapPanel>
-                        </DockPanel>
-                        <TextBlock x:Name="AppsDetailPid" Text=""
-                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                   Margin="0,0,0,14"/>
+                                   Margin="0,6,0,16" TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding [Apps.Output], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource SectionTitle}"/>
                         <ComboBox x:Name="AppsOutputCombo" Style="{StaticResource SelCombo}"
@@ -1242,25 +1253,26 @@
                                     VerticalAlignment="Center" IsMoveToPointEnabled="True"
                                     ValueChanged="AppsVolumeSlider_ValueChanged"/>
                         </DockPanel>
-                        <DockPanel Margin="0,4,0,0">
+                        <WrapPanel Margin="0,4,0,0">
                             <Button x:Name="AppsMuteButton"
                                     Content="{Binding [Apps.Mute], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" Width="96"
+                                    Style="{StaticResource GhostButton}" Width="96" Margin="0,0,8,6"
                                     Click="AppsMuteButton_Click"/>
                             <Button x:Name="AppsDisableAutoButton"
                                     Content="{Binding [Apps.DisableAuto], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" MinWidth="132" Margin="8,0,0,0"
+                                    Style="{StaticResource GhostButton}" MinWidth="132" Margin="0,0,8,6"
                                     Click="AppsDisableAutoButton_Click"/>
                             <Button x:Name="AppsShowInPanelButton"
                                     Content="{Binding [Apps.ShowInPanel], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" MinWidth="132" Margin="8,0,0,0"
+                                    Style="{StaticResource GhostButton}" MinWidth="132" Margin="0,0,0,6"
                                     Click="AppsShowInPanelButton_Click"/>
                             <TextBlock x:Name="AppsStatusText" Text=""
                                        FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                        VerticalAlignment="Center" HorizontalAlignment="Left"
-                                       Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
-                        </DockPanel>
+                                       Margin="12,0,0,6" TextTrimming="CharacterEllipsis"/>
+                        </WrapPanel>
                     </StackPanel>
+                    </ScrollViewer>
                 </Border>
             </Grid>
 

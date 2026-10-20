@@ -35,14 +35,9 @@ namespace SonicRoute
         private TrayWheelService? _trayWheel;
         private CancellationTokenSource? _singleClickCts;
         private CancellationTokenSource? _uiReclaimCts;
-        private long _lastUiReclaimUtcTicks;
-        private long _lastUiReclaimManagedBytes;
-        private long _lastUiReclaimPrivateBytes;
         private int _uiReclaimRunning;
-        private bool _uiWorkingSetDirty;
-        private const long IdleManagedGrowthBytes = 8 * 1024 * 1024;
-        private const long IdlePrivateGrowthBytes = 16 * 1024 * 1024;
-        private System.Windows.Threading.DispatcherTimer? _idleTimer;
+        private bool _uiWorkingSetDirty = true;
+        private bool _startupWarmupComplete, _exiting;
         private static Mutex? _instanceMutex;
         private bool _ownsInstanceMutex;
         private RuleCommandServer? _ruleCommandServer;
@@ -202,29 +197,12 @@ namespace SonicRoute
                 return IntPtr.Zero;
             });
 
-            // 稳定的托盘进程只检查内存增长，不主动触发 GC。
-            _idleTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
-            bool firstTrim = true;
-            _idleTimer.Tick += (_, _) =>
-            {
-                if (_mainWindow == null && _quickPanel == null && _uiReclaimCts == null
-                    && Volatile.Read(ref _uiReclaimRunning) == 0 && ShouldReclaimIdle())
-                {
-                    ScheduleUiReclaim();
-                }
-                if (firstTrim)
-                {
-                    firstTrim = false;
-                    _idleTimer.Interval = TimeSpan.FromSeconds(120);
-                }
-            };
-            _idleTimer.Start();
-
             // 前台监听：recent 模式下自动跟随前台音频应用（抖音/游戏等），并维护"最近有音频的前台应用"
             var foregroundWarmup = CurrentAppService.StartForegroundWatcher();
 
             // 后台预热音频会话/应用缓存，避免首次滚轮/切语言时在 UI 线程做重量级 COM 枚举
             var audioWarmup = WarmupAudioAsync();
+            _ = ReclaimAfterWarmupAsync(foregroundWarmup, audioWarmup);
             StartRuleCommandServer(audioWarmup);
 
             // 启动行为
@@ -473,42 +451,23 @@ namespace SonicRoute
 
         private void ScheduleUiReclaim()
         {
+            if (!ShouldReclaimIdle() || _mainWindow != null || _quickPanel != null || Dispatcher.HasShutdownStarted) return;
             CancelUiReclaim();
             var source = new CancellationTokenSource();
             _uiReclaimCts = source;
             _ = ReclaimUiWhenIdleAsync(source);
         }
 
-        private bool ShouldReclaimIdle()
+        private async Task ReclaimAfterWarmupAsync(Task foreground, Task audio)
         {
-            // Each closed UI can leave new inactive pages. The old 120s gate guarded forced GC;
-            // a fresh UI close now gets one delayed working-set pass without collecting the heap.
-            if (_uiWorkingSetDirty) return true;
-            long last = Interlocked.Read(ref _lastUiReclaimUtcTicks);
-            if (last == 0) return true; // 首次最小化启动整理一次不活跃工作集。
-            if (DateTime.UtcNow.Ticks - last < TimeSpan.FromSeconds(120).Ticks) return false;
-            if (GC.GetTotalMemory(false) - Interlocked.Read(ref _lastUiReclaimManagedBytes) >= IdleManagedGrowthBytes)
-                return true;
-            try
-            {
-                using var process = System.Diagnostics.Process.GetCurrentProcess();
-                return process.PrivateMemorySize64 - Interlocked.Read(ref _lastUiReclaimPrivateBytes) >= IdlePrivateGrowthBytes;
-            }
-            catch { return false; }
+            try { await Task.WhenAll(foreground, audio).ConfigureAwait(false); }
+            catch { /* A failed warmup must not leave the startup idle request waiting forever. */ }
+            try { await Dispatcher.InvokeAsync(() => { _startupWarmupComplete = true; ScheduleUiReclaim(); }).Task.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            catch (InvalidOperationException) { }
         }
 
-        private void RecordUiReclaimBaseline()
-        {
-            _uiWorkingSetDirty = false;
-            Interlocked.Exchange(ref _lastUiReclaimManagedBytes, GC.GetTotalMemory(false));
-            try
-            {
-                using var process = System.Diagnostics.Process.GetCurrentProcess();
-                Interlocked.Exchange(ref _lastUiReclaimPrivateBytes, process.PrivateMemorySize64);
-            }
-            catch { }
-            Interlocked.Exchange(ref _lastUiReclaimUtcTicks, DateTime.UtcNow.Ticks);
-        }
+        private bool ShouldReclaimIdle() => _uiWorkingSetDirty && _startupWarmupComplete && !_exiting;
 
         private async Task ReclaimUiWhenIdleAsync(CancellationTokenSource source)
         {
@@ -525,7 +484,7 @@ namespace SonicRoute
                     if (_mainWindow != null || _quickPanel != null || _trayMenu != null || token.IsCancellationRequested || !ShouldReclaimIdle()) return;
                     // This pages out inactive working-set memory; it does not collect managed objects.
                     TrimWorkingSet();
-                    RecordUiReclaimBaseline();
+                    _uiWorkingSetDirty = false;
                 },
                     System.Windows.Threading.DispatcherPriority.ApplicationIdle, token).Task.ConfigureAwait(false);
             }
@@ -918,9 +877,9 @@ namespace SonicRoute
 
         private void Quit()
         {
+            _exiting = true;
             _mainWindow?.FlushPendingSettings();
             CancelUiReclaim();
-            _idleTimer?.Stop();
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();
@@ -936,9 +895,9 @@ namespace SonicRoute
 
         protected override void OnExit(ExitEventArgs e)
         {
+            _exiting = true;
             _mainWindow?.FlushPendingSettings();
             CancelUiReclaim();
-            _idleTimer?.Stop();
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();

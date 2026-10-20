@@ -240,6 +240,7 @@ namespace SonicRoute.Core
             {
                 var config = Load();
                 var previous = config.AppIcons;
+                if (AppIconFiles.GetFileName(config, processName) == fileName) return true;
                 var next = AppIconFiles.NormalizeMappings(previous);
                 if (fileName == null) next.Remove(processName);
                 else
@@ -266,17 +267,28 @@ namespace SonicRoute.Core
             }
         }
 
-        /// <summary>导出配置副本到指定路径（先落盘当前内存配置再复制）。</summary>
-        public static bool ExportTo(string destPath)
+        /// <summary>在界面线程捕获普通配置快照；不读取图片或写盘。</summary>
+        public static string CaptureExportSnapshot()
+        {
+            lock (_lock) return JsonSerializer.Serialize(Load(), SaveOptions);
+        }
+
+        /// <summary>后台导出稳定配置及图片；不把快照替换成运行中的配置对象。</summary>
+        public static bool ExportTo(string destPath, string? snapshot = null)
         {
             try
             {
-                var config = Load();
                 if (string.Equals(Path.GetFullPath(destPath), Path.GetFullPath(ConfigPath), StringComparison.OrdinalIgnoreCase)) return false;
-                if (!TrySave(config)) return false;
+                lock (_lock)
+                {
+                    if (!TrySave(Load())) return false;
+                    snapshot ??= CaptureExportSnapshot();
+                }
+                using var document = JsonDocument.Parse(snapshot);
+                var config = document.RootElement.Deserialize<AppConfig>();
+                if (config == null) return false;
                 var assets = AppIconFiles.ExportAssets(config);
-                using var document = JsonDocument.Parse(JsonSerializer.Serialize(config, SaveOptions));
-                AtomicFile.WriteAllText(destPath, TransferJson(document.RootElement, config, assets));
+                AtomicFile.WriteAllBytes(destPath, TransferJson(document.RootElement, config, assets));
                 return true;
             }
             catch { return false; }
@@ -285,27 +297,48 @@ namespace SonicRoute.Core
         /// <summary>从指定文件导入配置：复制到配置路径并清空内存缓存，下次 Load 重新读取（调用方负责重启应用）。</summary>
         public static bool ImportFrom(string srcPath)
         {
+            var prepared = PrepareImport(srcPath);
+            return prepared != null && ApplyImport(prepared);
+        }
+
+        /// <summary>后台验证备份与图片；只生成配置提交数据，失败不替换当前配置。</summary>
+        public static byte[]? PrepareImport(string srcPath)
+        {
             try
             {
-                if (new FileInfo(srcPath).Length > AppIconFiles.MaxTransferBytes) return false;
-                string json = File.ReadAllText(srcPath);
-                using var document = JsonDocument.Parse(json);
-                if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
-                var config = JsonSerializer.Deserialize<AppConfig>(json);
-                if (config == null || (config.AppIcons?.Count ?? 0) > AppIconFiles.MaxIcons) return false;
+                using var stream = File.OpenRead(srcPath);
+                if (stream.Length > AppIconFiles.MaxTransferBytes) return null;
+                using var document = JsonDocument.Parse(stream);
+                if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
+                var config = document.RootElement.Deserialize<AppConfig>();
+                if (config == null || (config.AppIcons?.Count ?? 0) > AppIconFiles.MaxIcons) return null;
                 config.AppIcons = AppIconFiles.NormalizeMappings(config.AppIcons);
                 AppIconFiles.ImportAssets(document.RootElement, config);
-                var dir = Path.GetDirectoryName(ConfigPath);
-                if (dir != null) Directory.CreateDirectory(dir);
-                AtomicFile.WriteAllText(ConfigPath, TransferJson(document.RootElement, config, null));
-                lock (_lock) { _cache = null; }
+                return TransferJson(document.RootElement, config, null);
+            }
+            catch { return null; }
+        }
+
+        /// <summary>调用方串行提交已验证的普通配置，然后按原流程重启。</summary>
+        public static bool ApplyImport(byte[] prepared)
+        {
+            if (prepared.Length > AppIconFiles.MaxTransferBytes) return false;
+            try
+            {
+                lock (_lock)
+                {
+                    var dir = Path.GetDirectoryName(ConfigPath);
+                    if (dir != null) Directory.CreateDirectory(dir);
+                    AtomicFile.WriteAllBytes(ConfigPath, prepared);
+                    _cache = null;
+                }
                 return true;
             }
             catch { return false; }
         }
 
         // Asset data exists only in explicit backups, never in the frequently loaded/saved config.json.
-        private static string TransferJson(JsonElement root, AppConfig config, Dictionary<string, string>? assets)
+        private static byte[] TransferJson(JsonElement root, AppConfig config, Dictionary<string, string>? assets)
         {
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
@@ -323,7 +356,7 @@ namespace SonicRoute.Core
                 writer.WriteEndObject();
             }
             if (buffer.Length > AppIconFiles.MaxTransferBytes) throw new InvalidDataException("Configuration backup too large.");
-            return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+            return buffer.ToArray();
         }
     }
 }

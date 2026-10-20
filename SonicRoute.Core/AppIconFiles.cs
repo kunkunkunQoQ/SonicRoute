@@ -60,13 +60,19 @@ namespace SonicRoute.Core
             return bytes;
         }
 
-        public static string SavePng(byte[] bytes)
+        public static string SavePng(byte[] bytes) => SavePngIfChanged(bytes, out _);
+
+        public static string SavePngIfChanged(byte[] bytes, out bool changed)
         {
             ValidatePng(bytes);
             string name = NameFor(bytes);
+            changed = false;
+            try { if (ReadPng(name).SequenceEqual(bytes)) return name; }
+            catch { /* Missing or damaged files are repaired by the normal atomic write. */ }
             Directory.CreateDirectory(DirectoryPath);
             // Also repairs an existing damaged file with the same original content hash.
             AtomicFile.WriteAllBytes(Path.Combine(DirectoryPath, name), bytes);
+            changed = true;
             return name;
         }
 

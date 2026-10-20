@@ -152,42 +152,93 @@ namespace SonicRoute.Core
             finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
 
-        public async Task<List<ExecutionHistoryEntry>> ReadRecentAsync()
+        public async Task<List<ExecutionHistoryEntry>> ReadRecentAsync(CancellationToken cancellationToken = default)
         {
-            await _io.WaitAsync().ConfigureAwait(false);
+            await _io.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
                 if (_disposed) return new List<ExecutionHistoryEntry>();
                 return await Task.Run(() =>
                 {
-                    var entries = new Queue<ExecutionHistoryEntry>();
-                    foreach (string file in new[] { Previous, Current })
+                    var entries = new List<ExecutionHistoryEntry>(200);
+                    foreach (string file in new[] { Current, Previous })
                     {
-                        if (!File.Exists(file)) continue;
-                        if (new FileInfo(file).Length > 64L * 1024 * 1024) { LastError = "file_too_large"; continue; }
-                        using var reader = new StreamReader(file, Encoding.UTF8);
-                        string? line;
-                        while ((line = reader.ReadLine()) != null)
+                        foreach (string line in ReadLinesBackwards(file, cancellationToken))
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            if (_disposed) return entries;
                             if (line.Length > MaxRecordBytes) { LastError = "record_too_large"; continue; }
                             try
                             {
                                 var entry = JsonSerializer.Deserialize<ExecutionHistoryEntry>(line);
                                 if (entry == null || entry.Steps == null || entry.Steps.Count > 100
                                     || entry.Steps.Exists(step => step == null || step.TargetApp == null || step.Status == null || step.Reason == null)) continue;
-                                entries.Enqueue(entry);
-                                if (entries.Count > 200) entries.Dequeue();
+                                entries.Add(entry);
+                                if (entries.Count == 200) return entries;
                             }
                             catch (JsonException) { LastError = "invalid_record"; }
                         }
                     }
-                    var result = new List<ExecutionHistoryEntry>(entries);
-                    result.Reverse();
-                    return result;
-                }).ConfigureAwait(false);
+                    return entries;
+                }, cancellationToken).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception error) { LastError = error.GetType().Name; return new List<ExecutionHistoryEntry>(); }
             finally { _io.Release(); }
+        }
+
+        // Read only the tail needed by the viewer. Byte boundaries preserve UTF8 across blocks.
+        private IEnumerable<string> ReadLinesBackwards(string file, CancellationToken token)
+        {
+            if (!File.Exists(file)) yield break;
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length > 64L * 1024 * 1024) { LastError = "file_too_large"; yield break; }
+            var block = new byte[8192];
+            var line = new byte[1024];
+            int count = 0;
+            bool tooLong = false, atEnd = true;
+            long position = stream.Length;
+            while (position > 0)
+            {
+                token.ThrowIfCancellationRequested();
+                if (_disposed) yield break;
+                int size = (int)Math.Min(block.Length, position);
+                position -= size;
+                stream.Position = position;
+                int read = 0;
+                while (read < size)
+                {
+                    int n = stream.Read(block, read, size - read);
+                    if (n == 0) throw new EndOfStreamException();
+                    read += n;
+                }
+                for (int i = size - 1; i >= 0; i--)
+                {
+                    if (block[i] == '\n')
+                    {
+                        if (tooLong) LastError = "record_too_large";
+                        else if (count != 0 || !atEnd)
+                        {
+                            Array.Reverse(line, 0, count);
+                            yield return Encoding.UTF8.GetString(line, 0, count);
+                        }
+                        count = 0; tooLong = false; atEnd = false;
+                    }
+                    else if (!tooLong)
+                    {
+                        // The original reader limited UTF16 characters, so allow multibyte UTF8.
+                        if (count == MaxRecordBytes * 4) { tooLong = true; count = 0; continue; }
+                        if (count == line.Length) Array.Resize(ref line, Math.Min(line.Length * 2, MaxRecordBytes * 4));
+                        line[count++] = block[i];
+                    }
+                }
+            }
+            if (tooLong) LastError = "record_too_large";
+            else if (count != 0 || !atEnd)
+            {
+                Array.Reverse(line, 0, count);
+                yield return Encoding.UTF8.GetString(line, 0, count).TrimStart('\uFEFF');
+            }
         }
 
         public async Task<bool> ClearAsync()

@@ -53,6 +53,7 @@ namespace SonicRoute
         private bool _nameSavePending, _deviceNamesPending;
         private bool _suppressSettings;
         private bool _autoStartChangeBusy;
+        private bool _configTransferBusy;
         private int _autoStartSyncVersion;
         private System.Windows.Threading.DispatcherTimer? _themeSaveTimer;
         private bool _themeSavePending;
@@ -2057,8 +2058,9 @@ namespace SonicRoute
         }
 
         /// <summary>实验设置 - 导出配置文件：把当前全部设置保存为 json 副本。</summary>
-        private void ExpExportConfig_Click(object sender, RoutedEventArgs e)
+        private async void ExpExportConfig_Click(object sender, RoutedEventArgs e)
         {
+            if (_configTransferBusy || _appIconImportBusy) return;
             var dlg = new Microsoft.Win32.SaveFileDialog
             {
                 Title = L10n.T("Exp.ExportConfig"),
@@ -2067,15 +2069,13 @@ namespace SonicRoute
                 DefaultExt = ".json",
             };
             if (dlg.ShowDialog() != true) return;
-            if (SonicRoute.Core.ConfigService.ExportTo(dlg.FileName))
-                ShowToast(L10n.T("Exp.ExportDone"));
-            else
-                ShowToast(L10n.T("Exp.TransferFail"));
+            await TransferConfigAsync(dlg.FileName, import: false);
         }
 
         /// <summary>实验设置 - 导入配置文件：从备份文件恢复全部设置并自动重启应用。</summary>
-        private void ExpImportConfig_Click(object sender, RoutedEventArgs e)
+        private async void ExpImportConfig_Click(object sender, RoutedEventArgs e)
         {
+            if (_configTransferBusy || _appIconImportBusy) return;
             var dlg = new Microsoft.Win32.OpenFileDialog
             {
                 Title = L10n.T("Exp.ImportConfig"),
@@ -2083,20 +2083,43 @@ namespace SonicRoute
                 DefaultExt = ".json",
             };
             if (dlg.ShowDialog() != true) return;
-            ImportConfigFile(dlg.FileName);
+            await TransferConfigAsync(dlg.FileName, import: true);
         }
 
         /// <summary>导入配置文件（点击对话框 / 拖入文件共用）：恢复全部设置并自动重启应用。</summary>
-        private void ImportConfigFile(string file)
+        private async Task TransferConfigAsync(string file, bool import)
         {
-            if (SonicRoute.Core.ConfigService.ImportFrom(file))
+            if (_configTransferBusy || _appIconImportBusy || _isClosed) return;
+            _configTransferBusy = true;
+            bool wasEnabled = IsEnabled;
+            IsEnabled = false;
+            try
             {
-                ShowToast(L10n.T("Exp.ImportDone"));
-                RestartApp();
+                bool ok;
+                if (import)
+                {
+                    var prepared = await Task.Run(() => ConfigService.PrepareImport(file));
+                    if (_isClosed) return;
+                    // Commit the small, validated config and restart in the same UI turn.
+                    ok = prepared != null && ConfigService.ApplyImport(prepared);
+                }
+                else
+                {
+                    string snapshot = ConfigService.CaptureExportSnapshot();
+                    ok = await Task.Run(() => ConfigService.ExportTo(file, snapshot));
+                    if (_isClosed) return;
+                }
+                ShowToast(L10n.T(ok ? import ? "Exp.ImportDone" : "Exp.ExportDone" : "Exp.TransferFail"));
+                if (ok && import) RestartApp();
             }
-            else
+            catch
             {
-                ShowToast(L10n.T("Exp.TransferFail"));
+                if (!_isClosed) ShowToast(L10n.T("Exp.TransferFail"));
+            }
+            finally
+            {
+                _configTransferBusy = false;
+                if (!_isClosed) IsEnabled = wasEnabled;
             }
         }
 
@@ -2107,12 +2130,12 @@ namespace SonicRoute
             e.Handled = true;
         }
 
-        private void ExpImportConfigButton_Drop(object sender, System.Windows.DragEventArgs e)
+        private async void ExpImportConfigButton_Drop(object sender, System.Windows.DragEventArgs e)
         {
             if (e.Data.GetData(System.Windows.DataFormats.FileDrop) is string[] files)
             {
                 var f = files.FirstOrDefault(x => x.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
-                if (f != null) ImportConfigFile(f);
+                if (f != null) await TransferConfigAsync(f, import: true);
             }
         }
 

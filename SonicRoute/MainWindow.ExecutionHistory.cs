@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,6 +24,15 @@ namespace SonicRoute
         private TextBlock? _historyNotice;
         private string? _historyOptionsLanguage;
         private int _historyReadVersion;
+        private CancellationTokenSource? _historyReadCancellation;
+
+        private void CancelHistoryRead()
+        {
+            ++_historyReadVersion;
+            var source = _historyReadCancellation;
+            _historyReadCancellation = null;
+            source?.Cancel(); // The owning read disposes its source after its continuation finishes.
+        }
 
         private void ExecutionHistory_Changed(object sender, RoutedEventArgs e)
         {
@@ -150,7 +160,7 @@ namespace SonicRoute
             window.Closed += (_, _) =>
             {
                 if (_historyWindow != window) return;
-                ++_historyReadVersion;
+                CancelHistoryRead();
                 _historyWindow = null; _historyList = null; _historyDetails = null; _historyNotice = null;
                 window.Content = null;
             };
@@ -161,20 +171,35 @@ namespace SonicRoute
         private async Task RefreshHistoryAsync()
         {
             var window = _historyWindow;
+            if (window == null) return;
             var store = AutoRuleService.GetHistoryStore();
-            if (window == null || store == null) return;
-            int version = ++_historyReadVersion;
-            await store.WhenIdleAsync();
-            var entries = await store.ReadRecentAsync();
-            if (_isClosed || _historyWindow != window || version != _historyReadVersion || !_config.ExecutionHistoryEnabled || !_config.ExperimentalMode) return;
-            var rows = new List<HistoryRow>();
-            foreach (var entry in entries)
-                rows.Add(new HistoryRow { Entry = entry, Text = entry.StartedUtc.ToLocalTime().ToString("MM-dd HH:mm:ss") + "  " + entry.RuleName
-                    + Environment.NewLine + L10n.T("History.Status." + entry.Status) + " · " + L10n.T("History.Source." + entry.Source) });
-            _historyList!.ItemsSource = rows;
-            _historyNotice!.Text = store.LastError != null ? L10n.T("History.ReadError") : rows.Count == 0 ? L10n.T("History.Empty") : "";
-            if (rows.Count > 0) _historyList.SelectedIndex = 0;
-            else _historyDetails!.Clear();
+            if (store == null) return;
+            CancelHistoryRead();
+            int version = _historyReadVersion;
+            var source = _historyReadCancellation = new CancellationTokenSource();
+            try
+            {
+                var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                using (source.Token.Register(() => canceled.TrySetResult(true)))
+                    await Task.WhenAny(store.WhenIdleAsync(), canceled.Task);
+                source.Token.ThrowIfCancellationRequested();
+                var entries = await store.ReadRecentAsync(source.Token);
+                if (_isClosed || _historyWindow != window || version != _historyReadVersion || !_config.ExecutionHistoryEnabled || !_config.ExperimentalMode) return;
+                var rows = new List<HistoryRow>();
+                foreach (var entry in entries)
+                    rows.Add(new HistoryRow { Entry = entry, Text = entry.StartedUtc.ToLocalTime().ToString("MM-dd HH:mm:ss") + "  " + entry.RuleName
+                        + Environment.NewLine + L10n.T("History.Status." + entry.Status) + " · " + L10n.T("History.Source." + entry.Source) });
+                _historyList!.ItemsSource = rows;
+                _historyNotice!.Text = store.LastError != null ? L10n.T("History.ReadError") : rows.Count == 0 ? L10n.T("History.Empty") : "";
+                if (rows.Count > 0) _historyList.SelectedIndex = 0;
+                else _historyDetails!.Clear();
+            }
+            catch (OperationCanceledException) when (source.IsCancellationRequested) { }
+            finally
+            {
+                if (ReferenceEquals(_historyReadCancellation, source)) _historyReadCancellation = null;
+                source.Dispose();
+            }
         }
 
         private static string FormatHistory(ExecutionHistoryEntry entry)
@@ -205,7 +230,7 @@ namespace SonicRoute
 
         private void ReleaseExecutionHistoryUi()
         {
-            ++_historyReadVersion;
+            CancelHistoryRead();
             _historyWindow?.Close();
             _historyWindow = null; _historyList = null; _historyDetails = null; _historyNotice = null;
             _historyLimitBox = null; _historyOptionsLanguage = null;

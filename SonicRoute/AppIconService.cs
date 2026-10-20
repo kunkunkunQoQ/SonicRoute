@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using SonicRoute.Core;
+using Microsoft.Win32.SafeHandles;
 
 namespace SonicRoute
 {
@@ -54,16 +56,16 @@ namespace SonicRoute
         public static ImageSource? GetIconForPid(int pid)
         {
             if (pid <= 0) return null;
-            string? exe = null;
-            try
-            {
-                using var p = Process.GetProcessById(pid);
-                exe = p.MainModule?.FileName;
-            }
-            catch { /* 系统/提升进程可能无权限 */ }
-
-            if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe)) return null;
-            return GetOrExtract("exe|" + exe);
+            // PR #6: query the image path without requesting access to process modules.
+            using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
+            if (handle.IsInvalid) return null;
+            var path = new StringBuilder(1024);
+            int length = path.Capacity;
+            if (QueryFullProcessImageName(handle, 0, path, ref length)) return GetIconForPath(path.ToString());
+            if (Marshal.GetLastWin32Error() != 122) return null;
+            path.EnsureCapacity(32768);
+            length = path.Capacity;
+            return QueryFullProcessImageName(handle, 0, path, ref length) ? GetIconForPath(path.ToString()) : null;
         }
 
         /// <summary>取指定 EXE 的图标（自动化「打开方式」候选应用使用，与进程图标共用缓存）；失败返回 null。</summary>
@@ -89,18 +91,62 @@ namespace SonicRoute
             {
                 using var icon = System.Drawing.Icon.ExtractAssociatedIcon(path);
                 if (icon == null) return null;
-                using var bmp = icon.ToBitmap();
-                var hbmp = bmp.GetHbitmap();
-                try
-                {
-                    var img = Imaging.CreateBitmapSourceFromHBitmap(hbmp, IntPtr.Zero,
-                        Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(24, 24));
-                    img.Freeze();
-                    return img;
-                }
-                finally { DeleteObject(hbmp); }
+                var image = FromIcon(icon);
+                // Only automatic EXE icons are filtered; explicit user imports remain authoritative.
+                var pixels = Pixels(image);
+                foreach (var reference in DefaultIconPixels.Value)
+                    if (pixels.SequenceEqual(reference)) return null;
+                return image;
             }
             catch { return null; }
+        }
+
+        private static readonly Lazy<byte[][]> DefaultIconPixels = new(() =>
+        {
+            var references = new System.Collections.Generic.List<byte[]>(4);
+            AddDefaultIcon(references, System.Drawing.SystemIcons.Application);
+            var stock = new StockIconInfo { Size = (uint)Marshal.SizeOf<StockIconInfo>() };
+            if (SHGetStockIconInfo(2, 0x100, ref stock) != 0 || stock.Icon == IntPtr.Zero) return references.ToArray();
+            try
+            {
+                using var icon = System.Drawing.Icon.FromHandle(stock.Icon);
+                AddDefaultIcon(references, icon);
+                return references.ToArray();
+            }
+            finally { DestroyIcon(stock.Icon); }
+        });
+
+        private static void AddDefaultIcon(System.Collections.Generic.List<byte[]> references, System.Drawing.Icon icon)
+        {
+            references.Add(Pixels(FromIcon(icon)));
+            // PE/icon-file decoding may expose a legacy mask variant of the same stock icon.
+            using var encoded = new MemoryStream();
+            icon.Save(encoded);
+            encoded.Position = 0;
+            using var decoded = new System.Drawing.Icon(encoded);
+            references.Add(Pixels(FromIcon(decoded)));
+        }
+
+        private static byte[] Pixels(BitmapSource image)
+        {
+            if (image.Format != PixelFormats.Bgra32) image = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+            var pixels = new byte[image.PixelWidth * image.PixelHeight * 4];
+            image.CopyPixels(pixels, image.PixelWidth * 4, 0);
+            return pixels;
+        }
+
+        private static BitmapSource FromIcon(System.Drawing.Icon icon)
+        {
+            using var bmp = icon.ToBitmap();
+            var hbmp = bmp.GetHbitmap();
+            try
+            {
+                var img = Imaging.CreateBitmapSourceFromHBitmap(hbmp, IntPtr.Zero,
+                    Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(24, 24));
+                img.Freeze();
+                return img;
+            }
+            finally { DeleteObject(hbmp); }
         }
 
         /// <summary>按最近访问顺序淘汰；UI 关闭后最多保留 32 个冻结图标，减少下次打开时的提取。</summary>
@@ -123,8 +169,31 @@ namespace SonicRoute
             TrimIfNeeded();
         }
 
-        [System.Runtime.InteropServices.DllImport("gdi32.dll")]
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern SafeProcessHandle OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, int processId);
+
+        [DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, StringBuilder path, ref int length);
+
+        [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct StockIconInfo
+        {
+            public uint Size;
+            public IntPtr Icon;
+            public int ImageIndex, IconIndex;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string? Path;
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHGetStockIconInfo(uint id, uint flags, ref StockIconInfo info);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DestroyIcon(IntPtr icon);
 
     }
 }

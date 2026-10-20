@@ -21,7 +21,7 @@ namespace SonicRoute
 
         private async void IconImport_Click(object sender, RoutedEventArgs e)
         {
-            if (_appIconImportBusy || AppsListBox.SelectedItem is not AppItem item) return;
+            if (_appIconImportBusy || _configTransferBusy || AppsListBox.SelectedItem is not AppItem item) return;
             string processName = item.ProcessName;
             if (string.IsNullOrWhiteSpace(processName)) return;
             if (_config.AppIcons.Count >= AppIconFiles.MaxIcons && !_config.AppIcons.ContainsKey(processName))
@@ -44,18 +44,20 @@ namespace SonicRoute
                 catch { if (!_isClosed) ShowToast(L10n.T("AppIcons.Invalid")); return; }
                 if (_isClosed) return;
                 string fileName;
-                try { fileName = await Task.Run(() => AppIconFiles.SavePng(bytes)); }
+                bool changed = false;
+                try { fileName = await Task.Run(() => AppIconFiles.SavePngIfChanged(bytes, out changed)); }
                 catch { if (!_isClosed) ShowToast(L10n.T("AppIcons.SaveFailed")); return; }
                 if (_isClosed) return;
+                string? previous = AppIconFiles.GetFileName(_config, processName);
                 if (!ConfigService.TrySetAppIcon(processName, fileName))
                 {
                     ShowToast(L10n.T("AppIcons.SaveFailed"));
                     return;
                 }
-                AppIconService.InvalidateCustom(fileName);
-                ((App)System.Windows.Application.Current).NotifyAppIconChanged(processName);
+                if (changed) AppIconService.InvalidateCustom(fileName);
+                if (changed || previous != fileName) ((App)System.Windows.Application.Current).NotifyAppIconChanged(processName);
                 ShowToast(L10n.T("AppIcons.Imported"));
-                await Task.Run(() => AppIconFiles.CleanupUnused(ConfigService.Load()));
+                if (changed || previous != fileName) await Task.Run(() => AppIconFiles.CleanupUnused(ConfigService.Load()));
             }
             finally
             {
@@ -66,7 +68,7 @@ namespace SonicRoute
 
         private async void IconReset_Click(object sender, RoutedEventArgs e)
         {
-            if (_appIconImportBusy || AppsListBox.SelectedItem is not AppItem item) return;
+            if (_appIconImportBusy || _configTransferBusy || AppsListBox.SelectedItem is not AppItem item) return;
             if (!ConfigService.TrySetAppIcon(item.ProcessName, null))
             {
                 ShowToast(L10n.T("AppIcons.SaveFailed"));

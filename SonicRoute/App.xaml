@@ -8,7 +8,7 @@
         <!-- 共用应用图标：懒加载期间或提取失败时显示名称首字，原图就绪后自动替换。 -->
         <DataTemplate x:Key="AppIconTemplate">
             <Grid IsHitTestVisible="False">
-                <TextBlock x:Name="Initial" Text="{Binding Label, Converter={StaticResource AppIconInitial}}"
+                <TextBlock x:Name="Initial"
                            FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"
                            HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
                 <Image Source="{Binding Icon}" SnapsToDevicePixels="True"
@@ -16,6 +16,7 @@
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                    <Setter TargetName="Initial" Property="Text" Value="{Binding Label, Converter={StaticResource AppIconInitial}}"/>
                     <Setter TargetName="Initial" Property="Visibility" Value="Visible"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
