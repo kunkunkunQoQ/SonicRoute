@@ -9,7 +9,7 @@
 - **应用图标与名称**：应用页可导入图标或恢复默认；没有可用图标时显示名称首字，配置备份可带上导入的图标。
 - **读取与界面改进**：历史按需读取并取消过时请求，配置传输和图标处理复用现有后台路径；应用详情布局同步调整。
 
-感谢 [Billy636](https://github.com/Billy636) 提供的进程路径查询改进方案（[PR #6](https://github.com/kunkunkunQoQ/SonicRoute/pull/6)）。
+- 修复部分高权限应用图标无法显示的问题（感谢 @Billy636 的 [PR #6](https://github.com/kunkunkunQoQ/SonicRoute/pull/6)）。
 
 ## 从示例开始创建规则
 
