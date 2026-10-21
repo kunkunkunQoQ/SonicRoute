@@ -59,33 +59,9 @@
         </Style>
 
         <!-- 底部工具按钮 -->
-        <Style x:Key="FootButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+        <Style x:Key="FootButton" TargetType="Button" BasedOn="{StaticResource QuickPanelToolButton}">
             <Setter Property="Padding" Value="12,6"/>
             <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
-                                              Margin="{TemplateBinding Padding}"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
 
         <!-- 应用项模板 -->
@@ -136,10 +112,6 @@
             <TextBlock Text="{Binding [Qp.Output], Source={x:Static local:L10n.Instance}}"
                        FontSize="12.5" FontWeight="SemiBold"
                        Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,6"/>
-            <TextBlock x:Name="OutputCurrentText" Text="…"
-                       FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
-                       Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
-                       ToolTipService.ShowDuration="8000"/>
             <ItemsControl x:Name="OutputButtonsPanel">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -154,10 +126,6 @@
                 <TextBlock Text="{Binding [Qp.Input], Source={x:Static local:L10n.Instance}}"
                            FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,0,6"/>
-                <TextBlock x:Name="InputCurrentText" Text="…"
-                           FontSize="12" Foreground="{DynamicResource Theme.TextPrimary}"
-                           Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
-                           ToolTipService.ShowDuration="8000"/>
                 <ItemsControl x:Name="InputButtonsPanel">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -185,22 +153,20 @@
                         VerticalAlignment="Center" IsMoveToPointEnabled="True"
                         ValueChanged="VolumeSlider_ValueChanged"/>
             </DockPanel>
-            <DockPanel Margin="0,4,0,0">
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
                     <Button x:Name="MuteButton"
                             Content="{Binding [Qp.Mute], Source={x:Static local:L10n.Instance}}"
-                            Style="{StaticResource FootButton}" Width="80" Height="28"
-                            Margin="0,0,6,0" Click="MuteButton_Click"/>
+                            Style="{StaticResource FootButton}" Height="28"
+                            Margin="0,0,3,0" Click="MuteButton_Click"/>
                     <Button x:Name="MicMuteButton"
                             Content="{Binding [Qp.MicMute], Source={x:Static local:L10n.Instance}}"
-                            Style="{StaticResource FootButton}" MinWidth="136" Height="28"
-                            Click="MicMuteButton_Click"/>
-                </StackPanel>
-                <TextBlock x:Name="PanelStatusText" Text=""
-                           FontSize="11" Foreground="{DynamicResource Theme.TextSecondary}"
-                           VerticalAlignment="Center" HorizontalAlignment="Right"
-                           TextTrimming="CharacterEllipsis"/>
-            </DockPanel>
+                            Grid.Column="1" Style="{StaticResource FootButton}" Height="28"
+                            Margin="3,0,0,0" Click="MicMuteButton_Click"/>
+            </Grid>
 
             <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,10,0,10"/>
 

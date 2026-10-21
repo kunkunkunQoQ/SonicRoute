@@ -234,11 +234,10 @@ namespace SonicRoute
                     if (!_entrancePlayed) { _entrancePlayed = true; PlayEntranceAnimation(); }
                 }).Task;
             }
-            catch (Exception ex)
+            catch
             {
                 if (_isClosed) return;
                 AppNameText.Text = L10n.T("Qp.LoadFail");
-                PanelStatusText.Text = ex.Message;
             }
 
         }
@@ -336,8 +335,6 @@ namespace SonicRoute
             {
                 if (_currentApp == null)
                 {
-                    OutputCurrentText.Text = "—";
-                    InputCurrentText.Text = "—";
                     VolumeSlider.Value = 0;
                     VolumePercentText.Text = "0%";
                     return;
@@ -349,15 +346,12 @@ namespace SonicRoute
                 if (_isClosed || request != _appStateRequest) return;
                 _currentOutId = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
 
-                OutputCurrentText.Text = DescribeCurrent(_outputDisplay, _currentOutId);
-
                 HighlightActive(OutputButtonsPanel, _currentOutId);
 
                 // 输入设备（麦克风）：与输出对称
                 var inId = await _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture));
                 if (_isClosed || request != _appStateRequest) return;
                 _currentInId = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
-                InputCurrentText.Text = DescribeCurrent(_inputDisplay, _currentInId);
                 HighlightInputActive();
 
                 var vol = await _uiLifetime.ReadAsync(() =>
@@ -398,17 +392,6 @@ namespace SonicRoute
             catch (OperationCanceledException) when (_isClosed) { }
         }
 
-        private static string DescribeCurrent(List<AudioDeviceInfo> devices, string? currentShortId)
-        {
-            if (currentShortId == null)
-            {
-                var sysDef = devices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id));
-                return sysDef != null ? L10n.T("Ov.Default") + sysDef.DisplayName! : L10n.T("Ov.Unset");
-            }
-            var dev = devices.FirstOrDefault(d => string.Equals(d.Id, currentShortId, StringComparison.OrdinalIgnoreCase));
-            return dev != null ? dev.DisplayName! : L10n.T("Ov.CurrentUnavailable");
-        }
-
         // ------------------------------------------------------------------
         // 设备按钮渲染 + 点击切换
         // ------------------------------------------------------------------
@@ -447,17 +430,12 @@ namespace SonicRoute
         {
             if (_currentApp == null)
             {
-                PanelStatusText.Text = L10n.T("Qp.NoAudioMsg");
                 return;
             }
 
             MarkLastUsed(_currentApp);
             var pid = (int)_currentApp.ProcessId;
-            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, dev.Id));
-            if (ok)
-                PanelStatusText.Text = string.Format(L10n.T("Qp.SwitchOk"), "🔊 " + dev.DisplayName, AppDisplayName.Get(_currentApp));
-            else
-                PanelStatusText.Text = $"✗ {msg}";
+            await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, dev.Id));
 
             await RefreshCurrentAppDataAsync();
         }
@@ -501,17 +479,12 @@ namespace SonicRoute
         {
             if (_currentApp == null)
             {
-                PanelStatusText.Text = L10n.T("Qp.NoAudioMsg");
                 return;
             }
 
             MarkLastUsed(_currentApp);
             var pid = (int)_currentApp.ProcessId;
-            var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eCapture, dev.Id));
-            if (ok)
-                PanelStatusText.Text = string.Format(L10n.T("Qp.SwitchOk"), "🎤 " + dev.DisplayName, AppDisplayName.Get(_currentApp));
-            else
-                PanelStatusText.Text = $"✗ {msg}";
+            await Task.Run(() => AudioService.ApplyEndpoint(pid, EDataFlow.eCapture, dev.Id));
 
             await RefreshCurrentAppDataAsync();
         }
@@ -536,18 +509,14 @@ namespace SonicRoute
             int pct = (int)Math.Round(e.NewValue);
             var pid = (int)_currentApp.ProcessId;
 
-            var result = await Task.Run(() =>
+            int actual = await Task.Run(() =>
             {
-                bool applied = SessionVolumeService.SetVolumePercent(pid, pct);
-                return (Applied: applied, Actual: SessionVolumeService.GetVolumePercent(pid));
+                SessionVolumeService.SetVolumePercent(pid, pct);
+                return SessionVolumeService.GetVolumePercent(pid);
             });
             if (_isClosed || _currentApp?.ProcessId != (uint)pid) return;
-            int actual = result.Actual;
             if (actual >= 0)
                 ApplyAppVolumeReadback(actual);
-            PanelStatusText.Text = result.Applied && actual >= 0
-                ? string.Format(L10n.T("Qp.VolOk"), actual)
-                : L10n.T("Qp.VolFail");
         }
 
         private void ApplyAppVolumeReadback(int actual)
@@ -562,7 +531,7 @@ namespace SonicRoute
             finally { _volumeReady = ready; }
         }
 
-        /// <summary>调整当前应用音量（delta 为 ±n 百分比），同步面板滑块/百分比/状态行。
+        /// <summary>调整当前应用音量（delta 为 ±n 百分比），同步面板滑块与百分比。
         /// 供音量快捷键与面板 ± 按钮共用，保证快捷键调的就是面板/概览显示的当前应用。
         /// 返回调整后的实际音量；无当前应用/无输出会话返回 -1。</summary>
         public async Task<int> AdjustVolumeAsync(int delta)
@@ -576,7 +545,6 @@ namespace SonicRoute
             if (actual >= 0)
             {
                 ApplyAppVolumeReadback(actual);
-                PanelStatusText.Text = string.Format(L10n.T("Qp.VolOk"), actual);
                 ((App)Application.Current).ShowVolumeOsd(AppDisplayName.Get(_currentApp), actual, $"🔉 {actual}%",
                     target: "app:" + pid);
             }
@@ -624,8 +592,8 @@ namespace SonicRoute
         }
 
         /// <summary>静音/取消静音当前应用（面板显示的应用）。面板按钮与静音快捷键共用同一条
-        /// 路径，保证快捷键静音的就是面板/概览显示的同一个当前应用；同时回写面板按钮文字与
-        /// 状态行，让快捷键操作在面板上有可见反馈。返回是否真正执行。</summary>
+        /// 路径，保证快捷键静音的就是面板/概览显示的同一个当前应用；同时更新按钮状态，
+        /// 让快捷键操作在面板上有可见反馈。返回是否真正执行。</summary>
         public async Task<bool> MuteCurrentAppAsync()
         {
             if (_currentApp == null || !_volumeReady) return false;
@@ -634,7 +602,6 @@ namespace SonicRoute
             bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
             if (_isClosed || _currentApp?.ProcessId != (uint)pid) return true;
             ApplyMuteVisual(muted);
-            PanelStatusText.Text = L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted");
             return true;
         }
 
@@ -651,7 +618,6 @@ namespace SonicRoute
             bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
             if (_isClosed) return muted;
             ApplyMicMuteVisual(muted);
-            PanelStatusText.Text = L10n.T(muted ? "Qp.MicMuted" : "Qp.MicUnmuted");
             return muted; // 返回真实静音状态（快捷键共用：切换后立即更新 OSD）
         }
 

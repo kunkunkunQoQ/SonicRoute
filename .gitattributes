@@ -1,0 +1,3 @@
+# Count only C# in GitHub Languages; retain other files and their syntax highlighting.
+* -linguist-detectable
+*.cs linguist-detectable

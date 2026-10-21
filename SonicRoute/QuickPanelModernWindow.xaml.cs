@@ -46,6 +46,7 @@ namespace SonicRoute
             public float PeakLevel;
             public bool IsMuted;
             public ToggleButton ExpandButton = null!;
+            public TextBlock OutputName = null!;
             public StackPanel ExpandPanel = null!;
             public AnimatedExpandHost ExpandWrap = null!;
             public RotateTransform ExpandArrow = new();
@@ -644,15 +645,17 @@ namespace SonicRoute
                     && !hiddenPanel.Any(h => string.Equals(h, a.ProcessName, StringComparison.OrdinalIgnoreCase))).ToList();
                 string signature = GetAppRowsSignature(apps, cfg);
 
-                // 批量读各应用音量/静音（UI 线程外，避免逐行 COM 开销）
+                // 复用本次后台批量读取，同时取得下拉入口所需的播放路由；不增加轮询。
                 var vols = await _uiLifetime.ReadAsync(apps, static applications =>
                 {
                     SessionVolumeService.Refresh();
-                    var d = new Dictionary<int, (int vol, bool muted)>();
+                    var d = new Dictionary<int, (int vol, bool muted, string output)>();
                     foreach (var a in applications)
                     {
                         var pid = (int)a.ProcessId;
-                        d[pid] = (SessionVolumeService.GetVolumePercent(pid), SessionVolumeService.IsMuted(pid));
+                        string? output = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
+                        d[pid] = (SessionVolumeService.GetVolumePercent(pid), SessionVolumeService.IsMuted(pid),
+                            output == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(output));
                     }
                     return d;
                 });
@@ -665,6 +668,7 @@ namespace SonicRoute
                         var row = _rows[(int)app.ProcessId];
                         row.App = app;
                         var value = vols[(int)app.ProcessId];
+                        UpdateRowOutputName(row, value.output);
                         row.Slider.IsEnabled = value.vol >= 0;
                         if (value.vol >= 0) row.Slider.Value = value.vol;
                         ApplyRowMutedVisual(row, value.vol >= 0 && value.muted);
@@ -687,7 +691,7 @@ namespace SonicRoute
                     pendingIcons.Add(item);
                     var row = new AppRow { App = app, IconItem = item };
 
-                    // 行头：图标（可点击静音）+ 百分比 + ▾ + 音量条
+                    // 行头：图标（可点击静音）+ 音量条 + 固定宽度播放设备名与原下拉箭头。
                     var header = new Border
                     {
                         Height = 36,
@@ -737,10 +741,8 @@ namespace SonicRoute
 
                     var expand = new ToggleButton
                     {
-                        Width = 32,
-                        Height = 16,
-                        MinWidth = 32,
-                        MinHeight = 16,
+                        Width = 96,
+                        Height = 24,
                         VerticalAlignment = System.Windows.VerticalAlignment.Center,
                         Style = (Style)FindResource("RowExpandButton"),
                         Tag = row,
@@ -748,7 +750,23 @@ namespace SonicRoute
                     };
                     var glyph = new TextBlock { Text = "▾", RenderTransform = row.ExpandArrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
                     glyph.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
-                    expand.Content = glyph;
+                    var deviceLabel = new Grid { Width = 88, ClipToBounds = true };
+                    deviceLabel.ColumnDefinitions.Add(new ColumnDefinition());
+                    deviceLabel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    row.OutputName = new TextBlock
+                    {
+                        FontSize = 11,
+                        VerticalAlignment = VerticalAlignment.Center,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        TextWrapping = TextWrapping.NoWrap
+                    };
+                    row.OutputName.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
+                    glyph.Margin = new Thickness(4, 0, 0, 0);
+                    glyph.VerticalAlignment = VerticalAlignment.Center;
+                    Grid.SetColumn(glyph, 1);
+                    deviceLabel.Children.Add(row.OutputName);
+                    deviceLabel.Children.Add(glyph);
+                    expand.Content = deviceLabel;
                     expand.Checked += RowExpand_Changed;
                     expand.Unchecked += RowExpand_Changed;
                     row.ExpandButton = expand;
@@ -808,7 +826,9 @@ namespace SonicRoute
                     _rows[pid] = row;
 
                     // 初始音量/静音（无会话 -1 → 显示 —）
-                    if (vols.TryGetValue(pid, out var v) && v.vol >= 0)
+                    var v = vols[pid];
+                    UpdateRowOutputName(row, v.output);
+                    if (v.vol >= 0)
                     {
                         row.Slider.Value = v.vol;
                         ApplyRowMutedVisual(row, v.muted);
@@ -831,6 +851,16 @@ namespace SonicRoute
             }
             finally { _updatingRowVolumes = false; }
 
+        }
+
+        private void UpdateRowOutputName(AppRow row, string outputId)
+        {
+            string name = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outputId, StringComparison.OrdinalIgnoreCase))?.DisplayName
+                ?? L10n.T(AudioService.IsSystemDefault(outputId) ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
+            if (row.OutputName.Text == name) return;
+            row.OutputName.Text = name;
+            row.OutputName.ToolTip = name;
+            System.Windows.Automation.AutomationProperties.SetName(row.ExpandButton, name + " " + L10n.T("Qp.ExpandDevices"));
         }
 
         /// <summary>更新行滑块填充宽度；圆点定位与输入由标准 Track 处理。</summary>
@@ -1137,6 +1167,7 @@ namespace SonicRoute
                 });
                 if (_isClosed || !row.Expanded || request != row.DeviceBuildVersion
                     || !_rows.TryGetValue(pid, out var current) || current != row) return false;
+                UpdateRowOutputName(row, selected.Output);
                 if (row.DeviceSignature != structure)
                 {
                     row.ExpandPanel.Children.Clear();
@@ -1203,7 +1234,11 @@ namespace SonicRoute
             var pid = (int)row.App.ProcessId;
             var (ok, _, msg) = await Task.Run(() => AudioService.ApplyEndpoint(pid, flow, dev.Id));
             if (ok)
+            {
                 ShowOsd(AppDisplayName.Get(row.App), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName);
+                if (flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
+                    UpdateRowOutputName(current, dev.Id);
+            }
             else
                 ShowOsd(AppDisplayName.Get(row.App), $"✗ {msg}");
 
