@@ -14,13 +14,15 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     name: Build, Verify and Publish Release
     runs-on: windows-latest
     if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -41,6 +43,13 @@ jobs:
 
       - name: Verify README consistency
         run: node docs/readme/generate.cjs --check
+
+      - name: Run release pipeline test harness
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          .\packaging\Updates\Test-ReleasePipelineHarness.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify solution build
         run: dotnet build SonicRoute.sln -c Release

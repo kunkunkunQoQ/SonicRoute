@@ -114,25 +114,54 @@ function Assert-Preflight {
         }
     }
 
-    # 4. Check remote git tag (handling lightweight and annotated peeled tags)
+    # 4. Check remote git tag (handling lightweight and annotated peeled tags with exact ref comparison)
     $remoteTagLines = (& git -C $root ls-remote --tags "https://github.com/$TargetRepo.git" "refs/tags/$Tag" "refs/tags/$Tag^{}" 2>$null)
     if ($remoteTagLines) {
-        $peeled = ($remoteTagLines | Where-Object { $_ -match "\Qrefs/tags/$Tag^{}\E" })
-        $tagLine = if ($peeled) { $peeled } else { ($remoteTagLines | Where-Object { $_ -match "\Qrefs/tags/$Tag\E" }) }
-        if ($tagLine) {
-            $remoteTagSha = ($tagLine -split '\s+')[0].Trim()
-            $shortCommit = $commitSha.Substring(0, [Math]::Min(7, $commitSha.Length))
-            if (!$remoteTagSha.StartsWith($shortCommit) -and !$commitSha.StartsWith($remoteTagSha.Substring(0, [Math]::Min(7, $remoteTagSha.Length)))) {
-                throw "Fatal: Remote git tag '$Tag' already exists and points to $remoteTagSha (current commit is $commitSha). Cannot reuse tag for different commit!"
+        $exactTagRef = "refs/tags/$Tag"
+        $peeledTagRef = "refs/tags/$Tag^{}"
+
+        $peeledSha = $null
+        $directSha = $null
+
+        foreach ($line in ($remoteTagLines -split '\r?\n')) {
+            if (!$line.Trim()) { continue }
+            $parts = $line -split '\s+'
+            if ($parts.Count -ge 2) {
+                $refSha = $parts[0].Trim()
+                $refName = $parts[1].Trim()
+                if ($refName -eq $peeledTagRef) {
+                    $peeledSha = $refSha
+                } elseif ($refName -eq $exactTagRef) {
+                    $directSha = $refSha
+                }
             }
+        }
+
+        # Peeled commit SHA takes precedence for annotated tags; direct tag SHA for lightweight tags
+        $remoteCommitSha = if ($peeledSha) { $peeledSha } else { $directSha }
+
+        if ($remoteCommitSha) {
+            $shortCommit = $commitSha.Substring(0, [Math]::Min(7, $commitSha.Length))
+            $shortRemote = $remoteCommitSha.Substring(0, [Math]::Min(7, $remoteCommitSha.Length))
+            if (!$remoteCommitSha.StartsWith($shortCommit) -and !$commitSha.StartsWith($shortRemote)) {
+                throw "Fatal: Remote git tag '$Tag' already exists and points to $remoteCommitSha (current commit is $commitSha). Cannot reuse tag for different commit!"
+            }
+            Write-Host "    [OK] Remote git tag matches target commit SHA ($shortRemote)."
         }
     }
 
     # 5. Monotonic version increase verification
     $verifiedRemote = $false
     try {
-        $releasesJson = & gh release list --repo $TargetRepo --limit 10 --json tagName,isLatest,isDraft,isPrerelease 2>$null
-        if ($LASTEXITCODE -eq 0 -and $releasesJson) {
+        $releasesJson = Invoke-WithRetry -Description "Query remote releases for version verification" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+            $json = & gh release list --repo $TargetRepo --limit 10 --json tagName,isLatest,isDraft,isPrerelease 2>$null
+            if ($LASTEXITCODE -ne 0 -or !$json) {
+                throw "gh release list returned exit code $LASTEXITCODE"
+            }
+            return $json
+        }
+
+        if ($releasesJson) {
             $releases = $releasesJson | ConvertFrom-Json
             $latestOfficial = $releases | Where-Object { !$_.isDraft -and !$_.isPrerelease } | Select-Object -First 1
             if ($latestOfficial) {
@@ -148,16 +177,22 @@ function Assert-Preflight {
                 } elseif ($currNumeric -eq $latestNumeric -and (!$existingRelease -or !$existingRelease.isDraft)) {
                     throw "Fatal: Version '$Version' matches latest published version '$latestVerStr' and is already published."
                 }
-                $verifiedRemote = $true
             }
+            $verifiedRemote = $true
         }
     } catch {
         if ($_.Exception.Message -match "Fatal:") { throw }
-        Write-Warning "Could not verify monotonic increase against remote releases: $($_.Exception.Message)"
+        if (!$IsDryRun) {
+            throw "Fatal: Production release requires authoritative remote verification from GitHub API, but remote query failed: $($_.Exception.Message)"
+        }
+        Write-Warning "Could not verify monotonic increase against remote releases (DryRun fallback enabled): $($_.Exception.Message)"
     }
 
     if (!$verifiedRemote) {
-        Write-Host "    Verifying monotonic version increase against local git tags..."
+        if (!$IsDryRun) {
+            throw "Fatal: Production release aborted because remote release verification was not completed."
+        }
+        Write-Host "    [DRY-RUN] Verifying monotonic version increase against local git tags as simulation fallback..."
         $tags = (& git -C $root tag -l "v*" 2>$null) | Where-Object { $_ -match '^v\d+\.\d+(\.\d+)?$' }
         if ($tags) {
             $versions = foreach ($t in $tags) {
@@ -203,6 +238,12 @@ function Assert-LocalArtifacts {
         "SHA256SUMS.txt"
     )
 
+    $uniqueExpected = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($ef in $expectedFiles) { [void]$uniqueExpected.Add($ef) }
+    if ($uniqueExpected.Count -ne 5) {
+        throw "Expected files configuration error: Expected 5 unique files, got $($uniqueExpected.Count)"
+    }
+
     $assetDetails = [ordered]@{}
 
     foreach ($file in $expectedFiles) {
@@ -224,28 +265,43 @@ function Assert-LocalArtifacts {
         Write-Host "    [OK] $file ($($item.Length) bytes, sha256: $hash)"
     }
 
-    # 1. Verify SHA256SUMS.txt entries
+    # 1. Verify SHA256SUMS.txt entries, uniqueness and exact asset coverage
     $sumsPath = Join-Path $AssetsDir 'SHA256SUMS.txt'
     $sumsLines = (Get-Content -LiteralPath $sumsPath) | Where-Object { $_.Trim() }
     if ($sumsLines.Count -ne 4) {
         throw "SHA256SUMS.txt must contain exactly 4 entries (3 packages + SonicRoute-update.json), got $($sumsLines.Count)"
     }
+
+    $seenSumsFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $expectedSumsFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($sf in @("SonicRoute-v$Version-Lite-x64.exe", "SonicRoute-v$Version-Lite-arm64.exe", "SonicRoute-v$Version-Legacy-x64.zip", "SonicRoute-update.json")) {
+        [void]$expectedSumsFiles.Add($sf)
+    }
+
     foreach ($line in $sumsLines) {
         if ($line -notmatch '^([a-f0-9]{64})\s\s(.+)$') {
             throw "Invalid line format in SHA256SUMS.txt: '$line'"
         }
         $lineHash = $matches[1].ToLowerInvariant()
         $lineFile = $matches[2].Trim()
-        if (!$assetDetails.Contains($lineFile)) {
-            throw "SHA256SUMS.txt references unknown file: '$lineFile'"
+
+        if (!$expectedSumsFiles.Contains($lineFile)) {
+            throw "SHA256SUMS.txt references unexpected or unauthorized file: '$lineFile'"
+        }
+        if (!$seenSumsFiles.Add($lineFile)) {
+            throw "Duplicate entry detected in SHA256SUMS.txt for file: '$lineFile'"
         }
         if ($assetDetails[$lineFile].Hash -ne $lineHash) {
             throw "Hash mismatch in SHA256SUMS.txt for $lineFile (expected $($assetDetails[$lineFile].Hash), got $lineHash)"
         }
     }
-    Write-Host "    [OK] SHA256SUMS.txt cryptographic consistency verified."
 
-    # 2. Verify SonicRoute-update.json structure & fields
+    if ($seenSumsFiles.Count -ne 4) {
+        throw "SHA256SUMS.txt did not cover all 4 required assets; covered $($seenSumsFiles.Count)"
+    }
+    Write-Host "    [OK] SHA256SUMS.txt cryptographic consistency, uniqueness and coverage verified."
+
+    # 2. Verify SonicRoute-update.json structure, uniqueness, 1-to-1 bijection & fields
     $manifestPath = Join-Path $AssetsDir 'SonicRoute-update.json'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     if ($manifest.schemaVersion -ne 1 -or $manifest.protocolVersion -ne 1) {
@@ -257,16 +313,31 @@ function Assert-LocalArtifacts {
     if ($manifest.packages.Count -ne 3) {
         throw "Manifest must contain exactly 3 package definitions, got $($manifest.packages.Count)"
     }
+
+    $seenCombos = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $expectedCombos = @{
+        "Lite:x64"   = "SonicRoute-v$Version-Lite-x64.exe"
+        "Lite:arm64" = "SonicRoute-v$Version-Lite-arm64.exe"
+        "Legacy:x64" = "SonicRoute-v$Version-Legacy-x64.zip"
+    }
+
     foreach ($pkg in $manifest.packages) {
-        $assetName = $pkg.asset
-        if (!$assetDetails.Contains($assetName)) {
-            throw "Manifest references missing asset: $assetName"
+        $combo = "$($pkg.edition):$($pkg.architecture)"
+        if (!$expectedCombos.ContainsKey($combo)) {
+            throw "Manifest contains invalid or unexpected edition:architecture combination: '$combo'"
         }
-        if ($pkg.size -ne $assetDetails[$assetName].Size) {
-            throw "Manifest package size mismatch for $assetName ($($pkg.size) vs $($assetDetails[$assetName].Size))"
+        if (!$seenCombos.Add($combo)) {
+            throw "Duplicate edition:architecture package definition in manifest: '$combo'"
         }
-        if ($pkg.sha256.ToLowerInvariant() -ne $assetDetails[$assetName].Hash) {
-            throw "Manifest package hash mismatch for $assetName"
+        $expectedAsset = $expectedCombos[$combo]
+        if ($pkg.asset -ne $expectedAsset) {
+            throw "Package asset name mismatch for $($combo): expected '$expectedAsset', got '$($pkg.asset)'"
+        }
+        if ($pkg.size -ne $assetDetails[$expectedAsset].Size) {
+            throw "Manifest package size mismatch for $expectedAsset ($($pkg.size) vs $($assetDetails[$expectedAsset].Size))"
+        }
+        if ($pkg.sha256.ToLowerInvariant() -ne $assetDetails[$expectedAsset].Hash) {
+            throw "Manifest package hash mismatch for $expectedAsset"
         }
         if ($pkg.edition -eq 'Legacy') {
             if ($pkg.files.Count -ne 13) {
@@ -274,7 +345,11 @@ function Assert-LocalArtifacts {
             }
         }
     }
-    Write-Host "    [OK] SonicRoute-update.json structure and hash integrity verified."
+
+    if ($seenCombos.Count -ne 3) {
+        throw "Manifest did not cover all 3 required edition:architecture variants."
+    }
+    Write-Host "    [OK] SonicRoute-update.json structure, uniqueness, 1-to-1 matrix and hash integrity verified."
 
     Write-Host "==> [VerifyLocal] All local artifact validations passed successfully!" -ForegroundColor Green
     return $assetDetails
@@ -424,7 +499,8 @@ function Write-StepSummary {
         [string]$Status,
         [string]$TargetRepo,
         [string]$ReleaseUrl,
-        [string]$DurationStr
+        [string]$DurationStr,
+        [hashtable]$Checklist
     )
 
     $summaryPath = $env:GITHUB_STEP_SUMMARY
@@ -446,31 +522,34 @@ function Write-StepSummary {
     }
     [void]$sb.AppendLine("- **Timestamp**: $((Get-Date).ToString('u'))")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("### 📦 Verified Release Assets (5/5)")
+    [void]$sb.AppendLine("### 📦 Verified Release Assets")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("| Asset Name | Size | SHA-256 Digest | Status |")
     [void]$sb.AppendLine("|---|---|---|---|")
 
-    foreach ($key in ($LocalAssets.Keys | Sort-Object)) {
-        $a = $LocalAssets[$key]
-        $sizeKb = [Math]::Round($a.Size / 1024, 1)
-        [void]$sb.AppendLine("| ``$($a.Name)`` | ${sizeKb} KB | ``$($a.Hash)`` | ✅ Verified |")
+    if ($LocalAssets) {
+        foreach ($key in ($LocalAssets.Keys | Sort-Object)) {
+            $a = $LocalAssets[$key]
+            $sizeKb = [Math]::Round($a.Size / 1024, 1)
+            [void]$sb.AppendLine("| ``$($a.Name)`` | ${sizeKb} KB | ``$($a.Hash)`` | ✅ Verified |")
+        }
     }
 
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("### 🛡️ Safety & Integrity Checklist")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("- [x] Version format and monotonic increase verified")
-    [void]$sb.AppendLine("- [x] PE architecture (x64: 0x8664, ARM64: 0xaa64) verified")
-    [void]$sb.AppendLine("- [x] FileVersion and Edition metadata verified")
-    [void]$sb.AppendLine("- [x] Legacy ZIP contents allowlist (13 files) verified")
-    [void]$sb.AppendLine("- [x] SHA256SUMS.txt & SonicRoute-update.json consistency verified")
-    if ($Status -eq 'PUBLISHED') {
-        [void]$sb.AppendLine("- [x] Remote asset size & SHA-256 download re-verification passed")
-        [void]$sb.AppendLine("- [x] Draft release automatically promoted to official Latest release")
-    } else {
-        [void]$sb.AppendLine("- [ ] Remote publish skipped ($Status mode)")
-    }
+
+    $mark = { param([bool]$v) if ($v) { '[x]' } else { '[ ]' } }
+
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.PreflightVerified)) Version format, master branch & monotonic increase verified")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.SolutionBuildVerified)) Full solution Release build verified")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.ArtifactsCompiled)) Three editions (Lite x64, Lite ARM64, Legacy x64) compiled")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.LocalArtifactsVerified)) PE machine architecture (0x8664/0xaa64) & Legacy ZIP 13-file whitelist verified")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.ManifestVerified)) SHA256SUMS.txt & SonicRoute-update.json 1-to-1 matrix bijection verified")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.ChangelogGenerated)) Changelog curated/generated with conventional commit categorization")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.RemoteAssetsVerified)) Remote asset size, count (5/5) & downloaded SHA-256 verified byte-for-byte")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.DraftPromoted)) Draft release promoted to official public release (prerelease: false)")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.LatestPointerVerified)) GitHub /releases/latest endpoint strictly verified pointing to $Tag")
 
     $utf8 = [Text.UTF8Encoding]::new($false)
     [IO.File]::AppendAllText($summaryPath, $sb.ToString(), $utf8)
@@ -488,7 +567,8 @@ function Publish-ReleaseToGitHub {
         [string]$TargetRepo,
         [bool]$HasExistingDraft = $false,
         [switch]$IsDryRun,
-        [string]$ElapsedStr
+        [string]$ElapsedStr,
+        [hashtable]$Checklist
     )
 
     Write-Host "==> [Release] Processing GitHub Release for $Tag (Commit: $CommitSha)..." -ForegroundColor Cyan
@@ -496,40 +576,116 @@ function Publish-ReleaseToGitHub {
     if ($IsDryRun) {
         Write-Host "    [DRY-RUN] Preflight and local artifact verifications succeeded." -ForegroundColor Yellow
         Write-Host "    [DRY-RUN] Remote release creation and upload skipped due to DryRun flag." -ForegroundColor Yellow
-        Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "DRY_RUN_PASSED" -TargetRepo $TargetRepo -DurationStr $ElapsedStr
+        Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "DRY_RUN_PASSED" -TargetRepo $TargetRepo -DurationStr $ElapsedStr -Checklist $Checklist
         return
     }
 
-    # Phase B: Create or Update Draft Release with retry
+    # Phase B: Create or Update Draft Release with retry and explicit prerelease=false
     if ($HasExistingDraft) {
         Write-Host "    Updating existing Draft Release for $Tag on GitHub..."
         Invoke-WithRetry -Description "Update existing draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
-            & gh release edit $Tag --repo $TargetRepo --title $Tag --notes-file $ChangelogTarget --target $CommitSha
+            & gh release edit $Tag --repo $TargetRepo --title $Tag --notes-file $ChangelogTarget --target $CommitSha --prerelease=false
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to update existing draft release $Tag on GitHub!"
             }
         }
     } else {
         Write-Host "    Creating Draft Release for $Tag on GitHub..."
-        Invoke-WithRetry -Description "Create draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
-            & gh release create $Tag --repo $TargetRepo --target $CommitSha --title $Tag --notes-file $ChangelogTarget --draft
-            if ($LASTEXITCODE -ne 0) {
+        $draftCreated = $false
+        try {
+            Invoke-WithRetry -Description "Create draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+                & gh release create $Tag --repo $TargetRepo --target $CommitSha --title $Tag --notes-file $ChangelogTarget --draft --prerelease=false
+                if ($LASTEXITCODE -eq 0) {
+                    $draftCreated = $true
+                } else {
+                    throw "gh release create returned exit code $LASTEXITCODE"
+                }
+            }
+        } catch { }
+
+        if (!$draftCreated) {
+            # Idempotency check: in case network response was lost but draft was created on GitHub
+            Write-Warning "Draft creation reported non-zero or error; checking if draft already exists on remote..."
+            $checkDraft = $null
+            try {
+                $checkDraft = & gh release view $Tag --repo $TargetRepo --json tagName,isDraft,targetCommitish 2>$null | ConvertFrom-Json
+            } catch { }
+            if ($checkDraft -and $checkDraft.isDraft) {
+                $shortCommit = $commitSha.Substring(0, [Math]::Min(7, $commitSha.Length))
+                if ($checkDraft.targetCommitish.StartsWith($shortCommit) -or $commitSha.StartsWith($checkDraft.targetCommitish)) {
+                    Write-Host "    [Recovered] Draft release was successfully created on remote despite response error." -ForegroundColor Yellow
+                    $draftCreated = $true
+                } else {
+                    throw "Fatal: Existing draft release points to different commit $($checkDraft.targetCommitish) (expected $commitSha)."
+                }
+            } else {
                 throw "Failed to create draft release $Tag on GitHub!"
             }
         }
     }
+    $Checklist.DraftCreated = $true
 
-    # Upload all 5 assets to the draft release individually with retry
-    Write-Host "    Uploading 5 release assets to draft release..."
-    foreach ($assetItem in $LocalAssets.Values) {
-        $filePath = $assetItem.Path
-        $fileName = $assetItem.Name
-        Write-Host "    Uploading $fileName..."
-        Invoke-WithRetry -Description "Upload asset $fileName" -MaxAttempts 3 -InitialDelaySeconds 3 -Action {
-            & gh release upload $Tag $filePath --repo $TargetRepo --clobber
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to upload asset $fileName to draft release $Tag!"
+    # Query current draft state to check existing remote assets
+    $draftStatus = & gh api "/repos/$TargetRepo/releases/tags/$Tag" | ConvertFrom-Json
+    $existingRemoteAssets = @{}
+    if ($draftStatus -and $draftStatus.assets) {
+        foreach ($ea in $draftStatus.assets) {
+            $existingRemoteAssets[$ea.name] = $ea
+        }
+    }
+
+    # Issue 1 Safety Check: If the draft contains unexpected assets, REJECT and DO NOT delete them!
+    foreach ($remoteName in $existingRemoteAssets.Keys) {
+        if (!$LocalAssets.Contains($remoteName)) {
+            throw "Safety violation: Existing draft release contains unexpected asset '$remoteName' not belonging to current build. Refusing to delete or overwrite unknown assets!"
+        }
+    }
+
+    # Issue 3: Upload all 5 assets to the draft release with idempotent skip
+    Write-Host "    Processing 5 release assets for upload to draft release..."
+    $checkTempDir = Join-Path ([IO.Path]::GetTempPath()) ("gh-chk-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $checkTempDir -Force | Out-Null
+    try {
+        foreach ($assetItem in $LocalAssets.Values) {
+            $filePath = $assetItem.Path
+            $fileName = $assetItem.Name
+            $localSize = $assetItem.Size
+            $localHash = $assetItem.Hash
+
+            $needsUpload = $true
+            if ($existingRemoteAssets.ContainsKey($fileName)) {
+                $rem = $existingRemoteAssets[$fileName]
+                if ($rem.size -eq $localSize -and $rem.state -eq 'uploaded') {
+                    # Verify remote hash by downloading to test if identical
+                    Write-Host "    Checking existing remote asset $fileName on draft..."
+                    & gh release download $Tag --repo $TargetRepo --pattern $fileName --dir $checkTempDir --clobber 2>$null
+                    $downFile = Join-Path $checkTempDir $fileName
+                    if (Test-Path -LiteralPath $downFile) {
+                        $downHash = (Get-FileHash -LiteralPath $downFile -Algorithm SHA256).Hash.ToLowerInvariant()
+                        Remove-Item -LiteralPath $downFile -Force -ErrorAction SilentlyContinue
+                        if ($downHash -eq $localHash) {
+                            Write-Host "    [Idempotent] $fileName is already uploaded and hash-verified on GitHub. Skipping re-upload." -ForegroundColor Green
+                            $needsUpload = $false
+                        } else {
+                            Write-Host "    $fileName hash mismatch on draft; will overwrite with --clobber." -ForegroundColor Yellow
+                        }
+                    }
+                }
             }
+
+            if ($needsUpload) {
+                Write-Host "    Uploading $fileName..."
+                Invoke-WithRetry -Description "Upload asset $fileName" -MaxAttempts 3 -InitialDelaySeconds 3 -Action {
+                    & gh release upload $Tag $filePath --repo $TargetRepo --clobber
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Failed to upload asset $fileName to draft release $Tag!"
+                    }
+                }
+            }
+        }
+    } finally {
+        if (Test-Path -LiteralPath $checkTempDir) {
+            Remove-Item -LiteralPath $checkTempDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 
@@ -549,18 +705,6 @@ function Publish-ReleaseToGitHub {
     if (!$remoteRelease.draft) {
         throw "Security violation: Release $Tag is NOT in draft state during verification!"
     }
-
-    # Prune any unexpected assets from the draft (safe since draft == true)
-    foreach ($rAsset in $remoteRelease.assets) {
-        if (!$LocalAssets.Contains($rAsset.name)) {
-            Write-Warning "Found unexpected asset '$($rAsset.name)' on draft release; pruning from draft..."
-            & gh api -X DELETE "/repos/$TargetRepo/releases/assets/$($rAsset.id)" 2>$null
-        }
-    }
-
-    # Re-query if pruning occurred to ensure exact count
-    $json = & gh api "/repos/$TargetRepo/releases/tags/$Tag"
-    $remoteRelease = $json | ConvertFrom-Json
     if ($remoteRelease.assets.Count -ne 5) {
         throw "Remote release contains $($remoteRelease.assets.Count) assets; expected exactly 5!"
     }
@@ -607,12 +751,13 @@ function Publish-ReleaseToGitHub {
         }
     }
     Write-Host "    [OK] All 5 remote assets verified byte-for-byte and hash-matched on GitHub!" -ForegroundColor Green
+    $Checklist.RemoteAssetsVerified = $true
 
     # Phase D: Auto-Publish with network disconnect / response loss recovery
     Write-Host "    Promoting Draft Release to Official Public Latest Release..."
     $publishSuccess = $false
     try {
-        & gh release edit $Tag --repo $TargetRepo --draft=false --latest
+        & gh release edit $Tag --repo $TargetRepo --draft=false --prerelease=false --latest
         if ($LASTEXITCODE -eq 0) {
             $publishSuccess = $true
         }
@@ -631,32 +776,45 @@ function Publish-ReleaseToGitHub {
             throw "Failed to publish release $Tag as official and latest!"
         }
     }
+    $Checklist.DraftPromoted = $true
 
     # Post-publish verification: 1. Confirm release public status
     $published = & gh api "/repos/$TargetRepo/releases/tags/$Tag" | ConvertFrom-Json
     if ($published.draft) {
-        throw "Post-publish check failed: Release $Tag is still marked as draft!"
+        throw "Post-publish check failed: Release $Tag is still marked as draft on GitHub!"
     }
     if ($published.prerelease) {
-        throw "Post-publish check failed: Release $Tag is marked as prerelease!"
+        throw "Post-publish check failed: Release $Tag is marked as prerelease on GitHub!"
     }
 
-    # Post-publish verification: 2. Confirm Latest pointer
+    # Post-publish verification: 2. Confirm Latest pointer strictly (Issue 2)
+    Write-Host "    Verifying /releases/latest endpoint points to $Tag..."
+    $latest = $null
     try {
-        $latest = & gh api "/repos/$TargetRepo/releases/latest" 2>$null | ConvertFrom-Json
-        if ($latest) {
-            if ($latest.tag_name -ne $Tag) {
-                throw "Latest release verification failed: Expected latest tag to be '$Tag', but GitHub reports '$($latest.tag_name)' is latest!"
+        $latest = Invoke-WithRetry -Description "Query /releases/latest endpoint" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+            $json = & gh api "/repos/$TargetRepo/releases/latest"
+            if ($LASTEXITCODE -ne 0 -or !$json) {
+                throw "Failed to query GitHub /releases/latest endpoint."
             }
-            Write-Host "    [OK] Confirmed $Tag is the active official Latest Release on GitHub." -ForegroundColor Green
+            return ($json | ConvertFrom-Json)
         }
     } catch {
-        if ($_.Exception.Message -match "Latest release verification failed") { throw }
-        Write-Warning "Could not query /releases/latest endpoint: $($_.Exception.Message)"
+        Write-Error "Post-publish check failed: Release $Tag is public, but failed to query /releases/latest endpoint: $($_.Exception.Message)"
+        Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_PENDING_LATEST_VERIFICATION" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
+        throw "Release $Tag is published, but could not verify /releases/latest pointer on GitHub: $($_.Exception.Message)"
     }
 
+    if ($latest.tag_name -ne $Tag) {
+        Write-Error "Latest release mismatch: Expected $Tag, but GitHub /releases/latest points to '$($latest.tag_name)'!"
+        Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_LATEST_MISMATCH" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
+        throw "Latest release verification failed: Expected latest tag to be '$Tag', but GitHub reports '$($latest.tag_name)' is latest!"
+    }
+
+    Write-Host "    [OK] Confirmed $Tag is the active official Latest Release on GitHub." -ForegroundColor Green
+    $Checklist.LatestPointerVerified = $true
+
     Write-Host "==> [Success] Release $Tag is officially published as Latest on GitHub!" -ForegroundColor Green
-    Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr
+    Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
 }
 
 # Dot-sourcing check: If this script is dot-sourced into a test harness, skip execution of the main block
@@ -670,6 +828,19 @@ $startTime = [System.Diagnostics.Stopwatch]::StartNew()
 $versionInfo = Get-SonicRouteVersion
 $version = $versionInfo.Version
 $tag = $versionInfo.Tag
+
+$checklist = [ordered]@{
+    PreflightVerified = $false
+    SolutionBuildVerified = $false
+    ArtifactsCompiled = $false
+    LocalArtifactsVerified = $false
+    ManifestVerified = $false
+    ChangelogGenerated = $false
+    DraftCreated = $false
+    RemoteAssetsVerified = $false
+    DraftPromoted = $false
+    LatestPointerVerified = $false
+}
 
 Write-Host "==========================================================" -ForegroundColor DarkCyan
 Write-Host "  SonicRoute Automated Release Pipeline" -ForegroundColor Cyan
@@ -696,6 +867,7 @@ if ($Stage -in @('Preflight', 'FullPipeline')) {
     $preflight = Assert-Preflight -TargetRepo $Repo -Version $version -Tag $tag -IsDryRun:$DryRun
     $commitSha = $preflight.CommitSha
     $hasExistingDraft = $preflight.HasExistingDraft
+    $checklist.PreflightVerified = $true
 } else {
     $commitSha = (& git -C $root rev-parse HEAD 2>$null)
 }
@@ -713,6 +885,7 @@ if ($Stage -in @('Build', 'FullPipeline')) {
         if ($LASTEXITCODE -ne 0) {
             throw "Build-PortableRelease.ps1 failed with exit code $LASTEXITCODE"
         }
+        $checklist.ArtifactsCompiled = $true
     } else {
         Write-Host "==> [Build] Skipping build as requested by -SkipBuild flag." -ForegroundColor Yellow
     }
@@ -721,6 +894,8 @@ if ($Stage -in @('Build', 'FullPipeline')) {
 # Stage: VerifyLocal
 if ($Stage -in @('VerifyLocal', 'FullPipeline')) {
     $localAssets = Assert-LocalArtifacts -AssetsDir $assetsDir -Version $version
+    $checklist.LocalArtifactsVerified = $true
+    $checklist.ManifestVerified = $true
 }
 
 # Stage: GenerateChangelog
@@ -730,14 +905,17 @@ if ($Stage -in @('GenerateChangelog', 'FullPipeline')) {
         New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
     }
     $null = Get-OrGenerateChangelog -Version $version -ChangelogTarget $ChangelogPath -TargetRepo $Repo
+    $checklist.ChangelogGenerated = $true
 }
 
 # Stage: Publish
 if ($Stage -in @('Publish', 'FullPipeline')) {
     if (!$localAssets) {
         $localAssets = Assert-LocalArtifacts -AssetsDir $assetsDir -Version $version
+        $checklist.LocalArtifactsVerified = $true
+        $checklist.ManifestVerified = $true
     }
     $startTime.Stop()
     $elapsedStr = "$([Math]::Round($startTime.Elapsed.TotalSeconds, 1))s"
-    Publish-ReleaseToGitHub -AssetsDir $assetsDir -ChangelogTarget $ChangelogPath -Version $version -Tag $tag -CommitSha $commitSha -LocalAssets $localAssets -TargetRepo $Repo -HasExistingDraft:$hasExistingDraft -IsDryRun:$DryRun -ElapsedStr $elapsedStr
+    Publish-ReleaseToGitHub -AssetsDir $assetsDir -ChangelogTarget $ChangelogPath -Version $version -Tag $tag -CommitSha $commitSha -LocalAssets $localAssets -TargetRepo $Repo -HasExistingDraft:$hasExistingDraft -IsDryRun:$DryRun -ElapsedStr $elapsedStr -Checklist $checklist
 }
