@@ -58,8 +58,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOLUTION_BUILD_VERIFIED: 'true'
         run: |
           $ErrorActionPreference = 'Stop'
           $isDryRun = ('${{ inputs.dry_run }}' -eq 'true')
-          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo "${{ github.repository }}" -DryRun:$isDryRun
+          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo "${{ github.repository }}" -DryRun:$isDryRun -SolutionBuildVerified
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

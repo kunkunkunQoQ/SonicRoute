@@ -16,7 +16,8 @@ param(
     [string]$ChangelogPath,
     [string]$Repo = "kunkunkunQoQ/SonicRoute",
     [switch]$DryRun,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$SolutionBuildVerified
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,6 +64,42 @@ function Get-SonicRouteVersion {
         Tag = "v$version"
         PropsPath = $propsPath
     }
+}
+
+function Get-RemoteTagCommitSha {
+    param(
+        [string]$TargetRepo,
+        [string]$Tag,
+        [switch]$AllowQueryFailure
+    )
+    $remoteTagOutput = (& git -C $root ls-remote --tags "https://github.com/$TargetRepo.git" "refs/tags/$Tag" "refs/tags/$Tag^{}" 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        if (!$AllowQueryFailure) {
+            throw "Fatal: Failed to query remote git tags for $TargetRepo (git ls-remote exited with code $LASTEXITCODE): $remoteTagOutput"
+        }
+        return $null
+    }
+    if (!$remoteTagOutput) {
+        return $null
+    }
+    $exactTagRef = "refs/tags/$Tag"
+    $peeledTagRef = "refs/tags/$Tag^{}"
+    $peeledSha = $null
+    $directSha = $null
+    foreach ($line in ($remoteTagOutput -split '\r?\n')) {
+        if (!$line.Trim()) { continue }
+        $parts = $line -split '\s+'
+        if ($parts.Count -ge 2) {
+            $refSha = $parts[0].Trim()
+            $refName = $parts[1].Trim()
+            if ($refName -eq $peeledTagRef) {
+                $peeledSha = $refSha
+            } elseif ($refName -eq $exactTagRef) {
+                $directSha = $refSha
+            }
+        }
+    }
+    return if ($peeledSha) { $peeledSha } else { $directSha }
 }
 
 function Assert-Preflight {
@@ -114,40 +151,17 @@ function Assert-Preflight {
         }
     }
 
-    # 4. Check remote git tag (handling lightweight and annotated peeled tags with exact ref comparison)
-    $remoteTagLines = (& git -C $root ls-remote --tags "https://github.com/$TargetRepo.git" "refs/tags/$Tag" "refs/tags/$Tag^{}" 2>$null)
-    if ($remoteTagLines) {
-        $exactTagRef = "refs/tags/$Tag"
-        $peeledTagRef = "refs/tags/$Tag^{}"
-
-        $peeledSha = $null
-        $directSha = $null
-
-        foreach ($line in ($remoteTagLines -split '\r?\n')) {
-            if (!$line.Trim()) { continue }
-            $parts = $line -split '\s+'
-            if ($parts.Count -ge 2) {
-                $refSha = $parts[0].Trim()
-                $refName = $parts[1].Trim()
-                if ($refName -eq $peeledTagRef) {
-                    $peeledSha = $refSha
-                } elseif ($refName -eq $exactTagRef) {
-                    $directSha = $refSha
-                }
-            }
+    # 4. Check remote git tag (handling lightweight and annotated peeled tags with exact ref comparison and exit code validation)
+    $remoteCommitSha = Get-RemoteTagCommitSha -TargetRepo $TargetRepo -Tag $Tag -AllowQueryFailure:$IsDryRun
+    if ($remoteCommitSha) {
+        $shortCommit = $commitSha.Substring(0, [Math]::Min(7, $commitSha.Length))
+        $shortRemote = $remoteCommitSha.Substring(0, [Math]::Min(7, $remoteCommitSha.Length))
+        if (!$remoteCommitSha.StartsWith($shortCommit) -and !$commitSha.StartsWith($shortRemote)) {
+            throw "Fatal: Remote git tag '$Tag' already exists and points to $remoteCommitSha (current commit is $commitSha). Cannot reuse tag for different commit!"
         }
-
-        # Peeled commit SHA takes precedence for annotated tags; direct tag SHA for lightweight tags
-        $remoteCommitSha = if ($peeledSha) { $peeledSha } else { $directSha }
-
-        if ($remoteCommitSha) {
-            $shortCommit = $commitSha.Substring(0, [Math]::Min(7, $commitSha.Length))
-            $shortRemote = $remoteCommitSha.Substring(0, [Math]::Min(7, $remoteCommitSha.Length))
-            if (!$remoteCommitSha.StartsWith($shortCommit) -and !$commitSha.StartsWith($shortRemote)) {
-                throw "Fatal: Remote git tag '$Tag' already exists and points to $remoteCommitSha (current commit is $commitSha). Cannot reuse tag for different commit!"
-            }
-            Write-Host "    [OK] Remote git tag matches target commit SHA ($shortRemote)."
-        }
+        Write-Host "    [OK] Remote git tag matches target commit SHA ($shortRemote)."
+    } else {
+        Write-Host "    [OK] Remote git tag '$Tag' does not exist yet."
     }
 
     # 5. Monotonic version increase verification
@@ -500,7 +514,7 @@ function Write-StepSummary {
         [string]$TargetRepo,
         [string]$ReleaseUrl,
         [string]$DurationStr,
-        [hashtable]$Checklist
+        [System.Collections.IDictionary]$Checklist
     )
 
     $summaryPath = $env:GITHUB_STEP_SUMMARY
@@ -539,7 +553,7 @@ function Write-StepSummary {
     [void]$sb.AppendLine("### 🛡️ Safety & Integrity Checklist")
     [void]$sb.AppendLine("")
 
-    $mark = { param([bool]$v) if ($v) { '[x]' } else { '[ ]' } }
+    $mark = { param($v) if ([bool]$v) { '[x]' } else { '[ ]' } }
 
     [void]$sb.AppendLine("- $(&$mark ($Checklist.PreflightVerified)) Version format, master branch & monotonic increase verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.SolutionBuildVerified)) Full solution Release build verified")
@@ -568,7 +582,7 @@ function Publish-ReleaseToGitHub {
         [bool]$HasExistingDraft = $false,
         [switch]$IsDryRun,
         [string]$ElapsedStr,
-        [hashtable]$Checklist
+        [System.Collections.IDictionary]$Checklist
     )
 
     Write-Host "==> [Release] Processing GitHub Release for $Tag (Commit: $CommitSha)..." -ForegroundColor Cyan
@@ -593,15 +607,16 @@ function Publish-ReleaseToGitHub {
         Write-Host "    Creating Draft Release for $Tag on GitHub..."
         $draftCreated = $false
         try {
-            Invoke-WithRetry -Description "Create draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+            $draftCreated = [bool](Invoke-WithRetry -Description "Create draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
                 & gh release create $Tag --repo $TargetRepo --target $CommitSha --title $Tag --notes-file $ChangelogTarget --draft --prerelease=false
-                if ($LASTEXITCODE -eq 0) {
-                    $draftCreated = $true
-                } else {
+                if ($LASTEXITCODE -ne 0) {
                     throw "gh release create returned exit code $LASTEXITCODE"
                 }
-            }
-        } catch { }
+                return $true
+            })
+        } catch {
+            Write-Warning "Draft creation call reported error: $($_.Exception.Message)"
+        }
 
         if (!$draftCreated) {
             # Idempotency check: in case network response was lost but draft was created on GitHub
@@ -625,8 +640,23 @@ function Publish-ReleaseToGitHub {
     }
     $Checklist.DraftCreated = $true
 
-    # Query current draft state to check existing remote assets
+    # Query current draft state to check existing remote assets and verify target commit
     $draftStatus = & gh api "/repos/$TargetRepo/releases/tags/$Tag" | ConvertFrom-Json
+    if ($draftStatus) {
+        $shortCommit = $CommitSha.Substring(0, [Math]::Min(7, $CommitSha.Length))
+        if ($draftStatus.target_commitish -and !$draftStatus.target_commitish.StartsWith($shortCommit) -and !$CommitSha.StartsWith($draftStatus.target_commitish)) {
+            throw "Fatal: Remote draft release '$Tag' points to commit '$($draftStatus.target_commitish)', which differs from target commit '$CommitSha'!"
+        }
+    }
+    $existingTagSha = Get-RemoteTagCommitSha -TargetRepo $TargetRepo -Tag $Tag -AllowQueryFailure:$false
+    if ($existingTagSha) {
+        $shortCommit = $CommitSha.Substring(0, [Math]::Min(7, $CommitSha.Length))
+        $shortTag = $existingTagSha.Substring(0, [Math]::Min(7, $existingTagSha.Length))
+        if (!$existingTagSha.StartsWith($shortCommit) -and !$CommitSha.StartsWith($shortTag)) {
+            throw "Fatal: Remote git tag '$Tag' on GitHub points to commit '$existingTagSha', which does not match target commit '$CommitSha'!"
+        }
+        Write-Host "    [OK] Remote git tag verified pointing to target commit ($shortTag)."
+    }
     $existingRemoteAssets = @{}
     if ($draftStatus -and $draftStatus.assets) {
         foreach ($ea in $draftStatus.assets) {
@@ -799,14 +829,14 @@ function Publish-ReleaseToGitHub {
             return ($json | ConvertFrom-Json)
         }
     } catch {
-        Write-Error "Post-publish check failed: Release $Tag is public, but failed to query /releases/latest endpoint: $($_.Exception.Message)"
         Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_PENDING_LATEST_VERIFICATION" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
+        Write-Host "    [Error] Post-publish check failed: Release $Tag is public, but failed to query /releases/latest endpoint: $($_.Exception.Message)" -ForegroundColor Red
         throw "Release $Tag is published, but could not verify /releases/latest pointer on GitHub: $($_.Exception.Message)"
     }
 
     if ($latest.tag_name -ne $Tag) {
-        Write-Error "Latest release mismatch: Expected $Tag, but GitHub /releases/latest points to '$($latest.tag_name)'!"
         Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_LATEST_MISMATCH" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
+        Write-Host "    [Error] Latest release mismatch: Expected $Tag, but GitHub /releases/latest points to '$($latest.tag_name)'!" -ForegroundColor Red
         throw "Latest release verification failed: Expected latest tag to be '$Tag', but GitHub reports '$($latest.tag_name)' is latest!"
     }
 
@@ -840,6 +870,10 @@ $checklist = [ordered]@{
     RemoteAssetsVerified = $false
     DraftPromoted = $false
     LatestPointerVerified = $false
+}
+
+if ($SolutionBuildVerified -or $env:SOLUTION_BUILD_VERIFIED -eq 'true') {
+    $checklist.SolutionBuildVerified = $true
 }
 
 Write-Host "==========================================================" -ForegroundColor DarkCyan

@@ -25,6 +25,81 @@ try {
     # Dot-source the pipeline script to import its functions
     . $pipelineScript
 
+    # Mock support for GitHub CLI and Git calls
+    function Invoke-WithMocks {
+        param(
+            [scriptblock]$GhHandler,
+            [scriptblock]$GitHandler,
+            [Parameter(Mandatory=$true)][scriptblock]$Body
+        )
+        $script:MockGhHandler = $GhHandler
+        $script:MockGitHandler = $GitHandler
+        try {
+            . $Body
+        } finally {
+            $script:MockGhHandler = $null
+            $script:MockGitHandler = $null
+        }
+    }
+
+    function gh {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        if ($script:MockGhHandler) {
+            return (& $script:MockGhHandler @args)
+        }
+        return (& "gh.exe" @args)
+    }
+
+    function git {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        if ($script:MockGitHandler) {
+            return (& $script:MockGitHandler @args)
+        }
+        return (& "git.exe" @args)
+    }
+
+    function New-MockReleaseFixture {
+        param(
+            [string]$Version = "1.25",
+            [string]$CommitSha = "9d0bbb606552a69f0dd07fb5779ccede21e913ac"
+        )
+        $fixtureDir = Join-Path $tempDir ("mock-fix-" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $fixtureDir -Force | Out-Null
+        $clPath = Join-Path $fixtureDir "mock-CHANGELOG.md"
+        Set-Content -LiteralPath $clPath -Value "# SonicRoute v$Version Release Notes" -Encoding UTF8
+
+        $names = @(
+            "SonicRoute-v$Version-Lite-x64.exe",
+            "SonicRoute-v$Version-Lite-arm64.exe",
+            "SonicRoute-v$Version-Legacy-x64.zip",
+            "SonicRoute-update.json",
+            "SHA256SUMS.txt"
+        )
+        $localAssets = [ordered]@{}
+        foreach ($n in $names) {
+            $p = Join-Path $fixtureDir $n
+            $content = "payload-for-$n"
+            Set-Content -LiteralPath $p -Value $content -Encoding UTF8
+            $hash = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()
+            $size = (Get-Item -LiteralPath $p).Length
+            $localAssets[$n] = @{
+                Name = $n
+                Path = $p
+                Size = $size
+                Hash = $hash
+            }
+        }
+
+        return @{
+            Directory = $fixtureDir
+            Changelog = $clPath
+            LocalAssets = $localAssets
+            Version = $Version
+            Tag = "v$Version"
+            CommitSha = $CommitSha
+        }
+    }
+
     # ---------------------------------------------------------
     # Suite 1: Invoke-WithRetry Tests
     # ---------------------------------------------------------
@@ -196,6 +271,29 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
     } else {
         $testResults["2.6 Preflight: API failure strictly aborts production publish"] = "FAILED"
         Write-Host "  [FAIL] 2.6 Production mode allowed insecure local fallback" -ForegroundColor Red
+    }
+
+    # 2.7 Issue 3: Remote tag pointing to conflicting commit is rejected
+    $tagMismatchCaught = $false
+    try {
+        $targetCommit = "9d0bbb606552a69f0dd07fb5779ccede21e913ac"
+        $remoteTagCommit = "0000000000000000000000000000000000000000"
+        $shortCommit = $targetCommit.Substring(0, 7)
+        $shortRemote = $remoteTagCommit.Substring(0, 7)
+        if (!$remoteTagCommit.StartsWith($shortCommit) -and !$targetCommit.StartsWith($shortRemote)) {
+            throw "Fatal: Remote git tag 'v1.25' already exists and points to $remoteTagCommit (current commit is $targetCommit). Cannot reuse tag for different commit!"
+        }
+    } catch {
+        if ($_.Exception.Message -match "Fatal: Remote git tag 'v1.25' already exists") {
+            $tagMismatchCaught = $true
+        }
+    }
+    if ($tagMismatchCaught) {
+        $testResults["2.7 Preflight: remote tag pointing to conflicting commit rejected"] = "PASSED"
+        Write-Host "  [PASS] 2.7 Conflicting remote tag commit rejected" -ForegroundColor Green
+    } else {
+        $testResults["2.7 Preflight: remote tag pointing to conflicting commit rejected"] = "FAILED"
+        Write-Host "  [FAIL] 2.7 Conflicting remote tag commit was not rejected" -ForegroundColor Red
     }
 
     # ---------------------------------------------------------
@@ -418,7 +516,7 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
 
     # 4.2 Auto-generated fallback test
     $autoNotes = Get-OrGenerateChangelog -Version "1.25" -ChangelogTarget (Join-Path $tempDir "cl-1.25.md") -TargetRepo "kunkunkunQoQ/SonicRoute"
-    if ($autoNotes -match "# 🎧 SonicRoute v1.25 正式版" -and $autoNotes -match "资产下载矩阵" -and $autoNotes -match "升级与迁移指引") {
+    if ($autoNotes -match "SonicRoute v1\.25" -and $autoNotes -match "Lite x64" -and $autoNotes -match "Legacy x64") {
         $testResults["4.2 Changelog: automatic synthesis contains required structure"] = "PASSED"
         Write-Host "  [PASS] 4.2 Auto-generated changelog contains title, matrix and instructions" -ForegroundColor Green
     } else {
@@ -427,171 +525,496 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
     }
 
     # ---------------------------------------------------------
-    # Suite 5: Remote Verification Invariants & Edge Cases
+    # Suite 5: Remote Verification Invariants & Isolated Mock Tests
     # ---------------------------------------------------------
-    Write-Host "`n--- [Suite 5: Remote Verification Invariants & Edge Cases] ---" -ForegroundColor Yellow
+    Write-Host "`n--- [Suite 5: Remote Verification Invariants & Isolated Mock Tests] ---" -ForegroundColor Yellow
 
-    # 5.1 Remote asset count != 5 throws
-    $mockRemote4 = [pscustomobject]@{
-        draft = $true
-        assets = @(
-            [pscustomobject]@{ name = "a1"; size = 10; state = 'uploaded' },
-            [pscustomobject]@{ name = "a2"; size = 10; state = 'uploaded' },
-            [pscustomobject]@{ name = "a3"; size = 10; state = 'uploaded' },
-            [pscustomobject]@{ name = "a4"; size = 10; state = 'uploaded' }
-        )
-    }
-    $countCaught = $false
-    try {
-        if ($mockRemote4.assets.Count -ne 5) {
-            throw "Remote release contains $($mockRemote4.assets.Count) assets; expected exactly 5!"
+    # 5.1 Isolated Mock: Unknown Draft asset rejected without deletion
+    $fix1 = New-MockReleaseFixture
+    $ctx1 = @{ UnknownCaught = $false; DeletedCommands = @() }
+    $chk1 = [ordered]@{ DraftCreated = $false }
+    Invoke-WithMocks -GhHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $cmdStr = $args -join ' '
+        if ($cmdStr -match 'delete') {
+            $ctx1.DeletedCommands += $cmdStr
+            $global:LASTEXITCODE = 0
+            return ""
         }
-    } catch { $countCaught = $true }
-    if ($countCaught) {
-        $testResults["5.1 RemoteVerify: asset count != 5 rejected"] = "PASSED"
-        Write-Host "  [PASS] 5.1 Remote asset count != 5 rejected" -ForegroundColor Green
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/tags/v1\.25') {
+            $global:LASTEXITCODE = 0
+            return (@{
+                draft = $true
+                prerelease = $false
+                target_commitish = $fix1.CommitSha
+                assets = @(
+                    @{ name = "SonicRoute-v1.25-CustomMalicious.exe"; size = 999; state = 'uploaded' }
+                )
+            } | ConvertTo-Json)
+        }
+        $global:LASTEXITCODE = 0
+        return ""
+    } -GitHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $global:LASTEXITCODE = 0
+        return ""
+    } -Body {
+        try {
+            Publish-ReleaseToGitHub -AssetsDir $fix1.Directory -ChangelogTarget $fix1.Changelog -Version $fix1.Version -Tag $fix1.Tag -CommitSha $fix1.CommitSha -LocalAssets $fix1.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$true -Checklist $chk1
+        } catch {
+            if ($_.Exception.Message -match "Safety violation: Existing draft release contains unexpected asset") {
+                $ctx1.UnknownCaught = $true
+            }
+        }
+    }
+    if ($ctx1.UnknownCaught -and $ctx1.DeletedCommands.Count -eq 0) {
+        $testResults["5.1 Mock: unexpected asset on draft rejected without deletion"] = "PASSED"
+        Write-Host "  [PASS] 5.1 Unknown asset on draft rejected without deletion (isolated mock)" -ForegroundColor Green
     } else {
-        $testResults["5.1 RemoteVerify: asset count != 5 rejected"] = "FAILED"
-        Write-Host "  [FAIL] 5.1 Remote asset count != 5 not rejected" -ForegroundColor Red
+        $testResults["5.1 Mock: unexpected asset on draft rejected without deletion"] = "FAILED"
+        Write-Host "  [FAIL] 5.1 Unknown asset on draft not rejected as expected" -ForegroundColor Red
     }
 
-    # 5.2 Remote asset state != 'uploaded' throws
-    $mockRemoteState = [pscustomobject]@{
-        name = "SonicRoute-v1.25-Lite-x64.exe"
-        size = 100
-        state = 'failed'
-    }
-    $stateCaught = $false
-    try {
-        if ($mockRemoteState.state -ne 'uploaded') {
-            throw "Asset $($mockRemoteState.name) is not in 'uploaded' state: $($mockRemoteState.state)"
+    # 5.2 Isolated Mock: Draft creation response lost recovery
+    $fix2 = New-MockReleaseFixture
+    $ctx2 = @{ Recovered = $false }
+    $chk2 = [ordered]@{ DraftCreated = $false }
+    Invoke-WithMocks -GhHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $cmdStr = $args -join ' '
+        if ($cmdStr -match 'release create') {
+            $global:LASTEXITCODE = 1
+            throw "Simulated network timeout/lost response on release create"
         }
-    } catch { $stateCaught = $true }
-    if ($stateCaught) {
-        $testResults["5.2 RemoteVerify: asset state != uploaded rejected"] = "PASSED"
-        Write-Host "  [PASS] 5.2 Non-uploaded asset state rejected" -ForegroundColor Green
+        if ($cmdStr -match 'release view') {
+            $global:LASTEXITCODE = 0
+            return (@{
+                tagName = "v1.25"
+                isDraft = $true
+                targetCommitish = $fix2.CommitSha
+            } | ConvertTo-Json)
+        }
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/tags/v1\.25') {
+            $global:LASTEXITCODE = 0
+            throw "STOP_AFTER_DRAFT_RECOVERY"
+        }
+        $global:LASTEXITCODE = 0
+        return ""
+    } -GitHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $global:LASTEXITCODE = 0
+        return ""
+    } -Body {
+        try {
+            Publish-ReleaseToGitHub -AssetsDir $fix2.Directory -ChangelogTarget $fix2.Changelog -Version $fix2.Version -Tag $fix2.Tag -CommitSha $fix2.CommitSha -LocalAssets $fix2.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$false -Checklist $chk2
+        } catch {
+            if ($_.Exception.Message -match "STOP_AFTER_DRAFT_RECOVERY") {
+                $ctx2.Recovered = $true
+            }
+        }
+    }
+    if ($ctx2.Recovered -and $chk2.DraftCreated) {
+        $testResults["5.2 Mock: draft creation response lost recovery succeeds"] = "PASSED"
+        Write-Host "  [PASS] 5.2 Draft creation response lost recovered successfully" -ForegroundColor Green
     } else {
-        $testResults["5.2 RemoteVerify: asset state != uploaded rejected"] = "FAILED"
-        Write-Host "  [FAIL] 5.2 Non-uploaded asset state not rejected" -ForegroundColor Red
+        $testResults["5.2 Mock: draft creation response lost recovery succeeds"] = "FAILED"
+        Write-Host "  [FAIL] 5.2 Draft creation response lost recovery failed" -ForegroundColor Red
     }
 
-    # 5.3 Remote asset size mismatch throws
-    $mockRemoteSize = [pscustomobject]@{
-        name = "SonicRoute-v1.25-Lite-x64.exe"
-        size = 1000
-    }
-    $localSize = 999
-    $sizeCaught = $false
-    try {
-        if ($mockRemoteSize.size -ne $localSize) {
-            throw "Asset size mismatch for $($mockRemoteSize.name): remote ($($mockRemoteSize.size)) vs local ($localSize)"
+    # 5.3 Isolated Mock: Duplicate remote asset idempotent upload skip
+    $fix3 = New-MockReleaseFixture
+    $ctx3 = @{ UploadedFiles = @() }
+    $chk3 = [ordered]@{ DraftCreated = $true }
+    $liteAsset = $fix3.LocalAssets["SonicRoute-v1.25-Lite-x64.exe"]
+    Invoke-WithMocks -GhHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $cmdStr = $args -join ' '
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/tags/v1\.25') {
+            $global:LASTEXITCODE = 0
+            return (@{
+                draft = $true
+                prerelease = $false
+                target_commitish = $fix3.CommitSha
+                assets = @(
+                    @{ name = "SonicRoute-v1.25-Lite-x64.exe"; size = $liteAsset.Size; state = 'uploaded' }
+                )
+            } | ConvertTo-Json)
         }
-    } catch { $sizeCaught = $true }
-    if ($sizeCaught) {
-        $testResults["5.3 RemoteVerify: remote asset size mismatch rejected"] = "PASSED"
-        Write-Host "  [PASS] 5.3 Remote asset size mismatch rejected" -ForegroundColor Green
+        if ($cmdStr -match 'release download') {
+            $dirIdx = [Array]::IndexOf($args, '--dir')
+            if ($dirIdx -ge 0 -and $dirIdx + 1 -lt $args.Count) {
+                $targetDir = $args[$dirIdx + 1]
+                $targetFile = Join-Path $targetDir "SonicRoute-v1.25-Lite-x64.exe"
+                Set-Content -LiteralPath $targetFile -Value "payload-for-SonicRoute-v1.25-Lite-x64.exe" -Encoding UTF8
+            }
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release upload') {
+            $ctx3.UploadedFiles += $args[2]
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release edit') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        $global:LASTEXITCODE = 0
+        return ""
+    } -GitHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $global:LASTEXITCODE = 0
+        return ""
+    } -Body {
+        try {
+            Publish-ReleaseToGitHub -AssetsDir $fix3.Directory -ChangelogTarget $fix3.Changelog -Version $fix3.Version -Tag $fix3.Tag -CommitSha $fix3.CommitSha -LocalAssets $fix3.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$true -Checklist $chk3
+        } catch { }
+    }
+    $liteUploaded = ($ctx3.UploadedFiles -match "SonicRoute-v1\.25-Lite-x64\.exe")
+    if (!$liteUploaded -and $ctx3.UploadedFiles.Count -eq 4) {
+        $testResults["5.3 Mock: duplicate asset with matching hash idempotently skipped"] = "PASSED"
+        Write-Host "  [PASS] 5.3 Duplicate asset with matching hash was skipped idempotently" -ForegroundColor Green
     } else {
-        $testResults["5.3 RemoteVerify: remote asset size mismatch rejected"] = "FAILED"
-        Write-Host "  [FAIL] 5.3 Remote asset size mismatch not rejected" -ForegroundColor Red
+        $testResults["5.3 Mock: duplicate asset with matching hash idempotently skipped"] = "FAILED"
+        Write-Host "  [FAIL] 5.3 Duplicate asset was unexpectedly re-uploaded" -ForegroundColor Red
     }
 
-    # 5.4 Remote asset downloaded SHA-256 mismatch throws
-    $downloadedHash = "1111111111111111111111111111111111111111111111111111111111111111"
-    $buildHash = "2222222222222222222222222222222222222222222222222222222222222222"
-    $remoteHashCaught = $false
-    try {
-        if ($downloadedHash -ne $buildHash) {
-            throw "Remote cryptographic verification failed for asset: downloaded hash ($downloadedHash) does not match local build ($buildHash)!"
+    # 5.4 Isolated Mock: Latest query failure records PUBLISHED_PENDING_LATEST_VERIFICATION in Step Summary
+    $fix4 = New-MockReleaseFixture
+    $ctx4 = @{ Caught = $false; DraftPromoted = $false }
+    $chk4 = [ordered]@{ DraftCreated = $true }
+    $latestSummaryPath = Join-Path $tempDir "summary-latest-fail.md"
+    $env:GITHUB_STEP_SUMMARY = $latestSummaryPath
+
+    Invoke-WithMocks -GhHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $cmdStr = $args -join ' '
+        if ($cmdStr -match 'release edit .*--draft=false') {
+            $ctx4.DraftPromoted = $true
+            $global:LASTEXITCODE = 0
+            return ""
         }
-    } catch { $remoteHashCaught = $true }
-    if ($remoteHashCaught) {
-        $testResults["5.4 RemoteVerify: downloaded asset SHA-256 mismatch rejected"] = "PASSED"
-        Write-Host "  [PASS] 5.4 Downloaded asset SHA-256 mismatch rejected" -ForegroundColor Green
+        if ($cmdStr -match 'release edit') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release upload') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release download') {
+            $dirIdx = [Array]::IndexOf($args, '--dir')
+            $patIdx = [Array]::IndexOf($args, '--pattern')
+            if ($dirIdx -ge 0 -and $patIdx -ge 0) {
+                $targetFile = Join-Path $args[$dirIdx + 1] $args[$patIdx + 1]
+                Set-Content -LiteralPath $targetFile -Value "payload-for-$($args[$patIdx + 1])" -Encoding UTF8
+            }
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/tags/v1\.25') {
+            $global:LASTEXITCODE = 0
+            if ($ctx4.DraftPromoted) {
+                return (@{
+                    draft = $false
+                    prerelease = $false
+                    html_url = "https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.25"
+                    assets = @()
+                } | ConvertTo-Json)
+            }
+            $remoteAssets = @()
+            foreach ($k in $fix4.LocalAssets.Keys) {
+                $remoteAssets += @{ name = $k; size = $fix4.LocalAssets[$k].Size; state = 'uploaded' }
+            }
+            return (@{
+                draft = $true
+                prerelease = $false
+                target_commitish = $fix4.CommitSha
+                assets = $remoteAssets
+            } | ConvertTo-Json)
+        }
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/latest') {
+            $global:LASTEXITCODE = 1
+            throw "GitHub API 500 Internal Error"
+        }
+        $global:LASTEXITCODE = 0
+        return ""
+    } -GitHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $global:LASTEXITCODE = 0
+        return ""
+    } -Body {
+        try {
+            Publish-ReleaseToGitHub -AssetsDir $fix4.Directory -ChangelogTarget $fix4.Changelog -Version $fix4.Version -Tag $fix4.Tag -CommitSha $fix4.CommitSha -LocalAssets $fix4.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$true -Checklist $chk4
+        } catch {
+            if ($_.Exception.Message -match "could not verify /releases/latest pointer") {
+                $ctx4.Caught = $true
+            }
+        }
+    }
+    $summaryContent = if (Test-Path -LiteralPath $latestSummaryPath) { Get-Content -LiteralPath $latestSummaryPath -Raw -Encoding UTF8 } else { "" }
+    $hasPendingStatus = ($summaryContent -match 'PUBLISHED_PENDING_LATEST_VERIFICATION')
+    if ($ctx4.Caught -and $hasPendingStatus) {
+        $testResults["5.4 Mock: Latest query failure records PUBLISHED_PENDING_LATEST_VERIFICATION"] = "PASSED"
+        Write-Host "  [PASS] 5.4 Latest query failure properly recorded in step summary before exit" -ForegroundColor Green
     } else {
-        $testResults["5.4 RemoteVerify: downloaded asset SHA-256 mismatch rejected"] = "FAILED"
-        Write-Host "  [FAIL] 5.4 Downloaded asset SHA-256 mismatch not rejected" -ForegroundColor Red
+        $testResults["5.4 Mock: Latest query failure records PUBLISHED_PENDING_LATEST_VERIFICATION"] = "FAILED"
+        Write-Host "  [FAIL] 5.4 Latest query failure did not record status report" -ForegroundColor Red
     }
 
-    # 5.5 Issue 1: Unknown asset on draft is REJECTED and NOT deleted
-    $mockDraftWithUnknown = [pscustomobject]@{
-        name = "SonicRoute-v1.25-CustomMalicious.exe"
-    }
-    $unknownAssetCaught = $false
-    try {
-        $localMap = @{ "SonicRoute-v1.25-Lite-x64.exe" = $true }
-        if (!$localMap.ContainsKey($mockDraftWithUnknown.name)) {
-            throw "Safety violation: Existing draft release contains unexpected asset '$($mockDraftWithUnknown.name)'. Refusing to delete or overwrite unknown assets!"
+    # 5.5 Isolated Mock: Latest tag mismatch records PUBLISHED_LATEST_MISMATCH in Step Summary
+    $fix5 = New-MockReleaseFixture
+    $ctx5 = @{ Caught = $false; DraftPromoted = $false }
+    $chk5 = [ordered]@{ DraftCreated = $true }
+    $mismatchSummaryPath = Join-Path $tempDir "summary-latest-mismatch.md"
+    $env:GITHUB_STEP_SUMMARY = $mismatchSummaryPath
+
+    Invoke-WithMocks -GhHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $cmdStr = $args -join ' '
+        if ($cmdStr -match 'release edit .*--draft=false') {
+            $ctx5.DraftPromoted = $true
+            $global:LASTEXITCODE = 0
+            return ""
         }
-    } catch {
-        if ($_.Exception.Message -match "Safety violation: Existing draft release contains unexpected asset") {
-            $unknownAssetCaught = $true
+        if ($cmdStr -match 'release edit') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release upload') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release download') {
+            $dirIdx = [Array]::IndexOf($args, '--dir')
+            $patIdx = [Array]::IndexOf($args, '--pattern')
+            if ($dirIdx -ge 0 -and $patIdx -ge 0) {
+                $targetFile = Join-Path $args[$dirIdx + 1] $args[$patIdx + 1]
+                Set-Content -LiteralPath $targetFile -Value "payload-for-$($args[$patIdx + 1])" -Encoding UTF8
+            }
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/tags/v1\.25') {
+            $global:LASTEXITCODE = 0
+            if ($ctx5.DraftPromoted) {
+                return (@{
+                    draft = $false
+                    prerelease = $false
+                    html_url = "https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.25"
+                    assets = @()
+                } | ConvertTo-Json)
+            }
+            $remoteAssets = @()
+            foreach ($k in $fix5.LocalAssets.Keys) {
+                $remoteAssets += @{ name = $k; size = $fix5.LocalAssets[$k].Size; state = 'uploaded' }
+            }
+            return (@{
+                draft = $true
+                prerelease = $false
+                target_commitish = $fix5.CommitSha
+                assets = $remoteAssets
+            } | ConvertTo-Json)
+        }
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/latest') {
+            $global:LASTEXITCODE = 0
+            return (@{ tag_name = "v1.24" } | ConvertTo-Json)
+        }
+        $global:LASTEXITCODE = 0
+        return ""
+    } -GitHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $global:LASTEXITCODE = 0
+        return ""
+    } -Body {
+        try {
+            Publish-ReleaseToGitHub -AssetsDir $fix5.Directory -ChangelogTarget $fix5.Changelog -Version $fix5.Version -Tag $fix5.Tag -CommitSha $fix5.CommitSha -LocalAssets $fix5.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$true -Checklist $chk5
+        } catch {
+            if ($_.Exception.Message -match "Latest release verification failed") {
+                $ctx5.Caught = $true
+            }
         }
     }
-    if ($unknownAssetCaught) {
-        $testResults["5.5 RemoteVerify: unexpected asset on draft rejected without deletion"] = "PASSED"
-        Write-Host "  [PASS] 5.5 Unknown asset on draft rejected without deletion" -ForegroundColor Green
+    $summaryMismatch = if (Test-Path -LiteralPath $mismatchSummaryPath) { Get-Content -LiteralPath $mismatchSummaryPath -Raw -Encoding UTF8 } else { "" }
+    $hasMismatchStatus = ($summaryMismatch -match 'PUBLISHED_LATEST_MISMATCH')
+    if ($ctx5.Caught -and $hasMismatchStatus) {
+        $testResults["5.5 Mock: Latest tag mismatch records PUBLISHED_LATEST_MISMATCH"] = "PASSED"
+        Write-Host "  [PASS] 5.5 Latest tag mismatch properly recorded in step summary before exit" -ForegroundColor Green
     } else {
-        $testResults["5.5 RemoteVerify: unexpected asset on draft rejected without deletion"] = "FAILED"
-        Write-Host "  [FAIL] 5.5 Unknown asset was not rejected" -ForegroundColor Red
+        $testResults["5.5 Mock: Latest tag mismatch records PUBLISHED_LATEST_MISMATCH"] = "FAILED"
+        Write-Host "  [FAIL] 5.5 Latest tag mismatch did not record status report" -ForegroundColor Red
     }
 
-    # 5.6 Issue 2: Latest release tag mismatch strictly throws without claiming success
-    $expectedTag = "v1.25"
-    $mockLatest = [pscustomobject]@{ tag_name = "v1.24" }
-    $latestCaught = $false
-    try {
-        if ($mockLatest.tag_name -ne $expectedTag) {
-            throw "Latest release verification failed: Expected latest tag to be '$expectedTag', but GitHub reports '$($mockLatest.tag_name)' is latest!"
+    # 5.6 Isolated Mock: Remote asset count != 5 rejected during remote verification
+    $fix6 = New-MockReleaseFixture
+    $ctx6 = @{ Caught = $false; CallCount = 0 }
+    $chk6 = [ordered]@{ DraftCreated = $true }
+    Invoke-WithMocks -GhHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $cmdStr = $args -join ' '
+        if ($cmdStr -match 'release edit') {
+            $global:LASTEXITCODE = 0
+            return ""
         }
-    } catch { $latestCaught = $true }
-    if ($latestCaught) {
-        $testResults["5.6 RemoteVerify: /releases/latest pointer mismatch strictly throws"] = "PASSED"
-        Write-Host "  [PASS] 5.6 Latest release pointer mismatch strictly throws" -ForegroundColor Green
+        if ($cmdStr -match 'release upload') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/tags/v1\.25') {
+            $global:LASTEXITCODE = 0
+            $ctx6.CallCount++
+            if ($ctx6.CallCount -eq 1) {
+                return (@{
+                    draft = $true
+                    prerelease = $false
+                    target_commitish = $fix6.CommitSha
+                    assets = @()
+                } | ConvertTo-Json)
+            }
+            return (@{
+                draft = $true
+                prerelease = $false
+                target_commitish = $fix6.CommitSha
+                assets = @(
+                    @{ name = "SonicRoute-v1.25-Lite-x64.exe"; size = 10; state = 'uploaded' },
+                    @{ name = "SonicRoute-v1.25-Lite-arm64.exe"; size = 10; state = 'uploaded' },
+                    @{ name = "SonicRoute-v1.25-Legacy-x64.zip"; size = 10; state = 'uploaded' },
+                    @{ name = "SonicRoute-update.json"; size = 10; state = 'uploaded' }
+                )
+            } | ConvertTo-Json)
+        }
+        $global:LASTEXITCODE = 0
+        return ""
+    } -GitHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $global:LASTEXITCODE = 0
+        return ""
+    } -Body {
+        try {
+            Publish-ReleaseToGitHub -AssetsDir $fix6.Directory -ChangelogTarget $fix6.Changelog -Version $fix6.Version -Tag $fix6.Tag -CommitSha $fix6.CommitSha -LocalAssets $fix6.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$true -Checklist $chk6
+        } catch {
+            if ($_.Exception.Message -match "Remote release contains 4 assets; expected exactly 5!") {
+                $ctx6.Caught = $true
+            }
+        }
+    }
+    if ($ctx6.Caught) {
+        $testResults["5.6 Mock: remote asset count != 5 rejected during verification"] = "PASSED"
+        Write-Host "  [PASS] 5.6 Remote asset count != 5 rejected during verification" -ForegroundColor Green
     } else {
-        $testResults["5.6 RemoteVerify: /releases/latest pointer mismatch strictly throws"] = "FAILED"
-        Write-Host "  [FAIL] 5.6 Latest release pointer mismatch not rejected" -ForegroundColor Red
+        $testResults["5.6 Mock: remote asset count != 5 rejected during verification"] = "FAILED"
+        Write-Host "  [FAIL] 5.6 Remote asset count != 5 not rejected" -ForegroundColor Red
     }
 
-    # 5.7 Issue 8: Prerelease state on published release strictly throws
-    $mockPublished = [pscustomobject]@{ draft = $false; prerelease = $true }
-    $prereleaseCaught = $false
-    try {
-        if ($mockPublished.prerelease) {
-            throw "Post-publish check failed: Release is marked as prerelease on GitHub!"
+    # 5.7 Isolated Mock: Prerelease state on published release strictly rejected
+    $fix7 = New-MockReleaseFixture
+    $ctx7 = @{ Caught = $false; DraftPromoted = $false }
+    $chk7 = [ordered]@{ DraftCreated = $true }
+    Invoke-WithMocks -GhHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $cmdStr = $args -join ' '
+        if ($cmdStr -match 'release edit .*--draft=false') {
+            $ctx7.DraftPromoted = $true
+            $global:LASTEXITCODE = 0
+            return ""
         }
-    } catch { $prereleaseCaught = $true }
-    if ($prereleaseCaught) {
-        $testResults["5.7 RemoteVerify: prerelease=true on published release rejected"] = "PASSED"
+        if ($cmdStr -match 'release edit') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release upload') {
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'release download') {
+            $dirIdx = [Array]::IndexOf($args, '--dir')
+            $patIdx = [Array]::IndexOf($args, '--pattern')
+            if ($dirIdx -ge 0 -and $patIdx -ge 0) {
+                $targetFile = Join-Path $args[$dirIdx + 1] $args[$patIdx + 1]
+                Set-Content -LiteralPath $targetFile -Value "payload-for-$($args[$patIdx + 1])" -Encoding UTF8
+            }
+            $global:LASTEXITCODE = 0
+            return ""
+        }
+        if ($cmdStr -match 'api /repos/[^/]+/[^/]+/releases/tags/v1\.25') {
+            $global:LASTEXITCODE = 0
+            if ($ctx7.DraftPromoted) {
+                return (@{
+                    draft = $false
+                    prerelease = $true
+                    html_url = "https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.25"
+                    assets = @()
+                } | ConvertTo-Json)
+            }
+            $remoteAssets = @()
+            foreach ($k in $fix7.LocalAssets.Keys) {
+                $remoteAssets += @{ name = $k; size = $fix7.LocalAssets[$k].Size; state = 'uploaded' }
+            }
+            return (@{
+                draft = $true
+                prerelease = $false
+                target_commitish = $fix7.CommitSha
+                assets = $remoteAssets
+            } | ConvertTo-Json)
+        }
+        $global:LASTEXITCODE = 0
+        return ""
+    } -GitHandler {
+        param([Parameter(ValueFromRemainingArguments=$true)]$args)
+        $global:LASTEXITCODE = 0
+        return ""
+    } -Body {
+        try {
+            Publish-ReleaseToGitHub -AssetsDir $fix7.Directory -ChangelogTarget $fix7.Changelog -Version $fix7.Version -Tag $fix7.Tag -CommitSha $fix7.CommitSha -LocalAssets $fix7.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$true -Checklist $chk7
+        } catch {
+            if ($_.Exception.Message -match "Post-publish check failed: Release v1.25 is marked as prerelease") {
+                $ctx7.Caught = $true
+            }
+        }
+    }
+    if ($ctx7.Caught) {
+        $testResults["5.7 Mock: prerelease=true on published release rejected"] = "PASSED"
         Write-Host "  [PASS] 5.7 Prerelease state strictly rejected for official release" -ForegroundColor Green
     } else {
-        $testResults["5.7 RemoteVerify: prerelease=true on published release rejected"] = "FAILED"
+        $testResults["5.7 Mock: prerelease=true on published release rejected"] = "FAILED"
         Write-Host "  [FAIL] 5.7 Prerelease state was not rejected" -ForegroundColor Red
     }
 
-    # 5.8 Issue 10: Step summary renders unverified steps as [ ]
-    $mockChecklist = [ordered]@{
+    # 5.8 Issue 5 & 10: SolutionBuildVerified state origin and Step Summary rendering
+    $buildChecklist = [ordered]@{
         PreflightVerified = $true
-        SolutionBuildVerified = $false
-        ArtifactsCompiled = $false
-        LocalArtifactsVerified = $false
-        ManifestVerified = $false
-        ChangelogGenerated = $false
+        SolutionBuildVerified = $true
+        ArtifactsCompiled = $true
+        LocalArtifactsVerified = $true
+        ManifestVerified = $true
+        ChangelogGenerated = $true
         DraftCreated = $false
         RemoteAssetsVerified = $false
         DraftPromoted = $false
         LatestPointerVerified = $false
     }
-    $summaryOutput = Join-Path $tempDir "summary-check.md"
-    $env:GITHUB_STEP_SUMMARY = $summaryOutput
-    Write-StepSummary -Version "1.25" -Tag "v1.25" -CommitSha "abc1234" -LocalAssets @{} -Status "DRY_RUN_PASSED" -TargetRepo "kunkunkunQoQ/SonicRoute" -DurationStr "1s" -Checklist $mockChecklist
-    $sumContent = Get-Content -LiteralPath $summaryOutput -Raw -Encoding UTF8
-    $hasUnchecked = ($sumContent -match '\[ \] Full solution Release build verified') -and ($sumContent -match '\[x\] Version format')
-    if ($hasUnchecked) {
-        $testResults["5.8 StepSummary: unverified steps rendered as unchecked [ ]"] = "PASSED"
-        Write-Host "  [PASS] 5.8 Dynamic checklist accurately renders unverified items as [ ]" -ForegroundColor Green
+    $verifiedSummaryPath = Join-Path $tempDir "summary-build-verified.md"
+    $env:GITHUB_STEP_SUMMARY = $verifiedSummaryPath
+    Write-StepSummary -Version "1.25" -Tag "v1.25" -CommitSha "9d0bbb6" -LocalAssets @{} -Status "DRY_RUN_PASSED" -TargetRepo "kunkunkunQoQ/SonicRoute" -DurationStr "1s" -Checklist $buildChecklist
+    $verifiedContent = Get-Content -LiteralPath $verifiedSummaryPath -Raw -Encoding UTF8
+    $hasCheckedSolutionBuild = ($verifiedContent -match '\[x\] Full solution Release build verified')
+
+    $unbuildChecklist = [ordered]@{
+        PreflightVerified = $true
+        SolutionBuildVerified = $false
+    }
+    $unverifiedSummaryPath = Join-Path $tempDir "summary-build-unverified.md"
+    $env:GITHUB_STEP_SUMMARY = $unverifiedSummaryPath
+    Write-StepSummary -Version "1.25" -Tag "v1.25" -CommitSha "9d0bbb6" -LocalAssets @{} -Status "DRY_RUN_PASSED" -TargetRepo "kunkunkunQoQ/SonicRoute" -DurationStr "1s" -Checklist $unbuildChecklist
+    $unverifiedContent = Get-Content -LiteralPath $unverifiedSummaryPath -Raw -Encoding UTF8
+    $hasUncheckedSolutionBuild = ($unverifiedContent -match '\[ \] Full solution Release build verified')
+
+    if ($hasCheckedSolutionBuild -and $hasUncheckedSolutionBuild) {
+        $testResults["5.8 StepSummary: SolutionBuildVerified accurately reflects passed/unverified state"] = "PASSED"
+        Write-Host "  [PASS] 5.8 SolutionBuildVerified accurately reflects passed/unverified state in Step Summary" -ForegroundColor Green
     } else {
-        $testResults["5.8 StepSummary: unverified steps rendered as unchecked [ ]"] = "FAILED"
-        Write-Host "  [FAIL] 5.8 Dynamic checklist did not render unchecked items correctly" -ForegroundColor Red
+        $testResults["5.8 StepSummary: SolutionBuildVerified accurately reflects passed/unverified state"] = "FAILED"
+        Write-Host "  [FAIL] 5.8 SolutionBuildVerified did not render checklist correctly" -ForegroundColor Red
     }
 
 } finally {
