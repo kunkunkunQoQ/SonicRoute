@@ -17,8 +17,8 @@ namespace SonicRoute
     /// 极简自动化规则引擎（v1.16 新增）。
     /// - 快捷键触发：规则快捷键以 "Rule:{Id}" 动作并入 HotkeyService 注册 map（App 构建），
     ///   HotkeyPressed 分发给 ExecuteByHotkeyAsync；冲突时该动作不注册（RegistrationStatus 无记录 = 冲突）。
-    /// - 应用启动 / 前台切换触发：1 秒 DispatcherTimer 轮询（仅当存在启用规则时启动，无新依赖，
-    ///   与 CurrentAppService 前台监听机制一致）；应用启动 = 进程快照 diff（新出现），应用退出 = 进程快照 diff（消失），前台切换 = GetForegroundWindow。
+    /// - 前台切换复用 CurrentAppService 通知；应用启停由原生进程事件请求快照 diff。
+    ///   仅进程通知不可用或用户开启兼容轮询时，应用启停规则使用原有低开销快照检测。
     /// - 执行全部复用 Core 现有静态服务（AudioService / SessionVolumeService / SystemVolumeService /
     ///   SystemDefaultDeviceService），不修改 OSD、主音量、设备枚举等无关功能。
     /// - 应用控制按进程名解析到当前有音频会话的 PID 执行（不误改其他应用或系统音量）。
@@ -118,11 +118,7 @@ namespace SonicRoute
             if (_shuttingDown) return;
             _shuttingDown = true;
             _executionLifetime.Cancel();
-            ++_watchGeneration;
-            _watchTimer?.Stop(); _watchTimer = null;
-            _watchTickPending = false;
-            _runningSnapshot = null; _snapshotBaselineTask = null; _snapshotTargetName = null;
-            _processSnapshot?.Dispose(); _processSnapshot = null;
+            StopWatcher();
         }
 
         /// <summary>随机启动用的随机源（net48 无 Random.Shared）。
@@ -148,20 +144,24 @@ namespace SonicRoute
 
         // ---------- 触发监听（应用启动 / 前台切换） ----------
 
-        private static DispatcherTimer? _watchTimer;
+        private static DispatcherTimer? _watchFallbackTimer;
+        private static Dispatcher? _watchDispatcher;
+        private static ProcessChangeSource? _processEvents;
+        private static HashSet<string>? _processEventTargets;
+        private static bool _foregroundSubscribed;
+        private static int _processNotificationQueued;
         private static HashSet<string>? _runningSnapshot;
         private static string? _snapshotTargetName;
         private static Task<HashSet<string>>? _snapshotBaselineTask;
         private static ProcessSnapshotService? _processSnapshot;
         private static int _lastFgPid;
         private static bool _watchTickRunning;
-        private static bool _watchTickPending;
+        private static bool _processCheckPending, _foregroundCheckPending;
         private static int _watchGeneration;
         private static long _watchRulesRevision = -1;
         private static List<AutoRule> _watchRules = new();
 
-        // RefreshWatcher/TickCoreAsync 均由 Dispatcher 调用。未变化时复用只读快照，
-        // 避免每秒深复制全部规则和步骤；执行引擎另行 CloneSteps，不修改该快照。
+        // Dispatcher 上复用只读规则快照；执行引擎另行 CloneSteps，不修改该快照。
         private static List<AutoRule> GetWatchRules()
         {
             var snapshot = AutoRuleStore.ReadSnapshot(_watchRulesRevision);
@@ -191,6 +191,7 @@ namespace SonicRoute
         private static void StartSnapshotBaseline(string? target)
         {
             _snapshotTargetName = target;
+            _processEventTargets = target == null ? null : new HashSet<string>(target.Split('|'), StringComparer.OrdinalIgnoreCase);
             _runningSnapshot = null;
             _processSnapshot?.Dispose();
             var snapshot = _processSnapshot = target == null ? new ProcessSnapshotService()
@@ -206,64 +207,126 @@ namespace SonicRoute
         public static void RefreshWatcher()
         {
             if (_shuttingDown) return;
+            _watchDispatcher ??= Dispatcher.CurrentDispatcher;
             var rules = GetWatchRules();
-            bool need = rules.Count > 0;
             bool needsSnapshot = rules.Any(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit);
+            bool needsForeground = rules.Any(r => r.Trigger == AutoRuleTrigger.AppSwitch);
+            bool initializeForeground = needsForeground && !_foregroundSubscribed;
             string? target = GetSnapshotTarget(rules);
-            if (need && _watchTimer == null)
+            if (!needsSnapshot && !needsForeground) { StopWatcher(); return; }
+            if (needsForeground && !_foregroundSubscribed)
             {
-                _watchGeneration++;
-                if (needsSnapshot) StartSnapshotBaseline(target);
                 _lastFgPid = -1;
-                _watchTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _watchTimer.Tick += async (_, _) => await TickAsync();
-                _watchTimer.Start();
+                CurrentAppService.ForegroundChanged += ForegroundChanged;
+                _foregroundSubscribed = true;
             }
-            else if (need && _watchTimer != null && needsSnapshot
-                && (_runningSnapshot == null && _snapshotBaselineTask == null
-                    || !string.Equals(target, _snapshotTargetName, StringComparison.OrdinalIgnoreCase)))
+            else if (!needsForeground && _foregroundSubscribed)
             {
-                _watchGeneration++;
-                StartSnapshotBaseline(target);
+                CurrentAppService.ForegroundChanged -= ForegroundChanged;
+                _foregroundSubscribed = false;
+                _foregroundCheckPending = false;
             }
-            else if (need && !needsSnapshot && (_runningSnapshot != null || _snapshotBaselineTask != null))
+            if (needsSnapshot)
             {
-                _watchGeneration++;
+                if (_processSnapshot == null || !string.Equals(target, _snapshotTargetName, StringComparison.OrdinalIgnoreCase))
+                {
+                    ++_watchGeneration;
+                    StartSnapshotBaseline(target);
+                }
+                if (_processEvents == null)
+                {
+                    // 注册完成后比较一次，注册过程中发生的变化与现有基线进行 diff。
+                    var source = new ProcessChangeSource(ProcessChanged);
+                    _processEvents = source;
+                    _ = source.StartAsync();
+                }
+            }
+            else if (_processSnapshot != null)
+            {
+                ++_watchGeneration;
+                _processEvents?.Dispose(); _processEvents = null;
+                _processEventTargets = null;
+                _processCheckPending = false;
                 _runningSnapshot = null;
                 _snapshotBaselineTask = null;
                 _snapshotTargetName = null;
-                _processSnapshot?.Dispose();
-                _processSnapshot = null;
+                _processSnapshot.Dispose(); _processSnapshot = null;
             }
-            else if (!need && _watchTimer != null)
+            UpdateWatchFallbackPolicy();
+            if (initializeForeground) _ = TickAsync(false, true);
+        }
+
+        internal static void RecoverWatcher()
+        {
+            if (_shuttingDown) return;
+            _processEvents?.Dispose(); _processEvents = null;
+            RefreshWatcher();
+        }
+
+        private static void StopWatcher()
+        {
+            ++_watchGeneration;
+            _watchFallbackTimer?.Stop(); _watchFallbackTimer = null;
+            if (_foregroundSubscribed) CurrentAppService.ForegroundChanged -= ForegroundChanged;
+            _foregroundSubscribed = false;
+            _processEvents?.Dispose(); _processEvents = null;
+            _processEventTargets = null;
+            _processCheckPending = _foregroundCheckPending = false;
+            _runningSnapshot = null; _snapshotBaselineTask = null; _snapshotTargetName = null;
+            _processSnapshot?.Dispose(); _processSnapshot = null;
+        }
+
+        private static void UpdateWatchFallbackPolicy()
+        {
+            // 前台监听已有自身恢复机制；不为自动化再建立另一份前台轮询。
+            bool need = _processSnapshot != null && (_processEvents?.IsAvailable != true
+                || ConfigService.Load().BackgroundPollingFallbackEnabled);
+            if (!need) { _watchFallbackTimer?.Stop(); _watchFallbackTimer = null; return; }
+            if (_watchFallbackTimer == null)
             {
-                _watchGeneration++;
-                _watchTimer.Stop();
-                _watchTimer = null;
-                _watchTickPending = false;
-                _runningSnapshot = null;
-                _snapshotBaselineTask = null;
-                _processSnapshot?.Dispose();
-                _processSnapshot = null;
+                _watchFallbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _watchFallbackTimer.Tick += async (_, _) => await TickAsync(true, false);
+                _watchFallbackTimer.Start();
             }
         }
 
-        private static async Task TickAsync()
+        private static void ForegroundChanged(int pid) { _ = TickAsync(false, true); }
+
+        private static void ProcessChanged(string? name)
         {
-            if (_watchTickRunning) { _watchTickPending = true; return; }
+            var targets = _processEventTargets;
+            if (name != null && targets != null && !targets.Contains(name)) return;
+            var dispatcher = _watchDispatcher;
+            if (_shuttingDown || dispatcher == null || dispatcher.HasShutdownStarted
+                || Interlocked.Exchange(ref _processNotificationQueued, 1) != 0) return;
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                Interlocked.Exchange(ref _processNotificationQueued, 0);
+                if (_shuttingDown || _processSnapshot == null) return;
+                UpdateWatchFallbackPolicy();
+                _ = TickAsync(true, false);
+            }), DispatcherPriority.Background);
+        }
+
+        private static async Task TickAsync(bool process, bool foreground)
+        {
+            _processCheckPending |= process;
+            _foregroundCheckPending |= foreground;
+            if (_watchTickRunning) return;
             _watchTickRunning = true;
             try
             {
                 do
                 {
-                    _watchTickPending = false;
-                    await TickCoreAsync();
-                } while (_watchTickPending && _watchTimer != null);
+                    bool checkProcess = _processCheckPending, checkForeground = _foregroundCheckPending;
+                    _processCheckPending = _foregroundCheckPending = false;
+                    await TickCoreAsync(checkProcess, checkForeground);
+                } while (!_shuttingDown && (_processCheckPending || _foregroundCheckPending));
             }
             finally { _watchTickRunning = false; }
         }
 
-        private static async Task TickCoreAsync()
+        private static async Task TickCoreAsync(bool process, bool foreground)
         {
             int generation = _watchGeneration;
             var rules = GetWatchRules();
@@ -271,7 +334,7 @@ namespace SonicRoute
 
             // 应用启动 / 应用退出触发：进程快照 diff（新出现 = 启动；消失 = 退出）。
             // 快照与 diff 独立于 AppStart——仅建 AppExit 规则时也必须检测退出。
-            if (rules.Any(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit))
+            if (process && rules.Any(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit))
             {
                 string? target = GetSnapshotTarget(rules);
                 if (_processSnapshot == null || !string.Equals(target, _snapshotTargetName, StringComparison.OrdinalIgnoreCase))
@@ -313,7 +376,7 @@ namespace SonicRoute
                             }
                         }
                     }
-                    // 应用退出：只对"上一秒存在、当前消失"的进程名触发
+                    // 应用退出：只对"上次存在、当前消失"的进程名触发
                     if (rules.Any(r => r.Trigger == AutoRuleTrigger.AppExit))
                     {
                         foreach (var gone in _runningSnapshot)
@@ -334,7 +397,7 @@ namespace SonicRoute
             }
 
             // 前台切换触发：前台 PID 变化且与目标进程名匹配（含空 = 任意应用）
-            if (rules.Any(r => r.Trigger == AutoRuleTrigger.AppSwitch))
+            if (foreground && rules.Any(r => r.Trigger == AutoRuleTrigger.AppSwitch))
             {
                 int fg = ForegroundAppService.GetForegroundProcessId();
                 if (fg != 0 && fg != _lastFgPid)

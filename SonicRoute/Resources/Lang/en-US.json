@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "Select a target device",
   "History.Reason.device_unavailable": "Target device unavailable",
   "Theme.OsdStyle": "OSD style",
-  "Auto.VolumeDeltaValue": "{0} percentage points",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "Set selected playback device volume",
   "Auto.ActionAdjustPlaybackDeviceVolume": "Increase or decrease selected playback device volume",
   "Auto.ActionSetPlaybackDeviceMute": "Set selected playback device mute state",

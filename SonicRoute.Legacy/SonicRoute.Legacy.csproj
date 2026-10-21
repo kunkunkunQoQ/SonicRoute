@@ -48,6 +48,7 @@
   <!-- net48 的 SDK 不会自动引用 System.Net.Http（.NET Core 才有隐式引用），MainWindow 的更新检查需要它 -->
   <ItemGroup>
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.Management" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>

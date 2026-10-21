@@ -29,6 +29,8 @@ namespace SonicRoute
 
         /// <summary>共享"当前应用"（面板/概览显示、快捷键静音/切设备的目标）。变更触发 CurrentChanged。</summary>
         public static event Action? CurrentChanged;
+        // 原始前台变化也供自动化复用；不受音频会话、当前应用选择模式和异步音频查询影响。
+        internal static event Action<int>? ForegroundChanged;
 
         public static AudioAppInfo? Current
         {
@@ -190,6 +192,8 @@ namespace SonicRoute
         {
             if (!_started) return Task.CompletedTask;
             int fg = ForegroundAppService.GetForegroundProcessId();
+            if (fg != _lastCheckedFgPid)
+                try { ForegroundChanged?.Invoke(fg); } catch { }
             if (!force && fg == _lastCheckedFgPid && !_needsRetry) return _foregroundWork;
             if (!force && fg == _lastCheckedFgPid && !_foregroundWork.IsCompleted) return _foregroundWork;
             if (force || fg != _lastCheckedFgPid) _foregroundRetryBudget = 2;

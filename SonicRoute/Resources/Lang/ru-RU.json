@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "Выберите целевое устройство",
   "History.Reason.device_unavailable": "Целевое устройство недоступно",
   "Theme.OsdStyle": "Стиль OSD",
-  "Auto.VolumeDeltaValue": "{0} процентных пунктов",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "Задать громкость выбранного устройства воспроизведения",
   "Auto.ActionAdjustPlaybackDeviceVolume": "Увеличить или уменьшить громкость выбранного устройства воспроизведения",
   "Auto.ActionSetPlaybackDeviceMute": "Задать отключение звука выбранного устройства воспроизведения",

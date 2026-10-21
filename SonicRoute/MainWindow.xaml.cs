@@ -87,9 +87,7 @@ namespace SonicRoute
             internal string Fingerprint = "";
             internal TextBlock Conflict = null!;
         }
-        /// <summary>自动化页低频自动刷新应用列表（8s，仅页面可见时运行）。</summary>
-        private System.Windows.Threading.DispatcherTimer? _autoRefreshTimer;
-        /// <summary>当前已创建的步骤应用下拉（供慢刷新重填，RenderAutoSteps 重建时清理）。</summary>
+        /// <summary>当前已创建的步骤应用下拉（按需刷新时重填，RenderAutoSteps 重建时清理）。</summary>
         private readonly List<System.Windows.Controls.ComboBox> _autoStepAppCombos = new();
         private readonly Dictionary<System.Windows.Controls.ComboBox, EDataFlow> _autoStepDeviceCombos = new();
         private List<AudioDeviceInfo>? _autoOutputs, _autoInputs;
@@ -2975,8 +2973,7 @@ namespace SonicRoute
             RefreshAutomationEditorPalette();
             if (SortAutomationRules()) _autoRuleListSignature = null;
             _ = RefreshAutoRulesAsync();
-            StartAutoRefresh();
-            _ = RefreshAutoAppsSlowAsync(navigationVersion, ensureFresh: true);
+            _ = RefreshAutoAppsAsync(navigationVersion, ensureFresh: true);
             _ = RefreshAutoDevicesAsync(navigationVersion);
         }
 
@@ -3012,17 +3009,6 @@ namespace SonicRoute
 
         }
 
-        /// <summary>启动自动化页应用列表低频刷新（8s 一次，离开页面自动停止）。</summary>
-        private void StartAutoRefresh()
-        {
-            if (!AutoRefreshWindowVisible) return;
-            if (_autoRefreshTimer != null) return;
-            _autoRefreshTimer = new System.Windows.Threading.DispatcherTimer
-            { Interval = TimeSpan.FromSeconds(8) };
-            _autoRefreshTimer.Tick += async (_, _) => await RefreshAutoAppsSlowAsync(_navigationVersion);
-            _autoRefreshTimer.Start();
-        }
-
         private bool AutoRefreshWindowVisible => !_isClosed && IsVisible && WindowState != WindowState.Minimized
             && AutomationPageHost.Visibility == Visibility.Visible;
 
@@ -3031,8 +3017,7 @@ namespace SonicRoute
         private void UpdateAutoRefreshVisibility()
         {
             if (!AutoRefreshWindowVisible) { StopAutoRefresh(); return; }
-            StartAutoRefresh();
-            _ = RefreshAutoAppsSlowAsync(_navigationVersion, ensureFresh: true);
+            _ = RefreshAutoAppsAsync(_navigationVersion, ensureFresh: true);
         }
 
         private void StopAutoRefresh()
@@ -3040,15 +3025,10 @@ namespace SonicRoute
             EndAutoDrag(commit: false);
             EndAutomationRuleDrag(false);
             _autoRefreshPending = false;
-            if (_autoRefreshTimer != null)
-            {
-                _autoRefreshTimer.Stop();
-                _autoRefreshTimer = null;
-            }
         }
 
-        /// <summary>慢速刷新应用列表：新启动 / 退出的应用自动出现在自动化下拉中（保留选中项）。</summary>
-        private async Task RefreshAutoAppsSlowAsync(int navigationVersion, bool ensureFresh = false)
+        /// <summary>进入/恢复页面及打开应用下拉时按需读取，复用单飞及选中项，不定时扫描音频会话。</summary>
+        private async Task RefreshAutoAppsAsync(int navigationVersion, bool ensureFresh = false)
         {
             if (_isClosed) return;
             if (_isClosed || navigationVersion != _navigationVersion
@@ -3061,7 +3041,7 @@ namespace SonicRoute
             _autoRefreshInProgress = true;
             try
             {
-                var apps = await _uiLifetime.ReadAsync(AudioService.GetAppsAsync());
+                var apps = await _uiLifetime.ReadAsync(AudioService.GetAppsAsync(refresh: ensureFresh));
                 if (_isClosed || navigationVersion != _navigationVersion
                     || !AutoRefreshWindowVisible) return;
                 if (SameAutoApps(_autoApps, apps)) return;
@@ -3089,7 +3069,7 @@ namespace SonicRoute
                 if (_autoRefreshPending && AutoRefreshWindowVisible)
                 {
                     _autoRefreshPending = false;
-                    _ = RefreshAutoAppsSlowAsync(_navigationVersion);
+                    _ = RefreshAutoAppsAsync(_navigationVersion, ensureFresh: true);
                 }
             }
 
@@ -3403,8 +3383,11 @@ namespace SonicRoute
             BindAutoAppCandidates(combo, (combo.SelectedItem as AppItem)?.ProcessName);
         }
 
-        private static void AppCombo_DropDownOpened(object sender, EventArgs e)
+        private async void AppCombo_DropDownOpened(object? sender, EventArgs e)
         {
+            if (AutoRefreshWindowVisible)
+                await RefreshAutoAppsAsync(_navigationVersion, ensureFresh: true);
+            if (_isClosed) return;
             if (sender is System.Windows.Controls.ComboBox combo) LoadAppComboIcons(combo);
         }
 

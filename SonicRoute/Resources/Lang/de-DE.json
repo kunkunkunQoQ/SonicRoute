@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "Zielgerät auswählen",
   "History.Reason.device_unavailable": "Zielgerät nicht verfügbar",
   "Theme.OsdStyle": "OSD-Stil",
-  "Auto.VolumeDeltaValue": "{0} Prozentpunkte",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "Lautstärke des ausgewählten Wiedergabegeräts einstellen",
   "Auto.ActionAdjustPlaybackDeviceVolume": "Lautstärke des ausgewählten Wiedergabegeräts erhöhen oder verringern",
   "Auto.ActionSetPlaybackDeviceMute": "Stummschaltung des ausgewählten Wiedergabegeräts festlegen",

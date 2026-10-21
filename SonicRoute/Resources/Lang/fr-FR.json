@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "Sélectionnez un périphérique cible",
   "History.Reason.device_unavailable": "Périphérique cible indisponible",
   "Theme.OsdStyle": "Style de l’OSD",
-  "Auto.VolumeDeltaValue": "{0} point(s) de pourcentage",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "Définir le volume du périphérique de lecture sélectionné",
   "Auto.ActionAdjustPlaybackDeviceVolume": "Augmenter ou réduire le volume du périphérique de lecture sélectionné",
   "Auto.ActionSetPlaybackDeviceMute": "Définir la sourdine du périphérique de lecture sélectionné",

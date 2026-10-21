@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "대상 장치를 선택하세요",
   "History.Reason.device_unavailable": "대상 장치를 사용할 수 없습니다",
   "Theme.OsdStyle": "OSD 스타일",
-  "Auto.VolumeDeltaValue": "{0}퍼센트포인트",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "선택한 재생 장치 볼륨 설정",
   "Auto.ActionAdjustPlaybackDeviceVolume": "선택한 재생 장치 볼륨 증감",
   "Auto.ActionSetPlaybackDeviceMute": "선택한 재생 장치 음소거 상태 설정",

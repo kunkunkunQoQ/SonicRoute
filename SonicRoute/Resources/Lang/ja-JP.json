@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "対象デバイスを選択してください",
   "History.Reason.device_unavailable": "対象デバイスを利用できません",
   "Theme.OsdStyle": "OSD のスタイル",
-  "Auto.VolumeDeltaValue": "{0} パーセントポイント",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "指定した再生デバイスの音量を設定",
   "Auto.ActionAdjustPlaybackDeviceVolume": "指定した再生デバイスの音量を増減",
   "Auto.ActionSetPlaybackDeviceMute": "指定した再生デバイスのミュート状態を設定",

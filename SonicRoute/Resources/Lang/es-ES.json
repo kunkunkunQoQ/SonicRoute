@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "Selecciona un dispositivo de destino",
   "History.Reason.device_unavailable": "El dispositivo de destino no está disponible",
   "Theme.OsdStyle": "Estilo del OSD",
-  "Auto.VolumeDeltaValue": "{0} puntos porcentuales",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "Establecer el volumen del dispositivo de reproducción seleccionado",
   "Auto.ActionAdjustPlaybackDeviceVolume": "Aumentar o reducir el volumen del dispositivo de reproducción seleccionado",
   "Auto.ActionSetPlaybackDeviceMute": "Establecer el silencio del dispositivo de reproducción seleccionado",

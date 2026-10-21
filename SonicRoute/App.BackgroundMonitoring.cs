@@ -97,6 +97,7 @@ namespace SonicRoute
             {
                 if (_backgroundStopped) return;
                 CurrentAppService.RecoverForegroundWatcher();
+                AutoRuleService.RecoverWatcher();
                 MicMonitor?.RequestRebuild();
                 AutoRuleStore.RecoverMonitoring();
                 RefreshRuleDirectoryProbePolicy();
@@ -109,6 +110,7 @@ namespace SonicRoute
         {
             if (_backgroundStopped) return;
             CurrentAppService.RefreshMonitoringPolicy();
+            AutoRuleService.RefreshWatcher();
             RefreshMicMonitoringState();
             RefreshRuleDirectoryProbePolicy();
         }

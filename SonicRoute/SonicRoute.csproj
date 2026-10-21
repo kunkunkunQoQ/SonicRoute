@@ -31,6 +31,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
     <ProjectReference Include="..\SonicRoute.Core\SonicRoute.Core.csproj" /><ProjectReference Include="..\StoreInterop\StoreInterop.csproj" />
     <Resource Include="SonicRoute.png" />
     <Resource Include="SonicRoute.ico" />

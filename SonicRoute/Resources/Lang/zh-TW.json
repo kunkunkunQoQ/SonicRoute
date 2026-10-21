@@ -577,7 +577,7 @@
   "Auto.DeviceRequired": "請選擇目標裝置",
   "History.Reason.device_unavailable": "目標裝置無法使用",
   "Theme.OsdStyle": "OSD 樣式",
-  "Auto.VolumeDeltaValue": "{0} 個百分點",
+  "Auto.VolumeDeltaValue": "{0}%",
   "Auto.ActionSetPlaybackDeviceVolume": "設定指定播放裝置音量",
   "Auto.ActionAdjustPlaybackDeviceVolume": "增減指定播放裝置音量",
   "Auto.ActionSetPlaybackDeviceMute": "設定指定播放裝置靜音狀態",
