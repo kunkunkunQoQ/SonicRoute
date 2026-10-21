@@ -39,7 +39,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          package-manager-cache: false
 
       - name: Verify README consistency
         run: node docs/readme/generate.cjs --check
@@ -61,6 +60,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $dryRunFlag = if ('${{ inputs.dry_run }}' -eq 'true') { @('-DryRun') } else { @() }
-          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo "${{ github.repository }}" @dryRunFlag
+          $isDryRun = ('${{ inputs.dry_run }}' -eq 'true')
+          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo "${{ github.repository }}" -DryRun:$isDryRun
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
