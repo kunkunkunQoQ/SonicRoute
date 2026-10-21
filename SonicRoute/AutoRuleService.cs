@@ -193,28 +193,29 @@ namespace SonicRoute
         private static string? GetSnapshotTarget(List<AutoRule> rules)
         {
             var targets = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool includeAll = false;
             foreach (var rule in rules)
             {
                 if (rule.Trigger is not (AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)) continue;
                 // 空目标旧规则仍支持任意应用；多目标在缺失时共用一次全量枚举。
-                if (string.IsNullOrWhiteSpace(rule.TriggerApp)
-                    || rule.TriggerApp.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) return null;
+                if (string.IsNullOrWhiteSpace(rule.TriggerApp)) { includeAll = true; continue; }
+                if (rule.TriggerApp.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) includeAll = true;
                 targets.Add(rule.TriggerApp);
             }
-            return targets.Count == 0 ? null : string.Join("|", targets);
+            // 前导分隔符保留任意应用模式，同时让指定目标变化参与原有采集范围比较。
+            return targets.Count == 0 ? null : (includeAll ? "|" : "") + string.Join("|", targets);
         }
 
         private static void StartSnapshotBaseline(string? target)
         {
             _snapshotTargetName = target;
-            _processEventTargets = target == null ? null : new HashSet<string>(target.Split('|'), StringComparer.OrdinalIgnoreCase);
+            bool includeAll = target == null || target.StartsWith("|", StringComparison.Ordinal);
+            var targets = (target ?? "").Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+            _processEventTargets = includeAll ? null : new HashSet<string>(targets, StringComparer.OrdinalIgnoreCase);
             _runningSnapshot = null;
             _snapshotNeedsBaseline = true; _snapshotUncertain.Clear(); _snapshotCertain.Clear();
             _processSnapshot?.Dispose();
-            var snapshot = _processSnapshot = target == null ? ProcessSnapshotService.ForTargets(GetWatchRules()
-                .Where(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)
-                .Select(r => r.TriggerApp).Where(name => !string.IsNullOrWhiteSpace(name)), includeAll: true)
-                : ProcessSnapshotService.ForTargets(target.Split('|'));
+            var snapshot = _processSnapshot = ProcessSnapshotService.ForTargets(targets, includeAll);
             _snapshotBaselineTask = Task.Run(() =>
             {
                 try { return snapshot.CaptureState(); }
@@ -482,11 +483,8 @@ namespace SonicRoute
                     }
                 }
                 if (generation != _watchGeneration) return;
-                // 先保存本次确切观测，再保留未知目标的上次值；上次值不再具有变化比较资格。
+                // 仅提交确切观测；未知状态由可靠性标记表达，不长期保留失效的旧名称。
                 _snapshotCertain = new HashSet<string>(now.Concat(capture.Absent), StringComparer.OrdinalIgnoreCase);
-                if (_runningSnapshot != null)
-                    foreach (string name in _runningSnapshot)
-                        if (!IsKnown(name)) now.Add(name);
                 if (capture.Complete || _runningSnapshot != null || _snapshotCertain.Count > 0) _runningSnapshot = now;
                 _snapshotUncertain = capture.Uncertain;
                 _snapshotNeedsBaseline = !capture.Complete;
