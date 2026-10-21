@@ -434,12 +434,12 @@ namespace SonicRoute.Core
             return (result.OutOk, result.InOk, result.Total);
         }
 
-        /// <summary>复用原还原流程；只有全局清理或全部逐进程重置、以及磁盘清理均完成才确认成功。</summary>
+        /// <summary>只清除端点路由，不删除可能同时保存音量/静音偏好的Windows音频属性存储。
+        /// 逐进程回退不能覆盖已退出应用，仅全局持久路由接口成功时确认全部完成。</summary>
         public static (int OutOk, int InOk, int Total, bool Applied) ResetAllPersistedEndpointsChecked()
         {
-            // 第一步：ClearAllPersistedApplicationDefaultEndpoints（Win11 22H2+，
-            // 即系统"音量合成器→重置"的底层机制）。一次性清除所有应用的输出+输入
-            // 持久化路由（含运行中与已退出的应用），立即生效。
+            // Reuse the existing persisted-endpoint interface for all applications, including
+            // exited apps. Do not broaden endpoint reset into deleting mixer preferences.
             int hrClear = -999;
             try
             {
@@ -471,35 +471,8 @@ namespace SonicRoute.Core
                 }
                 catch { /* 单个进程失败不影响其余 */ }
             }
-            // 第三步：无条件清除注册表磁盘条目（已退出应用的持久化路由存这里，
-            // ClearAll 只清内存策略，不清磁盘；audiosrv 会在应用退出/重开时读磁盘恢复旧设备）
-            // HKCU\Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore
-            // 每个子键 = 一个应用的持久化端点（默认值含应用路径）。整树删除 = 全部还原为系统默认。
-            int cleared = ClearPersistedPolicyStore(out bool storeCompleted);
-            if (hrClear >= 0 || okOut > 0 || okIn > 0 || cleared > 0) InvalidateAppsCache();
-            bool applied = storeCompleted && (hrClear >= 0 || (okOut == total && okIn == total));
-            return (okOut + cleared, okIn + cleared, total + cleared, applied);
-        }
-
-        /// <summary>清除注册表中所有按应用持久化音频路由（含已退出应用），返回删除的子键数。</summary>
-        private static int ClearPersistedPolicyStore(out bool completed)
-        {
-            const string path = @"Software\Microsoft\Internet Explorer\LowRegistry\Audio\PolicyConfig\PropertyStore";
-            int n = 0;
-            completed = false;
-            try
-            {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(path, writable: true);
-                if (key == null) { completed = true; return 0; }
-                bool all = true;
-                foreach (var name in key.GetSubKeyNames())
-                {
-                    try { key.DeleteSubKeyTree(name); n++; } catch { all = false; }
-                }
-                completed = all;
-            }
-            catch { /* 无权限/键不存在则跳过 */ }
-            return n;
+            if (hrClear >= 0 || okOut > 0 || okIn > 0) InvalidateAppsCache();
+            return (okOut, okIn, total, hrClear >= 0);
         }
 
         /// <summary>读取进程当前持久化的设备完整 ID（未设置返回 null）。</summary>
