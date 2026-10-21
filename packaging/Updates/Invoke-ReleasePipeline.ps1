@@ -22,6 +22,32 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 
+function Invoke-WithRetry {
+    param(
+        [Parameter(Mandatory=$true)][scriptblock]$Action,
+        [int]$MaxAttempts = 3,
+        [int]$InitialDelaySeconds = 2,
+        [string]$Description = "Operation"
+    )
+    $attempt = 1
+    $delay = $InitialDelaySeconds
+    while ($attempt -le $MaxAttempts) {
+        try {
+            $result = & $Action
+            return $result
+        } catch {
+            if ($attempt -ge $MaxAttempts) {
+                Write-Host "    [Error] Failed $Description after $MaxAttempts attempts: $($_.Exception.Message)" -ForegroundColor Red
+                throw
+            }
+            Write-Warning "Attempt $attempt of $MaxAttempts failed for $Description ($($_.Exception.Message)). Retrying in ${delay}s..."
+            Start-Sleep -Seconds $delay
+            $delay = $delay * 2
+            $attempt++
+        }
+    }
+}
+
 function Get-SonicRouteVersion {
     $propsPath = Join-Path $root 'build/Version.props'
     if (!(Test-Path -LiteralPath $propsPath)) {
@@ -40,16 +66,19 @@ function Get-SonicRouteVersion {
 }
 
 function Assert-Preflight {
-    param([string]$TargetRepo, [string]$Version, [string]$Tag)
+    param([string]$TargetRepo, [string]$Version, [string]$Tag, [switch]$IsDryRun)
 
     Write-Host "==> [Preflight] Validating release preconditions for $Tag..." -ForegroundColor Cyan
 
-    # 1. Branch check
+    # 1. Branch check (in official publish mode, strictly require master branch)
     $branch = (& git -C $root rev-parse --abbrev-ref HEAD 2>$null)
     Write-Host "    Current git branch: $branch"
-    if ($env:GITHUB_REF) {
-        if ($env:GITHUB_REF -ne 'refs/heads/master') {
+    if (!$IsDryRun) {
+        if ($env:GITHUB_REF -and $env:GITHUB_REF -ne 'refs/heads/master') {
             throw "Refusing to release from non-master ref '$($env:GITHUB_REF)'. Only 'refs/heads/master' is permitted."
+        }
+        if (!$env:GITHUB_REF -and $branch -ne 'master') {
+            throw "Refusing to release from non-master branch '$branch'. Only 'master' is permitted for official releases."
         }
     }
 
@@ -471,38 +500,68 @@ function Publish-ReleaseToGitHub {
         return
     }
 
-    # Phase B: Create or Update Draft Release
+    # Phase B: Create or Update Draft Release with retry
     if ($HasExistingDraft) {
         Write-Host "    Updating existing Draft Release for $Tag on GitHub..."
-        & gh release edit $Tag --repo $TargetRepo --title $Tag --notes-file $ChangelogTarget --target $CommitSha
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to update existing draft release $Tag on GitHub!"
+        Invoke-WithRetry -Description "Update existing draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+            & gh release edit $Tag --repo $TargetRepo --title $Tag --notes-file $ChangelogTarget --target $CommitSha
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to update existing draft release $Tag on GitHub!"
+            }
         }
     } else {
         Write-Host "    Creating Draft Release for $Tag on GitHub..."
-        & gh release create $Tag --repo $TargetRepo --target $CommitSha --title $Tag --notes-file $ChangelogTarget --draft
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create draft release $Tag on GitHub!"
+        Invoke-WithRetry -Description "Create draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+            & gh release create $Tag --repo $TargetRepo --target $CommitSha --title $Tag --notes-file $ChangelogTarget --draft
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to create draft release $Tag on GitHub!"
+            }
         }
     }
 
-    # Upload all 5 assets to the draft release
+    # Upload all 5 assets to the draft release individually with retry
     Write-Host "    Uploading 5 release assets to draft release..."
-    $filesToUpload = $LocalAssets.Values | ForEach-Object { $_.Path }
-    & gh release upload $Tag $filesToUpload --repo $TargetRepo --clobber
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to upload assets to draft release $Tag!"
+    foreach ($assetItem in $LocalAssets.Values) {
+        $filePath = $assetItem.Path
+        $fileName = $assetItem.Name
+        Write-Host "    Uploading $fileName..."
+        Invoke-WithRetry -Description "Upload asset $fileName" -MaxAttempts 3 -InitialDelaySeconds 3 -Action {
+            & gh release upload $Tag $filePath --repo $TargetRepo --clobber
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to upload asset $fileName to draft release $Tag!"
+            }
+        }
     }
 
     # Phase C: Remote Verification
     Write-Host "    Verifying remote release and assets on GitHub..."
-    $remoteRelease = & gh api "/repos/$TargetRepo/releases/tags/$Tag" | ConvertFrom-Json
+    $remoteRelease = $null
+    Invoke-WithRetry -Description "Query remote release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+        $json = & gh api "/repos/$TargetRepo/releases/tags/$Tag"
+        if ($LASTEXITCODE -ne 0 -or !$json) {
+            throw "Unable to query release $Tag after upload!"
+        }
+        $script:remoteRelease = $json | ConvertFrom-Json
+    }
+
     if (!$remoteRelease) {
-        throw "Unable to query release $Tag after upload!"
+        throw "Remote release object is null after query."
     }
     if (!$remoteRelease.draft) {
         throw "Security violation: Release $Tag is NOT in draft state during verification!"
     }
+
+    # Prune any unexpected assets from the draft (safe since draft == true)
+    foreach ($rAsset in $remoteRelease.assets) {
+        if (!$LocalAssets.Contains($rAsset.name)) {
+            Write-Warning "Found unexpected asset '$($rAsset.name)' on draft release; pruning from draft..."
+            & gh api -X DELETE "/repos/$TargetRepo/releases/assets/$($rAsset.id)" 2>$null
+        }
+    }
+
+    # Re-query if pruning occurred to ensure exact count
+    $json = & gh api "/repos/$TargetRepo/releases/tags/$Tag"
+    $remoteRelease = $json | ConvertFrom-Json
     if ($remoteRelease.assets.Count -ne 5) {
         throw "Remote release contains $($remoteRelease.assets.Count) assets; expected exactly 5!"
     }
@@ -524,12 +583,15 @@ function Publish-ReleaseToGitHub {
                 throw "Asset $($name) is not in 'uploaded' state: $($rAsset.state)"
             }
 
-            # Independent download & cryptographic verification
+            # Independent download & cryptographic verification with retry
             Write-Host "    Downloading and verifying SHA-256 for $($name) from GitHub..."
-            & gh release download $Tag --repo $TargetRepo --pattern $name --dir $verifyTempDir --clobber
-            if ($LASTEXITCODE -ne 0) {
-                throw "Failed to download asset $($name) from GitHub release for verification!"
+            Invoke-WithRetry -Description "Download asset $name for verification" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+                & gh release download $Tag --repo $TargetRepo --pattern $name --dir $verifyTempDir --clobber
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to download asset $($name) from GitHub release for verification!"
+                }
             }
+
             $downloadedFilePath = Join-Path $verifyTempDir $name
             if (!(Test-Path -LiteralPath $downloadedFilePath)) {
                 throw "Downloaded asset file not found at $downloadedFilePath"
@@ -547,14 +609,31 @@ function Publish-ReleaseToGitHub {
     }
     Write-Host "    [OK] All 5 remote assets verified byte-for-byte and hash-matched on GitHub!" -ForegroundColor Green
 
-    # Phase D: Auto-Publish
+    # Phase D: Auto-Publish with network disconnect / response loss recovery
     Write-Host "    Promoting Draft Release to Official Public Latest Release..."
-    & gh release edit $Tag --repo $TargetRepo --draft=false --latest
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to publish release $Tag as official and latest!"
+    $publishSuccess = $false
+    try {
+        & gh release edit $Tag --repo $TargetRepo --draft=false --latest
+        if ($LASTEXITCODE -eq 0) {
+            $publishSuccess = $true
+        }
+    } catch { }
+
+    if (!$publishSuccess) {
+        Write-Warning "Publish command encountered a warning or non-zero exit; querying remote release state to verify if update took effect..."
+        $queryAfter = $null
+        try {
+            $queryAfter = & gh api "/repos/$TargetRepo/releases/tags/$Tag" 2>$null | ConvertFrom-Json
+        } catch { }
+        if ($queryAfter -and !$queryAfter.draft -and !$queryAfter.prerelease) {
+            Write-Host "    [Recovered] Release $Tag is confirmed published on GitHub despite network response anomaly!" -ForegroundColor Yellow
+            $publishSuccess = $true
+        } else {
+            throw "Failed to publish release $Tag as official and latest!"
+        }
     }
 
-    # Post-publish verification
+    # Post-publish verification: 1. Confirm release public status
     $published = & gh api "/repos/$TargetRepo/releases/tags/$Tag" | ConvertFrom-Json
     if ($published.draft) {
         throw "Post-publish check failed: Release $Tag is still marked as draft!"
@@ -563,8 +642,27 @@ function Publish-ReleaseToGitHub {
         throw "Post-publish check failed: Release $Tag is marked as prerelease!"
     }
 
+    # Post-publish verification: 2. Confirm Latest pointer
+    try {
+        $latest = & gh api "/repos/$TargetRepo/releases/latest" 2>$null | ConvertFrom-Json
+        if ($latest) {
+            if ($latest.tag_name -ne $Tag) {
+                throw "Latest release verification failed: Expected latest tag to be '$Tag', but GitHub reports '$($latest.tag_name)' is latest!"
+            }
+            Write-Host "    [OK] Confirmed $Tag is the active official Latest Release on GitHub." -ForegroundColor Green
+        }
+    } catch {
+        if ($_.Exception.Message -match "Latest release verification failed") { throw }
+        Write-Warning "Could not query /releases/latest endpoint: $($_.Exception.Message)"
+    }
+
     Write-Host "==> [Success] Release $Tag is officially published as Latest on GitHub!" -ForegroundColor Green
     Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr
+}
+
+# Dot-sourcing check: If this script is dot-sourced into a test harness, skip execution of the main block
+if ($MyInvocation.InvocationName -eq '.') {
+    return
 }
 
 # --- Main Entry Point ---
@@ -596,7 +694,7 @@ $localAssets = $null
 
 # Stage: Preflight
 if ($Stage -in @('Preflight', 'FullPipeline')) {
-    $preflight = Assert-Preflight -TargetRepo $Repo -Version $version -Tag $tag
+    $preflight = Assert-Preflight -TargetRepo $Repo -Version $version -Tag $tag -IsDryRun:$DryRun
     $commitSha = $preflight.CommitSha
     $hasExistingDraft = $preflight.HasExistingDraft
 } else {

@@ -51,5 +51,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $ErrorActionPreference = 'Stop'
           $dryRunFlag = if ('${{ inputs.dry_run }}' -eq 'true') { @('-DryRun') } else { @() }
           .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo "${{ github.repository }}" @dryRunFlag
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
