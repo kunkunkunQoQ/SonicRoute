@@ -22,8 +22,14 @@ namespace SonicRoute
     {
         private static readonly object _lock = new();
         private static System.Threading.Timer? _timer;
-        private static DateTime? _pendingDue;
-        private static readonly List<string> _pendingRules = new();
+        private sealed class Plan
+        {
+            internal DateTime Due;
+            internal List<AutoRule> Rules = new();
+            internal bool CallbackTaken;
+        }
+        private static Plan? _pendingPlan;
+        private static bool _started, _shutdown;
 
         private static readonly string LogPath = Path.Combine(
             SonicRoute.Core.AppDataRoot.DirectoryPath, "scheduler.log");
@@ -52,32 +58,39 @@ namespace SonicRoute
         /// <summary>初始化：挂接系统时间变化与电源恢复监听，并立即重算（App.OnStartup 调用）。</summary>
         public static void Start()
         {
+            lock (_lock) { if (_started) return; _started = true; _shutdown = false; }
             Log("Start: 挂接系统事件并开始调度");
             SystemEvents.TimeChanged += OnSystemTimeChanged;
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
-            RefreshScheduler();
+            RefreshScheduler(false);
         }
 
         /// <summary>停止并清理（App.OnExit / Quit 调用）。</summary>
         public static void Shutdown()
         {
             Log("Shutdown: 停止调度");
-            SystemEvents.TimeChanged -= OnSystemTimeChanged;
-            SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             lock (_lock)
             {
+                _shutdown = true;
+                if (_started)
+                {
+                    SystemEvents.TimeChanged -= OnSystemTimeChanged;
+                    SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                    _started = false;
+                }
                 _timer?.Dispose();
                 _timer = null;
-                _pendingDue = null;
-                _pendingRules.Clear();
+                _pendingPlan = null;
             }
         }
 
         /// <summary>重新计算：读取全部启用定时规则，只等待最近一次执行时刻。规则增删改/启停后调用。</summary>
-        public static void RefreshScheduler()
+        public static void RefreshScheduler(bool preservePendingDue = true)
         {
             lock (_lock)
             {
+                if (_shutdown) return;
+                var now = DateTime.Now;
                 var rules = AutoRuleStore.LoadAll()
                     .Where(r => r.Enabled && r.Trigger == AutoRuleTrigger.Schedule).ToList();
                 Log($"Refresh: 启用定时规则 {rules.Count} 条" + (rules.Count == 0 ? "" : " [" + string.Join(",", rules.Select(r => r.Name + "@" + r.ScheduleTime + "(" + r.ScheduleMode + ")")) + "]"));
@@ -85,26 +98,30 @@ namespace SonicRoute
                 {
                     _timer?.Dispose();
                     _timer = null;
-                    _pendingDue = null;
-                    _pendingRules.Clear();
+                    _pendingPlan = null;
                     return;
                 }
 
                 DateTime? next = null;
-                var dueRules = new List<string>();
+                var dueRules = new List<AutoRule>();
                 foreach (var r in rules)
                 {
-                    var t = NextRun(r, DateTime.Now);
+                    // 到点后、Dispatcher派发前发生无关编辑，仍保留同一有效到期事件，避免重算成明天。
+                    bool pendingDue = preservePendingDue && _pendingPlan != null && _pendingPlan.Due <= now
+                        && now - _pendingPlan.Due <= MissedTolerance
+                        && r.LastRunKey != _pendingPlan.Due.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+                        && _pendingPlan.Rules.Any(old => AutoRuleStore.SameSchedule(old, r));
+                    var t = pendingDue ? _pendingPlan!.Due : NextRun(r, now);
                     if (t == null) continue;
                     if (next == null || t < next)
                     {
                         next = t;
                         dueRules.Clear();
-                        dueRules.Add(r.Id);
+                        dueRules.Add(r);
                     }
                     else if (t == next)
                     {
-                        dueRules.Add(r.Id);
+                        dueRules.Add(r);
                     }
                 }
 
@@ -113,76 +130,74 @@ namespace SonicRoute
                     // 所有定时规则都无未来时刻：清空等待
                     _timer?.Dispose();
                     _timer = null;
-                    _pendingDue = null;
-                    _pendingRules.Clear();
+                    _pendingPlan = null;
                     return;
                 }
 
-                _pendingDue = next;
-                _pendingRules.Clear();
-                _pendingRules.AddRange(dueRules);
+                if (preservePendingDue && _pendingPlan != null && _pendingPlan.Due == next
+                    && _pendingPlan.Rules.Count == dueRules.Count
+                    && _pendingPlan.Rules.Zip(dueRules, AutoRuleStore.SameSchedule).All(same => same)) return;
+                var plan = new Plan { Due = next.Value, Rules = dueRules };
+                _pendingPlan = plan;
                 var delay = next.Value - DateTime.Now;
                 if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
-                Log($"Refresh: 下次执行 {next:yyyy-MM-dd HH:mm:ss.fff}，等待 {(long)delay.TotalMilliseconds}ms，规则 [{string.Join(",", dueRules)}]");
-                _timer ??= new System.Threading.Timer(_ => OnTimerElapsed(), null, Timeout.Infinite, Timeout.Infinite);
+                Log($"Refresh: 下次执行 {next:yyyy-MM-dd HH:mm:ss.fff}，等待 {(long)delay.TotalMilliseconds}ms，规则 [{string.Join(",", dueRules.Select(r => r.Id))}]");
+                _timer?.Dispose();
+                // 每次安排绑定不可变计划身份；已经入队的旧回调不能读取新计划冒充其到期。
+                _timer = new System.Threading.Timer(_ => OnTimerElapsed(plan), null, Timeout.Infinite, Timeout.Infinite);
                 _timer.Change(delay, Timeout.InfiniteTimeSpan);
             }
         }
 
-        private static void OnTimerElapsed()
+        private static void OnTimerElapsed(Plan plan)
         {
-            DateTime due;
-            List<string> dueRules;
             lock (_lock)
             {
-                due = _pendingDue ?? DateTime.MinValue;
-                dueRules = new List<string>(_pendingRules);
+                if (_shutdown || !ReferenceEquals(plan, _pendingPlan) || plan.CallbackTaken) return;
+                var now = DateTime.Now;
+                if (now < plan.Due) { _timer?.Change(plan.Due - now, Timeout.InfiniteTimeSpan); return; }
+                plan.CallbackTaken = true;
             }
-
-            // 错过（睡眠/休眠恢复后 Timer 补到期）：不补执行，直接重算下一次
-            if (DateTime.Now - due > MissedTolerance)
+            var app = System.Windows.Application.Current;
+            if (app != null && !app.Dispatcher.CheckAccess())
             {
-                Log($"Timer 触发但已错过（到期 {due:HH:mm:ss.fff}，现在 {DateTime.Now:HH:mm:ss.fff}，差 {(DateTime.Now - due).TotalSeconds:F1}s），不补执行");
-                RefreshScheduler();
+                if (!app.Dispatcher.HasShutdownStarted)
+                    try { app.Dispatcher.BeginInvoke(new Action(() => ExecutePlan(plan))); }
+                    catch (InvalidOperationException) { }
                 return;
             }
-            Log($"Timer 触发，到期 {due:yyyy-MM-dd HH:mm:ss.fff}，规则 [{string.Join(",", dueRules)}]");
-
-            // 到点：执行所有预定该时刻且尚未执行的规则
-            foreach (var id in dueRules)
-            {
-                var r = AutoRuleStore.Find(id);
-                if (r == null || !r.Enabled || r.Trigger != AutoRuleTrigger.Schedule) continue;
-                // 用到期时刻精确判定（避免 Timer 晚到导致 NextRun 把本次跳过）
-                var t = NextRun(r, due);
-                if (t == null || t != due) continue;
-                var dueKey = due.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
-                if (string.Equals(r.LastRunKey, dueKey, StringComparison.Ordinal)) continue; // 防重复
-                ExecuteDue(r, dueKey);
-            }
-
-            RefreshScheduler();
+            ExecutePlan(plan);
         }
 
-        /// <summary>标记已执行（写 LastRunKey；仅一次自动禁用）后，复用自动化执行引擎执行。</summary>
-        private static void ExecuteDue(AutoRule rule, string dueKey)
+        private static void ExecutePlan(Plan plan)
         {
-            Log($"ExecuteDue: 规则 [{rule.Name}] 到期 {dueKey}，步骤数 {rule.Actions.Count}");
-            rule.LastRunKey = dueKey;
-            if (rule.ScheduleMode == 0) rule.Enabled = false; // 仅一次：执行后自动禁用（不删除）
-            try { AutoRuleStore.Save(rule); }
-            catch (Exception error)
+            lock (_lock)
             {
-                Log($"规则 [{rule.Name}] 保存执行记录失败，本次不执行：{error.Message}");
-                return;
+                if (_shutdown || !ReferenceEquals(plan, _pendingPlan)) return;
+                try
+                {
+                    if (DateTime.Now < plan.Due || DateTime.Now - plan.Due > MissedTolerance) return;
+                    string key = plan.Due.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+                    foreach (var expected in plan.Rules)
+                    {
+                        if (NextRun(expected, plan.Due) != plan.Due) continue;
+                        try
+                        {
+                            var claimed = AutoRuleStore.ClaimScheduledRun(expected, key);
+                            if (claimed != null) _ = AutoRuleService.ExecuteAsync(claimed);
+                        }
+                        catch (Exception error) { Log("定时规则领取/执行失败: " + error.Message); }
+                    }
+                }
+                catch (Exception error) { Log("定时回调失败: " + error.Message); }
+                finally
+                {
+                    _pendingPlan = null;
+                    _timer?.Dispose(); _timer = null;
+                    // 保存失败沿用原本次不执行策略，不以0延时反复重试写盘。
+                    try { RefreshScheduler(false); } catch (Exception error) { Log("定时计划刷新失败: " + error.Message); }
+                }
             }
-
-            var app = System.Windows.Application.Current;
-            if (app == null) { _ = AutoRuleService.ExecuteAsync(rule); return; }
-            if (app.Dispatcher.CheckAccess())
-                _ = AutoRuleService.ExecuteAsync(rule);
-            else
-                app.Dispatcher.BeginInvoke(() => _ = AutoRuleService.ExecuteAsync(rule));
         }
 
         // ---------- 下一次执行时刻计算 ----------
@@ -234,11 +249,11 @@ namespace SonicRoute
 
         // ---------- 系统事件 ----------
 
-        private static void OnSystemTimeChanged(object? sender, EventArgs e) => RefreshScheduler();
+        private static void OnSystemTimeChanged(object? sender, EventArgs e) => RefreshScheduler(false);
 
         private static void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
         {
-            if (e.Mode == PowerModes.Resume) RefreshScheduler();
+            if (e.Mode == PowerModes.Resume) RefreshScheduler(false);
         }
     }
 }

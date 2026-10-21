@@ -100,6 +100,7 @@ namespace SonicRoute
                 AutoRuleService.RecoverWatcher();
                 MicMonitor?.RequestRebuild();
                 AutoRuleStore.RecoverMonitoring();
+                ReloadHotkeys(force: true);
                 RefreshRuleDirectoryProbePolicy();
             }), DispatcherPriority.Background);
         }

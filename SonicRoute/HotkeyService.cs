@@ -27,6 +27,9 @@ namespace SonicRoute
         private readonly HwndSource _source;
         private readonly Dictionary<int, string> _actionById = new();
         private readonly MouseHotkeyHook _mouseHook;
+        private Dictionary<string, string> _requestedBindings = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> _mouseByAction = new(StringComparer.Ordinal);
+        private List<KeyValuePair<string, string>> _compiledMouseBindings = new();
         private int _nextId = 1;
 
         public event Action<string>? HotkeyPressed;
@@ -66,51 +69,98 @@ namespace SonicRoute
             return IntPtr.Zero;
         }
 
-        /// <summary>按 config 重新注册全部快捷键（先注销旧的）。
+        /// <summary>合并后的绑定仅更新受影响的冲突组；未变化的成功注册保留，失败/回退绑定按请求重试。
         /// 空串/缺失 = 不绑定（跳过，不回退默认）；
         /// 含鼠标键/滚轮的绑定 → 低级鼠标钩子；其余 → RegisterHotKey（被占用自动回退默认组合）。</summary>
-        public void Reload(IReadOnlyDictionary<string, string> hotkeys)
+        public void Reload(IReadOnlyDictionary<string, string> hotkeys, bool force = false)
         {
-            UnregisterAll();
-            RegistrationStatus.Clear();
-
-            var mouseBindings = new List<KeyValuePair<string, string>>();
-            var defaults = HotkeyActions.Defaults;
-
-            foreach (var kv in hotkeys)
+            var next = hotkeys.Where(kv => !string.IsNullOrWhiteSpace(kv.Value))
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            var affected = new HashSet<string>(_requestedBindings.Keys.Concat(next.Keys).Where(action => force
+                || !_requestedBindings.TryGetValue(action, out var old) || !next.TryGetValue(action, out var current)
+                || !SameCombo(old, current)), StringComparer.Ordinal);
+            // 修改一个绑定时，把共享请求/回退组合的动作一起按原map顺序重新仲裁，支持交换键位及冲突优先级。
+            var combinations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool grew;
+            do
             {
-                if (string.IsNullOrWhiteSpace(kv.Value)) continue; // Esc 清除 = 不绑定任何东西
+                foreach (string action in affected)
+                    foreach (string key in CandidateKeys(action, next)) combinations.Add(key);
+                grew = false;
+                foreach (string action in next.Keys.Concat(_requestedBindings.Keys).Distinct(StringComparer.Ordinal))
+                    if (!affected.Contains(action) && CandidateKeys(action, next).Any(combinations.Contains))
+                        grew |= affected.Add(action);
+            } while (grew);
+            foreach (string action in affected)
+            {
+                foreach (int id in _actionById.Where(pair => pair.Value == action).Select(pair => pair.Key).ToArray()) ReleaseRegistration(id);
+                RegistrationStatus.Remove(action); _mouseByAction.Remove(action);
+            }
+            foreach (var kv in next)
+                if (affected.Contains(kv.Key)) RegisterBinding(kv.Key, kv.Value);
 
-                if (IsMouseCombo(kv.Value))
+            // 无关规则保存只重试确实失败/正在回退的动作，不动其它成功注册，也没有后台重试计时器。
+            foreach (var kv in next)
+            {
+                if (affected.Contains(kv.Key) || RegistrationStatus.TryGetValue(kv.Key, out var actual) && SameCombo(actual, kv.Value)) continue;
+                if (IsMouseCombo(kv.Value)) continue; // 鼠标钩子失败由下方同一编译集合重试。
+                if (RegistrationStatus.Any(pair => pair.Key != kv.Key && !IsMouseCombo(pair.Value) && SameCombo(pair.Value, kv.Value))) continue;
+                var oldIds = _actionById.Where(pair => pair.Value == kv.Key).Select(pair => pair.Key).ToArray();
+                if (TryRegister(kv.Key, kv.Value))
                 {
-                    mouseBindings.Add(new KeyValuePair<string, string>(kv.Value, kv.Key));
-                    RegistrationStatus[kv.Key] = kv.Value;
-                    continue;
-                }
-
-                if (TryRegister(kv.Key, kv.Value)) continue;
-                if (defaults.TryGetValue(kv.Key, out var def)
-                    && !string.Equals(def, kv.Value, StringComparison.OrdinalIgnoreCase))
-                {
-                    // 默认可能是鼠标滚轮，不能交给 RegisterHotKey 的键盘解析。
-                    if (IsMouseCombo(def))
-                    {
-                        mouseBindings.Add(new KeyValuePair<string, string>(def, kv.Key));
-                        RegistrationStatus[kv.Key] = def;
-                    }
-                    else TryRegister(kv.Key, def); // 配置组合冲突/无效 → 回退默认
-                }
-                else if (!RegistrationStatus.ContainsKey(kv.Key))
-                {
-                    // 无默认动作（如自动化规则 Rule:{Id}）冲突/无效：标记未注册成功，
-                    // 供规则列表显示"快捷键冲突/无效"，避免静默占用预期
-                    RegistrationStatus[kv.Key] = "";
+                    foreach (int id in oldIds) ReleaseRegistration(id);
+                    _mouseByAction.Remove(kv.Key);
                 }
             }
+            // 元数据变化不会改变已建立的顺序；真正绑定变化才采用新map的原有仲裁顺序。
+            bool changed = affected.Count != 0;
+            var mouseOrder = changed ? next : _requestedBindings;
+            var mouseBindings = mouseOrder.Where(kv => _mouseByAction.ContainsKey(kv.Key))
+                .Select(kv => new KeyValuePair<string, string>(_mouseByAction[kv.Key], kv.Key)).ToList();
+            if (force || !mouseBindings.SequenceEqual(_compiledMouseBindings) || !_mouseHook.IsInstalled && mouseBindings.Count != 0)
+                _mouseHook.Reload(mouseBindings);
+            _compiledMouseBindings = mouseBindings;
+            foreach (var binding in mouseBindings) RegistrationStatus[binding.Value] = _mouseHook.IsInstalled ? binding.Key : "";
+            if (changed) _requestedBindings = next;
+        }
 
-            _mouseHook.Reload(mouseBindings);
-            if (!_mouseHook.IsInstalled)
-                foreach (var binding in mouseBindings) RegistrationStatus[binding.Value] = "";
+        private IEnumerable<string> CandidateKeys(string action, Dictionary<string, string> next)
+        {
+            if (_requestedBindings.TryGetValue(action, out var old)) yield return ComboKey(old);
+            if (next.TryGetValue(action, out var requested)) yield return ComboKey(requested);
+            if (HotkeyActions.Defaults.TryGetValue(action, out var fallback)) yield return ComboKey(fallback);
+            if (RegistrationStatus.TryGetValue(action, out var actual) && actual.Length > 0) yield return ComboKey(actual);
+        }
+
+        private static string ComboKey(string combo)
+        {
+            if (TryParse(combo, out uint modifiers, out uint key)) return modifiers + ":" + key;
+            if (IsMouseCombo(combo))
+            {
+                var parts = SplitCombo(combo);
+                if (TryParse(string.Join("+", parts.Take(parts.Length - 1).Concat(new[] { "F24" })), out modifiers, out _))
+                    return "Mouse:" + modifiers + ":" + parts[parts.Length - 1].ToUpperInvariant();
+            }
+            return string.Join("+", SplitCombo(combo)).ToUpperInvariant();
+        }
+        private static bool SameCombo(string left, string right) => ComboKey(left) == ComboKey(right);
+
+        private void RegisterBinding(string action, string combo)
+        {
+            if (IsMouseCombo(combo)) { _mouseByAction[action] = combo; RegistrationStatus[action] = combo; return; }
+            if (TryRegister(action, combo)) return;
+            if (HotkeyActions.Defaults.TryGetValue(action, out var fallback) && !SameCombo(fallback, combo))
+            {
+                if (IsMouseCombo(fallback)) { _mouseByAction[action] = fallback; RegistrationStatus[action] = fallback; return; }
+                if (TryRegister(action, fallback)) return;
+            }
+            RegistrationStatus[action] = "";
+        }
+
+        private void ReleaseRegistration(int id)
+        {
+            UnregisterHotKey(_source.Handle, id);
+            _actionById.Remove(id);
         }
 
         /// <summary>拆分快捷键组合串（'+' 分隔）：去空段 + 逐段 Trim。

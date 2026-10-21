@@ -545,7 +545,7 @@ namespace SonicRoute
         private static extern bool SetProcessWorkingSetSize(IntPtr proc, IntPtr min, IntPtr max);
 
         /// <summary>重新加载全局快捷键（设置页修改后调用）。实验模式的隐藏动作仅在"实验模式+麦克风选项"开启时注册。</summary>
-        internal void ReloadHotkeys()
+        internal void ReloadHotkeys(bool force = false)
         {
             if (_hotkeys == null) return;
             var config = ConfigService.Load();
@@ -559,14 +559,13 @@ namespace SonicRoute
                     ? c
                     : (HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "");
             }
-            _hotkeys.Reload(map);
             // 自动化规则快捷键：Rule:{Id} 动作并入同一注册通道；冲突/无效时不注册（RegistrationStatus 标记空）
             foreach (var r in AutoRuleStore.LoadAll())
             {
                 if (r.Enabled && r.Trigger == AutoRuleTrigger.Hotkey && !string.IsNullOrWhiteSpace(r.Hotkey))
                     map[AutoRuleService.HotkeyPrefix + r.Id] = r.Hotkey;
             }
-            _hotkeys.Reload(map);
+            _hotkeys.Reload(map, force);
             // 应用启动 / 前台切换触发监听：仅当存在启用规则时启动（无规则自动停止）
             AutoRuleService.RefreshWatcher();
             // 定时触发调度：规则增删改/启停后立即重新计算最近一次执行时刻

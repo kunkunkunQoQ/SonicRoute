@@ -271,6 +271,29 @@ namespace SonicRoute.Core
             }
         }
 
+        /// <summary>仅比较有效定时资格；名称/步骤等非计划修改由执行时读取的最新副本提供。</summary>
+        public static bool SameSchedule(AutoRule left, AutoRule right) => left.Id == right.Id
+            && left.Enabled && right.Enabled && left.Trigger == AutoRuleTrigger.Schedule && right.Trigger == AutoRuleTrigger.Schedule
+            && left.ScheduleMode == right.ScheduleMode && left.ScheduleTime == right.ScheduleTime
+            && (left.ScheduleMode != 2 || (left.ScheduleWeekdays ?? new List<int>()).Where(d => d is >= 0 and <= 6).Distinct().OrderBy(d => d)
+                .SequenceEqual((right.ScheduleWeekdays ?? new List<int>()).Where(d => d is >= 0 and <= 6).Distinct().OrderBy(d => d)));
+
+        /// <summary>领取和原子保存处于同一存储锁，防止并发回调覆盖新计划或重复领取。保存失败不返回执行资格。</summary>
+        public static AutoRule? ClaimScheduledRun(AutoRule expected, string dueKey)
+        {
+            lock (_lock)
+            {
+                EnsureLoaded();
+                if (!_byId.TryGetValue(expected.Id, out var path) || _files[path].Rule is not AutoRule current
+                    || !SameSchedule(expected, current) || string.Equals(current.LastRunKey, dueKey, StringComparison.Ordinal)) return null;
+                var claimed = current.Clone();
+                claimed.LastRunKey = dueKey;
+                if (claimed.ScheduleMode == 0) claimed.Enabled = false;
+                Save(claimed);
+                return claimed;
+            }
+        }
+
         /// <summary>原子保存一条规则：以名称命名，重名追加 (1)(2)…，成功后更新索引与修订号。</summary>
         public static void Save(AutoRule rule, string? defaultNamePrefix = null)
         {

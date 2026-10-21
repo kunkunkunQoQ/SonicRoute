@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -152,10 +153,25 @@ namespace SonicRoute
         private static int _processNotificationQueued;
         private static HashSet<string>? _runningSnapshot;
         private static string? _snapshotTargetName;
-        private static Task<HashSet<string>>? _snapshotBaselineTask;
+        private static Task<ProcessSnapshotService.Snapshot>? _snapshotBaselineTask;
+        private static HashSet<string> _snapshotUncertain = new(StringComparer.OrdinalIgnoreCase);
+        private static HashSet<string> _snapshotCertain = new(StringComparer.OrdinalIgnoreCase);
+        private static bool _snapshotNeedsBaseline = true;
+        private static bool _snapshotReadUncertain;
         private static ProcessSnapshotService? _processSnapshot;
         private static int _lastFgPid;
+        private static int _observedForegroundPid;
+        private static long _foregroundSequence;
         private static bool _watchTickRunning;
+        private static bool _watchReadFailed, _watchExecutionRunning;
+        private sealed class WatchRequest
+        {
+            internal AutoRule Rule = null!;
+            internal long Revision, ForegroundSequence;
+            internal int ForegroundPid;
+        }
+        private static readonly LinkedList<WatchRequest> _watchRequests = new();
+        private static readonly Dictionary<string, LinkedListNode<WatchRequest>> _pendingWatchRules = new(StringComparer.Ordinal);
         private static bool _processCheckPending, _foregroundCheckPending;
         private static int _watchGeneration;
         private static long _watchRulesRevision = -1;
@@ -193,13 +209,16 @@ namespace SonicRoute
             _snapshotTargetName = target;
             _processEventTargets = target == null ? null : new HashSet<string>(target.Split('|'), StringComparer.OrdinalIgnoreCase);
             _runningSnapshot = null;
+            _snapshotNeedsBaseline = true; _snapshotUncertain.Clear(); _snapshotCertain.Clear();
             _processSnapshot?.Dispose();
-            var snapshot = _processSnapshot = target == null ? new ProcessSnapshotService()
+            var snapshot = _processSnapshot = target == null ? ProcessSnapshotService.ForTargets(GetWatchRules()
+                .Where(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)
+                .Select(r => r.TriggerApp).Where(name => !string.IsNullOrWhiteSpace(name)), includeAll: true)
                 : ProcessSnapshotService.ForTargets(target.Split('|'));
             _snapshotBaselineTask = Task.Run(() =>
             {
-                try { return snapshot.Capture(); }
-                catch { return new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+                try { return snapshot.CaptureState(); }
+                catch { return new ProcessSnapshotService.Snapshot(complete: false); }
             });
         }
 
@@ -250,10 +269,11 @@ namespace SonicRoute
                 _runningSnapshot = null;
                 _snapshotBaselineTask = null;
                 _snapshotTargetName = null;
+                _snapshotUncertain.Clear(); _snapshotCertain.Clear(); _snapshotNeedsBaseline = true;
                 _processSnapshot.Dispose(); _processSnapshot = null;
             }
             UpdateWatchFallbackPolicy();
-            if (initializeForeground) _ = TickAsync(false, true);
+            if (initializeForeground) ForegroundChanged(ForegroundAppService.GetForegroundProcessId());
         }
 
         internal static void RecoverWatcher()
@@ -272,7 +292,9 @@ namespace SonicRoute
             _processEvents?.Dispose(); _processEvents = null;
             _processEventTargets = null;
             _processCheckPending = _foregroundCheckPending = false;
+            _watchRequests.Clear(); _pendingWatchRules.Clear();
             _runningSnapshot = null; _snapshotBaselineTask = null; _snapshotTargetName = null;
+            _snapshotUncertain.Clear(); _snapshotCertain.Clear(); _snapshotNeedsBaseline = true;
             _processSnapshot?.Dispose(); _processSnapshot = null;
         }
 
@@ -290,7 +312,53 @@ namespace SonicRoute
             }
         }
 
-        private static void ForegroundChanged(int pid) { _ = TickAsync(false, true); }
+        private static void ForegroundChanged(int pid)
+        {
+            _observedForegroundPid = pid;
+            ++_foregroundSequence;
+            _ = TickAsync(false, true);
+        }
+
+        private static void QueueWatchRules(IEnumerable<WatchRequest> requests)
+        {
+            foreach (var request in requests)
+            {
+                string id = request.Rule.Id;
+                if (IsRunning(id)) continue;
+                if (_pendingWatchRules.TryGetValue(id, out var old))
+                {
+                    if (request.Rule.Trigger != AutoRuleTrigger.AppSwitch && old.Value.Revision == request.Revision) continue;
+                    _watchRequests.Remove(old);
+                }
+                _pendingWatchRules[id] = _watchRequests.AddLast(request);
+            }
+            if (!_watchExecutionRunning && _watchRequests.Count > 0) _ = ExecuteWatchRequestsAsync();
+        }
+
+        private static async Task ExecuteWatchRequestsAsync()
+        {
+            _watchExecutionRunning = true;
+            try
+            {
+                while (!_shuttingDown && _watchRequests.First is { } node)
+                {
+                    var request = node.Value;
+                    _watchRequests.RemoveFirst(); _pendingWatchRules.Remove(request.Rule.Id);
+                    try
+                    {
+                        // 复用现有修订快照，逐项重新确认资格；不为每个旧待办克隆整个规则库。
+                        var rule = GetWatchRules().FirstOrDefault(r => r.Id == request.Rule.Id);
+                        if (rule == null || !rule.Enabled || rule.Trigger != request.Rule.Trigger) continue;
+                        if (!ReferenceEquals(rule, request.Rule) && JsonSerializer.Serialize(rule) != JsonSerializer.Serialize(request.Rule)) continue;
+                        if (rule.Trigger == AutoRuleTrigger.AppSwitch && (request.ForegroundSequence != _foregroundSequence
+                            || request.ForegroundPid != ForegroundAppService.GetForegroundProcessId())) continue;
+                        await ExecuteAsync(rule);
+                    }
+                    catch (Exception error) { AutoRuleScheduler.Log("应用触发执行失败: " + error.Message); }
+                }
+            }
+            finally { _watchExecutionRunning = false; }
+        }
 
         private static void ProcessChanged(string? name)
         {
@@ -320,7 +388,12 @@ namespace SonicRoute
                 {
                     bool checkProcess = _processCheckPending, checkForeground = _foregroundCheckPending;
                     _processCheckPending = _foregroundCheckPending = false;
-                    await TickCoreAsync(checkProcess, checkForeground);
+                    try { await TickCoreAsync(checkProcess, checkForeground); _watchReadFailed = false; }
+                    catch (Exception error)
+                    {
+                        if (!_watchReadFailed) AutoRuleScheduler.Log("应用触发检测失败，将在后续通知/兼容检测中恢复: " + error.Message);
+                        _watchReadFailed = true;
+                    }
                 } while (!_shuttingDown && (_processCheckPending || _foregroundCheckPending));
             }
             finally { _watchTickRunning = false; }
@@ -331,6 +404,10 @@ namespace SonicRoute
             int generation = _watchGeneration;
             var rules = GetWatchRules();
             if (rules.Count == 0) { RefreshWatcher(); return; }
+            long rulesRevision = _watchRulesRevision;
+            var requests = new List<WatchRequest>();
+            void Trigger(AutoRule rule, int foregroundPid = 0) => requests.Add(new WatchRequest
+            { Rule = rule, Revision = rulesRevision, ForegroundPid = foregroundPid, ForegroundSequence = _foregroundSequence });
 
             // 应用启动 / 应用退出触发：进程快照 diff（新出现 = 启动；消失 = 退出）。
             // 快照与 diff 独立于 AppStart——仅建 AppExit 规则时也必须检测退出。
@@ -342,23 +419,37 @@ namespace SonicRoute
                 var baselineTask = _snapshotBaselineTask;
                 if (baselineTask != null)
                 {
-                    HashSet<string> baseline;
+                    ProcessSnapshotService.Snapshot baseline;
                     try { baseline = await baselineTask; }
-                    catch { baseline = new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+                    catch { baseline = new ProcessSnapshotService.Snapshot(complete: false); }
                     if (generation != _watchGeneration) return;
-                    _runningSnapshot = baseline;
+                    if (baseline.Complete || baseline.Present.Count != 0 || baseline.Absent.Count != 0)
+                    {
+                        _runningSnapshot = baseline.Present;
+                        _snapshotUncertain = baseline.Uncertain;
+                        _snapshotCertain = new HashSet<string>(baseline.Present.Concat(baseline.Absent), StringComparer.OrdinalIgnoreCase);
+                        _snapshotNeedsBaseline = !baseline.Complete;
+                    }
                     if (_snapshotBaselineTask == baselineTask) _snapshotBaselineTask = null;
                 }
-                HashSet<string> now;
+                ProcessSnapshotService.Snapshot capture;
                 var snapshot = _processSnapshot!;
                 try
                 {
-                    now = await Task.Run(() => snapshot.Capture());
+                    capture = await Task.Run(() => snapshot.CaptureState());
                 }
-                catch { now = _runningSnapshot ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase); }
+                catch { capture = new ProcessSnapshotService.Snapshot(complete: false); }
 
                 if (generation != _watchGeneration) return;
 
+                bool uncertain = !capture.Complete || capture.Uncertain.Count != 0;
+                if (uncertain != _snapshotReadUncertain)
+                    AutoRuleScheduler.Log(uncertain ? "进程快照存在不确定状态，相关目标暂停变化判断。" : "进程快照读取恢复，相关目标重新建立比较基线。");
+                _snapshotReadUncertain = uncertain;
+                var now = capture.Present;
+                bool WasKnown(string name) => (!_snapshotNeedsBaseline && !_snapshotUncertain.Contains(name)) || _snapshotCertain.Contains(name);
+                bool IsKnown(string name) => now.Contains(name) || capture.Absent.Contains(name)
+                    || capture.Complete && !capture.Uncertain.Contains(name);
                 if (_runningSnapshot != null)
                 {
                     // 应用启动：只对"新出现"的进程名触发（启动时已存在的进程不触发）
@@ -366,13 +457,12 @@ namespace SonicRoute
                     {
                         foreach (var name in now)
                         {
-                            if (_runningSnapshot.Contains(name)) continue;
+                            if (_runningSnapshot.Contains(name) || !WasKnown(name)) continue;
                             foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppStart
                                 && (string.IsNullOrWhiteSpace(x.TriggerApp)
                                     || string.Equals(x.TriggerApp, name, StringComparison.OrdinalIgnoreCase))))
                             {
-                                await ExecuteAsync(r);
-                                if (generation != _watchGeneration) return;
+                                Trigger(r);
                             }
                         }
                     }
@@ -381,25 +471,31 @@ namespace SonicRoute
                     {
                         foreach (var gone in _runningSnapshot)
                         {
-                            if (now.Contains(gone)) continue;
+                            if (now.Contains(gone) || !WasKnown(gone) || !IsKnown(gone)) continue;
                             foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppExit
                                 && (string.IsNullOrWhiteSpace(x.TriggerApp)
                                     || string.Equals(x.TriggerApp, gone, StringComparison.OrdinalIgnoreCase))))
                             {
-                                await ExecuteAsync(r);
-                                if (generation != _watchGeneration) return;
+                                Trigger(r);
                             }
                         }
                     }
                 }
                 if (generation != _watchGeneration) return;
-                _runningSnapshot = now;
+                // 先保存本次确切观测，再保留未知目标的上次值；上次值不再具有变化比较资格。
+                _snapshotCertain = new HashSet<string>(now.Concat(capture.Absent), StringComparer.OrdinalIgnoreCase);
+                if (_runningSnapshot != null)
+                    foreach (string name in _runningSnapshot)
+                        if (!IsKnown(name)) now.Add(name);
+                if (capture.Complete || _runningSnapshot != null || _snapshotCertain.Count > 0) _runningSnapshot = now;
+                _snapshotUncertain = capture.Uncertain;
+                _snapshotNeedsBaseline = !capture.Complete;
             }
 
             // 前台切换触发：前台 PID 变化且与目标进程名匹配（含空 = 任意应用）
             if (foreground && rules.Any(r => r.Trigger == AutoRuleTrigger.AppSwitch))
             {
-                int fg = ForegroundAppService.GetForegroundProcessId();
+                int fg = _observedForegroundPid;
                 if (fg != 0 && fg != _lastFgPid)
                 {
                     string? name = ForegroundAppService.GetProcessNameSafe(fg);
@@ -409,14 +505,15 @@ namespace SonicRoute
                             && (string.IsNullOrWhiteSpace(x.TriggerApp)
                                 || string.Equals(x.TriggerApp, name, StringComparison.OrdinalIgnoreCase))))
                         {
-                            await ExecuteAsync(r);
-                            if (generation != _watchGeneration) return;
+                            Trigger(r, fg);
                         }
                     }
                 }
                 if (generation != _watchGeneration) return;
                 _lastFgPid = fg;
             }
+            // 基线已提交后再派发；执行等待不占用检测的单飞状态。
+            QueueWatchRules(requests);
         }
 
         // ---------- 执行 ----------
