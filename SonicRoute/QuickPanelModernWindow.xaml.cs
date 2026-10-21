@@ -741,7 +741,7 @@ namespace SonicRoute
 
                     var expand = new ToggleButton
                     {
-                        Width = 96,
+                        Width = 80,
                         Height = 24,
                         VerticalAlignment = System.Windows.VerticalAlignment.Center,
                         Style = (Style)FindResource("RowExpandButton"),
@@ -750,7 +750,7 @@ namespace SonicRoute
                     };
                     var glyph = new TextBlock { Text = "▾", RenderTransform = row.ExpandArrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
                     glyph.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
-                    var deviceLabel = new Grid { Width = 88, ClipToBounds = true };
+                    var deviceLabel = new Grid { Width = 72, ClipToBounds = true };
                     deviceLabel.ColumnDefinitions.Add(new ColumnDefinition());
                     deviceLabel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                     row.OutputName = new TextBlock
