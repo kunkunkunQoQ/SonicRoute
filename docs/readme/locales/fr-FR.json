@@ -26,9 +26,9 @@
   "storeRequirement": "Installation en un clic avec mises à jour automatiques via le Microsoft Store ; pour Windows 10/11 64 bits",
   "runtimeNote": "Lite nécessite le {runtime} correspondant. Legacy ne nécessite pas .NET 8.",
   "steps": [
-    "Lancez l'application : elle reste active dans la zone de notification (glissez-la hors du menu masqué pour la fixer). Double-cliquez pour ouvrir la fenêtre principale.",
-    "Cochez vos casques et haut-parleurs dans Paramètres → Périphériques conservés. Cliquez sur l'icône de la barre des tâches pour ouvrir le panneau rapide et router vos applications.",
-    "Survolez l'icône dans la zone de notification et tournez la molette pour ajuster le volume à l'aveugle. Raccourcis et règles d'automatisation permettent de tout contrôler sans quitter vos jeux plein écran."
+    "**Lancer & garder en barre des tâches** : Double-cliquez pour démarrer ; reste actif dans la zone de notification. Double-cliquez sur l'icône pour ouvrir la fenêtre principale.",
+    "**Sélectionner & router les périphériques** : Cochez vos casques et haut-parleurs dans Paramètres → Périphériques conservés. Cliquez sur l'icône pour afficher le panneau rapide et router chaque application.",
+    "**Contrôle du volume à l'aveugle** : Survolez l'icône de notification et utilisez la molette pour ajuster le volume à l'aveugle, ou utilisez des raccourcis et des règles d'automatisation sans quitter vos jeux."
   ],
   "commandNote": "Avant d’utiliser `sr` pour la première fois, lancez SonicRoute normalement pour enregistrer la commande, puis ouvrez de nouveau votre terminal. Si le changement de périphérique ne fonctionne pas comme prévu, consultez la {faq}.",
   "ruleExample": "Nom ou ID de la règle",
@@ -64,8 +64,8 @@
   "releaseInfo": "Informations sur la version",
   "roadmapTitle": "Feuille de route",
   "roadmapItems": [
-    "**{nextRelease} · Mise à jour majeure :** les détails seront présentés dans les prochaines notes de version.",
-    "**Étapes suivantes :** continuer à améliorer les fonctions existantes selon vos retours. Les projets peuvent évoluer en fonction des commentaires reçus."
+    "**{nextRelease} · Mise à jour majeure (En développement)** : Extension de l'automatisation à {triggerCount} déclencheurs et {actionCount} actions avancées (sélection détaillée d'enregistrement, contrôle micro par application, volume global par lot et réinitialisation en un clic).",
+    "**Étapes ultérieures** : Perfectionnement continu des écouteurs d'événements à faible latence et de l'architecture sans scrutation selon les retours de la communauté."
   ],
   "roadmapFeedback": "Partager une idée ou signaler un problème",
   "footerDocs": "Lire les guides (en chinois)",

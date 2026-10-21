@@ -26,9 +26,9 @@
   "storeRequirement": "Instalación con un clic y actualizaciones automáticas silenciosas desde la tienda; para Windows 10/11 de 64 bits",
   "runtimeNote": "Lite necesita el {runtime} correspondiente. Legacy no requiere .NET 8.",
   "steps": [
-    "Ejecútelo y permanecerá en la bandeja del sistema (arrástrelo fuera del menú desplegable para fijarlo). Haga doble clic en el icono para abrir la interfaz principal.",
-    "Marque sus auriculares y altavoces en Configuración → Dispositivos conservados. Haga clic izquierdo en el icono para abrir el panel rápido y enrutar el audio de cada app.",
-    "Pase el cursor sobre el icono de la bandeja y gire la rueda del ratón para ajustar el volumen al instante, o use atajos y automatización sin salir de sus juegos a pantalla completa."
+    "**Iniciar y mantener en bandeja**: Haz doble clic para iniciar; permanece en la bandeja del sistema. Doble clic en el icono para abrir la ventana principal.",
+    "**Seleccionar y enrutar dispositivos**: Marca tus auriculares y altavoces en Configuración → Dispositivos conservados. Clic izquierdo para abrir el panel rápido y enrutar cada app al instante.",
+    "**Control de volumen a ciegas**: Pasa el ratón sobre el icono y gira la rueda para ajustar el volumen a ciegas, o usa atajos y reglas de automatización sin salir del juego."
   ],
   "commandNote": "Antes de usar `sr` por primera vez, inicia SonicRoute con normalidad para registrar el comando y vuelve a abrir el terminal. Si el cambio de dispositivo no funciona como esperabas, consulta las {faq}.",
   "ruleExample": "Nombre o ID de la regla",
@@ -64,8 +64,8 @@
   "releaseInfo": "Información de la versión",
   "roadmapTitle": "Hoja de ruta",
   "roadmapItems": [
-    "**{nextRelease} · Actualización importante:** los detalles se anunciarán en las próximas notas de la versión.",
-    "**Etapas posteriores:** seguir perfeccionando las funciones existentes según los comentarios. Los planes pueden cambiar a medida que recibamos sugerencias."
+    "**{nextRelease} · Actualización importante (En desarrollo)**: Ampliación de automatización a {triggerCount} desencadenadores y {actionCount} acciones avanzadas (selección de grabación, micro por app, ajuste de volumen por lotes y restablecimiento en un clic).",
+    "**Etapas posteriores**: Perfeccionamiento continuo de escucha de eventos de baja latencia y arquitectura sin sondeo según comentarios de la comunidad."
   ],
   "roadmapFeedback": "Comparte una idea o informa de un problema",
   "footerDocs": "Leer las guías (en chino)",

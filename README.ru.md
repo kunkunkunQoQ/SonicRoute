@@ -3,7 +3,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | **Русский**
 
-[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE) [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
 
 **Направляйте звук каждого приложения на нужное вам устройство.**
 
@@ -38,11 +38,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 
 | Повседневный сценарий | Как SonicRoute решает задачу |
 |---|---|
-| **Голосовой чат слишком громкий, или звуки игры заглушают тиммейтов** | Настраивайте Discord отдельно, не меняя звук игры; разделяйте вывод игры и голосового чата по разным устройствам |
-| **Фоновое прослушивание музыки или просмотр видео во время игры** | Музыка — в колонки, игра — в наушники; регулируйте громкость колесом мыши над областью уведомлений без сворачивания |
-| **Постоянное переключение гарнитур и настроек Windows перед каждой игрой** | Правило: запуск игры → переход на гарнитуру + громкость 40% + запуск Discord; возврат на колонки при выходе |
-| **Необходимость отойти от ПК или принять личный звонок** | Отключайте все микрофоны по Ctrl+Shift+N с мгновенным подтверждением статуса на экранном баннере OSD |
-| **Стримы в OBS или запись обучающих видео с экрана** | Назначайте приложениям отдельные звуковые дорожки, чтобы личные разговоры и уведомления не попадали в запись |
+| 🎮 **Голосовой чат слишком громкий, или звуки игры заглушают тиммейтов** | Настраивайте Discord отдельно, не меняя звук игры; разделяйте вывод игры и голосового чата по разным устройствам |
+| 🎵 **Фоновое прослушивание музыки или просмотр видео во время игры** | Музыка — в колонки, игра — в наушники; регулируйте громкость колесом мыши над областью уведомлений без сворачивания |
+| ⚡ **Постоянное переключение гарнитур и настроек Windows перед каждой игрой** | Правило: запуск игры → переход на гарнитуру + громкость 40% + запуск Discord; возврат на колонки при выходе |
+| 🎙️ **Необходимость отойти от ПК или принять личный звонок** | Отключайте все микрофоны по Ctrl+Shift+N с мгновенным подтверждением статуса на экранном баннере OSD |
+| 📹 **Стримы в OBS или запись обучающих видео с экрана** | Назначайте приложениям отдельные звуковые дорожки, чтобы личные разговоры и уведомления не попадали в запись |
 
 ## 🚀 Скачивание и начало работы
 
@@ -52,16 +52,16 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 
 | Вариант | Скачать | Требования |
 |---|---|---|
-| Lite x64 (Рекомендуется) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Один автономный исполняемый файл без установки; требуется совместимый x64 .NET 8 Desktop Runtime |
-| Lite ARM64 (экспериментально) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Нативная производительность на Surface Pro и устройствах Snapdragon ARM64; требуется ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 (Без .NET 8) | [Полный ZIP-архив](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | Не требует .NET 8; работает напрямую через встроенный .NET Framework 4.8; распакуйте ZIP-архив |
-| Microsoft Store (Автообновление) | [Установить из Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Установка в один клик и автоматические обновления через магазин; для 64-битных версий Windows 10/11 |
+| ⭐ Lite x64 (Рекомендуется) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Один автономный исполняемый файл без установки; требуется совместимый x64 .NET 8 Desktop Runtime |
+| ⚡ Lite ARM64 (экспериментально) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Нативная производительность на Surface Pro и устройствах Snapdragon ARM64; требуется ARM64 .NET 8 Desktop Runtime |
+| 🛡️ Legacy x64 (Без .NET 8) | [Полный ZIP-архив](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | Не требует .NET 8; работает напрямую через встроенный .NET Framework 4.8; распакуйте ZIP-архив |
+| 🔄 Microsoft Store (Автообновление) | [Установить из Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Установка в один клик и автоматические обновления через магазин; для 64-битных версий Windows 10/11 |
 
 Для Lite требуется соответствующая версия [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Для Legacy .NET 8 не нужен.
 
-1. После запуска программа сворачивается в системный трей (перетащите значок для закрепления). Дважды кликните по нему, чтобы открыть главное окно.
-2. В меню «Настройки → Сохраненные устройства» отметьте наушники и динамики. Кликните по значку в трее, чтобы открыть быструю панель и маршрутизировать приложения.
-3. Наведите курсор на значок в трее и прокрутите колесо мыши для быстрой регулировки громкости; горячие клавиши и автоматизация позволяют управлять звуком прямо во время полноэкранных игр.
+1. **Запуск и работа в трее**: Дважды щелкните для запуска; программа свернется в системный трей. Двойной щелчок по значку открывает главное окно.
+2. **Выбор и перенаправление устройств**: Отметьте наушники и динамики в «Настройки → Сохраненные устройства». Нажмите на значок для вызова быстрой панели и распределяйте звук приложений ползунками.
+3. **Управление громкостью вслепую**: Наведите курсор на значок в трее и крутите колесо мыши для быстрой регулировки громкости вслепую, либо используйте горячие клавиши и правила автоматизации без выхода из полноэкранных игр.
 
 Перед первым использованием `sr` запустите SonicRoute обычным способом, чтобы зарегистрировать команду, затем откройте терминал заново. Если переключение устройств работает не так, как ожидалось, обратитесь к разделу [Частые вопросы](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
@@ -100,8 +100,8 @@ A: Практически ноль. SonicRoute построен исключит
 
 ## 📌 План развития
 
-- **v1.25 · Крупное обновление:** подробности будут опубликованы в будущих примечаниях к выпуску.
-- **Дальнейшие этапы:** продолжать улучшать существующие функции с учётом отзывов. Планы могут меняться по мере поступления предложений.
+- **v1.25 · Крупное обновление (В разработке)**: Расширение автоматизации до 6 триггеров и 37 расширенных действий (детализация записи, микрофон по приложениям, пакетное управление громкостью и сброс маршрутизации в один клик).
+- **Дальнейшие этапы**: Постоянное улучшение слушателей событий с низкой задержкой и архитектуры без опроса на основе отзывов сообщества.
 
 [Предложить идею или сообщить о проблеме](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

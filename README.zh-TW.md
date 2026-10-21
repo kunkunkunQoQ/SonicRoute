@@ -3,7 +3,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | **繁體中文** | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md)
 
-[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE) [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![在 Afdian 支援我們](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![在 Afdian 支援我們](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
 
 **將每個應用程式的音訊輸出至您選擇的裝置。**
 
@@ -38,11 +38,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 | 你的日常場景 | SonicRoute 怎麼幫你解決 |
 |---|---|
-| **遊戲開黑，隊友太吵或遊戲聲蓋過語音** | 單獨調整語音軟體（Discord/YY）音量，遊戲音效不受影響；遊戲走耳機，語音走耳麥，互不串音 |
-| **邊玩遊戲邊在後台聽歌追劇** | 音樂送去音箱，遊戲留在耳機；無需切出全螢幕遊戲，滑鼠懸停在工作列匣區滾輪即可盲調音樂 |
-| **每次開遊戲都要插拔耳機、改 Windows 設定** | 設定規則：遊戲開啟時自動「切換耳機 + 音量 40% + 啟動語音軟體」，結束遊戲自動切回音箱 |
-| **臨時離開電腦、拿外賣或私密通話** | 一鍵全域麥克風靜音（快捷鍵 Ctrl+Shift+N），配合螢幕常駐 OSD 浮窗，一眼確認是否閉麥 |
-| **OBS 遊戲直播 / 錄屏教學** | 為各應用指定獨立實體或虛擬軌道，避免錄影時把私人聊天或系統提示音混入錄像 |
+| 🎮 **遊戲開黑，隊友太吵或遊戲聲蓋過語音** | 單獨調整語音軟體（Discord/YY）音量，遊戲音效不受影響；遊戲走耳機，語音走耳麥，互不串音 |
+| 🎵 **邊玩遊戲邊在後台聽歌追劇** | 音樂送去音箱，遊戲留在耳機；無需切出全螢幕遊戲，滑鼠懸停在工作列匣區滾輪即可盲調音樂 |
+| ⚡ **每次開遊戲都要插拔耳機、改 Windows 設定** | 設定規則：遊戲開啟時自動「切換耳機 + 音量 40% + 啟動語音軟體」，結束遊戲自動切回音箱 |
+| 🎙️ **臨時離開電腦、拿外賣或私密通話** | 一鍵全域麥克風靜音（快捷鍵 Ctrl+Shift+N），配合螢幕常駐 OSD 浮窗，一眼確認是否閉麥 |
+| 📹 **OBS 遊戲直播 / 錄屏教學** | 為各應用指定獨立實體或虛擬軌道，避免錄影時把私人聊天或系統提示音混入錄像 |
 
 ## 🚀 下載與快速入門
 
@@ -52,16 +52,16 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 | 版本 | 下載 | 需求 |
 |---|---|---|
-| Lite x64（推薦主力） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 單檔案免安裝，開箱即用；需與系統架構匹配的 x64 .NET 8 Desktop Runtime |
-| Lite ARM64（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro 與高通驍龍 ARM64 裝置原生高效運作；需與系統匹配的 ARM64 .NET 8 Desktop Runtime |
-| Legacy x64（免裝執行庫） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用 |
-| Microsoft Store（自動更新） | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 一鍵安裝並由微軟商店自動靜默更新；適用於 64 位元 Windows 10/11 |
+| ⭐ Lite x64（推薦主力） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 單檔案免安裝，開箱即用；需與系統架構匹配的 x64 .NET 8 Desktop Runtime |
+| ⚡ Lite ARM64（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro 與高通驍龍 ARM64 裝置原生高效運作；需與系統匹配的 ARM64 .NET 8 Desktop Runtime |
+| 🛡️ Legacy x64（免裝執行庫） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用 |
+| 🔄 Microsoft Store（自動更新） | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 一鍵安裝並由微軟商店自動靜默更新；適用於 64 位元 Windows 10/11 |
 
 Lite 需要相符的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)。Legacy 不需要 .NET 8。
 
-1. 按兩下啟動後常駐系統匣（可在工作列溢位區拖出固定），按兩下系統匣圖示打開主介面。
-2. 在「設定 → 保留的裝置」勾選常用輸出與輸入裝置；按一下系統匣圖示滑出面板，即時滑動調節並分流各個應用程式的聲音輸出。
-3. 將滑鼠移至系統匣圖示上直接滾動滾輪即可盲調當前音量；配合快捷鍵與自動化規則，無需切出全螢幕遊戲也能從容掌控。
+1. **按兩下啟動常駐**：按兩下啟動後常駐系統匣（可在工作列角溢位區拖出固定），按兩下系統匣圖示開啟主介面。
+2. **勾選分流裝置**：在「設定 → 保留的裝置」勾選常用輸出與輸入裝置；按一下系統匣圖示滑出面板，即時滑動調節並分流各個應用程式的聲音輸出。
+3. **無感盲調掌控**：把滑鼠移到系統匣圖示上直接滾動滾輪即可盲調當前音量；配合快捷鍵與自動化規則，無需切出全螢幕遊戲也能從容掌控。
 
 首次使用 `sr` 前，請先正常啟動 SonicRoute 以註冊指令，然後重新開啟終端機。若裝置切換未如預期運作，請參閱 [常見問題](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)。
 
@@ -100,8 +100,8 @@ A：幾乎為零。SonicRoute 採用純 Windows 系統事件監聽架構，閒�
 
 ## 📌 開發規劃
 
-- **v1.25 · 重大更新：** 具體內容將於後續更新說明公布。
-- **後續階段：** 根據回饋持續改進現有功能。計畫可能隨回饋調整。
+- **v1.25 · 重大更新（開發中）**：自動化編排擴充至 6 種觸發器與 37 種進階操作（含錄音裝置細分、應用程式麥克風獨立控制、全應用程式批次音量調度與一鍵路由重設）。
+- **後續演進**：持續最佳化低延遲事件監聽與零輪詢機制，根據社群反饋打磨極簡體驗。
 
 [分享想法或回報問題](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 

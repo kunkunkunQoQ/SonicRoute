@@ -3,7 +3,7 @@
 
 [简体中文](README.md) | **English** | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md)
 
-[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE) [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Support on Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Support on Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
 
 **Send each app's audio to the device you choose.**
 
@@ -38,11 +38,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 | Everyday scenario | How SonicRoute helps |
 |---|---|
-| **Voice chat too loud, or game sound drowning out teammates** | Adjust voice chat (Discord) volume independently without altering game audio; keep game in headset and chat in earpiece |
-| **Listening to music or watching videos while gaming** | Route music to speakers and games to headphones; adjust music volume with the tray scroll wheel without leaving full screen |
-| **Constantly swapping headsets and changing Windows settings for games** | Create a rule: launch game → switch to headset + set volume to 40% + start voice chat; restore speakers on exit |
-| **Stepping away from the PC or taking a private call** | Mute all microphones with Ctrl+Shift+N and confirm mute state instantly via the on-screen OSD banner |
-| **Streaming on OBS or recording tutorials** | Route applications to dedicated physical or virtual audio tracks so private chats and alerts never end up in recordings |
+| 🎮 **Voice chat too loud, or game sound drowning out teammates** | Adjust voice chat (Discord) volume independently without altering game audio; keep game in headset and chat in earpiece |
+| 🎵 **Listening to music or watching videos while gaming** | Route music to speakers and games to headphones; adjust music volume with the tray scroll wheel without leaving full screen |
+| ⚡ **Constantly swapping headsets and changing Windows settings for games** | Create a rule: launch game → switch to headset + set volume to 40% + start voice chat; restore speakers on exit |
+| 🎙️ **Stepping away from the PC or taking a private call** | Mute all microphones with Ctrl+Shift+N and confirm mute state instantly via the on-screen OSD banner |
+| 📹 **Streaming on OBS or recording tutorials** | Route applications to dedicated physical or virtual audio tracks so private chats and alerts never end up in recordings |
 
 ## 🚀 Download and get started
 
@@ -52,16 +52,16 @@ For most Windows x64 users, the Microsoft Store build offers convenient installa
 
 | Version | Download | Requirements |
 |---|---|---|
-| Lite x64 (Recommended) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Standalone single-file executable; requires matching x64 .NET 8 Desktop Runtime |
-| Lite ARM64 (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Native performance on Surface Pro and Snapdragon ARM64 devices; requires matching ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 (No .NET 8 required) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
-| Microsoft Store (Auto-updates) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | One-click install with silent automatic updates; for 64-bit Windows 10/11 |
+| ⭐ Lite x64 (Recommended) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Standalone single-file executable; requires matching x64 .NET 8 Desktop Runtime |
+| ⚡ Lite ARM64 (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Native performance on Surface Pro and Snapdragon ARM64 devices; requires matching ARM64 .NET 8 Desktop Runtime |
+| 🛡️ Legacy x64 (No .NET 8 required) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
+| 🔄 Microsoft Store (Auto-updates) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | One-click install with silent automatic updates; for 64-bit Windows 10/11 |
 
 Lite requires the matching [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Legacy does not require .NET 8.
 
-1. Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.
-2. Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.
-3. Hover over the tray icon and scroll the wheel to adjust volume blindly, or use hotkeys and automation rules without leaving full-screen games.
+1. **Launch & Keep in Tray**: Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.
+2. **Select & Route Devices**: Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.
+3. **Blind Volume Control**: Hover over the tray icon and scroll the wheel to adjust volume blindly, or use hotkeys and automation rules without leaving full-screen games.
 
 `sr` connects only to an already-running SonicRoute instance; it does not start the app. Before first use, start SonicRoute normally to register the command, then close and reopen your terminal. See the [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) if device switching does not work as expected.
 
@@ -100,8 +100,8 @@ The Wiki is currently in Chinese.
 
 ## 📌 Roadmap
 
-- **v1.25 · Major update:** Details will be shared in the upcoming release notes.
-- **Later stages:** Keep refining existing features based on feedback. Plans may change as feedback comes in.
+- **v1.25 · Major Update (In Development)**: Automation orchestration expands to 6 triggers and 37 advanced actions (including recording device details, per-app mic mute, batch app volume ducking, and one-click routing reset).
+- **Upcoming Stages**: Continuously refine low-latency event listeners and zero-polling telemetry based on community feedback.
 
 [Share an idea or report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

@@ -26,9 +26,9 @@
   "storeRequirement": "One-click install with silent automatic updates; for 64-bit Windows 10/11",
   "runtimeNote": "Lite requires the matching {runtime}. Legacy does not require .NET 8.",
   "steps": [
-    "Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.",
-    "Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.",
-    "Hover over the tray icon and scroll the wheel to adjust volume blindly, or use hotkeys and automation rules without leaving full-screen games."
+    "**Launch & Keep in Tray**: Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.",
+    "**Select & Route Devices**: Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.",
+    "**Blind Volume Control**: Hover over the tray icon and scroll the wheel to adjust volume blindly, or use hotkeys and automation rules without leaving full-screen games."
   ],
   "commandNote": "`sr` connects only to an already-running SonicRoute instance; it does not start the app. Before first use, start SonicRoute normally to register the command, then close and reopen your terminal. See the {faq} if device switching does not work as expected.",
   "ruleExample": "Rule name or ID",
@@ -64,8 +64,8 @@
   "releaseInfo": "Release information",
   "roadmapTitle": "Roadmap",
   "roadmapItems": [
-    "**{nextRelease} · Major update:** Details will be shared in the upcoming release notes.",
-    "**Later stages:** Keep refining existing features based on feedback. Plans may change as feedback comes in."
+    "**{nextRelease} · Major Update (In Development)**: Automation orchestration expands to {triggerCount} triggers and {actionCount} advanced actions (including recording device details, per-app mic mute, batch app volume ducking, and one-click routing reset).",
+    "**Upcoming Stages**: Continuously refine low-latency event listeners and zero-polling telemetry based on community feedback."
   ],
   "roadmapFeedback": "Share an idea or report an issue",
   "footerDocs": "Read the guides (Chinese)",

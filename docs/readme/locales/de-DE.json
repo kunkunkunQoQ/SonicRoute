@@ -26,9 +26,9 @@
   "storeRequirement": "Ein-Klick-Installation mit automatischen Updates im Hintergrund über den Store; für 64-Bit Windows 10/11",
   "runtimeNote": "Lite benötigt die passende {runtime}. Legacy benötigt .NET 8 nicht.",
   "steps": [
-    "Nach dem Start bleibt SonicRoute im Infobereich der Taskleiste aktiv (zur dauerhaften Sichtbarkeit einfach herausziehen). Doppelklick auf das Symbol öffnet das Hauptfenster.",
-    "Wählen Sie unter Einstellungen → Beibehaltene Geräte Ihre Kopfhörer und Lautsprecher aus. Ein Klick auf das Symbol öffnet das Schnellbedienfeld zum sofortigen Weiterleiten und Regeln der Apps.",
-    "Bewegen Sie die Maus über das Taskleistensymbol und drehen Sie das Mausrad zur schnellen Lautstärkeregelung. Dank Hotkeys und Automatisierung steuern Sie alles, ohne Vollbild-Spiele zu verlassen."
+    "**Starten & im Tray behalten**: Doppelklicken zum Starten; bleibt im Infobereich aktiv. Doppelklick auf das Tray-Symbol öffnet das Hauptfenster.",
+    "**Geräte wählen & weiterleiten**: Aktivieren Sie Kopfhörer und Lautsprecher unter Einstellungen → Behaltene Geräte. Linksklick auf das Tray-Symbol öffnet das Schnellbedienfeld zum sofortigen Weiterleiten.",
+    "**Blind-Lautstärkeregelung**: Maus über das Tray-Symbol bewegen und am Rad drehen, um die Lautstärke blind zu regeln, oder Hotkeys und Automatisierungsregeln ohne Spielunterbrechung nutzen."
   ],
   "commandNote": "Bevor du `sr` zum ersten Mal verwendest, starte SonicRoute normal, damit der Befehl registriert wird, und öffne anschließend dein Terminal erneut. Wenn der Gerätewechsel nicht wie erwartet funktioniert, findest du Hilfe in den {faq}.",
   "ruleExample": "Regelname oder ID",
@@ -64,8 +64,8 @@
   "releaseInfo": "Informationen zur Version",
   "roadmapTitle": "Roadmap",
   "roadmapItems": [
-    "**{nextRelease} · Großes Update:** Details folgen in den kommenden Versionshinweisen.",
-    "**Weitere Schritte:** Bestehende Funktionen anhand von Rückmeldungen weiterentwickeln. Die Pläne können sich mit dem Feedback ändern."
+    "**{nextRelease} · Großes Update (In Entwicklung)**: Erweiterung der Automatisierung auf {triggerCount} Auslöser und {actionCount} erweiterte Aktionen (einschließlich Aufnahmegeräte-Details, App-Mikrofonsteuerung, Batch-Lautstärkeregelung und Ein-Klick-Routing-Reset).",
+    "**Weitere Phasen**: Kontinuierliche Verfeinerung ereignisgesteuerter Listener und Null-Polling-Architektur basierend auf Community-Feedback."
   ],
   "roadmapFeedback": "Idee teilen oder Problem melden",
   "footerDocs": "Anleitungen lesen (Chinesisch)",

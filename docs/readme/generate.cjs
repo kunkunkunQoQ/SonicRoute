@@ -47,11 +47,13 @@ function render(language, text) {
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
     return variables[key];
   });
+  const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 '];
+  const editionIcons = ['⭐ ', '⚡ ', '🛡️ ', '🔄 '];
   const rows = [
-    [text.editionLiteX64, link(text.singleExe, downloadAsset('Lite-x64.exe')), text.liteRequirement],
-    [text.editionLiteArm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-arm64.exe')), text.arm64Requirement],
-    [text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
-    [text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
+    [editionIcons[0] + text.editionLiteX64, link(text.singleExe, downloadAsset('Lite-x64.exe')), text.liteRequirement],
+    [editionIcons[1] + text.editionLiteArm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-arm64.exe')), text.arm64Requirement],
+    [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
+    [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ');
   const sponsorBadge = language.locale === 'zh-CN' ? '赞助-爱发电' : 'Support-Afdian';
@@ -62,8 +64,10 @@ function render(language, text) {
   return [
     '<!-- Generated from docs/readme/shared.json and docs/readme/locales/' + language.locale + '.json. Edit those sources, then run node docs/readme/generate.cjs. -->',
     '# 🎧 ' + text.title, '', navigation, '',
-    '[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE) ' +
-      `[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](${releaseUrl}) ` +
+    `[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](${releaseUrl}) ` +
+      '[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) ' +
+      `[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](${shared.repository}) ` +
+      `[![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](${releaseUrl}) ` +
       `[![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](${releaseUrl}) ` + sponsor, '',
     '**' + text.tagline + '**', '', text.intro, '',
     '📥 ' + [link(text.download, releaseUrl + '/latest'), link('Microsoft Store', shared.store), link(text.guide, wiki(pages.guide)), link(text.wiki, shared.repository + '/wiki')].join(' · '), '',
@@ -77,7 +81,7 @@ function render(language, text) {
     '## 🎮 ' + text.useCasesTitle, '',
     automationImage + ' ' + text.automationExample + ' ' + link(text.configureAutomation, wiki(pages.automationGuide)), '',
     '| ' + [text.scenario, text.whatYouCanDo].join(' | ') + ' |', '|---|---|',
-    ...text.useCaseNames.map((scenario, index) => '| ' + tableCell(scenario) + ' | ' + tableCell(fill(text.useCaseActions[index])) + ' |'), '',
+    ...text.useCaseNames.map((scenario, index) => '| ' + tableCell((scenarioIcons[index] || '') + scenario) + ' | ' + tableCell(fill(text.useCaseActions[index])) + ' |'), '',
     '## 🚀 ' + text.downloadTitle, '',
     '**' + text.currentRelease + colon + link(shared.release, releaseUrl + '/tag/' + shared.release) + '** · ' + shared.releaseDate + ' · ' + link(text.releaseNotes, shared.releaseNotes), '',
     fill(text.downloadIntro), '',

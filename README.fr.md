@@ -3,7 +3,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | **Français** | [Español](README.es.md) | [Русский](README.ru.md)
 
-[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE) [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Soutenir sur Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Soutenir sur Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
 
 **Envoyez le son de chaque application vers l’appareil de votre choix.**
 
@@ -38,11 +38,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d�
 
 | Votre scénario quotidien | Comment SonicRoute vous aide |
 |---|---|
-| **Chat vocal trop fort ou sons du jeu couvrant vos coéquipiers** | Réglez le volume de Discord indépendamment sans toucher au jeu ; jeu dans le casque et chat sur écouteur dédié |
-| **Écouter de la musique ou regarder une vidéo tout en jouant** | Musique sur les haut-parleurs et jeu dans le casque ; ajustez le volume via la molette sur la zone de notification |
-| **Changer de casque et modifier les paramètres Windows à chaque jeu** | Règle auto : lancer le jeu → basculer sur casque + volume à 40 % + lancer Discord ; retour enceintes à la fermeture |
-| **S'éloigner du PC ou passer un appel privé rapidement** | Coupez tous les micros avec Ctrl+Maj+N et confirmez l'état en un coup d'œil grâce à la bannière OSD à l'écran |
-| **Diffusion en direct sur OBS ou enregistrement de tutoriels** | Attribuez des pistes audio distinctes par application pour ne jamais inclure vos conversations privées en vidéo |
+| 🎮 **Chat vocal trop fort ou sons du jeu couvrant vos coéquipiers** | Réglez le volume de Discord indépendamment sans toucher au jeu ; jeu dans le casque et chat sur écouteur dédié |
+| 🎵 **Écouter de la musique ou regarder une vidéo tout en jouant** | Musique sur les haut-parleurs et jeu dans le casque ; ajustez le volume via la molette sur la zone de notification |
+| ⚡ **Changer de casque et modifier les paramètres Windows à chaque jeu** | Règle auto : lancer le jeu → basculer sur casque + volume à 40 % + lancer Discord ; retour enceintes à la fermeture |
+| 🎙️ **S'éloigner du PC ou passer un appel privé rapidement** | Coupez tous les micros avec Ctrl+Maj+N et confirmez l'état en un coup d'œil grâce à la bannière OSD à l'écran |
+| 📹 **Diffusion en direct sur OBS ou enregistrement de tutoriels** | Attribuez des pistes audio distinctes par application pour ne jamais inclure vos conversations privées en vidéo |
 
 ## 🚀 Télécharger et commencer
 
@@ -52,16 +52,16 @@ Pour la plupart des PC Windows x64, la version du Microsoft Store offre une inst
 
 | Édition | Télécharger | Configuration requise |
 |---|---|---|
-| Lite x64 (Recommandé) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Exécutable autonome à fichier unique ; nécessite le .NET 8 Desktop Runtime x64 correspondant |
-| Lite ARM64 (expérimental) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Performances natives sur Surface Pro et PC Snapdragon ARM64 ; nécessite le .NET 8 Desktop Runtime ARM64 |
-| Legacy x64 (Sans .NET 8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | Aucun .NET 8 requis ; s'exécute directement via le .NET Framework 4.8 intégré ; décompressez le ZIP |
-| Microsoft Store (Mises à jour auto) | [Installer depuis le Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Installation en un clic avec mises à jour automatiques via le Microsoft Store ; pour Windows 10/11 64 bits |
+| ⭐ Lite x64 (Recommandé) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Exécutable autonome à fichier unique ; nécessite le .NET 8 Desktop Runtime x64 correspondant |
+| ⚡ Lite ARM64 (expérimental) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Performances natives sur Surface Pro et PC Snapdragon ARM64 ; nécessite le .NET 8 Desktop Runtime ARM64 |
+| 🛡️ Legacy x64 (Sans .NET 8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | Aucun .NET 8 requis ; s'exécute directement via le .NET Framework 4.8 intégré ; décompressez le ZIP |
+| 🔄 Microsoft Store (Mises à jour auto) | [Installer depuis le Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Installation en un clic avec mises à jour automatiques via le Microsoft Store ; pour Windows 10/11 64 bits |
 
 Lite nécessite le [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) correspondant. Legacy ne nécessite pas .NET 8.
 
-1. Lancez l'application : elle reste active dans la zone de notification (glissez-la hors du menu masqué pour la fixer). Double-cliquez pour ouvrir la fenêtre principale.
-2. Cochez vos casques et haut-parleurs dans Paramètres → Périphériques conservés. Cliquez sur l'icône de la barre des tâches pour ouvrir le panneau rapide et router vos applications.
-3. Survolez l'icône dans la zone de notification et tournez la molette pour ajuster le volume à l'aveugle. Raccourcis et règles d'automatisation permettent de tout contrôler sans quitter vos jeux plein écran.
+1. **Lancer & garder en barre des tâches** : Double-cliquez pour démarrer ; reste actif dans la zone de notification. Double-cliquez sur l'icône pour ouvrir la fenêtre principale.
+2. **Sélectionner & router les périphériques** : Cochez vos casques et haut-parleurs dans Paramètres → Périphériques conservés. Cliquez sur l'icône pour afficher le panneau rapide et router chaque application.
+3. **Contrôle du volume à l'aveugle** : Survolez l'icône de notification et utilisez la molette pour ajuster le volume à l'aveugle, ou utilisez des raccourcis et des règles d'automatisation sans quitter vos jeux.
 
 Avant d’utiliser `sr` pour la première fois, lancez SonicRoute normalement pour enregistrer la commande, puis ouvrez de nouveau votre terminal. Si le changement de périphérique ne fonctionne pas comme prévu, consultez la [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
@@ -100,8 +100,8 @@ Le Wiki est actuellement en chinois simplifié.
 
 ## 📌 Feuille de route
 
-- **v1.25 · Mise à jour majeure :** les détails seront présentés dans les prochaines notes de version.
-- **Étapes suivantes :** continuer à améliorer les fonctions existantes selon vos retours. Les projets peuvent évoluer en fonction des commentaires reçus.
+- **v1.25 · Mise à jour majeure (En développement)** : Extension de l'automatisation à 6 déclencheurs et 37 actions avancées (sélection détaillée d'enregistrement, contrôle micro par application, volume global par lot et réinitialisation en un clic).
+- **Étapes ultérieures** : Perfectionnement continu des écouteurs d'événements à faible latence et de l'architecture sans scrutation selon les retours de la communauté.
 
 [Partager une idée ou signaler un problème](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

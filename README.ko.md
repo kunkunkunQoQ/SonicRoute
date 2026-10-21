@@ -3,7 +3,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | **한국어** | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md)
 
-[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE) [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
 
 **앱마다 원하는 오디오 장치를 지정하세요.**
 
@@ -38,11 +38,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 | 일상 속 사용 시나리오 | SonicRoute의 해결 방법 |
 |---|---|
-| **음성 채팅이 너무 크거나 게임 소리에 팀원 목소리가 묻힐 때** | Discord 등 음성 채팅 볼륨만 따로 조절하여 게임 사운드를 유지하고, 게임과 음성을 분리 출력 |
-| **게임을 하면서 배경으로 음악이나 영상을 재생할 때** | 음악은 스피커로, 게임은 헤드폰으로 출력. 전체화면 게임을 나가지 않고 작업표시줄 휠 스크롤로 조절 |
-| **게임을 할 때마다 헤드셋을 다시 연결하거나 설정을 바꿀 때** | 게임 실행 시 '헤드셋 전환 + 볼륨 40% + 음성 앱 실행', 게임 종료 시 스피커로 자동 복귀 규칙 설정 |
-| **잠시 자리를 비우거나 개인적인 통화를 해야 할 때** | Ctrl+Shift+N으로 모든 마이크를 즉시 음소거하고, 화면 OSD 배너로 상태를 한눈에 확인 |
-| **OBS 게임 방송 또는 화면 녹화 튜토리얼 제작 시** | 앱별로 독립된 오디오 트랙을 지정하여 개인 대화나 알림음이 녹화에 섞여 들어가는 것 방지 |
+| 🎮 **음성 채팅이 너무 크거나 게임 소리에 팀원 목소리가 묻힐 때** | Discord 등 음성 채팅 볼륨만 따로 조절하여 게임 사운드를 유지하고, 게임과 음성을 분리 출력 |
+| 🎵 **게임을 하면서 배경으로 음악이나 영상을 재생할 때** | 음악은 스피커로, 게임은 헤드폰으로 출력. 전체화면 게임을 나가지 않고 작업표시줄 휠 스크롤로 조절 |
+| ⚡ **게임을 할 때마다 헤드셋을 다시 연결하거나 설정을 바꿀 때** | 게임 실행 시 '헤드셋 전환 + 볼륨 40% + 음성 앱 실행', 게임 종료 시 스피커로 자동 복귀 규칙 설정 |
+| 🎙️ **잠시 자리를 비우거나 개인적인 통화를 해야 할 때** | Ctrl+Shift+N으로 모든 마이크를 즉시 음소거하고, 화면 OSD 배너로 상태를 한눈에 확인 |
+| 📹 **OBS 게임 방송 또는 화면 녹화 튜토리얼 제작 시** | 앱별로 독립된 오디오 트랙을 지정하여 개인 대화나 알림음이 녹화에 섞여 들어가는 것 방지 |
 
 ## 🚀 다운로드 및 시작하기
 
@@ -52,16 +52,16 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| Lite x64 (권장·표준) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 설치 없는 단일 실행 파일; 시스템 아키텍처에 맞는 x64 .NET 8 Desktop Runtime 필요 |
-| Lite ARM64 (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro 및 Snapdragon ARM64 기기에서 네이티브 고속 실행; ARM64 .NET 8 Desktop Runtime 필요 |
-| Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
-| Microsoft Store (자동 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 원클릭 설치 및 MS Store를 통한 자동 백그라운드 업데이트; 64비트 Windows 10/11 지원 |
+| ⭐ Lite x64 (권장·표준) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 설치 없는 단일 실행 파일; 시스템 아키텍처에 맞는 x64 .NET 8 Desktop Runtime 필요 |
+| ⚡ Lite ARM64 (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro 및 Snapdragon ARM64 기기에서 네이티브 고속 실행; ARM64 .NET 8 Desktop Runtime 필요 |
+| 🛡️ Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
+| 🔄 Microsoft Store (자동 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 원클릭 설치 및 MS Store를 통한 자동 백그라운드 업데이트; 64비트 Windows 10/11 지원 |
 
 Lite에는 호환되는 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)이 필요합니다. Legacy에는 .NET 8이 필요하지 않습니다.
 
-1. 실행 후 시스템 트레이에 상주합니다(숨겨진 아이콘 영역에서 끌어내 고정 가능). 트레이 아이콘을 더블 클릭하면 메인 창이 열립니다.
-2. 「설정 → 보존할 장치」에서 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 띄우고 앱별 출력 장치와 볼륨을 즉시 조절하세요.
-3. 트레이 아이콘 위에 마우스를 올리고 휠을 굴려 즉시 볼륨을 조절할 수 있습니다. 단축키와 자동화 규칙을 결합하면 전체화면 게임 중에도 화면 전환 없이 완벽하게 제어할 수 있습니다.
+1. **실행 및 트레이 상주**: 더블 클릭하여 실행하면 트레이 영역에 상주합니다. 트레이 아이콘을 더블 클릭하여 메인 창을 엽니다.
+2. **장치 선택 및 라우팅**: '설정 → 유지할 장치'에서 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 열고, 슬라이더로 앱별 사운드를 즉시 라우팅합니다.
+3. **손쉬운 블라인드 조절**: 트레이 아이콘 위에 마우스를 올리고 휠을 굴려 볼륨을 빠르게 조절하거나, 단축키와 자동화 규칙을 활용하여 전체 화면 게임 중에도 손쉽게 제어할 수 있습니다.
 
 `sr`을 처음 사용하기 전에 SonicRoute를 일반 실행해 명령을 등록한 다음 터미널을 다시 여세요. 장치 전환이 예상대로 작동하지 않으면 [자주 묻는 질문](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)를 참고하세요.
 
@@ -100,8 +100,8 @@ A: 거의 없습니다. 순수 Windows 시스템 이벤트 구동 구조를 채�
 
 ## 📌 로드맵
 
-- **v1.25 · 대규모 업데이트:** 자세한 내용은 추후 릴리스 노트에서 안내합니다.
-- **향후 단계:** 의견을 바탕으로 기존 기능을 계속 다듬습니다. 계획은 피드백에 따라 변경될 수 있습니다.
+- **v1.25 · 주요 업데이트 (개발 중)**: 자동화 오케스트레이션을 6개 트리거 및 37개 고급 작업으로 대폭 확장 (녹음 장치 세분화, 앱별 마이크 개별 제어, 전체 앱 일괄 볼륨 조절 및 원클릭 라우팅 리셋 지원).
+- **향후 계획**: 커뮤니티 피드백을 바탕으로 저지연 이벤트 리스너와 제로 폴링 설계를 지속적으로 개선.
 
 [아이디어 공유 또는 문제 제보](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

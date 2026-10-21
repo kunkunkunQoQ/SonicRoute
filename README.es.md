@@ -3,7 +3,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | **Español** | [Русский](README.ru.md)
 
-[![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=green)](LICENSE) [![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Apoyar en Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Apoyar en Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://www.ifdian.net/a/koukou021)
 
 **Envía el audio de cada aplicación al dispositivo que elijas.**
 
@@ -38,11 +38,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de 
 
 | Escenario cotidiano | Cómo le ayuda SonicRoute |
 |---|---|
-| **Chat de voz muy alto o el juego tapa la voz de los compañeros** | Ajuste el volumen de Discord sin alterar el juego; mantenga el juego en auriculares y el chat en el microauricular |
-| **Escuchar música o ver vídeos mientras juegas en segundo plano** | Música a los altavoces y juego a los auriculares; ajuste el volumen con la rueda en la bandeja sin salir del juego |
-| **Cambiar cables de auriculares y ajustar Windows cada vez que juegas** | Regla rápida: abrir juego → pasar a auriculares + volumen 40 % + abrir chat; volver a altavoces al salir |
-| **Alejarse del equipo o atender una llamada privada al instante** | Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla |
-| **Transmisión con OBS o grabación de tutoriales de pantalla** | Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación |
+| 🎮 **Chat de voz muy alto o el juego tapa la voz de los compañeros** | Ajuste el volumen de Discord sin alterar el juego; mantenga el juego en auriculares y el chat en el microauricular |
+| 🎵 **Escuchar música o ver vídeos mientras juegas en segundo plano** | Música a los altavoces y juego a los auriculares; ajuste el volumen con la rueda en la bandeja sin salir del juego |
+| ⚡ **Cambiar cables de auriculares y ajustar Windows cada vez que juegas** | Regla rápida: abrir juego → pasar a auriculares + volumen 40 % + abrir chat; volver a altavoces al salir |
+| 🎙️ **Alejarse del equipo o atender una llamada privada al instante** | Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla |
+| 📹 **Transmisión con OBS o grabación de tutoriales de pantalla** | Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación |
 
 ## 🚀 Descarga y primeros pasos
 
@@ -52,16 +52,16 @@ Para la mayoría de equipos Windows x64, la versión de Microsoft Store ofrece u
 
 | Edición | Descargar | Requisitos |
 |---|---|---|
-| Lite x64 (Recomendado) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Ejecutable independiente de archivo único; requiere el entorno .NET 8 Desktop Runtime x64 correspondiente |
-| Lite ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Rendimiento nativo en Surface Pro y dispositivos Snapdragon ARM64; requiere .NET 8 Desktop Runtime ARM64 |
-| Legacy x64 (Sin .NET 8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP |
-| Microsoft Store (Actualización auto) | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Instalación con un clic y actualizaciones automáticas silenciosas desde la tienda; para Windows 10/11 de 64 bits |
+| ⭐ Lite x64 (Recomendado) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Ejecutable independiente de archivo único; requiere el entorno .NET 8 Desktop Runtime x64 correspondiente |
+| ⚡ Lite ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Rendimiento nativo en Surface Pro y dispositivos Snapdragon ARM64; requiere .NET 8 Desktop Runtime ARM64 |
+| 🛡️ Legacy x64 (Sin .NET 8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP |
+| 🔄 Microsoft Store (Actualización auto) | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Instalación con un clic y actualizaciones automáticas silenciosas desde la tienda; para Windows 10/11 de 64 bits |
 
 Lite necesita el [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) correspondiente. Legacy no requiere .NET 8.
 
-1. Ejecútelo y permanecerá en la bandeja del sistema (arrástrelo fuera del menú desplegable para fijarlo). Haga doble clic en el icono para abrir la interfaz principal.
-2. Marque sus auriculares y altavoces en Configuración → Dispositivos conservados. Haga clic izquierdo en el icono para abrir el panel rápido y enrutar el audio de cada app.
-3. Pase el cursor sobre el icono de la bandeja y gire la rueda del ratón para ajustar el volumen al instante, o use atajos y automatización sin salir de sus juegos a pantalla completa.
+1. **Iniciar y mantener en bandeja**: Haz doble clic para iniciar; permanece en la bandeja del sistema. Doble clic en el icono para abrir la ventana principal.
+2. **Seleccionar y enrutar dispositivos**: Marca tus auriculares y altavoces en Configuración → Dispositivos conservados. Clic izquierdo para abrir el panel rápido y enrutar cada app al instante.
+3. **Control de volumen a ciegas**: Pasa el ratón sobre el icono y gira la rueda para ajustar el volumen a ciegas, o usa atajos y reglas de automatización sin salir del juego.
 
 Antes de usar `sr` por primera vez, inicia SonicRoute con normalidad para registrar el comando y vuelve a abrir el terminal. Si el cambio de dispositivo no funciona como esperabas, consulta las [Preguntas frecuentes](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
@@ -100,8 +100,8 @@ La Wiki está actualmente en chino simplificado.
 
 ## 📌 Hoja de ruta
 
-- **v1.25 · Actualización importante:** los detalles se anunciarán en las próximas notas de la versión.
-- **Etapas posteriores:** seguir perfeccionando las funciones existentes según los comentarios. Los planes pueden cambiar a medida que recibamos sugerencias.
+- **v1.25 · Actualización importante (En desarrollo)**: Ampliación de automatización a 6 desencadenadores y 37 acciones avanzadas (selección de grabación, micro por app, ajuste de volumen por lotes y restablecimiento en un clic).
+- **Etapas posteriores**: Perfeccionamiento continuo de escucha de eventos de baja latencia y arquitectura sin sondeo según comentarios de la comunidad.
 
 [Comparte una idea o informa de un problema](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
