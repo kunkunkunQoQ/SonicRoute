@@ -112,6 +112,7 @@ namespace SonicRoute
             if (HeaderTitleText != null)
                 HeaderTitleText.Text = $"SonicRoute {App.DisplayVersion}";
             _config = ConfigService.Load();
+            InitializeUpdateNotifications();
 
             Loaded += async (_, _) =>
             {
@@ -2784,109 +2785,6 @@ namespace SonicRoute
             {
                 // 打开失败静默
             }
-        }
-
-        private bool _checkingUpdate;
-        private static class UpdateHttpClient
-        {
-            internal static readonly HttpClient Instance = CreateUpdateHttp();
-            // Opening the window must not initialize the optional networking client.
-            static UpdateHttpClient() { }
-        }
-
-        private static HttpClient CreateUpdateHttp()
-        {
-            var h = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            h.DefaultRequestHeaders.UserAgent.ParseAdd("SonicRoute");
-            return h;
-        }
-
-        /// <summary>检查更新：仅点击触发，不自动检测；商店版与非商店版行为不同。</summary>
-        private void CheckUpdate_Click(object sender, RoutedEventArgs e)
-        {
-            if (_checkingUpdate) return;
-            _checkingUpdate = true;
-            try { CheckUpdateRun.Text = L10n.T("St.CheckingUpdate"); }
-            catch { /* 忽略 */ }
-            _ = CheckUpdateAsync();
-        }
-
-        private async Task CheckUpdateAsync()
-        {
-            string? remoteTag = null;
-            try
-            {
-                using var resp = await UpdateHttpClient.Instance.GetAsync("https://api.github.com/repos/kunkunkunQoQ/SonicRoute/releases/latest", _uiLifetime.Token);
-                if (!resp.IsSuccessStatusCode) { FinishCheck(null); return; }
-                using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-                if (doc.RootElement.TryGetProperty("tag_name", out var tag)) remoteTag = tag.GetString();
-            }
-            catch
-            {
-                FinishCheck(null);
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(remoteTag)) { FinishCheck(null); return; }
-            var newer = IsNewerVersion(remoteTag);
-            if (newer == null) { FinishCheck(null); return; }
-            FinishCheck(newer.Value, remoteTag);
-        }
-
-        /// <summary>检查结果回 UI 线程弹窗：hasUpdate=null 失败；true 有新版（商店版引导去微软商店，非商店版去 GitHub）；false 已是最新。</summary>
-        private void FinishCheck(bool? hasUpdate, string? remoteTag = null)
-        {
-            if (_isClosed) return;
-            _checkingUpdate = false;
-            try { CheckUpdateRun.Text = L10n.T("St.CheckUpdate"); }
-            catch { /* 忽略 */ }
-            var title = L10n.T("St.CheckUpdate");
-            if (hasUpdate == null)
-            {
-                System.Windows.MessageBox.Show(L10n.T("St.UpdateCheckFailed"), title, MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (hasUpdate.Value)
-            {
-                var msg = string.Format(L10n.T("St.UpdateAvailable"), remoteTag ?? string.Empty) + "\n" +
-                          (IsPackaged() ? L10n.T("St.UpdateOpenStore") : L10n.T("St.UpdateGoDownload"));
-                if (System.Windows.MessageBox.Show(msg, title, MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
-                {
-                    var url = IsPackaged()
-                        ? "ms-windows-store://pdp/?ProductId=9NQZGRTPM1NT"
-                        : "https://github.com/kunkunkunQoQ/SonicRoute/releases/latest";
-                    try
-                    {
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
-                    }
-                    catch
-                    {
-                        // 打开失败静默
-                    }
-                }
-                return;
-            }
-            System.Windows.MessageBox.Show(L10n.T("St.UpdateLatest"), title, MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private static bool? IsNewerVersion(string remoteTag)
-        {
-            var r = ParseVersion(remoteTag);
-            var l = ParseVersion(App.DisplayVersion);
-            if (r == null || l == null) return null;
-            return r.Value.CompareTo(l.Value) > 0;
-        }
-
-        /// <summary>解析 vX.Y[.Z][rN]（r 无数字=1）；返回 (主, 次, 修订, rN)。</summary>
-        private static (int Major, int Minor, int Rev, int R)? ParseVersion(string s)
-        {
-            if (string.IsNullOrWhiteSpace(s)) return null;
-            s = s.Trim();
-            if (s.StartsWith("v", StringComparison.OrdinalIgnoreCase)) s = s.Substring(1);
-            var m = Regex.Match(s, @"^(\d+)\.(\d+)(?:\.(\d+))?(?:r(\d*))?$");
-            if (!m.Success) return null;
-            int rev = m.Groups[3].Success ? int.Parse(m.Groups[3].Value) : 0;
-            int rn = m.Groups[4].Success ? (m.Groups[4].Length == 0 ? 1 : int.Parse(m.Groups[4].Value)) : 0;
-            return (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value), rev, rn);
         }
 
         // ==================================================================

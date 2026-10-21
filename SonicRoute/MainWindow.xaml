@@ -840,6 +840,7 @@
                         </StackPanel>
                     </Border>
 
+                    <ContentControl x:Name="UpdatesHost"/>
                     <!-- ⑥ 其他 + 关于 -->
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
@@ -871,12 +872,6 @@
                                 <Hyperlink x:Name="GithubLink" Click="GithubLink_Click"
                                            Foreground="{DynamicResource Theme.Accent}">
                                     <Run Text="GitHub"/>
-                                </Hyperlink>
-                                <Run Text=" ‖ "/>
-                                <Hyperlink x:Name="CheckUpdateLink" Click="CheckUpdate_Click"
-                                           Foreground="{DynamicResource Theme.Accent}">
-                                    <Run x:Name="CheckUpdateRun"
-                                         Text="{Binding [St.CheckUpdate], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                 </Hyperlink>
                             </TextBlock>
                         </StackPanel>
@@ -1019,6 +1014,10 @@
                            MouseLeftButtonDown="Titlebar_MouseDown"
                            ToolTip="拖动移动窗口"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <Button x:Name="UpdateNoticeButton" Visibility="Collapsed" Style="{StaticResource GhostButton}"
+                            Margin="0,0,12,0" Padding="10,4" MaxWidth="300" Click="UpdateNotice_Click">
+                        <TextBlock x:Name="UpdateNoticeText" Margin="12,0" TextTrimming="CharacterEllipsis"/>
+                    </Button>
                     <Button Content="─" Style="{StaticResource TitleBarButton}" Click="TitlebarMin_Click" ToolTip="最小化"/>
                     <Button Content="□" Style="{StaticResource TitleBarButton}" Click="TitlebarMax_Click" ToolTip="最大化 / 还原"/>
                     <Button Content="✕" Style="{StaticResource TitleCloseButton}" Click="TitlebarClose_Click" ToolTip="关闭"/>

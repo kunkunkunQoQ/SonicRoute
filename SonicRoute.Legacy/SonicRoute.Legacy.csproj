@@ -16,6 +16,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <StartupObject>SonicRoute.Program</StartupObject>
     <TargetFramework>net48</TargetFramework>
     <!-- net48 的 SDK 默认 LangVersion 为 C# 7.3，与 Nullable=enable 直接冲突（CS8630），必须显式提升 -->
     <LangVersion>latest</LangVersion>
@@ -33,7 +34,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
     <!-- 版本号与 .NET 8 主版本保持一致（UI 显示联动，配置/规则格式互通） -->
-    <AssemblyTitle>SonicRoute</AssemblyTitle>
+    <AssemblyTitle>SonicRoute Legacy</AssemblyTitle>
     <Product>音跃 SonicRoute</Product>
     <Authors>困困困</Authors>
     <Company>困困困</Company>
@@ -47,6 +48,8 @@
   <!-- net48 的 SDK 不会自动引用 System.Net.Http（.NET Core 才有隐式引用），MainWindow 的更新检查需要它 -->
   <ItemGroup>
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>
 
   <!-- ============ 共享源码（Link，不复制） ============ -->

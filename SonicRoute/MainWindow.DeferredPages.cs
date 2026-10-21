@@ -92,8 +92,6 @@ namespace SonicRoute
         internal Hyperlink BiliLink = null!;
         internal Hyperlink IfdianLink = null!;
         internal Hyperlink GithubLink = null!;
-        internal Hyperlink CheckUpdateLink = null!;
-        internal Run CheckUpdateRun = null!;
 
         internal Grid HotkeysPage = null!;
         internal ItemsControl HotkeyList = null!;
@@ -219,9 +217,8 @@ namespace SonicRoute
                 BiliLink = FindDeferredControl<Hyperlink>(content, nameof(BiliLink));
                 IfdianLink = FindDeferredControl<Hyperlink>(content, nameof(IfdianLink));
                 GithubLink = FindDeferredControl<Hyperlink>(content, nameof(GithubLink));
-                CheckUpdateLink = FindDeferredControl<Hyperlink>(content, nameof(CheckUpdateLink));
-                CheckUpdateRun = FindDeferredControl<Run>(content, nameof(CheckUpdateRun));
                 SettingsPageHost.Child = content;
+                InitializeUpdateSettings(FindDeferredControl<ContentControl>(content, "UpdatesHost"));
                 FixedAppCombo.DropDownOpened += AppCombo_DropDownOpened;
             }
             finally
@@ -393,8 +390,6 @@ namespace SonicRoute
             BiliLink = null!;
             IfdianLink = null!;
             GithubLink = null!;
-            CheckUpdateLink = null!;
-            CheckUpdateRun = null!;
         }
     }
 }

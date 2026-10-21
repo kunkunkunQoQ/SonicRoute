@@ -17,6 +17,11 @@ namespace SonicRoute.Core
 
         public bool StartMinimized { get; set; } = true;
 
+        /// <summary>Portable editions check once at startup when the last attempt is at least 24 hours old.</summary>
+        public bool AutoCheckUpdates { get; set; } = false;
+        public string IgnoredUpdateVersion { get; set; } = "";
+        public DateTime LastUpdateCheckUtc { get; set; } = DateTime.MinValue;
+
         /// <summary>全局快捷键：动作名 → 组合键描述（如 "Ctrl+Alt+1"）。</summary>
         public Dictionary<string, string> Hotkeys { get; set; } = new();
 

@@ -70,6 +70,8 @@ namespace SonicRoute
                 else ToggleQuickPanel();
             });
             AddTrayAction(menu, L10n.T("Tray.OpenMain"), ShowMainWindow);
+            if (Updates.ShouldNotify)
+                AddTrayAction(menu, string.Format(L10n.T("Upd.Notice"), Updates.Release!.Tag), ShowUpdateSettings);
             AddTraySeparator(menu.Items);
             AddTrayAudioItems(menu, foregroundPid);
             menu.Items.Add(BuildFavoriteRulesMenu(menu));

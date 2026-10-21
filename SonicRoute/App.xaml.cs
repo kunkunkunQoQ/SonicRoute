@@ -74,7 +74,7 @@ namespace SonicRoute
             base.OnStartup(e);
 
 
-            var commandMode = RuleCommandLine.Parse(e.Args, out var ruleSelector);
+            var commandMode = RuleCommandLine.Parse(SonicRoute.Updates.UpdateBootstrap.Pending != null ? Array.Empty<string>() : e.Args, out var ruleSelector);
             if (commandMode == RuleCommandLine.Mode.Help || commandMode == RuleCommandLine.Mode.Invalid)
             {
                 if (commandMode == RuleCommandLine.Mode.Help)
@@ -202,6 +202,7 @@ namespace SonicRoute
 
             // 后台预热音频会话/应用缓存，避免首次滚轮/切语言时在 UI 线程做重量级 COM 枚举
             var audioWarmup = WarmupAudioAsync();
+            StartUpdates(Task.WhenAll(foregroundWarmup, audioWarmup));
             _ = ReclaimAfterWarmupAsync(foregroundWarmup, audioWarmup);
             StartRuleCommandServer(audioWarmup);
 
@@ -878,6 +879,7 @@ namespace SonicRoute
         private void Quit()
         {
             _exiting = true;
+            Updates.Dispose();
             _mainWindow?.FlushPendingSettings();
             CancelUiReclaim();
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
@@ -895,6 +897,7 @@ namespace SonicRoute
 
         protected override void OnExit(ExitEventArgs e)
         {
+            Updates.Dispose();
             _exiting = true;
             _mainWindow?.FlushPendingSettings();
             CancelUiReclaim();
