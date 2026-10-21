@@ -81,7 +81,6 @@ The Wiki is currently in Chinese.
 ## 🧩 Other projects and combinations
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: A Windows audio player. Combine it with the Launch program action to play sound effects from hotkeys. [Setup guide (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-- **[WinAudioRoute](https://github.com/kunkunkunQoQ/WinAudioRoute)**: A .NET library for Windows audio devices, sessions, per-app routing, events and CLI access.
 
 <a href="https://github.com/kunkunkunQoQ/XiaoYue-Comics" title="XiaoYue Comics"><img src="docs/images/mascot-comics.png" width="84" align="left" alt="Click XiaoYue peeking out of an eggshell with a comic book to read the series"></a>
 

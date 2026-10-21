@@ -92,7 +92,7 @@ function render(language, text) {
     link(text.roadmapFeedback, shared.repository + '/issues/new/choose') + period, '',
     '## 🧩 ' + text.otherTitle, '',
     '- **' + link('SilentPlayer', shared.projects.silentPlayer) + '**' + colon + text.silentPlayer + ' ' + link(text.combinationGuide, wiki(pages.guide) + '#' + encodeURIComponent(shared.combinationAnchor)),
-    '- **' + link('WinAudioRoute', shared.projects.winAudioRoute) + '**' + colon + text.winAudioRoute, '',
+    '',
     `<a href="${shared.projects.xiaoYueComics}" title="${attr(text.comicTitle)}"><img src="docs/images/mascot-comics.png" width="84" align="left" alt="${attr(text.comicAlt)}"></a>`, '',
     '**' + link(text.comicTitle, shared.projects.xiaoYueComics) + '**', '',
     text.comicDescription, '', '<br clear="all">', '', '---', '',

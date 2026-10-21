@@ -81,7 +81,6 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 ## 🧩 Другие проекты и сочетания
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: Аудиоплеер для Windows. Используйте действие запуска программы в автоматизации, чтобы включать звуковые эффекты с помощью горячих клавиш. [Руководство по настройке (на китайском)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-- **[WinAudioRoute](https://github.com/kunkunkunQoQ/WinAudioRoute)**: .NET-библиотека для аудиоустройств и сеансов Windows, маршрутизации звука приложений, событий и доступа через CLI.
 
 <a href="https://github.com/kunkunkunQoQ/XiaoYue-Comics" title="XiaoYue Comics"><img src="docs/images/mascot-comics.png" width="84" align="left" alt="Нажмите на Сяоюэ с комиксом в яичной скорлупе, чтобы читать серию"></a>
 

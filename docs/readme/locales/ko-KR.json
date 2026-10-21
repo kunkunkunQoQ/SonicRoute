@@ -44,7 +44,6 @@
   "otherTitle": "다른 프로젝트와 함께 사용하기",
   "silentPlayer": "Windows용 오디오 플레이어입니다. 자동화의 ‘프로그램 실행’ 동작과 함께 사용하면 단축키로 효과음을 재생할 수 있습니다.",
   "combinationGuide": "설정 가이드(중국어 간체)",
-  "winAudioRoute": "Windows 오디오 장치, 세션, 앱별 라우팅, 이벤트 및 CLI 접근을 위한 .NET 라이브러리입니다.",
   "thanks": "SonicRoute를 사용해 주셔서 감사합니다.",
   "author": "제작자",
   "easterEgg": "쉬고 있는 마스코트를 클릭해 이스터 에그 찾기",

@@ -44,7 +44,6 @@
   "otherTitle": "其他專案與組合用法",
   "silentPlayer": "Windows 音訊播放器。搭配「啟動程式」動作，即可透過快速鍵播放音效。",
   "combinationGuide": "設定指南（簡體中文）",
-  "winAudioRoute": "供 Windows 音訊裝置、工作階段、各應用程式路由、事件與 CLI 存取使用的 .NET 程式庫。",
   "thanks": "感謝使用 SonicRoute。",
   "author": "作者",
   "easterEgg": "發現彩蛋",

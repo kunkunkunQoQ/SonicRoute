@@ -81,7 +81,6 @@ Lite 需要相符的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/downl
 ## 🧩 其他專案與組合用法
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**：Windows 音訊播放器。搭配「啟動程式」動作，即可透過快速鍵播放音效。 [設定指南（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-- **[WinAudioRoute](https://github.com/kunkunkunQoQ/WinAudioRoute)**：供 Windows 音訊裝置、工作階段、各應用程式路由、事件與 CLI 存取使用的 .NET 程式庫。
 
 <a href="https://github.com/kunkunkunQoQ/XiaoYue-Comics" title="小躍的奇妙日常"><img src="docs/images/mascot-comics.png" width="84" align="left" alt="點擊從蛋殼裡探頭、抱著漫畫冊的小躍，閱讀漫畫連載"></a>
 
