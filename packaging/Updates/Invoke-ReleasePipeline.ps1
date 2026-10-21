@@ -535,13 +535,12 @@ function Publish-ReleaseToGitHub {
 
     # Phase C: Remote Verification
     Write-Host "    Verifying remote release and assets on GitHub..."
-    $remoteRelease = $null
-    Invoke-WithRetry -Description "Query remote release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
+    $remoteRelease = Invoke-WithRetry -Description "Query remote release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
         $json = & gh api "/repos/$TargetRepo/releases/tags/$Tag"
         if ($LASTEXITCODE -ne 0 -or !$json) {
             throw "Unable to query release $Tag after upload!"
         }
-        $script:remoteRelease = $json | ConvertFrom-Json
+        return ($json | ConvertFrom-Json)
     }
 
     if (!$remoteRelease) {
