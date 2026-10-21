@@ -172,6 +172,8 @@
   "Exp.Collapse": "Geräteabschnitte in Einstellungen einklappen",
   "Exp.CollapseHint": "Wenn aktiviert, sind die Bereiche «Behaltene Geräte / Gerätenamen» standardmäßig eingeklappt; über die Schaltfläche rechts neben dem Titel aufklappen (sofort wirksam)",
   "Exp.CollapseTip": "Einklappen / Aufklappen",
+  "Exp.PanelOutputName": "Wiedergabegerätenamen im Dropdown des Schnellpanels anzeigen",
+  "Exp.PanelOutputNameHint": "Standardmäßig deaktiviert. Wenn aktiviert, wird der Wiedergabegerätename im Dropdown-Eintrag der App-Zeile im Schnellpanel angezeigt. Wenn deaktiviert, wird nur der Pfeil angezeigt und kein Name geladen. Wirkt beim nächsten Öffnen des Panels.",
   "Exp.BackgroundPolling": "Regelmäßige Hintergrundprüfungen",
   "Exp.BackgroundPollingHint": "Standardmäßig aus. Prüft die Vordergrund-App und den Mikrofonstatus regelmäßig, um die Kompatibilität zu verbessern. Bei deaktivierter Option erfolgen Aktualisierungen über Benachrichtigungen; bei Fehlern wird eine Wiederherstellung versucht. Wirkt sofort.",
   "Exp.ResetAll": "Alle Apps (Ausgabe/Eingabe) auf Standard zurücksetzen",

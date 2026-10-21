@@ -110,6 +110,9 @@ namespace SonicRoute.Core
         /// <summary>实验设置 - 持续定时校验前台与麦克风；默认关闭，通知异常时仍临时恢复。</summary>
         public bool BackgroundPollingFallbackEnabled { get; set; } = false;
 
+        /// <summary>实验设置：快捷面板应用行的下拉入口显示播放设备名；默认关闭，关闭时不加载名称。</summary>
+        public bool QuickPanelShowOutputName { get; set; } = false;
+
         /// <summary>实验设置：记录自动化执行详情；缺省关闭，不读取或创建历史存储。</summary>
         public bool ExecutionHistoryEnabled { get; set; } = false;
         /// <summary>执行详情的磁盘容量上限（MiB），1–64，默认4。</summary>

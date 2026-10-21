@@ -46,7 +46,7 @@ namespace SonicRoute
             public float PeakLevel;
             public bool IsMuted;
             public ToggleButton ExpandButton = null!;
-            public TextBlock OutputName = null!;
+            public TextBlock? OutputName;
             public StackPanel ExpandPanel = null!;
             public AnimatedExpandHost ExpandWrap = null!;
             public RotateTransform ExpandArrow = new();
@@ -616,11 +616,12 @@ namespace SonicRoute
         }
         // ------------------------------------------------------------------
 
-        private string GetAppRowsSignature(List<AudioAppInfo> apps, AppConfig cfg)
+        private string GetAppRowsSignature(List<AudioAppInfo> apps, AppConfig cfg, bool showOutputName)
         {
             var text = new StringBuilder();
             void Add(string? value) => text.Append(value?.Length ?? -1).Append(':').Append(value).Append(';');
             Add(cfg.Language); Add(cfg.ThemeMode); Add(cfg.Accent); Add(_micUiOn.ToString());
+            Add(showOutputName.ToString());
             foreach (var app in apps)
             {
                 Add(app.ProcessId.ToString()); Add(app.ProcessName); Add(app.DisplayName); Add(AppDisplayName.Get(app));
@@ -643,19 +644,24 @@ namespace SonicRoute
                 var hiddenPanel = cfg.HiddenPanelApps;
                 apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
                     && !hiddenPanel.Any(h => string.Equals(h, a.ProcessName, StringComparison.OrdinalIgnoreCase))).ToList();
-                string signature = GetAppRowsSignature(apps, cfg);
+                bool showOutputName = cfg.ExperimentalMode && cfg.QuickPanelShowOutputName;
+                string signature = GetAppRowsSignature(apps, cfg, showOutputName);
 
-                // 复用本次后台批量读取，同时取得下拉入口所需的播放路由；不增加轮询。
-                var vols = await _uiLifetime.ReadAsync(apps, static applications =>
+                // 名称开关关闭时只走原音量读取，不查询播放路由、不创建名称控件。
+                var vols = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName), static state =>
                 {
                     SessionVolumeService.Refresh();
-                    var d = new Dictionary<int, (int vol, bool muted, string output)>();
-                    foreach (var a in applications)
+                    var d = new Dictionary<int, (int vol, bool muted, string? output)>();
+                    foreach (var a in state.Apps)
                     {
                         var pid = (int)a.ProcessId;
-                        string? output = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
-                        d[pid] = (SessionVolumeService.GetVolumePercent(pid), SessionVolumeService.IsMuted(pid),
-                            output == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(output));
+                        string? output = null;
+                        if (state.ShowOutputName)
+                        {
+                            var persisted = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
+                            output = persisted == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(persisted);
+                        }
+                        d[pid] = (SessionVolumeService.GetVolumePercent(pid), SessionVolumeService.IsMuted(pid), output);
                     }
                     return d;
                 });
@@ -741,8 +747,8 @@ namespace SonicRoute
 
                     var expand = new ToggleButton
                     {
-                        Width = 80,
-                        Height = 24,
+                        Width = showOutputName ? 80 : 32,
+                        Height = showOutputName ? 24 : 16,
                         VerticalAlignment = System.Windows.VerticalAlignment.Center,
                         Style = (Style)FindResource("RowExpandButton"),
                         Tag = row,
@@ -750,23 +756,27 @@ namespace SonicRoute
                     };
                     var glyph = new TextBlock { Text = "▾", RenderTransform = row.ExpandArrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
                     glyph.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
-                    var deviceLabel = new Grid { Width = 72, ClipToBounds = true };
-                    deviceLabel.ColumnDefinitions.Add(new ColumnDefinition());
-                    deviceLabel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                    row.OutputName = new TextBlock
+                    if (showOutputName)
                     {
-                        FontSize = 11,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        TextTrimming = TextTrimming.CharacterEllipsis,
-                        TextWrapping = TextWrapping.NoWrap
-                    };
-                    row.OutputName.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
-                    glyph.Margin = new Thickness(4, 0, 0, 0);
-                    glyph.VerticalAlignment = VerticalAlignment.Center;
-                    Grid.SetColumn(glyph, 1);
-                    deviceLabel.Children.Add(row.OutputName);
-                    deviceLabel.Children.Add(glyph);
-                    expand.Content = deviceLabel;
+                        var deviceLabel = new Grid { Width = 72, ClipToBounds = true };
+                        deviceLabel.ColumnDefinitions.Add(new ColumnDefinition());
+                        deviceLabel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                        row.OutputName = new TextBlock
+                        {
+                            FontSize = 11,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            TextTrimming = TextTrimming.CharacterEllipsis,
+                            TextWrapping = TextWrapping.NoWrap
+                        };
+                        row.OutputName.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
+                        glyph.Margin = new Thickness(4, 0, 0, 0);
+                        glyph.VerticalAlignment = VerticalAlignment.Center;
+                        Grid.SetColumn(glyph, 1);
+                        deviceLabel.Children.Add(row.OutputName);
+                        deviceLabel.Children.Add(glyph);
+                        expand.Content = deviceLabel;
+                    }
+                    else expand.Content = glyph;
                     expand.Checked += RowExpand_Changed;
                     expand.Unchecked += RowExpand_Changed;
                     row.ExpandButton = expand;
@@ -853,8 +863,9 @@ namespace SonicRoute
 
         }
 
-        private void UpdateRowOutputName(AppRow row, string outputId)
+        private void UpdateRowOutputName(AppRow row, string? outputId)
         {
+            if (row.OutputName == null) return;
             string name = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outputId, StringComparison.OrdinalIgnoreCase))?.DisplayName
                 ?? L10n.T(AudioService.IsSystemDefault(outputId) ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
             if (row.OutputName.Text == name) return;

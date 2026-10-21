@@ -172,6 +172,8 @@
   "Exp.Collapse": "Replier les sections d'appareils des réglages",
   "Exp.CollapseHint": "Lorsqu'activé, les sections « Appareils conservés / Noms d'appareils » sont repliées par défaut ; cliquez sur le bouton à droite du titre pour déplier (effet immédiat)",
   "Exp.CollapseTip": "Replier / Déplier",
+  "Exp.PanelOutputName": "Afficher le nom du périphérique de lecture dans le menu déroulant du panneau rapide",
+  "Exp.PanelOutputNameHint": "Désactivé par défaut. Une fois activé, le nom du périphérique de lecture s’affiche dans le menu déroulant de la ligne de l’application du panneau rapide. Une fois désactivé, seule la flèche s’affiche et aucun nom n’est chargé. Prend effet à la prochaine ouverture du panneau.",
   "Exp.BackgroundPolling": "Vérifications périodiques en arrière-plan",
   "Exp.BackgroundPollingHint": "Désactivées par défaut. Lorsqu’elles sont activées, ces vérifications contrôlent périodiquement l’application au premier plan et l’état du microphone pour améliorer la compatibilité. Lorsqu’elles sont désactivées, les notifications assurent les mises à jour habituelles et une récupération est tentée en cas d’erreur. Effet immédiat.",
   "Exp.ResetAll": "Restaurer toutes les apps (sortie/entrée) par défaut",

@@ -1972,6 +1972,8 @@ namespace SonicRoute
             _config.ExperimentalMode = enabled;
             ConfigService.Save(_config);
             if (!_config.ExperimentalMode) AutoRuleService.StopExecutionHistory();
+            if (!enabled && _config.QuickPanelShowOutputName
+                && ((App)Application.Current).QuickPanelInstance is QuickPanelModernWindow panel) panel.Close();
             SyncExecutionHistoryOptions();
             // 导航"实验设置"入口立即显示/隐藏（功能本身重启生效）
             NavExperimental.Visibility = _config.ExperimentalMode ? Visibility.Visible : Visibility.Collapsed;
@@ -2006,6 +2008,7 @@ namespace SonicRoute
                 bool expOn = _config.ExperimentalMode;
                 ApplyExpMicUi(_config.ExperimentalMic);
                 ExpBackgroundPollingCheck.IsChecked = _config.BackgroundPollingFallbackEnabled;
+                ExpPanelOutputNameCheck.IsChecked = _config.QuickPanelShowOutputName;
                 ExpHistoryCheck.IsChecked = _config.ExecutionHistoryEnabled;
                 SyncExecutionHistoryOptions();
 
@@ -2014,6 +2017,15 @@ namespace SonicRoute
             {
                 _suppressSettings = false;
             }
+        }
+
+        private void ExpPanelOutputName_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsSettingsChange(sender, e)) return;
+            _config.QuickPanelShowOutputName = ExpPanelOutputNameCheck.IsChecked == true;
+            ConfigService.Save(_config);
+            // 复用原面板关闭/释放流程；不创建隐藏面板，下次呼出按新选项加载。
+            if (((App)Application.Current).QuickPanelInstance is QuickPanelModernWindow panel) panel.Close();
         }
 
         private void ExpBackgroundPolling_Changed(object sender, RoutedEventArgs e)

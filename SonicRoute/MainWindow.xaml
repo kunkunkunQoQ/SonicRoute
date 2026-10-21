@@ -920,6 +920,18 @@
                     </Border>
 
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <CheckBox x:Name="ExpPanelOutputNameCheck" Style="{StaticResource SettingsSwitchRow}"
+                                  Tag="{x:Static local:AutomationIcons.Options}"
+                                  Checked="ExpPanelOutputName_Changed" Unchecked="ExpPanelOutputName_Changed">
+                            <StackPanel>
+                                <TextBlock Text="{Binding [Exp.PanelOutputName], Source={x:Static local:L10n.Instance}}" TextWrapping="Wrap"/>
+                                <TextBlock Style="{StaticResource ThemeHint}" Margin="0,3,0,0"
+                                           Text="{Binding [Exp.PanelOutputNameHint], Source={x:Static local:L10n.Instance}}"/>
+                            </StackPanel>
+                        </CheckBox>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                         <StackPanel>
                             <CheckBox x:Name="ExpHistoryCheck" Style="{StaticResource SettingsSwitchRow}"
                                       Tag="{x:Static local:AutomationIcons.Options}"
