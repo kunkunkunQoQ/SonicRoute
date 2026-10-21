@@ -17,10 +17,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="Benutzerhandbuch (Chinesisch)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="Klicke auf das Maskottchen, um das Benutzerhandbuch zu öffnen"></a>
 <br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute-Schnellpanel mit Ausgabegerät und Lautstärkereglern pro App"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute v1.23: Automatisierungseditor mit App-Auslöser und Auswahl der Audioaktionen"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute Automatisierungsregel-Editor: Auswahl von App-Triggern und Audio-Aktionsschritten"></a>
 </div>
 
-<sub>Oberflächenbeispiele: Schnellpanel für App-Lautstärke und Geräte; Automatisierungseditor zum Kombinieren von Auslösern und Aktionsschritten.</sub>
+<sub>Oberflächenvorschau: Schnellbedienfeld (mit adaptiver Höhe und Acryl-Design) zur sofortigen Steuerung von Lautstärke und Geräten; Automatisierungseditor für Trigger und Aktionsabläufe.</sub>
 
 ## ✨ Das bietet SonicRoute
 
@@ -52,20 +52,39 @@ Für die meisten Windows-x64-Systeme bietet die Version aus dem Microsoft Store 
 
 | Version | Herunterladen | Voraussetzungen |
 |---|---|---|
-| Lite x64 | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | .NET 8 Desktop Runtime für x64 |
-| Lite ARM64 (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | .NET 8 Desktop Runtime für ARM64 |
-| Legacy x64 | [Vollständiges ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8; ZIP vor dem Start vollständig entpacken |
-| Microsoft Store | [Aus dem Store installieren](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64; automatische Updates; verfügbare Version im Store angezeigt |
+| Lite x64 (Empfohlen) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Eigenständige Einzeldatei ohne Installation; erfordert passende x64 .NET 8 Desktop Runtime |
+| Lite ARM64 (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Native Leistung auf Surface Pro und Snapdragon ARM64-Geräten; erfordert passende ARM64 .NET 8 Desktop Runtime |
+| Legacy x64 (Ohne .NET 8) | [Vollständiges ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten |
+| Microsoft Store (Auto-Updates) | [Aus dem Store installieren](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Ein-Klick-Installation mit automatischen Updates im Hintergrund über den Store; für 64-Bit Windows 10/11 |
 
 Lite benötigt die passende [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Legacy benötigt .NET 8 nicht.
 
-1. Starte SonicRoute, suche das Symbol im Windows-Infobereich (möglicherweise unter den ausgeblendeten Symbolen) und öffne die vollständige Oberfläche per Doppelklick.
-2. Wähle unter „Einstellungen“ deine bevorzugten Ausgabe- und Eingabegeräte aus.
-3. Klicke auf das Symbol im Infobereich, um ein Panel zu öffnen oder Tastenkürzel einzurichten. Wenn du mehrere Aktionen kombinieren möchtest, erstelle eine Automatisierungsregel.
+1. Nach dem Start bleibt SonicRoute im Infobereich der Taskleiste aktiv (zur dauerhaften Sichtbarkeit einfach herausziehen). Doppelklick auf das Symbol öffnet das Hauptfenster.
+2. Wählen Sie unter Einstellungen → Beibehaltene Geräte Ihre Kopfhörer und Lautsprecher aus. Ein Klick auf das Symbol öffnet das Schnellbedienfeld zum sofortigen Weiterleiten und Regeln der Apps.
+3. Bewegen Sie die Maus über das Taskleistensymbol und drehen Sie das Mausrad zur schnellen Lautstärkeregelung. Dank Hotkeys und Automatisierung steuern Sie alles, ohne Vollbild-Spiele zu verlassen.
 
 Bevor du `sr` zum ersten Mal verwendest, starte SonicRoute normal, damit der Befehl registriert wird, und öffne anschließend dein Terminal erneut. Wenn der Gerätewechsel nicht wie erwartet funktioniert, findest du Hilfe in den [Häufige Fragen](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
+```bash
+# Automatisierungsregel ausführen (SonicRoute muss bereits laufen)
+sr "Regelname oder ID"
+```
+
 Version 1.24 ergänzt Vorlagen für Automatisierungsregeln, ein optionales Ausführungsprotokoll (standardmäßig aus, mit einstellbarer Speichergrenze) und eigene App-Symbole. Fehlt ein Symbol oder wird nur ein Standardsymbol erkannt, erscheint das erste Zeichen des App-Namens. Importierte Symbole sind in der Einstellungssicherung enthalten. Frühere Änderungen stehen unter [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+
+### ❓ Häufig gestellte Fragen (FAQ)
+
+**Q: Bleiben Routing- und Lautstärkeeinstellungen nach dem Schließen von SonicRoute erhalten?**
+
+A: Ja! Die Audio-Zuweisung wird nativ vom Windows-Audiosystem gespeichert und bleibt auch nach Beenden von SonicRoute aktiv. Nur Tastenkürzel, Infobereich-Gesten und Automatisierungsregeln erfordern die Hintergrund-Ausführung.
+
+**Q: Was tun, wenn der Start meldet, dass die .NET 8 Desktop Runtime fehlt?**
+
+A: Klicken Sie in der Tabelle oben auf den Runtime-Link zur offiziellen Microsoft .NET 8 Desktop Runtime oder laden Sie die Legacy-Version herunter, die keine zusätzliche Runtime benötigt.
+
+**Q: Verbraucht SonicRoute im Hintergrund spürbar CPU oder Akku?**
+
+A: Praktisch null. SonicRoute basiert vollständig auf Windows-Systemereignissen; im Leerlauf liegt die CPU-Last bei 0% ohne Hintergrund-Polling-Timer.
 
 ## 📚 Dokumentation
 

@@ -17,10 +17,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="User guide (Chinese)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="Click the mascot to open the user guide"></a>
 <br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute Quick panel: output device and per-app volume controls"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute v1.23 automation rule editor: app trigger and audio action selection"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute automation rule editor: select app triggers and audio action steps"></a>
 </div>
 
-<sub>Interface examples: Quick panel for app volume and devices; automation editor for combining triggers and action steps.</sub>
+<sub>Interface preview: Quick panel (with adaptive height and acrylic style) for instant app volume and routing; automation editor for custom triggers and action chains.</sub>
 
 ## ✨ What SonicRoute offers
 
@@ -52,20 +52,39 @@ For most Windows x64 users, the Microsoft Store build offers convenient installa
 
 | Version | Download | Requirements |
 |---|---|---|
-| Lite x64 | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Matching x64 .NET 8 Desktop Runtime |
-| Lite ARM64 (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Matching ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8; extract the entire archive |
-| Microsoft Store | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64; automatic updates; the available version is shown on the Store |
+| Lite x64 (Recommended) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Standalone single-file executable; requires matching x64 .NET 8 Desktop Runtime |
+| Lite ARM64 (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Native performance on Surface Pro and Snapdragon ARM64 devices; requires matching ARM64 .NET 8 Desktop Runtime |
+| Legacy x64 (No .NET 8 required) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
+| Microsoft Store (Auto-updates) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | One-click install with silent automatic updates; for 64-bit Windows 10/11 |
 
 Lite requires the matching [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Legacy does not require .NET 8.
 
-1. Start SonicRoute, find its icon in the Windows notification area (it may be under hidden icons), and double-click it to open the full interface.
-2. Select your preferred output and input devices in Settings.
-3. Click the tray icon to open a panel, or set up your hotkeys. Create automation rules when you want to combine actions.
+1. Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.
+2. Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.
+3. Hover over the tray icon and scroll the wheel to adjust volume blindly, or use hotkeys and automation rules without leaving full-screen games.
 
 `sr` connects only to an already-running SonicRoute instance; it does not start the app. Before first use, start SonicRoute normally to register the command, then close and reopen your terminal. See the [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) if device switching does not work as expected.
 
+```bash
+# Trigger an automation rule (SonicRoute must be running)
+sr "Rule name or ID"
+```
+
 Version 1.24 adds starter templates for automation, optional recent execution details (off by default, with a storage limit), and per-app icon imports. Missing or generic app icons fall back to the first character of the app’s name. Configuration backups include imported icons. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier changes.
+
+### ❓ Quick FAQ
+
+**Q: Will app routing and volume settings persist after closing SonicRoute?**
+
+A: Yes! App audio routing is natively preserved by the Windows audio engine and stays active even after SonicRoute is closed. Only hotkeys, tray controls, and automation rules require SonicRoute running in the background.
+
+**Q: What should I do if Windows prompts that .NET 8 Desktop Runtime is missing?**
+
+A: Click the runtime link in the table above to install the official Microsoft .NET 8 Desktop Runtime, or download the Legacy edition which requires no additional runtime.
+
+**Q: Does running SonicRoute in the background consume CPU or battery?**
+
+A: Practically zero. SonicRoute is built entirely on Windows event-driven listeners; it idles at 0% CPU with zero background polling timers and on-demand memory cleanup.
 
 ## 📚 Documentation
 

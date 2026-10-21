@@ -17,10 +17,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="ユーザーガイド（簡体字中国語）"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="マスコットをクリックしてユーザーガイドを開く"></a>
 <br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute クイックパネル：上部の出力デバイスとアプリごとの音量操作"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute v1.23 自動化ルールエディター：アプリのトリガーと音声操作の選択"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute 自動化ルールエディター：アプリトリガーとオーディオアクションの手順選択"></a>
 </div>
 
-<sub>画面例：クイックパネルでアプリごとの音量とデバイスを操作し、自動化エディターでトリガーと操作手順を組み合わせられます。</sub>
+<sub>UIプレビュー：音量とルーティングを即座に操作できるクイックパネル（可変高さ・アクリル半透明対応）と、トリガーとアクションを自在に組める自動化エディター。</sub>
 
 ## ✨ SonicRoute の主な機能
 
@@ -52,20 +52,39 @@ Windows x64 をお使いの方には、インストールが簡単で自動更�
 
 | エディション | ダウンロード | 要件 |
 |---|---|---|
-| Lite x64 | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | x64 .NET 8 Desktop Runtime |
-| Lite ARM64（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8。実行前に ZIP 全体を展開してください |
-| Microsoft Store | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64；自動更新；Store に現在提供中のバージョンが表示されます |
+| Lite x64（おすすめ・標準） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 単一ファイルでインストール不要。システムに適合する x64 .NET 8 Desktop Runtime が必要です |
+| Lite ARM64（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro や Snapdragon 搭載 ARM64 PC でネイティブ動作。ARM64 .NET 8 Desktop Runtime が必要です |
+| Legacy x64（.NET 8 不要） | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 追加ランタイム不要。Windows 標準の .NET Framework 4.8 で動作し、ZIP を解凍するだけですぐに使えます |
+| Microsoft Store（自動更新） | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | ワンクリック導入とストア経由の自動バックグラウンド更新に対応（64ビット Windows 10/11 対象） |
 
 Lite には対応する [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) が必要です。Legacy に .NET 8 は必要ありません。
 
-1. SonicRoute を起動し、Windows の通知領域（隠れているアイコンの中にある場合があります）でアイコンを見つけて、ダブルクリックでメイン画面を開きます。
-2. 設定で使いたい出力・入力デバイスを選びます。
-3. 通知領域のアイコンをクリックしてパネルを開くか、ホットキーを設定します。複数の操作を組み合わせる場合は、自動化ルールを作成します。
+1. 起動するとシステムトレイに常駐します（隠れている場合はトレイ一覧からドラッグして固定可能）。アイコンをダブルクリックするとメイン画面が開きます。
+2. 「設定 → 保持するデバイス」でヘッドホンやスピーカーをチェック。トレイアイコンを左クリックしてクイックパネルを開き、各アプリの出力先や音量を素早く調整できます。
+3. トレイアイコンにマウスを重ねてホイールを回すだけでブラインド音量調節が可能。ホットキーや自動化ルールを組み合わせれば、ゲーム画面を切り替えずに操作できます。
 
 `sr` を初めて使う前に、SonicRoute を通常起動してコマンドを登録し、ターミナルを開き直してください。デバイス切り替えが想定どおりに動作しない場合は [よくある質問](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) をご覧ください。
 
+```bash
+# 自動化ルールを実行（SonicRoute が起動中である必要があります）
+sr "ルール名または ID"
+```
+
 1.24 では、自動化のひな形、最近の実行履歴（初期設定はオフ、保存容量を設定可能）、アプリごとのアイコン読み込みを追加しました。アイコンがない場合や汎用アイコンの場合は、アプリ名の先頭文字を表示します。設定のバックアップには読み込んだアイコンも含まれます。過去の変更は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) を参照してください。
+
+### ❓ よくある質問（FAQ）
+
+**Q：SonicRoute を終了してもアプリのルーティングや音量設定は維持されますか？**
+
+A：はい、維持されます。アプリのルーティングは Windows 側のオーディオエンジンによってネイティブに保存されるため、終了後も有効です。ホットキーや自動化ルールのみ常駐が必要です。
+
+**Q：起動時に .NET 8 Desktop Runtime が不足していると表示された場合はどうすればよいですか？**
+
+A：上記テーブル内のランタイムリンクから公式の .NET 8 Desktop Runtime をインストールするか、追加環境が不要な Legacy 版をご利用ください。
+
+**Q：バックグラウンド常駐中に CPU やバッテリーを消費しますか？**
+
+A：ほぼゼロです。SonicRoute は完全な Windows システムイベント駆動型アーキテクチャを採用しており、待機時の CPU 使用率は 0%、無駄な定期ポーリングも一切ありません。
 
 ## 📚 ドキュメント
 

@@ -8,9 +8,9 @@
   "support": "在 Afdian 支援我們",
   "experimental": "實驗性",
   "languages": "支援九種介面語言",
-  "preview": "介面範例：快捷面板管理各應用程式音量與裝置；自動化編輯器組合觸發條件與操作步驟。",
+  "preview": "介面預覽：快速面板（支援自適應與透明壓克力風格）即時控制音量與裝置；自動化規則編輯器自由編排觸發器與執行動作。",
   "panelAlt": "SonicRoute 快捷面板：頂端輸出裝置與各應用程式音量控制",
-  "automationPreviewAlt": "SonicRoute v1.23 自動化規則編輯器：應用程式觸發條件與音訊操作選擇",
+  "automationPreviewAlt": "SonicRoute 自動化規則編輯器：選擇應用程式觸發器與音訊操作步驟",
   "mascotAlt": "點擊看板娘開啟使用指南",
   "featuresTitle": "SonicRoute 的功能",
   "downloadTitle": "下載與快速入門",
@@ -21,14 +21,14 @@
   "singleExe": "單一 EXE",
   "fullZip": "完整 ZIP",
   "storeInstall": "從 Store 安裝",
-  "liteRequirement": "{arch} .NET 8 Desktop Runtime",
-  "legacyRequirement": ".NET Framework 4.8；執行前請解壓縮整個 ZIP",
-  "storeRequirement": "x64；自動更新；Store 上會顯示目前提供的版本",
+  "liteRequirement": "單檔案免安裝，開箱即用；需與系統架構匹配的 x64 .NET 8 Desktop Runtime",
+  "legacyRequirement": "免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用",
+  "storeRequirement": "一鍵安裝並由微軟商店自動靜默更新；適用於 64 位元 Windows 10/11",
   "runtimeNote": "Lite 需要相符的 {runtime}。Legacy 不需要 .NET 8。",
   "steps": [
-    "啟動 SonicRoute，在 Windows 系統匣中找到它的圖示（可能位於隱藏圖示中），然後按兩下以開啟完整介面。",
-    "在設定中選擇偏好的輸出與輸入裝置。",
-    "點擊系統匣圖示開啟面板，或設定快速鍵。需要組合多項操作時，再建立自動化規則。"
+    "按兩下啟動後常駐系統匣（可在工作列溢位區拖出固定），按兩下系統匣圖示打開主介面。",
+    "在「設定 → 保留的裝置」勾選常用輸出與輸入裝置；按一下系統匣圖示滑出面板，即時滑動調節並分流各個應用程式的聲音輸出。",
+    "將滑鼠移至系統匣圖示上直接滾動滾輪即可盲調當前音量；配合快捷鍵與自動化規則，無需切出全螢幕遊戲也能從容掌控。"
   ],
   "commandNote": "首次使用 `sr` 前，請先正常啟動 SonicRoute 以註冊指令，然後重新開啟終端機。若裝置切換未如預期運作，請參閱 {faq}。",
   "ruleExample": "規則名稱或 ID",
@@ -103,5 +103,22 @@
     "設定規則：遊戲開啟時自動「切換耳機 + 音量 40% + 啟動語音軟體」，結束遊戲自動切回音箱",
     "一鍵全域麥克風靜音（快捷鍵 Ctrl+Shift+N），配合螢幕常駐 OSD 浮窗，一眼確認是否閉麥",
     "為各應用指定獨立實體或虛擬軌道，避免錄影時把私人聊天或系統提示音混入錄像"
+  ],
+  "editionLiteX64": "Lite x64（推薦主力）",
+  "editionLiteArm64": "Lite ARM64",
+  "editionLegacyX64": "Legacy x64（免裝執行庫）",
+  "editionStore": "Microsoft Store（自動更新）",
+  "arm64Requirement": "Surface Pro 與高通驍龍 ARM64 裝置原生高效運作；需與系統匹配的 ARM64 .NET 8 Desktop Runtime",
+  "commandSnippetComment": "觸發指定自動化規則（需 SonicRoute 正在運行）",
+  "faqQuickTitle": "常見問題速覽",
+  "faqQuestions": [
+    "關閉軟體後，應用程式的分流與音量設定還會保留嗎？",
+    "啟動提示缺少 .NET 8 桌面執行庫怎麼辦？",
+    "軟體在後台常駐會佔用 CPU 或耗電嗎？"
+  ],
+  "faqAnswers": [
+    "會！應用程式路由由 Windows 核心音訊服務原生持久化保存；關閉 SonicRoute 後依然有效。僅快捷鍵、系統匣控制與自動化規則需要軟體在後台常駐生效。",
+    "可按一下上方表格中的執行庫連結安裝微軟官方 .NET 8 Desktop Runtime，或直接下載無需任何額外環境的 Legacy 版本。",
+    "幾乎為零。SonicRoute 採用純 Windows 系統事件監聽架構，閒置時完全掛起等待事件通知，CPU 佔用 0%，無任何後台輪詢計時器。"
   ]
 }

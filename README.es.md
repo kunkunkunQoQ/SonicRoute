@@ -17,10 +17,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de 
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="Guía de usuario (en chino)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="Haz clic en la mascota para abrir la guía de usuario"></a>
 <br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="Panel rápido de SonicRoute: dispositivo de salida y controles de volumen por aplicación"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="Editor de reglas de automatización de SonicRoute v1.23: activador de aplicación y selección de acciones de audio"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="Editor de reglas de automatización de SonicRoute: selección de disparadores y acciones de audio"></a>
 </div>
 
-<sub>Ejemplos de la interfaz: panel rápido para el volumen y los dispositivos de cada aplicación; editor de automatizaciones para combinar activadores y acciones.</sub>
+<sub>Vista previa de la interfaz: panel rápido (altura adaptable y estilo acrílico) para volumen y enrutamiento inmediato; editor de automatización para combinar disparadores y acciones.</sub>
 
 ## ✨ Qué ofrece SonicRoute
 
@@ -52,20 +52,39 @@ Para la mayoría de equipos Windows x64, la versión de Microsoft Store ofrece u
 
 | Edición | Descargar | Requisitos |
 |---|---|---|
-| Lite x64 | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | .NET 8 Desktop Runtime para x64 |
-| Lite ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | .NET 8 Desktop Runtime para ARM64 |
-| Legacy x64 | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8; extrae el ZIP completo antes de ejecutar |
-| Microsoft Store | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64; actualizaciones automáticas; la versión disponible se muestra en Store |
+| Lite x64 (Recomendado) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Ejecutable independiente de archivo único; requiere el entorno .NET 8 Desktop Runtime x64 correspondiente |
+| Lite ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Rendimiento nativo en Surface Pro y dispositivos Snapdragon ARM64; requiere .NET 8 Desktop Runtime ARM64 |
+| Legacy x64 (Sin .NET 8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP |
+| Microsoft Store (Actualización auto) | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Instalación con un clic y actualizaciones automáticas silenciosas desde la tienda; para Windows 10/11 de 64 bits |
 
 Lite necesita el [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) correspondiente. Legacy no requiere .NET 8.
 
-1. Inicia SonicRoute, busca su icono en el área de notificación de Windows (puede estar entre los iconos ocultos) y haz doble clic para abrir la interfaz completa.
-2. En Configuración, selecciona tus dispositivos de salida y entrada preferidos.
-3. Haz clic en el icono del área de notificación para abrir un panel o configurar atajos. Crea reglas de automatización cuando quieras combinar varias acciones.
+1. Ejecútelo y permanecerá en la bandeja del sistema (arrástrelo fuera del menú desplegable para fijarlo). Haga doble clic en el icono para abrir la interfaz principal.
+2. Marque sus auriculares y altavoces en Configuración → Dispositivos conservados. Haga clic izquierdo en el icono para abrir el panel rápido y enrutar el audio de cada app.
+3. Pase el cursor sobre el icono de la bandeja y gire la rueda del ratón para ajustar el volumen al instante, o use atajos y automatización sin salir de sus juegos a pantalla completa.
 
 Antes de usar `sr` por primera vez, inicia SonicRoute con normalidad para registrar el comando y vuelve a abrir el terminal. Si el cambio de dispositivo no funciona como esperabas, consulta las [Preguntas frecuentes](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
+```bash
+# Ejecutar regla de automatización (SonicRoute debe estar en ejecución)
+sr "Nombre o ID de la regla"
+```
+
 La versión 1.24 añade plantillas de automatización, un registro detallado de las ejecuciones recientes (desactivado de forma predeterminada, con límite de almacenamiento configurable) e iconos personalizados por aplicación. Si falta el icono o es genérico, se muestra el primer carácter del nombre de la aplicación. Las copias de seguridad de la configuración incluyen los iconos importados. Consulta [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) para ver los cambios anteriores.
+
+### ❓ Preguntas frecuentes (FAQ)
+
+**Q: ¿Se mantienen el enrutamiento de aplicaciones y el volumen tras cerrar SonicRoute?**
+
+A: ¡Sí! El enrutamiento de audio por aplicación es conservado de forma nativa por el motor de Windows y sigue activo aunque cierre SonicRoute. Solo los atajos, la rueda de la bandeja y la automatización requieren que permanezca en segundo plano.
+
+**Q: ¿Qué hacer si se indica que falta el entorno .NET 8 Desktop Runtime?**
+
+A: Haga clic en el enlace del entorno de ejecución en la tabla superior para instalar Microsoft .NET 8 Desktop Runtime oficial, o descargue la edición Legacy que no necesita ningún runtime adicional.
+
+**Q: ¿Consume CPU o batería mantener SonicRoute abierto en segundo plano?**
+
+A: Prácticamente cero. SonicRoute funciona totalmente mediante escucha de eventos de Windows; en reposo la CPU está al 0% sin temporizadores ni sondeos periódicos.
 
 ## 📚 Documentación
 

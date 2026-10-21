@@ -48,10 +48,10 @@ function render(language, text) {
     return variables[key];
   });
   const rows = [
-    ['Lite x64', link(text.singleExe, downloadAsset('Lite-x64.exe')), text.liteRequirement.replace('{arch}', 'x64')],
-    ['Lite ARM64' + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-arm64.exe')), text.liteRequirement.replace('{arch}', 'ARM64')],
-    ['Legacy x64', link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
-    ['Microsoft Store', link(text.storeInstall, shared.store), text.storeRequirement]
+    [text.editionLiteX64, link(text.singleExe, downloadAsset('Lite-x64.exe')), text.liteRequirement],
+    [text.editionLiteArm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-arm64.exe')), text.arm64Requirement],
+    [text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
+    [text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ');
   const sponsorBadge = language.locale === 'zh-CN' ? '赞助-爱发电' : 'Support-Afdian';
@@ -85,7 +85,19 @@ function render(language, text) {
     ...rows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
     fill(text.runtimeNote), '',
     ...text.steps.map((step, index) => (index + 1) + '. ' + step), '',
-    fill(text.commandNote), '', fill(text.releaseSummary), '',
+    fill(text.commandNote), '',
+    '```bash',
+    '# ' + text.commandSnippetComment,
+    'sr "' + text.ruleExample + '"',
+    '```', '',
+    fill(text.releaseSummary), '',
+    '### ❓ ' + text.faqQuickTitle, '',
+    ...text.faqQuestions.flatMap((question, index) => [
+      '**Q' + colon + question + '**',
+      '',
+      'A' + colon + text.faqAnswers[index],
+      ''
+    ]),
     '## 📚 ' + text.docsTitle, '', ...(text.wikiNote ? [text.wikiNote, ''] : []),
     '| ' + [text.docTopic, text.docGuides].join(' | ') + ' |', '|---|---|',
     ...text.docTopics.map((topic, index) => '| ' + tableCell(topic) + ' | ' + docGroups[index].map(documentLink).join(' · ') + ' |'), '',

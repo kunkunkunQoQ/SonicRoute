@@ -8,9 +8,9 @@
   "support": "Apoyar en Afdian",
   "experimental": "experimental",
   "languages": "Nueve idiomas de interfaz",
-  "preview": "Ejemplos de la interfaz: panel rápido para el volumen y los dispositivos de cada aplicación; editor de automatizaciones para combinar activadores y acciones.",
+  "preview": "Vista previa de la interfaz: panel rápido (altura adaptable y estilo acrílico) para volumen y enrutamiento inmediato; editor de automatización para combinar disparadores y acciones.",
   "panelAlt": "Panel rápido de SonicRoute: dispositivo de salida y controles de volumen por aplicación",
-  "automationPreviewAlt": "Editor de reglas de automatización de SonicRoute v1.23: activador de aplicación y selección de acciones de audio",
+  "automationPreviewAlt": "Editor de reglas de automatización de SonicRoute: selección de disparadores y acciones de audio",
   "mascotAlt": "Haz clic en la mascota para abrir la guía de usuario",
   "featuresTitle": "Qué ofrece SonicRoute",
   "downloadTitle": "Descarga y primeros pasos",
@@ -21,14 +21,14 @@
   "singleExe": "Un solo EXE",
   "fullZip": "ZIP completo",
   "storeInstall": "Instalar desde Store",
-  "liteRequirement": ".NET 8 Desktop Runtime para {arch}",
-  "legacyRequirement": ".NET Framework 4.8; extrae el ZIP completo antes de ejecutar",
-  "storeRequirement": "x64; actualizaciones automáticas; la versión disponible se muestra en Store",
+  "liteRequirement": "Ejecutable independiente de archivo único; requiere el entorno .NET 8 Desktop Runtime x64 correspondiente",
+  "legacyRequirement": "No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP",
+  "storeRequirement": "Instalación con un clic y actualizaciones automáticas silenciosas desde la tienda; para Windows 10/11 de 64 bits",
   "runtimeNote": "Lite necesita el {runtime} correspondiente. Legacy no requiere .NET 8.",
   "steps": [
-    "Inicia SonicRoute, busca su icono en el área de notificación de Windows (puede estar entre los iconos ocultos) y haz doble clic para abrir la interfaz completa.",
-    "En Configuración, selecciona tus dispositivos de salida y entrada preferidos.",
-    "Haz clic en el icono del área de notificación para abrir un panel o configurar atajos. Crea reglas de automatización cuando quieras combinar varias acciones."
+    "Ejecútelo y permanecerá en la bandeja del sistema (arrástrelo fuera del menú desplegable para fijarlo). Haga doble clic en el icono para abrir la interfaz principal.",
+    "Marque sus auriculares y altavoces en Configuración → Dispositivos conservados. Haga clic izquierdo en el icono para abrir el panel rápido y enrutar el audio de cada app.",
+    "Pase el cursor sobre el icono de la bandeja y gire la rueda del ratón para ajustar el volumen al instante, o use atajos y automatización sin salir de sus juegos a pantalla completa."
   ],
   "commandNote": "Antes de usar `sr` por primera vez, inicia SonicRoute con normalidad para registrar el comando y vuelve a abrir el terminal. Si el cambio de dispositivo no funciona como esperabas, consulta las {faq}.",
   "ruleExample": "Nombre o ID de la regla",
@@ -103,5 +103,22 @@
     "Regla rápida: abrir juego → pasar a auriculares + volumen 40 % + abrir chat; volver a altavoces al salir",
     "Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla",
     "Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación"
+  ],
+  "editionLiteX64": "Lite x64 (Recomendado)",
+  "editionLiteArm64": "Lite ARM64",
+  "editionLegacyX64": "Legacy x64 (Sin .NET 8)",
+  "editionStore": "Microsoft Store (Actualización auto)",
+  "arm64Requirement": "Rendimiento nativo en Surface Pro y dispositivos Snapdragon ARM64; requiere .NET 8 Desktop Runtime ARM64",
+  "commandSnippetComment": "Ejecutar regla de automatización (SonicRoute debe estar en ejecución)",
+  "faqQuickTitle": "Preguntas frecuentes (FAQ)",
+  "faqQuestions": [
+    "¿Se mantienen el enrutamiento de aplicaciones y el volumen tras cerrar SonicRoute?",
+    "¿Qué hacer si se indica que falta el entorno .NET 8 Desktop Runtime?",
+    "¿Consume CPU o batería mantener SonicRoute abierto en segundo plano?"
+  ],
+  "faqAnswers": [
+    "¡Sí! El enrutamiento de audio por aplicación es conservado de forma nativa por el motor de Windows y sigue activo aunque cierre SonicRoute. Solo los atajos, la rueda de la bandeja y la automatización requieren que permanezca en segundo plano.",
+    "Haga clic en el enlace del entorno de ejecución en la tabla superior para instalar Microsoft .NET 8 Desktop Runtime oficial, o descargue la edición Legacy que no necesita ningún runtime adicional.",
+    "Prácticamente cero. SonicRoute funciona totalmente mediante escucha de eventos de Windows; en reposo la CPU está al 0% sin temporizadores ni sondeos periódicos."
   ]
 }

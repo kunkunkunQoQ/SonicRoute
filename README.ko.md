@@ -17,10 +17,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="사용자 가이드(중국어 간체)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="마스코트를 클릭해 사용자 가이드 열기"></a>
 <br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute 빠른 패널: 위쪽의 출력 장치와 앱별 볼륨 제어"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute v1.23 자동화 규칙 편집기: 앱 실행 조건 및 오디오 작업 선택"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute 자동화 규칙 편집기: 앱 트리거 및 오디오 동작 단계 선택"></a>
 </div>
 
-<sub>화면 예시: 빠른 패널에서 앱별 볼륨과 장치를 조절하고, 자동화 편집기에서 실행 조건과 작업 단계를 조합할 수 있습니다.</sub>
+<sub>인터페이스 미리보기: 높이 조절 및 아크릴 스타일을 지원하는 퀵 패널로 앱 볼륨과 장치를 즉시 제어하고, 자동화 편집기에서 트리거와 동작을 자유롭게 구성할 수 있습니다.</sub>
 
 ## ✨ SonicRoute의 주요 기능
 
@@ -52,20 +52,39 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| Lite x64 | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | x64 .NET 8 Desktop Runtime |
-| Lite ARM64 (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8; 실행 전에 ZIP 전체 압축을 푸세요 |
-| Microsoft Store | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64; 자동 업데이트; Store에서 제공 중인 버전을 확인할 수 있습니다 |
+| Lite x64 (권장·표준) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 설치 없는 단일 실행 파일; 시스템 아키텍처에 맞는 x64 .NET 8 Desktop Runtime 필요 |
+| Lite ARM64 (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro 및 Snapdragon ARM64 기기에서 네이티브 고속 실행; ARM64 .NET 8 Desktop Runtime 필요 |
+| Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
+| Microsoft Store (자동 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 원클릭 설치 및 MS Store를 통한 자동 백그라운드 업데이트; 64비트 Windows 10/11 지원 |
 
 Lite에는 호환되는 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)이 필요합니다. Legacy에는 .NET 8이 필요하지 않습니다.
 
-1. SonicRoute를 시작한 뒤 Windows 알림 영역에서 아이콘을 찾으세요(숨겨진 아이콘에 있을 수 있습니다). 아이콘을 두 번 클릭하면 전체 인터페이스가 열립니다.
-2. 설정에서 원하는 출력 및 입력 장치를 선택하세요.
-3. 알림 영역 아이콘을 클릭해 패널을 열거나 단축키를 설정하세요. 여러 작업을 조합하려면 자동화 규칙을 만드세요.
+1. 실행 후 시스템 트레이에 상주합니다(숨겨진 아이콘 영역에서 끌어내 고정 가능). 트레이 아이콘을 더블 클릭하면 메인 창이 열립니다.
+2. 「설정 → 보존할 장치」에서 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 띄우고 앱별 출력 장치와 볼륨을 즉시 조절하세요.
+3. 트레이 아이콘 위에 마우스를 올리고 휠을 굴려 즉시 볼륨을 조절할 수 있습니다. 단축키와 자동화 규칙을 결합하면 전체화면 게임 중에도 화면 전환 없이 완벽하게 제어할 수 있습니다.
 
 `sr`을 처음 사용하기 전에 SonicRoute를 일반 실행해 명령을 등록한 다음 터미널을 다시 여세요. 장치 전환이 예상대로 작동하지 않으면 [자주 묻는 질문](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)를 참고하세요.
 
+```bash
+# 자동화 규칙 트리거 (SonicRoute가 실행 중이어야 함)
+sr "규칙 이름 또는 ID"
+```
+
 1.24에서는 자동화 시작 템플릿, 최근 실행 상세 기록(기본값 꺼짐, 저장 용량 설정 가능), 앱별 아이콘 가져오기를 추가했습니다. 앱 아이콘이 없거나 기본 아이콘이면 앱 이름의 첫 글자를 표시합니다. 가져온 아이콘은 설정 백업에도 포함됩니다. 이전 변경 사항은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
+
+### ❓ 자주 묻는 질문 (FAQ)
+
+**Q: 프로그램을 종료한 후에도 앱 라우팅 및 볼륨 설정이 유지되나요?**
+
+A: 네, 유지됩니다! 앱 오디오 라우팅은 Windows 오디오 엔진에 의해 기본적으로 영구 저장되므로 프로그램을 종료해도 유지됩니다. 단축키, 트레이 제어, 자동화 규칙만 상주가 필요합니다.
+
+**Q: 실행 시 .NET 8 Desktop Runtime이 없다는 오류가 발생하면 어떻게 하나요?**
+
+A: 위 표의 런타임 링크를 클릭하여 Microsoft 공식 .NET 8 Desktop Runtime을 설치하거나, 추가 런타임이 필요 없는 Legacy 버전을 다운로드하세요.
+
+**Q: 백그라운드 상주 중 CPU나 배터리를 소모하나요?**
+
+A: 거의 없습니다. 순수 Windows 시스템 이벤트 구동 구조를 채택하여 유휴 상태에서는 CPU 사용량이 0%이며 불필요한 백그라운드 폴링 타이머가 전혀 없습니다.
 
 ## 📚 문서
 

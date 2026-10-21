@@ -8,9 +8,9 @@
   "support": "Unterstützung auf Afdian",
   "experimental": "experimentell",
   "languages": "Neun Sprachen",
-  "preview": "Oberflächenbeispiele: Schnellpanel für App-Lautstärke und Geräte; Automatisierungseditor zum Kombinieren von Auslösern und Aktionsschritten.",
+  "preview": "Oberflächenvorschau: Schnellbedienfeld (mit adaptiver Höhe und Acryl-Design) zur sofortigen Steuerung von Lautstärke und Geräten; Automatisierungseditor für Trigger und Aktionsabläufe.",
   "panelAlt": "SonicRoute-Schnellpanel mit Ausgabegerät und Lautstärkereglern pro App",
-  "automationPreviewAlt": "SonicRoute v1.23: Automatisierungseditor mit App-Auslöser und Auswahl der Audioaktionen",
+  "automationPreviewAlt": "SonicRoute Automatisierungsregel-Editor: Auswahl von App-Triggern und Audio-Aktionsschritten",
   "mascotAlt": "Klicke auf das Maskottchen, um das Benutzerhandbuch zu öffnen",
   "featuresTitle": "Das bietet SonicRoute",
   "downloadTitle": "Herunterladen und loslegen",
@@ -21,14 +21,14 @@
   "singleExe": "Einzelne EXE",
   "fullZip": "Vollständiges ZIP",
   "storeInstall": "Aus dem Store installieren",
-  "liteRequirement": ".NET 8 Desktop Runtime für {arch}",
-  "legacyRequirement": ".NET Framework 4.8; ZIP vor dem Start vollständig entpacken",
-  "storeRequirement": "x64; automatische Updates; verfügbare Version im Store angezeigt",
+  "liteRequirement": "Eigenständige Einzeldatei ohne Installation; erfordert passende x64 .NET 8 Desktop Runtime",
+  "legacyRequirement": "Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten",
+  "storeRequirement": "Ein-Klick-Installation mit automatischen Updates im Hintergrund über den Store; für 64-Bit Windows 10/11",
   "runtimeNote": "Lite benötigt die passende {runtime}. Legacy benötigt .NET 8 nicht.",
   "steps": [
-    "Starte SonicRoute, suche das Symbol im Windows-Infobereich (möglicherweise unter den ausgeblendeten Symbolen) und öffne die vollständige Oberfläche per Doppelklick.",
-    "Wähle unter „Einstellungen“ deine bevorzugten Ausgabe- und Eingabegeräte aus.",
-    "Klicke auf das Symbol im Infobereich, um ein Panel zu öffnen oder Tastenkürzel einzurichten. Wenn du mehrere Aktionen kombinieren möchtest, erstelle eine Automatisierungsregel."
+    "Nach dem Start bleibt SonicRoute im Infobereich der Taskleiste aktiv (zur dauerhaften Sichtbarkeit einfach herausziehen). Doppelklick auf das Symbol öffnet das Hauptfenster.",
+    "Wählen Sie unter Einstellungen → Beibehaltene Geräte Ihre Kopfhörer und Lautsprecher aus. Ein Klick auf das Symbol öffnet das Schnellbedienfeld zum sofortigen Weiterleiten und Regeln der Apps.",
+    "Bewegen Sie die Maus über das Taskleistensymbol und drehen Sie das Mausrad zur schnellen Lautstärkeregelung. Dank Hotkeys und Automatisierung steuern Sie alles, ohne Vollbild-Spiele zu verlassen."
   ],
   "commandNote": "Bevor du `sr` zum ersten Mal verwendest, starte SonicRoute normal, damit der Befehl registriert wird, und öffne anschließend dein Terminal erneut. Wenn der Gerätewechsel nicht wie erwartet funktioniert, findest du Hilfe in den {faq}.",
   "ruleExample": "Regelname oder ID",
@@ -103,5 +103,22 @@
     "Regel erstellen: Spielstart → Headset wählen + Lautstärke 40 % + Chat starten; beim Beenden zurück auf Lautsprecher",
     "Alle Mikrofone mit Strg+Umschalt+N stummschalten und den Status sofort per OSD-Banner auf dem Bildschirm ablesen",
     "Apps dedizierten Audiospuren zuweisen, damit private Gespräche und Systemtöne nicht in der Aufnahme landen"
+  ],
+  "editionLiteX64": "Lite x64 (Empfohlen)",
+  "editionLiteArm64": "Lite ARM64",
+  "editionLegacyX64": "Legacy x64 (Ohne .NET 8)",
+  "editionStore": "Microsoft Store (Auto-Updates)",
+  "arm64Requirement": "Native Leistung auf Surface Pro und Snapdragon ARM64-Geräten; erfordert passende ARM64 .NET 8 Desktop Runtime",
+  "commandSnippetComment": "Automatisierungsregel ausführen (SonicRoute muss bereits laufen)",
+  "faqQuickTitle": "Häufig gestellte Fragen (FAQ)",
+  "faqQuestions": [
+    "Bleiben Routing- und Lautstärkeeinstellungen nach dem Schließen von SonicRoute erhalten?",
+    "Was tun, wenn der Start meldet, dass die .NET 8 Desktop Runtime fehlt?",
+    "Verbraucht SonicRoute im Hintergrund spürbar CPU oder Akku?"
+  ],
+  "faqAnswers": [
+    "Ja! Die Audio-Zuweisung wird nativ vom Windows-Audiosystem gespeichert und bleibt auch nach Beenden von SonicRoute aktiv. Nur Tastenkürzel, Infobereich-Gesten und Automatisierungsregeln erfordern die Hintergrund-Ausführung.",
+    "Klicken Sie in der Tabelle oben auf den Runtime-Link zur offiziellen Microsoft .NET 8 Desktop Runtime oder laden Sie die Legacy-Version herunter, die keine zusätzliche Runtime benötigt.",
+    "Praktisch null. SonicRoute basiert vollständig auf Windows-Systemereignissen; im Leerlauf liegt die CPU-Last bei 0% ohne Hintergrund-Polling-Timer."
   ]
 }

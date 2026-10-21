@@ -17,10 +17,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="使用指南"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="点击看板娘查看使用指南"></a>
 <br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute 快捷面板：顶部输出设备与各应用音量"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute v1.23 自动化规则编辑器：应用触发条件与音频操作选择"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute 自动化规则编辑器：选择应用触发器与音频操作步骤"></a>
 </div>
 
-<sub>界面示例：快捷面板管理应用音量与设备；自动化编辑器组合触发条件与操作步骤。</sub>
+<sub>界面预览：快速面板（支持自适应与透明亚克力风格）即时控制音量与设备；自动化规则编辑器自由编排触发器与执行动作。</sub>
 
 ## ✨ SonicRoute 的特点
 
@@ -52,20 +52,39 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| Lite x64 | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 与程序架构匹配的 x64 .NET 8 Desktop Runtime |
-| Lite ARM64（实验） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | 与程序架构匹配的 ARM64 .NET 8 Desktop Runtime |
-| Legacy x64 | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | .NET Framework 4.8；完整解压后运行 |
-| Microsoft Store | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64；支持自动更新，以商店在架版本为准 |
+| Lite x64（推荐主力） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 单文件免安装，开箱即用；需与系统架构匹配的 x64 .NET 8 Desktop Runtime |
+| Lite ARM64（实验） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro 与骁龙 ARM64 设备原生高效运行；需与系统匹配的 ARM64 .NET 8 Desktop Runtime |
+| Legacy x64（免装运行库） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用 |
+| Microsoft Store（自动更新） | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 一键安装并由微软商店自动静默更新；适用于 64 位 Windows 10/11 |
 
 Lite 请安装对应架构的 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)。Legacy 无需安装 .NET 8。
 
-1. 启动后在系统托盘找到 SonicRoute（可能位于隐藏图标中），双击图标打开完整界面。
-2. 在「设置 → 保留的设备」勾选常用输出与输入设备。
-3. 单击托盘打开快速面板，或到快捷键页设置操作；需要组合操作时再创建自动化规则。
+1. 双击启动后常驻托盘（可在任务栏角溢出区拖出固定），双击托盘图标打开主界面。
+2. 在「设置 → 保留的设备」勾选常用输出与输入设备；单击托盘图标滑出面板，即时滑动调节并分流各个应用的声音输出。
+3. 把鼠标移到托盘图标上直接滚动滚轮即可盲调当前音量；配合快捷键与自动化规则，无需切出全屏游戏也能从容掌控。
 
 `sr` 只连接已运行的 SonicRoute 实例，不会启动软件。首次使用前，先正常启动软件登记命令，再关闭并重新打开终端。设备切换遇到问题时，可按 [常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) 排查。
 
+```bash
+# 触发指定自动化规则（需 SonicRoute 正在运行）
+sr "规则名称或ID"
+```
+
 1.24 新增自动化起步模板、可设置存储上限的最近执行详情（默认关闭），以及逐应用图标导入。缺少图标或只有系统通用图标时，显示应用名称首字；配置备份包含导入的图标。旧版变化见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+
+### ❓ 常见问题速览
+
+**Q：关闭软件后，应用的分流与音量设置还会保留吗？**
+
+A：会！应用路由由 Windows 核心音频服务原生持久化保存；关闭 SonicRoute 后依然有效。仅快捷键、托盘控制与自动化规则需要软件在后台常驻生效。
+
+**Q：启动提示缺少 .NET 8 桌面运行库怎么办？**
+
+A：可点击上方表格中的运行库链接安装微软官方 .NET 8 Desktop Runtime，或直接下载无需任何额外环境的 Legacy 版本。
+
+**Q：软件在后台常驻会占用 CPU 或耗电吗？**
+
+A：几乎为零。SonicRoute 采用纯 Windows 系统事件监听架构，闲时完全挂起等待事件通知，CPU 占用 0%，无任何后台轮询定时器。
 
 ## 📚 使用文档
 

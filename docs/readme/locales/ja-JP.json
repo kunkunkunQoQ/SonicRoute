@@ -8,9 +8,9 @@
   "support": "Afdian で支援",
   "experimental": "実験的",
   "languages": "9 種類の UI 言語",
-  "preview": "画面例：クイックパネルでアプリごとの音量とデバイスを操作し、自動化エディターでトリガーと操作手順を組み合わせられます。",
+  "preview": "UIプレビュー：音量とルーティングを即座に操作できるクイックパネル（可変高さ・アクリル半透明対応）と、トリガーとアクションを自在に組める自動化エディター。",
   "panelAlt": "SonicRoute クイックパネル：上部の出力デバイスとアプリごとの音量操作",
-  "automationPreviewAlt": "SonicRoute v1.23 自動化ルールエディター：アプリのトリガーと音声操作の選択",
+  "automationPreviewAlt": "SonicRoute 自動化ルールエディター：アプリトリガーとオーディオアクションの手順選択",
   "mascotAlt": "マスコットをクリックしてユーザーガイドを開く",
   "featuresTitle": "SonicRoute の主な機能",
   "downloadTitle": "ダウンロードと使い始め方",
@@ -21,14 +21,14 @@
   "singleExe": "単体 EXE",
   "fullZip": "完全版 ZIP",
   "storeInstall": "Store からインストール",
-  "liteRequirement": "{arch} .NET 8 Desktop Runtime",
-  "legacyRequirement": ".NET Framework 4.8。実行前に ZIP 全体を展開してください",
-  "storeRequirement": "x64；自動更新；Store に現在提供中のバージョンが表示されます",
+  "liteRequirement": "単一ファイルでインストール不要。システムに適合する x64 .NET 8 Desktop Runtime が必要です",
+  "legacyRequirement": "追加ランタイム不要。Windows 標準の .NET Framework 4.8 で動作し、ZIP を解凍するだけですぐに使えます",
+  "storeRequirement": "ワンクリック導入とストア経由の自動バックグラウンド更新に対応（64ビット Windows 10/11 対象）",
   "runtimeNote": "Lite には対応する {runtime} が必要です。Legacy に .NET 8 は必要ありません。",
   "steps": [
-    "SonicRoute を起動し、Windows の通知領域（隠れているアイコンの中にある場合があります）でアイコンを見つけて、ダブルクリックでメイン画面を開きます。",
-    "設定で使いたい出力・入力デバイスを選びます。",
-    "通知領域のアイコンをクリックしてパネルを開くか、ホットキーを設定します。複数の操作を組み合わせる場合は、自動化ルールを作成します。"
+    "起動するとシステムトレイに常駐します（隠れている場合はトレイ一覧からドラッグして固定可能）。アイコンをダブルクリックするとメイン画面が開きます。",
+    "「設定 → 保持するデバイス」でヘッドホンやスピーカーをチェック。トレイアイコンを左クリックしてクイックパネルを開き、各アプリの出力先や音量を素早く調整できます。",
+    "トレイアイコンにマウスを重ねてホイールを回すだけでブラインド音量調節が可能。ホットキーや自動化ルールを組み合わせれば、ゲーム画面を切り替えずに操作できます。"
   ],
   "commandNote": "`sr` を初めて使う前に、SonicRoute を通常起動してコマンドを登録し、ターミナルを開き直してください。デバイス切り替えが想定どおりに動作しない場合は {faq} をご覧ください。",
   "ruleExample": "ルール名または ID",
@@ -103,5 +103,22 @@
     "ゲーム起動時に「ヘッドセットへ切り替え＋音量40%＋通話起動」、終了時にスピーカーへ自動復帰",
     "Ctrl+Shift+N で全マイクを一括ミュート。画面上の OSD バナーで消音状態を一目で確認",
     "アプリごとに独立した音声トラックを割り当て、プライベートな会話や通知音が録画に入るのを防止"
+  ],
+  "editionLiteX64": "Lite x64（おすすめ・標準）",
+  "editionLiteArm64": "Lite ARM64",
+  "editionLegacyX64": "Legacy x64（.NET 8 不要）",
+  "editionStore": "Microsoft Store（自動更新）",
+  "arm64Requirement": "Surface Pro や Snapdragon 搭載 ARM64 PC でネイティブ動作。ARM64 .NET 8 Desktop Runtime が必要です",
+  "commandSnippetComment": "自動化ルールを実行（SonicRoute が起動中である必要があります）",
+  "faqQuickTitle": "よくある質問（FAQ）",
+  "faqQuestions": [
+    "SonicRoute を終了してもアプリのルーティングや音量設定は維持されますか？",
+    "起動時に .NET 8 Desktop Runtime が不足していると表示された場合はどうすればよいですか？",
+    "バックグラウンド常駐中に CPU やバッテリーを消費しますか？"
+  ],
+  "faqAnswers": [
+    "はい、維持されます。アプリのルーティングは Windows 側のオーディオエンジンによってネイティブに保存されるため、終了後も有効です。ホットキーや自動化ルールのみ常駐が必要です。",
+    "上記テーブル内のランタイムリンクから公式の .NET 8 Desktop Runtime をインストールするか、追加環境が不要な Legacy 版をご利用ください。",
+    "ほぼゼロです。SonicRoute は完全な Windows システムイベント駆動型アーキテクチャを採用しており、待機時の CPU 使用率は 0%、無駄な定期ポーリングも一切ありません。"
   ]
 }

@@ -8,9 +8,9 @@
   "support": "Support on Afdian",
   "experimental": "experimental",
   "languages": "Nine languages",
-  "preview": "Interface examples: Quick panel for app volume and devices; automation editor for combining triggers and action steps.",
+  "preview": "Interface preview: Quick panel (with adaptive height and acrylic style) for instant app volume and routing; automation editor for custom triggers and action chains.",
   "panelAlt": "SonicRoute Quick panel: output device and per-app volume controls",
-  "automationPreviewAlt": "SonicRoute v1.23 automation rule editor: app trigger and audio action selection",
+  "automationPreviewAlt": "SonicRoute automation rule editor: select app triggers and audio action steps",
   "mascotAlt": "Click the mascot to open the user guide",
   "featuresTitle": "What SonicRoute offers",
   "downloadTitle": "Download and get started",
@@ -21,14 +21,14 @@
   "singleExe": "Single EXE",
   "fullZip": "Complete ZIP",
   "storeInstall": "Install from the Store",
-  "liteRequirement": "Matching {arch} .NET 8 Desktop Runtime",
-  "legacyRequirement": ".NET Framework 4.8; extract the entire archive",
-  "storeRequirement": "x64; automatic updates; the available version is shown on the Store",
+  "liteRequirement": "Standalone single-file executable; requires matching x64 .NET 8 Desktop Runtime",
+  "legacyRequirement": "No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use",
+  "storeRequirement": "One-click install with silent automatic updates; for 64-bit Windows 10/11",
   "runtimeNote": "Lite requires the matching {runtime}. Legacy does not require .NET 8.",
   "steps": [
-    "Start SonicRoute, find its icon in the Windows notification area (it may be under hidden icons), and double-click it to open the full interface.",
-    "Select your preferred output and input devices in Settings.",
-    "Click the tray icon to open a panel, or set up your hotkeys. Create automation rules when you want to combine actions."
+    "Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.",
+    "Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.",
+    "Hover over the tray icon and scroll the wheel to adjust volume blindly, or use hotkeys and automation rules without leaving full-screen games."
   ],
   "commandNote": "`sr` connects only to an already-running SonicRoute instance; it does not start the app. Before first use, start SonicRoute normally to register the command, then close and reopen your terminal. See the {faq} if device switching does not work as expected.",
   "ruleExample": "Rule name or ID",
@@ -103,5 +103,22 @@
     "Create a rule: launch game → switch to headset + set volume to 40% + start voice chat; restore speakers on exit",
     "Mute all microphones with Ctrl+Shift+N and confirm mute state instantly via the on-screen OSD banner",
     "Route applications to dedicated physical or virtual audio tracks so private chats and alerts never end up in recordings"
+  ],
+  "editionLiteX64": "Lite x64 (Recommended)",
+  "editionLiteArm64": "Lite ARM64",
+  "editionLegacyX64": "Legacy x64 (No .NET 8 required)",
+  "editionStore": "Microsoft Store (Auto-updates)",
+  "arm64Requirement": "Native performance on Surface Pro and Snapdragon ARM64 devices; requires matching ARM64 .NET 8 Desktop Runtime",
+  "commandSnippetComment": "Trigger an automation rule (SonicRoute must be running)",
+  "faqQuickTitle": "Quick FAQ",
+  "faqQuestions": [
+    "Will app routing and volume settings persist after closing SonicRoute?",
+    "What should I do if Windows prompts that .NET 8 Desktop Runtime is missing?",
+    "Does running SonicRoute in the background consume CPU or battery?"
+  ],
+  "faqAnswers": [
+    "Yes! App audio routing is natively preserved by the Windows audio engine and stays active even after SonicRoute is closed. Only hotkeys, tray controls, and automation rules require SonicRoute running in the background.",
+    "Click the runtime link in the table above to install the official Microsoft .NET 8 Desktop Runtime, or download the Legacy edition which requires no additional runtime.",
+    "Practically zero. SonicRoute is built entirely on Windows event-driven listeners; it idles at 0% CPU with zero background polling timers and on-demand memory cleanup."
   ]
 }
