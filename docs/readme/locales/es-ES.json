@@ -49,8 +49,7 @@
   "easterEgg": "Descubre un huevo de Pascua",
   "useCasesTitle": "Para el día a día",
   "configureAutomation": "Configurar automatización",
-  "automationExample": "Por ejemplo, configura al iniciar un juego: enviar el sonido del juego a los auriculares → poner su volumen al 50 % → abrir el chat de voz. Después, activa la regla.",
-  "useCaseExample": "¿Se oye demasiado alto a tus compañeros? Baja solo el control de volumen del chat de voz, sin cambiar el del juego.",
+  "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
   "currentRelease": "Versión actual",
   "releaseSummary": "La versión {version} añade plantillas de automatización, un registro detallado de las ejecuciones recientes (desactivado de forma predeterminada, con límite de almacenamiento configurable) e iconos personalizados por aplicación. Si falta el icono o es genérico, se muestra el primer carácter del nombre de la aplicación. Las copias de seguridad de la configuración incluyen los iconos importados. Consulta {history} para ver los cambios anteriores.",
   "docTopic": "Tema",
@@ -88,5 +87,21 @@
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nuevo desastre cada vez que intenta ayudar.",
-  "comicAlt": "Haz clic en XiaoYue asomándose de un huevo con un cómic para leer la serie"
+  "comicAlt": "Haz clic en XiaoYue asomándose de un huevo con un cómic para leer la serie",
+  "scenario": "Escenario cotidiano",
+  "whatYouCanDo": "Cómo le ayuda SonicRoute",
+  "useCaseNames": [
+    "**Chat de voz muy alto o el juego tapa la voz de los compañeros**",
+    "**Escuchar música o ver vídeos mientras juegas en segundo plano**",
+    "**Cambiar cables de auriculares y ajustar Windows cada vez que juegas**",
+    "**Alejarse del equipo o atender una llamada privada al instante**",
+    "**Transmisión con OBS o grabación de tutoriales de pantalla**"
+  ],
+  "useCaseActions": [
+    "Ajuste el volumen de Discord sin alterar el juego; mantenga el juego en auriculares y el chat en el microauricular",
+    "Música a los altavoces y juego a los auriculares; ajuste el volumen con la rueda en la bandeja sin salir del juego",
+    "Regla rápida: abrir juego → pasar a auriculares + volumen 40 % + abrir chat; volver a altavoces al salir",
+    "Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla",
+    "Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación"
+  ]
 }

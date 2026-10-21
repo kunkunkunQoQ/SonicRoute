@@ -49,8 +49,7 @@
   "easterEgg": "Click the resting mascot to discover an Easter egg",
   "useCasesTitle": "Everyday uses",
   "configureAutomation": "Set up automation",
-  "automationExample": "For example, set a game-start rule to send the game’s audio to headphones → set the game’s volume to 50% → open voice chat, then enable the rule.",
-  "useCaseExample": "Teammates too loud? Lower just the voice chat app’s slider and leave the game’s volume alone.",
+  "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
   "currentRelease": "Current release",
   "releaseSummary": "Version {version} adds starter templates for automation, optional recent execution details (off by default, with a storage limit), and per-app icon imports. Missing or generic app icons fall back to the first character of the app’s name. Configuration backups include imported icons. See {history} for earlier changes.",
   "docTopic": "Topic",
@@ -88,5 +87,21 @@
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "An absurd magical-girl comedy about a girl who hatches from an egg and makes a mess whenever she tries to help.",
-  "comicAlt": "Click XiaoYue peeking out of an eggshell with a comic book to read the series"
+  "comicAlt": "Click XiaoYue peeking out of an eggshell with a comic book to read the series",
+  "scenario": "Everyday scenario",
+  "whatYouCanDo": "How SonicRoute helps",
+  "useCaseNames": [
+    "**Voice chat too loud, or game sound drowning out teammates**",
+    "**Listening to music or watching videos while gaming**",
+    "**Constantly swapping headsets and changing Windows settings for games**",
+    "**Stepping away from the PC or taking a private call**",
+    "**Streaming on OBS or recording tutorials**"
+  ],
+  "useCaseActions": [
+    "Adjust voice chat (Discord) volume independently without altering game audio; keep game in headset and chat in earpiece",
+    "Route music to speakers and games to headphones; adjust music volume with the tray scroll wheel without leaving full screen",
+    "Create a rule: launch game → switch to headset + set volume to 40% + start voice chat; restore speakers on exit",
+    "Mute all microphones with Ctrl+Shift+N and confirm mute state instantly via the on-screen OSD banner",
+    "Route applications to dedicated physical or virtual audio tracks so private chats and alerts never end up in recordings"
+  ]
 }

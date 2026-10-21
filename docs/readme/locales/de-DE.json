@@ -49,8 +49,7 @@
   "easterEgg": "Entdecke ein Easter Egg",
   "useCasesTitle": "Für den Alltag",
   "configureAutomation": "Automatisierung einrichten",
-  "automationExample": "Lege zum Beispiel für den Spielstart fest: Spielton auf Kopfhörer → Spiellautstärke auf 50% → Sprachchat öffnen. Aktiviere anschließend die Regel.",
-  "useCaseExample": "Sind deine Mitspieler zu laut? Senke nur den Regler der Sprachchat-App; die Spiellautstärke bleibt unverändert.",
+  "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
   "currentRelease": "Aktuelle Version",
   "releaseSummary": "Version {version} ergänzt Vorlagen für Automatisierungsregeln, ein optionales Ausführungsprotokoll (standardmäßig aus, mit einstellbarer Speichergrenze) und eigene App-Symbole. Fehlt ein Symbol oder wird nur ein Standardsymbol erkannt, erscheint das erste Zeichen des App-Namens. Importierte Symbole sind in der Einstellungssicherung enthalten. Frühere Änderungen stehen unter {history}.",
   "docTopic": "Thema",
@@ -88,5 +87,21 @@
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Eine absurde Comedy über ein magisches Mädchen, das aus einem Ei schlüpft und mit jedem Hilfsversuch neues Chaos anrichtet.",
-  "comicAlt": "Klicke auf XiaoYue mit Comicbuch in der Eierschale, um die Reihe zu lesen"
+  "comicAlt": "Klicke auf XiaoYue mit Comicbuch in der Eierschale, um die Reihe zu lesen",
+  "scenario": "Alltagsszenario",
+  "whatYouCanDo": "So hilft SonicRoute",
+  "useCaseNames": [
+    "**Voice-Chat zu laut oder Spielsound übertönt Teamkollegen**",
+    "**Beim Zocken im Hintergrund Musik hören oder Videos schauen**",
+    "**Vor jedem Spiel Headsets umstecken und Windows-Einstellungen anpassen**",
+    "**Kurz vom PC aufstehen oder ein privates Telefonat führen**",
+    "**OBS-Gaming-Streams oder Aufnahme von Tutorials**"
+  ],
+  "useCaseActions": [
+    "Voice-Chat (Discord) separat regeln, ohne den Spielsound zu verändern; Spiel und Chat auf getrennte Geräte legen",
+    "Musik auf Lautsprecher, Spiel auf Kopfhörer; Lautstärke per Tray-Mausrad steuern, ohne das Spiel zu verlassen",
+    "Regel erstellen: Spielstart → Headset wählen + Lautstärke 40 % + Chat starten; beim Beenden zurück auf Lautsprecher",
+    "Alle Mikrofone mit Strg+Umschalt+N stummschalten und den Status sofort per OSD-Banner auf dem Bildschirm ablesen",
+    "Apps dedizierten Audiospuren zuweisen, damit private Gespräche und Systemtöne nicht in der Aufnahme landen"
+  ]
 }
