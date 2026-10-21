@@ -105,19 +105,18 @@ namespace SonicRoute
                 if (step.Action == AutoRuleAction.ExecuteRule && (string.IsNullOrWhiteSpace(step.TargetRuleId)
                     || step.TargetRuleId == (_autoTemplateDraft?.Id ?? _autoEditingId) || AutoRuleStore.Find(step.TargetRuleId) == null))
                     return "Auto.RuleRequired";
-                if (step.Action is AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute or AutoRuleAction.SetAppOutput
-                    or AutoRuleAction.SetAppInput or AutoRuleAction.SetAppMute or AutoRuleAction.AdjustAppVolume)
+                if (AutoRuleActions.NeedsApp(step.Action))
                 {
                     if (string.IsNullOrWhiteSpace(step.TargetApp) || (_autoTemplateDraft != null
                         && !_autoStepAppCombos.Any(combo => ReferenceEquals(combo.Tag, step) && combo.SelectedItem is AppItem)))
                         return "Auto.ActionAppRequired";
                 }
-                if (step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput or AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput)
+                if (AutoRuleActions.NeedsDevice(step.Action))
                 {
                     if (string.IsNullOrWhiteSpace(step.TargetDeviceId) || (_autoTemplateDraft != null
-                        && (!_autoStepDeviceCombos.Keys.Any(combo => ReferenceEquals(combo.Tag, step) && combo.SelectedItem is AudioDeviceInfo)
-                            || (step.Action is AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput && AudioService.IsSystemDefault(step.TargetDeviceId)))))
-                        return "Auto.TargetDevice";
+                        && !_autoStepDeviceCombos.Keys.Any(combo => ReferenceEquals(combo.Tag, step) && combo.SelectedItem is AudioDeviceInfo))
+                        || (step.Action is not (AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput) && AudioService.IsSystemDefault(step.TargetDeviceId)))
+                        return "Auto.DeviceRequired";
                 }
                 if ((step.Action == AutoRuleAction.LaunchProgram && step.CurrentLaunchItems().Count == 0)
                     || (step.Action == AutoRuleAction.RunPowerShell && step.ProgramPaths.All(string.IsNullOrWhiteSpace)))

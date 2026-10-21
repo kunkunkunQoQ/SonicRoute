@@ -385,6 +385,18 @@ namespace SonicRoute
             }
         }
 
+        internal bool SetQuickPanelVisibility(bool visible)
+        {
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return false;
+            if (visible)
+            {
+                if (_quickPanel?.IsVisible != true) ToggleQuickPanel();
+                return _quickPanel?.IsVisible == true;
+            }
+            _quickPanel?.Close(); // No hidden panel is created just to close it.
+            return _quickPanel == null || !_quickPanel.IsVisible;
+        }
+
         internal void ToggleQuickPanel()
         {
             if (_quickPanel == null)

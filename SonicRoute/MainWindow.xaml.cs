@@ -1921,8 +1921,8 @@ namespace SonicRoute
         }
         // ==================================================================
         // 实验模式（隐藏功能）
-        // 解锁：设置页底部点击"困困困"（作者名）5 次 → 持久化 ExperimentalUnlocked。
-        // 之后"开机自启"栏下方出现"实验模式"开关；开启（重启生效）后出现"麦克风选项"；
+        // 设置页底部点击"困困困"（作者名）5 次 → 解锁并开启实验模式，立即显示"实验设置"导航。
+        // "开机自启"栏下方显示"实验模式"开关；各实验子选项保留原设置，功能本身仍按需重启生效；
         // 开启麦克风选项（重启生效）后：设置页"保留的设备"显示输入设备区、快捷键页显示"切换当前应用麦克风设备"。
         // 更新日志规范：实验模式内容不写入 GitHub 更新日志，仅记录于本地规范 README。
         // ==================================================================
@@ -1931,15 +1931,19 @@ namespace SonicRoute
 
         private void AboutAuthorText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (_config.ExperimentalUnlocked) return; // 已解锁
+            if (_config.ExperimentalUnlocked && _config.ExperimentalMode) return;
             _authorClicks++;
             if (_authorClicks >= 5)
             {
                 _authorClicks = 0;
                 _config.ExperimentalUnlocked = true;
-                ConfigService.Save(_config);
                 SettingsExperimentalMode.Visibility = Visibility.Visible;
                 ExperimentalModeHint.Visibility = Visibility.Visible;
+                bool suppressed = _suppressSettings;
+                _suppressSettings = true;
+                try { SettingsExperimentalMode.IsChecked = true; }
+                finally { _suppressSettings = suppressed; }
+                ApplyExperimentalMode(true);
                 ShowToast(L10n.T("St.EggDone"));
             }
             else
@@ -1952,13 +1956,18 @@ namespace SonicRoute
         private void SettingsExperimentalMode_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsSettingsChange(sender, e)) return;
-            _config.ExperimentalMode = SettingsExperimentalMode.IsChecked == true;
+            ApplyExperimentalMode(SettingsExperimentalMode.IsChecked == true);
+            ShowToast(L10n.T("St.ExpModeNeedRestart"));
+        }
+
+        private void ApplyExperimentalMode(bool enabled)
+        {
+            _config.ExperimentalMode = enabled;
             ConfigService.Save(_config);
             if (!_config.ExperimentalMode) AutoRuleService.StopExecutionHistory();
             SyncExecutionHistoryOptions();
             // 导航"实验设置"入口立即显示/隐藏（功能本身重启生效）
             NavExperimental.Visibility = _config.ExperimentalMode ? Visibility.Visible : Visibility.Collapsed;
-            ShowToast(L10n.T("St.ExpModeNeedRestart"));
         }
 
         /// <summary>按麦克风选项开关状态统一控制各界面麦克风（输入）UI 的可见性。
@@ -3183,11 +3192,11 @@ namespace SonicRoute
             var actionTexts = steps.Select(step =>
             {
                 string text = L10n.T(AutoActionKey(step.Action));
-                if (step.Action is AutoRuleAction.SetSystemMute or AutoRuleAction.SetAppMute or AutoRuleAction.SetGlobalMicMute)
+                if (AutoRuleActions.SetsMute(step.Action))
                     text += "·" + L10n.T(step.Muted ? "Auto.MuteOn" : "Auto.MuteOff");
-                if (step.Action is AutoRuleAction.AdjustSystemVolume or AutoRuleAction.AdjustAppVolume)
-                    text += " " + (step.VolumeDelta > 0 ? "+" : "") + step.VolumeDelta + "%";
-                if (step.Action is AutoRuleAction.SetSystemVolume or AutoRuleAction.SetAppVolume)
+                if (AutoRuleActions.AdjustsVolume(step.Action))
+                    text += " " + string.Format(L10n.T("Auto.VolumeDeltaValue"), (step.VolumeDelta > 0 ? "+" : "") + step.VolumeDelta);
+                if (AutoRuleActions.SetsVolume(step.Action))
                     text += " " + step.Volume + "%";
                 if (step.Action == AutoRuleAction.LaunchProgram && step.LaunchMode == 1)
                     text += " · " + L10n.T("Auto.LaunchModeRandom");
@@ -3573,6 +3582,25 @@ namespace SonicRoute
             AutoRuleAction.AdjustAppVolume => "Auto.ActionAdjustAppVolume",
             AutoRuleAction.SetGlobalMicMute => "Auto.ActionSetMicMute",
             AutoRuleAction.ToggleGlobalMicMute => "Auto.ActionToggleMicMute",
+            AutoRuleAction.SetMicrophoneMute => "Auto.ActionSetMicrophoneMute",
+            AutoRuleAction.ToggleMicrophoneMute => "Auto.ActionToggleMicrophoneMute",
+            AutoRuleAction.SetPlaybackDeviceVolume => "Auto.ActionSetPlaybackDeviceVolume",
+            AutoRuleAction.AdjustPlaybackDeviceVolume => "Auto.ActionAdjustPlaybackDeviceVolume",
+            AutoRuleAction.SetPlaybackDeviceMute => "Auto.ActionSetPlaybackDeviceMute",
+            AutoRuleAction.TogglePlaybackDeviceMute => "Auto.ActionTogglePlaybackDeviceMute",
+            AutoRuleAction.SetDefaultInputVolume => "Auto.ActionSetDefaultInputVolume",
+            AutoRuleAction.AdjustDefaultInputVolume => "Auto.ActionAdjustDefaultInputVolume",
+            AutoRuleAction.SetDefaultInputMute => "Auto.ActionSetDefaultInputMute",
+            AutoRuleAction.ToggleDefaultInputMute => "Auto.ActionToggleDefaultInputMute",
+            AutoRuleAction.SetAppInputMute => "Auto.ActionSetAppInputMute",
+            AutoRuleAction.ToggleAppInputMute => "Auto.ActionToggleAppInputMute",
+            AutoRuleAction.SetAllAppsVolume => "Auto.ActionSetAllAppsVolume",
+            AutoRuleAction.AdjustAllAppsVolume => "Auto.ActionAdjustAllAppsVolume",
+            AutoRuleAction.SetAllAppsMute => "Auto.ActionSetAllAppsMute",
+            AutoRuleAction.ToggleAllAppsMute => "Auto.ActionToggleAllAppsMute",
+            AutoRuleAction.ResetAllAppRouting => "Auto.ActionResetAllAppRouting",
+            AutoRuleAction.ShowQuickPanel => "Auto.ActionShowQuickPanel",
+            AutoRuleAction.HideQuickPanel => "Auto.ActionHideQuickPanel",
             _ => "Auto.Action"
         };
 
@@ -3583,9 +3611,17 @@ namespace SonicRoute
             {
                 AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput or AutoRuleAction.SetSystemVolume
                     or AutoRuleAction.ToggleSystemMute or AutoRuleAction.SetSystemMute or AutoRuleAction.AdjustSystemVolume
-                    or AutoRuleAction.SetGlobalMicMute or AutoRuleAction.ToggleGlobalMicMute => 0,
+                    or AutoRuleAction.SetGlobalMicMute or AutoRuleAction.ToggleGlobalMicMute
+                    or AutoRuleAction.SetMicrophoneMute or AutoRuleAction.ToggleMicrophoneMute
+                    or AutoRuleAction.SetPlaybackDeviceVolume or AutoRuleAction.AdjustPlaybackDeviceVolume
+                    or AutoRuleAction.SetPlaybackDeviceMute or AutoRuleAction.TogglePlaybackDeviceMute
+                    or AutoRuleAction.SetDefaultInputVolume or AutoRuleAction.AdjustDefaultInputVolume
+                    or AutoRuleAction.SetDefaultInputMute or AutoRuleAction.ToggleDefaultInputMute => 0,
                 AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute or AutoRuleAction.SetAppOutput
-                    or AutoRuleAction.SetAppInput or AutoRuleAction.SetAppMute or AutoRuleAction.AdjustAppVolume => 1,
+                    or AutoRuleAction.SetAppInput or AutoRuleAction.SetAppMute or AutoRuleAction.AdjustAppVolume
+                    or AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute
+                    or AutoRuleAction.SetAllAppsVolume or AutoRuleAction.AdjustAllAppsVolume
+                    or AutoRuleAction.SetAllAppsMute or AutoRuleAction.ToggleAllAppsMute or AutoRuleAction.ResetAllAppRouting => 1,
                 AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell => 2,
                 _ => 3
             };
@@ -3971,14 +4007,11 @@ namespace SonicRoute
                 return sp;
             }
 
-            bool app = step.Action is AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute
-                or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
-                or AutoRuleAction.SetAppMute or AutoRuleAction.AdjustAppVolume;
-            bool dev = step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
-                or AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput;
-            bool relativeVolume = step.Action is AutoRuleAction.AdjustSystemVolume or AutoRuleAction.AdjustAppVolume;
-            bool vol = relativeVolume || step.Action is AutoRuleAction.SetSystemVolume or AutoRuleAction.SetAppVolume;
-            bool muteState = step.Action is AutoRuleAction.SetSystemMute or AutoRuleAction.SetAppMute or AutoRuleAction.SetGlobalMicMute;
+            bool app = AutoRuleActions.NeedsApp(step.Action);
+            bool dev = AutoRuleActions.NeedsDevice(step.Action);
+            bool relativeVolume = AutoRuleActions.AdjustsVolume(step.Action);
+            bool vol = relativeVolume || AutoRuleActions.SetsVolume(step.Action);
+            bool muteState = AutoRuleActions.SetsMute(step.Action);
             bool prog = step.Action is AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell;
             bool osd = step.Action == AutoRuleAction.ShowOsd;
 
@@ -4010,8 +4043,7 @@ namespace SonicRoute
                     DisplayMemberPath = "DisplayLabel",
                     Tag = step
                 };
-                var flow = step.Action is AutoRuleAction.SetAppInput or AutoRuleAction.SetSystemInput
-                    ? EDataFlow.eCapture : EDataFlow.eRender;
+                var flow = AutoRuleActions.UsesCaptureDevice(step.Action) ? EDataFlow.eCapture : EDataFlow.eRender;
                 var devices = flow == EDataFlow.eRender ? (_autoOutputs ?? _outputs) : (_autoInputs ?? _inputs);
                 foreach (var d in AutomationDeviceChoices(step, flow, devices)) cb.Items.Add(d);
                 _autoStepDeviceCombos[cb] = flow;
@@ -4026,13 +4058,17 @@ namespace SonicRoute
             {
                 int min = relativeVolume ? -100 : 0;
                 int value = MathEx.Clamp(relativeVolume ? step.VolumeDelta : step.Volume, min, 100);
-                string VolumeText(int percent) => (relativeVolume && percent > 0 ? "+" : "") + percent + "%";
+                string VolumeText(int percent) => relativeVolume
+                    ? string.Format(L10n.T("Auto.VolumeDeltaValue"), (percent > 0 ? "+" : "") + percent)
+                    : percent + "%";
                 var txt = new TextBlock
                 {
                     Text = VolumeText(value),
                     FontSize = 13,
                     FontWeight = FontWeights.SemiBold,
                     MinWidth = 44,
+                    MaxWidth = 150,
+                    TextWrapping = TextWrapping.Wrap,
                     TextAlignment = TextAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Center
                 };
@@ -4083,6 +4119,25 @@ namespace SonicRoute
                     if (cb.SelectedItem is ComboBoxItem { Tag: bool muted }) step.Muted = muted;
                 };
                 wrap.Children.Add(Group(L10n.T("Auto.MuteState"), cb));
+            }
+            string? hintKey = step.Action switch
+            {
+                AutoRuleAction.SetMicrophoneMute or AutoRuleAction.ToggleMicrophoneMute => "Auto.MicrophoneMuteHint",
+                AutoRuleAction.SetPlaybackDeviceVolume or AutoRuleAction.AdjustPlaybackDeviceVolume
+                    or AutoRuleAction.SetPlaybackDeviceMute or AutoRuleAction.TogglePlaybackDeviceMute => "Auto.PlaybackDeviceHint",
+                AutoRuleAction.SetDefaultInputVolume or AutoRuleAction.AdjustDefaultInputVolume
+                    or AutoRuleAction.SetDefaultInputMute or AutoRuleAction.ToggleDefaultInputMute => "Auto.DefaultInputHint",
+                AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute => "Auto.AppInputMuteHint",
+                AutoRuleAction.SetAllAppsVolume or AutoRuleAction.AdjustAllAppsVolume
+                    or AutoRuleAction.SetAllAppsMute or AutoRuleAction.ToggleAllAppsMute => "Auto.AllAppsHint",
+                AutoRuleAction.ResetAllAppRouting => "Auto.ResetAllRoutingHint",
+                _ => null
+            };
+            if (hintKey != null)
+            {
+                var hint = new TextBlock { Text = L10n.T(hintKey), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
+                hint.SetResourceReference(StyleProperty, "ThemeHint");
+                wrap.Children.Add(hint);
             }
             if (prog)
             {

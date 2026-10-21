@@ -6,7 +6,7 @@ using SonicRoute.Core.Interop;
 namespace SonicRoute.Core
 {
     /// <summary>
-    /// 系统输出设备音量控制（设备级 IAudioEndpointVolume，eRender）。
+    /// 音频端点音量控制（设备级 IAudioEndpointVolume）；显式设备 Id 也支持录音设备。
     /// 仅控制指定设备（默认：系统默认输出设备）自身的音量/静音，**不修改系统默认设备**，
     /// 与 Per-App Routing 核心（IAudioPolicyConfigFactory）完全无关。
     /// 供简洁面板顶部"系统音频"区使用：选择设备 → 滑块/静音控制系统音量。
@@ -15,6 +15,7 @@ namespace SonicRoute.Core
     {
         private static readonly Guid IID_IAudioEndpointVolume = new("5CDF2C82-841E-4546-9722-0CF74078229A");
         private static readonly object _adjustVolumeLock = new();
+        private static readonly object _toggleMuteLock = new();
 
         /// <summary>按设备 Id 获取 IAudioEndpointVolume；deviceId 为 null/空表示系统默认输出设备。</summary>
         private static IAudioEndpointVolume? GetVolume(string? deviceId)
@@ -158,6 +159,27 @@ namespace SonicRoute.Core
             bool m = IsMuted(deviceId);
             SetMute(deviceId, !m);
             return IsMuted(deviceId);
+        }
+
+        /// <summary>在同一次端点激活内读取、反转并验证静音。状态未知时不写入；切换串行避免丢失并发操作。</summary>
+        public static (bool Muted, bool Applied) ToggleMuteChecked(string? deviceId = null)
+        {
+            lock (_toggleMuteLock)
+            {
+                IAudioEndpointVolume? volume = null;
+                try
+                {
+                    volume = GetVolume(deviceId);
+                    if (volume == null || volume.GetMute(out int current) < 0) return (false, false);
+                    int target = current == 0 ? 1 : 0;
+                    var context = Guid.Empty;
+                    if (volume.SetMute(target, ref context) < 0) return (current != 0, false);
+                    if (volume.GetMute(out int actual) < 0) return (false, false);
+                    return (actual != 0, (actual != 0) == (target != 0));
+                }
+                catch { return (false, false); }
+                finally { if (volume != null) Marshal.ReleaseComObject(volume); }
+            }
         }
 
         /// <summary>设置指定设备静音状态。</summary>

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using SonicRoute.Core.Compat;
@@ -318,15 +319,107 @@ namespace SonicRoute.Core
         /// 重读真实状态，否则按钮文案与实际静音状态错乱（"静音不稳定"根因）。</summary>
         public static (bool Muted, bool Applied) ToggleInputMuteChecked(int pid)
         {
-            var list = FindCaptureVolumes(pid, 5);
-            if (list == null || list.Count == 0) return (false, false);
-            bool m = IsInputMuted(pid);
-            bool ok = SetInputMute(pid, !m);
-            if (!ok) return (!m, false);
-            // 强制重新枚举，读写入后的真实状态
-            Refresh(true);
-            bool actual = IsInputMuted(pid);
-            return (actual, true);
+            return ChangeInputMuteChecked(pid, null);
+        }
+
+        public static (bool Muted, bool Applied) ChangeInputMuteChecked(int pid, bool? muted, CancellationToken token = default)
+        {
+            var result = ChangeSessionsChecked(EDataFlow.eCapture, pid, null, null, muted, token);
+            return (result.Muted, result.Total > 0 && result.Succeeded == result.Total);
+        }
+
+        /// <summary>执行时的全部现有播放会话；相对音量在各会话原值上增减，失败不会撤销已成功的会话。</summary>
+        public static (int Succeeded, int Total) ChangeAllPlaybackVolumeChecked(int value, bool relative, CancellationToken token = default)
+        {
+            var result = ChangeSessionsChecked(EDataFlow.eRender, null, relative ? (int?)null : value,
+                relative ? value : (int?)null, null, token);
+            return (result.Succeeded, result.Total);
+        }
+
+        /// <summary>muted=null 时：全部已静音则取消，否则统一静音；任一状态未知时不进行切换写入。</summary>
+        public static (int Succeeded, int Total) ChangeAllPlaybackMuteChecked(bool? muted, CancellationToken token = default)
+        {
+            var result = ChangeSessionsChecked(EDataFlow.eRender, null, null, null, muted, token);
+            return (result.Succeeded, result.Total);
+        }
+
+        private static (int Succeeded, int Total, bool Muted) ChangeSessionsChecked(EDataFlow flow, int? pid,
+            int? volume, int? delta, bool? muted, CancellationToken token)
+        {
+            // Reuse the volume adjustment lock to serialize read/modify/write. The cache lock keeps
+            // Refresh from releasing these COM references during a call; no new long-lived references.
+            lock (_adjustVolumeLock)
+            {
+                token.ThrowIfCancellationRequested();
+                if (pid.HasValue) FindCaptureVolumes(pid.Value, 5); else Refresh(true);
+                bool target = muted ?? false;
+                bool capture = flow == EDataFlow.eCapture;
+                int succeeded = 0, total;
+                lock (_lock)
+                {
+                    var map = capture ? _captureVolumes : _renderVolumes;
+                    var sessions = map.Where(pair => !pid.HasValue || pair.Key == pid.Value)
+                        .SelectMany(pair => pair.Value).ToArray();
+                    total = sessions.Length;
+                    if (total == 0) return (0, 0, false);
+                    if (!volume.HasValue && !delta.HasValue && !muted.HasValue)
+                    {
+                        bool allMuted = true;
+                        foreach (var session in sessions)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            try
+                            {
+                                if (session.GetMute(out int state) < 0) return (0, total, false);
+                                allMuted &= state != 0;
+                            }
+                            catch { return (0, total, false); }
+                        }
+                        target = !allMuted;
+                    }
+                    foreach (var session in sessions)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        try
+                        {
+                            var context = Guid.Empty;
+                            if (volume.HasValue || delta.HasValue)
+                            {
+                                float requested;
+                                if (delta.HasValue)
+                                {
+                                    if (session.GetMasterVolume(out float current) < 0 || float.IsNaN(current) || float.IsInfinity(current)) continue;
+                                    requested = MathEx.Clamp(current + MathEx.Clamp(delta.Value, -100, 100) / 100f, 0f, 1f);
+                                }
+                                else requested = MathEx.Clamp(volume!.Value / 100f, 0f, 1f);
+                                if (session.SetMasterVolume(requested, ref context) >= 0
+                                    && session.GetMasterVolume(out float actual) >= 0
+                                    && Math.Abs(actual - requested) <= 0.0051f) succeeded++;
+                            }
+                            else if (session.SetMute(target ? 1 : 0, ref context) >= 0
+                                && (capture || (session.GetMute(out int actual) >= 0 && (actual != 0) == target))) succeeded++;
+                        }
+                        catch { /* Continue other sessions; report partial failure to the caller. */ }
+                    }
+                }
+                if (capture)
+                {
+                    // Recording apps can recreate sessions on writes. Reuse the existing forced
+                    // refresh once, then verify every current session instead of trusting HRESULT.
+                    token.ThrowIfCancellationRequested();
+                    Refresh(true);
+                    lock (_lock)
+                    {
+                        if (!_captureVolumes.TryGetValue(pid!.Value, out var current) || current.Count == 0) return (0, total, false);
+                        foreach (var session in current)
+                        {
+                            try { if (session.GetMute(out int actual) < 0 || (actual != 0) != target) return (0, total, false); }
+                            catch { return (0, total, false); }
+                        }
+                    }
+                }
+                return (succeeded, total, target);
+            }
         }
 
         /// <summary>重新枚举所有播放/录音设备的会话，按 PID 缓存其全部 eRender / eCapture 会话

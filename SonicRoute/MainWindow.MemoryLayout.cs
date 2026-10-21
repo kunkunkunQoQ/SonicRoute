@@ -123,13 +123,21 @@ namespace SonicRoute
                     items.Add(new AutomationActionChoice { Text = L10n.T(AutoActionKey(action)), Action = action, Padding = new Thickness(10, 6, 10, 6) });
             }
             Group("Auto.GroupSystem", AutoRuleAction.SetSystemOutput, AutoRuleAction.SetSystemInput, AutoRuleAction.SetSystemVolume,
-                AutoRuleAction.AdjustSystemVolume, AutoRuleAction.SetSystemMute, AutoRuleAction.ToggleSystemMute);
+                AutoRuleAction.AdjustSystemVolume, AutoRuleAction.SetSystemMute, AutoRuleAction.ToggleSystemMute,
+                AutoRuleAction.SetPlaybackDeviceVolume, AutoRuleAction.AdjustPlaybackDeviceVolume,
+                AutoRuleAction.SetPlaybackDeviceMute, AutoRuleAction.TogglePlaybackDeviceMute);
             Group("Auto.GroupApp", AutoRuleAction.SetAppOutput, AutoRuleAction.SetAppInput, AutoRuleAction.SetAppVolume,
-                AutoRuleAction.AdjustAppVolume, AutoRuleAction.SetAppMute, AutoRuleAction.ToggleAppMute);
-            Group("Auto.GroupMic", AutoRuleAction.SetGlobalMicMute, AutoRuleAction.ToggleGlobalMicMute);
+                AutoRuleAction.AdjustAppVolume, AutoRuleAction.SetAppMute, AutoRuleAction.ToggleAppMute,
+                AutoRuleAction.SetAppInputMute, AutoRuleAction.ToggleAppInputMute,
+                AutoRuleAction.SetAllAppsVolume, AutoRuleAction.AdjustAllAppsVolume,
+                AutoRuleAction.SetAllAppsMute, AutoRuleAction.ToggleAllAppsMute, AutoRuleAction.ResetAllAppRouting);
+            Group("Auto.GroupMic", AutoRuleAction.SetMicrophoneMute, AutoRuleAction.ToggleMicrophoneMute,
+                AutoRuleAction.SetGlobalMicMute, AutoRuleAction.ToggleGlobalMicMute,
+                AutoRuleAction.SetDefaultInputVolume, AutoRuleAction.AdjustDefaultInputVolume,
+                AutoRuleAction.SetDefaultInputMute, AutoRuleAction.ToggleDefaultInputMute);
             Group("Auto.GroupProgram", AutoRuleAction.LaunchProgram, AutoRuleAction.RunPowerShell);
             Group("Auto.GroupAutomation", AutoRuleAction.ExecuteRule);
-            Group("Auto.GroupNotice", AutoRuleAction.ShowOsd);
+            Group("Auto.GroupNotice", AutoRuleAction.ShowOsd, AutoRuleAction.ShowQuickPanel, AutoRuleAction.HideQuickPanel);
             _actionChoicesLanguage = L10n.CurrentLanguage;
             return _actionChoices = items;
         }

@@ -158,11 +158,14 @@ namespace SonicRoute
 
         private static Geometry AutomationActionIcon(AutoRuleAction action) => action switch
         {
-            AutoRuleAction.SetGlobalMicMute or AutoRuleAction.ToggleGlobalMicMute or AutoRuleAction.SetAppInput or AutoRuleAction.SetSystemInput => AutomationIcons.Microphone,
+            AutoRuleAction.SetMicrophoneMute or AutoRuleAction.ToggleMicrophoneMute or AutoRuleAction.SetGlobalMicMute or AutoRuleAction.ToggleGlobalMicMute or AutoRuleAction.SetAppInput or AutoRuleAction.SetSystemInput
+                or AutoRuleAction.SetDefaultInputVolume or AutoRuleAction.AdjustDefaultInputVolume or AutoRuleAction.SetDefaultInputMute or AutoRuleAction.ToggleDefaultInputMute
+                or AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute => AutomationIcons.Microphone,
             AutoRuleAction.LaunchProgram => AutomationIcons.Switch,
             AutoRuleAction.RunPowerShell => AutomationIcons.Terminal,
             AutoRuleAction.ExecuteRule => AutomationIcons.Link,
-            AutoRuleAction.ShowOsd => AutomationIcons.Monitor,
+            AutoRuleAction.ShowOsd or AutoRuleAction.ShowQuickPanel or AutoRuleAction.HideQuickPanel => AutomationIcons.Monitor,
+            AutoRuleAction.ResetAllAppRouting => AutomationIcons.Reset,
             _ => AutomationIcons.Speaker
         };
 

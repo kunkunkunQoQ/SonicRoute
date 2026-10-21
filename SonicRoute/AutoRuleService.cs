@@ -518,16 +518,80 @@ namespace SonicRoute
                             SessionVolumeService.AdjustVolumePercent(pid,
                                 MathEx.Clamp(step.VolumeDelta, -100, 100)).Applied, detail));
 
+                    case AutoRuleAction.SetMicrophoneMute:
+                    case AutoRuleAction.ToggleMicrophoneMute:
+                    case AutoRuleAction.SetPlaybackDeviceVolume:
+                    case AutoRuleAction.AdjustPlaybackDeviceVolume:
+                    case AutoRuleAction.SetPlaybackDeviceMute:
+                    case AutoRuleAction.TogglePlaybackDeviceMute:
+                        return await Task.Run(() => WithDevice(step.TargetDeviceId,
+                            AutoRuleActions.UsesCaptureDevice(step.Action) ? EDataFlow.eCapture : EDataFlow.eRender,
+                            id => ChangeEndpoint(step, id), detail), token);
+
+                    case AutoRuleAction.SetDefaultInputVolume:
+                    case AutoRuleAction.AdjustDefaultInputVolume:
+                    case AutoRuleAction.SetDefaultInputMute:
+                    case AutoRuleAction.ToggleDefaultInputMute:
+                        return await Task.Run(() =>
+                        {
+                            string? id = AudioService.GetDefaultDeviceId(EDataFlow.eCapture);
+                            if (string.IsNullOrWhiteSpace(id))
+                            { if (detail != null) detail.Reason = "device_unavailable"; return false; }
+                            return ChangeEndpoint(step, id!);
+                        }, token);
+
+                    case AutoRuleAction.SetAppInputMute:
+                    case AutoRuleAction.ToggleAppInputMute:
+                        return await Task.Run(() => WithApp(step.TargetApp, pid =>
+                            SessionVolumeService.ChangeInputMuteChecked(pid,
+                                step.Action == AutoRuleAction.SetAppInputMute ? step.Muted : (bool?)null, token).Applied, detail), token);
+
+                    case AutoRuleAction.SetAllAppsVolume:
+                    case AutoRuleAction.AdjustAllAppsVolume:
+                        return await Task.Run(() => BatchSucceeded(SessionVolumeService.ChangeAllPlaybackVolumeChecked(
+                            AutoRuleActions.AdjustsVolume(step.Action) ? step.VolumeDelta : step.Volume,
+                            AutoRuleActions.AdjustsVolume(step.Action), token), detail), token);
+
+                    case AutoRuleAction.SetAllAppsMute:
+                    case AutoRuleAction.ToggleAllAppsMute:
+                        return await Task.Run(() => BatchSucceeded(SessionVolumeService.ChangeAllPlaybackMuteChecked(
+                            step.Action == AutoRuleAction.SetAllAppsMute ? step.Muted : (bool?)null, token), detail), token);
+
+                    case AutoRuleAction.ResetAllAppRouting:
+                        return await Task.Run(() =>
+                        {
+                            bool applied = AudioService.ResetAllPersistedEndpointsChecked().Applied;
+                            if (!applied && detail != null) detail.Reason = "reset_unconfirmed";
+                            return applied;
+                        }, token);
+
+                    case AutoRuleAction.ShowQuickPanel:
+                    case AutoRuleAction.HideQuickPanel:
+                        {
+                            var app = System.Windows.Application.Current as App;
+                            if (app == null || app.Dispatcher.HasShutdownStarted || app.Dispatcher.HasShutdownFinished) return false;
+                            return await app.Dispatcher.InvokeAsync(() =>
+                            {
+                                token.ThrowIfCancellationRequested();
+                                return app.SetQuickPanelVisibility(step.Action == AutoRuleAction.ShowQuickPanel);
+                            });
+                        }
+
                     case AutoRuleAction.SetGlobalMicMute:
                     case AutoRuleAction.ToggleGlobalMicMute:
                         {
                             var result = await Task.Run(() =>
                             {
-                                bool target = step.Action == AutoRuleAction.ToggleGlobalMicMute
-                                    ? !GlobalMicMuteService.IsMuted() : step.Muted;
-                                bool applied = GlobalMicMuteService.SetMute(target);
-                                bool muted = GlobalMicMuteService.IsAnyMuted(ConfigService.Load().MicMuteOsdTrackInputMuted);
-                                return (Applied: applied, Muted: muted);
+                                bool target = step.Muted;
+                                if (step.Action == AutoRuleAction.ToggleGlobalMicMute)
+                                {
+                                    var state = GlobalMicMuteService.ReadState();
+                                    if (!state.Known)
+                                    { if (detail != null) detail.Reason = "device_unavailable"; return (Applied: false, Muted: false); }
+                                    target = !state.AllMuted;
+                                }
+                                var changed = GlobalMicMuteService.SetMuteChecked(target);
+                                return (Applied: changed.Applied, Muted: changed.State.AllMuted);
                             });
                             var app = System.Windows.Application.Current as App;
                             if (result.Applied && !token.IsCancellationRequested && app != null && !app.Dispatcher.HasShutdownStarted)
@@ -570,6 +634,32 @@ namespace SonicRoute
             int pid = ResolveAppPid(processName);
             if (pid <= 0 && detail != null) detail.Reason = "app_unavailable";
             return pid > 0 && action(pid);
+        }
+
+        private static bool BatchSucceeded((int Succeeded, int Total) result, ExecutionHistoryStep? detail)
+        {
+            if (result.Total > 0 && result.Succeeded == result.Total) return true;
+            if (detail != null) detail.Reason = result.Total == 0 ? "no_sessions" : "partial_failure";
+            return false;
+        }
+
+        private static bool ChangeEndpoint(AutoRuleStep step, string id)
+        {
+            if (AutoRuleActions.SetsVolume(step.Action)) return SystemVolumeService.SetVolumePercent(id, MathEx.Clamp(step.Volume, 0, 100));
+            if (AutoRuleActions.AdjustsVolume(step.Action)) return SystemVolumeService.AdjustVolumePercent(id, MathEx.Clamp(step.VolumeDelta, -100, 100)).Applied;
+            return AutoRuleActions.SetsMute(step.Action) ? SystemVolumeService.SetMute(id, step.Muted)
+                : SystemVolumeService.ToggleMuteChecked(id).Applied;
+        }
+
+        private static bool WithDevice(string deviceId, EDataFlow flow, Func<string, bool> action, ExecutionHistoryStep? detail)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId) || AudioService.IsSystemDefault(deviceId))
+            { if (detail != null) detail.Reason = "device_not_selected"; return false; }
+            // A missing or wrong-flow target never falls back to another device.
+            var target = AudioService.GetDevices(flow).FirstOrDefault(device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            { if (detail != null) detail.Reason = "device_unavailable"; return false; }
+            return action(target.Id);
         }
 
         /// <summary>切换系统默认播放 / 录音设备（空或系统默认虚拟 id = 无操作失败，避免把系统默认"还原"成无意义状态）。</summary>

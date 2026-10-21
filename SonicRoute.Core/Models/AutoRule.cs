@@ -81,7 +81,50 @@ namespace SonicRoute.Core.Models
         ToggleGlobalMicMute = 16,
 
         /// <summary>直接执行另一条已保存规则，不等待其自动触发。</summary>
-        ExecuteRule = 17
+        ExecuteRule = 17,
+
+        /// <summary>设置指定录音设备的静音状态，不改变系统默认设备。</summary>
+        SetMicrophoneMute = 18,
+
+        /// <summary>切换指定录音设备的静音状态，不改变系统默认设备。</summary>
+        ToggleMicrophoneMute = 19,
+        SetPlaybackDeviceVolume = 20,
+        AdjustPlaybackDeviceVolume = 21,
+        SetPlaybackDeviceMute = 22,
+        TogglePlaybackDeviceMute = 23,
+        SetDefaultInputVolume = 24,
+        AdjustDefaultInputVolume = 25,
+        SetDefaultInputMute = 26,
+        ToggleDefaultInputMute = 27,
+        SetAppInputMute = 28,
+        ToggleAppInputMute = 29,
+        SetAllAppsVolume = 30,
+        AdjustAllAppsVolume = 31,
+        SetAllAppsMute = 32,
+        ToggleAllAppsMute = 33,
+        ResetAllAppRouting = 34,
+        ShowQuickPanel = 35,
+        HideQuickPanel = 36
+    }
+
+    /// <summary>编辑器、校验和摘要共用参数语义，不复制多份动作名单。</summary>
+    public static class AutoRuleActions
+    {
+        public static bool NeedsApp(AutoRuleAction a) => a is AutoRuleAction.SetAppVolume or AutoRuleAction.AdjustAppVolume
+            or AutoRuleAction.SetAppMute or AutoRuleAction.ToggleAppMute or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
+            or AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute;
+        public static bool NeedsDevice(AutoRuleAction a) => a is AutoRuleAction.SetSystemOutput or AutoRuleAction.SetSystemInput
+            or AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput or AutoRuleAction.SetMicrophoneMute or AutoRuleAction.ToggleMicrophoneMute
+            or AutoRuleAction.SetPlaybackDeviceVolume or AutoRuleAction.AdjustPlaybackDeviceVolume or AutoRuleAction.SetPlaybackDeviceMute or AutoRuleAction.TogglePlaybackDeviceMute;
+        public static bool UsesCaptureDevice(AutoRuleAction a) => a is AutoRuleAction.SetSystemInput or AutoRuleAction.SetAppInput
+            or AutoRuleAction.SetMicrophoneMute or AutoRuleAction.ToggleMicrophoneMute;
+        public static bool SetsVolume(AutoRuleAction a) => a is AutoRuleAction.SetSystemVolume or AutoRuleAction.SetAppVolume
+            or AutoRuleAction.SetPlaybackDeviceVolume or AutoRuleAction.SetDefaultInputVolume or AutoRuleAction.SetAllAppsVolume;
+        public static bool AdjustsVolume(AutoRuleAction a) => a is AutoRuleAction.AdjustSystemVolume or AutoRuleAction.AdjustAppVolume
+            or AutoRuleAction.AdjustPlaybackDeviceVolume or AutoRuleAction.AdjustDefaultInputVolume or AutoRuleAction.AdjustAllAppsVolume;
+        public static bool SetsMute(AutoRuleAction a) => a is AutoRuleAction.SetSystemMute or AutoRuleAction.SetAppMute
+            or AutoRuleAction.SetGlobalMicMute or AutoRuleAction.SetMicrophoneMute or AutoRuleAction.SetPlaybackDeviceMute
+            or AutoRuleAction.SetDefaultInputMute or AutoRuleAction.SetAppInputMute or AutoRuleAction.SetAllAppsMute;
     }
 
     /// <summary>
@@ -120,7 +163,7 @@ namespace SonicRoute.Core.Models
         /// <summary>应用控制的目标进程名（SetAppVolume / ToggleAppMute / SetAppOutput / SetAppInput）。</summary>
         public string TargetApp { get; set; } = "";
 
-        /// <summary>目标设备短 ID（设备切换操作；空或系统默认虚拟 id = 跟随系统默认）。</summary>
+        /// <summary>目标设备短 ID；应用路由可跟随系统默认，指定麦克风静音只接受实际录音设备。</summary>
         public string TargetDeviceId { get; set; } = "";
 
         /// <summary>音量（SetSystemVolume / SetAppVolume，0~100）。</summary>

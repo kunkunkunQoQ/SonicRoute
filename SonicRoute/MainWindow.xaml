@@ -629,7 +629,8 @@
                                 </ContentControl>
                                 <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" MaxWidth="320">
                                     <Button x:Name="OsdAdjustBtnTheme" Content="{Binding [Exp.OsdAdjust], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemePositionButton}" Tag="{x:Static local:AutomationIcons.Position}" Margin="0,0,8,0" Click="OsdAdjust_Click" ToolTip="{Binding [Exp.OsdAdjustHint], Source={x:Static local:L10n.Instance}}"/>
-                                    <Button x:Name="OsdResetButtonTheme" Content="{Binding [Exp.OsdReset], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemePositionButton}" Tag="{x:Static local:AutomationIcons.Reset}" Click="OsdReset_Click"/>
+                                    <Button x:Name="OsdResetButtonTheme" Content="{Binding [Exp.OsdReset], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemePositionButton}" Tag="{x:Static local:AutomationIcons.Reset}" Click="OsdReset_Click"
+                                            ToolTip="{Binding [Exp.OsdResetHint], Source={x:Static local:L10n.Instance}}" Height="Auto" MinHeight="38"/>
                                 </WrapPanel>
                             </Grid>
                             <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,16,0,14"/>
@@ -653,7 +654,10 @@
                                 <CheckBox x:Name="MicMuteTrackInputCheck" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" VerticalAlignment="Center" AutomationProperties.Name="{Binding [Theme.MicMuteTrackInput], Source={x:Static local:L10n.Instance}}" Checked="MicMuteTrackInput_Changed" Unchecked="MicMuteTrackInput_Changed"/>
                             </Grid>
                             <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,14,0,10"/>
-                            <ToggleButton x:Name="OsdMoreToggle" Style="{StaticResource MoreOptionsToggle}" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}" Checked="OsdMoreToggle_Click" Unchecked="OsdMoreToggle_Click"/>
+                            <DockPanel>
+                                <ToggleButton x:Name="OsdMoreToggle" Style="{StaticResource MoreOptionsToggle}" DockPanel.Dock="Right" VerticalAlignment="Top" Content="{Binding [Exp.MoreOptions], Source={x:Static local:L10n.Instance}}" Checked="OsdMoreToggle_Click" Unchecked="OsdMoreToggle_Click"/>
+                                <TextBlock Text="{Binding [Theme.OsdStyle], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemeSectionTitle}" Margin="0,0,12,0"/>
+                            </DockPanel>
                             <local:AnimatedExpandHost>
                                 <StackPanel x:Name="OsdSlidersPanel" Margin="8,10,0,0" Visibility="Collapsed">
                                     <Grid>
