@@ -201,8 +201,9 @@ namespace SonicRoute
 
             // 后台预热音频会话/应用缓存，避免首次滚轮/切语言时在 UI 线程做重量级 COM 枚举
             var audioWarmup = WarmupAudioAsync();
-            StartUpdates(Task.WhenAll(foregroundWarmup, audioWarmup));
-            _ = ReclaimAfterWarmupAsync(foregroundWarmup, audioWarmup);
+            var startupWarmup = Task.WhenAll(foregroundWarmup, audioWarmup);
+            StartUpdates(startupWarmup);
+            _ = ReclaimAfterWarmupAsync(startupWarmup);
             StartRuleCommandServer(audioWarmup);
 
             // 启动行为
@@ -472,9 +473,9 @@ namespace SonicRoute
             _uiReclaimTimer.Start();
         }
 
-        private async Task ReclaimAfterWarmupAsync(Task foreground, Task audio)
+        private async Task ReclaimAfterWarmupAsync(Task warmup)
         {
-            try { await Task.WhenAll(foreground, audio).ConfigureAwait(false); }
+            try { await warmup.ConfigureAwait(false); }
             catch { /* A failed warmup must not leave the startup idle request waiting forever. */ }
             try { await Dispatcher.InvokeAsync(() => { _startupWarmupComplete = true; ScheduleUiReclaim(); }).Task.ConfigureAwait(false); }
             catch (OperationCanceledException) { }

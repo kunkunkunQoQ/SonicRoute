@@ -70,7 +70,7 @@ namespace SonicRoute.Core
 
         /// <summary>快速面板样式：modern(简洁面板，默认) / classic(经典面板)。</summary>
         public string QuickPanelStyle { get; set; } = "modern";
-        /// <summary>简洁面板固定高度（px，350–800，默认 450）：展开/收起不改变；内容超出在应用区域滚动。</summary>
+        /// <summary>简洁面板固定高度（px，350–850，默认 450）：展开/收起不改变；内容超出在应用区域滚动。</summary>
         public int QuickPanelHeight { get; set; } = 450;
 
         /// <summary>主题页：简洁面板内显示每应用实时声音活动；关闭时不启动 Meter，显示与旧版一致。</summary>

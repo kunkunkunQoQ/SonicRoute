@@ -701,7 +701,7 @@
                                 <Grid Margin="8,2,0,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/><ColumnDefinition Width="62"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="{Binding [Exp.PanelHeight], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemeSliderLabel}"/>
-                                    <Slider x:Name="PanelHeightSlider" Grid.Column="1" Minimum="350" Maximum="800" Value="450" TickFrequency="10" IsSnapToTickEnabled="True" VerticalAlignment="Center" Margin="8,0,16,0" ValueChanged="PanelHeightSlider_Changed"/>
+                                    <Slider x:Name="PanelHeightSlider" Grid.Column="1" Minimum="350" Maximum="850" Value="450" TickFrequency="10" IsSnapToTickEnabled="True" VerticalAlignment="Center" Margin="8,0,16,0" ValueChanged="PanelHeightSlider_Changed"/>
                                     <TextBlock x:Name="PanelHeightValue" Grid.Column="2" Text="450 px" Style="{StaticResource ThemeSliderValue}"/>
                                 </Grid>
                                 <Grid Margin="0,16,0,0">

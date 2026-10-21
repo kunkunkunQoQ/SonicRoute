@@ -172,7 +172,7 @@ namespace SonicRoute
             });
         }
 
-        /// <summary>应用固定面板高度：窗口高度 = 用户设置值（QuickPanelHeight，350–800，默认 450，clamp 工作区）。
+        /// <summary>应用固定面板高度：窗口高度 = 用户设置值（QuickPanelHeight，350–850，默认 450，clamp 工作区）。
         /// 面板高度自此恒定——展开/收起设备区只在固定高度的应用区域内变化，窗口高度永不变；
         /// 底部操作栏固定贴底，内容超出在应用区域内滚动。</summary>
         private void ApplyFixedPanelHeight(SonicRoute.Core.AppConfig cfg)
@@ -185,7 +185,7 @@ namespace SonicRoute
                 AppListScroll.UpdateLayout();
                 double fixedH = RootBorder.DesiredSize.Height;
                 if (fixedH <= 0) fixedH = RootBorder.ActualHeight; // 兜底
-                double total = MathEx.Clamp(cfg.QuickPanelHeight, 350, 800);
+                double total = MathEx.Clamp(cfg.QuickPanelHeight, 350, 850);
                 var wa = SystemParameters.WorkArea;
                 double maxTotal = Math.Max(240, wa.Height - 16); // 不超屏幕限度
                 if (total > maxTotal) total = maxTotal;

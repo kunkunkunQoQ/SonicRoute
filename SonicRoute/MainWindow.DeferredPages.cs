@@ -289,7 +289,7 @@ namespace SonicRoute
             {
                 PanelHeightSection.Visibility = _config.QuickPanelStyle == "classic"
                     ? Visibility.Collapsed : Visibility.Visible;
-                int height = SonicRoute.Core.Compat.MathEx.Clamp(_config.QuickPanelHeight, 350, 800);
+                int height = SonicRoute.Core.Compat.MathEx.Clamp(_config.QuickPanelHeight, 350, 850);
                 PanelHeightSlider.Value = height;
                 PanelHeightValue.Text = height + " px";
             }

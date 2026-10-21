@@ -34,23 +34,31 @@ namespace SonicRoute.Updates
         internal bool NotificationsDismissed { get; private set; }
         internal bool IsPackaged => AppRuntimeIdentity.Current.IsPackaged;
         internal bool Busy => Volatile.Read(ref _operation) != 0;
-        internal bool ShouldNotify => Release != null && !NotificationsDismissed &&
-            UpdateProtocol.ParseVersion(Release.Tag) > UpdateProtocol.ParseVersion(App.DisplayVersion) &&
-            UpdateProtocol.ParseVersion(ConfigService.Load().IgnoredUpdateVersion) != UpdateProtocol.ParseVersion(Release.Tag);
+        internal bool ShouldNotify
+        {
+            get
+            {
+                if (Release == null || NotificationsDismissed) return false;
+                var version = UpdateProtocol.ParseVersion(Release.Tag);
+                return version > UpdateProtocol.ParseVersion(App.DisplayVersion) &&
+                    version != UpdateProtocol.ParseVersion(ConfigService.Load().IgnoredUpdateVersion);
+            }
+        }
 
         internal async Task StartAsync(Task warmup)
         {
+            if (IsPackaged || _lifetime.IsCancellationRequested) return;
             // The update-start handshake reads its outcome after the worker finishes.
-            if (!IsPackaged && UpdateBootstrap.Pending == null) ReadOutcome();
-            if (IsPackaged || !ConfigService.Load().AutoCheckUpdates) return;
+            if (UpdateBootstrap.Pending == null) ReadOutcome();
+            // Not due: do not allocate cancellation or delay work just to return after warmup.
+            if (!AutomaticCheckDue()) return;
             using var automatic = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             _automatic = automatic;
             try
             {
                 await warmup.ConfigureAwait(false);
                 await Task.Delay(TimeSpan.FromSeconds(15), automatic.Token).ConfigureAwait(false);
-                var config = ConfigService.Load();
-                if (!config.AutoCheckUpdates || !AutomaticDue(config.LastUpdateCheckUtc, DateTime.UtcNow)) return;
+                if (!AutomaticCheckDue()) return;
                 await CheckAsync(false, automatic.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { }
@@ -60,12 +68,18 @@ namespace SonicRoute.Updates
 
         internal static bool AutomaticDue(DateTime last, DateTime now) => last > now || now - last >= TimeSpan.FromHours(24);
 
+        private static bool AutomaticCheckDue()
+        {
+            var config = ConfigService.Load();
+            return config.AutoCheckUpdates && AutomaticDue(config.LastUpdateCheckUtc, DateTime.UtcNow);
+        }
+
         internal async Task CheckAsync(bool manual, CancellationToken automaticToken = default)
         {
             if (IsPackaged || Busy || _lifetime.IsCancellationRequested) return;
             if (manual && DateTime.UtcNow - _lastManual < TimeSpan.FromSeconds(15)) return;
-            if (manual) { _lastManual = DateTime.UtcNow; NotificationsDismissed = false; }
             if (Interlocked.CompareExchange(ref _operation, 1, 0) != 0) return;
+            if (manual) { _lastManual = DateTime.UtcNow; NotificationsDismissed = false; }
             State = UpdateState.Checking; Error = ""; Notify();
             string? notes = null;
             try

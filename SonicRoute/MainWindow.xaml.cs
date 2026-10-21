@@ -1563,7 +1563,7 @@ namespace SonicRoute
                 AppPeakMeterCheck.IsChecked = _config.ShowAppPeakMeter;
                 SyncOsdSliders();
 
-                // 快速面板高度（快捷面板固定高度，350–800，默认 450）：
+                // 快速面板高度（快捷面板固定高度，350–850，默认 450）：
                 // 该设置位于主题页，必须在 LoadTheme 初始化，否则会显示 XAML 硬编码初值；应用面板不显示
                 SyncThemePanelHeight();
             }
@@ -2555,11 +2555,11 @@ namespace SonicRoute
         }
 
         /// <summary>主题页 - 「一键还原」：快速面板恢复任务栏右下角默认位置。</summary>
-        /// <summary>主题页「快速面板高度」：快捷面板窗口固定高度（350–800px，默认 450），保存并立即应用（面板打开时）。</summary>
+        /// <summary>主题页「快速面板高度」：快捷面板窗口固定高度（350–850px，默认 450），保存并立即应用（面板打开时）。</summary>
         private void PanelHeightSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (!IsLoaded || _suppressSettings) return;
-            int v = MathEx.Clamp((int)Math.Round(e.NewValue), 350, 800);
+            int v = MathEx.Clamp((int)Math.Round(e.NewValue), 350, 850);
             if (PanelHeightValue != null) PanelHeightValue.Text = v + " px";
             _config.QuickPanelHeight = v;
             ConfigService.Save(_config);
