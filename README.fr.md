@@ -26,11 +26,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d�
 
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7" title="Fonctionnalités"><img src="docs/images/mascot-music-hoodie.png" width="68" align="right" alt="Cliquez sur la mascotte pour découvrir les fonctionnalités de SonicRoute"></a>
 
-- **Routage bidirectionnel par application (lecture + enregistrement) :** attribuez des périphériques d'entrée et de sortie dédiés à chaque application (jeux et voix sur le casque, musique sur les haut-parleurs). Les paramètres sont conservés nativement par Windows après fermeture.
-- **Détection intelligente du premier plan et réglage direct :** verrouille instantanément l'application audio active via les événements système. Ajustez le volume en faisant défiler la molette sur la zone de notification, avec retour visuel OSD et coupure micro globale.
-- **Deux styles de panneau et activité sonore en direct :** choisissez entre la vue classique par ligne et le panneau moderne sous forme de cartes (hauteur ajustable de 350 à 800 px) ; contrôlez le volume individuel avec indicateurs d'activité sonore en temps réel.
-- **Moteur d'automatisation à 37 actions et interface CLI :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.
-- **Architecture légère entièrement pilotée par événements :** aucun minuteur de scrutation permanent, consommation CPU quasi nulle au repos et gestion mémoire optimisée. Décliné en Legacy (.NET 4.8), fichier unique Lite (x64 / ARM64 expérimental) et Microsoft Store en 9 langues.
+- **Routage audio indépendant et bidirectionnel par application (lecture + enregistrement) :** attribuez des périphériques d'entrée et de sortie dédiés à chaque application (jeux et voix sur le casque, musique sur les haut-parleurs). Les paramètres sont conservés nativement par Windows après fermeture.
+- **Suivi intelligent du premier plan et réglage direct dans la barre des tâches :** verrouille instantanément l'application audio active via les événements système. Ajustez le volume en faisant défiler la molette sur la zone de notification, avec retour visuel OSD et coupure micro globale.
+- **Deux styles de panneau et indicateur de niveau sonore en direct :** choisissez entre la vue classique par ligne et le panneau moderne sous forme de cartes (hauteur ajustable de 350 à 800 px) ; contrôlez le volume individuel avec indicateurs d'activité sonore en temps réel.
+- **Moteur d'automatisation et CLI ultrarapide (6 déclencheurs × 37 actions) :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.
+- **Architecture légère et purement événementielle (0 % CPU au repos) :** aucun minuteur de scrutation permanent, consommation CPU quasi nulle au repos et gestion mémoire optimisée. Décliné en Legacy (.NET 4.8), fichier unique Lite (x64 / ARM64 expérimental) et Microsoft Store en 9 langues.
 
 ## 🎮 Pour le quotidien
 

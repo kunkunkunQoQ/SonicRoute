@@ -79,11 +79,11 @@
   "downloadColumn": "Download",
   "license": "MIT licensed",
   "features": [
-    "**App-level bidirectional routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.",
-    "**Intelligent foreground detection and blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust app volume, paired with on-screen OSD feedback and global mic mute, without leaving your active window.",
-    "**Dual panel layouts and live audio activity.** Choose between the classic row-based management panel and the Modern card panel, featuring 350–800px adaptive height and position saving; control per-app volume sliders with real-time sound activity meters.",
-    "**37 automation actions with CLI command integration.** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.",
-    "**Lightweight, pure event-driven architecture.** Fully driven by system events with zero persistent polling timers, near-zero idle CPU usage, and on-demand memory cleanup. Available as dependency-free Legacy (.NET 4.8), single-file Lite (x64 / experimental ARM64), and Microsoft Store builds, with nine built-in languages."
+    "**Independent app audio routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.",
+    "**Smart foreground focus and tray wheel blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust app volume, paired with on-screen OSD feedback and global mic mute, without leaving your active window.",
+    "**Dual panel layouts and live audio activity indicators.** Choose between the classic row-based management panel and the Modern card panel, featuring 350–800px adaptive height and position saving; control per-app volume sliders with real-time sound activity meters.",
+    "**Automation combo engine and blazing CLI (6 triggers × 37 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.",
+    "**Lightweight, pure event-driven architecture (near-zero idle CPU).** Fully driven by system events with zero persistent polling timers, near-zero idle CPU usage, and on-demand memory cleanup. Available as dependency-free Legacy (.NET 4.8), single-file Lite (x64 / experimental ARM64), and Microsoft Store builds, with nine built-in languages."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "An absurd magical-girl comedy about a girl who hatches from an egg and makes a mess whenever she tries to help.",
