@@ -26,9 +26,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7" title="Features"><img src="docs/images/mascot-music-hoodie.png" width="68" align="right" alt="Click the mascot to explore SonicRoute features"></a>
 
-- **Automatic foreground-app detection.** By default, controls follow the audio app you’re using. With the panel closed, use the same hotkeys to change its volume, mute it, or switch devices, or scroll over the system tray to adjust volume—no need to find the app first.
-- **Quick panel.** Click the tray icon to manage app volumes in one place. Click an app’s icon to mute it or expand its device section to choose headphones or speakers. Control music players, games, and voice chat apps separately.
-- **Automation rules.** Arrange device switches, volume changes, program launches, and other steps in order; add delays and run rules by hotkey, app launch or focus, or schedule. **New in the v1.25 development build:** device and app playback/recording controls, batch adjustments across apps, reset all app routes, and show or hide the quick panel.
+- **App-level bidirectional routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.
+- **Intelligent foreground detection and blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust app volume, paired with on-screen OSD feedback and global mic mute, without leaving your active window.
+- **Dual panel layouts and live audio activity.** Choose between the classic row-based management panel and the Modern card panel, featuring 350–800px adaptive height and position saving; control per-app volume sliders with real-time sound activity meters.
+- **37 automation actions with CLI command integration.** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.
+- **Lightweight, pure event-driven architecture.** Fully driven by system events with zero persistent polling timers, near-zero idle CPU usage, and on-demand memory cleanup. Available as dependency-free Legacy (.NET 4.8), single-file Lite (x64 / experimental ARM64), and Microsoft Store builds, with nine built-in languages.
 
 ## 🎮 Everyday uses
 

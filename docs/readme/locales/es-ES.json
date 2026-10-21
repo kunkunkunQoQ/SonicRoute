@@ -80,9 +80,11 @@
   "downloadColumn": "Descargar",
   "license": "Licencia MIT",
   "features": [
-    "**Detección automática de la aplicación en primer plano.** Por defecto, los controles siguen a la aplicación de audio que usas. Con el panel cerrado, los mismos atajos ajustan su volumen, la silencian o cambian de dispositivo. La rueda sobre el área de notificación también ajusta su volumen, sin buscar antes la aplicación.",
-    "**Panel rápido.** Haz clic en el icono del área de notificación para gestionar los volúmenes de las aplicaciones en un solo lugar. Pulsa el icono de una aplicación para silenciarla o despliega sus dispositivos para elegir auriculares o altavoces. Controla reproductores de música, juegos y aplicaciones de chat de voz por separado.",
-    "**Reglas de automatización.** Ordena cambios de dispositivo, ajustes de volumen, apertura de programas y otros pasos; añade esperas y ejecuta las reglas con un atajo, al abrir o activar una aplicación, o según un horario. **Novedades de la versión de desarrollo 1.25:** controles de reproducción y grabación de dispositivos y aplicaciones, ajustes por lotes, restablecimiento de todas las rutas de aplicaciones y mostrar u ocultar el panel rápido."
+    "**Enrutamiento bidireccional por aplicación (reproducción + grabación):** asigne dispositivos de salida y entrada específicos a cada aplicación (juegos y voz a auriculares, música a altavoces). La configuración se guarda de forma nativa en Windows incluso al cerrar el programa.",
+    "**Detección inteligente de primer plano y control directo:** detecta al instante la aplicación activa mediante eventos del sistema. Ajuste el volumen desplazando la rueda sobre la bandeja del sistema, con notificaciones OSD y silencio global de micrófono.",
+    "**Dos estilos de panel y actividad de sonido en tiempo real:** elija entre el panel clásico por filas o el panel moderno de tarjetas (altura adaptable de 350 a 800 px); controle el volumen de cada aplicación con medidores de sonido en directo.",
+    "**Motor de automatización con 37 acciones e integración CLI:** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.",
+    "**Arquitectura ligera impulsada por eventos:** sin temporizadores de sondeo constantes, consumo de CPU casi nulo en reposo y limpieza bajo demanda. Disponible en versión Legacy (.NET 4.8), ejecutable único Lite (x64 / ARM64 experimental) y tienda en 9 idiomas."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nuevo desastre cada vez que intenta ayudar.",

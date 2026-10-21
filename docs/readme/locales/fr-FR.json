@@ -80,9 +80,11 @@
   "downloadColumn": "Télécharger",
   "license": "Licence MIT",
   "features": [
-    "**Détection automatique de l’application au premier plan.** Par défaut, les commandes suivent l’application audio utilisée. Lorsque le panneau est fermé, les mêmes raccourcis règlent son volume, coupent le son ou changent d’appareil. La molette dans la zone de notification règle aussi son volume, sans avoir à chercher l’application.",
-    "**Panneau rapide.** Un clic sur l’icône de notification permet de régler les volumes des applications au même endroit. Cliquez sur l’icône d’une application pour couper le son ou dépliez ses appareils pour choisir un casque ou des haut-parleurs. Lecteur de musique, jeu et application de chat vocal se règlent séparément.",
-    "**Règles d’automatisation.** Ordonnez les changements d’appareil, réglages de volume, lancements de programmes et autres étapes ; ajoutez des délais et exécutez les règles par raccourci, au lancement ou à l’activation d’une application, ou selon un calendrier. **Nouveautés de la version de développement 1.25 :** commandes de lecture et d’enregistrement des appareils et applications, réglages groupés, réinitialisation de tous les routages d’applications et affichage ou masquage du panneau rapide."
+    "**Routage bidirectionnel par application (lecture + enregistrement) :** attribuez des périphériques d'entrée et de sortie dédiés à chaque application (jeux et voix sur le casque, musique sur les haut-parleurs). Les paramètres sont conservés nativement par Windows après fermeture.",
+    "**Détection intelligente du premier plan et réglage direct :** verrouille instantanément l'application audio active via les événements système. Ajustez le volume en faisant défiler la molette sur la zone de notification, avec retour visuel OSD et coupure micro globale.",
+    "**Deux styles de panneau et activité sonore en direct :** choisissez entre la vue classique par ligne et le panneau moderne sous forme de cartes (hauteur ajustable de 350 à 800 px) ; contrôlez le volume individuel avec indicateurs d'activité sonore en temps réel.",
+    "**Moteur d'automatisation à 37 actions et interface CLI :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.",
+    "**Architecture légère entièrement pilotée par événements :** aucun minuteur de scrutation permanent, consommation CPU quasi nulle au repos et gestion mémoire optimisée. Décliné en Legacy (.NET 4.8), fichier unique Lite (x64 / ARM64 expérimental) et Microsoft Store en 9 langues."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Une comédie absurde autour d’une magical girl née dans un œuf, dont chaque tentative d’aide provoque une nouvelle catastrophe.",

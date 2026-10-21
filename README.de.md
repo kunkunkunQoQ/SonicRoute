@@ -26,9 +26,11 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7" title="Funktionen"><img src="docs/images/mascot-music-hoodie.png" width="68" align="right" alt="Klicke auf das Maskottchen, um die SonicRoute-Funktionen zu entdecken"></a>
 
-- **Vordergrund-App automatisch erkennen.** Standardmäßig folgt die Steuerung der gerade verwendeten Audio-App. Bei geschlossenem Panel regelst du mit denselben Tastenkürzeln ihre Lautstärke, Stummschaltung und Geräte. Auch das Mausrad im Infobereich regelt ihre Lautstärke, ohne die App erst suchen zu müssen.
-- **Schnellpanel.** Ein Klick auf das Symbol im Infobereich zeigt die App-Lautstärken an einem Ort. Klicke auf ein App-Symbol zum Stummschalten oder klappe den Gerätebereich auf, um Kopfhörer oder Lautsprecher zu wählen. Musikplayer, Spiele und Sprachchat-Apps lassen sich getrennt steuern.
-- **Automatisierungsregeln.** Ordne Gerätewechsel, Lautstärkeanpassungen, Programmstarts und weitere Schritte in der gewünschten Reihenfolge an; ergänze Verzögerungen und führe die Regel per Tastenkürzel, App-Start oder -Wechsel oder Zeitplan aus. **Neu im Entwicklungsbuild v1.25:** Wiedergabe- und Aufnahmesteuerungen für Geräte und Apps, Sammeländerungen für alle Apps, das Zurücksetzen aller App-Routen sowie das Ein- und Ausblenden des Schnellbereichs.
+- **Bidirektionales Routing pro App (Wiedergabe + Aufnahme):** Weisen Sie Apps individuelle Ausgabe- und Eingabegeräte zu – Spiele und Chat auf das Headset, Musik auf die Lautsprecher. Einstellungen bleiben nativ in Windows erhalten, auch wenn SonicRoute beendet wird.
+- **Intelligente Vordergrund-Erkennung und blinde Steuerung:** Erkennt aktive Audio-Apps blitzschnell per Systemereignis. Scrollen Sie im Infobereich der Taskleiste, um die Lautstärke anzupassen, unterstützt durch OSD-Anzeigen und globale Mikrofon-Stummschaltung.
+- **Zwei Panel-Designs und Echtzeit-Audioaktivität:** Wählen Sie zwischen dem klassischen Zeilen-Panel und dem modernen Karten-Panel mit 350–800 px anpassbarer Höhe; steuern Sie individuelle App-Lautstärken mit Pegelanzeigen für aktive Tonausgabe.
+- **37 Automatisierungsaktionen mit CLI-Integration:** Auslöser durch App-Start, -Fokus, -Beenden, Zeitpläne oder Hotkeys. Kombinieren Sie Audiosteuerung, Programmstarts und PowerShell-Skripte; nutzen Sie den Befehl sr zur nahtlosen Steuerung per Skript oder Hardware-Deck.
+- **Leichtgewichtige, ereignisgesteuerte Architektur:** Vollständig ereignisbasiert ohne permanente Polling-Timer, minimale CPU-Last im Leerlauf und bedarfsgesteuerte Bereinigung. Verfügbar als Legacy (.NET 4.8), Lite (x64 / ARM64) und Store-Version in 9 Sprachen.
 
 ## 🎮 Für den Alltag
 
