@@ -34,8 +34,7 @@ namespace SonicRoute
         private HotkeyService? _hotkeys;
         private TrayWheelService? _trayWheel;
         private CancellationTokenSource? _singleClickCts;
-        private CancellationTokenSource? _uiReclaimCts;
-        private int _uiReclaimRunning;
+        private System.Windows.Threading.DispatcherTimer? _uiReclaimTimer;
         private bool _uiWorkingSetDirty = true;
         private bool _startupWarmupComplete, _exiting;
         private static Mutex? _instanceMutex;
@@ -456,19 +455,21 @@ namespace SonicRoute
 
         private void CancelUiReclaim()
         {
-            var pending = _uiReclaimCts;
-            _uiReclaimCts = null;
-            pending?.Cancel();
-            pending?.Dispose();
+            _uiReclaimTimer?.Stop();
         }
 
         private void ScheduleUiReclaim()
         {
-            if (!ShouldReclaimIdle() || _mainWindow != null || _quickPanel != null || Dispatcher.HasShutdownStarted) return;
-            CancelUiReclaim();
-            var source = new CancellationTokenSource();
-            _uiReclaimCts = source;
-            _ = ReclaimUiWhenIdleAsync(source);
+            if (!ShouldReclaimIdle() || _mainWindow != null || _quickPanel != null || _trayMenu != null || Dispatcher.HasShutdownStarted) return;
+            if (_uiReclaimTimer == null)
+            {
+                _uiReclaimTimer = new System.Windows.Threading.DispatcherTimer(
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle, Dispatcher)
+                { Interval = TimeSpan.FromMilliseconds(1500) };
+                _uiReclaimTimer.Tick += ReclaimUiWhenIdle;
+            }
+            _uiReclaimTimer.Stop();
+            _uiReclaimTimer.Start();
         }
 
         private async Task ReclaimAfterWarmupAsync(Task foreground, Task audio)
@@ -482,42 +483,14 @@ namespace SonicRoute
 
         private bool ShouldReclaimIdle() => _uiWorkingSetDirty && _startupWarmupComplete && !_exiting;
 
-        private async Task ReclaimUiWhenIdleAsync(CancellationTokenSource source)
+        private void ReclaimUiWhenIdle(object? sender, EventArgs e)
         {
-            var token = source.Token;
-            bool acquired = false;
-            try
-            {
-                await Task.Delay(1500, token).ConfigureAwait(false);
-                if (Interlocked.CompareExchange(ref _uiReclaimRunning, 1, 0) != 0) return;
-                acquired = true;
-                // Check and trim in one dispatcher turn so reopening cannot race the idle pass.
-                await Dispatcher.InvokeAsync(() =>
-                {
-                    if (_mainWindow != null || _quickPanel != null || _trayMenu != null || token.IsCancellationRequested || !ShouldReclaimIdle()) return;
-                    // This pages out inactive working-set memory; it does not collect managed objects.
-                    TrimWorkingSet();
-                    _uiWorkingSetDirty = false;
-                },
-                    System.Windows.Threading.DispatcherPriority.ApplicationIdle, token).Task.ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { }
-            catch (InvalidOperationException) { /* Dispatcher 正在关闭 */ }
-            finally
-            {
-                if (acquired) Interlocked.Exchange(ref _uiReclaimRunning, 0);
-                try
-                {
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        if (!ReferenceEquals(_uiReclaimCts, source)) return;
-                        _uiReclaimCts = null;
-                        source.Dispose();
-                    }).Task.ConfigureAwait(false);
-                }
-                catch (InvalidOperationException) { }
-                catch (OperationCanceledException) { }
-            }
+            // 复用单次延迟：先停止，再在同一个空闲 Dispatcher 回合核验并回收，不周期唤醒。
+            _uiReclaimTimer?.Stop();
+            if (_mainWindow != null || _quickPanel != null || _trayMenu != null || !ShouldReclaimIdle()
+                || Dispatcher.HasShutdownStarted) return;
+            TrimWorkingSet();
+            _uiWorkingSetDirty = false;
         }
 
         // Single-instance activation uses a hidden message window.

@@ -35,8 +35,7 @@ namespace SonicRoute
             ++_autoRuleRefreshRequest; ++_autoDeviceRefreshRequest;
             _uiLifetime.Dispose();
             FinishPanelAnimations();
-            FlushNameChanges(refreshDisplay: false);
-            FlushThemeChanges();
+            FlushPendingSettings();
             StopAutoRefresh();
             StateChanged -= AutoRefreshWindowStateChanged;
             IsVisibleChanged -= AutoRefreshVisibilityChanged;
@@ -68,7 +67,7 @@ namespace SonicRoute
                 if (FindName(name) is ItemsControl items)
                 {
                     items.ItemsSource = null;
-                    items.Items.Clear();
+                    if (items.Items.Count != 0) items.Items.Clear();
                 }
             }
             _outputs = new(); _outputDisplay = new(); _inputs = new(); _inputDisplay = new();

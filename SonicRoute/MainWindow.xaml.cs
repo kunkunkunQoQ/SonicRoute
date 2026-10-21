@@ -1333,7 +1333,16 @@ namespace SonicRoute
             _nameSaveTimer?.Stop();
             if (_nameSaveTimer != null) _nameSaveTimer.Tick -= NameSaveTimer_Tick;
             _nameSaveTimer = null;
-            if (_nameSavePending) { _nameSavePending = false; ConfigService.Save(_config); }
+            if (_nameSavePending)
+            {
+                _nameSavePending = false;
+                // 同一配置快照也包含主题修改；落盘成功才合并其待保存状态，失败仍保留原主题重试。
+                if (ConfigService.TrySave(_config))
+                {
+                    _themeSavePending = false;
+                    _themeSaveTimer?.Stop();
+                }
+            }
             bool devices = _deviceNamesPending;
             _deviceNamesPending = false;
             if (devices && refreshDisplay && !_isClosed)
