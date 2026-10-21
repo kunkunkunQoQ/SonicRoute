@@ -1,5 +1,39 @@
 # Portable updates (protocol 1)
 
+## Automated GitHub Releases Workflow (CI/CD)
+
+The repository provides a fully automated, one-click GitHub Actions workflow [`.github/workflows/release.yml`](../../.github/workflows/release.yml) and an orchestration script [`Invoke-ReleasePipeline.ps1`](./Invoke-ReleasePipeline.ps1).
+
+### One-Click Release Usage
+
+1. Open GitHub repository → **Actions** → select **Release** workflow.
+2. Click **Run workflow** (branch: `master`).
+3. (Optional) Check **Dry Run** to simulate all preflight checks, full three-edition compilation, and local validation without publishing or modifying GitHub releases.
+4. The workflow automatically:
+   - Reads the target release version from `build/Version.props` (e.g. `1.25` → `v1.25`).
+   - Asserts preflight conditions (strictly `master` branch, commit SHA binding, monotonic version increase against remote releases and local tags, absence of conflicting published releases).
+   - Compiles and packages all three editions (Lite x64, Lite ARM64, Legacy x64 net48) via `Build-PortableRelease.ps1`.
+   - Validates local artifacts (PE machine types `0x8664`/`0xaa64`, FileVersion, 13-file allowlist for Legacy ZIP, `SHA256SUMS.txt`, `SonicRoute-update.json` protocol 1 schema).
+   - Generates release notes: prioritizes curated `docs/release-v<version>.md` if maintained, or automatically extracts and groups conventional commits and PRs since the previous official release tag.
+   - Creates a **Draft Release** pinned to the validated commit SHA and uploads all 5 assets.
+   - Performs **Remote Cryptographic Re-verification**: re-queries the GitHub API for asset counts and sizes, downloads each asset back to an isolated temporary sandbox, and re-computes its SHA-256 hash locally.
+   - Promotes the draft to an official public **Latest Release** (`prerelease: false`, `latest: true`).
+   - Generates a full markdown report into GitHub Actions Step Summary.
+
+### Safeguards and Failure Recovery
+
+- **Zero Unverified Releases**: Releases remain in draft state until all 5 assets pass remote download and cryptographic hash validation.
+- **Idempotent Draft Takeover**: If a previous run failed during network upload or verification, re-running on the same commit safely updates the existing draft release and overwrites assets (`--clobber`) without tag collisions.
+- **Published Immutability**: If an official (non-draft) release already exists for `v<version>`, the pipeline immediately aborts to prevent overwriting or deleting published artifacts.
+- **Manual Verification / Dry-Run**: Run locally or in CI at any time using:
+  ```powershell
+  ./packaging/Updates/Invoke-ReleasePipeline.ps1 -DryRun
+  ```
+
+---
+
+## Local Manual Build
+
 Build from the reviewed release source in the isolated public worktree. Use a fresh absolute output directory:
 
 ```powershell

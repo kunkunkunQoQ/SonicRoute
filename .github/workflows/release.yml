@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry Run (validate, build and verify locally without publishing to GitHub)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-publishing
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, Verify and Publish Release
+    runs-on: windows-latest
+    if: github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Verify README consistency
+        run: node docs/readme/generate.cjs --check
+
+      - name: Verify solution build
+        run: dotnet build SonicRoute.sln -c Release
+
+      - name: Run automated release pipeline
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $dryRunFlag = if ('${{ inputs.dry_run }}' -eq 'true') { @('-DryRun') } else { @() }
+          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo "${{ github.repository }}" @dryRunFlag
