@@ -1,0 +1,76 @@
+name: 🎧 音频设备与声卡兼容性反馈
+description: 分享你的耳机、USB DAC 声卡、蓝牙设备或虚拟声卡驱动在 SonicRoute 下的表现与调校经验
+title: "[Device]: "
+labels: [device-compat]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 感谢参与 SonicRoute 硬件兼容性建设！
+        Windows 音频生态中包含各种 USB 外置解码器、蓝牙编码格式与虚拟多通道声卡。
+        无论是「完美兼容」的经验分享，还是「偶发失真/不切端点」的疑难杂症，你的反馈都将帮助更多用户与后续驱动互操作优化。
+
+  - type: input
+    id: device_model
+    attributes:
+      label: 音频设备 / 驱动完整名称与型号
+      description: 尽可能提供品牌、具体型号与驱动版本
+      placeholder: "例如：飞傲 FiiO K7 (USB DAC) / 索尼 WH-1000XM5 (LDAC蓝牙) / Voicemeeter Banana (虚拟驱动)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connection_type
+    attributes:
+      label: 物理接口与连接方式
+      description: 设备是如何连接到计算机的
+      options:
+        - USB 外置声卡 / DAC 解码耳放
+        - 蓝牙无线音频 (A2DP / Hands-Free)
+        - 3.5mm / 6.35mm 模拟音频接口 (板载 Realtek 等)
+        - HDMI / DisplayPort 显卡显示器音频
+        - 虚拟多通道声卡驱动 (Voicemeeter / SteelSeries Sonar / Elgato Wave Link 等)
+        - Type-C 小尾巴 / 便携解码线
+        - 其他特殊总线 (Thunderbolt / PCIe 声卡)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: 兼容性测试结论
+      description: 整体使用情况属于以下哪种
+      options:
+        - 🟢 完美兼容：应用分流、默认切换、音量滑块与热插拔均无瑕疵
+        - 🟡 基本可用：分流正常，但偶有小问题（如睡眠唤醒后需点一下重切、或音量步进不同步）
+        - 🟠 需特殊设置：需在设备驱动或 Windows 声音控制面板中关闭独占模式方可生效
+        - 🔴 存在严重兼容问题：无法完成分流、频繁爆音/无声、或导致软件报错
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 操作系统与 SonicRoute 版本
+      description: 你的运行环境
+      placeholder: "例如：Windows 11 24H2 + SonicRoute v1.24 Lite x64"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 具体使用表现与排查细节
+      description: 详细描述在不同采样率（如 24bit/48kHz, 24bit/96kHz）、自动化规则触发或多应用分流时的表现
+      placeholder: "例如：在 48kHz 下应用秒切无爆音；但在切换采样率到 192kHz 时，某些 Chromium 内核浏览器需要刷新页面..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 调校心得或变通解决方法 (可选)
+      description: 如果你成功解决了问题，请把经验分享出来
+      placeholder: "例如：在 Windows 控制面板将该设备属性中的「允许应用程序独占控制该设备」取消勾选即可完美解决..."
+    validations:
+      required: false

@@ -1,0 +1,61 @@
+title: "[灵感]: "
+labels:
+  - idea
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 欢迎分享你的创新灵感与玩法构想！
+        在这里畅所欲言，探讨关于音频路由、自动化编排、外设联动或桌面交互的各种可能。
+        社区成员可以自由讨论、补充设计并投票 👍 支持；讨论成熟且符合项目定位的构想后续将转化为正式功能。
+
+  - type: input
+    id: idea_title
+    attributes:
+      label: 一句话灵感标题
+      description: 概括你的新想法
+      placeholder: "例如：支持依据应用前台焦点自动平滑淡入淡出（Duck Audio）其他背景应用"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 涉及的领域
+      description: 该灵感主要影响哪一部分
+      options:
+        - 自动化规则与智能触发 (Automation)
+        - 桌面面板与托盘滚轮体验 (UI & UX)
+        - 麦克风与全域静音体系 (Microphone & Mute)
+        - 极客短命令与本地 IPC 联动 (CLI & Scripts)
+        - 虚拟声卡与多轨道录播生态 (Virtual Audio / OBS)
+        - 其他奇思妙想
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 为什么会有这个想法？它能带来什么好处？
+      description: 阐明使用场景、受众人群以及相比现有方式的优势
+      placeholder: "例如：开黑或者打 FPS 听声辨位时，背景音乐如果能自动微弱压低 60%，就能免去频繁切出调节..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 设想的交互流程或实现思路
+      description: 你期望用户在界面上如何配置？它是自动生效还是快捷键触发？
+      placeholder: "描述你脑海中的交互草图或逻辑流程..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: 参考案例或类似方案 (可选)
+      description: 是否有其他软件有类似体验？或者有什么文档/协议可以借鉴？
+      placeholder: "例如：Discord 的 Streamer Mode、Elgato 的 Wave Link 压音功能..."
+    validations:
+      required: false

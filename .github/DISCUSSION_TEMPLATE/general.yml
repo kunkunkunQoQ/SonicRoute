@@ -1,0 +1,28 @@
+title: "[交流]: "
+labels:
+  - general
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 💬 欢迎来到 SonicRoute 自由交流区！
+        这里是社区水吧与随聊专区，无论是日常使用唠嗑、音频设备八卦、开源心得，还是对项目未来的闲聊，都欢迎在此发言。
+        请保持友善包容，共同维护良好的社区交流氛围。
+
+  - type: input
+    id: topic
+    attributes:
+      label: 讨论主题
+      description: 简述你想聊的话题
+      placeholder: "例如：大家平时玩游戏都用什么耳机？有推荐的低延迟蓝牙方案吗？"
+    validations:
+      required: true
+
+  - type: textarea
+    id: content
+    attributes:
+      label: 详细内容与见解
+      description: 展开讲讲你的看法或抛出讨论点
+      placeholder: "分享你的思考、日常体验或好奇的问题..."
+    validations:
+      required: true

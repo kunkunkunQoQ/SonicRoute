@@ -1,0 +1,56 @@
+title: "[求助]: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 欢迎来到 SonicRoute 使用求助专区！
+        在发帖前提倡先查阅：
+        - [Wiki 01-使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
+        - [Wiki 04-自动化规则指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
+        - [Wiki 06-常见问题汇总](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)
+
+  - type: input
+    id: summary
+    attributes:
+      label: 一句话问题概括
+      description: 简明扼要地描述你的疑问
+      placeholder: "例如：如何让《原神》和网易云音乐分别走耳机和音箱？"
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: 运行环境
+      description: 请提供系统版本与软件版本
+      placeholder: "例如：Windows 11 23H2 + SonicRoute v1.24 (Lite x64)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: 详细背景与期望效果
+      description: 你想实现什么样的音频调度效果？当前具体卡在哪个步骤或遇到了什么现象？
+      placeholder: "详细说明你的操作流程与现状..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: 已经尝试过的排查手段
+      description: 是否在设置中保留了对应设备？是否尝试过滑动面板或重启软件？
+      placeholder: "例如：已在保留设备勾选了耳机；在 Windows 声音设置里能看到设备..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: 相关截图 (建议)
+      description: 快速面板截图、自动化规则列表或 Windows 声音设置界面
+    validations:
+      required: false

@@ -1,79 +1,129 @@
-name: 🐛 Bug 反馈
-description: 音跃 SonicRoute 出现问题？按此模板提交，便于快速定位修复
-title: "[Bug] "
+name: 🐛 Bug 缺陷报告
+description: 发现 SonicRoute 运行异常、路由未生效、自动化编排错误或界面崩溃？按此提交
+title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        ## 感谢反馈！
-        提交前建议先看 [Wiki 常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki) 与 [讨论区置顶帖](https://github.com/kunkunkunQoQ/SonicRoute/discussions/3) 是否已有解答。
+        ### 感谢提交反馈！
+        提交前强烈建议先查阅 [Wiki 06-常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) 与 [Discussions 讨论区](https://github.com/kunkunkunQoQ/SonicRoute/discussions)。
+        *(如某些旧式游戏采用独占模式需重启游戏生效，或特定浏览器需要播放声音后才出现在 Windows 混音器中)*
+
   - type: input
     id: version
     attributes:
-      label: 音跃版本号
-      description: 设置页可查看
-      placeholder: "例如：1.13"
+      label: 软件版本号
+      description: 可在设置页底部或托盘图标悬停提示查看
+      placeholder: "例如：1.24 或 1.25-preview"
     validations:
       required: true
+
+  - type: dropdown
+    id: edition
+    attributes:
+      label: 软件版本形态
+      description: 请选择你正在使用的 SonicRoute 分发版本
+      options:
+        - Lite x64（推荐主力 · 单文件 .NET 8 桌面版）
+        - Lite ARM64（Surface Pro / 骁龙 PC 原生 · .NET 8）
+        - Legacy x64（免额外运行库 · 系统自带 .NET 4.8）
+        - Microsoft Store（微软商店版 · 自动静默更新）
+        - 自行拉取源码编译构建
+    validations:
+      required: true
+
   - type: input
     id: windows
     attributes:
-      label: Windows 版本
-      description: Win+R 输入 winver 可查看
-      placeholder: "例如：Windows 11 24H2"
+      label: Windows 操作系统版本
+      description: 可按 Win+R 输入 winver 或在「系统设置 → 关于」查看
+      placeholder: "例如：Windows 11 24H2 专业版 (内部版本 26100.2033)"
     validations:
       required: true
+
   - type: dropdown
     id: category
     attributes:
-      label: 问题类型
-      description: 问题主要出在哪一块
+      label: 涉及的功能模块
+      description: 问题主要发生在哪一功能区域
       options:
-        - 应用/全局设备切换
-        - 系统默认设备切换
-        - 快捷键
-        - 快速面板
-        - 音量/静音
-        - 麦克风静音
-        - OSD 显示
-        - 主题/界面
-        - 开机自启
-        - 性能/内存
-        - 其他
+        - 应用音频定向分流 (Per-App Audio Routing)
+        - 系统默认端点切换 (Default Playback/Record Device)
+        - 自动化规则与编排引擎 (AutoRuleScheduler)
+        - 前台进程与全屏感知 (ForegroundAppService)
+        - 命令行工具与命名管道 (sr CLI / IPC)
+        - 快捷面板与交互滑块 (QuickPanel)
+        - 系统托盘与滚轮盲调 (TrayService)
+        - 全局麦克风硬件级闭麦与状态同步
+        - 物理设备热插拔 / 睡眠唤醒恢复
+        - 蓝牙耳机连接与低延迟切换
+        - 虚拟声卡兼容性 (Voicemeeter / SteelSeries Sonar 等)
+        - OSD 屏幕浮动提示
+        - 开机自启与后台常驻
+        - 内存/CPU 资源占用异常
+        - 其他界面或文本问题
     validations:
       required: true
+
+  - type: input
+    id: devices
+    attributes:
+      label: 涉及的音频设备与应用
+      description: 请写明测试时使用的具体耳机、音箱、声卡型号及出现异常的软件
+      placeholder: "例如：耳机 森海塞尔 HD560S (USB DAC) + 音箱 漫步者 S880 (光纤) + 网易云音乐"
+    validations:
+      required: true
+
   - type: textarea
     id: desc
     attributes:
-      label: 问题描述
-      description: 发生了什么？预期应该是什么？
-      placeholder: "简洁清楚地描述问题"
+      label: 问题现象描述
+      description: 发生了什么？预期的正确行为是什么？
+      placeholder: "请清晰、详细地描述异常现象..."
     validations:
       required: true
+
   - type: textarea
     id: repro
     attributes:
       label: 重现步骤
-      description: 一步步说明如何复现（有助于更快修复）
+      description: 请列出一步步的复现操作，这对于开发者排查至关重要
       placeholder: |
-        1. 打开音跃
-        2. ...
-        3. 出现问题
+        1. 启动 SonicRoute，并在「保留的设备」中勾选耳机与音箱
+        2. 打开《英雄联盟》并将声音输出通过快捷面板指定为耳机
+        3. 打开音乐播放器并指定为音箱
+        4. 拔出耳机再重新插入 / 切换前台窗口...
+        5. 发现异常：...
     validations:
-      required: false
-  - type: input
-    id: device
+      required: true
+
+  - type: textarea
+    id: logs
     attributes:
-      label: 涉及的应用 / 设备
-      description: 写明具体应用或设备名称
-      placeholder: "例如：某游戏 / 耳机 AUSDOM A3 Pro"
+      label: 规则执行日志 / 异常信息 (可选)
+      description: 可提供「自动化规则 → 查看执行日志」中的记录，或提供配置目录 `%LocalAppData%\SonicRoute` 中的信息（请勿包含个人敏感路径）
+      placeholder: "粘贴相关日志文本..."
     validations:
       required: false
+
   - type: textarea
     id: screenshots
     attributes:
-      label: 截图 / 录屏
-      description: 拖入截图或录屏文件（强烈建议，能大幅加快定位）
+      label: 截图或录屏 (强烈建议)
+      description: 直接将图片拖入或粘贴到此处（快速面板状态、主界面设置或 Windows 声音设置截图能极大加快修复速度）
     validations:
       required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交确认清单
+      description: 请在提交前逐一确认
+      options:
+        - label: 我已查阅 [Wiki 06-常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)，确认非已知系统机制限制
+          required: true
+        - label: 我已在 Issues 和 Discussions 中搜索过，确认此前尚无相同或极为相似的问题报告
+          required: true
+        - label: 我使用的是官方发布的最新版本或已知稳定版，且已尝试过重启软件或重新检查保留设备
+          required: true

@@ -1,0 +1,87 @@
+title: "[分享]: "
+labels:
+  - showcase
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### 🎉 欢迎秀出你的神仙调校方案与规则食谱！
+        无论是「游戏开黑无感分流」、「双显示器办公+摸鱼自动静音」，还是「SilentPlayer 联动虚拟声卡」，你的分享都能给其他玩家带来巨大启发！
+
+  - type: input
+    id: recipe_name
+    attributes:
+      label: 玩法/食谱名称
+      description: 给你的调校方案起一个响亮、易记的名字
+      placeholder: "例如：【配方】双显示器居家办公：全自动办公会议与游戏背景音流转方案"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 方案主场景
+      description: 属于哪种典型的音频调度需求
+      options:
+        - 🎮 游戏开黑与语音隔离（游戏独占耳机，语音软件走耳麦，背景音乐走音箱）
+        - 💼 居家办公与摸鱼自如（工作会议专属通道，非前台应用音量压低）
+        - 🎧 双设备/多设备无感接力（白天桌面音箱，夜间戴上耳机全自动平滑重定向）
+        - 📹 OBS 直播推流与录屏分轨（虚拟轨道物理隔离，私密语音绝不进录像）
+        - 🎹 音效板与串流联动（配合 SilentPlayer / 声卡硬件旋钮 / 脚本调用）
+        - ⚡ 极客 CLI 与自动化脚本流（sr 命令行深度编排）
+    validations:
+      required: true
+
+  - type: input
+    id: devices
+    attributes:
+      label: 你的设备搭配
+      description: 列出方案中用到的物理端点或虚拟通道
+      placeholder: "例如：罗技 G PRO X 无线耳机 + 漫步者 S2000MKIII 音箱 + 飞傲 K7 解码器"
+    validations:
+      required: true
+
+  - type: textarea
+    id: config_details
+    attributes:
+      label: 核心配置与规则链步骤
+      description: 一步步分享你是如何设置保留设备、触发器（应用启动/前台变动/快捷键）与动作的
+      placeholder: |
+        - 触发器：检测到 cs2.exe 成为前台窗口
+        - 动作 1：将 cs2.exe 路由至「罗技耳机」，音量 80%
+        - 动作 2：将 cloudmusic.exe 音量下调至 20%，路由至「漫步者音箱」
+        - 动作 3：启动 Discord 并指定语音端点...
+    validations:
+      required: true
+
+  - type: textarea
+    id: rules_snippet
+    attributes:
+      label: 规则 JSON 片段或 sr 命令行 (可选)
+      description: 若有导出规则或脚本命令，可直接贴在这里供大家一键导入/复现
+      placeholder: |
+        ```json
+        {
+          "name": "游戏自动化接力",
+          ...
+        }
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: 效果截图或录屏 (强烈建议)
+      description: 快速面板实时分流状态、规则编辑界面截图
+    validations:
+      required: false
+
+  - type: textarea
+    id: thoughts
+    attributes:
+      label: 使用体验与避坑指南
+      description: 这一套用下来有什么爽点？有哪些设置细节需要注意？
+      placeholder: "例如：注意在 Windows 声音设置里不要勾选独占；配合 OSD 提示看一眼就知道生效了..."
+    validations:
+      required: false

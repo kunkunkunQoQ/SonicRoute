@@ -1,32 +1,80 @@
-name: 💡 功能建议
-description: 想让音跃更好用？提出你的想法
-title: "[Feature] "
+name: 💡 功能建议与提案
+description: 对 SonicRoute 有新的功能灵感、交互优化或编排需求？按此提交提案
+title: "[Feature]: "
 labels: [enhancement]
 body:
   - type: markdown
     attributes:
       value: |
-        ## 感谢建议！
-        想先讨论功能想法，也可以去 [Discussions - Ideas](https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/ideas) 交流。
-  - type: textarea
-    id: desc
+        ### 感谢提出宝贵构想！
+        如果只是初步的想法、玩法探讨或不确定的灵感，建议先在 [Discussions · Ideas](https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/ideas) 发帖交流，获得社区共鸣后再立项提 Issue。
+
+  - type: dropdown
+    id: module
     attributes:
-      label: 功能描述
-      description: 你想实现什么功能
-      placeholder: "描述这个功能"
+      label: 期望新增/改进的功能模块
+      description: 该功能属于哪一部分
+      options:
+        - 自动化规则与编排引擎 (AutoRuleScheduler)
+        - 应用音频定向与输出设备管理 (Per-App Routing)
+        - 录音设备与麦克风精细化控制 (Recording Devices)
+        - 快捷面板与桌面交互 (QuickPanel / WPF)
+        - 系统托盘与滚轮交互 (TrayService)
+        - 命令行工具与管道调用 (sr CLI / IPC)
+        - 快捷键与热键体系 (Hotkeys)
+        - 屏幕浮窗与状态反馈 (OSD Service)
+        - 硬件设备兼容性与虚拟音频
+        - 国际化与多语言本地化 (Localization)
+        - 其他周边生态联动
     validations:
       required: true
+
   - type: textarea
-    id: scenario
+    id: problem
     attributes:
-      label: 使用场景
-      description: 在什么情况下会用到？解决什么问题？
+      label: 你遇到了什么痛点？解决了什么场景的问题？
+      description: 请详细描述在什么场景下现有功能无法满足你的需求，或者存在什么不便之处
+      placeholder: "例如：在双人合租/多人连麦场景下，我需要同时向耳机和虚拟采集卡双路输出，现有的单端分流无法满足..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 你期望的解决方案与交互方式
+      description: 描述你设想该功能应该如何呈现、如何配置或如何操作
+      placeholder: "例如：建议在自动化动作中增加一项「分流至多端点」选项，或者在快捷面板右键菜单中提供快速镜像开关..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你考虑过的替代方案或现有变通做法 (可选)
+      description: 在没有该功能前，你目前是如何妥协或解决该问题的？是否尝试过其他第三方工具？
+      placeholder: "例如：目前通过在系统设置中手动更改，或者配合 SilentPlayer 转发..."
     validations:
       required: false
-  - type: textarea
-    id: expect
+
+  - type: dropdown
+    id: impact
     attributes:
-      label: 期望行为
-      description: 期望它如何工作
+      label: 对你的使用影响程度
+      description: 该建议对日常使用的重要性
+      options:
+        - ⭐⭐⭐ 强烈推荐 · 能极大改善核心场景与关键痛点
+        - ⭐⭐ 体验提升 · 让日常操作更顺畅、更优雅
+        - ⭐ 锦上添花 · 细节微调或小众极客玩法
     validations:
-      required: false
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 建议核对清单
+      description: 请在提交前逐一确认
+      options:
+        - label: 我已查阅 [Wiki 02-功能特性](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) 与 [Wiki 04-自动化规则](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)，确认当前版本尚无此原生实现
+          required: true
+        - label: 我理解 SonicRoute 的核心理念是“极致轻量、零轮询、低系统闲时开销”，该提议不会引入沉重冗余的常驻后台负担
+          required: true
