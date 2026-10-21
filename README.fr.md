@@ -28,7 +28,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d�
 
 - **Détection automatique de l’application au premier plan.** Par défaut, les commandes suivent l’application audio utilisée. Lorsque le panneau est fermé, les mêmes raccourcis règlent son volume, coupent le son ou changent d’appareil. La molette dans la zone de notification règle aussi son volume, sans avoir à chercher l’application.
 - **Panneau rapide.** Un clic sur l’icône de notification permet de régler les volumes des applications au même endroit. Cliquez sur l’icône d’une application pour couper le son ou dépliez ses appareils pour choisir un casque ou des haut-parleurs. Lecteur de musique, jeu et application de chat vocal se règlent séparément.
-- **Règles d’automatisation.** Dans « Automatisation », ordonnez les changements d’appareil, réglages de volume et lancements de programmes, avec des délais si nécessaire. Enregistrez et activez la règle pour l’exécuter par raccourci, au lancement ou à l’activation d’une application, ou à l’heure prévue, sans refaire les mêmes étapes.
+- **Règles d’automatisation.** Ordonnez les changements d’appareil, réglages de volume, lancements de programmes et autres étapes ; ajoutez des délais et exécutez les règles par raccourci, au lancement ou à l’activation d’une application, ou selon un calendrier. **Nouveautés de la version de développement 1.25 :** commandes de lecture et d’enregistrement des appareils et applications, réglages groupés, réinitialisation de tous les routages d’applications et affichage ou masquage du panneau rapide.
 
 ## 🎮 Pour le quotidien
 

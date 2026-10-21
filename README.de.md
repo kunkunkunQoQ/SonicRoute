@@ -28,7 +28,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 
 - **Vordergrund-App automatisch erkennen.** Standardmäßig folgt die Steuerung der gerade verwendeten Audio-App. Bei geschlossenem Panel regelst du mit denselben Tastenkürzeln ihre Lautstärke, Stummschaltung und Geräte. Auch das Mausrad im Infobereich regelt ihre Lautstärke, ohne die App erst suchen zu müssen.
 - **Schnellpanel.** Ein Klick auf das Symbol im Infobereich zeigt die App-Lautstärken an einem Ort. Klicke auf ein App-Symbol zum Stummschalten oder klappe den Gerätebereich auf, um Kopfhörer oder Lautsprecher zu wählen. Musikplayer, Spiele und Sprachchat-Apps lassen sich getrennt steuern.
-- **Automatisierungsregeln.** Ordne unter „Automatisierung“ Gerätewechsel, Lautstärkeanpassungen und Programmstarts in der gewünschten Reihenfolge an, bei Bedarf mit Verzögerungen. Speichere und aktiviere die Regel: Tastenkürzel, App-Start, Wechsel zur App oder Zeitplan übernehmen dann die wiederkehrenden Schritte.
+- **Automatisierungsregeln.** Ordne Gerätewechsel, Lautstärkeanpassungen, Programmstarts und weitere Schritte in der gewünschten Reihenfolge an; ergänze Verzögerungen und führe die Regel per Tastenkürzel, App-Start oder -Wechsel oder Zeitplan aus. **Neu im Entwicklungsbuild v1.25:** Wiedergabe- und Aufnahmesteuerungen für Geräte und Apps, Sammeländerungen für alle Apps, das Zurücksetzen aller App-Routen sowie das Ein- und Ausblenden des Schnellbereichs.
 
 ## 🎮 Für den Alltag
 

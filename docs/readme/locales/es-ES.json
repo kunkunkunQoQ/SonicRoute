@@ -82,7 +82,7 @@
   "features": [
     "**Detección automática de la aplicación en primer plano.** Por defecto, los controles siguen a la aplicación de audio que usas. Con el panel cerrado, los mismos atajos ajustan su volumen, la silencian o cambian de dispositivo. La rueda sobre el área de notificación también ajusta su volumen, sin buscar antes la aplicación.",
     "**Panel rápido.** Haz clic en el icono del área de notificación para gestionar los volúmenes de las aplicaciones en un solo lugar. Pulsa el icono de una aplicación para silenciarla o despliega sus dispositivos para elegir auriculares o altavoces. Controla reproductores de música, juegos y aplicaciones de chat de voz por separado.",
-    "**Reglas de automatización.** En «Automatización», ordena cambios de dispositivo, ajustes de volumen y apertura de programas, con esperas si las necesitas. Guarda y activa la regla para ejecutarla con un atajo, al abrir una aplicación o cambiar a ella, o según un horario, sin repetir los pasos a mano."
+    "**Reglas de automatización.** Ordena cambios de dispositivo, ajustes de volumen, apertura de programas y otros pasos; añade esperas y ejecuta las reglas con un atajo, al abrir o activar una aplicación, o según un horario. **Novedades de la versión de desarrollo 1.25:** controles de reproducción y grabación de dispositivos y aplicaciones, ajustes por lotes, restablecimiento de todas las rutas de aplicaciones y mostrar u ocultar el panel rápido."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nuevo desastre cada vez que intenta ayudar.",

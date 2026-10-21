@@ -82,7 +82,7 @@
   "features": [
     "**Automatic foreground-app detection.** By default, controls follow the audio app you’re using. With the panel closed, use the same hotkeys to change its volume, mute it, or switch devices, or scroll over the system tray to adjust volume—no need to find the app first.",
     "**Quick panel.** Click the tray icon to manage app volumes in one place. Click an app’s icon to mute it or expand its device section to choose headphones or speakers. Control music players, games, and voice chat apps separately.",
-    "**Automation rules.** On the Automation page, arrange device switches, volume changes, and program launches in order, with delays if needed. Save and enable the rule, then run it with a hotkey, when an app starts or gains focus, or on a schedule instead of repeating the steps yourself."
+    "**Automation rules.** Arrange device switches, volume changes, program launches, and other steps in order; add delays and run rules by hotkey, app launch or focus, or schedule. **New in the v1.25 development build:** device and app playback/recording controls, batch adjustments across apps, reset all app routes, and show or hide the quick panel."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "An absurd magical-girl comedy about a girl who hatches from an egg and makes a mess whenever she tries to help.",
