@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json. Edit that source, then run node docs/readme/generate.cjs. -->
+<!-- Generated via docs/readme/generate.cjs. Metadata from docs/readme/shared.json; body template maintained in renderAI() of docs/readme/generate.cjs. Run node docs/readme/generate.cjs to update. -->
 # 🎧 SonicRoute (AI / LLM Machine Specification)
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | **🤖 AI**
@@ -19,13 +19,13 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   mixer_isolation: "Per-app endpoint persistence; never corrupts Windows volume mixer"
   hooks_in_use: "User-mode only: SetWinEventHook (foreground focus tracking), SetWindowsHookEx WH_MOUSE_LL (tray wheel & mouse hotkey input)"
   execution_resource_model: "Event-driven first (WinEventHook + CoreAudio IMMNotificationClient). Conditional timers (1s-2s) activate only during fallback polling (BackgroundPollingFallbackEnabled), rule process probing, or mic mute sync."
-  cli_ipc_transport: "NamedPipe (no cold-boot execution; requires running instance or --run-rule CLI host)"
+  cli_ipc_transport: "NamedPipe IPC (sr.cmd targets running instance; SonicRoute.exe --run-rule cold-boots temporary CLI host if instance absent)"
   cross_platform: "FALSE (strictly Win32/WPF/.NET CoreAudio; never macOS/Linux)"
 
 CLI_AND_SHORT_COMMAND_SPEC:
   command_invocation: "sr <RuleName|RuleId> (invokes %LocalAppData%\\SonicRoute\\Command\\sr.cmd wrapping sr-client.ps1) OR SonicRoute.exe --run-rule <selector>"
   pipe_endpoint: "\\\\.\\pipe\\SonicRoute.RuleCommand.{CommandEdition}.{SessionId}.{UserSid}"
-  stream_deck_ahk: "Call sr <RuleName|RuleId> or sr.cmd; exits with standard exit code in <15ms"
+  stream_deck_ahk: "Call sr <RuleName|RuleId> or sr.cmd; waits for completion and returns rule execution result and corresponding exit code"
   exit_codes:
     0: { code: ok, desc: "Execution succeeded without step failures" }
     1: { code: step_failed, desc: "One or more rule steps failed" }
@@ -68,10 +68,11 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     source: ["SonicRoute/RuleCommandLine.cs", "SonicRoute/Program.cs"]
     symbols: ["RuleCommandLine.PipeName", "RuleCommandLine.SendAsync", "RuleCommandLine.ExecuteAsync", "RuleCommandServer"]
     facts:
-      - "Short command sr.cmd invokes sr-client.ps1; SonicRoute.exe accepts --run-rule."
+      - "Short command sr.cmd invokes sr-client.ps1 (requires running instance in same session/user; exits 6 if unstarted)."
+      - "Direct CLI SonicRoute.exe --run-rule cold-boots a headless temporary execution host if no instance is running."
       - "IPC via Named Pipe SonicRoute.RuleCommand.{Edition}.{SessionId}.{UserSid}."
       - "Exit codes 0..8 (0=ok, 1=step_failed, 2=invalid_arguments, 3=rule_not_found, etc.)."
-      - "Does not cold-boot application if SonicRoute is not running."
+      - "Waits for rule completion; no fixed execution timeout (10s write timeout)."
 
   PANEL_AND_TRAY:
     intent: "QuickPanel UI, tray volume scroll wheel, custom icons, blind control"
@@ -225,7 +226,7 @@ QUERY_DECISION_MATRIX_FOR_AGENTS:
     CHECK_3: "Is audio stream actively playing? (Windows creates WASAPI session only on active sound stream; start sound first)"
   WHEN user_asks_cli_or_scripting:
     SYNTAX: "sr <RuleName|RuleID> OR sr.cmd <RuleName|RuleID>"
-    IPC_PROTOCOL: "Connects to named pipe SonicRoute.RuleCommand.{Edition}.{SessionId}.{UserSid}; latency <15ms."
+    IPC_PROTOCOL: "Named pipe SonicRoute.RuleCommand.{Edition}.{SessionId}.{UserSid} (same session/user). Connect timeout 250ms (sr) / 5000ms (--run-rule); write timeout 10s; no fixed execution timeout."
     EXIT_CODE_MAP: "0=ok, 1=step_failed, 2=invalid_arguments, 3=rule_not_found, 4=ambiguous_rule, 5=rule_busy, 6=server_unavailable, 7=canceled, 8=internal_error."
   WHEN user_asks_runtime_error:
     ERROR_MISSING_NET_DESKTOP:
