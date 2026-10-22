@@ -30,7 +30,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 - **포그라운드 스마트 추적 및 트레이 휠 간편 제어:** 시스템 이벤트를 통해 오디오가 실행 중인 포그라운드 앱을 즉시 감지합니다. 작업 표시줄 트레이 영역에서 휠을 굴려 앱 볼륨을 조절할 수 있으며, OSD 알림과 전역 마이크 음소거를 지원합니다.
 - **두 가지 패널 스타일 및 실시간 오디오 레벨 표시:** 기본 목록 패널과 모던 카드 패널을 제공하며, 350~850px 높이 조절을 지원합니다. 앱별 개별 볼륨 슬라이더와 실시간 소리 감지 레벨을 직관적으로 확인하세요.
 - **자동화 콤보 엔진 및 초고속 CLI(6가지 트리거 × 37개 작업):** 앱 실행/전환/종료, 예약, 단축키 등 6가지 트리거 지원. 장치 전환, 볼륨, 음소거, PowerShell 등을 조합할 수 있으며, 내장된 sr 명령어로 외부 스크립트 및 하드웨어와 손쉽게 연동됩니다.
-- **가벼운 순수 이벤트 기반 아키텍처(유휴 시 0% CPU):** 완전한 시스템 이벤트 구동으로 불필요한 백그라운드 폴링 타이머가 없어 유휴 CPU 점유율이 거의 0에 가깝습니다. .NET 4.8 기반 Legacy, 단일 파일 Lite(x64 / ARM64 실험), Store 버전을 제공하며 9개 언어를 지원합니다.
+- **이벤트 우선 감지:** 시스템 알림을 사용하고 필요한 경우 1초 간격 스냅샷 확인으로 보완하며, 불필요한 데이터는 필요할 때 정리합니다. Legacy(.NET 4.8), .NET 10 및 NET8 Lite, Store 버전을 9개 언어로 제공합니다.
 
 ## 🎮 일상적인 활용
 
@@ -46,18 +46,20 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 ## 🚀 다운로드 및 시작하기
 
-**현재 릴리스: [v1.24](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.24)** · 2026-10-20 · [릴리스 노트(중국어 간체)](docs/release-v1.24.md)
+**현재 릴리스: [v1.25](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.25)** · 2026-10-22 · [릴리스 노트(중국어 간체)](docs/release-v1.25.md)
 
-대부분의 Windows x64 사용자에게는 간편한 설치와 자동 업데이트를 제공하는 Microsoft Store 버전을 권장합니다. 단일 실행 파일을 원하면 Lite x64, .NET 8 설치가 어렵다면 Legacy x64를 선택하세요. 위 다운로드 링크는 항상 최신 릴리스를 가리키며, 아래 직접 링크는 v1.24용입니다.
+Windows x64에서는 .NET 10 Lite, NET8 호환 Lite, .NET Framework 4.8 Legacy 중에서 선택할 수 있습니다. Store 페이지에는 현재 제공 중인 버전이 표시되며 업데이트는 Store에서 관리합니다. 아래 직접 다운로드 링크는 v1.25용입니다.
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| ⭐ Lite x64 (권장·표준) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | 설치 없는 단일 실행 파일; 시스템 아키텍처에 맞는 x64 .NET 8 Desktop Runtime 필요 |
-| ⚡ Lite ARM64 (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Surface Pro 및 Snapdragon ARM64 기기에서 네이티브 고속 실행; ARM64 .NET 8 Desktop Runtime 필요 |
-| 🛡️ Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
-| 🔄 Microsoft Store (자동 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 원클릭 설치 및 MS Store를 통한 자동 백그라운드 업데이트; 64비트 Windows 10/11 지원 |
+| ⭐ Lite x64 (.NET 10 기본) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-x64.exe) | 휴대용 단일 실행 파일; x64 .NET 10 Desktop Runtime 필요 |
+| ⚡ Lite ARM64 (.NET 10) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-arm64.exe) | 휴대용 ARM64 실행 파일; ARM64 .NET 10 Desktop Runtime 필요 |
+| ☕ Lite NET8 x64 | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-NET8-x64.exe) | NET8 호환 Lite; x64 .NET 8 Desktop Runtime 필요 |
+| ☕ Lite NET8 ARM64 (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-NET8-arm64.exe) | NET8 호환 Lite; ARM64 .NET 8 Desktop Runtime 필요 |
+| 🛡️ Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
+| 🔄 Microsoft Store (Store 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | .NET 10 Store 패키지에는 x64 .NET 10 Desktop Runtime이 필요합니다. 현재 제공 중인 버전은 Store 페이지에서 확인하세요(64비트 Windows 10/11). |
 
-Lite에는 호환되는 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)이 필요합니다. Legacy에는 .NET 8이 필요하지 않습니다.
+기본 Lite에는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), NET8 호환 Lite에는 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)이 필요합니다. NET8 버전은 2026년 11월 이후 제공 및 유지보수가 종료됩니다. 이후 x64 사용자는 .NET 10 또는 Legacy(.NET Framework 4.8)를 직접 선택하고, ARM64 사용자는 .NET 10을 선택하세요.
 
 1. **실행 및 트레이 상주**: 더블 클릭하여 실행하면 트레이 영역에 상주합니다. 트레이 아이콘을 더블 클릭하여 메인 창을 엽니다.
 2. **장치 선택 및 라우팅**: '설정 → 유지할 장치'에서 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 열고, 슬라이더로 앱별 사운드를 즉시 라우팅합니다.
@@ -70,7 +72,7 @@ Lite에는 호환되는 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/do
 sr "규칙 이름 또는 ID"
 ```
 
-1.24에서는 자동화 시작 템플릿, 최근 실행 상세 기록(기본값 꺼짐, 저장 용량 설정 가능), 앱별 아이콘 가져오기를 추가했습니다. 앱 아이콘이 없거나 기본 아이콘이면 앱 이름의 첫 글자를 표시합니다. 가져온 아이콘은 설정 백업에도 포함됩니다. 이전 변경 사항은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
+버전 1.25에서는 .NET 10을 기본 Lite 버전으로 제공하고 NET8 호환 버전도 유지합니다. 휴대용 버전 업데이트는 사용자가 확인한 뒤 다운로드되며 자동 확인은 기본적으로 꺼져 있습니다. Runtime과 아키텍처가 일치해야 합니다. Store 버전은 Microsoft Store를 통해 업데이트됩니다. 이전 변경 사항은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
 
 ### ❓ 자주 묻는 질문 (FAQ)
 
@@ -78,13 +80,13 @@ sr "규칙 이름 또는 ID"
 
 A: 네, 유지됩니다! 앱 오디오 라우팅은 Windows 오디오 엔진에 의해 기본적으로 영구 저장되므로 프로그램을 종료해도 유지됩니다. 단축키, 트레이 제어, 자동화 규칙만 상주가 필요합니다.
 
-**Q: 실행 시 .NET 8 Desktop Runtime이 없다는 오류가 발생하면 어떻게 하나요?**
+**Q: 각 버전에 필요한 Runtime은 무엇인가요?**
 
-A: 위 표의 런타임 링크를 클릭하여 Microsoft 공식 .NET 8 Desktop Runtime을 설치하거나, 추가 런타임이 필요 없는 Legacy 버전을 다운로드하세요.
+A: 기본 Lite에는 시스템에 맞는 .NET 10 Desktop Runtime이, Lite NET8에는 .NET 8이 필요합니다. Legacy는 별도 .NET Desktop Runtime 없이 .NET Framework 4.8로 실행됩니다. 현재 Store 패키지는 x64 .NET 10 Desktop Runtime이 필요합니다.
 
 **Q: 백그라운드 상주 중 CPU나 배터리를 소모하나요?**
 
-A: 거의 없습니다. 순수 Windows 시스템 이벤트 구동 구조를 채택하여 유휴 상태에서는 CPU 사용량이 0%이며 불필요한 백그라운드 폴링 타이머가 전혀 없습니다.
+A: 감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1초 간격 스냅샷 확인을 보완적으로 사용합니다. 불필요한 데이터는 필요할 때 정리하며 실제 CPU 사용량은 시스템과 작업에 따라 다릅니다.
 
 ## 📚 문서
 
@@ -100,7 +102,7 @@ A: 거의 없습니다. 순수 Windows 시스템 이벤트 구동 구조를 채�
 
 ## 📌 로드맵
 
-- **v1.25 · 주요 업데이트 (개발 중)**: 자동화 오케스트레이션을 6개 트리거 및 37개 고급 작업으로 대폭 확장 (녹음 장치 세분화, 앱별 마이크 개별 제어, 전체 앱 일괄 볼륨 조절 및 원클릭 라우팅 리셋 지원).
+- **v1.26 · 주요 업데이트 (개발 중)**: 자동화 오케스트레이션을 6개 트리거 및 37개 고급 작업으로 대폭 확장 (녹음 장치 세분화, 앱별 마이크 개별 제어, 전체 앱 일괄 볼륨 조절 및 원클릭 라우팅 리셋 지원).
 - **향후 계획**: 커뮤니티 피드백을 바탕으로 저지연 이벤트 리스너와 제로 폴링 설계를 지속적으로 개선.
 
 [아이디어 공유 또는 문제 제보](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -97,9 +97,14 @@ namespace SonicRoute
         private string _autoHotkeyCombo = "";
         private bool _suppressAutoUi;
 
+        public static double LastInitializeComponentMs { get; private set; }
+
         public MainWindow()
         {
+            var swInit = System.Diagnostics.Stopwatch.StartNew();
             InitializeComponent();
+            swInit.Stop();
+            LastInitializeComponentMs = swInit.Elapsed.TotalMilliseconds;
             OverviewAppCombo.IsSynchronizedWithCurrentItem = false;
             AppsListBox.IsSynchronizedWithCurrentItem = false;
             VolumePresets.Attach(OverviewVolumeSlider);

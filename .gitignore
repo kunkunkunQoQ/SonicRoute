@@ -37,6 +37,11 @@ _attach_tmp.bin
 /rel*.json
 .preview/
 # 本地保留、不上传 GitHub 的多余文件
+/tools/local/
+/maintenance/
+/LOCAL_WORKSPACE.md
+/benchmarks/
+/build-artifacts/
 /Probe/
 /SonicRoute.Selftest/
 /WpfUiSkeleton/

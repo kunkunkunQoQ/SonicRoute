@@ -18,7 +18,11 @@ namespace SonicRoute.Core
             public Snapshot(IEnumerable<string>? present = null, bool complete = true)
             { Present = new HashSet<string>(present ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase); Complete = complete; }
         }
+#if NET9_0_OR_GREATER
+        private readonly System.Threading.Lock _gate = new();
+#else
         private readonly object _gate = new object();
+#endif
         private readonly string? _targetName;
         private Process? _knownProcess;
         private string[]? _targets;

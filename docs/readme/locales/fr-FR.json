@@ -15,16 +15,16 @@
   "featuresTitle": "Ce que propose SonicRoute",
   "downloadTitle": "Télécharger et commencer",
   "releaseNotes": "Notes de version (en chinois)",
-  "downloadIntro": "Pour la plupart des PC Windows x64, la version du Microsoft Store offre une installation pratique et des mises à jour automatiques. Choisissez Lite x64 pour un exécutable unique, ou Legacy x64 si l’installation de .NET 8 n’est pas pratique. Le lien de téléchargement ci-dessus mène toujours à la dernière version ; les liens directs ci-dessous correspondent à {release}.",
+  "downloadIntro": "Sous Windows x64, choisissez Lite avec .NET 10, Lite compatible NET8 ou Legacy avec .NET Framework 4.8. La page du Store indique la version qui y est disponible et les mises à jour passent par le Store. Les liens directs ci-dessous correspondent à {release}.",
   "edition": "Édition",
   "requirements": "Configuration requise",
   "singleExe": "Un seul EXE",
   "fullZip": "Archive ZIP complète",
   "storeInstall": "Installer depuis le Store",
-  "liteRequirement": "Exécutable autonome à fichier unique ; nécessite le .NET 8 Desktop Runtime x64 correspondant",
+  "liteRequirement": "Exécutable portable à fichier unique ; nécessite le .NET 10 Desktop Runtime x64",
   "legacyRequirement": "Aucun .NET 8 requis ; s'exécute directement via le .NET Framework 4.8 intégré ; décompressez le ZIP",
-  "storeRequirement": "Installation en un clic avec mises à jour automatiques via le Microsoft Store ; pour Windows 10/11 64 bits",
-  "runtimeNote": "Lite nécessite le {runtime} correspondant. Legacy ne nécessite pas .NET 8.",
+  "storeRequirement": "Le paquet Store .NET 10 nécessite le .NET 10 Desktop Runtime x64. Consultez la page du Store pour connaître la version actuellement disponible ; pour Windows 10/11 64 bits.",
+  "runtimeNote": "Lite standard nécessite {runtime} ; Lite compatible NET8 nécessite {runtime8}. L’édition NET8 ne sera plus proposée ni maintenue après novembre 2026. Ensuite, les utilisateurs x64 pourront choisir manuellement .NET 10 ou Legacy (.NET Framework 4.8) ; les utilisateurs ARM64 devront choisir .NET 10.",
   "steps": [
     "**Lancer & garder en barre des tâches** : Double-cliquez pour démarrer ; reste actif dans la zone de notification. Double-cliquez sur l'icône pour ouvrir la fenêtre principale.",
     "**Sélectionner & router les périphériques** : Cochez vos casques et haut-parleurs dans Paramètres → Périphériques conservés. Cliquez sur l'icône pour afficher le panneau rapide et router chaque application.",
@@ -51,7 +51,7 @@
   "configureAutomation": "Configurer l’automatisation",
   "automationExample": "Transformez les réglages manuels fastidieux en une expérience automatisée prête à l'emploi.",
   "currentRelease": "Version actuelle",
-  "releaseSummary": "La version {version} ajoute des modèles d’automatisation, un historique détaillé des exécutions récentes (désactivé par défaut, avec une limite de stockage réglable) et l’importation d’icônes par application. Lorsqu’une icône est absente ou générique, le premier caractère du nom de l’application s’affiche. Les sauvegardes des paramètres incluent les icônes importées. Consultez {history} pour les changements précédents.",
+  "releaseSummary": "La version {version} fait de .NET 10 l’édition Lite standard et propose une édition compatible NET8. Les mises à jour portables ne sont téléchargées qu’après confirmation ; la vérification automatique est désactivée par défaut et le runtime ainsi que l’architecture doivent correspondre. L’édition Store reçoit ses mises à jour via Microsoft Store. Consultez {history} pour les changements précédents.",
   "docTopic": "Sujet",
   "docGuides": "Guides",
   "docTopics": [
@@ -83,7 +83,7 @@
     "**Suivi intelligent du premier plan et réglage direct dans la barre des tâches :** verrouille instantanément l'application audio active via les événements système. Ajustez le volume en faisant défiler la molette sur la zone de notification, avec retour visuel OSD et coupure micro globale.",
     "**Deux styles de panneau et indicateur de niveau sonore en direct :** choisissez entre la vue classique par ligne et le panneau moderne sous forme de cartes (hauteur ajustable de 350 à 850 px) ; contrôlez le volume individuel avec indicateurs d'activité sonore en temps réel.",
     "**Moteur d'automatisation et CLI ultrarapide (6 déclencheurs × 37 actions) :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.",
-    "**Architecture légère et purement événementielle (0 % CPU au repos) :** aucun minuteur de scrutation permanent, consommation CPU quasi nulle au repos et gestion mémoire optimisée. Décliné en Legacy (.NET 4.8), fichier unique Lite (x64 / ARM64 expérimental) et Microsoft Store en 9 langues."
+    "**Détection prioritairement événementielle :** utilise les notifications système et, si nécessaire, une vérification ponctuelle toutes les secondes ; les données inutiles sont nettoyées à la demande. Disponible en Legacy (.NET 4.8), Lite pour .NET 10 et NET8, et Store en 9 langues."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Une comédie absurde autour d’une magical girl née dans un œuf, dont chaque tentative d’aide provoque une nouvelle catastrophe.",
@@ -104,21 +104,25 @@
     "Coupez tous les micros avec Ctrl+Maj+N et confirmez l'état en un coup d'œil grâce à la bannière OSD à l'écran",
     "Attribuez des pistes audio distinctes par application pour ne jamais inclure vos conversations privées en vidéo"
   ],
-  "editionLiteX64": "Lite x64 (Recommandé)",
-  "editionLiteArm64": "Lite ARM64",
+  "editionLiteX64": "Lite x64 (.NET 10, standard)",
+  "editionLiteArm64": "Lite ARM64 (.NET 10)",
   "editionLegacyX64": "Legacy x64 (Sans .NET 8)",
-  "editionStore": "Microsoft Store (Mises à jour auto)",
-  "arm64Requirement": "Performances natives sur Surface Pro et PC Snapdragon ARM64 ; nécessite le .NET 8 Desktop Runtime ARM64",
+  "editionStore": "Microsoft Store (mises à jour du Store)",
+  "arm64Requirement": "Exécutable portable ARM64 ; nécessite le .NET 10 Desktop Runtime ARM64",
   "commandSnippetComment": "Déclencher une règle d'automatisation (SonicRoute doit être en cours d'exécution)",
   "faqQuickTitle": "Foire aux questions (FAQ)",
   "faqQuestions": [
     "Le routage et les réglages de volume restent-ils conservés après avoir fermé SonicRoute ?",
-    "Que faire si le système indique que le .NET 8 Desktop Runtime est manquant ?",
+    "Quel runtime chaque édition nécessite-t-elle ?",
     "L'exécution de SonicRoute en arrière-plan consomme-t-elle du processeur ou de la batterie ?"
   ],
   "faqAnswers": [
     "Oui ! Le routage audio des applications est conservé nativement par le moteur audio de Windows et reste actif même après la fermeture de SonicRoute. Seuls les raccourcis, la molette et l'automatisation nécessitent son exécution.",
-    "Cliquez sur le lien du runtime dans le tableau ci-dessus pour installer le .NET 8 Desktop Runtime officiel de Microsoft, ou téléchargez l'édition Legacy qui ne nécessite aucun composant supplémentaire.",
-    "Pratiquement zéro. SonicRoute repose entièrement sur les événements système de Windows ; au repos, l'utilisation CPU est de 0% sans aucune boucle de scrutation inutile."
-  ]
+    "Lite standard nécessite le .NET 10 Desktop Runtime correspondant ; Lite NET8 nécessite .NET 8. Legacy ne nécessite aucun paquet .NET Desktop Runtime supplémentaire et utilise .NET Framework 4.8. Le paquet Store actuel nécessite le .NET 10 Desktop Runtime x64.",
+    "La détection privilégie les événements système et utilise, si nécessaire, une vérification ponctuelle toutes les secondes. Les données inutiles sont nettoyées à la demande ; l’utilisation réelle du processeur dépend du système et de l’activité."
+  ],
+  "net8RequirementX64": "Lite compatible NET8 ; nécessite le .NET 8 Desktop Runtime x64",
+  "net8RequirementArm64": "Lite compatible NET8 ; nécessite le .NET 8 Desktop Runtime ARM64",
+  "editionLiteNet8X64": "Lite NET8 x64",
+  "editionLiteNet8Arm64": "Lite NET8 ARM64"
 }

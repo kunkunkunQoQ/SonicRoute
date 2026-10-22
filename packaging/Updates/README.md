@@ -4,6 +4,8 @@
 
 The repository provides a fully automated, one-click GitHub Actions workflow [`.github/workflows/release.yml`](../../.github/workflows/release.yml) and an orchestration script [`Invoke-ReleasePipeline.ps1`](./Invoke-ReleasePipeline.ps1).
 
+See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the source-bound build receipt, read-only full DryRun, interruption recovery and the separate Store gate. The validation job has Contents read permission; only a non-DryRun master publication job obtains write permission. Hosted Actions execution must be verified separately from local tests.
+
 ### One-Click Release Usage
 
 1. Open GitHub repository → **Actions** → select **Release** workflow.
@@ -24,11 +26,14 @@ The repository provides a fully automated, one-click GitHub Actions workflow [`.
 
 - **Zero Unverified Releases**: Releases remain in draft state until all 7 assets pass remote download and cryptographic hash validation.
 - **Idempotent Draft Takeover**: If a previous run failed during network upload or verification, re-running on the same commit safely updates the existing draft release and overwrites assets (`--clobber`) without tag collisions.
+- Reuse requires the exact full commit SHA and a known asset set. Unknown assets are retained and cause an abort. Seven-file PE, runtime, archive contents, manifest, hashes and the clean-source receipt are checked again before production publication; a command-line success flag cannot substitute for the receipt.
 - **Published Immutability**: If an official (non-draft) release already exists for `v<version>`, the pipeline immediately aborts to prevent overwriting or deleting published artifacts.
 - **Manual Verification / Dry-Run**: Run locally or in CI at any time using:
   ```powershell
   ./packaging/Updates/Invoke-ReleasePipeline.ps1 -DryRun
   ```
+
+`Test-ReleasePipelineHarness.ps1 -AssetsDirectory <candidate>/assets` exercises actual release functions against real binaries; git/gh boundaries are simulated and make no network changes. It retains malformed fixtures, results and simulated publication summaries under `build-artifacts`. Without an asset directory it builds a fresh five-package candidate once. Runtime isolation/staging tests are in `tests/RuntimeChecks` (net8/net10/net48); transactional worker tests in `tests/WorkerChecks` use locally built fixture executables and real filesystem/process operations. They are not evidence of an installed Store update, an ARM64 run, or a NET8-only OS.
 
 ---
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -80,11 +80,24 @@ namespace SonicRoute.Core
             }
         }
 
-        private static List<AudioDeviceInfo> CloneDevices(List<AudioDeviceInfo> src) =>
-            src.Select(d => new AudioDeviceInfo { Id = d.Id, DisplayName = d.DisplayName, Flow = d.Flow }).ToList();
+        private static List<AudioDeviceInfo> CloneDevices(List<AudioDeviceInfo> src)
+        {
+            var list = new List<AudioDeviceInfo>(src.Count);
+            for (int i = 0; i < src.Count; i++)
+            {
+                var d = src[i];
+                list.Add(new AudioDeviceInfo { Id = d.Id, DisplayName = d.DisplayName, Flow = d.Flow });
+            }
+            return list;
+        }
 
+#if NET9_0_OR_GREATER
+        private static readonly System.Threading.Lock _deviceCacheLock = new();
+        private static readonly System.Threading.Lock _renderEnumerationLock = new(), _captureEnumerationLock = new();
+#else
         private static readonly object _deviceCacheLock = new();
         private static readonly object _renderEnumerationLock = new(), _captureEnumerationLock = new();
+#endif
         private static List<AudioDeviceInfo>? _deviceCacheRender;
         private static List<AudioDeviceInfo>? _deviceCaptureRender;
         private static long _deviceCacheRenderAt;

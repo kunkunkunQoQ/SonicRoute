@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFrameworks>net8.0-windows;net10.0-windows</TargetFrameworks><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <AssemblyName>SonicRoute</AssemblyName><AssemblyTitle>SonicRoute Lite</AssemblyTitle><Version Condition="'$(Version)' == ''">1.25</Version>
+    <AssemblyTitle Condition="'$(TargetFramework)' == 'net8.0-windows'">SonicRoute Lite NET8</AssemblyTitle>
+    <PlatformTarget>x64</PlatformTarget><UseAppHost>true</UseAppHost>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../../SonicRoute/Updates/UpdateProtocol.cs" Link="UpdateProtocol.cs"/>
+    <Compile Include="../../../../SonicRoute/Updates/UpdateTransport.cs" Link="UpdateTransport.cs"/>
+    <Compile Include="../../../../SonicRoute/Updates/UpdateInstaller.cs" Link="UpdateInstaller.cs"/>
+    <Compile Include="../../../../SonicRoute/Updates/UpdateBootstrap.cs" Link="UpdateBootstrap.cs"/>
+  </ItemGroup>
+</Project>

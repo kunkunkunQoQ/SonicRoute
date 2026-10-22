@@ -42,7 +42,7 @@ function render(language, text) {
   const variables = { release: shared.release, version: shared.release.slice(1), nextRelease: shared.nextRelease,
     triggerCount: shared.triggerCount, actionCount: shared.actionCount, ruleCommand: 'sr "' + text.ruleExample + '"',
     faq: link(text.faq, wiki(pages.faq)), history: link(text.history, wiki(pages.history)),
-    runtime: link('.NET 8 Desktop Runtime', shared.runtime) };
+    runtime: link('.NET 10 Desktop Runtime', shared.runtime), runtime8: link('.NET 8 Desktop Runtime', shared.runtime8) };
   const fill = value => value.replace(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g, (_, key) => {
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
     return variables[key];
@@ -52,6 +52,8 @@ function render(language, text) {
   const rows = [
     [editionIcons[0] + text.editionLiteX64, link(text.singleExe, downloadAsset('Lite-x64.exe')), text.liteRequirement],
     [editionIcons[1] + text.editionLiteArm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-arm64.exe')), text.arm64Requirement],
+    ['☕ ' + text.editionLiteNet8X64, link(text.singleExe, downloadAsset('Lite-NET8-x64.exe')), text.net8RequirementX64],
+    ['☕ ' + text.editionLiteNet8Arm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-NET8-arm64.exe')), text.net8RequirementArm64],
     [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
     [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
   ];

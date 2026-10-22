@@ -20,11 +20,13 @@ namespace SonicRoute
         {
             if (packaged && legacy) throw new System.ArgumentException("Legacy is not a packaged edition.");
             IsPackaged = packaged;
-            string suffix = packaged ? "_Store" : legacy ? "_Legacy" : "";
+            string? instanceId = System.Environment.GetEnvironmentVariable("SONICROUTE_INSTANCE_ID");
+            string instanceSuffix = string.IsNullOrWhiteSpace(instanceId) ? "" : "_" + instanceId.Trim();
+            string suffix = instanceSuffix + (packaged ? "_Store" : legacy ? "_Legacy" : "");
             MutexName = @"Local\SonicRoute" + suffix + "_9NQZGRTPM1NT";
             ActivateSinkTitle = "SonicRoute" + suffix + "_ActivateSink";
             ActivateMessageName = "SonicRoute" + suffix + "_ActivateMain";
-            CommandEdition = packaged ? "Store" : legacy ? "Legacy" : "Lite";
+            CommandEdition = (string.IsNullOrWhiteSpace(instanceId) ? "" : instanceId.Trim() + "_") + (packaged ? "Store" : legacy ? "Legacy" : "Lite");
         }
     }
 }

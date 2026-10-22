@@ -24,6 +24,10 @@ $output=[IO.Path]::GetFullPath($OutputDirectory)
 $exe=Join-Path $publish 'SonicRoute.exe'
 if(-not (Test-Path -LiteralPath $exe)){throw 'Publish the Lite x64 single-file application first.'}
 if(Test-Path -LiteralPath $output){throw 'Use a new output directory; existing packages are retained.'}
+# Store is the default NET10 x64 edition. Reject a stale NET8/ARM64 publish directory
+# before creating any package files; use the same read-only identity validator as portable releases.
+. "$PSScriptRoot/../Updates/ReleaseLayout.ps1"
+Assert-ReleaseExecutable $exe 'x64' 'Lite' 'net10' $PackageVersion
 if(-not $SdkDirectory){
     $sdkRoot=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
     $sdk=Get-ChildItem -LiteralPath $sdkRoot -Directory|Where-Object {

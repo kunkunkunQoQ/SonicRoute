@@ -15,16 +15,16 @@
   "featuresTitle": "Das bietet SonicRoute",
   "downloadTitle": "Herunterladen und loslegen",
   "releaseNotes": "Versionshinweise (Chinesisch)",
-  "downloadIntro": "Für die meisten Windows-x64-Systeme bietet die Version aus dem Microsoft Store eine bequeme Installation mit automatischen Updates. Wähle Lite x64 für eine einzelne ausführbare Datei oder Legacy x64, wenn .NET 8 nicht infrage kommt. Der Download oben führt immer zur neuesten Version; die direkten Links unten beziehen sich auf {release}.",
+  "downloadIntro": "Für Windows-x64-Systeme stehen Lite mit .NET 10, eine NET8-kompatible Lite-Version und Legacy mit .NET Framework 4.8 zur Auswahl. Die Store-Seite zeigt die dort verfügbare Version und verwendet Store-Updates. Die direkten Downloadlinks unten gelten für {release}.",
   "edition": "Version",
   "requirements": "Voraussetzungen",
   "singleExe": "Einzelne EXE",
   "fullZip": "Vollständiges ZIP",
   "storeInstall": "Aus dem Store installieren",
-  "liteRequirement": "Eigenständige Einzeldatei ohne Installation; erfordert passende x64 .NET 8 Desktop Runtime",
+  "liteRequirement": "Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime",
   "legacyRequirement": "Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten",
-  "storeRequirement": "Ein-Klick-Installation mit automatischen Updates im Hintergrund über den Store; für 64-Bit Windows 10/11",
-  "runtimeNote": "Lite benötigt die passende {runtime}. Legacy benötigt .NET 8 nicht.",
+  "storeRequirement": "Das NET10-Store-Paket benötigt die x64 .NET 10 Desktop Runtime. Welche Version aktuell im Store verfügbar ist, zeigt die Store-Seite; für 64-Bit Windows 10/11.",
+  "runtimeNote": "Lite Standard benötigt {runtime}; die NET8-kompatible Lite-Version benötigt {runtime8}. Die NET8-Version wird nach November 2026 nicht mehr angeboten oder gewartet. Danach wählen x64-Nutzer manuell .NET 10 oder Legacy (.NET Framework 4.8); ARM64-Nutzer wählen .NET 10.",
   "steps": [
     "**Starten & im Tray behalten**: Doppelklicken zum Starten; bleibt im Infobereich aktiv. Doppelklick auf das Tray-Symbol öffnet das Hauptfenster.",
     "**Geräte wählen & weiterleiten**: Aktivieren Sie Kopfhörer und Lautsprecher unter Einstellungen → Behaltene Geräte. Linksklick auf das Tray-Symbol öffnet das Schnellbedienfeld zum sofortigen Weiterleiten.",
@@ -51,7 +51,7 @@
   "configureAutomation": "Automatisierung einrichten",
   "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
   "currentRelease": "Aktuelle Version",
-  "releaseSummary": "Version {version} ergänzt Vorlagen für Automatisierungsregeln, ein optionales Ausführungsprotokoll (standardmäßig aus, mit einstellbarer Speichergrenze) und eigene App-Symbole. Fehlt ein Symbol oder wird nur ein Standardsymbol erkannt, erscheint das erste Zeichen des App-Namens. Importierte Symbole sind in der Einstellungssicherung enthalten. Frühere Änderungen stehen unter {history}.",
+  "releaseSummary": "Version {version} bietet .NET 10 als Standard und eine kompatible .NET-8-Version. Die portable Updatefunktion lädt Updates erst nach Bestätigung herunter; die automatische Prüfung ist standardmäßig deaktiviert und Runtime sowie Architektur müssen übereinstimmen. Store-Versionen werden über den Microsoft Store aktualisiert. Frühere Änderungen: {history}.",
   "docTopic": "Thema",
   "docGuides": "Anleitungen",
   "docTopics": [
@@ -83,7 +83,7 @@
     "**Intelligenter Vordergrund-Fokus und blinde Tray-Steuerung:** Erkennt aktive Audio-Apps blitzschnell per Systemereignis. Scrollen Sie im Infobereich der Taskleiste, um die Lautstärke anzupassen, unterstützt durch OSD-Anzeigen und globale Mikrofon-Stummschaltung.",
     "**Zwei Panel-Layouts und Echtzeit-Pegelanzeige:** Wählen Sie zwischen dem klassischen Zeilen-Panel und dem modernen Karten-Panel mit 350–850 px anpassbarer Höhe; steuern Sie individuelle App-Lautstärken mit Pegelanzeigen für aktive Tonausgabe.",
     "**Automatisierungs-Engine und blitzschnelle CLI (6 Auslöser × 37 Aktionen):** Auslöser durch App-Start, -Fokus, -Beenden, Zeitpläne oder Hotkeys. Kombinieren Sie Audiosteuerung, Programmstarts und PowerShell-Skripte; nutzen Sie den Befehl sr zur nahtlosen Steuerung per Skript oder Hardware-Deck.",
-    "**Reine ereignisgesteuerte Architektur (0 % Leerlauf-CPU):** Vollständig ereignisbasiert ohne permanente Polling-Timer, minimale CPU-Last im Leerlauf und bedarfsgesteuerte Bereinigung. Verfügbar als Legacy (.NET 4.8), Lite (x64 / ARM64) und Store-Version in 9 Sprachen."
+    "**Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine notwendige Momentaufnahme im Abstand von einer Sekunde; nicht benötigte Daten werden bei Bedarf bereinigt. Verfügbar als Legacy (.NET 4.8), Lite für .NET 10 und NET8 sowie Store-Version in 9 Sprachen."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Eine absurde Comedy über ein magisches Mädchen, das aus einem Ei schlüpft und mit jedem Hilfsversuch neues Chaos anrichtet.",
@@ -104,21 +104,25 @@
     "Alle Mikrofone mit Strg+Umschalt+N stummschalten und den Status sofort per OSD-Banner auf dem Bildschirm ablesen",
     "Apps dedizierten Audiospuren zuweisen, damit private Gespräche und Systemtöne nicht in der Aufnahme landen"
   ],
-  "editionLiteX64": "Lite x64 (Empfohlen)",
-  "editionLiteArm64": "Lite ARM64",
+  "editionLiteX64": "Lite x64 (.NET 10, Standard)",
+  "editionLiteArm64": "Lite ARM64 (.NET 10)",
   "editionLegacyX64": "Legacy x64 (Ohne .NET 8)",
-  "editionStore": "Microsoft Store (Auto-Updates)",
-  "arm64Requirement": "Native Leistung auf Surface Pro und Snapdragon ARM64-Geräten; erfordert passende ARM64 .NET 8 Desktop Runtime",
+  "editionStore": "Microsoft Store (Updates über Store)",
+  "arm64Requirement": "Portable ARM64-Datei; benötigt die passende ARM64 .NET 10 Desktop Runtime",
   "commandSnippetComment": "Automatisierungsregel ausführen (SonicRoute muss bereits laufen)",
   "faqQuickTitle": "Häufig gestellte Fragen (FAQ)",
   "faqQuestions": [
     "Bleiben Routing- und Lautstärkeeinstellungen nach dem Schließen von SonicRoute erhalten?",
-    "Was tun, wenn der Start meldet, dass die .NET 8 Desktop Runtime fehlt?",
+    "Welche Runtime benötigt meine Version?",
     "Verbraucht SonicRoute im Hintergrund spürbar CPU oder Akku?"
   ],
   "faqAnswers": [
     "Ja! Die Audio-Zuweisung wird nativ vom Windows-Audiosystem gespeichert und bleibt auch nach Beenden von SonicRoute aktiv. Nur Tastenkürzel, Infobereich-Gesten und Automatisierungsregeln erfordern die Hintergrund-Ausführung.",
-    "Klicken Sie in der Tabelle oben auf den Runtime-Link zur offiziellen Microsoft .NET 8 Desktop Runtime oder laden Sie die Legacy-Version herunter, die keine zusätzliche Runtime benötigt.",
-    "Praktisch null. SonicRoute basiert vollständig auf Windows-Systemereignissen; im Leerlauf liegt die CPU-Last bei 0% ohne Hintergrund-Polling-Timer."
-  ]
+    "Lite Standard benötigt die passende .NET 10 Desktop Runtime; Lite NET8 benötigt .NET 8. Legacy benötigt kein zusätzliches .NET Desktop Runtime-Paket und läuft mit .NET Framework 4.8. Das aktuelle Store-Paket benötigt x64 .NET 10 Desktop Runtime.",
+    "Die Erkennung nutzt vorrangig Systemereignisse und ergänzt sie bei Bedarf durch eine notwendige Momentaufnahme im Abstand von einer Sekunde. Nicht benötigte Daten werden bei Bedarf bereinigt; die tatsächliche CPU-Auslastung hängt von System und Nutzung ab."
+  ],
+  "net8RequirementX64": "NET8-kompatible Lite-Datei; benötigt die x64 .NET 8 Desktop Runtime",
+  "net8RequirementArm64": "NET8-kompatible Lite-Datei; benötigt die ARM64 .NET 8 Desktop Runtime",
+  "editionLiteNet8X64": "Lite NET8 x64",
+  "editionLiteNet8Arm64": "Lite NET8 ARM64"
 }

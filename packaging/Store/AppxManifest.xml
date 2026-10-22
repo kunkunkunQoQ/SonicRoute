@@ -9,7 +9,7 @@
     <DisplayName>SonicRoute</DisplayName>
     <PublisherDisplayName>困困困</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <Description>Windows 10/11 按应用音频快速切换工具（轻量版，需 .NET 8 运行时）</Description>
+    <Description>Windows 10/11 按应用音频快速切换工具（需 .NET 10 Desktop Runtime）</Description>
   </Properties>
   <Resources>
     <Resource Language="zh-cn" />

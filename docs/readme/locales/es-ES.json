@@ -15,16 +15,16 @@
   "featuresTitle": "Qué ofrece SonicRoute",
   "downloadTitle": "Descarga y primeros pasos",
   "releaseNotes": "Notas de la versión (en chino)",
-  "downloadIntro": "Para la mayoría de equipos Windows x64, la versión de Microsoft Store ofrece una instalación cómoda y actualizaciones automáticas. Elige Lite x64 si quieres un único ejecutable o Legacy x64 si no te resulta práctico instalar .NET 8. El enlace de descarga superior siempre lleva a la última versión; los enlaces directos de abajo corresponden a {release}.",
+  "downloadIntro": "En Windows x64, elige Lite con .NET 10, Lite compatible con NET8 o Legacy con .NET Framework 4.8. La página de Store muestra la versión disponible allí y las actualizaciones se gestionan desde Store. Los enlaces directos siguientes corresponden a {release}.",
   "edition": "Edición",
   "requirements": "Requisitos",
   "singleExe": "Un solo EXE",
   "fullZip": "ZIP completo",
   "storeInstall": "Instalar desde Store",
-  "liteRequirement": "Ejecutable independiente de archivo único; requiere el entorno .NET 8 Desktop Runtime x64 correspondiente",
+  "liteRequirement": "Ejecutable portátil de un solo archivo; requiere .NET 10 Desktop Runtime x64",
   "legacyRequirement": "No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP",
-  "storeRequirement": "Instalación con un clic y actualizaciones automáticas silenciosas desde la tienda; para Windows 10/11 de 64 bits",
-  "runtimeNote": "Lite necesita el {runtime} correspondiente. Legacy no requiere .NET 8.",
+  "storeRequirement": "El paquete de Store con .NET 10 requiere .NET 10 Desktop Runtime x64. Consulta la página de Store para ver la versión disponible actualmente; para Windows 10/11 de 64 bits.",
+  "runtimeNote": "Lite estándar requiere {runtime}; Lite compatible con NET8 requiere {runtime8}. La edición NET8 dejará de ofrecerse y mantenerse después de noviembre de 2026. Desde entonces, en x64 se podrá elegir manualmente .NET 10 o Legacy (.NET Framework 4.8); en ARM64, .NET 10.",
   "steps": [
     "**Iniciar y mantener en bandeja**: Haz doble clic para iniciar; permanece en la bandeja del sistema. Doble clic en el icono para abrir la ventana principal.",
     "**Seleccionar y enrutar dispositivos**: Marca tus auriculares y altavoces en Configuración → Dispositivos conservados. Clic izquierdo para abrir el panel rápido y enrutar cada app al instante.",
@@ -51,7 +51,7 @@
   "configureAutomation": "Configurar automatización",
   "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
   "currentRelease": "Versión actual",
-  "releaseSummary": "La versión {version} añade plantillas de automatización, un registro detallado de las ejecuciones recientes (desactivado de forma predeterminada, con límite de almacenamiento configurable) e iconos personalizados por aplicación. Si falta el icono o es genérico, se muestra el primer carácter del nombre de la aplicación. Las copias de seguridad de la configuración incluyen los iconos importados. Consulta {history} para ver los cambios anteriores.",
+  "releaseSummary": "La versión {version} establece .NET 10 como edición Lite estándar y ofrece una edición compatible con NET8. Las actualizaciones portátiles solo se descargan tras la confirmación del usuario; la comprobación automática está desactivada de forma predeterminada y deben coincidir el runtime y la arquitectura. La edición Store se actualiza mediante Microsoft Store. Consulta {history} para ver cambios anteriores.",
   "docTopic": "Tema",
   "docGuides": "Guías",
   "docTopics": [
@@ -83,7 +83,7 @@
     "**Seguimiento inteligente del primer plano y control directo desde la bandeja:** detecta al instante la aplicación activa mediante eventos del sistema. Ajuste el volumen desplazando la rueda sobre la bandeja del sistema, con notificaciones OSD y silencio global de micrófono.",
     "**Paneles dobles e indicador de nivel de sonido en tiempo real:** elija entre el panel clásico por filas o el panel moderno de tarjetas (altura adaptable de 350 a 850 px); controle el volumen de cada aplicación con medidores de sonido en directo.",
     "**Motor de automatización y CLI ultrarrápida (6 disparadores × 37 acciones):** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.",
-    "**Arquitectura ligera y puramente basada en eventos (0 % CPU en reposo):** sin temporizadores de sondeo constantes, consumo de CPU casi nulo en reposo y limpieza bajo demanda. Disponible en versión Legacy (.NET 4.8), ejecutable único Lite (x64 / ARM64 experimental) y tienda en 9 idiomas."
+    "**Detección basada primero en eventos:** utiliza notificaciones del sistema y, cuando hace falta, una comprobación necesaria cada segundo; limpia los datos innecesarios bajo demanda. Disponible como Legacy (.NET 4.8), Lite para .NET 10 y NET8, y edición Store en 9 idiomas."
   ],
   "comicTitle": "XiaoYue Comics",
   "comicDescription": "Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nuevo desastre cada vez que intenta ayudar.",
@@ -104,21 +104,25 @@
     "Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla",
     "Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación"
   ],
-  "editionLiteX64": "Lite x64 (Recomendado)",
-  "editionLiteArm64": "Lite ARM64",
+  "editionLiteX64": "Lite x64 (.NET 10, estándar)",
+  "editionLiteArm64": "Lite ARM64 (.NET 10)",
   "editionLegacyX64": "Legacy x64 (Sin .NET 8)",
-  "editionStore": "Microsoft Store (Actualización auto)",
-  "arm64Requirement": "Rendimiento nativo en Surface Pro y dispositivos Snapdragon ARM64; requiere .NET 8 Desktop Runtime ARM64",
+  "editionStore": "Microsoft Store (actualizaciones de Store)",
+  "arm64Requirement": "Ejecutable portátil ARM64; requiere .NET 10 Desktop Runtime ARM64",
   "commandSnippetComment": "Ejecutar regla de automatización (SonicRoute debe estar en ejecución)",
   "faqQuickTitle": "Preguntas frecuentes (FAQ)",
   "faqQuestions": [
     "¿Se mantienen el enrutamiento de aplicaciones y el volumen tras cerrar SonicRoute?",
-    "¿Qué hacer si se indica que falta el entorno .NET 8 Desktop Runtime?",
+    "¿Qué runtime requiere cada edición?",
     "¿Consume CPU o batería mantener SonicRoute abierto en segundo plano?"
   ],
   "faqAnswers": [
     "¡Sí! El enrutamiento de audio por aplicación es conservado de forma nativa por el motor de Windows y sigue activo aunque cierre SonicRoute. Solo los atajos, la rueda de la bandeja y la automatización requieren que permanezca en segundo plano.",
-    "Haga clic en el enlace del entorno de ejecución en la tabla superior para instalar Microsoft .NET 8 Desktop Runtime oficial, o descargue la edición Legacy que no necesita ningún runtime adicional.",
-    "Prácticamente cero. SonicRoute funciona totalmente mediante escucha de eventos de Windows; en reposo la CPU está al 0% sin temporizadores ni sondeos periódicos."
-  ]
+    "Lite estándar requiere .NET 10 Desktop Runtime; Lite NET8 requiere .NET 8. Legacy no necesita un paquete .NET Desktop Runtime adicional y utiliza .NET Framework 4.8. El paquete Store actual requiere .NET 10 Desktop Runtime x64.",
+    "La detección prioriza los eventos del sistema y, cuando hace falta, usa una comprobación necesaria cada segundo. Los datos innecesarios se limpian bajo demanda; el uso real de CPU depende del sistema y de la actividad."
+  ],
+  "net8RequirementX64": "Lite compatible con NET8; requiere .NET 8 Desktop Runtime x64",
+  "net8RequirementArm64": "Lite compatible con NET8; requiere .NET 8 Desktop Runtime ARM64",
+  "editionLiteNet8X64": "Lite NET8 x64",
+  "editionLiteNet8Arm64": "Lite NET8 ARM64"
 }

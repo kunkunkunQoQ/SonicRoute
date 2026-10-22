@@ -1,11 +1,12 @@
 {
   "repository": "https://github.com/kunkunkunQoQ/SonicRoute",
   "store": "https://apps.microsoft.com/detail/9NQZGRTPM1NT",
-  "runtime": "https://dotnet.microsoft.com/download/dotnet/8.0",
+  "runtime": "https://dotnet.microsoft.com/download/dotnet/10.0",
+  "runtime8": "https://dotnet.microsoft.com/download/dotnet/8.0",
   "minimumWindows": "Windows 10 2004+ / Windows 11",
-  "release": "v1.24",
-  "releaseDate": "2026-10-20",
-  "releaseNotes": "docs/release-v1.24.md",
+  "release": "v1.25",
+  "releaseDate": "2026-10-22",
+  "releaseNotes": "docs/release-v1.25.md",
   "author": {
     "bilibili": "https://b23.tv/TDqSAKM",
     "afdian": "https://www.ifdian.net/a/koukou021",
@@ -67,7 +68,7 @@
       "automationMascot": "mascot-automation-ru.png"
     }
   ],
-  "nextRelease": "v1.25",
+  "nextRelease": "v1.26",
   "triggerCount": 6,
   "actionCount": 37,
   "wikiPages": {

@@ -30,7 +30,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 - **Smart foreground focus and tray wheel blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust app volume, paired with on-screen OSD feedback and global mic mute, without leaving your active window.
 - **Dual panel layouts and live audio activity indicators.** Choose between the classic row-based management panel and the Modern card panel, featuring 350–850px adaptive height and position saving; control per-app volume sliders with real-time sound activity meters.
 - **Automation combo engine and blazing CLI (6 triggers × 37 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.
-- **Lightweight, pure event-driven architecture (near-zero idle CPU).** Fully driven by system events with zero persistent polling timers, near-zero idle CPU usage, and on-demand memory cleanup. Available as dependency-free Legacy (.NET 4.8), single-file Lite (x64 / experimental ARM64), and Microsoft Store builds, with nine built-in languages.
+- **Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Available as Legacy (.NET 4.8), Lite for .NET 10 and NET8, and a Store edition in nine languages.
 
 ## 🎮 Everyday uses
 
@@ -46,18 +46,20 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 ## 🚀 Download and get started
 
-**Current release: [v1.24](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.24)** · 2026-10-20 · [Release notes (Chinese)](docs/release-v1.24.md)
+**Current release: [v1.25](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.25)** · 2026-10-22 · [Release notes (Chinese)](docs/release-v1.25.md)
 
-For most Windows x64 users, the Microsoft Store build offers convenient installation and automatic updates. Choose Lite x64 for a single executable, or Legacy x64 if installing .NET 8 is not convenient. The download link above always points to the latest release; Lite and Legacy links below are for v1.24, while the Store page shows the version currently available there.
+For Windows x64, choose Lite with .NET 10, the NET8-compatible Lite edition, or Legacy with .NET Framework 4.8. The Store page shows the version currently available there and uses Store updates. Direct download links below are for v1.25.
 
 | Version | Download | Requirements |
 |---|---|---|
-| ⭐ Lite x64 (Recommended) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-x64.exe) | Standalone single-file executable; requires matching x64 .NET 8 Desktop Runtime |
-| ⚡ Lite ARM64 (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Lite-arm64.exe) | Native performance on Surface Pro and Snapdragon ARM64 devices; requires matching ARM64 .NET 8 Desktop Runtime |
-| 🛡️ Legacy x64 (No .NET 8 required) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.24/SonicRoute-v1.24-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
-| 🔄 Microsoft Store (Auto-updates) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | One-click install with silent automatic updates; for 64-bit Windows 10/11 |
+| ⭐ Lite x64 (.NET 10, Standard) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-x64.exe) | Portable single-file executable; requires the matching x64 .NET 10 Desktop Runtime |
+| ⚡ Lite ARM64 (.NET 10) (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-arm64.exe) | Portable ARM64 executable; requires the matching ARM64 .NET 10 Desktop Runtime |
+| ☕ Lite NET8 x64 | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-NET8-x64.exe) | NET8-compatible Lite edition; requires the x64 .NET 8 Desktop Runtime |
+| ☕ Lite NET8 ARM64 (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-NET8-arm64.exe) | NET8-compatible Lite edition; requires the ARM64 .NET 8 Desktop Runtime |
+| 🛡️ Legacy x64 (No .NET 8 required) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
+| 🔄 Microsoft Store (Store updates) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | The .NET 10 Store package requires the x64 .NET 10 Desktop Runtime. See the Store page for the version currently available there; for 64-bit Windows 10/11. |
 
-Lite requires the matching [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Legacy does not require .NET 8.
+Standard Lite requires [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); NET8-compatible Lite requires [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). The NET8 edition will no longer be offered or maintained after November 2026. After that, x64 users can choose .NET 10 or Legacy (.NET Framework 4.8); ARM64 users should choose .NET 10.
 
 1. **Launch & Keep in Tray**: Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.
 2. **Select & Route Devices**: Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.
@@ -70,7 +72,7 @@ Lite requires the matching [.NET 8 Desktop Runtime](https://dotnet.microsoft.com
 sr "Rule name or ID"
 ```
 
-Version 1.24 adds starter templates for automation, optional recent execution details (off by default, with a storage limit), and per-app icon imports. Missing or generic app icons fall back to the first character of the app’s name. Configuration backups include imported icons. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier changes.
+Version 1.25 makes .NET 10 the standard Lite edition and offers a NET8-compatible edition. Portable updates download only after user confirmation; automatic checks are off by default, and runtime and architecture must match. Store editions receive updates through Microsoft Store. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier changes.
 
 ### ❓ Quick FAQ
 
@@ -78,13 +80,13 @@ Version 1.24 adds starter templates for automation, optional recent execution de
 
 A: Yes! App audio routing is natively preserved by the Windows audio engine and stays active even after SonicRoute is closed. Only hotkeys, tray controls, and automation rules require SonicRoute running in the background.
 
-**Q: What should I do if Windows prompts that .NET 8 Desktop Runtime is missing?**
+**Q: Which runtime does each edition require?**
 
-A: Click the runtime link in the table above to install the official Microsoft .NET 8 Desktop Runtime, or download the Legacy edition which requires no additional runtime.
+A: Standard Lite requires the matching .NET 10 Desktop Runtime; Lite NET8 requires .NET 8. Legacy needs no separate .NET Desktop Runtime package and uses .NET Framework 4.8. The current Store package requires the x64 .NET 10 Desktop Runtime.
 
 **Q: Does running SonicRoute in the background consume CPU or battery?**
 
-A: Practically zero. SonicRoute is built entirely on Windows event-driven listeners; it idles at 0% CPU with zero background polling timers and on-demand memory cleanup.
+A: Detection prioritizes system events and uses a necessary one-second snapshot fallback when needed. Unneeded data is cleaned up on demand; actual CPU use depends on the system and workload.
 
 ## 📚 Documentation
 
@@ -100,7 +102,7 @@ The Wiki is currently in Chinese.
 
 ## 📌 Roadmap
 
-- **v1.25 · Major Update (In Development)**: Automation orchestration expands to 6 triggers and 37 advanced actions (including recording device details, per-app mic mute, batch app volume ducking, and one-click routing reset).
+- **v1.26 · Major Update (In Development)**: Automation orchestration expands to 6 triggers and 37 advanced actions (including recording device details, per-app mic mute, batch app volume ducking, and one-click routing reset).
 - **Upcoming Stages**: Continuously refine low-latency event listeners and zero-polling telemetry based on community feedback.
 
 [Share an idea or report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).

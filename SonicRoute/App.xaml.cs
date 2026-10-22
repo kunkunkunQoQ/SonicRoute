@@ -207,6 +207,11 @@ namespace SonicRoute
             StartRuleCommandServer(audioWarmup);
 
             // 启动行为
+                        if (e.Args.Contains("--benchmark-ui", StringComparer.OrdinalIgnoreCase))
+            {
+                Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; await RunUiBenchmarkAsync(); }));
+                return;
+            }
             bool showMain = !config.StartMinimized;
             if (e.Args.Contains("--panel", StringComparer.OrdinalIgnoreCase))
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ToggleQuickPanel(); }));
@@ -427,6 +432,122 @@ namespace SonicRoute
             _quickPanel.ShowQuickPanel();
         }
 
+
+        private async Task RunUiBenchmarkAsync()
+        {
+            var logPath = Environment.GetEnvironmentVariable("SONICROUTE_BENCH_TRACE");
+            if (string.IsNullOrWhiteSpace(logPath))
+                logPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ui_benchmark.json");
+
+            var results = new Dictionary<string, object>();
+            var proc = System.Diagnostics.Process.GetCurrentProcess();
+
+            (double WallMs, double CpuMs, long AllocBytes) Measure(Action action)
+            {
+                long startAlloc = GC.GetAllocatedBytesForCurrentThread();
+                TimeSpan startCpu = proc.TotalProcessorTime;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                action();
+                sw.Stop();
+                TimeSpan endCpu = proc.TotalProcessorTime;
+                long endAlloc = GC.GetAllocatedBytesForCurrentThread();
+                return (sw.Elapsed.TotalMilliseconds, (endCpu - startCpu).TotalMilliseconds, endAlloc - startAlloc);
+            }
+
+            async Task<(double WallMs, double CpuMs, long AllocBytes)> MeasureAsync(Func<Task> action)
+            {
+                long startAlloc = GC.GetAllocatedBytesForCurrentThread();
+                TimeSpan startCpu = proc.TotalProcessorTime;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await action();
+                sw.Stop();
+                TimeSpan endCpu = proc.TotalProcessorTime;
+                long endAlloc = GC.GetAllocatedBytesForCurrentThread();
+                return (sw.Elapsed.TotalMilliseconds, (endCpu - startCpu).TotalMilliseconds, endAlloc - startAlloc);
+            }
+
+            // 1. 首次创建 MainWindow
+            SonicRoute.MainWindow? win = null;
+            var m1 = Measure(() => { win = new SonicRoute.MainWindow(); });
+            results["1_FirstMainWindowConstructor"] = new { WallMs = m1.WallMs, CpuMs = m1.CpuMs, AllocBytes = m1.AllocBytes, InitializeComponentMs = SonicRoute.MainWindow.LastInitializeComponentMs };
+
+            // 2. 首次显示 MainWindow (包含渲染完成)
+            var m2 = await MeasureAsync(async () =>
+            {
+                win!.Show();
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            });
+            results["2_FirstMainWindowShow"] = new { WallMs = m2.WallMs, CpuMs = m2.CpuMs, AllocBytes = m2.AllocBytes };
+
+            // 3. 隐藏 MainWindow
+            var m3 = await MeasureAsync(async () =>
+            {
+                win!.Hide();
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            });
+            results["3_MainWindowHide"] = new { WallMs = m3.WallMs, CpuMs = m3.CpuMs, AllocBytes = m3.AllocBytes };
+
+            // 4. 再次打开已有 MainWindow
+            var m4 = await MeasureAsync(async () =>
+            {
+                win!.Show();
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            });
+            results["4_MainWindowReShow"] = new { WallMs = m4.WallMs, CpuMs = m4.CpuMs, AllocBytes = m4.AllocBytes };
+
+            // 5. 反复开关已有窗口 5 次
+            var toggleWall = new List<double>();
+            var toggleCpu = new List<double>();
+            for (int i = 0; i < 5; i++)
+            {
+                var mt = await MeasureAsync(async () =>
+                {
+                    win!.Hide();
+                    await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                    win!.Show();
+                    await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                });
+                toggleWall.Add(mt.WallMs);
+                toggleCpu.Add(mt.CpuMs);
+            }
+            results["5_MainWindowToggle5x_AvgWallMs"] = toggleWall.Average();
+            results["5_MainWindowToggle5x_AvgCpuMs"] = toggleCpu.Average();
+            win!.Close();
+            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+
+            // 6. 快速面板首次打开与重复打开
+            QuickPanelModernWindow? panel = null;
+            var mp1 = await MeasureAsync(async () =>
+            {
+                panel = new QuickPanelModernWindow();
+                panel.ShowQuickPanel();
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            });
+            results["6_1_FirstQuickPanelShow"] = new { WallMs = mp1.WallMs, CpuMs = mp1.CpuMs, AllocBytes = mp1.AllocBytes };
+
+            var panelToggleWall = new List<double>();
+            var panelToggleCpu = new List<double>();
+            for (int i = 0; i < 5; i++)
+            {
+                var mt = await MeasureAsync(async () =>
+                {
+                    panel!.Hide();
+                    await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                    panel!.ShowQuickPanel();
+                    await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                });
+                panelToggleWall.Add(mt.WallMs);
+                panelToggleCpu.Add(mt.CpuMs);
+            }
+            results["6_2_QuickPanelToggle5x_AvgWallMs"] = panelToggleWall.Average();
+            results["6_2_QuickPanelToggle5x_AvgCpuMs"] = panelToggleCpu.Average();
+            panel!.Close();
+
+            string json = System.Text.Json.JsonSerializer.Serialize(results, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            try { System.IO.File.WriteAllText(logPath, json); } catch { }
+            Console.WriteLine(json);
+            Shutdown(0);
+        }
         internal void ShowMainWindow()
         {
             if (_mainWindow == null)

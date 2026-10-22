@@ -1,5 +1,5 @@
-﻿{
+{
   "configProperties": {
-    "System.GC.RetainVM": false
+    "System.GC.DynamicAdaptationMode": 1
   }
 }

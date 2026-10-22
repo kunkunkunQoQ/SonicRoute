@@ -17,7 +17,11 @@ namespace SonicRoute
     {
         // 冻结画刷复用；容量封顶，避免拖动自定义 RGB 时把所有中间色永久留在静态缓存中。
         private const int BrushCacheLimit = 256;
+        #if NET9_0_OR_GREATER
+        private static readonly System.Threading.Lock _brushGate = new();
+#else
         private static readonly object _brushGate = new();
+#endif
         private static readonly Dictionary<int, SolidColorBrush> _brushCache = new();
         private static readonly Queue<int> _brushOrder = new();
         private static SolidColorBrush GetBrush(Color c)

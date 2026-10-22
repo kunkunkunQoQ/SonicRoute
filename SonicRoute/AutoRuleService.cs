@@ -176,6 +176,10 @@ namespace SonicRoute
         private static int _watchGeneration;
         private static long _watchRulesRevision = -1;
         private static List<AutoRule> _watchRules = new();
+        private static bool _hasAppStart;
+        private static bool _hasAppExit;
+        private static bool _hasAppSwitch;
+        private static string? _cachedSnapshotTarget;
 
         // Dispatcher 上复用只读规则快照；执行引擎另行 CloneSteps，不修改该快照。
         private static List<AutoRule> GetWatchRules()
@@ -186,11 +190,38 @@ namespace SonicRoute
                 _watchRules = snapshot.Rules.Where(r => r.Enabled
                     && (r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit)).ToList();
                 _watchRulesRevision = snapshot.Revision;
+                _hasAppStart = _watchRules.Any(r => r.Trigger == AutoRuleTrigger.AppStart);
+                _hasAppExit = _watchRules.Any(r => r.Trigger == AutoRuleTrigger.AppExit);
+                _hasAppSwitch = _watchRules.Any(r => r.Trigger == AutoRuleTrigger.AppSwitch);
+                _cachedSnapshotTarget = ComputeSnapshotTarget(_watchRules);
             }
             return _watchRules;
         }
 
-        private static string? GetSnapshotTarget(List<AutoRule> rules)
+        private static string NormalizeAppName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+            string target = name.Trim();
+            if (target.IndexOfAny(new[] { '/', '\\' }) >= 0)
+            {
+                try { target = Path.GetFileName(target); }
+                catch { }
+            }
+            if (target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                target = target.Substring(0, target.Length - 4).Trim();
+            return target;
+        }
+
+        private static bool MatchApp(string? ruleApp, string processName)
+        {
+            if (string.IsNullOrWhiteSpace(ruleApp)) return true;
+            if (string.Equals(ruleApp, processName, StringComparison.OrdinalIgnoreCase)) return true;
+            return string.Equals(NormalizeAppName(ruleApp), NormalizeAppName(processName), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string? GetSnapshotTarget(List<AutoRule> rules) => _cachedSnapshotTarget ?? ComputeSnapshotTarget(rules);
+
+        private static string? ComputeSnapshotTarget(List<AutoRule> rules)
         {
             var targets = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
             bool includeAll = false;
@@ -199,8 +230,9 @@ namespace SonicRoute
                 if (rule.Trigger is not (AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)) continue;
                 // 空目标旧规则仍支持任意应用；多目标在缺失时共用一次全量枚举。
                 if (string.IsNullOrWhiteSpace(rule.TriggerApp)) { includeAll = true; continue; }
-                if (rule.TriggerApp.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) includeAll = true;
-                targets.Add(rule.TriggerApp);
+                string normalized = NormalizeAppName(rule.TriggerApp);
+                if (string.IsNullOrEmpty(normalized)) { includeAll = true; continue; }
+                targets.Add(normalized);
             }
             // 前导分隔符保留任意应用模式，同时让指定目标变化参与原有采集范围比较。
             return targets.Count == 0 ? null : (includeAll ? "|" : "") + string.Join("|", targets);
@@ -229,10 +261,10 @@ namespace SonicRoute
             if (_shuttingDown) return;
             _watchDispatcher ??= Dispatcher.CurrentDispatcher;
             var rules = GetWatchRules();
-            bool needsSnapshot = rules.Any(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit);
-            bool needsForeground = rules.Any(r => r.Trigger == AutoRuleTrigger.AppSwitch);
+            bool needsSnapshot = _hasAppStart || _hasAppExit;
+            bool needsForeground = _hasAppSwitch;
             bool initializeForeground = needsForeground && !_foregroundSubscribed;
-            string? target = GetSnapshotTarget(rules);
+            string? target = _cachedSnapshotTarget;
             if (!needsSnapshot && !needsForeground) { StopWatcher(); return; }
             if (needsForeground && !_foregroundSubscribed)
             {
@@ -406,15 +438,19 @@ namespace SonicRoute
             var rules = GetWatchRules();
             if (rules.Count == 0) { RefreshWatcher(); return; }
             long rulesRevision = _watchRulesRevision;
-            var requests = new List<WatchRequest>();
-            void Trigger(AutoRule rule, int foregroundPid = 0) => requests.Add(new WatchRequest
-            { Rule = rule, Revision = rulesRevision, ForegroundPid = foregroundPid, ForegroundSequence = _foregroundSequence });
+            List<WatchRequest>? requests = null;
+            void Trigger(AutoRule rule, int foregroundPid = 0)
+            {
+                requests ??= new List<WatchRequest>();
+                requests.Add(new WatchRequest
+                { Rule = rule, Revision = rulesRevision, ForegroundPid = foregroundPid, ForegroundSequence = _foregroundSequence });
+            }
 
             // 应用启动 / 应用退出触发：进程快照 diff（新出现 = 启动；消失 = 退出）。
             // 快照与 diff 独立于 AppStart——仅建 AppExit 规则时也必须检测退出。
-            if (process && rules.Any(r => r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit))
+            if (process && (_hasAppStart || _hasAppExit))
             {
-                string? target = GetSnapshotTarget(rules);
+            string? target = _cachedSnapshotTarget;
                 if (_processSnapshot == null || !string.Equals(target, _snapshotTargetName, StringComparison.OrdinalIgnoreCase))
                     StartSnapshotBaseline(target);
                 var baselineTask = _snapshotBaselineTask;
@@ -428,7 +464,9 @@ namespace SonicRoute
                     {
                         _runningSnapshot = baseline.Present;
                         _snapshotUncertain = baseline.Uncertain;
-                        _snapshotCertain = new HashSet<string>(baseline.Present.Concat(baseline.Absent), StringComparer.OrdinalIgnoreCase);
+                        _snapshotCertain.Clear();
+                        foreach (var p in baseline.Present) _snapshotCertain.Add(p);
+                        foreach (var a in baseline.Absent) _snapshotCertain.Add(a);
                         _snapshotNeedsBaseline = !baseline.Complete;
                     }
                     if (_snapshotBaselineTask == baselineTask) _snapshotBaselineTask = null;
@@ -454,44 +492,44 @@ namespace SonicRoute
                 if (_runningSnapshot != null)
                 {
                     // 应用启动：只对"新出现"的进程名触发（启动时已存在的进程不触发）
-                    if (rules.Any(r => r.Trigger == AutoRuleTrigger.AppStart))
+                    if (_hasAppStart)
                     {
                         foreach (var name in now)
                         {
                             if (_runningSnapshot.Contains(name) || !WasKnown(name)) continue;
-                            foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppStart
-                                && (string.IsNullOrWhiteSpace(x.TriggerApp)
-                                    || string.Equals(x.TriggerApp, name, StringComparison.OrdinalIgnoreCase))))
+                            foreach (var r in rules)
                             {
-                                Trigger(r);
+                                if (r.Trigger == AutoRuleTrigger.AppStart && MatchApp(r.TriggerApp, name))
+                                    Trigger(r);
                             }
                         }
                     }
                     // 应用退出：只对"上次存在、当前消失"的进程名触发
-                    if (rules.Any(r => r.Trigger == AutoRuleTrigger.AppExit))
+                    if (_hasAppExit)
                     {
                         foreach (var gone in _runningSnapshot)
                         {
                             if (now.Contains(gone) || !WasKnown(gone) || !IsKnown(gone)) continue;
-                            foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppExit
-                                && (string.IsNullOrWhiteSpace(x.TriggerApp)
-                                    || string.Equals(x.TriggerApp, gone, StringComparison.OrdinalIgnoreCase))))
+                            foreach (var r in rules)
                             {
-                                Trigger(r);
+                                if (r.Trigger == AutoRuleTrigger.AppExit && MatchApp(r.TriggerApp, gone))
+                                    Trigger(r);
                             }
                         }
                     }
                 }
                 if (generation != _watchGeneration) return;
                 // 仅提交确切观测；未知状态由可靠性标记表达，不长期保留失效的旧名称。
-                _snapshotCertain = new HashSet<string>(now.Concat(capture.Absent), StringComparer.OrdinalIgnoreCase);
+                _snapshotCertain.Clear();
+                foreach (var n in now) _snapshotCertain.Add(n);
+                foreach (var a in capture.Absent) _snapshotCertain.Add(a);
                 if (capture.Complete || _runningSnapshot != null || _snapshotCertain.Count > 0) _runningSnapshot = now;
                 _snapshotUncertain = capture.Uncertain;
                 _snapshotNeedsBaseline = !capture.Complete;
             }
 
             // 前台切换触发：前台 PID 变化且与目标进程名匹配（含空 = 任意应用）
-            if (foreground && rules.Any(r => r.Trigger == AutoRuleTrigger.AppSwitch))
+            if (foreground && _hasAppSwitch)
             {
                 int fg = _observedForegroundPid;
                 if (fg != 0 && fg != _lastFgPid)
@@ -499,11 +537,10 @@ namespace SonicRoute
                     string? name = ForegroundAppService.GetProcessNameSafe(fg);
                     if (!string.IsNullOrWhiteSpace(name))
                     {
-                        foreach (var r in rules.Where(x => x.Trigger == AutoRuleTrigger.AppSwitch
-                            && (string.IsNullOrWhiteSpace(x.TriggerApp)
-                                || string.Equals(x.TriggerApp, name, StringComparison.OrdinalIgnoreCase))))
+                        foreach (var r in rules)
                         {
-                            Trigger(r, fg);
+                            if (r.Trigger == AutoRuleTrigger.AppSwitch && MatchApp(r.TriggerApp, name))
+                                Trigger(r, fg);
                         }
                     }
                 }
@@ -511,7 +548,7 @@ namespace SonicRoute
                 _lastFgPid = fg;
             }
             // 基线已提交后再派发；执行等待不占用检测的单飞状态。
-            QueueWatchRules(requests);
+            if (requests != null) QueueWatchRules(requests);
         }
 
         // ---------- 执行 ----------
@@ -834,11 +871,14 @@ namespace SonicRoute
         {
             if (string.IsNullOrWhiteSpace(processName)) return -1;
             var apps = AudioService.GetApps();
-            var app = apps.FirstOrDefault(a => string.Equals(a.ProcessName, processName, StringComparison.OrdinalIgnoreCase));
+            string cleanName = NormalizeAppName(processName);
+            var app = apps.FirstOrDefault(a => string.Equals(a.ProcessName, cleanName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(a.ProcessName, processName, StringComparison.OrdinalIgnoreCase));
             if (app == null)
             {
                 // 进程名匹配不到时再按显示名兜底（如部分会话 DisplayName 与进程名不同）
-                app = apps.FirstOrDefault(a => string.Equals(a.Label, processName, StringComparison.OrdinalIgnoreCase));
+                app = apps.FirstOrDefault(a => string.Equals(a.Label, processName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(a.Label, cleanName, StringComparison.OrdinalIgnoreCase));
             }
             return app == null ? -1 : (int)app.ProcessId;
         }
