@@ -105,14 +105,29 @@ function Get-RemoteTagCommitSha {
     return $directSha
 }
 
-function Read-RemoteRelease([string]$TargetRepo,[string]$Tag) {
-    Invoke-WithRetry -Description "Read release $Tag" -Action {
-        $json=& gh api "/repos/$TargetRepo/releases/tags/$Tag"
-        if($LASTEXITCODE -ne 0 -or !$json){throw 'GitHub release query failed.'}
-        $release=($json-join "`n")|ConvertFrom-Json
-        if(!$release -or $release.tag_name -cne $Tag -or $release.draft -isnot [bool] -or $release.prerelease -isnot [bool]){throw 'Invalid GitHub release response.'}
-        return $release
+function Read-RemoteReleaseHistory([string]$TargetRepo) {
+    $all=@()
+    for($page=1;$page -le 100;$page++){
+        $batch=@(Invoke-WithRetry -Description "Read release history page $page" -Action {
+            $json=& gh api "/repos/$TargetRepo/releases?per_page=100&page=$page"
+            if($LASTEXITCODE -ne 0 -or !$json){throw 'GitHub release history query failed.'}
+            $items=($json-join "`n")|ConvertFrom-Json
+            if($null -ne $items){foreach($item in @($items)){if(!$item -or !$item.tag_name -or $item.draft -isnot [bool] -or $item.prerelease -isnot [bool]){throw 'Invalid release history response.'}}}
+            return $items
+        })
+        $all+=$batch
+        if($batch.Count -lt 100){return $all}
     }
+    throw 'Release history exceeds the bounded pagination limit.'
+}
+
+function Read-RemoteRelease([string]$TargetRepo,[string]$Tag) {
+    # Newly created drafts may not have a Git tag yet, so /releases/tags/{tag}
+    # returns 404. Reuse the authenticated, bounded history lookup for both states.
+    $matches=@(Read-RemoteReleaseHistory $TargetRepo|Where-Object{$_.tag_name -ceq $Tag})
+    if($matches.Count -gt 1){throw 'Duplicate release tag in server response.'}
+    if($matches.Count -ne 1){throw "GitHub release query failed: $Tag was not found."}
+    return $matches[0]
 }
 
 function Assert-RemoteDraft($Release,[string]$Tag,[string]$CommitSha,$LocalAssets) {
@@ -163,18 +178,8 @@ function Assert-Preflight {
     }
     $all=@();$verified=$false
     try {
-        for($page=1;$page -le 100;$page++){
-            $batch=@(Invoke-WithRetry -Description "Read release history page $page" -Action {
-                $json=& gh api "/repos/$TargetRepo/releases?per_page=100&page=$page"
-                if($LASTEXITCODE -ne 0 -or !$json){throw 'GitHub release history query failed.'}
-                $items=($json-join "`n")|ConvertFrom-Json
-                if($null -ne $items){foreach($item in @($items)){if(!$item -or !$item.tag_name -or $item.draft -isnot [bool] -or $item.prerelease -isnot [bool]){throw 'Invalid release history response.'}}}
-                return $items
-            })
-            $all+=$batch
-            if($batch.Count -lt 100){$verified=$true;break}
-        }
-        if(!$verified){throw 'Release history exceeds the bounded pagination limit.'}
+        $all=@(Read-RemoteReleaseHistory $TargetRepo)
+        $verified=$true
     }catch{
         if(!$IsDryRun -or $env:GITHUB_ACTIONS -eq 'true'){throw "Production/CI validation requires authoritative release history: $($_.Exception.Message)"}
         Write-Warning "DryRun remote history NOT VERIFIED: $($_.Exception.Message)"
@@ -586,13 +591,7 @@ function Publish-ReleaseToGitHub {
 
     # Phase C: Remote Verification
     Write-Host "    Verifying remote release and assets on GitHub..."
-    $remoteRelease = Invoke-WithRetry -Description "Query remote release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
-        $json = & gh api "/repos/$TargetRepo/releases/tags/$Tag"
-        if ($LASTEXITCODE -ne 0 -or !$json) {
-            throw "Unable to query release $Tag after upload!"
-        }
-        return ($json | ConvertFrom-Json)
-    }
+    $remoteRelease = Read-RemoteRelease $TargetRepo $Tag
 
     if (!$remoteRelease) {
         throw "Remote release object is null after query."
@@ -668,7 +667,7 @@ function Publish-ReleaseToGitHub {
         Write-Warning "Publish command encountered a warning or non-zero exit; querying remote release state to verify if update took effect..."
         $queryAfter = $null
         try {
-            $queryAfter = & gh api "/repos/$TargetRepo/releases/tags/$Tag" 2>$null | ConvertFrom-Json
+            $queryAfter = Read-RemoteRelease $TargetRepo $Tag
         } catch { }
         if ($queryAfter -and !$queryAfter.draft -and !$queryAfter.prerelease) {
             Write-Host "    [Recovered] Release $Tag is confirmed published on GitHub despite network response anomaly!" -ForegroundColor Yellow

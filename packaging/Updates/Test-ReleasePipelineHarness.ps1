@@ -18,7 +18,7 @@ $env:GITHUB_STEP_SUMMARY=Join-Path $harnessRoot 'summaries.md'
 function Reset-Mock {
     $script:mock=@{Head=('a'*40);Tree=('c'*40);Branch='master';Dirty=$false;RemoteTag=$null;History=@(@{tag_name='v1.24';draft=$false;prerelease=$false});
         Draft=$true;Exists=$false;Target=('a'*40);Assets=@{};Calls=[Collections.Generic.List[string]]::new();Mutations=0;Uploads=0;
-        ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false}
+        ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false;TagApiUnavailable=$false}
     $global:LASTEXITCODE=0
 }
 function git {
@@ -40,14 +40,17 @@ function gh {
     if($a[0] -eq 'api'){
         if($mock.ApiFailure){$global:LASTEXITCODE=1;return}
         if($a[1] -match '/releases\?per_page=100&page=(\d+)$'){
-            return (ConvertTo-Json -InputObject @($mock.History|Select-Object -Skip (([int]$Matches[1]-1)*100) -First 100) -Depth 8 -Compress)
+            $pageNumber=[int]$Matches[1]
+            $history=@($mock.History)
+            if($mock.Exists){$history=@(Remote-Object)+$history}
+            return (ConvertTo-Json -InputObject @($history|Select-Object -Skip (($pageNumber-1)*100) -First 100) -Depth 8 -Compress)
         }
         if($a[1] -match '/releases/latest$'){
             if($mock.LatestFailure){$global:LASTEXITCODE=1;return}
             $r=Remote-Object;if($mock.LatestWrong){$r.tag_name='v1.24'};return ($r|ConvertTo-Json -Depth 8 -Compress)
         }
         if($a[1] -match '/releases/tags/'){
-            if(!$mock.Exists){$global:LASTEXITCODE=1;return};return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
+            if(!$mock.Exists -or $mock.TagApiUnavailable){$global:LASTEXITCODE=1;return};return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
         }
     }
     if($a[0] -eq 'release'){
@@ -156,6 +159,9 @@ try {
     Case 'DryRun causes no remote mutations' {Publish -DryRun;Require ($mock.Mutations -eq 0) 'DryRun mutated remote'}
     Case 'complete real publisher success' {Publish;Require (!$mock.Draft -and $mock.Uploads -eq 7 -and $checks.LatestPointerVerified) 'Incomplete publisher path'}
     Case 'lost create and promotion response recovery' {$mock.CreateLost=$true;$mock.PublishLost=$true;Publish;Require ($checks.DraftPromoted -and $checks.LatestPointerVerified) 'Recovery failed'}
+    Case 'draft without a Git tag can publish safely' {$mock.TagApiUnavailable=$true;Publish;Require ($checks.LatestPointerVerified -and !@($mock.Calls|Where-Object{$_ -match '/releases/tags/'}).Count) 'Draft lookup still depends on a Git tag'}
+    Case 'duplicate draft lookup is refused' {$mock.Exists=$true;$mock.History+=Remote-Object;Reject {Read-RemoteRelease 'kunkunkunQoQ/SonicRoute' "v$version"} 'Duplicate release tag'}
+    Case 'draft lookup includes later release pages' {$mock.History=@(1..100|ForEach-Object{@{tag_name="old-$_";draft=$false;prerelease=$false}})+@(Remote-Object);$found=Read-RemoteRelease 'kunkunkunQoQ/SonicRoute' "v$version";Require ($found.tag_name -ceq "v$version" -and $found.draft) 'Draft on later page missed'}
     Case 'upload transient failure recovers' {$mock.UploadFailures=1;Publish;Require ($mock.Uploads -eq 8 -and $checks.LatestPointerVerified) 'Upload retry failed'}
     Case 'permanent upload failure leaves draft' {$mock.UploadFailures=10;Reject {Publish} 'Failed to upload';Require ($mock.Draft -and !$checks.DraftPromoted) 'Unsafe promotion'}
     Case 'identical existing assets avoid upload' {$mock.Exists=$true;foreach($a in $golden.Values){$mock.Assets[$a.Name]=$a};Publish -Existing $true;Require ($mock.Uploads -eq 0 -and $checks.LatestPointerVerified) 'Idempotent run uploaded again'}
