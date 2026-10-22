@@ -99,7 +99,7 @@
                                     Margin="14,0" IsHitTestVisible="False" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}" Width="0"/>
                             <Border x:Name="PART_PeakVisual" Height="4" CornerRadius="2" VerticalAlignment="Center"
                                     Margin="14,0" Background="{DynamicResource Theme.AccentPeak}"
-                                    RenderTransformOrigin="0,0.5" IsHitTestVisible="False" Visibility="Collapsed"/>
+                                    RenderTransformOrigin="0,0.5" IsHitTestVisible="False" Visibility="Hidden"/>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Focusable="False" IsTabStop="False">
                                     <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
@@ -213,7 +213,7 @@
             </StackPanel>
 
             <!-- 应用列表：全部有音频的应用，每行独立音量，行右侧展开设置输出/输入设备（区域内滚动） -->
-            <ScrollViewer x:Name="AppListScroll" Grid.Row="4" Height="114" VerticalScrollBarVisibility="Auto"
+            <ScrollViewer x:Name="AppListScroll" Grid.Row="4" MinHeight="36" VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
                 <ItemsControl x:Name="AppListPanel">
                     <ItemsControl.ItemsPanel>

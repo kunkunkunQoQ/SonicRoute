@@ -180,18 +180,11 @@ namespace SonicRoute
         {
             try
             {
-                // 先量固定部分：列表区压到 0 后布局，取内容期望高度（Grid 下 ActualHeight 会被窗口高度撑满，
-                // 用 DesiredSize 得到标题/设备/音量/分隔/底部操作栏的固定高总和）
-                AppListScroll.Height = 0;
-                AppListScroll.UpdateLayout();
-                double fixedH = RootBorder.DesiredSize.Height;
-                if (fixedH <= 0) fixedH = RootBorder.ActualHeight; // 兜底
+                // 列表复用原 Grid 的 * 行分配剩余空间；不临时压高度或强制同步布局。
                 double total = MathEx.Clamp(cfg.QuickPanelHeight, 350, 850);
                 var wa = SystemParameters.WorkArea;
                 double maxTotal = Math.Max(240, wa.Height - 16); // 不超屏幕限度
                 if (total > maxTotal) total = maxTotal;
-                double listH = Math.Max(RowHeight, total - fixedH); // 应用区域 = 窗口高 - 固定部分（不足时至少一行）
-                AppListScroll.Height = listH;
                 Height = Math.Round(total);
             }
             catch { }
@@ -999,7 +992,8 @@ namespace SonicRoute
         {
             if (row.PeakVisual == null || row.PeakTransform == null) return;
             bool show = _meterEnabled && !row.IsMuted && row.Slider.IsEnabled && row.PeakLevel > 0.001f;
-            var visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            // 覆盖层始终保留原布局尺寸；静默切换不让音量条模板重复 Measure/Arrange。
+            var visibility = show ? Visibility.Visible : Visibility.Hidden;
             if (row.PeakVisual.Visibility != visibility) row.PeakVisual.Visibility = visibility;
             // 动态帧只改变 ScaleX；Slider.Value 和 Thumb 均不由 Meter 修改。
             double scale = show ? MathEx.Clamp(row.PeakLevel * (float)(row.Slider.Value / 100d), 0f, 1f) : 0d;
