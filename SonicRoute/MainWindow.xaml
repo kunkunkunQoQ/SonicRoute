@@ -946,22 +946,6 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 一键还原全部应用为默认播放设备 -->
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                        <StackPanel>
-                            <TextBlock Text="{Binding [Exp.ResetAll], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
-                            <TextBlock Text="{Binding [Exp.ResetAllHint], Source={x:Static local:L10n.Instance}}"
-                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       Margin="0,-4,0,10" TextWrapping="Wrap"/>
-                            <Button x:Name="ExpResetAllButton" Content="{Binding [Exp.ResetAll], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                    HorizontalAlignment="Left" Click="ExpResetAll_Click"/>
-                            <TextBlock Text="{Binding [Exp.ResetAllTip], Source={x:Static local:L10n.Instance}}"
-                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       Margin="0,6,0,0" TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </Border>
-
                     <!-- 一键清理配置文件 -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                         <StackPanel>

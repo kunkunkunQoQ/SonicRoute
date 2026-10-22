@@ -19,7 +19,7 @@ namespace SonicRoute
         public const string ActPanel = "打开快速面板";
         /// <summary>切换全局应用的输出设备（所有有音频会话的应用切到下一个保留设备）。</summary>
         public const string ActSwitchAllOutput = "切换全局应用输出设备";
-        /// <summary>一键还原全部应用输出/输入设备为系统默认（所有运行进程 + 音频会话应用）。</summary>
+        /// <summary>清除全部应用（含已退出应用）的持久化输出/输入路由；保留音量与系统默认设备。</summary>
         public const string ActResetAllApps = "还原全部应用默认设备";
         /// <summary>切换全局应用的输入设备（跟随麦克风选项，同 ActSwitchInput）。</summary>
         public const string ActSwitchAllInput = "切换全局应用输入设备";

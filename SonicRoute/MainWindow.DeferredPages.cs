@@ -100,7 +100,6 @@ namespace SonicRoute
         internal CheckBox ExpPanelOutputNameCheck = null!;
         internal CheckBox ExpHistoryCheck = null!;
         internal ContentControl ExpHistoryOptionsHost = null!;
-        internal Button ExpResetAllButton = null!;
         internal Button ExpClearConfigButton = null!;
         internal Button ExpExportConfigButton = null!;
         internal Button ExpImportConfigButton = null!;
@@ -257,7 +256,6 @@ namespace SonicRoute
                 ExpPanelOutputNameCheck = FindDeferredControl<CheckBox>(content, nameof(ExpPanelOutputNameCheck));
                 ExpHistoryCheck = FindDeferredControl<CheckBox>(content, nameof(ExpHistoryCheck));
                 ExpHistoryOptionsHost = FindDeferredControl<ContentControl>(content, nameof(ExpHistoryOptionsHost));
-                ExpResetAllButton = FindDeferredControl<Button>(content, nameof(ExpResetAllButton));
                 ExpClearConfigButton = FindDeferredControl<Button>(content, nameof(ExpClearConfigButton));
                 ExpExportConfigButton = FindDeferredControl<Button>(content, nameof(ExpExportConfigButton));
                 ExpImportConfigButton = FindDeferredControl<Button>(content, nameof(ExpImportConfigButton));
@@ -312,7 +310,6 @@ namespace SonicRoute
             ExpPanelOutputNameCheck = null!;
             ExpHistoryCheck = null!;
             ExpHistoryOptionsHost = null!;
-            ExpResetAllButton = null!;
             ExpClearConfigButton = null!;
             ExpExportConfigButton = null!;
             ExpImportConfigButton = null!;

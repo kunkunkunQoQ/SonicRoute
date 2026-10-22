@@ -2063,22 +2063,6 @@ namespace SonicRoute
         }
 
 
-        /// <summary>实验设置 - 一键还原全部应用输出/输入默认设备：
-        /// 覆盖系统里所有应用（所有运行进程 + 曾设置过/有音频会话的应用），清除持久化路由跟随系统默认。</summary>
-        private async void ExpResetAll_Click(object sender, RoutedEventArgs e)
-        {
-            ExpResetAllButton.IsEnabled = false;
-            try
-            {
-                var (okOut, okIn, total) = await Task.Run(() => AudioService.ResetAllPersistedEndpoints());
-                if (_isClosed) return;
-                if (total == 0) ShowToast(L10n.T("Exp.ResetAllNone"));
-                else if (okOut == total && okIn == total) ShowToast(string.Format(L10n.T("Exp.ResetAllDone"), total));
-                else ShowToast(string.Format(L10n.T("Exp.ResetAllFail"), okOut, total, okIn, total));
-            }
-            finally { if (!_isClosed && ExpResetAllButton != null) ExpResetAllButton.IsEnabled = true; }
-        }
-
         /// <summary>实验设置 - 一键清理配置文件：删除 config.json 恢复全部默认并自动重启应用。</summary>
         private void ExpClearConfig_Click(object sender, RoutedEventArgs e)
         {

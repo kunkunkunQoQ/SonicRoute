@@ -426,53 +426,58 @@ namespace SonicRoute.Core
             }
         }
 
-        /// <summary>一键还原：把系统里所有应用（含所有运行进程 + 有音频会话的应用 + 已退出但曾设置过的应用）
-        /// 的输出/输入设备都清除持久化路由，恢复为跟随系统默认。返回 (输出成功数, 输入成功数, 尝试总数)。</summary>
-        public static (int OutOk, int InOk, int Total) ResetAllPersistedEndpoints()
-        {
-            var result = ResetAllPersistedEndpointsChecked();
-            return (result.OutOk, result.InOk, result.Total);
-        }
-
         /// <summary>只清除端点路由，不删除可能同时保存音量/静音偏好的Windows音频属性存储。
-        /// 逐进程回退不能覆盖已退出应用，仅全局持久路由接口成功时确认全部完成。</summary>
+        /// 全局接口成功即完成；计数仅用于逐进程兼容回退，不能据此确认已退出应用也已还原。</summary>
         public static (int OutOk, int InOk, int Total, bool Applied) ResetAllPersistedEndpointsChecked()
         {
-            // Reuse the existing persisted-endpoint interface for all applications, including
-            // exited apps. Do not broaden endpoint reset into deleting mixer preferences.
-            int hrClear = -999;
+            using var output = new AudioPolicyConfig(EDataFlow.eRender);
             try
             {
-                using var clearAll = new AudioPolicyConfig(EDataFlow.eRender);
-                hrClear = clearAll.ClearAllPersistedApplicationDefaultEndpoints();
+                if (output.ClearAllPersistedApplicationDefaultEndpoints() >= 0)
+                {
+                    InvalidateAppsCache();
+                    return (0, 0, 0, true); // 原生全局调用不返回应用计数，不再扫描或重复写入。
+                }
             }
             catch { /* 旧系统/异常时回退 */ }
 
             var pids = new HashSet<uint>();
-            foreach (var p in System.Diagnostics.Process.GetProcesses())
+            try
             {
-                try { if (p.Id > 0) pids.Add((uint)p.Id); }
-                catch { /* 权限不足的进程跳过 */ }
-                finally { p.Dispose(); }
+                foreach (var p in System.Diagnostics.Process.GetProcesses())
+                {
+                    try { if (p.Id > 0) pids.Add((uint)p.Id); }
+                    catch { /* 权限不足的进程跳过 */ }
+                    finally { p.Dispose(); }
+                }
             }
-            foreach (var app in GetApps(refresh: true))
-                if (app.ProcessId > 0) pids.Add(app.ProcessId);
+            catch { /* 进程快照失败仍尝试可靠的音频会话目标。 */ }
+            try
+            {
+                foreach (var app in GetApps(refresh: true))
+                    if (app.ProcessId > 0 && app.ProcessId <= int.MaxValue) pids.Add(app.ProcessId);
+            }
+            catch { /* 会话读取失败仍处理已取得的进程。 */ }
 
+            if (pids.Count == 0) return (0, 0, 0, false);
+            using var input = new AudioPolicyConfig(EDataFlow.eCapture);
             int okOut = 0, okIn = 0, total = 0;
             foreach (var pid in pids)
             {
                 total++;
                 try
                 {
-                    using (var c1 = new AudioPolicyConfig(EDataFlow.eRender))
-                        if (c1.SetDefaultEndPoint(null, (int)pid) >= 0) okOut++;
-                    using (var c2 = new AudioPolicyConfig(EDataFlow.eCapture))
-                        if (c2.SetDefaultEndPoint(null, (int)pid) >= 0) okIn++;
+                    if (output.SetDefaultEndPoint(null, (int)pid) >= 0) okOut++;
                 }
-                catch { /* 单个进程失败不影响其余 */ }
+                catch { /* 单个方向失败不阻止另一个方向与其他进程。 */ }
+                try
+                {
+                    if (input.SetDefaultEndPoint(null, (int)pid) >= 0) okIn++;
+                }
+                catch { /* 单个方向失败不阻止其余目标。 */ }
             }
-            if (hrClear >= 0 || okOut > 0 || okIn > 0) InvalidateAppsCache();
-            return (okOut, okIn, total, hrClear >= 0);
+            if (okOut > 0 || okIn > 0) InvalidateAppsCache();
+            return (okOut, okIn, total, false);
         }
 
         /// <summary>读取进程当前持久化的设备完整 ID（未设置返回 null）。</summary>

@@ -34,7 +34,7 @@ namespace SonicRoute.Core.Interop
         private const string DEVINTERFACE_AUDIO_RENDER = "#{e6327cad-dcec-4949-ae8a-991e976a79d2}";
         private const string DEVINTERFACE_AUDIO_CAPTURE = "#{2eef81be-33fa-4800-9670-1cd474972c3f}";
 
-        // vtable 槽位（1-based 实测）：Set=25、Get=26；ClearAllPersistedApplicationDefaultEndpoints = 27
+        // vtable 槽位（从 0 开始）：Set=25、Get=26；ClearAllPersistedApplicationDefaultEndpoints = 27
         private const int VTBL_SLOT_SET = 25;
         private const int VTBL_SLOT_GET = 26;
         private const int VTBL_SLOT_CLEAR_ALL = 27;
@@ -68,7 +68,7 @@ namespace SonicRoute.Core.Interop
         // 判定阈值（BUILD_21H2 = 22000）与改造前完全一致。
         private bool IsWin11 => WindowsVersion.Build >= BUILD_21H2;
 
-        /// <summary>取得策略接口指针（QI 后的目标接口，含正确 vtable）。进程内复用，不释放。</summary>
+        /// <summary>取得策略接口指针（QI 后的目标接口，含正确 vtable）。当前实例内复用，由 Dispose 释放。</summary>
         private IntPtr EnsureFactory()
         {
             if (_factory != IntPtr.Zero) return _factory;
@@ -165,9 +165,8 @@ namespace SonicRoute.Core.Interop
             }
         }
 
-        /// <summary>清除所有应用的全部持久化音频设备（输出+输入），即 Windows 11 音量合成器
-        /// "重置"按钮的底层机制（Win11 22H2+ 才有，旧系统返回 E_NOTIMPL）。
-        /// 立即生效，运行中与已退出的应用都会被还原为跟随系统默认设备。</summary>
+        /// <summary>通过 Windows 内部策略接口清除所有应用的持久化输出/输入路由，包括已退出应用。
+        /// 这不包含音量合成器“重置”按钮的音量/静音重置；支持情况取决于系统实现，调用方处理失败。</summary>
         public int ClearAllPersistedApplicationDefaultEndpoints()
         {
             IntPtr factory = EnsureFactory();

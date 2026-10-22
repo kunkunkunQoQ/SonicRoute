@@ -588,6 +588,14 @@ namespace SonicRoute
                 return;
             }
 
+            if (action == HotkeyActions.ActResetAllApps)
+            {
+                var result = await Task.Run(() => AudioService.ResetAllPersistedEndpointsChecked());
+                _trayWheel?.ShowOsd(L10n.T("Act.ResetAllApps"), L10n.T(result.Applied
+                    ? "Act.ResetAllAppsDone" : "Act.ResetAllAppsFailed"));
+                return;
+            }
+
             // 系统设备音量不依赖当前应用，也不受面板所选设备影响。
             if (action is HotkeyActions.ActSystemVolUp or HotkeyActions.ActSystemVolDown)
             {
@@ -668,17 +676,6 @@ namespace SonicRoute
                     _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? L10n.T("Ov.NoMicDevice") : $"🎤 {mdev}");
 
                     break;
-                case HotkeyActions.ActResetAllApps:
-                    // 一键还原全部应用（含未打开但曾设置过/正在运行的进程）输出+输入为系统默认
-                    {
-                        var rr = await Task.Run(() => AudioService.ResetAllPersistedEndpoints());
-                        _trayWheel?.ShowOsd(L10n.T("Act.ResetAllApps"),
-                            rr.Total == 0
-                                ? L10n.T("Ov.NoneToReset")
-                                : string.Format(L10n.T("Act.ResetAllAppsDone"), rr.OutOk, rr.InOk));
-                    }
-                    break;
-
                 case HotkeyActions.ActSwitchAllOutput:
                     // 切换全局应用输出设备：所有有音频会话的应用切到下一个保留设备
                     string? ao = await CycleAllAppsDeviceAsync(EDataFlow.eRender);
