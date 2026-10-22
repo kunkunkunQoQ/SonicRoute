@@ -130,6 +130,18 @@ function Publish([switch]$DryRun,[bool]$Existing=$false,$Assets=$golden){
     Publish-ReleaseToGitHub -AssetsDir $AssetsDirectory -ChangelogTarget "$harnessRoot/notes.md" -Version $version -Tag "v$version" -CommitSha $mock.Head -LocalAssets $Assets -TargetRepo 'kunkunkunQoQ/SonicRoute' -HasExistingDraft:$Existing -IsDryRun:$DryRun -ElapsedStr 'test' -Checklist $checks
 }
 try {
+    Case 'curated UTF8 release notes preserve original Unicode' {
+        $expected='SonicRoute '+[char]0x6b63+[char]0x5f0f+[char]0x7248+' '+[char]::ConvertFromUtf32(0x1f3a7)+"`r`nhttps://github.com/kunkunkunQoQ/SonicRoute"
+        $root=Join-Path $harnessRoot 'curated-notes'
+        New-Item -ItemType Directory -Path (Join-Path $root 'docs')|Out-Null
+        [IO.File]::WriteAllText((Join-Path $root "docs/release-v$version.md"),$expected,[Text.UTF8Encoding]::new($false))
+        $target=Join-Path $harnessRoot 'unicode-release-notes.md'
+        $actual=Get-OrGenerateChangelog $version $target 'kunkunkunQoQ/SonicRoute'
+        Require ($actual -ceq $expected) 'Curated notes were decoded with the wrong encoding'
+        $saved=[Text.UTF8Encoding]::new($false,$true).GetString([IO.File]::ReadAllBytes($target))
+        Require ($saved -ceq $expected) 'Generated file differs from original UTF8 notes'
+        Require ($mock.Mutations -eq 0) 'Generating notes mutated GitHub'
+    }
     Case 'retry executes real action until success' {$script:n=0;$r=Invoke-WithRetry -Action {$script:n++;if($n -lt 3){throw 'transient'};'ok'};Require ($n -eq 3 -and $r -eq 'ok') 'Retry count/result incorrect'}
     Case 'permanent failure stops after bound' {$script:n=0;Reject {Invoke-WithRetry -Action {$script:n++;throw 'permanent'}} 'permanent';Require ($n -eq 3) 'Retry bound incorrect'}
     Case 'real preflight accepts exact clean source' {$r=Preflight;Require ($r.RemoteVerified -and $r.CommitSha -ceq $mock.Head) 'Unverified result'}

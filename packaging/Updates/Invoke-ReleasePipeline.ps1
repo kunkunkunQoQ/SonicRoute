@@ -285,7 +285,7 @@ function Get-OrGenerateChangelog {
     # Priority 1: Use curated release note if maintained in docs/
     if (Test-Path -LiteralPath $curatedFile) {
         Write-Host "    Found curated release notes: docs/release-v$Version.md"
-        $notes = Get-Content -LiteralPath $curatedFile -Raw
+        $notes = [IO.File]::ReadAllText($curatedFile, [Text.UTF8Encoding]::new($false, $true))
         if ($ChangelogTarget) {
             $utf8 = [Text.UTF8Encoding]::new($false)
             [IO.File]::WriteAllText($ChangelogTarget, $notes, $utf8)
