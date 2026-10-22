@@ -102,8 +102,7 @@ The Wiki is currently in Chinese.
 
 ## 📌 Roadmap
 
-- **v1.26 · Major Update (In Development)**: Automation orchestration expands to 6 triggers and 37 advanced actions (including recording device details, per-app mic mute, batch app volume ducking, and one-click routing reset).
-- **Upcoming Stages**: Continuously refine low-latency event listeners and zero-polling telemetry based on community feedback.
+- **No active roadmap**: Core features are complete with no new feature plans. Future updates will focus on necessary maintenance and stability fixes.
 
 [Share an idea or report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

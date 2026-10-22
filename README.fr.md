@@ -102,8 +102,7 @@ Le Wiki est actuellement en chinois simplifié.
 
 ## 📌 Feuille de route
 
-- **v1.26 · Mise à jour majeure (En développement)** : Extension de l'automatisation à 6 déclencheurs et 37 actions avancées (sélection détaillée d'enregistrement, contrôle micro par application, volume global par lot et réinitialisation en un clic).
-- **Étapes ultérieures** : Perfectionnement continu des écouteurs d'événements à faible latence et de l'architecture sans scrutation selon les retours de la communauté.
+- **Aucun plan prévu :** Les fonctionnalités principales sont complètes et aucun nouveau développement n'est prévu. Les futures mises à jour se concentreront sur la maintenance et la stabilité.
 
 [Partager une idée ou signaler un problème](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

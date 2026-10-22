@@ -102,8 +102,7 @@ Das Wiki ist derzeit auf vereinfachtem Chinesisch.
 
 ## 📌 Roadmap
 
-- **v1.26 · Großes Update (In Entwicklung)**: Erweiterung der Automatisierung auf 6 Auslöser und 37 erweiterte Aktionen (einschließlich Aufnahmegeräte-Details, App-Mikrofonsteuerung, Batch-Lautstärkeregelung und Ein-Klick-Routing-Reset).
-- **Weitere Phasen**: Kontinuierliche Verfeinerung ereignisgesteuerter Listener und Null-Polling-Architektur basierend auf Community-Feedback.
+- **Keine aktiven Pläne:** Die Kernfunktionen sind vollständig und es sind keine neuen Features geplant. Zukünftige Updates konzentrieren sich auf erforderliche Wartung und Stabilität.
 
 [Idee teilen oder Problem melden](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 

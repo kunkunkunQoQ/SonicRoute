@@ -102,8 +102,7 @@ La Wiki está actualmente en chino simplificado.
 
 ## 📌 Hoja de ruta
 
-- **v1.26 · Actualización importante (En desarrollo)**: Ampliación de automatización a 6 desencadenadores y 37 acciones avanzadas (selección de grabación, micro por app, ajuste de volumen por lotes y restablecimiento en un clic).
-- **Etapas posteriores**: Perfeccionamiento continuo de escucha de eventos de baja latencia y arquitectura sin sondeo según comentarios de la comunidad.
+- **Sin planes activos:** Las funciones principales están completas y no hay planes de nuevas características. Las próximas actualizaciones se centrarán en el mantenimiento y la estabilidad necesarios.
 
 [Comparte una idea o informa de un problema](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
