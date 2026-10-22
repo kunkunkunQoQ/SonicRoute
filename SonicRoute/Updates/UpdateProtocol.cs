@@ -21,6 +21,7 @@ namespace SonicRoute.Updates
     internal sealed class UpdatePackage
     {
         public string Edition { get; set; } = "";
+        public string Runtime { get; set; } = "";
         public string Architecture { get; set; } = "";
         public string Asset { get; set; } = "";
         public string Sha256 { get; set; } = "";
@@ -54,6 +55,16 @@ namespace SonicRoute.Updates
         internal const string Repository = "https://github.com/kunkunkunQoQ/SonicRoute";
         internal const string LatestApi = "https://api.github.com/repos/kunkunkunQoQ/SonicRoute/releases/latest";
         internal const string ManifestName = "SonicRoute-update.json";
+#if NET48
+        internal const string CurrentRuntime = "net48";
+        internal const string RuntimeName = ".NET Framework 4.8";
+#elif NET10_0_OR_GREATER
+        internal const string CurrentRuntime = "net10";
+        internal const string RuntimeName = ".NET 10";
+#else
+        internal const string CurrentRuntime = "net8";
+        internal const string RuntimeName = ".NET 8";
+#endif
         internal const long MaxPackageSize = 128 * 1024 * 1024;
         internal static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true, WriteIndented = true };
 
@@ -105,9 +116,19 @@ namespace SonicRoute.Updates
             return result;
         }
 
-        internal static void ValidatePackage(UpdatePackage p, string edition, string architecture)
+        // Protocol 1 predated dual-runtime releases: its Lite packages were .NET 8.
+        // Keep old plans/recovery readable without interpreting an old Lite package as .NET 10.
+        internal static string PackageRuntime(UpdatePackage p) => !string.IsNullOrEmpty(p.Runtime) ? p.Runtime
+            : p.Edition == "Legacy" ? "net48" : "net8";
+
+        internal static string ExecutableDescription(UpdatePackage p) => "SonicRoute " + p.Edition
+            + (p.Runtime == "net8" ? " NET8" : "");
+
+        internal static void ValidatePackage(UpdatePackage p, string edition, string architecture, string runtime = CurrentRuntime)
         {
             if (p.Edition != edition || p.Architecture != architecture || (edition != "Lite" && edition != "Legacy")
+                || PackageRuntime(p) != runtime || (edition == "Lite" && runtime != "net8" && runtime != "net10")
+                || (edition == "Legacy" && runtime != "net48")
                 || (architecture != "x64" && architecture != "arm64") || (edition == "Legacy" && architecture != "x64")
                 || !Regex.IsMatch(p.Asset, @"^[A-Za-z0-9._-]+$") || !IsHash(p.Sha256)
                 || p.Size <= 0 || p.Size > MaxPackageSize || p.Files == null || p.Files.Count == 0 || p.Files.Count > 32)

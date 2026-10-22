@@ -104,6 +104,13 @@ namespace SonicRoute
             _updateVersion = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 8) };
             _updateVersion.SetResourceReference(ForegroundProperty, "Theme.TextSecondary");
             stack.Children.Add(_updateVersion);
+            if (!AppRuntimeIdentity.Current.IsPackaged && UpdateProtocol.CurrentRuntime == "net8")
+            {
+                var migration = UpdateButton("Upd.MigrationDownloads",
+                    () => OpenUpdateUrl(UpdateProtocol.Repository + "/releases/latest"));
+                migration.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+                stack.Children.Add(migration);
+            }
             _updateAutomatic = new CheckBox { Tag = AutomationIcons.Clock };
             _updateAutomatic.SetResourceReference(StyleProperty, "SettingsSwitchRow");
             var automaticText = new StackPanel();
@@ -156,8 +163,11 @@ namespace SonicRoute
             _syncingUpdates = false;
             _updateAutomatic.Visibility = store ? Visibility.Collapsed : Visibility.Visible;
             _updateVersion!.Text = string.Format(L10n.T("Upd.Current"), App.DisplayVersion,
-                AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture) +
+                AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture) + " · " + UpdateProtocol.RuntimeName +
                 (updates.Release != null ? "\n" + string.Format(L10n.T("Upd.Newest"), updates.Release.Tag) : "");
+            if (!store && UpdateProtocol.CurrentRuntime == "net8")
+                _updateVersion.Text += "\n" + L10n.T(UpdateBootstrap.Architecture == "arm64"
+                    ? "Upd.Net8MaintenanceArm64" : "Upd.Net8Maintenance");
             string key = "Upd." + updates.State;
             _updateStatus.Text = store ? L10n.T("Upd.Store") : L10n.T(key);
             if (!store && updates.LastOutcome.Length != 0) _updateStatus.Text += "\n" + L10n.T(updates.LastOutcome);

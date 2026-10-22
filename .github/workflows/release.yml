@@ -30,10 +30,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup .NET 8 SDK
+      - name: Setup .NET SDKs
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            10.0.x
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

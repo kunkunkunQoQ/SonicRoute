@@ -71,6 +71,8 @@ try {
         $names = @(
             "SonicRoute-v$Version-Lite-x64.exe",
             "SonicRoute-v$Version-Lite-arm64.exe",
+            "SonicRoute-v$Version-Lite-NET8-x64.exe",
+            "SonicRoute-v$Version-Lite-NET8-arm64.exe",
             "SonicRoute-v$Version-Legacy-x64.zip",
             "SonicRoute-update.json",
             "SHA256SUMS.txt"
@@ -308,37 +310,49 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
 
     $fLiteX64 = Join-Path $mockAssetsDir "SonicRoute-v$ver-Lite-x64.exe"
     $fLiteArm = Join-Path $mockAssetsDir "SonicRoute-v$ver-Lite-arm64.exe"
+    $fLiteNet8X64 = Join-Path $mockAssetsDir "SonicRoute-v$ver-Lite-NET8-x64.exe"
+    $fLiteNet8Arm = Join-Path $mockAssetsDir "SonicRoute-v$ver-Lite-NET8-arm64.exe"
     $fLegacyZip = Join-Path $mockAssetsDir "SonicRoute-v$ver-Legacy-x64.zip"
     $fManifest = Join-Path $mockAssetsDir "SonicRoute-update.json"
     $fSums = Join-Path $mockAssetsDir "SHA256SUMS.txt"
 
     [IO.File]::WriteAllBytes($fLiteX64, [byte[]]@(0x4D, 0x5A, 0x90, 0x00, 0x01, 0x02, 0x03, 0x04))
     [IO.File]::WriteAllBytes($fLiteArm, [byte[]]@(0x4D, 0x5A, 0x90, 0x00, 0x05, 0x06, 0x07, 0x08))
+    [IO.File]::WriteAllBytes($fLiteNet8X64, [byte[]]@(0x4D, 0x5A, 0x90, 0x00, 0x0D, 0x0E, 0x0F, 0x10))
+    [IO.File]::WriteAllBytes($fLiteNet8Arm, [byte[]]@(0x4D, 0x5A, 0x90, 0x00, 0x11, 0x12, 0x13, 0x14))
     [IO.File]::WriteAllBytes($fLegacyZip, [byte[]]@(0x50, 0x4B, 0x03, 0x04, 0x09, 0x0A, 0x0B, 0x0C))
 
     function Rebuild-MockManifestAndSums([string]$targetDir, [string]$v) {
         $p1 = Join-Path $targetDir "SonicRoute-v$v-Lite-x64.exe"
         $p2 = Join-Path $targetDir "SonicRoute-v$v-Lite-arm64.exe"
-        $p3 = Join-Path $targetDir "SonicRoute-v$v-Legacy-x64.zip"
+        $p3 = Join-Path $targetDir "SonicRoute-v$v-Lite-NET8-x64.exe"
+        $p4 = Join-Path $targetDir "SonicRoute-v$v-Lite-NET8-arm64.exe"
+        $p5 = Join-Path $targetDir "SonicRoute-v$v-Legacy-x64.zip"
 
         $h1 = (Get-FileHash -LiteralPath $p1 -Algorithm SHA256).Hash.ToLowerInvariant()
         $h2 = (Get-FileHash -LiteralPath $p2 -Algorithm SHA256).Hash.ToLowerInvariant()
         $h3 = (Get-FileHash -LiteralPath $p3 -Algorithm SHA256).Hash.ToLowerInvariant()
+        $h4 = (Get-FileHash -LiteralPath $p4 -Algorithm SHA256).Hash.ToLowerInvariant()
+        $h5 = (Get-FileHash -LiteralPath $p5 -Algorithm SHA256).Hash.ToLowerInvariant()
 
         $s1 = (Get-Item $p1).Length
         $s2 = (Get-Item $p2).Length
         $s3 = (Get-Item $p3).Length
+        $s4 = (Get-Item $p4).Length
+        $s5 = (Get-Item $p5).Length
 
         $dummy13 = @(1..13 | ForEach-Object { @{ path = "file$_.dll"; size = 100; sha256 = ("a" * 64) } })
 
         $manifestObj = [ordered]@{
             schemaVersion = 1
-            protocolVersion = 1
+            protocolVersion = 2
             version = $v
             packages = @(
-                [ordered]@{ edition = "Lite"; architecture = "x64"; asset = "SonicRoute-v$v-Lite-x64.exe"; size = $s1; sha256 = $h1; files = @(@{ path='SonicRoute.exe'; size=$s1; sha256=$h1 }) },
-                [ordered]@{ edition = "Lite"; architecture = "arm64"; asset = "SonicRoute-v$v-Lite-arm64.exe"; size = $s2; sha256 = $h2; files = @(@{ path='SonicRoute.exe'; size=$s2; sha256=$h2 }) },
-                [ordered]@{ edition = "Legacy"; architecture = "x64"; asset = "SonicRoute-v$v-Legacy-x64.zip"; size = $s3; sha256 = $h3; files = $dummy13 }
+                [ordered]@{ edition = "Lite"; runtime = "net10"; architecture = "x64"; asset = "SonicRoute-v$v-Lite-x64.exe"; size = $s1; sha256 = $h1; files = @(@{ path='SonicRoute.exe'; size=$s1; sha256=$h1 }) },
+                [ordered]@{ edition = "Lite"; runtime = "net10"; architecture = "arm64"; asset = "SonicRoute-v$v-Lite-arm64.exe"; size = $s2; sha256 = $h2; files = @(@{ path='SonicRoute.exe'; size=$s2; sha256=$h2 }) },
+                [ordered]@{ edition = "Lite"; runtime = "net8"; architecture = "x64"; asset = "SonicRoute-v$v-Lite-NET8-x64.exe"; size = $s3; sha256 = $h3; files = @(@{ path='SonicRoute.exe'; size=$s3; sha256=$h3 }) },
+                [ordered]@{ edition = "Lite"; runtime = "net8"; architecture = "arm64"; asset = "SonicRoute-v$v-Lite-NET8-arm64.exe"; size = $s4; sha256 = $h4; files = @(@{ path='SonicRoute.exe'; size=$s4; sha256=$h4 }) },
+                [ordered]@{ edition = "Legacy"; runtime = "net48"; architecture = "x64"; asset = "SonicRoute-v$v-Legacy-x64.zip"; size = $s5; sha256 = $h5; files = $dummy13 }
             )
         }
         $manifestJson = ($manifestObj | ConvertTo-Json -Depth 5) + "`n"
@@ -347,7 +361,9 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
 
         $hM = (Get-FileHash -LiteralPath $mPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $sumsLines = @(
-            "$h3  SonicRoute-v$v-Legacy-x64.zip",
+            "$h5  SonicRoute-v$v-Legacy-x64.zip",
+            "$h4  SonicRoute-v$v-Lite-NET8-arm64.exe",
+            "$h3  SonicRoute-v$v-Lite-NET8-x64.exe",
             "$h2  SonicRoute-v$v-Lite-arm64.exe",
             "$h1  SonicRoute-v$v-Lite-x64.exe",
             "$hM  SonicRoute-update.json"
@@ -362,7 +378,7 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
     $basePassed = $false
     try {
         $assets = Assert-LocalArtifacts -AssetsDir $mockAssetsDir -Version $ver
-        if ($assets.Count -eq 5) { $basePassed = $true }
+        if ($assets.Count -eq 7) { $basePassed = $true }
     } catch {
         Write-Host "Baseline failed: $($_.Exception.Message)" -ForegroundColor Red
     }
@@ -432,7 +448,7 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
     $tempDupSumsDir = Join-Path $tempDir "dup-sums-test"
     Copy-Item -Recurse -LiteralPath $mockAssetsDir -Destination $tempDupSumsDir
     $sumsLines = Get-Content (Join-Path $tempDupSumsDir "SHA256SUMS.txt")
-    $dupSums = @($sumsLines[0], $sumsLines[0], $sumsLines[1], $sumsLines[2])
+    $dupSums = @($sumsLines[0], $sumsLines[0], $sumsLines[1], $sumsLines[2], $sumsLines[3], $sumsLines[4])
     [IO.File]::WriteAllText((Join-Path $tempDupSumsDir "SHA256SUMS.txt"), ($dupSums -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
     $dupSumsCaught = $false
     try {
@@ -671,7 +687,7 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
         } catch { }
     }
     $liteUploaded = ($ctx3.UploadedFiles -match "SonicRoute-v1\.25-Lite-x64\.exe")
-    if (!$liteUploaded -and $ctx3.UploadedFiles.Count -eq 4) {
+    if (!$liteUploaded -and $ctx3.UploadedFiles.Count -eq 6) {
         $testResults["5.3 Mock: duplicate asset with matching hash idempotently skipped"] = "PASSED"
         Write-Host "  [PASS] 5.3 Duplicate asset with matching hash was skipped idempotently" -ForegroundColor Green
     } else {
@@ -845,7 +861,7 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
         Write-Host "  [FAIL] 5.5 Latest tag mismatch did not record status report" -ForegroundColor Red
     }
 
-    # 5.6 Isolated Mock: Remote asset count != 5 rejected during remote verification
+    # 5.6 Isolated Mock: Remote asset count != 7 rejected during remote verification
     $fix6 = New-MockReleaseFixture
     $ctx6 = @{ Caught = $false; CallCount = 0 }
     $chk6 = [ordered]@{ DraftCreated = $true }
@@ -893,17 +909,17 @@ cce1e11073b4bc74422c8f776581237247479bda	refs/tags/v1.24^{}
         try {
             Publish-ReleaseToGitHub -AssetsDir $fix6.Directory -ChangelogTarget $fix6.Changelog -Version $fix6.Version -Tag $fix6.Tag -CommitSha $fix6.CommitSha -LocalAssets $fix6.LocalAssets -TargetRepo "kunkunkunQoQ/SonicRoute" -HasExistingDraft:$true -Checklist $chk6
         } catch {
-            if ($_.Exception.Message -match "Remote release contains 4 assets; expected exactly 5!") {
+            if ($_.Exception.Message -match "Remote release contains 4 assets; expected exactly 7!") {
                 $ctx6.Caught = $true
             }
         }
     }
     if ($ctx6.Caught) {
-        $testResults["5.6 Mock: remote asset count != 5 rejected during verification"] = "PASSED"
-        Write-Host "  [PASS] 5.6 Remote asset count != 5 rejected during verification" -ForegroundColor Green
+        $testResults["5.6 Mock: remote asset count != 7 rejected during verification"] = "PASSED"
+        Write-Host "  [PASS] 5.6 Remote asset count != 7 rejected during verification" -ForegroundColor Green
     } else {
-        $testResults["5.6 Mock: remote asset count != 5 rejected during verification"] = "FAILED"
-        Write-Host "  [FAIL] 5.6 Remote asset count != 5 not rejected" -ForegroundColor Red
+        $testResults["5.6 Mock: remote asset count != 7 rejected during verification"] = "FAILED"
+        Write-Host "  [FAIL] 5.6 Remote asset count != 7 not rejected" -ForegroundColor Red
     }
 
     # 5.7 Isolated Mock: Prerelease state on published release strictly rejected

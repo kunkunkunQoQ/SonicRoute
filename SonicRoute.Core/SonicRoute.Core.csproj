@@ -1,9 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <Import Project="../build/Version.props" />
 
   <PropertyGroup>
-    <!-- net48 双目标（Spike）：net8.0-windows 行为保持不变；net48 为 .NET Framework 4.8 兼容分支 -->
-    <TargetFrameworks>net8.0-windows;net48</TargetFrameworks>
+    <!-- net48 双目标（Spike）：net10.0-windows 行为保持不变；net48 为 .NET Framework 4.8 兼容分支 -->
+    <TargetFrameworks>net10.0-windows;net8.0-windows;net48</TargetFrameworks>
     <!-- net48 的 SDK 默认 LangVersion 为 C# 7.3，必须显式提升（switch 表达式 / using var / new() / ??= / 模式匹配等） -->
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
@@ -23,7 +23,7 @@
   </PropertyGroup>
 
   <!-- Core 直接依赖 System.Text.Json（ConfigService / AutoRuleStore），net48 不含该程序集，
-       仅对 net48 目标条件引入；net8.0-windows 分支不引包，行为不变 -->
+       仅对 net48 目标条件引入；net10.0-windows 分支不引包，行为不变 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>

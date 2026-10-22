@@ -14,10 +14,12 @@ foreach ($name in @('SonicRoute-update.json','SHA256SUMS.txt')) {
 $allowed = @('LICENSE','Microsoft.Bcl.AsyncInterfaces.dll','SonicRoute.Core.dll','SonicRoute.exe','SonicRoute.exe.config',
     'System.Buffers.dll','System.Memory.dll','System.Numerics.Vectors.dll','System.Runtime.CompilerServices.Unsafe.dll',
     'System.Text.Encodings.Web.dll','System.Text.Json.dll','System.Threading.Tasks.Extensions.dll','System.ValueTuple.dll')
-function Assert-Executable([string]$Path, [string]$Architecture, [string]$Edition) {
+
+function Assert-Executable([string]$Path, [string]$Architecture, [string]$Edition, [string]$Runtime) {
     $fileInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
-    if ([version]$fileInfo.FileVersion -ne $numeric -or $fileInfo.FileDescription -cne "SonicRoute $Edition") {
-        throw "Wrong product version/edition: $Path"
+    $expectedDesc = "SonicRoute $Edition" + $(if ($Runtime -eq 'net8') { ' NET8' } else { '' })
+    if ([version]$fileInfo.FileVersion -ne $numeric -or $fileInfo.FileDescription -cne $expectedDesc) {
+        throw "Wrong product version/edition: $Path (got '$($fileInfo.FileDescription)', expected '$expectedDesc')"
     }
     $reader = [IO.BinaryReader]::new([IO.File]::OpenRead($Path))
     try {
@@ -30,17 +32,25 @@ function Assert-Executable([string]$Path, [string]$Architecture, [string]$Editio
         if ($reader.ReadUInt32() -ne 0x4550 -or $reader.ReadUInt16() -ne $machine) { throw 'Wrong PE architecture.' }
     } finally { $reader.Dispose() }
 }
+
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $packages = @()
-foreach ($variant in @(@('Lite','x64','exe'), @('Lite','arm64','exe'), @('Legacy','x64','zip'))) {
-    $edition,$architecture,$extension = $variant
-    $assetName = "SonicRoute-v$Version-$edition-$architecture.$extension"
+$variants = @(
+    @('Lite', 'x64',   'net10', "SonicRoute-v$Version-Lite-x64.exe"),
+    @('Lite', 'arm64', 'net10', "SonicRoute-v$Version-Lite-arm64.exe"),
+    @('Lite', 'x64',   'net8',  "SonicRoute-v$Version-Lite-NET8-x64.exe"),
+    @('Lite', 'arm64', 'net8',  "SonicRoute-v$Version-Lite-NET8-arm64.exe"),
+    @('Legacy', 'x64', 'net48', "SonicRoute-v$Version-Legacy-x64.zip")
+)
+
+foreach ($variant in $variants) {
+    $edition,$architecture,$runtime,$assetName = $variant
     $path = Join-Path $assets $assetName
     $assetInfo = Get-Item -LiteralPath $path
     if ($assetInfo.Length -gt 128MB -or $assetInfo.Length -eq 0) { throw 'Package outside supported size limit.' }
     $files = @()
     if ($edition -eq 'Lite') {
-        Assert-Executable $path $architecture $edition
+        Assert-Executable $path $architecture $edition $runtime
         $files = @([ordered]@{ path='SonicRoute.exe'; size=$assetInfo.Length; sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() })
     } else {
         $archive = [IO.Compression.ZipFile]::OpenRead($path)
@@ -58,7 +68,7 @@ foreach ($variant in @(@('Lite','x64','exe'), @('Lite','arm64','exe'), @('Legacy
                 $files += [ordered]@{ path=$entry.FullName; size=$entry.Length; sha256=$hash }
                 if ($entry.FullName -ceq 'SonicRoute.exe') {
                     [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $scratch)
-                    Assert-Executable $scratch $architecture $edition
+                    Assert-Executable $scratch $architecture $edition $runtime
                 }
             }
             if (!$seen.Contains('SonicRoute.exe') -or !$seen.Contains('SonicRoute.Core.dll') -or $seen.Count -ne $allowed.Count) {
@@ -66,15 +76,15 @@ foreach ($variant in @(@('Lite','x64','exe'), @('Lite','arm64','exe'), @('Legacy
             }
         } finally { $archive.Dispose(); if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch } }
     }
-    $packages += [ordered]@{ edition=$edition; architecture=$architecture; asset=$assetName; size=$assetInfo.Length;
+    $packages += [ordered]@{ edition=$edition; runtime=$runtime; architecture=$architecture; asset=$assetName; size=$assetInfo.Length;
         sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); files=@($files) }
 }
 $utf8 = [Text.UTF8Encoding]::new($false)
-$manifest = [ordered]@{ schemaVersion=1; protocolVersion=1; version=$Version; packages=@($packages) }
+$manifest = [ordered]@{ schemaVersion=1; protocolVersion=2; version=$Version; packages=@($packages) }
 [IO.File]::WriteAllText((Join-Path $assets 'SonicRoute-update.json'), ($manifest | ConvertTo-Json -Depth 8) + "`n", $utf8)
 $names = @($packages | ForEach-Object { $_.asset }) + @('SonicRoute-update.json')
 $lines = foreach ($name in ($names | Sort-Object)) {
     (Get-FileHash -LiteralPath (Join-Path $assets $name) -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $name
 }
 [IO.File]::WriteAllText((Join-Path $assets 'SHA256SUMS.txt'), ($lines -join "`n") + "`n", $utf8)
-Write-Output "Created validated three-edition update manifest and SHA256SUMS in $assets"
+Write-Output "Created validated five-package update manifest and SHA256SUMS in $assets"

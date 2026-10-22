@@ -247,6 +247,8 @@ function Assert-LocalArtifacts {
     $expectedFiles = @(
         "SonicRoute-v$Version-Lite-x64.exe",
         "SonicRoute-v$Version-Lite-arm64.exe",
+        "SonicRoute-v$Version-Lite-NET8-x64.exe",
+        "SonicRoute-v$Version-Lite-NET8-arm64.exe",
         "SonicRoute-v$Version-Legacy-x64.zip",
         "SonicRoute-update.json",
         "SHA256SUMS.txt"
@@ -254,8 +256,8 @@ function Assert-LocalArtifacts {
 
     $uniqueExpected = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($ef in $expectedFiles) { [void]$uniqueExpected.Add($ef) }
-    if ($uniqueExpected.Count -ne 5) {
-        throw "Expected files configuration error: Expected 5 unique files, got $($uniqueExpected.Count)"
+    if ($uniqueExpected.Count -ne 7) {
+        throw "Expected files configuration error: Expected 7 unique files, got $($uniqueExpected.Count)"
     }
 
     $assetDetails = [ordered]@{}
@@ -282,13 +284,20 @@ function Assert-LocalArtifacts {
     # 1. Verify SHA256SUMS.txt entries, uniqueness and exact asset coverage
     $sumsPath = Join-Path $AssetsDir 'SHA256SUMS.txt'
     $sumsLines = (Get-Content -LiteralPath $sumsPath) | Where-Object { $_.Trim() }
-    if ($sumsLines.Count -ne 4) {
-        throw "SHA256SUMS.txt must contain exactly 4 entries (3 packages + SonicRoute-update.json), got $($sumsLines.Count)"
+    if ($sumsLines.Count -ne 6) {
+        throw "SHA256SUMS.txt must contain exactly 6 entries (5 packages + SonicRoute-update.json), got $($sumsLines.Count)"
     }
 
     $seenSumsFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $expectedSumsFiles = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    foreach ($sf in @("SonicRoute-v$Version-Lite-x64.exe", "SonicRoute-v$Version-Lite-arm64.exe", "SonicRoute-v$Version-Legacy-x64.zip", "SonicRoute-update.json")) {
+    foreach ($sf in @(
+        "SonicRoute-v$Version-Lite-x64.exe",
+        "SonicRoute-v$Version-Lite-arm64.exe",
+        "SonicRoute-v$Version-Lite-NET8-x64.exe",
+        "SonicRoute-v$Version-Lite-NET8-arm64.exe",
+        "SonicRoute-v$Version-Legacy-x64.zip",
+        "SonicRoute-update.json"
+    )) {
         [void]$expectedSumsFiles.Add($sf)
     }
 
@@ -310,33 +319,35 @@ function Assert-LocalArtifacts {
         }
     }
 
-    if ($seenSumsFiles.Count -ne 4) {
-        throw "SHA256SUMS.txt did not cover all 4 required assets; covered $($seenSumsFiles.Count)"
+    if ($seenSumsFiles.Count -ne 6) {
+        throw "SHA256SUMS.txt did not cover all 6 required assets; covered $($seenSumsFiles.Count)"
     }
     Write-Host "    [OK] SHA256SUMS.txt cryptographic consistency, uniqueness and coverage verified."
 
     # 2. Verify SonicRoute-update.json structure, uniqueness, 1-to-1 bijection & fields
     $manifestPath = Join-Path $AssetsDir 'SonicRoute-update.json'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    if ($manifest.schemaVersion -ne 1 -or $manifest.protocolVersion -ne 1) {
+    if ($manifest.schemaVersion -ne 1 -or $manifest.protocolVersion -ne 2) {
         throw "Invalid manifest schemaVersion ($($manifest.schemaVersion)) or protocolVersion ($($manifest.protocolVersion))"
     }
     if ($manifest.version -ne $Version) {
         throw "Manifest version ($($manifest.version)) does not match release version $Version"
     }
-    if ($manifest.packages.Count -ne 3) {
-        throw "Manifest must contain exactly 3 package definitions, got $($manifest.packages.Count)"
+    if ($manifest.packages.Count -ne 5) {
+        throw "Manifest must contain exactly 5 package definitions, got $($manifest.packages.Count)"
     }
 
     $seenCombos = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $expectedCombos = @{
-        "Lite:x64"   = "SonicRoute-v$Version-Lite-x64.exe"
-        "Lite:arm64" = "SonicRoute-v$Version-Lite-arm64.exe"
-        "Legacy:x64" = "SonicRoute-v$Version-Legacy-x64.zip"
+        "Lite:net10:x64"   = "SonicRoute-v$Version-Lite-x64.exe"
+        "Lite:net10:arm64" = "SonicRoute-v$Version-Lite-arm64.exe"
+        "Lite:net8:x64"    = "SonicRoute-v$Version-Lite-NET8-x64.exe"
+        "Lite:net8:arm64"  = "SonicRoute-v$Version-Lite-NET8-arm64.exe"
+        "Legacy:net48:x64" = "SonicRoute-v$Version-Legacy-x64.zip"
     }
 
     foreach ($pkg in $manifest.packages) {
-        $combo = "$($pkg.edition):$($pkg.architecture)"
+        $combo = "$($pkg.edition):$($pkg.runtime):$($pkg.architecture)"
         if (!$expectedCombos.ContainsKey($combo)) {
             throw "Manifest contains invalid or unexpected edition:architecture combination: '$combo'"
         }
@@ -360,8 +371,8 @@ function Assert-LocalArtifacts {
         }
     }
 
-    if ($seenCombos.Count -ne 3) {
-        throw "Manifest did not cover all 3 required edition:architecture variants."
+    if ($seenCombos.Count -ne 5) {
+        throw "Manifest did not cover all 5 required edition:architecture variants."
     }
     Write-Host "    [OK] SonicRoute-update.json structure, uniqueness, 1-to-1 matrix and hash integrity verified."
 
@@ -480,8 +491,10 @@ function Get-OrGenerateChangelog {
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("| 发行形态 | 推荐目标人群 | 下载链接 | 运行环境要求 |")
     [void]$sb.AppendLine("|---|---|---|---|")
-    [void]$sb.AppendLine("| ⭐ **Lite x64**（推荐主力） | 主流 64 位 PC 绿色单文件 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-x64.exe) | 需匹配的 x64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |")
-    [void]$sb.AppendLine("| ⚡ **Lite ARM64**（实验） | Surface Pro / 骁龙 PC 原生高效 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-arm64.exe) | 需匹配的 ARM64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |")
+    [void]$sb.AppendLine("| ⭐ **Lite x64**（.NET 10 推荐主力） | 主流 64 位 PC 绿色单文件 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-x64.exe) | 需匹配的 x64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |")
+    [void]$sb.AppendLine("| ⚡ **Lite ARM64**（.NET 10 实验） | Surface Pro / 骁龙 PC 原生高效 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-arm64.exe) | 需匹配的 ARM64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |")
+    [void]$sb.AppendLine("| ☕ **Lite NET8 x64**（.NET 8 兼容版） | 兼容现有 .NET 8 运行库环境 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-NET8-x64.exe) | 需匹配的 x64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |")
+    [void]$sb.AppendLine("| ☕ **Lite NET8 ARM64**（.NET 8 兼容版）| 兼容现有 .NET 8 运行库环境 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-NET8-arm64.exe) | 需匹配的 ARM64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |")
     [void]$sb.AppendLine("| 🛡️ **Legacy x64**（免装运行库） | 公司办公电脑 / 受限机型 | [完整 ZIP](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Legacy-x64.zip) | 系统自带 .NET Framework 4.8（解压即用） |")
     [void]$sb.AppendLine("| 🔄 **Microsoft Store** | 商店静默后台自动更新 | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 适用于 64 位 Windows 10 2004+ / Windows 11 |")
     [void]$sb.AppendLine("")
@@ -557,7 +570,7 @@ function Write-StepSummary {
 
     [void]$sb.AppendLine("- $(&$mark ($Checklist.PreflightVerified)) Version format, master branch & monotonic increase verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.SolutionBuildVerified)) Full solution Release build verified")
-    [void]$sb.AppendLine("- $(&$mark ($Checklist.ArtifactsCompiled)) Three editions (Lite x64, Lite ARM64, Legacy x64) compiled")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.ArtifactsCompiled)) Five packages (Lite x64, Lite ARM64, Lite-NET8 x64, Lite-NET8 ARM64, Legacy x64) compiled")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.LocalArtifactsVerified)) PE machine architecture (0x8664/0xaa64) & Legacy ZIP 13-file whitelist verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ManifestVerified)) SHA256SUMS.txt & SonicRoute-update.json 1-to-1 matrix bijection verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ChangelogGenerated)) Changelog curated/generated with conventional commit categorization")
@@ -735,8 +748,8 @@ function Publish-ReleaseToGitHub {
     if (!$remoteRelease.draft) {
         throw "Security violation: Release $Tag is NOT in draft state during verification!"
     }
-    if ($remoteRelease.assets.Count -ne 5) {
-        throw "Remote release contains $($remoteRelease.assets.Count) assets; expected exactly 5!"
+    if ($remoteRelease.assets.Count -ne $LocalAssets.Count) {
+        throw "Remote release contains $($remoteRelease.assets.Count) assets; expected exactly $($LocalAssets.Count)!"
     }
 
     # Verify each asset remote size, state, and cryptographic hash by downloading

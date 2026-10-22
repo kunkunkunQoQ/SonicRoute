@@ -122,9 +122,18 @@ namespace SonicRoute.Updates
             if (!sums.TryGetValue(UpdateProtocol.ManifestName, out var manifestHash) || !manifestHash.Equals(manifestAsset.Digest.Substring(7), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Manifest absent from checksums.");
             var manifest = JsonSerializer.Deserialize<UpdateManifest>(manifestBytes, UpdateProtocol.Json) ?? throw new InvalidDataException("Empty manifest.");
-            if (manifest.SchemaVersion != 1 || manifest.ProtocolVersion != 1 || UpdateProtocol.ParseVersion(manifest.Version) != UpdateProtocol.ParseVersion(release.Tag))
+            if (manifest.SchemaVersion != 1 || (manifest.ProtocolVersion != 1 && manifest.ProtocolVersion != 2)
+                || UpdateProtocol.ParseVersion(manifest.Version) != UpdateProtocol.ParseVersion(release.Tag))
                 throw new InvalidDataException("Unsupported update manifest.");
-            var matching = manifest.Packages.Where(p => p.Edition == edition && p.Architecture == architecture).ToList();
+            // Never reinterpret unpublished, ambiguous dual-runtime protocol-1 manifests.
+            // Protocol 2 makes runtime mandatory and makes old clients fail closed.
+            if (manifest.Packages == null || manifest.Packages.Any(p => p == null))
+                throw new InvalidDataException("Invalid update packages.");
+            if (manifest.ProtocolVersion == 1 && manifest.Packages.Any(p => !string.IsNullOrEmpty(p.Runtime) || p.Edition == "Lite-NET8")) return release;
+            if (manifest.ProtocolVersion == 2 && manifest.Packages.Any(p => string.IsNullOrEmpty(p.Runtime)))
+                throw new InvalidDataException("Missing update runtime.");
+            var matching = manifest.Packages.Where(p => p.Edition == edition && p.Architecture == architecture
+                && UpdateProtocol.PackageRuntime(p) == UpdateProtocol.CurrentRuntime).ToList();
             if (matching.Count == 0) return release;
             if (matching.Count != 1) throw new InvalidDataException("Ambiguous update package.");
             var package = matching[0];

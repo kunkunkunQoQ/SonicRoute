@@ -130,7 +130,7 @@ namespace SonicRoute.Updates
             foreach (var file in package.Files) UpdateProtocol.Verify(Path.Combine(incoming, file.Path), file.Sha256, file.Size);
             UpdateProtocol.VerifyExecutable(Path.Combine(incoming, "SonicRoute.exe"), package.Architecture, version);
             var description = FileVersionInfo.GetVersionInfo(Path.Combine(incoming, "SonicRoute.exe")).FileDescription;
-            if (description != "SonicRoute " + package.Edition) throw new InvalidDataException("Wrong executable edition or unsupported update protocol.");
+            if (description != UpdateProtocol.ExecutableDescription(package)) throw new InvalidDataException("Wrong executable edition/runtime or unsupported update protocol.");
         }
 
         internal static InstallPlan Prepare(UpdateRelease release, string payload, string executable, string dataDirectory)

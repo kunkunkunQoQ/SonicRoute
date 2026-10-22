@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="../build/Version.props" />
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFrameworks>net10.0-windows;net8.0-windows</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -35,5 +35,14 @@
 -embedded
       </CsWinRTParams>
     </PropertyGroup>
+  </Target>
+  <!-- CsWinRT 2.3.1 embedded targets hardcode lib\net8.0\WinRT.Runtime.dll removal. On net10.0,
+       NuGet selects net9.0\WinRT.Runtime.dll causing duplicate definitions with embedded sources. -->
+  <Target Name="FixCsWinRTRuntimeReferenceForNet10" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <Reference Remove="WinRT.Runtime" />
+      <RuntimeCopyLocalItems Remove="@(RuntimeCopyLocalItems)" Condition="'%(FileName)' == 'WinRT.Runtime'" />
+      <ResolvedCompileFileDefinitions Remove="@(ResolvedCompileFileDefinitions)" Condition="'%(FileName)' == 'WinRT.Runtime'" />
+    </ItemGroup>
   </Target>
 </Project>
