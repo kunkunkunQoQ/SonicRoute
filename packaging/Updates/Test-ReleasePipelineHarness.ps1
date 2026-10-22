@@ -19,7 +19,7 @@ function Reset-Mock {
     $script:mock=@{Head=('a'*40);Tree=('c'*40);Branch='master';Dirty=$false;RemoteTag=$null;History=@(@{tag_name='v1.24';draft=$false;prerelease=$false});
         Draft=$true;Exists=$false;Target=('a'*40);Assets=@{};Calls=[Collections.Generic.List[string]]::new();Mutations=0;Uploads=0;
         ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false;TagApiUnavailable=$false;
-        HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100}
+        HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100;Body='';CorruptNotes=$false;LatestWrongId=$false}
     $global:LASTEXITCODE=0
 }
 function git {
@@ -34,7 +34,7 @@ function git {
 }
 function Remote-Object {
     $assets=@($mock.Assets.Values|ForEach-Object{@{id=$_.Id;name=$_.Name;size=$_.Size;state='uploaded';digest=$(if($mock.NoDigest){$null}else{'sha256:'+$_.Hash})}})
-    return @{id=12345;tag_name="v$version";draft=$mock.Draft;prerelease=$false;target_commitish=$mock.Target;assets=$assets;html_url='https://example.invalid/release'}
+    return @{id=12345;tag_name="v$version";draft=$mock.Draft;prerelease=$false;target_commitish=$mock.Target;assets=$assets;body=$(if($mock.CorruptNotes){'corrupt notes'}else{$mock.Body});html_url='https://example.invalid/release'}
 }
 function gh {
     $a=@($args);$line=$a -join ' ';$mock.Calls.Add($line);$global:LASTEXITCODE=0
@@ -46,11 +46,15 @@ function gh {
             if($method -eq 'POST' -and $line -match '/releases -f '){
                 Require ($a -contains "tag_name=v$version" -and $a -contains 'draft=true' -and $a -contains 'prerelease=false') 'Create lost explicit draft identity'
                 $mock.Exists=$true
+                $bodyArg=@($a|Where-Object{$_ -like 'body=@*'})[0]
+                $mock.Body=[IO.File]::ReadAllText($bodyArg.Substring(6))
                 if($mock.CreateLost){$global:LASTEXITCODE=1;return}
                 return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
             }
             if($method -eq 'PATCH' -and $line -match '/releases/12345 '){
                 Require ($a -contains "tag_name=v$version" -and $a -contains "target_commitish=$($mock.Target)" -and $a -contains 'prerelease=false') 'Edit lost tag/target identity'
+                $bodyArg=@($a|Where-Object{$_ -like 'body=@*'})
+                if($bodyArg.Count){$mock.Body=[IO.File]::ReadAllText($bodyArg[0].Substring(6))}
                 if($a -contains 'draft=false'){$mock.Draft=$false;if($mock.PublishLost){$global:LASTEXITCODE=1}}
                 return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
             }
@@ -79,7 +83,7 @@ function gh {
         }
         if($a[1] -match '/releases/latest$'){
             if($mock.LatestFailure){$global:LASTEXITCODE=1;return}
-            $r=Remote-Object;if($mock.LatestWrong){$r.tag_name='v1.24'};return ($r|ConvertTo-Json -Depth 8 -Compress)
+            $r=Remote-Object;if($mock.LatestWrong){$r.tag_name='v1.24'};if($mock.LatestWrongId){$r.id=99999};return ($r|ConvertTo-Json -Depth 8 -Compress)
         }
         if($a[1] -match '/releases/tags/'){
             if(!$mock.Exists -or $mock.TagApiUnavailable){$global:LASTEXITCODE=1;return};return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
@@ -125,9 +129,15 @@ function Refresh-Package([string]$Dir,$Manifest,[string]$Asset){
     if($p.edition -eq 'Lite'){$p.files[0].size=$p.size;$p.files[0].sha256=$p.sha256};Save-Manifest $Dir $Manifest
 }
 function Preflight {Assert-Preflight 'kunkunkunQoQ/SonicRoute' $version "v$version"}
-function Publish([switch]$DryRun,[bool]$Existing=$false,$Assets=$golden){
+function Publish([switch]$DryRun,[bool]$Existing=$false,$Assets=$golden,[string]$NotesPath){
     $script:checks=@{DraftCreated=$false;RemoteAssetsVerified=$false;DraftPromoted=$false;LatestPointerVerified=$false}
-    Publish-ReleaseToGitHub -AssetsDir $AssetsDirectory -ChangelogTarget "$harnessRoot/notes.md" -Version $version -Tag "v$version" -CommitSha $mock.Head -LocalAssets $Assets -TargetRepo 'kunkunkunQoQ/SonicRoute' -HasExistingDraft:$Existing -IsDryRun:$DryRun -ElapsedStr 'test' -Checklist $checks
+    if(!$NotesPath){
+        $NotesPath=Join-Path $harnessRoot 'notes.md'
+        $curated=Join-Path $root "docs/release-v$version.md"
+        $text=if(Test-Path -LiteralPath $curated){[IO.File]::ReadAllText($curated)}else{'Fixture release notes'}
+        [IO.File]::WriteAllText($NotesPath,$text,[Text.UTF8Encoding]::new($false))
+    }
+    Publish-ReleaseToGitHub -AssetsDir $AssetsDirectory -ChangelogTarget $NotesPath -Version $version -Tag "v$version" -CommitSha $mock.Head -LocalAssets $Assets -TargetRepo 'kunkunkunQoQ/SonicRoute' -HasExistingDraft:$Existing -IsDryRun:$DryRun -ElapsedStr 'test' -Checklist $checks
 }
 try {
     Case 'curated UTF8 release notes preserve original Unicode' {
@@ -148,7 +158,9 @@ try {
     Case 'preflight rejects unrelated source branch' {$mock.Branch='feature/test';Reject {Preflight} 'non-master'}
     Case 'preflight includes untracked files' {$mock.Dirty=$true;Reject {Preflight} 'clean source'}
     Case 'CI commit mismatch' {$env:GITHUB_REF='refs/heads/master';$env:GITHUB_REPOSITORY='kunkunkunQoQ/SonicRoute';$env:GITHUB_SHA='b'*40;try{Reject {Preflight} 'CI ref'}finally{$env:GITHUB_REF=$null;$env:GITHUB_SHA=$null;$env:GITHUB_REPOSITORY=$null}}
-    Case 'published current version immutable' {$mock.History+=@{tag_name="v$version";draft=$false;prerelease=$false};Reject {Preflight} 'matching draft'}
+    Case 'published current version immutable' {$mock.History+=@{tag_name="v$version";draft=$false;prerelease=$false};Reject {Preflight} 'immutable'}
+    Case 'DryRun revalidates published version from later clean commit without mutation' {$mock.History+=@{tag_name="v$version";draft=$false;prerelease=$false};$mock.RemoteTag='b'*40;$r=Assert-Preflight 'kunkunkunQoQ/SonicRoute' $version "v$version" -IsDryRun;Require ($r.ReadOnlyRevalidation -and !$r.HasExistingDraft -and $r.RemoteVerified -and $mock.Mutations -eq 0) 'Published DryRun was rejected or changed publication eligibility'}
+    Case 'published DryRun still refuses a downgrade' {$mock.History+=@{tag_name="v$version";draft=$false;prerelease=$false};$mock.History+=@{tag_name='v9.0';draft=$false;prerelease=$false};Reject {Assert-Preflight 'kunkunkunQoQ/SonicRoute' $version "v$version" -IsDryRun} 'not newer'}
     Case 'numeric version maximum beyond first page' {$mock.History=@(1..100|ForEach-Object{@{tag_name="test$_";draft=$true;prerelease=$false}})+@(@{tag_name='v9.0';draft=$false;prerelease=$false});Reject {Preflight} 'not newer';Require (@($mock.Calls|Where-Object{$_ -match 'page=2$'}).Count -eq 1) 'Second page not queried'}
     Case 'untrusted release history fails closed' {$mock.ApiFailure=$true;Reject {Preflight} 'authoritative release history'}
     Case 'DryRun offline explicitly unverified' {$mock.ApiFailure=$true;$r=Assert-Preflight 'kunkunkunQoQ/SonicRoute' $version "v$version" -IsDryRun;Require (!$r.RemoteVerified -and $mock.Mutations -eq 0) 'Offline DryRun incorrectly verified'}
@@ -193,6 +205,13 @@ try {
         $mock.Tree=$r.tree;$mock.Dirty=$true;Reject {Assert-BuildReceipt $receiptDir $version $mock.Head $golden} 'clean, solution-verified'
     }
     Case 'DryRun causes no remote mutations' {Publish -DryRun;Require ($mock.Mutations -eq 0) 'DryRun mutated remote'}
+    Case 'missing notes stop before any remote mutation' {Reject {Publish -NotesPath "$harnessRoot/missing-notes.md"} 'Missing';Require ($mock.Mutations -eq 0) 'Remote mutation preceded notes validation'}
+    Case 'mismatched UTF8 notes stop before any remote mutation' {
+        $root=Join-Path $harnessRoot 'mismatch-notes';New-Item -ItemType Directory -Path (Join-Path $root 'docs')|Out-Null
+        [IO.File]::WriteAllText((Join-Path $root "docs/release-v$version.md"),'Reviewed source')
+        $bad=Join-Path $root 'bad.md';[IO.File]::WriteAllText($bad,'Different generated notes')
+        Reject {Publish -NotesPath $bad} 'reviewed UTF-8 source';Require ($mock.Mutations -eq 0) 'Remote mutation preceded source text comparison'
+    }
     Case 'complete real publisher success' {Publish;Require (!$mock.Draft -and $mock.Uploads -eq 7 -and $checks.LatestPointerVerified) 'Incomplete publisher path'}
     Case 'lost create and promotion response recovery' {$mock.CreateLost=$true;$mock.PublishLost=$true;Publish;Require ($checks.DraftPromoted -and $checks.LatestPointerVerified) 'Recovery failed'}
     Case 'draft without a Git tag can publish safely' {$mock.TagApiUnavailable=$true;Publish;Require ($checks.LatestPointerVerified -and !@($mock.Calls|Where-Object{$_ -match '/releases/tags/'}).Count) 'Draft lookup still depends on a Git tag'}
@@ -213,8 +232,10 @@ try {
     Case 'partial SHA draft cannot be reused' {$mock.Exists=$true;$mock.Target=$mock.Head.Substring(0,7);Reject {Publish -Existing $true} 'full commit SHA';Require ($mock.Mutations -eq 0) 'Draft edited'}
     Case 'corrupt remote bytes prevent promotion' {$mock.DownloadCorrupt=$true;Reject {Publish} 'cryptographic verification';Require ($mock.Draft -and !$checks.DraftPromoted) 'Bad bytes published'}
     Case 'missing API digest prevents promotion' {$mock.NoDigest=$true;Reject {Publish} 'digest is missing';Require ($mock.Draft) 'Missing digest published'}
+    Case 'remote note corruption prevents promotion' {$mock.CorruptNotes=$true;Reject {Publish} 'release notes differ';Require ($mock.Draft -and !$checks.DraftPromoted) 'Corrupt notes published'}
     Case 'concurrent publication stops next upload' {$mock.PromoteEarly=$true;Reject {Publish} 'matching draft';Require ($mock.Uploads -eq 1) 'Continued upload after external promotion'}
     Case 'Latest mismatch recorded as published failure' {$mock.LatestWrong=$true;Reject {Publish} 'Latest release verification';Require (!$mock.Draft -and $checks.DraftPromoted -and !$checks.LatestPointerVerified) 'Publication state hidden'}
+    Case 'Latest with another ID cannot pass using the same tag' {$mock.LatestWrongId=$true;Reject {Publish} 'Latest release verification';Require (!$checks.LatestPointerVerified) 'Different release ID accepted as Latest'}
     Case 'Latest query failure recorded as published failure' {$mock.LatestFailure=$true;Reject {Publish} 'could not verify';Require (!$mock.Draft -and !$checks.LatestPointerVerified) 'Publication state hidden'}
     Case 'changed local bytes refused before remote mutation' {$dir=Fixture;$a=@{};foreach($key in $golden.Keys){$a[$key]=@{Name=$key;Path=(Join-Path $dir $key);Hash=$golden[$key].Hash;Size=$golden[$key].Size}};[IO.File]::AppendAllText($a['SHA256SUMS.txt'].Path,'x');Reject {Publish -Assets $a} 'no remote mutation';Require ($mock.Mutations -eq 0) 'Remote changed before local check'}
 } finally {

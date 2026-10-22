@@ -51,6 +51,14 @@ function Invoke-WithRetry {
     }
 }
 
+function Invoke-Utf8Native([scriptblock]$Action) {
+    $previous=[Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+        & $Action
+    } finally { [Console]::OutputEncoding=$previous }
+}
+
 function Get-SonicRouteVersion {
     $propsPath = Join-Path $root 'build/Version.props'
     if (!(Test-Path -LiteralPath $propsPath)) {
@@ -109,7 +117,7 @@ function Read-RemoteReleaseHistory([string]$TargetRepo) {
     $all=@()
     for($page=1;$page -le 100;$page++){
         $batch=@(Invoke-WithRetry -Description "Read release history page $page" -Action {
-            $json=& gh api "/repos/$TargetRepo/releases?per_page=100&page=$page"
+            $json=Invoke-Utf8Native { & gh api "/repos/$TargetRepo/releases?per_page=100&page=$page" }
             if($LASTEXITCODE -ne 0 -or !$json){throw 'GitHub release history query failed.'}
             $items=($json-join "`n")|ConvertFrom-Json
             if($null -ne $items){foreach($item in @($items)){if(!$item -or !$item.tag_name -or $item.draft -isnot [bool] -or $item.prerelease -isnot [bool]){throw 'Invalid release history response.'}}}
@@ -126,7 +134,7 @@ function Read-RemoteRelease([string]$TargetRepo,[string]$Tag,[long]$ReleaseId=0)
     # not guarantee immediate visibility through tag or release-list lookups.
     return Invoke-WithRetry -Description "Read release $Tag" -Action {
         if($ReleaseId -gt 0){
-            $json=& gh api "/repos/$TargetRepo/releases/$ReleaseId"
+            $json=Invoke-Utf8Native { & gh api "/repos/$TargetRepo/releases/$ReleaseId" }
             if($LASTEXITCODE -ne 0 -or !$json){throw 'GitHub release ID query failed.'}
             $release=($json -join "`n")|ConvertFrom-Json
             if($release.id -ne $ReleaseId){throw 'GitHub returned a different release ID.'}
@@ -216,19 +224,34 @@ function Assert-Preflight {
     }
     $existing=@($all|Where-Object{$_.tag_name -ceq $Tag})
     if($existing.Count -gt 1){throw 'Duplicate release tag in server response.'}
-    $hasDraft=$existing.Count -eq 1
+    $publishedCurrent=$existing.Count -eq 1 -and !$existing[0].draft -and !$existing[0].prerelease
+    $readOnlyRevalidation=[bool]($IsDryRun -and $publishedCurrent)
+    if($publishedCurrent -and !$IsDryRun){throw 'Published version is immutable; increase the version before production publication.'}
+    $hasDraft=$existing.Count -eq 1 -and !$publishedCurrent
     if($hasDraft){Assert-RemoteDraft $existing[0] $Tag $source.Commit $null}
     $remoteTag=Get-RemoteTagCommitSha -TargetRepo $TargetRepo -Tag $Tag -AllowQueryFailure:$IsDryRun
-    if($remoteTag -and $remoteTag -cne $source.Commit){throw 'Remote tag points to a different full commit SHA.'}
+    if($remoteTag -and $remoteTag -cne $source.Commit -and !$readOnlyRevalidation){throw 'Remote tag points to a different full commit SHA.'}
     $parts=($Version.Split('.')+@('0','0','0','0'))[0..3];$current=[version]($parts-join '.')
     $tags=if($verified){@($all|Where-Object{!$_.draft -and !$_.prerelease}|ForEach-Object{$_.tag_name})}else{@(& git -C $root tag -l 'v*')}
     foreach($publishedTag in $tags){
         if($publishedTag -notmatch '^[vV]?(\d+\.\d+(\.\d+)?(\.\d+)?)$'){continue}
         $remoteParts=($Matches[1].Split('.')+@('0','0','0','0'))[0..3]
-        if($current -le [version]($remoteParts-join '.')){throw "Version $Version is not newer than published/tagged version $publishedTag."}
+        $remoteVersion=[version]($remoteParts-join '.')
+        if($current -lt $remoteVersion -or ($current -eq $remoteVersion -and !$readOnlyRevalidation)){throw "Version $Version is not newer than published/tagged version $publishedTag."}
     }
+    if($readOnlyRevalidation){Write-Host '    Read-only revalidation of an already published version; production publication remains forbidden.' -ForegroundColor Yellow}
     if(!$source.Clean){Write-Warning 'Dirty source: DryRun only; artifacts cannot be used for production publishing.'}
-    return [pscustomobject]@{CommitSha=$source.Commit;HasExistingDraft=$hasDraft;RemoteVerified=$verified;SourceClean=$source.Clean}
+    return [pscustomobject]@{CommitSha=$source.Commit;HasExistingDraft=$hasDraft;RemoteVerified=$verified;SourceClean=$source.Clean;ReadOnlyRevalidation=$readOnlyRevalidation}
+}
+
+function Assert-ReleaseNotes([string]$Path,[string]$Version) {
+    if(!(Test-Path -LiteralPath $Path -PathType Leaf) -or (Get-Item -LiteralPath $Path).Length -gt 512KB){throw 'Missing or oversized candidate release notes.'}
+    $utf8=[Text.UTF8Encoding]::new($false,$true)
+    $notes=[IO.File]::ReadAllText($Path,$utf8)
+    if([string]::IsNullOrWhiteSpace($notes) -or $notes -match '[\x00-\x08\x0b\x0c\x0e-\x1f]'){throw 'Candidate release notes contain invalid text.'}
+    $curated=Join-Path $root "docs/release-v$Version.md"
+    if((Test-Path -LiteralPath $curated) -and $notes -cne [IO.File]::ReadAllText($curated,$utf8)){throw 'Candidate release notes differ from the reviewed UTF-8 source; regenerate the changelog.'}
+    return $notes
 }
 function Assert-LocalArtifacts {
     param([string]$AssetsDir, [string]$Version)
@@ -313,7 +336,7 @@ function Get-OrGenerateChangelog {
     Write-Host "    Previous release tag: $(if ($prevTag) { $prevTag } else { '(Initial Release)' })"
 
     $logRange = if ($prevTag) { "$prevTag..HEAD" } else { "HEAD" }
-    $commits = (& git -C $root log $logRange --pretty=format:"%H%x09%s%x09%an%x09%h" 2>$null)
+    $commits = Invoke-Utf8Native { & git -C $root log $logRange --pretty=format:"%H%x09%s%x09%an%x09%h" 2>$null }
 
     $features = @()
     $fixes = @()
@@ -463,7 +486,8 @@ function Write-StepSummary {
 
     $mark = { param($v) if ([bool]$v) { '[x]' } else { '[ ]' } }
 
-    [void]$sb.AppendLine("- $(&$mark ($Checklist.PreflightVerified)) Version format, master branch & monotonic increase verified")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.PreflightVerified)) Source/ref and authoritative release history checked under the selected publish/DryRun policy")
+    if($Checklist.ReadOnlyRevalidation){[void]$sb.AppendLine('- [x] Read-only revalidation of an existing release; this candidate is not authorized to overwrite that release')}
     [void]$sb.AppendLine("- $(&$mark ($Checklist.SolutionBuildVerified)) Full solution Release build verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ArtifactsCompiled)) Five packages (Lite x64, Lite ARM64, Lite-NET8 x64, Lite-NET8 ARM64, Legacy x64) compiled")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.LocalArtifactsVerified)) PE machine architecture (0x8664/0xaa64) & Legacy ZIP 13-file whitelist verified")
@@ -494,9 +518,11 @@ function Publish-ReleaseToGitHub {
     )
 
     Write-Host "==> [Release] Processing GitHub Release for $Tag (Commit: $CommitSha)..." -ForegroundColor Cyan
+    $expectedNotes=Assert-ReleaseNotes $ChangelogTarget $Version
+    $Checklist.ChangelogGenerated=$true
 
     if ($IsDryRun) {
-        $dryStatus=if($Checklist.PreflightVerified){'DRY_RUN_PASSED'}else{'DRY_RUN_LOCAL_ONLY_REMOTE_NOT_VERIFIED'}
+        $dryStatus=if(!$Checklist.PreflightVerified){'DRY_RUN_LOCAL_ONLY_REMOTE_NOT_VERIFIED'}elseif($Checklist.ReadOnlyRevalidation){'DRY_RUN_REVALIDATED_PUBLISHED_VERSION'}else{'DRY_RUN_PASSED'}
         Write-Host "    [DRY-RUN] Local candidate verified; remote preflight verified: $([bool]$Checklist.PreflightVerified)." -ForegroundColor Yellow
         Write-Host "    [DRY-RUN] Remote release creation and upload skipped due to DryRun flag." -ForegroundColor Yellow
         Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status $dryStatus -TargetRepo $TargetRepo -DurationStr $ElapsedStr -Checklist $Checklist
@@ -526,7 +552,7 @@ function Publish-ReleaseToGitHub {
         try {
             # Do not retry POST blindly: a lost response can otherwise create
             # multiple drafts. Recover through the bounded lookup below.
-            $json=& gh api --method POST "/repos/$TargetRepo/releases" -f "tag_name=$Tag" -f "target_commitish=$CommitSha" -f "name=$Tag" -F "body=@$ChangelogTarget" -F draft=true -F prerelease=false
+            $json=Invoke-Utf8Native { & gh api --method POST "/repos/$TargetRepo/releases" -f "tag_name=$Tag" -f "target_commitish=$CommitSha" -f "name=$Tag" -F "body=@$ChangelogTarget" -F draft=true -F prerelease=false }
             if($LASTEXITCODE -ne 0 -or !$json){throw 'Draft create response was unavailable.'}
             $created=($json -join "`n")|ConvertFrom-Json
             Assert-RemoteDraft $created $Tag $CommitSha $LocalAssets
@@ -692,6 +718,7 @@ function Publish-ReleaseToGitHub {
     $beforePromotion=Read-RemoteRelease $TargetRepo $Tag $releaseId
     Assert-RemoteDraft $beforePromotion $Tag $CommitSha $LocalAssets
     Assert-RemoteAssetMetadata $beforePromotion $LocalAssets
+    if($beforePromotion.body -cne $expectedNotes){throw 'Remote draft release notes differ from the reviewed UTF-8 source; publication stopped.'}
     Write-Host "    Promoting Draft Release to Official Public Latest Release..."
     $publishSuccess = $false
     try {
@@ -725,6 +752,7 @@ function Publish-ReleaseToGitHub {
         throw "Post-publish check failed: Release $Tag is marked as prerelease on GitHub!"
     }
     if($published.target_commitish -cne $CommitSha){throw 'Published release target differs from the validated full commit SHA.'}
+    if($published.body -cne $expectedNotes){throw 'Published release notes differ from the reviewed UTF-8 source.'}
     Assert-RemoteAssetMetadata $published $LocalAssets
 
     # Post-publish verification: 2. Confirm Latest pointer strictly (Issue 2)
@@ -732,7 +760,7 @@ function Publish-ReleaseToGitHub {
     $latest = $null
     try {
         $latest = Invoke-WithRetry -Description "Query /releases/latest endpoint" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
-            $json = & gh api "/repos/$TargetRepo/releases/latest"
+            $json = Invoke-Utf8Native { & gh api "/repos/$TargetRepo/releases/latest" }
             if ($LASTEXITCODE -ne 0 -or !$json) {
                 throw "Failed to query GitHub /releases/latest endpoint."
             }
@@ -744,10 +772,10 @@ function Publish-ReleaseToGitHub {
         throw "Release $Tag is published, but could not verify /releases/latest pointer on GitHub: $($_.Exception.Message)"
     }
 
-    if ($latest.tag_name -ne $Tag) {
+    if ($latest.tag_name -cne $Tag -or $latest.id -ne $releaseId) {
         Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_LATEST_MISMATCH" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
         Write-Host "    [Error] Latest release mismatch: Expected $Tag, but GitHub /releases/latest points to '$($latest.tag_name)'!" -ForegroundColor Red
-        throw "Latest release verification failed: Expected latest tag to be '$Tag', but GitHub reports '$($latest.tag_name)' is latest!"
+        throw "Latest release verification failed: expected $Tag (ID $releaseId), received $($latest.tag_name) (ID $($latest.id))."
     }
 
     Write-Host "    [OK] Confirmed $Tag is the active official Latest Release on GitHub." -ForegroundColor Green
@@ -780,6 +808,7 @@ $checklist = [ordered]@{
     RemoteAssetsVerified = $false
     DraftPromoted = $false
     LatestPointerVerified = $false
+    ReadOnlyRevalidation = $false
 }
 
 if ($SolutionBuildVerified -or $env:SOLUTION_BUILD_VERIFIED -eq 'true') { Write-Warning 'SolutionBuildVerified input is advisory only; the build receipt supplies the verified result.' }
@@ -810,6 +839,7 @@ if ($Stage -in @('Preflight', 'Publish', 'FullPipeline')) {
     $commitSha = $preflight.CommitSha
     $hasExistingDraft = $preflight.HasExistingDraft
     $checklist.PreflightVerified = $preflight.RemoteVerified
+    $checklist.ReadOnlyRevalidation = $preflight.ReadOnlyRevalidation
 } else {
     $commitSha = (& git -C $root rev-parse HEAD 2>$null)
 }
@@ -855,6 +885,7 @@ if ($Stage -in @('Publish', 'FullPipeline')) {
     }
     $receipt=Assert-BuildReceipt $OutputDirectory $version $commitSha $localAssets
     $checklist.SolutionBuildVerified=$receipt.solutionBuildVerified
+    $checklist.ArtifactsCompiled=$true
     $startTime.Stop()
     $elapsedStr = "$([Math]::Round($startTime.Elapsed.TotalSeconds, 1))s"
     Publish-ReleaseToGitHub -AssetsDir $assetsDir -ChangelogTarget $ChangelogPath -Version $version -Tag $tag -CommitSha $commitSha -LocalAssets $localAssets -TargetRepo $Repo -HasExistingDraft:$hasExistingDraft -IsDryRun:$DryRun -ElapsedStr $elapsedStr -Checklist $checklist

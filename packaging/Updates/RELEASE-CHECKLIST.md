@@ -42,7 +42,9 @@ $candidate = 'E:\releases\SonicRoute-v1.26-candidate-<commit>'
 .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage FullPipeline -SkipBuild -DryRun -OutputDirectory $candidate
 ```
 
-Dry Run 要求工作树 clean，且候选收据绑定当前完整 commit；它复用已经构建和本地验证的候选，不重新构建或上传。检查输出中的预检、本地资产验证、变更说明生成和汇总状态均通过。失败时保留候选，先解决具体原因；改变源码或版本后须用新候选目录重新走全流程。
+上述带 `-SkipBuild` 的本地命令要求工作树 clean，且候选收据绑定当前完整 commit；它复用已经构建和本地验证的候选，不重新构建或上传。Actions 的 Dry Run 则会先实际构建五包，再运行该命令。当前版本已经发布时，DryRun 允许在更新的源码上只读复验，汇总明确标记 `DRY_RUN_REVALIDATED_PUBLISHED_VERSION`；这不授权替换已经发布的标签、文件或版本，低于最新版本的请求仍拒绝。检查输出中的预检、本地资产验证、变更说明生成和汇总状态均通过。
+
+发布说明必须是有效 UTF-8，并与当前源码中同版本的人工维护 Markdown 一致；晋级前还会核对 GitHub 草稿的实际正文。不可只比较上传正文与生成文件、遗漏生成阶段已经发生的乱码。失败时保留候选，先解决具体原因；改变源码或版本后须用新候选目录重新走全流程。
 
 ## 正式发布
 
@@ -58,7 +60,9 @@ Dry Run 要求工作树 clean，且候选收据绑定当前完整 commit；它�
 
 ## CI 与权限边界
 
-CI 将只读验证与正式发布拆分为不同 job：只读验证负责一致性、Harness、构建及候选校验，不持有发布写权限；只有正式发布 job 在 master 且未选择 dry_run 时取得 Contents write 权限，并复验同一候选及收据。尚未实际运行的托管 CI 必须另记 NOT TESTED，不把本地 Harness 或 DryRun 通过视为托管 CI 已通过。
+Actions 默认勾选 Dry Run。正式发布必须明确取消勾选并选择 master；策略预检在构建前执行，错误分支明确失败。CI 将只读验证与正式发布拆分为不同 job：只读验证负责一致性、Harness、构建、三运行时检查及 NET10/NET8 更新助手进程/回滚检查，不持有发布写权限；只有正式发布 job 在 master 且未选择 dry_run 时取得 Contents write 权限，并复验同一候选及收据。Checkout 不持久保存凭据。尚未实际运行的托管 CI 必须另记 NOT TESTED，不把本地 Harness 或 DryRun 通过视为托管 CI 已通过。
+
+发布失败后使用 **Re-run failed jobs**，保留成功验证 job 的输出，发布 job 按该 job 输出的 artifact 名下载原候选。候选按验证 attempt 分名保存 14 天。**Re-run all jobs** 或重新 dispatch 会重建；不要把它们称为复用同一候选。验证中途失败时，能取得的资产、收据和检查结果进入单独的 failure artifact，仅用于诊断，不能拿它当正式候选；尚未生成有效收据的文件不得发布。
 
 ## 1.26 / 1.27 操作顺序
 
@@ -71,4 +75,4 @@ CI 将只读验证与正式发布拆分为不同 job：只读验证负责一致�
 5. 发布完成后确认 Release 页面为正式发布状态且资产齐全。失败则保留 Draft 和候选，针对同一 commit/资产排查及重试。
 6. 1.27 从新的 commit、新的版本号和全新的候选目录重新开始；不得把 1.26 候选或结果当作 1.27 验证。
 
-**本轮仅新增此操作说明；未执行人工正式发布步骤。**
+上述步骤用于后续新版本；同版本已公开时，正式发布必须被拒绝。只读复验不创建新 Release，也不提审 Microsoft Store。

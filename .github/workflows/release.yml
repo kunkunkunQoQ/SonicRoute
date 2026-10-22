@@ -7,7 +7,7 @@ on:
         description: 'Dry Run (validate, build and verify locally without publishing to GitHub)'
         required: false
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: release-publishing
@@ -16,72 +16,93 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: powershell
+
 jobs:
   validate:
     name: Build and validate candidate (read only)
     runs-on: windows-latest
-    if: inputs.dry_run || github.ref == 'refs/heads/master'
+    timeout-minutes: 35
+    outputs:
+      candidate_artifact: ${{ steps.candidate.outputs.artifact_name }}
 
     steps:
       - name: Select isolated candidate output
-        shell: powershell
+        id: candidate
         run: |
-          "CANDIDATE_DIRECTORY=$env:RUNNER_TEMP/sonicroute-candidate" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $utf8 = [Text.UTF8Encoding]::new($false)
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "CANDIDATE_DIRECTORY=$env:RUNNER_TEMP/sonicroute-candidate`n", $utf8)
+          [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "artifact_name=sonicroute-release-candidate-${{ github.run_attempt }}`n", $utf8)
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Check release policy before building
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage Preflight -Repo $env:TARGET_REPOSITORY -DryRun:($env:DRY_RUN -eq 'true')
 
       - name: Setup .NET SDKs
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
             10.0.x
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
+          package-manager-cache: false
 
       - name: Verify README consistency
         run: node docs/readme/generate.cjs --check
 
       - name: Build all five portable packages and solution
-        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           .\packaging\Updates\Build-PortableRelease.ps1 -OutputDirectory $env:CANDIDATE_DIRECTORY
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test actual release functions against candidate bytes
-        shell: powershell
         run: |
           .\packaging\Updates\Test-ReleasePipelineHarness.ps1 -AssetsDirectory "$env:CANDIDATE_DIRECTORY/assets" -ReportPath "$env:CANDIDATE_DIRECTORY/harness-results.json"
 
       - name: Verify client runtime isolation and actual package staging
-        shell: powershell
         run: |
           dotnet build packaging/Updates/tests/RuntimeChecks/Checks.csproj -c Release
           if ($LASTEXITCODE -ne 0) { throw 'Client validation build failed.' }
           foreach ($tfm in @('net10.0-windows', 'net8.0-windows', 'net48')) {
-            & "packaging/Updates/tests/RuntimeChecks/bin/Release/$tfm/Checks.exe" "$env:CANDIDATE_DIRECTORY/assets" "${{ runner.temp }}/client-validation/$tfm"
+            & "packaging/Updates/tests/RuntimeChecks/bin/Release/$tfm/Checks.exe" "$env:CANDIDATE_DIRECTORY/assets" "$env:RUNNER_TEMP/client-validation/$tfm"
             if ($LASTEXITCODE -ne 0) { throw "Client validation failed: $tfm" }
           }
 
+      - name: Verify actual worker processes and rollback
+        run: |
+          .\packaging\Updates\tests\Run-WorkerChecks.ps1 -AssetsDirectory "$env:CANDIDATE_DIRECTORY/assets" -OutputDirectory "$env:RUNNER_TEMP/worker-validation"
+
       - name: Full dry run without write credentials
-        shell: powershell
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
         run: |
           $ErrorActionPreference = 'Stop'
-          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo "${{ github.repository }}" -OutputDirectory $env:CANDIDATE_DIRECTORY -SkipBuild -DryRun
+          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Repo $env:TARGET_REPOSITORY -OutputDirectory $env:CANDIDATE_DIRECTORY -SkipBuild -DryRun
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Preserve validated candidate and receipt
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: sonicroute-release-candidate
+          name: ${{ steps.candidate.outputs.artifact_name }}
+          retention-days: 14
           path: |
             ${{ env.CANDIDATE_DIRECTORY }}/assets/*
             ${{ env.CANDIDATE_DIRECTORY }}/build-receipt.json
@@ -89,25 +110,57 @@ jobs:
             ${{ env.CANDIDATE_DIRECTORY }}/harness-results.json
           if-no-files-found: error
 
+      - name: Download candidate into a separate directory
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.candidate.outputs.artifact_name }}
+          path: ${{ runner.temp }}/candidate-roundtrip
+
+      - name: Revalidate downloaded candidate without write credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage Publish -DryRun -Repo $env:TARGET_REPOSITORY -OutputDirectory "$env:RUNNER_TEMP/candidate-roundtrip"
+
+      - name: Retain validation failures for diagnosis
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sonicroute-validation-failure-${{ github.run_attempt }}
+          retention-days: 14
+          path: |
+            ${{ env.CANDIDATE_DIRECTORY }}/assets/*
+            ${{ env.CANDIDATE_DIRECTORY }}/build-receipt.json
+            ${{ env.CANDIDATE_DIRECTORY }}/CHANGELOG.md
+            ${{ env.CANDIDATE_DIRECTORY }}/harness-results.json
+            ${{ runner.temp }}/candidate-roundtrip/**
+            ${{ runner.temp }}/client-validation/**/result.json
+            ${{ runner.temp }}/client-validation/**/failure.txt
+            ${{ runner.temp }}/worker-validation/**/results.json
+          if-no-files-found: warn
+
   publish:
     name: Publish exact validated candidate
     needs: validate
     if: ${{ !inputs.dry_run && github.ref == 'refs/heads/master' }}
     runs-on: windows-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.sha }}
-      - uses: actions/download-artifact@v4
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
         with:
-          name: sonicroute-release-candidate
+          name: ${{ needs.validate.outputs.candidate_artifact }}
           path: ${{ runner.temp }}/sonicroute-candidate
       - name: Revalidate source, receipt, bytes and remote state before publishing
-        shell: powershell
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPOSITORY: ${{ github.repository }}
         run: |
-          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage Publish -Repo "${{ github.repository }}" -OutputDirectory "${{ runner.temp }}/sonicroute-candidate"
+          .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage Publish -Repo $env:TARGET_REPOSITORY -OutputDirectory "$env:RUNNER_TEMP/sonicroute-candidate"

@@ -10,7 +10,7 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
 
 1. Open GitHub repository → **Actions** → select **Release** workflow.
 2. Click **Run workflow** (branch: `master`).
-3. (Optional) Check **Dry Run** to simulate all preflight checks, all five package builds, and local validation without publishing or modifying GitHub releases.
+3. **Dry Run is checked by default**. It actually builds all five packages and runs the checks, without changing Releases. An already published current version can be revalidated from a later commit; this never authorizes overwriting that release. To publish a new version, increase `Version.props`, select `master` and explicitly uncheck Dry Run.
 4. The workflow automatically:
    - Reads the target release version from `build/Version.props` (e.g. `1.25` → `v1.25`).
    - Asserts preflight conditions (strictly `master` branch, commit SHA binding, monotonic version increase against remote releases and local tags, absence of conflicting published releases).
@@ -19,6 +19,7 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
    - Generates release notes: prioritizes curated `docs/release-v<version>.md` if maintained, or automatically extracts and groups conventional commits and PRs since the previous official release tag.
    - Creates a **Draft Release** pinned to the validated commit SHA and uploads all 7 assets.
    - Performs **Remote Cryptographic Re-verification**: re-queries the GitHub API for asset counts and sizes, downloads each asset back to an isolated temporary sandbox, and re-computes its SHA-256 hash locally.
+   - Compares candidate notes with the reviewed UTF-8 Markdown, and compares the remote draft text again before publication. Native JSON/git output is decoded as UTF-8 on Windows PowerShell 5.
    - Promotes the draft to an official public **Latest Release** (`prerelease: false`, `latest: true`).
    - Generates a full markdown report into GitHub Actions Step Summary.
 
@@ -29,12 +30,19 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
 - **Stable Draft Identity**: Draft creation retains the API response's release ID. Subsequent reads, edits, uploads, downloads and promotion use IDs, rather than assuming the new draft is immediately visible through its tag or the release list. Every edit explicitly preserves the tag and full target commit. A lost create response triggers bounded discovery, never a blind duplicate create; unresolved discovery stops safely with the draft unpublished.
 - Reuse requires the exact full commit SHA and a known asset set. Unknown assets are retained and cause an abort. Seven-file PE, runtime, archive contents, manifest, hashes and the clean-source receipt are checked again before production publication; a command-line success flag cannot substitute for the receipt.
 - **Published Immutability**: If an official (non-draft) release already exists for `v<version>`, the pipeline immediately aborts to prevent overwriting or deleting published artifacts.
+- The immutable-version rule applies to production publication. DryRun may revalidate the current published version without modifying its tag or assets; summaries identify this as `DRY_RUN_REVALIDATED_PUBLISHED_VERSION`. Older versions still fail the downgrade guard.
+- Release policy is checked before compilation. A production request from a non-master branch fails explicitly instead of silently skipping all jobs. Checkout credentials are not persisted; the write token is supplied only to the publish step.
+- Candidate artifacts are named per validation attempt, and the publish job downloads the exact name returned by that successful job. **Re-run failed jobs** after a publish failure to reuse the same validated bytes; **Re-run all jobs** or a new dispatch rebuilds them and is not an identical-candidate retry.
+- Validation also downloads its uploaded candidate into a fresh directory and runs the actual publish-stage checks in DryRun mode. This verifies artifact layout, source-bound receipt, seven files and reviewed notes without granting release write permission.
+- On validation failure, available candidate files and check results are retained as a separate diagnostic artifact for 14 days. Diagnostic artifacts are never publication inputs. No valid receipt means no publishable candidate.
 - **Manual Verification / Dry-Run**: Run locally or in CI at any time using:
   ```powershell
   ./packaging/Updates/Invoke-ReleasePipeline.ps1 -DryRun
   ```
 
 `Test-ReleasePipelineHarness.ps1 -AssetsDirectory <candidate>/assets` exercises actual release functions against real binaries; git/gh, binary-download and retry-delay boundaries are simulated and make no network changes. It retains malformed fixtures, results and simulated publication summaries under `build-artifacts`. The production download helper copies native stdout as bytes, avoiding PowerShell 5 text redirection corruption. Without an asset directory the harness builds a fresh five-package candidate once. Runtime isolation/staging tests are in `tests/RuntimeChecks` (net8/net10/net48); transactional worker tests in `tests/WorkerChecks` use locally built fixture executables and real filesystem/process operations. They are not evidence of an installed Store update, an ARM64 run, or a NET8-only OS.
+
+CI runs RuntimeChecks for all three runtimes and the existing worker process/rollback checks for NET10 and NET8 through `tests/Run-WorkerChecks.ps1`. Worker fixtures use isolated directories and processes, not normal application/audio sessions. Store submission remains a separate operation.
 
 ---
 

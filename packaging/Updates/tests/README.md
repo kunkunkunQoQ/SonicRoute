@@ -28,6 +28,14 @@ Each target writes `result.json` on success or `failure.txt` on failure under it
 
 ## WorkerChecks
 
+CI 和本地可共用入口，自动按当前版本构建 NET10/NET8 的旧、新单文件测试替身并运行既有进程/回滚用例：
+
+```powershell
+.\packaging\Updates\tests\Run-WorkerChecks.ps1 -AssetsDirectory E:\releases\SonicRoute-v1.26\assets -OutputDirectory E:\release-checks\worker-new-run
+```
+
+输出目录必须尚不存在，可用 `-DotnetPath` 指定稳定 .NET 10 SDK。旧替身版本为 1.24、新替身版本取自 `Version.props`；它们均不是历史正式客户端。下方命令用于逐运行时手动复现。
+
 WorkerChecks has 33 scenario groups using real temporary files and child processes plus HTTP fault injection. Publish the same fixture source twice as framework-dependent single-file executables: an old 1.24 fixture and a new 1.26 fixture. Both must have the `SonicRoute Lite NET8` assembly title. The 1.24 fixture is a test fixture; it is not an official historical client. The harness runs the new fixture as its driver and uses the real NET8 x64 candidate EXE as the replacement payload. It makes one real GitHub latest-release metadata request; the injected HTTP failure cases use the in-memory test handler.
 
 ```powershell
