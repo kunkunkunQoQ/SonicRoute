@@ -363,9 +363,6 @@
         </Style>
 
         <!-- Slider（轨道填充=强调色，拇指=强调色） -->
-        <ControlTemplate x:Key="EmptySliderRepeatTemplate" TargetType="RepeatButton">
-            <Border Background="Transparent"/>
-        </ControlTemplate>
         <Style TargetType="Slider">
             <Setter Property="Height" Value="32"/>
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
@@ -388,8 +385,13 @@
                                     </RepeatButton>
                                 </Track.DecreaseRepeatButton>
                                 <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False"
-                                                  Template="{StaticResource EmptySliderRepeatTemplate}"/>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
                                 </Track.IncreaseRepeatButton>
                                 <Track.Thumb>
                                     <Thumb Width="28">
@@ -473,10 +475,12 @@
                     <Grid>
                         <Border Background="{TemplateBinding Background}" Margin="0,6,12,6"/>
                         <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
-                            <Track.DecreaseRepeatButton><RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False"
-                                Template="{StaticResource EmptySliderRepeatTemplate}"/></Track.DecreaseRepeatButton>
-                            <Track.IncreaseRepeatButton><RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False"
-                                Template="{StaticResource EmptySliderRepeatTemplate}"/></Track.IncreaseRepeatButton>
+                            <Track.DecreaseRepeatButton><RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
+                                <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                            </RepeatButton></Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton><RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
+                                <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                            </RepeatButton></Track.IncreaseRepeatButton>
                             <Track.Thumb><Thumb Width="32" Height="12">
                                 <Thumb.Template><ControlTemplate TargetType="Thumb">
                                     <Grid Background="Transparent"><Path Data="M8,0 L0,6 L8,12 Z" Width="8" Height="12" HorizontalAlignment="Right"

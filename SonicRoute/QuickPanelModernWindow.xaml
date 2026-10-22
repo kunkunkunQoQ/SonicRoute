@@ -101,10 +101,12 @@
                                     Margin="14,0" Background="{DynamicResource Theme.AccentPeak}"
                                     RenderTransformOrigin="0,0.5" IsHitTestVisible="False" Visibility="Hidden"/>
                             <Track x:Name="PART_Track">
-                                <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Focusable="False" IsTabStop="False"
-                                    Template="{StaticResource EmptySliderRepeatTemplate}"/></Track.DecreaseRepeatButton>
-                                <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False"
-                                    Template="{StaticResource EmptySliderRepeatTemplate}"/></Track.IncreaseRepeatButton>
+                                <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Focusable="False" IsTabStop="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton></Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False">
+                                    <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+                                </RepeatButton></Track.IncreaseRepeatButton>
                                 <Track.Thumb>
                             <Thumb x:Name="PART_Thumb" Width="28"
                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Slider}}">
