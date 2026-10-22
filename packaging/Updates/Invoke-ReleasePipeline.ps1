@@ -121,13 +121,43 @@ function Read-RemoteReleaseHistory([string]$TargetRepo) {
     throw 'Release history exceeds the bounded pagination limit.'
 }
 
-function Read-RemoteRelease([string]$TargetRepo,[string]$Tag) {
-    # Newly created drafts may not have a Git tag yet, so /releases/tags/{tag}
-    # returns 404. Reuse the authenticated, bounded history lookup for both states.
-    $matches=@(Read-RemoteReleaseHistory $TargetRepo|Where-Object{$_.tag_name -ceq $Tag})
-    if($matches.Count -gt 1){throw 'Duplicate release tag in server response.'}
-    if($matches.Count -ne 1){throw "GitHub release query failed: $Tag was not found."}
-    return $matches[0]
+function Read-RemoteRelease([string]$TargetRepo,[string]$Tag,[long]$ReleaseId=0) {
+    # Bind all post-create operations to the server's ID. A successful create does
+    # not guarantee immediate visibility through tag or release-list lookups.
+    return Invoke-WithRetry -Description "Read release $Tag" -Action {
+        if($ReleaseId -gt 0){
+            $json=& gh api "/repos/$TargetRepo/releases/$ReleaseId"
+            if($LASTEXITCODE -ne 0 -or !$json){throw 'GitHub release ID query failed.'}
+            $release=($json -join "`n")|ConvertFrom-Json
+            if($release.id -ne $ReleaseId){throw 'GitHub returned a different release ID.'}
+            return $release
+        }
+        $found=@(Read-RemoteReleaseHistory $TargetRepo|Where-Object{$_.tag_name -ceq $Tag})
+        if($found.Count -gt 1){throw 'Duplicate release tag in server response.'}
+        if($found.Count -ne 1){throw "GitHub release query failed: $Tag was not found."}
+        return $found[0]
+    }
+}
+
+function Save-RemoteReleaseAsset([string]$TargetRepo,[long]$AssetId,[string]$Destination) {
+    if($TargetRepo -cnotmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' -or $AssetId -le 0){throw 'Invalid asset download identity.'}
+    # PowerShell 5 redirects native stdout as text. Copy the gh binary stream
+    # directly, retaining gh's authentication and redirect handling.
+    $start=[Diagnostics.ProcessStartInfo]::new((Get-Command gh -CommandType Application).Source,
+        "api /repos/$TargetRepo/releases/assets/$AssetId -H `"Accept: application/octet-stream`"")
+    $start.UseShellExecute=$false;$start.CreateNoWindow=$true
+    $start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+    $process=[Diagnostics.Process]::Start($start)
+    try{
+        $errors=$process.StandardError.ReadToEndAsync()
+        $file=[IO.File]::Open($Destination,[IO.FileMode]::Create,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try{$process.StandardOutput.BaseStream.CopyTo($file)}finally{$file.Dispose()}
+        $process.WaitForExit();$null=$errors.GetAwaiter().GetResult()
+        if($process.ExitCode -ne 0){throw 'GitHub release asset download failed.'}
+    }finally{
+        if(!$process.HasExited){$process.Kill();$process.WaitForExit()}
+        $process.Dispose()
+    }
 }
 
 function Assert-RemoteDraft($Release,[string]$Tag,[string]$CommitSha,$LocalAssets) {
@@ -477,45 +507,44 @@ function Publish-ReleaseToGitHub {
         if((Get-Item -LiteralPath $asset.Path).Length -ne $asset.Size -or (Get-FileHash -LiteralPath $asset.Path).Hash -ne $asset.Hash){throw 'Local artifact changed after validation; no remote mutation was attempted.'}
     }
 
-    # Phase B: Create or Update Draft Release with retry and explicit prerelease=false
+    # Phase B: create once, retain the returned ID, and always preserve tag identity.
+    $releaseId=0L
     if ($HasExistingDraft) {
         $beforeEdit = Read-RemoteRelease $TargetRepo $Tag
         Assert-RemoteDraft $beforeEdit $Tag $CommitSha $LocalAssets
+        $releaseId=[long]$beforeEdit.id
+        if($releaseId -le 0){throw 'Draft has no valid release ID.'}
         Write-Host "    Updating existing Draft Release for $Tag on GitHub..."
         Invoke-WithRetry -Description "Update existing draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
-            & gh release edit $Tag --repo $TargetRepo --title $Tag --notes-file $ChangelogTarget --target $CommitSha --prerelease=false
+            & gh api --method PATCH "/repos/$TargetRepo/releases/$releaseId" -f "tag_name=$Tag" -f "target_commitish=$CommitSha" -f "name=$Tag" -F "body=@$ChangelogTarget" -F draft=true -F prerelease=false | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to update existing draft release $Tag on GitHub!"
             }
         }
     } else {
         Write-Host "    Creating Draft Release for $Tag on GitHub..."
-        $draftCreated = $false
         try {
-            $draftCreated = [bool](Invoke-WithRetry -Description "Create draft release $Tag" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
-                & gh release create $Tag --repo $TargetRepo --target $CommitSha --title $Tag --notes-file $ChangelogTarget --draft --prerelease=false
-                if ($LASTEXITCODE -ne 0) {
-                    throw "gh release create returned exit code $LASTEXITCODE"
-                }
-                return $true
-            })
+            # Do not retry POST blindly: a lost response can otherwise create
+            # multiple drafts. Recover through the bounded lookup below.
+            $json=& gh api --method POST "/repos/$TargetRepo/releases" -f "tag_name=$Tag" -f "target_commitish=$CommitSha" -f "name=$Tag" -F "body=@$ChangelogTarget" -F draft=true -F prerelease=false
+            if($LASTEXITCODE -ne 0 -or !$json){throw 'Draft create response was unavailable.'}
+            $created=($json -join "`n")|ConvertFrom-Json
+            Assert-RemoteDraft $created $Tag $CommitSha $LocalAssets
+            $releaseId=[long]$created.id
+            if($releaseId -le 0){throw 'Draft create response has no valid release ID.'}
         } catch {
             Write-Warning "Draft creation call reported error: $($_.Exception.Message)"
-        }
-
-        if (!$draftCreated) {
-            # Idempotency check: in case network response was lost but draft was created on GitHub
-            Write-Warning "Draft creation reported non-zero or error; checking if draft already exists on remote..."
             $checkDraft = Read-RemoteRelease $TargetRepo $Tag
             Assert-RemoteDraft $checkDraft $Tag $CommitSha $LocalAssets
+            $releaseId=[long]$checkDraft.id
+            if($releaseId -le 0){throw 'Recovered draft has no valid release ID.'}
             Write-Host '    [Recovered] Matching draft exists despite the lost create response.' -ForegroundColor Yellow
-            $draftCreated = $true
         }
     }
     $Checklist.DraftCreated = $true
 
     # Query current draft state to check existing remote assets and verify target commit
-    $draftStatus = Read-RemoteRelease $TargetRepo $Tag
+    $draftStatus = Read-RemoteRelease $TargetRepo $Tag $releaseId
     Assert-RemoteDraft $draftStatus $Tag $CommitSha $LocalAssets
     $existingTagSha = Get-RemoteTagCommitSha -TargetRepo $TargetRepo -Tag $Tag -AllowQueryFailure:$false
     if ($existingTagSha) {
@@ -543,7 +572,7 @@ function Publish-ReleaseToGitHub {
     New-Item -ItemType Directory -Path $checkTempDir -Force | Out-Null
     try {
         foreach ($assetItem in $LocalAssets.Values) {
-            Assert-RemoteDraft (Read-RemoteRelease $TargetRepo $Tag) $Tag $CommitSha $LocalAssets
+            Assert-RemoteDraft (Read-RemoteRelease $TargetRepo $Tag $releaseId) $Tag $CommitSha $LocalAssets
             $filePath = $assetItem.Path
             $fileName = $assetItem.Name
             $localSize = $assetItem.Size
@@ -556,9 +585,8 @@ function Publish-ReleaseToGitHub {
                 if ($rem.size -eq $localSize -and $rem.state -eq 'uploaded') {
                     # Verify remote hash by downloading to test if identical
                     Write-Host "    Checking existing remote asset $fileName on draft..."
-                    & gh release download $Tag --repo $TargetRepo --pattern $fileName --dir $checkTempDir --clobber 2>$null
-                    if($LASTEXITCODE -ne 0){throw 'Could not verify an existing draft asset; upload stopped.'}
                     $downFile = Join-Path $checkTempDir $fileName
+                    Save-RemoteReleaseAsset $TargetRepo ([long]$rem.id) $downFile
                     if (Test-Path -LiteralPath $downFile) {
                         $downHash = (Get-FileHash -LiteralPath $downFile -Algorithm SHA256).Hash.ToLowerInvariant()
                         Remove-Item -LiteralPath $downFile -Force -ErrorAction SilentlyContinue
@@ -575,7 +603,20 @@ function Publish-ReleaseToGitHub {
             if ($needsUpload) {
                 Write-Host "    Uploading $fileName..."
                 Invoke-WithRetry -Description "Upload asset $fileName" -MaxAttempts 3 -InitialDelaySeconds 3 -Action {
-                    & gh release upload $Tag $filePath --repo $TargetRepo --clobber
+                    $current=Read-RemoteRelease $TargetRepo $Tag $releaseId
+                    Assert-RemoteDraft $current $Tag $CommitSha $LocalAssets
+                    $sameName=@($current.assets|Where-Object{$_.name -ceq $fileName})
+                    if($sameName.Count -eq 1){
+                        $present=$sameName[0]
+                        # A lost upload response is safe to reuse only after the
+                        # final independent download; never blindly POST twice.
+                        if($present.size -eq $localSize -and $present.state -ceq 'uploaded' -and $present.digest -ceq ('sha256:'+$localHash)){return}
+                        if([long]$present.id -le 0){throw 'Invalid existing asset ID.'}
+                        & gh api --method DELETE "/repos/$TargetRepo/releases/assets/$($present.id)" | Out-Null
+                        if($LASTEXITCODE -ne 0){throw 'Failed to replace a known draft asset.'}
+                    }
+                    $encoded=[Uri]::EscapeDataString($fileName)
+                    & gh api --method POST "https://uploads.github.com/repos/$TargetRepo/releases/$releaseId/assets?name=$encoded" --input $filePath -H 'Content-Type: application/octet-stream' | Out-Null
                     if ($LASTEXITCODE -ne 0) {
                         throw "Failed to upload asset $fileName to draft release $Tag!"
                     }
@@ -591,7 +632,7 @@ function Publish-ReleaseToGitHub {
 
     # Phase C: Remote Verification
     Write-Host "    Verifying remote release and assets on GitHub..."
-    $remoteRelease = Read-RemoteRelease $TargetRepo $Tag
+    $remoteRelease = Read-RemoteRelease $TargetRepo $Tag $releaseId
 
     if (!$remoteRelease) {
         throw "Remote release object is null after query."
@@ -625,10 +666,7 @@ function Publish-ReleaseToGitHub {
             # Independent download & cryptographic verification with retry
             Write-Host "    Downloading and verifying SHA-256 for $($name) from GitHub..."
             Invoke-WithRetry -Description "Download asset $name for verification" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
-                & gh release download $Tag --repo $TargetRepo --pattern $name --dir $verifyTempDir --clobber
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Failed to download asset $($name) from GitHub release for verification!"
-                }
+                Save-RemoteReleaseAsset $TargetRepo ([long]$rAsset.id) (Join-Path $verifyTempDir $name)
             }
 
             $downloadedFilePath = Join-Path $verifyTempDir $name
@@ -651,13 +689,13 @@ function Publish-ReleaseToGitHub {
     $Checklist.RemoteAssetsVerified = $true
 
     # Phase D: Auto-Publish with network disconnect / response loss recovery
-    $beforePromotion=Read-RemoteRelease $TargetRepo $Tag
+    $beforePromotion=Read-RemoteRelease $TargetRepo $Tag $releaseId
     Assert-RemoteDraft $beforePromotion $Tag $CommitSha $LocalAssets
     Assert-RemoteAssetMetadata $beforePromotion $LocalAssets
     Write-Host "    Promoting Draft Release to Official Public Latest Release..."
     $publishSuccess = $false
     try {
-        & gh release edit $Tag --repo $TargetRepo --draft=false --prerelease=false --latest
+        & gh api --method PATCH "/repos/$TargetRepo/releases/$releaseId" -f "tag_name=$Tag" -f "target_commitish=$CommitSha" -F draft=false -F prerelease=false -f make_latest=true | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $publishSuccess = $true
         }
@@ -667,7 +705,7 @@ function Publish-ReleaseToGitHub {
         Write-Warning "Publish command encountered a warning or non-zero exit; querying remote release state to verify if update took effect..."
         $queryAfter = $null
         try {
-            $queryAfter = Read-RemoteRelease $TargetRepo $Tag
+            $queryAfter = Read-RemoteRelease $TargetRepo $Tag $releaseId
         } catch { }
         if ($queryAfter -and !$queryAfter.draft -and !$queryAfter.prerelease) {
             Write-Host "    [Recovered] Release $Tag is confirmed published on GitHub despite network response anomaly!" -ForegroundColor Yellow
@@ -679,7 +717,7 @@ function Publish-ReleaseToGitHub {
     $Checklist.DraftPromoted = $true
 
     # Post-publish verification: 1. Confirm release public status
-    $published = Read-RemoteRelease $TargetRepo $Tag
+    $published = Read-RemoteRelease $TargetRepo $Tag $releaseId
     if ($published.draft) {
         throw "Post-publish check failed: Release $Tag is still marked as draft on GitHub!"
     }

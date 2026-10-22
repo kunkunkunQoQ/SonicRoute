@@ -25,7 +25,8 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
 ### Safeguards and Failure Recovery
 
 - **Zero Unverified Releases**: Releases remain in draft state until all 7 assets pass remote download and cryptographic hash validation.
-- **Idempotent Draft Takeover**: If a previous run failed during network upload or verification, re-running on the same commit safely updates the existing draft release and overwrites assets (`--clobber`) without tag collisions.
+- **Idempotent Draft Takeover**: If a previous run failed during network upload or verification, re-running on the same commit safely updates the existing draft. Matching files are reused; a changed, known file is replaced by its exact asset ID. Unknown files are never removed.
+- **Stable Draft Identity**: Draft creation retains the API response's release ID. Subsequent reads, edits, uploads, downloads and promotion use IDs, rather than assuming the new draft is immediately visible through its tag or the release list. Every edit explicitly preserves the tag and full target commit. A lost create response triggers bounded discovery, never a blind duplicate create; unresolved discovery stops safely with the draft unpublished.
 - Reuse requires the exact full commit SHA and a known asset set. Unknown assets are retained and cause an abort. Seven-file PE, runtime, archive contents, manifest, hashes and the clean-source receipt are checked again before production publication; a command-line success flag cannot substitute for the receipt.
 - **Published Immutability**: If an official (non-draft) release already exists for `v<version>`, the pipeline immediately aborts to prevent overwriting or deleting published artifacts.
 - **Manual Verification / Dry-Run**: Run locally or in CI at any time using:
@@ -33,7 +34,7 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
   ./packaging/Updates/Invoke-ReleasePipeline.ps1 -DryRun
   ```
 
-`Test-ReleasePipelineHarness.ps1 -AssetsDirectory <candidate>/assets` exercises actual release functions against real binaries; git/gh boundaries are simulated and make no network changes. It retains malformed fixtures, results and simulated publication summaries under `build-artifacts`. Without an asset directory it builds a fresh five-package candidate once. Runtime isolation/staging tests are in `tests/RuntimeChecks` (net8/net10/net48); transactional worker tests in `tests/WorkerChecks` use locally built fixture executables and real filesystem/process operations. They are not evidence of an installed Store update, an ARM64 run, or a NET8-only OS.
+`Test-ReleasePipelineHarness.ps1 -AssetsDirectory <candidate>/assets` exercises actual release functions against real binaries; git/gh, binary-download and retry-delay boundaries are simulated and make no network changes. It retains malformed fixtures, results and simulated publication summaries under `build-artifacts`. The production download helper copies native stdout as bytes, avoiding PowerShell 5 text redirection corruption. Without an asset directory the harness builds a fresh five-package candidate once. Runtime isolation/staging tests are in `tests/RuntimeChecks` (net8/net10/net48); transactional worker tests in `tests/WorkerChecks` use locally built fixture executables and real filesystem/process operations. They are not evidence of an installed Store update, an ARM64 run, or a NET8-only OS.
 
 ---
 

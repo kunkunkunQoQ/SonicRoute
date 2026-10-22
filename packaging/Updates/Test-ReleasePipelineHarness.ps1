@@ -1,4 +1,4 @@
-<# Exercises real release functions and real packages. Only git/gh and retry delays are substituted.
+<# Exercises real release functions and real packages. Only git/gh, binary download and retry delays are substituted.
    Never writes to the network. Retains fixtures and a machine-readable report. #>
 [CmdletBinding()]
 param([string]$AssetsDirectory,[string]$ReportPath)
@@ -18,7 +18,8 @@ $env:GITHUB_STEP_SUMMARY=Join-Path $harnessRoot 'summaries.md'
 function Reset-Mock {
     $script:mock=@{Head=('a'*40);Tree=('c'*40);Branch='master';Dirty=$false;RemoteTag=$null;History=@(@{tag_name='v1.24';draft=$false;prerelease=$false});
         Draft=$true;Exists=$false;Target=('a'*40);Assets=@{};Calls=[Collections.Generic.List[string]]::new();Mutations=0;Uploads=0;
-        ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false;TagApiUnavailable=$false}
+        ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false;TagApiUnavailable=$false;
+        HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100}
     $global:LASTEXITCODE=0
 }
 function git {
@@ -32,17 +33,48 @@ function git {
     throw "Unimplemented git boundary: $line"
 }
 function Remote-Object {
-    $assets=@($mock.Assets.Values|ForEach-Object{@{name=$_.Name;size=$_.Size;state='uploaded';digest=$(if($mock.NoDigest){$null}else{'sha256:'+$_.Hash})}})
-    return @{tag_name="v$version";draft=$mock.Draft;prerelease=$false;target_commitish=$mock.Target;assets=$assets;html_url='https://example.invalid/release'}
+    $assets=@($mock.Assets.Values|ForEach-Object{@{id=$_.Id;name=$_.Name;size=$_.Size;state='uploaded';digest=$(if($mock.NoDigest){$null}else{'sha256:'+$_.Hash})}})
+    return @{id=12345;tag_name="v$version";draft=$mock.Draft;prerelease=$false;target_commitish=$mock.Target;assets=$assets;html_url='https://example.invalid/release'}
 }
 function gh {
     $a=@($args);$line=$a -join ' ';$mock.Calls.Add($line);$global:LASTEXITCODE=0
     if($a[0] -eq 'api'){
         if($mock.ApiFailure){$global:LASTEXITCODE=1;return}
+        if($a -contains '--method'){
+            $method=$a[([array]::IndexOf($a,'--method')+1)]
+            $mock.Mutations++
+            if($method -eq 'POST' -and $line -match '/releases -f '){
+                Require ($a -contains "tag_name=v$version" -and $a -contains 'draft=true' -and $a -contains 'prerelease=false') 'Create lost explicit draft identity'
+                $mock.Exists=$true
+                if($mock.CreateLost){$global:LASTEXITCODE=1;return}
+                return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
+            }
+            if($method -eq 'PATCH' -and $line -match '/releases/12345 '){
+                Require ($a -contains "tag_name=v$version" -and $a -contains "target_commitish=$($mock.Target)" -and $a -contains 'prerelease=false') 'Edit lost tag/target identity'
+                if($a -contains 'draft=false'){$mock.Draft=$false;if($mock.PublishLost){$global:LASTEXITCODE=1}}
+                return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
+            }
+            if($method -eq 'POST' -and $line -match 'https://uploads.github.com/repos/kunkunkunQoQ/SonicRoute/releases/12345/assets\?name='){
+                $mock.Uploads++;if($mock.UploadFailures -gt 0){$mock.UploadFailures--;$global:LASTEXITCODE=1;return}
+                $path=$a[([array]::IndexOf($a,'--input')+1)];$name=[IO.Path]::GetFileName($path)
+                Require (!$mock.Assets.ContainsKey($name)) 'Repeated POST would create duplicate assets'
+                $mock.NextAssetId++
+                $mock.Assets[$name]=@{Id=$mock.NextAssetId;Name=$name;Path=$path;Size=(Get-Item -LiteralPath $path).Length;Hash=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}
+                if($mock.PromoteEarly){$mock.Draft=$false}
+                if($mock.UploadLost){$mock.UploadLost=$false;$global:LASTEXITCODE=1}
+                return '{}'
+            }
+            if($method -eq 'DELETE' -and $line -match '/releases/assets/(\d+)$'){
+                $id=[long]$Matches[1];$asset=@($mock.Assets.Values|Where-Object{$_.Id -eq $id})
+                Require ($asset.Count -eq 1) 'Unknown asset ID deleted';$mock.Assets.Remove($asset[0].Name);return
+            }
+            throw "Unimplemented mutation: $line"
+        }
         if($a[1] -match '/releases\?per_page=100&page=(\d+)$'){
             $pageNumber=[int]$Matches[1]
             $history=@($mock.History)
-            if($mock.Exists){$history=@(Remote-Object)+$history}
+            if($mock.Exists -and !$mock.HiddenDraftHistory -and $mock.HistoryLag -le 0){$history=@(Remote-Object)+$history}
+            if($mock.HistoryLag -gt 0){$mock.HistoryLag--}
             return (ConvertTo-Json -InputObject @($history|Select-Object -Skip (($pageNumber-1)*100) -First 100) -Depth 8 -Compress)
         }
         if($a[1] -match '/releases/latest$'){
@@ -52,27 +84,19 @@ function gh {
         if($a[1] -match '/releases/tags/'){
             if(!$mock.Exists -or $mock.TagApiUnavailable){$global:LASTEXITCODE=1;return};return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
         }
-    }
-    if($a[0] -eq 'release'){
-        if($a[1] -in @('create','edit','upload')){$mock.Mutations++}
-        switch($a[1]){
-            'create' {$mock.Exists=$true;if($mock.CreateLost){$global:LASTEXITCODE=1};return}
-            'edit' {if($a -contains '--draft=false'){$mock.Draft=$false;if($mock.PublishLost){$global:LASTEXITCODE=1}};return}
-            'upload' {
-                $mock.Uploads++;if($mock.UploadFailures -gt 0){$mock.UploadFailures--;$global:LASTEXITCODE=1;return}
-                $path=$a[3];$name=[IO.Path]::GetFileName($path)
-                $mock.Assets[$name]=@{Name=$name;Path=$path;Size=(Get-Item -LiteralPath $path).Length;Hash=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()}
-                if($mock.PromoteEarly){$mock.Draft=$false};return
-            }
-            'download' {
-                $name=$a[([array]::IndexOf($a,'--pattern')+1)];$dir=$a[([array]::IndexOf($a,'--dir')+1)]
-                if(!$mock.Assets.ContainsKey($name)){$global:LASTEXITCODE=1;return}
-                Copy-Item -LiteralPath $mock.Assets[$name].Path -Destination (Join-Path $dir $name) -Force
-                if($mock.DownloadCorrupt){[IO.File]::AppendAllText((Join-Path $dir $name),'corrupt')};return
-            }
+        if($a[1] -match '/releases/12345$'){
+            if(!$mock.Exists -or $mock.ReadIdFailures -gt 0){$mock.ReadIdFailures--;$global:LASTEXITCODE=1;return}
+            $object=Remote-Object;if($mock.WrongId){$object.id=99999}
+            return ($object|ConvertTo-Json -Depth 8 -Compress)
         }
     }
     throw "Unimplemented gh boundary: $line"
+}
+function Save-RemoteReleaseAsset([string]$TargetRepo,[long]$AssetId,[string]$Destination){
+    $found=@($mock.Assets.Values|Where-Object{$_.Id -eq $AssetId -and $AssetId -gt 0})
+    Require ($found.Count -eq 1) 'Unknown asset download ID'
+    Copy-Item -LiteralPath $found[0].Path -Destination $Destination -Force
+    if($mock.DownloadCorrupt){[IO.File]::AppendAllText($Destination,'corrupt')}
 }
 function Start-Sleep {param([int]$Seconds)}
 function Require([bool]$Condition,[string]$Message){if(!$Condition){throw $Message}}
@@ -160,11 +184,18 @@ try {
     Case 'complete real publisher success' {Publish;Require (!$mock.Draft -and $mock.Uploads -eq 7 -and $checks.LatestPointerVerified) 'Incomplete publisher path'}
     Case 'lost create and promotion response recovery' {$mock.CreateLost=$true;$mock.PublishLost=$true;Publish;Require ($checks.DraftPromoted -and $checks.LatestPointerVerified) 'Recovery failed'}
     Case 'draft without a Git tag can publish safely' {$mock.TagApiUnavailable=$true;Publish;Require ($checks.LatestPointerVerified -and !@($mock.Calls|Where-Object{$_ -match '/releases/tags/'}).Count) 'Draft lookup still depends on a Git tag'}
+    Case 'new draft absent from history still publishes by returned ID' {$mock.HiddenDraftHistory=$true;Publish;Require ($checks.LatestPointerVerified -and $mock.Uploads -eq 7) 'New draft still requires list visibility'}
+    Case 'transient release ID lookup failure recovers' {$mock.ReadIdFailures=2;Publish;Require ($checks.LatestPointerVerified) 'Bounded ID recovery failed'}
+    Case 'different returned release ID blocks upload' {$mock.WrongId=$true;Reject {Publish} 'different release ID';Require ($mock.Uploads -eq 0 -and $mock.Draft) 'Wrong release accepted'}
+    Case 'lost create response waits for history without duplicate POST' {$mock.CreateLost=$true;$mock.HistoryLag=2;Publish;Require ($checks.LatestPointerVerified -and @($mock.Calls|Where-Object{$_ -match 'api --method POST /repos/[^ ]+/releases -f '}).Count -eq 1) 'Draft POST retried or recovery failed'}
+    Case 'unrecoverable create response leaves one draft and stops' {$mock.CreateLost=$true;$mock.HiddenDraftHistory=$true;Reject {Publish} 'not found';Require ($mock.Exists -and $mock.Draft -and $mock.Uploads -eq 0 -and @($mock.Calls|Where-Object{$_ -match 'api --method POST /repos/[^ ]+/releases -f '}).Count -eq 1) 'Unsafe duplicate create or upload'}
+    Case 'lost upload response reuses verified metadata without duplicate POST' {$mock.UploadLost=$true;Publish;Require ($checks.LatestPointerVerified -and $mock.Uploads -eq 7) 'Upload POST duplicated'}
     Case 'duplicate draft lookup is refused' {$mock.Exists=$true;$mock.History+=Remote-Object;Reject {Read-RemoteRelease 'kunkunkunQoQ/SonicRoute' "v$version"} 'Duplicate release tag'}
     Case 'draft lookup includes later release pages' {$mock.History=@(1..100|ForEach-Object{@{tag_name="old-$_";draft=$false;prerelease=$false}})+@(Remote-Object);$found=Read-RemoteRelease 'kunkunkunQoQ/SonicRoute' "v$version";Require ($found.tag_name -ceq "v$version" -and $found.draft) 'Draft on later page missed'}
     Case 'upload transient failure recovers' {$mock.UploadFailures=1;Publish;Require ($mock.Uploads -eq 8 -and $checks.LatestPointerVerified) 'Upload retry failed'}
     Case 'permanent upload failure leaves draft' {$mock.UploadFailures=10;Reject {Publish} 'Failed to upload';Require ($mock.Draft -and !$checks.DraftPromoted) 'Unsafe promotion'}
-    Case 'identical existing assets avoid upload' {$mock.Exists=$true;foreach($a in $golden.Values){$mock.Assets[$a.Name]=$a};Publish -Existing $true;Require ($mock.Uploads -eq 0 -and $checks.LatestPointerVerified) 'Idempotent run uploaded again'}
+    Case 'identical existing assets avoid upload' {$mock.Exists=$true;foreach($a in $golden.Values){$copy=$a.Clone();$mock.NextAssetId++;$copy.Id=$mock.NextAssetId;$mock.Assets[$a.Name]=$copy};Publish -Existing $true;Require ($mock.Uploads -eq 0 -and $checks.LatestPointerVerified) 'Idempotent run uploaded again'}
+    Case 'changed known draft asset replaced using its ID' {$mock.Exists=$true;$copy=$golden['SHA256SUMS.txt'].Clone();$copy.Id=100;$copy.Size=1;$copy.Hash='0'*64;$mock.Assets[$copy.Name]=$copy;Publish -Existing $true;Require ($checks.LatestPointerVerified -and @($mock.Calls|Where-Object{$_ -match 'api --method DELETE /repos/[^ ]+/releases/assets/100$'}).Count -eq 1) 'Known replacement missed exact asset ID'}
     Case 'published release never edited' {$mock.Exists=$true;$mock.Draft=$false;Reject {Publish -Existing $true} 'matching draft';Require ($mock.Mutations -eq 0) 'Published release mutated'}
     Case 'unknown draft asset retained and aborts' {$mock.Exists=$true;$mock.Assets['other.exe']=@{Name='other.exe';Size=1;Hash=('0'*64)};Reject {Publish -Existing $true} 'Unknown or duplicate';Require ($mock.Mutations -eq 0 -and $mock.Assets.ContainsKey('other.exe')) 'Unknown asset modified'}
     Case 'partial SHA draft cannot be reused' {$mock.Exists=$true;$mock.Target=$mock.Head.Substring(0,7);Reject {Publish -Existing $true} 'full commit SHA';Require ($mock.Mutations -eq 0) 'Draft edited'}
