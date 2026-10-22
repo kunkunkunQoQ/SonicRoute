@@ -56,7 +56,7 @@
                                   StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                         </Viewbox>
                         <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0"/>
-                        <CheckBox Grid.Column="2" Style="{DynamicResource AutomationSwitch}" IsChecked="{Binding IsChecked, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}"
+                        <CheckBox Grid.Column="2" Style="{DynamicResource AutomationSwitch}" IsChecked="{TemplateBinding IsChecked}"
                                   IsEnabled="{TemplateBinding IsEnabled}" IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>

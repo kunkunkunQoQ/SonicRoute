@@ -179,11 +179,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="ScrollViewer.CanContentScroll" Value="True"/>
-            <Setter Property="ItemContainerStyle">
-                <Setter.Value>
-                    <Style TargetType="ComboBoxItem" BasedOn="{StaticResource RoundedComboItem}"/>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource RoundedComboItem}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
@@ -367,6 +363,9 @@
         </Style>
 
         <!-- Slider（轨道填充=强调色，拇指=强调色） -->
+        <ControlTemplate x:Key="EmptySliderRepeatTemplate" TargetType="RepeatButton">
+            <Border Background="Transparent"/>
+        </ControlTemplate>
         <Style TargetType="Slider">
             <Setter Property="Height" Value="32"/>
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
@@ -389,13 +388,8 @@
                                     </RepeatButton>
                                 </Track.DecreaseRepeatButton>
                                 <Track.IncreaseRepeatButton>
-                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False">
-                                        <RepeatButton.Template>
-                                            <ControlTemplate TargetType="RepeatButton">
-                                                <Border Background="Transparent"/>
-                                            </ControlTemplate>
-                                        </RepeatButton.Template>
-                                    </RepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False" IsTabStop="False"
+                                                  Template="{StaticResource EmptySliderRepeatTemplate}"/>
                                 </Track.IncreaseRepeatButton>
                                 <Track.Thumb>
                                     <Thumb Width="28">
@@ -453,7 +447,7 @@
                                           HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
                                           VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"/>
                             <TextBlock x:Name="Placeholder" Grid.Column="1" Visibility="Collapsed" IsHitTestVisible="False"
-                                       Text="{Binding Path=(local:InputAppearance.Placeholder), RelativeSource={RelativeSource TemplatedParent}}"
+                                       Text="{TemplateBinding local:InputAppearance.Placeholder}"
                                        Foreground="{DynamicResource Theme.TextSecondary}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
                         </Grid>
                     </Border>
@@ -479,12 +473,10 @@
                     <Grid>
                         <Border Background="{TemplateBinding Background}" Margin="0,6,12,6"/>
                         <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
-                            <Track.DecreaseRepeatButton><RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False">
-                                <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
-                            </RepeatButton></Track.DecreaseRepeatButton>
-                            <Track.IncreaseRepeatButton><RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False">
-                                <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
-                            </RepeatButton></Track.IncreaseRepeatButton>
+                            <Track.DecreaseRepeatButton><RepeatButton Command="{x:Static Slider.DecreaseLarge}" Focusable="False"
+                                Template="{StaticResource EmptySliderRepeatTemplate}"/></Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton><RepeatButton Command="{x:Static Slider.IncreaseLarge}" Focusable="False"
+                                Template="{StaticResource EmptySliderRepeatTemplate}"/></Track.IncreaseRepeatButton>
                             <Track.Thumb><Thumb Width="32" Height="12">
                                 <Thumb.Template><ControlTemplate TargetType="Thumb">
                                     <Grid Background="Transparent"><Path Data="M8,0 L0,6 L8,12 Z" Width="8" Height="12" HorizontalAlignment="Right"
