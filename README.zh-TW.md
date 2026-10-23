@@ -103,7 +103,7 @@ A：偵測優先使用系統事件，必要時以每秒一次的快照檢查作�
 
 ## 📌 開發規劃
 
-- **暫無計劃**：核心功能已趨於完善，目前暫無新功能開發計劃。後續僅做必要的相容性維護與穩定性修復。
+- **音訊分流與路由能力進階（Route Enhancement）**：持續打磨核心音訊路由引擎，探索更靈活的應用流向接力、裝置熱插拔與狀態切換時的智慧重定向及動態復原，進一步增強特殊應用與多音訊工作階段場景下的分流穩定性。
 
 [分享想法或回報問題](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 
@@ -124,8 +124,6 @@ A：偵測優先使用系統事件，必要時以每秒一次的快照檢查作�
 <a href="EASTER_EGGS.md" title="昨日與明日的彩蛋"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="發現彩蛋"></a>
 
 感謝使用 SonicRoute。 [閱讀指南（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [回報問題](https://github.com/kunkunkunQoQ/SonicRoute/issues)。
-
-[![在 Afdian 支援我們](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ 如果 SonicRoute 對您有幫助，歡迎在 Afdian 支援作者與小躍。
 
 **作者：[Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

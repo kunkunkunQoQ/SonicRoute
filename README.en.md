@@ -103,7 +103,7 @@ The Wiki is currently in Chinese.
 
 ## 📌 Roadmap
 
-- **No active roadmap**: Core features are complete with no new feature plans. Future updates will focus on necessary maintenance and stability fixes.
+- **Audio routing enhancement**: Plan to further advance the core routing engine with dynamic stream handover, automatic recovery upon device plug/unplug, and improved routing stability for complex multi-session and protected apps.
 
 [Share an idea or report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
@@ -124,8 +124,6 @@ An absurd magical-girl comedy about a girl who hatches from an egg and makes a m
 <a href="EASTER_EGGS.md" title="An Easter egg: yesterday and tomorrow"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="Click the resting mascot to discover an Easter egg"></a>
 
 Thanks for using SonicRoute. [Read the guides (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [Report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues).
-
-[![Support on Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ If SonicRoute has helped you, consider supporting the author on Afdian.
 
 **Author: [Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

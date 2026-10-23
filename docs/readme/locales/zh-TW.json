@@ -64,7 +64,7 @@
     "releaseInfo": "發布資訊",
     "roadmapTitle": "開發規劃",
     "roadmapItems": [
-        "**暫無計劃**：核心功能已趨於完善，目前暫無新功能開發計劃。後續僅做必要的相容性維護與穩定性修復。"
+        "**音訊分流與路由能力進階（Route Enhancement）**：持續打磨核心音訊路由引擎，探索更靈活的應用流向接力、裝置熱插拔與狀態切換時的智慧重定向及動態復原，進一步增強特殊應用與多音訊工作階段場景下的分流穩定性。"
     ],
     "roadmapFeedback": "分享想法或回報問題",
     "footerDocs": "閱讀指南（簡體中文）",
@@ -123,6 +123,5 @@
     "net8RequirementX64": "NET8 相容版 Lite；需要 x64 .NET 8 Desktop Runtime",
     "net8RequirementArm64": "NET8 相容版 Lite；需要 ARM64 .NET 8 Desktop Runtime",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64",
-    "sponsorHint": "如果 SonicRoute 對您有幫助，歡迎在 Afdian 支援作者與小躍。"
+    "editionLiteNet8Arm64": "Lite NET8 ARM64"
 }

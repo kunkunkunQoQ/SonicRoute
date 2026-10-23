@@ -101,7 +101,7 @@ A：检测优先使用系统事件，必要时以每秒一次的快照检查作�
 
 ## 📌 后续计划
 
-- **暂无计划**：核心功能已趋于完善，目前暂无新功能开发计划。后续仅做必要的兼容性维护与稳定性修复。
+- **音频分流与路由能力进阶（Route Enhancement）**：持续打磨核心音频路由引擎，探索更灵活的应用流向接力、设备热插拔与状态切换时的智能重定向及动态恢复，进一步增强特殊应用与多音频会话场景下的分流稳定性。
 
 [提交建议或问题](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 
@@ -122,8 +122,6 @@ A：检测优先使用系统事件，必要时以每秒一次的快照检查作�
 <a href="EASTER_EGGS.md" title="关于昨天是否经过明天的讨论"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="点击看板娘发现一个彩蛋"></a>
 
 感谢使用 SonicRoute。 [查看文档](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [反馈问题](https://github.com/kunkunkunQoQ/SonicRoute/issues)。
-
-[![爱发电](https://img.shields.io/badge/赞助-爱发电-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ 如果 SonicRoute 对您有帮助，欢迎在爱发电支持作者与小跃。
 
 **作者主页：[哔哩哔哩](https://b23.tv/TDqSAKM) | [爱发电](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

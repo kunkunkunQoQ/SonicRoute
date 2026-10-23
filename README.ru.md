@@ -103,7 +103,7 @@ A: Обнаружение в первую очередь использует с
 
 ## 📌 План развития
 
-- **Планов нет:** Базовый функционал полностью завершён, разработка новых функций не планируется. Дальнейшие обновления будут сосредоточены на необходимом обслуживании и стабильности.
+- **Развитие маршрутизации звука (Route Enhancement)**: Планируется улучшение ядра маршрутизации с поддержкой динамического переключения потоков, автовосстановления при переподключении устройств и повышения стабильности в сложных сценариях.
 
 [Предложить идею или сообщить о проблеме](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
@@ -124,8 +124,6 @@ A: Обнаружение в первую очередь использует с
 <a href="EASTER_EGGS.md" title="Пасхалка: вчера и завтра"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="Найдите пасхалку"></a>
 
 Спасибо, что пользуетесь SonicRoute. [Руководства (на китайском)](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [Сообщить о проблеме](https://github.com/kunkunkunQoQ/SonicRoute/issues).
-
-[![Поддержать на Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ Если SonicRoute оказался полезен, вы можете поддержать автора на Afdian.
 
 **Автор: [Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

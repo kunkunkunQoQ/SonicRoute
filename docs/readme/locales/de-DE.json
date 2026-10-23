@@ -64,7 +64,7 @@
     "releaseInfo": "Informationen zur Version",
     "roadmapTitle": "Roadmap",
     "roadmapItems": [
-        "**Keine aktiven Pläne:** Die Kernfunktionen sind vollständig und es sind keine neuen Features geplant. Zukünftige Updates konzentrieren sich auf erforderliche Wartung und Stabilität."
+        "**Erweiterung des Audio-Routings (Route Enhancement)**: Weiterentwicklung der Routing-Engine mit dynamischer Stream-Übergabe, automatischer Wiederherstellung beim Anschließen/Trennen von Geräten und verbesserter Stabilität für komplexe Audio-Sitzungen."
     ],
     "roadmapFeedback": "Idee teilen oder Problem melden",
     "footerDocs": "Anleitungen lesen (Chinesisch)",
@@ -123,6 +123,5 @@
     "net8RequirementX64": "NET8-kompatible Lite-Datei; benötigt die x64 .NET 8 Desktop Runtime",
     "net8RequirementArm64": "NET8-kompatible Lite-Datei; benötigt die ARM64 .NET 8 Desktop Runtime",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64",
-    "sponsorHint": "Wenn SonicRoute hilfreich für Sie ist, freuen wir uns über Ihre Unterstützung auf Afdian."
+    "editionLiteNet8Arm64": "Lite NET8 ARM64"
 }

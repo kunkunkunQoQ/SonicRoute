@@ -103,7 +103,7 @@ La Wiki está actualmente en chino simplificado.
 
 ## 📌 Hoja de ruta
 
-- **Sin planes activos:** Las funciones principales están completas y no hay planes de nuevas características. Las próximas actualizaciones se centrarán en el mantenimiento y la estabilidad necesarios.
+- **Mejora del enrutamiento de audio (Route Enhancement)**: Plan para perfeccionar el motor de enrutamiento con transferencia dinámica de flujos, recuperación automática al conectar/desconectar dispositivos y mayor estabilidad en sesiones complejas.
 
 [Comparte una idea o informa de un problema](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
@@ -124,8 +124,6 @@ Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nu
 <a href="EASTER_EGGS.md" title="Un huevo de Pascua: ayer y mañana"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="Descubre un huevo de Pascua"></a>
 
 Gracias por usar SonicRoute. [Leer las guías (en chino)](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [Informar de un problema](https://github.com/kunkunkunQoQ/SonicRoute/issues).
-
-[![Apoyar en Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ Si SonicRoute te ha resultado útil, considera apoyar el desarrollo en Afdian.
 
 **Autor: [Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

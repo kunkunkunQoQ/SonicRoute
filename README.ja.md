@@ -103,7 +103,7 @@ A：検出はシステムイベントを優先し、必要な場合に限り1秒
 
 ## 📌 ロードマップ
 
-- **今後の計画はありません：** 主要機能はすでに完成しており、現時点で新機能の追加予定はありません。今後は必要に応じた互換性と安定性の保守に専念します。
+- **音声ルーティング機能の向上（Route Enhancement）**：コア・ルーティング・エンジンのさらなる進化を計画中。デバイスの抜き差し時の自動復旧や動的ストリーム切り替え、マルチセッションアプリでのルーティング安定性向上を進めます。
 
 [アイデアの共有・問題の報告](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 
@@ -124,8 +124,6 @@ A：検出はシステムイベントを優先し、必要な場合に限り1秒
 <a href="EASTER_EGGS.md" title="昨日と明日のイースターエッグ"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="休んでいるマスコットをクリックしてイースターエッグを見つける"></a>
 
 SonicRoute をご利用いただきありがとうございます。 [ガイドを読む（簡体字中国語）](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [問題を報告](https://github.com/kunkunkunQoQ/SonicRoute/issues)。
-
-[![Afdian で支援](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ SonicRoute がお役に立ちましたら、Afdian でのご支援を歓迎いたします。
 
 **作者：[Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

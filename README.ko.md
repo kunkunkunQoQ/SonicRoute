@@ -103,7 +103,7 @@ A: 감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1
 
 ## 📌 로드맵
 
-- **예정된 계획 없음:** 핵심 기능이 완성되어 현재 새로운 기능 개발 계획은 없습니다. 향후에는 필요한 호환성 유지보수 및 안정성 수정에 집중할 예정입니다.
+- **오디오 라우팅 기능 향상 (Route Enhancement)**: 핵심 라우팅 엔진을 고도화하여 기기 연결/해제 시 자동 복구 및 동적 스트림 전환을 지원하고, 복잡한 다중 세션 환경에서의 라우팅 안정성을 강화할 계획입니다.
 
 [아이디어 공유 또는 문제 제보](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
@@ -124,8 +124,6 @@ A: 감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1
 <a href="EASTER_EGGS.md" title="어제와 내일의 이스터 에그"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="쉬고 있는 마스코트를 클릭해 이스터 에그 찾기"></a>
 
 SonicRoute를 사용해 주셔서 감사합니다. [가이드 읽기(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [문제 제보](https://github.com/kunkunkunQoQ/SonicRoute/issues).
-
-[![Afdian에서 후원](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ SonicRoute가 도움이 되었다면 Afdian을 통해 개발자를 후원해 주세요.
 
 **제작자: [Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

@@ -103,7 +103,7 @@ Le Wiki est actuellement en chinois simplifié.
 
 ## 📌 Feuille de route
 
-- **Aucun plan prévu :** Les fonctionnalités principales sont complètes et aucun nouveau développement n'est prévu. Les futures mises à jour se concentreront sur la maintenance et la stabilité.
+- **Amélioration du routage audio (Route Enhancement)** : Évolution du moteur de routage avec relais dynamique des flux, récupération automatique lors du branchement/débranchement d’appareils et meilleure stabilité pour les sessions audio complexes.
 
 [Partager une idée ou signaler un problème](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
@@ -124,8 +124,6 @@ Une comédie absurde autour d’une magical girl née dans un œuf, dont chaque 
 <a href="EASTER_EGGS.md" title="Un œuf de Pâques : hier et demain"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="Découvrez un œuf de Pâques"></a>
 
 Merci d’utiliser SonicRoute. [Lire les guides (en chinois)](https://github.com/kunkunkunQoQ/SonicRoute/wiki) · [Signaler un problème](https://github.com/kunkunkunQoQ/SonicRoute/issues).
-
-[![Soutenir sur Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021) ☕ Si SonicRoute vous a été utile, n’hésitez pas à soutenir le développement sur Afdian.
 
 **Auteur : [Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 

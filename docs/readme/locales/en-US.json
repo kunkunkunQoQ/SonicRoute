@@ -64,7 +64,7 @@
     "releaseInfo": "Release information",
     "roadmapTitle": "Roadmap",
     "roadmapItems": [
-        "**No active roadmap**: Core features are complete with no new feature plans. Future updates will focus on necessary maintenance and stability fixes."
+        "**Audio routing enhancement**: Plan to further advance the core routing engine with dynamic stream handover, automatic recovery upon device plug/unplug, and improved routing stability for complex multi-session and protected apps."
     ],
     "roadmapFeedback": "Share an idea or report an issue",
     "footerDocs": "Read the guides (Chinese)",
@@ -123,6 +123,5 @@
     "net8RequirementX64": "NET8-compatible Lite edition; requires the x64 .NET 8 Desktop Runtime",
     "net8RequirementArm64": "NET8-compatible Lite edition; requires the ARM64 .NET 8 Desktop Runtime",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64",
-    "sponsorHint": "If SonicRoute has helped you, consider supporting the author on Afdian."
+    "editionLiteNet8Arm64": "Lite NET8 ARM64"
 }

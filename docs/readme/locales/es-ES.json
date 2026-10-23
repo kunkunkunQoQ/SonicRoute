@@ -64,7 +64,7 @@
     "releaseInfo": "Información de la versión",
     "roadmapTitle": "Hoja de ruta",
     "roadmapItems": [
-        "**Sin planes activos:** Las funciones principales están completas y no hay planes de nuevas características. Las próximas actualizaciones se centrarán en el mantenimiento y la estabilidad necesarios."
+        "**Mejora del enrutamiento de audio (Route Enhancement)**: Plan para perfeccionar el motor de enrutamiento con transferencia dinámica de flujos, recuperación automática al conectar/desconectar dispositivos y mayor estabilidad en sesiones complejas."
     ],
     "roadmapFeedback": "Comparte una idea o informa de un problema",
     "footerDocs": "Leer las guías (en chino)",
@@ -123,6 +123,5 @@
     "net8RequirementX64": "Lite compatible con NET8; requiere .NET 8 Desktop Runtime x64",
     "net8RequirementArm64": "Lite compatible con NET8; requiere .NET 8 Desktop Runtime ARM64",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64",
-    "sponsorHint": "Si SonicRoute te ha resultado útil, considera apoyar el desarrollo en Afdian."
+    "editionLiteNet8Arm64": "Lite NET8 ARM64"
 }
