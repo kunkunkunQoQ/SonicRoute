@@ -23,7 +23,13 @@ namespace SonicRoute.Core
             AppDataRoot.DirectoryPath,
             "Automation");
 
+#if NET10_0_OR_GREATER
+        private static readonly JsonSerializerOptions SaveOptions = PersistenceJsonContext.Default.Options;
+        private static JsonSerializerOptions? ReadOptions => SaveOptions;
+#else
         private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
+        private static JsonSerializerOptions? ReadOptions => null;
+#endif
 
         private static List<AutoRule>? _cache;
         private static readonly object _lock = new();
@@ -89,7 +95,19 @@ namespace SonicRoute.Core
         }
 
         public static void Shutdown()
-        { lock (_lock) { StopWatcher(); StopDirectoryWatcher(); Changed = null; } }
+        {
+            FileSystemWatcher? watcher, directoryWatcher;
+            lock (_lock)
+            {
+                watcher = _watcher; _watcher = null;
+                directoryWatcher = _directoryWatcher; _directoryWatcher = null;
+                Changed = null;
+            }
+            // Framework's watcher disposal can wait for a callback that needs _lock.
+            // Detach under the store lock, then release the existing two watchers outside it.
+            watcher?.Dispose();
+            directoryWatcher?.Dispose();
+        }
 
         /// <summary>相同修订号不复制列表，供 UI 跳过未变化的规则数据。</summary>
         public static (long Revision, List<AutoRule>? Rules) ReadSnapshot(long knownRevision = -1)
@@ -149,7 +167,7 @@ namespace SonicRoute.Core
                     {
                         var info = new FileInfo(file);
                         entry.Length = info.Length; entry.Written = info.LastWriteTimeUtc.Ticks;
-                        entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(file));
+                        entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(file), ReadOptions);
                     }
                     catch { /* 损坏文件仍占用名称。 */ }
                     _files[file] = entry;
@@ -385,7 +403,7 @@ namespace SonicRoute.Core
                 using var doc = JsonDocument.Parse(File.ReadAllText(cfgPath));
                 if (!doc.RootElement.TryGetProperty("AutoRules", out var arr)
                     || arr.ValueKind != JsonValueKind.Array) return;
-                var legacy = arr.Deserialize<List<AutoRule>>();
+                var legacy = arr.Deserialize<List<AutoRule>>(ReadOptions);
                 if (legacy == null || legacy.Count == 0) return;
                 Directory.CreateDirectory(RulesDir);
                 var occupied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

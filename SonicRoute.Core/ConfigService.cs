@@ -195,7 +195,7 @@ namespace SonicRoute.Core
                 if (File.Exists(ConfigPath))
                 {
                     var json = File.ReadAllText(ConfigPath);
-                    cfg = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+                    cfg = JsonSerializer.Deserialize<AppConfig>(json, ReadOptions) ?? new AppConfig();
                 }
                 else
                 {
@@ -238,7 +238,13 @@ namespace SonicRoute.Core
             }
         }
 
+#if NET10_0_OR_GREATER
+        private static readonly JsonSerializerOptions SaveOptions = PersistenceJsonContext.Default.Options;
+        private static JsonSerializerOptions? ReadOptions => SaveOptions;
+#else
         private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
+        private static JsonSerializerOptions? ReadOptions => null;
+#endif
 
         /// <summary>替换整份小映射，后台图标读取可继续使用旧快照；保存失败则恢复旧映射。</summary>
         public static bool TrySetAppIcon(string processName, string? fileName)
@@ -293,7 +299,7 @@ namespace SonicRoute.Core
                     snapshot ??= CaptureExportSnapshot();
                 }
                 using var document = JsonDocument.Parse(snapshot);
-                var config = document.RootElement.Deserialize<AppConfig>();
+                var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
                 if (config == null) return false;
                 var assets = AppIconFiles.ExportAssets(config);
                 AtomicFile.WriteAllBytes(destPath, TransferJson(document.RootElement, config, assets));
@@ -318,7 +324,7 @@ namespace SonicRoute.Core
                 if (stream.Length > AppIconFiles.MaxTransferBytes) return null;
                 using var document = JsonDocument.Parse(stream);
                 if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
-                var config = document.RootElement.Deserialize<AppConfig>();
+                var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
                 if (config == null || (config.AppIcons?.Count ?? 0) > AppIconFiles.MaxIcons) return null;
                 config.AppIcons = AppIconFiles.NormalizeMappings(config.AppIcons);
                 AppIconFiles.ImportAssets(document.RootElement, config);
