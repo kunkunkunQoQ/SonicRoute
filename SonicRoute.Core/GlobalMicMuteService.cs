@@ -15,6 +15,7 @@ namespace SonicRoute.Core
     public static class GlobalMicMuteService
     {
         private static readonly Guid IID_IAudioEndpointVolume = new("5CDF2C82-841E-4546-9722-0CF74078229A");
+        private static readonly object _changeMuteLock = new();
 
         public readonly struct MuteState
         {
@@ -42,22 +43,41 @@ namespace SonicRoute.Core
 
         /// <summary>本轮接口内写入全部麦克风并读回；任一失败或未到目标均不报告全部成功。</summary>
         public static (MuteState State, bool Applied) SetMuteChecked(bool mute)
+            => ChangeMuteChecked(mute);
+
+        /// <summary>初读与写入共用本轮端点；保留写后重新发现验证，状态不明时不切换。</summary>
+        public static (MuteState State, bool Applied) ToggleChecked() => ChangeMuteChecked(null);
+
+        private static (MuteState State, bool Applied) ChangeMuteChecked(bool? mute)
         {
-            List<IAudioEndpointVolume>? volumes = null;
-            try
+            lock (_changeMuteLock)
             {
-                volumes = GetEndpointVolumes(out int count);
-                bool writesOk = count > 0 && volumes.Count == count;
-                var context = Guid.Empty;
-                foreach (var volume in volumes)
-                    try { if (volume.SetMute(mute ? 1 : 0, ref context) < 0) writesOk = false; }
-                    catch { writesOk = false; }
-                var state = ReadState(volumes, count);
-                bool matches = state.Known && state.MutedCount == (mute ? state.Count : 0);
-                return (state, writesOk && matches);
+                List<IAudioEndpointVolume>? volumes = null;
+                try
+                {
+                    volumes = GetEndpointVolumes(out int count);
+                    bool toggle = !mute.HasValue;
+                    if (toggle)
+                    {
+                        var before = ReadState(volumes, count);
+                        if (!before.Known) return (before, false);
+                        mute = !before.AllMuted;
+                    }
+                    bool target = mute.Value;
+                    bool writesOk = count > 0 && volumes.Count == count;
+                    var context = Guid.Empty;
+                    foreach (var volume in volumes)
+                        try { if (volume.SetMute(target ? 1 : 0, ref context) < 0) writesOk = false; }
+                        catch { writesOk = false; }
+                    // Keep the old toggle's final topology read: a newly available microphone
+                    // must not be hidden by a successful write to the original endpoint list.
+                    var state = toggle ? ReadState() : ReadState(volumes, count);
+                    bool matches = state.Known && state.MutedCount == (target ? state.Count : 0);
+                    return (state, writesOk && matches);
+                }
+                catch { return (new MuteState(0, 0, 1), false); }
+                finally { ReleaseVolumes(volumes); }
             }
-            catch { return (new MuteState(0, 0, 1), false); }
-            finally { ReleaseVolumes(volumes); }
         }
 
         private static MuteState ReadState(List<IAudioEndpointVolume> volumes, int count)
@@ -111,12 +131,7 @@ namespace SonicRoute.Core
 
         /// <summary>静音/取消静音所有录音设备；返回切换后的全局静音状态（true=已静音）。</summary>
         public static bool Toggle()
-        {
-            bool m = IsMuted();
-            bool ok = SetMute(!m);
-            // 以写入后的真实状态为准（读回确认，与输入会话一致防止设备写入异步不生效）
-            return ok ? IsMuted() : m;
-        }
+            => ToggleChecked().State.AllMuted;
 
         /// <summary>设置所有录音设备的静音状态；任一设备写入成功即视为成功。</summary>
         public static bool SetMute(bool mute)

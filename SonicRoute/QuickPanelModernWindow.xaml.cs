@@ -488,11 +488,7 @@ namespace SonicRoute
             if (!_systemReady) return;
             int pct = (int)Math.Round(e.NewValue);
             string? deviceId = _systemDeviceId;
-            var result = await Task.Run(() =>
-            {
-                bool applied = SystemVolumeService.SetVolumePercent(deviceId, pct);
-                return (Applied: applied, Actual: SystemVolumeService.GetVolumePercent(deviceId));
-            });
+            var result = await Task.Run(() => SystemVolumeService.SetVolumePercentChecked(deviceId, pct));
             if (_isClosed || deviceId != _systemDeviceId) return;
             int actual = result.Actual;
             ((App)Application.Current).ShowSystemVolumeFeedback(deviceId, actual, result.Applied,
@@ -573,12 +569,7 @@ namespace SonicRoute
 
         private async void MuteButton_Click(object sender, RoutedEventArgs e)
         {
-            if (!_systemReady) return;
-            string? deviceId = _systemDeviceId;
-            bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(deviceId));
-            if (_isClosed || deviceId != _systemDeviceId) return;
-            ApplySystemMuteVisual(muted);
-            ShowDeviceOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
+            await MuteCurrentAppAsync();
         }
 
         /// <summary>调整系统设备音量（delta 为 ±n 百分比），同步顶部滑块/百分比/状态行。
@@ -601,10 +592,10 @@ namespace SonicRoute
         {
             if (!_systemReady) return false;
             string? deviceId = _systemDeviceId;
-            bool muted = await Task.Run(() => SystemVolumeService.ToggleMute(deviceId));
+            var result = await Task.Run(() => SystemVolumeService.ToggleMuteChecked(deviceId));
             if (_isClosed || deviceId != _systemDeviceId) return true;
-            ApplySystemMuteVisual(muted);
-            ShowDeviceOsd(L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
+            if (result.Applied) ApplySystemMuteVisual(result.Muted);
+            ShowDeviceOsd(L10n.T(result.Applied ? (result.Muted ? "Qp.Muted" : "Qp.Unmuted") : "Tray.AudioUnavailable"));
             return true;
         }
         // ------------------------------------------------------------------
@@ -645,16 +636,20 @@ namespace SonicRoute
                 {
                     SessionVolumeService.Refresh();
                     var d = new Dictionary<int, (int vol, bool muted, string? output)>();
+                    using var routes = state.ShowOutputName ? new AudioPolicyConfig(EDataFlow.eRender) : null;
                     foreach (var a in state.Apps)
                     {
                         var pid = (int)a.ProcessId;
                         string? output = null;
                         if (state.ShowOutputName)
                         {
-                            var persisted = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
+                            string? persisted;
+                            try { persisted = routes!.GetDefaultEndPoint(pid); }
+                            catch { persisted = null; }
                             output = persisted == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(persisted);
                         }
-                        d[pid] = (SessionVolumeService.GetVolumePercent(pid), SessionVolumeService.IsMuted(pid), output);
+                        var audio = SessionVolumeService.ReadState(pid);
+                        d[pid] = (audio.Volume, audio.Muted, output);
                     }
                     return d;
                 });
@@ -1299,18 +1294,21 @@ namespace SonicRoute
         public async Task<bool> ToggleGlobalOutputMuteAsync()
         {
             int version = ++_globalMuteVersion;
-            bool muted = await Task.Run(() => SessionVolumeService.ToggleAllMute());
+            var result = await Task.Run(() => SessionVolumeService.ToggleAllMuteChecked());
+            bool muted = result.Muted;
             if (!_isClosed && version == _globalMuteVersion)
             {
                 ++_globalMuteVersion; // 丢弃操作进行期间读到、却延迟返回的初始化状态。
                 ApplyGlobalMuteVisual(muted);
                 GlobalMuteButton.IsEnabled = true;
                 // net48 无 KeyValuePair<K,V>.Deconstruct：显式取 Value
-                foreach (var kv in _rows) ApplyRowMutedVisual(kv.Value, muted);
+                if (result.Applied)
+                    foreach (var kv in _rows) ApplyRowMutedVisual(kv.Value, muted);
             }
             // 全局输出静音 OSD 主标题显示「全部应用」（静音的是所有应用，不是音跃本身）
-            ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted"));
-            return true;
+            ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(result.Applied
+                ? (muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted") : "Tray.AudioUnavailable"));
+            return result.Applied;
         }
 
         private async void MicMuteButton_Click(object sender, RoutedEventArgs e)

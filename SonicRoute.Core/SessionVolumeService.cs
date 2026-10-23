@@ -78,6 +78,38 @@ namespace SonicRoute.Core
             return -1;
         }
 
+        /// <summary>共用一次会话定位读取音量和静音；刷新不得在读取期间释放接口。
+        /// 保留各项未知值及现有 5 秒新鲜度、一次失败重试。</summary>
+        public static (int Volume, bool Muted) ReadState(int pid)
+        {
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                FindRenderVolumes(pid, 5);
+                int percent = -1;
+                bool muted = false, failed = false;
+                lock (_lock)
+                {
+                    if (!_renderVolumes.TryGetValue(pid, out var sessions) || sessions.Count == 0) return (-1, false);
+                    try
+                    {
+                        if (sessions[0].GetMasterVolume(out float value) >= 0)
+                            percent = (int)Math.Round(MathEx.Clamp(value, 0f, 1f) * 100f);
+                        else failed = true;
+                    }
+                    catch { failed = true; }
+                    try
+                    {
+                        if (sessions[0].GetMute(out int value) >= 0) muted = value != 0;
+                        else failed = true;
+                    }
+                    catch { failed = true; }
+                }
+                if (!failed || attempt != 0) return (percent, muted);
+                Refresh(true);
+            }
+            return (-1, false);
+        }
+
         /// <summary>设置音量百分比（0–100）；对进程全部输出会话生效。任一成功即视为成功。</summary>
         public static bool SetVolumePercent(int pid, int percent)
         {
@@ -201,43 +233,54 @@ namespace SonicRoute.Core
         /// <summary>所有有输出会话的应用是否都已静音（没有任何会话视为未静音）。</summary>
         public static bool AllMuted()
         {
-            var pids = RenderPids();
-            if (pids.Count == 0) return false;
-            foreach (var pid in pids)
-            {
-                if (!IsMuted(pid)) return false;
-            }
-            return true;
+            Refresh(true);
+            lock (_lock) return ReadAllMutedCore().Muted;
         }
 
-        /// <summary>当前有输出会话的全部进程 PID。</summary>
-        private static List<int> RenderPids()
+        // Caller owns _lock; include every session, not only each PID's first session.
+        private static (bool Known, bool Muted) ReadAllMutedCore()
         {
-            Refresh(true);
-            lock (_lock)
+            bool any = false, all = true;
+            foreach (var sessions in _renderVolumes.Values)
+                foreach (var session in sessions)
+                {
+                    any = true;
+                    try
+                    {
+                        if (session.GetMute(out int state) < 0) return (false, false);
+                        all &= state != 0;
+                    }
+                    catch { return (false, false); }
+                }
+            return (any, any && all);
+        }
+
+        /// <summary>初读与切换共用一轮会话，保留写后重新发现；部分失败不报告全部成功。</summary>
+        public static (bool Muted, bool Applied) ToggleAllMuteChecked()
+        {
+            lock (_adjustVolumeLock)
             {
-                return _renderVolumes.Where(kv => kv.Value is { Count: > 0 }).Select(kv => kv.Key).ToList();
+                var result = ChangeSessionsChecked(EDataFlow.eRender, null, null, null, null, default);
+                if (result.Total == 0) return (false, false);
+                // Preserve the old final discovery: writes can rebuild streams, so checking
+                // only the interfaces used to write is not sufficient confirmation.
+                Refresh(true);
+                lock (_lock)
+                {
+                    var actual = ReadAllMutedCore();
+                    return (actual.Muted, result.Succeeded == result.Total
+                        && actual.Known && actual.Muted == result.Muted);
+                }
             }
         }
 
         /// <summary>静音/取消静音所有有输出会话的应用；任一成功即视为成功。</summary>
         public static bool SetAllMute(bool mute)
-        {
-            bool any = false;
-            foreach (var pid in RenderPids())
-            {
-                if (SetMute(pid, mute)) any = true;
-            }
-            return any;
-        }
+            => ChangeAllPlaybackMuteChecked(mute).Succeeded > 0;
 
         /// <summary>切换全局输出静音，返回切换后的状态。</summary>
         public static bool ToggleAllMute()
-        {
-            bool m = AllMuted();
-            SetAllMute(!m);
-            return AllMuted();
-        }
+            => ToggleAllMuteChecked().Muted;
 
 
         // ------------------------------------------------------------------

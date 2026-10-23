@@ -683,7 +683,7 @@ namespace SonicRoute
                             SystemVolumeService.SetVolumePercent(null, MathEx.Clamp(step.Volume, 0, 100)));
 
                     case AutoRuleAction.ToggleSystemMute:
-                        return await Task.Run(() => SystemVolumeService.SetMute(null, !SystemVolumeService.IsMuted()));
+                        return await Task.Run(() => SystemVolumeService.ToggleMuteChecked().Applied);
 
                     case AutoRuleAction.SetSystemMute:
                         return await Task.Run(() => SystemVolumeService.SetMute(null, step.Muted));

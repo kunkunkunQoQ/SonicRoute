@@ -292,9 +292,21 @@ namespace SonicRoute.Core
             {
                 foreach (var flow in new[] { EDataFlow.eRender, EDataFlow.eCapture })
                 {
-                    var devices = GetDevicesCore(enumerator, flow);
-                    foreach (var dev in devices)
-                        CollectSessions(enumerator, dev.Id, apps, processes, includeIconPaths);
+                    int hr = enumerator.EnumAudioEndpoints(flow, DeviceState.ACTIVE, out var devices);
+                    if (hr < 0)
+                        throw new InvalidOperationException($"枚举音频设备失败 HRESULT=0x{hr:X8} ({hr})");
+                    try
+                    {
+                        Marshal.ThrowExceptionForHR(devices.GetCount(out uint count));
+                        for (uint i = 0; i < count; i++)
+                        {
+                            devices.Item(i, out var device);
+                            if (device == null) continue;
+                            try { CollectSessions(device, apps, processes, includeIconPaths); }
+                            finally { Marshal.ReleaseComObject(device); }
+                        }
+                    }
+                    finally { Marshal.ReleaseComObject(devices); }
                 }
             }
             finally
@@ -308,98 +320,89 @@ namespace SonicRoute.Core
                 .ToList();
         }
 
-        private static void CollectSessions(IMMDeviceEnumerator enumerator, string deviceId,
+        private static void CollectSessions(IMMDevice device,
             Dictionary<uint, AudioAppInfo> apps, Dictionary<uint, (string? Name, bool Alive)> processes, bool includeIconPaths)
         {
-            int hrGet = enumerator.GetDevice(deviceId, out var device);
-            if (hrGet < 0 || device == null) return;
+            var iidSessionManager = IID_IAudioSessionManager2;
+            int hrActivate = device.Activate(ref iidSessionManager, ComConstants.CLSCTX_ALL, IntPtr.Zero, out object mgrObj);
+            if (hrActivate < 0 || mgrObj == null) return;
+            var mgr = (IAudioSessionManager2)mgrObj;
             try
             {
-                var iidSessionManager = IID_IAudioSessionManager2;
-                int hrActivate = device.Activate(ref iidSessionManager, ComConstants.CLSCTX_ALL, IntPtr.Zero, out object mgrObj);
-                if (hrActivate < 0 || mgrObj == null) return;
-                var mgr = (IAudioSessionManager2)mgrObj;
+                int hrEnum = mgr.GetSessionEnumerator(out var sessionEnum);
+                if (hrEnum < 0 || sessionEnum == null) return;
                 try
                 {
-                    int hrEnum = mgr.GetSessionEnumerator(out var sessionEnum);
-                    if (hrEnum < 0 || sessionEnum == null) return;
-                    try
+                    sessionEnum.GetCount(out int count);
+                    for (int i = 0; i < count; i++)
                     {
-                        sessionEnum.GetCount(out int count);
-                        for (int i = 0; i < count; i++)
+                        int hrSess = sessionEnum.GetSession(i, out var session);
+                        if (hrSess < 0 || session == null) continue;
+                        try
                         {
-                            int hrSess = sessionEnum.GetSession(i, out var session);
-                            if (hrSess < 0 || session == null) continue;
-                            try
+                            int hrPid = session.GetProcessId(out uint pid);
+                            if (hrPid < 0 || pid == 0) continue;
+
+                            int hrState = session.GetState(out var state);
+                            if (hrState >= 0 && state == AudioSessionState.Expired) continue;
+
+                            string? displayName = null;
+                            int hrName = session.GetDisplayName(out displayName);
+                            if (hrName < 0) displayName = null;
+
+                            if (string.IsNullOrWhiteSpace(displayName))
+                                displayName = null;
+
+                            // 一个 PID 可能跨设备拥有多个会话；本轮只查一次进程名/存活状态。
+                            if (!processes.TryGetValue(pid, out var process))
                             {
-                                int hrPid = session.GetProcessId(out uint pid);
-                                if (hrPid < 0 || pid == 0) continue;
-
-                                int hrState = session.GetState(out var state);
-                                if (hrState >= 0 && state == AudioSessionState.Expired) continue;
-
-                                string? displayName = null;
-                                int hrName = session.GetDisplayName(out displayName);
-                                if (hrName < 0) displayName = null;
-
-                                if (string.IsNullOrWhiteSpace(displayName))
-                                    displayName = null;
-
-                                // 一个 PID 可能跨设备拥有多个会话；本轮只查一次进程名/存活状态。
-                                if (!processes.TryGetValue(pid, out var process))
-                                {
-                                    string? name = ForegroundAppService.GetProcessNameSafe((int)pid);
-                                    process = (name, name != null || IsProcessAlive(pid));
-                                    processes[pid] = process;
-                                }
-                                string? processName = process.Name;
-                                // 幽灵会话：进程已不存在（任务管理器也搜不到）但会话残留未标记 Expired。
-                                // 过滤掉，避免完整界面应用列表出现无法操作的 PID 空项；权限受限的
-                                // 真实进程（IsProcessAlive=true）仍保留 PID 显示。
-                                if (!process.Alive) continue;
-
-                                if (!apps.TryGetValue(pid, out var existing))
-                                {
-                                    existing = apps[pid] = new AudioAppInfo
-                                    {
-                                        ProcessId = pid,
-                                        DisplayName = displayName,
-                                        ProcessName = processName
-                                    };
-                                }
-                                else if (existing.DisplayName == null && displayName != null)
-                                {
-                                    existing.DisplayName = displayName;
-                                }
-                                // Reuse the session already being read. Elevated/service processes
-                                // may deny image-path queries even though their icon file is readable.
-                                if (includeIconPaths && Volatile.Read(ref _appIconMetadataEnabled) != 0 && existing.IconPath == null
-                                    && session.GetIconPath(out var iconPath) >= 0
-                                    && !string.IsNullOrWhiteSpace(iconPath))
-                                    existing.IconPath = iconPath;
-                                // 存在正在播放(Active)的会话 → 标记，供列表排序优先展示
-                                if (hrState >= 0 && state == AudioSessionState.Active)
-                                    existing.HasActiveSession = true;
+                                string? name = ForegroundAppService.GetProcessNameSafe((int)pid);
+                                process = (name, name != null || IsProcessAlive(pid));
+                                processes[pid] = process;
                             }
-                            finally
+                            string? processName = process.Name;
+                            // 幽灵会话：进程已不存在（任务管理器也搜不到）但会话残留未标记 Expired。
+                            // 过滤掉，避免完整界面应用列表出现无法操作的 PID 空项；权限受限的
+                            // 真实进程（IsProcessAlive=true）仍保留 PID 显示。
+                            if (!process.Alive) continue;
+
+                            if (!apps.TryGetValue(pid, out var existing))
                             {
-                                Marshal.ReleaseComObject(session);
+                                existing = apps[pid] = new AudioAppInfo
+                                {
+                                    ProcessId = pid,
+                                    DisplayName = displayName,
+                                    ProcessName = processName
+                                };
                             }
+                            else if (existing.DisplayName == null && displayName != null)
+                            {
+                                existing.DisplayName = displayName;
+                            }
+                            // Reuse the session already being read. Elevated/service processes
+                            // may deny image-path queries even though their icon file is readable.
+                            if (includeIconPaths && Volatile.Read(ref _appIconMetadataEnabled) != 0 && existing.IconPath == null
+                                && session.GetIconPath(out var iconPath) >= 0
+                                && !string.IsNullOrWhiteSpace(iconPath))
+                                existing.IconPath = iconPath;
+                            // 存在正在播放(Active)的会话 → 标记，供列表排序优先展示
+                            if (hrState >= 0 && state == AudioSessionState.Active)
+                                existing.HasActiveSession = true;
                         }
-                    }
-                    finally
-                    {
-                        Marshal.ReleaseComObject(sessionEnum);
+                        finally
+                        {
+                            Marshal.ReleaseComObject(session);
+                        }
                     }
                 }
                 finally
                 {
-                    Marshal.ReleaseComObject(mgr);
+                    Marshal.ReleaseComObject(sessionEnum);
                 }
             }
             finally
             {
-                Marshal.ReleaseComObject(device);
+                Marshal.ReleaseComObject(mgr);
             }
         }
 

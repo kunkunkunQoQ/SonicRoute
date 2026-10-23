@@ -90,6 +90,34 @@ namespace SonicRoute.Core
             finally { Marshal.ReleaseComObject(v); }
         }
 
+        /// <summary>本次激活内设置并读回实际音量，不重新解析默认端点。</summary>
+        public static (bool Applied, int Actual) SetVolumePercentChecked(string? deviceId, int percent)
+        {
+            lock (_adjustVolumeLock)
+            {
+                IAudioEndpointVolume? volume = null;
+                try
+                {
+                    volume = GetVolume(deviceId);
+                    if (volume == null) return (false, -1);
+                    var context = Guid.Empty;
+                    bool applied;
+                    try { applied = volume.SetMasterVolumeLevelScalar(MathEx.Clamp(percent / 100f, 0f, 1f), ref context) >= 0; }
+                    catch { applied = false; }
+                    int actual = -1;
+                    try
+                    {
+                        if (volume.GetMasterVolumeLevelScalar(out float value) >= 0)
+                            actual = (int)Math.Round(MathEx.Clamp(value, 0f, 1f) * 100f);
+                    }
+                    catch { }
+                    return (applied, actual);
+                }
+                catch { return (false, -1); }
+                finally { if (volume != null) Marshal.ReleaseComObject(volume); }
+            }
+        }
+
         /// <summary>同一设备接口内完成音量增减与实际值读回，避免三次创建枚举器/激活端点。
         /// 增减操作串行；接口只在本轮持有，默认设备或会话改变后仍重新获取。</summary>
         public static (int Current, int Requested, int Actual, bool Applied) AdjustVolumePercent(string? deviceId, int delta)
@@ -155,11 +183,7 @@ namespace SonicRoute.Core
 
         /// <summary>静音/取消静音指定设备；返回切换后的状态。</summary>
         public static bool ToggleMute(string? deviceId = null)
-        {
-            bool m = IsMuted(deviceId);
-            SetMute(deviceId, !m);
-            return IsMuted(deviceId);
-        }
+            => ToggleMuteChecked(deviceId).Muted;
 
         /// <summary>在同一次端点激活内读取、反转并验证静音。状态未知时不写入；切换串行避免丢失并发操作。</summary>
         public static (bool Muted, bool Applied) ToggleMuteChecked(string? deviceId = null)

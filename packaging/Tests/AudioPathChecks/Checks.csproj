@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net10.0-windows;net8.0-windows;net48</TargetFrameworks>
+    <AssemblyName>AudioPathChecks</AssemblyName>
+    <PlatformTarget>x64</PlatformTarget><LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <SourceRoot Condition="'$(SourceRoot)' == ''">$(MSBuildProjectDirectory)/../../..</SourceRoot>
+    <PreparedSources>$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)/$(BaselineRevision)</PreparedSources>
+    <DefineConstants Condition="'$(BaselineRevision)' != ''">$(DefineConstants);BASELINE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup><Compile Include="Program.cs;Fakes.cs" /></ItemGroup>
+  <Target Name="PrepareAudioSources" BeforeTargets="CoreCompile">
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Sources.ps1&quot; -SourceRoot &quot;$(SourceRoot)&quot; -OutputDirectory &quot;$(PreparedSources)&quot; -Revision &quot;$(BaselineRevision)&quot;" />
+    <ItemGroup><Compile Include="$(PreparedSources)/*.cs" /></ItemGroup>
+  </Target>
+</Project>

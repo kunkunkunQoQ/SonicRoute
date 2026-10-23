@@ -357,7 +357,8 @@ namespace SonicRoute
                 var vol = await _uiLifetime.ReadAsync(() =>
                 {
                     SessionVolumeService.Refresh();
-                    return (pct: SessionVolumeService.GetVolumePercent(pid), muted: SessionVolumeService.IsMuted(pid));
+                    var state = SessionVolumeService.ReadState(pid);
+                    return (pct: state.Volume, muted: state.Muted);
                 });
 
                 // 无论有无输出会话，都同步麦克风静音按钮文案（全局状态与应用无关，切换应用后不残留旧状态）

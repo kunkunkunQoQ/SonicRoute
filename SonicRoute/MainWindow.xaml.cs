@@ -623,15 +623,14 @@ namespace SonicRoute
                 var tIn = _config.ExperimentalMic
                     ? _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture))
                     : Task.FromResult<string?>(null);
-                var tVol = _uiLifetime.ReadAsync(() => SessionVolumeService.GetVolumePercent(pid));
-                var tMuted = _uiLifetime.ReadAsync(() => SessionVolumeService.IsMuted(pid));
-                await Task.WhenAll(tMic, tOut, tIn, tVol, tMuted);
+                var tState = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadState(pid));
+                await Task.WhenAll(tMic, tOut, tIn, tState);
                 if (_isClosed || request != _overviewStateRequest || targetPid != _overviewApp?.ProcessId) return;
                 bool micMuted = tMic.Result;
                 var outId = tOut.Result;
                 var inId = tIn.Result;
-                int vol = tVol.Result;
-                bool muted = tMuted.Result;
+                int vol = tState.Result.Volume;
+                bool muted = tState.Result.Muted;
 
                 // 全局麦克风状态与应用无关，始终刷新按钮文案
                 OverviewMicMuteButton.Content = L10n.T(micMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
@@ -1188,9 +1187,8 @@ namespace SonicRoute
                 var input = _config.ExperimentalMic
                     ? _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture))
                     : Task.FromResult<string?>(null);
-                var volume = _uiLifetime.ReadAsync(() => SessionVolumeService.GetVolumePercent(pid));
-                var mute = _uiLifetime.ReadAsync(() => SessionVolumeService.IsMuted(pid));
-                await Task.WhenAll(output, input, volume, mute);
+                var state = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadState(pid));
+                await Task.WhenAll(output, input, state);
                 if (_isClosed || request != _appsStateRequest || _appsSelected?.ProcessId != app.ProcessId) return;
                 var outId = output.Result;
                 string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
@@ -1211,8 +1209,8 @@ namespace SonicRoute
                                               : _inputDisplay.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase))
                                                 ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault();
                 _suppressDevCombo = false;
-                int vol = volume.Result;
-                bool muted = mute.Result;
+                int vol = state.Result.Volume;
+                bool muted = state.Result.Muted;
                 SetAppsVolumeUi(vol >= 0 ? vol : null);
                 ApplyAppsMuteVisual(muted);
 
