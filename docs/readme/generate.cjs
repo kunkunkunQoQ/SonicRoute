@@ -118,6 +118,7 @@ function render(language, text) {
     text.comicDescription, '', '<br clear="all">', '', '---', '',
     `<a href="EASTER_EGGS.md" title="${attr(text.footerTitle)}"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="${attr(text.easterEgg)}"></a>`, '',
     text.thanks + ' ' + link(text.footerDocs, shared.repository + '/wiki') + ' · ' + link(text.footerIssues, shared.repository + '/issues') + period, '',
+    sponsor + ' ☕ ' + text.sponsorHint, '',
     '**' + text.author + colon + [link(text.bilibili, shared.author.bilibili), link(text.afdian, shared.author.afdian), link('GitHub', shared.author.github)].join(' | ') + '**', '',
     `<div align="right"><sub><a href="${wiki(pages.ai)}" title="AI / LLM Context">🤖 AI Context</a></sub></div>`, ''
   ].join('\n');

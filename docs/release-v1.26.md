@@ -74,4 +74,4 @@ Windows 底层将音频设备划分为数据流向（播放 Render / 录音 Capt
 ## 📚 相关链接
 
 - [Wiki 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [自动化规则配置手册](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) · [常见问题排障](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)
-- [📚 完整版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) · [🐛 提交建议与问题反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)
+- [📚 完整版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) · [🐛 提交建议与问题反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose) · [💖 在爱发电支持我们](https://afdian.com/a/koukou021)
