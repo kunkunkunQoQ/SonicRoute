@@ -51,7 +51,7 @@
     "configureAutomation":  "配置自动化",
     "automationExample":  "把繁琐的手动改设置，变成一次配置、随开随用的自动化体验。",
     "currentRelease":  "当前正式版",
-    "releaseSummary":  "{version} 将 .NET 10 设为默认 Lite 版本，并提供 NET8 兼容版。便携版更新需用户确认后才会下载，自动检查默认关闭，运行时与架构必须匹配。商店版通过 Microsoft Store 获取更新。旧版变化见 {history}。",
+    "releaseSummary":  "{version} 修复部分高权限应用的图标问题，优化按需读取音频及 .NET 10 和 Legacy 版的持久化，并改进静音状态读回与退出清理。旧版变化见 {history}。",
     "docTopic":  "想了解什么",
     "docGuides":  "文档",
     "docTopics":  [

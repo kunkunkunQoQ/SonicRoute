@@ -51,7 +51,7 @@
     "configureAutomation":  "Configurer l’automatisation",
     "automationExample":  "Transformez les réglages manuels fastidieux en une expérience automatisée prête à l\u0027emploi.",
     "currentRelease":  "Version actuelle",
-    "releaseSummary":  "La version {version} fait de .NET 10 l’édition Lite standard et propose une édition compatible NET8. Les mises à jour portables ne sont téléchargées qu’après confirmation ; la vérification automatique est désactivée par défaut et le runtime ainsi que l’architecture doivent correspondre. L’édition Store reçoit ses mises à jour via Microsoft Store. Consultez {history} pour les changements précédents.",
+    "releaseSummary":  "La version {version} corrige les icônes de certaines applications à privilèges élevés, améliore la lecture audio à la demande et la persistance des éditions .NET 10 et Legacy, et affine la relecture de l’état muet ainsi que le nettoyage à la fermeture. Consultez {history} pour les changements précédents.",
     "docTopic":  "Sujet",
     "docGuides":  "Guides",
     "docTopics":  [

@@ -51,7 +51,7 @@
     "configureAutomation":  "自動化を設定",
     "automationExample":  "面倒な手動設定を、一度設定すればずっと快適な自動化体験へ。",
     "currentRelease":  "現在のリリース",
-    "releaseSummary":  "バージョン {version} では .NET 10 を Lite の標準版とし、NET8 互換版も用意しました。ポータブル版の更新はユーザーが確認した後にダウンロードされ、自動確認は初期設定でオフです。Runtime とアーキテクチャが一致する必要があります。Store 版の更新は Microsoft Store から提供されます。過去の変更は {history} を参照してください。",
+    "releaseSummary":  "バージョン {version} では、一部の高い権限で動作するアプリのアイコン表示を修正し、必要時の音声読み取りと .NET 10／Legacy 版の永続化を改善しました。また、ミュート状態の読み戻しと終了時のクリーンアップを改善しています。過去の変更は {history} を参照してください。",
     "docTopic":  "トピック",
     "docGuides":  "ガイド",
     "docTopics":  [

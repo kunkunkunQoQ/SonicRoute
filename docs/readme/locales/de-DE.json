@@ -51,7 +51,7 @@
     "configureAutomation":  "Automatisierung einrichten",
     "automationExample":  "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease":  "Aktuelle Version",
-    "releaseSummary":  "Version {version} bietet .NET 10 als Standard und eine kompatible .NET-8-Version. Die portable Updatefunktion lädt Updates erst nach Bestätigung herunter; die automatische Prüfung ist standardmäßig deaktiviert und Runtime sowie Architektur müssen übereinstimmen. Store-Versionen werden über den Microsoft Store aktualisiert. Frühere Änderungen: {history}.",
+    "releaseSummary":  "Version {version} behebt die Anzeige von Symbolen bei einigen Apps mit erhöhten Rechten, verbessert bedarfsgesteuertes Lesen von Audiodaten sowie die Persistenz unter .NET 10 und Legacy und optimiert das Auslesen des Stummschaltstatus und die Bereinigung beim Beenden. Frühere Änderungen: {history}.",
     "docTopic":  "Thema",
     "docGuides":  "Anleitungen",
     "docTopics":  [

@@ -51,7 +51,7 @@
     "configureAutomation":  "Set up automation",
     "automationExample":  "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease":  "Current release",
-    "releaseSummary":  "Version {version} makes .NET 10 the standard Lite edition and offers a NET8-compatible edition. Portable updates download only after user confirmation; automatic checks are off by default, and runtime and architecture must match. Store editions receive updates through Microsoft Store. See {history} for earlier changes.",
+    "releaseSummary":  "Version {version} fixes icons for some elevated-privilege apps, improves on-demand audio reads and persistence in .NET 10 and Legacy editions, and refines mute-state readback and shutdown cleanup. See {history} for earlier changes.",
     "docTopic":  "Topic",
     "docGuides":  "Guides",
     "docTopics":  [

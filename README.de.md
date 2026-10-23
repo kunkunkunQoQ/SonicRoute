@@ -47,17 +47,17 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 
 ## 🚀 Herunterladen und loslegen
 
-**Aktuelle Version: [v1.25](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.25)** · 2026-10-22 · [Versionshinweise (Chinesisch)](docs/release-v1.25.md)
+**Aktuelle Version: [v1.26](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.26)** · 2026-10-23 · [Versionshinweise (Chinesisch)](docs/release-v1.26.md)
 
-Für Windows-x64-Systeme stehen Lite mit .NET 10, eine NET8-kompatible Lite-Version und Legacy mit .NET Framework 4.8 zur Auswahl. Die Store-Seite zeigt die dort verfügbare Version und verwendet Store-Updates. Die direkten Downloadlinks unten gelten für v1.25.
+Für Windows-x64-Systeme stehen Lite mit .NET 10, eine NET8-kompatible Lite-Version und Legacy mit .NET Framework 4.8 zur Auswahl. Die Store-Seite zeigt die dort verfügbare Version und verwendet Store-Updates. Die direkten Downloadlinks unten gelten für v1.26.
 
 | Version | Herunterladen | Voraussetzungen |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10, Standard) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-x64.exe) | Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime |
-| ⚡ Lite ARM64 (.NET 10) (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-arm64.exe) | Portable ARM64-Datei; benötigt die passende ARM64 .NET 10 Desktop Runtime |
-| ☕ Lite NET8 x64 | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-NET8-x64.exe) | NET8-kompatible Lite-Datei; benötigt die x64 .NET 8 Desktop Runtime |
-| ☕ Lite NET8 ARM64 (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Lite-NET8-arm64.exe) | NET8-kompatible Lite-Datei; benötigt die ARM64 .NET 8 Desktop Runtime |
-| 🛡️ Legacy x64 (Ohne .NET 8) | [Vollständiges ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.25/SonicRoute-v1.25-Legacy-x64.zip) | Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten |
+| ⭐ Lite x64 (.NET 10, Standard) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-x64.exe) | Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime |
+| ⚡ Lite ARM64 (.NET 10) (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-arm64.exe) | Portable ARM64-Datei; benötigt die passende ARM64 .NET 10 Desktop Runtime |
+| ☕ Lite NET8 x64 | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-NET8-x64.exe) | NET8-kompatible Lite-Datei; benötigt die x64 .NET 8 Desktop Runtime |
+| ☕ Lite NET8 ARM64 (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Lite-NET8-arm64.exe) | NET8-kompatible Lite-Datei; benötigt die ARM64 .NET 8 Desktop Runtime |
+| 🛡️ Legacy x64 (Ohne .NET 8) | [Vollständiges ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.26/SonicRoute-v1.26-Legacy-x64.zip) | Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten |
 | 🔄 Microsoft Store (Updates über Store) | [Aus dem Store installieren](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Das NET10-Store-Paket benötigt die x64 .NET 10 Desktop Runtime. Welche Version aktuell im Store verfügbar ist, zeigt die Store-Seite; für 64-Bit Windows 10/11. |
 
 Lite Standard benötigt [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); die NET8-kompatible Lite-Version benötigt [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Die NET8-Version wird nach November 2026 nicht mehr angeboten oder gewartet. Danach wählen x64-Nutzer manuell .NET 10 oder Legacy (.NET Framework 4.8); ARM64-Nutzer wählen .NET 10.
@@ -73,7 +73,7 @@ Bevor du `sr` zum ersten Mal verwendest, starte SonicRoute normal, damit der Bef
 sr "Regelname oder ID"
 ```
 
-Version 1.25 bietet .NET 10 als Standard und eine kompatible .NET-8-Version. Die portable Updatefunktion lädt Updates erst nach Bestätigung herunter; die automatische Prüfung ist standardmäßig deaktiviert und Runtime sowie Architektur müssen übereinstimmen. Store-Versionen werden über den Microsoft Store aktualisiert. Frühere Änderungen: [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+Version 1.26 behebt die Anzeige von Symbolen bei einigen Apps mit erhöhten Rechten, verbessert bedarfsgesteuertes Lesen von Audiodaten sowie die Persistenz unter .NET 10 und Legacy und optimiert das Auslesen des Stummschaltstatus und die Bereinigung beim Beenden. Frühere Änderungen: [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Häufig gestellte Fragen (FAQ)
 
