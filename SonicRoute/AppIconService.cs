@@ -141,7 +141,7 @@ namespace SonicRoute
             try
             {
                 var image = FromNativeIcon(copy);
-                return IsDefaultIcon(image) ? null : image;
+                return IsDefaultIcon(image, includeWindowIcons: true) ? null : image;
             }
             catch { return null; } // The target can exit while its window/icon is being read.
             finally { DestroyIcon(copy); } // Never destroy an icon owned by another application.
@@ -186,34 +186,44 @@ namespace SonicRoute
             catch { return null; }
         }
 
-        private static bool IsDefaultIcon(BitmapSource image)
+        private static bool IsDefaultIcon(BitmapSource image, bool includeWindowIcons = false)
         {
             var pixels = Pixels(image);
-            return DefaultIconPixels.Value.Any(reference => pixels.SequenceEqual(reference));
+            return DefaultIconPixels.Value.Any(reference => pixels.SequenceEqual(reference))
+                || (includeWindowIcons && WindowDefaultIconPixels.Value.Any(reference => pixels.SequenceEqual(reference)));
         }
 
-        private static readonly Lazy<byte[][]> DefaultIconPixels = new(() =>
+        private static readonly Lazy<byte[][]> DefaultIconPixels = new(() => CreateDefaultIconPixels(false));
+
+        // Native window icon variants are only needed by the last-resort window lookup.
+        private static readonly Lazy<byte[][]> WindowDefaultIconPixels = new(() => CreateDefaultIconPixels(true));
+
+        private static byte[][] CreateDefaultIconPixels(bool native)
         {
-            var references = new List<byte[]>(7);
-            AddDefaultIcon(references, System.Drawing.SystemIcons.Application);
-            // Windows' shared IDI_APPLICATION can differ from SystemIcons.Application.
-            var shared = LoadIcon(IntPtr.Zero, new IntPtr(32512));
-            if (shared != IntPtr.Zero) references.Add(Pixels(FromNativeIcon(shared)));
+            var references = new List<byte[]>(native ? 3 : 4);
+            if (native)
+            {
+                references.Add(Pixels(FromNativeIcon(System.Drawing.SystemIcons.Application.Handle)));
+                // Windows' shared IDI_APPLICATION can differ from SystemIcons.Application.
+                var shared = LoadIcon(IntPtr.Zero, new IntPtr(32512));
+                if (shared != IntPtr.Zero) references.Add(Pixels(FromNativeIcon(shared)));
+            }
+            else AddDefaultIcon(references, System.Drawing.SystemIcons.Application);
             var stock = new StockIconInfo { Size = (uint)Marshal.SizeOf<StockIconInfo>() };
             if (SHGetStockIconInfo(2, 0x100, ref stock) != 0 || stock.Icon == IntPtr.Zero) return references.ToArray();
             try
             {
                 using var icon = System.Drawing.Icon.FromHandle(stock.Icon);
-                AddDefaultIcon(references, icon);
+                if (native) references.Add(Pixels(FromNativeIcon(icon.Handle)));
+                else AddDefaultIcon(references, icon);
                 return references.ToArray();
             }
             finally { DestroyIcon(stock.Icon); }
-        });
+        }
 
         private static void AddDefaultIcon(List<byte[]> references, System.Drawing.Icon icon)
         {
             references.Add(Pixels(FromIcon(icon)));
-            references.Add(Pixels(FromNativeIcon(icon.Handle)));
             // PE/icon-file decoding may expose a legacy mask variant of the same stock icon.
             using var encoded = new MemoryStream();
             icon.Save(encoded);
@@ -264,10 +274,15 @@ namespace SonicRoute
             }
         }
 
-        internal static void Resume() => Volatile.Write(ref _cacheLimit, MaxCacheSize);
+        internal static void Resume()
+        {
+            Volatile.Write(ref _cacheLimit, MaxCacheSize);
+            AudioService.SetAppIconMetadataEnabled(true);
+        }
 
         internal static void TrimForIdle()
         {
+            AudioService.SetAppIconMetadataEnabled(false);
             Volatile.Write(ref _cacheLimit, IdleCacheSize);
             TrimIfNeeded();
         }

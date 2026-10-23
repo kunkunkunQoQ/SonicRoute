@@ -11,8 +11,8 @@ foreach ($framework in 'net10.0-windows', 'net8.0-windows', 'net48') {
 }
 ```
 
-The checks compile the actual `AppIconService.cs`. Only configuration and the
-custom icon store are substituted; no user configuration or audio settings are
+The checks compile the actual `AppIconService.cs`. Configuration, the custom icon
+store and the AudioService metadata-demand setter are substituted; no user configuration or audio settings are
 read or written. Disposable child processes create hidden native windows, then
 restrict **their own** process DACL to deny `PROCESS_QUERY_LIMITED_INFORMATION`.
 The parent verifies Windows actually returns access denied and tests class icons,
@@ -23,6 +23,12 @@ Also checks successful/concurrent cache reuse, recovery of a failed cache entry
 after five seconds, session-supplied file paths, custom icon precedence, and paths
 containing Unicode, spaces and commas. The five seconds are a cache cooldown
 checked on demand, not a production timer or an automatic retry loop.
+
+The checks also verify that ordinary file icons leave the window-only default
+pixel resources uninitialized and that the existing Resume/TrimForIdle calls
+enable/disable metadata demand while preserving cached images. This setter
+substitute does not test the real AudioService snapshot cache or WASAPI gating;
+those require a separate production-assembly integration check.
 
 These fixtures test real Windows access denial; they do not simulate a UAC token,
 launch an elevated application or prove every protected application is readable.

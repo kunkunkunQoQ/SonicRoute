@@ -226,8 +226,10 @@ namespace SonicRoute.Core
                     && CompatEnv.TickCount64 - _appsCacheAt < 1000)
                     return _appsCache;
                 int generation = Volatile.Read(ref _appsGeneration);
-                var apps = EnumerateApps();
+                bool includeIconPaths = Volatile.Read(ref _appIconMetadataEnabled) != 0;
+                var apps = EnumerateApps(includeIconPaths);
                 _appsCache = apps;
+                _appsCacheIncludesIconPaths = includeIconPaths && Volatile.Read(ref _appIconMetadataEnabled) != 0;
                 _appsCacheAt = CompatEnv.TickCount64;
                 _appsCacheGeneration = generation;
                 return apps;
@@ -236,13 +238,28 @@ namespace SonicRoute.Core
 
         private static readonly object _appsLock = new();
         private static List<AudioAppInfo>? _appsCache;
+        private static bool _appsCacheIncludesIconPaths;
         private static long _appsCacheAt;
         private static int _appsGeneration, _appsCacheGeneration;
         private static readonly object _appsReadGate = new();
         private static Task<List<AudioAppInfo>>? _appsReadTask;
         private static int _appsReadGeneration;
+        private static int _appIconMetadataEnabled;
 
         public static void InvalidateAppsCache() => Interlocked.Increment(ref _appsGeneration);
+
+        /// <summary>由现有窗口生命周期控制；后台目标解析不需要图标元数据。
+        /// 开启时复用已有图标快照，仅基础快照或进行中的旧读取需要失效；不等待枚举锁。</summary>
+        public static void SetAppIconMetadataEnabled(bool enabled)
+        {
+            int value = enabled ? 1 : 0;
+            if (Interlocked.Exchange(ref _appIconMetadataEnabled, value) == value || !enabled) return;
+            // An in-flight basic read must not be shared by the newly opened UI. TryEnter avoids
+            // blocking the dispatcher on WASAPI; the existing generation check rejects that read.
+            if (!Monitor.TryEnter(_appsLock)) { InvalidateAppsCache(); return; }
+            try { if (!_appsCacheIncludesIconPaths) InvalidateAppsCache(); }
+            finally { Monitor.Exit(_appsLock); }
+        }
 
         /// <summary>Share ordinary reads without blocking the UI on the enumeration lock.
         /// Forced reads remain independent, and an invalidation starts a new read generation.</summary>
@@ -266,7 +283,7 @@ namespace SonicRoute.Core
             }
         }
 
-        private static List<AudioAppInfo> EnumerateApps()
+        private static List<AudioAppInfo> EnumerateApps(bool includeIconPaths)
         {
             var apps = new Dictionary<uint, AudioAppInfo>();
             var processes = new Dictionary<uint, (string? Name, bool Alive)>();
@@ -277,7 +294,7 @@ namespace SonicRoute.Core
                 {
                     var devices = GetDevicesCore(enumerator, flow);
                     foreach (var dev in devices)
-                        CollectSessions(enumerator, dev.Id, apps, processes);
+                        CollectSessions(enumerator, dev.Id, apps, processes, includeIconPaths);
                 }
             }
             finally
@@ -292,7 +309,7 @@ namespace SonicRoute.Core
         }
 
         private static void CollectSessions(IMMDeviceEnumerator enumerator, string deviceId,
-            Dictionary<uint, AudioAppInfo> apps, Dictionary<uint, (string? Name, bool Alive)> processes)
+            Dictionary<uint, AudioAppInfo> apps, Dictionary<uint, (string? Name, bool Alive)> processes, bool includeIconPaths)
         {
             int hrGet = enumerator.GetDevice(deviceId, out var device);
             if (hrGet < 0 || device == null) return;
@@ -356,7 +373,8 @@ namespace SonicRoute.Core
                                 }
                                 // Reuse the session already being read. Elevated/service processes
                                 // may deny image-path queries even though their icon file is readable.
-                                if (existing.IconPath == null && session.GetIconPath(out var iconPath) >= 0
+                                if (includeIconPaths && Volatile.Read(ref _appIconMetadataEnabled) != 0 && existing.IconPath == null
+                                    && session.GetIconPath(out var iconPath) >= 0
                                     && !string.IsNullOrWhiteSpace(iconPath))
                                     existing.IconPath = iconPath;
                                 // 存在正在播放(Active)的会话 → 标记，供列表排序优先展示

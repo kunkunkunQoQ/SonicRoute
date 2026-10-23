@@ -3026,6 +3026,7 @@ namespace SonicRoute
         private void AutoRefreshVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateAutoRefreshVisibility();
         private void UpdateAutoRefreshVisibility()
         {
+            if (Application.Current is App app) app.UpdateAppIconMetadataDemand();
             if (!AutoRefreshWindowVisible) { StopAutoRefresh(); return; }
             _ = RefreshAutoAppsAsync(_navigationVersion, ensureFresh: true);
         }

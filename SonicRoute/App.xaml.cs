@@ -420,6 +420,7 @@ namespace SonicRoute
                         AppIconService.TrimForIdle();
                         ScheduleUiReclaim();
                     }
+                    else UpdateAppIconMetadataDemand();
                 };
             }
 
@@ -431,6 +432,11 @@ namespace SonicRoute
 
             _quickPanel.ShowQuickPanel();
         }
+
+        // Reuse the existing window references and visibility events; no separate UI registry.
+        internal void UpdateAppIconMetadataDemand() => AudioService.SetAppIconMetadataEnabled(
+            (_mainWindow?.IsVisible == true && _mainWindow.WindowState != WindowState.Minimized)
+            || _quickPanel?.IsVisible == true);
 
 
         private async Task RunUiBenchmarkAsync()
@@ -564,6 +570,7 @@ namespace SonicRoute
                         AppIconService.TrimForIdle();
                         ScheduleUiReclaim();
                     }
+                    else UpdateAppIconMetadataDemand();
                 };
             }
 

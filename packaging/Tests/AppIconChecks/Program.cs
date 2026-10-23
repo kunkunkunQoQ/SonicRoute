@@ -53,6 +53,13 @@ internal static class Program
             var image = AppIconService.GetIconForPath(path);
             Check("normal executable icon", image is BitmapSource bitmap && bitmap.IsFrozen);
             Check("successful path cache reused", ReferenceEquals(image, AppIconService.GetIconForPath(path)));
+            var windowDefaults = (Lazy<byte[][]>)typeof(AppIconService).GetField("WindowDefaultIconPixels", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+            Check("file icons do not initialize window-only resources", !windowDefaults.IsValueCreated);
+            AppIconService.Resume();
+            Check("existing UI resume enables icon metadata", SonicRoute.Core.AudioService.IconMetadataEnabled);
+            AppIconService.TrimForIdle();
+            Check("existing idle trim disables icon metadata", !SonicRoute.Core.AudioService.IconMetadataEnabled);
+            Check("UI lifecycle preserves successful icon cache", ReferenceEquals(image, AppIconService.GetIconForPath(path)));
             using (var self = Process.GetCurrentProcess())
                 Check("normal PID uses path cache", ReferenceEquals(image, AppIconService.GetIconForPid(self.Id)));
             var parallel = Enumerable.Range(0, 16).Select(_ => Task.Run(() => AppIconService.GetIconForPath(path))).ToArray();
@@ -109,6 +116,7 @@ internal static class Program
                     Console.WriteLine($"MEASURE {mode} {watch.Elapsed.TotalMilliseconds:F2} ms");
                     if (mode == "class" || mode == "message" || mode == "alpha")
                     {
+                        if (mode == "class") Check("window-only resources initialize on fallback", windowDefaults.IsValueCreated);
                         Check(mode + ": icon recovered without process access", icon is BitmapSource source && source.IsFrozen);
                         Check(mode + ": correct icon pixels and alpha", CorrectFixturePixels(icon!, mode == "alpha" ? (byte)128 : (byte)255));
                         Check(mode + ": repeated copy keeps source icon alive", SamePixels(icon!, AppIconService.GetIconForPid(child.Id)!));
@@ -276,6 +284,11 @@ internal static class Program
 
 namespace SonicRoute.Core
 {
+    internal static class AudioService
+    {
+        internal static bool IconMetadataEnabled;
+        internal static void SetAppIconMetadataEnabled(bool enabled) => IconMetadataEnabled = enabled;
+    }
     internal static class ConfigService { internal static object Load() => new object(); }
     internal static class AppIconFiles
     {
