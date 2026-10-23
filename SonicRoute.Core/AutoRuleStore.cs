@@ -25,9 +25,12 @@ namespace SonicRoute.Core
 
 #if NET10_0_OR_GREATER
         private static readonly JsonSerializerOptions SaveOptions = PersistenceJsonContext.Default.Options;
-        private static JsonSerializerOptions? ReadOptions => SaveOptions;
 #else
         private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
+#endif
+#if NET10_0_OR_GREATER || NET48
+        private static JsonSerializerOptions? ReadOptions => SaveOptions;
+#else
         private static JsonSerializerOptions? ReadOptions => null;
 #endif
 

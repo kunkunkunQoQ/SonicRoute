@@ -240,9 +240,14 @@ namespace SonicRoute.Core
 
 #if NET10_0_OR_GREATER
         private static readonly JsonSerializerOptions SaveOptions = PersistenceJsonContext.Default.Options;
-        private static JsonSerializerOptions? ReadOptions => SaveOptions;
 #else
         private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
+#endif
+#if NET10_0_OR_GREATER || NET48
+        // Indentation affects writes only. Legacy can reuse its existing reflection
+        // metadata for reads and saves instead of building a second options cache.
+        private static JsonSerializerOptions? ReadOptions => SaveOptions;
+#else
         private static JsonSerializerOptions? ReadOptions => null;
 #endif
 

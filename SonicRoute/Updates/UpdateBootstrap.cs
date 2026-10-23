@@ -9,7 +9,20 @@ namespace SonicRoute.Updates
     internal static class UpdateBootstrap
     {
         internal static InstallPlan? Pending { get; private set; }
-        internal static string ExecutablePath { get { using var process = Process.GetCurrentProcess(); return process.MainModule!.FileName!; } }
+        internal static string ExecutablePath
+        {
+            get
+            {
+#if NET48
+                // Share the existing process identity cache; keep the original query as
+                // a recovery path if the initial cached lookup could not obtain a path.
+                var cached = SonicRoute.Core.Compat.AppInfo.ExecutablePath;
+                if (!string.IsNullOrEmpty(cached)) return cached;
+#endif
+                using var process = Process.GetCurrentProcess();
+                return process.MainModule!.FileName!;
+            }
+        }
         internal static string Architecture
         {
             get
