@@ -634,8 +634,9 @@ namespace SonicRoute
                 // 名称开关关闭时只走原音量读取，不查询播放路由、不创建名称控件。
                 var vols = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName), static state =>
                 {
-                    SessionVolumeService.Refresh();
                     var d = new Dictionary<int, (int vol, bool muted, string? output)>();
+                    if (state.Apps.Count == 0) return d;
+                    SessionVolumeService.Refresh();
                     using var routes = state.ShowOutputName ? new AudioPolicyConfig(EDataFlow.eRender) : null;
                     foreach (var a in state.Apps)
                     {

@@ -202,6 +202,19 @@ internal static class Program
             Assert(string.Join(",", Boundary.PolicyRoles) == (Expected(0, 1) == 0 ? "1" : "0,1"), "input roles");
         });
 #if !BASELINE
+        Case("empty visible list skips session discovery with route names disabled", () =>
+        {
+            var rows = PanelRows.Read(new List<AudioAppInfo>(), false);
+            Assert(rows.Count == 0 && Boundary.Enumerators == 0 && Boundary.Policies == 0,
+                $"empty list enumerators={Boundary.Enumerators} policies={Boundary.Policies}");
+        });
+        Case("all hidden apps skip discovery and route policy creation", () =>
+        {
+            Boundary.Add(EDataFlow.eRender, new Session(143));
+            var rows = PanelRows.Read(new List<AudioAppInfo>(), true);
+            Assert(rows.Count == 0 && Boundary.Enumerators == 0 && Boundary.Policies == 0,
+                $"hidden apps enumerators={Boundary.Enumerators} policies={Boundary.Policies}");
+        });
         Case("volume readback failure keeps unknown actual value", () =>
         {
             var d = Boundary.Add(EDataFlow.eRender); d.Volume.VolumeReadFailures = 10;
