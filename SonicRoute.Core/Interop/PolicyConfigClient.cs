@@ -54,7 +54,7 @@ namespace SonicRoute.Core.Interop
         int SetPropertyValue(IntPtr pstereoid, IntPtr pdeviceid, IntPtr pkey, IntPtr pvalue);
 
         [PreserveSig]
-        int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string wszDeviceId, EDataFlow dataFlow);
+        int SetDefaultEndpoint([MarshalAs(UnmanagedType.LPWStr)] string wszDeviceId, ERole role);
 
         [PreserveSig]
         int SetEndpointVisibility(IntPtr pstereoid, IntPtr pdeviceid, int bvisible);
@@ -64,16 +64,23 @@ namespace SonicRoute.Core.Interop
     public static class SystemDefaultDeviceService
     {
         /// <summary>将系统默认输出/输入设备设为指定设备（短 ID 或完整路径均可）。
-        /// 返回 HRESULT 与结果。</summary>
+        /// 设置 Console/Multimedia 普通默认角色，保留独立的通信默认设备。返回 HRESULT 与结果。</summary>
         public static (bool Success, int HResult, string Message) SetDefault(EDataFlow flow, string deviceId)
         {
+            IPolicyConfig? policy = null;
             try
             {
-                var client = new PolicyConfigClient();
+                if ((flow != EDataFlow.eRender && flow != EDataFlow.eCapture) || string.IsNullOrWhiteSpace(deviceId))
+                    return (false, unchecked((int)0x80070057), "E_INVALIDARG");
+                policy = (IPolicyConfig)new PolicyConfigClient();
                 // ⚠️ SetDefaultEndpoint 需要的是"短 ID"（IMMDevice::GetId 返回格式，如 {0.0.0.00000000}.{hash}），
                 // 不能包成完整接口路径（\\?\SWD#MMDEVAPI#... 是按应用路由 API 的格式）——实测包成完整路径返回 E_INVALIDARG。
                 // 传的就是 Device.Id（IMMDevice::GetId 的短 ID 格式）。
-                int hr = ((IPolicyConfig)client).SetDefaultEndpoint(deviceId, flow);
+                // 方向由端点 ID 决定；原生第二参数是角色，不能传入 eRender/eCapture。
+                string endpointId = AudioPolicyConfig.UnpackDeviceId(deviceId);
+                int console = policy.SetDefaultEndpoint(endpointId, ERole.eConsole);
+                int multimedia = policy.SetDefaultEndpoint(endpointId, ERole.eMultimedia);
+                int hr = console < 0 ? console : multimedia;
                 if (hr >= 0)
                     return (true, hr, "成功");
                 return (false, hr, $"HRESULT: 0x{hr:X8} ({hr})");
@@ -82,6 +89,7 @@ namespace SonicRoute.Core.Interop
             {
                 return (false, 0, ex.Message);
             }
+            finally { if (policy != null) Marshal.ReleaseComObject(policy); }
         }
     }
 }
