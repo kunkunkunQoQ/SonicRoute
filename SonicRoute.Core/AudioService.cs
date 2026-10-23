@@ -354,6 +354,11 @@ namespace SonicRoute.Core
                                 {
                                     existing.DisplayName = displayName;
                                 }
+                                // Reuse the session already being read. Elevated/service processes
+                                // may deny image-path queries even though their icon file is readable.
+                                if (existing.IconPath == null && session.GetIconPath(out var iconPath) >= 0
+                                    && !string.IsNullOrWhiteSpace(iconPath))
+                                    existing.IconPath = iconPath;
                                 // 存在正在播放(Active)的会话 → 标记，供列表排序优先展示
                                 if (hrState >= 0 && state == AudioSessionState.Active)
                                     existing.HasActiveSession = true;

@@ -62,7 +62,8 @@ namespace SonicRoute
         private static bool SameAutoApp(AudioAppInfo a, AudioAppInfo b) =>
             a.ProcessId == b.ProcessId && a.HasActiveSession == b.HasActiveSession
             && string.Equals(a.ProcessName, b.ProcessName, StringComparison.Ordinal)
-            && string.Equals(a.DisplayName, b.DisplayName, StringComparison.Ordinal);
+            && string.Equals(a.DisplayName, b.DisplayName, StringComparison.Ordinal)
+            && string.Equals(a.IconPath, b.IconPath, StringComparison.Ordinal);
 
         private void BindAutoAppCandidates(ComboBox combo, string? processName)
         {

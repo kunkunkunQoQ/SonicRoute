@@ -617,7 +617,7 @@ namespace SonicRoute
             Add(showOutputName.ToString());
             foreach (var app in apps)
             {
-                Add(app.ProcessId.ToString()); Add(app.ProcessName); Add(app.DisplayName); Add(AppDisplayName.Get(app));
+                Add(app.ProcessId.ToString()); Add(app.ProcessName); Add(app.DisplayName); Add(app.IconPath); Add(AppDisplayName.Get(app));
             }
             foreach (var device in _outputDisplay) { Add(device.Id); Add(device.DisplayName); }
             foreach (var device in _inputDisplay) { Add(device.Id); Add(device.DisplayName); }

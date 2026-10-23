@@ -96,7 +96,7 @@ namespace SonicRoute
             bool queued = false;
             try
             {
-                var icon = AppIconService.GetIconForApp(ProcessId, ProcessName);
+                var icon = AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
                 if (icon == null) return; // Preserve the original no-dispatch path for missing/default icons.
                 var disp = System.Windows.Application.Current?.Dispatcher;
                 if (disp != null && !disp.CheckAccess())

@@ -3092,9 +3092,7 @@ namespace SonicRoute
             {
                 var a = current[i];
                 var b = next[i];
-                if (a.ProcessId != b.ProcessId || a.HasActiveSession != b.HasActiveSession
-                    || !string.Equals(a.ProcessName, b.ProcessName, StringComparison.Ordinal)
-                    || !string.Equals(a.DisplayName, b.DisplayName, StringComparison.Ordinal))
+                if (!SameAutoApp(a, b))
                     return false;
             }
             return true;

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -20,6 +22,7 @@ namespace SonicRoute
         /// <summary>图标缓存上限：防止面板/完整界面反复枚举应用导致 BitmapSource 无限增长（内存优化 A1）。</summary>
         private const int MaxCacheSize = 256;
         private const int IdleCacheSize = 32;
+        private const int FailedCacheMilliseconds = 5000;
         private static int _cacheLimit = MaxCacheSize;
         private static long _accessSequence;
 
@@ -27,16 +30,24 @@ namespace SonicRoute
         {
             public readonly Lazy<ImageSource?> Image;
             public long LastUsed;
+            public int FailedAt;
             public CacheEntry(string key)
             {
-                Image = new Lazy<ImageSource?>(() => key.StartsWith("png|", StringComparison.Ordinal)
-                    ? CustomAppIconStore.Load(key.Substring(4)) : ExtractIcon(key.Substring(4)));
+                Image = new Lazy<ImageSource?>(() =>
+                {
+                    var image = key.StartsWith("png|", StringComparison.Ordinal)
+                        ? CustomAppIconStore.Load(key.Substring(4)) : ExtractIcon(key.Substring(4));
+                    if (image == null) Volatile.Write(ref FailedAt, Environment.TickCount);
+                    return image;
+                });
             }
         }
 
         private static readonly ConcurrentDictionary<string, CacheEntry> Cache = new(StringComparer.OrdinalIgnoreCase);
 
-        public static ImageSource? GetIconForApp(int pid, string processName)
+        public static ImageSource? GetIconForApp(int pid, string processName) => GetIconForApp(pid, processName, null);
+
+        public static ImageSource? GetIconForApp(int pid, string processName, string? sessionIconPath)
         {
             string? custom = AppIconFiles.GetFileName(ConfigService.Load(), processName);
             if (custom != null)
@@ -44,6 +55,9 @@ namespace SonicRoute
                 var image = GetOrExtract("png|" + custom);
                 if (image != null) return image;
             }
+            // WASAPI can supply an icon for a protected audio service without any GUI window.
+            // It is metadata, never a command; share the existing file extraction/cache.
+            if (GetIconForPath(sessionIconPath) is ImageSource sessionIcon) return sessionIcon;
             return GetIconForPid(pid);
         }
 
@@ -58,14 +72,79 @@ namespace SonicRoute
             if (pid <= 0) return null;
             // PR #6: query the image path without requesting access to process modules.
             using var handle = OpenProcess(0x1000, false, pid); // PROCESS_QUERY_LIMITED_INFORMATION
-            if (handle.IsInvalid) return null;
-            var path = new StringBuilder(1024);
-            int length = path.Capacity;
-            if (QueryFullProcessImageName(handle, 0, path, ref length)) return GetIconForPath(path.ToString());
-            if (Marshal.GetLastWin32Error() != 122) return null;
-            path.EnsureCapacity(32768);
-            length = path.Capacity;
-            return QueryFullProcessImageName(handle, 0, path, ref length) ? GetIconForPath(path.ToString()) : null;
+            if (!handle.IsInvalid)
+            {
+                var path = new StringBuilder(1024);
+                int length = path.Capacity;
+                bool found = QueryFullProcessImageName(handle, 0, path, ref length);
+                if (!found && Marshal.GetLastWin32Error() == 122)
+                {
+                    path.EnsureCapacity(32768);
+                    length = path.Capacity;
+                    found = QueryFullProcessImageName(handle, 0, path, ref length);
+                }
+                if (found && GetIconForPath(path.ToString()) is ImageSource image) return image;
+            }
+            // Some elevated applications deny even limited process queries. Window icons do not
+            // require opening their executable/process. Never guess a path from a process name.
+            return GetWindowIcon(pid);
+        }
+
+        private static ImageSource? GetWindowIcon(int pid)
+        {
+            var windows = new List<IntPtr>();
+            EnumWindows((window, _) =>
+            {
+                GetWindowThreadProcessId(window, out uint owner);
+                if (owner == (uint)pid) windows.Add(window);
+                return true;
+            }, IntPtr.Zero);
+
+            // Prefer visible application windows over hidden helper windows. All work is on demand
+            // on the existing icon worker; a hung window gets a bounded share of a 200 ms budget.
+            var budget = Stopwatch.StartNew();
+            foreach (var window in windows.OrderByDescending(IsWindowVisible))
+            {
+                if (budget.ElapsedMilliseconds >= 200) break;
+                GetWindowThreadProcessId(window, out uint owner);
+                if (owner != (uint)pid) continue;
+                // A missing small class icon may be synthesized by Windows from its generic
+                // large icon; prefer the original large icon rather than that generated variant.
+                var classIcon = GetClassLongPtr(window, -14);
+                if (classIcon == IntPtr.Zero) classIcon = GetClassLongPtr(window, -34);
+                var image = CopyWindowIcon(classIcon);
+                GetWindowThreadProcessId(window, out owner);
+                if (owner != (uint)pid) continue;
+                if (image != null) return image;
+                // ICON_BIG / ICON_SMALL only. ICON_SMALL2 can synthesize a stock icon.
+                for (int kind = 1; kind >= 0; kind--)
+                {
+                    int remaining = 200 - (int)budget.ElapsedMilliseconds;
+                    if (remaining <= 0) return null;
+                    // SMTO_BLOCK | SMTO_ABORTIFHUNG | SMTO_ERRORONEXIT; no unbounded SendMessage.
+                    if (SendMessageTimeout(window, 0x007F, new IntPtr(kind), IntPtr.Zero, 0x23,
+                        (uint)Math.Min(50, remaining), out var icon) == IntPtr.Zero) break;
+                    GetWindowThreadProcessId(window, out owner);
+                    if (owner != (uint)pid) break;
+                    image = CopyWindowIcon(icon);
+                    if (image != null) return image;
+                }
+            }
+            return null;
+        }
+
+        private static ImageSource? CopyWindowIcon(IntPtr source)
+        {
+            if (source == IntPtr.Zero) return null;
+            var copy = CopyIcon(source);
+            if (copy == IntPtr.Zero) return null;
+            try
+            {
+                var image = FromNativeIcon(copy);
+                return IsDefaultIcon(image) ? null : image;
+            }
+            catch { return null; } // The target can exit while its window/icon is being read.
+            finally { DestroyIcon(copy); } // Never destroy an icon owned by another application.
         }
 
         /// <summary>取指定 EXE 的图标（自动化「打开方式」候选应用使用，与进程图标共用缓存）；失败返回 null。</summary>
@@ -78,6 +157,15 @@ namespace SonicRoute
         private static ImageSource? GetOrExtract(string exe)
         {
             var entry = Cache.GetOrAdd(exe, path => new CacheEntry(path));
+            // Keep misses briefly to coalesce repeated UI requests, but never poison the cache
+            // for the entire session after a temporary file lock/permission failure. No timer.
+            if (entry.Image.IsValueCreated && entry.Image.Value == null
+                && unchecked((uint)(Environment.TickCount - Volatile.Read(ref entry.FailedAt))) >= FailedCacheMilliseconds)
+            {
+                var replacement = new CacheEntry(exe);
+                entry = Cache.TryUpdate(exe, replacement, entry) ? replacement
+                    : Cache.GetOrAdd(exe, path => new CacheEntry(path));
+            }
             Interlocked.Exchange(ref entry.LastUsed, Interlocked.Increment(ref _accessSequence));
             // 相同路径的并发请求共用一次提取，避免 GetOrAdd 工厂重复提取位图。
             var src = entry.Image.Value;
@@ -93,18 +181,24 @@ namespace SonicRoute
                 if (icon == null) return null;
                 var image = FromIcon(icon);
                 // Only automatic EXE icons are filtered; explicit user imports remain authoritative.
-                var pixels = Pixels(image);
-                foreach (var reference in DefaultIconPixels.Value)
-                    if (pixels.SequenceEqual(reference)) return null;
-                return image;
+                return IsDefaultIcon(image) ? null : image;
             }
             catch { return null; }
         }
 
+        private static bool IsDefaultIcon(BitmapSource image)
+        {
+            var pixels = Pixels(image);
+            return DefaultIconPixels.Value.Any(reference => pixels.SequenceEqual(reference));
+        }
+
         private static readonly Lazy<byte[][]> DefaultIconPixels = new(() =>
         {
-            var references = new System.Collections.Generic.List<byte[]>(4);
+            var references = new List<byte[]>(7);
             AddDefaultIcon(references, System.Drawing.SystemIcons.Application);
+            // Windows' shared IDI_APPLICATION can differ from SystemIcons.Application.
+            var shared = LoadIcon(IntPtr.Zero, new IntPtr(32512));
+            if (shared != IntPtr.Zero) references.Add(Pixels(FromNativeIcon(shared)));
             var stock = new StockIconInfo { Size = (uint)Marshal.SizeOf<StockIconInfo>() };
             if (SHGetStockIconInfo(2, 0x100, ref stock) != 0 || stock.Icon == IntPtr.Zero) return references.ToArray();
             try
@@ -116,9 +210,10 @@ namespace SonicRoute
             finally { DestroyIcon(stock.Icon); }
         });
 
-        private static void AddDefaultIcon(System.Collections.Generic.List<byte[]> references, System.Drawing.Icon icon)
+        private static void AddDefaultIcon(List<byte[]> references, System.Drawing.Icon icon)
         {
             references.Add(Pixels(FromIcon(icon)));
+            references.Add(Pixels(FromNativeIcon(icon.Handle)));
             // PE/icon-file decoding may expose a legacy mask variant of the same stock icon.
             using var encoded = new MemoryStream();
             icon.Save(encoded);
@@ -149,6 +244,14 @@ namespace SonicRoute
             finally { DeleteObject(hbmp); }
         }
 
+        private static BitmapSource FromNativeIcon(IntPtr icon)
+        {
+            var image = Imaging.CreateBitmapSourceFromHIcon(icon, Int32Rect.Empty,
+                BitmapSizeOptions.FromWidthAndHeight(24, 24));
+            image.Freeze();
+            return image;
+        }
+
         /// <summary>按最近访问顺序淘汰；UI 关闭后最多保留 32 个冻结图标，减少下次打开时的提取。</summary>
         private static void TrimIfNeeded()
         {
@@ -175,6 +278,32 @@ namespace SonicRoute
         [DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, StringBuilder path, ref int length);
+
+        private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr window);
+
+        [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")]
+        private static extern IntPtr GetClassLongPtr(IntPtr window, int index);
+
+        [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")]
+        private static extern IntPtr SendMessageTimeout(IntPtr window, uint message, IntPtr wParam,
+            IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CopyIcon(IntPtr icon);
+
+        [DllImport("user32.dll", EntryPoint = "LoadIconW")]
+        private static extern IntPtr LoadIcon(IntPtr instance, IntPtr resource);
 
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
