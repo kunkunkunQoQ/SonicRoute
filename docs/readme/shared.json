@@ -4,9 +4,9 @@
   "runtime": "https://dotnet.microsoft.com/download/dotnet/10.0",
   "runtime8": "https://dotnet.microsoft.com/download/dotnet/8.0",
   "minimumWindows": "Windows 10 2004+ / Windows 11",
-  "release": "v1.26",
-  "releaseDate": "2026-10-23",
-  "releaseNotes": "docs/release-v1.26.md",
+  "release": "v1.27",
+  "releaseDate": "2026-10-24",
+  "releaseNotes": "docs/release-v1.27.md",
   "author": {
     "bilibili": "https://b23.tv/TDqSAKM",
     "afdian": "https://afdian.com/a/koukou021",
@@ -68,7 +68,7 @@
       "automationMascot": "mascot-automation-ru.png"
     }
   ],
-  "nextRelease": "v1.26",
+  "nextRelease": "v1.27",
   "triggerCount": 6,
   "actionCount": 37,
   "wikiPages": {

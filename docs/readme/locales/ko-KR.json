@@ -51,7 +51,7 @@
     "configureAutomation": "자동화 설정",
     "automationExample": "번거로운 수동 설정을 한 번의 구성으로 언제나 간편한 자동화로 전환하세요.",
     "currentRelease": "현재 릴리스",
-    "releaseSummary": "버전 {version}에서는 일부 높은 권한으로 실행되는 앱의 아이콘 문제를 수정하고, 필요할 때만 오디오를 읽도록 개선했으며 .NET 10 및 Legacy 버전의 지속성을 보완했습니다. 음소거 상태 읽기와 종료 시 정리도 개선했습니다. 이전 변경 사항은 {history}에서 확인하세요.",
+    "releaseSummary": "{version}은 빠른 패널을 통합하고 기존 앱 패널을 제거했으며, 오디오 세션 알림과 오류 복구를 개선했습니다. 음소거 단축키 대상과 중복 알림을 수정하고 장치 사용자 지정 이름, 공통 스크롤바 및 설정 행 재사용을 적용했습니다. 이전 변경 사항은 {history}를 확인하세요.",
     "docTopic": "주제",
     "docGuides": "가이드",
     "docTopics": [

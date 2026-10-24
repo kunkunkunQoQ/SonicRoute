@@ -51,7 +51,7 @@
     "configureAutomation": "配置自动化",
     "automationExample": "把繁琐的手动改设置，变成一次配置、随开随用的自动化体验。",
     "currentRelease": "当前正式版",
-    "releaseSummary": "{version} 修复部分高权限应用的图标问题，优化按需读取音频及 .NET 10 和 Legacy 版的持久化，并改进静音状态读回与退出清理。旧版变化见 {history}。",
+    "releaseSummary": "{version} 统一快速面板并移除旧应用面板，改进音频会话通知与异常恢复，修复静音快捷键的目标和重复提示；设备卡片优先显示自定义名称，加入统一滚动条并复用设置行。旧版变化见 {history}。",
     "docTopic": "想了解什么",
     "docGuides": "文档",
     "docTopics": [

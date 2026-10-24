@@ -51,7 +51,7 @@
     "configureAutomation": "Set up automation",
     "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease": "Current release",
-    "releaseSummary": "Version {version} fixes icons for some elevated-privilege apps, improves on-demand audio reads and persistence in .NET 10 and Legacy editions, and refines mute-state readback and shutdown cleanup. See {history} for earlier changes.",
+    "releaseSummary": "Version {version} unifies the quick panel and removes the old app panel, improves audio-session notifications and recovery, and fixes mute hotkey targets and duplicate feedback. Device cards prefer custom names, with shared scrollbars and reusable settings rows. See {history} for earlier changes.",
     "docTopic": "Topic",
     "docGuides": "Guides",
     "docTopics": [

@@ -6,7 +6,7 @@
 SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
-  version: "v1.26 (1.26.0.0)"
+  version: "v1.27 (1.27.0.0)"
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
   download_latest: "https://github.com/kunkunkunQoQ/SonicRoute/releases/latest"
@@ -153,11 +153,11 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Icons dir: %LocalAppData%\\SonicRoute\\Icons\\"
 
   VERSION_ARCHIVE_AND_CHANGELOG:
-    intent: "Release history, changelog, v1.26 upgrade notes"
-    keywords: ["changelog", "history", "version", "update", "v1.26", "v1.25", "v1.24", "更新日志", "版本历史"]
+    intent: "Release history, changelog, v1.27 upgrade notes"
+    keywords: ["changelog", "history", "version", "update", "v1.27", "v1.25", "v1.24", "更新日志", "版本历史"]
     wiki: "09-版本历史.md"
-    source: ["docs/release-v1.26.md"]
-    symbols: ["v1.26"]
+    source: ["docs/release-v1.27.md"]
+    symbols: ["v1.27"]
     facts:
       - "v1.26: Protected-app icon fallback, on-demand audio reads, runtime-specific persistence and reliable mute readback."
       - "v1.25: .NET 10 default, native updater, 37 actions, drag icon, 850px panel."

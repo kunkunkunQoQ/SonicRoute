@@ -51,7 +51,7 @@
     "configureAutomation": "Automatisierung einrichten",
     "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease": "Aktuelle Version",
-    "releaseSummary": "Version {version} behebt die Anzeige von Symbolen bei einigen Apps mit erhöhten Rechten, verbessert bedarfsgesteuertes Lesen von Audiodaten sowie die Persistenz unter .NET 10 und Legacy und optimiert das Auslesen des Stummschaltstatus und die Bereinigung beim Beenden. Frühere Änderungen: {history}.",
+    "releaseSummary": "Version {version} vereinheitlicht das Schnellpanel und entfernt das alte App-Panel. Audiositzungsbenachrichtigungen und Fehlerbehebung wurden verbessert, Ziele der Stummschalt-Tastenkürzel und doppelte Hinweise korrigiert. Gerätekarten zeigen bevorzugt eigene Namen; Scrollleisten und Einstellungszeilen werden wiederverwendet. Frühere Änderungen: {history}.",
     "docTopic": "Thema",
     "docGuides": "Anleitungen",
     "docTopics": [

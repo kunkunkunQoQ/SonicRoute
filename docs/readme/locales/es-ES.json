@@ -51,7 +51,7 @@
     "configureAutomation": "Configurar automatización",
     "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
     "currentRelease": "Versión actual",
-    "releaseSummary": "La versión {version} corrige los iconos de algunas aplicaciones con privilegios elevados, mejora la lectura de audio bajo demanda y la persistencia en las ediciones .NET 10 y Legacy, y perfecciona la lectura del estado de silencio y la limpieza al cerrar. Consulta {history} para ver cambios anteriores.",
+    "releaseSummary": "La versión {version} unifica el panel rápido y elimina el antiguo panel de aplicaciones. Mejora las notificaciones de sesiones de audio y la recuperación, y corrige los destinos de los atajos de silencio y los avisos duplicados. Las tarjetas priorizan nombres personalizados e incorporan barras de desplazamiento comunes y filas de ajustes reutilizadas. Cambios anteriores: {history}.",
     "docTopic": "Tema",
     "docGuides": "Guías",
     "docTopics": [
