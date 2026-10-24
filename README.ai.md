@@ -18,7 +18,7 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   persistence_scope: "OS-level native persistence (survives app exit & OS reboot without SonicRoute running)"
   mixer_isolation: "Per-app endpoint persistence; never corrupts Windows volume mixer"
   hooks_in_use: "User-mode only: SetWinEventHook (foreground focus tracking), SetWindowsHookEx WH_MOUSE_LL (tray wheel & mouse hotkey input)"
-  execution_resource_model: "Event-driven first (WinEventHook + CoreAudio IMMNotificationClient). Conditional timers (1s-2s) activate only during fallback polling (BackgroundPollingFallbackEnabled), rule process probing, or mic mute sync."
+  execution_resource_model: "Event-driven first (WinEventHook + CoreAudio IMMNotificationClient). A necessary 1-second automation process snapshot fallback and conditional recovery checks are retained; visible active-session meters sample at 33ms. No relevant rules or closed meter UI retain their dedicated polling."
   cli_ipc_transport: "NamedPipe IPC (sr.cmd targets running instance; SonicRoute.exe --run-rule cold-boots temporary CLI host if instance absent)"
   cross_platform: "FALSE (strictly Win32/WPF/.NET CoreAudio; never macOS/Linux)"
 
@@ -126,7 +126,7 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     symbols: ["AudioMeterService.Start", "AudioMeterService.Stop", "ForegroundChangeSource"]
     facts:
       - "Event-driven first architecture using WinEventHook and CoreAudio events."
-      - "Background polling fallback (1s-2s) is disabled by default; runs only if explicitly configured or WMI trace fails."
+      - "Automation process fallback remains 1 second when required. WMI subscription recovery backs off from 2 to 30 seconds without slowing fallback detection; no process rules retain no dedicated listener or timer."
       - "AudioMeterService peak monitoring runs exclusively while UI panels are open; stops when closed."
 
   SOURCE_ARCHITECTURE_AND_BUILD:
@@ -159,7 +159,7 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     source: ["docs/release-v1.27.md"]
     symbols: ["v1.27"]
     facts:
-      - "v1.26: Protected-app icon fallback, on-demand audio reads, runtime-specific persistence and reliable mute readback."
+      - "v1.27: One quick panel, session notification lifecycle, reliable mute hotkey targets, custom device titles, shared scrollbars and reusable settings rows. v1.26: Protected-app icon fallback and runtime-specific persistence."
       - "v1.25: .NET 10 default, native updater, 37 actions, drag icon, 850px panel."
       - "v1.24: Card-style release notes, audio meter optimizations."
 
@@ -235,7 +235,7 @@ QUERY_DECISION_MATRIX_FOR_AGENTS:
       FIX: "Download .NET Desktop Runtime (x64/ARM64) from official Microsoft link."
     ALTERNATIVE: "Advise Legacy x64 build (uses system .NET Framework 4.8; no separate runtime required)."
   WHEN user_asks_cpu_consumption:
-    RESPONSE_FACT: "Idle CPU is minimized via WinEventHook and CoreAudio event callbacks. Conditional fallback timers (1s-2s) only run if fallback polling mode is explicitly enabled or when actively probing rules."
+    RESPONSE_FACT: "System events drive detection, with necessary 1-second process fallback and conditional failure recovery. Active visible meters still sample at 33ms; inactive sessions wait for notifications. No whole-app CPU or memory improvement is claimed from local call-count checks."
 
 
 <div align="right"><sub><a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI" title="AI Context">🤖 Wiki AI Knowledge Base</a></sub></div>
