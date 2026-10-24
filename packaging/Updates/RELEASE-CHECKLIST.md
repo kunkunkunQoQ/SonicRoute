@@ -46,6 +46,8 @@ $candidate = 'E:\releases\SonicRoute-v1.26-candidate-<commit>'
 
 发布说明必须是有效 UTF-8，并与当前源码中同版本的人工维护 Markdown 一致；晋级前还会核对 GitHub 草稿的实际正文。不可只比较上传正文与生成文件、遗漏生成阶段已经发生的乱码。失败时保留候选，先解决具体原因；改变源码或版本后须用新候选目录重新走全流程。
 
+新版本正文以 [v1.27](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.27) 为排版参考：标题/日期/核心主题 → 核心更新亮点 → 按功能分组的详细演进 → 升级与验证说明 → 资产下载矩阵 → 数据保留指引 → 相关链接。维护 `docs/release-v<version>.md`，逐项核对本版事实、下载版本和运行时要求；性能收益须有对应证据，未测场景如实说明。人工正文优先且原样发布；缺少正文时仅从本版提交生成同结构摘要，不继承旧版功能或测试结论。
+
 ## 正式发布
 
 正式操作前确认目标版本和 commit 正确、工作树 clean、候选与收据匹配、Dry Run 通过，并具备 GitHub CLI 对目标仓库 Contents 的写权限。正式发布仅允许 `master`。

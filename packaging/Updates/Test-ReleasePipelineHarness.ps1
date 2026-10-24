@@ -1,4 +1,4 @@
-<# Exercises real release functions and real packages. Only git/gh, binary download and retry delays are substituted.
+﻿<# Exercises real release functions and real packages. Only git/gh, binary download and retry delays are substituted.
    Never writes to the network. Retains fixtures and a machine-readable report. #>
 [CmdletBinding()]
 param([string]$AssetsDirectory,[string]$ReportPath)
@@ -19,7 +19,7 @@ function Reset-Mock {
     $script:mock=@{Head=('a'*40);Tree=('c'*40);Branch='master';Dirty=$false;RemoteTag=$null;History=@(@{tag_name='v1.24';draft=$false;prerelease=$false});
         Draft=$true;Exists=$false;Target=('a'*40);Assets=@{};Calls=[Collections.Generic.List[string]]::new();Mutations=0;Uploads=0;
         ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false;TagApiUnavailable=$false;
-        HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100;Body='';CorruptNotes=$false;LatestWrongId=$false}
+        HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100;Body='';CorruptNotes=$false;LatestWrongId=$false;Commits=@()}
     $global:LASTEXITCODE=0
 }
 function git {
@@ -30,6 +30,7 @@ function git {
     if($line -match 'status --porcelain --untracked-files=all$'){if($mock.Dirty){return '?? untracked.cs'};return}
     if($line -match 'ls-remote --tags '){if($mock.RemoteTag){return "$($mock.RemoteTag)`trefs/tags/v$version"};return}
     if($line -match 'tag -l '){return 'v1.24'}
+    if($line -match ' log '){return $mock.Commits}
     throw "Unimplemented git boundary: $line"
 }
 function Remote-Object {
@@ -38,6 +39,7 @@ function Remote-Object {
 }
 function gh {
     $a=@($args);$line=$a -join ' ';$mock.Calls.Add($line);$global:LASTEXITCODE=0
+    if($line -match '^release list '){return '[{"tagName":"v1.24","isDraft":false}]'}
     if($a[0] -eq 'api'){
         if($mock.ApiFailure){$global:LASTEXITCODE=1;return}
         if($a -contains '--method'){
@@ -154,6 +156,47 @@ try {
     }
     Case 'retry executes real action until success' {$script:n=0;$r=Invoke-WithRetry -Action {$script:n++;if($n -lt 3){throw 'transient'};'ok'};Require ($n -eq 3 -and $r -eq 'ok') 'Retry count/result incorrect'}
     Case 'permanent failure stops after bound' {$script:n=0;Reject {Invoke-WithRetry -Action {$script:n++;throw 'permanent'}} 'permanent';Require ($n -eq 3) 'Retry bound incorrect'}
+    Case 'generated notes follow v1.27 layout with current links and complete details' {
+        $root=Join-Path $harnessRoot 'generated-notes'
+        $mock.Commits=@(
+            (('a'*40)+"`tfeat: new feature`ttester`taaaaaaa"),
+            (('b'*40)+"`tfix: corrected target`ttester`tbbbbbbb"),
+            (('c'*40)+"`tperf: reuse objects`ttester`tccccccc"),
+            (('d'*40)+"`tdocs: usage clarification`ttester`tddddddd")
+        )
+        $target=Join-Path $harnessRoot 'generated-notes.md'
+        $notes=Get-OrGenerateChangelog '2.34' $target 'example/SonicRoute'
+        $last=-1
+        foreach($heading in @('## ✨ 核心更新亮点','## 📋 详细演进说明','## 📋 升级与验证说明','## 🚀 资产下载矩阵','## 🔄 升级与数据保留指引','## 📚 相关链接')){
+            $index=$notes.IndexOf($heading,[StringComparison]::Ordinal)
+            Require ($index -gt $last) "Missing or misordered section: $heading";$last=$index
+        }
+        Require ($notes.Contains('### 1. 新增功能与特性') -and $notes.Contains('### 4. 其他变更') -and $notes.Contains('docs: usage clarification')) 'Detailed groups dropped non-feature commits'
+        foreach($asset in @('Lite-x64.exe','Lite-arm64.exe','Lite-NET8-x64.exe','Lite-NET8-arm64.exe','Legacy-x64.zip')){
+            Require ($notes.Contains("https://github.com/example/SonicRoute/releases/download/v2.34/SonicRoute-v2.34-$asset")) 'Download link has a stale version/repository'
+        }
+        Require (!$notes.Contains('v1.27') -and $notes.Contains('MSIX 不内置运行时') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承')) 'Copied old version facts or overstated upgrade guarantees'
+        Require ([IO.File]::ReadAllText($target,[Text.UTF8Encoding]::new($false,$true)) -ceq $notes) 'Saved generated UTF8 differs'
+        Require ($mock.Mutations -eq 0) 'Generating notes mutated GitHub'
+    }
+    Case 'highlight limit retains all commits in detailed notes' {
+        $root=Join-Path $harnessRoot 'limited-highlights'
+        $mock.Commits=@(1..8|ForEach-Object{('a'*40)+"`tfix: distinct item $_`ttester`taaaaaaa"})
+        $notes=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
+        $overview=($notes -split '## 📋 详细演进说明',2)[0]
+        Require ([regex]::Matches($overview,'(?m)^- fix: distinct item ').Count -eq 6) 'Highlight limit was not six'
+        Require ([regex]::Matches($notes,'(?m)^- fix: distinct item 8 ').Count -eq 1) 'Omitted highlight was lost from details'
+    }
+    Case 'documentation-only and empty history do not invent feature or test claims' {
+        $root=Join-Path $harnessRoot 'documentation-notes'
+        $mock.Commits=@(('a'*40)+"`tdocs: improve guide`ttester`taaaaaaa")
+        $notes=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
+        Require ([regex]::Matches($notes,'(?m)^- docs: improve guide ').Count -eq 2 -and $notes.Contains('### 1. 其他变更')) 'Documentation-only notes lost overview or detail'
+        Require (!$notes.Contains('### 1. 新增功能') -and !$notes.Contains('PASS')) 'Generated unsupported feature or validation claim'
+        $mock.Commits=@()
+        $empty=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
+        Require ($empty.Contains('未提取到可展示的提交记录') -and !$empty.Contains('PASS')) 'Empty history invented changes or validation'
+    }
     Case 'real preflight accepts exact clean source' {$r=Preflight;Require ($r.RemoteVerified -and $r.CommitSha -ceq $mock.Head) 'Unverified result'}
     Case 'preflight rejects unrelated source branch' {$mock.Branch='feature/test';Reject {Preflight} 'non-master'}
     Case 'preflight includes untracked files' {$mock.Dirty=$true;Reject {Preflight} 'clean source'}

@@ -321,7 +321,8 @@ function Get-OrGenerateChangelog {
 
     $prevTag = $null
     try {
-        $releases = (& gh release list --repo $TargetRepo --limit 5 --json tagName,isDraft 2>$null) | ConvertFrom-Json
+        $releaseJson = Invoke-Utf8Native { & gh release list --repo $TargetRepo --limit 5 --json tagName,isDraft 2>$null }
+        $releases = ($releaseJson -join "`n") | ConvertFrom-Json
         $prev = $releases | Where-Object { !$_.isDraft -and $_.tagName -ne "v$Version" } | Select-Object -First 1
         if ($prev) { $prevTag = $prev.tagName }
     } catch { }
@@ -377,34 +378,64 @@ function Get-OrGenerateChangelog {
     [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
 
+    # Follow the v1.27 layout, deriving the content from this version's commits.
+    # Curated notes above remain authoritative and are never reformatted.
+    [void]$sb.AppendLine("## ✨ 核心更新亮点")
+    [void]$sb.AppendLine("")
+    $highlights = @($features + $fixes + $improvements)
+    if ($highlights.Count -eq 0) { $highlights = @($others) }
+    foreach ($item in ($highlights | Select-Object -First 6)) { [void]$sb.AppendLine($item) }
+    if ($highlights.Count -eq 0) { [void]$sb.AppendLine("未提取到可展示的提交记录，请参阅本版人工维护的发布说明。") }
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("## 📋 详细演进说明")
+    [void]$sb.AppendLine("")
+    $section = 0
+
     if ($features.Count -gt 0) {
-        [void]$sb.AppendLine("## ✨ 新增功能与特性 (Features)")
+        $section++
+        [void]$sb.AppendLine("### $section. 新增功能与特性")
         [void]$sb.AppendLine("")
         foreach ($f in $features) { [void]$sb.AppendLine($f) }
         [void]$sb.AppendLine("")
     }
 
     if ($fixes.Count -gt 0) {
-        [void]$sb.AppendLine("## 🐛 缺陷修复 (Bug Fixes)")
+        $section++
+        [void]$sb.AppendLine("### $section. 缺陷修复")
         [void]$sb.AppendLine("")
         foreach ($fx in $fixes) { [void]$sb.AppendLine($fx) }
         [void]$sb.AppendLine("")
     }
 
     if ($improvements.Count -gt 0) {
-        [void]$sb.AppendLine("## ⚡ 体验与性能改进 (Improvements)")
+        $section++
+        [void]$sb.AppendLine("### $section. 体验与性能改进")
         [void]$sb.AppendLine("")
         foreach ($imp in $improvements) { [void]$sb.AppendLine($imp) }
         [void]$sb.AppendLine("")
     }
 
-    if ($others.Count -gt 0 -and ($features.Count + $fixes.Count + $improvements.Count) -eq 0) {
-        [void]$sb.AppendLine("## 📋 变更记录 (Changes)")
+    if ($others.Count -gt 0) {
+        $section++
+        [void]$sb.AppendLine("### $section. 其他变更")
         [void]$sb.AppendLine("")
         foreach ($oth in $others) { [void]$sb.AppendLine($oth) }
         [void]$sb.AppendLine("")
     }
 
+    if ($section -eq 0) { [void]$sb.AppendLine("未提取到可展示的提交记录。") }
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("## 📋 升级与验证说明")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("- **更新渠道**：便携版只匹配当前发行类型、运行时与架构；Microsoft Store 版继续由商店更新。自动检查默认关闭。")
+    [void]$sb.AppendLine("- **变更来源**：以上内容由本版提交记录自动汇总。功能效果、性能数据及已验证/未验证场景应以本版人工维护的发布说明和测试记录为准。")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("")
     [void]$sb.AppendLine("## 🚀 资产下载矩阵")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("| 发行形态 | 推荐目标人群 | 下载链接 | 运行环境要求 |")
@@ -412,20 +443,30 @@ function Get-OrGenerateChangelog {
     [void]$sb.AppendLine("| ⭐ **Lite x64**（.NET 10 推荐主力） | 主流 64 位 PC 绿色单文件 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-x64.exe) | 需匹配的 x64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |")
     [void]$sb.AppendLine("| ⚡ **Lite ARM64**（.NET 10 实验） | Surface Pro / 骁龙 PC 原生高效 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-arm64.exe) | 需匹配的 ARM64 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) |")
     [void]$sb.AppendLine("| ☕ **Lite NET8 x64**（.NET 8 兼容版） | 兼容现有 .NET 8 运行库环境 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-NET8-x64.exe) | 需匹配的 x64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |")
-    [void]$sb.AppendLine("| ☕ **Lite NET8 ARM64**（.NET 8 兼容版）| 兼容现有 .NET 8 运行库环境 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-NET8-arm64.exe) | 需匹配的 ARM64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |")
+    [void]$sb.AppendLine("| ☕ **Lite NET8 ARM64**（.NET 8 兼容版） | 兼容现有 .NET 8 运行库环境 | [单个 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Lite-NET8-arm64.exe) | 需匹配的 ARM64 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) |")
     [void]$sb.AppendLine("| 🛡️ **Legacy x64**（免装运行库） | 公司办公电脑 / 受限机型 | [完整 ZIP](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Legacy-x64.zip) | 系统自带 .NET Framework 4.8（解压即用） |")
-    [void]$sb.AppendLine("| 🔄 **Microsoft Store** | 商店静默后台自动更新 | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 适用于 64 位 Windows 10 2004+ / Windows 11 |")
+    [void]$sb.AppendLine("| 🔄 **Microsoft Store** | 由商店提供更新，在架版本以商店页面为准 | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64 .NET 10 Desktop Runtime；MSIX 不内置运行时 |")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("> [!NOTE]")
     [void]$sb.AppendLine("> - 支持 Windows 10 2004+ / Windows 11 系统。")
-    [void]$sb.AppendLine("> - 默认 Lite 需要对应架构的 .NET 10 桌面运行时；带 NET8 后缀的兼容版需要 .NET 8。2026 年 11 月之后停止提供和维护 NET8 版，届时请手动选择 .NET 10，或 x64 Legacy。")
-    [void]$sb.AppendLine("> - 资产完整性 SHA-256 校验和请查看发布附件 ``SHA256SUMS.txt``。")
+    [void]$sb.AppendLine("> - 默认 Lite 需要对应架构的 .NET 10 Desktop Runtime；带 NET8 后缀的兼容版需要 .NET 8。2026 年 11 月之后停止提供和维护 NET8 版；x64 用户可手动选择 .NET 10 或 Legacy，ARM64 用户请选择 .NET 10，不跨运行时自动替换。")
+    [void]$sb.AppendLine("> - Lite 与 Store 为框架依赖部署，不假定商店会自动安装 .NET 10 Desktop Runtime。")
+    [void]$sb.AppendLine("> - 发布附件提供 ``SHA256SUMS.txt`` 和 ``SonicRoute-update.json``（Protocol 2）。SHA-256 用于完整性校验，不是独立发布者数字签名。")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("## 🔄 升级与迁移指引")
+    [void]$sb.AppendLine("---")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("- **覆盖升级**：升级前请先在任务栏右下角托盘图标右键选择「退出」，然后运行新版 EXE 或解压覆盖 Legacy 文件夹。")
-    [void]$sb.AppendLine("- **数据保留**：已有的应用分流设置、快捷键与自动化规则（保存在 ``%LocalAppData%\\SonicRoute\\``）会自动无损继承。")
-    [void]$sb.AppendLine("- **开机自启**：普通版与微软商店版各自使用独立自启项，互不干扰。")
+    [void]$sb.AppendLine("## 🔄 升级与数据保留指引")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("- **v1.25 及后续便携版**：打开「设置 → 软件更新」，检查、下载并完成校验后，确认重启更新。")
+    [void]$sb.AppendLine("- **v1.24 及更早版本或手动更新**：先在托盘菜单选择「退出」，再替换对应 EXE；Legacy 请完整解压 ZIP。")
+    [void]$sb.AppendLine("- **用户数据**：设置、快捷键、自动化规则及自定义图标继续使用 ``%LocalAppData%\SonicRoute\``；更新器不替换这些数据，建议手动更新前备份。")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("---")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("## 📚 相关链接")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("- [Wiki 使用指南](https://github.com/$TargetRepo/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [自动化规则](https://github.com/$TargetRepo/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) · [常见问题](https://github.com/$TargetRepo/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)")
+    [void]$sb.AppendLine("- [完整版本历史](https://github.com/$TargetRepo/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) · [问题反馈](https://github.com/$TargetRepo/issues/new/choose)")
 
     $generatedNotes = $sb.ToString()
     if ($ChangelogTarget) {

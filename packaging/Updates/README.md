@@ -23,6 +23,12 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
    - Promotes the draft to an official public **Latest Release** (`prerelease: false`, `latest: true`).
    - Generates a full markdown report into GitHub Actions Step Summary.
 
+### Release description style
+
+Use the [v1.27 release description](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.27) as the presentation reference. Maintain each new version in `docs/release-v<version>.md`: title/date/theme and guide links → a short highlight overview → details grouped by the affected features → upgrade and verification notes → the download/runtime matrix → data-preserving upgrade instructions → related links. Reuse the structure, writing each section from that version's actual changes and evidence; do not copy v1.27-specific fixes, test results or performance claims into later releases.
+
+The workflow preserves curated UTF-8 Markdown verbatim. If none exists, the existing changelog generator follows the same layout, uses up to six commit entries for highlights, and retains all categorized entries in the details, including documentation and other changes. Version numbers and download URLs come from the target version. Automatically grouped commits do not establish functional or performance test results; include actual validation and limitations in the curated notes before release.
+
 ### Safeguards and Failure Recovery
 
 - **Zero Unverified Releases**: Releases remain in draft state until all 7 assets pass remote download and cryptographic hash validation.
