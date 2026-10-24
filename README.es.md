@@ -29,7 +29,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de 
 
 - **Enrutamiento bidireccional y separación de audio por app (reproducción + grabación):** asigne dispositivos de salida y entrada específicos a cada aplicación (juegos y voz a auriculares, música a altavoces). La configuración se guarda de forma nativa en Windows incluso al cerrar el programa.
 - **Seguimiento inteligente del primer plano y control directo desde la bandeja:** detecta al instante la aplicación activa mediante eventos del sistema. Ajuste el volumen desplazando la rueda sobre la bandeja del sistema, con notificaciones OSD y silencio global de micrófono.
-- **Paneles dobles e indicador de nivel de sonido en tiempo real:** elija entre el panel clásico por filas o el panel moderno de tarjetas (altura adaptable de 350 a 850 px); controle el volumen de cada aplicación con medidores de sonido en directo.
+- **Panel rápido e indicador de nivel de sonido en tiempo real:** el panel de tarjetas ofrece una altura ajustable de 350 a 850 px y guarda su posición; controle el volumen de cada aplicación con medidores de sonido en directo.
 - **Motor de automatización y CLI ultrarrápida (6 disparadores × 37 acciones):** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.
 - **Detección basada primero en eventos:** utiliza notificaciones del sistema y, cuando hace falta, una comprobación necesaria cada segundo; limpia los datos innecesarios bajo demanda. Disponible como Legacy (.NET 4.8), Lite para .NET 10 y NET8, y edición Store en 9 idiomas.
 

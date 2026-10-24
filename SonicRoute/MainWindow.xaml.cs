@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -1032,7 +1032,7 @@ namespace SonicRoute
         }
 
 
-        /// <summary>切换选中应用的"在快速面板显示"状态（隐藏的应用不出现在简洁/应用面板列表/下拉）。</summary>
+        /// <summary>切换选中应用的"在快速面板显示"状态。</summary>
         private async void AppsShowInPanelButton_Click(object sender, RoutedEventArgs e)
         {
             if (_appsSelected == null) return;
@@ -1224,30 +1224,36 @@ namespace SonicRoute
 
         private void BuildDeviceFilter()
         {
-            OutputFilterList.Items.Clear();
-            AddFilterCheckBox(OutputFilterList, new AudioDeviceInfo { Id = AudioService.SystemDefaultDeviceId, DisplayName = L10n.T("Dev.SystemDefaultOut"), Flow = EDataFlow.eRender }, _config.HiddenOutputDevices, DeviceFilterChanged);
-            foreach (var device in _outputs) AddFilterCheckBox(OutputFilterList, device, _config.HiddenOutputDevices, DeviceFilterChanged);
-            InputFilterList.Items.Clear();
-            AddFilterCheckBox(InputFilterList, new AudioDeviceInfo { Id = AudioService.SystemDefaultInputDeviceId, DisplayName = L10n.T("Dev.SystemDefaultIn"), Flow = EDataFlow.eCapture }, _config.HiddenInputDevices, InputFilterChanged);
-            foreach (var device in _inputs) AddFilterCheckBox(InputFilterList, device, _config.HiddenInputDevices, InputFilterChanged);
+            bool suppressed = _suppressSettings;
+            _suppressSettings = true;
+            try
+            {
+                SyncDeviceFilter(OutputFilterList, SettingsDevices(_outputs, EDataFlow.eRender), _config.HiddenOutputDevices, DeviceFilterChanged);
+                SyncDeviceFilter(InputFilterList, _config.ExperimentalMic ? SettingsDevices(_inputs, EDataFlow.eCapture) : Enumerable.Empty<AudioDeviceInfo>(), _config.HiddenInputDevices, InputFilterChanged);
+            }
+            finally { _suppressSettings = suppressed; }
         }
         private void DeviceFilterChanged(object sender, RoutedEventArgs e)
         {
+            if (_isClosed || _suppressSettings) return;
             if (sender is not CheckBox cb || cb.Tag is not AudioDeviceInfo dev) return;
             if (cb.IsChecked == false) { if (!_config.HiddenOutputDevices.Contains(dev.Id)) _config.HiddenOutputDevices.Add(dev.Id); }
             else _config.HiddenOutputDevices.Remove(dev.Id);
+            if (_suppressFilter) return;
             ConfigService.Save(_config);
             UpdateSelectAllLabels();
             // 快速切换界面立即生效（刷新设备显示）
-            if (!_suppressFilter) _ = RefreshOverviewDevicesVolumeAsync();
+            _ = RefreshOverviewDevicesVolumeAsync();
         }
 
         /// <summary>输入设备（麦克风）保留勾选：实验模式 + 麦克风选项开启时可用。</summary>
         private void InputFilterChanged(object sender, RoutedEventArgs e)
         {
+            if (_isClosed || _suppressSettings) return;
             if (sender is not CheckBox cb || cb.Tag is not AudioDeviceInfo dev) return;
             if (cb.IsChecked == false) { if (!_config.HiddenInputDevices.Contains(dev.Id)) _config.HiddenInputDevices.Add(dev.Id); }
             else _config.HiddenInputDevices.Remove(dev.Id);
+            if (_suppressFilter) return;
             ConfigService.Save(_config);
             UpdateSelectAllLabels();
         }
@@ -1270,9 +1276,11 @@ namespace SonicRoute
             if (boxes.Count == 0) return;
             bool allChecked = boxes.All(cb => cb.IsChecked == true);
             bool? target = allChecked ? false : true;
+            bool suppressed = _suppressFilter;
             _suppressFilter = true;
             try { foreach (var cb in boxes) cb.IsChecked = target; }
-            finally { _suppressFilter = false; }
+            finally { _suppressFilter = suppressed; }
+            if (suppressed) return;
             ConfigService.Save(_config);
             UpdateSelectAllLabels();
             _ = RefreshOverviewDevicesVolumeAsync();
@@ -1297,17 +1305,18 @@ namespace SonicRoute
 
         private void BuildDeviceNameLists()
         {
-            OutputNameList.Items.Clear();
-            // 系统默认输出虚拟项：可在"设备名称"中改名（存 DeviceNames[@@SYSTEM_DEFAULT@@]）
-            OutputNameList.Items.Add(MakeNameRow(new AudioDeviceInfo { Id = AudioService.SystemDefaultDeviceId, DisplayName = L10n.T("Dev.SystemDefaultOut"), Flow = EDataFlow.eRender }));
-            foreach (var dev in _outputs) OutputNameList.Items.Add(MakeNameRow(dev));
-            InputNameList.Items.Clear();
-            // 系统默认输入虚拟项（麦克风）
-            InputNameList.Items.Add(MakeNameRow(new AudioDeviceInfo { Id = AudioService.SystemDefaultInputDeviceId, DisplayName = L10n.T("Dev.SystemDefaultIn"), Flow = EDataFlow.eCapture }));
-            foreach (var dev in _inputs) InputNameList.Items.Add(MakeNameRow(dev));
+            bool suppressed = _suppressSettings;
+            _suppressSettings = true;
+            try
+            {
+                SyncDeviceNames(OutputNameList, SettingsDevices(_outputs, EDataFlow.eRender));
+                SyncDeviceNames(InputNameList, _config.ExperimentalMic ? SettingsDevices(_inputs, EDataFlow.eCapture) : Enumerable.Empty<AudioDeviceInfo>());
+            }
+            finally { _suppressSettings = suppressed; }
         }
         private void DeviceName_TextChanged(object sender, TextChangedEventArgs e)
         {
+            if (_isClosed || _suppressSettings) return;
             if (sender is not TextBox tb || tb.Tag is not string id) return;
             var name = tb.Text.Trim();
             if (string.IsNullOrEmpty(name)) _config.DeviceNames.Remove(id);
@@ -1350,6 +1359,7 @@ namespace SonicRoute
             _deviceNamesPending = false;
             if (devices && refreshDisplay && !_isClosed)
             {
+                RefreshSettingsDeviceTitles();
                 RefreshDeviceDisplays();
                 _ = RefreshOverviewDevicesVolumeAsync();
             }
@@ -1394,11 +1404,6 @@ namespace SonicRoute
                 SettingsStartMinimized.IsChecked = _config.StartMinimized;
                 SettingsShowPanelOnStart.IsChecked = _config.StartPanelOnStart;
                 SettingsPanelChangeSysDef.IsChecked = _config.PanelChangeSystemDefault;
-                // 快速面板样式：应用面板 / 快捷面板（默认简洁）
-                SyncSettingsPanelStyle();
-                // 快捷面板更改系统默认设备：仅"快捷面板"样式时显示
-                PanelChangeSysDefSection.Visibility = _config.QuickPanelStyle == "classic"
-                    ? Visibility.Collapsed : Visibility.Visible;
                 // 主题页未创建时保留配置；首次进入主题页再同步高度。
                 SyncThemePanelHeight();
                 VolumeStepBox.Text = MathEx.Clamp(_config.VolumeStep, 1, 20).ToString();
@@ -1544,7 +1549,6 @@ namespace SonicRoute
                 UpdateAppsDisableAutoButton();
                 UpdateAppsShowInPanelButton();
                 // 设置页动态文本
-                SyncSettingsPanelStyle();
                 InvalidateSettingsDeviceSections();
                 EnsureSettingsDeviceSections();
                 RefreshCustomLangList();
@@ -1566,8 +1570,8 @@ namespace SonicRoute
                 AppPeakMeterCheck.IsChecked = _config.ShowAppPeakMeter;
                 SyncOsdSliders();
 
-                // 快速面板高度（快捷面板固定高度，350–850，默认 450）：
-                // 该设置位于主题页，必须在 LoadTheme 初始化，否则会显示 XAML 硬编码初值；应用面板不显示
+                // 快速面板高度（快速面板固定高度，350–850，默认 450）：
+                // 该设置位于主题页，必须在 LoadTheme 初始化，否则会显示 XAML 硬编码初值。
                 SyncThemePanelHeight();
             }
             finally
@@ -1737,19 +1741,7 @@ namespace SonicRoute
             _config.TrayWheelEverywhere = SettingsTrayWheelEverywhere.IsChecked == true;
             ConfigService.Save(_config);
         }
-        private void QuickPanelStyleCombo_Changed(object sender, SelectionChangedEventArgs e)
-        {
-            if (!IsLoaded || _suppressSettings || QuickPanelStyleCombo.SelectedIndex < 0) return;
-            _config.QuickPanelStyle = QuickPanelStyleCombo.SelectedIndex == 0 ? "classic" : "modern";
-            ConfigService.Save(_config);
-            // 快捷面板更改系统默认设备选项仅快捷面板样式显示
-            PanelChangeSysDefSection.Visibility = _config.QuickPanelStyle == "classic"
-                ? Visibility.Collapsed : Visibility.Visible;
-            // 快捷面板高度设置仅快捷面板样式显示
-            SyncThemePanelHeight();
-        }
-
-        /// <summary>快捷面板更改系统默认设备开关（默认关）：开启后快捷面板下拉框切换设备 = 更改系统默认输出设备。</summary>
+        /// <summary>快速面板更改系统默认设备开关（默认关）：开启后快速面板下拉框切换设备 = 更改系统默认输出设备。</summary>
         private void SettingsPanelChangeSysDef_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsSettingsChange(sender, e)) return;
@@ -1872,7 +1864,9 @@ namespace SonicRoute
         {
             if (panel == null) return;
             if (panel is FrameworkElement element && element.Parent is AnimatedExpandHost host)
-                host.SetExpanded(expand, animate);
+            {
+                if (!host.IsAtRest(expand)) host.SetExpanded(expand, animate);
+            }
             else
                 panel.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -1976,7 +1970,7 @@ namespace SonicRoute
             ConfigService.Save(_config);
             if (!_config.ExperimentalMode) AutoRuleService.StopExecutionHistory();
             if (!enabled && _config.QuickPanelShowOutputName
-                && ((App)Application.Current).QuickPanelInstance is QuickPanelModernWindow panel) panel.Close();
+                && ((App)Application.Current).QuickPanelInstance is { } panel) panel.Close();
             SyncExecutionHistoryOptions();
             // 导航"实验设置"入口立即显示/隐藏（功能本身重启生效）
             NavExperimental.Visibility = _config.ExperimentalMode ? Visibility.Visible : Visibility.Collapsed;
@@ -1991,10 +1985,16 @@ namespace SonicRoute
             AppsInputCombo.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
             if (SettingsPage != null)
             {
+                bool changed = InputFilterList.Visibility != (expMic ? Visibility.Visible : Visibility.Collapsed);
                 InputFilterHeader.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
                 InputFilterList.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
                 InputNameHeader.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
                 InputNameList.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+                if (changed)
+                {
+                    InvalidateSettingsDeviceSections();
+                    EnsureSettingsDeviceSections();
+                }
             }
             // 麦克风子选项折叠按钮：仅麦克风选项开启时显示
             if (ExpMicPanelCheck != null)
@@ -2002,7 +2002,7 @@ namespace SonicRoute
             if (expMic) _ = EnsureInputDevicesAsync();
         }
 
-        /// <summary>实验设置页：加载麦克风选项 / 快捷面板显示 / 折叠 的当前配置。</summary>
+        /// <summary>实验设置页：加载麦克风选项 / 快速面板显示 / 折叠 的当前配置。</summary>
         private void LoadExperimentalSettings()
         {
             _suppressSettings = true;
@@ -2028,7 +2028,7 @@ namespace SonicRoute
             _config.QuickPanelShowOutputName = ExpPanelOutputNameCheck.IsChecked == true;
             ConfigService.Save(_config);
             // 复用原面板关闭/释放流程；不创建隐藏面板，下次呼出按新选项加载。
-            if (((App)Application.Current).QuickPanelInstance is QuickPanelModernWindow panel) panel.Close();
+            ((App)Application.Current).QuickPanelInstance?.Close();
         }
 
         private void ExpBackgroundPolling_Changed(object sender, RoutedEventArgs e)
@@ -2554,7 +2554,7 @@ namespace SonicRoute
         }
 
         /// <summary>主题页 - 「一键还原」：快速面板恢复任务栏右下角默认位置。</summary>
-        /// <summary>主题页「快速面板高度」：快捷面板窗口固定高度（350–850px，默认 450），保存并立即应用（面板打开时）。</summary>
+        /// <summary>主题页「快速面板高度」：快速面板窗口固定高度（350–850px，默认 450），保存并立即应用（面板打开时）。</summary>
         private void PanelHeightSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             if (!IsLoaded || _suppressSettings) return;
@@ -2562,8 +2562,8 @@ namespace SonicRoute
             if (PanelHeightValue != null) PanelHeightValue.Text = v + " px";
             _config.QuickPanelHeight = v;
             ConfigService.Save(_config);
-            // 快捷面板打开时立即应用固定高度
-            if (Application.Current is App app && app.QuickPanelInstance is QuickPanelModernWindow m && m.IsVisible)
+            // 快速面板打开时立即应用固定高度
+            if (Application.Current is App app && app.QuickPanelInstance is { IsVisible: true } m)
                 m.ApplyPanelHeightFromConfig();
         }
 

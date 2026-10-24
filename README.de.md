@@ -29,7 +29,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 
 - **App-unabhängiges Audio-Routing (Wiedergabe + Aufnahme):** Weisen Sie Apps individuelle Ausgabe- und Eingabegeräte zu – Spiele und Chat auf das Headset, Musik auf die Lautsprecher. Einstellungen bleiben nativ in Windows erhalten, auch wenn SonicRoute beendet wird.
 - **Intelligenter Vordergrund-Fokus und blinde Tray-Steuerung:** Erkennt aktive Audio-Apps blitzschnell per Systemereignis. Scrollen Sie im Infobereich der Taskleiste, um die Lautstärke anzupassen, unterstützt durch OSD-Anzeigen und globale Mikrofon-Stummschaltung.
-- **Zwei Panel-Layouts und Echtzeit-Pegelanzeige:** Wählen Sie zwischen dem klassischen Zeilen-Panel und dem modernen Karten-Panel mit 350–850 px anpassbarer Höhe; steuern Sie individuelle App-Lautstärken mit Pegelanzeigen für aktive Tonausgabe.
+- **Schnellpanel und Echtzeit-Pegelanzeige:** Das Karten-Panel bietet eine anpassbare Höhe von 350–850 px und speichert seine Position; steuern Sie individuelle App-Lautstärken mit Pegelanzeigen für aktive Tonausgabe.
 - **Automatisierungs-Engine und blitzschnelle CLI (6 Auslöser × 37 Aktionen):** Auslöser durch App-Start, -Fokus, -Beenden, Zeitpläne oder Hotkeys. Kombinieren Sie Audiosteuerung, Programmstarts und PowerShell-Skripte; nutzen Sie den Befehl sr zur nahtlosen Steuerung per Skript oder Hardware-Deck.
 - **Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine notwendige Momentaufnahme im Abstand von einer Sekunde; nicht benötigte Daten werden bei Bedarf bereinigt. Verfügbar als Legacy (.NET 4.8), Lite für .NET 10 und NET8 sowie Store-Version in 9 Sprachen.
 

@@ -203,7 +203,7 @@ function renderAI(shared) {
     "    intent: \"QuickPanel UI, tray volume scroll wheel, custom icons, blind control\"",
     "    keywords: [\"panel\", \"tray\", \"wheel\", \"icon\", \"quickpanel\", \"height\", \"blind\", \"面板\", \"托盘\", \"滚轮\", \"盲操\", \"图标\"]",
     "    wiki: \"01-使用指南.md\"",
-    "    source: [\"SonicRoute/TrayWheelService.cs\", \"SonicRoute/QuickPanelWindow.xaml.cs\", \"SonicRoute/QuickPanelModernWindow.xaml.cs\", \"SonicRoute/CustomAppIconStore.cs\"]",
+    "    source: [\"SonicRoute/TrayWheelService.cs\", \"SonicRoute/QuickPanelModernWindow.xaml.cs\", \"SonicRoute/CustomAppIconStore.cs\"]",
     "    symbols: [\"TrayWheelService.Start\", \"QuickPanelModernWindow\", \"CustomAppIconStore.Prepare\", \"CustomAppIconStore.Load\"]",
     "    facts:",
     "      - \"Tray mouse wheel blinds-scrolls active app, foreground app, or master volume via WH_MOUSE_LL hook.\"",

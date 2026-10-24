@@ -80,7 +80,7 @@
     "features": [
         "**Routage audio indépendant et bidirectionnel par application (lecture + enregistrement) :** attribuez des périphériques d'entrée et de sortie dédiés à chaque application (jeux et voix sur le casque, musique sur les haut-parleurs). Les paramètres sont conservés nativement par Windows après fermeture.",
         "**Suivi intelligent du premier plan et réglage direct dans la barre des tâches :** verrouille instantanément l'application audio active via les événements système. Ajustez le volume en faisant défiler la molette sur la zone de notification, avec retour visuel OSD et coupure micro globale.",
-        "**Deux styles de panneau et indicateur de niveau sonore en direct :** choisissez entre la vue classique par ligne et le panneau moderne sous forme de cartes (hauteur ajustable de 350 à 850 px) ; contrôlez le volume individuel avec indicateurs d'activité sonore en temps réel.",
+        "**Panneau rapide et indicateur de niveau sonore en direct :** le panneau sous forme de cartes offre une hauteur ajustable de 350 à 850 px et mémorise sa position ; contrôlez le volume individuel avec des indicateurs sonores en temps réel.",
         "**Moteur d'automatisation et CLI ultrarapide (6 déclencheurs × 37 actions) :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.",
         "**Détection prioritairement événementielle :** utilise les notifications système et, si nécessaire, une vérification ponctuelle toutes les secondes ; les données inutiles sont nettoyées à la demande. Disponible en Legacy (.NET 4.8), Lite pour .NET 10 et NET8, et Store en 9 langues."
     ],

@@ -42,7 +42,6 @@ namespace SonicRoute
         internal TextBlock OsdFadeOutValue = null!;
         internal Button PanelPosAdjustBtn = null!;
         internal Button PanelPosResetBtn = null!;
-        internal StackPanel PanelHeightSection = null!;
         internal Slider PanelHeightSlider = null!;
         internal TextBlock PanelHeightValue = null!;
         internal CheckBox AppPeakMeterCheck = null!;
@@ -73,8 +72,6 @@ namespace SonicRoute
         internal CheckBox SettingsTrayWheelEverywhere = null!;
         internal CheckBox ExpMicOptionCheck = null!;
         internal CheckBox ExpMicPanelCheck = null!;
-        internal ComboBox QuickPanelStyleCombo = null!;
-        internal StackPanel PanelChangeSysDefSection = null!;
         internal CheckBox SettingsPanelChangeSysDef = null!;
         internal CheckBox ExpCollapseCheck = null!;
         internal CheckBox SettingsExperimentalMode = null!;
@@ -149,7 +146,6 @@ namespace SonicRoute
                 OsdFadeOutValue = FindDeferredControl<TextBlock>(content, nameof(OsdFadeOutValue));
                 PanelPosAdjustBtn = FindDeferredControl<Button>(content, nameof(PanelPosAdjustBtn));
                 PanelPosResetBtn = FindDeferredControl<Button>(content, nameof(PanelPosResetBtn));
-                PanelHeightSection = FindDeferredControl<StackPanel>(content, nameof(PanelHeightSection));
                 PanelHeightSlider = FindDeferredControl<Slider>(content, nameof(PanelHeightSlider));
                 PanelHeightValue = FindDeferredControl<TextBlock>(content, nameof(PanelHeightValue));
                 AppPeakMeterCheck = FindDeferredControl<CheckBox>(content, nameof(AppPeakMeterCheck));
@@ -198,8 +194,6 @@ namespace SonicRoute
                 SettingsTrayWheelEverywhere = FindDeferredControl<CheckBox>(content, nameof(SettingsTrayWheelEverywhere));
                 ExpMicOptionCheck = FindDeferredControl<CheckBox>(content, nameof(ExpMicOptionCheck));
                 ExpMicPanelCheck = FindDeferredControl<CheckBox>(content, nameof(ExpMicPanelCheck));
-                QuickPanelStyleCombo = FindDeferredControl<ComboBox>(content, nameof(QuickPanelStyleCombo));
-                PanelChangeSysDefSection = FindDeferredControl<StackPanel>(content, nameof(PanelChangeSysDefSection));
                 SettingsPanelChangeSysDef = FindDeferredControl<CheckBox>(content, nameof(SettingsPanelChangeSysDef));
                 ExpCollapseCheck = FindDeferredControl<CheckBox>(content, nameof(ExpCollapseCheck));
                 SettingsExperimentalMode = FindDeferredControl<CheckBox>(content, nameof(SettingsExperimentalMode));
@@ -264,22 +258,6 @@ namespace SonicRoute
             finally { _suppressSettings = suppressed; }
         }
 
-        private void SyncSettingsPanelStyle()
-        {
-            if (SettingsPage == null) return;
-            bool suppressed = _suppressSettings;
-            _suppressSettings = true;
-            try
-            {
-                string classic = L10n.T("St.PanelClassic"), modern = L10n.T("St.PanelModern");
-                if (QuickPanelStyleCombo.ItemsSource is not string[] styles || styles.Length != 2
-                    || styles[0] != classic || styles[1] != modern)
-                    QuickPanelStyleCombo.ItemsSource = new[] { classic, modern };
-                QuickPanelStyleCombo.SelectedIndex = _config.QuickPanelStyle == "classic" ? 0 : 1;
-            }
-            finally { _suppressSettings = suppressed; }
-        }
-
         private void SyncThemePanelHeight()
         {
             if (ThemePage == null) return;
@@ -287,8 +265,6 @@ namespace SonicRoute
             _suppressSettings = true;
             try
             {
-                PanelHeightSection.Visibility = _config.QuickPanelStyle == "classic"
-                    ? Visibility.Collapsed : Visibility.Visible;
                 int height = SonicRoute.Core.Compat.MathEx.Clamp(_config.QuickPanelHeight, 350, 850);
                 PanelHeightSlider.Value = height;
                 PanelHeightValue.Text = height + " px";
@@ -340,7 +316,6 @@ namespace SonicRoute
             OsdFadeOutValue = null!;
             PanelPosAdjustBtn = null!;
             PanelPosResetBtn = null!;
-            PanelHeightSection = null!;
             PanelHeightSlider = null!;
             PanelHeightValue = null!;
             AppPeakMeterCheck = null!;
@@ -371,8 +346,6 @@ namespace SonicRoute
             SettingsTrayWheelEverywhere = null!;
             ExpMicOptionCheck = null!;
             ExpMicPanelCheck = null!;
-            QuickPanelStyleCombo = null!;
-            PanelChangeSysDefSection = null!;
             SettingsPanelChangeSysDef = null!;
             ExpCollapseCheck = null!;
             SettingsExperimentalMode = null!;

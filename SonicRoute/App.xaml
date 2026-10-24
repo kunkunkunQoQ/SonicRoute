@@ -8,6 +8,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="ThemeControls.xaml"/>
                 <ResourceDictionary Source="SettingsControls.xaml"/>
+                <ResourceDictionary Source="ScrollControls.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         <local:AppIconInitialConverter x:Key="AppIconInitial"/>
         <!-- 共用应用图标：懒加载期间或提取失败时显示名称首字，原图就绪后自动替换。 -->
@@ -26,7 +27,7 @@
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
-        <!-- 两种快速面板共用现代工具按钮模板。 -->
+        <!-- 快速面板的工具按钮模板。 -->
         <Style x:Key="QuickPanelToolButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>

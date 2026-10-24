@@ -148,6 +148,10 @@ namespace SonicRoute
         private static DispatcherTimer? _watchFallbackTimer;
         private static Dispatcher? _watchDispatcher;
         private static ProcessChangeSource? _processEvents;
+        private static long _processEventRetryAt;
+        private static int _processEventRetryDelay = 2000;
+        private static bool _processEventRecoveryPending;
+        private static long ProcessEventMilliseconds => (long)(Stopwatch.GetTimestamp() * (1000d / Stopwatch.Frequency));
         private static HashSet<string>? _processEventTargets;
         private static bool _foregroundSubscribed;
         private static int _processNotificationQueued;
@@ -288,9 +292,7 @@ namespace SonicRoute
                 if (_processEvents == null)
                 {
                     // 注册完成后比较一次，注册过程中发生的变化与现有基线进行 diff。
-                    var source = new ProcessChangeSource(ProcessChanged);
-                    _processEvents = source;
-                    _ = source.StartAsync();
+                    StartProcessEvents();
                 }
             }
             else if (_processSnapshot != null)
@@ -313,7 +315,50 @@ namespace SonicRoute
         {
             if (_shuttingDown) return;
             _processEvents?.Dispose(); _processEvents = null;
+            _processEventRetryDelay = 2000;
             RefreshWatcher();
+        }
+
+        private static void StartProcessEvents()
+        {
+            ProcessChangeSource? source = null;
+            source = new ProcessChangeSource(name =>
+            {
+                // 退休订阅已经派发的旧回调不得影响新监听的可用状态或检测请求。
+                if (ReferenceEquals(_processEvents, source)) ProcessChanged(name);
+            });
+            _processEvents = source;
+            _processEventRetryAt = ProcessEventMilliseconds + _processEventRetryDelay;
+            _ = source.StartAsync();
+        }
+
+        private static void TryRecoverProcessEvents()
+        {
+            var source = _processEvents;
+            if (_shuttingDown || _processSnapshot == null || source == null || source.IsAvailable
+                || !source.Startup.IsCompleted || _processEventRecoveryPending
+                || ProcessEventMilliseconds < _processEventRetryAt) return;
+            _processEventRecoveryPending = true;
+            _processEventRetryDelay = Math.Min(30000, _processEventRetryDelay * 2);
+            _ = RecoverProcessEventsAsync(source);
+        }
+
+        private static async Task RecoverProcessEventsAsync(ProcessChangeSource source)
+        {
+            try
+            {
+                source.Dispose();
+                await source.Completion;
+                if (_shuttingDown || _processSnapshot == null || !ReferenceEquals(_processEvents, source)) return;
+                _processEvents = null;
+                StartProcessEvents();
+            }
+            catch (Exception error)
+            {
+                _processEventRetryAt = ProcessEventMilliseconds + _processEventRetryDelay;
+                AutoRuleScheduler.Log("进程事件恢复失败，继续1秒兼容检测: " + error.Message);
+            }
+            finally { _processEventRecoveryPending = false; }
         }
 
         private static void StopWatcher()
@@ -323,6 +368,7 @@ namespace SonicRoute
             if (_foregroundSubscribed) CurrentAppService.ForegroundChanged -= ForegroundChanged;
             _foregroundSubscribed = false;
             _processEvents?.Dispose(); _processEvents = null;
+            _processEventRetryDelay = 2000;
             _processEventTargets = null;
             _processCheckPending = _foregroundCheckPending = false;
             _watchRequests.Clear(); _pendingWatchRules.Clear();
@@ -333,6 +379,7 @@ namespace SonicRoute
 
         private static void UpdateWatchFallbackPolicy()
         {
+            if (_processEvents?.IsAvailable == true) _processEventRetryDelay = 2000;
             // 前台监听已有自身恢复机制；不为自动化再建立另一份前台轮询。
             bool need = _processSnapshot != null && (_processEvents?.IsAvailable != true
                 || ConfigService.Load().BackgroundPollingFallbackEnabled);
@@ -340,7 +387,11 @@ namespace SonicRoute
             if (_watchFallbackTimer == null)
             {
                 _watchFallbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                _watchFallbackTimer.Tick += async (_, _) => await TickAsync(true, false);
+                _watchFallbackTimer.Tick += async (_, _) =>
+                {
+                    TryRecoverProcessEvents();
+                    await TickAsync(true, false);
+                };
                 _watchFallbackTimer.Start();
             }
         }

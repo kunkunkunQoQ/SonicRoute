@@ -21,6 +21,9 @@ namespace AudioPathChecks
             ScanFailure = CountFailure = 0; PolicyFailureRole = -1;
             AudioService.InvalidateAppsCache(); AudioService.InvalidateDeviceCache();
             SessionVolumeService.Refresh(true);
+#if !BASELINE
+            SessionVolumeService.InvalidateCache();
+#endif
             ClearCounts();
         }
         internal static void ClearCounts()
@@ -55,7 +58,7 @@ namespace AudioPathChecks
         internal readonly EDataFlow Flow;
         internal readonly string Id;
         internal readonly Endpoint Volume = new();
-        internal readonly Session[] Sessions;
+        internal Session[] Sessions;
         internal bool ActivationFails;
         internal Device(EDataFlow flow, string id, Session[] sessions) { Flow = flow; Id = id; Sessions = sessions; }
         public int Activate(ref Guid iid, int context, IntPtr parameters, out object value)
@@ -109,6 +112,10 @@ namespace AudioPathChecks
         public int GetSimpleAudioVolume(ref Guid g, uint f, out object s) { s = null!; return -1; }
         public int RegisterSessionNotification(object n) => throw new InvalidOperationException("No new subscriptions");
         public int UnregisterSessionNotification(object n) => 0;
+#if !BASELINE
+        public int RegisterSessionNotification(IAudioSessionNotification n) => RegisterSessionNotification((object)n);
+        public int UnregisterSessionNotification(IAudioSessionNotification n) => UnregisterSessionNotification((object)n);
+#endif
         public int RegisterDuckNotification(string id, object n) => throw new InvalidOperationException("No new subscriptions");
         public int UnregisterDuckNotification(object n) => 0;
     }
@@ -143,6 +150,10 @@ namespace AudioPathChecks
         public int SetGroupingParam(ref Guid g, ref Guid c) => 0;
         public int RegisterAudioSessionNotification(object n) => throw new InvalidOperationException("No new subscriptions");
         public int UnregisterAudioSessionNotification(object n) => 0;
+#if !BASELINE
+        public int RegisterAudioSessionNotification(IAudioSessionEvents n) => RegisterAudioSessionNotification((object)n);
+        public int UnregisterAudioSessionNotification(IAudioSessionEvents n) => UnregisterAudioSessionNotification((object)n);
+#endif
         public int GetSessionIdentifier(out string id) { id = "session"; return 0; }
         public int GetSessionInstanceIdentifier(out string id) { id = "instance"; return 0; }
         public int IsSystemSoundsSession() => 1;

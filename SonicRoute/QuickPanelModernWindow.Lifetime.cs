@@ -49,7 +49,7 @@ namespace SonicRoute
             SystemDevCombo.Items.Clear();
             AppListPanel.Items.Clear();
             _rows.Clear(); _recentDeviceRow = _scrollingRow = null;
-            _outputDisplay = new(); _inputDisplay = new(); _systemDevices = new();
+            _outputDisplay = new(); _inputDisplay = new();
             _systemDeviceId = _appRowsSignature = null;
             _loadTask = null;
             lock (_peakGate) _latestPeaks = null;

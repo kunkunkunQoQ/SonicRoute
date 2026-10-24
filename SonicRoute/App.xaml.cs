@@ -22,14 +22,14 @@ namespace SonicRoute
     {
         private NotifyIcon? _trayIcon;
         private MainWindow? _mainWindow;
-        private IQuickPanel? _quickPanel;
+        private QuickPanelModernWindow? _quickPanel;
 
         /// <summary>当前快速面板实例（供设置页立即应用面板高度等）。</summary>
-        public IQuickPanel? QuickPanelInstance => _quickPanel;
+        public QuickPanelModernWindow? QuickPanelInstance => _quickPanel;
 
         internal void ApplyQuickPanelMeterSetting(bool enabled)
         {
-            if (_quickPanel is QuickPanelModernWindow modern) modern.SetMeterEnabled(enabled);
+            _quickPanel?.SetMeterEnabled(enabled);
         }
         private HotkeyService? _hotkeys;
         private TrayWheelService? _trayWheel;
@@ -323,13 +323,13 @@ namespace SonicRoute
         internal void BeginQuickPanelAdjust()
         {
             if (_quickPanel == null) ToggleQuickPanel();
-            SetPanelAdjustMode(true);
+            _quickPanel?.SetAdjustMode(true);
         }
 
         /// <summary>取消快速面板位置调整（不保存，关闭面板）。</summary>
         internal void CancelQuickPanelAdjust()
         {
-            SetPanelAdjustMode(false);
+            _quickPanel?.SetAdjustMode(false);
             _quickPanel?.Close();
         }
 
@@ -341,8 +341,7 @@ namespace SonicRoute
             cfg.QuickPanelCustomX = -1;
             cfg.QuickPanelCustomY = -1;
             ConfigService.Save(cfg);
-            if (_quickPanel is QuickPanelWindow c) c.ResetPosition();
-            else if (_quickPanel is QuickPanelModernWindow m) m.ResetPosition();
+            _quickPanel?.ResetPosition();
         }
 
         /// <summary>快速面板拖拽保存后通知（主题页复位按钮）。</summary>
@@ -354,15 +353,9 @@ namespace SonicRoute
         internal void NotifyAppIconChanged(string processName)
         {
             _mainWindow?.RefreshAppIcons(processName);
-            if (_quickPanel is QuickPanelModernWindow modern) modern.RefreshAppIcons(processName);
-            else if (_quickPanel is QuickPanelWindow classic) classic.RefreshAppIcons(processName);
+            _quickPanel?.RefreshAppIcons(processName);
         }
 
-        private void SetPanelAdjustMode(bool on)
-        {
-            if (_quickPanel is QuickPanelWindow c) c.SetAdjustMode(on);
-            else if (_quickPanel is QuickPanelModernWindow m) m.SetAdjustMode(on);
-        }
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。
         /// net48 Legacy 为传统桌面程序，不依赖 WinRT / Windows App SDK，恒为 false。</summary>
         private static bool IsPackaged() => AppRuntimeIdentity.Current.IsPackaged;
@@ -409,9 +402,7 @@ namespace SonicRoute
                 _uiWorkingSetDirty = true;
                 CancelUiReclaim();
                 AppIconService.Resume();
-                // 按设置选择面板样式：modern=简洁面板（默认）/ classic=经典面板
-                var cfg = ConfigService.Load();
-                _quickPanel = cfg.QuickPanelStyle == "classic" ? new QuickPanelWindow() : new QuickPanelModernWindow();
+                _quickPanel = new QuickPanelModernWindow();
                 _quickPanel.Closed += (_, _) =>
                 {
                     _quickPanel = null;
@@ -734,24 +725,26 @@ namespace SonicRoute
             // 静音/切设备/音量的目标应用：与托盘滚轮调音量完全一致——直接走
             // CurrentAppService.Resolve 同一套规则（last/fixed → 前台 → 最近使用 → 兜底），
             // 保证快捷键和"鼠标放任务栏滚轮调音量"永远解析出同一个应用。
-            var cfg = ConfigService.Load();
-            int fg = foregroundPid ?? ForegroundAppService.GetForegroundProcessId();
-            var target = await Task.Run(() => CurrentAppService.Resolve(AudioService.GetApps(), cfg, fg));
             // 仅"当前应用"类动作需要解析当前应用；全局切换 / 系统默认切换不依赖，解析失败照常执行
             bool needsTarget = action is HotkeyActions.ActMute or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown or HotkeyActions.ActSwitchOutput or HotkeyActions.ActSwitchInput;
-            if (needsTarget && target == null) return;
+            AudioAppInfo? target = null;
+            if (needsTarget)
+            {
+                var cfg = ConfigService.Load();
+                int fg = foregroundPid ?? ForegroundAppService.GetForegroundProcessId();
+                try { target = await Task.Run(() => CurrentAppService.Resolve(AudioService.GetApps(), cfg, fg)); }
+                catch { /* 会话发现失败只影响当前应用类动作，仍给出已有的无会话反馈。 */ }
+                if (target == null) { _trayWheel?.ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoOutputSession")); return; }
+            }
             int pid = target == null ? -1 : (int)target.ProcessId;
             string name = target == null ? "" : AppDisplayName.Get(target);
 
             switch (action)
             {
                 case HotkeyActions.ActMute:
-                    // 优先走快捷面板的静音路径：与面板静音按钮完全一致，静音的是面板/概览
-                    // 显示的同一个当前应用，并同步面板按钮文字/状态行。面板未打开或无当前
-                    // 应用时回退到共享当前应用路径。
-                    if (_quickPanel is { IsVisible: true } && await _quickPanel.MuteCurrentAppAsync())
-                        break;
+                    // 当前应用快捷键始终控制同一个会话；面板顶部按钮只控制所选系统设备。
                     var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
+                    if (mr.Applied) _quickPanel?.ApplyAppMuteReadback(pid, mr.Muted);
                     _trayWheel?.ShowOsd(name, mr.Applied
                         ? (mr.Muted ? L10n.T("Ov.AppMuted") : L10n.T("Ov.AppUnmuted"))
                         : L10n.T("Ov.NoOutputSession"));
@@ -759,33 +752,23 @@ namespace SonicRoute
 
                 case HotkeyActions.ActMuteInput:
                     // 全局麦克风静音：静音/取消静音系统所有录音设备（与当前应用无关）。
-                    // 面板打开时走面板路径（同步按钮/状态行并返回真实状态），否则直接全局静音；
-                    // 切换后立即用真实状态更新 OSD（静音且常驻开关开启 → 常驻显示，不等待后台检测）。
-                    bool gm;
-                    if (_quickPanel is { IsVisible: true })
-                        gm = await _quickPanel.ToggleGlobalMicMuteAsync();
-                    else
-                        gm = await Task.Run(() => GlobalMicMuteService.Toggle());
+                    // 统一执行一次，面板仅同步读回；OSD 也只经共享入口显示一次。
+                    bool gm = await Task.Run(() => GlobalMicMuteService.Toggle());
+                    _quickPanel?.ApplyMicMuteReadback(gm);
                     ShowMicMuteOsd(L10n.T("Ov.MuteMic"), gm); // 全局麦克风静音：标题固定「麦克风静音」，不显示应用名
                     break;
 
                 case HotkeyActions.ActVolUp:
                 case HotkeyActions.ActVolDown:
-                    // 经典面板复用当前应用的 ± 路径；现代面板顶部控制设备音量，
-                    // 当前应用直接走会话调整，再用读回值同步对应应用行。
+                    // 当前应用直接走会话调整，再用读回值同步快速面板的对应应用行。
                     {
                         int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
                         int delta = action == HotkeyActions.ActVolUp ? step : -step;
-                        if (_quickPanel is QuickPanelWindow { IsVisible: true } classic)
-                        {
-                            int v = await classic.AdjustVolumeAsync(delta);
-                            if (v >= 0) break; // 面板已经按实际目标发出一次音量反馈。
-                        }
                         var adjusted = await Task.Run(() => SessionVolumeService.AdjustVolumePercent(pid, delta));
                         if (adjusted.Current < 0) { _trayWheel?.ShowOsd(name, "⚠ " + L10n.T("Ov.NoOutputSession")); break; }
                         if (adjusted.Applied && adjusted.Actual >= 0)
                         {
-                            if (_quickPanel is QuickPanelModernWindow { IsVisible: true } modern)
+                            if (_quickPanel is { IsVisible: true } modern)
                                 modern.ApplyAppVolumeReadback(pid, adjusted.Actual);
                             _trayWheel?.ShowVolumeOsd(name, adjusted.Actual, $"🔉 {adjusted.Actual}%", target: "app:" + pid);
                         }
@@ -857,7 +840,7 @@ namespace SonicRoute
 
         internal void ShowSystemVolumeFeedback(string? deviceId, int actual, bool applied, bool muted, string title)
         {
-            if (actual >= 0 && _quickPanel is QuickPanelModernWindow { IsVisible: true } modern)
+            if (actual >= 0 && _quickPanel is { IsVisible: true } modern)
                 modern.ApplySystemVolumeReadback(deviceId, actual, muted);
             if (applied && actual >= 0)
                 ShowVolumeOsd(title, actual, string.Format(L10n.T("Qp.VolOk"), actual), muted, "device:" + deviceId);
@@ -870,7 +853,7 @@ namespace SonicRoute
             var devs = AudioService.GetDevices(flow);
             var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
             var list = devs.Where(d => !hidden.Contains(d.Id)).ToList();
-            // 列表头部加入"系统默认输出/输入"虚拟项（与快捷面板/概览一致），选中即切回跟随系统默认
+            // 列表头部加入"系统默认输出/输入"虚拟项（与快速面板/概览一致），选中即切回跟随系统默认
             return PanelDevices.WithSystemDefault(list, flow, config);
         }
         /// <summary>设备名（自定义名优先）。</summary>

@@ -9,7 +9,7 @@ namespace SonicRoute.Core
     /// 音频端点音量控制（设备级 IAudioEndpointVolume）；显式设备 Id 也支持录音设备。
     /// 仅控制指定设备（默认：系统默认输出设备）自身的音量/静音，**不修改系统默认设备**，
     /// 与 Per-App Routing 核心（IAudioPolicyConfigFactory）完全无关。
-    /// 供简洁面板顶部"系统音频"区使用：选择设备 → 滑块/静音控制系统音量。
+    /// 供快速面板顶部"系统音频"区使用：选择设备 → 滑块/静音控制系统音量。
     /// </summary>
     public static class SystemVolumeService
     {

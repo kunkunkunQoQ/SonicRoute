@@ -83,9 +83,10 @@ namespace SonicRoute.Core.Interop
         [PreserveSig]
         int GetSessionEnumerator(out IAudioSessionEnumerator sessionEnum);
         [PreserveSig]
-        int RegisterSessionNotification([MarshalAs(UnmanagedType.Interface)] object sessionNotification);
+        // 必须以SDK指定接口封送，object可能传入IUnknown默认接口而非通知vtable。
+        int RegisterSessionNotification(IAudioSessionNotification sessionNotification);
         [PreserveSig]
-        int UnregisterSessionNotification([MarshalAs(UnmanagedType.Interface)] object sessionNotification);
+        int UnregisterSessionNotification(IAudioSessionNotification sessionNotification);
         [PreserveSig]
         int RegisterDuckNotification([MarshalAs(UnmanagedType.LPWStr)] string sessionID, [MarshalAs(UnmanagedType.Interface)] object duckNotification);
         [PreserveSig]
@@ -125,9 +126,9 @@ namespace SonicRoute.Core.Interop
         [PreserveSig]
         int SetGroupingParam(ref Guid override_, ref Guid eventContext);
         [PreserveSig]
-        int RegisterAudioSessionNotification([MarshalAs(UnmanagedType.Interface)] object notifications);
+        int RegisterAudioSessionNotification(IAudioSessionEvents notifications);
         [PreserveSig]
-        int UnregisterAudioSessionNotification([MarshalAs(UnmanagedType.Interface)] object notifications);
+        int UnregisterAudioSessionNotification(IAudioSessionEvents notifications);
 
         // ---- IAudioSessionControl2 ----
         [PreserveSig]

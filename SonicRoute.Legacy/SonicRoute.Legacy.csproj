@@ -62,7 +62,7 @@
     <Page Include="..\SonicRoute\MainWindow.xaml" Link="MainWindow.xaml" />
     <Page Include="..\SonicRoute\ThemeControls.xaml" Link="ThemeControls.xaml" />
     <Page Include="..\SonicRoute\SettingsControls.xaml" Link="SettingsControls.xaml" />
-    <Page Include="..\SonicRoute\QuickPanelWindow.xaml" Link="QuickPanelWindow.xaml" />
+    <Page Include="..\SonicRoute\ScrollControls.xaml" Link="ScrollControls.xaml" />
     <Page Include="..\SonicRoute\QuickPanelModernWindow.xaml" Link="QuickPanelModernWindow.xaml" />
   </ItemGroup>
 

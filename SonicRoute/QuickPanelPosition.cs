@@ -8,8 +8,7 @@ using SonicRoute.Core.Compat;
 namespace SonicRoute
 {
     /// <summary>
-    /// 快速面板定位共享逻辑：经典面板（QuickPanelWindow）与简洁面板（QuickPanelModernWindow）共用，
-    /// 保证两版定位行为一致。
+    /// 快速面板的定位、拖拽边界与位置保存。
     /// 坐标统一 WPF DIP：SystemParameters.WorkArea 直接用（不再除 DPI）；
     /// GetSystemMetrics(76-79) 虚拟屏幕为物理像素，仅在拖拽边界与保存时 ÷ GetDpi().DpiScaleX 换算为 DIP。
     /// </summary>

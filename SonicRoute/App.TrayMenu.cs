@@ -66,7 +66,7 @@ namespace SonicRoute
             _trayMenu = menu;
             AddTrayAction(menu, L10n.T("Tray.OpenPanel"), () =>
             {
-                if (_quickPanel is System.Windows.Window { IsVisible: true } panel) panel.Activate();
+                if (_quickPanel is { IsVisible: true } panel) panel.Activate();
                 else ToggleQuickPanel();
             });
             AddTrayAction(menu, L10n.T("Tray.OpenMain"), ShowMainWindow);

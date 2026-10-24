@@ -15,10 +15,11 @@ namespace SonicRoute
         private int _disposed, _available, _subscriptionFailed;
         internal bool IsAvailable => Volatile.Read(ref _available) != 0;
         internal Task Completion { get; private set; } = Task.CompletedTask;
+        internal Task Startup { get; private set; } = Task.CompletedTask;
 
         internal ProcessChangeSource(Action<string?> changed) { _changed = changed; }
 
-        internal Task StartAsync() => Task.Run(() =>
+        internal Task StartAsync() => Startup = Task.Run(() =>
         {
             lock (_gate)
             {

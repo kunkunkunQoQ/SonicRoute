@@ -37,7 +37,7 @@ namespace SonicRoute.Core
         /// <summary>禁用自动切换的应用（进程名列表）：这些应用不会被自动选为"当前应用"（前台跟随/最近使用等），但仍可手动选择。</summary>
         public List<string> DisabledAutoSwitchApps { get; set; } = new();
 
-        /// <summary>不在快速面板显示的应用（进程名列表，不区分大小写）：隐藏后不出现在简洁/经典面板的应用列表/下拉中。</summary>
+        /// <summary>不在快速面板显示的应用（进程名列表，不区分大小写）。</summary>
         public List<string> HiddenPanelApps { get; set; } = new();
 
         /// <summary>托盘常用规则，按规则 Id 保存，顺序与收藏顺序一致。</summary>
@@ -68,15 +68,13 @@ namespace SonicRoute.Core
         /// <summary>启动时显示快速面板。</summary>
         public bool StartPanelOnStart { get; set; } = false;
 
-        /// <summary>快速面板样式：modern(简洁面板，默认) / classic(经典面板)。</summary>
-        public string QuickPanelStyle { get; set; } = "modern";
-        /// <summary>简洁面板固定高度（px，350–850，默认 450）：展开/收起不改变；内容超出在应用区域滚动。</summary>
+        /// <summary>快速面板固定高度（px，350–850，默认 450）：展开/收起不改变；内容超出在应用区域滚动。</summary>
         public int QuickPanelHeight { get; set; } = 450;
 
-        /// <summary>主题页：简洁面板内显示每应用实时声音活动；关闭时不启动 Meter，显示与旧版一致。</summary>
+        /// <summary>主题页：快速面板内显示每应用实时声音活动；关闭时不启动 Meter，显示与旧版一致。</summary>
         public bool ShowAppPeakMeter { get; set; } = true;
 
-        /// <summary>简洁面板顶部下拉框切换设备时更改系统默认输出设备（默认关；开启后下拉=改系统默认输出）。</summary>
+        /// <summary>快速面板顶部下拉框切换设备时更改系统默认输出设备（默认关；开启后下拉=改系统默认输出）。</summary>
         public bool PanelChangeSystemDefault { get; set; } = false;
 
         /// <summary>快速面板位置模式：default=任务栏右下角 / custom=自定义坐标（主题页拖拽调整，逻辑同 OSD）。</summary>
@@ -84,7 +82,6 @@ namespace SonicRoute.Core
         public int QuickPanelCustomX { get; set; } = -1;
         public int QuickPanelCustomY { get; set; } = -1;
 
-        /// <summary>简洁面板应用列表最多显示行数（1–8，默认 3）：超出在列表内滚动；面板高度恒定，展开设备区不改变窗口高度。</summary>
         /// <summary>开机自启（写入 HKCU\...\Run，正常/绿色版）。</summary>
         public bool AutoStart { get; set; } = false;
 
@@ -110,7 +107,7 @@ namespace SonicRoute.Core
         /// <summary>实验设置 - 持续定时校验前台与麦克风；默认关闭，通知异常时仍临时恢复。</summary>
         public bool BackgroundPollingFallbackEnabled { get; set; } = false;
 
-        /// <summary>实验设置：快捷面板应用行的下拉入口显示播放设备名；默认关闭，关闭时不加载名称。</summary>
+        /// <summary>实验设置：快速面板应用行的下拉入口显示播放设备名；默认关闭，关闭时不加载名称。</summary>
         public bool QuickPanelShowOutputName { get; set; } = false;
 
         /// <summary>实验设置：记录自动化执行详情；缺省关闭，不读取或创建历史存储。</summary>
@@ -118,10 +115,10 @@ namespace SonicRoute.Core
         /// <summary>执行详情的磁盘容量上限（MiB），1–64，默认4。</summary>
         public int ExecutionHistoryLimitMb { get; set; } = 4;
 
-        /// <summary>实验模式 - 麦克风选项（需开启实验模式，重启生效；开启后显示麦克风相关设置与快捷键）。</summary>
+        /// <summary>麦克风选项默认开启，显示输入设备设置与切换快捷键；保留已保存的关闭选择，不依赖实验模式。</summary>
         public bool ExperimentalMic { get; set; } = true;
 
-        /// <summary>实验设置 - 麦克风相关选项是否在快捷面板显示（需实验模式+麦克风选项，重启生效）。</summary>
+        /// <summary>实验设置 - 麦克风相关选项是否在快速面板显示（需实验模式+麦克风选项，重启生效）。</summary>
         public bool MicInPanel { get; set; } = false;
 
         /// <summary>折叠设置页"保留的设备/设备名称"区块（含麦克风），默认开启；开关位于设置页（不依赖实验模式）。</summary>

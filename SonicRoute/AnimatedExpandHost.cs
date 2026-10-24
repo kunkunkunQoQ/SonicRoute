@@ -43,6 +43,10 @@ namespace SonicRoute
         public bool IsAnimating { get; private set; }
         public double NaturalHeight => _naturalHeight;
 
+        internal bool IsAtRest(bool expanded) => _hasTarget && !IsAnimating && _expanded == expanded
+            && Child != null && Child.Visibility == (expanded ? Visibility.Visible : Visibility.Collapsed)
+            && double.IsNaN(RevealHeight) && Child.Opacity == 1 && _slide.Y == 0;
+
         protected override Size MeasureOverride(Size availableSize)
         {
             _measureWidth = availableSize.Width;

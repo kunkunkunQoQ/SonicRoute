@@ -35,8 +35,14 @@ namespace SonicRoute.Core
         private static bool _refreshInProgress;
         private static long _refreshGeneration;
         private static DateTime _lastEnum = DateTime.MinValue;   // 实际完成枚举的时刻
+        private const int MissingCacheMilliseconds = 200;
+        private static bool _snapshotComplete;
+        private static int _cacheGeneration, _snapshotGeneration;
         private static Dictionary<int, List<ISimpleAudioVolume>> _renderVolumes = new();
         private static Dictionary<int, List<ISimpleAudioVolume>> _captureVolumes = new();
+
+        /// <summary>设备/会话通知只使快照过期；不在回调内等待枚举锁或释放 COM。</summary>
+        public static void InvalidateCache() => Interlocked.Increment(ref _cacheGeneration);
 
         /// <summary>该 PID 是否有可用的（输出）会话；缓存未命中会自动刷新（受节流保护）。</summary>
         public static bool HasSession(int pid)
@@ -478,8 +484,10 @@ namespace SonicRoute.Core
                 if (_refreshGeneration != observedGeneration) return;
                 lock (_lock)
                 {
-                    if (!force && (_renderVolumes.Count + _captureVolumes.Count) > 0
-                        && (DateTime.UtcNow - _lastEnum).TotalMilliseconds < 2000)
+                    double age = (DateTime.UtcNow - _lastEnum).TotalMilliseconds;
+                    int ttl = (_renderVolumes.Count + _captureVolumes.Count) > 0 ? 2000 : MissingCacheMilliseconds;
+                    if (!force && _snapshotComplete && _snapshotGeneration == Volatile.Read(ref _cacheGeneration)
+                        && age >= 0 && age < ttl)
                         return;
                 }
                 _refreshInProgress = true;
@@ -488,13 +496,15 @@ namespace SonicRoute.Core
             var newRender = new Dictionary<int, List<ISimpleAudioVolume>>();
             var newCapture = new Dictionary<int, List<ISimpleAudioVolume>>();
             bool completed = false;
+            int generation = Volatile.Read(ref _cacheGeneration);
+            bool complete;
             try
             {
                 var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
                 try
                 {
-                    CollectInto(enumerator, EDataFlow.eRender, newRender);
-                    CollectInto(enumerator, EDataFlow.eCapture, newCapture);
+                    complete = CollectInto(enumerator, EDataFlow.eRender, newRender);
+                    complete &= CollectInto(enumerator, EDataFlow.eCapture, newCapture);
                 }
                 finally
                 {
@@ -508,6 +518,8 @@ namespace SonicRoute.Core
                     _renderVolumes = newRender;
                     _captureVolumes = newCapture;
                     _lastEnum = DateTime.UtcNow;
+                    _snapshotGeneration = generation;
+                    _snapshotComplete = complete;
                     completed = true;
                 }
             }
@@ -515,6 +527,7 @@ namespace SonicRoute.Core
             {
                 if (!completed)
                 {
+                    lock (_lock) _snapshotComplete = false;
                     ReleaseVolumes(newRender);
                     ReleaseVolumes(newCapture);
                 }
@@ -534,37 +547,40 @@ namespace SonicRoute.Core
                     try { Marshal.ReleaseComObject(volume); } catch { }
         }
 
-        private static void CollectInto(
+        private static bool CollectInto(
             IMMDeviceEnumerator enumerator, EDataFlow flow, Dictionary<int, List<ISimpleAudioVolume>> target)
         {
             if (enumerator.EnumAudioEndpoints(flow, DeviceState.ACTIVE, out var collection) < 0 || collection == null)
-                return;
+                return false;
+            bool complete = true;
             try
             {
-                collection.GetCount(out uint count);
+                if (collection.GetCount(out uint count) < 0) return false;
                 for (uint i = 0; i < count; i++)
                 {
-                    if (collection.Item(i, out var device) < 0 || device == null) continue;
+                    if (collection.Item(i, out var device) < 0 || device == null) { complete = false; continue; }
                     try
                     {
                         var iid = IID_IAudioSessionManager2;
                         if (device.Activate(ref iid, ComConstants.CLSCTX_ALL, IntPtr.Zero, out object mgrObj) < 0 || mgrObj == null)
-                            continue;
+                        { complete = false; continue; }
                         var mgr = (IAudioSessionManager2)mgrObj;
                         try
                         {
-                            if (mgr.GetSessionEnumerator(out var sessionEnum) < 0 || sessionEnum == null) continue;
+                            if (mgr.GetSessionEnumerator(out var sessionEnum) < 0 || sessionEnum == null) { complete = false; continue; }
                             try
                             {
-                                sessionEnum.GetCount(out int sc);
+                                if (sessionEnum.GetCount(out int sc) < 0) { complete = false; continue; }
                                 for (int j = 0; j < sc; j++)
                                 {
-                                    if (sessionEnum.GetSession(j, out var session) < 0 || session == null) continue;
+                                    if (sessionEnum.GetSession(j, out var session) < 0 || session == null) { complete = false; continue; }
                                     bool owned = false;
                                     try
                                     {
-                                        if (session.GetProcessId(out uint pid) < 0 || pid == 0) continue;
-                                        if (session.GetState(out var st) >= 0 && st == AudioSessionState.Expired) continue;
+                                        if (session.GetProcessId(out uint pid) < 0) { complete = false; continue; }
+                                        if (pid == 0) continue;
+                                        if (session.GetState(out var st) < 0) complete = false;
+                                        else if (st == AudioSessionState.Expired) continue;
                                         var vol = (ISimpleAudioVolume)session;
                                         int key = (int)pid;
                                         if (!target.TryGetValue(key, out var list))
@@ -601,6 +617,13 @@ namespace SonicRoute.Core
             {
                 Marshal.ReleaseComObject(collection);
             }
+            return complete;
+        }
+
+        private static bool SnapshotFresh(double milliseconds)
+        {
+            double age = (DateTime.UtcNow - _lastEnum).TotalMilliseconds;
+            return _snapshotGeneration == Volatile.Read(ref _cacheGeneration) && age >= 0 && age < milliseconds;
         }
 
         /// <summary>按 PID 取输出会话列表；缓存超过 maxAgeSeconds 秒则强制刷新后再取。
@@ -614,8 +637,9 @@ namespace SonicRoute.Core
             {
                 if (_renderVolumes.TryGetValue(pid, out var l))
                 {
-                    if ((DateTime.UtcNow - _lastEnum).TotalSeconds < maxAgeSeconds) return l;
+                    if (SnapshotFresh(maxAgeSeconds * 1000)) return l;
                 }
+                else if (_snapshotComplete && SnapshotFresh(MissingCacheMilliseconds)) return null;
             }
             Refresh(true);
             lock (_lock)
@@ -631,8 +655,9 @@ namespace SonicRoute.Core
             {
                 if (_captureVolumes.TryGetValue(pid, out var l))
                 {
-                    if ((DateTime.UtcNow - _lastEnum).TotalSeconds < maxAgeSeconds) return l;
+                    if (SnapshotFresh(maxAgeSeconds * 1000)) return l;
                 }
+                else if (_snapshotComplete && SnapshotFresh(MissingCacheMilliseconds)) return null;
             }
             Refresh(true);
             lock (_lock)

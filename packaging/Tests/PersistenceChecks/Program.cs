@@ -93,6 +93,9 @@ internal static class Program
 
     private static void Checks()
     {
+        Check(new AppConfig().ExperimentalMic, "microphone option defaults on for new config");
+        Check(JsonSerializer.Deserialize<AppConfig>("{}", ProductJson)!.ExperimentalMic, "missing microphone field defaults on");
+        Check(!JsonSerializer.Deserialize<AppConfig>("{\"ExperimentalMic\":false}", ProductJson)!.ExperimentalMic, "explicit saved microphone opt-out remains off");
         Check(!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")), "isolated data root required");
 #if NET10_0_OR_GREATER
         Check(ProductJson.TypeInfoResolver!.GetType().Name == "PersistenceJsonContext", "NET10 uses generated contracts");
@@ -103,6 +106,19 @@ internal static class Program
         Check(typeof(ConfigService).Assembly.GetType("SonicRoute.Core.PersistenceJsonContext") == null, "older runtime excludes generated context");
 #endif
         Same(new AppConfig(), "default config"); Same(Config(), "all config properties");
+        foreach (string oldStyle in new[] { "classic", "modern" })
+        {
+            string oldJson = JsonSerializer.Serialize(new { QuickPanelStyle = oldStyle, QuickPanelHeight = 610,
+                QuickPanelPosMode = "custom", QuickPanelCustomX = 120, VolumeStep = 7,
+                HiddenPanelApps = new[] { "HiddenApp" }, DeviceNames = new Dictionary<string, string> { ["device"] = "Custom" } });
+            var retained = JsonSerializer.Deserialize<AppConfig>(oldJson, ProductJson)!;
+            Check(retained.QuickPanelHeight == 610 && retained.QuickPanelPosMode == "custom"
+                && retained.QuickPanelCustomX == 120 && retained.VolumeStep == 7
+                && retained.HiddenPanelApps.Single() == "HiddenApp" && retained.DeviceNames["device"] == "Custom",
+                "obsolete panel preference preserves other settings: " + oldStyle);
+            Check(ConfigService.TrySave(retained) && !File.ReadAllText(ConfigService.ConfigPath).Contains("\"QuickPanelStyle\""),
+                "normal save omits obsolete panel preference: " + oldStyle);
+        }
         Same(new AppConfig { AppIcons = new(StringComparer.OrdinalIgnoreCase) { ["App.EXE"] = new string('a', 64) + ".png" } }, "custom icon mapping");
         Same(new AutoRule { Id = "default-id" }, "default rule"); Same(Rule(), "all 37 actions/nested launch items");
         Same(new List<AutoRule> { Rule(), new() { Id = "legacy", Action = AutoRuleAction.LaunchProgram, ProgramPath = "C:\\old.exe" } }, "legacy rule array");

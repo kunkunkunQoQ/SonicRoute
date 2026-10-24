@@ -52,7 +52,9 @@ namespace SonicRoute.Core
                 if (Volatile.Read(ref _disposed) != 0) return (false, false);
                 try
                 {
-                    if (Interlocked.Exchange(ref _dirty, 0) != 0 || _enumerator == null) Rebuild();
+                    // 设备通知失败时仍按原2秒恢复周期重查拓扑；仅音量回调失败则复用有效接口。
+                    if (Interlocked.Exchange(ref _dirty, 0) != 0 || _enumerator == null || !_deviceRegistered) Rebuild();
+                    else if (_registrationIncomplete) RetryVolumeNotifications();
                     bool all = _capture.Count > 0;
                     foreach (var volume in _capture)
                     {
@@ -107,9 +109,18 @@ namespace SonicRoute.Core
                 if (defaultResult >= 0 && input != null) _default = Activate(input);
             }
             finally { if (input != null) Free(input); }
-            bool recovery = !_deviceRegistered || _registered.Count != _volumes.Count;
-            if (recovery) Interlocked.Exchange(ref _dirty, 1);
-            _registrationIncomplete = recovery;
+            _registrationIncomplete = !_deviceRegistered || _registered.Count != _volumes.Count;
+        }
+
+        private void RetryVolumeNotifications()
+        {
+            foreach (var pair in _volumes)
+            {
+                if (_registered.Contains(pair.Key)) continue;
+                try { if (pair.Value.RegisterControlChangeNotify(_volumeCallback) >= 0) _registered.Add(pair.Key); }
+                catch { } // 有效音量读取仍可兜底；读取失败才释放并重建。
+            }
+            _registrationIncomplete = !_deviceRegistered || _registered.Count != _volumes.Count;
         }
 
         private IAudioEndpointVolume Activate(IMMDevice device)
@@ -155,6 +166,7 @@ namespace SonicRoute.Core
                 Free(_enumerator); _enumerator = null;
             }
             _deviceRegistered = false;
+            _registrationIncomplete = false;
         }
         public void Dispose()
         {
@@ -182,6 +194,7 @@ namespace SonicRoute.Core
             {
                 AudioService.InvalidateDeviceCache();
                 AudioService.InvalidateAppsCache();
+                SessionVolumeService.InvalidateCache();
                 _changed();
             }
             public int OnDeviceStateChanged(string id, DeviceState state) { InvalidateDevices(); return 0; }
@@ -191,6 +204,7 @@ namespace SonicRoute.Core
             {
                 AudioService.InvalidateDeviceCache(flow);
                 AudioService.InvalidateAppsCache();
+                SessionVolumeService.InvalidateCache();
                 if (flow == EDataFlow.eCapture && role == ERole.eMultimedia) _changed();
                 return 0;
             }

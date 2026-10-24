@@ -28,6 +28,7 @@ namespace SonicRoute
         private const int VK_MENU = 0x12;      // Alt
         private const int VK_SHIFT = 0x10;
         private const int VK_LWIN = 0x5B;
+        private const int VK_RWIN = 0x5C;
 
         private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -173,7 +174,7 @@ namespace SonicRoute
             if (IsDown(VK_CONTROL)) m |= MOD_CONTROL;
             if (IsDown(VK_MENU)) m |= MOD_ALT;
             if (IsDown(VK_SHIFT)) m |= MOD_SHIFT;
-            if (IsDown(VK_LWIN)) m |= MOD_WIN;
+            if (IsDown(VK_LWIN) || IsDown(VK_RWIN)) m |= MOD_WIN;
             return m;
         }
 

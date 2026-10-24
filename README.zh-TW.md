@@ -17,7 +17,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 <div>
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="使用指南（簡體中文）"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="點擊看板娘開啟使用指南"></a>
 <br>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute 快捷面板：頂端輸出裝置與各應用程式音量控制"></a>
+<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute 快速面板：頂端輸出裝置與各應用程式音量控制"></a>
 <a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute 自動化規則編輯器：選擇應用程式觸發器與音訊操作步驟"></a>
 </div>
 
@@ -29,7 +29,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 - **應用獨立聲音分流與雙向路由（播放 + 錄音）**：為每個應用分別指定輸出與輸入設備，讓遊戲與語音走耳機和麥克風，音樂走音箱。設定由 Windows 原生持久化，結束軟體後依然生效，不破壞系統混音器設定。
 - **前景焦點智慧跟隨與匣區滾輪盲操**：系統事件驅動秒級鎖定目前前景有聲應用；支援在工作列匣區捲動滾輪直接調整目前應用音量，配合螢幕浮動 OSD 提示與全域麥克風靜音，無需切換視窗。
-- **雙形態面板與即時出聲電平指示**：提供經典逐行管理面板與現代卡片面板（Modern），支援 350~850px 自適應高度與位置儲存；直覺掌控各應用獨立音量，內建即時聲音出聲強弱的電平指示。
+- **快速面板與即時出聲電平指示**：卡片式快速面板支援 350~850px 高度調整與位置儲存；直覺掌控各應用獨立音量，內建即時聲音電平指示。
 - **自動化連招引擎與極速 CLI（6 種觸發 × 37 種操作）**：支援應用啟閉與切換、排程、快捷鍵等 6 種觸發，自由組合設備切換、音量、靜音、程式關聯啟動與 PowerShell；內建 sr 具名管道短命令，無額外常駐開銷，輕鬆連動腳本與硬體控制台。
 - **事件優先偵測**：使用系統通知，並在需要時以每秒一次的快照檢查作為備援；不需要的資料會按需清理。提供 Legacy（.NET 4.8）、.NET 10 與 NET8 Lite，以及商店版，支援九種語言。
 

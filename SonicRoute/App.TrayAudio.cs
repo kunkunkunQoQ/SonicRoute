@@ -141,7 +141,7 @@ namespace SonicRoute
             {
                 var result = await Task.Run(() => GlobalMicMuteService.SetMuteChecked(!micState.AllMuted));
                 if (!result.Applied) throw new InvalidOperationException();
-                if (_quickPanel is QuickPanelModernWindow modern) modern.ApplyMicMuteReadback(result.State.AllMuted);
+                _quickPanel?.ApplyMicMuteReadback(result.State.AllMuted);
                 ShowMicMuteOsd(L10n.T("Ov.MuteMic"), result.State.AllMuted);
             });
         }
@@ -206,8 +206,8 @@ namespace SonicRoute
                             Volume: SessionVolumeService.GetVolumePercent(target.Pid));
                     });
                     if (!result.Applied) throw new InvalidOperationException();
-                    if (_quickPanel is QuickPanelModernWindow modern && result.Volume >= 0)
-                        modern.ApplyAppVolumeReadback(target.Pid, result.Volume, !data.Muted);
+                    if (result.Volume >= 0)
+                        _quickPanel?.ApplyAppVolumeReadback(target.Pid, result.Volume, !data.Muted);
                     ShowOsd(target.Name, L10n.T(!data.Muted ? "Ov.AppMuted" : "Ov.AppUnmuted"));
                 });
                 parent.Items.Add(mute);
@@ -227,7 +227,7 @@ namespace SonicRoute
                             return (Applied: ok, Actual: SessionVolumeService.GetVolumePercent(target.Pid), Muted: SessionVolumeService.IsMuted(target.Pid));
                         });
                         if (!result.Applied || result.Actual < 0) throw new InvalidOperationException();
-                        if (_quickPanel is QuickPanelModernWindow modern) modern.ApplyAppVolumeReadback(target.Pid, result.Actual, result.Muted);
+                        _quickPanel?.ApplyAppVolumeReadback(target.Pid, result.Actual, result.Muted);
                         ShowVolumeOsd(target.Name, result.Actual, string.Format(L10n.T("Qp.VolOk"), result.Actual), result.Muted, "app:" + target.Pid);
                     }), staysOpenOnClick: true);
                     VolumePresets.Update(presets.Items, data.Volume, true);
@@ -262,7 +262,7 @@ namespace SonicRoute
                         {
                             var result = await Task.Run(() => AudioService.ApplyEndpoint(target.Pid, EDataFlow.eRender, id));
                             if (!result.Success) throw new InvalidOperationException();
-                            if (_quickPanel is QuickPanelModernWindow modern) modern.RefreshAppRouteReadback(target.Pid);
+                            _quickPanel?.RefreshAppRouteReadback(target.Pid);
                             ShowOsd(target.Name, name);
                         }));
                 }

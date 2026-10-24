@@ -24,13 +24,11 @@ using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 namespace SonicRoute
 {
     /// <summary>
-    /// 简洁面板（新默认）：Windows 11 音量飞出式布局。
-    /// 顶部 = 系统音频设备（选择输出设备为控制对象，大滑块/静音控制系统设备音量，不改默认设备）；
-    /// 下方列出全部有音频的应用，每行 = 图标（点击静音/取消静音）+ 音量条 + 百分比 + ▾（展开设置
-    /// 该应用输出/输入设备）。静音后音量条变强调色 RGB 反色。底部：全局输出静音 + 全局麦克风静音 + 完整界面。
-    /// 保留全部优化：滚轮调系统音量、失焦自动关闭、Esc 关闭、保留设备筛选、自定义设备名、OSD 通知。
+    /// 快速面板：顶部控制所选系统输出设备的音量和静音，可选同步更改系统默认设备。
+    /// 应用行提供图标静音、音量条和设备下拉；设备名称按实验开关加载。
+    /// 保留失焦/Esc 关闭、设备筛选、自定义名称和现有动画；顶部音量调节仅就地反馈。
     /// </summary>
-    public partial class QuickPanelModernWindow : Window, IQuickPanel
+    public partial class QuickPanelModernWindow : Window
     {
         private sealed class AppRow
         {
@@ -80,7 +78,6 @@ namespace SonicRoute
 
         private List<AudioDeviceInfo> _outputDisplay = new();
         private List<AudioDeviceInfo> _inputDisplay = new();
-        private List<AudioDeviceInfo> _systemDevices = new();
         private string? _systemDeviceId;
         private bool _systemReady;
         private bool _suppressDevCombo;
@@ -276,15 +273,6 @@ namespace SonicRoute
         public void ShowQuickPanel()
         {
             _everFocused = false;
-            if (IsVisible && _entranceMotion.IsRunning)
-            {
-                // 动画进行中再次呼出：不位移、不重播动画，仅激活并刷新内容（避免闪烁/抖动）
-                _entrancePlayed = true;
-                Show();
-                Activate();
-                _ = LoadAsync();
-                return;
-            }
             if (!IsVisible)
             {
                 // 先放到屏幕外，内容加载完再由 LoadAsync 定位，避免闪烁/溢出
@@ -296,7 +284,7 @@ namespace SonicRoute
             }
             else
             {
-                // 已可见但动画已完成：内容刷新，不重播入场动画，保持原位
+                // 已可见（含动画进行中）只激活和刷新，不位移或重播入场动画。
                 _entrancePlayed = true;
             }
             Show();
@@ -328,20 +316,22 @@ namespace SonicRoute
                     return (Outputs: outputs, Inputs: inputs, DefaultId: AudioService.GetDefaultDeviceId(EDataFlow.eRender));
                 });
                 if (_isClosed) return;
-                _outputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(devices.Outputs), EDataFlow.eRender, cfg);
+                var outputs = DisplayDevices(devices.Outputs, cfg);
+                _outputDisplay = PanelDevices.WithSystemDefault(outputs, EDataFlow.eRender, cfg);
                 _inputDisplay = cfg.ExperimentalMic
-                    ? PanelDevices.WithSystemDefault(DisplayDevices(devices.Inputs), EDataFlow.eCapture, cfg)
+                    ? PanelDevices.WithSystemDefault(DisplayDevices(devices.Inputs, cfg), EDataFlow.eCapture, cfg)
                     : new List<AudioDeviceInfo>();
 
                 // 顶部系统音频设备
-                await LoadSystemDevicesAsync(devices.Outputs, devices.DefaultId);
+                SetSystemDevices(outputs, devices.DefaultId);
+                await RefreshSystemVolumeAsync();
                 if (_isClosed) return;
 
                 var apps = await _uiLifetime.ReadAsync(AudioService.GetAppsAsync());
                 if (_isClosed) return;
-                await BuildAppRowsAsync(apps);
+                await BuildAppRowsAsync(apps, cfg);
                 if (_isClosed) return;
-                SetMeterEnabled(ConfigService.Load().ShowAppPeakMeter);
+                SetMeterEnabled(cfg.ShowAppPeakMeter);
                 ApplyFixedPanelHeight(cfg);
                 // 先让 WPF 完成布局；最终定位与动画在同一个回调中执行，避免动画在屏幕外提前运行。
                 await _uiLifetime.Post(Dispatcher, () =>
@@ -375,9 +365,8 @@ namespace SonicRoute
             catch { /* 底部状态读取失败不打断已准备好的面板，下次刷新重试。 */ }
         }
 
-        private List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs)
+        private static List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs, AppConfig cfg)
         {
-            var cfg = ConfigService.Load();
             return devs.Select(d =>
             {
                 string? custom = cfg.DeviceNames.TryGetValue(d.Id, out var n) ? n : null;
@@ -391,19 +380,19 @@ namespace SonicRoute
         // 顶部：系统音频设备（选择控制对象 + 系统设备音量/静音；不修改系统默认设备）
         // ------------------------------------------------------------------
 
-        private async Task LoadSystemDevicesAsync(List<AudioDeviceInfo> devs, string? defaultId)
+        private void SetSystemDevices(List<AudioDeviceInfo> devices, string? defaultId)
         {
-            _systemDevices = DisplayDevices(devs);
-            foreach (var d in _systemDevices) d.IsDefault = d.Id == defaultId;
+            foreach (var d in devices) d.IsDefault = d.Id == defaultId;
 
             _suppressDevCombo = true;
-            SystemDevCombo.ItemsSource = null;
-            SystemDevCombo.ItemsSource = _systemDevices;
-            SystemDevCombo.SelectedItem = _systemDevices.FirstOrDefault(d => d.IsDefault);
-            _suppressDevCombo = false;
+            try
+            {
+                SystemDevCombo.ItemsSource = devices;
+                SystemDevCombo.SelectedItem = devices.FirstOrDefault(d => d.IsDefault);
+            }
+            finally { _suppressDevCombo = false; }
 
             _systemDeviceId = (SystemDevCombo.SelectedItem as AudioDeviceInfo)?.Id ?? defaultId;
-            await RefreshSystemVolumeAsync();
         }
 
         private async void SystemDevCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -412,7 +401,7 @@ namespace SonicRoute
             if (SystemDevCombo.SelectedItem is AudioDeviceInfo dev)
             {
                 _systemDeviceId = dev.Id;
-                // 设置「简洁面板更改系统默认设备」开启时：下拉切换 = 更改系统默认输出设备（IPolicyConfig.SetDefaultEndpoint）
+                // 设置「快速面板更改系统默认设备」开启时：下拉切换 = 更改系统默认输出设备（IPolicyConfig.SetDefaultEndpoint）
                 if (SonicRoute.Core.ConfigService.Load().PanelChangeSystemDefault)
                 {
                     var ok = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, dev.Id));
@@ -490,9 +479,9 @@ namespace SonicRoute
             string? deviceId = _systemDeviceId;
             var result = await Task.Run(() => SystemVolumeService.SetVolumePercentChecked(deviceId, pct));
             if (_isClosed || deviceId != _systemDeviceId) return;
-            int actual = result.Actual;
-            ((App)Application.Current).ShowSystemVolumeFeedback(deviceId, actual, result.Applied,
-                _systemMutedForOsd, SystemVolumeTitle());
+            // 面板内直接调节已有百分比反馈，复用读回同步；快捷键仍走共享 OSD 入口。
+            if (result.Actual >= 0)
+                ApplySystemVolumeReadback(deviceId, result.Actual, _systemMutedForOsd);
         }
 
         private void ApplySystemVolumeReadback(int actual)
@@ -525,6 +514,11 @@ namespace SonicRoute
             try { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
             finally { _updatingRowVolumes = updating; }
             if (muted.HasValue) ApplyRowMutedVisual(row, muted.Value);
+        }
+
+        internal void ApplyAppMuteReadback(int pid, bool muted)
+        {
+            if (!_isClosed && _rows.TryGetValue(pid, out var row)) ApplyRowMutedVisual(row, muted);
         }
 
         internal void ApplyMicMuteReadback(bool muted)
@@ -564,39 +558,21 @@ namespace SonicRoute
         }
 
         private bool _systemMutedForOsd;
-        private string SystemVolumeTitle() =>
-            (SystemDevCombo.SelectedItem as AudioDeviceInfo)?.DisplayName ?? L10n.T("App.NameFull");
 
         private async void MuteButton_Click(object sender, RoutedEventArgs e)
         {
-            await MuteCurrentAppAsync();
+            await ToggleSelectedOutputMuteAsync();
         }
 
-        /// <summary>调整系统设备音量（delta 为 ±n 百分比），同步顶部滑块/百分比/状态行。
-        /// 供音量快捷键与面板共用，保证快捷键调的就是面板顶部显示的系统设备音量。
-        /// 返回调整后的实际音量；无可用设备返回 -1。</summary>
-        public async Task<int> AdjustVolumeAsync(int delta)
+        /// <summary>静音/取消静音顶部选中的系统输出设备，不修改系统默认设备。</summary>
+        private async Task ToggleSelectedOutputMuteAsync()
         {
-            if (!_systemReady) return -1;
-            string? deviceId = _systemDeviceId;
-            var result = await Task.Run(() => SystemVolumeService.AdjustVolumeWithState(deviceId, delta));
-            int actual = result.Actual;
-            if (_isClosed || deviceId != _systemDeviceId) return actual;
-            ((App)Application.Current).ShowSystemVolumeFeedback(deviceId, actual, result.Applied,
-                result.Muted, SystemVolumeTitle());
-            return result.Applied && actual >= 0 ? actual : -1;
-        }
-
-        /// <summary>静音/取消静音顶部选中的系统输出设备（快捷键与面板顶部按钮一致；不修改系统默认设备）。</summary>
-        public async Task<bool> MuteCurrentAppAsync()
-        {
-            if (!_systemReady) return false;
+            if (!_systemReady) return;
             string? deviceId = _systemDeviceId;
             var result = await Task.Run(() => SystemVolumeService.ToggleMuteChecked(deviceId));
-            if (_isClosed || deviceId != _systemDeviceId) return true;
+            if (_isClosed || deviceId != _systemDeviceId) return;
             if (result.Applied) ApplySystemMuteVisual(result.Muted);
             ShowDeviceOsd(L10n.T(result.Applied ? (result.Muted ? "Qp.Muted" : "Qp.Unmuted") : "Tray.AudioUnavailable"));
-            return true;
         }
         // ------------------------------------------------------------------
 
@@ -618,16 +594,16 @@ namespace SonicRoute
             return text.ToString();
         }
 
-        private async Task BuildAppRowsAsync(List<AudioAppInfo> apps)
+        private async Task BuildAppRowsAsync(List<AudioAppInfo> apps, AppConfig cfg)
         {
             if (_isClosed) return;
             try
             {
                 // 过滤：完整界面「应用」里关闭"在快速面板显示"的应用不列出
-                var cfg = ConfigService.Load();
-                var hiddenPanel = cfg.HiddenPanelApps;
+                var hiddenPanel = cfg.HiddenPanelApps?.Count > 0
+                    ? new HashSet<string>(cfg.HiddenPanelApps, StringComparer.OrdinalIgnoreCase) : null;
                 apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
-                    && !hiddenPanel.Any(h => string.Equals(h, a.ProcessName, StringComparison.OrdinalIgnoreCase))).ToList();
+                    && hiddenPanel?.Contains(a.ProcessName) != true).ToList();
                 bool showOutputName = cfg.ExperimentalMode && cfg.QuickPanelShowOutputName;
                 string signature = GetAppRowsSignature(apps, cfg, showOutputName);
 
@@ -668,7 +644,6 @@ namespace SonicRoute
                         if (value.vol >= 0) row.Slider.Value = value.vol;
                         ApplyRowMutedVisual(row, value.vol >= 0 && value.muted);
                     }
-                    UpdateMeterTargets();
                     UpdateRowHighlights();
                     return;
                 }
@@ -884,10 +859,9 @@ namespace SonicRoute
             if (_isClosed || _updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
             _pendingVolume[(int)row.App.ProcessId] = pct;
 
-            _volDebounce ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
-            if (_volDebounce.Tag == null)
+            if (_volDebounce == null)
             {
-                _volDebounce.Tag = true;
+                _volDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
                 _volDebounce.Tick += VolDebounce_Tick;
             }
             _volDebounce.Stop();
@@ -911,13 +885,24 @@ namespace SonicRoute
         /// <summary>行静音视觉：静音后音量条/百分比变强调色 RGB 反色，图标右上显示反色圆点。</summary>
         private void ApplyRowMutedVisual(AppRow row, bool muted)
         {
-            var inv = ThemeService.GetInvertedAccentBrush();
-            row.Slider.Foreground = muted ? inv : (Brush)FindResource("Theme.Accent");
+            row.Slider.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
             row.MuteDot.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
             row.IsMuted = muted;
             if (muted) row.PeakLevel = 0f;
             UpdatePeakVisual(row);
             if (!_updatingRowVolumes) UpdateMeterTargets();
+        }
+
+        private void ApplyAllRowsMutedVisual(bool muted)
+        {
+            bool updating = _updatingRowVolumes;
+            _updatingRowVolumes = true;
+            try
+            {
+                foreach (var row in _rows.Values) ApplyRowMutedVisual(row, muted);
+            }
+            finally { _updatingRowVolumes = updating; }
+            if (!updating) UpdateMeterTargets();
         }
 
         /// <summary>主题页开关即时生效；关闭后滑块恢复原样且工作线程和 COM 缓存全部释放。</summary>
@@ -1292,7 +1277,7 @@ namespace SonicRoute
         }
 
         /// <summary>全局输出静音：静音/取消静音所有有输出会话的应用。面板按钮专用。</summary>
-        public async Task<bool> ToggleGlobalOutputMuteAsync()
+        private async Task ToggleGlobalOutputMuteAsync()
         {
             int version = ++_globalMuteVersion;
             var result = await Task.Run(() => SessionVolumeService.ToggleAllMuteChecked());
@@ -1302,14 +1287,11 @@ namespace SonicRoute
                 ++_globalMuteVersion; // 丢弃操作进行期间读到、却延迟返回的初始化状态。
                 ApplyGlobalMuteVisual(muted);
                 GlobalMuteButton.IsEnabled = true;
-                // net48 无 KeyValuePair<K,V>.Deconstruct：显式取 Value
-                if (result.Applied)
-                    foreach (var kv in _rows) ApplyRowMutedVisual(kv.Value, muted);
+                if (result.Applied) ApplyAllRowsMutedVisual(muted);
             }
             // 全局输出静音 OSD 主标题显示「全部应用」（静音的是所有应用，不是音跃本身）
             ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(result.Applied
                 ? (muted ? "Qp.GlobalMuted" : "Qp.GlobalUnmuted") : "Tray.AudioUnavailable"));
-            return result.Applied;
         }
 
         private async void MicMuteButton_Click(object sender, RoutedEventArgs e)
@@ -1318,9 +1300,8 @@ namespace SonicRoute
         }
 
         /// <summary>全局麦克风静音：直接静音/取消静音系统所有录音设备（设备级），
-        /// 与当前应用无关，所有应用录音都生效。面板按钮与麦克风静音快捷键共用。
-        /// 返回是否已静音。</summary>
-        public async Task<bool> ToggleGlobalMicMuteAsync()
+        /// 与当前应用无关，所有应用录音都生效；复用全局服务和 OSD 入口。</summary>
+        private async Task ToggleGlobalMicMuteAsync()
         {
             int version = ++_micMuteVersion;
             bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
@@ -1331,7 +1312,6 @@ namespace SonicRoute
                 MicMuteButton.IsEnabled = true;
             }
             ((App)Application.Current).ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted); // 统一入口：标题固定「麦克风静音」，静音且常驻开关开 → 常驻
-            return muted; // 返回真实静音状态（快捷键共用：切换后立即更新 OSD）
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)

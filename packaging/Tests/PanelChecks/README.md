@@ -1,0 +1,33 @@
+# Remaining quick panel and removed-panel compatibility checks
+
+This harness loads the actual product MainWindow/QuickPanelModernWindow BAML and
+the product App resource declarations. It suppresses product Application startup
+and exit, does not show windows or register global input, and uses a unique data
+directory. Audio calls in row construction are reads for deliberately missing PIDs.
+
+It checks removed types/BAML, old config compatibility, deferred settings/theme
+creation and release, light/dark resources, case-insensitive/null hidden lists,
+existing row reuse, batch/single-app mute visuals, shared device name projection,
+default/missing device selection, selection-event suppression, and absence of
+queued volume writes.
+It also checks custom device headings with unchanged lower descriptions, native
+vertical/horizontal scrollbar templates, routed drag/wheel/page handling, native
+range boundaries, shared frozen resources and embedded popup/menu/textbox styles.
+The contrast branch is simulated without changing Windows high contrast settings.
+It does not measure whole-app performance, physical DPI/input or endpoint writes.
+`--render-scrollbars <directory>` renders actual WPF controls offscreen at 96 DPI;
+this is distinct from a visible-window or physical DPI/input check.
+`--measure-sections --device-count=8` is a narrow unshown row construction/update
+probe, not a CPU/working-set or first-visible-window benchmark.
+
+Build each runtime separately (default NET10):
+
+```powershell
+dotnet build packaging/Tests/PanelChecks/Checks.csproj -c Release -p:PanelTestFramework=net8.0-windows
+```
+
+Use `net10.0-windows`, `net8.0-windows`, or `net48`. The custom property is needed
+for restore as well as compilation. Lite and Legacy share the product package ID;
+restoring both references in one multi-target graph can omit the executable from
+the test runtime dependency manifest. Run each DLL with its matching installed
+runtime host, or `PanelRemovalChecks.exe` for Framework.

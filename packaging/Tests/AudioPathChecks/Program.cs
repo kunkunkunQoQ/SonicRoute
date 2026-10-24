@@ -304,6 +304,69 @@ internal static class Program
             Assert(!SystemDefaultDeviceService.SetDefault(EDataFlow.eAll, "device").Success && Boundary.Policies == 0, "invalid direction");
         });
 #endif
+#if !BASELINE
+        Case("repeated missing render and capture requests share a complete empty scan", () =>
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                Assert(SessionVolumeService.ReadState(991).Volume == -1, "missing render became present");
+                Assert(!SessionVolumeService.IsInputMuted(992), "missing capture became muted");
+            }
+            Assert(Boundary.Enumerators == 1, "repeated empty enumeration: " + Boundary.Enumerators);
+        });
+        Case("ordinary empty refresh is throttled but explicit refresh remains forced", () =>
+        {
+            SessionVolumeService.Refresh(); SessionVolumeService.Refresh(); SessionVolumeService.Refresh();
+            Assert(Boundary.Enumerators == 1, "empty refresh repeated");
+            SessionVolumeService.Refresh(true);
+            Assert(Boundary.Enumerators == 2, "explicit refresh skipped");
+        });
+        Case("concurrent missing requests reuse one complete scan", () =>
+        {
+            var tasks = Enumerable.Range(0, 20).Select(i => Task.Run(() => SessionVolumeService.ReadState(980 + i))).ToArray();
+            Task.WaitAll(tasks);
+            Assert(tasks.All(t => t.Result.Volume == -1) && Boundary.Enumerators == 1, "concurrent misses repeated enumeration");
+        });
+        Case("negative result expires and discovers a new session without notifications", () =>
+        {
+            var device = Boundary.Add(EDataFlow.eRender);
+            Assert(SessionVolumeService.ReadState(993).Volume == -1, "initial miss");
+            device.Sessions = new[] { new Session(993) { Volume = .37f } };
+            Assert(SessionVolumeService.ReadState(993).Volume == -1, "negative window not reused");
+            Thread.Sleep(250);
+            Assert(SessionVolumeService.ReadState(993).Volume == 37 && Boundary.Enumerators == 2, "new session hidden");
+        });
+        Case("notification invalidates a negative result immediately", () =>
+        {
+            var device = Boundary.Add(EDataFlow.eCapture);
+            Assert(!SessionVolumeService.IsInputMuted(994), "initial state");
+            device.Sessions = new[] { new Session(994) { Muted = true } };
+            SessionVolumeService.InvalidateCache();
+            Assert(SessionVolumeService.IsInputMuted(994) && Boundary.Enumerators == 2, "notification ignored");
+        });
+        Case("failed device scan cannot create a negative cache", () =>
+        {
+            Boundary.ScanFailure = -1;
+            Assert(SessionVolumeService.ReadState(995).Volume == -1, "scan failure state");
+            Boundary.ScanFailure = 0; Boundary.Add(EDataFlow.eRender, new Session(995));
+            Assert(SessionVolumeService.ReadState(995).Volume == 60 && Boundary.Enumerators == 2, "failure cached as absent");
+        });
+        Case("partial device activation cannot create a negative cache", () =>
+        {
+            var device = Boundary.Add(EDataFlow.eRender, new Session(996)); device.ActivationFails = true;
+            Assert(SessionVolumeService.ReadState(996).Volume == -1, "partial state");
+            device.ActivationFails = false;
+            Assert(SessionVolumeService.ReadState(996).Volume == 60 && Boundary.Enumerators == 2, "partial scan cached");
+        });
+        Case("notification invalidates positive session references before five seconds", () =>
+        {
+            var device = Boundary.Add(EDataFlow.eRender, new Session(997) { Volume = .2f });
+            Assert(SessionVolumeService.ReadState(997).Volume == 20, "initial volume");
+            device.Sessions = new[] { new Session(997) { Volume = .8f } };
+            SessionVolumeService.InvalidateCache();
+            Assert(SessionVolumeService.ReadState(997).Volume == 80 && Boundary.Enumerators == 2, "old session retained");
+        });
+#endif
         Console.WriteLine("COUNTS {" + string.Join(",", Counts.Select(p => "\"" + p.Key + "\":" + p.Value)) + "}");
         Console.WriteLine($"RESULT passed={_passed} failed={_failed} runtime={Environment.Version} audioWrites=FAKES_ONLY");
         return _failed == 0 ? 0 : 1;

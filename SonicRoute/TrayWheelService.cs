@@ -84,7 +84,7 @@ namespace SonicRoute
         private int _pendingDelta;
         private bool _dispatchScheduled;
 
-        // 目标应用解析缓存（与快捷面板一致，避免每次滚轮全量枚举）
+        // 目标应用解析缓存（与快速面板一致，避免每次滚轮全量枚举）
         private readonly object _appsLock = new();
         private List<AudioAppInfo>? _cachedApps;
         private DateTime _cachedAt;
@@ -372,7 +372,7 @@ namespace SonicRoute
         }
 
         /// <summary>
-        /// 目标应用与快捷面板完全一致（CurrentAppService 同一套规则：recent/last/fixed → 前台 → 第一个）。
+        /// 目标应用与快速面板完全一致（CurrentAppService 同一套规则：recent/last/fixed → 前台 → 第一个）。
         /// 应用列表走 AudioService 的 1 秒缓存，避免每次滚轮全量枚举音频会话。
         /// </summary>
         private AudioAppInfo? ResolveTargetApp(int foregroundPid)

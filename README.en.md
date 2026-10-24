@@ -29,7 +29,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 - **Independent app audio routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.
 - **Smart foreground focus and tray wheel blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust app volume, paired with on-screen OSD feedback and global mic mute, without leaving your active window.
-- **Dual panel layouts and live audio activity indicators.** Choose between the classic row-based management panel and the Modern card panel, featuring 350–850px adaptive height and position saving; control per-app volume sliders with real-time sound activity meters.
+- **Quick panel and live audio activity indicators.** The card panel features 350–850px adjustable height and position saving; control per-app volume sliders with real-time sound activity meters.
 - **Automation combo engine and blazing CLI (6 triggers × 37 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.
 - **Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Available as Legacy (.NET 4.8), Lite for .NET 10 and NET8, and a Store edition in nine languages.
 
