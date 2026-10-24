@@ -1,20 +1,35 @@
-title: "[求助]: "
+title: "[咨询]: "
 labels:
   - question
 body:
   - type: markdown
     attributes:
       value: |
-        ### 欢迎来到 SonicRoute 使用求助专区！
-        在发帖前提倡先查阅：
-        - [Wiki 01-使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
-        - [Wiki 04-自动化规则指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
-        - [Wiki 06-常见问题汇总](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)
+        ### ⚠️ 遇到软件问题、Bug 或功能异常？请优先前往 Issues！
+
+        > [!IMPORTANT]
+        > **如果遇到软件故障、崩溃闪退、设备切换失败、快捷键无响应或报错**：
+        > **请务必优先前往 👉 [GitHub Issues 提交 Bug 反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml)！**
+        > 
+        > - 🐛 **Bug 与功能故障排查**：请前往 **Issues** 提交。Issue 配备了标准化版本、Windows 环境、重现步骤与音频设备信息采集模板，能够第一时间被开发者跟踪排查并排期修复；在 Discussions 中发帖容易被遗漏或缺乏关键排障信息。
+        > - 💬 **使用咨询与经验交流**：如果您对软件的正常使用方法、配置逻辑或场景搭配有疑问，欢迎在此发帖交流。
+        > - 📖 **查阅现有文档**：发帖前建议先查阅：
+        >   - [Wiki 01-使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
+        >   - [Wiki 04-自动化规则指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
+        >   - [Wiki 06-常见问题汇总与排障](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)
+
+  - type: checkboxes
+    id: confirm_not_bug
+    attributes:
+      label: 提问前须知确认
+      options:
+        - label: "我确认此贴为日常使用咨询或经验探讨；若为软件缺陷、崩溃或功能故障，我已知晓并优先前往 [Issues](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml) 提交"
+          required: true
 
   - type: input
     id: summary
     attributes:
-      label: 一句话问题概括
+      label: 一句话咨询概括
       description: 简明扼要地描述你的疑问
       placeholder: "例如：如何让《原神》和网易云音乐分别走耳机和音箱？"
     validations:
@@ -25,9 +40,9 @@ body:
     attributes:
       label: 运行环境
       description: 请提供系统版本与软件版本
-      placeholder: "例如：Windows 11 23H2 + SonicRoute v1.24 (Lite x64)"
+      placeholder: "例如：Windows 11 23H2 + SonicRoute v1.26 (Lite x64)"
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: details

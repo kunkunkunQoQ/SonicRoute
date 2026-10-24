@@ -7,7 +7,10 @@ body:
       value: |
         ### 💬 欢迎来到 SonicRoute 自由交流区！
         这里是社区水吧与随聊专区，无论是日常使用唠嗑、音频设备八卦、开源心得，还是对项目未来的闲聊，都欢迎在此发言。
-        请保持友善包容，共同维护良好的社区交流氛围。
+        
+        > [!IMPORTANT]
+        > **遇到软件缺陷、报错崩溃或功能异常？**
+        > 请勿在此发帖，请直接前往 **[Issues 提交 Bug 反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml)**，以便快速获得排查与修复。
 
   - type: input
     id: topic

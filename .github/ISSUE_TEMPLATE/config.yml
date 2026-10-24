@@ -3,9 +3,9 @@ contact_links:
   - name: 📖 Wiki 核心指南与常见问题 (FAQ)
     url: https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98
     about: 80% 的使用疑问与系统限制（如游戏无声、设备未切换）在此已有解答
-  - name: ❓ 新手提问与使用求助 (Discussions Q&A)
+  - name: 💬 社区使用咨询与交流 (Discussions Q&A)
     url: https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/q-a
-    about: “怎么设置XX应用”、“如何分流”等日常使用问题，请在此与社区交流
+    about: 日常使用咨询与分流探讨（遇到软件 Bug、崩溃或功能故障请直接点击上方 Bug 反馈）
   - name: 🎉 玩法分享与规则食谱 (Discussions Show & Tell)
     url: https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/show-and-tell
     about: 分享你调校的神仙自动化规则、双设备接力配置或音效板联动
