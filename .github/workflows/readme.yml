@@ -5,12 +5,14 @@ on:
     paths:
       - 'README*.md'
       - 'docs/readme/**'
+      - 'build/Version.props'
       - 'SonicRoute/Resources/Lang/*.json'
       - '.github/workflows/readme.yml'
   pull_request:
     paths:
       - 'README*.md'
       - 'docs/readme/**'
+      - 'build/Version.props'
       - 'SonicRoute/Resources/Lang/*.json'
       - '.github/workflows/readme.yml'
   workflow_dispatch:
