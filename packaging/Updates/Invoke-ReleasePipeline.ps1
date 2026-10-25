@@ -319,25 +319,30 @@ function Get-OrGenerateChangelog {
     # Priority 2: Automatically generate structured changelog from git history
     Write-Host "    No curated release note found at docs/release-v$Version.md. Generating from git history..."
 
-    $prevTag = $null
+    $stableTags = @()
     try {
-        $releaseJson = Invoke-Utf8Native { & gh release list --repo $TargetRepo --limit 5 --json tagName,isDraft 2>$null }
-        $releases = ($releaseJson -join "`n") | ConvertFrom-Json
-        $prev = $releases | Where-Object { !$_.isDraft -and $_.tagName -ne "v$Version" } | Select-Object -First 1
-        if ($prev) { $prevTag = $prev.tagName }
-    } catch { }
-
-    if (!$prevTag) {
-        try {
-            $prevTag = (& git -C $root describe --tags --abbrev=0 "HEAD^" 2>$null)
-            if ($prevTag) { $prevTag = $prevTag.Trim() }
-        } catch { }
+        # Reuse preflight's bounded pagination and stable-release identity rules.
+        $stableTags = @(Read-RemoteReleaseHistory $TargetRepo | Where-Object { !$_.draft -and !$_.prerelease } | ForEach-Object { $_.tag_name })
+    } catch {
+        Write-Warning "Changelog remote history NOT VERIFIED; using numeric local tags: $($_.Exception.Message)"
+        $stableTags = @(& git -C $root tag -l 'v*')
+        if ($LASTEXITCODE -ne 0) { throw 'Cannot read local release tags for the changelog.' }
     }
+    $targetVersion = [version]((($Version.Split('.') + @('0','0','0','0'))[0..3]) -join '.')
+    $priorVersions = @(foreach ($stableTag in $stableTags) {
+        if ($stableTag -match '^[vV]?(\d+\.\d+(\.\d+)?(\.\d+)?)$') {
+            $numeric = [version]((($Matches[1].Split('.') + @('0','0','0','0'))[0..3]) -join '.')
+            if ($numeric -lt $targetVersion) { [pscustomobject]@{ Tag=$stableTag; Version=$numeric } }
+        }
+    })
+    $previous = $priorVersions | Sort-Object Version -Descending | Select-Object -First 1
+    $prevTag = if ($previous) { $previous.Tag } else { $null }
 
     Write-Host "    Previous release tag: $(if ($prevTag) { $prevTag } else { '(Initial Release)' })"
 
     $logRange = if ($prevTag) { "$prevTag..HEAD" } else { "HEAD" }
     $commits = Invoke-Utf8Native { & git -C $root log $logRange --pretty=format:"%H%x09%s%x09%an%x09%h" 2>$null }
+    if ($LASTEXITCODE -ne 0) { throw "Cannot read release commit history for range $logRange; no changelog was generated." }
 
     $features = @()
     $fixes = @()
@@ -799,24 +804,28 @@ function Publish-ReleaseToGitHub {
     # Post-publish verification: 2. Confirm Latest pointer strictly (Issue 2)
     Write-Host "    Verifying /releases/latest endpoint points to $Tag..."
     $latest = $null
+    $latestObservation = @{ Reply=$null }
     try {
         $latest = Invoke-WithRetry -Description "Query /releases/latest endpoint" -MaxAttempts 3 -InitialDelaySeconds 2 -Action {
             $json = Invoke-Utf8Native { & gh api "/repos/$TargetRepo/releases/latest" }
             if ($LASTEXITCODE -ne 0 -or !$json) {
                 throw "Failed to query GitHub /releases/latest endpoint."
             }
-            return ($json | ConvertFrom-Json)
+            $reply = ($json | ConvertFrom-Json)
+            $latestObservation.Reply = $reply
+            if ($reply.tag_name -cne $Tag -or $reply.id -ne $releaseId) {
+                throw "Latest release verification failed: expected $Tag (ID $releaseId), received $($reply.tag_name) (ID $($reply.id))."
+            }
+            return $reply
         }
     } catch {
+        if ($latestObservation.Reply) {
+            Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_LATEST_MISMATCH" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
+            throw "Latest release verification failed after bounded retries: $($_.Exception.Message)"
+        }
         Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_PENDING_LATEST_VERIFICATION" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
         Write-Host "    [Error] Post-publish check failed: Release $Tag is public, but failed to query /releases/latest endpoint: $($_.Exception.Message)" -ForegroundColor Red
         throw "Release $Tag is published, but could not verify /releases/latest pointer on GitHub: $($_.Exception.Message)"
-    }
-
-    if ($latest.tag_name -cne $Tag -or $latest.id -ne $releaseId) {
-        Write-StepSummary -Version $Version -Tag $Tag -CommitSha $CommitSha -LocalAssets $LocalAssets -Status "PUBLISHED_LATEST_MISMATCH" -TargetRepo $TargetRepo -ReleaseUrl $published.html_url -DurationStr $ElapsedStr -Checklist $Checklist
-        Write-Host "    [Error] Latest release mismatch: Expected $Tag, but GitHub /releases/latest points to '$($latest.tag_name)'!" -ForegroundColor Red
-        throw "Latest release verification failed: expected $Tag (ID $releaseId), received $($latest.tag_name) (ID $($latest.id))."
     }
 
     Write-Host "    [OK] Confirmed $Tag is the active official Latest Release on GitHub." -ForegroundColor Green

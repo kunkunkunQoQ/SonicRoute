@@ -27,7 +27,7 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
 
 Use the [v1.27 release description](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.27) as the presentation reference. Maintain each new version in `docs/release-v<version>.md`: title/date/theme and guide links → a short highlight overview → details grouped by the affected features → upgrade and verification notes → the download/runtime matrix → data-preserving upgrade instructions → related links. Reuse the structure, writing each section from that version's actual changes and evidence; do not copy v1.27-specific fixes, test results or performance claims into later releases.
 
-The workflow preserves curated UTF-8 Markdown verbatim. If none exists, the existing changelog generator follows the same layout, uses up to six commit entries for highlights, and retains all categorized entries in the details, including documentation and other changes. Version numbers and download URLs come from the target version. Automatically grouped commits do not establish functional or performance test results; include actual validation and limitations in the curated notes before release.
+The workflow preserves curated UTF-8 Markdown verbatim. If none exists, the existing changelog generator follows the same layout, uses up to six commit entries for highlights, and retains all categorized entries in the details, including documentation and other changes. Its base is the greatest earlier numeric stable release from the existing paginated history reader; drafts, prereleases and API display order cannot truncate the range. Offline local DryRun generation warns before using numeric local tags, and a failed git log aborts rather than producing an apparently valid empty changelog. Version numbers and download URLs come from the target version. Automatically grouped commits do not establish functional or performance test results; include actual validation and limitations in the curated notes before release.
 
 ### Safeguards and Failure Recovery
 
@@ -37,7 +37,8 @@ The workflow preserves curated UTF-8 Markdown verbatim. If none exists, the exis
 - Reuse requires the exact full commit SHA and a known asset set. Unknown assets are retained and cause an abort. Seven-file PE, runtime, archive contents, manifest, hashes and the clean-source receipt are checked again before production publication; a command-line success flag cannot substitute for the receipt.
 - **Published Immutability**: If an official (non-draft) release already exists for `v<version>`, the pipeline immediately aborts to prevent overwriting or deleting published artifacts.
 - The immutable-version rule applies to production publication. DryRun may revalidate the current published version without modifying its tag or assets; summaries identify this as `DRY_RUN_REVALIDATED_PUBLISHED_VERSION`. Older versions still fail the downgrade guard.
-- Release policy is checked before compilation. A production request from a non-master branch fails explicitly instead of silently skipping all jobs. Checkout credentials are not persisted; the write token is supplied only to the publish step.
+- Release policy is checked before compilation. A production request from a non-master branch fails explicitly instead of silently skipping all jobs. Checkout credentials are not persisted. Only the publish job has Contents write permission; its script step explicitly receives GH_TOKEN, while actions in that job also run within the job token's permission boundary.
+- After publication, a temporarily stale Latest tag or release ID is retried through the existing three-attempt backoff. A persistent mismatch or query failure remains a failed, already-published outcome in the summary; it never causes duplicate draft creation or republishing.
 - Candidate artifacts are named per validation attempt, and the publish job downloads the exact name returned by that successful job. **Re-run failed jobs** after a publish failure to reuse the same validated bytes; **Re-run all jobs** or a new dispatch rebuilds them and is not an identical-candidate retry.
 - Validation also downloads its uploaded candidate into a fresh directory and runs the actual publish-stage checks in DryRun mode. This verifies artifact layout, source-bound receipt, seven files and reviewed notes without granting release write permission.
 - On validation failure, available candidate files and check results are retained as a separate diagnostic artifact for 14 days. Diagnostic artifacts are never publication inputs. No valid receipt means no publishable candidate.
@@ -60,7 +61,7 @@ Build from the reviewed release source in the isolated public worktree. Use a fr
 ./packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory E:/releases/SonicRoute-1.25
 ```
 
-The script reads `build/Version.props`, builds the four Lite runtime/architecture combinations and Legacy x64 in sequence, retains LICENSE in the Legacy ZIP, validates PE architecture, file version and edition/runtime, and generates:
+The script reads `build/Version.props`, selects the SDK from the repository directory so `global.json` also applies to calls from another working directory, and restores the caller's directory on exit. It builds the four Lite runtime/architecture combinations and Legacy x64 in sequence, retains LICENSE in the Legacy ZIP, validates PE architecture, file version and edition/runtime, and generates:
 
 - `SonicRoute-v<version>-Lite-x64.exe`
 - `SonicRoute-v<version>-Lite-arm64.exe`

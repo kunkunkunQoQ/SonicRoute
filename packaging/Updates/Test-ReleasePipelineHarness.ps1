@@ -19,18 +19,20 @@ function Reset-Mock {
     $script:mock=@{Head=('a'*40);Tree=('c'*40);Branch='master';Dirty=$false;RemoteTag=$null;History=@(@{tag_name='v1.24';draft=$false;prerelease=$false});
         Draft=$true;Exists=$false;Target=('a'*40);Assets=@{};Calls=[Collections.Generic.List[string]]::new();Mutations=0;Uploads=0;
         ApiFailure=$false;CreateLost=$false;UploadFailures=0;DownloadCorrupt=$false;NoDigest=$false;PublishLost=$false;LatestWrong=$false;LatestFailure=$false;PromoteEarly=$false;TagApiUnavailable=$false;
-        HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100;Body='';CorruptNotes=$false;LatestWrongId=$false;Commits=@()}
+        HiddenDraftHistory=$false;HistoryLag=0;ReadIdFailures=0;WrongId=$false;UploadLost=$false;NextAssetId=100;Body='';CorruptNotes=$false;LatestWrongId=$false;Commits=@();
+        GitCalls=[Collections.Generic.List[string]]::new();LogFailure=$false;LatestStaleReads=0;LatestCalls=0}
     $global:LASTEXITCODE=0
 }
 function git {
     $line=$args -join ' ';$global:LASTEXITCODE=0
+    $mock.GitCalls.Add($line)
     if($line -match 'rev-parse --abbrev-ref HEAD$'){return $mock.Branch}
     if($line -match 'rev-parse HEAD\^\{tree\}$'){return $mock.Tree}
     if($line -match 'rev-parse HEAD$'){return $mock.Head}
     if($line -match 'status --porcelain --untracked-files=all$'){if($mock.Dirty){return '?? untracked.cs'};return}
     if($line -match 'ls-remote --tags '){if($mock.RemoteTag){return "$($mock.RemoteTag)`trefs/tags/v$version"};return}
     if($line -match 'tag -l '){return 'v1.24'}
-    if($line -match ' log '){return $mock.Commits}
+    if($line -match ' log '){if($mock.LogFailure){$global:LASTEXITCODE=128;return};return $mock.Commits}
     throw "Unimplemented git boundary: $line"
 }
 function Remote-Object {
@@ -39,7 +41,7 @@ function Remote-Object {
 }
 function gh {
     $a=@($args);$line=$a -join ' ';$mock.Calls.Add($line);$global:LASTEXITCODE=0
-    if($line -match '^release list '){return '[{"tagName":"v1.24","isDraft":false}]'}
+    if($line -match '^release list '){return (ConvertTo-Json -InputObject @($mock.History|Select-Object -First 5|ForEach-Object{@{tagName=$_.tag_name;isDraft=$_.draft;isPrerelease=$_.prerelease}}) -Compress)}
     if($a[0] -eq 'api'){
         if($mock.ApiFailure){$global:LASTEXITCODE=1;return}
         if($a -contains '--method'){
@@ -84,8 +86,9 @@ function gh {
             return (ConvertTo-Json -InputObject @($history|Select-Object -Skip (($pageNumber-1)*100) -First 100) -Depth 8 -Compress)
         }
         if($a[1] -match '/releases/latest$'){
+            $mock.LatestCalls++
             if($mock.LatestFailure){$global:LASTEXITCODE=1;return}
-            $r=Remote-Object;if($mock.LatestWrong){$r.tag_name='v1.24'};if($mock.LatestWrongId){$r.id=99999};return ($r|ConvertTo-Json -Depth 8 -Compress)
+            $r=Remote-Object;if($mock.LatestWrong -or $mock.LatestStaleReads -gt 0){$r.tag_name='v1.24';if($mock.LatestStaleReads -gt 0){$mock.LatestStaleReads--}};if($mock.LatestWrongId){$r.id=99999};return ($r|ConvertTo-Json -Depth 8 -Compress)
         }
         if($a[1] -match '/releases/tags/'){
             if(!$mock.Exists -or $mock.TagApiUnavailable){$global:LASTEXITCODE=1;return};return (Remote-Object|ConvertTo-Json -Depth 8 -Compress)
@@ -197,6 +200,28 @@ try {
         $empty=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
         Require ($empty.Contains('未提取到可展示的提交记录') -and !$empty.Contains('PASS')) 'Empty history invented changes or validation'
     }
+    Case 'generated notes exclude numeric prerelease bases' {
+        $root=Join-Path $harnessRoot 'prerelease-base'
+        $mock.History=@(@{tag_name='v2.33';draft=$false;prerelease=$true},@{tag_name='v1.24';draft=$false;prerelease=$false})
+        $null=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
+        Require (@($mock.GitCalls|Where-Object{$_.Contains(' log v1.24..HEAD ')}).Count -eq 1) 'Prerelease used as changelog base'
+    }
+    Case 'generated notes select greatest earlier stable version rather than API order' {
+        $root=Join-Path $harnessRoot 'stable-base-order'
+        $mock.History=@(@{tag_name='v1.24';draft=$false;prerelease=$false},@{tag_name='v2.34';draft=$false;prerelease=$false},@{tag_name='v2.33';draft=$false;prerelease=$false})
+        $null=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
+        Require (@($mock.GitCalls|Where-Object{$_.Contains(' log v2.33..HEAD ')}).Count -eq 1) 'Older stable edit or current release hid correct base'
+    }
+    Case 'generated notes find stable base beyond first history page' {
+        $root=Join-Path $harnessRoot 'paged-stable-base'
+        $mock.History=@(1..100|ForEach-Object{@{tag_name="v9.$_";draft=$false;prerelease=$true}})+@(@{tag_name='v1.24';draft=$false;prerelease=$false})
+        $null=Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'
+        Require (@($mock.GitCalls|Where-Object{$_.Contains(' log v1.24..HEAD ')}).Count -eq 1 -and @($mock.Calls|Where-Object{$_ -match 'page=2$'}).Count -eq 1) 'Recent prereleases hid the previous stable base'
+    }
+    Case 'git history failure cannot masquerade as a valid empty changelog' {
+        $root=Join-Path $harnessRoot 'failed-git-history';$mock.LogFailure=$true
+        Reject {Get-OrGenerateChangelog '2.34' $null 'example/SonicRoute'} 'commit history'
+    }
     Case 'real preflight accepts exact clean source' {$r=Preflight;Require ($r.RemoteVerified -and $r.CommitSha -ceq $mock.Head) 'Unverified result'}
     Case 'preflight rejects unrelated source branch' {$mock.Branch='feature/test';Reject {Preflight} 'non-master'}
     Case 'preflight includes untracked files' {$mock.Dirty=$true;Reject {Preflight} 'clean source'}
@@ -277,6 +302,7 @@ try {
     Case 'missing API digest prevents promotion' {$mock.NoDigest=$true;Reject {Publish} 'digest is missing';Require ($mock.Draft) 'Missing digest published'}
     Case 'remote note corruption prevents promotion' {$mock.CorruptNotes=$true;Reject {Publish} 'release notes differ';Require ($mock.Draft -and !$checks.DraftPromoted) 'Corrupt notes published'}
     Case 'concurrent publication stops next upload' {$mock.PromoteEarly=$true;Reject {Publish} 'matching draft';Require ($mock.Uploads -eq 1) 'Continued upload after external promotion'}
+    Case 'temporarily stale Latest retries until exact release ID is visible' {$mock.LatestStaleReads=2;Publish;Require ($checks.LatestPointerVerified -and $mock.LatestCalls -eq 3) 'Transient Latest lag treated as permanent failure'}
     Case 'Latest mismatch recorded as published failure' {$mock.LatestWrong=$true;Reject {Publish} 'Latest release verification';Require (!$mock.Draft -and $checks.DraftPromoted -and !$checks.LatestPointerVerified) 'Publication state hidden'}
     Case 'Latest with another ID cannot pass using the same tag' {$mock.LatestWrongId=$true;Reject {Publish} 'Latest release verification';Require (!$checks.LatestPointerVerified) 'Different release ID accepted as Latest'}
     Case 'Latest query failure recorded as published failure' {$mock.LatestFailure=$true;Reject {Publish} 'could not verify';Require (!$mock.Draft -and !$checks.LatestPointerVerified) 'Publication state hidden'}

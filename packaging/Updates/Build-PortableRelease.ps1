@@ -10,6 +10,9 @@ $matrix=@(Get-ReleaseMatrix $version)
 $dotnet=Resolve-ReleaseDotnet $DotnetPath
 $before=Get-ReleaseSourceState $root
 $priorDotnetRoot=$env:DOTNET_ROOT
+# SDK selection searches from the working directory, not the project argument.
+# Honor this repository's global.json even when invoked by an absolute path.
+Push-Location -LiteralPath $root
 try {
     $env:DOTNET_ROOT=Split-Path -Parent $dotnet
     $assets=Join-Path $output 'assets';New-Item -ItemType Directory -Path $assets -Force|Out-Null
@@ -37,4 +40,4 @@ try {
     $receipt=[ordered]@{schemaVersion=1;version=$version;commit=$before.Commit;tree=$before.Tree;clean=$before.Clean;solutionBuildVerified=$true;
         sdk=(& $dotnet --version|Out-String).Trim();assets=@(Get-ChildItem -LiteralPath $assets -File|ForEach-Object{@{name=$_.Name;size=$_.Length;sha256=(Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant()}})}
     [IO.File]::WriteAllText((Join-Path $output 'build-receipt.json'),($receipt|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
-} finally {$env:DOTNET_ROOT=$priorDotnetRoot}
+} finally {$env:DOTNET_ROOT=$priorDotnetRoot;Pop-Location}
