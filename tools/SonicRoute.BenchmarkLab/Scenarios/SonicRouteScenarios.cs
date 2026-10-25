@@ -53,7 +53,8 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             // Warmup phase (let JIT, UI rendering and initialization settle)
             context.Log($"[idle_empty] Warming up for {warmup:F1}s...");
@@ -61,6 +62,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
 
             // Active measurement phase
             context.Log($"[idle_empty] Measuring idle steady state for {duration:F1}s...");
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
             await Task.Delay(TimeSpan.FromSeconds(duration), context.CancellationToken);
 
@@ -79,6 +81,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 Timeseries = monitor.Samples,
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
                     ["RuleCount"] = 0,
                     ["Sandbox"] = sandbox.SandboxPath
                 }
@@ -115,11 +118,13 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
             context.Log($"[{Id}] Measuring steady state for {duration:F1}s...");
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
             await Task.Delay(TimeSpan.FromSeconds(duration), context.CancellationToken);
 
@@ -138,6 +143,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 Timeseries = monitor.Samples,
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
                     ["RuleCount"] = _ruleCount,
                     ["Sandbox"] = sandbox.SandboxPath
                 }
@@ -167,11 +173,13 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
             context.Log($"[target_absent] Measuring background watcher overhead for {duration:F1}s...");
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
             await Task.Delay(TimeSpan.FromSeconds(duration), context.CancellationToken);
 
@@ -190,6 +198,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 Timeseries = monitor.Samples,
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
                     ["MonitoredTarget"] = "nonexistent_app_xyz_404.exe",
                     ["RuleCount"] = 10
                 }
@@ -210,7 +219,8 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         public override async Task<ScenarioResult> RunAsync(BenchmarkContext context)
         {
             using var sandbox = new SonicRouteSandbox();
-            sandbox.PopulateRules(5, triggerAppName: "cmd.exe", triggerType: 1 /* AppStart */);
+            string probe = sandbox.CreateProbeExecutable();
+            sandbox.PopulateRules(5, triggerAppName: Path.GetFileNameWithoutExtension(probe), triggerType: 1 /* AppStart */);
             double duration = ResolveDuration(context);
             double warmup = 2.0;
 
@@ -219,16 +229,18 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
             context.Log($"[app_lifecycle_churn] Spawning dummy churn processes during {duration:F1}s window...");
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
 
             using var churnCts = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
             var churnTask = DummyProcessHelper.SimulateProcessChurnAsync(
-                "cmd.exe",
+                probe,
                 count: (int)(duration * 3),
                 delayMs: 300,
                 churnCts.Token);
@@ -236,7 +248,8 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             await Task.Delay(TimeSpan.FromSeconds(duration), context.CancellationToken);
             churnCts.Cancel();
             int actualChurnCount = 0;
-            try { actualChurnCount = await churnTask; } catch { }
+            try { actualChurnCount = await churnTask; } catch (OperationCanceledException) { }
+            int executedRules = sandbox.ReadHistory().Length;
 
             var summary = await monitor.StopAsync();
             monitor.Kill();
@@ -251,9 +264,13 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 WarmupSeconds = warmup,
                 Metrics = summary,
                 Timeseries = monitor.Samples,
+                Success = actualChurnCount > 0 && executedRules > 0,
+                ErrorMessage = actualChurnCount > 0 && executedRules > 0 ? null : "Owned churn or actual rule execution was not confirmed.",
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
                     ["ActualChurnCount"] = actualChurnCount,
+                    ["ConfirmedRuleExecutions"] = executedRules,
                     ["ChurnRatePerSec"] = duration > 0 ? actualChurnCount / duration : 0,
                     ["RuleCount"] = 5
                 }
@@ -283,10 +300,12 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
 
             using var switchCts = CancellationTokenSource.CreateLinkedTokenSource(context.CancellationToken);
@@ -303,7 +322,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             var summary = await monitor.StopAsync();
             monitor.Kill();
 
-            bool loadValid = stats.Requested > 0 && stats.Successful > 0;
+            bool loadValid = stats.Requested > 0 && stats.Successful > 0 && sandbox.ReadHistory().Length > 0;
 
             return new ScenarioResult
             {
@@ -319,6 +338,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 ErrorMessage = loadValid ? null : $"Foreground switches blocked by Windows session policy (Requested={stats.Requested}, Successful={stats.Successful}).",
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
                     ["RequestedSwitches"] = stats.Requested,
                     ["SuccessfulSwitches"] = stats.Successful,
                     ["FailedSwitches"] = stats.Failed,
@@ -351,13 +371,15 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 StartMinimized = true,
                 ExperimentalMode = true,
                 ExecutionHistoryEnabled = true,
+                TrayWheelPaused = true,
                 ThemeMode = "light",
                 Accent = "blue",
                 Hotkeys = new Dictionary<string, string>()
             });
 
             const int delayMs = 2500;
-            sandbox.PopulateRules(1, triggerAppName: "cmd.exe", triggerType: 1 /* AppStart */, delayMs: delayMs);
+            string probe = sandbox.CreateProbeExecutable();
+            sandbox.PopulateRules(1, triggerAppName: Path.GetFileNameWithoutExtension(probe), triggerType: 1 /* AppStart */, delayMs: delayMs);
             double duration = Math.Max(ResolveDuration(context), 6.0);
             double warmup = 2.0;
 
@@ -366,72 +388,25 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
 
-            // Trigger the rule via process start (keep process alive so snapshot watcher catches AppStart)
-            bool triggered = false;
-            Process? holder = null;
-            try
-            {
-                var psi = new ProcessStartInfo("cmd.exe", "/c ping -n 4 127.0.0.1 >nul")
-                {
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                };
-                holder = Process.Start(psi);
-                triggered = holder != null;
-            }
-            catch { }
-
-            // Concurrently test subsequent background detection while delay step is in flight
-            await Task.Delay(800, context.CancellationToken);
-            try
-            {
-                var p2 = Process.Start(new ProcessStartInfo("cmd.exe", "/c ping -n 2 127.0.0.1 >nul") { CreateNoWindow = true, UseShellExecute = false });
-                p2?.WaitForExit(1500);
-            }
-            catch { }
-
-            await Task.Delay(TimeSpan.FromSeconds(Math.Max(1.0, duration - 1.8)), context.CancellationToken);
-
-            try { holder?.Kill(); holder?.Dispose(); } catch { }
+            using var holder = ProcessMonitor.Launch(probe, "__worker idle 2000", measureStartupLatency: false);
+            bool triggered = !holder.Process.HasExited;
+            await Task.Delay(TimeSpan.FromSeconds(duration), context.CancellationToken);
+            holder.Kill();
 
             var summary = await monitor.StopAsync();
             monitor.Kill();
 
-            // Verify execution history recorded in sandbox
-            long observedDelay = 0;
-            bool historyFound = false;
-            try
-            {
-                string histDir = Path.Combine(sandbox.SandboxPath, "ExecutionHistory");
-                if (Directory.Exists(histDir))
-                {
-                    var files = Directory.GetFiles(histDir, "*.json", SearchOption.AllDirectories);
-                    if (files.Length > 0)
-                    {
-                        historyFound = true;
-                        foreach (var f in files)
-                        {
-                            string text = File.ReadAllText(f);
-                            if (text.Contains("Benchmark Rule"))
-                            {
-                                // Parse ElapsedMs
-                                using var doc = System.Text.Json.JsonDocument.Parse(text);
-                                if (doc.RootElement.TryGetProperty("ElapsedMs", out var el))
-                                {
-                                    observedDelay = el.GetInt64();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch { }
+            var history = sandbox.ReadHistory();
+            bool historyFound = history.Length > 0;
+            long observedDelay = history.Select(e => e.TryGetProperty("ElapsedMs", out var elapsed) ? elapsed.GetInt64() : 0).DefaultIfEmpty().Max();
 
             return new ScenarioResult
             {
@@ -443,8 +418,11 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 WarmupSeconds = warmup,
                 Metrics = summary,
                 Timeseries = monitor.Samples,
+                Success = historyFound && observedDelay >= delayMs - 200,
+                ErrorMessage = historyFound && observedDelay >= delayMs - 200 ? null : "Delayed execution was not confirmed in actual JSONL history.",
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
                     ["DelayStepMs"] = delayMs,
                     ["DelayedStepTriggered"] = triggered,
                     ["HistoryRecorded"] = historyFound,
@@ -468,8 +446,8 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         public override async Task<ScenarioResult> RunAsync(BenchmarkContext context)
         {
             using var sandbox = new SonicRouteSandbox();
-            // Use controlled non-standard hotkeys (Ctrl+Alt+Shift+F9..F12) to never collide with user shortcuts
-            sandbox.PopulateRules(4, triggerType: 0 /* Hotkey */, hotkey: "Ctrl+Alt+Shift+F9");
+            // Distinct controlled bindings avoid self-conflicts; other applications may still own these keys.
+            sandbox.PopulateRules(4, triggerType: 0 /* Hotkey */);
             double duration = ResolveDuration(context);
             double warmup = 2.0;
 
@@ -478,10 +456,12 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
 
             // Perform repeated rule modifications in background
@@ -496,6 +476,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             }
 
             var summary = await monitor.StopAsync();
+            bool reloadVerified = await sandbox.VerifyReloadAsync(monitor, context.CancellationToken);
             monitor.Kill();
 
             return new ScenarioResult
@@ -508,8 +489,13 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 WarmupSeconds = warmup,
                 Metrics = summary,
                 Timeseries = monitor.Samples,
+                Success = reloadVerified,
+                ErrorMessage = reloadVerified ? null : "Latest rule reload was not confirmed after measurement.",
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
+                    ["RuleReloadVerified"] = reloadVerified,
+                    ["PhysicalHotkeyOrTimerFiringVerified"] = false,
                     ["RuleModificationCycles"] = modifications,
                     ["TriggerType"] = "Hotkey",
                     ["ControlledKeys"] = "Ctrl+Alt+Shift+F9..F12"
@@ -541,10 +527,12 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
 
             int updates = 0;
@@ -558,6 +546,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             }
 
             var summary = await monitor.StopAsync();
+            bool reloadVerified = await sandbox.VerifyReloadAsync(monitor, context.CancellationToken);
             monitor.Kill();
 
             return new ScenarioResult
@@ -570,8 +559,13 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 WarmupSeconds = warmup,
                 Metrics = summary,
                 Timeseries = monitor.Samples,
+                Success = reloadVerified,
+                ErrorMessage = reloadVerified ? null : "Latest rule reload was not confirmed after measurement.",
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
+                    ["RuleReloadVerified"] = reloadVerified,
+                    ["PhysicalHotkeyOrTimerFiringVerified"] = false,
                     ["ScheduleUpdatesCount"] = updates,
                     ["TriggerType"] = "Schedule"
                 }
@@ -600,14 +594,21 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
             await Task.Delay(TimeSpan.FromSeconds(duration / 2.0), context.CancellationToken);
 
-            // Trigger main window
+            double trayEnd = monitor.Samples.Last().ElapsedMs;
+            var response = Stopwatch.StartNew();
+            bool visible = false;
+            Process? trigger = null;
+            using var triggerJob = new ProcessJobObject();
+            // Trigger the same isolated instance, then verify its actual window.
             try
             {
                 var psi = new ProcessStartInfo
@@ -618,10 +619,21 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                     CreateNoWindow = true
                 };
                 foreach (var kvp in sandbox.EnvironmentVariables) psi.Environment[kvp.Key] = kvp.Value;
-                using var trigger = Process.Start(psi);
-                trigger?.WaitForExit(3000);
+                trigger = Process.Start(psi);
+                if (trigger != null && !triggerJob.AssignProcess(trigger) && !trigger.HasExited)
+                    throw new InvalidOperationException("UI trigger could not be assigned to its cleanup Job.");
+                visible = await WindowProbe.WaitForMainWindowAsync(monitor.Process, context.CancellationToken);
             }
-            catch { }
+            finally
+            {
+                if (trigger != null)
+                {
+                    try { if (!trigger.HasExited) { trigger.Kill(true); trigger.WaitForExit(1000); } } finally { trigger.Dispose(); }
+                }
+            }
+            response.Stop();
+            if (visible) monitor.ResponseLatencyMs = response.Elapsed.TotalMilliseconds;
+            double mainStart = monitor.Samples.Last().ElapsedMs;
 
             await Task.Delay(TimeSpan.FromSeconds(duration / 2.0), context.CancellationToken);
 
@@ -638,12 +650,23 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 WarmupSeconds = warmup,
                 Metrics = summary,
                 Timeseries = monitor.Samples,
+                Success = visible,
+                ErrorMessage = visible ? null : "Main window was not observed; launching a --main trigger is not proof that UI opened.",
                 Observations = new Dictionary<string, object>
                 {
-                    ["TransitionAction"] = "TrayToMain"
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
+                    ["TransitionAction"] = "TrayToMain",
+                    ["VisibleNativeWindowConfirmed"] = visible,
+                    ["RenderedFrameOrDataReadyMeasured"] = false,
+                    ["WindowClosedAndReleasedMeasured"] = false,
+                    ["TrayPhase"] = Phase(monitor.Samples.Where(s => s.ElapsedMs <= trayEnd).ToArray()),
+                    ["MainPhase"] = Phase(monitor.Samples.Where(s => s.ElapsedMs >= mainStart).ToArray())
                 }
             };
         }
+
+        private static ProcessMetricSummary Phase(IReadOnlyList<ProcessSample> samples) => ProcessMetricSummary.Aggregate(samples,
+            samples.Count > 1 ? (samples[^1].ElapsedMs - samples[0].ElapsedMs) / 1000 : 0);
     }
 
     /// <summary>
@@ -676,10 +699,12 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: "",
-                environmentVariables: sandbox.EnvironmentVariables);
+                environmentVariables: sandbox.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 
+            await sandbox.VerifyReadyAsync(monitor, context.CancellationToken);
             monitor.Start();
             await Task.Delay(TimeSpan.FromSeconds(duration), context.CancellationToken);
 
@@ -698,6 +723,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
                 Timeseries = monitor.Samples,
                 Observations = new Dictionary<string, object>
                 {
+                    ["SandboxEvidence"] = sandbox.CaptureEvidence(),
                     ["PrivateBytesTrendPerSec"] = summary.PrivateBytes.TrendPerSecond,
                     ["HandleTrendPerSec"] = summary.HandleCount.TrendPerSecond,
                     ["ThreadTrendPerSec"] = summary.ThreadCount.TrendPerSecond
@@ -733,7 +759,8 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var monitor = ProcessMonitor.Launch(
                 context.TargetExecutable,
                 arguments: _args,
-                environmentVariables: context.EnvironmentVariables);
+                environmentVariables: context.EnvironmentVariables,
+                sampleIntervalMs: context.SampleIntervalMs);
 
             await Task.Delay(TimeSpan.FromSeconds(warmup), context.CancellationToken);
 

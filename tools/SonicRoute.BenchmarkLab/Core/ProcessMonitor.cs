@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -20,6 +21,8 @@ namespace SonicRoute.BenchmarkLab.Core
         private CancellationTokenSource? _cts;
         private Task? _monitorTask;
         private bool _disposed;
+        private string? _measurementError;
+        private bool _exitedDuringMeasurement;
 
         public int ProcessId => _process.Id;
         public Process Process => _process;
@@ -60,7 +63,7 @@ namespace SonicRoute.BenchmarkLab.Core
                 Arguments = arguments,
                 WorkingDirectory = workingDirectory ?? Path.GetDirectoryName(executablePath) ?? Environment.CurrentDirectory,
                 UseShellExecute = false,
-                CreateNoWindow = false
+                CreateNoWindow = true
             };
 
             if (environmentVariables != null)
@@ -75,20 +78,26 @@ namespace SonicRoute.BenchmarkLab.Core
             var sw = Stopwatch.StartNew();
             var process = new Process { StartInfo = startInfo };
 
-            if (!process.Start())
+            try
             {
-                jobObject.Dispose();
-                throw new InvalidOperationException($"Failed to launch process: {executablePath}");
+                if (!process.Start()) throw new InvalidOperationException($"Failed to launch process: {executablePath}");
+                if (!jobObject.AssignProcess(process))
+                    throw new InvalidOperationException("Target could not be assigned to the cleanup Job Object (or exited immediately).");
             }
-
-            jobObject.AssignProcess(process);
+            catch
+            {
+                try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+                process.Dispose();
+                jobObject.Dispose();
+                throw;
+            }
 
             double? startupLatency = null;
             if (measureStartupLatency)
             {
                 try
                 {
-                    // WaitForInputIdle waits for process to finish initialization and be ready for input
+                    // Only an input-queue proxy, not first frame or application readiness.
                     if (NativeMethods.WaitForInputIdle(process.Handle, 5000) == 0)
                         startupLatency = sw.Elapsed.TotalMilliseconds;
                 }
@@ -123,7 +132,7 @@ namespace SonicRoute.BenchmarkLab.Core
 
             _selfCpuStartMs = GetCurrentProcessCpuMs();
             _cts = new CancellationTokenSource();
-            _monitorTask = Task.Run(() => MonitoringLoop(_cts.Token));
+            _monitorTask = MonitoringLoopAsync(_cts.Token);
         }
 
         public async Task<ProcessMetricSummary> StopAsync()
@@ -151,11 +160,14 @@ namespace SonicRoute.BenchmarkLab.Core
                 var summary = ProcessMetricSummary.Aggregate(_samples, duration, monitorSelfCpu);
                 summary.StartupLatencyMs = StartupLatencyMs;
                 summary.ResponseLatencyMs = ResponseLatencyMs;
+                summary.ProcessExitedDuringMeasurement = _exitedDuringMeasurement;
+                summary.MeasurementError = _measurementError;
+                summary.MeasurementValid = _measurementError == null && !_exitedDuringMeasurement && _samples.Count >= 3;
                 return summary;
             }
         }
 
-        private void MonitoringLoop(CancellationToken token)
+        private async Task MonitoringLoopAsync(CancellationToken token)
         {
             var stopwatch = Stopwatch.StartNew();
             IntPtr hProcess;
@@ -163,8 +175,9 @@ namespace SonicRoute.BenchmarkLab.Core
             {
                 hProcess = _process.Handle;
             }
-            catch
+            catch (Exception error)
             {
+                _measurementError = error.Message;
                 return;
             }
 
@@ -173,43 +186,41 @@ namespace SonicRoute.BenchmarkLab.Core
             int processorCount = Environment.ProcessorCount;
 
             // Initial sample
-            Sample(hProcess, stopwatch.Elapsed.TotalMilliseconds, ref prevCpuTime, ref prevWallMs, processorCount);
-
-            while (!token.IsCancellationRequested)
+            try
             {
-                try
+                Sample(hProcess, stopwatch.Elapsed.TotalMilliseconds, ref prevCpuTime, ref prevWallMs, processorCount);
+                while (!token.IsCancellationRequested)
                 {
                     if (_process.HasExited)
                     {
-                        // Process terminated
+                        _exitedDuringMeasurement = true;
                         break;
                     }
-
-                    Thread.Sleep(_sampleIntervalMs);
+                    await Task.Delay(_sampleIntervalMs, token).ConfigureAwait(false);
+                    if (_process.HasExited) { _exitedDuringMeasurement = true; break; }
                     Sample(hProcess, stopwatch.Elapsed.TotalMilliseconds, ref prevCpuTime, ref prevWallMs, processorCount);
                 }
-                catch (Exception)
-                {
-                    break;
-                }
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            catch (Exception error) { _measurementError = error.Message; }
 
             // Final sample
-            if (!_process.HasExited)
+            if (!_process.HasExited && _measurementError == null)
             {
                 try
                 {
                     Sample(hProcess, stopwatch.Elapsed.TotalMilliseconds, ref prevCpuTime, ref prevWallMs, processorCount);
                 }
-                catch { }
+                catch (Exception error) { _measurementError = error.Message; }
             }
+            else if (_process.HasExited) { _exitedDuringMeasurement = true; }
         }
 
         private void Sample(IntPtr hProcess, double currentWallMs, ref double prevCpuTime, ref double prevWallMs, int processorCount)
         {
             if (!NativeMethods.GetProcessTimes(hProcess, out _, out _, out long kernelTime, out long userTime))
             {
-                return;
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "CPU measurement failed.");
             }
 
             // 100-nanosecond units to milliseconds
@@ -245,9 +256,11 @@ namespace SonicRoute.BenchmarkLab.Core
                 peakWorkingSet = (long)mem.PeakWorkingSetSize.ToUInt64();
                 privateBytes = (long)mem.PrivateUsage.ToUInt64();
             }
+            else throw new Win32Exception(Marshal.GetLastWin32Error(), "Memory measurement failed; zero is not a valid substitute.");
 
             uint handleCount = 0;
-            NativeMethods.GetProcessHandleCount(hProcess, out handleCount);
+            if (!NativeMethods.GetProcessHandleCount(hProcess, out handleCount))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Handle measurement failed.");
 
             ulong readBytes = 0, writeBytes = 0, readOps = 0, writeOps = 0;
             if (NativeMethods.GetProcessIoCounters(hProcess, out NativeMethods.IO_COUNTERS io))
@@ -257,13 +270,15 @@ namespace SonicRoute.BenchmarkLab.Core
                 readOps = io.ReadOperationCount;
                 writeOps = io.WriteOperationCount;
             }
+            else throw new Win32Exception(Marshal.GetLastWin32Error(), "I/O measurement failed.");
 
             int threadCount = 0;
             try
             {
+                _process.Refresh();
                 threadCount = _process.Threads.Count;
             }
-            catch { }
+            catch (Exception error) { throw new InvalidOperationException("Thread count measurement failed.", error); }
 
             var sample = new ProcessSample
             {
@@ -307,6 +322,7 @@ namespace SonicRoute.BenchmarkLab.Core
 
         public void Kill()
         {
+            if (!_ownsProcess) throw new InvalidOperationException("Only processes launched and owned by this monitor can be terminated.");
             try
             {
                 if (!_process.HasExited)
@@ -333,12 +349,14 @@ namespace SonicRoute.BenchmarkLab.Core
         {
             if (!_disposed)
             {
-                _disposed = true;
                 if (_cts != null)
                 {
                     _cts.Cancel();
+                    // Join the sampling task before disposing its token, process or Job.
+                    _monitorTask?.GetAwaiter().GetResult();
                     _cts.Dispose();
                 }
+                _disposed = true;
 
                 if (_ownsProcess)
                 {
@@ -351,9 +369,8 @@ namespace SonicRoute.BenchmarkLab.Core
                         }
                     }
                     catch { }
-                    _process.Dispose();
                 }
-
+                _process.Dispose();
                 _jobObject?.Dispose();
             }
             GC.SuppressFinalize(this);

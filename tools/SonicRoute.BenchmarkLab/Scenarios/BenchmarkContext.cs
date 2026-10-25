@@ -27,6 +27,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         public string TargetExecutable { get; set; } = string.Empty;
         public BenchmarkTier Tier { get; set; } = BenchmarkTier.Standard;
         public double? CustomDurationSeconds { get; set; }
+        public int SampleIntervalMs { get; set; } = 200;
         public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
         public string SandboxDirectory { get; set; } = string.Empty;
         public string InstanceId { get; set; } = string.Empty;
@@ -38,6 +39,9 @@ namespace SonicRoute.BenchmarkLab.Scenarios
 
     public sealed class ScenarioResult
     {
+        public DateTime StartedUtc { get; set; }
+        public DateTime CompletedUtc { get; set; }
+        public int SampleIntervalMs { get; set; }
         public string ScenarioId { get; set; } = string.Empty;
         public string ScenarioName { get; set; } = string.Empty;
         public string TargetPath { get; set; } = string.Empty;

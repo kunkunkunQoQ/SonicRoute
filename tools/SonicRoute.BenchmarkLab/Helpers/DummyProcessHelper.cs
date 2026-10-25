@@ -33,20 +33,14 @@ namespace SonicRoute.BenchmarkLab.Helpers
             {
                 try
                 {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = "cmd.exe",
-                        Arguments = "/c exit",
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    };
-
-                    using var p = Process.Start(psi);
-                    if (p != null)
-                    {
-                        spawned++;
-                        await Task.Delay(delayMs, token).ConfigureAwait(false);
-                    }
+                    using var p = Core.ProcessMonitor.Launch(processName, "__worker idle 2000", measureStartupLatency: false);
+                    // Keep each uniquely named owned process alive beyond the product's
+                    // one-second fallback. Process creation alone is not rule evidence.
+                    await Task.Delay(1500, token).ConfigureAwait(false);
+                    p.Kill();
+                    p.WaitForExit(1000);
+                    spawned++;
+                    await Task.Delay(delayMs, token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -69,6 +63,7 @@ namespace SonicRoute.BenchmarkLab.Helpers
             var stats = new ForegroundSwitchStats();
             Process? p1 = null;
             Process? p2 = null;
+            using var job = new Core.ProcessJobObject();
 
             try
             {
@@ -77,6 +72,8 @@ namespace SonicRoute.BenchmarkLab.Helpers
 
                 p1 = Process.Start(psi1);
                 p2 = Process.Start(psi2);
+                if (p1 != null && !job.AssignProcess(p1) && !p1.HasExited) throw new InvalidOperationException("Cannot own foreground helper.");
+                if (p2 != null && !job.AssignProcess(p2) && !p2.HasExited) throw new InvalidOperationException("Cannot own foreground helper.");
 
                 await Task.Delay(400, token);
 

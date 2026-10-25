@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using SonicRoute.BenchmarkLab.Comparison;
 
@@ -8,6 +9,13 @@ namespace SonicRoute.BenchmarkLab.Reporting
 {
     public static class HtmlReporter
     {
+        private static string H(string? text) => WebUtility.HtmlEncode(text ?? "");
+        private static string Badge(OverallVerdict verdict) => verdict switch
+        {
+            OverallVerdict.Pass => "<span class=\"badge badge-pass\">PASS</span>",
+            OverallVerdict.RegressionDetected => "<span class=\"badge badge-fail\">REGRESSION</span>",
+            _ => "<span class=\"badge badge-warn\">INCONCLUSIVE</span>"
+        };
         public static string SaveComparisonReport(SuiteComparisonResult result, string outputDir)
         {
             Directory.CreateDirectory(outputDir);
@@ -64,15 +72,13 @@ namespace SonicRoute.BenchmarkLab.Reporting
             sb.AppendLine("  </div>");
 
             // KPI Cards
-            string verdictBadge = result.OverallVerdict == OverallVerdict.Pass
-                ? "<span class=\"badge badge-pass\">PASS (未超阈值)</span>"
-                : "<span class=\"badge badge-fail\">REGRESSION (检测到性能退化)</span>";
+            string verdictBadge = Badge(result.OverallVerdict);
 
             sb.AppendLine("  <div class=\"cards\">");
             sb.AppendLine($"    <div class=\"card\"><div class=\"card-title\">综合判定</div><div class=\"card-val\">{verdictBadge}</div></div>");
-            sb.AppendLine($"    <div class=\"card\"><div class=\"card-title\">基线版本</div><div class=\"card-val\" style=\"font-size:16px;\">{Path.GetFileName(result.BaselineTarget)}</div><div class=\"sub\">{result.BaselineVersion}</div></div>");
-            sb.AppendLine($"    <div class=\"card\"><div class=\"card-title\">待测版本</div><div class=\"card-val\" style=\"font-size:16px;\">{Path.GetFileName(result.CandidateTarget)}</div><div class=\"sub\">{result.CandidateVersion}</div></div>");
-            sb.AppendLine($"    <div class=\"card\"><div class=\"card-title\">测试环境</div><div class=\"card-val\" style=\"font-size:14px;\">{result.Environment.CpuModel}</div><div class=\"sub\">{result.Environment.LogicalProcessorCount} 逻辑核 / {result.Environment.OperatingSystem}</div></div>");
+            sb.AppendLine($"    <div class=\"card\"><div class=\"card-title\">基线版本</div><div class=\"card-val\" style=\"font-size:16px;\">{H(Path.GetFileName(result.BaselineTarget))}</div><div class=\"sub\">{H(result.BaselineVersion)}</div></div>");
+            sb.AppendLine($"    <div class=\"card\"><div class=\"card-title\">待测版本</div><div class=\"card-val\" style=\"font-size:16px;\">{H(Path.GetFileName(result.CandidateTarget))}</div><div class=\"sub\">{H(result.CandidateVersion)}</div></div>");
+            sb.AppendLine($"    <div class=\"card\"><div class=\"card-title\">测试环境</div><div class=\"card-val\" style=\"font-size:14px;\">{H(result.Environment.CpuModel)}</div><div class=\"sub\">{result.Environment.LogicalProcessorCount} 逻辑核 / {H(result.Environment.OperatingSystem)}</div></div>");
             sb.AppendLine("  </div>");
 
             // Summary Findings
@@ -82,16 +88,25 @@ namespace SonicRoute.BenchmarkLab.Reporting
                 sb.AppendLine("    <strong>⚠️ 检测到以下性能退化项目:</strong><br>");
                 foreach (var reg in result.RegressionsSummary)
                 {
-                    sb.AppendLine($"    • {reg}<br>");
+                    sb.AppendLine($"    • {H(reg)}<br>");
                 }
                 sb.AppendLine("  </div>");
             }
-            else
+            else if (result.OverallVerdict == OverallVerdict.Pass)
             {
                 sb.AppendLine("  <div class=\"alert alert-success\">");
                 sb.AppendLine("    <strong>🟢 所有测试场景常规指标均在预设阈值以内，未发现性能退化。</strong>");
                 sb.AppendLine("  </div>");
             }
+            else
+            {
+                sb.AppendLine("<div class=\"alert alert-info\">证据不足或波动尚不能区分，不判为通过或退化。</div>");
+            }
+
+            foreach (var limitation in result.Limitations)
+                sb.AppendLine($"<p class=\"alert alert-info\">{H(limitation)}</p>");
+            foreach (var run in result.Runs.Where(r => !r.Result.Success))
+                sb.AppendLine($"<p class=\"alert alert-danger\">{H(run.Side)} round {run.Round}, {H(run.Result.ScenarioId)}: {H(run.Result.ErrorMessage)}</p>");
 
             if (result.ImprovementsSummary.Count > 0)
             {
@@ -99,7 +114,7 @@ namespace SonicRoute.BenchmarkLab.Reporting
                 sb.AppendLine("    <strong>⚡ 检测到以下显著性能改善:</strong><br>");
                 foreach (var imp in result.ImprovementsSummary)
                 {
-                    sb.AppendLine($"    • {imp}<br>");
+                    sb.AppendLine($"    • {H(imp)}<br>");
                 }
                 sb.AppendLine("  </div>");
             }
@@ -108,11 +123,11 @@ namespace SonicRoute.BenchmarkLab.Reporting
             foreach (var scenario in result.Scenarios)
             {
                 sb.AppendLine("  <div class=\"section\">");
-                string sBadge = scenario.Verdict == OverallVerdict.Pass
-                    ? "<span class=\"badge badge-pass\">PASS</span>"
-                    : "<span class=\"badge badge-fail\">REGRESSION</span>";
+                string sBadge = Badge(scenario.Verdict);
 
-                sb.AppendLine($"    <div class=\"section-title\" style=\"display:flex; justify-content:space-between; align-items:center;\"><span>场景: {scenario.ScenarioName} ({scenario.ScenarioId})</span>{sBadge}</div>");
+                sb.AppendLine($"    <div class=\"section-title\" style=\"display:flex; justify-content:space-between; align-items:center;\"><span>场景: {H(scenario.ScenarioName)} ({H(scenario.ScenarioId)})</span>{sBadge}</div>");
+                if (!string.IsNullOrEmpty(scenario.Notes)) sb.AppendLine($"<p>{H(scenario.Notes)}</p>");
+                sb.AppendLine($"<p>原始 CPU：A {scenario.BaselineSummary.TotalCpuTimeMs:F3} ms / {scenario.BaselineSummary.DurationSeconds:F3} s；B {scenario.CandidateSummary.TotalCpuTimeMs:F3} ms / {scenario.CandidateSummary.DurationSeconds:F3} s。逐轮原始样本及负载证据见 report.json。</p>");
 
                 sb.AppendLine("    <table>");
                 sb.AppendLine("      <thead><tr><th>指标名称</th><th>基线均值</th><th>待测均值</th><th>绝对差值</th><th>变化幅度</th><th>阈值</th><th>判定</th></tr></thead>");
@@ -124,11 +139,13 @@ namespace SonicRoute.BenchmarkLab.Reporting
                     {
                         MetricVerdict.Regressed => "<span class=\"badge badge-fail\">退化</span>",
                         MetricVerdict.Improved => "<span class=\"badge badge-pass\">改善</span>",
+                        MetricVerdict.Inconclusive => "<span class=\"badge badge-warn\">不确定</span>",
+                        MetricVerdict.Unmeasured => "<span class=\"badge badge-neutral\">未测量</span>",
                         _ => "<span class=\"badge badge-neutral\">稳定</span>"
                     };
 
                     sb.AppendLine($"        <tr>");
-                    sb.AppendLine($"          <td><strong>{m.MetricName}</strong></td>");
+                    sb.AppendLine($"          <td title=\"{H(m.Details)}\"><strong>{H(m.MetricName)}</strong></td>");
                     sb.AppendLine($"          <td>{m.BaselineValue:F2} {m.Unit}</td>");
                     sb.AppendLine($"          <td>{m.CandidateValue:F2} {m.Unit}</td>");
                     sb.AppendLine($"          <td>{m.DeltaAbsolute:+0.00;-0.00} {m.Unit}</td>");

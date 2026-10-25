@@ -1,154 +1,93 @@
-# SonicRoute Benchmark Lab (性能基准测试与版本对比实验室)
+# SonicRoute BenchmarkLab 1.1
 
-**SonicRoute Benchmark Lab** 是一款专为 Windows 桌面软件（优先针对 SonicRoute）设计的独立、可复用、可扩展的专业性能基准测试与 A/B 版本对比工具。
+独立的 Windows 进程测量与版本对比工具。保留 compare/ab、run、baseline、scenarios、verify 命令及原报告文件名；不向 SonicRoute 加入探针或后台服务。默认工具使用 .NET 8 x64，可以测量 NET10、NET8 和 Legacy 目标。
 
-支持被 Codex、Gemini 等 AI 编程代理直接调用，通过简洁的命令行接口完成高精度的性能测量、版本对比、性能回归检测，并**以极少的 Token 消耗（零外部 API、纯本地生成）直接获取结构化性能结论**。
+运行工具本身需要 .NET 8 x64 Runtime（Desktop Runtime 也包含所需运行时）；仅装 .NET 10 不会自动满足此要求。工具与目标软件的运行时需求分别检查。
 
----
+## 本次修正
 
-## 🌟 核心设计与特性
+- CPU 保留原始累计时间，按实际窗口长度比较；总体 CPU 均值由端点差值/时长计算，初始无区间样本不参与瞬时百分位。GetProcessTimes 的 100ns 是表示单位，不保证同等精度。
+- 原有 CPU 30ms 绝对保护值与 5% 相对阈值保留。非零变化低于绝对保护值标记 INCONCLUSIVE，不能解释成零开销或稳定通过。
+- 至少三轮才建立重复性判断。A/B 使用交替轮次差值的描述性 t 区间，并检查区间是否跨越原门限；历史基线使用独立样本区间，不冒称配对。区间用于测量诊断，不证明代码因果关系。
+- 完整报告保留每轮成功/失败、异常、时间序列、观察与负载证据。读取失败、早退、缺失场景、不可比基线不会变成 PASS；单目标失败不保存基线。
+- 线程采样先 Refresh，停止时取消并等待采样任务再释放资源。可取消异步等待替代 Thread.Sleep，结束无需等满采样周期；Attach 的进程禁止通过 Kill 结束。Job 分配失败则结束自建目标并报错。
+- 规则目标去掉错误的 .exe；进程负载使用唯一命名自建探针，存活超过一秒；执行确认读取实际 JSONL，长延时必须出现对应记录。修改规则保持 ID 并原子替换；热键负载采用四个不同绑定，定时负载具有有效且变化的未来计划。
+- SonicRoute 场景通过独立命令管道确认就绪并核验服务端 PID。v1.24 及更早版本没有这个协议，不能确认时保留失败，不假报自动化场景成功。
+- UI 场景验证目标进程实际出现原生主窗口，分别保留托盘/窗口样本阶段；原生窗口可见不等于 WPF 首帧、数据就绪或关闭后资源回收。
+- HTML、AI 和 JSON 区分 PASS / REGRESSION / INCONCLUSIVE；JSON-only 不混入进度。检查参数及输出路径，已有报告目录不覆盖。
+- 默认每 200ms 采样一次，可用 --interval 20..1000 调整；仅测量期间采样，结束即取消等待。相较旧默认 100ms，周期采样次数减半，不代表 CPU 开销必然减半；累计 CPU 仍由端点读取。
+- 报告记录目标 EXE、托管入口及运行时配置的 SHA256，Legacy 同时记录本地 DLL；结束后复核，文件变化即失去可比性。单目标 run_metadata.json 保留测量协议，旧基线可读但不会冒充新协议的有效对照。
 
-1. **通用进程性能监控 (`ProcessMonitor`)**：
-   - 基于原生 Win32 APIs (`GetProcessTimes`, `GetProcessMemoryInfo`, `GetProcessIoCounters`, `GetProcessHandleCount`)，监控工具自身 CPU 开销极低（实测 `< 0.05%`，自动校准记录）。
-   - **严格区分累计 CPU 时间与瞬时 CPU 使用率**：累计 CPU 时间作为单调递增的基准真值，避免采样抖动和核心数换算误判。
-   - 采集工作集（Working Set）、私有内存（Private Bytes）、内存峰值、线程数、句柄数、I/O 读写统计、进程启动耗时（毫秒级）。
-   - 不支持直接获取托管 GC 堆指标时明确标注为未测量，严禁伪造数据。
+## 构建与自检
 
-2. **进程安全与完全沙盒隔离**：
-   - **Windows Job Object 自动管理**：使用 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`，测试进程意外退出或测试工具被终止时，Windows 内核自动清理所有测试子进程，绝无僵尸进程残留。
-   - **隔离环境与双环境变量约束**：使用独立的临时目录 `SONICROUTE_DATA_DIRECTORY` 与独立的实例标识 `SONICROUTE_INSTANCE_ID`，测试实例拥有完全独立的配置、规则目录、互斥体（Mutex）与命名管道，**绝不影响、不修改用户真实的音频设备、系统音量、运行中实例、生产配置或全局快捷键**。
-   - **绝不误杀无关进程**：通过精准的进程句柄与创建时间戳绑定，防范 PID 复用。
-
-3. **双层报告机制与零 Token 极简 AI 总结**：
-   - **第一级（极简 AI 报告）**：自动生成 `ai-summary.md` 与 `ai-summary.json`，字符数严格控制在约 300–500 字，自动合并微小波动指标，置顶突出超阈值退化项，输出结论、退化定位与详细报告路径。零外部 API，100% 本地统计规则驱动。
-   - **第二级（完整证据报告）**：自动生成 `report.json`（完整结构化数据与每轮统计）与 `report.html`（现代化自包含可视化图表与各场景指标比对表）。
-
-4. **自动化多轮交替 A/B 对比 (`ComparisonRunner`)**：
-   - 支持双版本奇偶轮次交替运行（例如第 1 轮 A→B，第 2 轮 B→A，第 3 轮 A→B），消除系统散热降频、后台任务波动与冷启动缓存影响。
-   - 噪声抑制机制：设置绝对时间/内存底噪阈值（如 CPU 时间 `< 30ms`），微小波动不被错误宣称为优化或退化。
-
-5. **历史基线存储与复用 (`BaselineStore`)**：
-   - 能够将基准版本测试结果持久化为命名基线（如 `v1.25-baseline`），后续开发测试可直接与历史基线对比，无需重复运行旧版二进制。
-   - 环境兼容性校验：与历史基线对比前自动比对 CPU 核心数、操作系统与架构，不兼容时主动告警。
-
----
-
-## 🛠️ 命令参考
-
-### 1. 快速验收自检 (`verify`)
-自动化运行内置的 6 项核心验收标准测试（正常报告、CPU 退化定位、内存退化定位、噪声抑制、Token 控制、真实 SonicRoute 采集）：
 ```powershell
+dotnet build tools/SonicRoute.BenchmarkLab/SonicRoute.BenchmarkLab.csproj -c Release
 dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- verify
+# 显式追加实际 SonicRoute 隔离检查；默认不自动寻找或启动用户软件
+dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- verify --target E:/releases/current.exe
 ```
 
-### 2. A/B 版本对比 (`compare` 或 `ab`)
-对比两个可执行文件，或将候选版本与已保存的历史基线对比：
+自检包含计算、报告、JSONL、规则身份及真实自建 Windows 子进程；实际软件检查需要显式 --target。
+
+自动 SonicRoute 场景使用独立数据目录及实例身份，关闭自动更新、开机启动和托盘滚轮，避免操作用户音频。这里的空闲结果对应这套受控配置；需要测量托盘滚轮等功能时，应另建明确启用该功能的专项场景。
+
+## 常用命令
+
+先让机器尽量安静，用同一 EXE 做 A/A，再做 A/B。工具不会暂停系统任务或自动消除环境噪声；缓存、调度和后台负载仍需控制。
+
 ```powershell
-# 对比两个 EXE（执行 3 轮交替测试，输出 AI 极简摘要）
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- compare `
-  --baseline "dist/experiments/v1.24/SonicRoute.exe" `
-  --candidate "SonicRoute/bin/Release/net8.0-windows/win-x64/SonicRoute.exe" `
-  --suite standard `
-  --rounds 3 `
-  --quiet
-
-# 对比已保存的历史基线
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- compare `
-  --baseline v1.25-quick-baseline `
-  --candidate "SonicRoute/bin/Release/net8.0-windows/win-x64/SonicRoute.exe" `
-  --suite quick `
-  --rounds 2 `
-  --quiet
+# A/A 重复性对照；不能作为软件版本优化结论
+SonicRoute.BenchmarkLab compare --aa --candidate E:/releases/current.exe --suite quick --rounds 3 --duration 30 --output E:/benchmarks/aa-new --json
+# 双版本交替，后台0/10规则和目标不存在
+SonicRoute.BenchmarkLab compare --baseline E:/releases/old.exe --candidate E:/releases/current.exe --suite quick --rounds 3 --duration 30 --output E:/benchmarks/ab-new --quiet
+# 100条规则专项
+SonicRoute.BenchmarkLab compare --baseline E:/releases/old.exe --candidate E:/releases/current.exe --scenario rules_scaling_100 --rounds 3 --duration 30 --json
+# 保存历史基线
+SonicRoute.BenchmarkLab run --target E:/releases/current.exe --suite quick --rounds 3 --duration 30 --save-baseline current-quick --output E:/benchmarks/baseline-new
+# 通用进程，参数直接传给目标，不经 shell 解释
+SonicRoute.BenchmarkLab run --target E:/tests/example.exe --scenario generic_process --args "--test-mode" --duration 10
+# UI、前台、全局热键场景需显式允许，避免测试时干扰工作
+SonicRoute.BenchmarkLab compare --baseline E:/releases/old.exe --candidate E:/releases/current.exe --suite standard --allow-desktop-interaction --rounds 3
+SonicRoute.BenchmarkLab scenarios
+SonicRoute.BenchmarkLab baseline list
+SonicRoute.BenchmarkLab baseline show current-quick
+SonicRoute.BenchmarkLab baseline delete current-quick
 ```
 
-**核心选项**：
-- `--baseline <path|name>`: 基线 EXE 路径或已存储基线名称（必填）。
-- `--candidate <path>`: 待测候选版本 EXE 路径（必填）。
-- `--suite <quick|standard|endurance>`: 测试等级预设（默认 `standard`）。
-- `--scenario <id>`: 仅运行单个指定场景（如 `idle_empty`）。
-- `--module <all|automation|hotkey|ui|general>`: 按受影响模块过滤场景。
-- `--rounds <n>`: 交替测试轮次（默认 `3`）。
-- `--duration <seconds>`: 自定义每阶段测量秒数。
-- `--threshold-cpu <percent>`: CPU 退化报警阈值百分比（默认 `5.0%`）。
-- `--threshold-mem <percent>`: 内存退化报警阈值百分比（默认 `10.0%`）。
-- `--output <dir>`: 报告输出目录（默认 `./benchmarks/<run_id>/`）。
-- `--quiet, -q`: 安静模式，控制台仅输出面向 AI 的极简摘要。
-- `--json`: 控制台仅输出 `ai-summary.json` 内容。
+--duration 使用小数点，接受有限秒数，最低0.5秒；短窗口用于冒烟，不足以证明低负载性能。默认 CPU 5%、内存10% 门限不变。--rounds 必须为正整数；一轮可留证，但不能作为最终门禁。
 
-### 3. 单目标基准测量与保存基线 (`run`)
-运行测试套件并可选择保存为基线：
-```powershell
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- run `
-  --target "SonicRoute/bin/Release/net8.0-windows/win-x64/SonicRoute.exe" `
-  --suite quick `
-  --rounds 2 `
-  --save-baseline v1.25-quick-baseline
-```
+## 场景范围
 
-### 4. 历史基线管理 (`baseline`)
-```powershell
-# 列出所有存储的基线
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- baseline list
+| 套件/场景 | 范围 |
+| --- | --- |
+| quick | idle_empty、rules_scaling_10、target_absent；后台场景 |
+| standard | 另含1/100规则、进程负载、主窗口；需允许桌面交互 |
+| automation / optimization | 进程、前台、长延时、规则保存和定时更新；部分需允许桌面交互 |
+| endurance | 后台、100规则和资源趋势；短期斜率不等于证实泄漏 |
+| generic_process | 通用进程；遵循目标自身启动行为，不承诺目标软件的数据或音频副作用隔离 |
+| app_lifecycle_churn / long_delay_step | 自建负载并查实际执行；安全操作针对随机唯一的不存在应用 |
+| rule_save_hotkeys / schedule_rule_churn | 修改规则并确认最新名称已载入；不等于已验证物理热键、冲突或定时到期 |
+| fast_foreground_switch | 必须实际切换成功且记录规则执行；被系统拦截则失败 |
+| window_tray_transitions | 目标 PID 的可见原生主窗口与两段资源；未测首帧或关窗回收 |
 
-# 查看指定基线详情
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- baseline show v1.25-quick-baseline
+SonicRoute 场景使用独立数据与实例 ID，禁用更新、自启动和普通快捷键。仅明确选择交互场景时产生窗口/前台/规则热键负载。规则只尝试控制随机唯一的不存在应用，不写用户音量、默认设备或路由。全局键位和桌面活动仍受 Windows 及正在运行的软件影响。
 
-# 删除指定基线
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- baseline delete v1.25-quick-baseline
-```
+## 报告与退出码
 
-### 5. 列出支持的场景 (`scenarios`)
-```powershell
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- scenarios
-```
+- report.json：来源、逐轮指标、样本、失败和负载证据；观察器 CPU 是工具全进程在测量期间的 CPU，包含负载生成，不是纯采样器开销。
+- report.html：离线展示判定、原始 CPU/时长、门限与限制；不确定状态不显示绿色通过。
+- ai-summary.md/json：快速摘要；完整波动与证据见 report.json。
+- run_summary.json / run_evidence.json：单目标汇总及逐轮证据。Schema 2 基线保存轮次、套件和请求时长；旧基线仍可读，缺协议证据时不作为有效门禁。
 
----
+| 码 | 含义 |
+| --- | --- |
+| 0 | 比较未检出超阈值退化；run 仅表示测量完成 |
+| 1 | 检出有重复性证据的退化 |
+| 2 | 参数、路径或输出目录错误 |
+| 3 | 场景负载、启动、采样或执行失败 |
+| 4 | 证据不足、波动或基线不可比 |
+| 130 | 用户取消，清理自建进程 |
 
-## 📋 预置测试场景清单
+工作集峰值来自进程生命周期，包含预热；托管 GC、硬件功能、首帧及未执行场景不伪造结果。短测和工具自检不等于整版 SonicRoute 性能提升。
 
-| 场景 ID | 归属模块 | 默认时长(标配) | 测量目标与模拟负载 |
-| :--- | :--- | :--- | :--- |
-| `idle_empty` | `general` | 10.0s | 无自动化规则时的后台常驻托盘闲置资源消耗。 |
-| `rules_scaling_1` | `automation` | 10.0s | 载入 1 条自动化规则时的资源变化与调度开销。 |
-| `rules_scaling_10` | `automation` | 10.0s | 载入 10 条自动化规则时的内存增长与调度开销。 |
-| `rules_scaling_100`| `automation` | 10.0s | 载入 100 条规则时内存线性扩张与文件索引效率。 |
-| `target_absent` | `automation` | 10.0s | 规则目标进程长期不存在时的后台轮询/WMI 闲时消耗。 |
-| `app_lifecycle_churn`| `automation` | 10.0s | 外部进程频繁启动与退出（高吞吐进程事件）时的调度性能。 |
-| `fast_foreground_switch`| `automation` | 10.0s | 快速切换前台应用时的窗口事件追踪与匹配开销。 |
-| `long_delay_step` | `automation` | 10.0s | 包含长延时执行步骤（如 5000ms 计时器）时的挂起稳定性。 |
-| `rule_save_hotkeys`| `hotkey` | 10.0s | 大量规则动态写入与重新加载时的热键注销/重绑性能。 |
-| `window_tray_transitions`| `ui` | 10.0s | 托盘常驻状态与主界面打开（`--main`）之间的资源阶跃变化。 |
-| `endurance_leak_trend`| `general` | 25.0s | 长时间运行下的句柄、线程及私有内存斜率（泄漏趋势分析）。 |
-| `generic_process` | `general` | 10.0s | 通用进程基准测试，可适用于任何其他 Windows 应用程序。 |
-
----
-
-## 🚦 进程退出码规范
-
-| 退出码 | 状态 | 说明 |
-| :---: | :--- | :--- |
-| `0` | **PASS** | 性能测试通过，所有关键指标变化均在预设阈值以内。 |
-| `1` | **REGRESSION** | 检测到性能显著退化（某项指标超出设定退化阈值）。 |
-| `2` | **INVALID_ARGUMENTS** | 命令行参数格式错误、目标文件不存在或配置异常。 |
-| `3` | **EXECUTION_ERROR** | 目标进程在测试期间异常崩溃、发生超时或环境中断。 |
-
----
-
-## 🤖 面向 AI 的输出样例 (`ai-summary.md`)
-
-```markdown
-### SonicRoute 性能对比结论: 🟢 PASS (无退化)
-
-- **对比目标**: `v1.25-quick-baseline (1.25.0.0)` ➔ `SonicRoute.exe` (2 轮交替)
-- **宿主环境**: 13th Gen Intel(R) Core(TM) i7-13620H (16 逻辑核) | Microsoft Windows 10.0.26300
-
-#### 📊 稳定指标概要:
-- 18 项常规指标（CPU时间、工作集、私有内存、句柄等）在预设噪声容限内保持平稳
-
-#### ℹ️ 测试限制与说明:
-- Executed 2 round(s); 3+ rounds recommended for production regression gating to minimize background OS noise.
-
-#### 📁 完整报告与证据:
-- 结构化数据: `file:///E:/kunkun/SonarSwitch/benchmarks/compare_20261021_105137/report.json`
-- 可视化图表: `file:///E:/kunkun/SonarSwitch/benchmarks/compare_20261021_105137/report.html`
-```
+参考：[GetProcessTimes](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getprocesstimes)、[WaitForInputIdle](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-waitforinputidle)、[Process.Refresh](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.process.refresh)。

@@ -134,6 +134,12 @@ namespace SonicRoute.BenchmarkLab.Core
 
         // Benchmark tool self-overhead calibration
         public double MonitorSelfCpuTimeMs { get; set; }
+        public string MonitorCpuNotes { get; set; } = "Whole BenchmarkLab process CPU during measurement, including workload generation; not isolated sampler overhead.";
+        public string StartupLatencyNotes { get; set; } = "WaitForInputIdle proxy only; does not establish a visible, rendered or data-ready window.";
+        public bool MeasurementValid { get; set; } = true;
+        public string? MeasurementError { get; set; }
+        public bool ProcessExitedDuringMeasurement { get; set; }
+        public double CpuTimePerSecondMs => DurationSeconds > 0 ? TotalCpuTimeMs / DurationSeconds : 0;
 
         public static ProcessMetricSummary Aggregate(IReadOnlyList<ProcessSample> samples, double durationSeconds, double monitorSelfCpuMs = 0)
         {
@@ -142,6 +148,8 @@ namespace SonicRoute.BenchmarkLab.Core
                 return new ProcessMetricSummary
                 {
                     DurationSeconds = durationSeconds,
+                    MeasurementValid = false,
+                    MeasurementError = "No samples collected.",
                     MonitorSelfCpuTimeMs = monitorSelfCpuMs
                 };
             }
@@ -164,12 +172,15 @@ namespace SonicRoute.BenchmarkLab.Core
             return new ProcessMetricSummary
             {
                 DurationSeconds = durationSeconds,
+                MeasurementValid = samples.Count >= 3 && durationSeconds >= 0.5,
                 SampleCount = samples.Count,
                 TotalCpuTimeMs = totalCpu,
                 UserCpuTimeMs = userCpu,
                 KernelCpuTimeMs = kernelCpu,
-                CpuPercentMachine = MetricStatistics.Calculate(samples.Select(s => s.InstantCpuPercentMachine).ToList(), durationSeconds),
-                CpuPercentPerCore = MetricStatistics.Calculate(samples.Select(s => s.InstantCpuPercentPerCore).ToList(), durationSeconds),
+                // The initial endpoint has no interval. Exclude its artificial zero;
+                // the overall mean uses cumulative CPU / actual wall duration below.
+                CpuPercentMachine = CpuStatistics(samples, durationSeconds, totalCpu, Environment.ProcessorCount),
+                CpuPercentPerCore = CpuStatistics(samples, durationSeconds, totalCpu, 1),
                 WorkingSetBytes = MetricStatistics.Calculate(samples.Select(s => (double)s.WorkingSetBytes).ToList(), durationSeconds),
                 PeakWorkingSetBytes = peakWs,
                 PrivateBytes = MetricStatistics.Calculate(samples.Select(s => (double)s.PrivateBytes).ToList(), durationSeconds),
@@ -181,6 +192,14 @@ namespace SonicRoute.BenchmarkLab.Core
                 IoWriteOpsTotal = ioWriteOps,
                 MonitorSelfCpuTimeMs = monitorSelfCpuMs
             };
+        }
+
+        private static MetricStatistics CpuStatistics(IReadOnlyList<ProcessSample> samples, double seconds, double cpuMs, int cores)
+        {
+            var values = samples.Skip(1).Select(s => cores == 1 ? s.InstantCpuPercentPerCore : s.InstantCpuPercentMachine).ToArray();
+            var result = MetricStatistics.Calculate(values, seconds);
+            result.Mean = seconds > 0 ? cpuMs / (seconds * 1000) * 100 / cores : 0;
+            return result;
         }
     }
 }

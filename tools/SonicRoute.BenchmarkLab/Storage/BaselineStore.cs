@@ -9,6 +9,12 @@ namespace SonicRoute.BenchmarkLab.Storage
 {
     public sealed class StoredBaseline
     {
+        public int SchemaVersion { get; set; }
+        public string Tier { get; set; } = "";
+        public int SampleIntervalMs { get; set; }
+        public double? RequestedDurationSeconds { get; set; }
+        public Dictionary<string, List<ProcessMetricSummary>> Rounds { get; set; } = new();
+        public Dictionary<string, string> TargetFiles { get; set; } = new();
         public string Name { get; set; } = string.Empty;
         public DateTime SavedUtc { get; set; } = DateTime.UtcNow;
         public string TargetPath { get; set; } = string.Empty;

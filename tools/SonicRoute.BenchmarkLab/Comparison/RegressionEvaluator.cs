@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SonicRoute.BenchmarkLab.Core;
+using SonicRoute.BenchmarkLab.Scenarios;
 
 namespace SonicRoute.BenchmarkLab.Comparison
 {
@@ -47,6 +49,15 @@ namespace SonicRoute.BenchmarkLab.Comparison
 
     public sealed class SuiteComparisonResult
     {
+        public int SchemaVersion { get; set; } = 2;
+        public string BaselineSha256 { get; set; } = string.Empty;
+        public string CandidateSha256 { get; set; } = string.Empty;
+        public Dictionary<string, string> BaselineFiles { get; set; } = new();
+        public Dictionary<string, string> CandidateFiles { get; set; } = new();
+        public bool IsAaControl { get; set; }
+        public bool UsesStoredBaseline { get; set; }
+        public bool SourceFilesUnchanged { get; set; } = true;
+        public List<BenchmarkRunEvidence> Runs { get; set; } = new();
         public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
         public string BaselineTarget { get; set; } = string.Empty;
         public string CandidateTarget { get; set; } = string.Empty;
@@ -65,6 +76,14 @@ namespace SonicRoute.BenchmarkLab.Comparison
         public string ReportJsonPath { get; set; } = string.Empty;
         public string ReportHtmlPath { get; set; } = string.Empty;
         public string AiSummaryMdPath { get; set; } = string.Empty;
+    }
+
+    public sealed class BenchmarkRunEvidence
+    {
+        public int Round { get; set; }
+        public string Side { get; set; } = "";
+        public int Order { get; set; }
+        public ScenarioResult Result { get; set; } = new();
     }
 
     public static class RegressionEvaluator
@@ -93,17 +112,17 @@ namespace SonicRoute.BenchmarkLab.Comparison
             };
 
             // Check for premature exit or insufficient sampling
-            if (baseline.SampleCount < 3 || baseline.DurationSeconds < 0.5)
+            if (!baseline.MeasurementValid || baseline.ProcessExitedDuringMeasurement || baseline.SampleCount < 3 || baseline.DurationSeconds < 0.5)
             {
                 result.Verdict = OverallVerdict.Inconclusive;
-                result.Notes = $"Baseline process exited prematurely or insufficient samples collected (SampleCount={baseline.SampleCount}, Duration={baseline.DurationSeconds:F1}s). Likely single-instance mutex collision or early termination.";
+                result.Notes = $"Baseline measurement invalid: {baseline.MeasurementError} (samples={baseline.SampleCount}, duration={baseline.DurationSeconds:F2}s).";
                 return result;
             }
 
-            if (candidate.SampleCount < 3 || candidate.DurationSeconds < 0.5)
+            if (!candidate.MeasurementValid || candidate.ProcessExitedDuringMeasurement || candidate.SampleCount < 3 || candidate.DurationSeconds < 0.5)
             {
                 result.Verdict = OverallVerdict.Inconclusive;
-                result.Notes = $"Candidate process exited prematurely or insufficient samples collected (SampleCount={candidate.SampleCount}, Duration={candidate.DurationSeconds:F1}s). Likely single-instance mutex collision or early crash.";
+                result.Notes = $"Candidate measurement invalid: {candidate.MeasurementError} (samples={candidate.SampleCount}, duration={candidate.DurationSeconds:F2}s).";
                 return result;
             }
 
@@ -114,11 +133,17 @@ namespace SonicRoute.BenchmarkLab.Comparison
                 "Total CPU Time",
                 "ms",
                 baseline.TotalCpuTimeMs,
-                candidate.TotalCpuTimeMs,
+                candidate.CpuTimePerSecondMs * baseline.DurationSeconds,
                 cpuThresholdPercent,
                 CpuTimeNoiseFloorMs,
                 lowerIsBetter: true);
             result.MetricComparisons.Add(cpuComp);
+            cpuComp.Details += $"; CPU normalized to {baseline.DurationSeconds:F3}s baseline window; raw A={baseline.TotalCpuTimeMs:F3}ms/{baseline.DurationSeconds:F3}s, B={candidate.TotalCpuTimeMs:F3}ms/{candidate.DurationSeconds:F3}s";
+            if (cpuComp.Verdict == MetricVerdict.Stable && cpuComp.DeltaAbsolute != 0 && Math.Abs(cpuComp.DeltaAbsolute) <= CpuTimeNoiseFloorMs)
+            {
+                cpuComp.Verdict = MetricVerdict.Inconclusive;
+                cpuComp.Details += "; change is below the existing 30ms absolute uncertainty guard, not proof of no regression; use longer windows/A-A controls";
+            }
             if (cpuComp.Verdict == MetricVerdict.Regressed) hasRegression = true;
 
             // 2. Private Bytes (Memory allocated to process)
@@ -173,7 +198,7 @@ namespace SonicRoute.BenchmarkLab.Comparison
             if (baseline.StartupLatencyMs.HasValue && candidate.StartupLatencyMs.HasValue)
             {
                 var startupComp = CompareMetric(
-                    "Startup Latency",
+                    "Input-idle Proxy Latency",
                     "ms",
                     baseline.StartupLatencyMs.Value,
                     candidate.StartupLatencyMs.Value,
@@ -190,8 +215,79 @@ namespace SonicRoute.BenchmarkLab.Comparison
                 result.Notes = "Single-round test: Results subject to system scheduling variance. Multi-round recommended for final verification.";
             }
 
-            result.Verdict = hasRegression ? OverallVerdict.RegressionDetected : OverallVerdict.Pass;
+            result.Verdict = hasRegression ? OverallVerdict.RegressionDetected
+                : result.MetricComparisons.Any(m => m.Verdict == MetricVerdict.Inconclusive) ? OverallVerdict.Inconclusive : OverallVerdict.Pass;
             return result;
+        }
+
+        // Use paired alternating rounds, rather than interpreting a mean alone as
+        // repeatable evidence. This is a descriptive 95% t interval, not causality.
+        public static void ApplyRoundEvidence(ScenarioComparisonResult result, IReadOnlyList<ProcessMetricSummary> baseline, IReadOnlyList<ProcessMetricSummary> candidate, bool paired = true)
+        {
+            foreach (var metric in result.MetricComparisons)
+            {
+                Func<ProcessMetricSummary, double>? selector = metric.MetricName switch
+                {
+                    "Total CPU Time" => s => s.CpuTimePerSecondMs * result.BaselineSummary.DurationSeconds,
+                    "Private Memory" => s => s.PrivateBytes.Mean / (1024 * 1024),
+                    "Peak Working Set" => s => s.PeakWorkingSetBytes / (1024.0 * 1024.0),
+                    "Handle Count" => s => s.HandleCount.Mean,
+                    "Thread Count" => s => s.ThreadCount.Mean,
+                    "Input-idle Proxy Latency" => s => s.StartupLatencyMs ?? double.NaN,
+                    _ => null
+                };
+                if (selector == null) continue;
+                if ((paired && baseline.Count != candidate.Count) || baseline.Count < 3 || candidate.Count < 3)
+                {
+                    metric.Verdict = MetricVerdict.Inconclusive;
+                    metric.Details += "; fewer than three matched rounds, repeatability not established";
+                    continue;
+                }
+                var aValues = baseline.Select(selector).ToArray();
+                var bValues = candidate.Select(selector).ToArray();
+                if (aValues.Concat(bValues).Any(d => !double.IsFinite(d)))
+                { metric.Verdict = MetricVerdict.Inconclusive; metric.Details += "; missing round measurement"; continue; }
+                var differences = aValues.Zip(bValues, (a, b) => b - a).ToArray();
+                double mean = bValues.Average() - aValues.Average();
+                double uncertainty = metric.MetricName switch
+                {
+                    "Total CPU Time" => CpuTimeNoiseFloorMs,
+                    "Private Memory" or "Peak Working Set" => 2,
+                    "Handle Count" => HandleNoiseFloor,
+                    "Thread Count" => ThreadNoiseFloor,
+                    _ => 50
+                };
+                if (metric.MetricName == "Total CPU Time")
+                {
+                    metric.BaselineValue = baseline.Average(selector);
+                    metric.CandidateValue = candidate.Average(selector);
+                    metric.DeltaAbsolute = mean;
+                    metric.DeltaPercentDefined = metric.BaselineValue > 0.0001;
+                    metric.DeltaPercent = metric.DeltaPercentDefined ? mean / metric.BaselineValue * 100 : 0;
+                    var normalized = CompareMetric(metric.MetricName, metric.Unit, metric.BaselineValue, metric.CandidateValue, metric.ThresholdPercent, uncertainty);
+                    metric.Verdict = normalized.Verdict;
+                    if (mean != 0 && Math.Abs(mean) <= uncertainty) metric.Verdict = MetricVerdict.Inconclusive;
+                }
+                double squaredError = paired ? differences.Sum(d => (d - mean) * (d - mean)) / (differences.Length - 1) / differences.Length
+                    : aValues.Sum(d => Math.Pow(d - aValues.Average(), 2)) / (aValues.Length - 1) / aValues.Length
+                    + bValues.Sum(d => Math.Pow(d - bValues.Average(), 2)) / (bValues.Length - 1) / bValues.Length;
+                int n = Math.Min(aValues.Length, bValues.Length);
+                double t = n switch { 3 => 4.303, 4 => 3.182, 5 => 2.776, 6 => 2.571, <= 10 => 2.447, <= 20 => 2.262, _ => 2.093 };
+                double halfWidth = t * Math.Sqrt(squaredError);
+                metric.Details += $"; {(paired ? "paired alternating" : "independent historical")} rounds A={aValues.Length}, B={bValues.Length}, delta mean={mean:F3}, 95% descriptive interval=[{mean-halfWidth:F3}, {mean+halfWidth:F3}] {metric.Unit}";
+                double limit = Math.Max(uncertainty, Math.Abs(metric.BaselineValue) * metric.ThresholdPercent / 100);
+                bool overlapsGate = metric.Verdict switch
+                {
+                    MetricVerdict.Regressed => mean - halfWidth <= limit,
+                    MetricVerdict.Improved => mean + halfWidth >= -limit,
+                    MetricVerdict.Stable => mean - halfWidth < -limit || mean + halfWidth > limit,
+                    _ => false
+                };
+                if (overlapsGate)
+                    metric.Verdict = MetricVerdict.Inconclusive;
+            }
+            result.Verdict = result.MetricComparisons.Any(m => m.Verdict == MetricVerdict.Regressed) ? OverallVerdict.RegressionDetected
+                : result.MetricComparisons.Count == 0 || result.MetricComparisons.Any(m => m.Verdict == MetricVerdict.Inconclusive) ? OverallVerdict.Inconclusive : OverallVerdict.Pass;
         }
 
         private static MetricComparisonResult CompareMetric(

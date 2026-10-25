@@ -68,14 +68,14 @@ namespace SonicRoute.BenchmarkLab.Reporting
             var sb = new StringBuilder();
             string statusIcon = summaryData.Status switch
             {
-                "PASS" => "🟢 PASS (无退化)",
+                "PASS" => "🟢 PASS (本次未检出超阈值退化)",
                 "REGRESSION_DETECTED" => "🔴 REGRESSION (发现退化)",
-                _ => "🟡 INCONCLUSIVE (采样不足或进程异常退出)"
+                _ => "🟡 INCONCLUSIVE (证据不足、负载未确认或波动未收敛)"
             };
 
             sb.AppendLine($"### SonicRoute 性能对比结论: {statusIcon}");
             sb.AppendLine();
-            sb.AppendLine($"- **对比目标**: `{summaryData.Baseline}` ➔ `{summaryData.Candidate}` ({summaryData.Rounds} 轮交替)");
+            sb.AppendLine($"- **对比目标**: `{summaryData.Baseline}` ➔ `{summaryData.Candidate}` ({summaryData.Rounds} 轮，{(result.IsAaControl ? "A/A 对照" : result.UsesStoredBaseline ? "历史基线，非交替" : "A/B 交替")})");
             sb.AppendLine($"- **宿主环境**: {summaryData.CpuModel} ({summaryData.Cores} 逻辑核) | {result.Environment.OperatingSystem}");
             sb.AppendLine();
 

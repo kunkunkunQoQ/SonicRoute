@@ -57,6 +57,13 @@ namespace SonicRoute.BenchmarkLab.Core
         /// </summary>
         public bool IsCompatibleWith(SystemEnvironmentInfo other, out string reason)
         {
+            if (!string.Equals(OsVersion, other.OsVersion, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(ProcessArchitecture, other.ProcessArchitecture, StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(MachineName, other.MachineName, StringComparison.OrdinalIgnoreCase))
+            {
+                reason = "Machine, OS version or measurement-process architecture differs from the historical baseline.";
+                return false;
+            }
             if (LogicalProcessorCount != other.LogicalProcessorCount)
             {
                 reason = $"CPU logical core mismatch: current={LogicalProcessorCount}, baseline={other.LogicalProcessorCount}. CPU % normalization will skew.";
