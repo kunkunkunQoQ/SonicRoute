@@ -168,7 +168,7 @@ namespace SonicRoute
             return string.Equals(parts[parts.Length - 1], pressedKey, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static uint GetPressedMods()
+        internal static uint GetPressedMods()
         {
             uint m = 0;
             if (IsDown(VK_CONTROL)) m |= MOD_CONTROL;

@@ -7,9 +7,8 @@ using SonicRoute.Core.Models;
 namespace SonicRoute
 {
     /// <summary>
-    /// 托盘滚轮调音量：安装 WH_MOUSE_LL 低层鼠标钩子，当滚轮事件发生时光标位于
-    /// 系统托盘通知区（TrayNotifyWnd / 溢出窗口）内，就对当前前台应用调节音量，
-    /// 并显示一个小型 OSD 反馈。只调前台应用自己的会话音量，不动系统主音量。
+    /// 复用 WH_MOUSE_LL：在配置区域内滚轮调当前应用音量，纯Alt滚轮切换其输出设备。
+    /// 后台操作与目标缓存共用原派发通道；不改变系统主音量或默认设备。
     /// </summary>
     internal sealed class TrayWheelService : IDisposable
     {
@@ -82,6 +81,7 @@ namespace SonicRoute
 
         // 滚轮合并派发（钩子只做检测；单个后台任务操作音频，结果返回 UI 显示 OSD）
         private int _pendingDelta;
+        private int _pendingDeviceDelta;
         private bool _dispatchScheduled;
 
         // 目标应用解析缓存（与快速面板一致，避免每次滚轮全量枚举）
@@ -125,7 +125,10 @@ namespace SonicRoute
                 if (IsOverTray(data.pt))
                 {
                     // 钩子线程绝不做 COM/音频调用：合并滚轮量，UI 入口启动后台处理。
-                    System.Threading.Interlocked.Add(ref _pendingDelta, delta);
+                    // 输入时捕获Alt，异步处理时释放修饰键也不会误调音量。
+                    if (MouseHotkeyHook.GetPressedMods() == 1) // MOD_ALT，Ctrl/Shift/Win不混入
+                        System.Threading.Interlocked.Add(ref _pendingDeviceDelta, delta);
+                    else System.Threading.Interlocked.Add(ref _pendingDelta, delta);
                     if (!_dispatchScheduled)
                     {
                         _dispatchScheduled = true;
@@ -137,7 +140,11 @@ namespace SonicRoute
             return CallNextHookEx(_hook, nCode, wParam, lParam);
         }
 
-        internal void DiscardPendingWheel() => System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
+        internal void DiscardPendingWheel()
+        {
+            System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
+            System.Threading.Interlocked.Exchange(ref _pendingDeviceDelta, 0);
+        }
 
         private async void ProcessPendingWheel()
         {
@@ -147,9 +154,20 @@ namespace SonicRoute
                 {
                     if (ConfigService.Load().TrayWheelPaused) { DiscardPendingWheel(); break; }
                     int delta = System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
-                    if (delta == 0) break;
+                    int deviceDelta = System.Threading.Interlocked.Exchange(ref _pendingDeviceDelta, 0);
+                    if (delta == 0 && deviceDelta == 0) break;
                     // 记录此次输入时的前台，后台查询期间焦点变化不改本轮目标。
                     int foregroundPid = ForegroundAppService.GetForegroundProcessId();
+                    if (deviceDelta != 0)
+                    {
+                        var switched = await Task.Run(() => SwitchOutputDevice(deviceDelta, foregroundPid));
+                        if (_disposed) return;
+                        if (switched.App == null) ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession"));
+                        else ShowOsd(AppDisplayName.Get(switched.App), string.IsNullOrEmpty(switched.DeviceName)
+                            ? L10n.T("Ov.NoDevice") : $"🔊 {switched.DeviceName}");
+                    }
+                    if (delta == 0) continue;
+                    if (ConfigService.Load().TrayWheelPaused) { DiscardPendingWheel(); break; }
                     var result = await Task.Run(() => AdjustVolume(delta, foregroundPid));
                     if (_disposed) return;
                     if (result.App == null)
@@ -169,7 +187,8 @@ namespace SonicRoute
             finally
             {
                 _dispatchScheduled = false;
-                if (!_disposed && System.Threading.Volatile.Read(ref _pendingDelta) != 0)
+                if (!_disposed && (System.Threading.Volatile.Read(ref _pendingDelta) != 0
+                    || System.Threading.Volatile.Read(ref _pendingDeviceDelta) != 0))
                 {
                     _dispatchScheduled = true;
                     _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(ProcessPendingWheel));
@@ -179,8 +198,8 @@ namespace SonicRoute
 
         /// <summary>
         /// 判断光标是否在"可调音量区域"：
-        /// 配置 TrayWheelEverywhere=true（默认）→ 整个托盘通知区（含溢出区、第二任务栏）都响应；
-        /// false → 仅音跃自己的托盘图标矩形内响应（Shell_NotifyIconGetRect）。
+        /// true → 整个托盘通知区（含溢出区、第二任务栏）；
+        /// false（默认）→ 仅音跃自己的图标矩形。音量和Alt设备切换共用该判断。
         /// </summary>
         private bool IsOverTray(POINT pt)
         {
@@ -355,6 +374,15 @@ namespace SonicRoute
             return false;
         }
 
+        private (AudioAppInfo? App, string? DeviceName) SwitchOutputDevice(int delta, int foregroundPid)
+        {
+            if (_disposed || ConfigService.Load().TrayWheelPaused) return (null, null);
+            var target = ResolveTargetApp(foregroundPid);
+            if (target == null) return (null, null);
+            int steps = Math.Max(1, (int)(Math.Abs((long)delta) / 120));
+            return (target, App.CycleDevice((int)target.ProcessId, Core.Interop.EDataFlow.eRender, delta > 0, steps));
+        }
+
         private (AudioAppInfo? App, string ProcessName, int Current, int Actual, bool Muted) AdjustVolume(int delta, int foregroundPid)
         {
             if (_disposed) return (null, "", -1, -1, false);
@@ -408,7 +436,7 @@ namespace SonicRoute
         public void Dispose()
         {
             _disposed = true;
-            System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
+            DiscardPendingWheel();
             _osdService.Dispose();
             if (_hook != IntPtr.Zero)
             {

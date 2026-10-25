@@ -13,6 +13,15 @@ namespace SonicRoute
     /// </summary>
     public static class PanelDevices
     {
+        /// <summary>按可见列表循环；当前项已离线或隐藏时，向后取首项，向前取末项。</summary>
+        internal static int CycleIndex(int currentIndex, int count, bool previous, int steps = 1)
+        {
+            if (count <= 0) return -1;
+            if (currentIndex < 0 || currentIndex >= count) currentIndex = previous ? 0 : count - 1;
+            int offset = System.Math.Max(1, steps) % count;
+            return previous ? (currentIndex + count - offset) % count : (currentIndex + offset) % count;
+        }
+
         /// <summary>构建带"系统默认"虚拟项的显示列表。
         /// 虚拟项按流使用独立 ID（输出 @@SYSTEM_DEFAULT@@ / 输入 @@SYSTEM_DEFAULT_IN@@），
         /// 从而在 HiddenOutputDevices/HiddenInputDevices 与 DeviceNames 中可分别控制显示和命名。

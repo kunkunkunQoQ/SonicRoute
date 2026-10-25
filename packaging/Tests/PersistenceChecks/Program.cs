@@ -94,6 +94,10 @@ internal static class Program
     private static void Checks()
     {
         Check(new AppConfig().ExperimentalMic, "microphone option defaults on for new config");
+        Check(!new AppConfig().TrayWheelEverywhere, "tray wheel area defaults to own icon");
+        Check(!JsonSerializer.Deserialize<AppConfig>("{}", ProductJson)!.TrayWheelEverywhere, "missing tray wheel area defaults to own icon");
+        Check(JsonSerializer.Deserialize<AppConfig>("{\"TrayWheelEverywhere\":true}", ProductJson)!.TrayWheelEverywhere, "saved whole-tray choice remains enabled");
+        Check(!JsonSerializer.Deserialize<AppConfig>("{\"TrayWheelEverywhere\":false}", ProductJson)!.TrayWheelEverywhere, "saved own-icon choice remains disabled");
         Check(JsonSerializer.Deserialize<AppConfig>("{}", ProductJson)!.ExperimentalMic, "missing microphone field defaults on");
         Check(!JsonSerializer.Deserialize<AppConfig>("{\"ExperimentalMic\":false}", ProductJson)!.ExperimentalMic, "explicit saved microphone opt-out remains off");
         Check(!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")), "isolated data root required");

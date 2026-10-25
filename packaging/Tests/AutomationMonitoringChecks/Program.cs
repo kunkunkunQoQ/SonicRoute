@@ -108,10 +108,11 @@ internal static class Program
         var dispatcher = Dispatcher.CurrentDispatcher; SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
         try
         {
-            var run = Run(); var frame = new DispatcherFrame();
+            async Task RunHotkeys() { _passed += await HotkeyChecks.Run(); }
+            var run = args.Contains("--hotkeys-only") ? RunHotkeys() : Run(); var frame = new DispatcherFrame();
             run.ContinueWith(_ => dispatcher.BeginInvoke(new Action(() => frame.Continue = false)), TaskScheduler.Default);
             Dispatcher.PushFrame(frame); run.GetAwaiter().GetResult();
-            Console.WriteLine($"RESULT passed={_passed} runtime={Environment.Version} AUDIO_WRITES=FAKES_ONLY PROCESS_CHILDREN=REAL"); return 0;
+            Console.WriteLine($"RESULT passed={_passed} runtime={Environment.Version} AUDIO_WRITES=FAKES_ONLY PROCESS_CHILDREN={(args.Contains("--hotkeys-only") ? "NONE" : "REAL")}"); return 0;
         }
         catch (Exception error) { Console.WriteLine("FAIL " + error); return 1; }
         finally

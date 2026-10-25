@@ -6,7 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="../../../SonicRoute.Core/SonicRoute.Core.csproj" />
     <Compile Include="../../../SonicRoute/AutoRuleService.cs;../../../SonicRoute/ExecutionHistoryRun.cs;../../../SonicRoute/CurrentAppService.cs" />
-    <Compile Include="../../../SonicRoute/HotkeyActions.cs" />
+    <Compile Include="../../../SonicRoute/HotkeyActions.cs;../../../SonicRoute/PanelDevices.cs" />
   </ItemGroup>
   <Target Name="PrepareHotkeyBoundary" BeforeTargets="CoreCompile">
     <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Hotkeys.ps1&quot; -OutputDirectory &quot;$(MSBuildProjectDirectory)/obj/hotkeys/$(TargetFramework)&quot;" />

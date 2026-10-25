@@ -91,9 +91,9 @@ namespace SonicRoute.Core
         /// <summary>音量调节步进（1–20%，默认 4）：托盘滚轮、面板行滑块滚轮、音量±快捷键共用，设置页可自定义。</summary>
         public int VolumeStep { get; set; } = 4;
 
-        /// <summary>托盘滚轮调音量区域：true=整个托盘通知区滚轮均可调当前应用音量（默认）；false=仅音跃托盘图标上滚轮可调。</summary>
-        public bool TrayWheelEverywhere { get; set; } = true;
-        /// <summary>暂停托盘区域滚轮调音量，保存后跨重启生效；不影响全局快捷键。</summary>
+        /// <summary>托盘滚轮音量/Alt设备切换区域：默认false=仅音跃图标；true=整个托盘通知区。保留已保存选择。</summary>
+        public bool TrayWheelEverywhere { get; set; } = false;
+        /// <summary>暂停托盘区域滚轮音量和Alt设备切换，保存后跨重启生效；不影响全局快捷键。</summary>
         public bool TrayWheelPaused { get; set; } = false;
         /// <summary>窗口/面板背景透明度（60–100，默认 85：适当通透、保持可读）。</summary>
         public int BackgroundOpacity { get; set; } = 85;

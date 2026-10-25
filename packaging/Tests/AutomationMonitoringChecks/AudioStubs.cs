@@ -21,20 +21,43 @@ namespace SonicRoute
     internal static class AudioService
     {
         internal const string SystemDefaultDeviceId="@@SYSTEM_DEFAULT@@";
+        internal const string SystemDefaultInputDeviceId="@@SYSTEM_DEFAULT_IN@@";
         internal static readonly List<AudioDeviceInfo> Inputs=new();
         internal static readonly List<AudioDeviceInfo> Outputs=new();
         internal static readonly List<AudioAppInfo> Apps=new();
         internal static bool ThrowApps;
         internal static int AppReads;
+        internal static int DeviceReads;
         internal static string? DefaultInput="mic-a";
+        internal static string? DefaultOutput="speaker-a";
+        internal static bool EndpointApplied;
+        internal static readonly Dictionary<(int Pid,EDataFlow Flow),string?> Endpoints=new();
+        internal static readonly List<(int Pid,EDataFlow Flow,string Id)> EndpointWrites=new();
         internal static bool ResetApplied=true;
         internal static EDataFlow? LastFlow;
         internal static bool IsSystemDefault(string? id)=>Core.AudioService.IsSystemDefault(id);
-        internal static List<AudioDeviceInfo> GetDevices(EDataFlow flow){LastFlow=flow;return (flow==EDataFlow.eCapture?Inputs:Outputs).ToList();}
+        internal static List<AudioDeviceInfo> GetDevices(EDataFlow flow){LastFlow=flow;DeviceReads++;return (flow==EDataFlow.eCapture?Inputs:Outputs).ToList();}
         internal static List<AudioAppInfo> GetApps(){AppReads++;if(ThrowApps)throw new InvalidOperationException("Simulated unavailable audio discovery");return Apps.ToList();}
-        internal static string? GetDefaultDeviceId(EDataFlow flow){LastFlow=flow;return DefaultInput;}
+        internal static string? GetDefaultDeviceId(EDataFlow flow){LastFlow=flow;return flow==EDataFlow.eCapture?DefaultInput:DefaultOutput;}
+        internal static string? GetPersistedEndpoint(int pid,EDataFlow flow)=>Endpoints.TryGetValue((pid,flow),out var id)?id:null;
         internal static (int OutOk,int InOk,int Total,bool Applied) ResetAllPersistedEndpointsChecked()=>(1,1,1,ResetApplied);
-        internal static (bool Success,int HResult,string Message) ApplyEndpoint(int pid,EDataFlow flow,string id)=>(false,-1,"fixture");
+        internal static (bool Success,int HResult,string Message) ApplyEndpoint(int pid,EDataFlow flow,string id)
+        {
+            EndpointWrites.Add((pid,flow,id));
+            if(EndpointApplied)Endpoints[(pid,flow)]=IsSystemDefault(id)?null:AudioPolicyConfig.EnsureFullDeviceId(id,flow);
+            return(EndpointApplied,EndpointApplied?0:-1,"fixture");
+        }
+    }
+    internal static class SystemDefaultDeviceService
+    {
+        internal static readonly List<(EDataFlow Flow,string Id)> Writes=new();
+        internal static bool Succeeds=true;
+        internal static (bool Success,int HResult,string Message) SetDefault(EDataFlow flow,string id)
+        {
+            Writes.Add((flow,id));
+            if(Succeeds){if(flow==EDataFlow.eCapture)AudioService.DefaultInput=id;else AudioService.DefaultOutput=id;}
+            return(Succeeds,Succeeds?0:-1,"fixture");
+        }
     }
     internal static class SystemVolumeService
     {
@@ -65,10 +88,12 @@ namespace SonicRoute
         internal static (int Succeeded,int Total) ChangeAllPlaybackVolumeChecked(int value,bool relative,CancellationToken token=default){token.ThrowIfCancellationRequested();LastVolume=(value,relative);return Batch;}
         internal static (int Succeeded,int Total) ChangeAllPlaybackMuteChecked(bool? muted,CancellationToken token=default){token.ThrowIfCancellationRequested();LastMute=muted;return Batch;}
         internal static bool SetVolumePercent(int pid,int value)=>true;
-        internal static (int Current,int Requested,int Actual,bool Applied) AdjustVolumePercent(int pid,int delta)=>(50,50+delta,50+delta,true);
+        internal static (int Current,int Requested,int Actual,bool Applied) AdjustVolumePercent(int pid,int delta){AdjustTargets.Add((pid,delta));return(50,50+delta,50+delta,true);}
         internal static bool SetMute(int pid,bool mute)=>true;
         internal static readonly List<int> MuteTargets=new();
         internal static bool MuteApplied=true;
+        internal static readonly List<(int Pid,int Delta)> AdjustTargets=new();
+        internal static bool IsMuted(int pid)=>false;
         internal static (bool Muted,bool Applied) ToggleMuteChecked(int pid){MuteTargets.Add(pid);return(true,MuteApplied);}
     }
     internal static class GlobalMicMuteService

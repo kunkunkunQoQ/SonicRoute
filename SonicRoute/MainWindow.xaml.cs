@@ -2811,14 +2811,14 @@ namespace SonicRoute
             if (_isClosed || HotkeyList == null) return;
             _recordingAction = null;
             HotkeyList.Items.Clear();
-            // 实验模式隐藏动作：仅在"实验模式 + 麦克风选项"开启时显示（切换当前应用麦克风设备）
+            // 应用输入切换的两个方向随麦克风选项显示；系统默认输入始终显示。
             bool expMicOn = _config.ExperimentalMic;
             var registered = ((App)Application.Current).HotkeyRegistration;
             // 按分组渲染：每组先加分类标题，再渲染动作行
             foreach (var (l10nKey, groupActions) in HotkeyActions.Groups)
             {
                 var visible = groupActions
-                    .Where(a => (a != HotkeyActions.ActSwitchInput && a != HotkeyActions.ActSwitchAllInput) || expMicOn)
+                    .Where(a => !HotkeyActions.RequiresMicrophoneOption(a) || expMicOn)
                     .ToArray();
                 if (visible.Length == 0) continue;
                 var header = new TextBlock
@@ -2833,7 +2833,7 @@ namespace SonicRoute
                 foreach (var a in visible)
                 {
                     string combo = _config.Hotkeys.TryGetValue(a, out var c) ? c
-                        : HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : L10n.T("Ov.Unset");
+                        : HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "";
                     var actionLabel = HotkeyActions.DisplayName(a);
                     var row = new DockPanel { Margin = new Thickness(0, 5, 0, 5) };
                     var label = new TextBlock
@@ -2846,15 +2846,16 @@ namespace SonicRoute
                         Foreground = (Brush)FindResource("Theme.TextPrimary")
                     };
                     // 实际注册状态：配置组合被其他程序占用回退默认时，显示生效组合并标注 ⚠
-                    string display = combo;
+                    string display = string.IsNullOrWhiteSpace(combo) ? L10n.T("Ov.Unset") : combo;
                     string tip = "";
-                    if (registered.TryGetValue(a, out var actual)
+                    registered.TryGetValue(a, out var actual);
+                    if (!string.IsNullOrEmpty(actual)
                         && !string.Equals(actual, combo, StringComparison.OrdinalIgnoreCase))
                     {
                         display = actual + " ⚠";
                         tip = string.Format(L10n.T("Hk.ConflictTip"), combo, actual);
                     }
-                    else if (!registered.ContainsKey(a) && !string.IsNullOrEmpty(combo))
+                    else if (string.IsNullOrEmpty(actual) && !string.IsNullOrEmpty(combo))
                     {
                         display = combo + " ⚠";
                         tip = L10n.T("Hk.Unregistered");

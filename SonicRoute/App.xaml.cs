@@ -637,7 +637,7 @@ namespace SonicRoute
         [System.Runtime.InteropServices.DllImport("kernel32.dll")]
         private static extern bool SetProcessWorkingSetSize(IntPtr proc, IntPtr min, IntPtr max);
 
-        /// <summary>重新加载全局快捷键（设置页修改后调用）。实验模式的隐藏动作仅在"实验模式+麦克风选项"开启时注册。</summary>
+        /// <summary>重新加载全局快捷键（设置页修改后调用）。应用输入切换仅在麦克风选项开启时注册。</summary>
         internal void ReloadHotkeys(bool force = false)
         {
             if (_hotkeys == null) return;
@@ -646,8 +646,7 @@ namespace SonicRoute
             var map = new Dictionary<string, string>();
             foreach (var a in HotkeyActions.All)
             {
-                // 实验模式隐藏动作：未开启麦克风选项不注册，避免后台占用组合键
-                if ((a == HotkeyActions.ActSwitchInput || a == HotkeyActions.ActSwitchAllInput) && !expMicOn) continue;
+                if (HotkeyActions.RequiresMicrophoneOption(a) && !expMicOn) continue;
                 map[a] = config.Hotkeys.TryGetValue(a, out var c)
                     ? c
                     : (HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "");
@@ -726,7 +725,9 @@ namespace SonicRoute
             // CurrentAppService.Resolve 同一套规则（last/fixed → 前台 → 最近使用 → 兜底），
             // 保证快捷键和"鼠标放任务栏滚轮调音量"永远解析出同一个应用。
             // 仅"当前应用"类动作需要解析当前应用；全局切换 / 系统默认切换不依赖，解析失败照常执行
-            bool needsTarget = action is HotkeyActions.ActMute or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown or HotkeyActions.ActSwitchOutput or HotkeyActions.ActSwitchInput;
+            bool needsTarget = action is HotkeyActions.ActMute or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown
+                or HotkeyActions.ActSwitchOutputPrevious or HotkeyActions.ActSwitchOutputNext
+                or HotkeyActions.ActSwitchInputPrevious or HotkeyActions.ActSwitchInputNext;
             AudioAppInfo? target = null;
             if (needsTarget)
             {
@@ -776,39 +777,43 @@ namespace SonicRoute
                         break;
                     }
 
-                case HotkeyActions.ActSwitchOutput:
-                    string? dev = await CycleDeviceAsync(pid, EDataFlow.eRender);
+                case HotkeyActions.ActSwitchOutputPrevious:
+                case HotkeyActions.ActSwitchOutputNext:
+                    string? dev = await CycleDeviceAsync(pid, EDataFlow.eRender, action == HotkeyActions.ActSwitchOutputPrevious);
                     _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(dev) ? L10n.T("Ov.NoDevice") : $"🔊 {dev}");
                     break;
 
-                case HotkeyActions.ActSwitchInput:
-                    // 实验模式 - 麦克风选项开启后才注册的隐藏动作：切换当前应用的录音（输入）设备
-                    string? mdev = await CycleDeviceAsync(pid, EDataFlow.eCapture);
+                case HotkeyActions.ActSwitchInputPrevious:
+                case HotkeyActions.ActSwitchInputNext:
+                    string? mdev = await CycleDeviceAsync(pid, EDataFlow.eCapture, action == HotkeyActions.ActSwitchInputPrevious);
                     _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? L10n.T("Ov.NoMicDevice") : $"🎤 {mdev}");
 
                     break;
-                case HotkeyActions.ActSwitchAllOutput:
-                    // 切换全局应用输出设备：所有有音频会话的应用切到下一个保留设备
-                    string? ao = await CycleAllAppsDeviceAsync(EDataFlow.eRender);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllOutput"), string.IsNullOrEmpty(ao) ? L10n.T("Ov.NoDevice") : $"🔊 {ao}");
+                case HotkeyActions.ActSwitchAllOutputPrevious:
+                case HotkeyActions.ActSwitchAllOutputNext:
+                    string? ao = await CycleAllAppsDeviceAsync(EDataFlow.eRender, action == HotkeyActions.ActSwitchAllOutputPrevious);
+                    _trayWheel?.ShowOsd(HotkeyActions.DisplayName(action), string.IsNullOrEmpty(ao) ? L10n.T("Ov.NoDevice") : $"🔊 {ao}");
                     break;
 
-                case HotkeyActions.ActSwitchAllInput:
+                case HotkeyActions.ActSwitchAllInputPrevious:
+                case HotkeyActions.ActSwitchAllInputNext:
                     // 切换全局应用输入设备（跟随麦克风选项显示/注册）
-                    string? ai = await CycleAllAppsDeviceAsync(EDataFlow.eCapture);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SwitchAllInput"), string.IsNullOrEmpty(ai) ? L10n.T("Ov.NoMicDevice") : $"🎤 {ai}");
+                    string? ai = await CycleAllAppsDeviceAsync(EDataFlow.eCapture, action == HotkeyActions.ActSwitchAllInputPrevious);
+                    _trayWheel?.ShowOsd(HotkeyActions.DisplayName(action), string.IsNullOrEmpty(ai) ? L10n.T("Ov.NoMicDevice") : $"🎤 {ai}");
                     break;
 
-                case HotkeyActions.ActSetDefaultOutput:
+                case HotkeyActions.ActSetDefaultOutputPrevious:
+                case HotkeyActions.ActSetDefaultOutputNext:
                     // 切换系统默认输出设备（改系统默认，非按应用）
-                    string? sd = await CycleSystemDefaultDeviceAsync(EDataFlow.eRender);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultOutput"), string.IsNullOrEmpty(sd) ? L10n.T("Ov.NoDevice") : $"🔊 {sd}");
+                    string? sd = await CycleSystemDefaultDeviceAsync(EDataFlow.eRender, action == HotkeyActions.ActSetDefaultOutputPrevious);
+                    _trayWheel?.ShowOsd(HotkeyActions.DisplayName(action), string.IsNullOrEmpty(sd) ? L10n.T("Ov.NoDevice") : $"🔊 {sd}");
                     break;
 
-                case HotkeyActions.ActSetDefaultInput:
+                case HotkeyActions.ActSetDefaultInputPrevious:
+                case HotkeyActions.ActSetDefaultInputNext:
                     // 切换系统默认输入设备（无需启用麦克风选项，始终可用）
-                    string? si = await CycleSystemDefaultDeviceAsync(EDataFlow.eCapture);
-                    _trayWheel?.ShowOsd(L10n.T("Act.SetDefaultInput"), string.IsNullOrEmpty(si) ? L10n.T("Ov.NoMicDevice") : $"🎤 {si}");
+                    string? si = await CycleSystemDefaultDeviceAsync(EDataFlow.eCapture, action == HotkeyActions.ActSetDefaultInputPrevious);
+                    _trayWheel?.ShowOsd(HotkeyActions.DisplayName(action), string.IsNullOrEmpty(si) ? L10n.T("Ov.NoMicDevice") : $"🎤 {si}");
                     break;
             }
         }
@@ -865,8 +870,12 @@ namespace SonicRoute
         }
 
         /// <summary>在当前应用的可见设备间循环切换，返回切换到的设备名；失败/无设备返回 null。
-        /// 当前"跟随系统默认"（无持久化）且默认项在列表 → 从默认项的下一个开始。</summary>
-        private static Task<string?> CycleDeviceAsync(int pid, EDataFlow flow) => Task.Run(() =>
+        /// 当前"跟随系统默认"（无持久化）且默认项在列表 → 从默认项按方向切换。</summary>
+        private static Task<string?> CycleDeviceAsync(int pid, EDataFlow flow, bool previous) =>
+            Task.Run(() => CycleDevice(pid, flow, previous));
+
+        // 托盘Alt滚轮复用同一切换实现；合并多个刻度只读取/写入一次设备路由。
+        internal static string? CycleDevice(int pid, EDataFlow flow, bool previous, int steps = 1)
         {
             try
             {
@@ -876,10 +885,10 @@ namespace SonicRoute
 
                 var persisted = AudioService.GetPersistedEndpoint(pid, flow);
                 string? curShort = persisted == null ? null : AudioPolicyConfig.UnpackDeviceId(persisted);
-                // 跟随系统默认（无持久化）→ 位于"系统默认"虚拟项（首位），按下切到第一个真实设备
+                // 跟随系统默认（无持久化）→ 位于"系统默认"虚拟项（首位）。
                 int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
                 if (idx < 0 && persisted == null && AudioService.IsSystemDefault(visible[0].Id)) idx = 0;  // 仅当"系统默认"虚拟项在列表首位时（未被隐藏），从它开始循环
-                int next = idx < 0 ? 0 : (idx + 1) % visible.Count;
+                int next = PanelDevices.CycleIndex(idx, visible.Count, previous, steps);
                 var target = visible[next];
                 var r = AudioService.ApplyEndpoint(pid, flow, target.Id);
                 if (!r.Success) return null;
@@ -889,11 +898,11 @@ namespace SonicRoute
             {
                 return null;
             }
-        });
+        }
 
-        /// <summary>在系统默认输出/输入设备间循环切换：从当前默认的下一个可见设备开始，改系统默认设备。
+        /// <summary>按方向在真实保留设备间循环切换系统默认输出/输入设备。
         /// 返回切换到的设备名（用自定义名）；失败/无设备返回 null。</summary>
-        private static Task<string?> CycleSystemDefaultDeviceAsync(EDataFlow flow) => Task.Run(() =>
+        private static Task<string?> CycleSystemDefaultDeviceAsync(EDataFlow flow, bool previous) => Task.Run(() =>
         {
             try
             {
@@ -909,7 +918,7 @@ namespace SonicRoute
                 string? curShort = curDefault == null ? null : AudioPolicyConfig.UnpackDeviceId(curDefault);
                 int idx = curShort == null ? -1
                     : visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
-                int next = idx < 0 ? 0 : (idx + 1) % visible.Count;
+                int next = PanelDevices.CycleIndex(idx, visible.Count, previous);
                 var r = SystemDefaultDeviceService.SetDefault(flow, visible[next].Id);
                 if (!r.Success) return null;
                 // 通知/OSD 显示用户自定义名称（与设置页"设备名称"一致）
@@ -922,10 +931,10 @@ namespace SonicRoute
             }
         });
 
-        /// <summary>切换全局应用设备：所有有音频会话的应用统一切到"当前系统默认设备的下一个可见设备"。
+        /// <summary>所有有音频会话的应用以首个应用路由为参考，按方向切到同一可见设备。
         /// 目标可为"系统默认"虚拟项（清除所有应用的持久化路由，跟随系统默认）。
         /// 返回目标设备名；无可见设备/无应用返回 null。</summary>
-        private static Task<string?> CycleAllAppsDeviceAsync(EDataFlow flow) => Task.Run(() =>
+        private static Task<string?> CycleAllAppsDeviceAsync(EDataFlow flow, bool previous) => Task.Run(() =>
         {
             try
             {
@@ -934,15 +943,15 @@ namespace SonicRoute
                 if (visible.Count == 0) return null;
 
                 var apps = AudioService.GetApps();
-                var target = visible[0]; // 无参考时默认第一个可见设备
                 // 参考设备：优先用第一个有音频会话应用的实际设备（会随上次切换更新，保证连续按能循环）；
-                // 应用跟随系统默认时退回用系统默认设备。
+                // 跟随系统默认时以可见虚拟项为锚点，保证两个方向都包含“跟随系统默认”。
                 string? refShort = null;
                 var firstApp = apps.FirstOrDefault();
                 if (firstApp != null)
                 {
                     var persisted = AudioService.GetPersistedEndpoint((int)firstApp.ProcessId, flow);
                     if (persisted != null) refShort = AudioPolicyConfig.UnpackDeviceId(persisted);
+                    else if (AudioService.IsSystemDefault(visible[0].Id)) refShort = visible[0].Id;
                 }
                 if (refShort == null)
                 {
@@ -951,7 +960,7 @@ namespace SonicRoute
                 }
                 int idx = refShort == null ? -1
                     : visible.FindIndex(d => string.Equals(d.Id, refShort, StringComparison.OrdinalIgnoreCase));
-                if (idx >= 0) target = visible[(idx + 1) % visible.Count];
+                var target = visible[PanelDevices.CycleIndex(idx, visible.Count, previous)];
 
                 int done = 0;
                 foreach (var app in apps)
