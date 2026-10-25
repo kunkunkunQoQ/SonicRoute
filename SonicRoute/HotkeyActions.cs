@@ -9,9 +9,7 @@ namespace SonicRoute
     /// <summary>快捷键动作定义与组合键解析。</summary>
     public static class HotkeyActions
     {
-        // 原有动作 ID 沿用为“下一个”，保留用户绑定及显式禁用，无需迁移配置或额外写盘。
-        public const string ActSwitchOutputNext = "切换当前应用快捷设备";
-        public const string ActSwitchOutputPrevious = "切换当前应用上一个输出设备";
+        public const string ActSwitchOutput = "切换当前应用快捷设备";
         public const string ActMute = "静音当前应用";
         public const string ActMuteInput = "麦克风静音当前应用";
         public const string ActVolUp = "增大当前应用音量";
@@ -19,23 +17,18 @@ namespace SonicRoute
         public const string ActSystemVolUp = "增大系统默认输出音量";
         public const string ActSystemVolDown = "减小系统默认输出音量";
         public const string ActPanel = "打开快速面板";
-        /// <summary>所有有音频会话的应用切到下一个/上一个保留输出设备。</summary>
-        public const string ActSwitchAllOutputNext = "切换全局应用输出设备";
-        public const string ActSwitchAllOutputPrevious = "切换全局应用上一个输出设备";
+        /// <summary>切换全局应用的输出设备（所有有音频会话的应用切到下一个保留设备）。</summary>
+        public const string ActSwitchAllOutput = "切换全局应用输出设备";
         /// <summary>清除全部应用（含已退出应用）的持久化输出/输入路由；保留音量与系统默认设备。</summary>
         public const string ActResetAllApps = "还原全部应用默认设备";
-        /// <summary>切换全局应用的输入设备（跟随麦克风选项，同 ActSwitchInputNext）。</summary>
-        public const string ActSwitchAllInputNext = "切换全局应用输入设备";
-        public const string ActSwitchAllInputPrevious = "切换全局应用上一个输入设备";
+        /// <summary>切换全局应用的输入设备（跟随麦克风选项，同 ActSwitchInput）。</summary>
+        public const string ActSwitchAllInput = "切换全局应用输入设备";
         /// <summary>切换系统默认输出设备（改的是系统默认，非按应用路由）。</summary>
-        public const string ActSetDefaultOutputNext = "切换系统默认输出设备";
-        public const string ActSetDefaultOutputPrevious = "切换系统默认上一个输出设备";
+        public const string ActSetDefaultOutput = "切换系统默认输出设备";
         /// <summary>切换系统默认输入设备（无需开启麦克风选项，始终可用）。</summary>
-        public const string ActSetDefaultInputNext = "切换系统默认输入设备";
-        public const string ActSetDefaultInputPrevious = "切换系统默认上一个输入设备";
+        public const string ActSetDefaultInput = "切换系统默认输入设备";
         /// <summary>麦克风选项开启后才显示/注册的动作：切换当前应用的录音（输入）设备。</summary>
-        public const string ActSwitchInputNext = "切换当前应用麦克风设备";
-        public const string ActSwitchInputPrevious = "切换当前应用上一个输入设备";
+        public const string ActSwitchInput = "切换当前应用麦克风设备";
 
         public static readonly string[] All =
         {
@@ -43,58 +36,49 @@ namespace SonicRoute
             ActVolDown,
             ActSystemVolUp,
             ActSystemVolDown,
-            ActSwitchOutputNext,
+            ActSwitchOutput,
             ActMute,
             ActMuteInput,
-            ActSwitchAllOutputNext,
-            ActSwitchAllInputNext,
+            ActSwitchAllOutput,
+            ActSwitchAllInput,
             ActResetAllApps,
-            ActSetDefaultOutputNext,
-            ActSetDefaultInputNext,
-            ActSwitchInputNext,
-            ActPanel,
-            // 原动作的注册/冲突优先级不变；新增方向排在其后，UI顺序由Groups单独定义。
-            ActSwitchOutputPrevious,
-            ActSwitchInputPrevious,
-            ActSwitchAllOutputPrevious,
-            ActSwitchAllInputPrevious,
-            ActSetDefaultOutputPrevious,
-            ActSetDefaultInputPrevious
+            ActSetDefaultOutput,
+            ActSetDefaultInput,
+            ActSwitchInput,
+            ActPanel
         };
 
         /// <summary>快捷键分组：L10n 分类键 → 该组动作（用于快捷键设置页分类展示）。</summary>
         public static readonly (string L10nKey, string[] Actions)[] Groups =
         {
             ("Hk.CatVolume", new[] { ActVolUp, ActVolDown, ActSystemVolUp, ActSystemVolDown, ActMute, ActMuteInput }),
-            ("Hk.CatApp", new[] { ActSwitchOutputPrevious, ActSwitchOutputNext, ActSwitchInputPrevious, ActSwitchInputNext }),
-            ("Hk.CatGlobal", new[] { ActSwitchAllOutputPrevious, ActSwitchAllOutputNext, ActSwitchAllInputPrevious, ActSwitchAllInputNext, ActResetAllApps, ActSetDefaultOutputPrevious, ActSetDefaultOutputNext, ActSetDefaultInputPrevious, ActSetDefaultInputNext }),
+            ("Hk.CatApp", new[] { ActSwitchOutput, ActSwitchInput }),
+            ("Hk.CatGlobal", new[] { ActSwitchAllOutput, ActSwitchAllInput, ActResetAllApps, ActSetDefaultOutput, ActSetDefaultInput }),
             ("Hk.CatUi", new[] { ActPanel }),
         };
 
-        // 未列出的动作默认未绑定，也没有冲突回退组合；避免空默认项参与冲突关联。
         public static readonly Dictionary<string, string> Defaults = new()
         {
             [ActVolUp] = "Ctrl+Alt+WheelUp",
             [ActVolDown] = "Ctrl+Alt+WheelDown",
             [ActSystemVolUp] = "Ctrl+Alt+Shift+WheelUp",
             [ActSystemVolDown] = "Ctrl+Alt+Shift+WheelDown",
-            [ActSwitchOutputNext] = "Ctrl+Alt+D",
+            [ActSwitchOutput] = "Ctrl+Alt+D",
             [ActMute] = "Ctrl+Shift+M",   // Ctrl+Alt+M 常被其他程序注册（本机实测被占用），改用 Ctrl+Shift+M
             [ActMuteInput] = "Ctrl+Shift+N",      // 麦克风静音，与扬声器静音 Ctrl+Shift+M 区分
-            [ActSwitchAllOutputNext] = "Ctrl+Alt+Shift+O", // 切换全局应用输出设备
-            [ActSwitchAllInputNext] = "Ctrl+Alt+Shift+I",  // 切换全局应用输入设备
+            [ActSwitchAllOutput] = "Ctrl+Alt+Shift+O", // 切换全局应用输出设备
+            [ActSwitchAllInput] = "Ctrl+Alt+Shift+I",  // 切换全局应用输入设备
             [ActResetAllApps] = "Ctrl+Alt+Shift+R",     // 还原全部应用默认设备
-            [ActSetDefaultOutputNext] = "Ctrl+Alt+O", // 切换系统默认输出设备
-            [ActSetDefaultInputNext] = "Ctrl+Alt+I",  // 切换系统默认输入设备（无需麦克风选项）
-            [ActSwitchInputNext] = "Ctrl+Alt+Shift+D", // 麦克风选项开启后：切换当前应用麦克风设备
+            [ActSetDefaultOutput] = "Ctrl+Alt+O", // 切换系统默认输出设备
+            [ActSetDefaultInput] = "Ctrl+Alt+I",  // 切换系统默认输入设备（无需麦克风选项）
+            [ActSwitchInput] = "Ctrl+Alt+Shift+D", // 麦克风选项开启后：切换当前应用麦克风设备
             [ActPanel] = "Ctrl+Alt+Space",
         };
 
         /// <summary>动作的本地化显示名。</summary>
         public static string DisplayName(string action) => action switch
         {
-            ActSwitchOutputPrevious => L10n.T("Act.SwitchOutput.Previous"),
-            ActSwitchOutputNext => L10n.T("Act.SwitchOutput.Next"),
+            ActSwitchOutput => L10n.T("Act.SwitchOutput"),
             ActMute => L10n.T("Act.Mute"),
             ActMuteInput => L10n.T("Act.MuteInput"),
             ActVolUp => L10n.T("Act.VolUp"),
@@ -103,22 +87,13 @@ namespace SonicRoute
             ActSystemVolDown => L10n.T("Act.SystemVolDown"),
             ActPanel => L10n.T("Act.Panel"),
             ActResetAllApps => L10n.T("Act.ResetAllApps"),
-            ActSwitchAllOutputPrevious => L10n.T("Act.SwitchAllOutput.Previous"),
-            ActSwitchAllOutputNext => L10n.T("Act.SwitchAllOutput.Next"),
-            ActSwitchAllInputPrevious => L10n.T("Act.SwitchAllInput.Previous"),
-            ActSwitchAllInputNext => L10n.T("Act.SwitchAllInput.Next"),
-            ActSetDefaultOutputPrevious => L10n.T("Act.SetDefaultOutput.Previous"),
-            ActSetDefaultOutputNext => L10n.T("Act.SetDefaultOutput.Next"),
-            ActSetDefaultInputPrevious => L10n.T("Act.SetDefaultInput.Previous"),
-            ActSetDefaultInputNext => L10n.T("Act.SetDefaultInput.Next"),
-            ActSwitchInputPrevious => L10n.T("Act.SwitchInput.Previous"),
-            ActSwitchInputNext => L10n.T("Act.SwitchInput.Next"),
+            ActSwitchAllOutput => L10n.T("Act.SwitchAllOutput"),
+            ActSwitchAllInput => L10n.T("Act.SwitchAllInput"),
+            ActSetDefaultOutput => L10n.T("Act.SetDefaultOutput"),
+            ActSetDefaultInput => L10n.T("Act.SetDefaultInput"),
+            ActSwitchInput => L10n.T("Act.SwitchInput"),
             _ => action
         };
-
-        /// <summary>应用录音路由两个方向共用麦克风选项；系统默认输入始终可用。</summary>
-        public static bool RequiresMicrophoneOption(string action) => action is
-            ActSwitchInputPrevious or ActSwitchInputNext or ActSwitchAllInputPrevious or ActSwitchAllInputNext;
 
         /// <summary>
         /// 把按键事件格式化为 "Ctrl+Alt+1" / "F2" / "A" 形式。

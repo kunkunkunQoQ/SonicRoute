@@ -161,7 +161,7 @@ internal static partial class Program
                 "application exposes only the remaining quick panel");
             var theme = assembly.GetType("SonicRoute.ThemeService")!.GetMethod("Apply", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                 null, new[] { typeof(string), typeof(string) }, null)!;
-            if (args.Contains("--hotkeys-only")) { CheckDirectionalHotkeys(theme, windows); Console.WriteLine($"RESULT passed={_checks} HOTKEY_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
+            if (args.Contains("--hotkeys-only")) { CheckDeviceHotkeysAndTraySettings(theme, windows); Console.WriteLine($"RESULT passed={_checks} HOTKEY_TRAY_SETTINGS_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--measure-sections")) { MeasureSections(windows, args); return 0; }
             if (args.Contains("--render-scrollbars")) { RenderScrollbars(theme, args.Last()); return 0; }
             foreach (string mode in new[] { "light", "dark" })

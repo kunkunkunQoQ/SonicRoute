@@ -74,8 +74,8 @@ namespace SonicRoute.Core
         /// <summary>主题页：快速面板内显示每应用实时声音活动；关闭时不启动 Meter，显示与旧版一致。</summary>
         public bool ShowAppPeakMeter { get; set; } = true;
 
-        /// <summary>快速面板顶部下拉框切换设备时更改系统默认输出设备（默认关；开启后下拉=改系统默认输出）。</summary>
-        public bool PanelChangeSystemDefault { get; set; } = false;
+        /// <summary>快速面板顶部下拉框切换设备时更改系统默认输出设备（默认开；保留已保存选择）。</summary>
+        public bool PanelChangeSystemDefault { get; set; } = true;
 
         /// <summary>快速面板位置模式：default=任务栏右下角 / custom=自定义坐标（主题页拖拽调整，逻辑同 OSD）。</summary>
         public string QuickPanelPosMode { get; set; } = "default";

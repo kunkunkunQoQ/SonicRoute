@@ -26,6 +26,6 @@ function Section([string]$startText, [string]$endText) {
     if ($from -lt 0 -or $to -le $from) { throw "Tray method boundaries changed: $startText" }
     return $tray.Substring($from, $to - $from)
 }
-$trayMethods = (Section 'private IntPtr HookProc' 'private bool IsOverOurIcon') + (Section 'private (AudioAppInfo? App, string? DeviceName) SwitchOutputDevice' '// Shared OSD controller')
+$trayMethods = (Section 'private IntPtr HookProc' 'private bool IsOverOurIcon') + (Section 'private async Task SwitchOutputDeviceAsync' '// Shared OSD controller')
 $traySource = "using System.Runtime.InteropServices; using SonicRoute.Core; using SonicRoute.Core.Compat; using SonicRoute.Core.Models; namespace SonicRoute { internal sealed partial class TrayWheelService { $trayMethods } }"
 [IO.File]::WriteAllText((Join-Path $OutputDirectory 'TrayWheelDispatch.cs'), $traySource, [Text.UTF8Encoding]::new($false))

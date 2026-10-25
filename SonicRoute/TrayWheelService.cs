@@ -8,7 +8,7 @@ namespace SonicRoute
 {
     /// <summary>
     /// 复用 WH_MOUSE_LL：在配置区域内滚轮调当前应用音量，纯Alt滚轮切换其输出设备。
-    /// 后台操作与目标缓存共用原派发通道；不改变系统主音量或默认设备。
+    /// Alt＋Shift滚轮切换系统默认播放设备；后台操作共用原派发通道。
     /// </summary>
     internal sealed class TrayWheelService : IDisposable
     {
@@ -82,6 +82,7 @@ namespace SonicRoute
         // 滚轮合并派发（钩子只做检测；单个后台任务操作音频，结果返回 UI 显示 OSD）
         private int _pendingDelta;
         private int _pendingDeviceDelta;
+        private int _pendingSystemDeviceDelta;
         private bool _dispatchScheduled;
 
         // 目标应用解析缓存（与快速面板一致，避免每次滚轮全量枚举）
@@ -126,8 +127,11 @@ namespace SonicRoute
                 {
                     // 钩子线程绝不做 COM/音频调用：合并滚轮量，UI 入口启动后台处理。
                     // 输入时捕获Alt，异步处理时释放修饰键也不会误调音量。
-                    if (MouseHotkeyHook.GetPressedMods() == 1) // MOD_ALT，Ctrl/Shift/Win不混入
+                    uint mods = MouseHotkeyHook.GetPressedMods();
+                    if (mods == 1) // MOD_ALT
                         System.Threading.Interlocked.Add(ref _pendingDeviceDelta, delta);
+                    else if (mods == 5) // MOD_ALT | MOD_SHIFT
+                        System.Threading.Interlocked.Add(ref _pendingSystemDeviceDelta, delta);
                     else System.Threading.Interlocked.Add(ref _pendingDelta, delta);
                     if (!_dispatchScheduled)
                     {
@@ -144,6 +148,7 @@ namespace SonicRoute
         {
             System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
             System.Threading.Interlocked.Exchange(ref _pendingDeviceDelta, 0);
+            System.Threading.Interlocked.Exchange(ref _pendingSystemDeviceDelta, 0);
         }
 
         private async void ProcessPendingWheel()
@@ -155,17 +160,14 @@ namespace SonicRoute
                     if (ConfigService.Load().TrayWheelPaused) { DiscardPendingWheel(); break; }
                     int delta = System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
                     int deviceDelta = System.Threading.Interlocked.Exchange(ref _pendingDeviceDelta, 0);
-                    if (delta == 0 && deviceDelta == 0) break;
+                    int systemDeviceDelta = System.Threading.Interlocked.Exchange(ref _pendingSystemDeviceDelta, 0);
+                    if (delta == 0 && deviceDelta == 0 && systemDeviceDelta == 0) break;
                     // 记录此次输入时的前台，后台查询期间焦点变化不改本轮目标。
                     int foregroundPid = ForegroundAppService.GetForegroundProcessId();
-                    if (deviceDelta != 0)
-                    {
-                        var switched = await Task.Run(() => SwitchOutputDevice(deviceDelta, foregroundPid));
-                        if (_disposed) return;
-                        if (switched.App == null) ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession"));
-                        else ShowOsd(AppDisplayName.Get(switched.App), string.IsNullOrEmpty(switched.DeviceName)
-                            ? L10n.T("Ov.NoDevice") : $"🔊 {switched.DeviceName}");
-                    }
+                    if (deviceDelta != 0) await SwitchOutputDeviceAsync(deviceDelta, foregroundPid, systemDefault: false);
+                    if (_disposed) return;
+                    if (systemDeviceDelta != 0) await SwitchOutputDeviceAsync(systemDeviceDelta, foregroundPid, systemDefault: true);
+                    if (_disposed) return;
                     if (delta == 0) continue;
                     if (ConfigService.Load().TrayWheelPaused) { DiscardPendingWheel(); break; }
                     var result = await Task.Run(() => AdjustVolume(delta, foregroundPid));
@@ -188,7 +190,8 @@ namespace SonicRoute
             {
                 _dispatchScheduled = false;
                 if (!_disposed && (System.Threading.Volatile.Read(ref _pendingDelta) != 0
-                    || System.Threading.Volatile.Read(ref _pendingDeviceDelta) != 0))
+                    || System.Threading.Volatile.Read(ref _pendingDeviceDelta) != 0
+                    || System.Threading.Volatile.Read(ref _pendingSystemDeviceDelta) != 0))
                 {
                     _dispatchScheduled = true;
                     _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(ProcessPendingWheel));
@@ -374,12 +377,23 @@ namespace SonicRoute
             return false;
         }
 
-        private (AudioAppInfo? App, string? DeviceName) SwitchOutputDevice(int delta, int foregroundPid)
+        private async Task SwitchOutputDeviceAsync(int delta, int foregroundPid, bool systemDefault)
+        {
+            var switched = await Task.Run(() => SwitchOutputDevice(delta, foregroundPid, systemDefault));
+            if (_disposed || ConfigService.Load().TrayWheelPaused) return;
+            if (!systemDefault && switched.App == null) ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession"));
+            else ShowOsd(systemDefault ? L10n.T("Act.SetDefaultOutput") : AppDisplayName.Get(switched.App!), string.IsNullOrEmpty(switched.DeviceName)
+                ? L10n.T("Ov.NoDevice") : $"🔊 {switched.DeviceName}");
+        }
+
+        private (AudioAppInfo? App, string? DeviceName) SwitchOutputDevice(int delta, int foregroundPid, bool systemDefault)
         {
             if (_disposed || ConfigService.Load().TrayWheelPaused) return (null, null);
+            int steps = Math.Max(1, (int)(Math.Abs((long)delta) / 120));
+            if (systemDefault)
+                return (null, App.CycleSystemDefaultDevice(Core.Interop.EDataFlow.eRender, delta > 0, steps));
             var target = ResolveTargetApp(foregroundPid);
             if (target == null) return (null, null);
-            int steps = Math.Max(1, (int)(Math.Abs((long)delta) / 120));
             return (target, App.CycleDevice((int)target.ProcessId, Core.Interop.EDataFlow.eRender, delta > 0, steps));
         }
 

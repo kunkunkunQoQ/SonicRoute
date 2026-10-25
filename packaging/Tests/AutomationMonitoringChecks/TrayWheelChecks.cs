@@ -16,20 +16,21 @@ internal sealed partial class TrayWheelService : IDisposable
     { public POINT pt; public uint mouseData, flags, time; public IntPtr dwExtraInfo; }
     private IntPtr _hook = IntPtr.Zero;
     private bool _disposed, _dispatchScheduled;
-    private int _pendingDelta, _pendingDeviceDelta;
+    private int _pendingDelta, _pendingDeviceDelta, _pendingSystemDeviceDelta;
     private readonly object _appsLock = new();
     private List<AudioAppInfo>? _cachedApps;
     private DateTime _cachedAt;
     internal bool OverIcon = true;
     internal bool Pending => _dispatchScheduled;
     internal int VolumeNotices, DeviceNotices;
+    internal string? LastDeviceText;
     private static IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data) => IntPtr.Zero;
     private bool IsOverOurIcon(POINT point) => OverIcon;
     private static IntPtr FindWindow(string? name, string? text) => new(1);
     private static IntPtr FindWindowEx(IntPtr parent, IntPtr child, string name, string? text) => new(2);
     private static bool GetWindowRect(IntPtr window, out RECT rect) { rect = new() { Left = 0, Top = 0, Right = 100, Bottom = 100 }; return true; }
     private static bool PtInRect(ref RECT rect, POINT point) => point.x >= rect.Left && point.x < rect.Right && point.y >= rect.Top && point.y < rect.Bottom;
-    private void ShowOsd(string name, string text) { DeviceNotices++; }
+    private void ShowOsd(string name, string text) { DeviceNotices++; LastDeviceText = text; }
     private void ShowVolumeOsd(string name, int volume, string text, bool muted, string target) { VolumeNotices++; }
     internal void Feed(int delta)
     {
@@ -86,24 +87,65 @@ internal static class TrayWheelChecks
             config.TrayWheelEverywhere = true;
             KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
             Check(AudioService.EndpointWrites.Count == 1, "saved whole-tray area also enables Alt wheel within that area");
+            // System switching must not resolve an application or touch its persisted route.
+            config.TrayWheelEverywhere = false; wheel.OverIcon = true;
+            AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
+            AudioService.Apps.Clear(); AudioService.ThrowApps = true;
+            int appReads = AudioService.AppReads;
+            foreach (int delta in new[] { 120, -120 })
+            {
+                AudioService.DefaultOutput = "B"; SystemDefaultDeviceService.Writes.Clear();
+                KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(delta); KeyBoundary.Down.Clear();
+                await Drain(wheel);
+                Check(SystemDefaultDeviceService.Writes.Count == 1 && SystemDefaultDeviceService.Writes[0] == (EDataFlow.eRender, delta > 0 ? "A" : "C"), "Alt Shift wheel changes system playback in captured direction without an app: " + delta);
+            }
+            Check(AudioService.AppReads == appReads && AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0, "system wheel skips application discovery, routing and volume entirely");
+            AudioService.DefaultOutput = "A"; SystemDefaultDeviceService.Writes.Clear();
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
+            Check(SystemDefaultDeviceService.Writes.Count == 1 && SystemDefaultDeviceService.Writes[0].Id == "C", "system wheel coalesces multiple ticks into one default-device write");
+            config.HiddenOutputDevices.Add("C"); AudioService.DefaultOutput = "B"; SystemDefaultDeviceService.Writes.Clear();
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
+            Check(SystemDefaultDeviceService.Writes.Single().Id == "A", "system wheel respects retained playback devices");
+            config.HiddenOutputDevices.Clear(); SystemDefaultDeviceService.Succeeds = false; SystemDefaultDeviceService.Writes.Clear();
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
+            Check(AudioService.DefaultOutput == "A" && wheel.LastDeviceText == "Ov.NoDevice", "failed system switch preserves default and reports failure");
+            SystemDefaultDeviceService.Succeeds = true;
+            var outputs = AudioService.Outputs.ToArray(); AudioService.Outputs.Clear(); SystemDefaultDeviceService.Writes.Clear();
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
+            Check(SystemDefaultDeviceService.Writes.Count == 0 && wheel.LastDeviceText == "Ov.NoDevice", "empty playback list performs no default write");
+            AudioService.Outputs.AddRange(outputs); AudioService.ThrowApps = false;
+            AudioService.Apps.Add(new AudioAppInfo { ProcessId = 101234, ProcessName = "HotkeyTarget", DisplayName = "Target" });
+            AudioService.Endpoints[(101234, EDataFlow.eRender)] = "B"; AudioService.DefaultOutput = "B";
+            SystemDefaultDeviceService.Writes.Clear(); AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
+            KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Add(0x10); wheel.Feed(120); KeyBoundary.Down.Clear(); wheel.Feed(120); await Drain(wheel);
+            Check(AudioService.EndpointWrites.Single().Id == "C" && SystemDefaultDeviceService.Writes.Single().Id == "A" && SessionVolumeService.AdjustTargets.Count == 1, "three coalesced input modes retain independent targets and actions");
+            SystemDefaultDeviceService.Writes.Clear(); AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
+            wheel.OverIcon = false;
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
+            Check(SystemDefaultDeviceService.Writes.Count == 0 && !wheel.Pending, "system wheel also respects own-icon area boundary");
+            config.TrayWheelEverywhere = true;
             AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
             app.BypassTrayWheel = true;
             KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
-            Check(AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0, "global mouse binding/capture bypass prevents region action");
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
+            Check(AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0 && SystemDefaultDeviceService.Writes.Count == 0, "global mouse binding/capture bypass prevents all region actions");
             app.BypassTrayWheel = false;
             config.TrayWheelPaused = true;
             KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); wheel.Feed(120); await Drain(wheel);
-            Check(AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0, "paused region blocks both volume and device wheel");
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
+            Check(AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0 && SystemDefaultDeviceService.Writes.Count == 0, "paused region blocks all three wheel modes");
             config.TrayWheelPaused = false;
             KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); wheel.Feed(120);
+            KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear();
             wheel.DiscardPendingWheel(); await Drain(wheel);
-            Check(AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0, "discard clears both pending input types");
+            Check(AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0 && SystemDefaultDeviceService.Writes.Count == 0, "discard clears all three pending input types");
             wheel.Dispose(); KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
             Check(AudioService.EndpointWrites.Count == 0 && !wheel.Pending, "disposed tray service queues no further work");
         }
         finally
         {
             KeyBoundary.Down.Clear(); app.BypassTrayWheel = false;
+            AudioService.ThrowApps = false; SystemDefaultDeviceService.Succeeds = true; SystemDefaultDeviceService.Writes.Clear(); config.HiddenOutputDevices.Clear();
             AudioService.EndpointApplied = false; AudioService.Apps.Clear(); AudioService.Outputs.Clear();
             AudioService.Endpoints.Clear(); AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
             config.TrayWheelEverywhere = false; config.TrayWheelPaused = false;

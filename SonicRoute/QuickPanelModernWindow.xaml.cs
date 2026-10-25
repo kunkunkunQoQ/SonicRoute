@@ -407,7 +407,7 @@ namespace SonicRoute
                     var ok = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, dev.Id));
                     if (!ok.Success)
                     {
-                        ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Dev.SystemDefaultOut"), L10n.T("St.SysDefaultSetFail"));
+                        ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
                     }
                 }
             }

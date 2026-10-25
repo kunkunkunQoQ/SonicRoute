@@ -94,6 +94,10 @@ internal static class Program
     private static void Checks()
     {
         Check(new AppConfig().ExperimentalMic, "microphone option defaults on for new config");
+        Check(new AppConfig().PanelChangeSystemDefault, "quick panel defaults to changing system playback");
+        Check(JsonSerializer.Deserialize<AppConfig>("{}", ProductJson)!.PanelChangeSystemDefault, "missing quick panel system-default setting defaults on");
+        Check(!JsonSerializer.Deserialize<AppConfig>("{\"PanelChangeSystemDefault\":false}", ProductJson)!.PanelChangeSystemDefault, "saved quick panel opt-out remains off");
+        Check(JsonSerializer.Deserialize<AppConfig>("{\"PanelChangeSystemDefault\":true}", ProductJson)!.PanelChangeSystemDefault, "saved quick panel opt-in remains on");
         Check(!new AppConfig().TrayWheelEverywhere, "tray wheel area defaults to own icon");
         Check(!JsonSerializer.Deserialize<AppConfig>("{}", ProductJson)!.TrayWheelEverywhere, "missing tray wheel area defaults to own icon");
         Check(JsonSerializer.Deserialize<AppConfig>("{\"TrayWheelEverywhere\":true}", ProductJson)!.TrayWheelEverywhere, "saved whole-tray choice remains enabled");

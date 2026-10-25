@@ -1734,14 +1734,14 @@ namespace SonicRoute
             ConfigService.Save(_config);
         }
 
-        /// <summary>托盘滚轮调音量区域开关：true=整个托盘通知区响应（默认）；false=仅音跃托盘图标上响应。</summary>
+        /// <summary>托盘滚轮区域开关：true=整个托盘通知区响应；false=仅音跃托盘图标上响应（默认）。</summary>
         private void SettingsTrayWheelEverywhere_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.TrayWheelEverywhere = SettingsTrayWheelEverywhere.IsChecked == true;
             ConfigService.Save(_config);
         }
-        /// <summary>快速面板更改系统默认设备开关（默认关）：开启后快速面板下拉框切换设备 = 更改系统默认输出设备。</summary>
+        /// <summary>快速面板更改系统默认设备开关（默认开）：开启后快速面板下拉框切换设备 = 更改系统默认输出设备。</summary>
         private void SettingsPanelChangeSysDef_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsSettingsChange(sender, e)) return;
@@ -2811,14 +2811,14 @@ namespace SonicRoute
             if (_isClosed || HotkeyList == null) return;
             _recordingAction = null;
             HotkeyList.Items.Clear();
-            // 应用输入切换的两个方向随麦克风选项显示；系统默认输入始终显示。
+            // 实验模式隐藏动作：仅在"实验模式 + 麦克风选项"开启时显示（切换当前应用麦克风设备）
             bool expMicOn = _config.ExperimentalMic;
             var registered = ((App)Application.Current).HotkeyRegistration;
             // 按分组渲染：每组先加分类标题，再渲染动作行
             foreach (var (l10nKey, groupActions) in HotkeyActions.Groups)
             {
                 var visible = groupActions
-                    .Where(a => !HotkeyActions.RequiresMicrophoneOption(a) || expMicOn)
+                    .Where(a => (a != HotkeyActions.ActSwitchInput && a != HotkeyActions.ActSwitchAllInput) || expMicOn)
                     .ToArray();
                 if (visible.Length == 0) continue;
                 var header = new TextBlock
@@ -2833,7 +2833,7 @@ namespace SonicRoute
                 foreach (var a in visible)
                 {
                     string combo = _config.Hotkeys.TryGetValue(a, out var c) ? c
-                        : HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "";
+                        : HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : L10n.T("Ov.Unset");
                     var actionLabel = HotkeyActions.DisplayName(a);
                     var row = new DockPanel { Margin = new Thickness(0, 5, 0, 5) };
                     var label = new TextBlock
@@ -2846,16 +2846,15 @@ namespace SonicRoute
                         Foreground = (Brush)FindResource("Theme.TextPrimary")
                     };
                     // 实际注册状态：配置组合被其他程序占用回退默认时，显示生效组合并标注 ⚠
-                    string display = string.IsNullOrWhiteSpace(combo) ? L10n.T("Ov.Unset") : combo;
+                    string display = combo;
                     string tip = "";
-                    registered.TryGetValue(a, out var actual);
-                    if (!string.IsNullOrEmpty(actual)
+                    if (registered.TryGetValue(a, out var actual)
                         && !string.Equals(actual, combo, StringComparison.OrdinalIgnoreCase))
                     {
                         display = actual + " ⚠";
                         tip = string.Format(L10n.T("Hk.ConflictTip"), combo, actual);
                     }
-                    else if (string.IsNullOrEmpty(actual) && !string.IsNullOrEmpty(combo))
+                    else if (!registered.ContainsKey(a) && !string.IsNullOrEmpty(combo))
                     {
                         display = combo + " ⚠";
                         tip = L10n.T("Hk.Unregistered");
