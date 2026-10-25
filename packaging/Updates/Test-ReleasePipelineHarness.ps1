@@ -145,6 +145,20 @@ function Publish([switch]$DryRun,[bool]$Existing=$false,$Assets=$golden,[string]
     Publish-ReleaseToGitHub -AssetsDir $AssetsDirectory -ChangelogTarget $NotesPath -Version $version -Tag "v$version" -CommitSha $mock.Head -LocalAssets $Assets -TargetRepo 'kunkunkunQoQ/SonicRoute' -HasExistingDraft:$Existing -IsDryRun:$DryRun -ElapsedStr 'test' -Checklist $checks
 }
 try {
+    Case 'summary timestamp uses actual UTC rather than a local clock labelled Z' {
+        function Get-Date { [datetime]::new(2000,1,1,12,0,0,[DateTimeKind]::Local) }
+        $summaryPath=Join-Path $harnessRoot 'summary-utc.md'
+        $savedSummary=$env:GITHUB_STEP_SUMMARY;$env:GITHUB_STEP_SUMMARY=$summaryPath
+        $before=[DateTime]::UtcNow.AddSeconds(-2)
+        try {
+            Write-StepSummary -Version $version -Tag "v$version" -CommitSha $mock.Head -LocalAssets $golden -Status 'FIXTURE' -TargetRepo 'example/SonicRoute' -Checklist @{}
+            $text=[IO.File]::ReadAllText($summaryPath)
+            $match=[regex]::Match($text,'\*\*Timestamp\*\*: ([^\r\n]+)')
+            Require ($match.Success) 'Summary timestamp missing'
+            $stamp=[DateTimeOffset]::Parse($match.Groups[1].Value,[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::AssumeUniversal).UtcDateTime
+            Require ($stamp -ge $before -and $stamp -le [DateTime]::UtcNow.AddSeconds(2)) 'Local clock was incorrectly formatted as UTC'
+        } finally {$env:GITHUB_STEP_SUMMARY=$savedSummary}
+    }
     Case 'curated UTF8 release notes preserve original Unicode' {
         $expected='SonicRoute '+[char]0x6b63+[char]0x5f0f+[char]0x7248+' '+[char]::ConvertFromUtf32(0x1f3a7)+"`r`nhttps://github.com/kunkunkunQoQ/SonicRoute"
         $root=Join-Path $harnessRoot 'curated-notes'

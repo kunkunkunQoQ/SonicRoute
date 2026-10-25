@@ -511,7 +511,7 @@ function Write-StepSummary {
     if ($ReleaseUrl) {
         [void]$sb.AppendLine("- **Official Release URL**: [$Tag on GitHub]($ReleaseUrl)")
     }
-    [void]$sb.AppendLine("- **Timestamp**: $((Get-Date).ToString('u'))")
+    [void]$sb.AppendLine("- **Timestamp**: $([DateTime]::UtcNow.ToString('u'))")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("### 📦 Verified Release Assets")
     [void]$sb.AppendLine("")
