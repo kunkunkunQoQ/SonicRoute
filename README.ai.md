@@ -98,8 +98,8 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     facts:
       - "One quick panel (QuickPanelModernWindow); the old application/classic panel is removed. Quick panel styles do not imply a second legacy panel implementation."
       - "QuickPanel height setting: 350 to 850 WPF device-independent units, additionally constrained by available work area."
-      - "Current source defaults: TrayWheelEverywhere=false (own tray icon only); PanelChangeSystemDefault=true. Saved explicit preferences are retained. Normal tray wheel adjusts current-app volume."
-      - "Current development source adds Alt+wheel for current-app output and Alt+Shift+wheel for system default playback; up selects previous, down selects next. Existing registered wheel shortcuts take priority. Do not infer these additions exist in the stable release."
+      - "v1.28 defaults: TrayWheelEverywhere=false (own tray icon only); PanelChangeSystemDefault=true. Saved explicit preferences are retained. Normal tray wheel adjusts current-app volume."
+      - "v1.28 adds Alt+wheel for current-app output and Alt+Shift+wheel for system default playback; up selects previous, down selects next. Existing registered wheel shortcuts take priority."
       - "Quick panel device volume/mute changes do not show redundant OSD; hotkey and tray feedback remain."
       - "Drop one PNG/JPEG/ICO onto the Import icon button for the selected app in the full interface; it reuses the file-picker import path and stores managed PNGs in the Icons directory."
 
