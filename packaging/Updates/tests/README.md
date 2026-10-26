@@ -2,12 +2,14 @@
 
 Run these checks on Windows with the SDKs/runtimes required by the target frameworks. Use a real release `assets` directory and fresh, separate output directories for every run. These checks exercise update validation and isolated temporary files/processes; they do not change system audio settings.
 
+Run the commands below from the repository root and replace the example release/output paths with your own.
+
 ## RuntimeChecks
 
 `RuntimeChecks` currently contains 23 check groups for each target: `net10.0-windows`, `net8.0-windows`, and `net48`. It reads the real manifest and package assets, stages the package for its own runtime, and rejects packages for the other runtimes. ARM64 assets are staging-validated only; the test executables and launched scenarios are x64 and do not run ARM64 binaries.
 
 ```powershell
-$repo = 'E:\kunkun\SonarSwitch-release-audit'
+$repo = (Get-Location).Path
 $assets = 'E:\releases\SonicRoute-v1.26\assets' # real release assets
 $runRoot = 'E:\release-checks\runtime-v1.26-run-01' # new, unused path
 $project = Join-Path $repo 'packaging\Updates\tests\RuntimeChecks\Checks.csproj'
@@ -39,7 +41,7 @@ CI 和本地可共用入口，自动按当前版本构建 NET10/NET8 的旧、�
 WorkerChecks has 33 scenario groups using real temporary files and child processes plus HTTP fault injection. Publish the same fixture source twice as framework-dependent single-file executables: an old 1.24 fixture and a new 1.26 fixture. Both must have the `SonicRoute Lite NET8` assembly title. The 1.24 fixture is a test fixture; it is not an official historical client. The harness runs the new fixture as its driver and uses the real NET8 x64 candidate EXE as the replacement payload. It makes one real GitHub latest-release metadata request; the injected HTTP failure cases use the in-memory test handler.
 
 ```powershell
-$repo = 'E:\kunkun\SonarSwitch-release-audit'
+$repo = (Get-Location).Path
 $project = Join-Path $repo 'packaging\Updates\tests\WorkerChecks\Checks.csproj'
 $fixtures = 'E:\release-checks\worker-fixtures-v1.24-v1.26' # new, unused path
 $oldDir = Join-Path $fixtures 'old-1.24'
