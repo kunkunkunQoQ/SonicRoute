@@ -98,8 +98,7 @@ namespace SonicRoute.Core
         {
             MeterGraph? graph = null;
             var rawPeaks = new Dictionary<int, float>();
-            var display = new Dictionary<int, float>();
-            var published = new Dictionary<int, float>();
+            var display = new Dictionary<int, (float Smoothed, float Published)>();
             var targets = new HashSet<int>();
             var watch = Stopwatch.StartNew();
             long nextScan = 0;
@@ -131,7 +130,7 @@ namespace SonicRoute.Core
                             rawPeaks.Clear();
                             foreach (int pid in targets) rawPeaks[pid] = 0f;
                             foreach (int pid in new List<int>(display.Keys))
-                                if (!targets.Contains(pid)) { display.Remove(pid); published.Remove(pid); }
+                                if (!targets.Contains(pid)) display.Remove(pid);
                         }
                         nextScan = watch.ElapsedMilliseconds + RescanIntervalMs;
                     }
@@ -150,7 +149,15 @@ namespace SonicRoute.Core
                         {
                             int hr = handle.Meter.GetPeakValue(out float peak);
                             if (hr < 0) throw new COMException("GetPeakValue failed", hr);
-                            if (!float.IsNaN(peak) && peak > rawPeaks[handle.Pid]) rawPeaks[handle.Pid] = Math.Min(1f, peak);
+                            if (!float.IsNaN(peak))
+                            {
+#if NET8_0_OR_GREATER
+                                ref float maximum = ref CollectionsMarshal.GetValueRefOrAddDefault(rawPeaks, handle.Pid, out _);
+                                if (peak > maximum) maximum = Math.Min(1f, peak);
+#else
+                                if (peak > rawPeaks[handle.Pid]) rawPeaks[handle.Pid] = Math.Min(1f, peak);
+#endif
+                            }
                         }
                         catch { handle.Disconnected = 1; graph.RequireRecovery(); }
                     }
@@ -158,19 +165,28 @@ namespace SonicRoute.Core
                     foreach (int pid in targets)
                     {
                         float raw = rawPeaks[pid];
-                        display.TryGetValue(pid, out float previous);
+#if NET8_0_OR_GREATER
+                        // Worker-owned dictionaries: no resize/removal or callback while a ref is in use.
+                        ref var state = ref CollectionsMarshal.GetValueRefOrAddDefault(display, pid, out bool existed);
+#else
+                        bool existed = display.TryGetValue(pid, out var state);
+#endif
+                        float previous = state.Smoothed;
                         float alpha = raw > previous ? Attack : Release;
                         float smoothed = previous + (raw - previous) * alpha;
                         if (smoothed < 0.001f) smoothed = 0f;
-                        display[pid] = smoothed;
+                        state.Smoothed = smoothed;
                         fading |= smoothed != 0f;
                         // 千分之一量化仅用于发布，内部平滑仍保留精度，误差最多 0.05%。
                         float next = (float)Math.Round(smoothed * 1000f) / 1000f;
-                        if (!published.TryGetValue(pid, out float sent) || next != sent)
+                        if (!existed || next != state.Published)
                         {
-                            published[pid] = next;
+                            state.Published = next;
                             peaksChanged = true;
                         }
+#if !NET8_0_OR_GREATER
+                        display[pid] = state;
+#endif
                     }
 
                     // 静音段等电平不变时不生成快照，也不向 Dispatcher 投递无效帧。
@@ -178,7 +194,7 @@ namespace SonicRoute.Core
                     if (peaksChanged)
                     {
                         var snapshot = new Dictionary<int, float>(targets.Count);
-                        foreach (int pid in targets) snapshot[pid] = published[pid];
+                        foreach (int pid in targets) snapshot[pid] = display[pid].Published;
                         try { PeaksUpdated?.Invoke(snapshot); }
                         catch { } // UI 已关闭或 Dispatcher 已停止，不影响 COM 清理
                     }

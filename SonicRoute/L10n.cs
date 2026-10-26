@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 
 namespace SonicRoute
 {
@@ -105,7 +104,7 @@ namespace SonicRoute
                     try
                     {
                         using var fs = File.OpenRead(f);
-                        var d = JsonSerializer.Deserialize<Dictionary<string, string>>(fs);
+                        var d = LanguageFiles.Read(fs);
                         if (d == null) continue;
                         string native = code;
                         if (d.TryGetValue("Lang.NativeName", out var nn) && !string.IsNullOrWhiteSpace(nn))
@@ -161,7 +160,7 @@ namespace SonicRoute
 
         private static Dictionary<string, string> ParseLangJson(Stream s)
         {
-            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(s)
+            var dict = LanguageFiles.Read(s)
                        ?? new Dictionary<string, string>();
             dict.Remove("Lang.Code");
             dict.Remove("Lang.NativeName");
@@ -201,16 +200,12 @@ namespace SonicRoute
                     var resName = "SonicRoute.Resources.Lang." + code + ".json";
                     using var rs = asm.GetManifestResourceStream(resName);
                     if (rs == null) return false;
-                    var d = JsonSerializer.Deserialize<Dictionary<string, string>>(rs)
+                    var d = LanguageFiles.Read(rs)
                             ?? new Dictionary<string, string>();
                     d["Lang.Code"] = code;
                     d["Lang.NativeName"] = native;
                     LanguageFiles.WriteAtomic(Path.Combine(dir, code + ".json"),
-                        JsonSerializer.Serialize(d, new JsonSerializerOptions
-                        {
-                            WriteIndented = true,
-                            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                        }));
+                        LanguageFiles.Serialize(d));
                 }
                 return true;
             }
@@ -230,7 +225,7 @@ namespace SonicRoute
                 using var rs = typeof(L10n).Assembly.GetManifestResourceStream(resName);
                 if (rs != null)
                 {
-                    var d = JsonSerializer.Deserialize<Dictionary<string, string>>(rs);
+                    var d = LanguageFiles.Read(rs);
                     if (d != null)
                     {
                         // 与 ParseLangJson 一致剔除特殊键，避免覆盖率被 Lang.Code/NativeName/Custom 虚增
@@ -286,15 +281,11 @@ namespace SonicRoute
                 if (!LanguageFiles.IsValidCode(code) || _builtinCodes.Contains(code) || string.IsNullOrWhiteSpace(newName)) return false;
                 var path = Path.Combine(ExternalLangDir, code + ".json");
                 if (!File.Exists(path)) return false;
-                var d = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path))
+                var d = LanguageFiles.Read(File.ReadAllText(path))
                         ?? new Dictionary<string, string>();
                 d["Lang.NativeName"] = newName.Trim();
                 LanguageFiles.WriteAtomic(path,
-                    JsonSerializer.Serialize(d, new JsonSerializerOptions
-                    {
-                        WriteIndented = true,
-                        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-                    }));
+                    LanguageFiles.Serialize(d));
                 _supported = null;
                 _extIndexBuilt = false; // 索引缓存了旧显示名，需重建
                 return true;

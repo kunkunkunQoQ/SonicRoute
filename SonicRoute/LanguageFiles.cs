@@ -10,6 +10,35 @@ namespace SonicRoute
     // 文件操作不接触本地化缓存；显式目录也便于在独立临时目录验证。
     internal static class LanguageFiles
     {
+        internal static Dictionary<string, string>? Read(string json) =>
+            JsonSerializer.Deserialize<Dictionary<string, string>>(json
+#if NET10_0_OR_GREATER
+                , LanguageJsonContext.Default.DictionaryStringString
+#endif
+                );
+
+        internal static Dictionary<string, string>? Read(Stream stream) =>
+            JsonSerializer.Deserialize<Dictionary<string, string>>(stream
+#if NET10_0_OR_GREATER
+                , LanguageJsonContext.Default.DictionaryStringString
+#endif
+                );
+
+        internal static string Serialize(Dictionary<string, string> data) => JsonSerializer.Serialize(data, ExportJson.Options);
+
+        // Export/rename alone create the writer options; normal reads need no writer cache.
+        private static class ExportJson
+        {
+            internal static readonly JsonSerializerOptions Options = new()
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+#if NET10_0_OR_GREATER
+                TypeInfoResolver = LanguageJsonContext.Default,
+#endif
+            };
+        }
+
         internal static bool IsValidCode(string code)
         {
             if (string.IsNullOrWhiteSpace(code) || code.Length > 32 || code == "." || code == ".."
@@ -39,7 +68,7 @@ namespace SonicRoute
             try
             {
                 var json = File.ReadAllText(file);
-                var data = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                var data = Read(json);
                 if (data == null || data.Values.Any(value => value == null)) return (false, "", 0);
                 var code = data.TryGetValue("Lang.Code", out var value) && !string.IsNullOrWhiteSpace(value)
                     ? value.Trim() : Path.GetFileNameWithoutExtension(file);
@@ -68,7 +97,7 @@ namespace SonicRoute
                 {
                     // 格式损坏的覆盖文件也可还原；有效附加语言仍保留。
                     Dictionary<string, string>? data = null;
-                    try { data = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(path)); }
+                    try { data = Read(File.ReadAllText(path)); }
                     catch (JsonException) { }
                     if (data != null && data.TryGetValue("Lang.Custom", out var custom) && !string.IsNullOrWhiteSpace(custom)) continue;
                     File.Delete(path);

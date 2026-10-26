@@ -9,6 +9,7 @@ namespace AudioPathChecks
         internal static readonly List<Device> Devices = new();
         internal static int Enumerators, Scans, Activations, Lookups, Properties, Releases, Policies, PolicyDisposals;
         internal static int ScanFailure, CountFailure;
+        internal static Action? BeforeScan;
         internal static readonly HashSet<int> RouteFailures = new();
         internal static readonly List<int> PolicyRoles = new();
         internal static int PolicyFailureRole = -1;
@@ -18,7 +19,7 @@ namespace AudioPathChecks
         internal static void Reset()
         {
             Devices.Clear(); RouteFailures.Clear(); PolicyRoles.Clear();
-            ScanFailure = CountFailure = 0; PolicyFailureRole = -1;
+            ScanFailure = CountFailure = 0; PolicyFailureRole = -1; BeforeScan = null;
             AudioService.InvalidateAppsCache(); AudioService.InvalidateDeviceCache();
             SessionVolumeService.Refresh(true);
 #if !BASELINE
@@ -38,7 +39,7 @@ namespace AudioPathChecks
     internal sealed class Enumerator : IMMDeviceEnumerator
     {
         public int EnumAudioEndpoints(EDataFlow flow, DeviceState state, out IMMDeviceCollection devices)
-        { Boundary.Scans++; devices = new Collection(Boundary.Devices.Where(d => d.Flow == flow).ToArray()); return Boundary.ScanFailure; }
+        { Boundary.BeforeScan?.Invoke(); Boundary.Scans++; devices = new Collection(Boundary.Devices.Where(d => d.Flow == flow).ToArray()); return Boundary.ScanFailure; }
         public int GetDefaultAudioEndpoint(EDataFlow flow, ERole role, out IMMDevice device)
         { device = Boundary.Devices.FirstOrDefault(d => d.Flow == flow)!; return device == null ? -1 : 0; }
         public int GetDevice(string id, out IMMDevice device)

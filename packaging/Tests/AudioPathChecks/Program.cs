@@ -5,7 +5,7 @@ using SonicRoute.Core.Models;
 
 namespace AudioPathChecks;
 
-internal static class Program
+internal static partial class Program
 {
     private static int _passed, _failed;
     private static readonly Dictionary<string, int> Counts = new();
@@ -34,8 +34,9 @@ internal static class Program
         return SessionVolumeService.ReadState(pid);
 #endif
     }
-    public static int Main()
+    public static int Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--perf-session") return SessionPerformance(args.Length > 1 && args[1] == "concurrent");
         Case("device mute uses one activation and actual state", () =>
         {
             var device = Boundary.Add(EDataFlow.eRender);
@@ -367,6 +368,7 @@ internal static class Program
             Assert(SessionVolumeService.ReadState(997).Volume == 80 && Boundary.Enumerators == 2, "old session retained");
         });
 #endif
+        RunTuningChecks();
         Console.WriteLine("COUNTS {" + string.Join(",", Counts.Select(p => "\"" + p.Key + "\":" + p.Value)) + "}");
         Console.WriteLine($"RESULT passed={_passed} failed={_failed} runtime={Environment.Version} audioWrites=FAKES_ONLY");
         return _failed == 0 ? 0 : 1;

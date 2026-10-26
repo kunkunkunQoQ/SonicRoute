@@ -30,6 +30,8 @@ each perform 2,000 operations. Allocations are current-thread managed bytes, not
 process private memory; these timings are not whole-app startup or idle CPU results.
 
 The NET10 persistence context is intentionally limited to config/rule contracts.
-Update/network JSON, command responses and optional execution history keep their
-existing behavior. Unknown fields in imported config backups still pass through
+Update/network JSON and command responses keep their existing paths. Optional
+execution history has a separate compact, write-only NET10 generated contract;
+`SerializationChecks` verifies its JSONL format, original reader and language files.
+Unknown fields in imported config backups still pass through
 the existing `JsonDocument` transfer path.

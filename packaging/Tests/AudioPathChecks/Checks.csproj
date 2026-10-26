@@ -10,7 +10,7 @@
     <PreparedSources>$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)/$(BaselineRevision)</PreparedSources>
     <DefineConstants Condition="'$(BaselineRevision)' != ''">$(DefineConstants);BASELINE</DefineConstants>
   </PropertyGroup>
-  <ItemGroup><Compile Include="Program.cs;Fakes.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="Program.cs;Fakes.cs;TuningChecks.cs" /></ItemGroup>
   <Target Name="PrepareAudioSources" BeforeTargets="CoreCompile">
     <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Sources.ps1&quot; -SourceRoot &quot;$(SourceRoot)&quot; -OutputDirectory &quot;$(PreparedSources)&quot; -Revision &quot;$(BaselineRevision)&quot;" />
     <ItemGroup><Compile Include="$(PreparedSources)/*.cs" /></ItemGroup>

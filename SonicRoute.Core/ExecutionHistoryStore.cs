@@ -74,7 +74,11 @@ namespace SonicRoute.Core
                     if (_disposed) return;
                     await Task.Run(() =>
                     {
+#if NET10_0_OR_GREATER
+                        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(entry, ExecutionHistoryJsonContext.Default.ExecutionHistoryEntry);
+#else
                         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(entry);
+#endif
                         if (bytes.Length > MaxRecordBytes) { LastError = "record_too_large"; return; }
                         Directory.CreateDirectory(_directory);
                         Trim();
@@ -262,4 +266,11 @@ namespace SonicRoute.Core
         // Do not block a UI toggle waiting for storage. A write already underway may finish.
         public void Dispose() => _disposed = true;
     }
+
+#if NET10_0_OR_GREATER
+    // JSONL must remain compact. Do not reuse the indented config/rule context.
+    [System.Text.Json.Serialization.JsonSourceGenerationOptions(WriteIndented = false, GenerationMode = System.Text.Json.Serialization.JsonSourceGenerationMode.Serialization)]
+    [System.Text.Json.Serialization.JsonSerializable(typeof(ExecutionHistoryEntry))]
+    internal partial class ExecutionHistoryJsonContext : System.Text.Json.Serialization.JsonSerializerContext { }
+#endif
 }

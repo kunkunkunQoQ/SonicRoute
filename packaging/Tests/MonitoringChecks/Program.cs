@@ -165,6 +165,37 @@ internal static class Program
             int before = signals; foreach (var watcher in System.Management.ManagementEventWatcher.Instances) watcher.Emit();
             Assert(signals == before, "retired callback delivered");
         });
+        Case("meter ignores invalid peaks and clamps positive infinity", () =>
+        {
+            var a = new Session(201) { Peak = float.NaN }; var b = new Session(202) { Peak = -.5f };
+            var c = new Session(203) { Peak = float.PositiveInfinity };
+            Boundary.Add(EDataFlow.eRender, a, b, c);
+            using var probe = new Probe(201, 202, 203);
+            Wait(() => probe.Frames > 2 && probe.Peak(203) > .9f, "clamp frame missing");
+            Assert(probe.Peak(201) == 0 && probe.Peak(202) == 0 && probe.Peak(203) <= 1, "invalid peak published");
+        });
+        Case("target replacement removes old keys and published snapshots stay immutable", () =>
+        {
+            var a = new Session(204) { Peak = .2f }; var b = new Session(205) { Peak = .8f };
+            Boundary.Add(EDataFlow.eRender, a, b);
+            using var probe = new Probe(204);
+            Wait(() => probe.Peak(204) > .1f, "initial target missing");
+            var first = Volatile.Read(ref probe.Latest);
+            float retained = first[204];
+            probe.Meter.UpdateTargets(new[] { 205 });
+            Wait(() => probe.Peak(205) > .5f, "new target missing");
+            var current = Volatile.Read(ref probe.Latest);
+            Assert(current.Count == 1 && !current.ContainsKey(204), "stale snapshot key");
+            Assert(first.Count == 1 && first[204] == retained && !first.ContainsKey(205), "old snapshot mutated");
+        });
+        Case("empty meter waits without enumerating and starts on target event", () =>
+        {
+            Boundary.Add(EDataFlow.eRender, new Session(206));
+            using var probe = new Probe(); Thread.Sleep(120);
+            Assert(Boundary.Enumerators == 0 && probe.Frames == 0, "empty worker polled");
+            probe.Meter.UpdateTargets(new[] { 206 });
+            Wait(() => probe.Peak(206) > .5f, "target update did not wake empty worker");
+        });
         Console.WriteLine($"RESULT passed={_passed} failed={_failed} runtime={Environment.Version} OS_BOUNDARIES=FAKES_ONLY");
         return _failed == 0 ? 0 : 1;
     }

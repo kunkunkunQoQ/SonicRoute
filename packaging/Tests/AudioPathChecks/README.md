@@ -13,4 +13,11 @@ The preparation script compiles product service bodies with only native object c
 
 The baseline assertions document previous behavior, including the mixed-session and role-parameter defects, rather than treating those defects as the desired result.
 
+Current-source checks also cover concurrent volume adjustments and a blocked refresh
+with a waiting caller, verifying that generation sharing and Monitor wakeup finish.
+The optional NET10 `--perf-session` (`concurrent` for four workers) measures the actual
+ReadState method against managed fake sessions. It is a controlled local probe, not
+a real COM, whole-process idle CPU or UI performance measurement. The reported
+allocation count covers only the calling thread; it excludes worker allocations.
+
 `Native/Checks.csproj` references the real Core assembly. It reads actual device/application state and creates a temporary silent waveOut session. It only writes volume/mute for **its own PID**, restores those values, and closes that stream; it never writes global volume, microphones, routes or default devices. Run separately on each x64 runtime. It does not validate system-default switching or physical-device write failures.
