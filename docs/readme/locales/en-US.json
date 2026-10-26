@@ -51,7 +51,7 @@
     "configureAutomation": "Set up automation",
     "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease": "Current release",
-    "releaseSummary": "Version {version} unifies the quick panel and removes the old app panel, improves audio-session notifications and recovery, and fixes mute hotkey targets and duplicate feedback. Device cards prefer custom names, with shared scrollbars and reusable settings rows. See {history} for earlier changes.",
+    "releaseSummary": "{version} redesigns app cards, adds inline renaming beside the name, and combines input/output routing cards. Separate markers show mute/activity and quick-panel hiding. Alt+wheel switches the current app output; Alt+Shift+wheel switches the system default playback device. Earlier changes: {history}.",
     "docTopic": "Topic",
     "docGuides": "Guides",
     "docTopics": [

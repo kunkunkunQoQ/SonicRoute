@@ -51,7 +51,7 @@
     "configureAutomation": "Automatisierung einrichten",
     "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease": "Aktuelle Version",
-    "releaseSummary": "Version {version} vereinheitlicht das Schnellpanel und entfernt das alte App-Panel. Audiositzungsbenachrichtigungen und Fehlerbehebung wurden verbessert, Ziele der Stummschalt-Tastenkürzel und doppelte Hinweise korrigiert. Gerätekarten zeigen bevorzugt eigene Namen; Scrollleisten und Einstellungszeilen werden wiederverwendet. Frühere Änderungen: {history}.",
+    "releaseSummary": "Version {version} ordnet die App-Karten neu, ermöglicht das Umbenennen direkt neben dem Namen und fasst Ein- und Ausgaberouting zusammen. Getrennte Markierungen zeigen Stummschaltung/Aktivität und das Ausblenden im Schnellpanel. Alt+Rad wechselt die App-Ausgabe, Alt+Umschalt+Rad das Standard-Wiedergabegerät. Frühere Änderungen: {history}.",
     "docTopic": "Thema",
     "docGuides": "Anleitungen",
     "docTopics": [

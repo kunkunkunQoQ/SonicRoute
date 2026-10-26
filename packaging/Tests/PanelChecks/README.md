@@ -34,8 +34,10 @@ runtime host, or `PanelRemovalChecks.exe` for Framework.
 
 `--app-cards <absolute-image-directory>` limits execution to the application page.
 It checks the actual BAML in light/dark themes, nine languages at three widths,
-positive quick-panel visibility and inverse-color exclusion markers, microphone
-card collapse, existing rename/save behavior, readback without Click feedback,
+positive quick-panel visibility, independent top-left hidden and right-side
+activity/mute markers, cached readback for unselected apps, the shared
+input/output card and microphone collapse, pencil-triggered inline rename/save
+and focus-loss behavior, readback without Click feedback,
 empty selection and close cleanup. It uses missing-PID fixtures and an isolated
 configuration directory; it does not show windows or write real audio state.
 The saved offscreen PNGs include 96/144 raster DPI variants, not physical monitor

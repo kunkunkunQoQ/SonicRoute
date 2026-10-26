@@ -47,17 +47,17 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 ## 🚀 下載與快速入門
 
-**目前版本：[v1.27](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.27)** · 2026-10-24 · [發布說明（簡體中文）](docs/release-v1.27.md)
+**目前版本：[v1.28](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.28)** · 2026-10-26 · [發布說明（簡體中文）](docs/release-v1.28.md)
 
-Windows x64 使用者可選擇 .NET 10 Lite、NET8 相容版 Lite，或以 .NET Framework 4.8 為基礎的 Legacy。商店頁面顯示目前上架版本，更新透過 Microsoft Store 提供。下方直連下載對應 v1.27。
+Windows x64 使用者可選擇 .NET 10 Lite、NET8 相容版 Lite，或以 .NET Framework 4.8 為基礎的 Legacy。商店頁面顯示目前上架版本，更新透過 Microsoft Store 提供。下方直連下載對應 v1.28。
 
 | 版本 | 下載 | 需求 |
 |---|---|---|
-| ⭐ Lite x64（.NET 10 預設版） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-x64.exe) | 單一檔案可攜版；需要相符的 x64 .NET 10 Desktop Runtime |
-| ⚡ Lite ARM64（.NET 10）（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-arm64.exe) | ARM64 可攜版；需要 ARM64 .NET 10 Desktop Runtime |
-| ☕ Lite NET8 x64 | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-NET8-x64.exe) | NET8 相容版 Lite；需要 x64 .NET 8 Desktop Runtime |
-| ☕ Lite NET8 ARM64（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-NET8-arm64.exe) | NET8 相容版 Lite；需要 ARM64 .NET 8 Desktop Runtime |
-| 🛡️ Legacy x64（免裝執行庫） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用 |
+| ⭐ Lite x64（.NET 10 預設版） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-x64.exe) | 單一檔案可攜版；需要相符的 x64 .NET 10 Desktop Runtime |
+| ⚡ Lite ARM64（.NET 10）（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-arm64.exe) | ARM64 可攜版；需要 ARM64 .NET 10 Desktop Runtime |
+| ☕ Lite NET8 x64 | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-NET8-x64.exe) | NET8 相容版 Lite；需要 x64 .NET 8 Desktop Runtime |
+| ☕ Lite NET8 ARM64（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-NET8-arm64.exe) | NET8 相容版 Lite；需要 ARM64 .NET 8 Desktop Runtime |
+| 🛡️ Legacy x64（免裝執行庫） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用 |
 | 🔄 Microsoft Store（商店提供更新） | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | NET10 商店套件需要 x64 .NET 10 Desktop Runtime。上架版本請以 Microsoft Store 頁面為準；適用於 64 位元 Windows 10/11。 |
 
 預設 Lite 需要 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；NET8 相容版需要 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)。NET8 版將於 2026 年 11 月之後停止提供與維護。此後 x64 使用者可手動選擇 .NET 10 或 Legacy（.NET Framework 4.8）；ARM64 使用者請選擇 .NET 10。
@@ -73,7 +73,7 @@ Windows x64 使用者可選擇 .NET 10 Lite、NET8 相容版 Lite，或以 .NET 
 sr "規則名稱或 ID"
 ```
 
-1.27 統一快速面板並移除舊應用面板，改善音訊工作階段通知與異常恢復，修正靜音快捷鍵的目標與重複提示；裝置卡片優先顯示自訂名稱，加入統一捲軸並重用設定列。舊版變更見 [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+1.28 重整應用程式卡片，支援在名稱旁原位改名，並合併輸入與輸出路由卡片；靜音/活動狀態與快速面板隱藏標記分開顯示。Alt+滾輪切換目前應用程式的輸出裝置，Alt+Shift+滾輪切換系統預設播放裝置。舊版變更見 [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ 常見問題速覽
 

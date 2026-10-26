@@ -32,6 +32,7 @@ namespace SonicRoute
 
         private bool _isAutoSwitchDisabled;
         private bool _isHiddenInPanel;
+        private bool _isMuted;
         private System.Windows.Media.Brush _dotBrush = System.Windows.Media.Brushes.Transparent;
 
         /// <summary>该应用是否禁用了自动切换为当前应用（影响自动检测，不影响手动选择）。</summary>
@@ -57,6 +58,18 @@ namespace SonicRoute
                 if (_isHiddenInPanel == value) return;
                 _isHiddenInPanel = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsHiddenInPanel)));
+            }
+        }
+
+        /// <summary>应用页的播放静音读回；复用页面加载及选中应用的现有状态读取。</summary>
+        public bool IsMuted
+        {
+            get => _isMuted;
+            set
+            {
+                if (_isMuted == value) return;
+                _isMuted = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMuted)));
             }
         }
 

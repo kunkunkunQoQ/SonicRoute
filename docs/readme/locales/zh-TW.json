@@ -51,7 +51,7 @@
     "configureAutomation": "設定自動化",
     "automationExample": "把繁瑣的手動改設定，變成一次配置、隨開隨用的自動化體驗。",
     "currentRelease": "目前版本",
-    "releaseSummary": "{version} 統一快速面板並移除舊應用面板，改善音訊工作階段通知與異常恢復，修正靜音快捷鍵的目標與重複提示；裝置卡片優先顯示自訂名稱，加入統一捲軸並重用設定列。舊版變更見 {history}。",
+    "releaseSummary": "{version} 重整應用程式卡片，支援在名稱旁原位改名，並合併輸入與輸出路由卡片；靜音/活動狀態與快速面板隱藏標記分開顯示。Alt+滾輪切換目前應用程式的輸出裝置，Alt+Shift+滾輪切換系統預設播放裝置。舊版變更見 {history}。",
     "docTopic": "主題",
     "docGuides": "指南",
     "docTopics": [

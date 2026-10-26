@@ -906,11 +906,34 @@ namespace SonicRoute
             await LoadAppsAsync();
         }
 
+        private void AppsRenameButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isClosed || !AppsRenameButton.IsEnabled) return;
+            if (AppsRenameBox.Visibility != Visibility.Visible)
+            {
+                // Prefill the displayed name without saving an unchanged default as a custom name.
+                _suppressRename = true;
+                AppsRenameBox.Text = AppsDetailTitle.Text;
+                _suppressRename = false;
+                AppsRenameBox.Visibility = Visibility.Visible;
+            }
+            AppsRenameBox.Focus();
+            AppsRenameBox.SelectAll();
+        }
+
+        private void AppsRenameBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+        {
+            // IME composition uses ImeProcessed; let WPF finish it before treating Enter as done.
+            if (e.Key != Key.Enter) return;
+            e.Handled = true;
+            AppsRenameBox.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+        }
+
         /// <summary>应用页：输入即自动保存应用自定义名称（按进程名），留空=恢复默认。
         /// 不重建列表/输入框，避免中文输入法组合中断；仅更新标题与列表项显示。</summary>
         private void AppsRenameBox_TextChanged(object sender, TextChangedEventArgs e)
         {
-            if (_suppressRename || _appsSelected == null) return;
+            if (_isClosed || _suppressRename || _appsSelected == null) return;
             var pn = _appsSelected.ProcessName;
             if (string.IsNullOrWhiteSpace(pn)) return;
             var name = AppsRenameBox.Text.Trim();
@@ -932,16 +955,28 @@ namespace SonicRoute
                 int request = ++_appsRefreshRequest;
                 var apps = await _uiLifetime.ReadAsync(AudioService.GetAppsAsync());
                 if (_isClosed || request != _appsRefreshRequest) return;
+                var muted = await _uiLifetime.ReadAsync((Apps: apps, Token: _uiLifetime.Token), static state =>
+                {
+                    var states = new Dictionary<int, bool>(state.Apps.Count);
+                    foreach (var app in state.Apps)
+                    {
+                        state.Token.ThrowIfCancellationRequested();
+                        int pid = (int)app.ProcessId;
+                        states[pid] = SessionVolumeService.IsMuted(pid);
+                    }
+                    return states;
+                });
+                if (_isClosed || request != _appsRefreshRequest) return;
                 if (SameAutoApps(_appItems.Select(item => item.Info).ToList(), apps))
                 {
-                    foreach (var item in _appItems) { item.RefreshName(); item.RefreshAutoSwitchState(); }
+                    foreach (var item in _appItems) { item.RefreshName(); item.RefreshAutoSwitchState(); item.IsMuted = muted[item.ProcessId]; }
                     if (_appsSelected != null) await RefreshAppsSelectionAsync();
                     return;
                 }
                 int? selectedPid = (AppsListBox.SelectedItem as AppItem)?.ProcessId;
                 _appItems = GetAppCandidates(apps);
                 AppItem.LoadIconsAsync(_appItems);
-                foreach (var item in _appItems) item.RefreshAutoSwitchState();
+                foreach (var item in _appItems) { item.RefreshAutoSwitchState(); item.IsMuted = muted[item.ProcessId]; }
                 AppsListBox.ItemsSource = null;
                 AppsListBox.ItemsSource = _appItems;
                 if (selectedPid.HasValue) AppsListBox.SelectedItem = _appItems.FirstOrDefault(item => item.ProcessId == selectedPid.Value);
@@ -953,11 +988,12 @@ namespace SonicRoute
         private async void AppsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ++_appsStateRequest;
+            AppsRenameBox.Visibility = Visibility.Collapsed;
             _appsSelected = (AppsListBox.SelectedItem as AppItem)?.Info;
             AppsIconPreview.Content = AppsListBox.SelectedItem;
             AppsRoutingPanel.IsEnabled = AppsControls.IsEnabled = _appsSelected != null;
             bool hasName = !string.IsNullOrWhiteSpace(_appsSelected?.ProcessName);
-            AppsRenameToggle.IsEnabled = AppsDisableAutoButton.IsEnabled = AppsShowInPanelButton.IsEnabled = hasName;
+            AppsRenameButton.IsEnabled = AppsDisableAutoButton.IsEnabled = AppsShowInPanelButton.IsEnabled = hasName;
             SetAppsVolumeUi(null);
             UpdateIconSettingsState();
             if (_appsSelected == null)
@@ -1015,6 +1051,7 @@ namespace SonicRoute
         private void ApplyAppsMuteVisual(bool muted)
         {
             AppsMuteButton.IsChecked = muted;
+            if (AppsListBox.SelectedItem is AppItem item) item.IsMuted = muted;
         }
 
         private void ApplyAppsDisableAutoVisual(bool disabled)
@@ -1344,7 +1381,11 @@ namespace SonicRoute
         }
 
         private void NameSaveTimer_Tick(object? sender, EventArgs e) => FlushNameChanges(refreshDisplay: true);
-        private void NameEdit_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) => FlushNameChanges(refreshDisplay: true);
+        private void NameEdit_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            if (ReferenceEquals(sender, AppsRenameBox)) AppsRenameBox.Visibility = Visibility.Collapsed;
+            FlushNameChanges(refreshDisplay: true);
+        }
 
         private void FlushNameChanges(bool refreshDisplay)
         {
@@ -1550,7 +1591,7 @@ namespace SonicRoute
                     var pid = (int)_appsSelected.ProcessId;
                     bool muted = await Task.Run(() => SessionVolumeService.IsMuted(pid));
                     if (_isClosed) return;
-                    ApplyAppsMuteVisual(muted);
+                    if (_appsSelected?.ProcessId == (uint)pid) ApplyAppsMuteVisual(muted);
                 }
                 UpdateAppsDisableAutoButton();
                 UpdateAppsShowInPanelButton();

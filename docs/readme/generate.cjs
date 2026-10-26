@@ -324,6 +324,7 @@ function renderAI(shared) {
     `    source: ["${shared.releaseNotes}"]`,
     `    symbols: ["${shared.release}"]`,
     "    facts:",
+    "      - \"v1.28: Inline application renaming, shared routing card, independent mute/activity and hidden-panel markers; Alt wheel changes app output, Alt+Shift wheel changes system output. Existing device hotkeys remain.\"",
     "      - \"v1.27: One quick panel, session notification lifecycle, reliable mute hotkey targets, custom device titles, shared scrollbars and reusable settings rows. v1.26: Protected-app icon fallback and runtime-specific persistence.\"",
     "      - \"v1.25: .NET 10 default, native updater, 37 actions, drag icon, 850px panel.\"",
     "      - \"v1.24: Automation starter templates, optional recent execution details and per-app custom icons; later protected-app icon fixes are documented in v1.26.\"",

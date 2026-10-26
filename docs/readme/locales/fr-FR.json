@@ -51,7 +51,7 @@
     "configureAutomation": "Configurer l’automatisation",
     "automationExample": "Transformez les réglages manuels fastidieux en une expérience automatisée prête à l'emploi.",
     "currentRelease": "Version actuelle",
-    "releaseSummary": "La version {version} unifie le panneau rapide et supprime l’ancien panneau d’applications. Elle améliore les notifications des sessions audio et la reprise après erreur, corrige les cibles des raccourcis de sourdine et les notifications répétées. Les cartes privilégient les noms personnalisés, avec des barres de défilement communes et des lignes de réglages réutilisées. Historique : {history}.",
+    "releaseSummary": "{version} réorganise les cartes des applications, permet de renommer à côté du nom et regroupe les cartes d’entrée et de sortie. Des indicateurs distincts signalent le mode muet/l’activité et le masquage dans le panneau rapide. Alt+molette change la sortie de l’application actuelle ; Alt+Maj+molette change le périphérique de lecture par défaut. Historique : {history}.",
     "docTopic": "Sujet",
     "docGuides": "Guides",
     "docTopics": [

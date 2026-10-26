@@ -47,17 +47,17 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 
 ## 🚀 Скачивание и начало работы
 
-**Текущая версия: [v1.27](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.27)** · 2026-10-24 · [Примечания к выпуску (на китайском)](docs/release-v1.27.md)
+**Текущая версия: [v1.28](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.28)** · 2026-10-26 · [Примечания к выпуску (на китайском)](docs/release-v1.28.md)
 
-Для Windows x64 доступны Lite на .NET 10, совместимая с NET8 версия Lite и Legacy на .NET Framework 4.8. На странице Store указана доступная там версия, а обновления предоставляются через Store. Прямые ссылки ниже относятся к выпуску v1.27.
+Для Windows x64 доступны Lite на .NET 10, совместимая с NET8 версия Lite и Legacy на .NET Framework 4.8. На странице Store указана доступная там версия, а обновления предоставляются через Store. Прямые ссылки ниже относятся к выпуску v1.28.
 
 | Вариант | Скачать | Требования |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10, стандартная) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-x64.exe) | Портативный файл; требуется x64 .NET 10 Desktop Runtime |
-| ⚡ Lite ARM64 (.NET 10) (экспериментально) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-arm64.exe) | Портативный файл ARM64; требуется ARM64 .NET 10 Desktop Runtime |
-| ☕ Lite NET8 x64 | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-NET8-x64.exe) | Совместимая с NET8 версия Lite; требуется x64 .NET 8 Desktop Runtime |
-| ☕ Lite NET8 ARM64 (экспериментально) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Lite-NET8-arm64.exe) | Совместимая с NET8 версия Lite; требуется ARM64 .NET 8 Desktop Runtime |
-| 🛡️ Legacy x64 (Без .NET 8) | [Полный ZIP-архив](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.27/SonicRoute-v1.27-Legacy-x64.zip) | Не требует .NET 8; работает напрямую через встроенный .NET Framework 4.8; распакуйте ZIP-архив |
+| ⭐ Lite x64 (.NET 10, стандартная) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-x64.exe) | Портативный файл; требуется x64 .NET 10 Desktop Runtime |
+| ⚡ Lite ARM64 (.NET 10) (экспериментально) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-arm64.exe) | Портативный файл ARM64; требуется ARM64 .NET 10 Desktop Runtime |
+| ☕ Lite NET8 x64 | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-NET8-x64.exe) | Совместимая с NET8 версия Lite; требуется x64 .NET 8 Desktop Runtime |
+| ☕ Lite NET8 ARM64 (экспериментально) | [Один EXE-файл](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Lite-NET8-arm64.exe) | Совместимая с NET8 версия Lite; требуется ARM64 .NET 8 Desktop Runtime |
+| 🛡️ Legacy x64 (Без .NET 8) | [Полный ZIP-архив](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.28/SonicRoute-v1.28-Legacy-x64.zip) | Не требует .NET 8; работает напрямую через встроенный .NET Framework 4.8; распакуйте ZIP-архив |
 | 🔄 Microsoft Store (обновления через Store) | [Установить из Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Для пакета Store на .NET 10 требуется x64 .NET 10 Desktop Runtime. Текущую доступную версию смотрите на странице Store; Windows 10/11, 64-разрядная. |
 
 Для стандартной Lite требуется [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), для Lite с NET8 — [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Предложение и поддержка NET8 завершатся после ноября 2026 года. После этого пользователи x64 смогут вручную выбрать .NET 10 или Legacy (.NET Framework 4.8), пользователям ARM64 следует выбрать .NET 10.
@@ -73,7 +73,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 sr "Название правила или ID"
 ```
 
-Версия 1.27 объединяет быструю панель и удаляет старую панель приложений, улучшает уведомления аудиосеансов и восстановление, исправляет цели горячих клавиш отключения звука и повторные уведомления. Карточки устройств показывают пользовательские имена; добавлены общие полосы прокрутки и повторное использование строк настроек. Предыдущие изменения: [История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+1.28 обновляет карточки приложений, добавляет переименование рядом с названием и объединяет карточки входной и выходной маршрутизации. Отдельные индикаторы показывают отключение звука/активность и скрытие в быстрой панели. Alt+колесо переключает выход текущего приложения, Alt+Shift+колесо — системное устройство воспроизведения по умолчанию. Предыдущие изменения: [История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Часто задаваемые вопросы (FAQ)
 

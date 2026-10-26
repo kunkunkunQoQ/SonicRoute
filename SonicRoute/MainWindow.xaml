@@ -375,9 +375,13 @@
         <DataTemplate x:Key="AppsCardItemTemplate">
             <Grid Margin="0,3">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/></Grid.ColumnDefinitions>
-                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AppIconTemplate}"
-                                Width="26" Height="26" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                Focusable="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                <Grid Width="26" Height="26" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <ContentControl Content="{Binding}" ContentTemplate="{StaticResource AppIconTemplate}"
+                                    Focusable="False" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
+                    <Ellipse x:Name="PanelHiddenDot" Width="6" Height="6" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-1,-1,0,0"
+                             Fill="{DynamicResource Theme.AccentInverse}" Visibility="{Binding IsHiddenInPanel, Converter={StaticResource BoolToVis}}"
+                             ToolTip="{Binding [Apps.HiddenInPanel], Source={x:Static local:L10n.Instance}}"/>
+                </Grid>
                 <StackPanel Grid.Column="1" Margin="6,0,4,0">
                     <TextBlock Text="{Binding Label}" ToolTip="{Binding Label}" TextTrimming="CharacterEllipsis" FontSize="12.5"/>
                     <TextBlock Text="{Binding ProcessName}" TextTrimming="CharacterEllipsis" FontSize="10.5"
@@ -389,15 +393,10 @@
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Info.HasActiveSession}" Value="True"><Setter TargetName="StateDot" Property="Visibility" Value="Visible"/></DataTrigger>
-                <DataTrigger Binding="{Binding IsAutoSwitchDisabled}" Value="True">
+                <DataTrigger Binding="{Binding IsMuted}" Value="True">
                     <Setter TargetName="StateDot" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="StateDot" Property="Fill" Value="{DynamicResource Theme.AccentInverse}"/>
-                    <Setter TargetName="StateDot" Property="ToolTip" Value="{Binding [Apps.DisableAutoOn], Source={x:Static local:L10n.Instance}}"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsHiddenInPanel}" Value="True">
-                    <Setter TargetName="StateDot" Property="Visibility" Value="Visible"/>
-                    <Setter TargetName="StateDot" Property="Fill" Value="{DynamicResource Theme.AccentInverse}"/>
-                    <Setter TargetName="StateDot" Property="ToolTip" Value="{Binding [Apps.HiddenInPanel], Source={x:Static local:L10n.Instance}}"/>
+                    <Setter TargetName="StateDot" Property="ToolTip" Value="{Binding [Qp.Muted], Source={x:Static local:L10n.Instance}}"/>
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -409,11 +408,6 @@
             <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
             <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
-        </Style>
-        <Style x:Key="AppsControlHint" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
-            <Setter Property="FontSize" Value="10.5"/><Setter Property="TextWrapping" Value="Wrap"/>
-            <Setter Property="Margin" Value="0,0,0,10"/>
         </Style>
     <Style x:Key="ThemeSettingsCard" TargetType="Border" BasedOn="{StaticResource Card}">
         <Setter Property="CornerRadius" Value="16"/><Setter Property="Padding" Value="20"/>
@@ -1235,15 +1229,41 @@
                         <Border Style="{StaticResource AppsSectionCard}">
                             <StackPanel>
                                 <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
                                     <Border Width="54" Height="54" Style="{StaticResource Card}" Padding="10" CornerRadius="12" Margin="0,0,12,0" VerticalAlignment="Top">
                                         <ContentControl x:Name="AppsIconPreview" ContentTemplate="{StaticResource AppIconTemplate}" Focusable="False"
                                                         HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
                                     </Border>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock x:Name="AppsDetailTitle" Text="{Binding [Apps.SelectHint], Source={x:Static local:L10n.Instance}}"
-                                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
-                                                   FontSize="21" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                        <Grid>
+                                            <Grid.Style><Style TargetType="Grid">
+                                                <Setter Property="HorizontalAlignment" Value="Left"/>
+                                                <Style.Triggers><DataTrigger Binding="{Binding Visibility, ElementName=AppsRenameBox}" Value="Visible">
+                                                    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                                </DataTrigger></Style.Triggers>
+                                            </Style></Grid.Style>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <TextBlock x:Name="AppsDetailTitle" Text="{Binding [Apps.SelectHint], Source={x:Static local:L10n.Instance}}"
+                                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" VerticalAlignment="Center"
+                                                       FontSize="21" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource Theme.TextPrimary}">
+                                                <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Visibility, ElementName=AppsRenameBox}" Value="Visible"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                                </Style.Triggers></Style></TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBox x:Name="AppsRenameBox" Visibility="Collapsed" FontSize="21" FontWeight="SemiBold" Padding="4,0"
+                                                     IsEnabled="False" TextChanged="AppsRenameBox_TextChanged" KeyDown="AppsRenameBox_KeyDown"
+                                                     ToolTip="{Binding [Apps.RenameHint], Source={x:Static local:L10n.Instance}}"
+                                                     AutomationProperties.Name="{Binding [Apps.Rename], Source={x:Static local:L10n.Instance}}"/>
+                                            <Button x:Name="AppsRenameButton" Grid.Column="1" Style="{StaticResource GhostButton}" Width="26" Height="26"
+                                                    Margin="6,0,0,0" VerticalAlignment="Center" IsEnabled="False" Click="AppsRenameButton_Click"
+                                                    ToolTip="{Binding [Apps.RenameHint], Source={x:Static local:L10n.Instance}}"
+                                                    AutomationProperties.Name="{Binding [Apps.Rename], Source={x:Static local:L10n.Instance}}">
+                                                <Viewbox Width="14" Height="14" IsHitTestVisible="False">
+                                                    <Path Data="{x:Static local:AutomationIcons.Edit}" Width="24" Height="24" Stroke="{DynamicResource Theme.TextSecondary}"
+                                                          StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                </Viewbox>
+                                            </Button>
+                                        </Grid>
                                         <TextBlock x:Name="AppsDetailPid" FontSize="11" TextTrimming="CharacterEllipsis"
                                                    Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,4,0,0"/>
                                         <TextBlock FontSize="10.5" Margin="0,5,0,0">
@@ -1260,46 +1280,38 @@
                                             </Style></TextBlock.Style>
                                         </TextBlock>
                                     </StackPanel>
+                                    <WrapPanel Grid.Column="2" Margin="12,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Top">
+                                        <Button x:Name="IconImportButton" Style="{StaticResource GhostButton}" Margin="0,0,6,6" Click="IconImport_Click" IsEnabled="False"
+                                                ToolTip="{Binding [AppIcons.Hint], Source={x:Static local:L10n.Instance}}"
+                                                AllowDrop="True" PreviewDragOver="IconImport_DragOver" PreviewDrop="IconImport_Drop">
+                                            <TextBlock Text="{Binding [AppIcons.Import], Source={x:Static local:L10n.Instance}}" TextTrimming="CharacterEllipsis" Margin="10,0"/>
+                                        </Button>
+                                        <Button x:Name="IconResetButton" Style="{StaticResource GhostButton}" Margin="0,0,0,6" Click="IconReset_Click" IsEnabled="False"
+                                                ToolTip="{Binding [AppIcons.Reset], Source={x:Static local:L10n.Instance}}">
+                                            <TextBlock Text="{Binding [AppIcons.Reset], Source={x:Static local:L10n.Instance}}" TextTrimming="CharacterEllipsis" Margin="10,0"/>
+                                        </Button>
+                                    </WrapPanel>
                                 </Grid>
-                                <WrapPanel Margin="0,14,0,0">
-                                    <ToggleButton x:Name="AppsRenameToggle" Style="{StaticResource MoreOptionsToggle}" IsEnabled="False"
-                                                  Content="{Binding [Apps.Rename], Source={x:Static local:L10n.Instance}}" Margin="0,0,14,6" VerticalAlignment="Center"/>
-                                    <Button x:Name="IconImportButton" Style="{StaticResource GhostButton}" Margin="0,0,6,6" Click="IconImport_Click" IsEnabled="False"
-                                            ToolTip="{Binding [AppIcons.Hint], Source={x:Static local:L10n.Instance}}"
-                                            AllowDrop="True" PreviewDragOver="IconImport_DragOver" PreviewDrop="IconImport_Drop">
-                                        <TextBlock Text="{Binding [AppIcons.Import], Source={x:Static local:L10n.Instance}}" Margin="10,0"/>
-                                    </Button>
-                                    <Button x:Name="IconResetButton" Style="{StaticResource GhostButton}" Margin="0,0,0,6" Click="IconReset_Click" IsEnabled="False">
-                                        <TextBlock Text="{Binding [AppIcons.Reset], Source={x:Static local:L10n.Instance}}" Margin="10,0"/>
-                                    </Button>
-                                </WrapPanel>
-                                <StackPanel Margin="0,8,0,0" Visibility="{Binding IsChecked, ElementName=AppsRenameToggle, Converter={StaticResource BoolToVis}}">
-                                    <TextBox x:Name="AppsRenameBox" FontSize="12.5" VerticalContentAlignment="Center" Padding="8,6"
-                                             IsEnabled="False" TextChanged="AppsRenameBox_TextChanged"
-                                             ToolTip="{Binding [Apps.Rename], Source={x:Static local:L10n.Instance}}"/>
-                                    <TextBlock Text="{Binding [Apps.RenameHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource AppsControlHint}" Margin="0,6,0,0"/>
-                                </StackPanel>
                             </StackPanel>
                         </Border>
-                        <TextBlock Text="{Binding [Apps.RouteTitle], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PageTitle}" FontSize="14" Margin="2,4,0,10"/>
-                        <Grid x:Name="AppsRoutingPanel" IsEnabled="False" Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <Border x:Name="AppsOutputCard" Style="{StaticResource AppsSectionCard}" Margin="0,0,6,0" Padding="12">
-                                <StackPanel>
+                        <Border Style="{StaticResource AppsSectionCard}" Padding="12">
+                            <Grid x:Name="AppsRoutingPanel" IsEnabled="False">
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Grid.ColumnSpan="2" Text="{Binding [Apps.RouteTitle], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PageTitle}" FontSize="14" Margin="0,0,0,10"/>
+                                <StackPanel x:Name="AppsOutputCard" Grid.Row="1" Margin="0,0,6,0">
                                     <TextBlock Text="{Binding [Apps.Output], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}" TextWrapping="Wrap"/>
                                     <ComboBox x:Name="AppsOutputCombo" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
                                               SelectionChanged="AppsOutputCombo_SelectionChanged"/>
                                 </StackPanel>
-                            </Border>
-                            <Border x:Name="AppsInputCard" Grid.Column="1" Style="{StaticResource AppsSectionCard}" Margin="6,0,0,0" Padding="12" Visibility="Collapsed">
-                                <StackPanel>
+                                <StackPanel x:Name="AppsInputCard" Grid.Row="1" Grid.Column="1" Margin="6,0,0,0" Visibility="Collapsed">
                                     <TextBlock x:Name="AppsInputLabel" Text="{Binding [Apps.Input], Source={x:Static local:L10n.Instance}}"
                                                Style="{StaticResource SectionTitle}" TextWrapping="Wrap" Visibility="Collapsed"/>
                                     <ComboBox x:Name="AppsInputCombo" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
                                               SelectionChanged="AppsInputCombo_SelectionChanged" Visibility="Collapsed"/>
                                 </StackPanel>
-                            </Border>
-                        </Grid>
+                            </Grid>
+                        </Border>
                         <Border Style="{StaticResource AppsSectionCard}" MouseWheel="AppsVolume_MouseWheel">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,12">

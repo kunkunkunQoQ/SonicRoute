@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
@@ -40,6 +41,60 @@ internal static partial class Program
         bitmap.Render(root);
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var stream = File.Create(path); encoder.Save(stream);
+    }
+
+    private sealed class AppCardVolume : ISimpleAudioVolume
+    {
+        internal bool Muted;
+        internal int MuteReads;
+        public int GetMasterVolume(out float value) { value = .42f; return 0; }
+        public int GetMute(out int value) { System.Threading.Interlocked.Increment(ref MuteReads); value = Muted ? 1 : 0; return 0; }
+        public int SetMasterVolume(float value, ref Guid context) => throw new InvalidOperationException("Read-only UI fixture");
+        public int SetMute(int value, ref Guid context) => throw new InvalidOperationException("Read-only UI fixture");
+    }
+
+    private static void CheckAppListMuteReadback(MainWindow window, List<AppItem> items, string mode)
+    {
+        // Seed only the isolated process's existing caches; execute the actual page-load and mute-read paths.
+        const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+        var saved = new Dictionary<FieldInfo, object?>();
+        void Set(Type owner, string name, object? value)
+        {
+            var field = owner.GetField(name, flags)!;
+            if (!saved.ContainsKey(field)) saved.Add(field, field.GetValue(null));
+            field.SetValue(null, value);
+        }
+        var clock = typeof(AudioService).Assembly.GetType("SonicRoute.Core.Compat.CompatEnv")!.GetProperty("TickCount64", flags)!;
+        var first = new AppCardVolume(); var second = new AppCardVolume { Muted = true };
+        var apps = items.Select(item => item.Info).ToList();
+        var source = ((ListBox)window.FindName("AppsListBox")).ItemsSource;
+        try
+        {
+            int appGeneration = (int)typeof(AudioService).GetField("_appsGeneration", flags)!.GetValue(null)!;
+            Set(typeof(AudioService), "_appsCache", apps);
+            Set(typeof(AudioService), "_appsCacheGeneration", appGeneration);
+            Set(typeof(AudioService), "_appsReadTask", Task.FromResult(apps));
+            Set(typeof(AudioService), "_appsReadGeneration", appGeneration);
+            Set(typeof(SessionVolumeService), "_renderVolumes", new Dictionary<int, List<ISimpleAudioVolume>> {
+                [items[0].ProcessId] = new() { first }, [items[1].ProcessId] = new() { second }
+            });
+            int sessionGeneration = (int)typeof(SessionVolumeService).GetField("_cacheGeneration", flags)!.GetValue(null)!;
+            Set(typeof(SessionVolumeService), "_snapshotGeneration", sessionGeneration);
+            void ReadPage()
+            {
+                Set(typeof(AudioService), "_appsCacheAt", clock.GetValue(null));
+                Set(typeof(SessionVolumeService), "_lastEnum", DateTime.UtcNow);
+                Finish((Task)AppCardCall(window, "LoadAppsAsync")!);
+            }
+            ReadPage();
+            Check(!items[0].IsMuted && items[1].IsMuted && second.MuteReads == 1
+                && ReferenceEquals(source, ((ListBox)window.FindName("AppsListBox")).ItemsSource),
+                mode + " page load reads the unselected app mute once through existing session cache without rebuilding rows");
+            second.Muted = false; ReadPage();
+            Check(!items[1].IsMuted && second.MuteReads == 2,
+                mode + " manual page refresh updates unselected mute state through the same read-only path");
+        }
+        finally { foreach (var pair in saved) pair.Key.SetValue(null, pair.Value); }
     }
 
     private static void CheckAppCards(MethodInfo theme, List<Window> windows, string output)
@@ -92,49 +147,120 @@ internal static partial class Program
             Check(clicks == 0 && mute.IsChecked == false && auto.IsChecked == false && shown.IsChecked == true, mode + " readback changes switches without invoking Click; panel visibility has positive meaning");
             var root = LayoutAppCards(window, 1080, 760);
             var marker = AppCardTree(list).OfType<Ellipse>().First(e => e.Name == "StateDot");
+            var hiddenMarker = AppCardTree(list).OfType<Ellipse>().First(e => e.Name == "PanelHiddenDot");
+            var normal = ((SolidColorBrush)window.FindResource("Theme.Success")).Color;
+            var inverse = ((SolidColorBrush)window.FindResource("Theme.AccentInverse")).Color;
             Check(marker.Visibility == Visibility.Visible && ((SolidColorBrush)marker.Fill).Color == ((SolidColorBrush)window.FindResource("Theme.Success")).Color, mode + " active fixture uses existing success brush");
             Click(shown); root.UpdateLayout();
+            var icon = (Grid)hiddenMarker.Parent;
+            var hiddenBounds = hiddenMarker.TransformToAncestor(icon).TransformBounds(new Rect(hiddenMarker.RenderSize));
             Check(items[0].IsHiddenInPanel && shown.IsChecked == false && config.HiddenPanelApps.Contains("Steam")
-                && ((SolidColorBrush)marker.Fill).Color == ((SolidColorBrush)window.FindResource("Theme.AccentInverse")).Color,
-                mode + " hiding quick-panel app preserves inverse-color marker and saved preference");
+                && hiddenMarker.Visibility == Visibility.Visible && ((SolidColorBrush)hiddenMarker.Fill).Color == inverse
+                && hiddenBounds.Left <= 0 && hiddenBounds.Top <= 0 && ((SolidColorBrush)marker.Fill).Color == normal,
+                mode + " hiding from quick panel puts an independent inverse dot at the icon top left, leaving activity dot unchanged");
             RenderAppCards(root, Path.Combine(output, "app-cards-" + mode + "-hidden.png"));
             Click(shown); Click(auto); root.UpdateLayout();
             Check(!items[0].IsHiddenInPanel && auto.IsChecked == true && items[0].IsAutoSwitchDisabled
-                && ((SolidColorBrush)marker.Fill).Color == ((SolidColorBrush)window.FindResource("Theme.AccentInverse")).Color,
-                mode + " auto-follow exclusion retains its inverse-color marker");
+                && hiddenMarker.Visibility == Visibility.Collapsed && ((SolidColorBrush)marker.Fill).Color == normal
+                && ((SolidColorBrush)items[0].DotBrush).Color == inverse,
+                mode + " auto-follow exclusion keeps its original flag but cannot be confused with list mute or hidden dots");
             Click(auto);
-            var renameToggle = (ToggleButton)window.FindName("AppsRenameToggle");
-            renameToggle.IsChecked = true;
-            root.UpdateLayout();
+            AppCardCall(window, "ApplyAppsMuteVisual", true); root.UpdateLayout();
+            Check(items[0].IsMuted && marker.Visibility == Visibility.Visible && ((SolidColorBrush)marker.Fill).Color == inverse
+                && hiddenMarker.Visibility == Visibility.Collapsed && (string)marker.ToolTip == L10n.T("Qp.Muted"),
+                mode + " selected mute readback overrides active color with inverse dot without audio writes");
+            Click(shown); root.UpdateLayout();
+            Check(hiddenMarker.Visibility == Visibility.Visible && marker.Visibility == Visibility.Visible
+                && ((SolidColorBrush)marker.Fill).Color == inverse, mode + " muted and hidden app displays both independent markers");
+            RenderAppCards(root, Path.Combine(output, "app-cards-" + mode + "-muted-hidden.png"));
+            AppCardCall(window, "ApplyAppsMuteVisual", false); Click(shown); root.UpdateLayout();
+            var inactiveMarker = AppCardTree(list).OfType<Ellipse>().First(e => e.Name == "StateDot" && ReferenceEquals(e.DataContext, items[1]));
+            items[1].IsMuted = true; root.UpdateLayout();
+            Check(inactiveMarker.Visibility == Visibility.Visible && ((SolidColorBrush)inactiveMarker.Fill).Color == inverse
+                && ((SolidColorBrush)marker.Fill).Color == normal, mode + " inactive muted app has inverse dot without changing another app");
+            items[1].IsMuted = false; root.UpdateLayout();
+            Check(inactiveMarker.Visibility == Visibility.Collapsed && marker.Visibility == Visibility.Visible
+                && ((SolidColorBrush)marker.Fill).Color == normal, mode + " unmuting restores normal active dot or hides inactive dot");
+            CheckAppListMuteReadback(window, items, mode);
+            var renameButton = (Button)window.FindName("AppsRenameButton");
+            var title = (TextBlock)window.FindName("AppsDetailTitle");
             var rename = (TextBox)window.FindName("AppsRenameBox");
+            var titlePosition = title.TranslatePoint(new Point(), root);
+            renameButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); root.UpdateLayout();
+            var editPosition = rename.TranslatePoint(new Point(), root);
+            Check(window.FindName("AppsRenameToggle") == null && title.Visibility == Visibility.Collapsed
+                && rename.Visibility == Visibility.Visible && rename.Text == "Steam" && rename.SelectionLength == rename.Text.Length
+                && Math.Abs(titlePosition.X - editPosition.X) <= 1 && Math.Abs(titlePosition.Y - editPosition.Y) <= 2
+                && !config.AppNames.ContainsKey("Steam"), mode + " pencil opens the existing textbox at the title without saving an unchanged default");
             rename.Text = "自定义应用名称";
             Check(config.AppNames["Steam"] == "自定义应用名称"
-                && ((TextBlock)window.FindName("AppsDetailTitle")).Text == "自定义应用名称"
+                && title.Text == "自定义应用名称"
                 && items[0].Label == "自定义应用名称" && rename.ActualHeight > 0,
                 mode + " original rename handler updates title and existing list item without rebuilding textbox");
-            rename.Text = ""; renameToggle.IsChecked = false;
-            AppCardCall(window, "FlushNameChanges", false);
-            Check(!config.AppNames.ContainsKey("Steam") && items[0].Label == "Steam", mode + " blank display name restores the original name through existing save path");
+            root.UpdateLayout();
+            RenderAppCards(root, Path.Combine(output, "app-cards-" + mode + "-editing.png"));
+            root = LayoutAppCards(window, 780, 620); RenderAppCards(root, Path.Combine(output, "app-cards-" + mode + "-editing-narrow.png"));
+            rename.Text = "";
+            root.UpdateLayout();
+            Check(rename.ActualWidth >= 60 && rename.Visibility == Visibility.Visible,
+                mode + " clearing the name keeps a usable inline textbox until editing finishes");
+            rename.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, 0, rename, renameButton) { RoutedEvent = Keyboard.LostKeyboardFocusEvent });
+            root.UpdateLayout();
+            Check(!config.AppNames.ContainsKey("Steam") && items[0].Label == "Steam" && title.Visibility == Visibility.Visible
+                && rename.Visibility == Visibility.Collapsed && !Field<bool>(window, "_nameSavePending"),
+                mode + " blur closes inline editing and blank name restores the default through the existing save path");
+            renameButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            list.SelectedItem = items[1]; root.UpdateLayout();
+            Check(rename.Visibility == Visibility.Collapsed && title.Text == items[1].Label && !config.AppNames.ContainsKey(items[1].ProcessName),
+                mode + " changing application closes the old editor without copying its name to the new target");
+            list.SelectedItem = items[0]; Finish((Task)AppCardCall(window, "RefreshAppsSelectionAsync")!);
+            AppCardCall(window, "SetAppsVolumeUi", 42);
             AppCardCall(window, "ApplyExpMicUi", false); root.UpdateLayout();
-            Check(((Border)window.FindName("AppsInputCard")).Visibility == Visibility.Collapsed
-                && Grid.GetColumnSpan((Border)window.FindName("AppsOutputCard")) == 2, mode + " microphone off collapses whole card and output fills the row");
+            var routing = (Grid)window.FindName("AppsRoutingPanel");
+            var outputSection = (FrameworkElement)window.FindName("AppsOutputCard");
+            var inputSection = (FrameworkElement)window.FindName("AppsInputCard");
+            Check(inputSection.Visibility == Visibility.Collapsed && Grid.GetColumnSpan(outputSection) == 2
+                && Math.Abs(((ComboBox)window.FindName("AppsOutputCombo")).ActualWidth - routing.ActualWidth) <= 1,
+                mode + " microphone off collapses input and output selector fills the shared card");
             AppCardCall(window, "ApplyExpMicUi", true); root.UpdateLayout();
-            Check(((Border)window.FindName("AppsInputCard")).Visibility == Visibility.Visible
-                && Grid.GetColumnSpan((Border)window.FindName("AppsOutputCard")) == 1, mode + " microphone on restores both existing selectors");
+            Check(inputSection.Visibility == Visibility.Visible && Grid.GetColumnSpan(outputSection) == 1,
+                mode + " microphone on restores both existing selectors");
+            var routeTitle = routing.Children.OfType<TextBlock>().Single();
+            var routeTitleBounds = routeTitle.TransformToAncestor(routing).TransformBounds(new Rect(routeTitle.RenderSize));
+            Check(routing.Parent is Border sharedCard && sharedCard.Style == window.FindResource("AppsSectionCard")
+                && VisualTreeHelper.GetParent(outputSection) == routing && VisualTreeHelper.GetParent(inputSection) == routing
+                && !routing.Children.OfType<Border>().Any() && Grid.GetColumnSpan(routeTitle) == 2
+                && routeTitleBounds.Left >= 0 && routeTitleBounds.Right <= routing.ActualWidth + 0.5
+                && routeTitleBounds.Bottom <= outputSection.TranslatePoint(new Point(), routing).Y,
+                mode + " routing title, output and input share one continuous card surface without separate inner card borders");
             foreach (string locale in new[] { "zh-CN", "en-US", "zh-TW", "ja-JP", "ko-KR", "de-DE", "fr-FR", "es-ES", "ru-RU" })
             {
                 SetLanguage(locale);
                 foreach (int width in new[] { 780, 920, 1280 })
                 {
                     root = LayoutAppCards(window, width, width == 1280 ? 860 : 620);
-                    Check(new[] { "AppsMuteButton", "AppsDisableAutoButton", "AppsShowInPanelButton" }.All(name => {
+                    var import = (Button)window.FindName("IconImportButton");
+                    var actions = (WrapPanel)import.Parent;
+                    var header = (Grid)actions.Parent;
+                    var titleBounds = title.TransformToAncestor(header).TransformBounds(new Rect(title.RenderSize));
+                    var pencilBounds = renameButton.TransformToAncestor(header).TransformBounds(new Rect(renameButton.RenderSize));
+                    var actionBounds = actions.TransformToAncestor(header).TransformBounds(new Rect(actions.RenderSize));
+                    bool headerFits = title.ActualWidth >= 35 && pencilBounds.Left >= titleBounds.Right - 0.5
+                        && actionBounds.Left >= pencilBounds.Right - 0.5
+                        && Math.Abs(actionBounds.Top) <= 0.5 && actionBounds.Right <= header.ActualWidth + 0.5
+                        && new[] { "AppsRenameButton", "IconImportButton", "IconResetButton" }.All(name => {
+                            var control = (FrameworkElement)window.FindName(name);
+                            var bounds = control.TransformToAncestor(header).TransformBounds(new Rect(control.RenderSize));
+                            return control.ActualWidth > 0 && bounds.Right <= header.ActualWidth + 0.5;
+                        });
+                    Check(headerFits && new[] { "AppsMuteButton", "AppsDisableAutoButton", "AppsShowInPanelButton" }.All(name => {
                         var control = (CheckBox)window.FindName(name);
                         var border = AppCardTree((Grid)window.FindName("AppsControls")).OfType<Border>().First(b => b.Child is Grid grid && AppCardTree(grid).Contains(control));
                         var bounds = control.TransformToAncestor(border).TransformBounds(new Rect(control.RenderSize));
                         return control.ActualWidth == 34 && bounds.Left >= 0 && bounds.Right <= border.ActualWidth + 0.5
                             && Math.Abs(bounds.Top + bounds.Height / 2 - border.ActualHeight / 2) <= 0.5
                             && Math.Abs(bounds.Right - (border.ActualWidth - 13)) <= 0.5;
-                    }), mode + " " + locale + " width=" + width + " all switches align at the right and vertical center without clipping");
+                    }), mode + " " + locale + " width=" + width + " pencil stays beside title and icon actions stay at top right; switches align without clipping");
                 }
             }
             SetLanguage("zh-CN");
@@ -144,6 +270,7 @@ internal static partial class Program
             SetLanguage("de-DE"); root = LayoutAppCards(window, 920, 620); RenderAppCards(root, Path.Combine(output, "app-cards-" + mode + "-de.png"));
             list.SelectedItem = null;
             Check(!((Grid)window.FindName("AppsControls")).IsEnabled && !((Grid)window.FindName("AppsRoutingPanel")).IsEnabled
+                && !renameButton.IsEnabled && rename.Visibility == Visibility.Collapsed
                 && mute.IsChecked == false && shown.IsChecked == false && ((TextBlock)window.FindName("AppsVolumeText")).Text == "—"
                 && ((ComboBox)window.FindName("AppsOutputCombo")).SelectedItem == null && ((ComboBox)window.FindName("AppsInputCombo")).SelectedItem == null,
                 mode + " empty selection disables controls and clears old switch/volume state");

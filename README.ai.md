@@ -7,9 +7,9 @@
 SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
-  version: "v1.27 (1.27.0.0)"
+  version: "v1.28 (1.28.0.0)"
   source_version: "v1.28"
-  source_status: "Development version; not the current published release."
+  source_status: "Same version number as the published release; source may contain later commits."
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
@@ -27,11 +27,11 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   cross_platform: "FALSE (strictly Win32/WPF/.NET CoreAudio; never macOS/Linux)"
 
 RELEASE_EDITIONS:
-  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.27-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.27-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
-  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.27-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.27-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
-  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.27-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
+  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.28-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
+  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.28-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
+  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.28-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
+  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.28-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
+  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.28-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
   - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_LITE_EXE, updates: MICROSOFT_STORE }
 
 CLI_AND_SHORT_COMMAND_SPEC:
@@ -191,12 +191,13 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Optional execution history: ExecutionHistory/{CommandEdition}, only when experimental mode and execution history are enabled. SONICROUTE_DATA_DIRECTORY can override the root with an absolute path for isolated tooling."
 
   VERSION_ARCHIVE_AND_CHANGELOG:
-    intent: "Release history, changelog, v1.27 upgrade notes"
-    keywords: ["changelog", "history", "version", "update", "v1.27", "v1.25", "v1.24", "更新日志", "版本历史"]
+    intent: "Release history, changelog, v1.28 upgrade notes"
+    keywords: ["changelog", "history", "version", "update", "v1.28", "v1.25", "v1.24", "更新日志", "版本历史"]
     wiki: "09-版本历史.md"
-    source: ["docs/release-v1.27.md"]
-    symbols: ["v1.27"]
+    source: ["docs/release-v1.28.md"]
+    symbols: ["v1.28"]
     facts:
+      - "v1.28: Inline application renaming, shared routing card, independent mute/activity and hidden-panel markers; Alt wheel changes app output, Alt+Shift wheel changes system output. Existing device hotkeys remain."
       - "v1.27: One quick panel, session notification lifecycle, reliable mute hotkey targets, custom device titles, shared scrollbars and reusable settings rows. v1.26: Protected-app icon fallback and runtime-specific persistence."
       - "v1.25: .NET 10 default, native updater, 37 actions, drag icon, 850px panel."
       - "v1.24: Automation starter templates, optional recent execution details and per-app custom icons; later protected-app icon fixes are documented in v1.26."
