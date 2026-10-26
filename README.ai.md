@@ -100,6 +100,7 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "QuickPanel height setting: 350 to 850 WPF device-independent units, additionally constrained by available work area."
       - "v1.28 defaults: TrayWheelEverywhere=false (own tray icon only); PanelChangeSystemDefault=true. Saved explicit preferences are retained. Normal tray wheel adjusts current-app volume."
       - "v1.28 adds Alt+wheel for current-app output and Alt+Shift+wheel for system default playback; up selects previous, down selects next. Existing registered wheel shortcuts take priority."
+      - "Development source v1.29 adds Shift+wheel to adjust system default playback volume in the same configured tray area. It shares the system-volume hotkey handler, configured step, endpoint readback and OSD; no new polling or setting. This addition is not in the stable v1.28 download."
       - "Quick panel device volume/mute changes do not show redundant OSD; hotkey and tray feedback remain."
       - "Drop one PNG/JPEG/ICO onto the Import icon button for the selected app in the full interface; it reuses the file-picker import path and stores managed PNGs in the Icons directory."
 

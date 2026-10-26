@@ -117,7 +117,7 @@
   "St.VolumeStep": "Lautstärke-Schritt",
   "St.VolumeStepHint": "Änderung pro Radbewegung oder Lautstärke-Kurzbefehl in Prozentpunkten (1–20)",
   "St.TrayWheelEverywhere": "Mausrad im Infobereich",
-  "St.TrayWheelEverywhereHint": "Ein: im gesamten Infobereich; aus: nur über dem Symbol. Mausrad regelt die Lautstärke; Alt wechselt das App-Gerät, Alt+Umschalt die Systemausgabe.",
+  "St.TrayWheelEverywhereHint": "Ein: ganzer Infobereich; aus: nur Symbol. Mausrad: App-Lautstärke; Umschalt: Systemlautstärke; Alt: App-Ausgabe wechseln; Alt+Umschalt: Systemausgabe wechseln.",
   "St.OpacityHint": "Je höher der Wert, desto deckender der Hintergrund; 100 % ist vollständig deckend. Empfohlen werden mindestens 50 %.",
   "St.AuthorHome": "Autoren-Home ‖ ",
   "St.Misc": "Sonstiges",

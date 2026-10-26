@@ -6,7 +6,10 @@ namespace SonicRoute
 {
     public sealed partial class App : System.Windows.Application
     {
-        public void ShowOsd(string title,string text) { }
+        internal string? LastOsdText;
+        public void ShowOsd(string title,string text) { LastOsdText=text; }
+        internal readonly List<(string Target,int Volume,bool Muted)> VolumeNotices=new();
+        internal void ShowVolumeOsd(string title,int volume,string text,bool muted=false,string? target=null) { VolumeNotices.Add((target??"",volume,muted)); }
         internal int MicNotices;
         public void ShowMicMuteOsd(string title,bool muted) { MicNotices++; }
         internal bool SetQuickPanelVisibility(bool visible)=>true;
@@ -64,6 +67,7 @@ namespace SonicRoute
         internal static readonly List<(string? Id,bool Muted)> Writes=new();
         internal static bool Succeeds=true;
         internal static bool ToggleApplied=true;
+        internal static bool VolumeReadable=true,VolumeMuted;
         internal static readonly Dictionary<string,bool> States=new();
         internal static readonly List<(string? Id,int Value,bool Relative)> Volumes=new();
         internal static (bool Muted,bool Applied) ToggleMuteChecked(string? id = null)
@@ -76,6 +80,8 @@ namespace SonicRoute
         internal static bool IsMuted()=>false;
         internal static bool SetVolumePercent(string? id,int value){Volumes.Add((id,value,false));return Succeeds;}
         internal static (int Current,int Requested,int Actual,bool Applied) AdjustVolumePercent(string? id,int delta){Volumes.Add((id,delta,true));return(50,50+delta,50+delta,Succeeds);}
+        internal static (int Current,int Requested,int Actual,bool Applied,bool Muted) AdjustVolumeWithState(string? id,int delta)
+        {Volumes.Add((id,delta,true));return(VolumeReadable?50:-1,50+delta,VolumeReadable?Math.Max(0,Math.Min(100,50+delta)):-1,Succeeds,VolumeMuted);}
     }
     internal static class SessionVolumeService
     {

@@ -32,6 +32,13 @@ restoring both references in one multi-target graph can omit the executable from
 the test runtime dependency manifest. Run each DLL with its matching installed
 runtime host, or `PanelRemovalChecks.exe` for Framework.
 
+`--tray-hit-only` checks the actual product tray identity and Shell rectangle path
+on the current Windows desktop. It briefly adds its own temporary notification
+icon, checks real hit boundaries, removal, 30-second fallback expiry and recovery,
+then disposes the icon and service. It does not install a hook, inject input or
+write audio state. This optional check requires a running Explorer notification
+area; it does not validate physical mouse input, taskbar relocation or mixed DPI.
+
 `--app-cards <absolute-image-directory>` limits execution to the application page.
 It checks the actual BAML in light/dark themes, nine languages at three widths,
 positive quick-panel visibility, independent top-left hidden and right-side

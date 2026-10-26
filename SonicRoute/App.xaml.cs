@@ -813,7 +813,7 @@ namespace SonicRoute
             }
         }
 
-        private async Task AdjustDefaultOutputVolumeAsync(bool increase)
+        internal async Task AdjustDefaultOutputVolumeAsync(bool increase)
         {
             string title = L10n.T("Dev.SystemDefaultOut");
             int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);

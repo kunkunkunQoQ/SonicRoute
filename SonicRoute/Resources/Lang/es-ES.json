@@ -117,7 +117,7 @@
   "St.VolumeStep": "Paso de volumen",
   "St.VolumeStepHint": "Puntos porcentuales por cada paso de rueda o atajo de volumen (1–20)",
   "St.TrayWheelEverywhere": "Rueda en el área de notificación",
-  "St.TrayWheelEverywhereHint": "Activado: en toda el área; desactivado: solo en el icono. La rueda ajusta el volumen; Alt cambia la salida de la app y Alt+Mayús la del sistema.",
+  "St.TrayWheelEverywhereHint": "Activado: toda el área; desactivado: solo el icono. Rueda: volumen de la app; Mayús: volumen del sistema; Alt: cambiar salida de la app; Alt+Mayús: salida del sistema.",
   "St.OpacityHint": "Cuanto mayor sea el valor, más opaco será el fondo; 100 % es totalmente opaco. Se recomienda un mínimo del 50 %.",
   "St.AuthorHome": "Inicio del autor ‖ ",
   "St.Misc": "Miscelánea",

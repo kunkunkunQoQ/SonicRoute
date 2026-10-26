@@ -117,7 +117,7 @@
   "St.VolumeStep": "Volume step",
   "St.VolumeStepHint": "Percentage points changed per wheel step or volume hotkey (1–20)",
   "St.TrayWheelEverywhere": "Tray area scroll",
-  "St.TrayWheelEverywhereHint": "On: anywhere in tray; off: icon only. Scroll adjusts volume; Alt switches app device; Alt+Shift switches system output.",
+  "St.TrayWheelEverywhereHint": "On: whole tray; off: icon only. Scroll: app volume; Shift: system volume; Alt: switch app output; Alt+Shift: switch system output.",
   "St.OpacityHint": "Higher values are more opaque; 100% is fully opaque. At least 50% is recommended.",
   "St.AuthorHome": "Author Home ‖ ",
   "St.Misc": "Miscellaneous",

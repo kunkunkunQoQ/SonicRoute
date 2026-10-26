@@ -147,6 +147,12 @@ internal static partial class Program
             // No App.Run/Startup or Window.Show: do not register hotkeys, run automation,
             // start audio discovery, or write actual endpoint state in this BAML/lifetime check.
             app = new ProbeApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            if (args.Contains("--tray-hit-only"))
+            {
+                CheckNativeTrayHit();
+                Console.WriteLine($"RESULT passed={_checks} runtime={Environment.Version} ACTUAL_TRAY_ICON=true INPUT_INJECTED=false AUDIO_WRITES=NONE");
+                return 0;
+            }
             app.Resources = ProductResources();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
             var assembly = typeof(App).Assembly;

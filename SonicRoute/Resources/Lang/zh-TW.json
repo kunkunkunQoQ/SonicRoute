@@ -118,7 +118,7 @@
   "St.VolumeStep": "音量步進",
   "St.VolumeStepHint": "每次滾輪或音量快速鍵增減的百分點（1–20）",
   "St.TrayWheelEverywhere": "托盤區域滾輪",
-  "St.TrayWheelEverywhereHint": "開：整個托盤；關：僅圖示。滾輪調音量；Alt 切應用程式裝置；Alt＋Shift 切系統輸出。",
+  "St.TrayWheelEverywhereHint": "開：整個托盤；關：僅圖示。滾輪調應用程式音量；Shift 調系統音量；Alt 切應用程式裝置；Alt＋Shift 切系統輸出。",
   "St.OpacityHint": "數值越大越不透明；100% 完全不透明，建議至少 50%。",
   "St.AuthorHome": "作者主頁 ‖ ",
   "St.Misc": "雜項",

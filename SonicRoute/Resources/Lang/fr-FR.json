@@ -117,7 +117,7 @@
   "St.VolumeStep": "Pas de volume",
   "St.VolumeStepHint": "Points de pourcentage modifiés par cran de molette ou raccourci de volume (1–20)",
   "St.TrayWheelEverywhere": "Molette dans la zone de notification",
-  "St.TrayWheelEverywhereHint": "Activé : toute la zone ; désactivé : icône seule. La molette règle le volume ; Alt change la sortie de l’application, Alt+Maj la sortie système.",
+  "St.TrayWheelEverywhereHint": "Activé : toute la zone ; désactivé : icône seule. Molette : volume de l’application ; Maj : volume système ; Alt : changer la sortie de l’application ; Alt+Maj : sortie système.",
   "St.OpacityHint": "Plus la valeur est élevée, plus l’arrière-plan est opaque ; 100 % signifie une opacité totale. 50 % minimum est recommandé.",
   "St.AuthorHome": "Accueil auteur ‖ ",
   "St.Misc": "Divers",

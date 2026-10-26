@@ -118,7 +118,7 @@
   "St.VolumeStep": "音量步进",
   "St.VolumeStepHint": "单次滚轮或音量快捷键增减的百分点（1–20）",
   "St.TrayWheelEverywhere": "托盘区域滚轮",
-  "St.TrayWheelEverywhereHint": "开：整个托盘；关：仅图标。滚轮调音量；Alt 切应用设备；Alt＋Shift 切系统输出。",
+  "St.TrayWheelEverywhereHint": "开：整个托盘；关：仅图标。滚轮调应用音量；Shift 调系统音量；Alt 切应用设备；Alt＋Shift 切系统输出。",
   "St.OpacityHint": "数值越大越不透明；100% 完全不透明，建议至少 50%。",
   "St.AuthorHome": "作者主页 ‖ ",
   "St.Misc": "杂项",

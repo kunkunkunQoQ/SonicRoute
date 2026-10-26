@@ -117,7 +117,7 @@
   "St.VolumeStep": "音量ステップ",
   "St.VolumeStepHint": "ホイール1段階または音量ショートカットで増減するパーセントポイント（1～20）",
   "St.TrayWheelEverywhere": "トレイ領域でのスクロール",
-  "St.TrayWheelEverywhereHint": "オン：トレイ全体；オフ：アイコンのみ。ホイールで音量調整；Altでアプリのデバイス、Alt＋Shiftでシステム出力を切替。",
+  "St.TrayWheelEverywhereHint": "オン：トレイ全体；オフ：アイコンのみ。ホイール：アプリ音量；Shift：システム音量；Alt：アプリ出力切替；Alt＋Shift：システム出力切替。",
   "St.OpacityHint": "数値が大きいほど不透明になります。100%で完全に不透明です。50%以上を推奨します。",
   "St.AuthorHome": "作者ホーム ‖ ",
   "St.Misc": "その他",

@@ -117,7 +117,7 @@
   "St.VolumeStep": "볼륨 단계",
   "St.VolumeStepHint": "휠 한 단계 또는 볼륨 단축키 한 번으로 증감할 퍼센트포인트(1–20)",
   "St.TrayWheelEverywhere": "트레이 영역 스크롤",
-  "St.TrayWheelEverywhereHint": "켜기: 트레이 전체; 끄기: 아이콘만. 휠로 볼륨 조절; Alt는 앱 장치, Alt+Shift는 시스템 출력 장치를 전환.",
+  "St.TrayWheelEverywhereHint": "켜기: 트레이 전체; 끄기: 아이콘만. 휠: 앱 볼륨; Shift: 시스템 볼륨; Alt: 앱 출력 전환; Alt+Shift: 시스템 출력 전환.",
   "St.OpacityHint": "값이 클수록 불투명합니다. 100%는 완전히 불투명하며 50% 이상을 권장합니다.",
   "St.AuthorHome": "작성자 홈 ‖ ",
   "St.Misc": "기타",
