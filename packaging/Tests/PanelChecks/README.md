@@ -31,3 +31,12 @@ for restore as well as compilation. Lite and Legacy share the product package ID
 restoring both references in one multi-target graph can omit the executable from
 the test runtime dependency manifest. Run each DLL with its matching installed
 runtime host, or `PanelRemovalChecks.exe` for Framework.
+
+`--app-cards <absolute-image-directory>` limits execution to the application page.
+It checks the actual BAML in light/dark themes, nine languages at three widths,
+positive quick-panel visibility and inverse-color exclusion markers, microphone
+card collapse, existing rename/save behavior, readback without Click feedback,
+empty selection and close cleanup. It uses missing-PID fixtures and an isolated
+configuration directory; it does not show windows or write real audio state.
+The saved offscreen PNGs include 96/144 raster DPI variants, not physical monitor
+DPI, DWM presentation, hardware input or whole-app performance measurements.

@@ -31,6 +31,7 @@ namespace SonicRoute
         }
 
         private bool _isAutoSwitchDisabled;
+        private bool _isHiddenInPanel;
         private System.Windows.Media.Brush _dotBrush = System.Windows.Media.Brushes.Transparent;
 
         /// <summary>该应用是否禁用了自动切换为当前应用（影响自动检测，不影响手动选择）。</summary>
@@ -44,6 +45,18 @@ namespace SonicRoute
                     _isAutoSwitchDisabled = value;
                     PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsAutoSwitchDisabled)));
                 }
+            }
+        }
+
+        /// <summary>应用页的快速面板隐藏标记；复用现有列表刷新，不增加配置监听。</summary>
+        public bool IsHiddenInPanel
+        {
+            get => _isHiddenInPanel;
+            private set
+            {
+                if (_isHiddenInPanel == value) return;
+                _isHiddenInPanel = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsHiddenInPanel)));
             }
         }
 
@@ -64,8 +77,11 @@ namespace SonicRoute
         /// <summary>按当前配置与主题刷新"禁用自动切换"状态（应用列表刷新 / 切换主题强调色时调用）。</summary>
         public void RefreshAutoSwitchState()
         {
+            var config = ConfigService.Load();
             bool disabled = !string.IsNullOrWhiteSpace(ProcessName) &&
-                            ConfigService.Load().DisabledAutoSwitchApps.Contains(ProcessName);
+                            config.DisabledAutoSwitchApps.Contains(ProcessName);
+            IsHiddenInPanel = !string.IsNullOrWhiteSpace(ProcessName)
+                && config.HiddenPanelApps?.Any(name => string.Equals(name, ProcessName, StringComparison.OrdinalIgnoreCase)) == true;
             IsAutoSwitchDisabled = disabled;
             DotBrush = disabled ? ThemeService.GetInvertedAccentBrush() : System.Windows.Media.Brushes.Transparent;
         }

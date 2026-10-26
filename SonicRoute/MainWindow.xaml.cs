@@ -955,6 +955,10 @@ namespace SonicRoute
             ++_appsStateRequest;
             _appsSelected = (AppsListBox.SelectedItem as AppItem)?.Info;
             AppsIconPreview.Content = AppsListBox.SelectedItem;
+            AppsRoutingPanel.IsEnabled = AppsControls.IsEnabled = _appsSelected != null;
+            bool hasName = !string.IsNullOrWhiteSpace(_appsSelected?.ProcessName);
+            AppsRenameToggle.IsEnabled = AppsDisableAutoButton.IsEnabled = AppsShowInPanelButton.IsEnabled = hasName;
+            SetAppsVolumeUi(null);
             UpdateIconSettingsState();
             if (_appsSelected == null)
             {
@@ -964,7 +968,13 @@ namespace SonicRoute
                 AppsRenameBox.Text = "";
                 _suppressRename = false;
                 AppsRenameBox.IsEnabled = false;
-                SetAppsVolumeUi(null);
+                bool suppressed = _suppressDevCombo;
+                _suppressDevCombo = true;
+                AppsOutputCombo.SelectedItem = AppsInputCombo.SelectedItem = null;
+                _suppressDevCombo = suppressed;
+                ApplyAppsMuteVisual(false);
+                ApplyAppsDisableAutoVisual(false);
+                ApplyAppsShowInPanelVisual(true);
                 return;
             }
 
@@ -1001,26 +1011,20 @@ namespace SonicRoute
             await Task.CompletedTask;
         }
 
-        /// <summary>应用页三按钮：启用/禁用状态文字变强调色，不切换文案。</summary>
+        /// <summary>只读回开关状态；程序设置 IsChecked 不触发 Click 或音频写入。</summary>
         private void ApplyAppsMuteVisual(bool muted)
         {
-            AppsMuteButton.Content = L10n.T("Apps.Mute");
-            if (muted) AppsMuteButton.Foreground = (Brush)FindResource("Theme.Accent");
-            else AppsMuteButton.ClearValue(Button.ForegroundProperty);
+            AppsMuteButton.IsChecked = muted;
         }
 
         private void ApplyAppsDisableAutoVisual(bool disabled)
         {
-            AppsDisableAutoButton.Content = L10n.T("Apps.DisableAuto");
-            if (disabled) AppsDisableAutoButton.Foreground = (Brush)FindResource("Theme.Accent");
-            else AppsDisableAutoButton.ClearValue(Button.ForegroundProperty);
+            AppsDisableAutoButton.IsChecked = disabled;
         }
 
         private void ApplyAppsShowInPanelVisual(bool hidden)
         {
-            AppsShowInPanelButton.Content = L10n.T("Apps.ShowInPanel");
-            if (hidden) AppsShowInPanelButton.Foreground = (Brush)FindResource("Theme.Accent");
-            else AppsShowInPanelButton.ClearValue(Button.ForegroundProperty);
+            AppsShowInPanelButton.IsChecked = !hidden;
         }
 
         /// <summary>按当前选中应用是否禁用自动切换刷新按钮文字。</summary>
@@ -1044,6 +1048,9 @@ namespace SonicRoute
             if (isHidden) hidden.RemoveAll(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase));
             else hidden.Add(name);
             ConfigService.Save(cfg);
+            foreach (var item in _appItems)
+                if (string.Equals(item.ProcessName, name, StringComparison.OrdinalIgnoreCase))
+                    item.RefreshAutoSwitchState();
             UpdateAppsShowInPanelButton();
             await Task.CompletedTask;
         }
@@ -1086,6 +1093,7 @@ namespace SonicRoute
 
             bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, pct));
             int actual = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
+            if (_isClosed || _appsSelected?.ProcessId != (uint)pid) return;
             if (actual >= 0)
             {
                 _suppressVolume = true;
@@ -1093,9 +1101,7 @@ namespace SonicRoute
                 AppsVolumeText.Text = $"{actual}%";
                 _suppressVolume = false;
             }
-            AppsStatusText.Text = ok && actual >= 0
-                ? string.Format(L10n.T("Ov.VolOk"), actual)
-                : L10n.T("Ov.VolFail");
+            if (!ok || actual < 0) ShowToast(L10n.T("Ov.VolFail"));
         }
 
         private void AppsMinus_Click(object sender, RoutedEventArgs e)
@@ -1135,14 +1141,14 @@ namespace SonicRoute
 
             var pid = (int)app.ProcessId;
             var (ok, msg) = await Apply(pid, EDataFlow.eRender, dev.Id);
+            if (_isClosed || _appsSelected?.ProcessId != app.ProcessId) return;
             if (ok)
             {
-                AppsStatusText.Text = string.Format(L10n.T("Ov.SwitchOk"), "🔊 " + dev.DisplayName, AppDisplayName.Get(app));
                 await RefreshAppsSelectionAsync();
             }
             else
             {
-                AppsStatusText.Text = $"✗ {msg}";
+                ShowToast($"✗ {msg}");
             }
         }
 
@@ -1162,14 +1168,14 @@ namespace SonicRoute
 
             var pid = (int)app.ProcessId;
             var (ok, msg) = await Apply(pid, EDataFlow.eCapture, dev.Id);
+            if (_isClosed || _appsSelected?.ProcessId != app.ProcessId) return;
             if (ok)
             {
-                AppsStatusText.Text = string.Format(L10n.T("Ov.SwitchOk"), "🎤 " + dev.DisplayName, AppDisplayName.Get(app));
                 await RefreshAppsSelectionAsync();
             }
             else
             {
-                AppsStatusText.Text = $"✗ {msg}";
+                ShowToast($"✗ {msg}");
             }
         }
 
@@ -1981,6 +1987,9 @@ namespace SonicRoute
         private void ApplyExpMicUi(bool expMic)
         {
             OverviewInputCard.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            AppsInputCard.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
+            Grid.SetColumnSpan(AppsOutputCard, expMic ? 1 : 2);
+            AppsOutputCard.Margin = expMic ? new Thickness(0, 0, 6, 0) : new Thickness(0);
             AppsInputLabel.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
             AppsInputCombo.Visibility = expMic ? Visibility.Visible : Visibility.Collapsed;
             if (SettingsPage != null)
