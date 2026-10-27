@@ -9,7 +9,6 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Net.Http;
 using System.Text.Json;
@@ -344,7 +343,6 @@ namespace SonicRoute
                 RootBorder.CornerRadius = new CornerRadius(0);
                 WindowShadow.CornerRadius = new CornerRadius(0);
                 RootBorder.Margin = new Thickness(0);
-                WindowShadow.Effect = null;
             }
             else
             {
@@ -357,13 +355,6 @@ namespace SonicRoute
                 RootBorder.CornerRadius = new CornerRadius(10);
                 WindowShadow.CornerRadius = new CornerRadius(10);
                 RootBorder.Margin = new Thickness(0);
-                WindowShadow.Effect = new DropShadowEffect
-                {
-                    BlurRadius = 18,
-                    ShadowDepth = 2,
-                    Opacity = 0.25,
-                    Color = Colors.Black
-                };
             }
         }
 
