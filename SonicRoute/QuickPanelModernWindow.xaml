@@ -175,13 +175,10 @@
         <Grid.RenderTransform>
             <TranslateTransform x:Name="PanelSlide"/>
         </Grid.RenderTransform>
-        <!-- 单独的背景阴影，实时电平/按钮刷新不进入效果输入。 -->
+        <!-- 主面板背景。 -->
         <Border Background="{DynamicResource Theme.WindowBgAlpha}"
                 BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1" CornerRadius="12"
                 IsHitTestVisible="False">
-            <Border.Effect>
-                <DropShadowEffect BlurRadius="20" ShadowDepth="2" Opacity="0.28" Color="#000000"/>
-            </Border.Effect>
         </Border>
     <Border x:Name="RootBorder" BorderThickness="1" CornerRadius="12">
 
