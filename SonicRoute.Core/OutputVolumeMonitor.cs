@@ -32,9 +32,10 @@ namespace SonicRoute.Core
         private readonly DeviceCallback _deviceCallback;
         private IMMDeviceEnumerator? _enumerator;
         private bool _deviceRegistered;
-        private int _disposed, _needsRecovery;
+        private int _disposed, _needsRecovery, _needsTopologyRecovery = 1;
         public event Action<bool>? Invalidated;
         public bool NeedsRecovery => Volatile.Read(ref _needsRecovery) != 0;
+        public bool NeedsTopologyRecovery => Volatile.Read(ref _needsTopologyRecovery) != 0;
         public Task Completion { get; private set; } = Task.CompletedTask;
 
         public OutputVolumeMonitor()
@@ -44,21 +45,23 @@ namespace SonicRoute.Core
 
         // Incremental reads return only new/changed endpoints. Explicit refreshes
         // still read every target, including when notification recovery is needed.
-        public Task<Dictionary<string, (int Volume, bool Muted)>> ReadAsync(IEnumerable<string> deviceIds, bool refreshAll = true)
+        public Task<Dictionary<string, (int Volume, bool Muted)>> ReadAsync(IEnumerable<string> deviceIds, bool refreshAll = true,
+            IEnumerable<string>? refreshDeviceIds = null)
         {
             var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string id in deviceIds)
                 if (!string.IsNullOrWhiteSpace(id) && !AudioService.IsSystemDefault(id)) targets.Add(id);
-            return Task.Run(() => ReadCore(targets, refreshAll));
+            var requested = refreshDeviceIds == null ? null : new HashSet<string>(refreshDeviceIds, StringComparer.OrdinalIgnoreCase);
+            return Task.Run(() => ReadCore(targets, refreshAll, requested));
         }
 
-        private Dictionary<string, (int Volume, bool Muted)> ReadCore(HashSet<string> targets, bool refreshAll)
+        private Dictionary<string, (int Volume, bool Muted)> ReadCore(HashSet<string> targets, bool refreshAll, HashSet<string>? requested)
         {
             var result = new Dictionary<string, (int Volume, bool Muted)>(StringComparer.OrdinalIgnoreCase);
             lock (_gate)
             {
                 if (Volatile.Read(ref _disposed) != 0) return result;
-                bool recovery = false;
+                bool recovery = false, topologyRecovery = false;
                 try
                 {
                     _enumerator ??= (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
@@ -78,7 +81,11 @@ namespace SonicRoute.Core
                             bool added = false;
                             if (!_volumes.TryGetValue(id, out var observed))
                             {
-                                int hr = _enumerator.GetDevice(id, out var device);
+                                IMMDevice device;
+                                int hr;
+                                try { hr = _enumerator.GetDevice(id, out device); }
+                                catch { topologyRecovery = true; throw; }
+                                if (hr < 0) topologyRecovery = true;
                                 try { Marshal.ThrowExceptionForHR(hr); observed = new ObservedVolume(device, () => Signal(false)); _volumes.Add(id, observed); added = true; }
                                 finally { if (device != null) Marshal.ReleaseComObject(device); }
                             }
@@ -87,7 +94,7 @@ namespace SonicRoute.Core
                             if (retry && !added) subscription.TryRegister();
                             recovery |= !subscription.Registered;
                             int dirty = Interlocked.Exchange(ref observed.Dirty, 0);
-                            if (!refreshAll && !retry && dirty == 0) continue;
+                            if (!refreshAll && !retry && dirty == 0 && requested?.Contains(id) != true) continue;
                             Marshal.ThrowExceptionForHR(subscription.Volume.GetMasterVolumeLevelScalar(out float volume));
                             Marshal.ThrowExceptionForHR(subscription.Volume.GetMute(out int muted));
                             if (float.IsNaN(volume) || float.IsInfinity(volume)) throw new COMException("Invalid endpoint volume.");
@@ -108,6 +115,7 @@ namespace SonicRoute.Core
                     Release();
                     foreach (string id in targets) result[id] = (-1, false);
                 }
+                Interlocked.Exchange(ref _needsTopologyRecovery, topologyRecovery || !_deviceRegistered ? 1 : 0);
                 Interlocked.Exchange(ref _needsRecovery, recovery ? 1 : 0);
             }
             return result;

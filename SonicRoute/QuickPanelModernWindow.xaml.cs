@@ -153,7 +153,7 @@ namespace SonicRoute
         {
             if (e.PropertyName != nameof(SystemParameters.WorkArea)) return;
             if (IsVisible && !_adjustMode) RequestPosition();
-            if (OutputVolumesPopup.IsOpen) PositionOutputPopup();
+            if (OutputVolumesPopup.IsOpen) InvalidateOutputPopupScreen();
         }
 
         /// <summary>合并定位请求：同帧多次触发只定位一次，避免窗口反复移动/跳动。</summary>
@@ -513,6 +513,11 @@ namespace SonicRoute
         internal void ApplySystemVolumeReadback(string? deviceId, int actual, bool muted)
         {
             SyncExpandedOutputReadback(deviceId, actual, muted);
+            ApplySystemVolumeControls(deviceId, actual, muted);
+        }
+
+        private void ApplySystemVolumeControls(string? deviceId, int actual, bool muted)
+        {
             if (_isClosed || !string.Equals(deviceId, _systemDeviceId, StringComparison.OrdinalIgnoreCase)) return;
             ++_systemVolumeRequest; // 旧初始化/选择读取不能盖过这次实际调整。
             ApplySystemVolumeReadback(actual);

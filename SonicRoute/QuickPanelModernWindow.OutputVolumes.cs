@@ -37,7 +37,8 @@ namespace SonicRoute
             internal Button Mute = null!;
             internal Slider Slider = null!;
             internal FrameworkElement Root = null!;
-            internal bool Updating, Pending, MuteBusy, Muted;
+            internal bool Updating, Pending, MuteBusy, Muted, NeedsReadback;
+            internal int DisplayVolume = -1, MuteVersion;
         }
 
         private sealed class OutputVolumeLoad
@@ -45,6 +46,10 @@ namespace SonicRoute
             internal readonly WindowUiLifetime Lifetime = new();
             internal int TopologyDirty = 1, NotificationQueued;
             internal bool ReadAll;
+            internal readonly HashSet<string> ReadDevices = new(StringComparer.OrdinalIgnoreCase);
+            internal bool PositionDirty = true, PositionQueued, ForcePosition = true;
+            internal Rect? CalculatedRect, AppliedRect;
+            internal Point AppliedOwner;
         }
 
         private readonly Dictionary<string, OutputVolumeRow> _outputVolumeRows = new(StringComparer.OrdinalIgnoreCase);
@@ -68,7 +73,7 @@ namespace SonicRoute
             OutputVolumesPopup.PlacementTarget = this;
             OutputVolumesPopup.CustomPopupPlacementCallback = (_, targetSize, _) =>
             {
-                var rect = CalculateOutputPopupRect();
+                var rect = GetOutputPopupRect();
                 // WPF supplies custom-placement target bounds in screen units.
                 // Derive the transform from those bounds for all runtime DPI modes.
                 double sx = targetSize.Width / Math.Max(1, ActualWidth);
@@ -112,6 +117,7 @@ namespace SonicRoute
             {
                 CreateOutputPopupContent();
                 LocationChanged += OutputOwnerLocationChanged;
+                DpiChanged += OutputOwnerDpiChanged;
                 ++_outputPopupVersion;
                 var load = _outputLoad = new OutputVolumeLoad();
                 var monitor = _outputVolumeMonitor = new OutputVolumeMonitor();
@@ -161,23 +167,67 @@ namespace SonicRoute
             // Settings edits reuse the visible panel's existing device snapshot.
             // No enumeration or deferred feature creation when the extra panel is closed.
             var config = ConfigService.Load();
+            int oldCount = _outputVolumeRows.Count;
             BuildOutputVolumeRows(OutputVolumeDevices(_outputDisplay, config), _outputDisplay.FirstOrDefault(d => d.IsDefault)?.Id);
-            PositionOutputPopup();
+            if (oldCount != _outputVolumeRows.Count) PositionOutputPopup();
             _ = RefreshOutputVolumesAsync();
+        }
+
+        private Rect GetOutputPopupRect()
+        {
+            var load = _outputLoad;
+            if (load == null) return CalculateOutputPopupRect();
+            if (load.PositionDirty || !load.CalculatedRect.HasValue)
+            {
+                load.CalculatedRect = CalculateOutputPopupRect();
+                load.PositionDirty = false;
+            }
+            return load.CalculatedRect.Value;
         }
 
         private void PositionOutputPopup()
         {
-            if (_isClosed || !IsVisible) return;
-            var rect = CalculateOutputPopupRect();
-            if (_outputPopupSurface == null) return;
-            _outputPopupSurface.Width = rect.Width;
-            _outputPopupSurface.Height = rect.Height;
+            if (_isClosed || !IsVisible || _outputPopupSurface == null) return;
+            var load = _outputLoad;
+            if (load == null) { ApplyOutputPopupPosition(); return; }
+            load.PositionDirty = true;
+            if (!OutputVolumesPopup.IsOpen) { ApplyOutputPopupPosition(); return; }
+            if (load.PositionQueued) return;
+            load.PositionQueued = true;
+            load.Lifetime.Post(Dispatcher, () =>
+            {
+                load.PositionQueued = false;
+                if (ReferenceEquals(load, _outputLoad) && OutputVolumesPopup.IsOpen) ApplyOutputPopupPosition();
+            }, DispatcherPriority.Render);
+        }
+
+        private void ApplyOutputPopupPosition()
+        {
+            if (_isClosed || !IsVisible || _outputPopupSurface == null) return;
+            var rect = GetOutputPopupRect();
+            if (_outputPopupSurface.Width != rect.Width) _outputPopupSurface.Width = rect.Width;
+            if (_outputPopupSurface.Height != rect.Height) _outputPopupSurface.Height = rect.Height;
+            var load = _outputLoad;
+            var owner = new Point(Left, Top);
+            if (load != null)
+            {
+                bool changed = load.ForcePosition || load.AppliedRect != rect || load.AppliedOwner != owner;
+                load.AppliedRect = rect; load.AppliedOwner = owner; load.ForcePosition = false;
+                if (!changed) return;
+            }
             // Popup does not follow an owner move automatically. A property change
             // requests native repositioning without polling or recreating its HWND.
             _outputRepositionFlip = !_outputRepositionFlip;
             OutputVolumesPopup.HorizontalOffset = _outputRepositionFlip ? .001 : 0;
         }
+
+        private void InvalidateOutputPopupScreen()
+        {
+            if (_outputLoad != null) _outputLoad.ForcePosition = true;
+            PositionOutputPopup();
+        }
+
+        private void OutputOwnerDpiChanged(object sender, System.Windows.DpiChangedEventArgs e) => InvalidateOutputPopupScreen();
 
         private void OutputOwnerLocationChanged(object? sender, EventArgs e)
         {
@@ -229,18 +279,10 @@ namespace SonicRoute
                         if (!Current()) return;
                         var config = ConfigService.Load();
                         var outputs = DisplayDevices(devices.Outputs, config);
-                        _outputDisplay = PanelDevices.WithSystemDefault(outputs, EDataFlow.eRender, config);
-                        string? selected = _systemDeviceId;
-                        SetSystemDevices(outputs, devices.Default);
-                        var retained = outputs.FirstOrDefault(d => string.Equals(d.Id, selected, StringComparison.OrdinalIgnoreCase));
-                        if (retained != null)
-                        {
-                            _suppressDevCombo = true;
-                            try { SystemDevCombo.SelectedItem = retained; _systemDeviceId = retained.Id; }
-                            finally { _suppressDevCombo = false; }
-                        }
+                        ApplyOutputDeviceSnapshot(outputs, devices.Default, config);
+                        int oldCount = _outputVolumeRows.Count;
                         BuildOutputVolumeRows(OutputVolumeDevices(outputs, config), devices.Default);
-                        PositionOutputPopup();
+                        if (oldCount != _outputVolumeRows.Count) PositionOutputPopup();
                         if (_systemDeviceId == null || !_outputVolumeRows.ContainsKey(_systemDeviceId))
                         {
                             // The owner's read may still be useful after collapse;
@@ -251,20 +293,12 @@ namespace SonicRoute
                     }
                     refreshAll |= load.ReadAll;
                     load.ReadAll = false;
-                    var versions = _outputVolumeRows.ToDictionary(p => p.Key, p => p.Value.Target.Version, StringComparer.OrdinalIgnoreCase);
-                    var states = await load.Lifetime.ReadAsync(monitor.ReadAsync(versions.Keys, refreshAll));
+                    var versions = CaptureOutputVolumeVersions();
+                    var requested = load.ReadDevices.Count == 0 ? null : load.ReadDevices.ToArray();
+                    load.ReadDevices.Clear();
+                    var states = await load.Lifetime.ReadAsync(monitor.ReadAsync(versions.Keys, refreshAll, requested));
                     if (!Current()) return;
-                    foreach (var pair in states)
-                    {
-                        if (!_outputVolumeRows.TryGetValue(pair.Key, out var row) || row.Pending
-                            || row.Target.Version != versions[pair.Key]) continue;
-                        ApplyOutputVolumeState(row, pair.Value.Volume, pair.Value.Muted);
-                        if (string.Equals(pair.Key, _systemDeviceId, StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (pair.Value.Volume >= 0) ApplySystemVolumeReadback(pair.Key, pair.Value.Volume, pair.Value.Muted);
-                            else ApplySystemVolumeUnavailable();
-                        }
-                    }
+                    ApplyOutputVolumeSnapshot(states, versions);
                     if (_systemDeviceId == null || !_outputDisplay.Any(d => string.Equals(d.Id, _systemDeviceId, StringComparison.OrdinalIgnoreCase)))
                         ApplySystemVolumeUnavailable();
                 } while (_outputRefreshAgain && Current());
@@ -300,8 +334,55 @@ namespace SonicRoute
             _outputRecoveryTimer?.Stop();
             if (_isClosed || !OutputVolumesPopup.IsOpen) return;
             if (_outputLoad == null) return;
-            Interlocked.Exchange(ref _outputLoad.TopologyDirty, 1);
+            if (_outputVolumeMonitor?.NeedsTopologyRecovery == true)
+                Interlocked.Exchange(ref _outputLoad.TopologyDirty, 1);
             _ = RefreshOutputVolumesAsync();
+        }
+
+        private Dictionary<string, (OutputVolumeTarget Target, int Version, int MuteVersion)> CaptureOutputVolumeVersions() =>
+            _outputVolumeRows.ToDictionary(p => p.Key, p => (p.Value.Target, p.Value.Target.Version, p.Value.MuteVersion), StringComparer.OrdinalIgnoreCase);
+
+        private void ApplyOutputVolumeSnapshot(Dictionary<string, (int Volume, bool Muted)> states,
+            Dictionary<string, (OutputVolumeTarget Target, int Version, int MuteVersion)> versions)
+        {
+            foreach (var pair in states)
+            {
+                if (!_outputVolumeRows.TryGetValue(pair.Key, out var row) || !versions.TryGetValue(pair.Key, out var snapshot)
+                    || !ReferenceEquals(row.Target, snapshot.Target)) continue;
+                if (row.Pending || row.MuteBusy || row.Target.Version != snapshot.Version || row.MuteVersion != snapshot.MuteVersion)
+                {
+                    // The monitor has consumed this notification. A skipped read
+                    // must be reconciled after the explicit action settles.
+                    row.NeedsReadback = true;
+                    QueueDeferredOutputReadback(row);
+                    continue;
+                }
+                ApplyOutputVolumeState(row, pair.Value.Volume, pair.Value.Muted);
+                if (string.Equals(pair.Key, _systemDeviceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (pair.Value.Volume >= 0) ApplySystemVolumeControls(pair.Key, pair.Value.Volume, pair.Value.Muted);
+                    else ApplySystemVolumeUnavailable();
+                }
+            }
+        }
+
+        private void ApplyOutputDeviceSnapshot(List<AudioDeviceInfo> outputs, string? defaultId, AppConfig config)
+        {
+            foreach (var device in outputs) device.IsDefault = string.Equals(device.Id, defaultId, StringComparison.OrdinalIgnoreCase);
+            var previous = SystemDevCombo.ItemsSource as IList<AudioDeviceInfo>;
+            bool same = previous != null && previous.Count == outputs.Count;
+            for (int i = 0; same && i < outputs.Count; i++)
+                same = string.Equals(previous![i].Id, outputs[i].Id, StringComparison.OrdinalIgnoreCase)
+                    && previous[i].DisplayName == outputs[i].DisplayName && previous[i].IsDefault == outputs[i].IsDefault;
+            _outputDisplay = PanelDevices.WithSystemDefault(outputs, EDataFlow.eRender, config);
+            if (same) return;
+            string? selected = _systemDeviceId;
+            SetSystemDevices(outputs, defaultId);
+            var retained = outputs.FirstOrDefault(d => string.Equals(d.Id, selected, StringComparison.OrdinalIgnoreCase));
+            if (retained == null) return;
+            _suppressDevCombo = true;
+            try { SystemDevCombo.SelectedItem = retained; _systemDeviceId = retained.Id; }
+            finally { _suppressDevCombo = false; }
         }
 
         private void BuildOutputVolumeRows(List<AudioDeviceInfo> devices, string? defaultId)
@@ -328,11 +409,14 @@ namespace SonicRoute
                     if (_outputLoad != null) _outputLoad.ReadAll = true;
                 }
                 string name = device.DisplayName ?? device.Id;
-                row.Name.Text = name + (string.Equals(device.Id, defaultId, StringComparison.OrdinalIgnoreCase)
+                string title = name + (string.Equals(device.Id, defaultId, StringComparison.OrdinalIgnoreCase)
                     ? " · " + L10n.T("Qp.DefaultOutputBadge") : "");
-                row.Name.ToolTip = row.Name.Text;
-                System.Windows.Automation.AutomationProperties.SetName(row.Slider, name);
-                System.Windows.Automation.AutomationProperties.SetName(row.Mute, name + " " + L10n.T("Qp.Mute"));
+                if (row.Name.Text != title) { row.Name.Text = title; row.Name.ToolTip = title; }
+                if (System.Windows.Automation.AutomationProperties.GetName(row.Slider) != name)
+                    System.Windows.Automation.AutomationProperties.SetName(row.Slider, name);
+                string muteName = name + " " + L10n.T("Qp.Mute");
+                if (System.Windows.Automation.AutomationProperties.GetName(row.Mute) != muteName)
+                    System.Windows.Automation.AutomationProperties.SetName(row.Mute, muteName);
             }
             _outputVolumeRowsPanel!.ToolTip = devices.Count == 0 ? L10n.T("Ov.NoDevice") : null;
             if (_outputVolumeEmptyText != null) _outputVolumeEmptyText.Visibility = devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -362,7 +446,8 @@ namespace SonicRoute
             row.Root = root;
             row.Slider.ValueChanged += (_, _) =>
             {
-                row.Percent.Text = ((int)Math.Round(row.Slider.Value)) + "%";
+                int displayed = (int)Math.Round(row.Slider.Value);
+                if (row.DisplayVolume != displayed) { row.Percent.Text = displayed + "%"; row.DisplayVolume = displayed; }
                 if (row.Updating || _isClosed || !row.Target.Available) return;
                 row.Pending = true;
                 int request = ++row.Target.Version;
@@ -378,6 +463,7 @@ namespace SonicRoute
             row.Mute.Click += async (_, _) =>
             {
                 if (row.MuteBusy || !row.Target.Available || _isClosed) return;
+                ++row.MuteVersion;
                 row.MuteBusy = true;
                 row.Mute.IsEnabled = false;
                 FlushPendingVolumes();
@@ -385,18 +471,7 @@ namespace SonicRoute
                 var result = await Task.Run(() => row.Target.Available
                     ? SystemVolumeService.ToggleMuteChecked(id) : (Muted: false, Applied: false));
                 if (_isClosed || !_outputVolumeRows.TryGetValue(id, out var current) || !ReferenceEquals(current, row)) return;
-                row.MuteBusy = false;
-                row.Mute.IsEnabled = true;
-                if (result.Applied)
-                {
-                    ApplyOutputVolumeState(row, (int)Math.Round(row.Slider.Value), result.Muted);
-                    if (string.Equals(id, _systemDeviceId, StringComparison.OrdinalIgnoreCase)) ApplySystemMuteVisual(result.Muted);
-                }
-                else
-                {
-                    ShowOsd(row.Name.Text, L10n.T("Tray.AudioUnavailable"));
-                    if (OutputVolumesPopup.IsOpen) RequestOutputVolumeReadback();
-                }
+                ApplyOutputMuteReadback(row, result.Muted, result.Applied);
             };
             return row;
         }
@@ -406,13 +481,16 @@ namespace SonicRoute
             row.Updating = true;
             try
             {
-                row.Slider.IsEnabled = volume >= 0;
-                row.Mute.IsEnabled = volume >= 0 && !row.MuteBusy;
-                if (volume >= 0) row.Slider.Value = volume;
-                row.Percent.Text = volume >= 0 ? volume + "%" : "—";
-                row.Muted = muted;
-                if (muted) row.Mute.SetResourceReference(Button.ForegroundProperty, "Theme.Accent");
-                else row.Mute.ClearValue(Button.ForegroundProperty);
+                if (row.Slider.IsEnabled != (volume >= 0)) row.Slider.IsEnabled = volume >= 0;
+                if (row.Mute.IsEnabled != (volume >= 0 && !row.MuteBusy)) row.Mute.IsEnabled = volume >= 0 && !row.MuteBusy;
+                if (volume >= 0 && row.Slider.Value != volume) row.Slider.Value = volume;
+                if (row.DisplayVolume != volume) { row.Percent.Text = volume >= 0 ? volume + "%" : "—"; row.DisplayVolume = volume; }
+                if (row.Muted != muted)
+                {
+                    row.Muted = muted;
+                    if (muted) row.Mute.SetResourceReference(Button.ForegroundProperty, "Theme.Accent");
+                    else row.Mute.ClearValue(Button.ForegroundProperty);
+                }
             }
             finally { row.Updating = false; }
         }
@@ -422,23 +500,56 @@ namespace SonicRoute
             if (_isClosed || !_outputVolumeRows.TryGetValue(target.Id, out var row)
                 || !ReferenceEquals(row.Target, target) || version != target.Version) return;
             row.Pending = false;
+            ++target.Version; // Reject monitor reads that started before this confirmed write.
             ApplyOutputVolumeState(row, actual, row.Muted);
             if (actual >= 0 && string.Equals(target.Id, _systemDeviceId, StringComparison.OrdinalIgnoreCase))
-                ApplySystemVolumeReadback(target.Id, actual, row.Muted);
-            if (actual < 0 && OutputVolumesPopup.IsOpen) RequestOutputVolumeReadback();
+                ApplySystemVolumeControls(target.Id, actual, row.Muted);
+            if (actual < 0) row.NeedsReadback = true;
+            QueueDeferredOutputReadback(row);
         }
 
-        private void RequestOutputVolumeReadback()
+        private void ApplyOutputMuteReadback(OutputVolumeRow row, bool muted, bool applied)
+        {
+            row.MuteBusy = false;
+            ++row.MuteVersion;
+            if (applied)
+            {
+                ApplyOutputVolumeState(row, (int)Math.Round(row.Slider.Value), muted);
+                if (string.Equals(row.Target.Id, _systemDeviceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    ++_systemVolumeRequest;
+                    ApplySystemMuteVisual(muted);
+                }
+            }
+            else
+            {
+                row.Mute.IsEnabled = row.Slider.IsEnabled;
+                ShowOsd(row.Name.Text, L10n.T("Tray.AudioUnavailable"));
+                row.NeedsReadback = true;
+            }
+            QueueDeferredOutputReadback(row);
+        }
+
+        private void QueueDeferredOutputReadback(OutputVolumeRow row)
+        {
+            if (!row.NeedsReadback || row.Pending || row.MuteBusy) return;
+            row.NeedsReadback = false;
+            RequestOutputVolumeReadback(row.Target.Id);
+        }
+
+        private void RequestOutputVolumeReadback(string? deviceId)
         {
             if (_outputLoad == null) return;
-            _outputLoad.ReadAll = true;
+            if (deviceId == null) _outputLoad.ReadAll = true;
+            else _outputLoad.ReadDevices.Add(deviceId);
             _ = RefreshOutputVolumesAsync();
         }
 
         private void SyncExpandedOutputReadback(string? id, int actual, bool muted)
         {
-            if (id != null && _outputVolumeRows.TryGetValue(id, out var row) && !row.Pending)
+            if (id != null && _outputVolumeRows.TryGetValue(id, out var row))
             {
+                if (row.Pending || row.MuteBusy) { row.NeedsReadback = true; return; }
                 ++row.Target.Version; // A pending older monitor snapshot cannot replace this readback.
                 ApplyOutputVolumeState(row, actual, muted);
             }
@@ -453,6 +564,7 @@ namespace SonicRoute
             FlushPendingVolumes();
             OutputVolumesPopup.IsOpen = false;
             LocationChanged -= OutputOwnerLocationChanged;
+            DpiChanged -= OutputOwnerDpiChanged;
             _outputRecoveryTimer?.Stop();
             if (_outputRecoveryTimer != null) _outputRecoveryTimer.Tick -= OutputRecovery_Tick;
             _outputRecoveryTimer = null;

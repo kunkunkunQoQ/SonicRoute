@@ -75,6 +75,19 @@ It also checks synchronous cached device rows on reopen, feature-scoped
 cancellation of queued rendering and pending reads, preservation of the main
 panel lifetime, rapid collapse/reopen, and retired subscription disposal.
 
+`--output-optimization` checks the actual product controls in light and dark
+themes, defers targeted follow-up reads for notification changes until volume or
+mute writes settle, protects newer rows from stale reads, reuses repeated
+state resource references, and avoids rebinding an unchanged device list. It
+does not show a window, requires no real audio endpoint IDs, and does not write
+real audio state.
+`Run-OutputPopupChecks.ps1 -Optimization` runs the focused native variant on an
+isolated private desktop. It checks placement in all four corners, coalescing
+100 placement requests, cached coordinates, simulated screen/DPI invalidation,
+native owner movement alignment, separate recovery paths for endpoint-volume
+and device notifications, retained-device filtering, height limits, quick
+collapse/reopen, and resource disposal.
+
 `--app-cards <absolute-image-directory>` limits execution to the application page.
 It checks the actual BAML in light/dark themes, nine languages at three widths,
 positive quick-panel visibility, independent top-left hidden and right-side

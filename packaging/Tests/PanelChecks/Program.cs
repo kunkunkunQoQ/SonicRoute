@@ -174,7 +174,7 @@ internal static partial class Program
                 "application exposes only the remaining quick panel");
             var theme = assembly.GetType("SonicRoute.ThemeService")!.GetMethod("Apply", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                 null, new[] { typeof(string), typeof(string) }, null)!;
-            if (args.Contains("--output-popup-live")) { CheckLiveOutputPopup(theme, windows, args.Last(), args.Contains("--output-followup-live")); Console.WriteLine($"RESULT passed={_checks} PRIVATE_DESKTOP=true AUDIO_READS_ONLY=true INPUT_INJECTED=false"); return 0; }
+            if (args.Contains("--output-popup-live")) { CheckLiveOutputPopup(theme, windows, args.Last(), args.Contains("--output-followup-live"), args.Contains("--output-optimization-live")); Console.WriteLine($"RESULT passed={_checks} PRIVATE_DESKTOP=true AUDIO_READS_ONLY=true INPUT_INJECTED=false"); return 0; }
             if (args.Contains("--output-volumes")) { CheckOutputVolumes(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} OUTPUT_VOLUME_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--output-followup")) { CheckOutputFollowup(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} OUTPUT_FOLLOWUP_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--app-cards")) { CheckAppCards(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} APP_CARDS_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
@@ -182,6 +182,7 @@ internal static partial class Program
             if (args.Contains("--measure-sections")) { MeasureSections(windows, args); return 0; }
             if (args.Contains("--render-scrollbars")) { RenderScrollbars(theme, args.Last()); return 0; }
             if (args.Contains("--app-scroll-layout")) { CheckAppScrollLayout(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} APP_SCROLL_LAYOUT_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
+            if (args.Contains("--output-optimization")) { CheckOutputOptimization(theme, windows); Console.WriteLine($"RESULT passed={_checks} OUTPUT_OPTIMIZATION_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             foreach (string mode in new[] { "light", "dark" })
             {
                 theme.Invoke(null, new object[] { mode, "blue" });

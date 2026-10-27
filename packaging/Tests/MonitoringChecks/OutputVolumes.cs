@@ -6,6 +6,66 @@ internal static partial class OutputVolumeCases
 {
     internal static void Run(Action<string, Action> check, Action<bool, string> assert)
     {
+        check("output endpoint-only recovery preserves healthy reads and subscriptions", () =>
+        {
+            var a = Boundary.Add(EDataFlow.eRender); var b = Boundary.Add(EDataFlow.eRender); b.Volume.RegistrationFailures = 1;
+            var monitor = new OutputVolumeMonitor(); var ids = new[] { a.Id, b.Id };
+            try
+            {
+                monitor.ReadAsync(ids, false).GetAwaiter().GetResult();
+                assert(monitor.NeedsRecovery && !monitor.NeedsTopologyRecovery, "endpoint fault escalated to topology recovery");
+                b.Volume.Scalar = .64f;
+                var recovered = monitor.ReadAsync(ids, false).GetAwaiter().GetResult();
+                assert(recovered.Count == 1 && recovered[b.Id].Volume == 64 && a.Volume.VolumeReads == 1 && a.Volume.Registrations == 1
+                    && !monitor.NeedsRecovery && !monitor.NeedsTopologyRecovery, "healthy endpoint reread during recovery");
+                b.Volume.VolumeReadFailures = 1; b.Volume.Notify(); monitor.ReadAsync(ids, false).GetAwaiter().GetResult();
+                assert(monitor.NeedsRecovery && !monitor.NeedsTopologyRecovery, "read failure escalated topology");
+                monitor.ReadAsync(ids, false).GetAwaiter().GetResult();
+                assert(a.Volume.VolumeReads == 1 && a.Volume.Unregistrations == 0 && !monitor.NeedsRecovery, "healthy endpoint recreated after peer read failure");
+            }
+            finally { monitor.Dispose(); monitor.Completion.GetAwaiter().GetResult(); }
+        });
+        check("output missing device notifications retain full topology recovery", () =>
+        {
+            Boundary.DeviceRegistrationFailures = 1; var device = Boundary.Add(EDataFlow.eRender); var monitor = new OutputVolumeMonitor();
+            try
+            {
+                monitor.ReadAsync(new[] { device.Id }, false).GetAwaiter().GetResult();
+                assert(monitor.NeedsRecovery && monitor.NeedsTopologyRecovery, "missing device callbacks lost full recovery");
+                monitor.ReadAsync(new[] { device.Id }, true).GetAwaiter().GetResult();
+                assert(!monitor.NeedsRecovery && !monitor.NeedsTopologyRecovery, "topology recovery did not settle");
+            }
+            finally { monitor.Dispose(); monitor.Completion.GetAwaiter().GetResult(); }
+        });
+        check("output targeted reconciliation rereads one clean endpoint without removing peers", () =>
+        {
+            var devices = Enumerable.Range(0, 8).Select(_ => Boundary.Add(EDataFlow.eRender)).ToArray();
+            var ids = devices.Select(d => d.Id).ToArray(); var monitor = new OutputVolumeMonitor();
+            try
+            {
+                monitor.ReadAsync(ids, false).GetAwaiter().GetResult(); devices[3].Volume.Muted = true;
+                var states = monitor.ReadAsync(ids, false, new[] { ids[3].ToUpperInvariant(), "not-a-target" }).GetAwaiter().GetResult();
+                assert(states.Count == 1 && states[ids[3]].Muted && devices.Sum(d => d.Volume.VolumeReads) == 9
+                    && devices.All(d => d.Volume.Unregistrations == 0) && Boundary.Activations == 8, "targeted reconciliation scanned or removed peers");
+                Console.WriteLine("READ-COUNTS targeted-reconciliation=1 healthy-peer-rereads=0 subscriptions-retained=8");
+            }
+            finally { monitor.Dispose(); monitor.Completion.GetAwaiter().GetResult(); }
+        });
+        check("output unresolved endpoint keeps topology fallback without recreating healthy peers", () =>
+        {
+            var a = Boundary.Add(EDataFlow.eRender); var b = Boundary.Add(EDataFlow.eRender);
+            var ids = new[] { a.Id, b.Id }; var monitor = new OutputVolumeMonitor();
+            try
+            {
+                monitor.ReadAsync(ids, false).GetAwaiter().GetResult();
+                b.Volume.VolumeReadFailures = 1; b.Volume.Notify(); monitor.ReadAsync(ids, false).GetAwaiter().GetResult();
+                Boundary.Devices.Remove(b);
+                var states = monitor.ReadAsync(ids, false).GetAwaiter().GetResult();
+                assert(monitor.NeedsRecovery && monitor.NeedsTopologyRecovery && states[b.Id].Volume == -1
+                    && a.Volume.VolumeReads == 1 && a.Volume.Unregistrations == 0, "unresolved endpoint lost topology fallback or churned healthy peer");
+            }
+            finally { monitor.Dispose(); monitor.Completion.GetAwaiter().GetResult(); }
+        });
         check("output incremental bursts read one changed endpoint out of eight", () =>
         {
             var devices = Enumerable.Range(0, 8).Select(_ => Boundary.Add(EDataFlow.eRender)).ToArray();

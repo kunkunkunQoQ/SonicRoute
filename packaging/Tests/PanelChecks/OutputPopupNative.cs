@@ -36,7 +36,7 @@ internal static partial class Program
         Check(condition(), message);
     }
 
-    private static void CheckLiveOutputPopup(MethodInfo theme, List<Window> windows, string directory, bool followup = false)
+    private static void CheckLiveOutputPopup(MethodInfo theme, List<Window> windows, string directory, bool followup = false, bool optimization = false)
     {
         Directory.CreateDirectory(directory);
         theme.Invoke(null, new object[] { "light", "blue" });
@@ -85,6 +85,13 @@ internal static partial class Program
                 CheckOutputRowsRecreatedDuringRead(panel);
                 CheckOutputLoadCancellation(panel);
             }
+            if (optimization && corner == "top-left")
+            {
+                CheckLiveOutputSizingAndFilter(panel, work);
+                CheckOutputRowsRecreatedDuringRead(panel);
+                CheckOutputLoadCancellation(panel);
+                CheckLiveOutputOptimization(panel);
+            }
             var bitmap = new RenderTargetBitmap((int)Math.Ceiling(surface.ActualWidth), (int)Math.Ceiling(surface.ActualHeight), 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(surface);
             var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
@@ -117,6 +124,64 @@ internal static partial class Program
             panel.Close(); Finish(replacement.Completion);
             Check(!popup.IsOpen && popup.Child == null && Field<object?>(panel, "_outputVolumeMonitor") == null, corner + " closing owner releases extra feature");
         }
+    }
+
+    private static void CheckLiveOutputOptimization(QuickPanelModernWindow panel)
+    {
+        DrainUi();
+        var popup = (Popup)panel.FindName("OutputVolumesPopup");
+        var load = Field<object>(panel, "_outputLoad");
+        var lifetime = Field<object>(load, "Lifetime");
+        double offset = popup.HorizontalOffset;
+        for (int i = 0; i < 100; i++) Call(panel, "PositionOutputPopup");
+        var pending = Field<System.Collections.IEnumerable>(lifetime, "_operations").Cast<System.Windows.Threading.DispatcherOperation>()
+            .Count(op => op.Status == System.Windows.Threading.DispatcherOperationStatus.Pending);
+        Check(Field<bool>(load, "PositionQueued") && pending == 1, "100 positioning requests share one queued placement operation");
+        DrainUi();
+        Check(!Field<bool>(load, "PositionQueued") && popup.HorizontalOffset == offset,
+            "unchanged placement does not force a native offset change");
+        var rect = (Rect)panel.GetType().GetMethod("GetOutputPopupRect", Instance)!.Invoke(panel, null)!;
+        bool callbacksMatch = true;
+        for (int i = 0; i < 100; i++)
+        {
+            var positions = popup.CustomPopupPlacementCallback(new Size(rect.Width, rect.Height), new Size(panel.ActualWidth, panel.ActualHeight), new System.Windows.Point());
+            callbacksMatch &= positions[0].Point == new System.Windows.Point(rect.X, rect.Y);
+        }
+        Check(callbacksMatch, "cached placement callbacks preserve coordinates across repeated WPF queries");
+        Call(panel, "InvalidateOutputPopupScreen"); DrainUi();
+        Check(popup.HorizontalOffset != offset, "screen/DPI invalidation forces placement even with identical DIP bounds");
+        var surface = Field<Border>(panel, "_outputPopupSurface");
+        var source = (HwndSource)PresentationSource.FromVisual(surface)!;
+        var owner = new WindowInteropHelper(panel).Handle;
+        GetWindowRect(owner, out var ownerBefore); GetWindowRect(source.Handle, out var before);
+        double left = panel.Left; panel.Left = left + 8; DrainUi();
+        GetWindowRect(owner, out var ownerAfter); GetWindowRect(source.Handle, out var after);
+        Check(after.Left - before.Left == ownerAfter.Left - ownerBefore.Left && after.Top == before.Top,
+            "owner movement repositions cached popup in matching native screen units");
+        panel.Left = left; DrainUi();
+
+        var monitor = Field<OutputVolumeMonitor>(panel, "_outputVolumeMonitor");
+        void Set(object target, string field, object value) => target.GetType().GetField(field, Instance)!.SetValue(target, value);
+        int oldTopology = Field<int>(monitor, "_needsTopologyRecovery"), oldRecovery = Field<int>(monitor, "_needsRecovery");
+        Set(panel, "_outputRefreshRunning", true); // Hold UI refresh so the recovery request can be inspected before consumption.
+        try
+        {
+            Set(load, "TopologyDirty", 0); Set(monitor, "_needsRecovery", 1); Set(monitor, "_needsTopologyRecovery", 0);
+            panel.GetType().GetMethod("OutputRecovery_Tick", Instance)!.Invoke(panel, new object?[] { null, EventArgs.Empty });
+            Check(Field<int>(load, "TopologyDirty") == 0, "single-endpoint recovery avoids a full topology request");
+            Set(monitor, "_needsTopologyRecovery", 1);
+            panel.GetType().GetMethod("OutputRecovery_Tick", Instance)!.Invoke(panel, new object?[] { null, EventArgs.Empty });
+            Check(Field<int>(load, "TopologyDirty") == 1, "missing device notifications retain full topology recovery");
+        }
+        finally
+        {
+            Set(panel, "_outputRefreshRunning", false);
+            Set(monitor, "_needsRecovery", oldRecovery); Set(monitor, "_needsTopologyRecovery", oldTopology);
+        }
+        Finish((Task)panel.GetType().GetMethod("RefreshOutputVolumesAsync", Instance)!.Invoke(panel, null)!);
+        DrainUi();
+        Check(Field<object?>(panel, "_outputRecoveryTimer") == null || !Field<System.Windows.Threading.DispatcherTimer>(panel, "_outputRecoveryTimer").IsEnabled,
+            "healthy endpoint recovery returns to event-driven operation");
     }
 
     private static void CheckOutputLoadCancellation(QuickPanelModernWindow panel)
@@ -180,7 +245,7 @@ internal static partial class Program
         {
             // Hold only the read worker, then coalesce hide/show before it can
             // retire subscriptions. No audio setter or physical input is used.
-            Call(panel, "RequestOutputVolumeReadback");
+            panel.GetType().GetMethod("RequestOutputVolumeReadback", Instance)!.Invoke(panel, new object?[] { null });
             config.PanelOutputVolumesRetainedOnly = true;
             config.HiddenOutputDevices = rows.Keys.Cast<string>().ToList();
             Call(panel, "RefreshOutputVolumeFilter");
