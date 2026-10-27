@@ -12,6 +12,9 @@ public sealed partial class App
     internal int GlobalCalls;
     private void ToggleQuickPanel() { }
     internal Task TestHotkey(string action) => ExecuteHotkeyCoreAsync(action);
+    internal readonly List<(int Pid, bool Muted)> AppInputReadbacks = new();
+    internal void ApplyAppInputMuteReadback(int pid, bool muted) => AppInputReadbacks.Add((pid, muted));
+    internal void ApplyAppMuteReadback(int pid, bool muted) => _quickPanel?.ApplyAppMuteReadback(pid, muted);
     internal QuickPanelModernWindow? TestPanel { get => _quickPanel; set => _quickPanel = value; }
     private Task<string?> CycleDeviceAsync(int pid, EDataFlow flow) => Task.FromResult<string?>("test-device");
     private Task<string?> CycleAllAppsDeviceAsync(EDataFlow flow) { GlobalCalls++; return Task.FromResult<string?>("test-device"); }
@@ -47,7 +50,7 @@ internal static class HotkeyChecks
             HotkeyActions.ActSetDefaultOutput, HotkeyActions.ActSetDefaultInput, HotkeyActions.ActSystemVolUp, HotkeyActions.ActSystemVolDown })
         { await app.TestHotkey(action); Check(AudioService.AppReads == 0, "global hotkey bypasses unrelated failing current-app discovery: " + action); }
         Check(app.GlobalCalls == 4 && SystemVolumeService.Volumes.Count == 2, "global device and actual volume handlers execute despite unavailable app discovery");
-        foreach (string action in new[] { HotkeyActions.ActMute, HotkeyActions.ActVolUp, HotkeyActions.ActVolDown, HotkeyActions.ActSwitchOutput, HotkeyActions.ActSwitchInput })
+        foreach (string action in new[] { HotkeyActions.ActMute, HotkeyActions.ActMuteAppInput, HotkeyActions.ActVolUp, HotkeyActions.ActVolDown, HotkeyActions.ActSwitchOutput, HotkeyActions.ActSwitchInput })
         { int notices = TrayFixture.Notices; await app.TestHotkey(action); Check(TrayFixture.Notices == notices + 1, "current-app discovery failure gives feedback without unhandled task: " + action); }
         AudioService.ThrowApps = false;
         AudioService.Apps.Add(new SonicRoute.Core.Models.AudioAppInfo { ProcessId = 101234, ProcessName = "HotkeyTarget", DisplayName = "Target" });
@@ -80,7 +83,7 @@ internal static class HotkeyChecks
             (Keys: new[] { 0x12, 0x10, 0x5C }, Expected: 13u), (Keys: Array.Empty<int>(), Expected: 0u) })
         { KeyBoundary.Down.Clear(); foreach (int key in pair.Keys) KeyBoundary.Down.Add(key); Check((uint)modifiers.Invoke(null, null)! == pair.Expected, "mouse modifier mapping: " + string.Join(",", pair.Keys)); }
         KeyBoundary.Down.Clear();
-        Check(HotkeyActions.All.Length == 14 && HotkeyActions.All.Distinct().Count() == 14, "original 14 actions restored without directional hotkey entries");
+        Check(HotkeyActions.All.Length == 15 && HotkeyActions.All.Distinct().Count() == 15, "15 distinct actions include the independent current-app microphone action");
         passed += await TrayWheelChecks.Run(app);
         return passed;
     }

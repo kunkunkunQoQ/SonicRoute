@@ -356,6 +356,13 @@ namespace SonicRoute
             _quickPanel?.RefreshAppIcons(processName);
         }
 
+        internal void ApplyAppInputMuteReadback(int pid, bool muted) => _mainWindow?.ApplyAppInputMuteReadback(pid, muted);
+        internal void ApplyAppMuteReadback(int pid, bool muted)
+        {
+            _quickPanel?.ApplyAppMuteReadback(pid, muted);
+            _mainWindow?.ApplyAppMuteReadback(pid, muted);
+        }
+
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。
         /// net48 Legacy 为传统桌面程序，不依赖 WinRT / Windows App SDK，恒为 false。</summary>
         private static bool IsPackaged() => AppRuntimeIdentity.Current.IsPackaged;
@@ -647,7 +654,7 @@ namespace SonicRoute
             foreach (var a in HotkeyActions.All)
             {
                 // 实验模式隐藏动作：未开启麦克风选项不注册，避免后台占用组合键
-                if ((a == HotkeyActions.ActSwitchInput || a == HotkeyActions.ActSwitchAllInput) && !expMicOn) continue;
+                if ((a == HotkeyActions.ActSwitchInput || a == HotkeyActions.ActSwitchAllInput || a == HotkeyActions.ActMuteAppInput) && !expMicOn) continue;
                 map[a] = config.Hotkeys.TryGetValue(a, out var c)
                     ? c
                     : (HotkeyActions.Defaults.TryGetValue(a, out var d) ? d : "");
@@ -726,7 +733,7 @@ namespace SonicRoute
             // CurrentAppService.Resolve 同一套规则（last/fixed → 前台 → 最近使用 → 兜底），
             // 保证快捷键和"鼠标放任务栏滚轮调音量"永远解析出同一个应用。
             // 仅"当前应用"类动作需要解析当前应用；全局切换 / 系统默认切换不依赖，解析失败照常执行
-            bool needsTarget = action is HotkeyActions.ActMute or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown or HotkeyActions.ActSwitchOutput or HotkeyActions.ActSwitchInput;
+            bool needsTarget = action is HotkeyActions.ActMute or HotkeyActions.ActMuteAppInput or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown or HotkeyActions.ActSwitchOutput or HotkeyActions.ActSwitchInput;
             AudioAppInfo? target = null;
             if (needsTarget)
             {
@@ -734,7 +741,7 @@ namespace SonicRoute
                 int fg = foregroundPid ?? ForegroundAppService.GetForegroundProcessId();
                 try { target = await Task.Run(() => CurrentAppService.Resolve(AudioService.GetApps(), cfg, fg)); }
                 catch { /* 会话发现失败只影响当前应用类动作，仍给出已有的无会话反馈。 */ }
-                if (target == null) { _trayWheel?.ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoOutputSession")); return; }
+                if (target == null) { _trayWheel?.ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T(action == HotkeyActions.ActMuteAppInput ? "Ov.AppMicUnavailable" : "Ov.NoOutputSession")); return; }
             }
             int pid = target == null ? -1 : (int)target.ProcessId;
             string name = target == null ? "" : AppDisplayName.Get(target);
@@ -744,10 +751,17 @@ namespace SonicRoute
                 case HotkeyActions.ActMute:
                     // 当前应用快捷键始终控制同一个会话；面板顶部按钮只控制所选系统设备。
                     var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
-                    if (mr.Applied) _quickPanel?.ApplyAppMuteReadback(pid, mr.Muted);
+                    if (mr.Applied) ApplyAppMuteReadback(pid, mr.Muted);
                     _trayWheel?.ShowOsd(name, mr.Applied
                         ? (mr.Muted ? L10n.T("Ov.AppMuted") : L10n.T("Ov.AppUnmuted"))
                         : L10n.T("Ov.NoOutputSession"));
+                    break;
+
+                case HotkeyActions.ActMuteAppInput:
+                    var inputMute = await Task.Run(() => SessionVolumeService.ToggleInputMuteChecked(pid));
+                    if (inputMute.Applied) ApplyAppInputMuteReadback(pid, inputMute.Muted);
+                    _trayWheel?.ShowOsd(name, L10n.T(inputMute.Applied
+                        ? (inputMute.Muted ? "Ov.MicMuted" : "Ov.MicUnmuted") : "Ov.AppMicUnavailable"));
                     break;
 
                 case HotkeyActions.ActMuteInput:

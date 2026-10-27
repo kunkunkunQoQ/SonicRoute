@@ -69,8 +69,9 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     source: ["SonicRoute/AutoRuleService.cs", "SonicRoute/AutoRuleScheduler.cs", "SonicRoute.Core/Models/AutoRule.cs", "SonicRoute.Core/AutoRuleStore.cs"]
     symbols: ["AutoRuleService.ExecuteAsync", "AutoRuleTrigger", "AutoRuleAction", "AutoRuleStore.LoadAll"]
     facts:
-      - "6 Triggers (0..5) × 37 Actions (0..36)."
+      - "6 Triggers (0..5) × 39 source Actions (0..38); stable release metadata remains separate."
       - "Action 17 ExecuteRule enables nested rule chaining."
+      - "Source actions 37/38 set or toggle microphone mute for the runtime current app using the existing current-app resolver. A capture session is required; global and specified-app microphone actions remain separate."
       - "Steps execute in order with DelayMs before each step and optional StopOnFailure. Detection is independent of the serialized process/foreground execution queue; single-rule reentry is rejected and obsolete queued requests are revalidated."
       - "Schedules use one-shot timers and validate current plan identity; missed times are not replayed."
       - "Rules stored as separate JSON files in %LocalAppData%\\SonicRoute\\Automation\\."
@@ -253,6 +254,8 @@ DOMAIN_ENUM_REGISTRY:
     34: { name: ResetAllAppRouting, target: ALL_PERSISTED_APP_ROUTES, param: RESET_TO_DEFAULT }
     35: { name: ShowQuickPanel, target: UI_WINDOW, param: IDEMPOTENT_SHOW }
     36: { name: HideQuickPanel, target: UI_WINDOW, param: IDEMPOTENT_HIDE }
+    37: { name: SetCurrentAppInputMute, target: RUNTIME_CURRENT_APP_CAPTURE_SESSION, param: BOOL_EXPLICIT }
+    38: { name: ToggleCurrentAppInputMute, target: RUNTIME_CURRENT_APP_CAPTURE_SESSION, param: TOGGLE }
 
 DATA_PATHS_&_CONFIG_SCHEMA:
   root_dir: "%LocalAppData%\\SonicRoute\\"

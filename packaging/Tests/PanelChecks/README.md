@@ -26,6 +26,14 @@ slider width and expand-arrow position, the shared native scrollbar in the right
 gutter, scrolling to the end, collapse recovery and absence of queued audio writes.
 It renders the unshown product panel and uses only missing-PID audio reads.
 
+`--overview-mute <image-directory>` checks the relocated playback/capture mute
+switches in the actual product BAML. It covers nine languages, light/dark themes,
+920/780-DIP widths, shared switch styling, current-PID readback, microphone-option
+hiding, absent recording sessions, no Click on programmatic updates, close guards,
+and the independent unbound app-microphone hotkey entry. Explicit mute writes use
+only managed fake sessions for missing PIDs; capture verification subsequently
+uses native read-only discovery. No windows are shown and no real audio is written.
+
 Build each runtime separately (default NET10):
 
 ```powershell

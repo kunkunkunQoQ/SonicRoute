@@ -1119,9 +1119,22 @@
                     <StackPanel>
                         <TextBlock Text="{Binding [Ov.Output], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource SectionTitle}"/>
-                        <ComboBox x:Name="OverviewOutputCombo" HorizontalAlignment="Left" Margin="0,0,0,8"
-                                  Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
-                                  SelectionChanged="OverviewOutputCombo_SelectionChanged"/>
+                        <WrapPanel Margin="0,0,-12,0">
+                            <ComboBox x:Name="OverviewOutputCombo" Margin="0,0,12,8"
+                                      Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
+                                      SelectionChanged="OverviewOutputCombo_SelectionChanged"/>
+                            <Border Style="{StaticResource Card}" Height="36" Padding="12,4" Margin="0,0,12,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding [Ov.MuteApp], Source={x:Static local:L10n.Instance}}"
+                                               Style="{StaticResource AppsControlTitle}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                    <CheckBox x:Name="OverviewMuteButton" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34"
+                                              VerticalAlignment="Center" IsEnabled="False"
+                                              AutomationProperties.Name="{Binding [Ov.MuteApp], Source={x:Static local:L10n.Instance}}"
+                                              Click="OverviewMuteButton_Click"/>
+                                </Grid>
+                            </Border>
+                        </WrapPanel>
                         <ItemsControl x:Name="OverviewOutputQuickPanel">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -1135,9 +1148,22 @@
                     <StackPanel>
                         <TextBlock Text="{Binding [Ov.Input], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource SectionTitle}"/>
-                        <ComboBox x:Name="OverviewInputCombo" HorizontalAlignment="Left" Margin="0,0,0,8"
-                                  Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
-                                  SelectionChanged="OverviewInputCombo_SelectionChanged"/>
+                        <WrapPanel Margin="0,0,-12,0">
+                            <ComboBox x:Name="OverviewInputCombo" Margin="0,0,12,8"
+                                      Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
+                                      SelectionChanged="OverviewInputCombo_SelectionChanged"/>
+                            <Border Style="{StaticResource Card}" Height="36" Padding="12,4" Margin="0,0,12,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding [Ov.MuteAppMic], Source={x:Static local:L10n.Instance}}"
+                                               Style="{StaticResource AppsControlTitle}" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                    <CheckBox x:Name="OverviewMicMuteButton" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34"
+                                              VerticalAlignment="Center" IsEnabled="False"
+                                              AutomationProperties.Name="{Binding [Ov.MuteAppMic], Source={x:Static local:L10n.Instance}}"
+                                              Click="OverviewMicMuteButton_Click"/>
+                                </Grid>
+                            </Border>
+                        </WrapPanel>
                         <ItemsControl x:Name="OverviewInputQuickPanel">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
@@ -1165,22 +1191,9 @@
                                     VerticalAlignment="Center" IsMoveToPointEnabled="True"
                                     ValueChanged="OverviewVolumeSlider_ValueChanged"/>
                         </DockPanel>
-                        <DockPanel Margin="0,6,0,0">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                                <Button x:Name="OverviewMuteButton"
-                                        Content="{Binding [Ov.Mute], Source={x:Static local:L10n.Instance}}"
-                                        Style="{StaticResource GhostButton}" Width="96" Margin="0,0,8,0"
-                                        Click="OverviewMuteButton_Click"/>
-                                <Button x:Name="OverviewMicMuteButton"
-                                        Content="{Binding [Ov.MuteMic], Source={x:Static local:L10n.Instance}}"
-                                        Style="{StaticResource GhostButton}" MinWidth="140"
-                                        Click="OverviewMicMuteButton_Click"/>
-                            </StackPanel>
-                            <TextBlock x:Name="OverviewStatusText" Text=""
-                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       VerticalAlignment="Center" HorizontalAlignment="Left"
-                                       Margin="12,0,0,0" TextTrimming="CharacterEllipsis"/>
-                        </DockPanel>
+                        <TextBlock x:Name="OverviewStatusText" Text=""
+                                   FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
                 </StackPanel>

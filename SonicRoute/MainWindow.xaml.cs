@@ -44,6 +44,8 @@ namespace SonicRoute
         private AudioAppInfo? _appsSelected;
         private bool _suppressVolume;
         private bool _overviewVolumeReady;
+        private bool _overviewMuteBusy, _overviewMicMuteBusy;
+        private int _overviewMuteVersion, _overviewMicMuteVersion;
         private bool _appsVolumeReady;
         private bool _suppressAppCombo;
         private bool _suppressDevCombo;
@@ -585,6 +587,7 @@ namespace SonicRoute
             try
             {
                 int request = ++_overviewStateRequest;
+                int muteVersion = _overviewMuteVersion, micVersion = _overviewMicMuteVersion;
                 uint? targetPid = _overviewApp?.ProcessId;
                 var outs = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
                 // 输入下拉框显示全部设备（与输出下拉一致，不受「保留的设备」筛选影响）
@@ -594,10 +597,8 @@ namespace SonicRoute
 
                 if (_overviewApp == null)
                 {
-                    bool globalMicMuted = await _uiLifetime.ReadAsync(() => GlobalMicMuteService.IsMuted());
-                    if (_isClosed || request != _overviewStateRequest || targetPid != _overviewApp?.ProcessId) return;
-                    // 全局麦克风状态与应用无关，始终刷新按钮文案
-                    OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
+                    OverviewMicMuteButton.IsChecked = false;
+                    OverviewMicMuteButton.IsEnabled = false;
                     RenderQuickButtons(OverviewOutputQuickPanel, outs);
                     OverviewInputCombo.Tag = null;
                     RenderInputQuickButtons();
@@ -607,7 +608,9 @@ namespace SonicRoute
 
                 var pid = (int)_overviewApp.ProcessId;
                 // 并行读取可见功能的状态；隐藏输入路由时不查询其持久化端点。
-                var tMic = _uiLifetime.ReadAsync(() => GlobalMicMuteService.IsMuted());
+                var tMic = _config.ExperimentalMic
+                    ? _uiLifetime.ReadAsync(() => (Available: SessionVolumeService.HasInputSession(pid), Muted: SessionVolumeService.IsInputMuted(pid)))
+                    : Task.FromResult((Available: false, Muted: false));
                 var tOut = _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
                 var tIn = _config.ExperimentalMic
                     ? _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture))
@@ -615,14 +618,16 @@ namespace SonicRoute
                 var tState = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadState(pid));
                 await Task.WhenAll(tMic, tOut, tIn, tState);
                 if (_isClosed || request != _overviewStateRequest || targetPid != _overviewApp?.ProcessId) return;
-                bool micMuted = tMic.Result;
                 var outId = tOut.Result;
                 var inId = tIn.Result;
                 int vol = tState.Result.Volume;
                 bool muted = tState.Result.Muted;
 
-                // 全局麦克风状态与应用无关，始终刷新按钮文案
-                OverviewMicMuteButton.Content = L10n.T(micMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
+                if (!_overviewMicMuteBusy && micVersion == _overviewMicMuteVersion)
+                {
+                    OverviewMicMuteButton.IsChecked = tMic.Result.Muted;
+                    OverviewMicMuteButton.IsEnabled = tMic.Result.Available;
+                }
 
                 string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
 
@@ -648,8 +653,11 @@ namespace SonicRoute
                 OverviewInputCombo.SelectedItem = selectedIn;
                 _suppressDevCombo = false;
 
-                SetVolumeUi(vol >= 0 ? vol : null);
-                OverviewMuteButton.Content = L10n.T(muted ? "Ov.Unmute" : "Ov.Mute");
+                if (!_overviewMuteBusy && muteVersion == _overviewMuteVersion)
+                {
+                    SetVolumeUi(vol >= 0 ? vol : null);
+                    OverviewMuteButton.IsChecked = muted;
+                }
 
             }
             catch (OperationCanceledException) when (_isClosed) { }
@@ -663,9 +671,10 @@ namespace SonicRoute
             OverviewVolumeSlider.IsEnabled = ready;
             OverviewMinus.IsEnabled = ready;
             OverviewPlus.IsEnabled = ready;
-            OverviewMuteButton.IsEnabled = ready;
+            OverviewMuteButton.IsEnabled = ready && !_overviewMuteBusy;
             if (!ready || percent == null)
             {
+                OverviewMuteButton.IsChecked = false;
                 OverviewVolumeSlider.Value = 0;
                 OverviewVolumeText.Text = "—";
             }
@@ -833,23 +842,68 @@ namespace SonicRoute
             OverviewVolumeSlider.Value = Math.Min(100, OverviewVolumeSlider.Value + 5);
         }
 
-        private async void OverviewMuteButton_Click(object sender, RoutedEventArgs e)
+        private async void OverviewMuteButton_Click(object sender, RoutedEventArgs e) => await ChangeOverviewMuteAsync(false);
+
+        private async void OverviewMicMuteButton_Click(object sender, RoutedEventArgs e) => await ChangeOverviewMuteAsync(true);
+
+        private async Task ChangeOverviewMuteAsync(bool input)
         {
-            if (_overviewApp == null || !_overviewVolumeReady) return;
-            MarkLastUsed(_overviewApp);
+            if (_isClosed || _overviewApp == null || (input
+                ? !_config.ExperimentalMic || _overviewMicMuteBusy : !_overviewVolumeReady || _overviewMuteBusy)) return;
+            var control = input ? OverviewMicMuteButton : OverviewMuteButton;
             int pid = (int)_overviewApp.ProcessId;
-            bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
-            if (_isClosed || _overviewApp?.ProcessId != (uint)pid) return;
-            OverviewMuteButton.Content = L10n.T(muted ? "Ov.Unmute" : "Ov.Mute");
-            OverviewStatusText.Text = L10n.T(muted ? "Ov.Muted" : "Ov.Unmuted");
+            bool target = control.IsChecked == true, available = false;
+            MarkLastUsed(_overviewApp);
+            if (input) { _overviewMicMuteBusy = true; ++_overviewMicMuteVersion; }
+            else { _overviewMuteBusy = true; ++_overviewMuteVersion; }
+            control.IsEnabled = false;
+            try
+            {
+                var result = await Task.Run(() =>
+                {
+                    if (input)
+                    {
+                        var changed = SessionVolumeService.ChangeInputMuteChecked(pid, target);
+                        return (changed.Muted, changed.Applied, Available: SessionVolumeService.HasInputSession(pid));
+                    }
+                    bool applied = SessionVolumeService.SetMute(pid, target);
+                    var state = SessionVolumeService.ReadState(pid);
+                    return (state.Muted, Applied: applied && state.Muted == target, Available: state.Volume >= 0);
+                });
+                if (_isClosed || _overviewApp?.ProcessId != (uint)pid) return;
+                available = result.Available;
+                control.IsChecked = result.Muted;
+                OverviewStatusText.Text = L10n.T(result.Applied && available
+                    ? (input ? (result.Muted ? "Ov.MicMuted" : "Ov.MicUnmuted") : (result.Muted ? "Ov.Muted" : "Ov.Unmuted"))
+                    : (input ? "Ov.AppMicUnavailable" : "Tray.AudioUnavailable"));
+            }
+            finally
+            {
+                if (input) { _overviewMicMuteBusy = false; ++_overviewMicMuteVersion; }
+                else { _overviewMuteBusy = false; ++_overviewMuteVersion; }
+                if (!_isClosed)
+                {
+                    if (input || _overviewApp?.ProcessId != (uint)pid) _ = RefreshOverviewDevicesVolumeAsync();
+                    else control.IsEnabled = available && _overviewVolumeReady;
+                }
+            }
         }
 
-        private async void OverviewMicMuteButton_Click(object sender, RoutedEventArgs e)
+        internal void ApplyAppInputMuteReadback(int pid, bool muted)
         {
-            // 全局麦克风静音：静音/取消静音系统所有录音设备（与当前应用无关）
-            bool muted = await Task.Run(() => GlobalMicMuteService.Toggle());
-            OverviewMicMuteButton.Content = L10n.T(muted ? "Ov.MicUnmute" : "Ov.MuteMic");
-            OverviewStatusText.Text = L10n.T(muted ? "Ov.MicMuted" : "Ov.MicUnmuted");
+            if (_isClosed || _overviewApp?.ProcessId != (uint)pid || _overviewMicMuteBusy) return;
+            ++_overviewMicMuteVersion;
+            OverviewMicMuteButton.IsChecked = muted;
+            OverviewMicMuteButton.IsEnabled = _config.ExperimentalMic;
+        }
+
+        internal void ApplyAppMuteReadback(int pid, bool muted)
+        {
+            if (_isClosed || _overviewApp?.ProcessId != (uint)pid || _overviewMuteBusy) return;
+            ++_overviewMuteVersion;
+            OverviewMuteButton.IsChecked = muted;
+            OverviewMuteButton.IsEnabled = _overviewVolumeReady;
+            if (!_overviewVolumeReady && IsVisible) _ = RefreshOverviewDevicesVolumeAsync();
         }
 
         private async void OverviewOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2868,7 +2922,7 @@ namespace SonicRoute
             foreach (var (l10nKey, groupActions) in HotkeyActions.Groups)
             {
                 var visible = groupActions
-                    .Where(a => (a != HotkeyActions.ActSwitchInput && a != HotkeyActions.ActSwitchAllInput) || expMicOn)
+                    .Where(a => (a != HotkeyActions.ActSwitchInput && a != HotkeyActions.ActSwitchAllInput && a != HotkeyActions.ActMuteAppInput) || expMicOn)
                     .ToArray();
                 if (visible.Length == 0) continue;
                 var header = new TextBlock
@@ -3621,6 +3675,8 @@ namespace SonicRoute
             AutoRuleAction.ToggleDefaultInputMute => "Auto.ActionToggleDefaultInputMute",
             AutoRuleAction.SetAppInputMute => "Auto.ActionSetAppInputMute",
             AutoRuleAction.ToggleAppInputMute => "Auto.ActionToggleAppInputMute",
+            AutoRuleAction.SetCurrentAppInputMute => "Auto.ActionSetCurrentAppInputMute",
+            AutoRuleAction.ToggleCurrentAppInputMute => "Auto.ActionToggleCurrentAppInputMute",
             AutoRuleAction.SetAllAppsVolume => "Auto.ActionSetAllAppsVolume",
             AutoRuleAction.AdjustAllAppsVolume => "Auto.ActionAdjustAllAppsVolume",
             AutoRuleAction.SetAllAppsMute => "Auto.ActionSetAllAppsMute",
@@ -3647,6 +3703,7 @@ namespace SonicRoute
                 AutoRuleAction.SetAppVolume or AutoRuleAction.ToggleAppMute or AutoRuleAction.SetAppOutput
                     or AutoRuleAction.SetAppInput or AutoRuleAction.SetAppMute or AutoRuleAction.AdjustAppVolume
                     or AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute
+                    or AutoRuleAction.SetCurrentAppInputMute or AutoRuleAction.ToggleCurrentAppInputMute
                     or AutoRuleAction.SetAllAppsVolume or AutoRuleAction.AdjustAllAppsVolume
                     or AutoRuleAction.SetAllAppsMute or AutoRuleAction.ToggleAllAppsMute or AutoRuleAction.ResetAllAppRouting => 1,
                 AutoRuleAction.LaunchProgram or AutoRuleAction.RunPowerShell => 2,
@@ -4155,6 +4212,7 @@ namespace SonicRoute
                 AutoRuleAction.SetDefaultInputVolume or AutoRuleAction.AdjustDefaultInputVolume
                     or AutoRuleAction.SetDefaultInputMute or AutoRuleAction.ToggleDefaultInputMute => "Auto.DefaultInputHint",
                 AutoRuleAction.SetAppInputMute or AutoRuleAction.ToggleAppInputMute => "Auto.AppInputMuteHint",
+                AutoRuleAction.SetCurrentAppInputMute or AutoRuleAction.ToggleCurrentAppInputMute => "Auto.CurrentAppInputMuteHint",
                 AutoRuleAction.SetAllAppsVolume or AutoRuleAction.AdjustAllAppsVolume
                     or AutoRuleAction.SetAllAppsMute or AutoRuleAction.ToggleAllAppsMute => "Auto.AllAppsHint",
                 AutoRuleAction.ResetAllAppRouting => "Auto.ResetAllRoutingHint",

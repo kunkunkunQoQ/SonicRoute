@@ -104,7 +104,9 @@ namespace SonicRoute.Core.Models
         ToggleAllAppsMute = 33,
         ResetAllAppRouting = 34,
         ShowQuickPanel = 35,
-        HideQuickPanel = 36
+        HideQuickPanel = 36,
+        SetCurrentAppInputMute = 37,
+        ToggleCurrentAppInputMute = 38
     }
 
     /// <summary>编辑器、校验和摘要共用参数语义，不复制多份动作名单。</summary>
@@ -124,7 +126,7 @@ namespace SonicRoute.Core.Models
             or AutoRuleAction.AdjustPlaybackDeviceVolume or AutoRuleAction.AdjustDefaultInputVolume or AutoRuleAction.AdjustAllAppsVolume;
         public static bool SetsMute(AutoRuleAction a) => a is AutoRuleAction.SetSystemMute or AutoRuleAction.SetAppMute
             or AutoRuleAction.SetGlobalMicMute or AutoRuleAction.SetMicrophoneMute or AutoRuleAction.SetPlaybackDeviceMute
-            or AutoRuleAction.SetDefaultInputMute or AutoRuleAction.SetAppInputMute or AutoRuleAction.SetAllAppsMute;
+            or AutoRuleAction.SetDefaultInputMute or AutoRuleAction.SetAppInputMute or AutoRuleAction.SetCurrentAppInputMute or AutoRuleAction.SetAllAppsMute;
     }
 
     /// <summary>

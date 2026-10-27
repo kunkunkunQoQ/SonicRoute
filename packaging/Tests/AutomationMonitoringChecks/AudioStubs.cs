@@ -91,6 +91,7 @@ namespace SonicRoute
         internal static (int Value,bool Relative) LastVolume;
         internal static bool? LastMute;
         internal static (bool Muted,bool Applied) ChangeInputMuteChecked(int pid,bool? muted,CancellationToken token=default){token.ThrowIfCancellationRequested();LastInput=(pid,muted);return(muted??true,InputApplied);}
+        internal static (bool Muted,bool Applied) ToggleInputMuteChecked(int pid)=>ChangeInputMuteChecked(pid,null);
         internal static (int Succeeded,int Total) ChangeAllPlaybackVolumeChecked(int value,bool relative,CancellationToken token=default){token.ThrowIfCancellationRequested();LastVolume=(value,relative);return Batch;}
         internal static (int Succeeded,int Total) ChangeAllPlaybackMuteChecked(bool? muted,CancellationToken token=default){token.ThrowIfCancellationRequested();LastMute=muted;return Batch;}
         internal static bool SetVolumePercent(int pid,int value)=>true;

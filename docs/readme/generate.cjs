@@ -126,6 +126,10 @@ function renderAI(shared) {
   const navigation = shared.languages.map(item => link(item.name, item.file)).join(' | ') + ' | **🤖 AI**';
   const sourceVersion = fs.readFileSync(path.join(root, 'build/Version.props'), 'utf8').match(/<SonicRouteVersion>(\d+\.\d+(?:\.\d+)?)<\/SonicRouteVersion>/)?.[1];
   if (!sourceVersion) throw new Error('Missing source version in build/Version.props');
+  const actionBody = fs.readFileSync(path.join(root, 'SonicRoute.Core/Models/AutoRule.cs'), 'utf8').match(/public enum AutoRuleAction\s*\{([\s\S]*?)\n    \}/)?.[1];
+  const actionValues = [...(actionBody ?? '').matchAll(/^\s*\w+\s*=\s*(\d+)\s*,?\s*$/gm)].map(match => Number(match[1]));
+  if (!actionValues.length) throw new Error('Missing source automation actions');
+  const sourceActionCount = Math.max(...actionValues) + 1;
   return [
     '<!-- Generated via docs/readme/generate.cjs. Release metadata: docs/readme/shared.json. Source version: build/Version.props. Body: renderAI(). Run node docs/readme/generate.cjs to update. -->',
     '# 🎧 SonicRoute (AI / LLM Machine Specification)', '',
@@ -196,8 +200,9 @@ function renderAI(shared) {
     "    source: [\"SonicRoute/AutoRuleService.cs\", \"SonicRoute/AutoRuleScheduler.cs\", \"SonicRoute.Core/Models/AutoRule.cs\", \"SonicRoute.Core/AutoRuleStore.cs\"]",
     "    symbols: [\"AutoRuleService.ExecuteAsync\", \"AutoRuleTrigger\", \"AutoRuleAction\", \"AutoRuleStore.LoadAll\"]",
     "    facts:",
-    `      - "${shared.triggerCount} Triggers (0..${shared.triggerCount - 1}) × ${shared.actionCount} Actions (0..${shared.actionCount - 1})."`,
+    `      - "${shared.triggerCount} Triggers (0..${shared.triggerCount - 1}) × ${sourceActionCount} source Actions (0..${sourceActionCount - 1}); stable release metadata remains separate."`,
     "      - \"Action 17 ExecuteRule enables nested rule chaining.\"",
+    "      - \"Source actions 37/38 set or toggle microphone mute for the runtime current app using the existing current-app resolver. A capture session is required; global and specified-app microphone actions remain separate.\"",
     "      - \"Steps execute in order with DelayMs before each step and optional StopOnFailure. Detection is independent of the serialized process/foreground execution queue; single-rule reentry is rejected and obsolete queued requests are revalidated.\"",
     "      - \"Schedules use one-shot timers and validate current plan identity; missed times are not replayed.\"",
     "      - \"Rules stored as separate JSON files in %LocalAppData%\\\\SonicRoute\\\\Automation\\\\.\"",
@@ -380,6 +385,8 @@ function renderAI(shared) {
     "    34: { name: ResetAllAppRouting, target: ALL_PERSISTED_APP_ROUTES, param: RESET_TO_DEFAULT }",
     "    35: { name: ShowQuickPanel, target: UI_WINDOW, param: IDEMPOTENT_SHOW }",
     "    36: { name: HideQuickPanel, target: UI_WINDOW, param: IDEMPOTENT_HIDE }",
+    "    37: { name: SetCurrentAppInputMute, target: RUNTIME_CURRENT_APP_CAPTURE_SESSION, param: BOOL_EXPLICIT }",
+    "    38: { name: ToggleCurrentAppInputMute, target: RUNTIME_CURRENT_APP_CAPTURE_SESSION, param: TOGGLE }",
     "",
     "DATA_PATHS_&_CONFIG_SCHEMA:",
     "  root_dir: \"%LocalAppData%\\\\SonicRoute\\\\\"",

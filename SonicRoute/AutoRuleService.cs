@@ -792,6 +792,33 @@ namespace SonicRoute
                             SessionVolumeService.ChangeInputMuteChecked(pid,
                                 step.Action == AutoRuleAction.SetAppInputMute ? step.Muted : (bool?)null, token).Applied, detail), token);
 
+                    case AutoRuleAction.SetCurrentAppInputMute:
+                    case AutoRuleAction.ToggleCurrentAppInputMute:
+                        {
+                            var changed = await Task.Run(() =>
+                            {
+                                token.ThrowIfCancellationRequested();
+                                var current = CurrentAppService.Resolve(AudioService.GetApps(), ConfigService.Load());
+                                if (current == null)
+                                {
+                                    if (detail != null) detail.Reason = "app_unavailable";
+                                    return (Pid: -1, Muted: false, Applied: false);
+                                }
+                                int pid = (int)current.ProcessId;
+                                if (detail != null) detail.TargetApp = current.ProcessName ?? current.Label;
+                                var result = SessionVolumeService.ChangeInputMuteChecked(pid,
+                                    step.Action == AutoRuleAction.SetCurrentAppInputMute ? step.Muted : (bool?)null, token);
+                                return (Pid: pid, result.Muted, result.Applied);
+                            }, token);
+                            var app = System.Windows.Application.Current as App;
+                            if (changed.Applied && !token.IsCancellationRequested && app != null && !app.Dispatcher.HasShutdownStarted)
+                                await app.Dispatcher.InvokeAsync(() =>
+                                {
+                                    if (!token.IsCancellationRequested) app.ApplyAppInputMuteReadback(changed.Pid, changed.Muted);
+                                });
+                            return changed.Applied;
+                        }
+
                     case AutoRuleAction.SetAllAppsVolume:
                     case AutoRuleAction.AdjustAllAppsVolume:
                         return await Task.Run(() => BatchSucceeded(SessionVolumeService.ChangeAllPlaybackVolumeChecked(
