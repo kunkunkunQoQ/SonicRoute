@@ -598,10 +598,8 @@ namespace SonicRoute
                     if (_isClosed || request != _overviewStateRequest || targetPid != _overviewApp?.ProcessId) return;
                     // 全局麦克风状态与应用无关，始终刷新按钮文案
                     OverviewMicMuteButton.Content = L10n.T(globalMicMuted ? "Ov.MicUnmute" : "Ov.MuteMic");
-                    OverviewOutputCurrentText.Text = "";
                     RenderQuickButtons(OverviewOutputQuickPanel, outs);
-                    OverviewInputCurrentText.Text = "";
-                    OverviewInputCurrentText.Tag = null;
+                    OverviewInputCombo.Tag = null;
                     RenderInputQuickButtons();
                     SetVolumeUi(null);
                     return;
@@ -628,7 +626,6 @@ namespace SonicRoute
 
                 string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
 
-                OverviewOutputCurrentText.Text = DescribeCurrent(_outputDisplay, outShort, true);
                 RenderQuickButtons(OverviewOutputQuickPanel, outs);
 
                 // 选中项必须从下拉实际绑定的显示列表（含自定义名称）中查找，
@@ -642,8 +639,7 @@ namespace SonicRoute
 
                 // 输入设备（麦克风）：与输出一致读取持久化端点并刷新下拉/快捷按钮
                 string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
-                OverviewInputCurrentText.Text = DescribeCurrent(_inputDisplay, inShort, false);
-                OverviewInputCurrentText.Tag = inShort;
+                OverviewInputCombo.Tag = inShort;
                 RenderInputQuickButtons();
                 var selectedIn = inShort == null
                     ? (_inputDisplay.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault())
@@ -701,7 +697,7 @@ namespace SonicRoute
 
         private void HighlightQuickActive(ItemsControl panel)
         {
-            string? activeId = OverviewOutputCurrentText.Tag as string;
+            string? activeId = OverviewOutputCombo.Tag as string;
             foreach (var item in panel.Items)
             {
                 if (item is not Button btn || btn.Tag is not AudioDeviceInfo dev) continue;
@@ -755,7 +751,7 @@ namespace SonicRoute
 
         private void HighlightInputQuickActive()
         {
-            string? activeId = OverviewInputCurrentText.Tag as string;
+            string? activeId = OverviewInputCombo.Tag as string;
             foreach (var item in OverviewInputQuickPanel.Items)
             {
                 if (item is not Button btn || btn.Tag is not AudioDeviceInfo dev) continue;
@@ -2962,19 +2958,6 @@ namespace SonicRoute
         // ==================================================================
         // 工具
         // ==================================================================
-
-        private string DescribeCurrent(List<AudioDeviceInfo> devices, string? currentShortId, bool isOutput)
-        {
-            if (currentShortId == null)
-            {
-                string sysId = isOutput ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId;
-                // 状态显示系统默认（自定义名优先；虚拟项被"保留设备"隐藏时仍显示状态）
-                if (_config.DeviceNames.TryGetValue(sysId, out var cn) && !string.IsNullOrWhiteSpace(cn)) return L10n.T("Ov.Current") + cn;  // 与正常设备"当前：设备名"格式一致
-                return L10n.T("Ov.Current") + L10n.T(isOutput ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn");
-            }
-            var dev = devices.FirstOrDefault(d => string.Equals(d.Id, currentShortId, StringComparison.OrdinalIgnoreCase));
-            return dev != null ? L10n.T("Ov.Current") + dev.DisplayName : L10n.T("Ov.CurrentUnavailable");
-        }
 
         private static string ShortName(string? full)
         {
