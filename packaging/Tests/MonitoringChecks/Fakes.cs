@@ -121,14 +121,18 @@ namespace MonitoringChecks
     internal sealed class Volume : IAudioEndpointVolume
     {
         internal bool Muted;
+        internal float Scalar = .5f;
+        internal int VolumeReads, MuteReads, VolumeReadFailures;
         internal int RegistrationFailures, Registrations, Unregistrations, ReadFailures;
         internal readonly ConcurrentDictionary<IAudioEndpointVolumeCallback, byte> Callbacks = new();
         public int RegisterControlChangeNotify(IAudioEndpointVolumeCallback cb)
         { Registrations++; if (RegistrationFailures-- > 0) return -1; Callbacks[cb] = 0; return 0; }
         public int UnregisterControlChangeNotify(IAudioEndpointVolumeCallback cb) { Unregistrations++; Callbacks.TryRemove(cb, out _); return 0; }
-        public int GetMute(out int muted) { muted = Muted ? 1 : 0; return ReadFailures-- > 0 ? -1 : 0; }
+        public int GetMute(out int muted) { MuteReads++; muted = Muted ? 1 : 0; return ReadFailures-- > 0 ? -1 : 0; }
         public int SetMute(int muted, ref Guid context) => throw new InvalidOperationException("No writes permitted");
-        public int GetMasterVolumeLevelScalar(out float value) { value = .5f; return 0; }
+        internal Action? OnVolumeRead;
+        public int GetMasterVolumeLevelScalar(out float value) { VolumeReads++; value = Scalar; OnVolumeRead?.Invoke(); return VolumeReadFailures-- > 0 ? -1 : 0; }
+        internal void Notify() => Boundary.Callback(() => { foreach (var cb in Callbacks.Keys) cb.OnNotify(IntPtr.Zero); });
         public int GetMasterVolumeLevel(out float value) { value = -6; return 0; }
         public int GetChannelCount(out uint count) { count = 2; return 0; }
         public int GetChannelVolumeLevel(uint channel, out float value) { value = -6; return 0; }
@@ -141,7 +145,12 @@ namespace MonitoringChecks
 }
 namespace SonicRoute.Core
 {
-    internal static class AudioService { internal static void InvalidateAppsCache() { } internal static void InvalidateDeviceCache(EDataFlow? flow = null) { } }
+    internal static class AudioService
+    {
+        internal static void InvalidateAppsCache() { }
+        internal static void InvalidateDeviceCache(EDataFlow? flow = null) { }
+        internal static bool IsSystemDefault(string? id) => id == "@@SYSTEM_DEFAULT@@" || id == "@@SYSTEM_DEFAULT_IN@@";
+    }
     internal static class SessionVolumeService { internal static void InvalidateCache() { } }
     internal static class GlobalMicMuteService { internal static bool IsAnyMuted(bool track) => false; }
 }

@@ -136,6 +136,13 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Contains("--output-popup-live"))
+        {
+            AttachOutputTestDesktop();
+            Directory.CreateDirectory(args.Last());
+            var liveLog = new StreamWriter(Path.Combine(args.Last(), "console.log")) { AutoFlush = true };
+            Console.SetOut(liveLog); Console.SetError(liveLog);
+        }
         var directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "isolated-" + Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", directory);
         Directory.CreateDirectory(directory);
@@ -167,6 +174,9 @@ internal static partial class Program
                 "application exposes only the remaining quick panel");
             var theme = assembly.GetType("SonicRoute.ThemeService")!.GetMethod("Apply", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                 null, new[] { typeof(string), typeof(string) }, null)!;
+            if (args.Contains("--output-popup-live")) { CheckLiveOutputPopup(theme, windows, args.Last(), args.Contains("--output-followup-live")); Console.WriteLine($"RESULT passed={_checks} PRIVATE_DESKTOP=true AUDIO_READS_ONLY=true INPUT_INJECTED=false"); return 0; }
+            if (args.Contains("--output-volumes")) { CheckOutputVolumes(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} OUTPUT_VOLUME_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
+            if (args.Contains("--output-followup")) { CheckOutputFollowup(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} OUTPUT_FOLLOWUP_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--app-cards")) { CheckAppCards(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} APP_CARDS_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--hotkeys-only")) { CheckDeviceHotkeysAndTraySettings(theme, windows); Console.WriteLine($"RESULT passed={_checks} HOTKEY_TRAY_SETTINGS_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--measure-sections")) { MeasureSections(windows, args); return 0; }

@@ -7,9 +7,9 @@
 SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
-  version: "v1.28 (1.28.0.0)"
+  version: "v1.29 (1.29.0.0)"
   source_version: "v1.29"
-  source_status: "Development version; not the current published release."
+  source_status: "Same version number as the published release; source may contain later commits."
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
@@ -27,11 +27,11 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   cross_platform: "FALSE (strictly Win32/WPF/.NET CoreAudio; never macOS/Linux)"
 
 RELEASE_EDITIONS:
-  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.28-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.28-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
-  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.28-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.28-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
-  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.28-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
+  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.29-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
+  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.29-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
+  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
+  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
+  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.29-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
   - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_LITE_EXE, updates: MICROSOFT_STORE }
 
 CLI_AND_SHORT_COMMAND_SPEC:
@@ -93,14 +93,16 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     intent: "QuickPanel UI, tray volume scroll wheel, custom icons, blind control"
     keywords: ["panel", "tray", "wheel", "icon", "quickpanel", "height", "blind", "面板", "托盘", "滚轮", "盲操", "图标"]
     wiki: "01-使用指南.md"
-    source: ["SonicRoute/TrayWheelService.cs", "SonicRoute/QuickPanelModernWindow.xaml.cs", "SonicRoute/MainWindow.AppIcons.cs", "SonicRoute/CustomAppIconStore.cs"]
+    source: ["SonicRoute/TrayWheelService.cs", "SonicRoute/QuickPanelModernWindow.xaml.cs", "SonicRoute/QuickPanelModernWindow.OutputVolumes.cs", "SonicRoute.Core/OutputVolumeMonitor.cs", "SonicRoute/MainWindow.AppIcons.cs", "SonicRoute/CustomAppIconStore.cs"]
     symbols: ["TrayWheelService.Start", "QuickPanelModernWindow", "CustomAppIconStore.Prepare", "CustomAppIconStore.Load"]
     facts:
       - "One quick panel (QuickPanelModernWindow); the old application/classic panel is removed. Quick panel styles do not imply a second legacy panel implementation."
       - "QuickPanel height setting: 350 to 850 WPF device-independent units, additionally constrained by available work area."
       - "v1.28 defaults: TrayWheelEverywhere=false (own tray icon only); PanelChangeSystemDefault=true. Saved explicit preferences are retained. Normal tray wheel adjusts current-app volume."
       - "v1.28 adds Alt+wheel for current-app output and Alt+Shift+wheel for system default playback; up selects previous, down selects next. Existing registered wheel shortcuts take priority."
-      - "Development source v1.29 adds Shift+wheel to adjust system default playback volume in the same configured tray area. It shares the system-volume hotkey handler, configured step, endpoint readback and OSD; no new polling or setting. This addition is not in the stable v1.28 download."
+      - "v1.29 adds Shift+wheel to adjust system default playback volume in the same configured tray area. It shares the system-volume hotkey handler, configured step, endpoint readback and OSD; no new polling or setting."
+      - "v1.29 adds a deferred output-volume popup: expand beside/above the unchanged owner to control real output endpoint master volumes and mute. Height follows displayed rows, capped by the owner and work area. QuickPanelShowAllOutputVolumes defaults false and remembers explicit clicks."
+      - "PanelOutputVolumesRetainedOnly defaults false and independently filters the extra popup using HiddenOutputDevices. The popup loads only while expanded; collapse cancels its own reads/rendering and releases controls/subscriptions. Healthy notifications read only changed endpoints; visible notification/read failures retain bounded recovery."
       - "Quick panel device volume/mute changes do not show redundant OSD; hotkey and tray feedback remain."
       - "Drop one PNG/JPEG/ICO onto the Import icon button for the selected app in the full interface; it reuses the file-picker import path and stores managed PNGs in the Icons directory."
 
@@ -192,12 +194,13 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Optional execution history: ExecutionHistory/{CommandEdition}, only when experimental mode and execution history are enabled. SONICROUTE_DATA_DIRECTORY can override the root with an absolute path for isolated tooling."
 
   VERSION_ARCHIVE_AND_CHANGELOG:
-    intent: "Release history, changelog, v1.28 upgrade notes"
-    keywords: ["changelog", "history", "version", "update", "v1.28", "v1.25", "v1.24", "更新日志", "版本历史"]
+    intent: "Release history, changelog, v1.29 upgrade notes"
+    keywords: ["changelog", "history", "version", "update", "v1.29", "v1.25", "v1.24", "更新日志", "版本历史"]
     wiki: "09-版本历史.md"
-    source: ["docs/release-v1.28.md"]
-    symbols: ["v1.28"]
+    source: ["docs/release-v1.29.md"]
+    symbols: ["v1.29"]
     facts:
+      - "v1.29: Expandable output endpoint volume panel, independent retained-device filter, deferred loading and event-driven incremental refresh; Shift wheel controls system volume. JSON/language and audio-meter work was reduced without a whole-app CPU claim."
       - "v1.28: Inline application renaming, shared routing card, independent mute/activity and hidden-panel markers; Alt wheel changes app output, Alt+Shift wheel changes system output. Existing device hotkeys remain."
       - "v1.27: One quick panel, session notification lifecycle, reliable mute hotkey targets, custom device titles, shared scrollbars and reusable settings rows. v1.26: Protected-app icon fallback and runtime-specific persistence."
       - "v1.25: .NET 10 default, native updater, 37 actions, drag icon, 850px panel."

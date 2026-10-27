@@ -14,8 +14,7 @@ namespace SonicRoute.Core
         private readonly VolumeCallback _volumeCallback;
         private readonly DeviceCallback _deviceCallback;
         private IMMDeviceEnumerator? _enumerator;
-        private readonly Dictionary<string, IAudioEndpointVolume> _volumes = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _registered = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, EndpointVolumeSubscription> _volumes = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<IAudioEndpointVolume> _capture = new();
         private IAudioEndpointVolume? _default;
         private bool _deviceRegistered, _registrationIncomplete;
@@ -109,31 +108,27 @@ namespace SonicRoute.Core
                 if (defaultResult >= 0 && input != null) _default = Activate(input);
             }
             finally { if (input != null) Free(input); }
-            _registrationIncomplete = !_deviceRegistered || _registered.Count != _volumes.Count;
+            _registrationIncomplete = !_deviceRegistered;
+            foreach (var subscription in _volumes.Values) _registrationIncomplete |= !subscription.Registered;
         }
 
         private void RetryVolumeNotifications()
         {
-            foreach (var pair in _volumes)
+            _registrationIncomplete = !_deviceRegistered;
+            foreach (var subscription in _volumes.Values)
             {
-                if (_registered.Contains(pair.Key)) continue;
-                try { if (pair.Value.RegisterControlChangeNotify(_volumeCallback) >= 0) _registered.Add(pair.Key); }
-                catch { } // 有效音量读取仍可兜底；读取失败才释放并重建。
+                subscription.TryRegister();
+                _registrationIncomplete |= !subscription.Registered;
             }
-            _registrationIncomplete = !_deviceRegistered || _registered.Count != _volumes.Count;
         }
 
         private IAudioEndpointVolume Activate(IMMDevice device)
         {
             Marshal.ThrowExceptionForHR(device.GetId(out string id));
-            if (_volumes.TryGetValue(id, out var existing)) return existing;
-            var iid = typeof(IAudioEndpointVolume).GUID;
-            Marshal.ThrowExceptionForHR(device.Activate(ref iid, ComConstants.CLSCTX_ALL, IntPtr.Zero, out var obj));
-            if (obj == null) throw new COMException("Endpoint volume unavailable.");
-            var volume = (IAudioEndpointVolume)obj;
-            _volumes.Add(id, volume);
-            if (volume.RegisterControlChangeNotify(_volumeCallback) >= 0) _registered.Add(id);
-            return volume;
+            if (_volumes.TryGetValue(id, out var existing)) return existing.Volume;
+            var subscription = new EndpointVolumeSubscription(device, _volumeCallback);
+            _volumes.Add(id, subscription);
+            return subscription.Volume;
         }
 
         private void SetRecoveryRequired(bool value)
@@ -152,13 +147,8 @@ namespace SonicRoute.Core
         private static void Free(object obj) { try { Marshal.ReleaseComObject(obj); } catch { } }
         private void Release()
         {
-            foreach (var pair in _volumes)
-            {
-                if (_registered.Contains(pair.Key))
-                    try { pair.Value.UnregisterControlChangeNotify(_volumeCallback); } catch { }
-                Free(pair.Value);
-            }
-            _volumes.Clear(); _registered.Clear(); _capture.Clear(); _default = null;
+            foreach (var subscription in _volumes.Values) subscription.Dispose();
+            _volumes.Clear(); _capture.Clear(); _default = null;
             if (_enumerator != null)
             {
                 if (_deviceRegistered)

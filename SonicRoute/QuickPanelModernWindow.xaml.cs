@@ -93,6 +93,7 @@ namespace SonicRoute
         {
             InitializeComponent();
             VolumePresets.Attach(VolumeSlider);
+            InitializeOutputVolumes();
             _entranceMotion = new PanelEntranceMotion(PanelSurface, PanelSlide);
             AppListScroll.PreviewMouseWheel += (_, _) => StopRowScroll();
             AppListScroll.PreviewMouseDown += (_, _) => StopRowScroll();
@@ -103,7 +104,8 @@ namespace SonicRoute
             Activated += (_, _) => _everFocused = true;
             Deactivated += (_, _) =>
             {
-                if (IsVisible && _everFocused && !_adjustMode) Close();
+                if (OutputVolumesPopup.IsOpen) CloseAfterFocusLeaves();
+                else if (IsVisible && _everFocused && !_adjustMode) Close();
             };
             // 调整模式拖动：按住左键移动窗口，松手保存位置（逻辑同 OSD 调整）
             MouseLeftButtonDown += (_, e) =>
@@ -137,6 +139,7 @@ namespace SonicRoute
             {
                 if (!IsVisible || _adjustMode) return;
                 RequestPosition();
+                if (OutputVolumesPopup.IsOpen) PositionOutputPopup();
             };
             // 工作区变化（分辨率/任务栏位置/DPI 缩放）时重定位默认位置
             SystemParameters.StaticPropertyChanged += OnSystemParamChanged;
@@ -150,6 +153,7 @@ namespace SonicRoute
         {
             if (e.PropertyName != nameof(SystemParameters.WorkArea)) return;
             if (IsVisible && !_adjustMode) RequestPosition();
+            if (OutputVolumesPopup.IsOpen) PositionOutputPopup();
         }
 
         /// <summary>合并定位请求：同帧多次触发只定位一次，避免窗口反复移动/跳动。</summary>
@@ -228,13 +232,15 @@ namespace SonicRoute
         internal void SetAdjustMode(bool on)
         {
             _adjustMode = on;
+            OutputVolumesToggle.IsEnabled = !on;
+            if (on) StopOutputVolumes();
             if (on) ((App)Application.Current).ShowOsd(L10n.T("Exp.PanelPosDragTitle"), L10n.T("Exp.PanelPosHint"));
         }
 
         /// <summary>一键还原默认位置（任务栏右下角），已打开则立即重定位。</summary>
         internal void ResetPosition()
         {
-            if (_adjustMode) _adjustMode = false;
+            if (_adjustMode) SetAdjustMode(false);
             if (IsVisible) QuickPanelPosition.Apply(this, ConfigService.Load());
         }
 
@@ -244,9 +250,10 @@ namespace SonicRoute
             try
             {
                 QuickPanelPosition.Save(this, ConfigService.Load());
-                _adjustMode = false;
+                SetAdjustMode(false);
                 ((App)Application.Current).ShowOsd("📍", L10n.T("Exp.PanelPosSaved"));
                 ((App)Application.Current).NotifyQuickPanelAdjustFinished();
+                OpenOutputVolumes();
             }
             catch { }
         }
@@ -340,6 +347,7 @@ namespace SonicRoute
                     _contentReady = true;
                     QuickPanelPosition.Apply(this, cfg);
                     if (!_entrancePlayed) { _entrancePlayed = true; PlayEntranceAnimation(); }
+                    OpenOutputVolumes();
                 }).Task;
                 if (_isClosed) return;
                 await RefreshGlobalMuteStateAsync(loadVersion);
@@ -452,12 +460,7 @@ namespace SonicRoute
                 _systemReady = false;
                 if (vol < 0)
                 {
-                    VolumeSlider.Value = 0;
-                    VolumePercentText.Text = "—";
-                    VolumeSlider.IsEnabled = false;
-                    MuteButton.IsEnabled = false;
-                    MuteButton.Content = L10n.T("Qp.Mute");
-                    MuteButton.ClearValue(Button.ForegroundProperty);
+                    ApplySystemVolumeUnavailable();
                     return;
                 }
                 VolumeSlider.Value = vol;
@@ -469,6 +472,17 @@ namespace SonicRoute
 
             }
             catch (OperationCanceledException) when (_isClosed) { }
+        }
+
+        private void ApplySystemVolumeUnavailable()
+        {
+            ++_systemVolumeRequest;
+            _systemReady = false;
+            VolumeSlider.Value = 0;
+            VolumePercentText.Text = "—";
+            VolumeSlider.IsEnabled = MuteButton.IsEnabled = false;
+            MuteButton.Content = L10n.T("Qp.Mute");
+            MuteButton.ClearValue(Button.ForegroundProperty);
         }
 
         private async void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -498,6 +512,7 @@ namespace SonicRoute
 
         internal void ApplySystemVolumeReadback(string? deviceId, int actual, bool muted)
         {
+            SyncExpandedOutputReadback(deviceId, actual, muted);
             if (_isClosed || !string.Equals(deviceId, _systemDeviceId, StringComparison.OrdinalIgnoreCase)) return;
             ++_systemVolumeRequest; // 旧初始化/选择读取不能盖过这次实际调整。
             ApplySystemVolumeReadback(actual);
@@ -858,14 +873,7 @@ namespace SonicRoute
             UpdateRowSliderLayout(row);
             if (_isClosed || _updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
             _pendingVolume[(int)row.App.ProcessId] = pct;
-
-            if (_volDebounce == null)
-            {
-                _volDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
-                _volDebounce.Tick += VolDebounce_Tick;
-            }
-            _volDebounce.Stop();
-            _volDebounce.Start();
+            SchedulePendingVolumeFlush();
         }
 
         /// <summary>行滑块鼠标滚轮：悬停应用音量条时滚轮调节该应用音量 ±4%（写回走 RowSlider_ValueChanged 防抖）。</summary>

@@ -79,6 +79,22 @@ namespace SonicRoute
             return GetWindowRect(handle, out rect);
         }
 
+        // Shared screen query for an attached popup; coordinates are relative to
+        // the owner's origin in its DIPs. Existing OSD/main-panel placement is unchanged.
+        internal static bool TryRelativeWorkArea(Window window, out Rect work)
+        {
+            work = default;
+            var handle = new WindowInteropHelper(window).Handle;
+            if (handle == IntPtr.Zero) return false;
+            using var coordinates = new NativeCoordinates(true);
+            if (!GetWindowRect(handle, out var rect)) return false;
+            var area = WorkArea(MonitorFromRect(ref rect, 2));
+            double scale = WindowScale(window, handle);
+            work = new Rect((area.Left - rect.Left) / scale, (area.Top - rect.Top) / scale,
+                (area.Right - area.Left) / scale, (area.Bottom - area.Top) / scale);
+            return true;
+        }
+
         internal static void Drag(Window window, NativeRect start, NativePoint cursorStart)
         {
             var handle = new WindowInteropHelper(window).Handle;

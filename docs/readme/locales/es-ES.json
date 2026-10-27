@@ -51,7 +51,7 @@
     "configureAutomation": "Configurar automatización",
     "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
     "currentRelease": "Versión actual",
-    "releaseSummary": "{version} reorganiza las tarjetas de aplicaciones, permite cambiar el nombre junto al título y unifica las tarjetas de entrada y salida. Indicadores separados muestran el silencio/actividad y si la app está oculta del panel rápido. Alt+rueda cambia la salida de la app actual; Alt+Mayús+rueda cambia el dispositivo de reproducción predeterminado. Cambios anteriores: {history}.",
+    "releaseSummary": "{version} añade un panel adicional con controles de volumen principal para todos los dispositivos de salida, con carga bajo demanda y actualización por eventos, y opción para mostrar solo los dispositivos conservados. Shift+rueda ajusta el volumen del sistema; se mantienen las funciones de rueda, Alt+rueda y Alt+Mayús+rueda. Cambios anteriores: {history}.",
     "docTopic": "Tema",
     "docGuides": "Guías",
     "docTopics": [

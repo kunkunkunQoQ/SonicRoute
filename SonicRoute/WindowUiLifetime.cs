@@ -20,6 +20,13 @@ namespace SonicRoute
 
         internal Task<T> ReadAsync<T>(Func<T> read) => WaitForReadAsync(Task.Run(read, _token), _token);
         internal Task<T> ReadAsync<T>(Task<T> sharedRead) => WaitForReadAsync(sharedRead, _token);
+        internal Task ReadAsync(Task sharedRead) => WaitForReadAsync(CompleteReadAsync(sharedRead), _token);
+
+        private static async Task<bool> CompleteReadAsync(Task sharedRead)
+        {
+            await sharedRead.ConfigureAwait(false);
+            return true;
+        }
 
         internal Task<TResult> ReadAsync<TState, TResult>(TState state, Func<TState, TResult> read) =>
             ReadAsync(() => read(state));

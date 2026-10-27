@@ -6,11 +6,15 @@ namespace MonitoringChecks;
 internal static class Program
 {
     private static int _passed, _failed;
+    private static bool _endpointVolumesOnly;
     private static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
     private static void Wait(Func<bool> condition, string message, int timeout = 4000)
     { var watch = System.Diagnostics.Stopwatch.StartNew(); while (!condition() && watch.ElapsedMilliseconds < timeout) Thread.Sleep(10); Assert(condition(), message); }
     private static void Case(string name, Action test)
-    { try { Boundary.Reset(); test(); Assert(Boundary.CallbackReleases == 0, "COM released inside a callback"); _passed++; Console.WriteLine("PASS " + name); } catch (Exception error) { _failed++; Console.WriteLine("FAIL " + name + ": " + error); } }
+    {
+        if (_endpointVolumesOnly && !name.StartsWith("output ") && !name.Contains("microphone") && !name.StartsWith("missing device notification")) return;
+        try { Boundary.Reset(); test(); Assert(Boundary.CallbackReleases == 0, "COM released inside a callback"); _passed++; Console.WriteLine("PASS " + name); } catch (Exception error) { _failed++; Console.WriteLine("FAIL " + name + ": " + error); }
+    }
     private sealed class Probe : IDisposable
     {
         internal readonly AudioMeterService Meter = new();
@@ -20,8 +24,10 @@ internal static class Program
         internal float Peak(int pid) { var latest = Volatile.Read(ref Latest); return latest.TryGetValue(pid, out var peak) ? peak : 0; }
         public void Dispose() => Meter.Dispose();
     }
-    public static int Main()
+    public static int Main(string[] args)
     {
+        _endpointVolumesOnly = args.Contains("--endpoint-volumes-only");
+        OutputVolumeCases.Run(Case, Assert);
         Case("healthy active meter retains managers beyond old two-second scan", () =>
         {
             var session = new Session(101); var device = Boundary.Add(EDataFlow.eRender, session);

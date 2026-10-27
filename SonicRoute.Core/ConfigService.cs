@@ -71,6 +71,12 @@ namespace SonicRoute.Core
         /// <summary>快速面板固定高度（px，350–850，默认 450）：展开/收起不改变；内容超出在应用区域滚动。</summary>
         public int QuickPanelHeight { get; set; } = 450;
 
+        /// <summary>在附加面板中展开全部输出设备音量；仅用户点击切换时保存。</summary>
+        public bool QuickPanelShowAllOutputVolumes { get; set; } = false;
+
+        /// <summary>额外音量面板仅显示保留的输出设备；独立于顶部切换系统默认设备开关。</summary>
+        public bool PanelOutputVolumesRetainedOnly { get; set; } = false;
+
         /// <summary>主题页：快速面板内显示每应用实时声音活动；关闭时不启动 Meter，显示与旧版一致。</summary>
         public bool ShowAppPeakMeter { get; set; } = true;
 

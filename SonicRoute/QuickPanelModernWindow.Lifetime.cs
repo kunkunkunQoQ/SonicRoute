@@ -1,4 +1,5 @@
 using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
@@ -12,20 +13,41 @@ namespace SonicRoute
         private readonly WindowUiLifetime _uiLifetime = new();
         private Task _volumeWriteTask = Task.CompletedTask;
 
+        private void SchedulePendingVolumeFlush()
+        {
+            if (_volDebounce == null)
+            {
+                _volDebounce = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
+                _volDebounce.Tick += VolDebounce_Tick;
+            }
+            _volDebounce.Stop();
+            _volDebounce.Start();
+        }
+
         private void FlushPendingVolumes()
         {
             _volDebounce?.Stop();
-            if (_pendingVolume.Count == 0) return;
+            if (_pendingVolume.Count == 0 && _pendingOutputVolume.Count == 0) return;
             var snapshot = new List<KeyValuePair<int, int>>(_pendingVolume);
+            var outputs = new List<(OutputVolumeTarget Target, int Percent, int Version)>(_pendingOutputVolume.Values);
             _pendingVolume.Clear();
-            _volumeWriteTask = QueueVolumeWrites(_volumeWriteTask, snapshot);
+            _pendingOutputVolume.Clear();
+            _volumeWriteTask = QueueVolumeWrites(_volumeWriteTask, snapshot, outputs, new WeakReference<QuickPanelModernWindow>(this));
         }
 
-        private static Task QueueVolumeWrites(Task previous, List<KeyValuePair<int, int>> snapshot) =>
+        private static Task QueueVolumeWrites(Task previous, List<KeyValuePair<int, int>> snapshot,
+            List<(OutputVolumeTarget Target, int Percent, int Version)> outputs, WeakReference<QuickPanelModernWindow> owner) =>
             previous.ContinueWith(completed =>
             {
                 _ = completed.Exception;
                 foreach (var item in snapshot) SessionVolumeService.SetVolumePercent(item.Key, item.Value);
+                foreach (var item in outputs)
+                {
+                    if (!System.Threading.Volatile.Read(ref item.Target.Available)) continue;
+                    var result = SystemVolumeService.SetVolumePercentChecked(item.Target.Id, item.Percent);
+                    if (owner.TryGetTarget(out var panel) && !panel._isClosed)
+                        panel._uiLifetime.Post(panel.Dispatcher, () => panel.ApplyOutputVolumeWriteReadback(item.Target, item.Version, result.Actual));
+                }
             }, TaskScheduler.Default);
 
         private void CleanupClosedWindow()
@@ -35,6 +57,8 @@ namespace SonicRoute
             ++_loadVersion; ++_systemVolumeRequest; ++_globalMuteVersion; ++_micMuteVersion;
             // Pending slider changes are committed independently of UI cancellation.
             FlushPendingVolumes();
+            StopOutputVolumes();
+            LocationChanged -= OutputOwnerLocationChanged;
             if (_volDebounce != null) _volDebounce.Tick -= VolDebounce_Tick;
             _volDebounce = null;
             StopMeter();

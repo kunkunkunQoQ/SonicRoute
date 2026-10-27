@@ -73,6 +73,7 @@ namespace SonicRoute
         internal CheckBox ExpMicOptionCheck = null!;
         internal CheckBox ExpMicPanelCheck = null!;
         internal CheckBox SettingsPanelChangeSysDef = null!;
+        internal CheckBox SettingsPanelOutputVolumesRetainedOnly = null!;
         internal CheckBox ExpCollapseCheck = null!;
         internal CheckBox SettingsExperimentalMode = null!;
         internal TextBlock ExperimentalModeHint = null!;
@@ -195,6 +196,7 @@ namespace SonicRoute
                 ExpMicOptionCheck = FindDeferredControl<CheckBox>(content, nameof(ExpMicOptionCheck));
                 ExpMicPanelCheck = FindDeferredControl<CheckBox>(content, nameof(ExpMicPanelCheck));
                 SettingsPanelChangeSysDef = FindDeferredControl<CheckBox>(content, nameof(SettingsPanelChangeSysDef));
+                SettingsPanelOutputVolumesRetainedOnly = FindDeferredControl<CheckBox>(content, nameof(SettingsPanelOutputVolumesRetainedOnly));
                 ExpCollapseCheck = FindDeferredControl<CheckBox>(content, nameof(ExpCollapseCheck));
                 SettingsExperimentalMode = FindDeferredControl<CheckBox>(content, nameof(SettingsExperimentalMode));
                 ExperimentalModeHint = FindDeferredControl<TextBlock>(content, nameof(ExperimentalModeHint));
@@ -347,6 +349,7 @@ namespace SonicRoute
             ExpMicOptionCheck = null!;
             ExpMicPanelCheck = null!;
             SettingsPanelChangeSysDef = null!;
+            SettingsPanelOutputVolumesRetainedOnly = null!;
             ExpCollapseCheck = null!;
             SettingsExperimentalMode = null!;
             ExperimentalModeHint = null!;

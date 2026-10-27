@@ -51,7 +51,7 @@
     "configureAutomation": "Automatisierung einrichten",
     "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease": "Aktuelle Version",
-    "releaseSummary": "Version {version} ordnet die App-Karten neu, ermöglicht das Umbenennen direkt neben dem Namen und fasst Ein- und Ausgaberouting zusammen. Getrennte Markierungen zeigen Stummschaltung/Aktivität und das Ausblenden im Schnellpanel. Alt+Rad wechselt die App-Ausgabe, Alt+Umschalt+Rad das Standard-Wiedergabegerät. Frühere Änderungen: {history}.",
+    "releaseSummary": "{version} ergänzt ein Zusatzpanel mit Hauptlautstärkereglern für alle Ausgabegeräte, optional nur für behaltene Geräte, das bei Bedarf geladen und ereignisgesteuert aktualisiert wird. Shift+Rad regelt die Systemlautstärke; die bisherigen Funktionen von Rad, Alt+Rad und Alt+Umschalt+Rad bleiben erhalten. Frühere Änderungen: {history}.",
     "docTopic": "Thema",
     "docGuides": "Anleitungen",
     "docTopics": [

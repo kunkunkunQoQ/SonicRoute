@@ -1287,6 +1287,8 @@ namespace SonicRoute
             UpdateSelectAllLabels();
             // 快速切换界面立即生效（刷新设备显示）
             _ = RefreshOverviewDevicesVolumeAsync();
+            if (_config.PanelOutputVolumesRetainedOnly)
+                ((App)Application.Current).QuickPanelInstance?.RefreshOutputVolumeFilter();
         }
 
         /// <summary>输入设备（麦克风）保留勾选：实验模式 + 麦克风选项开启时可用。</summary>
@@ -1327,6 +1329,8 @@ namespace SonicRoute
             ConfigService.Save(_config);
             UpdateSelectAllLabels();
             _ = RefreshOverviewDevicesVolumeAsync();
+            if (_config.PanelOutputVolumesRetainedOnly && boxes[0].Tag is AudioDeviceInfo { Flow: EDataFlow.eRender })
+                ((App)Application.Current).QuickPanelInstance?.RefreshOutputVolumeFilter();
         }
 
         private void UpdateSelectAllLabels()
@@ -1451,6 +1455,7 @@ namespace SonicRoute
                 SettingsStartMinimized.IsChecked = _config.StartMinimized;
                 SettingsShowPanelOnStart.IsChecked = _config.StartPanelOnStart;
                 SettingsPanelChangeSysDef.IsChecked = _config.PanelChangeSystemDefault;
+                SettingsPanelOutputVolumesRetainedOnly.IsChecked = _config.PanelOutputVolumesRetainedOnly;
                 // 主题页未创建时保留配置；首次进入主题页再同步高度。
                 SyncThemePanelHeight();
                 VolumeStepBox.Text = MathEx.Clamp(_config.VolumeStep, 1, 20).ToString();
@@ -1794,6 +1799,14 @@ namespace SonicRoute
             if (!IsSettingsChange(sender, e)) return;
             _config.PanelChangeSystemDefault = SettingsPanelChangeSysDef.IsChecked == true;
             ConfigService.Save(_config);
+        }
+
+        private void SettingsPanelOutputVolumesRetainedOnly_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsSettingsChange(sender, e)) return;
+            _config.PanelOutputVolumesRetainedOnly = SettingsPanelOutputVolumesRetainedOnly.IsChecked == true;
+            ConfigService.Save(_config);
+            ((App)Application.Current).QuickPanelInstance?.RefreshOutputVolumeFilter();
         }
 
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。

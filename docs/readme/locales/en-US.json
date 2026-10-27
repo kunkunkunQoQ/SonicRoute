@@ -51,7 +51,7 @@
     "configureAutomation": "Set up automation",
     "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease": "Current release",
-    "releaseSummary": "{version} redesigns app cards, adds inline renaming beside the name, and combines input/output routing cards. Separate markers show mute/activity and quick-panel hiding. Alt+wheel switches the current app output; Alt+Shift+wheel switches the system default playback device. Earlier changes: {history}.",
+    "releaseSummary": "{version} adds an on-demand, event-refreshed panel with main volume controls for all output devices, optionally filtered to retained devices. Shift+wheel adjusts system volume; the existing wheel, Alt+wheel, and Alt+Shift+wheel actions remain. Earlier changes: {history}.",
     "docTopic": "Topic",
     "docGuides": "Guides",
     "docTopics": [

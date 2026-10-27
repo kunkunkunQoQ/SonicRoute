@@ -51,7 +51,7 @@
     "configureAutomation": "配置自动化",
     "automationExample": "把繁琐的手动改设置，变成一次配置、随开随用的自动化体验。",
     "currentRelease": "当前正式版",
-    "releaseSummary": "{version} 重整应用卡片，支持在名称旁原位改名，并合并输入与输出路由卡片；静音/活动状态与快速面板隐藏标记分开显示。Alt+滚轮切换当前应用输出设备，Alt+Shift+滚轮切换系统默认播放设备。旧版变化见 {history}。",
+    "releaseSummary": "{version} 新增输出设备附加音量面板，按需加载并由事件刷新，可筛选为仅显示保留设备。Shift+滚轮调节系统音量；普通滚轮、Alt+滚轮与 Alt+Shift+滚轮行为保持不变。此前变化见 {history}。",
     "docTopic": "想了解什么",
     "docGuides": "文档",
     "docTopics": [

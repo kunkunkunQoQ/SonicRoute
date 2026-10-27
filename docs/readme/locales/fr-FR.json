@@ -51,7 +51,7 @@
     "configureAutomation": "Configurer l’automatisation",
     "automationExample": "Transformez les réglages manuels fastidieux en une expérience automatisée prête à l'emploi.",
     "currentRelease": "Version actuelle",
-    "releaseSummary": "{version} réorganise les cartes des applications, permet de renommer à côté du nom et regroupe les cartes d’entrée et de sortie. Des indicateurs distincts signalent le mode muet/l’activité et le masquage dans le panneau rapide. Alt+molette change la sortie de l’application actuelle ; Alt+Maj+molette change le périphérique de lecture par défaut. Historique : {history}.",
+    "releaseSummary": "{version} ajoute un panneau supplémentaire avec les commandes de volume principal de tous les périphériques de sortie, chargé à la demande et actualisé par événements, avec une option pour filtrer les périphériques conservés. Maj+molette règle le volume système ; les actions existantes de la molette, Alt+molette et Alt+Maj+molette sont conservées. Changements précédents : {history}.",
     "docTopic": "Sujet",
     "docGuides": "Guides",
     "docTopics": [

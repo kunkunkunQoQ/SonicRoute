@@ -39,6 +39,36 @@ then disposes the icon and service. It does not install a hook, inject input or
 write audio state. This optional check requires a running Explorer notification
 area; it does not validate physical mouse input, taskbar relocation or mixed DPI.
 
+`--output-volumes <image-directory>` limits execution to the additional output
+volume panel. It checks corner placement and constrained space, old config and
+saved expansion mode, deferred controls, independent device targets, merged
+pending slider changes, stale readback, device removal and collapse cleanup.
+It renders the actual product controls in light/dark themes and nine languages.
+No windows are shown and no queued audio writes are executed in this mode.
+
+`Run-OutputPopupChecks.ps1 -Framework net10.0-windows` runs the optional native
+popup check on a newly created private desktop, without switching the input
+desktop. Build the matching test framework first. Use `net8.0-windows` or `net48`
+for the other runtimes; `-DotNetHost` selects the matching modern runtime host,
+and `-OutputDirectory` selects the log/image directory. The check shows its own
+product panels, reads real audio state, verifies all four corners and unchanged
+owner coordinates/height, focus, collapse/reopen and close disposal. It injects
+no mouse/keyboard input and never adjusts real audio. Physical input, mixed-DPI
+monitor transitions, Win10 and native ARM64 remain separate manual checks.
+
+`--output-followup <image-directory>` checks the themed expand button, absence
+of the extra close button, the independent retained-output setting directly
+below the default-device switch, config defaults/serialization, retained-device
+filtering, deferred control cleanup, and light/dark layouts in nine languages.
+Add `-Followup` to `Run-OutputPopupChecks.ps1` for its focused native counterpart:
+loaded settings events and persisted values, height caps at two main-panel
+sizes, empty/single/all retained devices, subscription removal, and the original
+main volume control remaining available when its device is filtered out.
+This native variant uses one corner, reusing the existing positioning path.
+It also checks synchronous cached device rows on reopen, feature-scoped
+cancellation of queued rendering and pending reads, preservation of the main
+panel lifetime, rapid collapse/reopen, and retired subscription disposal.
+
 `--app-cards <absolute-image-directory>` limits execution to the application page.
 It checks the actual BAML in light/dark themes, nine languages at three widths,
 positive quick-panel visibility, independent top-left hidden and right-side

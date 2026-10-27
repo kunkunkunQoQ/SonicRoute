@@ -14,6 +14,29 @@
         SnapsToDevicePixels="True"
         FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
     <Window.Resources>
+        <!-- Factory only: additional controls are instantiated on expansion and released on collapse. -->
+        <DataTemplate x:Key="OutputVolumePopupTemplate">
+            <Border x:Name="OutputPopupSurface" Width="366" Padding="14,12" ClipToBounds="True"
+                    Background="{DynamicResource Theme.WindowBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
+                    BorderThickness="1" CornerRadius="12" PreviewKeyDown="OutputPopup_PreviewKeyDown">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <DockPanel Height="24" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding [Qp.Output], Source={x:Static local:L10n.Instance}}"
+                                   FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextSecondary}"
+                                   VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <Grid Grid.Row="1">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="OutputVolumeRowsPanel"/>
+                        </ScrollViewer>
+                        <TextBlock x:Name="OutputVolumeEmptyText" Text="{Binding [Ov.NoDevice], Source={x:Static local:L10n.Instance}}"
+                                   Foreground="{DynamicResource Theme.TextSecondary}" Visibility="Collapsed"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                    </Grid>
+                </Grid>
+            </Border>
+        </DataTemplate>
         <!-- 设备快速切换按钮 -->
         <Style x:Key="DevButton" TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
@@ -185,8 +208,14 @@
             </DockPanel>
 
             <!-- 输出设备选择 -->
-            <ComboBox x:Name="SystemDevCombo" Style="{StaticResource RoundedComboBox}" Height="32" Margin="0,10,0,0"
-                      Grid.Row="1" SelectionChanged="SystemDevCombo_SelectionChanged"/>
+            <DockPanel Grid.Row="1" Margin="0,10,0,0">
+                <ToggleButton x:Name="OutputVolumesToggle" Style="{StaticResource RowExpandButton}"
+                              Background="{DynamicResource Theme.SurfaceBg}"
+                              DockPanel.Dock="Right" Width="30" Height="32" Margin="6,0,0,0"
+                              Content="▴" Click="OutputVolumesToggle_Click"/>
+                <ComboBox x:Name="SystemDevCombo" Style="{StaticResource RoundedComboBox}" Height="32"
+                          SelectionChanged="SystemDevCombo_SelectionChanged"/>
+            </DockPanel>
 
             <!-- 主音量：大滑块 + 静音 + 百分比（滚轮可调） -->
             <DockPanel Grid.Row="2" Margin="0,10,0,0" MouseWheel="Volume_MouseWheel">
@@ -245,5 +274,8 @@
             </DockPanel>
         </Grid>
     </Border>
+        <!-- Additional output controls have their own HWND and never resize/reposition the main panel. -->
+        <Popup x:Name="OutputVolumesPopup" Placement="Custom"
+               AllowsTransparency="True" StaysOpen="True" PopupAnimation="None"/>
     </Grid>
 </Window>
