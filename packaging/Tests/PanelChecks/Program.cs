@@ -181,6 +181,7 @@ internal static partial class Program
             if (args.Contains("--hotkeys-only")) { CheckDeviceHotkeysAndTraySettings(theme, windows); Console.WriteLine($"RESULT passed={_checks} HOTKEY_TRAY_SETTINGS_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--measure-sections")) { MeasureSections(windows, args); return 0; }
             if (args.Contains("--render-scrollbars")) { RenderScrollbars(theme, args.Last()); return 0; }
+            if (args.Contains("--app-scroll-layout")) { CheckAppScrollLayout(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} APP_SCROLL_LAYOUT_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             foreach (string mode in new[] { "light", "dark" })
             {
                 theme.Invoke(null, new object[] { mode, "blue" });

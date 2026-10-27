@@ -243,7 +243,18 @@
 
             <!-- 应用列表：全部有音频的应用，每行独立音量，行右侧展开设置输出/输入设备（区域内滚动） -->
             <ScrollViewer x:Name="AppListScroll" Grid.Row="4" MinHeight="36" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
+                          HorizontalScrollBarVisibility="Disabled" Margin="0,0,-14,0">
+                <!-- Keep the application viewport fixed; the shared 14-DIP scrollbar uses the right margin. -->
+                <ScrollViewer.Style>
+                    <Style TargetType="ScrollViewer">
+                        <Setter Property="Padding" Value="0,0,14,0"/>
+                        <Style.Triggers>
+                            <Trigger Property="ComputedVerticalScrollBarVisibility" Value="Visible">
+                                <Setter Property="Padding" Value="0"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </ScrollViewer.Style>
                 <ItemsControl x:Name="AppListPanel">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>

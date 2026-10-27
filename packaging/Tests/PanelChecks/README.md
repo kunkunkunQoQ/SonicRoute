@@ -20,6 +20,12 @@ this is distinct from a visible-window or physical DPI/input check.
 `--measure-sections --device-count=8` is a narrow unshown row construction/update
 probe, not a CPU/working-set or first-visible-window benchmark.
 
+`--app-scroll-layout <image-directory>` checks the actual application rows in
+light/dark themes before and after vertical overflow. It verifies stable viewport,
+slider width and expand-arrow position, the shared native scrollbar in the right
+gutter, scrolling to the end, collapse recovery and absence of queued audio writes.
+It renders the unshown product panel and uses only missing-PID audio reads.
+
 Build each runtime separately (default NET10):
 
 ```powershell

@@ -1,7 +1,7 @@
 <Project>
   <!-- The only development version to edit. Two or three numeric components. -->
   <PropertyGroup>
-    <SonicRouteVersion>1.29</SonicRouteVersion>
+    <SonicRouteVersion>1.30</SonicRouteVersion>
     <SonicRouteNumericVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(SonicRouteVersion)', '^(\d+)\.(\d+)$', '$1.$2.0.0'))</SonicRouteNumericVersion>
     <SonicRouteNumericVersion>$([System.Text.RegularExpressions.Regex]::Replace('$(SonicRouteNumericVersion)', '^(\d+)\.(\d+)\.(\d+)$', '$1.$2.$3.0'))</SonicRouteNumericVersion>
     <Version>$(SonicRouteVersion)</Version>

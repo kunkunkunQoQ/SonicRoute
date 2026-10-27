@@ -28,6 +28,64 @@ internal static partial class Program
         Width = 270, Height = 170, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
         Content = new Border { Width = 800, Height = 1800, Background = Brushes.Transparent }
     };
+
+    private static void CheckAppScrollLayout(MethodInfo theme, List<Window> windows, string directory)
+    {
+        Directory.CreateDirectory(directory);
+        foreach (string mode in new[] { "light", "dark" })
+        {
+            theme.Invoke(null, new object[] { mode, "#00D5DD" });
+            var panel = new QuickPanelModernWindow(); windows.Add(panel);
+            var apps = Enumerable.Range(0, 3).Select(i => new AudioAppInfo
+            {
+                ProcessId = (uint)(int.MaxValue - 50 - i), ProcessName = "ScrollLayoutMissing" + i, DisplayName = "App " + i
+            }).ToList();
+            Finish((Task)panel.GetType().GetMethod("BuildAppRowsAsync", Instance)!.Invoke(panel, new object[] { apps, ConfigService.Load() })!);
+            var surface = (FrameworkElement)panel.Content;
+            var viewer = (ScrollViewer)panel.FindName("AppListScroll");
+            var rows = Field<System.Collections.IDictionary>(panel, "_rows");
+            var row = rows.Values.Cast<object>().First();
+            var root = Field<FrameworkElement>(row, "RootElement");
+            var slider = Field<Slider>(row, "Slider");
+            var expand = Field<ToggleButton>(row, "ExpandButton");
+            Rect Bounds(FrameworkElement element) => element.TransformToAncestor(surface).TransformBounds(new Rect(element.RenderSize));
+            void Arrange() { Layout(surface, 372, 450); DrainUi(); surface.UpdateLayout(); }
+            void Render(string state)
+            {
+                var bitmap = new RenderTargetBitmap(372, 450, 96, 96, PixelFormats.Pbgra32); bitmap.Render(surface);
+                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                using var stream = File.Create(Path.Combine(directory, mode + "-" + state + ".png")); encoder.Save(stream);
+            }
+            Arrange();
+            Check(viewer.ComputedVerticalScrollBarVisibility == Visibility.Collapsed, mode + " fitting rows start without a vertical scrollbar");
+            double viewport = viewer.ViewportWidth;
+            var sliderBefore = Bounds(slider); var expandBefore = Bounds(expand);
+            Render("collapsed");
+            root.Height = 400; // Content growth reproduces an expanded application without executing device actions.
+            Arrange();
+            Check(viewer.ComputedVerticalScrollBarVisibility == Visibility.Visible, mode + " expanded rows require a vertical scrollbar");
+            var sliderAfter = Bounds(slider); var expandAfter = Bounds(expand);
+            Console.WriteLine($"LAYOUT {mode} viewport={viewport}->{viewer.ViewportWidth} slider={sliderBefore}->{sliderAfter} expand={expandBefore}->{expandAfter}");
+            Render("expanded");
+            Check(Math.Abs(viewport - viewer.ViewportWidth) < .01 && Math.Abs(sliderBefore.X - sliderAfter.X) < .01
+                && Math.Abs(sliderBefore.Width - sliderAfter.Width) < .01 && Math.Abs(expandBefore.X - expandAfter.X) < .01,
+                mode + " scrollbar appearance preserves viewport, slider width and arrow position");
+            var bar = (ScrollBar)viewer.Template.FindName("PART_VerticalScrollBar", viewer);
+            Check(ReferenceEquals(bar.Style, Application.Current.FindResource(typeof(ScrollBar)))
+                && Bounds(bar).Left >= expandAfter.Right && Bounds(bar).Right <= surface.ActualWidth,
+                mode + " native shared scrollbar occupies the right gutter without covering application controls");
+            viewer.ScrollToEnd(); Arrange();
+            Check(viewer.VerticalOffset > 0 && Math.Abs(viewer.VerticalOffset - viewer.ScrollableHeight) < .01,
+                mode + " existing native scrolling reaches the expanded content end");
+            root.Height = double.NaN; viewer.ScrollToTop(); Arrange();
+            Check(viewer.ComputedVerticalScrollBarVisibility == Visibility.Collapsed && Math.Abs(Bounds(expand).X - expandBefore.X) < .01
+                && Math.Abs(viewer.ViewportWidth - viewport) < .01, mode + " collapsing content removes scrollbar without horizontal motion");
+            Check(Field<System.Collections.IDictionary>(panel, "_pendingVolume").Count == 0
+                && Field<System.Collections.IDictionary>(panel, "_pendingOutputVolume").Count == 0,
+                mode + " layout and scrolling queue no audio writes");
+            panel.Close();
+        }
+    }
     private static void CheckScrollControls(string mode)
     {
         var app = Application.Current;
