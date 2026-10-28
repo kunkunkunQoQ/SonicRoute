@@ -41,6 +41,7 @@ namespace SonicRoute.BenchmarkLab
                 {
                     "compare" or "ab" => await ExecuteCompareAsync(remainingArgs, cancellation.Token),
                     "run" => await ExecuteRunAsync(remainingArgs, cancellation.Token),
+                    "plan" => ExecutePlan(remainingArgs),
                     "baseline" => ExecuteBaseline(remainingArgs),
                     "scenarios" => ExecuteScenarios(remainingArgs),
                     "verify" or "selftest" => await ExecuteVerifyAsync(remainingArgs),
@@ -92,21 +93,26 @@ namespace SonicRoute.BenchmarkLab
             Console.WriteLine(@"命令列表:");
             Console.WriteLine(@"  compare, ab     执行两个版本或与历史基线的 A/B 性能对比 (交替多轮测试)");
             Console.WriteLine(@"  run             运行指定目标程序的性能基准测试 (可保存为基线)");
-            Console.WriteLine(@"  baseline        管理已保存的历史性能基线 (list, show, delete, save)");
+            Console.WriteLine(@"  plan            预览场景、轮次顺序、桌面影响和预计时长；不启动目标");
+            Console.WriteLine(@"  baseline        管理已保存的历史性能基线 (list, show, delete)");
             Console.WriteLine(@"  scenarios       列出所有已注册的测试场景");
             Console.WriteLine(@"  verify          计算/报告/真实自建子进程检查；--target 显式追加软件隔离检查");
             Console.WriteLine();
             Console.WriteLine(@"'compare' 核心选项:");
             Console.WriteLine(@"  --aa                       以 candidate 自身做 A/A 重复性对照");
+            Console.WriteLine(@"  --mode <targeted|light|full> 功能专项 / 轻量冒烟 / 全部自动化性能场景");
+            Console.WriteLine(@"  --feature <name[,name...]> 专项：idle,rules,process,foreground,delay,hotkeys,schedule,window,endurance");
             Console.WriteLine(@"  --args <string>            generic_process 的启动参数（直接传给程序）");
             Console.WriteLine(@"  --allow-desktop-interaction 显式允许窗口、前台切换或全局快捷键场景");
             Console.WriteLine(@"  --baseline <path|name>      基准路径或已保存基线名称（--aa 时省略）");
             Console.WriteLine(@"  --candidate <path>          待测候选版本可执行文件路径 (必需)");
-            Console.WriteLine(@"  --scenario <id>             运行单个指定场景 (如 idle_empty)");
+            Console.WriteLine(@"  --scenario <id[,id...]>     选择一个或多个指定场景，按给定顺序执行");
             Console.WriteLine(@"  --suite <quick|standard|endurance> 测试套件预设 (默认: standard)");
             Console.WriteLine(@"  --module <all|automation|hotkey|ui|general> 按受影响模块过滤场景");
             Console.WriteLine(@"  --rounds <n>                测试交替轮次 (默认: 3 轮)");
             Console.WriteLine(@"  --duration <seconds>        覆盖每阶段测试时长");
+            Console.WriteLine(@"  --warmup <seconds>          覆盖每次启动后的预热，写入协议；默认随模式");
+            Console.WriteLine(@"  --baseline-max-age-days <n> 历史基线最大天数，默认7；过期不作门禁");
             Console.WriteLine(@"  --interval <ms>             资源采样间隔20–1000ms，默认200ms；CPU仍按端点计量");
             Console.WriteLine(@"  --threshold-cpu <percent>   CPU 退化报警阈值百分比 (默认: 5.0%)");
             Console.WriteLine(@"  --threshold-mem <percent>   内存退化报警阈值百分比 (默认: 10.0%)");
@@ -130,13 +136,59 @@ namespace SonicRoute.BenchmarkLab
             var options = ParseOptions(args);
             string? targetExe = options.GetValueOrDefault("target");
             if (targetExe != null && !File.Exists(targetExe)) throw new FileNotFoundException("Explicit verification target not found.", targetExe);
+            string? evidenceDirectory = options.GetValueOrDefault("output");
+            if (evidenceDirectory != null) CreateOutputDirectory(evidenceDirectory);
+            return await SonicRoute.BenchmarkLab.Verification.SelfVerification.RunAllAsync(targetExe, evidenceDirectory, options.GetValueOrDefault("feature"));
+        }
 
-            return await SonicRoute.BenchmarkLab.Verification.SelfVerification.RunAllAsync(targetExe);
+        private static int ExecutePlan(string[] args)
+        {
+            var options = ParseOptions(args);
+            TestModes.Apply(options);
+            bool compare = options.ContainsKey("candidate") || options.ContainsKey("baseline") || options.ContainsKey("aa");
+            string suite = options.GetValueOrDefault("suite", "standard");
+            int rounds = IntegerOption(options, "rounds", compare ? 3 : 1);
+            int interval = IntegerOption(options, "interval", 200);
+            if (interval < 20) throw new ArgumentException("--interval must be from 20 to 1000 milliseconds.");
+            double? duration = options.ContainsKey("duration") ? NumberOption(options, "duration", 10, 0.5) : null;
+            var selected = SelectScenarios(options.GetValueOrDefault("scenario"), suite, options.GetValueOrDefault("module", "all"));
+            var scenarios = ConfigureScenarios(selected, suite, options, preview: true);
+            bool historical = options.TryGetValue("baseline", out var baseline) && !options.ContainsKey("aa")
+                && !baseline.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+            double? warmup = options.ContainsKey("warmup") ? NumberOption(options, "warmup", 5) : null;
+            var plan = BenchmarkPlan.Create(scenarios, ResolveTier(suite), rounds, duration, interval, compare, historical, options.ContainsKey("allow-desktop-interaction"), warmup);
+            if (options.ContainsKey("json")) Console.WriteLine(JsonSerializer.Serialize(plan, new JsonSerializerOptions { WriteIndented = true }));
+            else
+            {
+                Console.WriteLine($"BenchmarkLab 1.2 plan: {plan.Mode}, {rounds} rounds, {plan.TargetLaunchCount} measured launches");
+                Console.WriteLine($"Measurement {plan.MeasurementSeconds:F1}s + warmup {plan.WarmupSeconds:F1}s + cooldown {plan.CooldownSeconds:F1}s = {plan.PlannedSecondsExcludingStartupReadinessAndWorkloadOverruns:F1}s (startup/readiness/cleanup extra)");
+                foreach (var run in plan.Runs) Console.WriteLine($"{run.Order,3}. round {run.Round} {run.Side,-9} {run.ScenarioId}: warmup {run.WarmupSeconds:F1}s, measure {run.DurationSeconds:F1}s");
+                foreach (string warning in plan.Warnings) Console.WriteLine("Note: " + warning);
+            }
+            return 0;
+        }
+
+        private static BenchmarkTier ResolveTier(string suite) => suite.ToLowerInvariant() switch
+        { "quick" => BenchmarkTier.Quick, "endurance" => BenchmarkTier.Endurance, _ => BenchmarkTier.Standard };
+
+        private static IReadOnlyList<IBenchmarkScenario> SelectScenarios(string? ids, string suite, string module)
+        {
+            if (!Enum.TryParse<BenchmarkModule>(module, true, out var parsed) || !Enum.IsDefined(parsed)) throw new ArgumentException("Unknown module: " + module);
+            if (string.IsNullOrWhiteSpace(ids)) return ScenarioRegistry.GetScenariosForSuite(suite, parsed);
+            var selected = new List<IBenchmarkScenario>();
+            foreach (var id in ids.Split(',', StringSplitOptions.TrimEntries))
+            {
+                var scenario = ScenarioRegistry.GetById(id) ?? throw new ArgumentException("Unknown scenario ID: '" + id + "'.");
+                if (selected.Any(s => s.Id == scenario.Id)) throw new ArgumentException("Duplicate scenario: " + id);
+                selected.Add(scenario);
+            }
+            return selected;
         }
 
         private static async Task<int> ExecuteCompareAsync(string[] args, CancellationToken token)
         {
             var options = ParseOptions(args);
+            TestModes.Apply(options);
 
             string? baseline = options.GetValueOrDefault("baseline");
             string? candidate = options.GetValueOrDefault("candidate");
@@ -161,16 +213,7 @@ namespace SonicRoute.BenchmarkLab
 
             BenchmarkModule module = Enum.TryParse<BenchmarkModule>(moduleStr, true, out var m) ? m : BenchmarkModule.All;
 
-            IReadOnlyList<IBenchmarkScenario> scenarios;
-            if (!string.IsNullOrWhiteSpace(scenarioId))
-            {
-                var single = ScenarioRegistry.GetById(scenarioId) ?? throw new ArgumentException($"Unknown scenario ID: '{scenarioId}'.");
-                scenarios = new List<IBenchmarkScenario> { single };
-            }
-            else
-            {
-                scenarios = ScenarioRegistry.GetScenariosForSuite(suiteName, module);
-            }
+            IReadOnlyList<IBenchmarkScenario> scenarios = SelectScenarios(scenarioId, suiteName, moduleStr);
             scenarios = ConfigureScenarios(scenarios, suiteName, options);
             if (!File.Exists(candidate)) throw new FileNotFoundException("Candidate not found.", candidate);
             CreateOutputDirectory(outputDir);
@@ -199,7 +242,9 @@ namespace SonicRoute.BenchmarkLab
                 duration,
                 thresholdCpu,
                 thresholdMem,
-                logger, token, interval);
+                logger, token, interval,
+                options.ContainsKey("warmup") ? NumberOption(options, "warmup", 5) : null,
+                NumberOption(options, "baseline-max-age-days", 7, 0.01));
 
             // Generate reports
             HtmlReporter.SaveComparisonReport(result, outputDir);
@@ -232,6 +277,7 @@ namespace SonicRoute.BenchmarkLab
         private static async Task<int> ExecuteRunAsync(string[] args, CancellationToken token)
         {
             var options = ParseOptions(args);
+            TestModes.Apply(options);
             string? target = options.GetValueOrDefault("target");
             if (string.IsNullOrWhiteSpace(target)) throw new ArgumentException("Missing required option '--target <path>'.");
 
@@ -248,16 +294,7 @@ namespace SonicRoute.BenchmarkLab
 
             BenchmarkModule module = Enum.TryParse<BenchmarkModule>(moduleStr, true, out var m) ? m : BenchmarkModule.All;
 
-            IReadOnlyList<IBenchmarkScenario> scenarios;
-            if (!string.IsNullOrWhiteSpace(scenarioId))
-            {
-                var single = ScenarioRegistry.GetById(scenarioId) ?? throw new ArgumentException($"Unknown scenario ID: '{scenarioId}'.");
-                scenarios = new List<IBenchmarkScenario> { single };
-            }
-            else
-            {
-                scenarios = ScenarioRegistry.GetScenariosForSuite(suiteName, module);
-            }
+            IReadOnlyList<IBenchmarkScenario> scenarios = SelectScenarios(scenarioId, suiteName, moduleStr);
             scenarios = ConfigureScenarios(scenarios, suiteName, options);
             if (!File.Exists(target)) throw new FileNotFoundException("Target not found.", target);
             CreateOutputDirectory(outputDir);
@@ -274,6 +311,7 @@ namespace SonicRoute.BenchmarkLab
             logger?.Invoke($"Running benchmark on {target} ({rounds} rounds, {scenarios.Count} scenarios)...");
             var evidence = new List<ScenarioResult>();
             var targetFiles = ComparisonRunner.CaptureTargetFiles(target);
+            var startedUtc = DateTime.UtcNow;
 
             var summaries = await BenchmarkRunner.RunSuiteAsync(
                 target,
@@ -282,19 +320,33 @@ namespace SonicRoute.BenchmarkLab
                 rounds,
                 duration,
                 logger,
-                token, evidence, interval);
+                token, evidence, interval, options.ContainsKey("warmup") ? NumberOption(options, "warmup", 5) : null);
 
             string jsonPath = Path.Combine(outputDir, "run_summary.json");
             File.WriteAllText(jsonPath, JsonSerializer.Serialize(summaries, new JsonSerializerOptions { WriteIndented = true }));
             File.WriteAllText(Path.Combine(outputDir, "run_evidence.json"), JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
-            File.WriteAllText(Path.Combine(outputDir, "run_metadata.json"), JsonSerializer.Serialize(new { SchemaVersion = 2, Target = target, TargetFiles = targetFiles,
-                Tier = tier.ToString(), RequestedDurationSeconds = duration, SampleIntervalMs = interval, Rounds = rounds, Environment = SystemEnvironmentInfo.CaptureCurrent() }, new JsonSerializerOptions { WriteIndented = true }));
-            ComparisonRunner.VerifyFilesUnchanged(target, targetFiles);
-            if (evidence.Any(r => !r.Success))
+            var protocol = MeasurementProtocol.Create(scenarios, tier, duration, interval, options.ContainsKey("warmup") ? NumberOption(options, "warmup", 5) : null);
+            bool sourceFilesUnchanged = true;
+            string? sourceError = null;
+            try { ComparisonRunner.VerifyFilesUnchanged(target, targetFiles); }
+            catch (IOException error) { sourceFilesUnchanged = false; sourceError = error.Message; }
+            var metadata = new { SchemaVersion = 3, ToolVersion = "1.2", Protocol = protocol, TimestampUtc = startedUtc, Target = target, TargetFiles = targetFiles,
+                SourceFilesUnchanged = sourceFilesUnchanged, SourceError = sourceError,
+                Tier = tier.ToString(), RequestedDurationSeconds = duration, SampleIntervalMs = interval, Rounds = rounds, Environment = SystemEnvironmentInfo.CaptureCurrent() };
+            File.WriteAllText(Path.Combine(outputDir, "run_metadata.json"), JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true }));
+            HtmlReporter.SaveRunReport(evidence, metadata, summaries, outputDir);
+            if (!sourceFilesUnchanged || evidence.Any(r => !r.Success))
             {
                 if (jsonOnly) Console.WriteLine(JsonSerializer.Serialize(new { Status = "EXECUTION_ERROR", Report = jsonPath, Evidence = "run_evidence.json" }));
                 else Console.Error.WriteLine("One or more workloads or measurements failed; evidence saved, baseline not saved.");
                 return 3;
+            }
+
+            if (evidence.Any(r => r.Metrics.SamplingQuality?.SuitableForComparison == false))
+            {
+                if (jsonOnly) Console.WriteLine(JsonSerializer.Serialize(new { Status = "INCONCLUSIVE", Report = jsonPath, Reason = "Sampling quality is unsuitable; baseline not saved." }));
+                else Console.Error.WriteLine("Sampling gaps prevent a valid comparison baseline; evidence saved, baseline not saved.");
+                return 4;
             }
 
             // Save baseline if requested
@@ -302,7 +354,7 @@ namespace SonicRoute.BenchmarkLab
             {
                 var stored = new StoredBaseline
                 {
-                    SchemaVersion = 2, Tier = tier.ToString(), RequestedDurationSeconds = duration,
+                    SchemaVersion = 3, Protocol = protocol, Tier = tier.ToString(), RequestedDurationSeconds = duration,
                     SampleIntervalMs = interval,
                     TargetFiles = targetFiles,
                     Rounds = evidence.GroupBy(r => r.ScenarioId).ToDictionary(g => g.Key, g => g.Select(r => r.Metrics).ToList()),
@@ -383,7 +435,7 @@ namespace SonicRoute.BenchmarkLab
         {
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var flags = new HashSet<string>(new[] { "quiet", "q", "json", "aa", "allow-desktop-interaction" }, StringComparer.OrdinalIgnoreCase);
-            var values = new HashSet<string>(new[] { "baseline", "candidate", "target", "suite", "scenario", "module", "rounds", "duration", "interval", "threshold-cpu", "threshold-mem", "output", "save-baseline", "args" }, StringComparer.OrdinalIgnoreCase);
+            var values = new HashSet<string>(new[] { "baseline", "candidate", "target", "suite", "scenario", "module", "mode", "feature", "rounds", "duration", "warmup", "baseline-max-age-days", "interval", "threshold-cpu", "threshold-mem", "output", "save-baseline", "args" }, StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < args.Length; i++)
             {
                 string arg = args[i];
@@ -430,12 +482,12 @@ namespace SonicRoute.BenchmarkLab
             return value;
         }
 
-        private static IReadOnlyList<IBenchmarkScenario> ConfigureScenarios(IReadOnlyList<IBenchmarkScenario> scenarios, string suite, Dictionary<string, string> options)
+        private static IReadOnlyList<IBenchmarkScenario> ConfigureScenarios(IReadOnlyList<IBenchmarkScenario> scenarios, string suite, Dictionary<string, string> options, bool preview = false)
         {
             if (suite.ToLowerInvariant() is not ("quick" or "standard" or "endurance" or "automation" or "optimization")) throw new ArgumentException("Unknown suite: " + suite);
             if (options.TryGetValue("module", out var module) && (!Enum.TryParse<BenchmarkModule>(module, true, out var parsed) || !Enum.IsDefined(parsed))) throw new ArgumentException("Unknown module: " + module);
             if (scenarios.Count == 0) throw new ArgumentException("No scenarios match the request.");
-            if (!options.ContainsKey("allow-desktop-interaction") && scenarios.Any(s => s.Module is BenchmarkModule.Ui or BenchmarkModule.Hotkey || s.Id == "fast_foreground_switch"))
+            if (!preview && !options.ContainsKey("allow-desktop-interaction") && scenarios.Any(BenchmarkPlan.RequiresDesktop))
                 throw new ArgumentException("This suite includes UI/foreground/global-hotkey activity. Select a background-only scenario/quick suite or explicitly pass --allow-desktop-interaction.");
             return scenarios.Select(s => s.Id == "generic_process" ? new GenericProcessScenario(options.GetValueOrDefault("args", "")) : s).ToArray();
         }

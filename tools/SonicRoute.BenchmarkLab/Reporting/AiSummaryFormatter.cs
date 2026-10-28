@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using SonicRoute.BenchmarkLab.Comparison;
+using SonicRoute.BenchmarkLab.Core;
 
 namespace SonicRoute.BenchmarkLab.Reporting
 {
@@ -14,6 +15,7 @@ namespace SonicRoute.BenchmarkLab.Reporting
         public string Baseline { get; set; } = string.Empty;
         public string Candidate { get; set; } = string.Empty;
         public int Rounds { get; set; }
+        public DecisionReadiness? DecisionReadiness { get; set; }
         public string CpuModel { get; set; } = string.Empty;
         public int Cores { get; set; }
         public List<string> Regressions { get; set; } = new();
@@ -32,7 +34,7 @@ namespace SonicRoute.BenchmarkLab.Reporting
         {
             var summaryData = new AiSummaryData
             {
-                Status = result.OverallVerdict switch
+                Status = !result.SourceFilesUnchanged || result.Runs.Any(r => !r.Result.Success) ? "EXECUTION_ERROR" : result.OverallVerdict switch
                 {
                     OverallVerdict.Pass => "PASS",
                     OverallVerdict.RegressionDetected => "REGRESSION_DETECTED",
@@ -41,6 +43,7 @@ namespace SonicRoute.BenchmarkLab.Reporting
                 Baseline = Path.GetFileName(result.BaselineTarget) + (!string.IsNullOrEmpty(result.BaselineVersion) ? $" ({result.BaselineVersion})" : ""),
                 Candidate = Path.GetFileName(result.CandidateTarget) + (!string.IsNullOrEmpty(result.CandidateVersion) ? $" ({result.CandidateVersion})" : ""),
                 Rounds = result.Rounds,
+                DecisionReadiness = result.DecisionReadiness,
                 CpuModel = result.Environment.CpuModel,
                 Cores = result.Environment.LogicalProcessorCount,
                 Regressions = new List<string>(result.RegressionsSummary),
@@ -70,6 +73,7 @@ namespace SonicRoute.BenchmarkLab.Reporting
             {
                 "PASS" => "🟢 PASS (本次未检出超阈值退化)",
                 "REGRESSION_DETECTED" => "🔴 REGRESSION (发现退化)",
+                "EXECUTION_ERROR" => "🔴 EXECUTION_ERROR (执行失败；查看逐轮证据)",
                 _ => "🟡 INCONCLUSIVE (证据不足、负载未确认或波动未收敛)"
             };
 
@@ -77,6 +81,11 @@ namespace SonicRoute.BenchmarkLab.Reporting
             sb.AppendLine();
             sb.AppendLine($"- **对比目标**: `{summaryData.Baseline}` ➔ `{summaryData.Candidate}` ({summaryData.Rounds} 轮，{(result.IsAaControl ? "A/A 对照" : result.UsesStoredBaseline ? "历史基线，非交替" : "A/B 交替")})");
             sb.AppendLine($"- **宿主环境**: {summaryData.CpuModel} ({summaryData.Cores} 逻辑核) | {result.Environment.OperatingSystem}");
+            if (summaryData.DecisionReadiness is { } readiness)
+            {
+                sb.AppendLine($"- **推荐决策协议**: {(readiness.RecommendedProtocolMet ? "已满足（不证明因果）" : "尚未满足；不得只凭 PASS 宣称最终性能通过")}");
+                foreach (string reason in readiness.Reasons) summaryData.Caveats.Add("Decision protocol: " + reason);
+            }
             sb.AppendLine();
 
             if (summaryData.Regressions.Count > 0)

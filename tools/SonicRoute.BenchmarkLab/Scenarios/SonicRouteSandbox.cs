@@ -13,12 +13,12 @@ namespace SonicRoute.BenchmarkLab.Scenarios;
 public sealed class SonicRouteSandbox : IDisposable
 {
     public string SandboxPath { get; }
-    public string InstanceId { get; } = "Bench_" + Guid.NewGuid().ToString("N")[..8];
+    public string InstanceId { get; } = "Bench_" + Guid.NewGuid().ToString("N");
     public Dictionary<string, string> EnvironmentVariables { get; } = new();
     public bool ReadinessVerified { get; private set; }
     public string MissingTarget => "SRBenchMissing_" + InstanceId;
     private readonly Dictionary<int, string> _ruleIds = new();
-    private readonly string _basePath;
+    private readonly OwnedTestDirectory _ownedDirectory;
     private bool _disposed;
     private int _revision;
     private string _lastRuleName = "";
@@ -29,8 +29,8 @@ public sealed class SonicRouteSandbox : IDisposable
 
     public SonicRouteSandbox(string? customBasePath = null)
     {
-        _basePath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(customBasePath ?? Path.Combine(Path.GetTempPath(), "SonicRouteBenchmark")));
-        SandboxPath = Path.Combine(_basePath, InstanceId);
+        _ownedDirectory = new OwnedTestDirectory("Bench", customBasePath, InstanceId);
+        SandboxPath = _ownedDirectory.DirectoryPath;
         Directory.CreateDirectory(Path.Combine(SandboxPath, "Automation"));
         EnvironmentVariables["SONICROUTE_DATA_DIRECTORY"] = SandboxPath;
         EnvironmentVariables["SONICROUTE_INSTANCE_ID"] = InstanceId;
@@ -155,11 +155,6 @@ public sealed class SonicRouteSandbox : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        string absolute = Path.GetFullPath(SandboxPath);
-        if (!absolute.StartsWith(_basePath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || Path.GetFileName(absolute) != InstanceId)
-            throw new InvalidOperationException("Sandbox cleanup escaped its owned directory.");
-        try { if (Directory.Exists(absolute) && (File.GetAttributes(absolute) & FileAttributes.ReparsePoint) == 0) Directory.Delete(absolute, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        _ownedDirectory.Dispose();
     }
 }

@@ -9,8 +9,15 @@
     <AssemblyName>SonicRoute.BenchmarkLab</AssemblyName>
     <RootNamespace>SonicRoute.BenchmarkLab</RootNamespace>
     <Description>SonicRoute Benchmark Lab - Independent Windows Process Performance Benchmark and A/B Comparison Tool</Description>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Viewer/index.html" LogicalName="BenchmarkViewer.index.html" />
+    <EmbeddedResource Include="Viewer/style.css" LogicalName="BenchmarkViewer.style.css" />
+    <EmbeddedResource Include="Viewer/data.js" LogicalName="BenchmarkViewer.data.js" />
+    <EmbeddedResource Include="Viewer/app.js" LogicalName="BenchmarkViewer.app.js" />
+  </ItemGroup>
 
 </Project>

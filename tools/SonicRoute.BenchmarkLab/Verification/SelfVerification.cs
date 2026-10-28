@@ -11,6 +11,9 @@ namespace SonicRoute.BenchmarkLab.Verification;
 public static class SelfVerification
 {
     private static int _passed, _failed;
+    private static HashSet<string>? _selectedFeatures;
+    public static readonly string[] Features = { "cpu", "statistics", "sampling", "protocol", "reports", "sandbox", "cleanup", "lifecycle" };
+    private static bool Selected(string feature) => _selectedFeatures == null || _selectedFeatures.Contains(feature);
     private static void Check(bool valid, string name)
     {
         if (!valid) throw new InvalidOperationException(name);
@@ -18,6 +21,17 @@ public static class SelfVerification
     }
     private static void Case(string name, Action action)
     {
+        string feature = name switch
+        {
+            "CPU window normalization" or "Low CPU and zero baseline" => "cpu",
+            "Real signals and round noise" or "Paired and Welch intervals" => "statistics",
+            "Invalid measurement" or "Weighted CPU endpoints" or "Time weighted means and gap quality" => "sampling",
+            "Reports preserve uncertainty" => "reports",
+            "Stable rule IDs and real JSONL" => "sandbox",
+            "Owned temporary cleanup" => "cleanup",
+            _ => "protocol"
+        };
+        if (!Selected(feature)) return;
         try { action(); } catch (Exception error) { _failed++; Console.WriteLine("FAIL " + name + ": " + error.Message); }
     }
     private static ProcessMetricSummary Summary(double cpu = 100, double duration = 10, double memoryMb = 50) => new()
@@ -30,10 +44,13 @@ public static class SelfVerification
     private static ScenarioComparisonResult Compare(ProcessMetricSummary a, ProcessMetricSummary b) => RegressionEvaluator.EvaluateScenario("fixture", "Fixture", a, b, 5, 10, 3);
     private static MetricComparisonResult Cpu(ScenarioComparisonResult result) => result.MetricComparisons.Single(m => m.MetricName == "Total CPU Time");
 
-    public static async Task<int> RunAllAsync(string? realSonicRouteExe = null)
+    public static async Task<int> RunAllAsync(string? realSonicRouteExe = null, string? evidenceDirectory = null, string? features = null)
     {
+        _selectedFeatures = features == null ? null : features.Split(',', StringSplitOptions.TrimEntries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (_selectedFeatures?.Any(f => !Features.Contains(f, StringComparer.OrdinalIgnoreCase)) == true)
+            throw new ArgumentException("Unknown verify feature. Supported: " + string.Join(", ", Features));
         _passed = _failed = 0;
-        Console.WriteLine("BenchmarkLab 1.1: calculation, evidence, reporting and owned native-process checks");
+        Console.WriteLine("BenchmarkLab 1.2: protocol, sampling quality, statistics, reports and owned native-process checks");
         Case("CPU window normalization", () => {
             var result = Compare(Summary(100, 10), Summary(200, 20));
             Check(Cpu(result).DeltaAbsolute == 0 && Cpu(result).Verdict == MetricVerdict.Stable, "unequal windows normalize CPU rates without changing raw totals");
@@ -73,20 +90,25 @@ public static class SelfVerification
             var result = ProcessMetricSummary.Aggregate(samples, 1);
             Check(Math.Abs(result.CpuPercentPerCore.Mean - 10) < 0.0001, "overall CPU mean uses actual endpoints instead of unweighted sample percentages");
         });
-        string output = Path.Combine(Path.GetTempPath(), "SonicRouteBenchmarkChecks", Guid.NewGuid().ToString("N"));
+        using var scratch = new OwnedTestDirectory("Verify");
+        string output = evidenceDirectory ?? scratch.DirectoryPath;
         Directory.CreateDirectory(output);
         Case("Reports preserve uncertainty", () => {
             var scenario = Compare(Summary(0), Summary(15.625)); scenario.ScenarioName = "<script>bad</script>";
             var suite = new SuiteComparisonResult { BaselineTarget = "A.exe", CandidateTarget = "B.exe", Rounds = 3,
+                DecisionReadiness = new() { RecommendedProtocolMet = false, Reasons = new() { "Smoke only" } },
                 OverallVerdict = OverallVerdict.Inconclusive, Scenarios = new() { scenario }, Runs = new() { new() { Round = 1, Side = "Candidate", Result = new() { Success = false, ErrorMessage = "load missing", Observations = new() { ["Proof"] = false }, Timeseries = new[] { new ProcessSample { TotalCpuTimeMs = 12 } } } } } };
             HtmlReporter.SaveComparisonReport(suite, output); JsonReporter.SaveComparisonReport(suite, output); AiSummaryFormatter.SaveFiles(suite, output);
             string html = File.ReadAllText(Path.Combine(output, "report.html"));
-            Check(html.Contains("INCONCLUSIVE") && !html.Contains("所有测试场景常规指标均在预设阈值以内"), "inconclusive HTML has no green all-tests-passed claim");
-            Check(!html.Contains("<script>bad</script>") && html.Contains("&lt;script&gt;"), "scenario text is HTML escaped");
+            Check(html.Contains("report-data") && !html.Contains("src=\"app.js\"") && !html.Contains("href=\"style.css\""), "standalone HTML embeds both viewer and report without external assets");
+            Check(!html.Contains("<script>bad</script>") && html.Contains("\\u003Cscript\\u003E"), "scenario text cannot escape JSON data into executable HTML");
             var saved = JsonSerializer.Deserialize<SuiteComparisonResult>(File.ReadAllText(Path.Combine(output, "report.json")))!;
             Check(!saved.Runs[0].Result.Success && saved.Runs[0].Result.ErrorMessage == "load missing" && saved.Runs[0].Result.Timeseries.Count == 1, "full report retains failed workload, observations and raw samples");
             var (markdown, json) = AiSummaryFormatter.Generate(suite, output);
-            Check(markdown.Contains("INCONCLUSIVE") && JsonDocument.Parse(json).RootElement.GetProperty("Status").GetString() == "INCONCLUSIVE", "AI summary and JSON agree on uncertainty");
+            Check(markdown.Contains("EXECUTION_ERROR") && JsonDocument.Parse(json).RootElement.GetProperty("Status").GetString() == "EXECUTION_ERROR", "failed workload is visibly an execution error in AI markdown and JSON");
+            Check(markdown.Contains("尚未满足") && !JsonDocument.Parse(json).RootElement.GetProperty("DecisionReadiness").GetProperty("RecommendedProtocolMet").GetBoolean(), "AI summary cannot lose the distinction between a verdict and final decision readiness");
+            suite.Runs.Clear();
+            Check(JsonDocument.Parse(AiSummaryFormatter.Generate(suite, output).Json).RootElement.GetProperty("Status").GetString() == "INCONCLUSIVE", "non-failing uncertain measurement remains inconclusive");
         });
         Case("Stable rule IDs and real JSONL", () => {
             using var sandbox = new SonicRouteSandbox(); sandbox.PopulateRules(4, "example.exe", triggerType: 0);
@@ -122,15 +144,96 @@ public static class SelfVerification
             bool rejected = false; try { ComparisonRunner.VerifyFilesUnchanged(executable, identity); } catch (InvalidDataException) { rejected = true; }
             Check(rejected, "changing a managed payload invalidates unchanged apphost bytes");
         });
+        Case("Time weighted means and gap quality", () => {
+            var samples = new[] { new ProcessSample { ElapsedMs = 0, PrivateBytes = 0 }, new ProcessSample { ElapsedMs = 100, PrivateBytes = 100 }, new ProcessSample { ElapsedMs = 1000, PrivateBytes = 100 } };
+            var summary = ProcessMetricSummary.Aggregate(samples, 1);
+            Check(Math.Abs(summary.PrivateBytes.Mean - 95) < 0.000001, "irregular resource samples are weighted by elapsed time rather than sample count");
+            var quality = SamplingQuality.Calculate(samples, 200);
+            Check(!quality.SuitableForComparison && quality.DelayedIntervalCount == 1 && Math.Abs(quality.DelayedTimeFraction - 0.9) < 0.000001, "large sample gaps expose their covered time and invalidate gating");
+            var bad = Summary(); bad.SamplingQuality = quality;
+            Check(Compare(bad, Summary()).Verdict == OverallVerdict.Inconclusive, "bad sampling quality cannot pass a comparison");
+            Check(!SamplingQuality.Calculate(new[] { new ProcessSample(), new ProcessSample(), new ProcessSample() }, 200).SuitableForComparison, "duplicate timestamps cannot masquerade as independent samples");
+            Check(SamplingQuality.Calculate(new[] { new ProcessSample(), new ProcessSample { ElapsedMs = 200 }, new ProcessSample { ElapsedMs = 400 }, new ProcessSample { ElapsedMs = 401 } }, 200).SuitableForComparison, "short final stop interval is not a delayed gap");
+        });
+        Case("Owned temporary cleanup", () => {
+            string owned;
+            using (var directory = new OwnedTestDirectory("Fixture"))
+            {
+                owned = directory.DirectoryPath;
+                File.WriteAllText(Path.Combine(owned, "temporary.txt"), "owned fixture");
+            }
+            Check(!Directory.Exists(owned), "temporary material is removed after its owned lifetime");
+            Check(Directory.Exists(output), "cleaning one test directory preserves report evidence and sibling material");
+            bool rejected = false;
+            try { using var invalid = new OwnedTestDirectory("Fixture", name: "../escape"); } catch (InvalidOperationException) { rejected = true; }
+            Check(rejected, "cleanup directory traversal is rejected before creating its destination");
+        });
+        Case("Versioned scenario protocol", () => {
+            var generic = new IBenchmarkScenario[] { new GenericProcessScenario("--alpha") };
+            var a = MeasurementProtocol.Create(generic, BenchmarkTier.Quick, 2, 200);
+            var b = MeasurementProtocol.Create(new IBenchmarkScenario[] { new GenericProcessScenario("--beta") }, BenchmarkTier.Quick, 2, 200);
+            Check(!a.IsCompatibleWith(b), "different generic arguments cannot reuse a historical baseline");
+            Check(!a.IsCompatibleWith(null), "old baselines without measurement protocol remain viewable but not comparable");
+            b = MeasurementProtocol.Create(generic, BenchmarkTier.Quick, 2, 200);
+            Check(a.IsCompatibleWith(b), "identical duration, warmup, argument and sampler semantics are comparable");
+            b.Revision = "older";
+            Check(!a.IsCompatibleWith(b), "different resource aggregation semantics invalidate historical gating");
+        });
+        Case("Paired and Welch intervals", () => {
+            var paired = RoundStatistics.Calculate(new double[] { 1, 2, 3 }, new double[] { 4, 5, 6 }, true);
+            Check(paired.Lower95 == 3 && paired.Upper95 == 3 && paired.DegreesOfFreedom == 2, "constant paired differences have zero standard error");
+            var independent = RoundStatistics.Calculate(new double[] { 1, 2, 3 }, new double[] { 2, 4, 6, 8 }, false);
+            Check(Math.Abs(independent.StandardError - Math.Sqrt(2)) < 0.000001 && Math.Abs(independent.DegreesOfFreedom - 216.0 / 53) < 0.000001, "unequal historical sample sizes use Welch-Satterthwaite degrees of freedom");
+            Check(RoundStatistics.Critical95(2.9) == 4.303 && RoundStatistics.Critical95(100) == 2.043, "fractional/large degrees of freedom use conservative table bounds");
+        });
+        Case("Preview schedule", () => {
+            var selection = new IBenchmarkScenario[] { new IdleEmptyScenario(), new TargetAbsentScenario() };
+            var plan = BenchmarkPlan.Create(selection, BenchmarkTier.Quick, 2, 10, 200, true, false, false);
+            Check(plan.Runs.Select(r => r.Side).SequenceEqual(new[] { "Baseline", "Candidate", "Baseline", "Candidate", "Candidate", "Baseline", "Candidate", "Baseline" }), "A/B pairs stay adjacent within each scenario and alternate across rounds");
+            Check(plan.TargetLaunchCount == 8 && plan.MeasurementSeconds == 80 && Math.Abs(plan.CooldownSeconds - 14.4) < 0.000001, "preview accounts for all target windows and configured cooldowns");
+            var desktop = BenchmarkPlan.Create(new IBenchmarkScenario[] { new WindowTrayTransitionsScenario() }, BenchmarkTier.Standard, 1, 1, 200, false, false, false);
+            Check(desktop.DesktopInteractionRequired && !desktop.DesktopInteractionAllowed, "preview exposes desktop impact without starting or allowing it");
+        });
+        Case("Three performance modes", () => {
+            var light = new Dictionary<string, string> { ["mode"] = "light" }; TestModes.Apply(light);
+            Check(light["rounds"] == "1" && light["scenario"].Split(',').Length == 3 && light["duration"] == "3", "light mode is explicitly a short three-scenario smoke test");
+            var targeted = new Dictionary<string, string> { ["mode"] = "targeted", ["feature"] = "hotkeys,schedule" }; TestModes.Apply(targeted);
+            Check(targeted["scenario"] == "rule_save_hotkeys,schedule_rule_churn" && targeted["rounds"] == "5" && targeted["duration"] == "30" && targeted["warmup"] == "5", "targeted mode selects requested features with five rounds, thirty-second windows and five-second warmup");
+            var full = new Dictionary<string, string> { ["mode"] = "full" }; TestModes.Apply(full);
+            Check(full["scenario"].Split(',').Length == 12 && !full["scenario"].Contains("generic_process"), "full mode covers all twelve isolated scenarios, excluding unrestricted generic targets");
+            bool rejected = false; try { TestModes.Apply(new() { ["mode"] = "targeted", ["feature"] = "not-a-feature" }); } catch (ArgumentException) { rejected = true; }
+            Check(rejected, "unknown targeted features are rejected rather than silently expanding the suite");
+            rejected = false; try { TestModes.Apply(new() { ["mode"] = "full", ["rounds"] = "1" }); } catch (ArgumentException) { rejected = true; }
+            Check(rejected, "full mode does not silently degrade to a single smoke round");
+            Check(full["rounds"] == "7" && full["duration"] == "60" && full["warmup"] == "5", "full mode predeclares seven long-window rounds");
+        });
+        Case("Baseline capture policy", () => {
+            var now = new DateTime(2026,10,28,10,0,0,DateTimeKind.Utc);
+            Check(BaselinePolicy.IsFresh(now.AddDays(-6),now,7) && !BaselinePolicy.IsFresh(now.AddDays(-8),now,7), "historical freshness respects the declared seven-day bound");
+            Check(!BaselinePolicy.IsFresh(default,now,7) && !BaselinePolicy.IsFresh(now.AddHours(1),now,7), "unset and implausible future baseline dates are rejected");
+            bool rejected = false;
+            BaselineStore.Save("immutable-fixture",new StoredBaseline(),output);
+            try { BaselineStore.Save("immutable-fixture",new StoredBaseline(),output); } catch(ArgumentException) { rejected = true; }
+            Check(rejected, "refreshing a baseline cannot overwrite an existing capture");
+            var a=MeasurementProtocol.Create(new IBenchmarkScenario[]{new GenericProcessScenario()},BenchmarkTier.Standard,30,200,5);
+            var b=MeasurementProtocol.Create(new IBenchmarkScenario[]{new GenericProcessScenario()},BenchmarkTier.Standard,30,200,2);
+            Check(a.Scenarios["generic_process"].WarmupSeconds==5 && !a.IsCompatibleWith(b), "configured warmup is bound to historical comparability");
+            Check(!DecisionReadiness.Assess(new SuiteComparisonResult()).RecommendedProtocolMet, "missing protocol and rounds cannot meet the final decision protocol");
+        });
         try
         {
+            if (Selected("protocol"))
+            {
             var failed = await BenchmarkRunner.RunScenarioAsync(new InvalidScenario(), new BenchmarkContext());
             Check(!failed.Success && !failed.Metrics.MeasurementValid && failed.Observations.ContainsKey("LoadConfirmed"), "runner propagates scenario failure instead of treating its metrics as valid");
+            }
+            if (Selected("lifecycle"))
+            {
             string self = Path.ChangeExtension(typeof(SelfVerification).Assembly.Location, ".exe");
             using (var monitor = ProcessMonitor.Launch(self, "__worker threads 2500", measureStartupLatency: false))
             {
                 monitor.Start(); await Task.Delay(1600); var metrics = await monitor.StopAsync();
-                Check(metrics.MeasurementValid && metrics.SampleCount >= 8 && metrics.PrivateBytes.Mean > 0, "owned native process produces valid real CPU/memory samples");
+                Check(metrics.MeasurementValid && metrics.SampleCount >= 7 && metrics.PrivateBytes.Mean > 0 && metrics.SamplingQuality != null, "owned native process produces valid CPU/memory samples and quality evidence at the default 200ms interval");
                 Check(metrics.ThreadCount.Max - metrics.ThreadCount.Min >= 4, "native thread changes are observed after Process.Refresh");
                 using var reference = Process.GetProcessById(monitor.ProcessId);
                 using (var attached = ProcessMonitor.Attach(monitor.ProcessId))
@@ -145,6 +248,7 @@ public static class SelfVerification
             {
                 monitor.Start(); await Task.Delay(450); var metrics = await monitor.StopAsync();
                 Check(!metrics.MeasurementValid && metrics.ProcessExitedDuringMeasurement, "real early-exit target is not a successful benchmark");
+            }
             }
         }
         catch (Exception error) { _failed++; Console.WriteLine("FAIL native checks: " + error); }

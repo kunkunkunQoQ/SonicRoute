@@ -8,6 +8,7 @@ namespace SonicRoute.BenchmarkLab.Core
     {
         public DateTime TimestampUtc { get; set; } = DateTime.UtcNow;
         public double ElapsedMs { get; set; }
+        public double CollectionDurationMs { get; set; }
 
         public double TotalCpuTimeMs { get; set; }
         public double UserCpuTimeMs { get; set; }
@@ -89,6 +90,22 @@ namespace SonicRoute.BenchmarkLab.Core
             };
         }
 
+        public static MetricStatistics CalculateTimeWeighted(IReadOnlyList<ProcessSample> samples, Func<ProcessSample, double> selector, double seconds)
+        {
+            var result = Calculate(samples.Select(selector).ToArray(), seconds);
+            double area = 0, span = 0;
+            for (int i = 1; i < samples.Count; i++)
+            {
+                double delta = samples[i].ElapsedMs - samples[i - 1].ElapsedMs;
+                if (!double.IsFinite(delta) || delta <= 0) continue;
+                area += (selector(samples[i - 1]) + selector(samples[i])) * 0.5 * delta;
+                span += delta;
+            }
+            if (span > 0) result.Mean = area / span;
+            // Dispersion/quantiles remain sample statistics, explicitly described in the summary.
+            return result;
+        }
+
         private static double Percentile(List<double> sorted, double percentile)
         {
             if (sorted.Count == 1) return sorted[0];
@@ -105,6 +122,8 @@ namespace SonicRoute.BenchmarkLab.Core
     {
         public double DurationSeconds { get; set; }
         public int SampleCount { get; set; }
+        public SamplingQuality? SamplingQuality { get; set; }
+        public string ResourceMeanNotes { get; set; } = "Resource means use trapezoidal time weighting; percentiles/dispersion describe collected samples, peaks may miss activity between samples.";
 
         // Monotonic, ground-truth cumulative CPU time
         public double TotalCpuTimeMs { get; set; }
@@ -181,11 +200,11 @@ namespace SonicRoute.BenchmarkLab.Core
                 // the overall mean uses cumulative CPU / actual wall duration below.
                 CpuPercentMachine = CpuStatistics(samples, durationSeconds, totalCpu, Environment.ProcessorCount),
                 CpuPercentPerCore = CpuStatistics(samples, durationSeconds, totalCpu, 1),
-                WorkingSetBytes = MetricStatistics.Calculate(samples.Select(s => (double)s.WorkingSetBytes).ToList(), durationSeconds),
+                WorkingSetBytes = MetricStatistics.CalculateTimeWeighted(samples, s => s.WorkingSetBytes, durationSeconds),
                 PeakWorkingSetBytes = peakWs,
-                PrivateBytes = MetricStatistics.Calculate(samples.Select(s => (double)s.PrivateBytes).ToList(), durationSeconds),
-                ThreadCount = MetricStatistics.Calculate(samples.Select(s => (double)s.ThreadCount).ToList(), durationSeconds),
-                HandleCount = MetricStatistics.Calculate(samples.Select(s => (double)s.HandleCount).ToList(), durationSeconds),
+                PrivateBytes = MetricStatistics.CalculateTimeWeighted(samples, s => s.PrivateBytes, durationSeconds),
+                ThreadCount = MetricStatistics.CalculateTimeWeighted(samples, s => s.ThreadCount, durationSeconds),
+                HandleCount = MetricStatistics.CalculateTimeWeighted(samples, s => s.HandleCount, durationSeconds),
                 IoReadBytesTotal = ioReadTotal,
                 IoWriteBytesTotal = ioWriteTotal,
                 IoReadOpsTotal = ioReadOps,

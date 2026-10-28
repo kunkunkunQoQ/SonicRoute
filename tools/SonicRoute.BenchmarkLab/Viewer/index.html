@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>SonicRoute · 性能观察室</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">∿</span><span>SonicRoute<small>性能观察室</small></span></a>
+    <div class="nav-label">工作空间</div>
+    <nav aria-label="报告导航">
+      <a class="nav-item active" href="#overview"><span aria-hidden="true">◫</span> 数据概览 <span class="nav-dot"></span></a>
+      <a class="nav-item" href="#trends"><span aria-hidden="true">∿</span> 资源曲线</a>
+      <a class="nav-item" href="#evidence"><span aria-hidden="true">≡</span> 逐轮证据</a>
+    </nav>
+    <div class="nav-label report-label">已载入的报告 <span id="report-count">0</span></div>
+    <div id="report-list" class="report-list" aria-label="报告列表"></div>
+    <button class="sidebar-import" id="import-side">＋ 添加报告</button>
+    <div class="local-note"><span class="local-dot"></span> 数据留在你的浏览器<p>本地读取，无需上传。<br>关闭页面后，导入数据随之清除。</p></div>
+    <div class="sidebar-bottom">BENCHMARK LAB <span>1.2</span></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>工作空间 <span class="crumb">/</span> 数据概览</span><span class="top-note"><span class="local-dot"></span> 本地分析</span></header>
+    <div class="content" id="overview">
+      <div class="page-heading"><div><div class="eyebrow">A LITTLE CLARITY, EVERY RUN</div><h1>看见每一次变化<span class="heading-dot">.</span></h1><p>从资源消耗到每轮波动，让优化有迹可循。</p></div><div class="heading-actions"><button class="button secondary" id="demo-button">查看示例</button><button class="button primary" id="import-button"><span aria-hidden="true">↥</span> 导入数据</button></div></div>
+      <input id="file-input" type="file" accept=".json,application/json" multiple hidden>
+      <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="选择或拖入 JSON 报告"><span class="file-symbol" aria-hidden="true">↳</span><span><strong>把报告放到这里，故事就清楚了。</strong><small>拖入 report.json，或同时导入 run_summary / run_evidence / run_metadata.json</small></span><span class="drop-end">JSON <span aria-hidden="true">↗</span></span></div>
+      <div id="import-message" role="status" aria-live="polite"></div>
+      <section class="dataset-bar" aria-label="当前报告"><div><span class="dataset-tag" id="data-tag">示例数据</span><strong id="dataset-title"></strong><span id="dataset-date" class="muted"></span></div><button class="text-button" id="export-button">导出整理数据 ↗</button></section>
+      <section class="verdict-banner" id="verdict-banner" aria-live="polite"><span class="verdict-icon" id="verdict-icon" aria-hidden="true">◌</span><div><strong id="verdict-title"></strong><p id="verdict-description"></p></div><span class="verdict-pill" id="verdict-pill"></span></section>
+      <section class="panel overview-panel"><div class="panel-heading"><div><div class="section-kicker">THE WHOLE PICTURE</div><h2>先看全局，再看细节</h2></div><span class="small-tag" id="coverage-count"></span></div><div id="scenario-overview" class="scenario-overview" aria-label="所有场景结论"></div><div id="protocol-strip" class="protocol-strip"></div></section>
+      <section class="filters" aria-label="数据筛选"><div class="section-caption">这一轮，发生了什么？</div><label>场景 <select id="scenario-select"></select></label><label>轮次 <select id="round-select"></select></label></section>
+      <section class="metric-grid" id="metric-grid" aria-label="主要指标"></section>
+      <div class="two-column"><section class="panel"><div class="panel-heading"><div><div class="section-kicker">ROUND BY ROUND</div><h2>一次快，还是每次都快？</h2></div><span class="small-tag">CPU · ms/s</span></div><div id="round-chart" class="round-chart" role="img" aria-label="逐轮 CPU 时间分布"></div><p id="round-statistics" class="panel-footnote"></p></section><section class="panel"><div class="panel-heading"><div><div class="section-kicker">UNCERTAINTY MATTERS</div><h2>差异，有没有跨过门限？</h2></div></div><div id="interval-chart" class="interval-chart" role="img" aria-label="指标置信区间与判定门限"></div><p class="panel-footnote">线段为逐指标 95% 描述区间，圆点为差值均值。中间浅色区是原门限范围；正方向表示消耗增加。单轮不产生置信结论。</p></section></div>
+      <section class="panel trend-panel" id="trends"><div class="panel-heading"><div><div class="section-kicker">RESOURCE TIMELINE</div><h2>资源的起伏，一目了然</h2></div><div class="segmented" role="group" aria-label="曲线指标"><button class="selected" data-metric="cpu" aria-pressed="true">CPU</button><button data-metric="memory" aria-pressed="false">私有内存</button><button data-metric="working" aria-pressed="false">工作集</button></div></div><div class="chart-toolbar"><p id="chart-subtitle"></p><div class="legend"><span><i class="line-a"></i> 基线 A</span><span><i class="line-b"></i> 待测 B</span></div></div><div id="chart" class="chart" role="img" aria-label="资源时间曲线"></div><p class="chart-note" id="chart-note"></p></section>
+      <div class="two-column"><section class="panel"><div class="panel-heading"><div><div class="section-kicker">VERSION COMPARISON</div><h2>变化，落在具体数字里</h2></div><span class="small-tag">同一场景</span></div><div class="table-wrap"><table class="comparison-table"><thead><tr><th scope="col">指标</th><th scope="col">基线 A</th><th scope="col">待测 B</th><th scope="col">变化 / 判定</th></tr></thead><tbody id="comparison-body"></tbody></table></div><p class="panel-footnote">CPU 按基线窗口归一化；原始累计值保留在逐轮证据中。</p></section><section class="panel quality-panel"><div class="panel-heading"><div><div class="section-kicker">EVIDENCE QUALITY</div><h2>先看证据，再下结论</h2></div><span class="quality-leaf" aria-hidden="true">⌁</span></div><div id="quality-list"></div><div class="quality-note" id="quality-note"></div></section></div>
+      <section class="panel" id="evidence"><div class="panel-heading"><div><div class="section-kicker">EVERY RUN COUNTS</div><h2>每一轮，都有据可查</h2></div><span class="small-tag" id="run-count"></span></div><div class="table-wrap"><table class="runs-table"><thead><tr><th scope="col">顺序 / 轮次</th><th scope="col">版本</th><th scope="col">实测时长</th><th scope="col">CPU 累计</th><th scope="col">私有内存</th><th scope="col">采样</th><th scope="col">状态</th></tr></thead><tbody id="runs-body"></tbody></table></div><details id="details-panel"><summary>查看测量协议、限制与负载证据</summary><pre id="raw-evidence"></pre></details></section>
+      <footer><span class="footer-mark">∿</span> SonicRoute Benchmark Lab <span class="footer-divider">/</span> 让数据说话，也为不确定留白。<span class="footer-right">本地 · 离线 · 可复查</span></footer>
+    </div>
+  </main>
+  <script id="report-data" type="application/json">null</script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

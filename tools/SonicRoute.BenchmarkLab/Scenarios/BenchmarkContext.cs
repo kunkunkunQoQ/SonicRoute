@@ -27,6 +27,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         public string TargetExecutable { get; set; } = string.Empty;
         public BenchmarkTier Tier { get; set; } = BenchmarkTier.Standard;
         public double? CustomDurationSeconds { get; set; }
+        public double? CustomWarmupSeconds { get; set; }
         public int SampleIntervalMs { get; set; } = 200;
         public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
         public string SandboxDirectory { get; set; } = string.Empty;
@@ -64,6 +65,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         BenchmarkModule Module { get; }
 
         double GetDurationSeconds(BenchmarkTier tier);
+        double GetWarmupSeconds(BenchmarkTier tier) => 2.0;
 
         System.Threading.Tasks.Task<ScenarioResult> RunAsync(BenchmarkContext context);
     }

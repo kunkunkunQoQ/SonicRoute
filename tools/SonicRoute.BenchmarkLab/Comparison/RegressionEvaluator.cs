@@ -34,6 +34,7 @@ namespace SonicRoute.BenchmarkLab.Comparison
         public double ThresholdPercent { get; set; }
         public MetricVerdict Verdict { get; set; } = MetricVerdict.Stable;
         public string Details { get; set; } = string.Empty;
+        public RoundEvidence? RoundEvidence { get; set; }
     }
 
     public sealed class ScenarioComparisonResult
@@ -49,7 +50,12 @@ namespace SonicRoute.BenchmarkLab.Comparison
 
     public sealed class SuiteComparisonResult
     {
-        public int SchemaVersion { get; set; } = 2;
+        public int SchemaVersion { get; set; } = 3;
+        public MeasurementProtocol? Protocol { get; set; }
+        public string ToolVersion { get; set; } = "1.2";
+        public DecisionReadiness? DecisionReadiness { get; set; }
+        public DateTime? BaselineSavedUtc { get; set; }
+        public double BaselineMaxAgeDays { get; set; } = 7;
         public string BaselineSha256 { get; set; } = string.Empty;
         public string CandidateSha256 { get; set; } = string.Empty;
         public Dictionary<string, string> BaselineFiles { get; set; } = new();
@@ -123,6 +129,13 @@ namespace SonicRoute.BenchmarkLab.Comparison
             {
                 result.Verdict = OverallVerdict.Inconclusive;
                 result.Notes = $"Candidate measurement invalid: {candidate.MeasurementError} (samples={candidate.SampleCount}, duration={candidate.DurationSeconds:F2}s).";
+                return result;
+            }
+
+            if (baseline.SamplingQuality?.SuitableForComparison == false || candidate.SamplingQuality?.SuitableForComparison == false)
+            {
+                result.Verdict = OverallVerdict.Inconclusive;
+                result.Notes = "Sampling gaps/invalid timestamps make resource evidence unsuitable for a comparison gate; inspect per-round sampling quality.";
                 return result;
             }
 
@@ -245,9 +258,9 @@ namespace SonicRoute.BenchmarkLab.Comparison
                 }
                 var aValues = baseline.Select(selector).ToArray();
                 var bValues = candidate.Select(selector).ToArray();
-                if (aValues.Concat(bValues).Any(d => !double.IsFinite(d)))
+                if (baseline.Concat(candidate).Any(s => !s.MeasurementValid || s.ProcessExitedDuringMeasurement || s.SamplingQuality?.SuitableForComparison == false)
+                    || aValues.Concat(bValues).Any(d => !double.IsFinite(d)))
                 { metric.Verdict = MetricVerdict.Inconclusive; metric.Details += "; missing round measurement"; continue; }
-                var differences = aValues.Zip(bValues, (a, b) => b - a).ToArray();
                 double mean = bValues.Average() - aValues.Average();
                 double uncertainty = metric.MetricName switch
                 {
@@ -268,19 +281,16 @@ namespace SonicRoute.BenchmarkLab.Comparison
                     metric.Verdict = normalized.Verdict;
                     if (mean != 0 && Math.Abs(mean) <= uncertainty) metric.Verdict = MetricVerdict.Inconclusive;
                 }
-                double squaredError = paired ? differences.Sum(d => (d - mean) * (d - mean)) / (differences.Length - 1) / differences.Length
-                    : aValues.Sum(d => Math.Pow(d - aValues.Average(), 2)) / (aValues.Length - 1) / aValues.Length
-                    + bValues.Sum(d => Math.Pow(d - bValues.Average(), 2)) / (bValues.Length - 1) / bValues.Length;
-                int n = Math.Min(aValues.Length, bValues.Length);
-                double t = n switch { 3 => 4.303, 4 => 3.182, 5 => 2.776, 6 => 2.571, <= 10 => 2.447, <= 20 => 2.262, _ => 2.093 };
-                double halfWidth = t * Math.Sqrt(squaredError);
-                metric.Details += $"; {(paired ? "paired alternating" : "independent historical")} rounds A={aValues.Length}, B={bValues.Length}, delta mean={mean:F3}, 95% descriptive interval=[{mean-halfWidth:F3}, {mean+halfWidth:F3}] {metric.Unit}";
+                var interval = RoundStatistics.Calculate(aValues, bValues, paired);
+                metric.RoundEvidence = interval;
+                metric.Details += $"; {interval.Method} rounds A={aValues.Length}, B={bValues.Length}, delta mean={mean:F3}, 95% descriptive interval=[{interval.Lower95:F3}, {interval.Upper95:F3}] {metric.Unit}";
                 double limit = Math.Max(uncertainty, Math.Abs(metric.BaselineValue) * metric.ThresholdPercent / 100);
+                interval.DecisionLimit = limit;
                 bool overlapsGate = metric.Verdict switch
                 {
-                    MetricVerdict.Regressed => mean - halfWidth <= limit,
-                    MetricVerdict.Improved => mean + halfWidth >= -limit,
-                    MetricVerdict.Stable => mean - halfWidth < -limit || mean + halfWidth > limit,
+                    MetricVerdict.Regressed => interval.Lower95 <= limit,
+                    MetricVerdict.Improved => interval.Upper95 >= -limit,
+                    MetricVerdict.Stable => interval.Lower95 < -limit || interval.Upper95 > limit,
                     _ => false
                 };
                 if (overlapsGate)

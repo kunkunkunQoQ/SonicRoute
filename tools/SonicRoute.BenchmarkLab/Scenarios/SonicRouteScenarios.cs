@@ -26,10 +26,20 @@ namespace SonicRoute.BenchmarkLab.Scenarios
 
         public abstract Task<ScenarioResult> RunAsync(BenchmarkContext context);
 
+        public virtual double GetWarmupSeconds(BenchmarkTier tier) => Id switch
+        {
+            "idle_empty" => tier == BenchmarkTier.Quick ? 1.5 : 3.0,
+            _ when Id.StartsWith("rules_scaling_") => tier == BenchmarkTier.Quick ? 1.5 : 3.0,
+            "endurance_leak_trend" => 3.0,
+            _ => 2.0
+        };
+
         protected double ResolveDuration(BenchmarkContext context)
         {
             return context.CustomDurationSeconds ?? GetDurationSeconds(context.Tier);
         }
+
+        protected double ResolveWarmup(BenchmarkContext context) => context.CustomWarmupSeconds ?? GetWarmupSeconds(context.Tier);
     }
 
     /// <summary>
@@ -46,7 +56,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         {
             using var sandbox = new SonicRouteSandbox();
             double duration = ResolveDuration(context);
-            double warmup = context.Tier == BenchmarkTier.Quick ? 1.5 : 3.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[idle_empty] Starting target with 0 rules in sandbox {sandbox.InstanceId}...");
 
@@ -111,7 +121,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var sandbox = new SonicRouteSandbox();
             sandbox.PopulateRules(_ruleCount);
             double duration = ResolveDuration(context);
-            double warmup = context.Tier == BenchmarkTier.Quick ? 1.5 : 3.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[{Id}] Starting target with {_ruleCount} rules...");
 
@@ -166,7 +176,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var sandbox = new SonicRouteSandbox();
             sandbox.PopulateRules(10, triggerAppName: "nonexistent_app_xyz_404.exe");
             double duration = ResolveDuration(context);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[target_absent] Starting target with rules watching nonexistent processes...");
 
@@ -222,7 +232,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             string probe = sandbox.CreateProbeExecutable();
             sandbox.PopulateRules(5, triggerAppName: Path.GetFileNameWithoutExtension(probe), triggerType: 1 /* AppStart */);
             double duration = ResolveDuration(context);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[app_lifecycle_churn] Starting target with process event rules...");
 
@@ -293,7 +303,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var sandbox = new SonicRouteSandbox();
             sandbox.PopulateRules(5, triggerAppName: "cmd.exe", triggerType: 2 /* AppSwitch */);
             double duration = ResolveDuration(context);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[fast_foreground_switch] Starting target with AppSwitch rules...");
 
@@ -381,7 +391,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             string probe = sandbox.CreateProbeExecutable();
             sandbox.PopulateRules(1, triggerAppName: Path.GetFileNameWithoutExtension(probe), triggerType: 1 /* AppStart */, delayMs: delayMs);
             double duration = Math.Max(ResolveDuration(context), 6.0);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[long_delay_step] Starting target with delayed step rules ({delayMs}ms delay)...");
 
@@ -449,7 +459,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             // Distinct controlled bindings avoid self-conflicts; other applications may still own these keys.
             sandbox.PopulateRules(4, triggerType: 0 /* Hotkey */);
             double duration = ResolveDuration(context);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[rule_save_hotkeys] Starting target...");
 
@@ -520,7 +530,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var sandbox = new SonicRouteSandbox();
             sandbox.PopulateRules(5, triggerType: 4 /* Schedule */);
             double duration = ResolveDuration(context);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[schedule_rule_churn] Starting target with schedule rules...");
 
@@ -587,7 +597,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         {
             using var sandbox = new SonicRouteSandbox();
             double duration = ResolveDuration(context);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[window_tray_transitions] Starting target in tray...");
 
@@ -692,7 +702,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
             using var sandbox = new SonicRouteSandbox();
             sandbox.PopulateRules(10);
             double duration = ResolveDuration(context);
-            double warmup = 3.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[endurance_leak_trend] Starting endurance test ({duration:F0}s)...");
 
@@ -738,6 +748,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
     public sealed class GenericProcessScenario : BaseScenario
     {
         private readonly string _args;
+        public string Arguments => _args;
 
         public GenericProcessScenario(string args = "")
         {
@@ -752,7 +763,7 @@ namespace SonicRoute.BenchmarkLab.Scenarios
         public override async Task<ScenarioResult> RunAsync(BenchmarkContext context)
         {
             double duration = ResolveDuration(context);
-            double warmup = 2.0;
+            double warmup = ResolveWarmup(context);
 
             context.Log($"[generic_process] Starting {context.TargetExecutable} {_args}...");
 

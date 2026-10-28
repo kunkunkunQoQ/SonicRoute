@@ -23,7 +23,7 @@ namespace SonicRoute.BenchmarkLab.Comparison
             Action<string>? logger,
             CancellationToken token,
             List<ScenarioResult>? evidence = null,
-            int sampleIntervalMs = 200)
+            int sampleIntervalMs = 200, double? customWarmupSeconds = null)
         {
             var resultsByScenario = new Dictionary<string, List<ProcessMetricSummary>>();
 
@@ -41,6 +41,7 @@ namespace SonicRoute.BenchmarkLab.Comparison
                         TargetExecutable = targetPath,
                         Tier = tier,
                         CustomDurationSeconds = customDurationSeconds,
+                        CustomWarmupSeconds = customWarmupSeconds,
                         SampleIntervalMs = sampleIntervalMs,
                         CancellationToken = token,
                         LogMessage = logger
@@ -96,6 +97,11 @@ namespace SonicRoute.BenchmarkLab.Comparison
             return new ProcessMetricSummary
             {
                 DurationSeconds = summaries.Average(s => s.DurationSeconds),
+                SamplingQuality = new SamplingQuality
+                {
+                    SuitableForComparison = summaries.All(s => s.SamplingQuality?.SuitableForComparison != false),
+                    Warnings = summaries.SelectMany(s => s.SamplingQuality?.Warnings ?? new()).Distinct().ToList()
+                },
                 MeasurementValid = summaries.All(s => s.MeasurementValid && !s.ProcessExitedDuringMeasurement),
                 MeasurementError = string.Join("; ", summaries.Where(s => !s.MeasurementValid || s.ProcessExitedDuringMeasurement).Select(s => s.MeasurementError ?? "Process exited.")),
                 ProcessExitedDuringMeasurement = summaries.Any(s => s.ProcessExitedDuringMeasurement),
@@ -167,13 +173,14 @@ namespace SonicRoute.BenchmarkLab.Comparison
             double memoryThresholdPercent = 10.0,
             Action<string>? logger = null,
             CancellationToken token = default,
-            int sampleIntervalMs = 200)
+            int sampleIntervalMs = 200, double? customWarmupSeconds = null, double baselineMaxAgeDays = 7)
         {
             var suiteResult = new SuiteComparisonResult
             {
                 BaselineTarget = baselineTarget,
                 CandidateTarget = candidateTarget,
                 Rounds = rounds,
+                Protocol = MeasurementProtocol.Create(scenarios, tier, customDurationSeconds, sampleIntervalMs, customWarmupSeconds),
                 Environment = SystemEnvironmentInfo.CaptureCurrent()
             };
             if (rounds < 1 || scenarios.Count == 0) throw new ArgumentException("At least one round and one scenario are required.");
@@ -187,6 +194,8 @@ namespace SonicRoute.BenchmarkLab.Comparison
             if (storedBaseline != null)
             {
                 suiteResult.UsesStoredBaseline = true;
+                suiteResult.BaselineSavedUtc = storedBaseline.SavedUtc;
+                suiteResult.BaselineMaxAgeDays = baselineMaxAgeDays;
                 suiteResult.BaselineSha256 = storedBaseline.ExeSha256;
                 suiteResult.BaselineFiles = storedBaseline.TargetFiles;
                 logger?.Invoke($"Loaded stored baseline '{baselineTarget}' (Saved on {storedBaseline.SavedUtc:yyyy-MM-dd HH:mm:ss} UTC).");
@@ -206,21 +215,25 @@ namespace SonicRoute.BenchmarkLab.Comparison
                 logger?.Invoke($"Running candidate target: {candidateTarget} for {rounds} round(s)...");
                 var runs = new List<ScenarioResult>();
                 var candidateSummaries = await BenchmarkRunner.RunSuiteAsync(
-                    candidateTarget, scenarios, tier, rounds, customDurationSeconds, logger, token, runs, sampleIntervalMs);
+                    candidateTarget, scenarios, tier, rounds, customDurationSeconds, logger, token, runs, sampleIntervalMs, customWarmupSeconds);
                 suiteResult.BaselineRounds = storedBaseline.Rounds;
                 suiteResult.CandidateRounds = runs.GroupBy(r => r.ScenarioId).ToDictionary(g => g.Key, g => g.Select(r => r.Metrics).ToList());
                 suiteResult.Runs = runs.Select((r, i) => new BenchmarkRunEvidence { Side = "Candidate", Round = i / scenarios.Count + 1, Order = i + 1, Result = r }).ToList();
 
                 EvaluateComparison(suiteResult, scenarios, baselineSummaries, candidateSummaries, cpuThresholdPercent, memoryThresholdPercent, rounds);
-                if (!suiteResult.Environment.IsCompatibleWith(storedBaseline.Environment, out _) || storedBaseline.SchemaVersion != 2
-                    || storedBaseline.Tier != tier.ToString() || storedBaseline.RequestedDurationSeconds != customDurationSeconds || storedBaseline.SampleIntervalMs != sampleIntervalMs)
+                if (!suiteResult.Environment.IsCompatibleWith(storedBaseline.Environment, out _) || storedBaseline.SchemaVersion != 3
+                    || !suiteResult.Protocol.IsCompatibleWith(storedBaseline.Protocol)
+                    || !BaselinePolicy.IsFresh(storedBaseline.SavedUtc, DateTime.UtcNow, baselineMaxAgeDays))
                 {
+                    if (!BaselinePolicy.IsFresh(storedBaseline.SavedUtc, DateTime.UtcNow, baselineMaxAgeDays))
+                        suiteResult.Limitations.Add($"Historical baseline timestamp {storedBaseline.SavedUtc:O} exceeds the {baselineMaxAgeDays} day freshness policy or is invalid/future-dated.");
                     suiteResult.Limitations.Add("Historical baseline environment/protocol/tier/duration is incompatible or lacks complete round evidence; it is readable but not a valid regression gate.");
                     suiteResult.OverallVerdict = OverallVerdict.Inconclusive;
                     foreach (var result in suiteResult.Scenarios) { result.Verdict = OverallVerdict.Inconclusive; foreach (var metric in result.MetricComparisons) metric.Verdict = MetricVerdict.Inconclusive; }
                     suiteResult.RegressionsSummary.Clear(); suiteResult.ImprovementsSummary.Clear();
                 }
                 FinalizeSourceIdentity(suiteResult, candidateTarget, suiteResult.CandidateFiles);
+                suiteResult.DecisionReadiness = DecisionReadiness.Assess(suiteResult);
                 return suiteResult;
             }
 
@@ -254,15 +267,15 @@ namespace SonicRoute.BenchmarkLab.Comparison
 
                 logger?.Invoke($"\n=== Round {r}/{rounds} (Order: {firstName} -> {secondName}) ===");
 
-                // Run first target
-                await RunTargetForRound(firstTarget, baselineFirst ? baselineRounds : candidateRounds, scenarios, tier, customDurationSeconds, logger, token, suiteResult.Runs, r, firstName, sampleIntervalMs);
-
-                // Thermal & system cooldown
-                logger?.Invoke("Cooldown 1.5s...");
-                await Task.Delay(1500, token);
-
-                // Run second target
-                await RunTargetForRound(secondTarget, baselineFirst ? candidateRounds : baselineRounds, scenarios, tier, customDurationSeconds, logger, token, suiteResult.Runs, r, secondName, sampleIntervalMs);
+                // Keep the same scenario's two measurements adjacent to reduce suite-length drift.
+                foreach (var scenario in scenarios)
+                {
+                    var pair = new[] { scenario };
+                    await RunTargetForRound(firstTarget, baselineFirst ? baselineRounds : candidateRounds, pair, tier, customDurationSeconds, logger, token, suiteResult.Runs, r, firstName, sampleIntervalMs, customWarmupSeconds);
+                    logger?.Invoke("Pair cooldown 1.5s...");
+                    await Task.Delay(1500, token);
+                    await RunTargetForRound(secondTarget, baselineFirst ? candidateRounds : baselineRounds, pair, tier, customDurationSeconds, logger, token, suiteResult.Runs, r, secondName, sampleIntervalMs, customWarmupSeconds);
+                }
 
                 if (r < rounds)
                 {
@@ -280,6 +293,7 @@ namespace SonicRoute.BenchmarkLab.Comparison
             EvaluateComparison(suiteResult, scenarios, avgBaseline, avgCandidate, cpuThresholdPercent, memoryThresholdPercent, rounds);
             FinalizeSourceIdentity(suiteResult, baselineTarget, suiteResult.BaselineFiles);
             FinalizeSourceIdentity(suiteResult, candidateTarget, suiteResult.CandidateFiles);
+            suiteResult.DecisionReadiness = DecisionReadiness.Assess(suiteResult);
             return suiteResult;
         }
 
@@ -291,7 +305,7 @@ namespace SonicRoute.BenchmarkLab.Comparison
             double? customDurationSeconds,
             Action<string>? logger,
             CancellationToken token,
-            List<BenchmarkRunEvidence> evidence, int round, string side, int sampleIntervalMs)
+            List<BenchmarkRunEvidence> evidence, int round, string side, int sampleIntervalMs, double? customWarmupSeconds)
         {
             foreach (var scenario in scenarios)
             {
@@ -302,6 +316,7 @@ namespace SonicRoute.BenchmarkLab.Comparison
                     TargetExecutable = targetPath,
                     Tier = tier,
                     CustomDurationSeconds = customDurationSeconds,
+                        CustomWarmupSeconds = customWarmupSeconds,
                     SampleIntervalMs = sampleIntervalMs,
                     CancellationToken = token,
                     LogMessage = logger
@@ -428,10 +443,10 @@ namespace SonicRoute.BenchmarkLab.Comparison
             foreach (string suffix in new[] { ".dll", ".deps.json", ".runtimeconfig.json" })
                 if (File.Exists(stem + suffix)) files["entry" + suffix] = ComputeFileSha256(stem + suffix);
             if (File.Exists(full + ".config")) files["exe.config"] = ComputeFileSha256(full + ".config");
-            // SonicRoute Legacy has a small reviewed local dependency set; hash its
-            // actual managed neighbors too. Generic external dependencies are not inferred.
+            // Bind SonicRoute's adjacent assemblies too, including modern multifile
+            // deployments: an unchanged apphost/Core DLL pair is not the same product.
             string description = FileVersionInfo.GetVersionInfo(full).FileDescription ?? "";
-            if (description.Contains("SonicRoute", StringComparison.OrdinalIgnoreCase) && description.Contains("Legacy", StringComparison.OrdinalIgnoreCase))
+            if (description.Contains("SonicRoute", StringComparison.OrdinalIgnoreCase))
                 foreach (var file in Directory.EnumerateFiles(directory, "*.dll")) files[Path.GetFileName(file)] = ComputeFileSha256(file);
             return files;
         }

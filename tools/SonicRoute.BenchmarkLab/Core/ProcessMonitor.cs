@@ -33,7 +33,7 @@ namespace SonicRoute.BenchmarkLab.Core
         private double _selfCpuStartMs;
         private double _selfCpuEndMs;
 
-        private ProcessMonitor(Process process, bool ownsProcess, ProcessJobObject? jobObject, int sampleIntervalMs = 100)
+        private ProcessMonitor(Process process, bool ownsProcess, ProcessJobObject? jobObject, int sampleIntervalMs = 200)
         {
             _process = process;
             _ownsProcess = ownsProcess;
@@ -49,7 +49,7 @@ namespace SonicRoute.BenchmarkLab.Core
             string arguments = "",
             string? workingDirectory = null,
             IDictionary<string, string>? environmentVariables = null,
-            int sampleIntervalMs = 100,
+            int sampleIntervalMs = 200,
             bool measureStartupLatency = true)
         {
             if (!File.Exists(executablePath))
@@ -119,7 +119,7 @@ namespace SonicRoute.BenchmarkLab.Core
         /// <summary>
         /// Attaches to an already running Windows process by PID.
         /// </summary>
-        public static ProcessMonitor Attach(int processId, int sampleIntervalMs = 100)
+        public static ProcessMonitor Attach(int processId, int sampleIntervalMs = 200)
         {
             var process = Process.GetProcessById(processId);
             return new ProcessMonitor(process, ownsProcess: false, jobObject: null, sampleIntervalMs);
@@ -158,11 +158,12 @@ namespace SonicRoute.BenchmarkLab.Core
                     : 0;
 
                 var summary = ProcessMetricSummary.Aggregate(_samples, duration, monitorSelfCpu);
+                summary.SamplingQuality = SamplingQuality.Calculate(_samples, _sampleIntervalMs);
                 summary.StartupLatencyMs = StartupLatencyMs;
                 summary.ResponseLatencyMs = ResponseLatencyMs;
                 summary.ProcessExitedDuringMeasurement = _exitedDuringMeasurement;
                 summary.MeasurementError = _measurementError;
-                summary.MeasurementValid = _measurementError == null && !_exitedDuringMeasurement && _samples.Count >= 3;
+                summary.MeasurementValid = summary.MeasurementValid && _measurementError == null && !_exitedDuringMeasurement;
                 return summary;
             }
         }
@@ -218,6 +219,7 @@ namespace SonicRoute.BenchmarkLab.Core
 
         private void Sample(IntPtr hProcess, double currentWallMs, ref double prevCpuTime, ref double prevWallMs, int processorCount)
         {
+            long readStarted = Stopwatch.GetTimestamp();
             if (!NativeMethods.GetProcessTimes(hProcess, out _, out _, out long kernelTime, out long userTime))
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "CPU measurement failed.");
@@ -284,6 +286,7 @@ namespace SonicRoute.BenchmarkLab.Core
             {
                 TimestampUtc = DateTime.UtcNow,
                 ElapsedMs = currentWallMs,
+                CollectionDurationMs = Stopwatch.GetElapsedTime(readStarted).TotalMilliseconds,
                 TotalCpuTimeMs = totalCpuMs,
                 UserCpuTimeMs = userMs,
                 KernelCpuTimeMs = kernelMs,

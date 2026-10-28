@@ -1,8 +1,22 @@
-# SonicRoute BenchmarkLab 1.1
+# SonicRoute BenchmarkLab 1.2
 
 独立的 Windows 进程测量与版本对比工具。保留 compare/ab、run、baseline、scenarios、verify 命令及原报告文件名；不向 SonicRoute 加入探针或后台服务。默认工具使用 .NET 8 x64，可以测量 NET10、NET8 和 Legacy 目标。
 
 运行工具本身需要 .NET 8 x64 Runtime（Desktop Runtime 也包含所需运行时）；仅装 .NET 10 不会自动满足此要求。工具与目标软件的运行时需求分别检查。
+
+## 1.2 新增
+
+最终细化版：专项默认每侧 5 轮 × 30 秒、预热 5 秒；全量默认 7 轮 × 60 秒、预热 5 秒；轻量为 1 轮 × 3 秒、预热 2 秒。可用 --warmup / --rounds / --duration 覆盖并记录协议。历史基线默认 7 天有效且同名不可覆盖。AI 先读 [BENCHMARK_POLICY.md](BENCHMARK_POLICY.md) 固定计划，报告的推荐协议完成度与统计判定分别查看。
+
+性能观察室新增可点击场景总览、协议完成度、逐轮 CPU 分布 / 中位数 / 极差 / CV，以及置信区间对照门限图；旧报告缺区间时明确显示缺失，单轮不作区间推断。
+
+- `plan` 在运行前预览场景、轮次、顺序、桌面影响和预计时长，不启动目标。`--scenario idle_empty,target_absent` 按需选择多场景。
+- 同一场景的 A/B 相邻测量，逐轮交换顺序；资源均值按实际采样时间加权，采样延迟可追查。统计区间额外保存结构化方法、标准误、自由度和门限。
+- Schema 3 历史基线绑定有效时长、预热、间隔、场景与 generic 参数；旧基线可读，跨协议不判通过。SonicRoute 多文件包也复核相邻 DLL。
+- **性能观察室**：打开 `Viewer/index.html` 导入数据。支持版本、场景、轮次筛选，CPU / 私有内存 / 工作集曲线，逐轮表格及采样质量；数据只在页面内处理。示例始终注明合成。
+- compare 和 run 均生成自带数据的离线 `report.html`，无需联网或网页服务。`导出整理数据` 可保存并再次导入同一份完整数据。
+- 测试规范、产物位置与清理规范分别见 [TESTING.md](TESTING.md)、[ARTIFACTS.md](ARTIFACTS.md)、[CLEANUP.md](CLEANUP.md)；升级设计见 [UPGRADE-v1.2.md](UPGRADE-v1.2.md)。
+- **AI 执行规范**：[AI_TESTING.md](AI_TESTING.md) 是 AI 的选择与执行入口，包含产品各功能专项索引。工具验证支持 `-Mode Targeted|Light|Full`；性能测量支持 `--mode targeted|light|full`，两者分别留证。
 
 ## 本次修正
 
@@ -18,16 +32,23 @@
 - 默认每 200ms 采样一次，可用 --interval 20..1000 调整；仅测量期间采样，结束即取消等待。相较旧默认 100ms，周期采样次数减半，不代表 CPU 开销必然减半；累计 CPU 仍由端点读取。
 - 报告记录目标 EXE、托管入口及运行时配置的 SHA256，Legacy 同时记录本地 DLL；结束后复核，文件变化即失去可比性。单目标 run_metadata.json 保留测量协议，旧基线可读但不会冒充新协议的有效对照。
 
-## 构建与自检
+## 隔离构建与自检
 
 ```powershell
-dotnet build tools/SonicRoute.BenchmarkLab/SonicRoute.BenchmarkLab.csproj -c Release
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- verify
-# 显式追加实际 SonicRoute 隔离检查；默认不自动寻找或启动用户软件
-dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- verify --target E:/releases/current.exe
+./tools/SonicRoute.BenchmarkLab/Invoke-IsolatedChecks.ps1 -Mode Targeted -Feature sampling,protocol
+# 轻量：工具自检和纯数据检查，不默认启动浏览器 / 产品
+./tools/SonicRoute.BenchmarkLab/Invoke-IsolatedChecks.ps1 -Mode Light
+# 页面变化时才追加浏览器验证；需要已安装 Edge 与 Node 22+
+./tools/SonicRoute.BenchmarkLab/Invoke-IsolatedChecks.ps1 -Mode Targeted -Feature reports,viewer-ui
+# 全量：全部工具 / 网站检查 + 自建进程 A/A 流程冒烟
+./tools/SonicRoute.BenchmarkLab/Invoke-IsolatedChecks.ps1 -Mode Full
+# 显式实际目标冒烟与交付提取；默认不自动寻找或启动用户软件
+./tools/SonicRoute.BenchmarkLab/Invoke-IsolatedChecks.ps1 -Scope All -Browser -Target E:/releases/current.exe -DeliveryName benchmarklab-v1.2-20261028
 ```
 
 自检包含计算、报告、JSONL、规则身份及真实自建 Windows 子进程；实际软件检查需要显式 --target。
+
+统一入口把构建与临时材料放进 `build-artifacts/benchmarklab/<RunId>`，结束清理并保留 `maintenance/plans/benchmarklab-runs/<RunId>/receipt.json`。直接使用已构建工具时，`verify --output <新目录>` 可保留自检报告；省略时自检临时材料在结束删除。不要在旧根或冻结输入目录中构建工具。
 
 自动 SonicRoute 场景使用独立数据目录及实例身份，关闭自动更新、开机启动和托盘滚轮，避免操作用户音频。这里的空闲结果对应这套受控配置；需要测量托盘滚轮等功能时，应另建明确启用该功能的专项场景。
 
@@ -36,6 +57,11 @@ dotnet run --project tools/SonicRoute.BenchmarkLab -c Release -- verify --target
 先让机器尽量安静，用同一 EXE 做 A/A，再做 A/B。工具不会暂停系统任务或自动消除环境噪声；缓存、调度和后台负载仍需控制。
 
 ```powershell
+# 先预览；不要求目标存在，也不启动或修改目标
+SonicRoute.BenchmarkLab plan --mode targeted --feature idle,rules --aa --json
+SonicRoute.BenchmarkLab plan --mode light --aa --json
+SonicRoute.BenchmarkLab plan --mode full --aa --json
+SonicRoute.BenchmarkLab plan --aa --scenario idle_empty,target_absent --suite quick --rounds 3 --duration 30 --json
 # A/A 重复性对照；不能作为软件版本优化结论
 SonicRoute.BenchmarkLab compare --aa --candidate E:/releases/current.exe --suite quick --rounds 3 --duration 30 --output E:/benchmarks/aa-new --json
 # 双版本交替，后台0/10规则和目标不存在
@@ -77,7 +103,7 @@ SonicRoute 场景使用独立数据与实例 ID，禁用更新、自启动和普
 - report.json：来源、逐轮指标、样本、失败和负载证据；观察器 CPU 是工具全进程在测量期间的 CPU，包含负载生成，不是纯采样器开销。
 - report.html：离线展示判定、原始 CPU/时长、门限与限制；不确定状态不显示绿色通过。
 - ai-summary.md/json：快速摘要；完整波动与证据见 report.json。
-- run_summary.json / run_evidence.json：单目标汇总及逐轮证据。Schema 2 基线保存轮次、套件和请求时长；旧基线仍可读，缺协议证据时不作为有效门禁。
+- run_summary.json / run_evidence.json / run_metadata.json：单目标汇总、逐轮证据、协议与身份；同目录 report.html 内嵌这些数据。Schema 3 保存完整场景协议；旧基线仍可读，缺协议证据时不作为有效门禁。
 
 | 码 | 含义 |
 | --- | --- |

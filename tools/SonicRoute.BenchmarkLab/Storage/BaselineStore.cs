@@ -10,6 +10,7 @@ namespace SonicRoute.BenchmarkLab.Storage
     public sealed class StoredBaseline
     {
         public int SchemaVersion { get; set; }
+        public MeasurementProtocol? Protocol { get; set; }
         public string Tier { get; set; } = "";
         public int SampleIntervalMs { get; set; }
         public double? RequestedDurationSeconds { get; set; }
@@ -34,7 +35,6 @@ namespace SonicRoute.BenchmarkLab.Storage
             get
             {
                 string baseDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "baselines");
-                Directory.CreateDirectory(baseDir);
                 return baseDir;
             }
         }
@@ -46,8 +46,13 @@ namespace SonicRoute.BenchmarkLab.Storage
             string safeName = Path.GetInvalidFileNameChars().Aggregate(name, (curr, c) => curr.Replace(c, '_'));
             string path = Path.Combine(dir, $"{safeName}.json");
 
+            if (File.Exists(path)) throw new ArgumentException("Baseline capture already exists; choose a new immutable name: " + safeName);
+
             string json = JsonSerializer.Serialize(baseline, JsonOptions);
-            File.WriteAllText(path, json);
+            // A name identifies an immutable capture; choose a new name to refresh it.
+            using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            using var writer = new StreamWriter(stream);
+            writer.Write(json);
         }
 
         public static StoredBaseline? Load(string name, string? customDir = null)
