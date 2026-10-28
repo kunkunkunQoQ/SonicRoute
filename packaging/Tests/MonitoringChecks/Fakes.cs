@@ -95,7 +95,8 @@ namespace MonitoringChecks
         internal Session(uint pid, AudioSessionState state = AudioSessionState.Active) { Pid = pid; State = state; }
         internal void SetState(AudioSessionState state) { State = state; Boundary.Callback(() => { foreach (var cb in Callbacks.Keys) cb.OnStateChanged(state); }); }
         internal void Disconnect() => Boundary.Callback(() => { foreach (var cb in Callbacks.Keys) cb.OnSessionDisconnected(0); });
-        public int GetPeakValue(out float peak) { Interlocked.Increment(ref PeakReads); peak = Peak; return PeakFailures-- > 0 ? -1 : 0; }
+        internal Action? OnPeakRead;
+        public int GetPeakValue(out float peak) { Interlocked.Increment(ref PeakReads); OnPeakRead?.Invoke(); peak = Peak; return PeakFailures-- > 0 ? -1 : 0; }
         public int GetState(out AudioSessionState state) { Interlocked.Increment(ref StateReads); state = State; return StateFailures-- > 0 ? -1 : 0; }
         public int GetProcessId(out uint pid) { pid = Pid; return 0; }
         public int GetSessionInstanceIdentifier(out string id) { id = Instance; return IdentityFails ? -1 : 0; }

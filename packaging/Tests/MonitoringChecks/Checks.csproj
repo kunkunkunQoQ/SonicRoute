@@ -4,7 +4,7 @@
     <AssemblyName>MonitoringChecks</AssemblyName><PlatformTarget>x64</PlatformTarget><LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
-  <ItemGroup><Compile Include="Program.cs;Fakes.cs;OutputVolumes.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="Program.cs;Fakes.cs;OutputVolumes.cs;PanelPerformance.cs" /></ItemGroup>
   <Target Name="PrepareMonitoringSources" BeforeTargets="CoreCompile">
     <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Sources.ps1&quot; -OutputDirectory &quot;$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)&quot;" />
     <ItemGroup><Compile Include="$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)/*.cs" /></ItemGroup>

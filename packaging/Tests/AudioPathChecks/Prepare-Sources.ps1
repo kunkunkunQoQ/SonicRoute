@@ -38,6 +38,8 @@ foreach ($file in $files) {
 }
 $panel = Read-Source 'SonicRoute/QuickPanelModernWindow.xaml.cs'
 $anchor = 'var vols = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName), static state =>'
+$snapshot = $panel.Contains('var snapshot = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName, Read: _readPanelState), static state =>')
+if ($snapshot) { $anchor = 'var snapshot = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName, Read: _readPanelState), static state =>' }
 $at = $panel.IndexOf($anchor, [StringComparison]::Ordinal)
 if ($at -lt 0) { throw 'Panel row reader anchor changed; inspect the test extraction.' }
 $start = $panel.IndexOf('{', $at)
@@ -47,6 +49,11 @@ $start = $normalized.IndexOf('{', $at)
 $end = $normalized.IndexOf("`n                });", $start, [StringComparison]::Ordinal)
 if ($end -lt 0) { throw 'Panel row reader end changed; inspect the test extraction.' }
 $body = $normalized.Substring($start + 1, $end - $start - 1)
+$returnType = 'Dictionary<int, (int vol, bool muted, string? output)>'
+if ($snapshot) { $returnType = '(Dictionary<int, (int vol, bool muted, string? output)> States, bool? AllMuted)' }
+$adapter = if ($snapshot) { 'public static Dictionary<int, (int vol, bool muted, string? output)> Read(List<AudioAppInfo> apps, bool names) => ReadSnapshot(apps, names).States;' } else { '' }
+$method = if ($snapshot) { 'ReadSnapshot' } else { 'Read' }
+$state = if ($snapshot) { 'var state = (Apps: apps, ShowOutputName: names, Read: (Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted)> Apps, bool AllMuted)>)SessionVolumeService.ReadPanelState);' } else { 'var state = (Apps: apps, ShowOutputName: names);' }
 $reader = @"
 using System;
 using System.Collections.Generic;
@@ -55,8 +62,9 @@ using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 namespace AudioPathChecks {
 internal static class PanelRows {
- public static Dictionary<int, (int vol, bool muted, string? output)> Read(List<AudioAppInfo> apps, bool names) {
-  var state = (Apps: apps, ShowOutputName: names);
+$adapter
+ public static $returnType $method(List<AudioAppInfo> apps, bool names) {
+  $state
 $body
  }
 }

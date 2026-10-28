@@ -142,3 +142,14 @@ included. Compare the same harness against both product revisions; disabling
 tiered compilation in both processes can help distinguish JIT warmup effects.
 This is a local name-refresh probe, not a first-visible-load, idle CPU,
 working-set or whole-app performance benchmark.
+
+`--panel-performance` checks the panel performance changes with actual product
+controls and fake endpoint writes: first response, queued-value coalescing behind
+a slow writer, latest readback, main/extra endpoint ordering, native routed
+DragCompleted and close flush. It also checks cached viewport-only peak updates,
+scroll-back refresh without sampler creation, canceled icon batches and queued
+icon delivery, and preservation of the shared icon cache. It includes the
+existing targeted extra-panel readback and loading/late-result checks. Windows
+remain unshown; real device reads are limited to the existing pending-load
+cancellation fixture, and no real audio writes or input injection occur.
+Reported operation counts describe controlled fixtures, not whole-app CPU gains.

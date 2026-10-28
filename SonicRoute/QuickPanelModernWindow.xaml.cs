@@ -66,6 +66,8 @@ namespace SonicRoute
         private bool _contentReady;
         private int _loadVersion;
         private int _globalMuteVersion;
+        private (int Load, int OutputVersion, bool Muted)? _globalMuteLoadState;
+        private Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted)> Apps, bool AllMuted)> _readPanelState = SessionVolumeService.ReadPanelState;
         private int _micMuteVersion;
         private int _systemVolumeRequest;
         private AppRow? _recentDeviceRow;
@@ -75,6 +77,10 @@ namespace SonicRoute
         private readonly Dictionary<int, int> _pendingVolume = new();
         private DispatcherTimer? _volDebounce;
         private AudioMeterService? _meter;
+        private Action<IReadOnlyDictionary<int, float>>? _meterListener;
+        private readonly List<AppRow> _visibleMeterRows = new();
+        private IReadOnlyDictionary<int, float>? _displayPeaks;
+        private bool _meterViewportQueued;
         private bool _meterEnabled;
         private bool _isClosed;
         private readonly object _peakGate = new();
@@ -97,11 +103,13 @@ namespace SonicRoute
         {
             InitializeComponent();
             VolumePresets.Attach(VolumeSlider);
+            VolumeSlider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(SystemVolumeDragCompleted), true);
             InitializeOutputVolumes();
             _entranceMotion = new PanelEntranceMotion(PanelSurface, PanelSlide);
             AppListScroll.PreviewMouseWheel += (_, _) => StopRowScroll();
             AppListScroll.PreviewMouseDown += (_, _) => StopRowScroll();
             AppListScroll.PreviewKeyDown += (_, _) => StopRowScroll();
+            AppListScroll.ScrollChanged += (_, _) => QueueMeterViewport();
             VersionText.Text = App.DisplayVersion;
             // 只有面板真正获得过焦点（托盘点击等正常交互）才在失焦时关闭；
             // 启动/脚本等未获焦场景下保持打开，避免一闪而过
@@ -141,6 +149,7 @@ namespace SonicRoute
             // 合并请求重定位（默认模式锚定右下角；自定义位置保持用户设定不重设）
             SizeChanged += (_, _) =>
             {
+                QueueMeterViewport();
                 if (!IsVisible || _adjustMode) return;
                 RequestPosition();
                 if (OutputVolumesPopup.IsOpen) PositionOutputPopup();
@@ -369,7 +378,11 @@ namespace SonicRoute
             int outputVersion = _globalMuteVersion, micVersion = _micMuteVersion;
             try
             {
-                var state = await _uiLifetime.ReadAsync(static () => (Output: SessionVolumeService.AllMuted(), Mic: GlobalMicMuteService.IsMuted()));
+                var cached = _globalMuteLoadState;
+                bool? output = cached.HasValue && cached.Value.Load == loadVersion && cached.Value.OutputVersion == outputVersion
+                    ? cached.Value.Muted : null;
+                var state = await _uiLifetime.ReadAsync(output, static saved =>
+                    (Output: saved ?? SessionVolumeService.AllMuted(), Mic: GlobalMicMuteService.IsMuted()));
                 if (_isClosed || loadVersion != _loadVersion) return;
                 if (outputVersion == _globalMuteVersion) { ApplyGlobalMuteVisual(state.Output); GlobalMuteButton.IsEnabled = true; }
                 if (micVersion == _micMuteVersion) { ApplyMicMuteVisual(state.Mic); MicMuteButton.IsEnabled = true; }
@@ -412,6 +425,8 @@ namespace SonicRoute
             if (_suppressDevCombo) return;
             if (SystemDevCombo.SelectedItem is AudioDeviceInfo dev)
             {
+                FlushPendingVolumes();
+                ++_systemVolumeWriteVersion;
                 _systemDeviceId = dev.Id;
                 // 设置「快速面板更改系统默认设备」开启时：下拉切换 = 更改系统默认输出设备（IPolicyConfig.SetDefaultEndpoint）
                 if (SonicRoute.Core.ConfigService.Load().PanelChangeSystemDefault)
@@ -495,17 +510,13 @@ namespace SonicRoute
             MuteButton.ClearValue(Button.ForegroundProperty);
         }
 
-        private async void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
             VolumePercentText.Text = $"{(int)Math.Round(e.NewValue)}%";
             if (!_systemReady) return;
             int pct = (int)Math.Round(e.NewValue);
-            string? deviceId = _systemDeviceId;
-            var result = await Task.Run(() => SystemVolumeService.SetVolumePercentChecked(deviceId, pct));
-            if (_isClosed || deviceId != _systemDeviceId) return;
-            // 面板内直接调节已有百分比反馈，复用读回同步；快捷键仍走共享 OSD 入口。
-            if (result.Actual >= 0)
-                ApplySystemVolumeReadback(deviceId, result.Actual, _systemMutedForOsd);
+            if (_isClosed) return;
+            QueueSystemVolume(pct);
         }
 
         private void ApplySystemVolumeReadback(int actual)
@@ -599,6 +610,9 @@ namespace SonicRoute
         {
             if (!_systemReady) return;
             string? deviceId = _systemDeviceId;
+            FlushPendingVolumes();
+            try { await _volumeWriteTask; } catch { }
+            if (_isClosed || deviceId != _systemDeviceId) return;
             var result = await Task.Run(() => SystemVolumeService.ToggleMuteChecked(deviceId));
             if (_isClosed || deviceId != _systemDeviceId) return;
             if (result.Applied) ApplySystemMuteVisual(result.Muted);
@@ -640,11 +654,13 @@ namespace SonicRoute
                 string signature = GetAppRowsSignature(apps, cfg, showOutputName);
 
                 // 名称开关关闭时显示应用名，只走原音量读取，不查询播放路由。
-                var vols = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName), static state =>
+                _globalMuteLoadState = null;
+                int outputVersion = _globalMuteVersion, loadVersion = _loadVersion;
+                var snapshot = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName, Read: _readPanelState), static state =>
                 {
                     var d = new Dictionary<int, (int vol, bool muted, string? output)>();
-                    if (state.Apps.Count == 0) return d;
-                    SessionVolumeService.Refresh();
+                    if (state.Apps.Count == 0) return (States: d, AllMuted: (bool?)null);
+                    var panel = state.Read(state.Apps.Select(a => (int)a.ProcessId));
                     using var routes = state.ShowOutputName ? new AudioPolicyConfig(EDataFlow.eRender) : null;
                     foreach (var a in state.Apps)
                     {
@@ -657,12 +673,14 @@ namespace SonicRoute
                             catch { persisted = null; }
                             output = persisted == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(persisted);
                         }
-                        var audio = SessionVolumeService.ReadState(pid);
+                        var audio = panel.Apps[pid];
                         d[pid] = (audio.Volume, audio.Muted, output);
                     }
-                    return d;
+                    return (States: d, AllMuted: (bool?)panel.AllMuted);
                 });
                 if (_isClosed) return;
+                var vols = snapshot.States;
+                if (snapshot.AllMuted.HasValue) _globalMuteLoadState = (loadVersion, outputVersion, snapshot.AllMuted.Value);
                 _updatingRowVolumes = true;
                 if (_appRowsSignature == signature)
                 {
@@ -855,7 +873,7 @@ namespace SonicRoute
                     }
                 }
 
-                AppItem.LoadIconsAsync(pendingIcons);
+                AppItem.LoadIconsAsync(pendingIcons, _uiLifetime.Token);
 
                 _appRowsSignature = signature;
                 UpdateRowHighlights();
@@ -956,7 +974,10 @@ namespace SonicRoute
         }
         private void VolDebounce_Tick(object? sender, EventArgs e)
         {
+            bool keepThrottle = _systemVolumeThrottled && _pendingSystemVolume.HasValue;
             FlushPendingVolumes();
+            _systemVolumeThrottled = keepThrottle;
+            if (keepThrottle) SchedulePendingVolumeFlush(false);
         }
 
         /// <summary>行静音视觉：静音后音量条/百分比变强调色 RGB 反色，图标右上显示反色圆点。</summary>
@@ -996,21 +1017,61 @@ namespace SonicRoute
 
             if (_meter == null)
             {
-                _meter = new AudioMeterService();
-                _meter.PeaksUpdated += OnPeaksUpdated;
-                _meter.Start(_rows.Values.Where(r => r.Slider.IsEnabled && !r.IsMuted).Select(r => (int)r.App.ProcessId));
+                var meter = _meter = new AudioMeterService();
+                _meterListener = peaks => OnPeaksUpdated(meter, peaks);
+                meter.PeaksUpdated += _meterListener;
+                meter.Start(_rows.Values.Where(r => r.Slider.IsEnabled && !r.IsMuted).Select(r => (int)r.App.ProcessId));
             }
             else UpdateMeterTargets();
+            QueueMeterViewport();
         }
 
         private void StopMeter()
         {
             var meter = _meter;
-            if (meter == null) return;
             _meter = null;
-            meter.PeaksUpdated -= OnPeaksUpdated;
-            meter.Dispose();
+            if (meter != null)
+            {
+                meter.PeaksUpdated -= _meterListener;
+                _ = meter.DisposeAsync();
+            }
+            _meterListener = null;
+            _visibleMeterRows.Clear();
+            _displayPeaks = null;
             lock (_peakGate) _latestPeaks = null;
+        }
+
+        private void QueueMeterViewport()
+        {
+            if (_isClosed || !_meterEnabled || !IsVisible || _meterViewportQueued) return;
+            _meterViewportQueued = true;
+            _uiLifetime.Post(Dispatcher, () =>
+            {
+                _meterViewportQueued = false;
+                if (!_isClosed && _meterEnabled && IsVisible) RefreshMeterViewport();
+            }, DispatcherPriority.Render);
+        }
+
+        private void RefreshMeterViewport()
+        {
+            _visibleMeterRows.Clear();
+            foreach (var row in _rows.Values)
+            {
+                if (row.Slider.ActualHeight <= 0) continue;
+                var bounds = row.Slider.TransformToAncestor(AppListScroll).TransformBounds(new Rect(row.Slider.RenderSize));
+                if (bounds.Bottom <= 0 || bounds.Top >= AppListScroll.ActualHeight) continue;
+                _visibleMeterRows.Add(row);
+                ApplyVisiblePeak(row);
+            }
+        }
+
+        private void ApplyVisiblePeak(AppRow row)
+        {
+            if (row.IsMuted || !row.Slider.IsEnabled) return;
+            float next = _displayPeaks != null && _displayPeaks.TryGetValue((int)row.App.ProcessId, out float level) ? level : 0f;
+            if (row.PeakLevel == next) return;
+            row.PeakLevel = next;
+            UpdatePeakVisual(row);
         }
 
         private void UpdateMeterTargets()
@@ -1019,9 +1080,13 @@ namespace SonicRoute
                 .Select(r => (int)r.App.ProcessId));
         }
 
-        private void OnPeaksUpdated(IReadOnlyDictionary<int, float> peaks)
+        private void OnPeaksUpdated(AudioMeterService source, IReadOnlyDictionary<int, float> peaks)
         {
-            lock (_peakGate) _latestPeaks = peaks;
+            lock (_peakGate)
+            {
+                if (!ReferenceEquals(source, _meter)) return;
+                _latestPeaks = peaks;
+            }
             // UI 忙时只保留最新快照，避免 30Hz 回调在 Dispatcher 上积压。
             if (Interlocked.Exchange(ref _peakDispatchPending, 1) != 0) return;
             try
@@ -1032,15 +1097,8 @@ namespace SonicRoute
                     lock (_peakGate) { latest = _latestPeaks; _latestPeaks = null; }
                     Interlocked.Exchange(ref _peakDispatchPending, 0);
                     if (_isClosed || !_meterEnabled || !IsVisible || latest == null) return;
-                    foreach (var pair in _rows)
-                    {
-                        var row = pair.Value;
-                        if (row.IsMuted || !row.Slider.IsEnabled) continue;
-                        float next = latest.TryGetValue(pair.Key, out float level) ? level : 0f;
-                        if (row.PeakLevel == next) continue;
-                        row.PeakLevel = next;
-                        UpdatePeakVisual(row);
-                    }
+                    _displayPeaks = latest;
+                    foreach (var row in _visibleMeterRows) ApplyVisiblePeak(row);
                 }), DispatcherPriority.Render);
             }
             catch { Interlocked.Exchange(ref _peakDispatchPending, 0); }

@@ -91,29 +91,33 @@ namespace SonicRoute.Core
             for (int attempt = 0; attempt < 2; attempt++)
             {
                 FindRenderVolumes(pid, 5);
-                int percent = -1;
-                bool muted = false, failed = false;
+                (int Volume, bool Muted) state;
+                bool failed;
                 lock (_lock)
-                {
-                    if (!_renderVolumes.TryGetValue(pid, out var sessions) || sessions.Count == 0) return (-1, false);
-                    try
-                    {
-                        if (sessions[0].GetMasterVolume(out float value) >= 0)
-                            percent = (int)Math.Round(MathEx.Clamp(value, 0f, 1f) * 100f);
-                        else failed = true;
-                    }
-                    catch { failed = true; }
-                    try
-                    {
-                        if (sessions[0].GetMute(out int value) >= 0) muted = value != 0;
-                        else failed = true;
-                    }
-                    catch { failed = true; }
-                }
-                if (!failed || attempt != 0) return (percent, muted);
+                    state = ReadStateCore(pid, out failed);
+                if (!failed || attempt != 0) return state;
                 Refresh(true);
             }
             return (-1, false);
+        }
+
+        // Caller owns _lock; preserve the existing first-session volume/mute semantics.
+        private static (int Volume, bool Muted) ReadStateCore(int pid, out bool failed)
+        {
+            failed = false;
+            if (!_renderVolumes.TryGetValue(pid, out var sessions) || sessions.Count == 0) return (-1, false);
+            int percent = -1;
+            bool muted = false;
+            try
+            {
+                if (sessions[0].GetMasterVolume(out float value) >= 0)
+                    percent = (int)Math.Round(MathEx.Clamp(value, 0f, 1f) * 100f);
+                else failed = true;
+            }
+            catch { failed = true; }
+            try { if (sessions[0].GetMute(out int value) >= 0) muted = value != 0; else failed = true; }
+            catch { failed = true; }
+            return (percent, muted);
         }
 
         /// <summary>设置音量百分比（0–100）；对进程全部输出会话生效。任一成功即视为成功。</summary>
@@ -241,6 +245,32 @@ namespace SonicRoute.Core
         {
             Refresh(true);
             lock (_lock) return ReadAllMutedCore().Muted;
+        }
+
+        /// <summary>面板同一轮读取应用状态与全部播放会话静音；包含未显示的应用和同 PID 的其它会话。</summary>
+        public static (Dictionary<int, (int Volume, bool Muted)> Apps, bool AllMuted) ReadPanelState(IEnumerable<int> pids)
+        {
+            var ids = new HashSet<int>(pids);
+            for (int attempt = 0; ; attempt++)
+            {
+                Refresh(true);
+                bool failed = false;
+                var states = new Dictionary<int, (int Volume, bool Muted)>();
+                bool allMuted;
+                lock (_lock)
+                {
+                    foreach (int pid in ids)
+                    {
+                        states[pid] = ReadStateCore(pid, out bool appFailed);
+                        failed |= appFailed;
+                    }
+                    var global = ReadAllMutedCore();
+                    allMuted = global.Muted;
+                    failed |= !global.Known && _renderVolumes.Count != 0;
+                    failed |= !_snapshotComplete || _snapshotGeneration != Volatile.Read(ref _cacheGeneration);
+                }
+                if (!failed || attempt != 0) return (states, allMuted);
+            }
         }
 
         // Caller owns _lock; include every session, not only each PID's first session.

@@ -7,12 +7,14 @@ internal static class Program
 {
     private static int _passed, _failed;
     private static bool _endpointVolumesOnly;
+    private static bool _meterOnly;
     private static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
     private static void Wait(Func<bool> condition, string message, int timeout = 4000)
     { var watch = System.Diagnostics.Stopwatch.StartNew(); while (!condition() && watch.ElapsedMilliseconds < timeout) Thread.Sleep(10); Assert(condition(), message); }
     private static void Case(string name, Action test)
     {
         if (_endpointVolumesOnly && !name.StartsWith("output ") && !name.Contains("microphone") && !name.StartsWith("missing device notification")) return;
+        if (_meterOnly && (name.StartsWith("output ") || name.Contains("microphone") || name.StartsWith("missing device notification") || name.StartsWith("WMI "))) return;
         try { Boundary.Reset(); test(); Assert(Boundary.CallbackReleases == 0, "COM released inside a callback"); _passed++; Console.WriteLine("PASS " + name); } catch (Exception error) { _failed++; Console.WriteLine("FAIL " + name + ": " + error); }
     }
     private sealed class Probe : IDisposable
@@ -26,7 +28,14 @@ internal static class Program
     }
     public static int Main(string[] args)
     {
+        if (args.Contains("--panel-performance"))
+        {
+            PanelPerformanceCases.Run(Case, Assert);
+            Console.WriteLine($"RESULT passed={_passed} failed={_failed} PANEL_PERFORMANCE_ONLY=true OS_BOUNDARIES=FAKES_ONLY");
+            return _failed == 0 ? 0 : 1;
+        }
         _endpointVolumesOnly = args.Contains("--endpoint-volumes-only");
+        _meterOnly = args.Contains("--meter-only");
         OutputVolumeCases.Run(Case, Assert);
         Case("healthy active meter retains managers beyond old two-second scan", () =>
         {

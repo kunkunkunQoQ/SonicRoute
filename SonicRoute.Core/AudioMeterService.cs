@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using SonicRoute.Core.Interop;
 
 namespace SonicRoute.Core
@@ -27,6 +28,8 @@ namespace SonicRoute.Core
         private bool _stopping;
         private bool _disposed;
         private int _targetsVersion;
+        private TaskCompletionSource<bool>? _completion;
+        public Task Completion { get { lock (_gate) return _completion?.Task ?? Task.CompletedTask; } }
 
         /// <summary>来自工作线程；接收方须自行切换到 UI 线程。每个快照只包含目标 PID。</summary>
         public event Action<IReadOnlyDictionary<int, float>>? PeaksUpdated;
@@ -40,6 +43,7 @@ namespace SonicRoute.Core
                 _targetsVersion++;
                 if (_worker != null) { _wake.Set(); return; }
                 _stopping = false;
+                _completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 _worker = new Thread(Run) { IsBackground = true, Name = "SonicRoute Audio Meter" };
                 _worker.SetApartmentState(ApartmentState.MTA);
                 _worker.Start();
@@ -61,29 +65,34 @@ namespace SonicRoute.Core
 
         public void Stop()
         {
-            Thread? worker;
-            lock (_gate)
-            {
-                worker = _worker;
-                if (worker == null) return;
-                _stopping = true;
-                _wake.Set();
-            }
-            if (worker != Thread.CurrentThread) worker.Join();
-            lock (_gate)
-            {
-                if (_worker == worker) _worker = null;
-            }
+            var completion = RequestStop(false);
+            if (Thread.CurrentThread != _worker) completion.GetAwaiter().GetResult();
         }
 
         public void Dispose()
         {
-            Stop();
+            var completion = DisposeAsync();
+            if (Thread.CurrentThread != _worker) completion.GetAwaiter().GetResult();
+        }
+
+        // UI owners signal immediately; native calls and COM release finish on the owning worker.
+        public Task DisposeAsync() => RequestStop(true);
+
+        private Task RequestStop(bool dispose)
+        {
             lock (_gate)
             {
-                if (_disposed) return;
-                _disposed = true;
-                _wake.Dispose();
+                if (_disposed) return _completion?.Task ?? Task.CompletedTask;
+                _disposed = dispose;
+                _stopping = true;
+                if (dispose) PeaksUpdated = null;
+                if (_worker == null)
+                {
+                    if (dispose) _wake.Dispose();
+                    return Task.CompletedTask;
+                }
+                _wake.Set();
+                return _completion!.Task;
             }
         }
 
@@ -124,7 +133,7 @@ namespace SonicRoute.Core
                         || (graph?.NeedsRecovery == true && watch.ElapsedMilliseconds >= nextScan))
                     {
                         graph?.Dispose(); graph = null;
-                        if (targets.Count != 0) graph = new MeterGraph(targets, Wake);
+                        if (targets.Count != 0) graph = new MeterGraph(targets, Wake, IsStopping);
                         if (targetsChanged)
                         {
                             rawPeaks.Clear();
@@ -138,11 +147,13 @@ namespace SonicRoute.Core
                     // 所有行都静音或列表为空时等待目标变化，不进行 30Hz 空轮询。
                     if (targets.Count == 0) { _wake.WaitOne(); continue; }
 
+                    if (IsStopping()) break;
                     graph!.Pump();
                     bool active = false, fading = false;
                     foreach (int pid in targets) rawPeaks[pid] = 0f;
                     foreach (var handle in graph.Sessions.Values)
                     {
+                        if (IsStopping()) break;
                         if (!handle.Active) continue;
                         active = true;
                         try
@@ -161,6 +172,7 @@ namespace SonicRoute.Core
                         }
                         catch { handle.Disconnected = 1; graph.RequireRecovery(); }
                     }
+                    if (IsStopping()) break;
                     bool peaksChanged = targetsChanged;
                     foreach (int pid in targets)
                     {
@@ -208,8 +220,22 @@ namespace SonicRoute.Core
                     _wake.WaitOne(wait);
                 }
             }
-            finally { graph?.Dispose(); }
+            finally
+            {
+                try { graph?.Dispose(); }
+                finally
+                {
+                    lock (_gate)
+                    {
+                        _worker = null;
+                        if (_disposed) _wake.Dispose();
+                        _completion!.TrySetResult(true);
+                    }
+                }
+            }
         }
+
+        private bool IsStopping() => Volatile.Read(ref _stopping);
 
         private void Wake()
         {
@@ -234,9 +260,10 @@ namespace SonicRoute.Core
             internal bool NeedsRecovery => Volatile.Read(ref _recovery) != 0;
             internal void RequireRecovery() => Interlocked.Exchange(ref _recovery, 1);
 
-            internal MeterGraph(HashSet<int> targets, Action wake)
+            private readonly Func<bool> _isStopping;
+            internal MeterGraph(HashSet<int> targets, Action wake, Func<bool> isStopping)
             {
-                _targets = targets; _wake = wake;
+                _targets = targets; _wake = wake; _isStopping = isStopping;
                 _deviceCallback = new MeterDeviceCallback(() =>
                 {
                     if (Volatile.Read(ref _stopped) != 0) return;
@@ -246,6 +273,7 @@ namespace SonicRoute.Core
                 });
                 try
                 {
+                    if (_isStopping()) return;
                     _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
                     try { _deviceRegistered = _enumerator.RegisterEndpointNotificationCallback(_deviceCallback) >= 0; }
                     catch { RequireRecovery(); }
@@ -256,6 +284,7 @@ namespace SonicRoute.Core
                         Marshal.ThrowExceptionForHR(devices.GetCount(out uint count));
                         for (uint i = 0; i < count; i++)
                         {
+                            if (_isStopping()) break;
                             IMMDevice? device = null;
                             try
                             {
@@ -298,6 +327,7 @@ namespace SonicRoute.Core
                     Marshal.ThrowExceptionForHR(sessions.GetCount(out int count));
                     for (int i = 0; i < count; i++)
                     {
+                        if (_isStopping()) break;
                         if (sessions.GetSession(i, out var session) < 0 || session == null) { RequireRecovery(); continue; }
                         AddSession(id, session);
                     }
@@ -311,6 +341,7 @@ namespace SonicRoute.Core
                 bool owned = false;
                 try
                 {
+                    if (_isStopping()) return;
                     if (value is not IAudioSessionControl2 session) { RequireRecovery(); return; }
                     Marshal.ThrowExceptionForHR(session.GetProcessId(out uint pid));
                     if (pid == 0 || pid > int.MaxValue || !_targets.Contains((int)pid)) return;

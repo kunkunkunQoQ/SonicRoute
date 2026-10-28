@@ -47,13 +47,14 @@ namespace SonicRoute
             internal int TopologyDirty = 1, NotificationQueued;
             internal bool ReadAll;
             internal readonly HashSet<string> ReadDevices = new(StringComparer.OrdinalIgnoreCase);
+            internal OutputVolumeMonitor.TargetSet Targets = new(Array.Empty<string>());
             internal bool PositionDirty = true, PositionQueued, ForcePosition = true;
             internal Rect? CalculatedRect, AppliedRect;
             internal Point AppliedOwner;
         }
 
         private readonly Dictionary<string, OutputVolumeRow> _outputVolumeRows = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, (OutputVolumeTarget Target, int Percent, int Version)> _pendingOutputVolume = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, (OutputVolumeTarget Target, int Percent, int Version, int Sequence)> _pendingOutputVolume = new(StringComparer.OrdinalIgnoreCase);
         private OutputVolumeMonitor? _outputVolumeMonitor;
         private OutputVolumeLoad? _outputLoad;
         private Border? _outputPopupSurface;
@@ -293,10 +294,10 @@ namespace SonicRoute
                     }
                     refreshAll |= load.ReadAll;
                     load.ReadAll = false;
-                    var versions = CaptureOutputVolumeVersions();
-                    var requested = load.ReadDevices.Count == 0 ? null : load.ReadDevices.ToArray();
+                    var readDevices = monitor.GetReadDevices(load.Targets, refreshAll, load.ReadDevices);
+                    var versions = CaptureOutputVolumeVersionsFor(readDevices);
                     load.ReadDevices.Clear();
-                    var states = await load.Lifetime.ReadAsync(monitor.ReadAsync(versions.Keys, refreshAll, requested));
+                    var states = await load.Lifetime.ReadAsync(monitor.ReadAsync(load.Targets, versions.Keys));
                     if (!Current()) return;
                     ApplyOutputVolumeSnapshot(states, versions);
                     if (_systemDeviceId == null || !_outputDisplay.Any(d => string.Equals(d.Id, _systemDeviceId, StringComparison.OrdinalIgnoreCase)))
@@ -341,6 +342,14 @@ namespace SonicRoute
 
         private Dictionary<string, (OutputVolumeTarget Target, int Version, int MuteVersion)> CaptureOutputVolumeVersions() =>
             _outputVolumeRows.ToDictionary(p => p.Key, p => (p.Value.Target, p.Value.Target.Version, p.Value.MuteVersion), StringComparer.OrdinalIgnoreCase);
+
+        private Dictionary<string, (OutputVolumeTarget Target, int Version, int MuteVersion)> CaptureOutputVolumeVersionsFor(IEnumerable<string> ids)
+        {
+            var result = new Dictionary<string, (OutputVolumeTarget, int, int)>(StringComparer.OrdinalIgnoreCase);
+            foreach (string id in ids)
+                if (_outputVolumeRows.TryGetValue(id, out var row)) result[id] = (row.Target, row.Target.Version, row.MuteVersion);
+            return result;
+        }
 
         private void ApplyOutputVolumeSnapshot(Dictionary<string, (int Volume, bool Muted)> states,
             Dictionary<string, (OutputVolumeTarget Target, int Version, int MuteVersion)> versions)
@@ -389,6 +398,7 @@ namespace SonicRoute
         private void BuildOutputVolumeRows(List<AudioDeviceInfo> devices, string? defaultId)
         {
             var ids = new HashSet<string>(devices.Select(d => d.Id), StringComparer.OrdinalIgnoreCase);
+            bool targetsChanged = ids.Count != _outputVolumeRows.Count || _outputVolumeRows.Keys.Any(id => !ids.Contains(id));
             foreach (string id in _outputVolumeRows.Keys.Where(id => !ids.Contains(id)).ToArray())
             {
                 var row = _outputVolumeRows[id];
@@ -420,6 +430,7 @@ namespace SonicRoute
                     System.Windows.Automation.AutomationProperties.SetName(row.Mute, muteName);
             }
             _outputVolumeRowsPanel!.ToolTip = devices.Count == 0 ? L10n.T("Ov.NoDevice") : null;
+            if (targetsChanged && _outputLoad != null) _outputLoad.Targets = new OutputVolumeMonitor.TargetSet(ids);
             if (_outputVolumeEmptyText != null) _outputVolumeEmptyText.Visibility = devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -451,8 +462,14 @@ namespace SonicRoute
                 if (row.DisplayVolume != displayed) { row.Percent.Text = displayed + "%"; row.DisplayVolume = displayed; }
                 if (row.Updating || _isClosed || !row.Target.Available) return;
                 row.Pending = true;
+                if (string.Equals(id, _systemDeviceId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _pendingSystemVolume = null;
+                    ++_systemVolumeWriteVersion;
+                    ++_systemVolumeRequest;
+                }
                 int request = ++row.Target.Version;
-                _pendingOutputVolume[id] = (row.Target, (int)Math.Round(row.Slider.Value), request);
+                _pendingOutputVolume[id] = (row.Target, (int)Math.Round(row.Slider.Value), request, RegisterEndpointWrite(id));
                 SchedulePendingVolumeFlush();
             };
             row.Slider.PreviewMouseWheel += (_, e) =>

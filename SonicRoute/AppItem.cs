@@ -118,15 +118,17 @@ namespace SonicRoute
         }
 
         /// <summary>后台线程提取图标，完成后切回 UI 线程通知绑定刷新（列表构建后批量调用）。</summary>
-        public void LoadIcon()
+        public void LoadIcon() => LoadIcon(default);
+
+        private void LoadIcon(System.Threading.CancellationToken cancellation)
         {
-            if (Icon != null || System.Threading.Interlocked.Exchange(ref _iconLoading, 1) != 0) return;
+            if (cancellation.IsCancellationRequested || Icon != null || System.Threading.Interlocked.Exchange(ref _iconLoading, 1) != 0) return;
             int version = System.Threading.Volatile.Read(ref _iconVersion);
             bool queued = false;
             try
             {
                 var icon = AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
-                if (icon == null) return; // Preserve the original no-dispatch path for missing/default icons.
+                if (icon == null || cancellation.IsCancellationRequested) return;
                 var disp = System.Windows.Application.Current?.Dispatcher;
                 if (disp != null && !disp.CheckAccess())
                 {
@@ -134,34 +136,39 @@ namespace SonicRoute
                     {
                         disp.BeginInvoke(new System.Action(() =>
                         {
-                            try { if (version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon; }
-                            finally { FinishIconLoading(version); }
+                            try { if (!cancellation.IsCancellationRequested && version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon; }
+                            finally { FinishIconLoading(version, cancellation); }
                         }), System.Windows.Threading.DispatcherPriority.Background);
                         queued = true;
                     }
                 }
-                else if (version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon;
+                else if (!cancellation.IsCancellationRequested && version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon;
             }
             catch (System.InvalidOperationException) { /* 退出期间 Dispatcher 已关闭 */ }
-            finally { if (!queued) FinishIconLoading(version); }
+            finally { if (!queued) FinishIconLoading(version, cancellation); }
         }
 
-        private void FinishIconLoading(int version)
+        private void FinishIconLoading(int version, System.Threading.CancellationToken cancellation)
         {
             System.Threading.Interlocked.Exchange(ref _iconLoading, 0);
-            if (version != System.Threading.Volatile.Read(ref _iconVersion))
-                _ = System.Threading.Tasks.Task.Run(LoadIcon);
+            if (!cancellation.IsCancellationRequested && version != System.Threading.Volatile.Read(ref _iconVersion))
+                _ = System.Threading.Tasks.Task.Run(() => LoadIcon(cancellation), cancellation);
         }
 
         /// <summary>批量后台加载图标（不阻塞调用线程）。</summary>
-        public static void LoadIconsAsync(IEnumerable<AppItem> items)
+        public static void LoadIconsAsync(IEnumerable<AppItem> items, System.Threading.CancellationToken cancellation = default)
         {
+            if (cancellation.IsCancellationRequested) return;
             var list = items.Where(i => i.Icon == null).ToList();
             if (list.Count == 0) return;
             _ = System.Threading.Tasks.Task.Run(() =>
             {
-                foreach (var item in list) item.LoadIcon();
-            });
+                foreach (var item in list)
+                {
+                    if (cancellation.IsCancellationRequested) break;
+                    item.LoadIcon(cancellation);
+                }
+            }, cancellation);
         }
     }
 }

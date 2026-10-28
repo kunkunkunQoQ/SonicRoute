@@ -108,6 +108,11 @@ internal static partial class Program
                     && Field<CheckBox?>(window, "PanelCompactOutputNameCheck") == null, mode + " close releases the deferred controls");
 
                 var panel = new QuickPanelModernWindow(); windows.Add(panel); panel.SetMeterEnabled(false);
+                // Replace only this fixture's native-discovery boundary. Service snapshot/retry
+                // semantics are exercised separately by AudioPathChecks against fake OS objects.
+                Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted)>, bool)> read = ids =>
+                    (ids.ToDictionary(id => id, SessionVolumeService.ReadState), false);
+                panel.GetType().GetField("_readPanelState", Instance)!.SetValue(panel, read);
                 var devices = new List<AudioDeviceInfo> {
                     new() { Id = AudioService.SystemDefaultDeviceId, DisplayName = L10n.T("Dev.SystemDefaultOut"), Flow = EDataFlow.eRender },
                     new() { Id = "fixture-chat", DisplayName = "聊天 / SteelSeries Sonar - Chat", Flow = EDataFlow.eRender },

@@ -27,4 +27,13 @@ ReadState method against managed fake sessions. It is a controlled local probe, 
 a real COM, whole-process idle CPU or UI performance measurement. The reported
 allocation count covers only the calling thread; it excludes worker allocations.
 
+`--panel-snapshot` checks the actual panel-reader body and shared service snapshot
+against fake native boundaries. It covers hidden and multiple same-PID playback
+sessions, recording separation, missing PIDs, one failure/generation retry,
+disabled route names and empty-list deferral. A cold healthy comparison uses the
+previous refresh/row/global-mute sequence and the combined snapshot sequence;
+the enumeration counts are local operation evidence, not startup latency or
+whole-process CPU measurements. The reader extractor supports both historical
+dictionary returns and the current snapshot return without changing its logic.
+
 `Native/Checks.csproj` references the real Core assembly. It reads actual device/application state and creates a temporary silent waveOut session. It only writes volume/mute for **its own PID**, restores those values, and closes that stream; it never writes global volume, microphones, routes or default devices. Run separately on each x64 runtime. It does not validate system-default switching or physical-device write failures.
