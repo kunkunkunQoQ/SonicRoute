@@ -106,3 +106,11 @@ empty selection and close cleanup. It uses missing-PID fixtures and an isolated
 configuration directory; it does not show windows or write real audio state.
 The saved offscreen PNGs include 96/144 raster DPI variants, not physical monitor
 DPI, DWM presentation, hardware input or whole-app performance measurements.
+
+`--overview-mute <absolute-image-directory>` checks the overview mute controls,
+current-app state/readback and the related hotkey/settings list. It checks the
+card padding, label and knob's visual hit route, the non-interactive shared
+switch visual, and calls the actual ToggleButton click path for playback mute
+and unmute. Each click must write once to the selected fake session and leave
+the switch enabled after readback. It shows no window, injects no physical
+input, and writes only managed fake audio sessions.

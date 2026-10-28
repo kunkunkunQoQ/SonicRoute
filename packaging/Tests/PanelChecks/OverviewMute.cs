@@ -38,7 +38,7 @@ internal static partial class Program
             var mute = (CheckBox)window.FindName("OverviewMuteButton");
             var mic = (CheckBox)window.FindName("OverviewMicMuteButton");
             var root = (FrameworkElement)window.Content;
-            Check(ReferenceEquals(mute.Style, window.FindResource("AutomationSwitch"))
+            Check(ReferenceEquals(mute.Style, window.FindResource("OverviewMuteSwitch"))
                 && ReferenceEquals(mic.Style, mute.Style) && !mute.IsEnabled && !mic.IsEnabled,
                 language + " " + mode + " overview reuses the shared switch and starts disabled before readback");
             bool geometry = true;
@@ -49,12 +49,36 @@ internal static partial class Program
             foreach (int width in new[] { 780, 920 })
             {
                 Layout(root, width, 620); DrainUi();
+                if (language == "zh-CN" && mode == "light" && width == 920)
+                {
+                    foreach (var control in new[] { mute, mic })
+                    {
+                        control.IsEnabled = true;
+                        var surface = (Border)VisualTreeHelper.GetChild(control, 0);
+                        var parts = (Grid)surface.Child;
+                        var visual = (CheckBox)parts.Children[1];
+                        bool Hits(Point point)
+                        {
+                            DependencyObject? hit = VisualTreeHelper.HitTest(root, control.TranslatePoint(point, root))?.VisualHit;
+                            while (hit is UIElement element && !element.IsHitTestVisible) hit = VisualTreeHelper.GetParent(hit);
+                            while (hit != null && hit is not CheckBox) hit = VisualTreeHelper.GetParent(hit);
+                            return ReferenceEquals(hit, control);
+                        }
+                        Check(Hits(new Point(8, 18)) && Hits(new Point(24, 18))
+                            && Hits(new Point(control.ActualWidth - 28, 18)),
+                            control.Name + " card padding, label and knob all route clicks to one switch");
+                        Check(ReferenceEquals(visual.Style, window.FindResource("AutomationSwitch"))
+                            && !visual.IsHitTestVisible && !visual.Focusable,
+                            control.Name + " reuses the shared switch as a non-interactive visual");
+                        control.IsChecked = true;
+                        Check(visual.IsChecked == true, control.Name + " visual follows its single interactive switch");
+                    }
+                }
                 foreach (var pair in new[] { (Combo: output, Switch: mute), (Combo: input, Switch: mic) })
                 {
                     var row = (WrapPanel)pair.Combo.Parent;
-                    var surface = (Border)((Grid)pair.Switch.Parent).Parent;
                     Rect Bounds(FrameworkElement element) => element.TransformToAncestor(row).TransformBounds(new Rect(element.RenderSize));
-                    var comboRect = Bounds(pair.Combo); var switchRect = Bounds(surface);
+                    var comboRect = Bounds(pair.Combo); var switchRect = Bounds(pair.Switch);
                     geometry &= Math.Abs(comboRect.Left) < .01 && Math.Abs(comboRect.Width - 320) < .01
                         && switchRect.Right <= row.ActualWidth + .01
                         && (switchRect.Left >= comboRect.Right + 11.9 || switchRect.Top >= comboRect.Bottom + 7.9);
@@ -70,7 +94,7 @@ internal static partial class Program
                 }
             }
             Check(geometry, language + " " + mode + " switches fit beside selectors or wrap at the minimum window width");
-            Check(((FrameworkElement)mic.Parent).Parent is Border card && ((FrameworkElement)card.Parent).Parent is StackPanel
+            Check(mic.Parent is WrapPanel rowParent && rowParent.Parent is StackPanel
                 && window.FindName("OverviewOutputCurrentText") == null && window.FindName("OverviewInputCurrentText") == null,
                 language + " " + mode + " controls occupy device rows and removed current text stays absent");
             window.Close();
@@ -143,12 +167,23 @@ internal static partial class Program
             typeof(MainWindow).GetMethod("ApplyExpMicUi", Instance)!.Invoke(window, new object[] { true });
             Select(a);
             Task Change(bool input) => (Task)typeof(MainWindow).GetMethod("ChangeOverviewMuteAsync", Instance)!.Invoke(window, new object[] { input })!;
-            mute.IsChecked = false; Finish(Change(false));
-            Check(!outputA.Muted && outputA.MuteWrites == 1 && outputB.MuteWrites == 0 && inputA.MuteWrites == 0,
-                "off explicitly unmutes only the selected app's playback session");
-            mute.IsChecked = true; Finish(Change(false));
-            Check(outputA.Muted && outputA.MuteWrites == 2 && mute.IsChecked == true,
-                "on explicitly mutes playback and applies the actual readback");
+            async Task ClickOutput()
+            {
+                typeof(System.Windows.Controls.Primitives.ToggleButton).GetMethod("OnClick", Instance)!.Invoke(mute, null);
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (Field<bool>(window, "_overviewMuteBusy"))
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("Overview mute click did not complete");
+                    await Task.Delay(1);
+                }
+            }
+            Finish(ClickOutput());
+            Check(!outputA.Muted && outputA.MuteWrites == 1 && outputB.MuteWrites == 0 && inputA.MuteWrites == 0
+                && clicks == 1 && mute.IsEnabled,
+                "switch Click explicitly unmutes only the selected app's playback session");
+            Finish(ClickOutput());
+            Check(outputA.Muted && outputA.MuteWrites == 2 && mute.IsChecked == true && clicks == 2 && mute.IsEnabled,
+                "switch Click mutes playback and applies the actual readback");
             mic.IsChecked = true; Finish(Change(true));
             Check(inputA.MuteWrites == 1 && inputA.Muted && inputB.MuteWrites == 0 && outputB.MuteWrites == 0,
                 "microphone switch writes only the current app's fake capture session");
