@@ -45,12 +45,16 @@ internal static partial class Program
 
     private sealed class AppCardVolume : ISimpleAudioVolume
     {
-        internal bool Muted;
-        internal int MuteReads;
+        internal bool Muted, AllowMuteWrites;
+        internal int MuteReads, MuteWrites;
         public int GetMasterVolume(out float value) { value = .42f; return 0; }
         public int GetMute(out int value) { System.Threading.Interlocked.Increment(ref MuteReads); value = Muted ? 1 : 0; return 0; }
         public int SetMasterVolume(float value, ref Guid context) => throw new InvalidOperationException("Read-only UI fixture");
-        public int SetMute(int value, ref Guid context) => throw new InvalidOperationException("Read-only UI fixture");
+        public int SetMute(int value, ref Guid context)
+        {
+            if (!AllowMuteWrites) throw new InvalidOperationException("Unexpected fixture mute write");
+            System.Threading.Interlocked.Increment(ref MuteWrites); Muted = value != 0; return 0;
+        }
     }
 
     private static void CheckAppListMuteReadback(MainWindow window, List<AppItem> items, string mode)
@@ -65,7 +69,8 @@ internal static partial class Program
             field.SetValue(null, value);
         }
         var clock = typeof(AudioService).Assembly.GetType("SonicRoute.Core.Compat.CompatEnv")!.GetProperty("TickCount64", flags)!;
-        var first = new AppCardVolume(); var second = new AppCardVolume { Muted = true };
+        var first = new AppCardVolume { AllowMuteWrites = true }; var second = new AppCardVolume { Muted = true };
+        var capture = new AppCardVolume();
         var apps = items.Select(item => item.Info).ToList();
         var source = ((ListBox)window.FindName("AppsListBox")).ItemsSource;
         try
@@ -77,6 +82,9 @@ internal static partial class Program
             Set(typeof(AudioService), "_appsReadGeneration", appGeneration);
             Set(typeof(SessionVolumeService), "_renderVolumes", new Dictionary<int, List<ISimpleAudioVolume>> {
                 [items[0].ProcessId] = new() { first }, [items[1].ProcessId] = new() { second }
+            });
+            Set(typeof(SessionVolumeService), "_captureVolumes", new Dictionary<int, List<ISimpleAudioVolume>> {
+                [items[0].ProcessId] = new() { capture }
             });
             int sessionGeneration = (int)typeof(SessionVolumeService).GetField("_cacheGeneration", flags)!.GetValue(null)!;
             Set(typeof(SessionVolumeService), "_snapshotGeneration", sessionGeneration);
@@ -93,6 +101,32 @@ internal static partial class Program
             second.Muted = false; ReadPage();
             Check(!items[1].IsMuted && second.MuteReads == 2,
                 mode + " manual page refresh updates unselected mute state through the same read-only path");
+            var mute = (Button)window.FindName("AppsMuteButton");
+            bool Muted() => ReferenceEquals(mute.Foreground, window.FindResource("Theme.Accent"));
+            void ClickMute() => typeof(Button).GetMethod("OnClick", Instance)!.Invoke(mute, null);
+            async Task Toggle(bool expected)
+            {
+                int writes = first.MuteWrites;
+                Set(typeof(SessionVolumeService), "_lastEnum", DateTime.UtcNow);
+                ClickMute();
+                var deadline = DateTime.UtcNow.AddSeconds(5);
+                while (first.MuteWrites != writes + 1 || Muted() != expected)
+                {
+                    if (DateTime.UtcNow > deadline) throw new TimeoutException("App mute button did not complete");
+                    await Task.Delay(1);
+                }
+            }
+            AppCardCall(window, "SetAppsVolumeUi", 42);
+            Finish(Toggle(true));
+            Check(first.Muted && items[0].IsMuted && Muted() && second.MuteWrites == 0,
+                mode + " relocated Button.OnClick mutes only the selected playback fixture and synchronizes its list marker");
+            Finish(Toggle(false));
+            Check(!first.Muted && !items[0].IsMuted && !Muted() && first.MuteWrites == 2,
+                mode + " relocated button unmutes through the existing application playback handler");
+            AppCardCall(window, "SetAppsVolumeUi", (object?)null); ClickMute();
+            Check(!mute.IsEnabled && first.MuteWrites == 2 && capture.MuteReads + capture.MuteWrites == 0,
+                mode + " unavailable playback disables the moved button; app mute never reads or writes capture");
+            AppCardCall(window, "SetAppsVolumeUi", 42);
         }
         finally { foreach (var pair in saved) pair.Key.SetValue(null, pair.Value); }
     }
@@ -137,14 +171,19 @@ internal static partial class Program
             var list = (ListBox)window.FindName("AppsListBox"); list.ItemsSource = items; list.SelectedItem = items[0];
             Finish((Task)AppCardCall(window, "RefreshAppsSelectionAsync")!);
             AppCardCall(window, "SetAppsVolumeUi", 42);
-            var mute = (CheckBox)window.FindName("AppsMuteButton");
+            var mute = (Button)window.FindName("AppsMuteButton");
+            bool Muted() => ReferenceEquals(mute.Foreground, window.FindResource("Theme.Accent"));
             var auto = (CheckBox)window.FindName("AppsDisableAutoButton");
             var shown = (CheckBox)window.FindName("AppsShowInPanelButton");
             int clicks = 0; mute.Click += (_, _) => clicks++; auto.Click += (_, _) => clicks++; shown.Click += (_, _) => clicks++;
             AppCardCall(window, "ApplyAppsMuteVisual", true);
             AppCardCall(window, "ApplyAppsMuteVisual", false);
             AppCardCall(window, "UpdateAppsDisableAutoButton"); AppCardCall(window, "UpdateAppsShowInPanelButton");
-            Check(clicks == 0 && mute.IsChecked == false && auto.IsChecked == false && shown.IsChecked == true, mode + " readback changes switches without invoking Click; panel visibility has positive meaning");
+            Check(clicks == 0 && !Muted() && auto.IsChecked == false && shown.IsChecked == true, mode + " readback changes mute button and switches without invoking Click; panel visibility has positive meaning");
+            Check(ReferenceEquals(mute.Style, window.FindResource("QuickPanelToolButton"))
+                && window.FindName("AppsMinus") == null && window.FindName("AppsPlus") == null
+                && ((Grid)window.FindName("AppsControls")).Children.Count == 2,
+                mode + " application volume reuses the quick-panel button and removes plus/minus and duplicate mute switch");
             var root = LayoutAppCards(window, 1080, 760);
             var marker = AppCardTree(list).OfType<Ellipse>().First(e => e.Name == "StateDot");
             var hiddenMarker = AppCardTree(list).OfType<Ellipse>().First(e => e.Name == "PanelHiddenDot");
@@ -166,7 +205,7 @@ internal static partial class Program
                 mode + " auto-follow exclusion keeps its original flag but cannot be confused with list mute or hidden dots");
             Click(auto);
             AppCardCall(window, "ApplyAppsMuteVisual", true); root.UpdateLayout();
-            Check(items[0].IsMuted && marker.Visibility == Visibility.Visible && ((SolidColorBrush)marker.Fill).Color == inverse
+            Check(Muted() && items[0].IsMuted && marker.Visibility == Visibility.Visible && ((SolidColorBrush)marker.Fill).Color == inverse
                 && hiddenMarker.Visibility == Visibility.Collapsed && (string)marker.ToolTip == L10n.T("Qp.Muted"),
                 mode + " selected mute readback overrides active color with inverse dot without audio writes");
             Click(shown); root.UpdateLayout();
@@ -253,14 +292,24 @@ internal static partial class Program
                             var bounds = control.TransformToAncestor(header).TransformBounds(new Rect(control.RenderSize));
                             return control.ActualWidth > 0 && bounds.Right <= header.ActualWidth + 0.5;
                         });
-                    Check(headerFits && new[] { "AppsMuteButton", "AppsDisableAutoButton", "AppsShowInPanelButton" }.All(name => {
+                    var slider = (Slider)window.FindName("AppsVolumeSlider");
+                    var volumeText = (TextBlock)window.FindName("AppsVolumeText");
+                    var row = (DockPanel)slider.Parent;
+                    Rect Bounds(FrameworkElement element) => element.TransformToAncestor(row).TransformBounds(new Rect(element.RenderSize));
+                    var muteBounds = Bounds(mute); var sliderBounds = Bounds(slider); var volumeBounds = Bounds(volumeText);
+                    bool volumeFits = ReferenceEquals(mute.Parent, row) && DockPanel.GetDock(mute) == Dock.Left
+                        && Equals(mute.Content, L10n.T("Qp.Mute")) && mute.ActualHeight == 28
+                        && Math.Abs(muteBounds.Left) < .5 && sliderBounds.Left >= muteBounds.Right + 9.5
+                        && slider.ActualWidth > 40 && sliderBounds.Right <= volumeBounds.Left + .5
+                        && volumeBounds.Right <= row.ActualWidth + .5 && slider.ActualHeight == 32;
+                    Check(headerFits && volumeFits && new[] { "AppsDisableAutoButton", "AppsShowInPanelButton" }.All(name => {
                         var control = (CheckBox)window.FindName(name);
                         var border = AppCardTree((Grid)window.FindName("AppsControls")).OfType<Border>().First(b => b.Child is Grid grid && AppCardTree(grid).Contains(control));
                         var bounds = control.TransformToAncestor(border).TransformBounds(new Rect(control.RenderSize));
                         return control.ActualWidth == 34 && bounds.Left >= 0 && bounds.Right <= border.ActualWidth + 0.5
                             && Math.Abs(bounds.Top + bounds.Height / 2 - border.ActualHeight / 2) <= 0.5
                             && Math.Abs(bounds.Right - (border.ActualWidth - 13)) <= 0.5;
-                    }), mode + " " + locale + " width=" + width + " pencil stays beside title and icon actions stay at top right; switches align without clipping");
+                    }), mode + " " + locale + " width=" + width + " app volume mute/slider/percentage and remaining controls fit without clipping");
                 }
             }
             SetLanguage("zh-CN");
@@ -271,7 +320,7 @@ internal static partial class Program
             list.SelectedItem = null;
             Check(!((Grid)window.FindName("AppsControls")).IsEnabled && !((Grid)window.FindName("AppsRoutingPanel")).IsEnabled
                 && !renameButton.IsEnabled && rename.Visibility == Visibility.Collapsed
-                && mute.IsChecked == false && shown.IsChecked == false && ((TextBlock)window.FindName("AppsVolumeText")).Text == "—"
+                && !mute.IsEnabled && !Muted() && shown.IsChecked == false && ((TextBlock)window.FindName("AppsVolumeText")).Text == "—"
                 && ((ComboBox)window.FindName("AppsOutputCombo")).SelectedItem == null && ((ComboBox)window.FindName("AppsInputCombo")).SelectedItem == null,
                 mode + " empty selection disables controls and clears old switch/volume state");
             window.Close();

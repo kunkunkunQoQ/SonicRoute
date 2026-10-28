@@ -1302,33 +1302,24 @@
                         </Border>
                         <Border Style="{StaticResource AppsSectionCard}" MouseWheel="AppsVolume_MouseWheel">
                             <StackPanel>
-                                <DockPanel Margin="0,0,0,12">
-                                    <TextBlock x:Name="AppsVolumeText" Text="—" DockPanel.Dock="Right" FontSize="22" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Theme.TextPrimary}" Margin="8,0,0,0"/>
-                                    <TextBlock Text="{Binding [Apps.Volume], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PageTitle}" FontSize="14" Margin="0" VerticalAlignment="Center"/>
-                                </DockPanel>
+                                <TextBlock Text="{Binding [Apps.Volume], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
                                 <DockPanel>
-                                    <Button x:Name="AppsMinus" Content="−" Style="{StaticResource GhostButton}" Width="32" DockPanel.Dock="Left"
-                                            Margin="0,0,10,0" IsEnabled="False" Click="AppsMinus_Click"/>
-                                    <Button x:Name="AppsPlus" Content="+" Style="{StaticResource GhostButton}" Width="32" DockPanel.Dock="Right"
-                                            Margin="10,0,0,0" IsEnabled="False" Click="AppsPlus_Click"/>
-                                    <Slider x:Name="AppsVolumeSlider" Minimum="0" Maximum="100" VerticalAlignment="Center" IsMoveToPointEnabled="True"
+                                    <Button x:Name="AppsMuteButton" Content="{Binding [Qp.Mute], Source={x:Static local:L10n.Instance}}"
+                                            Style="{StaticResource QuickPanelToolButton}" DockPanel.Dock="Left" MinWidth="54" Height="28"
+                                            Margin="0,0,10,0" VerticalAlignment="Center" IsEnabled="False"
+                                            AutomationProperties.Name="{Binding [Apps.MuteTitle], Source={x:Static local:L10n.Instance}}" Click="AppsMuteButton_Click"/>
+                                    <TextBlock x:Name="AppsVolumeText" Text="—" FontSize="13" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Theme.TextPrimary}" DockPanel.Dock="Right" Width="46"
+                                               TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <Slider x:Name="AppsVolumeSlider" Minimum="0" Maximum="100" VerticalAlignment="Center" IsMoveToPointEnabled="True" Height="32"
                                             IsEnabled="False" ValueChanged="AppsVolumeSlider_ValueChanged"/>
                                 </DockPanel>
                             </StackPanel>
                         </Border>
                         <TextBlock Text="{Binding [Apps.ControlsTitle], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PageTitle}" FontSize="14" Margin="2,4,0,10"/>
                         <Grid x:Name="AppsControls" IsEnabled="False" Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <Border Style="{StaticResource AppsSectionCard}" Padding="12" Margin="0">
-                                <Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="42"/></Grid.ColumnDefinitions>
-                                    <CheckBox x:Name="AppsMuteButton" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" HorizontalAlignment="Right" VerticalAlignment="Center" IsEnabled="False"
-                                              AutomationProperties.Name="{Binding [Apps.MuteTitle], Source={x:Static local:L10n.Instance}}" Click="AppsMuteButton_Click"/>
-                                    <TextBlock Text="{Binding [Apps.MuteTitle], Source={x:Static local:L10n.Instance}}" Style="{StaticResource AppsControlTitle}" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
-                            <Border Grid.Column="2" Style="{StaticResource AppsSectionCard}" Padding="12" Margin="0">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="42"/></Grid.ColumnDefinitions>
                                     <CheckBox x:Name="AppsDisableAutoButton" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" HorizontalAlignment="Right" VerticalAlignment="Center"
@@ -1336,7 +1327,7 @@
                                     <TextBlock Text="{Binding [Apps.DisableAuto], Source={x:Static local:L10n.Instance}}" Style="{StaticResource AppsControlTitle}" VerticalAlignment="Center"/>
                                 </Grid>
                             </Border>
-                            <Border Grid.Column="4" Style="{StaticResource AppsSectionCard}" Padding="12" Margin="0">
+                            <Border Grid.Column="2" Style="{StaticResource AppsSectionCard}" Padding="12" Margin="0">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="42"/></Grid.ColumnDefinitions>
                                     <CheckBox x:Name="AppsShowInPanelButton" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" HorizontalAlignment="Right" VerticalAlignment="Center"

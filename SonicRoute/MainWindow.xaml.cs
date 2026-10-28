@@ -1049,10 +1049,11 @@ namespace SonicRoute
             await Task.CompletedTask;
         }
 
-        /// <summary>只读回开关状态；程序设置 IsChecked 不触发 Click 或音频写入。</summary>
+        /// <summary>只读回静音状态；强调色与快速面板一致，不触发 Click 或音频写入。</summary>
         private void ApplyAppsMuteVisual(bool muted)
         {
-            AppsMuteButton.IsChecked = muted;
+            if (muted) AppsMuteButton.SetResourceReference(Button.ForegroundProperty, "Theme.Accent");
+            else AppsMuteButton.ClearValue(Button.ForegroundProperty);
             if (AppsListBox.SelectedItem is AppItem item) item.IsMuted = muted;
         }
 
@@ -1107,8 +1108,6 @@ namespace SonicRoute
             bool ready = percent != null;
             _appsVolumeReady = ready;
             AppsVolumeSlider.IsEnabled = ready;
-            AppsMinus.IsEnabled = ready;
-            AppsPlus.IsEnabled = ready;
             AppsMuteButton.IsEnabled = ready;
             if (!ready || percent == null)
             {
@@ -1143,21 +1142,9 @@ namespace SonicRoute
             if (!ok || actual < 0) ShowToast(L10n.T("Ov.VolFail"));
         }
 
-        private void AppsMinus_Click(object sender, RoutedEventArgs e)
-        {
-            if (_suppressVolume) return;
-            AppsVolumeSlider.Value = Math.Max(0, AppsVolumeSlider.Value - 5);
-        }
-
-        private void AppsPlus_Click(object sender, RoutedEventArgs e)
-        {
-            if (_suppressVolume) return;
-            AppsVolumeSlider.Value = Math.Min(100, AppsVolumeSlider.Value + 5);
-        }
-
         private async void AppsMuteButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_appsSelected == null || !_appsVolumeReady) return;
+            if (_isClosed || _appsSelected == null || !_appsVolumeReady) return;
             int pid = (int)_appsSelected.ProcessId;
             bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
             if (_isClosed || _appsSelected?.ProcessId != (uint)pid) return;
