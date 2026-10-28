@@ -14,6 +14,9 @@ Keep music on your speakers and games or calls on your headset. SonicRoute is a 
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages · MIT licensed
 
+> [!TIP]
+> **AI Summaries & Low-Token Troubleshooting**: When using AI assistants (such as Cursor, Copilot, ChatGPT, or Claude) to troubleshoot issues, explore architecture, or write scripts, refer directly to [README.ai.md](README.ai.md). Structured in a high-density DSL specifically for LLMs, it eliminates verbose prose, drastically reduces token consumption, and helps AI pinpoint root causes in seconds.
+
 <div>
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="User guide (Chinese)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="Click the mascot to open the user guide"></a>
 <br>

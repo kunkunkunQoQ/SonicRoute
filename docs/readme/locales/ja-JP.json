@@ -123,5 +123,7 @@
     "net8RequirementX64": "NET8 互換 Lite。x64 .NET 8 Desktop Runtime が必要です",
     "net8RequirementArm64": "NET8 互換 Lite。ARM64 .NET 8 Desktop Runtime が必要です",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64"
+    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "aiPromptTitle": "AIによる高速要約と省トークンでのトラブルシューティング",
+    "aiPromptBody": "Cursor、Copilot、ChatGPT、Claude などの AI アシスタントで不具合の調査、設計の把握、スクリプト作成を行う際は、専用の機械仕様書 {aiDoc} を直接参照することをお勧めします。LLM 向けの高密度構造化 DSL で整理されており、冗長な文章を排除してコンテキストのトークン消費を大幅に削減し、素早く原因を特定できます。"
 }

@@ -123,5 +123,7 @@
     "net8RequirementX64": "NET8-kompatible Lite-Datei; benötigt die x64 .NET 8 Desktop Runtime",
     "net8RequirementArm64": "NET8-kompatible Lite-Datei; benötigt die ARM64 .NET 8 Desktop Runtime",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64"
+    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "aiPromptTitle": "KI-Zusammenfassung und token-effiziente Fehlerbehebung",
+    "aiPromptBody": "Wenn Sie KI-Assistenten (wie Cursor, Copilot, ChatGPT oder Claude) zur Fehlerbehebung, Architekturanalyse oder Skripterstellung nutzen, empfiehlt sich die maschinenlesbare Spezifikation {aiDoc}. Sie ist in einer hochdichten, strukturierten DSL für LLMs verfasst, vermeidet lange Texte, spart drastisch Kontext-Tokens und ermöglicht eine sekundenschnelle Diagnose."
 }

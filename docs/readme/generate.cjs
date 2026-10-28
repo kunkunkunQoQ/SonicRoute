@@ -42,6 +42,7 @@ function render(language, text) {
   const variables = { release: shared.release, version: shared.release.slice(1), nextRelease: shared.nextRelease,
     triggerCount: shared.triggerCount, actionCount: shared.actionCount, ruleCommand: 'sr "' + text.ruleExample + '"',
     faq: link(text.faq, wiki(pages.faq)), history: link(text.history, wiki(pages.history)),
+    aiDoc: link('README.ai.md', 'README.ai.md'),
     runtime: link('.NET 10 Desktop Runtime', shared.runtime), runtime8: link('.NET 8 Desktop Runtime', shared.runtime8) };
   const fill = value => value.replace(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g, (_, key) => {
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
@@ -75,6 +76,8 @@ function render(language, text) {
     '**' + text.tagline + '**', '', text.intro, '',
     '📥 ' + [link(text.download, releaseUrl + '/latest'), link('Microsoft Store', shared.store), link(text.guide, wiki(pages.guide)), link(text.wiki, shared.repository + '/wiki')].join(' · '), '',
     shared.minimumWindows + ' · x64 / ARM64' + experimentalSuffix + ' · ' + text.languages + ' · ' + text.license, '',
+    '> [!TIP]',
+    '> **' + text.aiPromptTitle + '**' + colon + fill(text.aiPromptBody), '',
     '<div>', `<a href="${wiki(pages.guide)}" title="${attr(text.guideTitle)}"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="${attr(text.mascotAlt)}"></a>`,
     '<br>', `<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="${attr(text.panelAlt)}"></a>`,
     `<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="${attr(text.automationPreviewAlt)}"></a>`, '</div>', '',

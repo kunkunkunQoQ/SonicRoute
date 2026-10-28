@@ -14,6 +14,9 @@ SonicRoute 是常驻托盘的 Windows 音频工具：为应用分别选择输出
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 开源
 
+> [!TIP]
+> **AI 快速总结与省 Token 排错**：使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查问题、理解架构或编写脚本时，推荐直接参考专用机器规范 [README.ai.md](README.ai.md)。该文档以高密度结构化 DSL 整理核心机制与排障决策树，避免大模型扫描冗长图文，大幅节省上下文 Token 开销并秒级定位根因。
+
 <div>
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="使用指南"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="点击看板娘查看使用指南"></a>
 <br>

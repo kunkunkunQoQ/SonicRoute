@@ -14,6 +14,9 @@ Escucha música por los altavoces y juegos o llamadas con los auriculares. Sonic
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de interfaz · Licencia MIT
 
+> [!TIP]
+> **Resumen con IA y resolución de problemas con ahorro de tokens**: Al utilizar asistentes de IA (como Cursor, Copilot, ChatGPT o Claude) para diagnosticar fallos, comprender la arquitectura o crear scripts, se recomienda consultar [README.ai.md](README.ai.md). Diseñado en un DSL estructurado de alta densidad para LLM, evita textos extensos, reduce notablemente el gasto de tokens y localiza la causa raíz en cuestión de segundos.
+
 <div>
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="Guía de usuario (en chino)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="Haz clic en la mascota para abrir la guía de usuario"></a>
 <br>

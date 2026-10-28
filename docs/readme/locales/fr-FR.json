@@ -123,5 +123,7 @@
     "net8RequirementX64": "Lite compatible NET8 ; nécessite le .NET 8 Desktop Runtime x64",
     "net8RequirementArm64": "Lite compatible NET8 ; nécessite le .NET 8 Desktop Runtime ARM64",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64"
+    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "aiPromptTitle": "Résumé IA et dépannage à faible consommation de tokens",
+    "aiPromptBody": "Si vous utilisez des assistants IA (comme Cursor, Copilot, ChatGPT ou Claude) pour diagnostiquer un problème, comprendre l'architecture ou concevoir des scripts, nous vous recommandons de consulter {aiDoc}. Rédigé dans un DSL structuré haute densité pour les LLM, il évite les textes verbeux, réduit considérablement la consommation de tokens et cible la cause racine en quelques secondes."
 }

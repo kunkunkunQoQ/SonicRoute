@@ -14,6 +14,9 @@
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d’interface · Licence MIT
 
+> [!TIP]
+> **Résumé IA et dépannage à faible consommation de tokens** : Si vous utilisez des assistants IA (comme Cursor, Copilot, ChatGPT ou Claude) pour diagnostiquer un problème, comprendre l'architecture ou concevoir des scripts, nous vous recommandons de consulter [README.ai.md](README.ai.md). Rédigé dans un DSL structuré haute densité pour les LLM, il évite les textes verbeux, réduit considérablement la consommation de tokens et cible la cause racine en quelques secondes.
+
 <div>
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="Guide d’utilisation (en chinois)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="Cliquez sur la mascotte pour ouvrir le guide d’utilisation"></a>
 <br>

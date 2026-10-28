@@ -14,6 +14,9 @@ SonicRoute는 Windows 알림 영역에 상주하는 오디오 유틸리티입니
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개 언어 지원 · MIT 라이선스
 
+> [!TIP]
+> **AI를 위한 빠른 요약 및 토큰 절약 문제 해결**: Cursor, Copilot, ChatGPT, Claude 등 AI 어시스턴트로 문제를 진단하거나 구조를 파악하고 스크립트를 작성할 때 전용 사양서 [README.ai.md](README.ai.md) 문서를 직접 참조하는 것을 권장합니다. LLM을 위한 고밀도 구조화 DSL로 핵심 사실을 정리하여 불필요한 텍스트를 줄이고, 토큰 소비를 대폭 절약하며 원인을 신속하게 도출합니다.
+
 <div>
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="사용자 가이드(중국어 간체)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="마스코트를 클릭해 사용자 가이드 열기"></a>
 <br>

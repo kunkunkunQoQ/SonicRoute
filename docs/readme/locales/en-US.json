@@ -123,5 +123,7 @@
     "net8RequirementX64": "NET8-compatible Lite edition; requires the x64 .NET 8 Desktop Runtime",
     "net8RequirementArm64": "NET8-compatible Lite edition; requires the ARM64 .NET 8 Desktop Runtime",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64"
+    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "aiPromptTitle": "AI Summaries & Low-Token Troubleshooting",
+    "aiPromptBody": "When using AI assistants (such as Cursor, Copilot, ChatGPT, or Claude) to troubleshoot issues, explore architecture, or write scripts, refer directly to {aiDoc}. Structured in a high-density DSL specifically for LLMs, it eliminates verbose prose, drastically reduces token consumption, and helps AI pinpoint root causes in seconds."
 }

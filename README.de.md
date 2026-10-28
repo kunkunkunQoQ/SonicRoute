@@ -14,6 +14,9 @@ Lass Musik über deine Lautsprecher laufen und Spiele oder Anrufe über dein Hea
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen · MIT-Lizenz
 
+> [!TIP]
+> **KI-Zusammenfassung und token-effiziente Fehlerbehebung**: Wenn Sie KI-Assistenten (wie Cursor, Copilot, ChatGPT oder Claude) zur Fehlerbehebung, Architekturanalyse oder Skripterstellung nutzen, empfiehlt sich die maschinenlesbare Spezifikation [README.ai.md](README.ai.md). Sie ist in einer hochdichten, strukturierten DSL für LLMs verfasst, vermeidet lange Texte, spart drastisch Kontext-Tokens und ermöglicht eine sekundenschnelle Diagnose.
+
 <div>
 <a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="Benutzerhandbuch (Chinesisch)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="Klicke auf das Maskottchen, um das Benutzerhandbuch zu öffnen"></a>
 <br>

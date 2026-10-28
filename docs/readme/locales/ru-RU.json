@@ -123,5 +123,7 @@
     "net8RequirementX64": "Совместимая с NET8 версия Lite; требуется x64 .NET 8 Desktop Runtime",
     "net8RequirementArm64": "Совместимая с NET8 версия Lite; требуется ARM64 .NET 8 Desktop Runtime",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64"
+    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "aiPromptTitle": "Быстрый анализ с помощью ИИ и диагностика с экономией токенов",
+    "aiPromptBody": "При использовании ИИ-ассистентов (Cursor, Copilot, ChatGPT или Claude) для диагностики проблем, изучения архитектуры или написания скриптов рекомендуем обращаться к спецификации {aiDoc}. Она составлена на плотном структурированном DSL для LLM, избавляет от чтения длинных текстов, существенно экономит токены контекста и помогает быстро найти первопричину."
 }

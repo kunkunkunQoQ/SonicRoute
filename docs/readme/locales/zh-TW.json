@@ -123,5 +123,7 @@
     "net8RequirementX64": "NET8 相容版 Lite；需要 x64 .NET 8 Desktop Runtime",
     "net8RequirementArm64": "NET8 相容版 Lite；需要 ARM64 .NET 8 Desktop Runtime",
     "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64"
+    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "aiPromptTitle": "AI 快速總結與省 Token 排錯",
+    "aiPromptBody": "使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查問題、理解架構或編寫腳本時，建議直接參考專用機器規範 {aiDoc}。該文件以高密度結構化 DSL 提煉核心機制與排障決策樹，避免大模型掃描冗長圖文，大幅節省上下文 Token 開銷並秒級定位根因。"
 }
