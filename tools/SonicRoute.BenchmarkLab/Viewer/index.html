@@ -12,26 +12,31 @@
     <a class="brand" href="#overview"><span class="brand-mark" aria-hidden="true">∿</span><span>SonicRoute<small>性能观察室</small></span></a>
     <div class="nav-label">工作空间</div>
     <nav aria-label="报告导航">
-      <a class="nav-item active" href="#overview"><span aria-hidden="true">◫</span> 数据概览 <span class="nav-dot"></span></a>
-      <a class="nav-item" href="#trends"><span aria-hidden="true">∿</span> 资源曲线</a>
-      <a class="nav-item" href="#evidence"><span aria-hidden="true">≡</span> 逐轮证据</a>
+      <a class="nav-item active" data-view="overview" href="#overview"><span aria-hidden="true">◫</span> 结论与 AI 解读 <span class="nav-dot"></span></a>
+      <a class="nav-item" data-view="details" href="#trends"><span aria-hidden="true">∿</span> 图表分析</a>
+      <a class="nav-item" data-view="evidence" href="#evidence"><span aria-hidden="true">≡</span> 原始证据</a>
     </nav>
     <div class="nav-label report-label">已载入的报告 <span id="report-count">0</span></div>
     <div id="report-list" class="report-list" aria-label="报告列表"></div>
-    <button class="sidebar-import" id="import-side">＋ 添加报告</button>
+    <button class="sidebar-import" id="import-side">添加报告</button>
     <div class="local-note"><span class="local-dot"></span> 数据留在你的浏览器<p>本地读取，无需上传。<br>关闭页面后，导入数据随之清除。</p></div>
     <div class="sidebar-bottom">BENCHMARK LAB <span>1.2</span></div>
   </aside>
   <main>
     <header class="topbar"><span>工作空间 <span class="crumb">/</span> 数据概览</span><span class="top-note"><span class="local-dot"></span> 本地分析</span></header>
     <div class="content" id="overview">
-      <div class="page-heading"><div><div class="eyebrow">A LITTLE CLARITY, EVERY RUN</div><h1>看见每一次变化<span class="heading-dot">.</span></h1><p>从资源消耗到每轮波动，让优化有迹可循。</p></div><div class="heading-actions"><button class="button secondary" id="demo-button">查看示例</button><button class="button primary" id="import-button"><span aria-hidden="true">↥</span> 导入数据</button></div></div>
+      <div class="page-heading"><div><div class="eyebrow">SONICROUTE / BENCHMARK LAB</div><h1>本次测试结果<span class="heading-dot">.</span></h1><p>先读结论，再比较差异，需要时展开证据。</p></div><div class="heading-actions"><button class="button secondary" id="demo-button">查看示例</button><button class="button primary" id="import-button"><span aria-hidden="true">↥</span> 导入报告</button></div></div>
       <input id="file-input" type="file" accept=".json,application/json" multiple hidden>
       <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="选择或拖入 JSON 报告"><span class="file-symbol" aria-hidden="true">↳</span><span><strong>把报告放到这里，故事就清楚了。</strong><small>拖入 report.json，或同时导入 run_summary / run_evidence / run_metadata.json</small></span><span class="drop-end">JSON <span aria-hidden="true">↗</span></span></div>
       <div id="import-message" role="status" aria-live="polite"></div>
       <section class="dataset-bar" aria-label="当前报告"><div><span class="dataset-tag" id="data-tag">示例数据</span><strong id="dataset-title"></strong><span id="dataset-date" class="muted"></span></div><button class="text-button" id="export-button">导出整理数据 ↗</button></section>
-      <section class="verdict-banner" id="verdict-banner" aria-live="polite"><span class="verdict-icon" id="verdict-icon" aria-hidden="true">◌</span><div><strong id="verdict-title"></strong><p id="verdict-description"></p></div><span class="verdict-pill" id="verdict-pill"></span></section>
-      <section class="panel overview-panel"><div class="panel-heading"><div><div class="section-kicker">THE WHOLE PICTURE</div><h2>先看全局，再看细节</h2></div><span class="small-tag" id="coverage-count"></span></div><div id="scenario-overview" class="scenario-overview" aria-label="所有场景结论"></div><div id="protocol-strip" class="protocol-strip"></div></section>
+      <div class="view-tabs" role="group" aria-label="报告视图"><button data-view="overview" class="selected" aria-pressed="true">结论与 AI 解读</button><button data-view="details" aria-pressed="false">图表分析</button><button data-view="evidence" aria-pressed="false">原始证据</button></div>
+      <div class="decision-grid" data-view-section="overview">
+        <section class="verdict-banner" id="verdict-banner" aria-live="polite"><div class="decision-top"><span class="verdict-icon" id="verdict-icon" aria-hidden="true">◌</span><span class="verdict-pill" id="verdict-pill"></span></div><div><span class="section-kicker">报告整体结论</span><strong id="verdict-title"></strong><p id="verdict-description"></p></div><div id="coverage-visual" class="coverage-visual"></div><div id="decision-guidance" class="decision-guidance"></div></section>
+        <section class="panel ai-panel" id="ai-panel"><div class="panel-heading"><div><div class="section-kicker">AI INSIGHTS</div><h2>让 AI 读懂这份结果</h2></div><span id="ai-state" class="small-tag">等待 AI 解读</span></div><div id="ai-content" class="ai-content"></div><div class="ai-actions"><button class="button primary" id="ai-request">让 AI 分析</button><button class="button secondary" id="ai-paste">粘贴 AI 总结</button><button class="text-button" id="ai-import">导入总结</button></div><p class="ai-privacy">分析材料由你复制或下载后交给 AI；页面不会自动调用模型或上传数据。</p><input id="ai-file-input" type="file" accept=".json,application/json" hidden><div id="ai-message" role="status" aria-live="polite"></div></section>
+      </div>
+      <section class="panel landscape-panel" data-view-section="overview"><div class="panel-heading"><div><div class="section-kicker">A / B AT A GLANCE</div><h2>两个版本，差多少？</h2></div><label class="landscape-select">对比指标 <select id="landscape-metric"><option value="cpu">CPU 时间 / 秒</option><option value="memory">私有内存</option><option value="working">工作集</option></select></label></div><div class="landscape-legend"><span><i class="line-a"></i>基线 A</span><span><i class="line-b"></i>待测 B</span><span>条形越短，消耗越低 · 点击场景查看细节</span></div><div id="landscape-chart" class="landscape-chart"></div></section>
+      <section class="panel overview-panel" data-view-section="overview"><div class="panel-heading"><div><div class="section-kicker">TEST COVERAGE</div><h2>测试覆盖与完成情况</h2></div><span class="small-tag" id="coverage-count"></span></div><div id="scenario-overview" class="scenario-overview" aria-label="所有场景结论"></div><div id="protocol-strip" class="protocol-strip"></div></section>
       <section class="filters" aria-label="数据筛选"><div class="section-caption">这一轮，发生了什么？</div><label>场景 <select id="scenario-select"></select></label><label>轮次 <select id="round-select"></select></label></section>
       <section class="metric-grid" id="metric-grid" aria-label="主要指标"></section>
       <div class="two-column"><section class="panel"><div class="panel-heading"><div><div class="section-kicker">ROUND BY ROUND</div><h2>一次快，还是每次都快？</h2></div><span class="small-tag">CPU · ms/s</span></div><div id="round-chart" class="round-chart" role="img" aria-label="逐轮 CPU 时间分布"></div><p id="round-statistics" class="panel-footnote"></p></section><section class="panel"><div class="panel-heading"><div><div class="section-kicker">UNCERTAINTY MATTERS</div><h2>差异，有没有跨过门限？</h2></div></div><div id="interval-chart" class="interval-chart" role="img" aria-label="指标置信区间与判定门限"></div><p class="panel-footnote">线段为逐指标 95% 描述区间，圆点为差值均值。中间浅色区是原门限范围；正方向表示消耗增加。单轮不产生置信结论。</p></section></div>
@@ -41,8 +46,12 @@
       <footer><span class="footer-mark">∿</span> SonicRoute Benchmark Lab <span class="footer-divider">/</span> 让数据说话，也为不确定留白。<span class="footer-right">本地 · 离线 · 可复查</span></footer>
     </div>
   </main>
+  <dialog id="ai-dialog" aria-labelledby="ai-dialog-title"><div class="ai-dialog-heading"><div><h2 id="ai-dialog-title">交给 AI 分析</h2><p id="ai-dialog-help"></p></div><button id="ai-dialog-close" class="dialog-close" aria-label="关闭">×</button></div><label id="ai-model-label">模型来源<input id="ai-model" maxlength="120" placeholder="例如：实际使用的模型名称"></label><label for="ai-text" id="ai-text-label">分析材料</label><textarea id="ai-text" spellcheck="false"></textarea><div id="ai-dialog-message" role="status"></div><div class="ai-dialog-actions"><button id="ai-copy" class="button primary">复制分析材料</button><button id="ai-download" class="button secondary">下载材料</button><button id="ai-apply" class="button primary">保存到当前报告</button></div></dialog>
   <script id="report-data" type="application/json">null</script>
   <script src="data.js"></script>
+  <script src="icons.js"></script>
+  <script src="analysis.js"></script>
+  <script src="workspace.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

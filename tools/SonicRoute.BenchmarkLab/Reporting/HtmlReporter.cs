@@ -28,6 +28,9 @@ public static class HtmlReporter
             .Replace("<script id=\"report-data\" type=\"application/json\">null</script>",
                 "<script id=\"report-data\" type=\"application/json\">" + JsonSerializer.Serialize(data) + "</script>")
             .Replace("<script src=\"data.js\"></script>", "<script>" + ReadAsset("data.js") + "</script>")
+            .Replace("<script src=\"icons.js\"></script>", "<script>" + ReadAsset("icons.js") + "</script>")
+            .Replace("<script src=\"analysis.js\"></script>", "<script>" + ReadAsset("analysis.js") + "</script>")
+            .Replace("<script src=\"workspace.js\"></script>", "<script>" + ReadAsset("workspace.js") + "</script>")
             .Replace("<script src=\"app.js\"></script>", "<script>" + ReadAsset("app.js") + "</script>");
         File.WriteAllText(path, html, new UTF8Encoding(false));
         return path;

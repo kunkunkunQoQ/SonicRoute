@@ -21,6 +21,8 @@
 
 专项名称：`cpu`、`statistics`、`sampling`、`protocol`、`reports`、`sandbox`、`cleanup`、`lifecycle`、`viewer-data`、`viewer-ui`。多个名称用 PowerShell 数组，例如 `-Feature reports,viewer-ui`。未知项必须失败，不得悄悄跑默认套件。
 
+AI 解读区或图标 / 布局变化选择 `reports,viewer-ui`，验证离线内嵌资源、桌面 / 手机布局、视图切换、分析材料、总结粘贴 / 重导入、指纹不匹配拒绝和恶意文本只作为文本显示。`viewer-data` 包含 data 与 analysis 两个模块的纯数据检查。测试用模型名称与总结是 QA 假体，不能声称真实模型分析；工具 `ai-summary.json` 仅为规则格式化。实际 AI 总结需注明来源、限制，保留原始状态，不能将合成示例、短测、A/A 或协议不足解释成产品改善。
+
 只有确需验证真实产品就绪 / 报告入口时追加 `-Target <已知测试EXE>`；脚本执行独立 SonicRoute 空闲两秒冒烟，不产生性能改善结论。全量中的 A/A 流程冒烟允许 0 或 4，但必须有六轮次记录、来源未变、无负载失败；4 保留原“不确定”含义，不能说性能通过。
 
 `-Scope Tool|Viewer|All` 保留为兼容组件选择；不是第四种测试模式。专项从 Feature 自动确定 Scope；全量不能缩成单组件。浏览器未能完成则标未测 / 失败，不伪造截图验收。
@@ -93,6 +95,7 @@ SonicRoute.BenchmarkLab.exe plan --mode full --aa --duration 30 --json
 1. 读取退出码与逐轮 Success，核对来源哈希 / 协议 / 就绪与负载完成证据。不得只看均值或网站绿色。
 2. 0、1、2、3、4、130 含义遵守 TESTING.md。报告失败优先显式记录；不确定不等于零开销或通过。
 3. 网站验收需导入 / 筛选 / 原始证据 / 无效输入 / 合成标记往返与必要的桌面、手机截图。原始样本、失败和未知值不得被美化抹除。
+   完成性能测量后，执行 AI 应另外保存 `ai-analysis.json`，不能重命名规则摘要冒充模型分析。先用 `Viewer/data.js` 的 `normalize` 读取报告，再用 `Viewer/analysis.js` 的 `fingerprint` 绑定报告、`validate` 复核结构；Schema 为 `BenchmarkLab.AIAnalysis.v1`。填写实际模型来源、中文 Summary、引用场景的 Findings、Limitations、Recommendations 与 UTC 时间，明确区分“观察到的差异”和“可下的结论”。可导入网页 AI 解读区；也可将其放在整理报告的 Analysis 字段。未实际分析则注明未完成，不生成虚假 AI 结论。仅 UI 正确性测试无需重跑性能或为假体制作真实分析。
 4. 按 ARTIFACTS.md 留持久证据与交付哈希；按 CLEANUP.md 在 finally 清理。收据须列模式、功能、命令 / 退出码、残留路径和 TemporaryDirectoryRemoved。
 5. 必要检查通过且无新风险则停止。仅出现新失败、未解决疑点或用户明确要求基准时扩测。
 6. 最终汇报：完成内容、实际检查与结果、未覆盖范围、报告 / 网站 / 包位置和清理状态。不要自动提交、推送、发布或创建后台测试任务。

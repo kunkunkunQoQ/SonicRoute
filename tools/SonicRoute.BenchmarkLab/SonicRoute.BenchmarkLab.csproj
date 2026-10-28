@@ -18,6 +18,9 @@
     <EmbeddedResource Include="Viewer/style.css" LogicalName="BenchmarkViewer.style.css" />
     <EmbeddedResource Include="Viewer/data.js" LogicalName="BenchmarkViewer.data.js" />
     <EmbeddedResource Include="Viewer/app.js" LogicalName="BenchmarkViewer.app.js" />
+    <EmbeddedResource Include="Viewer/icons.js" LogicalName="BenchmarkViewer.icons.js" />
+    <EmbeddedResource Include="Viewer/analysis.js" LogicalName="BenchmarkViewer.analysis.js" />
+    <EmbeddedResource Include="Viewer/workspace.js" LogicalName="BenchmarkViewer.workspace.js" />
   </ItemGroup>
 
 </Project>

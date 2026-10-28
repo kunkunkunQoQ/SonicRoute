@@ -66,6 +66,7 @@
     if (raw.ViewerSchemaVersion === 1 && raw.Source) {
       const restored = normalize(raw.Source, raw.SourceName || sourceName, raw.Metadata, raw.Summary);
       restored.demo = restored.demo || raw.SyntheticExample === true;
+      if(raw.Analysis)restored.pendingAnalysis=raw.Analysis;
       return restored;
     }
     let model = { sourceName, source: raw, metadata, summary, demo: get(raw, 'SyntheticExample') === true, kind: 'comparison', scenarios: [], runs: [], warnings: [], protocol: get(raw, 'Protocol'),

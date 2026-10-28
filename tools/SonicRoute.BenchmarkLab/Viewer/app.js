@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   const D = window.BenchmarkData, $ = id => document.getElementById(id), MB = 1024 * 1024;
-  const state = { reports: [], active: 0, scenario: '', round: 'all', metric: 'cpu' };
+  const state = { reports: [], active: 0, scenario: '', round: 'all', metric: 'cpu', view:'overview' };
   let renderedChartWidth = 0;
   const fmt = (v, digits = 1) => D.num(v) === null ? '—' : v.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const text = (id, value) => { $(id).textContent = value; };
@@ -12,7 +12,7 @@
   function scenario() { return active().scenarios.find(s => s.id === state.scenario) || active().scenarios[0]; }
   function filteredRuns() { return active().runs.filter(r => r.scenarioId === scenario().id && (state.round === 'all' || String(r.round) === state.round)); }
   function option(value, label) { const o = document.createElement('option'); o.value = value; o.textContent = label; return o; }
-  function resetSelection() { state.scenario = active().scenarios[0]?.id || ''; state.round = 'all'; }
+  function resetSelection() { state.scenario = active().scenarios[0]?.id || ''; state.round = 'all';state.view='overview'; }
   function summaries() {
     if (state.round === 'all') return { a: scenario().baseline, b: scenario().candidate };
     const runs = filteredRuns();
@@ -40,7 +40,7 @@
     text('verdict-title', model.demo ? '示例展示 · 一次更轻盈的变化' : message[0]);
     text('verdict-description', model.demo ? '以下均为合成数据，仅用于体验图表与筛选，不代表真实测量或优化效果。' : message[1]);
     text('verdict-pill', model.demo ? 'SYNTHETIC DEMO' : message[2]);
-    text('verdict-icon', status === 'error' || status === 'regression' ? '!' : status === 'pass' ? '✓' : '◌');
+    window.BenchmarkIcons.set('verdict-icon',status==='error'||status==='regression'?'warning':status==='pass'?'check':'help',28);
   }
   function renderFilters() {
     const select = $('scenario-select'); select.replaceChildren();
@@ -61,7 +61,7 @@
       card.append(el('strong','',D.scenarioLabel(s.id)),badge(failed ? 'error' : s.verdict));
       const cpu = s.comparisons.find(m => m.name === 'Total CPU Time');
       card.append(el('small','',cpu?.percent !== null && cpu?.percent !== undefined ? 'CPU ' + (cpu.percent > 0 ? '+' : '') + fmt(cpu.percent) + '%' : runs.length + ' 次测量'));
-      card.onclick = () => { state.scenario=s.id;state.round='all';render(); }; container.append(card);
+      card.onclick = () => { state.scenario=s.id;state.round='all';state.view='details';render(); }; container.append(card);
     }
     text('coverage-count', model.scenarios.length + ' 个场景 · ' + model.runs.length + ' 次测量');
     const protocol = model.protocol, scenarios = Object.values(D.get(protocol,'Scenarios',{}));
@@ -128,14 +128,14 @@
   function renderCards() {
     const { a, b } = summaries(), box = $('metric-grid'); box.replaceChildren();
     const descriptors = [
-      { label: 'CPU 时间 / 秒', value: cpuRate, unit: 'ms/s', icon: '⌁', key: 'InstantCpuPercentPerCore' },
-      { label: '私有内存', value: s => { const v = D.metric(s, 'PrivateBytes'); return v === null ? null : v / MB; }, unit: 'MB', icon: '◫', key: 'PrivateBytes' },
-      { label: '工作集均值', value: s => { const v = D.metric(s, 'WorkingSetBytes'); return v === null ? null : v / MB; }, unit: 'MB', icon: '▤', key: 'WorkingSetBytes' },
-      { label: '句柄数量', value: s => D.metric(s, 'HandleCount'), unit: '个', icon: '⌘', key: 'HandleCount' }
+      { label: 'CPU 时间 / 秒', value: cpuRate, unit: 'ms/s', icon: 'cpu', key: 'InstantCpuPercentPerCore' },
+      { label: '私有内存', value: s => { const v = D.metric(s, 'PrivateBytes'); return v === null ? null : v / MB; }, unit: 'MB', icon: 'memory', key: 'PrivateBytes' },
+      { label: '工作集均值', value: s => { const v = D.metric(s, 'WorkingSetBytes'); return v === null ? null : v / MB; }, unit: 'MB', icon: 'layers', key: 'WorkingSetBytes' },
+      { label: '句柄数量', value: s => D.metric(s, 'HandleCount'), unit: '个', icon: 'handles', key: 'HandleCount' }
     ];
     for (const descriptor of descriptors) {
       const va = descriptor.value(a), vb = descriptor.value(b), delta = difference(va, vb);
-      const card = el('article', 'metric-card'), title = el('div', 'metric-title', descriptor.label); title.append(el('span', 'symbol', descriptor.icon));
+      const card = el('article', 'metric-card'), title = el('div', 'metric-title', descriptor.label); title.append(window.BenchmarkIcons.make(descriptor.icon,21));
       const value = el('div', 'metric-value', fmt(vb, descriptor.unit === '个' ? 0 : 1)); value.append(el('small', '', descriptor.unit));
       const detail = el('div', 'metric-detail');
       if (delta !== null) detail.append(el('span', 'metric-delta' + (delta > 0 ? ' worse' : ''), (delta > 0 ? '+' : '') + fmt(delta) + '%'));
@@ -274,7 +274,7 @@
     renderReports(); const model = active();
     text('dataset-title', model.title); text('data-tag', model.demo ? '合成示例' : model.kind === 'comparison' ? '版本对比' : '单目标测量'); $('data-tag').className = 'dataset-tag' + (!model.demo ? ' real' : '');
     const date = new Date(model.timestamp); text('dataset-date', !model.timestamp || Number.isNaN(date.getTime()) ? model.sourceName : date.toLocaleString('zh-CN', { hour12: false }));
-    renderBanner(); renderFilters(); renderOverview(); renderCards(); renderRoundChart(); renderIntervals(); renderChart(); renderComparison(); renderQuality(); renderRuns();
+    workspace.render(state.view);renderBanner(); renderFilters(); renderOverview(); renderCards(); renderRoundChart(); renderIntervals(); renderChart(); renderComparison(); renderQuality(); renderRuns();
     document.querySelectorAll('[data-metric]').forEach(b => { const selected = b.dataset.metric === state.metric; b.classList.toggle('selected', selected); b.setAttribute('aria-pressed', String(selected)); });
   }
   async function importFiles(files) {
@@ -284,6 +284,7 @@
       text('import-message', '正在整理报告…');
       const documents = await Promise.all(selected.map(async file => ({ name: file.name, data: JSON.parse(await file.text()) })));
       const models = D.importDocuments(documents);
+      for(const model of models)if(model.pendingAnalysis){await workspace.attach(model.pendingAnalysis,model);delete model.pendingAnalysis;}
       const retained = state.reports.filter(r => !r.demo);
       if (retained.length + models.length > 12) throw new Error('最多同时查看 12 份报告。刷新页面可清空当前工作空间。');
       state.reports = retained;
@@ -292,6 +293,7 @@
     } catch (error) { text('import-message', '无法导入：' + error.message); }
     finally { $('file-input').value = ''; }
   }
+  const workspace=window.BenchmarkWorkspace.create({getModel:active,format:fmt,setView:view=>{state.view=view;render();},selectScenario:id=>{state.scenario=id;state.round='all';state.view='details';render();window.scrollTo({top:0,behavior:'auto'});}});
   const openFiles = () => $('file-input').click();
   for (const id of ['import-button', 'import-side']) $(id).onclick = openFiles;
   $('file-input').onchange = event => importFiles(event.target.files);
@@ -303,10 +305,9 @@
   $('scenario-select').onchange = event => { state.scenario = event.target.value; state.round = 'all'; render(); };
   $('round-select').onchange = event => { state.round = event.target.value; render(); };
   document.querySelectorAll('[data-metric]').forEach(button => { button.onclick = () => { state.metric = button.dataset.metric; render(); }; });
-  document.querySelectorAll('.nav-item').forEach(link => { link.onclick = () => { document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active')); link.classList.add('active'); }; });
   $('demo-button').onclick = () => { const existing = state.reports.findIndex(r => r.demo); if (existing >= 0) selectReport(existing); else { state.reports.push(D.demo()); selectReport(state.reports.length - 1); } };
   $('export-button').onclick = () => {
-    const model = active(), blob = new Blob([JSON.stringify({ ViewerSchemaVersion: 1, SourceName: model.sourceName, SyntheticExample: model.demo, Source: model.source, Metadata: model.metadata, Summary: model.summary }, null, 2)], { type: 'application/json' });
+    const model = active(), blob = new Blob([JSON.stringify({ ViewerSchemaVersion: 1, SourceName: model.sourceName, SyntheticExample: model.demo, Source: model.source, Metadata: model.metadata, Summary: model.summary, Analysis:model.analysis||null }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob), link = el('a'); link.href = url; link.download = (model.demo ? 'synthetic-example' : 'benchmark-organized') + '.json'; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   };
   try {
@@ -314,6 +315,7 @@
     state.reports.push(embedded ? D.normalize(embedded, 'report.json') : D.demo());
   } catch (error) { state.reports.push(D.demo()); text('import-message', '内嵌报告读取失败：' + error.message + '。当前显示合成示例。'); }
   resetSelection(); render();
+  if(active().pendingAnalysis){const owner=active();workspace.attach(owner.pendingAnalysis,owner).then(()=>{delete owner.pendingAnalysis;}).catch(e=>text('ai-message','内嵌 AI 总结未附加：'+e.message));}
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => {
     if (Math.abs($('chart').clientWidth - renderedChartWidth) > 2) { renderChart();renderRoundChart();renderIntervals(); }
   }).observe($('chart'));
