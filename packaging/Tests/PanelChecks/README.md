@@ -125,3 +125,20 @@ toggles only the selected playback PID, verifies its readback and rejects an
 ignored write. Removing capture controls must leave no capture mute reads or
 writes, even with the microphone option enabled. It skips theme, language,
 layout and hotkey-list checks when those paths have not changed.
+
+`--row-loading-only` limits execution to application-row name refresh and panel
+load cancellation. It covers compact/full default titles, alias and actual
+default-device changes, equal aliases with different route IDs, unavailable
+endpoints, application renames, one in-flight load and close/late-result guards.
+The pending-load fixture allows existing read-only device discovery but never
+shows a window or executes audio writes. Configuration remains isolated.
+
+`--measure-row-names` (NET8/NET10) measures the actual name-update method against
+a synthetic 65-device snapshot. Each compact/full/application-name case warms up
+for 2,000 calls, then records five samples of 20,000 repeated unchanged updates.
+JSON `NAME_METRIC` lines include elapsed time and current-thread allocation;
+each sample includes the 40-byte Stopwatch allocation. Reflection overhead is
+included. Compare the same harness against both product revisions; disabling
+tiered compilation in both processes can help distinguish JIT warmup effects.
+This is a local name-refresh probe, not a first-visible-load, idle CPU,
+working-set or whole-app performance benchmark.

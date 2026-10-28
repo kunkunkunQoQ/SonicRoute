@@ -45,6 +45,7 @@ namespace SonicRoute
             public bool IsMuted;
             public ToggleButton ExpandButton = null!;
             public TextBlock? Name;
+            public string? NamePrimary, NameSuffix;
             public bool LegacyLayout;
             public double CollapsedHeight => LegacyLayout ? 38 : 54;
             public bool ShowOutputName;
@@ -319,13 +320,17 @@ namespace SonicRoute
                 _micUiOn = cfg.ExperimentalMic && cfg.MicInPanel;
                 GlobalMuteButton.IsEnabled = false;
                 MicMuteButton.IsEnabled = false;
-                var devices = await _uiLifetime.ReadAsync(cfg.ExperimentalMic, static includeInputs =>
+                // 两项独立发现共用原服务/缓存；一起等待以观察失败和关窗取消。
+                var deviceRead = _uiLifetime.ReadAsync(cfg.ExperimentalMic, static includeInputs =>
                 {
                     var outputs = AudioService.GetDevices(EDataFlow.eRender);
                     var inputs = includeInputs ? AudioService.GetDevices(EDataFlow.eCapture) : new List<AudioDeviceInfo>();
                     return (Outputs: outputs, Inputs: inputs, DefaultId: AudioService.GetDefaultDeviceId(EDataFlow.eRender));
                 });
+                var appRead = _uiLifetime.ReadAsync(AudioService.GetAppsAsync());
+                await Task.WhenAll(deviceRead, appRead);
                 if (_isClosed) return;
+                var devices = deviceRead.Result;
                 var outputs = DisplayDevices(devices.Outputs, cfg);
                 _outputDisplay = PanelDevices.WithSystemDefault(outputs, EDataFlow.eRender, cfg);
                 _inputDisplay = cfg.ExperimentalMic
@@ -334,12 +339,8 @@ namespace SonicRoute
 
                 // 顶部系统音频设备
                 SetSystemDevices(outputs, devices.DefaultId);
-                await RefreshSystemVolumeAsync();
-                if (_isClosed) return;
-
-                var apps = await _uiLifetime.ReadAsync(AudioService.GetAppsAsync());
-                if (_isClosed) return;
-                await BuildAppRowsAsync(apps, cfg);
+                // 顶部音量和应用行互不依赖，初次展示仍等待两者都准备好。
+                await Task.WhenAll(RefreshSystemVolumeAsync(), BuildAppRowsAsync(appRead.Result, cfg));
                 if (_isClosed) return;
                 SetMeterEnabled(cfg.ShowAppPeakMeter);
                 ApplyFixedPanelHeight(cfg);
@@ -879,17 +880,36 @@ namespace SonicRoute
         {
             row.OutputId = outputId;
             if (row.Name == null) return;
-            string name = AppDisplayName.Get(row.App);
+            string primary;
+            string? suffix = null;
             if (row.ShowOutputName)
             {
                 bool systemDefault = AudioService.IsSystemDefault(outputId);
-                name = _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outputId, StringComparison.OrdinalIgnoreCase))?.DisplayName
+                bool needDefault = systemDefault && !row.LegacyLayout;
+                AudioDeviceInfo? output = null;
+                // 直接查现有快照，不创建每行 LINQ 闭包；找到即停止。
+                foreach (var device in _outputDisplay)
+                {
+                    if (!string.Equals(device.Id, outputId, StringComparison.OrdinalIgnoreCase)) continue;
+                    output = device;
+                    break;
+                }
+                primary = output?.DisplayName
                     ?? L10n.T(systemDefault ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
-                // 使用已加载的设备快照，系统默认路由同时提示实际播放设备，不增加查询。
-                var device = systemDefault ? _outputDisplay.FirstOrDefault(d => d.IsDefault) : null;
-                if (device != null && !row.LegacyLayout) name += " · " + device.DisplayName;
+                // 简洁布局不需要实际默认设备；索引遍历快照不创建闭包或枚举器。
+                if (needDefault)
+                {
+                    var devices = _outputDisplay;
+                    for (int i = 0; i < devices.Count; i++)
+                        if (devices[i].IsDefault) { suffix = devices[i].DisplayName ?? string.Empty; break; }
+                }
             }
-            if (row.Name.Text == name) return;
+            else primary = AppDisplayName.Get(row.App);
+            // 比较当前快照中的两部分，名称未变时不再分配组合字符串。
+            if (row.NamePrimary == primary && row.NameSuffix == suffix) return;
+            row.NamePrimary = primary;
+            row.NameSuffix = suffix;
+            string name = suffix == null ? primary : primary + " · " + suffix;
             row.Name.Text = name;
             row.Name.ToolTip = name;
             if (!row.LegacyLayout) row.Slider.ToolTip = name;

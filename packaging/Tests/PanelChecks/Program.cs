@@ -181,6 +181,8 @@ internal static partial class Program
             if (args.Contains("--app-row-names")) { CheckAppRowNames(theme, windows, args.Last()); CheckAppScrollLayout(theme, windows, args.Last(), true); Console.WriteLine($"RESULT passed={_checks} APP_ROW_NAMES_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--hotkeys-only")) { CheckDeviceHotkeysAndTraySettings(theme, windows); Console.WriteLine($"RESULT passed={_checks} HOTKEY_TRAY_SETTINGS_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--measure-sections")) { MeasureSections(windows, args); return 0; }
+            if (args.Contains("--measure-row-names")) { MeasureRowNames(theme, windows); return 0; }
+            if (args.Contains("--row-loading-only")) { CheckRowLoadingOptimization(theme, windows); Console.WriteLine($"RESULT passed={_checks} ROW_LOADING_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--render-scrollbars")) { RenderScrollbars(theme, args.Last()); return 0; }
             if (args.Contains("--app-scroll-layout")) { CheckAppScrollLayout(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} APP_SCROLL_LAYOUT_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--output-optimization")) { CheckOutputOptimization(theme, windows); Console.WriteLine($"RESULT passed={_checks} OUTPUT_OPTIMIZATION_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
