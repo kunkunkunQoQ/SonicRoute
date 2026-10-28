@@ -52,31 +52,38 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 **Current release: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [Release notes (Chinese)](docs/release-v1.29.md)
 
-For Windows x64, choose Lite with .NET 10, the NET8-compatible Lite edition, or Legacy with .NET Framework 4.8. The Store page shows the version currently available there and uses Store updates. Direct download links below are for v1.29.
+Most users should choose Lite x64 (portable single file, top memory efficiency); choose Legacy x64 for restricted office PCs (no extra runtime required, extract and run); choose Lite ARM64 for ARM64 PCs. You can also install from the Microsoft Store for automatic updates. Direct download links below are for v1.29.
 
 | Version | Download | Requirements |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10, Standard) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Portable single-file executable; requires the matching x64 .NET 10 Desktop Runtime |
+| ⭐ Lite x64 (.NET 10, Recommended) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Portable single-file executable; requires the matching x64 .NET 10 Desktop Runtime |
 | ⚡ Lite ARM64 (.NET 10) (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | Portable ARM64 executable; requires the matching ARM64 .NET 10 Desktop Runtime |
 | ☕ Lite NET8 x64 | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | NET8-compatible Lite edition; requires the x64 .NET 8 Desktop Runtime |
 | ☕ Lite NET8 ARM64 (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | NET8-compatible Lite edition; requires the ARM64 .NET 8 Desktop Runtime |
 | 🛡️ Legacy x64 (No .NET 8 required) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
 | 🔄 Microsoft Store (Store updates) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | The .NET 10 Store package requires the x64 .NET 10 Desktop Runtime. See the Store page for the version currently available there; for 64-bit Windows 10/11. |
 
-Standard Lite requires [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); NET8-compatible Lite requires [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). The NET8 edition will no longer be offered or maintained after November 2026. After that, x64 users can choose .NET 10 or Legacy (.NET Framework 4.8); ARM64 users should choose .NET 10.
+> [!NOTE]
+> Runtime requirements: Standard Lite requires [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); NET8-compatible Lite requires [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (maintenance ends after November 2026; migrate to .NET 10 or Legacy). Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation.
 
-1. **Launch & Keep in Tray**: Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.
+### 🏁 3-Step Quick Start
+
+1. **Launch & Keep in Tray**: Double-click to start; SonicRoute stays in your system tray (drag it out of the overflow menu to keep it pinned). Double-click the tray icon to open the main window.
 2. **Select & Route Devices**: Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.
-3. **Effortless blind control.** Move your mouse over the tray icon and scroll to adjust volume or Alt+scroll to switch devices; combined with hotkeys and automation, control your audio without leaving full-screen games.
+3. **Tray Blind Control & Shortcuts**: Hover over the system tray and scroll to adjust app volume, Alt+scroll to switch audio routes, or Shift+scroll for master volume; combine with global mute hotkeys and automation for seamless in-game control.
 
-`sr` connects only to an already-running SonicRoute instance; it does not start the app. Before first use, start SonicRoute normally to register the command, then close and reopen your terminal. See the [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) if device switching does not work as expected.
+### ⚡ CLI & Automation Integration
+
+The `sr` command communicates with a running SonicRoute instance via named pipe in milliseconds (will not start an instance if absent). Launch SonicRoute once to register the command, then restart your terminal to integrate with scripts, AutoHotkey, or Stream Deck. If needed, refer to [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
 ```bash
 # Trigger an automation rule (SonicRoute must be running)
 sr "Rule name or ID"
 ```
 
-1.29 adds an on-demand, event-refreshed panel with main volume controls for all output devices, optionally filtered to retained devices. Shift+wheel adjusts system volume; the existing wheel, Alt+wheel, and Alt+Shift+wheel actions remain. Earlier changes: [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+### 🆕 v1.29 Release Highlights
+
+v1.29 adds an output device volume panel refreshed on demand by system events, supporting filtered views of preserved devices; adds Shift+wheel for system master volume alongside existing app volume and Alt+wheel device routing. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for full release notes.
 
 ### ❓ Quick FAQ
 

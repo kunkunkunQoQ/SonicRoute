@@ -15,7 +15,7 @@
     "featuresTitle": "Das bietet SonicRoute",
     "downloadTitle": "Herunterladen und loslegen",
     "releaseNotes": "Versionshinweise (Chinesisch)",
-    "downloadIntro": "Für Windows-x64-Systeme stehen Lite mit .NET 10, eine NET8-kompatible Lite-Version und Legacy mit .NET Framework 4.8 zur Auswahl. Die Store-Seite zeigt die dort verfügbare Version und verwendet Store-Updates. Die direkten Downloadlinks unten gelten für {release}.",
+    "downloadIntro": "Die meisten Nutzer sollten **Lite x64** wählen (portable Einzeldatei, minimale Speichernutzung); für restriktive Firmen-PCs empfiehlt sich **Legacy x64** (keine zusätzliche Runtime erforderlich, entpacken und starten); für ARM64-Geräte steht **Lite ARM64** bereit. Zudem kann die App über den **Microsoft Store** mit automatischen Updates installiert werden. Die folgenden Links beziehen sich auf {release}.",
     "edition": "Version",
     "requirements": "Voraussetzungen",
     "singleExe": "Einzelne EXE",
@@ -24,13 +24,13 @@
     "liteRequirement": "Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime",
     "legacyRequirement": "Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten",
     "storeRequirement": "Das NET10-Store-Paket benötigt die x64 .NET 10 Desktop Runtime. Welche Version aktuell im Store verfügbar ist, zeigt die Store-Seite; für 64-Bit Windows 10/11.",
-    "runtimeNote": "Lite Standard benötigt {runtime}; die NET8-kompatible Lite-Version benötigt {runtime8}. Die NET8-Version wird nach November 2026 nicht mehr angeboten oder gewartet. Danach wählen x64-Nutzer manuell .NET 10 oder Legacy (.NET Framework 4.8); ARM64-Nutzer wählen .NET 10.",
+    "runtimeNote": "Laufzeitumgebung: Standard-Lite erfordert {runtime}; die NET8-kompatible Version benötigt {runtime8} (Wartung endet nach November 2026; Wechsel zu .NET 10 oder Legacy empfohlen). Die Legacy-Edition nutzt das im System integrierte .NET Framework 4.8 und benötigt keine zusätzlichen Runtimes.",
     "steps": [
-        "**Starten & im Tray behalten**: Doppelklicken zum Starten; bleibt im Infobereich aktiv. Doppelklick auf das Tray-Symbol öffnet das Hauptfenster.",
-        "**Geräte wählen & weiterleiten**: Aktivieren Sie Kopfhörer und Lautsprecher unter Einstellungen → Behaltene Geräte. Linksklick auf das Tray-Symbol öffnet das Schnellbedienfeld zum sofortigen Weiterleiten.",
-        "**Mühelose Blindbedienung.** Bewegen Sie die Maus über das Tray-Symbol und scrollen Sie zur Lautstärkeregelung oder mit Alt+Mausrad zum schnellen Gerätewechsel; steuern Sie Ihr Audio ohne Verlassen von Vollbild-Spielen."
+        "**Starten & im Infobereich anheften**: Per Doppelklick starten; SonicRoute bleibt im Windows-Infobereich aktiv (ziehen Sie das Symbol am besten dauerhaft in die Taskleiste). Ein Doppelklick öffnet das Hauptfenster.",
+        "**Geräte auswählen & Audio zuweisen**: Unter „Einstellungen → Beibehaltene Geräte“ bevorzugte Kopfhörer und Lautsprecher aktivieren. Ein Klick auf das Tray-Symbol öffnet das Schnell-Panel zum sofortigen Zuweisen und Einstellen der Lautstärke jeder App.",
+        "**Blindsteuerung über das Tray-Rad**: Maus über den Infobereich bewegen und mit dem Mausrad die App-Lautstärke anpassen, mit Alt+Rad Geräte umschalten und mit Shift+Rad die Gesamtlautstärke regeln – nahtlose Steuerung ohne Vollbildspiele verlassen zu müssen."
     ],
-    "commandNote": "Bevor du `sr` zum ersten Mal verwendest, starte SonicRoute normal, damit der Befehl registriert wird, und öffne anschließend dein Terminal erneut. Wenn der Gerätewechsel nicht wie erwartet funktioniert, findest du Hilfe in den {faq}.",
+    "commandNote": "Der Befehl `sr` kommuniziert über Named Pipes in Millisekunden mit einer laufenden SonicRoute-Instanz (startet die App nicht, wenn sie geschlossen ist). Nach dem ersten Start ist der Pfad registriert; nach Neustart des Terminals kann `sr` in Skripten, AutoHotkey oder auf dem Stream Deck verwendet werden. Siehe {faq}.",
     "ruleExample": "Regelname oder ID",
     "docsTitle": "Dokumentation",
     "wikiNote": "Das Wiki ist derzeit auf vereinfachtem Chinesisch.",
@@ -51,7 +51,7 @@
     "configureAutomation": "Automatisierung einrichten",
     "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease": "Aktuelle Version",
-    "releaseSummary": "{version} ergänzt ein Zusatzpanel mit Hauptlautstärkereglern für alle Ausgabegeräte, optional nur für behaltene Geräte, das bei Bedarf geladen und ereignisgesteuert aktualisiert wird. Shift+Rad regelt die Systemlautstärke; die bisherigen Funktionen von Rad, Alt+Rad und Alt+Umschalt+Rad bleiben erhalten. Frühere Änderungen: {history}.",
+    "releaseSummary": "In Version 1.29 wurde ein separates Lautstärkepanel für Ausgabegeräte ergänzt, das ereignisgesteuert aktualisiert wird und auf Wunsch nur beibehaltene Geräte filtert. Zudem lässt sich mit Shift+Mausrad nun die Master-Lautstärke direkt über die Taskleiste regeln. Frühere Änderungen siehe {history}.",
     "docTopic": "Thema",
     "docGuides": "Anleitungen",
     "docTopics": [
@@ -103,7 +103,7 @@
         "Alle Mikrofone mit Strg+Umschalt+N stummschalten und den Status sofort per OSD-Banner auf dem Bildschirm ablesen",
         "Apps dedizierten Audiospuren zuweisen, damit private Gespräche und Systemtöne nicht in der Aufnahme landen"
     ],
-    "editionLiteX64": "Lite x64 (.NET 10, Standard)",
+    "editionLiteX64": "Lite x64 (.NET 10, Empfohlen)",
     "editionLiteArm64": "Lite ARM64 (.NET 10)",
     "editionLegacyX64": "Legacy x64 (Ohne .NET 8)",
     "editionStore": "Microsoft Store (Updates über Store)",
@@ -125,5 +125,8 @@
     "editionLiteNet8X64": "Lite NET8 x64",
     "editionLiteNet8Arm64": "Lite NET8 ARM64",
     "aiPromptTitle": "KI-Zusammenfassung und token-effiziente Fehlerbehebung",
-    "aiPromptBody": "Wenn Sie KI-Assistenten (wie Cursor, Copilot, ChatGPT oder Claude) zur Fehlerbehebung, Architekturanalyse oder Skripterstellung nutzen, empfiehlt sich die maschinenlesbare Spezifikation {aiDoc}. Sie ist in einer hochdichten, strukturierten DSL für LLMs verfasst, vermeidet lange Texte, spart drastisch Kontext-Tokens und ermöglicht eine sekundenschnelle Diagnose."
+    "aiPromptBody": "Wenn Sie KI-Assistenten (wie Cursor, Copilot, ChatGPT oder Claude) zur Fehlerbehebung, Architekturanalyse oder Skripterstellung nutzen, empfiehlt sich die maschinenlesbare Spezifikation {aiDoc}. Sie ist in einer hochdichten, strukturierten DSL für LLMs verfasst, vermeidet lange Texte, spart drastisch Kontext-Tokens und ermöglicht eine sekundenschnelle Diagnose.",
+    "quickStartTitle": "Schnellstart in 3 Schritten",
+    "cliTitle": "CLI & Automationsintegration (Power-User)",
+    "releaseHighlightsTitle": "{release} Release-Highlights"
 }

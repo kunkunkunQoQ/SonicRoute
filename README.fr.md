@@ -52,31 +52,38 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d�
 
 **Version actuelle : [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [Notes de version (en chinois)](docs/release-v1.29.md)
 
-Sous Windows x64, choisissez Lite avec .NET 10, Lite compatible NET8 ou Legacy avec .NET Framework 4.8. La page du Store indique la version qui y est disponible et les mises à jour passent par le Store. Les liens directs ci-dessous correspondent à v1.29.
+Pour la plupart des utilisateurs, **Lite x64** est le meilleur choix (exécutable unique et portable, faible empreinte mémoire) ; privilégiez **Legacy x64** pour les PC professionnels restreints (aucun runtime externe requis, décompressez et lancez) ; pour les machines ARM64, utilisez **Lite ARM64**. Disponible également sur le **Microsoft Store** avec mises à jour automatiques. Liens directs pour v1.29 ci-dessous.
 
 | Édition | Télécharger | Configuration requise |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10, standard) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Exécutable portable à fichier unique ; nécessite le .NET 10 Desktop Runtime x64 |
+| ⭐ Lite x64 (.NET 10, Recommandé) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Exécutable portable à fichier unique ; nécessite le .NET 10 Desktop Runtime x64 |
 | ⚡ Lite ARM64 (.NET 10) (expérimental) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | Exécutable portable ARM64 ; nécessite le .NET 10 Desktop Runtime ARM64 |
 | ☕ Lite NET8 x64 | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | Lite compatible NET8 ; nécessite le .NET 8 Desktop Runtime x64 |
 | ☕ Lite NET8 ARM64 (expérimental) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Lite compatible NET8 ; nécessite le .NET 8 Desktop Runtime ARM64 |
 | 🛡️ Legacy x64 (Sans .NET 8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | Aucun .NET 8 requis ; s'exécute directement via le .NET Framework 4.8 intégré ; décompressez le ZIP |
 | 🔄 Microsoft Store (mises à jour du Store) | [Installer depuis le Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Le paquet Store .NET 10 nécessite le .NET 10 Desktop Runtime x64. Consultez la page du Store pour connaître la version actuellement disponible ; pour Windows 10/11 64 bits. |
 
-Lite standard nécessite [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) ; Lite compatible NET8 nécessite [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). L’édition NET8 ne sera plus proposée ni maintenue après novembre 2026. Ensuite, les utilisateurs x64 pourront choisir manuellement .NET 10 ou Legacy (.NET Framework 4.8) ; les utilisateurs ARM64 devront choisir .NET 10.
+> [!NOTE]
+> Exigences d'exécution : Lite standard requiert [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) ; la version compatible NET8 nécessite [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (fin de maintenance après novembre 2026 ; transition conseillée vers .NET 10 ou Legacy). La version Legacy fonctionne directement avec .NET Framework 4.8 sans installation supplémentaire.
 
-1. **Lancer & garder en barre des tâches** : Double-cliquez pour démarrer ; reste actif dans la zone de notification. Double-cliquez sur l'icône pour ouvrir la fenêtre principale.
-2. **Sélectionner & router les périphériques** : Cochez vos casques et haut-parleurs dans Paramètres → Périphériques conservés. Cliquez sur l'icône pour afficher le panneau rapide et router chaque application.
-3. **Contrôle intuitif à l'aveugle.** Survolez l'icône de la barre des tâches pour régler le volume ou changez instantanément de périphérique avec Alt+molette ; combiné aux raccourcis et à l'automatisation, contrôlez le son sans quitter vos jeux plein écran.
+### 🏁 Prise en main rapide en 3 étapes
 
-Avant d’utiliser `sr` pour la première fois, lancez SonicRoute normalement pour enregistrer la commande, puis ouvrez de nouveau votre terminal. Si le changement de périphérique ne fonctionne pas comme prévu, consultez la [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
+1. **Lancer et épingler dans la zone de notification** : Double-cliquez pour exécuter ; SonicRoute reste dans la barre des tâches (glissez l'icône hors du menu déroulant pour la garder visible). Un double-clic ouvre la fenêtre principale.
+2. **Sélectionner les appareils et assigner** : Cochez vos casques et enceintes dans « Paramètres → Appareils conservés ». Un clic gauche sur l'icône ouvre le panneau rapide pour router chaque application et régler ses curseurs de volume.
+3. **Contrôle à l'aveugle via la molette** : Survolez la zone de notification et tournez la molette pour ajuster le volume de l'application, Alt+molette pour changer d'appareil et Shift+molette pour le volume général du système, sans quitter votre jeu en plein écran.
+
+### ⚡ CLI et automatisation (Power Users)
+
+La commande `sr` dialogue via tube nommé (Named Pipe) en quelques millisecondes avec l'instance SonicRoute active (ne démarre pas l'application si absente). Lancez le logiciel une première fois pour déclarer la commande, puis redémarrez votre terminal pour l'utiliser dans vos scripts, AutoHotkey ou Stream Deck. Détails dans [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
 ```bash
 # Déclencher une règle d'automatisation (SonicRoute doit être en cours d'exécution)
 sr "Nom ou ID de la règle"
 ```
 
-1.29 ajoute un panneau supplémentaire avec les commandes de volume principal de tous les périphériques de sortie, chargé à la demande et actualisé par événements, avec une option pour filtrer les périphériques conservés. Maj+molette règle le volume système ; les actions existantes de la molette, Alt+molette et Alt+Maj+molette sont conservées. Changements précédents : [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+### 🆕 Points forts de la version v1.29
+
+La version 1.29 intègre un panneau de gestion du volume des périphériques de sortie rafraîchi par les événements système avec filtrage des appareils conservés. Elle ajoute aussi le réglage du volume général système par Shift+molette, en complément du routage Alt+molette. Historique complet dans [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Foire aux questions (FAQ)
 

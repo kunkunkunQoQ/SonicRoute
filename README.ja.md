@@ -52,31 +52,38 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 
 **現在のリリース：[v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [リリースノート（簡体字中国語）](docs/release-v1.29.md)
 
-Windows x64 では、.NET 10 の Lite、NET8 互換 Lite、.NET Framework 4.8 の Legacy から選べます。Store ページには現在配信中のバージョンが表示され、更新は Store から提供されます。下の直接ダウンロードリンクは v1.29 用です。
+一般的なPC環境では **Lite x64**（単一実行ファイル、省メモリで軽快）が最もおすすめです。実行環境の制約があるオフィスPCでは **Legacy x64**（ランタイム追加不要、解凍後即利用可）、ARM64 PCでは **Lite ARM64** を選択してください。**Microsoft Store** 経由でのインストール・自動更新にも対応しています。以下のリンクは最新安定版 v1.29 です。
 
 | エディション | ダウンロード | 要件 |
 |---|---|---|
-| ⭐ Lite x64（.NET 10・標準） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | ポータブル単一ファイル。x64 .NET 10 Desktop Runtime が必要です |
+| ⭐ Lite x64（.NET 10 推奨） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | ポータブル単一ファイル。x64 .NET 10 Desktop Runtime が必要です |
 | ⚡ Lite ARM64（.NET 10）（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | ポータブル ARM64 ファイル。ARM64 .NET 10 Desktop Runtime が必要です |
 | ☕ Lite NET8 x64 | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | NET8 互換 Lite。x64 .NET 8 Desktop Runtime が必要です |
 | ☕ Lite NET8 ARM64（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | NET8 互換 Lite。ARM64 .NET 8 Desktop Runtime が必要です |
 | 🛡️ Legacy x64（.NET 8 不要） | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 追加ランタイム不要。Windows 標準の .NET Framework 4.8 で動作し、ZIP を解凍するだけですぐに使えます |
 | 🔄 Microsoft Store（Store 経由で更新） | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | .NET 10 の Store パッケージには x64 .NET 10 Desktop Runtime が必要です。現在配信中のバージョンは Store ページで確認してください（64 ビット Windows 10/11 対象）。 |
 
-標準 Lite には [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)、NET8 互換 Lite には [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) が必要です。NET8 版の提供と保守は 2026 年 11 月以降終了します。その後、x64 は .NET 10 または Legacy（.NET Framework 4.8）を手動で選択し、ARM64 は .NET 10 を選択してください。
+> [!NOTE]
+> ランタイム要件：標準 Lite には [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)、NET8 互換版には [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) の導入が必要です（2026年11月以降サポート終了予定のため .NET 10 または Legacy への移行を推奨）。Legacy 版は Windows 標準の .NET Framework 4.8 でそのまま動作します。
 
-1. **起動と常駐**：ダブルクリックで起動するとタスクバーのトレイに常駐します。トレイアイコンをダブルクリックしてメイン画面を開きます。
-2. **デバイスの選択と振り分け**：「設定 → 保持するデバイス」でよく使うデバイスにチェックを入れます。トレイアイコンをクリックしてクイックパネルを開き、スライダーでアプリごとに音声を振り分けます。
-3. **直感的なトレイ操作：** トレイアイコン上でホイールを回して音量を直感操作、Altキーを押しながら回して出力デバイスを即座に切替。ショートカットや自動化と組み合わせ、ゲーム画面のまま快適にコントロール。
+### 🏁 3ステップで今すぐ始める
 
-`sr` を初めて使う前に、SonicRoute を通常起動してコマンドを登録し、ターミナルを開き直してください。デバイス切り替えが想定どおりに動作しない場合は [よくある質問](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) をご覧ください。
+1. **起動してタスクトレイに常駐**：解凍またはダブルクリックで起動するとタスクトレイに常驻します（いつでも確認できるようオーバーフローからドラッグして固定を推奨）。トレイアイコンをダブルクリックでメイン画面を開きます。
+2. **デバイス選択と個別ルーティング**：「設定 → 保持するデバイス」でお手持ちのヘッドホンやスピーカーにチェックを入れます。トレイアイコンをクリックしてクイックパネルを開き、スライダーでアプリごとに音量調整と出力先切り替えを行います。
+3. **トレイ上でのブラインド操作**：通知領域にカーソルを合わせてホイール操作するだけでアプリ音量を即座に微調整、Alt+ホイールで出力先を即時切り替え、Shift+ホイールでシステムマスター音量を調整できます。ゲーム画面を閉じることなく快適に操作できます。
+
+### ⚡ コマンドラインと自動化連携（上級者向け）
+
+`sr` コマンドは名前付きパイプを使用して、起動中の SonicRoute インスタンスとミリ秒単位で高速連携します（未起動時には起動しません）。初回起動時に自動登録されるため、ターミナルを再起動すればスクリプト、AutoHotkey、Stream Deck から直接呼び出せます。不明点は [よくある質問](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) をご確認ください。
 
 ```bash
 # 自動化ルールを実行（SonicRoute が起動中である必要があります）
 sr "ルール名または ID"
 ```
 
-1.29では、必要時に読み込まれイベントで更新される追加パネルで、すべての出力デバイスの主音量を操作できます。保持デバイスだけに絞ることもできます。Shift+ホイールでシステム音量を調整でき、通常のホイール、Alt+ホイール、Alt+Shift+ホイールの動作も維持されます。これまでの変更: [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)
+### 🆕 v1.29 リリースの主な改善点
+
+v1.29 では出力デバイス別の音量管理パネルが追加され、システムイベントに応じたオンデマンド更新や保持デバイスの絞り込み表示に対応しました。また、Shift+ホイールによるマスター音量調整が追加され、既存のアプリ音量調整や Alt+ホイールでのデバイス切り替えとシームレスに連携できます。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) をご覧ください。
 
 ### ❓ よくある質問（FAQ）
 

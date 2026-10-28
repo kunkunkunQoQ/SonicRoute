@@ -15,7 +15,7 @@
     "featuresTitle": "SonicRoute 的功能",
     "downloadTitle": "下載與快速入門",
     "releaseNotes": "發布說明（簡體中文）",
-    "downloadIntro": "Windows x64 使用者可選擇 .NET 10 Lite、NET8 相容版 Lite，或以 .NET Framework 4.8 為基礎的 Legacy。商店頁面顯示目前上架版本，更新透過 Microsoft Store 提供。下方直連下載對應 {release}。",
+    "downloadIntro": "推薦首選 **Lite x64**（單檔便攜、低記憶體佔用）；辦公或受限機型可選 **Legacy x64**（免裝執行階段，解壓縮即用）；ARM64 裝置選擇 **Lite ARM64**。亦可透過 **Microsoft Store** 取得並自動更新。下方直連均對應最新正式版 {release}。",
     "edition": "版本",
     "requirements": "需求",
     "singleExe": "單一 EXE",
@@ -24,13 +24,13 @@
     "liteRequirement": "單一檔案可攜版；需要相符的 x64 .NET 10 Desktop Runtime",
     "legacyRequirement": "免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用",
     "storeRequirement": "NET10 商店套件需要 x64 .NET 10 Desktop Runtime。上架版本請以 Microsoft Store 頁面為準；適用於 64 位元 Windows 10/11。",
-    "runtimeNote": "預設 Lite 需要 {runtime}；NET8 相容版需要 {runtime8}。NET8 版將於 2026 年 11 月之後停止提供與維護。此後 x64 使用者可手動選擇 .NET 10 或 Legacy（.NET Framework 4.8）；ARM64 使用者請選擇 .NET 10。",
+    "runtimeNote": "執行階段說明：預設 Lite 需要安裝 {runtime}；NET8 相容版需要 {runtime8}（將於 2026 年 11 月後停止維護並建議遷移至 .NET 10 或 Legacy）。Legacy 版本依賴系統自帶 .NET Framework 4.8，無需額外安裝執行階段。",
     "steps": [
-        "**按兩下啟動常駐**：按兩下啟動後常駐系統匣（可在工作列角溢位區拖出固定），按兩下系統匣圖示開啟主介面。",
-        "**勾選分流裝置**：在「設定 → 保留的裝置」勾選常用輸出與輸入裝置；按一下系統匣圖示滑出面板，即時滑動調節並分流各個應用程式的聲音輸出。",
-        "**無感盲調掌控**：把滑鼠移到匣區圖示上直接捲動滾輪盲調音量，按住 Alt 捲動即時換軌裝置；配合快捷鍵與自動化規則，無需切出全螢幕遊戲也能從容掌控。"
+        "**按兩下啟動常駐**：下載解壓縮或按兩下執行後軟體常駐工作列系統匣（建議從溢出區拖出固定以便隨時檢視）；按兩下系統匣圖示即可打開主視窗。",
+        "**勾選裝置與分流**：首次在「設定 → 保留的裝置」勾選常用耳機與音響；按一下系統匣圖示呼出快速面板，滑動應用程式滑桿即時分流裝置與調整音量。",
+        "**系統匣盲調與快捷掌控**：滑鼠懸停在工作列系統匣區直接滾動滾輪調整應用程式音量，按住 Alt 滾動即時換軌裝置，Shift 滾輪調系統總音量；配合全域靜音快速鍵或自動化連動，無需切換畫面即可從容掌控。"
     ],
-    "commandNote": "首次使用 `sr` 前，請先正常啟動 SonicRoute 以註冊指令，然後重新開啟終端機。若裝置切換未如預期運作，請參閱 {faq}。",
+    "commandNote": "`sr` 命令基於具名管道與已執行的 SonicRoute 執行個體毫秒級通訊（軟體未執行時不會啟動）。首次使用請先啟動軟體自動註冊環境變數，重新啟動終端機後即可在指令碼、AutoHotkey 或 Stream Deck 旋鈕中呼叫。遇到疑問可查閱 {faq}。",
     "ruleExample": "規則名稱或 ID",
     "docsTitle": "文件",
     "wikiNote": "詳細 Wiki 目前以簡體中文提供。",
@@ -51,7 +51,7 @@
     "configureAutomation": "設定自動化",
     "automationExample": "把繁瑣的手動改設定，變成一次配置、隨開隨用的自動化體驗。",
     "currentRelease": "目前版本",
-    "releaseSummary": "{version} 新增輸出裝置附加音量面板，按需載入並由事件更新，可篩選為僅顯示保留裝置。Shift+滾輪調整系統音量；一般滾輪、Alt+滾輪與 Alt+Shift+滾輪行為維持不變。先前變更見 {history}。",
+    "releaseSummary": "v1.29 新增輸出裝置獨立音量管理面板，按需載入並由系統事件即時重新整理，支援篩選僅顯示保留裝置；新增 Shift+滾輪全域調節系統總音量，與普通滾輪、Alt+滾輪裝置換軌無縫協同。更多歷史改動詳見 {history}。",
     "docTopic": "主題",
     "docGuides": "指南",
     "docTopics": [
@@ -103,7 +103,7 @@
         "一鍵全域麥克風靜音（快捷鍵 Ctrl+Shift+N），配合螢幕常駐 OSD 浮窗，一眼確認是否閉麥",
         "為各應用指定獨立實體或虛擬軌道，避免錄影時把私人聊天或系統提示音混入錄像"
     ],
-    "editionLiteX64": "Lite x64（.NET 10 預設版）",
+    "editionLiteX64": "Lite x64（.NET 10 推薦首選）",
     "editionLiteArm64": "Lite ARM64（.NET 10）",
     "editionLegacyX64": "Legacy x64（免裝執行庫）",
     "editionStore": "Microsoft Store（商店提供更新）",
@@ -125,5 +125,8 @@
     "editionLiteNet8X64": "Lite NET8 x64",
     "editionLiteNet8Arm64": "Lite NET8 ARM64",
     "aiPromptTitle": "AI 快速總結與省 Token 排錯",
-    "aiPromptBody": "使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查問題、理解架構或編寫腳本時，建議直接參考專用機器規範 {aiDoc}。該文件以高密度結構化 DSL 提煉核心機制與排障決策樹，避免大模型掃描冗長圖文，大幅節省上下文 Token 開銷並秒級定位根因。"
+    "aiPromptBody": "使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查問題、理解架構或編寫腳本時，建議直接參考專用機器規範 {aiDoc}。該文件以高密度結構化 DSL 提煉核心機制與排障決策樹，避免大模型掃描冗長圖文，大幅節省上下文 Token 開銷並秒級定位根因。",
+    "quickStartTitle": "快速上手三步驟",
+    "cliTitle": "命令列與自動化連動（極客推薦）",
+    "releaseHighlightsTitle": "{release} 版本亮點速覽"
 }

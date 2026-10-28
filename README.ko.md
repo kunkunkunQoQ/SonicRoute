@@ -52,31 +52,38 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 **현재 릴리스: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [릴리스 노트(중국어 간체)](docs/release-v1.29.md)
 
-Windows x64에서는 .NET 10 Lite, NET8 호환 Lite, .NET Framework 4.8 Legacy 중에서 선택할 수 있습니다. Store 페이지에는 현재 제공 중인 버전이 표시되며 업데이트는 Store에서 관리합니다. 아래 직접 다운로드 링크는 v1.29용입니다.
+일반 PC 환경에서는 **Lite x64** (단일 실행 파일, 가벼운 메모리 점유)를 권장합니다. 런타임 설치가 제한된 업무용 PC는 **Legacy x64** (추가 설치 불필요, 압축 해제 즉시 실행), ARM64 PC는 **Lite ARM64**를 선택하세요. **Microsoft Store**를 통한 설치 및 자동 업데이트도 지원합니다. 아래 링크는 최신 릴리스 v1.29입니다.
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10 기본) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | 휴대용 단일 실행 파일; x64 .NET 10 Desktop Runtime 필요 |
+| ⭐ Lite x64 (.NET 10 권장) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | 휴대용 단일 실행 파일; x64 .NET 10 Desktop Runtime 필요 |
 | ⚡ Lite ARM64 (.NET 10) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | 휴대용 ARM64 실행 파일; ARM64 .NET 10 Desktop Runtime 필요 |
 | ☕ Lite NET8 x64 | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | NET8 호환 Lite; x64 .NET 8 Desktop Runtime 필요 |
 | ☕ Lite NET8 ARM64 (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | NET8 호환 Lite; ARM64 .NET 8 Desktop Runtime 필요 |
 | 🛡️ Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
 | 🔄 Microsoft Store (Store 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | .NET 10 Store 패키지에는 x64 .NET 10 Desktop Runtime이 필요합니다. 현재 제공 중인 버전은 Store 페이지에서 확인하세요(64비트 Windows 10/11). |
 
-기본 Lite에는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), NET8 호환 Lite에는 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)이 필요합니다. NET8 버전은 2026년 11월 이후 제공 및 유지보수가 종료됩니다. 이후 x64 사용자는 .NET 10 또는 Legacy(.NET Framework 4.8)를 직접 선택하고, ARM64 사용자는 .NET 10을 선택하세요.
+> [!NOTE]
+> 런타임 안내: 기본 Lite는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0), NET8 호환 버전은 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 설치가 필요합니다 (2026년 11월 이후 지원 종료 예정으로 .NET 10 또는 Legacy 전환 권장). Legacy 버전은 Windows 내장 .NET Framework 4.8을 사용하여 추가 설치가 필요 없습니다.
 
-1. **실행 및 트레이 상주**: 더블 클릭하여 실행하면 트레이 영역에 상주합니다. 트레이 아이콘을 더블 클릭하여 메인 창을 엽니다.
-2. **장치 선택 및 라우팅**: '설정 → 유지할 장치'에서 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 열고, 슬라이더로 앱별 사운드를 즉시 라우팅합니다.
-3. **편리한 블라인드 제어:** 마우스를 트레이 아이콘에 올리고 휠을 굴려 볼륨을 조절하거나 Alt+휠로 장치를 전환하세요. 단축키 및 자동화 규칙과 연동하여 전체 화면 게임 중에도 손쉽게 제어할 수 있습니다.
+### 🏁 3단계 빠른 시작
 
-`sr`을 처음 사용하기 전에 SonicRoute를 일반 실행해 명령을 등록한 다음 터미널을 다시 여세요. 장치 전환이 예상대로 작동하지 않으면 [자주 묻는 질문](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)를 참고하세요.
+1. **실행 및 트레이 고정**: 더블 클릭하여 실행하면 작업 표시줄 트레이에 상주합니다 (오버플로 영역에서 밖으로 끌어내어 항상 표시 권장). 트레이 아이콘을 더블 클릭하면 메인 창이 열립니다.
+2. **장치 선택 및 앱 라우팅**: '설정 → 보존할 장치'에서 사용하는 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 열고 슬라이더로 앱별 출력 장치와 볼륨을 즉시 조절합니다.
+3. **트레이 휠 블라인드 조절**: 작업 표시줄 트레이 영역에 마우스를 올리고 휠을 굴려 앱 볼륨을 조절하고, Alt+휠로 장치를 즉시 전환하며, Shift+휠로 시스템 마스터 볼륨을 조절할 수 있습니다. 게임 중 화면을 전환하지 않고 손쉽게 제어하세요.
+
+### ⚡ CLI 및 자동화 연동 (파워 유저)
+
+`sr` 명령은 Named Pipe를 통해 실행 중인 SonicRoute 인스턴스와 밀리초 단위로 통신합니다 (앱이 실행 중이지 않으면 시작되지 않습니다). 앱을 처음 실행하면 명령어가 등록되며, 터미널 재시작 후 스크립트, AutoHotkey, Stream Deck에서 직접 호출할 수 있습니다. 자세한 내용은 [자주 묻는 질문](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)를 참조하세요.
 
 ```bash
 # 자동화 규칙 트리거 (SonicRoute가 실행 중이어야 함)
 sr "규칙 이름 또는 ID"
 ```
 
-1.29에서는 필요할 때 로드되고 이벤트로 갱신되는 추가 패널에서 모든 출력 장치의 마스터 볼륨을 조절할 수 있으며, 유지 장치만 표시하도록 필터링할 수도 있습니다. Shift+휠은 시스템 볼륨을 조절하고 기존 휠, Alt+휠, Alt+Shift+휠 동작은 유지됩니다. 이전 변경 사항: [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)
+### 🆕 v1.29 릴리스 주요 변경사항
+
+v1.29에서는 시스템 이벤트 기반 온디맨드 갱신과 보존 장치 필터링을 지원하는 출력 장치 볼륨 패널이 추가되었습니다. 또한 마스터 볼륨 조절을 위한 Shift+휠 동작이 추가되어 기존 앱 볼륨 조절 및 Alt+휠 장치 전환과 유기적으로 작동합니다. 자세한 이력은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)를 확인하세요.
 
 ### ❓ 자주 묻는 질문 (FAQ)
 

@@ -52,31 +52,38 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 
 **Aktuelle Version: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [Versionshinweise (Chinesisch)](docs/release-v1.29.md)
 
-Für Windows-x64-Systeme stehen Lite mit .NET 10, eine NET8-kompatible Lite-Version und Legacy mit .NET Framework 4.8 zur Auswahl. Die Store-Seite zeigt die dort verfügbare Version und verwendet Store-Updates. Die direkten Downloadlinks unten gelten für v1.29.
+Die meisten Nutzer sollten **Lite x64** wählen (portable Einzeldatei, minimale Speichernutzung); für restriktive Firmen-PCs empfiehlt sich **Legacy x64** (keine zusätzliche Runtime erforderlich, entpacken und starten); für ARM64-Geräte steht **Lite ARM64** bereit. Zudem kann die App über den **Microsoft Store** mit automatischen Updates installiert werden. Die folgenden Links beziehen sich auf v1.29.
 
 | Version | Herunterladen | Voraussetzungen |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10, Standard) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime |
+| ⭐ Lite x64 (.NET 10, Empfohlen) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime |
 | ⚡ Lite ARM64 (.NET 10) (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | Portable ARM64-Datei; benötigt die passende ARM64 .NET 10 Desktop Runtime |
 | ☕ Lite NET8 x64 | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | NET8-kompatible Lite-Datei; benötigt die x64 .NET 8 Desktop Runtime |
 | ☕ Lite NET8 ARM64 (experimentell) | [Einzelne EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | NET8-kompatible Lite-Datei; benötigt die ARM64 .NET 8 Desktop Runtime |
 | 🛡️ Legacy x64 (Ohne .NET 8) | [Vollständiges ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten |
 | 🔄 Microsoft Store (Updates über Store) | [Aus dem Store installieren](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Das NET10-Store-Paket benötigt die x64 .NET 10 Desktop Runtime. Welche Version aktuell im Store verfügbar ist, zeigt die Store-Seite; für 64-Bit Windows 10/11. |
 
-Lite Standard benötigt [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); die NET8-kompatible Lite-Version benötigt [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). Die NET8-Version wird nach November 2026 nicht mehr angeboten oder gewartet. Danach wählen x64-Nutzer manuell .NET 10 oder Legacy (.NET Framework 4.8); ARM64-Nutzer wählen .NET 10.
+> [!NOTE]
+> Laufzeitumgebung: Standard-Lite erfordert [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); die NET8-kompatible Version benötigt [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (Wartung endet nach November 2026; Wechsel zu .NET 10 oder Legacy empfohlen). Die Legacy-Edition nutzt das im System integrierte .NET Framework 4.8 und benötigt keine zusätzlichen Runtimes.
 
-1. **Starten & im Tray behalten**: Doppelklicken zum Starten; bleibt im Infobereich aktiv. Doppelklick auf das Tray-Symbol öffnet das Hauptfenster.
-2. **Geräte wählen & weiterleiten**: Aktivieren Sie Kopfhörer und Lautsprecher unter Einstellungen → Behaltene Geräte. Linksklick auf das Tray-Symbol öffnet das Schnellbedienfeld zum sofortigen Weiterleiten.
-3. **Mühelose Blindbedienung.** Bewegen Sie die Maus über das Tray-Symbol und scrollen Sie zur Lautstärkeregelung oder mit Alt+Mausrad zum schnellen Gerätewechsel; steuern Sie Ihr Audio ohne Verlassen von Vollbild-Spielen.
+### 🏁 Schnellstart in 3 Schritten
 
-Bevor du `sr` zum ersten Mal verwendest, starte SonicRoute normal, damit der Befehl registriert wird, und öffne anschließend dein Terminal erneut. Wenn der Gerätewechsel nicht wie erwartet funktioniert, findest du Hilfe in den [Häufige Fragen](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
+1. **Starten & im Infobereich anheften**: Per Doppelklick starten; SonicRoute bleibt im Windows-Infobereich aktiv (ziehen Sie das Symbol am besten dauerhaft in die Taskleiste). Ein Doppelklick öffnet das Hauptfenster.
+2. **Geräte auswählen & Audio zuweisen**: Unter „Einstellungen → Beibehaltene Geräte“ bevorzugte Kopfhörer und Lautsprecher aktivieren. Ein Klick auf das Tray-Symbol öffnet das Schnell-Panel zum sofortigen Zuweisen und Einstellen der Lautstärke jeder App.
+3. **Blindsteuerung über das Tray-Rad**: Maus über den Infobereich bewegen und mit dem Mausrad die App-Lautstärke anpassen, mit Alt+Rad Geräte umschalten und mit Shift+Rad die Gesamtlautstärke regeln – nahtlose Steuerung ohne Vollbildspiele verlassen zu müssen.
+
+### ⚡ CLI & Automationsintegration (Power-User)
+
+Der Befehl `sr` kommuniziert über Named Pipes in Millisekunden mit einer laufenden SonicRoute-Instanz (startet die App nicht, wenn sie geschlossen ist). Nach dem ersten Start ist der Pfad registriert; nach Neustart des Terminals kann `sr` in Skripten, AutoHotkey oder auf dem Stream Deck verwendet werden. Siehe [Häufige Fragen](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
 ```bash
 # Automatisierungsregel ausführen (SonicRoute muss bereits laufen)
 sr "Regelname oder ID"
 ```
 
-1.29 ergänzt ein Zusatzpanel mit Hauptlautstärkereglern für alle Ausgabegeräte, optional nur für behaltene Geräte, das bei Bedarf geladen und ereignisgesteuert aktualisiert wird. Shift+Rad regelt die Systemlautstärke; die bisherigen Funktionen von Rad, Alt+Rad und Alt+Umschalt+Rad bleiben erhalten. Frühere Änderungen: [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+### 🆕 v1.29 Release-Highlights
+
+In Version 1.29 wurde ein separates Lautstärkepanel für Ausgabegeräte ergänzt, das ereignisgesteuert aktualisiert wird und auf Wunsch nur beibehaltene Geräte filtert. Zudem lässt sich mit Shift+Mausrad nun die Master-Lautstärke direkt über die Taskleiste regeln. Frühere Änderungen siehe [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Häufig gestellte Fragen (FAQ)
 

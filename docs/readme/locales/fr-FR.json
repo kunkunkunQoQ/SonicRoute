@@ -15,7 +15,7 @@
     "featuresTitle": "Ce que propose SonicRoute",
     "downloadTitle": "Télécharger et commencer",
     "releaseNotes": "Notes de version (en chinois)",
-    "downloadIntro": "Sous Windows x64, choisissez Lite avec .NET 10, Lite compatible NET8 ou Legacy avec .NET Framework 4.8. La page du Store indique la version qui y est disponible et les mises à jour passent par le Store. Les liens directs ci-dessous correspondent à {release}.",
+    "downloadIntro": "Pour la plupart des utilisateurs, **Lite x64** est le meilleur choix (exécutable unique et portable, faible empreinte mémoire) ; privilégiez **Legacy x64** pour les PC professionnels restreints (aucun runtime externe requis, décompressez et lancez) ; pour les machines ARM64, utilisez **Lite ARM64**. Disponible également sur le **Microsoft Store** avec mises à jour automatiques. Liens directs pour {release} ci-dessous.",
     "edition": "Édition",
     "requirements": "Configuration requise",
     "singleExe": "Un seul EXE",
@@ -24,13 +24,13 @@
     "liteRequirement": "Exécutable portable à fichier unique ; nécessite le .NET 10 Desktop Runtime x64",
     "legacyRequirement": "Aucun .NET 8 requis ; s'exécute directement via le .NET Framework 4.8 intégré ; décompressez le ZIP",
     "storeRequirement": "Le paquet Store .NET 10 nécessite le .NET 10 Desktop Runtime x64. Consultez la page du Store pour connaître la version actuellement disponible ; pour Windows 10/11 64 bits.",
-    "runtimeNote": "Lite standard nécessite {runtime} ; Lite compatible NET8 nécessite {runtime8}. L’édition NET8 ne sera plus proposée ni maintenue après novembre 2026. Ensuite, les utilisateurs x64 pourront choisir manuellement .NET 10 ou Legacy (.NET Framework 4.8) ; les utilisateurs ARM64 devront choisir .NET 10.",
+    "runtimeNote": "Exigences d'exécution : Lite standard requiert {runtime} ; la version compatible NET8 nécessite {runtime8} (fin de maintenance après novembre 2026 ; transition conseillée vers .NET 10 ou Legacy). La version Legacy fonctionne directement avec .NET Framework 4.8 sans installation supplémentaire.",
     "steps": [
-        "**Lancer & garder en barre des tâches** : Double-cliquez pour démarrer ; reste actif dans la zone de notification. Double-cliquez sur l'icône pour ouvrir la fenêtre principale.",
-        "**Sélectionner & router les périphériques** : Cochez vos casques et haut-parleurs dans Paramètres → Périphériques conservés. Cliquez sur l'icône pour afficher le panneau rapide et router chaque application.",
-        "**Contrôle intuitif à l'aveugle.** Survolez l'icône de la barre des tâches pour régler le volume ou changez instantanément de périphérique avec Alt+molette ; combiné aux raccourcis et à l'automatisation, contrôlez le son sans quitter vos jeux plein écran."
+        "**Lancer et épingler dans la zone de notification** : Double-cliquez pour exécuter ; SonicRoute reste dans la barre des tâches (glissez l'icône hors du menu déroulant pour la garder visible). Un double-clic ouvre la fenêtre principale.",
+        "**Sélectionner les appareils et assigner** : Cochez vos casques et enceintes dans « Paramètres → Appareils conservés ». Un clic gauche sur l'icône ouvre le panneau rapide pour router chaque application et régler ses curseurs de volume.",
+        "**Contrôle à l'aveugle via la molette** : Survolez la zone de notification et tournez la molette pour ajuster le volume de l'application, Alt+molette pour changer d'appareil et Shift+molette pour le volume général du système, sans quitter votre jeu en plein écran."
     ],
-    "commandNote": "Avant d’utiliser `sr` pour la première fois, lancez SonicRoute normalement pour enregistrer la commande, puis ouvrez de nouveau votre terminal. Si le changement de périphérique ne fonctionne pas comme prévu, consultez la {faq}.",
+    "commandNote": "La commande `sr` dialogue via tube nommé (Named Pipe) en quelques millisecondes avec l'instance SonicRoute active (ne démarre pas l'application si absente). Lancez le logiciel une première fois pour déclarer la commande, puis redémarrez votre terminal pour l'utiliser dans vos scripts, AutoHotkey ou Stream Deck. Détails dans {faq}.",
     "ruleExample": "Nom ou ID de la règle",
     "docsTitle": "Documentation",
     "wikiNote": "Le Wiki est actuellement en chinois simplifié.",
@@ -51,7 +51,7 @@
     "configureAutomation": "Configurer l’automatisation",
     "automationExample": "Transformez les réglages manuels fastidieux en une expérience automatisée prête à l'emploi.",
     "currentRelease": "Version actuelle",
-    "releaseSummary": "{version} ajoute un panneau supplémentaire avec les commandes de volume principal de tous les périphériques de sortie, chargé à la demande et actualisé par événements, avec une option pour filtrer les périphériques conservés. Maj+molette règle le volume système ; les actions existantes de la molette, Alt+molette et Alt+Maj+molette sont conservées. Changements précédents : {history}.",
+    "releaseSummary": "La version 1.29 intègre un panneau de gestion du volume des périphériques de sortie rafraîchi par les événements système avec filtrage des appareils conservés. Elle ajoute aussi le réglage du volume général système par Shift+molette, en complément du routage Alt+molette. Historique complet dans {history}.",
     "docTopic": "Sujet",
     "docGuides": "Guides",
     "docTopics": [
@@ -103,7 +103,7 @@
         "Coupez tous les micros avec Ctrl+Maj+N et confirmez l'état en un coup d'œil grâce à la bannière OSD à l'écran",
         "Attribuez des pistes audio distinctes par application pour ne jamais inclure vos conversations privées en vidéo"
     ],
-    "editionLiteX64": "Lite x64 (.NET 10, standard)",
+    "editionLiteX64": "Lite x64 (.NET 10, Recommandé)",
     "editionLiteArm64": "Lite ARM64 (.NET 10)",
     "editionLegacyX64": "Legacy x64 (Sans .NET 8)",
     "editionStore": "Microsoft Store (mises à jour du Store)",
@@ -125,5 +125,8 @@
     "editionLiteNet8X64": "Lite NET8 x64",
     "editionLiteNet8Arm64": "Lite NET8 ARM64",
     "aiPromptTitle": "Résumé IA et dépannage à faible consommation de tokens",
-    "aiPromptBody": "Si vous utilisez des assistants IA (comme Cursor, Copilot, ChatGPT ou Claude) pour diagnostiquer un problème, comprendre l'architecture ou concevoir des scripts, nous vous recommandons de consulter {aiDoc}. Rédigé dans un DSL structuré haute densité pour les LLM, il évite les textes verbeux, réduit considérablement la consommation de tokens et cible la cause racine en quelques secondes."
+    "aiPromptBody": "Si vous utilisez des assistants IA (comme Cursor, Copilot, ChatGPT ou Claude) pour diagnostiquer un problème, comprendre l'architecture ou concevoir des scripts, nous vous recommandons de consulter {aiDoc}. Rédigé dans un DSL structuré haute densité pour les LLM, il évite les textes verbeux, réduit considérablement la consommation de tokens et cible la cause racine en quelques secondes.",
+    "quickStartTitle": "Prise en main rapide en 3 étapes",
+    "cliTitle": "CLI et automatisation (Power Users)",
+    "releaseHighlightsTitle": "Points forts de la version {release}"
 }

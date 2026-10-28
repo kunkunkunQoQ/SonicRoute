@@ -15,7 +15,7 @@
     "featuresTitle": "Qué ofrece SonicRoute",
     "downloadTitle": "Descarga y primeros pasos",
     "releaseNotes": "Notas de la versión (en chino)",
-    "downloadIntro": "En Windows x64, elige Lite con .NET 10, Lite compatible con NET8 o Legacy con .NET Framework 4.8. La página de Store muestra la versión disponible allí y las actualizaciones se gestionan desde Store. Los enlaces directos siguientes corresponden a {release}.",
+    "downloadIntro": "Para la mayoría de usuarios se recomienda **Lite x64** (ejecutable único portátil, bajo consumo de memoria); use **Legacy x64** en equipos de trabajo restringidos (sin necesidad de runtime externo, descomprimir y ejecutar); elija **Lite ARM64** para equipos ARM64. También disponible en la **Microsoft Store** con actualizaciones automáticas. Enlaces directos para {release} a continuación.",
     "edition": "Edición",
     "requirements": "Requisitos",
     "singleExe": "Un solo EXE",
@@ -24,13 +24,13 @@
     "liteRequirement": "Ejecutable portátil de un solo archivo; requiere .NET 10 Desktop Runtime x64",
     "legacyRequirement": "No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP",
     "storeRequirement": "El paquete de Store con .NET 10 requiere .NET 10 Desktop Runtime x64. Consulta la página de Store para ver la versión disponible actualmente; para Windows 10/11 de 64 bits.",
-    "runtimeNote": "Lite estándar requiere {runtime}; Lite compatible con NET8 requiere {runtime8}. La edición NET8 dejará de ofrecerse y mantenerse después de noviembre de 2026. Desde entonces, en x64 se podrá elegir manualmente .NET 10 o Legacy (.NET Framework 4.8); en ARM64, .NET 10.",
+    "runtimeNote": "Requisitos de entorno: La edición estándar Lite requiere {runtime}; la edición NET8 requiere {runtime8} (mantenimiento finaliza tras noviembre de 2026; se recomienda migrar a .NET 10 o Legacy). La edición Legacy aprovecha el .NET Framework 4.8 integrado en Windows y no necesita instalación adicional.",
     "steps": [
-        "**Iniciar y mantener en bandeja**: Haz doble clic para iniciar; permanece en la bandeja del sistema. Doble clic en el icono para abrir la ventana principal.",
-        "**Seleccionar y enrutar dispositivos**: Marca tus auriculares y altavoces en Configuración → Dispositivos conservados. Clic izquierdo para abrir el panel rápido y enrutar cada app al instante.",
-        "**Control ciego sin esfuerzo.** Pasa el ratón sobre el icono de la bandeja y gira la rueda para ajustar el volumen o usa Alt+rueda para cambiar de dispositivo; combinado con atajos y automatización, controla el audio sin salir del juego."
+        "**Iniciar y anclar a la bandeja** : Haga doble clic para iniciar; SonicRoute permanece residente en la bandeja del sistema (arrastre el icono para mantenerlo visible). Un doble clic abre la ventana principal.",
+        "**Elegir dispositivos y enrutar** : Marque sus auriculares y altavoces en «Ajustes → Dispositivos conservados». Un clic izquierdo en la bandeja despliega el panel rápido para enrutar cada app y ajustar su volumen.",
+        "**Control a ciegas desde la bandeja** : Pase el cursor sobre el área de la bandeja y use la rueda para ajustar el volumen de la app, Alt+rueda para conmutar dispositivos y Shift+rueda para el volumen general, sin tener que salir del juego en pantalla completa."
     ],
-    "commandNote": "Antes de usar `sr` por primera vez, inicia SonicRoute con normalidad para registrar el comando y vuelve a abrir el terminal. Si el cambio de dispositivo no funciona como esperabas, consulta las {faq}.",
+    "commandNote": "El comando `sr` se comunica mediante Named Pipe en milisegundos con la instancia activa de SonicRoute (no inicia la aplicación si está cerrada). Al iniciar la app por primera vez se registra el comando; reinicie el terminal para usarlo desde scripts, AutoHotkey o Stream Deck. Consulte {faq}.",
     "ruleExample": "Nombre o ID de la regla",
     "docsTitle": "Documentación",
     "wikiNote": "La Wiki está actualmente en chino simplificado.",
@@ -51,7 +51,7 @@
     "configureAutomation": "Configurar automatización",
     "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
     "currentRelease": "Versión actual",
-    "releaseSummary": "{version} añade un panel adicional con controles de volumen principal para todos los dispositivos de salida, con carga bajo demanda y actualización por eventos, y opción para mostrar solo los dispositivos conservados. Shift+rueda ajusta el volumen del sistema; se mantienen las funciones de rueda, Alt+rueda y Alt+Mayús+rueda. Cambios anteriores: {history}.",
+    "releaseSummary": "La versión 1.29 añade un panel de volumen para dispositivos de salida actualizado por eventos del sistema y con filtro para dispositivos conservados, además del ajuste de volumen general mediante Shift+rueda en combinación con el enrutamiento Alt+rueda. Registro de cambios en {history}.",
     "docTopic": "Tema",
     "docGuides": "Guías",
     "docTopics": [
@@ -103,7 +103,7 @@
         "Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla",
         "Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación"
     ],
-    "editionLiteX64": "Lite x64 (.NET 10, estándar)",
+    "editionLiteX64": "Lite x64 (.NET 10, Recomendado)",
     "editionLiteArm64": "Lite ARM64 (.NET 10)",
     "editionLegacyX64": "Legacy x64 (Sin .NET 8)",
     "editionStore": "Microsoft Store (actualizaciones de Store)",
@@ -125,5 +125,8 @@
     "editionLiteNet8X64": "Lite NET8 x64",
     "editionLiteNet8Arm64": "Lite NET8 ARM64",
     "aiPromptTitle": "Resumen con IA y resolución de problemas con ahorro de tokens",
-    "aiPromptBody": "Al utilizar asistentes de IA (como Cursor, Copilot, ChatGPT o Claude) para diagnosticar fallos, comprender la arquitectura o crear scripts, se recomienda consultar {aiDoc}. Diseñado en un DSL estructurado de alta densidad para LLM, evita textos extensos, reduce notablemente el gasto de tokens y localiza la causa raíz en cuestión de segundos."
+    "aiPromptBody": "Al utilizar asistentes de IA (como Cursor, Copilot, ChatGPT o Claude) para diagnosticar fallos, comprender la arquitectura o crear scripts, se recomienda consultar {aiDoc}. Diseñado en un DSL estructurado de alta densidad para LLM, evita textos extensos, reduce notablemente el gasto de tokens y localiza la causa raíz en cuestión de segundos.",
+    "quickStartTitle": "Inicio rápido en 3 pasos",
+    "cliTitle": "Línea de comandos y automatización (Avanzado)",
+    "releaseHighlightsTitle": "Aspectos destacados de la versión {release}"
 }

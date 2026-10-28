@@ -52,31 +52,38 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de 
 
 **Versión actual: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [Notas de la versión (en chino)](docs/release-v1.29.md)
 
-En Windows x64, elige Lite con .NET 10, Lite compatible con NET8 o Legacy con .NET Framework 4.8. La página de Store muestra la versión disponible allí y las actualizaciones se gestionan desde Store. Los enlaces directos siguientes corresponden a v1.29.
+Para la mayoría de usuarios se recomienda **Lite x64** (ejecutable único portátil, bajo consumo de memoria); use **Legacy x64** en equipos de trabajo restringidos (sin necesidad de runtime externo, descomprimir y ejecutar); elija **Lite ARM64** para equipos ARM64. También disponible en la **Microsoft Store** con actualizaciones automáticas. Enlaces directos para v1.29 a continuación.
 
 | Edición | Descargar | Requisitos |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10, estándar) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Ejecutable portátil de un solo archivo; requiere .NET 10 Desktop Runtime x64 |
+| ⭐ Lite x64 (.NET 10, Recomendado) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Ejecutable portátil de un solo archivo; requiere .NET 10 Desktop Runtime x64 |
 | ⚡ Lite ARM64 (.NET 10) (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | Ejecutable portátil ARM64; requiere .NET 10 Desktop Runtime ARM64 |
 | ☕ Lite NET8 x64 | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | Lite compatible con NET8; requiere .NET 8 Desktop Runtime x64 |
 | ☕ Lite NET8 ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Lite compatible con NET8; requiere .NET 8 Desktop Runtime ARM64 |
 | 🛡️ Legacy x64 (Sin .NET 8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP |
 | 🔄 Microsoft Store (actualizaciones de Store) | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | El paquete de Store con .NET 10 requiere .NET 10 Desktop Runtime x64. Consulta la página de Store para ver la versión disponible actualmente; para Windows 10/11 de 64 bits. |
 
-Lite estándar requiere [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Lite compatible con NET8 requiere [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0). La edición NET8 dejará de ofrecerse y mantenerse después de noviembre de 2026. Desde entonces, en x64 se podrá elegir manualmente .NET 10 o Legacy (.NET Framework 4.8); en ARM64, .NET 10.
+> [!NOTE]
+> Requisitos de entorno: La edición estándar Lite requiere [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); la edición NET8 requiere [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (mantenimiento finaliza tras noviembre de 2026; se recomienda migrar a .NET 10 o Legacy). La edición Legacy aprovecha el .NET Framework 4.8 integrado en Windows y no necesita instalación adicional.
 
-1. **Iniciar y mantener en bandeja**: Haz doble clic para iniciar; permanece en la bandeja del sistema. Doble clic en el icono para abrir la ventana principal.
-2. **Seleccionar y enrutar dispositivos**: Marca tus auriculares y altavoces en Configuración → Dispositivos conservados. Clic izquierdo para abrir el panel rápido y enrutar cada app al instante.
-3. **Control ciego sin esfuerzo.** Pasa el ratón sobre el icono de la bandeja y gira la rueda para ajustar el volumen o usa Alt+rueda para cambiar de dispositivo; combinado con atajos y automatización, controla el audio sin salir del juego.
+### 🏁 Inicio rápido en 3 pasos
 
-Antes de usar `sr` por primera vez, inicia SonicRoute con normalidad para registrar el comando y vuelve a abrir el terminal. Si el cambio de dispositivo no funciona como esperabas, consulta las [Preguntas frecuentes](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
+1. **Iniciar y anclar a la bandeja** : Haga doble clic para iniciar; SonicRoute permanece residente en la bandeja del sistema (arrastre el icono para mantenerlo visible). Un doble clic abre la ventana principal.
+2. **Elegir dispositivos y enrutar** : Marque sus auriculares y altavoces en «Ajustes → Dispositivos conservados». Un clic izquierdo en la bandeja despliega el panel rápido para enrutar cada app y ajustar su volumen.
+3. **Control a ciegas desde la bandeja** : Pase el cursor sobre el área de la bandeja y use la rueda para ajustar el volumen de la app, Alt+rueda para conmutar dispositivos y Shift+rueda para el volumen general, sin tener que salir del juego en pantalla completa.
+
+### ⚡ Línea de comandos y automatización (Avanzado)
+
+El comando `sr` se comunica mediante Named Pipe en milisegundos con la instancia activa de SonicRoute (no inicia la aplicación si está cerrada). Al iniciar la app por primera vez se registra el comando; reinicie el terminal para usarlo desde scripts, AutoHotkey o Stream Deck. Consulte [Preguntas frecuentes](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
 ```bash
 # Ejecutar regla de automatización (SonicRoute debe estar en ejecución)
 sr "Nombre o ID de la regla"
 ```
 
-1.29 añade un panel adicional con controles de volumen principal para todos los dispositivos de salida, con carga bajo demanda y actualización por eventos, y opción para mostrar solo los dispositivos conservados. Shift+rueda ajusta el volumen del sistema; se mantienen las funciones de rueda, Alt+rueda y Alt+Mayús+rueda. Cambios anteriores: [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+### 🆕 Aspectos destacados de la versión v1.29
+
+La versión 1.29 añade un panel de volumen para dispositivos de salida actualizado por eventos del sistema y con filtro para dispositivos conservados, además del ajuste de volumen general mediante Shift+rueda en combinación con el enrutamiento Alt+rueda. Registro de cambios en [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Preguntas frecuentes (FAQ)
 

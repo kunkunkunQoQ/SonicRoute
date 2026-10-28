@@ -15,7 +15,7 @@
     "featuresTitle": "What SonicRoute offers",
     "downloadTitle": "Download and get started",
     "releaseNotes": "Release notes (Chinese)",
-    "downloadIntro": "For Windows x64, choose Lite with .NET 10, the NET8-compatible Lite edition, or Legacy with .NET Framework 4.8. The Store page shows the version currently available there and uses Store updates. Direct download links below are for {release}.",
+    "downloadIntro": "Most users should choose Lite x64 (portable single file, top memory efficiency); choose Legacy x64 for restricted office PCs (no extra runtime required, extract and run); choose Lite ARM64 for ARM64 PCs. You can also install from the Microsoft Store for automatic updates. Direct download links below are for {release}.",
     "edition": "Version",
     "requirements": "Requirements",
     "singleExe": "Single EXE",
@@ -24,13 +24,13 @@
     "liteRequirement": "Portable single-file executable; requires the matching x64 .NET 10 Desktop Runtime",
     "legacyRequirement": "No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use",
     "storeRequirement": "The .NET 10 Store package requires the x64 .NET 10 Desktop Runtime. See the Store page for the version currently available there; for 64-bit Windows 10/11.",
-    "runtimeNote": "Standard Lite requires {runtime}; NET8-compatible Lite requires {runtime8}. The NET8 edition will no longer be offered or maintained after November 2026. After that, x64 users can choose .NET 10 or Legacy (.NET Framework 4.8); ARM64 users should choose .NET 10.",
+    "runtimeNote": "Runtime requirements: Standard Lite requires {runtime}; NET8-compatible Lite requires {runtime8} (maintenance ends after November 2026; migrate to .NET 10 or Legacy). Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation.",
     "steps": [
-        "**Launch & Keep in Tray**: Double-click to start; it stays in your system tray (drag it out of the overflow menu to keep it visible). Double-click the tray icon to open the main window.",
+        "**Launch & Keep in Tray**: Double-click to start; SonicRoute stays in your system tray (drag it out of the overflow menu to keep it pinned). Double-click the tray icon to open the main window.",
         "**Select & Route Devices**: Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.",
-        "**Effortless blind control.** Move your mouse over the tray icon and scroll to adjust volume or Alt+scroll to switch devices; combined with hotkeys and automation, control your audio without leaving full-screen games."
+        "**Tray Blind Control & Shortcuts**: Hover over the system tray and scroll to adjust app volume, Alt+scroll to switch audio routes, or Shift+scroll for master volume; combine with global mute hotkeys and automation for seamless in-game control."
     ],
-    "commandNote": "`sr` connects only to an already-running SonicRoute instance; it does not start the app. Before first use, start SonicRoute normally to register the command, then close and reopen your terminal. See the {faq} if device switching does not work as expected.",
+    "commandNote": "The `sr` command communicates with a running SonicRoute instance via named pipe in milliseconds (will not start an instance if absent). Launch SonicRoute once to register the command, then restart your terminal to integrate with scripts, AutoHotkey, or Stream Deck. If needed, refer to {faq}.",
     "ruleExample": "Rule name or ID",
     "docsTitle": "Documentation",
     "wikiNote": "The Wiki is currently in Chinese.",
@@ -51,7 +51,7 @@
     "configureAutomation": "Set up automation",
     "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease": "Current release",
-    "releaseSummary": "{version} adds an on-demand, event-refreshed panel with main volume controls for all output devices, optionally filtered to retained devices. Shift+wheel adjusts system volume; the existing wheel, Alt+wheel, and Alt+Shift+wheel actions remain. Earlier changes: {history}.",
+    "releaseSummary": "v1.29 adds an output device volume panel refreshed on demand by system events, supporting filtered views of preserved devices; adds Shift+wheel for system master volume alongside existing app volume and Alt+wheel device routing. See {history} for full release notes.",
     "docTopic": "Topic",
     "docGuides": "Guides",
     "docTopics": [
@@ -103,7 +103,7 @@
         "Mute all microphones with Ctrl+Shift+N and confirm mute state instantly via the on-screen OSD banner",
         "Route applications to dedicated physical or virtual audio tracks so private chats and alerts never end up in recordings"
     ],
-    "editionLiteX64": "Lite x64 (.NET 10, Standard)",
+    "editionLiteX64": "Lite x64 (.NET 10, Recommended)",
     "editionLiteArm64": "Lite ARM64 (.NET 10)",
     "editionLegacyX64": "Legacy x64 (No .NET 8 required)",
     "editionStore": "Microsoft Store (Store updates)",
@@ -125,5 +125,8 @@
     "editionLiteNet8X64": "Lite NET8 x64",
     "editionLiteNet8Arm64": "Lite NET8 ARM64",
     "aiPromptTitle": "AI Summaries & Low-Token Troubleshooting",
-    "aiPromptBody": "When using AI assistants (such as Cursor, Copilot, ChatGPT, or Claude) to troubleshoot issues, explore architecture, or write scripts, refer directly to {aiDoc}. Structured in a high-density DSL specifically for LLMs, it eliminates verbose prose, drastically reduces token consumption, and helps AI pinpoint root causes in seconds."
+    "aiPromptBody": "When using AI assistants (such as Cursor, Copilot, ChatGPT, or Claude) to troubleshoot issues, explore architecture, or write scripts, refer directly to {aiDoc}. Structured in a high-density DSL specifically for LLMs, it eliminates verbose prose, drastically reduces token consumption, and helps AI pinpoint root causes in seconds.",
+    "quickStartTitle": "3-Step Quick Start",
+    "cliTitle": "CLI & Automation Integration",
+    "releaseHighlightsTitle": "{release} Release Highlights"
 }

@@ -15,7 +15,7 @@
     "featuresTitle": "SonicRoute의 주요 기능",
     "downloadTitle": "다운로드 및 시작하기",
     "releaseNotes": "릴리스 노트(중국어 간체)",
-    "downloadIntro": "Windows x64에서는 .NET 10 Lite, NET8 호환 Lite, .NET Framework 4.8 Legacy 중에서 선택할 수 있습니다. Store 페이지에는 현재 제공 중인 버전이 표시되며 업데이트는 Store에서 관리합니다. 아래 직접 다운로드 링크는 {release}용입니다.",
+    "downloadIntro": "일반 PC 환경에서는 **Lite x64** (단일 실행 파일, 가벼운 메모리 점유)를 권장합니다. 런타임 설치가 제한된 업무용 PC는 **Legacy x64** (추가 설치 불필요, 압축 해제 즉시 실행), ARM64 PC는 **Lite ARM64**를 선택하세요. **Microsoft Store**를 통한 설치 및 자동 업데이트도 지원합니다. 아래 링크는 최신 릴리스 {release}입니다.",
     "edition": "에디션",
     "requirements": "요구 사항",
     "singleExe": "단일 EXE",
@@ -24,13 +24,13 @@
     "liteRequirement": "휴대용 단일 실행 파일; x64 .NET 10 Desktop Runtime 필요",
     "legacyRequirement": "추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행",
     "storeRequirement": ".NET 10 Store 패키지에는 x64 .NET 10 Desktop Runtime이 필요합니다. 현재 제공 중인 버전은 Store 페이지에서 확인하세요(64비트 Windows 10/11).",
-    "runtimeNote": "기본 Lite에는 {runtime}, NET8 호환 Lite에는 {runtime8}이 필요합니다. NET8 버전은 2026년 11월 이후 제공 및 유지보수가 종료됩니다. 이후 x64 사용자는 .NET 10 또는 Legacy(.NET Framework 4.8)를 직접 선택하고, ARM64 사용자는 .NET 10을 선택하세요.",
+    "runtimeNote": "런타임 안내: 기본 Lite는 {runtime}, NET8 호환 버전은 {runtime8} 설치가 필요합니다 (2026년 11월 이후 지원 종료 예정으로 .NET 10 또는 Legacy 전환 권장). Legacy 버전은 Windows 내장 .NET Framework 4.8을 사용하여 추가 설치가 필요 없습니다.",
     "steps": [
-        "**실행 및 트레이 상주**: 더블 클릭하여 실행하면 트레이 영역에 상주합니다. 트레이 아이콘을 더블 클릭하여 메인 창을 엽니다.",
-        "**장치 선택 및 라우팅**: '설정 → 유지할 장치'에서 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 열고, 슬라이더로 앱별 사운드를 즉시 라우팅합니다.",
-        "**편리한 블라인드 제어:** 마우스를 트레이 아이콘에 올리고 휠을 굴려 볼륨을 조절하거나 Alt+휠로 장치를 전환하세요. 단축키 및 자동화 규칙과 연동하여 전체 화면 게임 중에도 손쉽게 제어할 수 있습니다."
+        "**실행 및 트레이 고정**: 더블 클릭하여 실행하면 작업 표시줄 트레이에 상주합니다 (오버플로 영역에서 밖으로 끌어내어 항상 표시 권장). 트레이 아이콘을 더블 클릭하면 메인 창이 열립니다.",
+        "**장치 선택 및 앱 라우팅**: '설정 → 보존할 장치'에서 사용하는 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 열고 슬라이더로 앱별 출력 장치와 볼륨을 즉시 조절합니다.",
+        "**트레이 휠 블라인드 조절**: 작업 표시줄 트레이 영역에 마우스를 올리고 휠을 굴려 앱 볼륨을 조절하고, Alt+휠로 장치를 즉시 전환하며, Shift+휠로 시스템 마스터 볼륨을 조절할 수 있습니다. 게임 중 화면을 전환하지 않고 손쉽게 제어하세요."
     ],
-    "commandNote": "`sr`을 처음 사용하기 전에 SonicRoute를 일반 실행해 명령을 등록한 다음 터미널을 다시 여세요. 장치 전환이 예상대로 작동하지 않으면 {faq}를 참고하세요.",
+    "commandNote": "`sr` 명령은 Named Pipe를 통해 실행 중인 SonicRoute 인스턴스와 밀리초 단위로 통신합니다 (앱이 실행 중이지 않으면 시작되지 않습니다). 앱을 처음 실행하면 명령어가 등록되며, 터미널 재시작 후 스크립트, AutoHotkey, Stream Deck에서 직접 호출할 수 있습니다. 자세한 내용은 {faq}를 참조하세요.",
     "ruleExample": "규칙 이름 또는 ID",
     "docsTitle": "문서",
     "wikiNote": "자세한 Wiki는 현재 중국어 간체로 제공됩니다.",
@@ -51,7 +51,7 @@
     "configureAutomation": "자동화 설정",
     "automationExample": "번거로운 수동 설정을 한 번의 구성으로 언제나 간편한 자동화로 전환하세요.",
     "currentRelease": "현재 릴리스",
-    "releaseSummary": "{version}에서는 필요할 때 로드되고 이벤트로 갱신되는 추가 패널에서 모든 출력 장치의 마스터 볼륨을 조절할 수 있으며, 유지 장치만 표시하도록 필터링할 수도 있습니다. Shift+휠은 시스템 볼륨을 조절하고 기존 휠, Alt+휠, Alt+Shift+휠 동작은 유지됩니다. 이전 변경 사항: {history}",
+    "releaseSummary": "v1.29에서는 시스템 이벤트 기반 온디맨드 갱신과 보존 장치 필터링을 지원하는 출력 장치 볼륨 패널이 추가되었습니다. 또한 마스터 볼륨 조절을 위한 Shift+휠 동작이 추가되어 기존 앱 볼륨 조절 및 Alt+휠 장치 전환과 유기적으로 작동합니다. 자세한 이력은 {history}를 확인하세요.",
     "docTopic": "주제",
     "docGuides": "가이드",
     "docTopics": [
@@ -103,7 +103,7 @@
         "Ctrl+Shift+N으로 모든 마이크를 즉시 음소거하고, 화면 OSD 배너로 상태를 한눈에 확인",
         "앱별로 독립된 오디오 트랙을 지정하여 개인 대화나 알림음이 녹화에 섞여 들어가는 것 방지"
     ],
-    "editionLiteX64": "Lite x64 (.NET 10 기본)",
+    "editionLiteX64": "Lite x64 (.NET 10 권장)",
     "editionLiteArm64": "Lite ARM64 (.NET 10)",
     "editionLegacyX64": "Legacy x64 (.NET 8 불필요)",
     "editionStore": "Microsoft Store (Store 업데이트)",
@@ -125,5 +125,8 @@
     "editionLiteNet8X64": "Lite NET8 x64",
     "editionLiteNet8Arm64": "Lite NET8 ARM64",
     "aiPromptTitle": "AI를 위한 빠른 요약 및 토큰 절약 문제 해결",
-    "aiPromptBody": "Cursor, Copilot, ChatGPT, Claude 등 AI 어시스턴트로 문제를 진단하거나 구조를 파악하고 스크립트를 작성할 때 전용 사양서 {aiDoc} 문서를 직접 참조하는 것을 권장합니다. LLM을 위한 고밀도 구조화 DSL로 핵심 사실을 정리하여 불필요한 텍스트를 줄이고, 토큰 소비를 대폭 절약하며 원인을 신속하게 도출합니다."
+    "aiPromptBody": "Cursor, Copilot, ChatGPT, Claude 등 AI 어시스턴트로 문제를 진단하거나 구조를 파악하고 스크립트를 작성할 때 전용 사양서 {aiDoc} 문서를 직접 참조하는 것을 권장합니다. LLM을 위한 고밀도 구조화 DSL로 핵심 사실을 정리하여 불필요한 텍스트를 줄이고, 토큰 소비를 대폭 절약하며 원인을 신속하게 도출합니다.",
+    "quickStartTitle": "3단계 빠른 시작",
+    "cliTitle": "CLI 및 자동화 연동 (파워 유저)",
+    "releaseHighlightsTitle": "{release} 릴리스 주요 변경사항"
 }
