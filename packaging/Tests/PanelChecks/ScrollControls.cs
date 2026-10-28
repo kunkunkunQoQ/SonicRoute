@@ -34,10 +34,13 @@ internal static partial class Program
         Directory.CreateDirectory(directory);
         var config = ConfigService.Load();
         bool savedLayout = config.QuickPanelUseLegacyAppRows;
-        foreach (bool legacy in includeLegacy ? new[] { false, true } : new[] { savedLayout })
+        bool savedCompactNames = config.QuickPanelCompactShowOutputName;
+        foreach (int layout in includeLegacy ? new[] { 0, 1, 2 } : new[] { savedLayout ? (savedCompactNames ? 2 : 1) : 0 })
         foreach (string mode in new[] { "light", "dark" })
         {
+            bool legacy = layout != 0;
             config.QuickPanelUseLegacyAppRows = legacy;
+            config.QuickPanelCompactShowOutputName = layout == 2;
             theme.Invoke(null, new object[] { mode, "#00D5DD" });
             var panel = new QuickPanelModernWindow(); windows.Add(panel);
             var apps = Enumerable.Range(0, 3).Select(i => new AudioAppInfo
@@ -58,7 +61,7 @@ internal static partial class Program
             {
                 var bitmap = new RenderTargetBitmap(372, 450, 96, 96, PixelFormats.Pbgra32); bitmap.Render(surface);
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                using var stream = File.Create(Path.Combine(directory, mode + (legacy ? "-legacy" : "") + "-" + state + ".png")); encoder.Save(stream);
+                using var stream = File.Create(Path.Combine(directory, mode + (legacy ? (layout == 2 ? "-compact-names" : "-legacy") : "") + "-" + state + ".png")); encoder.Save(stream);
             }
             Arrange();
             Check(viewer.ComputedVerticalScrollBarVisibility == Visibility.Collapsed, mode + " fitting rows start without a vertical scrollbar");
@@ -90,6 +93,7 @@ internal static partial class Program
             panel.Close();
         }
         config.QuickPanelUseLegacyAppRows = savedLayout;
+        config.QuickPanelCompactShowOutputName = savedCompactNames;
     }
     private static void CheckScrollControls(string mode)
     {

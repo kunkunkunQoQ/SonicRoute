@@ -23,7 +23,7 @@
     <Product>音跃 SonicRoute</Product>
     <Authors>困困困</Authors>
     <Company>困困困</Company>
-    <Description>音跃 SonicRoute — 按应用切换 Windows 音频输出/输入设备，快速面板 + 完整管理界面</Description>
+    <Description>音跃 SonicRoute — 按应用切换 Windows 音频播放/录音设备，快速面板 + 完整管理界面</Description>
     <ApplicationIcon>SonicRoute.ico</ApplicationIcon>
   </PropertyGroup>
 

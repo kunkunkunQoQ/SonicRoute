@@ -635,7 +635,7 @@ namespace SonicRoute
                 apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
                     && hiddenPanel?.Contains(a.ProcessName) != true).ToList();
                 bool legacyLayout = cfg.QuickPanelUseLegacyAppRows;
-                bool showOutputName = !legacyLayout && cfg.QuickPanelShowOutputName;
+                bool showOutputName = legacyLayout ? cfg.QuickPanelCompactShowOutputName : cfg.QuickPanelShowOutputName;
                 string signature = GetAppRowsSignature(apps, cfg, showOutputName);
 
                 // 名称开关关闭时显示应用名，只走原音量读取，不查询播放路由。
@@ -742,8 +742,8 @@ namespace SonicRoute
 
                     var expand = new ToggleButton
                     {
-                        Width = 32,
-                        Height = legacyLayout ? 16 : 32,
+                        Width = legacyLayout && showOutputName ? 80 : 32,
+                        Height = legacyLayout ? (showOutputName ? 24 : 16) : 32,
                         VerticalAlignment = System.Windows.VerticalAlignment.Center,
                         Style = (Style)FindResource("RowExpandButton"),
                         Tag = row,
@@ -751,22 +751,34 @@ namespace SonicRoute
                     };
                     var glyph = new TextBlock { Text = "▾", RenderTransform = row.ExpandArrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
                     glyph.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
-                    expand.Content = glyph;
+                    if (legacyLayout && showOutputName)
+                    {
+                        var deviceLabel = new Grid { Width = 72, ClipToBounds = true };
+                        deviceLabel.ColumnDefinitions.Add(new ColumnDefinition());
+                        deviceLabel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                        row.Name = NewRowName();
+                        row.Name.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
+                        glyph.Margin = new Thickness(4, 0, 0, 0);
+                        glyph.VerticalAlignment = VerticalAlignment.Center;
+                        Grid.SetColumn(glyph, 1);
+                        deviceLabel.Children.Add(row.Name);
+                        deviceLabel.Children.Add(glyph);
+                        expand.Content = deviceLabel;
+                    }
+                    else expand.Content = glyph;
                     expand.Checked += RowExpand_Changed;
                     expand.Unchecked += RowExpand_Changed;
                     row.ExpandButton = expand;
                     DockPanel.SetDock(expand, Dock.Right);
 
-                    row.Slider = new Slider
-                    {
-                        Minimum = 0,
-                        Maximum = 100,
-                        Style = (Style)FindResource("RowSliderStyle"),
-                        VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                        Margin = new Thickness(0, 0, 6, 0),
-                        Tag = row,
-                        Foreground = (Brush)FindResource("Theme.Accent")
-                    };
+                    row.Slider = legacyLayout ? new Slider() : new AppRowVolumeSlider();
+                    row.Slider.Minimum = 0;
+                    row.Slider.Maximum = 100;
+                    row.Slider.Style = (Style)FindResource("RowSliderStyle");
+                    row.Slider.VerticalAlignment = VerticalAlignment.Center;
+                    row.Slider.Margin = new Thickness(0, 0, 6, 0);
+                    row.Slider.Tag = row;
+                    row.Slider.Foreground = (Brush)FindResource("Theme.Accent");
                     row.Slider.ApplyTemplate();
                     row.TrackBg = row.Slider.Template.FindName("PART_TrackBg", row.Slider) as Border;
                     row.TrackFill = row.Slider.Template.FindName("PART_TrackFill", row.Slider) as Border;
@@ -791,18 +803,15 @@ namespace SonicRoute
                         var labeledVolume = new Grid();
                         labeledVolume.RowDefinitions.Add(new RowDefinition { Height = new GridLength(16) });
                         labeledVolume.RowDefinitions.Add(new RowDefinition());
-                        row.Name = new TextBlock
-                        {
-                            FontSize = 11,
-                            VerticalAlignment = VerticalAlignment.Center,
-                            Margin = new Thickness(14, 0, 20, 0),
-                            TextTrimming = TextTrimming.CharacterEllipsis,
-                            TextWrapping = TextWrapping.NoWrap
-                        };
-                        row.Name.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
-                        Grid.SetRow(row.Slider, 1);
-                        labeledVolume.Children.Add(row.Name);
+                        row.Name = NewRowName();
+                        row.Name.Margin = new Thickness(14, 0, 20, 0);
+                        row.Name.IsHitTestVisible = false;
+                        row.Slider.Height = 48;
+                        row.Slider.Padding = new Thickness(0, 16, 0, 0);
+                        ToolTipService.SetShowOnDisabled(row.Slider, true);
+                        Grid.SetRowSpan(row.Slider, 2);
                         labeledVolume.Children.Add(row.Slider);
+                        labeledVolume.Children.Add(row.Name);
                         volume = labeledVolume;
                     }
                     dock.Children.Add(iconGrid);
@@ -858,6 +867,14 @@ namespace SonicRoute
 
         }
 
+        private static TextBlock NewRowName()
+        {
+            var name = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
+            name.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
+            return name;
+        }
+
         private void UpdateRowName(AppRow row, string? outputId)
         {
             row.OutputId = outputId;
@@ -870,11 +887,12 @@ namespace SonicRoute
                     ?? L10n.T(systemDefault ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
                 // 使用已加载的设备快照，系统默认路由同时提示实际播放设备，不增加查询。
                 var device = systemDefault ? _outputDisplay.FirstOrDefault(d => d.IsDefault) : null;
-                if (device != null) name += " · " + device.DisplayName;
+                if (device != null && !row.LegacyLayout) name += " · " + device.DisplayName;
             }
             if (row.Name.Text == name) return;
             row.Name.Text = name;
             row.Name.ToolTip = name;
+            if (!row.LegacyLayout) row.Slider.ToolTip = name;
             System.Windows.Automation.AutomationProperties.SetName(row.ExpandButton, name + " " + L10n.T("Qp.ExpandDevices"));
         }
 

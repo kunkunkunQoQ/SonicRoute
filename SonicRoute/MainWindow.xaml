@@ -756,6 +756,15 @@
                                     <CheckBox x:Name="PanelLegacyRowsCheck" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" VerticalAlignment="Center"
                                               AutomationProperties.Name="{Binding [Theme.PanelLegacyRows], Source={x:Static local:L10n.Instance}}" Checked="PanelAppRowDisplay_Changed" Unchecked="PanelAppRowDisplay_Changed"/>
                                 </Grid>
+                                <Grid x:Name="PanelCompactOutputNameRow" Margin="24,10,0,0" Visibility="Collapsed">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,14,0">
+                                        <TextBlock Text="{Binding [Theme.PanelCompactOutputName], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemeSwitchLabel}"/>
+                                        <TextBlock Text="{Binding [Theme.PanelCompactOutputNameHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemeHint}" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="PanelCompactOutputNameCheck" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" VerticalAlignment="Center"
+                                              AutomationProperties.Name="{Binding [Theme.PanelCompactOutputName], Source={x:Static local:L10n.Instance}}" Checked="PanelAppRowDisplay_Changed" Unchecked="PanelAppRowDisplay_Changed"/>
+                                </Grid>
                                 <Grid x:Name="PanelOutputNameRow" Margin="0,16,0,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <StackPanel Margin="0,0,14,0">

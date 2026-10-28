@@ -29,9 +29,12 @@ It renders the unshown product panel and uses only missing-PID audio reads.
 `--app-row-names <image-directory>` checks the theme setting directly below the
 peak-meter option, the peer classic-layout switch above it, saved-value/deferred-page migration, nine language labels,
 application/device-name modes without experimental mode, custom/default/missing
-device labels, unchanged-row reuse, name-above-slider layout, the retained thumb
+device labels, unchanged-row reuse, name-above-slider layout, name-area hit
+testing/native drag mapping, the retained thumb
 and current-application theme highlight, classic layout geometry, hidden name
-settings with preserved choices, and the scroll-gutter regression in both layouts. It renders light/dark product controls
+settings with preserved choices, the independent compact device-name child and
+its defaults, and the scroll-gutter regression in all three display states.
+It renders light/dark product controls
 offscreen. Playback state uses managed read-only fixtures; route reads target
 missing PIDs, and no real audio is written or capture state queried.
 

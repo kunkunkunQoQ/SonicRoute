@@ -18,7 +18,8 @@ internal static partial class Program
         var config = ConfigService.Load();
         var savedCurrent = CurrentAppService.Current;
         Check(!config.QuickPanelShowOutputName, "existing config defaults to application names");
-        Check(!config.QuickPanelUseLegacyAppRows, "existing config defaults to the new app row layout");
+        Check(config.QuickPanelUseLegacyAppRows && !config.QuickPanelCompactShowOutputName,
+            "missing preferences default to compact rows on and compact device names off");
         config.ExperimentalMode = config.ExperimentalMic = false;
         config.HiddenPanelApps.Clear();
         var apps = new List<AudioAppInfo> {
@@ -50,24 +51,29 @@ internal static partial class Program
                 theme.Invoke(null, new object[] { mode, "#00D5DD" });
                 config.QuickPanelShowOutputName = true;
                 config.QuickPanelUseLegacyAppRows = false;
+                config.QuickPanelCompactShowOutputName = false;
                 var window = new MainWindow(); windows.Add(window);
                 Call(window, "EnsureThemePage"); Call(window, "LoadTheme");
                 var toggle = Field<CheckBox>(window, "PanelOutputNameCheck");
                 var peak = Field<CheckBox>(window, "AppPeakMeterCheck");
                 var legacy = Field<CheckBox>(window, "PanelLegacyRowsCheck");
                 var legacyRow = (Grid)legacy.Parent;
+                var compactRow = Field<Grid>(window, "PanelCompactOutputNameRow");
+                var compactToggle = Field<CheckBox>(window, "PanelCompactOutputNameCheck");
                 var settingRow = (Grid)toggle.Parent; var peakRow = (Grid)peak.Parent;
                 var parent = (StackPanel)settingRow.Parent;
                 Check(toggle.IsChecked == true && ReferenceEquals(parent, peakRow.Parent)
                     && ReferenceEquals(parent, legacyRow.Parent)
                     && parent.Children.IndexOf(legacyRow) == parent.Children.IndexOf(peakRow) + 1
-                    && parent.Children.IndexOf(settingRow) == parent.Children.IndexOf(legacyRow) + 1,
+                    && parent.Children.IndexOf(compactRow) == parent.Children.IndexOf(legacyRow) + 1
+                    && parent.Children.IndexOf(settingRow) == parent.Children.IndexOf(compactRow) + 1,
                     mode + " theme orders peak meter, legacy layout and device-name rows as peers");
                 config.QuickPanelUseLegacyAppRows = true; Call(window, "LoadTheme");
                 Check(legacy.IsChecked == true && settingRow.Visibility == Visibility.Collapsed && toggle.IsChecked == true
-                    && config.QuickPanelShowOutputName, mode + " legacy layout hides the device-name switch while preserving its saved value");
+                    && config.QuickPanelShowOutputName && compactRow.Visibility == Visibility.Visible && compactToggle.IsChecked == false
+                    && compactRow.Margin.Left > legacyRow.Margin.Left, mode + " compact layout reveals its indented child and preserves the hidden full-layout preference");
                 config.QuickPanelUseLegacyAppRows = false; Call(window, "LoadTheme");
-                Check(legacy.IsChecked == false && settingRow.Visibility == Visibility.Visible && toggle.IsChecked == true,
+                Check(legacy.IsChecked == false && settingRow.Visibility == Visibility.Visible && toggle.IsChecked == true && compactRow.Visibility == Visibility.Collapsed,
                     mode + " new layout restores the device-name switch and its saved choice");
                 Call(window, "EnsureExperimentalPage"); Call(window, "LoadExperimentalSettings");
                 Check(window.FindName("ExpPanelOutputNameCheck") == null && toggle.IsChecked == true && config.QuickPanelShowOutputName,
@@ -84,12 +90,22 @@ internal static partial class Program
                     Check(!legacyLabel.Text.StartsWith("Theme.") && legacyLabel.ActualWidth > 0
                         && legacy.TranslatePoint(new Point(), legacyRow).X >= legacyLabel.TranslatePoint(new Point(legacyLabel.ActualWidth, 0), legacyRow).X,
                         mode + " " + locale + " legacy-layout label and switch fit without overlap");
+                    compactRow.Visibility = Visibility.Visible; Layout(compactRow, 396, 130); DrainUi();
+                    var compactLabel = OutputVisuals(compactRow).OfType<TextBlock>().First(t => t.Text == L10n.T("Theme.PanelCompactOutputName"));
+                    Check(!compactLabel.Text.StartsWith("Theme.") && compactLabel.ActualWidth > 0
+                        && compactToggle.TranslatePoint(new Point(), compactRow).X >= compactLabel.TranslatePoint(new Point(compactLabel.ActualWidth, 0), compactRow).X,
+                        mode + " " + locale + " compact child label and switch fit without overlap");
+                    compactRow.Visibility = Visibility.Collapsed;
                 }
                 L10n.Instance.SetLanguage("zh-CN");
                 SaveOutputPreview(Path.Combine(directory, mode + "-setting.png"), 520, peakRow, legacyRow, settingRow);
+                config.QuickPanelUseLegacyAppRows = true; Call(window, "LoadTheme");
+                SaveOutputPreview(Path.Combine(directory, mode + "-compact-setting.png"), 520, peakRow, legacyRow, compactRow);
+                config.QuickPanelUseLegacyAppRows = false;
                 window.Close();
                 Check(Field<CheckBox?>(window, "PanelOutputNameCheck") == null && Field<CheckBox?>(window, "PanelLegacyRowsCheck") == null
-                    && Field<Grid?>(window, "PanelOutputNameRow") == null, mode + " close releases the deferred controls");
+                    && Field<Grid?>(window, "PanelOutputNameRow") == null && Field<Grid?>(window, "PanelCompactOutputNameRow") == null
+                    && Field<CheckBox?>(window, "PanelCompactOutputNameCheck") == null, mode + " close releases the deferred controls");
 
                 var panel = new QuickPanelModernWindow(); windows.Add(panel); panel.SetMeterEnabled(false);
                 var devices = new List<AudioDeviceInfo> {
@@ -116,23 +132,54 @@ internal static partial class Program
                     Rect Bounds(FrameworkElement e) => e.TransformToAncestor(header).TransformBounds(new Rect(e.RenderSize));
                     var sliderBounds = Bounds(slider);
                     if (Field<bool>(item, "LegacyLayout"))
-                        Check(text == null && slider.Parent is DockPanel && header.Height == 36
-                            && expand.Width == 32 && expand.Height == 16 && Bounds(expand).Left >= sliderBounds.Right,
+                        Check(slider.Parent is DockPanel && header.Height == 36
+                            && (Field<bool>(item, "ShowOutputName") ? text != null && expand.Width == 80 && expand.Height == 24 && text.IsDescendantOf(expand)
+                                : text == null && expand.Width == 32 && expand.Height == 16) && Bounds(expand).Left >= sliderBounds.Right,
                             mode + " " + state + " classic single row restores the original icon/slider/arrow geometry without labels");
                     else
                     {
                         var textBounds = Bounds(text!);
-                        Check(textBounds.Bottom <= sliderBounds.Top + .1 && text!.ActualWidth > 80
+                        var visualTrack = Bounds(Field<Border>(item, "TrackBg"));
+                        Check(textBounds.Bottom <= visualTrack.Top + .1 && text!.ActualWidth > 80 && slider.ActualHeight == 48
                             && Math.Abs(textBounds.Left - sliderBounds.Left - 14) < .1
                             && expand.ActualWidth == 32 && Bounds(expand).Left >= sliderBounds.Right
                             && text.TextTrimming == TextTrimming.CharacterEllipsis,
                             mode + " " + state + " name sits above the slider with fixed-width arrow and ellipsis");
+                        var namePoint = text.TranslatePoint(new Point(text.ActualWidth * .75, text.ActualHeight / 2), surface);
+                        // Unshown windows are effectively invisible; filter the rendered tree by hit visibility instead.
+                        DependencyObject? hit = null;
+                        VisualTreeHelper.HitTest(surface,
+                            visual => visual is UIElement element && !element.IsHitTestVisible
+                                ? HitTestFilterBehavior.ContinueSkipSelfAndChildren : HitTestFilterBehavior.Continue,
+                            result => { hit = result.VisualHit; return HitTestResultBehavior.Stop; }, new PointHitTestParameters(namePoint));
+                        while (hit != null && hit is not Slider) hit = VisualTreeHelper.GetParent(hit);
+                        Check(ReferenceEquals(hit, slider) && !text.IsHitTestVisible && Equals(slider.ToolTip, text.Text)
+                            && ToolTipService.GetShowOnDisabled(slider),
+                            mode + " " + state + " name region hits the same slider and keeps its full-name tooltip");
                     }
                     Check(ReferenceEquals(header.Background, panel.FindResource("Theme.Overlay"))
                         && otherHeader.ReadLocalValue(Border.BackgroundProperty) == DependencyProperty.UnsetValue,
                         mode + " " + state + " current application retains the original theme-colored background");
                     var track = (Track)slider.Template.FindName("PART_Track", slider); track.Thumb.ApplyTemplate();
                     var knob = (Border)track.Thumb.Template.FindName("ThumbBg", track.Thumb);
+                    if (!Field<bool>(item, "LegacyLayout"))
+                    {
+                        double x = 14 + (track.ActualWidth - 28) * .75;
+                        Check(Math.Abs(track.ValueFromPoint(new Point(x, 8)) - track.ValueFromPoint(new Point(x, 40))) < .001
+                            && track.ActualHeight == 48 && Math.Abs(Bounds(knob).Top + 7 - Bounds(Field<Border>(item, "TrackBg")).Top - 2) < .1,
+                            mode + " " + state + " name and volume areas share native value mapping while the dot stays on the original track");
+                        var updating = panel.GetType().GetField("_updatingRowVolumes", Instance)!;
+                        updating.SetValue(panel, true);
+                        double before = slider.Value;
+                        try
+                        {
+                            track.Thumb.RaiseEvent(new DragDeltaEventArgs(20, 0) { RoutedEvent = Thumb.DragDeltaEvent });
+                            Check(slider.Value > before && Field<IDictionary>(panel, "_pendingVolume").Count == 0,
+                                mode + " " + state + " native thumb drag uses the existing slider without test audio writes");
+                            slider.Value = before;
+                        }
+                        finally { updating.SetValue(panel, false); }
+                    }
                     Check(knob.Opacity == 1 && knob.Visibility == Visibility.Visible && knob.Width == 14 && knob.Height == 14,
                         mode + " " + state + " original volume thumb remains visible at rest");
                     RenderAppCards(surface, Path.Combine(directory, mode + "-" + state + ".png"));
@@ -171,6 +218,16 @@ internal static partial class Program
                 Check(config.QuickPanelShowOutputName && rows.Values.Cast<object>().All(r => Field<TextBlock?>(r, "Name") == null && !Field<bool>(r, "ShowOutputName")),
                     mode + " legacy layout suppresses name controls and route loading despite a saved enabled device-name setting");
                 Render("legacy-layout");
+                config.QuickPanelCompactShowOutputName = true; Build(true);
+                Check(Field<bool>(First(), "ShowOutputName") && Field<TextBlock?>(First(), "Name") != null,
+                    mode + " compact child enables independent playback device names");
+                Name("fixture-chat"); Render("compact-device-names");
+                Name(AudioService.SystemDefaultDeviceId);
+                Check(Field<TextBlock>(First(), "Name").Text == L10n.T("Dev.SystemDefaultOut"),
+                    mode + " compact default label matches formal v1.29 layout without the full-layout actual-device suffix");
+                config.QuickPanelCompactShowOutputName = false; Build(true);
+                Check(Field<TextBlock?>(First(), "Name") == null && config.QuickPanelShowOutputName,
+                    mode + " compact child off removes its labels without resetting the other layout preference");
                 config.QuickPanelUseLegacyAppRows = false; Build(true);
                 Check(Field<TextBlock?>(First(), "Name") != null && Field<bool>(First(), "ShowOutputName"),
                     mode + " disabling legacy layout restores the saved device-name display");

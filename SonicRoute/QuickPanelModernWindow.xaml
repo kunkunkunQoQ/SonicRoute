@@ -116,6 +116,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid Background="Transparent">
+                            <Grid Margin="{TemplateBinding Padding}" IsHitTestVisible="False">
                             <Border x:Name="PART_TrackBg" Height="4" CornerRadius="2" VerticalAlignment="Center"
                                     Margin="14,0" IsHitTestVisible="False" Background="{DynamicResource Theme.Border}"/>
                             <Border x:Name="PART_TrackFill" Height="4" CornerRadius="2" VerticalAlignment="Center"
@@ -123,6 +124,7 @@
                             <Border x:Name="PART_PeakVisual" Height="4" CornerRadius="2" VerticalAlignment="Center"
                                     Margin="14,0" Background="{DynamicResource Theme.AccentPeak}"
                                     RenderTransformOrigin="0,0.5" IsHitTestVisible="False" Visibility="Hidden"/>
+                            </Grid>
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Focusable="False" IsTabStop="False">
                                     <RepeatButton.Template><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
@@ -135,8 +137,11 @@
                                    Background="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Slider}}">
                                 <Thumb.Template>
                                     <ControlTemplate TargetType="Thumb">
-                                        <Grid Background="Transparent"><Border x:Name="ThumbBg" Width="14" Height="14" CornerRadius="7"
-                                                Background="{TemplateBinding Background}"/></Grid>
+                                        <Grid Background="Transparent">
+                                            <Grid Margin="{Binding Padding, RelativeSource={RelativeSource AncestorType=Slider}}">
+                                                <Border x:Name="ThumbBg" Width="14" Height="14" CornerRadius="7" Background="{TemplateBinding Background}"/>
+                                            </Grid>
+                                        </Grid>
                                     </ControlTemplate>
                                 </Thumb.Template>
                             </Thumb>

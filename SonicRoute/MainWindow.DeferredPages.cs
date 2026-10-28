@@ -46,6 +46,8 @@ namespace SonicRoute
         internal TextBlock PanelHeightValue = null!;
         internal CheckBox AppPeakMeterCheck = null!;
         internal CheckBox PanelLegacyRowsCheck = null!;
+        internal Grid PanelCompactOutputNameRow = null!;
+        internal CheckBox PanelCompactOutputNameCheck = null!;
         internal Grid PanelOutputNameRow = null!;
         internal CheckBox PanelOutputNameCheck = null!;
         internal Grid SettingsPage = null!;
@@ -153,6 +155,8 @@ namespace SonicRoute
                 PanelHeightValue = FindDeferredControl<TextBlock>(content, nameof(PanelHeightValue));
                 AppPeakMeterCheck = FindDeferredControl<CheckBox>(content, nameof(AppPeakMeterCheck));
                 PanelLegacyRowsCheck = FindDeferredControl<CheckBox>(content, nameof(PanelLegacyRowsCheck));
+                PanelCompactOutputNameRow = FindDeferredControl<Grid>(content, nameof(PanelCompactOutputNameRow));
+                PanelCompactOutputNameCheck = FindDeferredControl<CheckBox>(content, nameof(PanelCompactOutputNameCheck));
                 PanelOutputNameRow = FindDeferredControl<Grid>(content, nameof(PanelOutputNameRow));
                 PanelOutputNameCheck = FindDeferredControl<CheckBox>(content, nameof(PanelOutputNameCheck));
                 ThemePageHost.Child = content;
@@ -325,6 +329,8 @@ namespace SonicRoute
             PanelHeightValue = null!;
             AppPeakMeterCheck = null!;
             PanelLegacyRowsCheck = null!;
+            PanelCompactOutputNameRow = null!;
+            PanelCompactOutputNameCheck = null!;
             PanelOutputNameRow = null!;
             PanelOutputNameCheck = null!;
             SettingsPage = null!;

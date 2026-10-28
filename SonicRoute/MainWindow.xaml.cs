@@ -1610,6 +1610,7 @@ namespace SonicRoute
                 SyncThemeColorUi(accent);
                 AppPeakMeterCheck.IsChecked = _config.ShowAppPeakMeter;
                 PanelLegacyRowsCheck.IsChecked = _config.QuickPanelUseLegacyAppRows;
+                PanelCompactOutputNameCheck.IsChecked = _config.QuickPanelCompactShowOutputName;
                 PanelOutputNameCheck.IsChecked = _config.QuickPanelShowOutputName;
                 ApplyPanelAppRowDisplayUi();
                 SyncOsdSliders();
@@ -2789,6 +2790,7 @@ namespace SonicRoute
         private void ApplyPanelAppRowDisplayUi()
         {
             PanelOutputNameRow.Visibility = PanelLegacyRowsCheck.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+            PanelCompactOutputNameRow.Visibility = PanelLegacyRowsCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void PanelAppRowDisplay_Changed(object sender, RoutedEventArgs e)
@@ -2796,10 +2798,13 @@ namespace SonicRoute
             if (!IsSettingsChange(sender, e)) return;
             bool legacy = PanelLegacyRowsCheck.IsChecked == true;
             bool enabled = PanelOutputNameCheck.IsChecked == true;
+            bool compactName = PanelCompactOutputNameCheck.IsChecked == true;
             ApplyPanelAppRowDisplayUi();
-            if (_config.QuickPanelUseLegacyAppRows == legacy && _config.QuickPanelShowOutputName == enabled) return;
+            if (_config.QuickPanelUseLegacyAppRows == legacy && _config.QuickPanelShowOutputName == enabled
+                && _config.QuickPanelCompactShowOutputName == compactName) return;
             _config.QuickPanelUseLegacyAppRows = legacy;
             _config.QuickPanelShowOutputName = enabled;
+            _config.QuickPanelCompactShowOutputName = compactName;
             ConfigService.Save(_config);
             // 复用面板关闭/释放流程，下次呼出按新选项加载，不创建隐藏面板。
             ((App)Application.Current).QuickPanelInstance?.Close();

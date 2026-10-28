@@ -113,10 +113,13 @@ namespace SonicRoute.Core
         /// <summary>实验设置 - 持续定时校验前台与麦克风；默认关闭，通知异常时仍临时恢复。</summary>
         public bool BackgroundPollingFallbackEnabled { get; set; } = false;
 
-        /// <summary>主题设置：恢复快速面板图标、音量条与下拉箭头的旧版单行布局；默认关闭。</summary>
-        public bool QuickPanelUseLegacyAppRows { get; set; } = false;
+        /// <summary>主题设置：使用快速面板简洁单行布局；缺省开启，保留旧配置键。</summary>
+        public bool QuickPanelUseLegacyAppRows { get; set; } = true;
 
-        /// <summary>主题设置：新版快速面板应用行显示播放设备名；默认关闭并显示应用名，旧版布局不查询播放路由。</summary>
+        /// <summary>简洁布局子选项：在右侧下拉入口显示播放设备名称；默认关闭。</summary>
+        public bool QuickPanelCompactShowOutputName { get; set; } = false;
+
+        /// <summary>主题设置：完整布局显示播放设备名；默认关闭并显示应用名，名称关闭时不查询播放路由。</summary>
         public bool QuickPanelShowOutputName { get; set; } = false;
 
         /// <summary>实验设置：记录自动化执行详情；缺省关闭，不读取或创建历史存储。</summary>
