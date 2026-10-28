@@ -1180,11 +1180,11 @@
                 </Border>
 
                 <!-- 音量 + 应用 -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                <Border Style="{StaticResource Card}" Margin="0,0,0,14" Padding="18,12">
                     <StackPanel>
                         <TextBlock Text="{Binding [Ov.Volume], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource SectionTitle}"/>
-                        <DockPanel Margin="0,0,0,4" MouseWheel="OverviewVolume_MouseWheel">
+                        <DockPanel MouseWheel="OverviewVolume_MouseWheel">
                             <Button x:Name="OverviewMinus" Content="−" Style="{StaticResource GhostButton}"
                                     Width="34" Padding="0" DockPanel.Dock="Left" Margin="0,0,8,0" Click="OverviewMinus_Click"/>
                             <Button x:Name="OverviewPlus" Content="+" Style="{StaticResource GhostButton}"
@@ -1200,7 +1200,15 @@
                         </DockPanel>
                         <TextBlock x:Name="OverviewStatusText" Text=""
                                    FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                   Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                   Margin="0,6,0,0" TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </Border>
                 </StackPanel>

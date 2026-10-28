@@ -733,7 +733,7 @@ namespace SonicRoute
             // CurrentAppService.Resolve 同一套规则（last/fixed → 前台 → 最近使用 → 兜底），
             // 保证快捷键和"鼠标放任务栏滚轮调音量"永远解析出同一个应用。
             // 仅"当前应用"类动作需要解析当前应用；全局切换 / 系统默认切换不依赖，解析失败照常执行
-            bool needsTarget = action is HotkeyActions.ActMute or HotkeyActions.ActMuteAppInput or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown or HotkeyActions.ActSwitchOutput or HotkeyActions.ActSwitchInput;
+            bool needsTarget = action is HotkeyActions.ActMuteAppInput or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown or HotkeyActions.ActSwitchOutput or HotkeyActions.ActSwitchInput;
             AudioAppInfo? target = null;
             if (needsTarget)
             {
@@ -748,15 +748,6 @@ namespace SonicRoute
 
             switch (action)
             {
-                case HotkeyActions.ActMute:
-                    // 当前应用快捷键始终控制同一个会话；面板顶部按钮只控制所选系统设备。
-                    var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
-                    if (mr.Applied) ApplyAppMuteReadback(pid, mr.Muted);
-                    _trayWheel?.ShowOsd(name, mr.Applied
-                        ? (mr.Muted ? L10n.T("Ov.AppMuted") : L10n.T("Ov.AppUnmuted"))
-                        : L10n.T("Ov.NoOutputSession"));
-                    break;
-
                 case HotkeyActions.ActMuteAppInput:
                     var inputMute = await Task.Run(() => SessionVolumeService.ToggleInputMuteChecked(pid));
                     if (inputMute.Applied) ApplyAppInputMuteReadback(pid, inputMute.Muted);

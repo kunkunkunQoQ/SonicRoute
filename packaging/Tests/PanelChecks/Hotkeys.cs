@@ -17,6 +17,7 @@ internal static partial class Program
             config.ExperimentalMic = true; config.Hotkeys.Clear();
             config.Hotkeys["切换当前应用快捷设备"] = "Ctrl+F13";
             config.Hotkeys["切换系统默认输入设备"] = "";
+            config.Hotkeys["静音当前应用"] = "Ctrl+F14";
             theme.Invoke(null, new object[] { mode, "blue" });
             var window = new MainWindow(); windows.Add(window);
             Check(Field<Grid?>(window, "SettingsPage") == null, mode + " tray settings remain deferred until settings page is opened");
@@ -36,7 +37,8 @@ internal static partial class Program
             Dictionary<string, Button> Buttons() => list.Items.OfType<DockPanel>().SelectMany(row => row.Children.OfType<Button>()).ToDictionary(button => (string)button.Tag);
             string Text(Button button) => ((TextBlock)button.Content).Text;
             var buttons = Buttons();
-            Check(buttons.Count == 15 && devices.All(buttons.ContainsKey) && buttons.ContainsKey(HotkeyActions.ActMuteAppInput), mode + " existing shortcuts and independent app microphone action are available");
+            Check(buttons.Count == 14 && devices.All(buttons.ContainsKey) && buttons.ContainsKey(HotkeyActions.ActMuteAppInput)
+                && !buttons.ContainsKey("静音当前应用"), mode + " retired playback mute is absent while device and microphone shortcuts remain");
             Check(string.IsNullOrEmpty(Text(buttons[HotkeyActions.ActMuteAppInput])), mode + " new app microphone shortcut starts unbound");
             foreach (string action in devices)
             {
@@ -48,11 +50,11 @@ internal static partial class Program
             buttons[HotkeyActions.ActSwitchOutput].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check(Field<string?>(window, "_recordingAction") == HotkeyActions.ActSwitchOutput, mode + " original device button enters existing recorder");
             config.ExperimentalMic = false; Call(window, "BuildHotkeyList"); buttons = Buttons();
-            Check(buttons.Count == 12 && !buttons.ContainsKey(HotkeyActions.ActSwitchInput) && !buttons.ContainsKey(HotkeyActions.ActSwitchAllInput)
+            Check(buttons.Count == 11 && !buttons.ContainsKey(HotkeyActions.ActSwitchInput) && !buttons.ContainsKey(HotkeyActions.ActSwitchAllInput)
                 && !buttons.ContainsKey(HotkeyActions.ActMuteAppInput), mode + " microphone off hides the three app-input actions");
             Check(buttons.ContainsKey(HotkeyActions.ActSetDefaultInput), mode + " system default input shortcut remains available");
             config.ExperimentalMic = true; Call(window, "BuildHotkeyList");
-            Check(Buttons().Count == 15 && Field<string?>(window, "_recordingAction") == null, mode + " rebuild restores current list and ends capture");
+            Check(Buttons().Count == 14 && Field<string?>(window, "_recordingAction") == null, mode + " rebuild restores current list and ends capture");
             window.Close();
             Check(Field<ItemsControl?>(window, "HotkeyList") == null, mode + " closing window releases original hotkey rows through existing cleanup");
             Check(Field<CheckBox?>(window, "SettingsTrayWheelEverywhere") == null && Field<CheckBox?>(window, "SettingsPanelChangeSysDef") == null, mode + " closing window releases settings through existing cleanup");

@@ -108,10 +108,10 @@ internal static class Program
         var dispatcher = Dispatcher.CurrentDispatcher; SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
         try
         {
-            async Task RunHotkeys() { _passed += await HotkeyChecks.Run(); }
+            async Task RunHotkeys() { _passed += await HotkeyChecks.Run(includeTray: !args.Contains("--mute-removal-only")); }
             async Task RunInputMute() { _passed += await InputMuteChecks.Run(); }
-            bool focused = args.Contains("--hotkeys-only") || args.Contains("--app-input-only");
-            var run = args.Contains("--app-input-only") ? RunInputMute() : args.Contains("--hotkeys-only") ? RunHotkeys() : Run(); var frame = new DispatcherFrame();
+            bool focused = args.Contains("--hotkeys-only") || args.Contains("--app-input-only") || args.Contains("--mute-removal-only");
+            var run = args.Contains("--app-input-only") ? RunInputMute() : args.Contains("--hotkeys-only") || args.Contains("--mute-removal-only") ? RunHotkeys() : Run(); var frame = new DispatcherFrame();
             run.ContinueWith(_ => dispatcher.BeginInvoke(new Action(() => frame.Continue = false)), TaskScheduler.Default);
             Dispatcher.PushFrame(frame); run.GetAwaiter().GetResult();
             Console.WriteLine($"RESULT passed={_passed} runtime={Environment.Version} AUDIO_WRITES=FAKES_ONLY PROCESS_CHILDREN={(focused ? "NONE" : "REAL")}"); return 0;

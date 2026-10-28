@@ -41,7 +41,7 @@ internal sealed class TrayFixture
 internal static class KeyBoundary { internal static readonly HashSet<int> Down = new(); }
 internal static class HotkeyChecks
 {
-    internal static async Task<int> Run()
+    internal static async Task<int> Run(bool includeTray = true)
     {
         int passed = 0;
         void Check(bool result, string text) { if (!result) throw new Exception(text); passed++; Console.WriteLine("PASS " + text); }
@@ -50,7 +50,7 @@ internal static class HotkeyChecks
             HotkeyActions.ActSetDefaultOutput, HotkeyActions.ActSetDefaultInput, HotkeyActions.ActSystemVolUp, HotkeyActions.ActSystemVolDown })
         { await app.TestHotkey(action); Check(AudioService.AppReads == 0, "global hotkey bypasses unrelated failing current-app discovery: " + action); }
         Check(app.GlobalCalls == 4 && SystemVolumeService.Volumes.Count == 2, "global device and actual volume handlers execute despite unavailable app discovery");
-        foreach (string action in new[] { HotkeyActions.ActMute, HotkeyActions.ActMuteAppInput, HotkeyActions.ActVolUp, HotkeyActions.ActVolDown, HotkeyActions.ActSwitchOutput, HotkeyActions.ActSwitchInput })
+        foreach (string action in new[] { HotkeyActions.ActMuteAppInput, HotkeyActions.ActVolUp, HotkeyActions.ActVolDown, HotkeyActions.ActSwitchOutput, HotkeyActions.ActSwitchInput })
         { int notices = TrayFixture.Notices; await app.TestHotkey(action); Check(TrayFixture.Notices == notices + 1, "current-app discovery failure gives feedback without unhandled task: " + action); }
         AudioService.ThrowApps = false;
         AudioService.Apps.Add(new SonicRoute.Core.Models.AudioAppInfo { ProcessId = 101234, ProcessName = "HotkeyTarget", DisplayName = "Target" });
@@ -61,15 +61,11 @@ internal static class HotkeyChecks
                 var panel = new QuickPanelModernWindow { IsVisible = visible };
                 app.TestPanel = visible ? panel : null;
                 int writes = SystemVolumeService.Writes.Count, mutes = SessionVolumeService.MuteTargets.Count;
-                await app.TestHotkey(HotkeyActions.ActMute);
-                Check(SessionVolumeService.MuteTargets.Count == mutes + 1 && SessionVolumeService.MuteTargets.Last() == 101234
-                    && SystemVolumeService.Writes.Count == writes, "current-app mute targets session with panel visible=" + visible);
-                Check(panel.MuteReadbacks.Count == (visible ? 1 : 0), "current-app mute synchronizes only an existing panel: " + visible);
-                SessionVolumeService.MuteApplied = false;
-                int readbacks = panel.MuteReadbacks.Count;
-                await app.TestHotkey(HotkeyActions.ActMute);
-                Check(panel.MuteReadbacks.Count == readbacks, "failed mute leaves panel state unchanged: " + visible);
-                SessionVolumeService.MuteApplied = true;
+                int reads = AudioService.AppReads, notices = TrayFixture.Notices;
+                await app.TestHotkey("静音当前应用");
+                Check(SessionVolumeService.MuteTargets.Count == mutes && SystemVolumeService.Writes.Count == writes
+                    && AudioService.AppReads == reads && TrayFixture.Notices == notices && panel.MuteReadbacks.Count == 0,
+                    "retired playback mute dispatch performs no discovery, audio write or readback with panel visible=" + visible);
                 int micWrites = GlobalMicMuteService.Writes.Count, micNotices = app.MicNotices;
                 await app.TestHotkey(HotkeyActions.ActMuteInput);
                 Check(GlobalMicMuteService.Writes.Count == micWrites + 1 && app.MicNotices == micNotices + 1
@@ -83,8 +79,11 @@ internal static class HotkeyChecks
             (Keys: new[] { 0x12, 0x10, 0x5C }, Expected: 13u), (Keys: Array.Empty<int>(), Expected: 0u) })
         { KeyBoundary.Down.Clear(); foreach (int key in pair.Keys) KeyBoundary.Down.Add(key); Check((uint)modifiers.Invoke(null, null)! == pair.Expected, "mouse modifier mapping: " + string.Join(",", pair.Keys)); }
         KeyBoundary.Down.Clear();
-        Check(HotkeyActions.All.Length == 15 && HotkeyActions.All.Distinct().Count() == 15, "15 distinct actions include the independent current-app microphone action");
-        passed += await TrayWheelChecks.Run(app);
+        Check(HotkeyActions.All.Length == 14 && HotkeyActions.All.Distinct().Count() == 14
+            && !HotkeyActions.All.Contains("静音当前应用") && !HotkeyActions.Defaults.ContainsKey("静音当前应用")
+            && HotkeyActions.Groups.All(group => !group.Actions.Contains("静音当前应用")),
+            "14 remaining actions omit retired playback mute from registration, defaults and groups");
+        if (includeTray) passed += await TrayWheelChecks.Run(app);
         return passed;
     }
 }
