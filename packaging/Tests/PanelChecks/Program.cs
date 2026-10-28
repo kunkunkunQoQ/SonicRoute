@@ -183,6 +183,7 @@ internal static partial class Program
             if (args.Contains("--render-scrollbars")) { RenderScrollbars(theme, args.Last()); return 0; }
             if (args.Contains("--app-scroll-layout")) { CheckAppScrollLayout(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} APP_SCROLL_LAYOUT_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--output-optimization")) { CheckOutputOptimization(theme, windows); Console.WriteLine($"RESULT passed={_checks} OUTPUT_OPTIMIZATION_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
+            if (args.Contains("--overview-mute-readback")) { CheckOverviewMuteReadback(windows); Console.WriteLine($"RESULT passed={_checks} OVERVIEW_MUTE_READBACK_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=FAKES_ONLY"); return 0; }
             if (args.Contains("--overview-mute")) { CheckOverviewMute(theme, windows, args.Last()); CheckDeviceHotkeysAndTraySettings(theme, windows); Console.WriteLine($"RESULT passed={_checks} OVERVIEW_MUTE_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=FAKES_ONLY"); return 0; }
             foreach (string mode in new[] { "light", "dark" })
             {

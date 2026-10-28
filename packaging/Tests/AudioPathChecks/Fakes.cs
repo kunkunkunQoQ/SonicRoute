@@ -132,14 +132,15 @@ namespace AudioPathChecks
         internal readonly uint Pid;
         internal float Volume = .6f;
         internal bool Muted, WriteFails, IgnoreWrite;
-        internal int ReadFailures, VolumeReadFailures, Writes, IconReads;
+        internal int ReadFailures, VolumeReadFailures, Writes, IconReads, MuteReads;
         internal AudioSessionState State = AudioSessionState.Active;
         internal Action? OnReadVolume;
+        internal Action? OnReadMute;
         internal Action? AfterMuteWrite;
         internal Session(uint pid) => Pid = pid;
         public int GetMasterVolume(out float v) { OnReadVolume?.Invoke(); v = Volume; return VolumeReadFailures-- > 0 ? -1 : 0; }
         public int SetMasterVolume(float v, ref Guid c) { Writes++; if (WriteFails) return -1; if (!IgnoreWrite) Volume = v; return 0; }
-        public int GetMute(out int v) { v = Muted ? 1 : 0; return ReadFailures-- > 0 ? -1 : 0; }
+        public int GetMute(out int v) { MuteReads++; OnReadMute?.Invoke(); v = Muted ? 1 : 0; return ReadFailures-- > 0 ? -1 : 0; }
         public int SetMute(int v, ref Guid c) { Writes++; if (WriteFails) return -1; if (!IgnoreWrite) Muted = v != 0; AfterMuteWrite?.Invoke(); return 0; }
         public int GetState(out AudioSessionState state) { state = State; return 0; }
         public int GetProcessId(out uint pid) { pid = Pid; return 0; }

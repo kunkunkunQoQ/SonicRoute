@@ -166,31 +166,40 @@ internal static partial class Program
             config.ExperimentalMic = true;
             typeof(MainWindow).GetMethod("ApplyExpMicUi", Instance)!.Invoke(window, new object[] { true });
             Select(a);
-            Task Change(bool input) => (Task)typeof(MainWindow).GetMethod("ChangeOverviewMuteAsync", Instance)!.Invoke(window, new object[] { input })!;
-            async Task ClickOutput()
+            async Task ClickMute(CheckBox control, bool input)
             {
-                typeof(System.Windows.Controls.Primitives.ToggleButton).GetMethod("OnClick", Instance)!.Invoke(mute, null);
+                typeof(System.Windows.Controls.Primitives.ToggleButton).GetMethod("OnClick", Instance)!.Invoke(control, null);
                 var deadline = DateTime.UtcNow.AddSeconds(5);
-                while (Field<bool>(window, "_overviewMuteBusy"))
+                while (Field<bool>(window, input ? "_overviewMicMuteBusy" : "_overviewMuteBusy"))
                 {
                     if (DateTime.UtcNow > deadline) throw new TimeoutException("Overview mute click did not complete");
                     await Task.Delay(1);
                 }
             }
-            Finish(ClickOutput());
+            Finish(ClickMute(mute, false));
             Check(!outputA.Muted && outputA.MuteWrites == 1 && outputB.MuteWrites == 0 && inputA.MuteWrites == 0
                 && clicks == 1 && mute.IsEnabled,
                 "switch Click explicitly unmutes only the selected app's playback session");
-            Finish(ClickOutput());
+            Finish(ClickMute(mute, false));
             Check(outputA.Muted && outputA.MuteWrites == 2 && mute.IsChecked == true && clicks == 2 && mute.IsEnabled,
                 "switch Click mutes playback and applies the actual readback");
-            mic.IsChecked = true; Finish(Change(true));
+            var inputCombo = (ComboBox)window.FindName("OverviewInputCombo");
+            var inputItems = inputCombo.ItemsSource;
+            int refreshRequest = Field<int>(window, "_overviewStateRequest");
+            int outputReads = outputA.MuteReads + outputB.MuteReads;
+            Finish(ClickMute(mic, true));
             Check(inputA.MuteWrites == 1 && inputA.Muted && inputB.MuteWrites == 0 && outputB.MuteWrites == 0,
                 "microphone switch writes only the current app's fake capture session");
+            Check(clicks == 3 && ReferenceEquals(inputItems, inputCombo.ItemsSource)
+                && Field<int>(window, "_overviewStateRequest") == refreshRequest
+                && outputA.MuteReads + outputB.MuteReads == outputReads,
+                "microphone Click completes without rereading playback or rebinding device UI");
             // Checked capture writes force native read-only discovery after the fake session write.
             // The deliberately missing PID cannot be confirmed there, so UI must report failure.
             Check(((TextBlock)window.FindName("OverviewStatusText")).Text == L10n.T("Ov.AppMicUnavailable"),
                 "a capture write absent from fresh discovery is never reported as confirmed success");
+            Check(!mic.IsEnabled && mic.IsChecked == false,
+                "missing capture after failure leaves the switch disabled with its actual readback");
             Select(null);
             window.Close(); Readback((int)b.ProcessId, true);
             Check(mic.IsChecked == false, "closed overview ignores late microphone readback");

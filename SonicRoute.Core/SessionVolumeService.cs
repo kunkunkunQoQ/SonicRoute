@@ -307,30 +307,30 @@ namespace SonicRoute.Core
             }
         }
 
-        /// <summary>麦克风是否静音（读组内第一个输入会话）。</summary>
-        public static bool IsInputMuted(int pid)
+        /// <summary>共用一次输入会话定位读取可用性和静音；读组内第一个，保留 5 秒新鲜度及一次失败重试。
+        /// 可用性仍表示会话存在；静音读取失败沿用未静音的返回值，不改变写入能力判断。</summary>
+        public static (bool Available, bool Muted) ReadInputState(int pid)
         {
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var list = FindCaptureVolumes(pid, 5);
-                if (list == null || list.Count == 0) return false;
-                try
+                FindCaptureVolumes(pid, 5);
+                lock (_lock)
                 {
-                    if (list[0].GetMute(out int m) < 0)
+                    if (!_captureVolumes.TryGetValue(pid, out var sessions) || sessions.Count == 0) return (false, false);
+                    try
                     {
-                        if (attempt == 0) { Refresh(true); continue; }
-                        return false;
+                        if (sessions[0].GetMute(out int m) >= 0) return (true, m != 0);
                     }
-                    return m != 0;
+                    catch { /* Retry after refreshing; keep references alive during the read. */ }
+                    if (attempt != 0) return (true, false);
                 }
-                catch
-                {
-                    if (attempt == 0) { Refresh(true); continue; }
-                    return false;
-                }
+                Refresh(true);
             }
-            return false;
+            return (false, false);
         }
+
+        /// <summary>麦克风是否静音（读组内第一个输入会话）。</summary>
+        public static bool IsInputMuted(int pid) => ReadInputState(pid).Muted;
 
         /// <summary>设置麦克风静音；对进程全部输入会话生效。</summary>
         public static bool SetInputMute(int pid, bool mute)

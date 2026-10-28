@@ -114,3 +114,10 @@ switch visual, and calls the actual ToggleButton click path for playback mute
 and unmute. Each click must write once to the selected fake session and leave
 the switch enabled after readback. It shows no window, injects no physical
 input, and writes only managed fake audio sessions.
+
+`--overview-mute-readback` runs just the current-app overview state and click
+checks. It also verifies that microphone-click completion preserves the input
+device ItemsSource, starts no full device refresh, and performs no playback
+state read. A missing capture session after a failed checked write must leave
+the switch disabled with the actual state. It does not repeat theme, language,
+layout or hotkey-list checks when those paths have not changed.

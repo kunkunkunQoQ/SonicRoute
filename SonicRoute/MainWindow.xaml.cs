@@ -609,7 +609,7 @@ namespace SonicRoute
                 var pid = (int)_overviewApp.ProcessId;
                 // 并行读取可见功能的状态；隐藏输入路由时不查询其持久化端点。
                 var tMic = _config.ExperimentalMic
-                    ? _uiLifetime.ReadAsync(() => (Available: SessionVolumeService.HasInputSession(pid), Muted: SessionVolumeService.IsInputMuted(pid)))
+                    ? _uiLifetime.ReadAsync(() => SessionVolumeService.ReadInputState(pid))
                     : Task.FromResult((Available: false, Muted: false));
                 var tOut = _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
                 var tIn = _config.ExperimentalMic
@@ -864,7 +864,10 @@ namespace SonicRoute
                     if (input)
                     {
                         var changed = SessionVolumeService.ChangeInputMuteChecked(pid, target);
-                        return (changed.Muted, changed.Applied, Available: SessionVolumeService.HasInputSession(pid));
+                        // A confirmed write already rediscovered and verified the capture sessions.
+                        // Only failure needs another capture read; neither case reloads routing/playback UI.
+                        var inputState = changed.Applied ? (Available: true, changed.Muted) : SessionVolumeService.ReadInputState(pid);
+                        return (inputState.Muted, changed.Applied, inputState.Available);
                     }
                     bool applied = SessionVolumeService.SetMute(pid, target);
                     var state = SessionVolumeService.ReadState(pid);
@@ -883,8 +886,8 @@ namespace SonicRoute
                 else { _overviewMuteBusy = false; ++_overviewMuteVersion; }
                 if (!_isClosed)
                 {
-                    if (input || _overviewApp?.ProcessId != (uint)pid) _ = RefreshOverviewDevicesVolumeAsync();
-                    else control.IsEnabled = available && _overviewVolumeReady;
+                    if (_overviewApp?.ProcessId != (uint)pid) _ = RefreshOverviewDevicesVolumeAsync();
+                    else control.IsEnabled = available && (input ? _config.ExperimentalMic : _overviewVolumeReady);
                 }
             }
         }

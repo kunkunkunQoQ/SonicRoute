@@ -11,6 +11,13 @@ Repeat with `net8.0-windows` and `net48` for compatibility. `-p:BaselineRevision
 
 The preparation script compiles product service bodies with only native object construction/release replaced by managed fakes; the panel's actual row-read lambda is extracted verbatim. The routing factory boundary is a fake as well. No real audio volume, mute, route, default-device or user data writes occur. This checks control flow, call counts, failure handling and reference protection; it does **not** prove native COM, physical audio, CPU savings, or installed Store behavior. Product code has no test hooks or new runtime dependency.
 
+`--input-state` limits current-source execution to combined capture availability
+and mute reads: first-session/PID selection, cache reuse and invalidation,
+missing sessions, one read-failure retry, consistent state after disappearance,
+reference protection during refresh, and unchanged checked-write verification.
+These are fake sessions; PID-targeted calls do not prove that native capture
+mute is isolated from other applications using the same recording device.
+
 The baseline assertions document previous behavior, including the mixed-session and role-parameter defects, rather than treating those defects as the desired result.
 
 Current-source checks also cover concurrent volume adjustments and a blocked refresh

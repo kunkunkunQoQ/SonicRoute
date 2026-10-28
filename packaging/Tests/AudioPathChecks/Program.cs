@@ -37,6 +37,14 @@ internal static partial class Program
     public static int Main(string[] args)
     {
         if (args.Length > 0 && args[0] == "--perf-session") return SessionPerformance(args.Length > 1 && args[1] == "concurrent");
+#if !BASELINE
+        if (args.Contains("--input-state"))
+        {
+            RunInputStateChecks();
+            Console.WriteLine($"RESULT passed={_passed} failed={_failed} runtime={Environment.Version} inputStateOnly=true audioWrites=FAKES_ONLY");
+            return _failed == 0 ? 0 : 1;
+        }
+#endif
         Case("device mute uses one activation and actual state", () =>
         {
             var device = Boundary.Add(EDataFlow.eRender);
