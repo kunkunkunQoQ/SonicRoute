@@ -178,6 +178,7 @@ internal static partial class Program
             if (args.Contains("--output-volumes")) { CheckOutputVolumes(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} OUTPUT_VOLUME_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--output-followup")) { CheckOutputFollowup(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} OUTPUT_FOLLOWUP_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--app-cards")) { CheckAppCards(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} APP_CARDS_UI_ONLY=true REAL_AUDIO_WRITES=NONE MUTE_WRITES=MANAGED_FIXTURES_ONLY"); return 0; }
+            if (args.Contains("--app-row-names")) { CheckAppRowNames(theme, windows, args.Last()); CheckAppScrollLayout(theme, windows, args.Last(), true); Console.WriteLine($"RESULT passed={_checks} APP_ROW_NAMES_ONLY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--hotkeys-only")) { CheckDeviceHotkeysAndTraySettings(theme, windows); Console.WriteLine($"RESULT passed={_checks} HOTKEY_TRAY_SETTINGS_UI_ONLY=true AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--measure-sections")) { MeasureSections(windows, args); return 0; }
             if (args.Contains("--render-scrollbars")) { RenderScrollbars(theme, args.Last()); return 0; }

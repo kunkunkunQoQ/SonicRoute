@@ -376,6 +376,7 @@ namespace SonicRoute
                     && previous[i].DisplayName == outputs[i].DisplayName && previous[i].IsDefault == outputs[i].IsDefault;
             _outputDisplay = PanelDevices.WithSystemDefault(outputs, EDataFlow.eRender, config);
             if (same) return;
+            RefreshRowDeviceNames();
             string? selected = _systemDeviceId;
             SetSystemDevices(outputs, defaultId);
             var retained = outputs.FirstOrDefault(d => string.Equals(d.Id, selected, StringComparison.OrdinalIgnoreCase));

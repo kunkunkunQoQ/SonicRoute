@@ -45,6 +45,9 @@ namespace SonicRoute
         internal Slider PanelHeightSlider = null!;
         internal TextBlock PanelHeightValue = null!;
         internal CheckBox AppPeakMeterCheck = null!;
+        internal CheckBox PanelLegacyRowsCheck = null!;
+        internal Grid PanelOutputNameRow = null!;
+        internal CheckBox PanelOutputNameCheck = null!;
         internal Grid SettingsPage = null!;
         internal ToggleButton KeepDevicesMoreToggle = null!;
         internal StackPanel KeepDevicesBody = null!;
@@ -95,7 +98,6 @@ namespace SonicRoute
         internal ItemsControl HotkeyList = null!;
         internal Grid ExperimentalPage = null!;
         internal CheckBox ExpBackgroundPollingCheck = null!;
-        internal CheckBox ExpPanelOutputNameCheck = null!;
         internal CheckBox ExpHistoryCheck = null!;
         internal ContentControl ExpHistoryOptionsHost = null!;
         internal Button ExpClearConfigButton = null!;
@@ -150,6 +152,9 @@ namespace SonicRoute
                 PanelHeightSlider = FindDeferredControl<Slider>(content, nameof(PanelHeightSlider));
                 PanelHeightValue = FindDeferredControl<TextBlock>(content, nameof(PanelHeightValue));
                 AppPeakMeterCheck = FindDeferredControl<CheckBox>(content, nameof(AppPeakMeterCheck));
+                PanelLegacyRowsCheck = FindDeferredControl<CheckBox>(content, nameof(PanelLegacyRowsCheck));
+                PanelOutputNameRow = FindDeferredControl<Grid>(content, nameof(PanelOutputNameRow));
+                PanelOutputNameCheck = FindDeferredControl<CheckBox>(content, nameof(PanelOutputNameCheck));
                 ThemePageHost.Child = content;
             }
             finally
@@ -249,7 +254,6 @@ namespace SonicRoute
                 var content = (Grid)Resources["ExperimentalPageContent"];
                 ExperimentalPage = FindDeferredControl<Grid>(content, nameof(ExperimentalPage));
                 ExpBackgroundPollingCheck = FindDeferredControl<CheckBox>(content, nameof(ExpBackgroundPollingCheck));
-                ExpPanelOutputNameCheck = FindDeferredControl<CheckBox>(content, nameof(ExpPanelOutputNameCheck));
                 ExpHistoryCheck = FindDeferredControl<CheckBox>(content, nameof(ExpHistoryCheck));
                 ExpHistoryOptionsHost = FindDeferredControl<ContentControl>(content, nameof(ExpHistoryOptionsHost));
                 ExpClearConfigButton = FindDeferredControl<Button>(content, nameof(ExpClearConfigButton));
@@ -285,7 +289,6 @@ namespace SonicRoute
             HotkeyList = null!;
             ExperimentalPage = null!;
             ExpBackgroundPollingCheck = null!;
-            ExpPanelOutputNameCheck = null!;
             ExpHistoryCheck = null!;
             ExpHistoryOptionsHost = null!;
             ExpClearConfigButton = null!;
@@ -321,6 +324,9 @@ namespace SonicRoute
             PanelHeightSlider = null!;
             PanelHeightValue = null!;
             AppPeakMeterCheck = null!;
+            PanelLegacyRowsCheck = null!;
+            PanelOutputNameRow = null!;
+            PanelOutputNameCheck = null!;
             SettingsPage = null!;
             KeepDevicesMoreToggle = null!;
             KeepDevicesBody = null!;

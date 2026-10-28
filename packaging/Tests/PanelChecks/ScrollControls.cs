@@ -29,11 +29,15 @@ internal static partial class Program
         Content = new Border { Width = 800, Height = 1800, Background = Brushes.Transparent }
     };
 
-    private static void CheckAppScrollLayout(MethodInfo theme, List<Window> windows, string directory)
+    private static void CheckAppScrollLayout(MethodInfo theme, List<Window> windows, string directory, bool includeLegacy = false)
     {
         Directory.CreateDirectory(directory);
+        var config = ConfigService.Load();
+        bool savedLayout = config.QuickPanelUseLegacyAppRows;
+        foreach (bool legacy in includeLegacy ? new[] { false, true } : new[] { savedLayout })
         foreach (string mode in new[] { "light", "dark" })
         {
+            config.QuickPanelUseLegacyAppRows = legacy;
             theme.Invoke(null, new object[] { mode, "#00D5DD" });
             var panel = new QuickPanelModernWindow(); windows.Add(panel);
             var apps = Enumerable.Range(0, 3).Select(i => new AudioAppInfo
@@ -54,7 +58,7 @@ internal static partial class Program
             {
                 var bitmap = new RenderTargetBitmap(372, 450, 96, 96, PixelFormats.Pbgra32); bitmap.Render(surface);
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                using var stream = File.Create(Path.Combine(directory, mode + "-" + state + ".png")); encoder.Save(stream);
+                using var stream = File.Create(Path.Combine(directory, mode + (legacy ? "-legacy" : "") + "-" + state + ".png")); encoder.Save(stream);
             }
             Arrange();
             Check(viewer.ComputedVerticalScrollBarVisibility == Visibility.Collapsed, mode + " fitting rows start without a vertical scrollbar");
@@ -85,6 +89,7 @@ internal static partial class Program
                 mode + " layout and scrolling queue no audio writes");
             panel.Close();
         }
+        config.QuickPanelUseLegacyAppRows = savedLayout;
     }
     private static void CheckScrollControls(string mode)
     {

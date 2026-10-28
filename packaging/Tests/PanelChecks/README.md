@@ -26,6 +26,15 @@ slider width and expand-arrow position, the shared native scrollbar in the right
 gutter, scrolling to the end, collapse recovery and absence of queued audio writes.
 It renders the unshown product panel and uses only missing-PID audio reads.
 
+`--app-row-names <image-directory>` checks the theme setting directly below the
+peak-meter option, the peer classic-layout switch above it, saved-value/deferred-page migration, nine language labels,
+application/device-name modes without experimental mode, custom/default/missing
+device labels, unchanged-row reuse, name-above-slider layout, the retained thumb
+and current-application theme highlight, classic layout geometry, hidden name
+settings with preserved choices, and the scroll-gutter regression in both layouts. It renders light/dark product controls
+offscreen. Playback state uses managed read-only fixtures; route reads target
+missing PIDs, and no real audio is written or capture state queried.
+
 `--overview-mute <image-directory>` checks the overview playback mute button in
 the actual product BAML. It covers nine languages, light/dark themes, 920/780-DIP
 widths, reuse of QuickPanelToolButton, placement left of the slider, removal of

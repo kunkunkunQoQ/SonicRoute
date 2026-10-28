@@ -1609,6 +1609,9 @@ namespace SonicRoute
                 string accent = _config.Accent ?? "blue";
                 SyncThemeColorUi(accent);
                 AppPeakMeterCheck.IsChecked = _config.ShowAppPeakMeter;
+                PanelLegacyRowsCheck.IsChecked = _config.QuickPanelUseLegacyAppRows;
+                PanelOutputNameCheck.IsChecked = _config.QuickPanelShowOutputName;
+                ApplyPanelAppRowDisplayUi();
                 SyncOsdSliders();
 
                 // 快速面板高度（快速面板固定高度，350–850，默认 450）：
@@ -2018,8 +2021,6 @@ namespace SonicRoute
             _config.ExperimentalMode = enabled;
             ConfigService.Save(_config);
             if (!_config.ExperimentalMode) AutoRuleService.StopExecutionHistory();
-            if (!enabled && _config.QuickPanelShowOutputName
-                && ((App)Application.Current).QuickPanelInstance is { } panel) panel.Close();
             SyncExecutionHistoryOptions();
             // 导航"实验设置"入口立即显示/隐藏（功能本身重启生效）
             NavExperimental.Visibility = _config.ExperimentalMode ? Visibility.Visible : Visibility.Collapsed;
@@ -2054,16 +2055,14 @@ namespace SonicRoute
             if (expMic) _ = EnsureInputDevicesAsync();
         }
 
-        /// <summary>实验设置页：加载麦克风选项 / 快速面板显示 / 折叠 的当前配置。</summary>
+        /// <summary>实验设置页：加载后台检测与自动化历史的当前配置。</summary>
         private void LoadExperimentalSettings()
         {
             _suppressSettings = true;
             try
             {
-                bool expOn = _config.ExperimentalMode;
                 ApplyExpMicUi(_config.ExperimentalMic);
                 ExpBackgroundPollingCheck.IsChecked = _config.BackgroundPollingFallbackEnabled;
-                ExpPanelOutputNameCheck.IsChecked = _config.QuickPanelShowOutputName;
                 ExpHistoryCheck.IsChecked = _config.ExecutionHistoryEnabled;
                 SyncExecutionHistoryOptions();
 
@@ -2072,15 +2071,6 @@ namespace SonicRoute
             {
                 _suppressSettings = false;
             }
-        }
-
-        private void ExpPanelOutputName_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!IsSettingsChange(sender, e)) return;
-            _config.QuickPanelShowOutputName = ExpPanelOutputNameCheck.IsChecked == true;
-            ConfigService.Save(_config);
-            // 复用原面板关闭/释放流程；不创建隐藏面板，下次呼出按新选项加载。
-            ((App)Application.Current).QuickPanelInstance?.Close();
         }
 
         private void ExpBackgroundPolling_Changed(object sender, RoutedEventArgs e)
@@ -2794,6 +2784,25 @@ namespace SonicRoute
             _config.ShowAppPeakMeter = enabled;
             ConfigService.Save(_config);
             ((App)Application.Current).ApplyQuickPanelMeterSetting(enabled);
+        }
+
+        private void ApplyPanelAppRowDisplayUi()
+        {
+            PanelOutputNameRow.Visibility = PanelLegacyRowsCheck.IsChecked == true ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void PanelAppRowDisplay_Changed(object sender, RoutedEventArgs e)
+        {
+            if (!IsSettingsChange(sender, e)) return;
+            bool legacy = PanelLegacyRowsCheck.IsChecked == true;
+            bool enabled = PanelOutputNameCheck.IsChecked == true;
+            ApplyPanelAppRowDisplayUi();
+            if (_config.QuickPanelUseLegacyAppRows == legacy && _config.QuickPanelShowOutputName == enabled) return;
+            _config.QuickPanelUseLegacyAppRows = legacy;
+            _config.QuickPanelShowOutputName = enabled;
+            ConfigService.Save(_config);
+            // 复用面板关闭/释放流程，下次呼出按新选项加载，不创建隐藏面板。
+            ((App)Application.Current).QuickPanelInstance?.Close();
         }
 
         /// <summary>右上角 OSD 通知（兼容主题/强调色/透明度）。</summary>
