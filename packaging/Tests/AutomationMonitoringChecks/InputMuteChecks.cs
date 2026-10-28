@@ -40,7 +40,7 @@ internal static class InputMuteChecks
             int retiredReads = AudioService.AppReads, retiredNotices = TrayFixture.Notices;
             await app.TestHotkey("静音当前应用麦克风");
             Check(SessionVolumeService.LastInput == beforeRetired && GlobalMicMuteService.Writes.Count == globalWrites
-                && app.AppInputReadbacks.Count == 0 && AudioService.AppReads == retiredReads && TrayFixture.Notices == retiredNotices,
+                && AudioService.AppReads == retiredReads && TrayFixture.Notices == retiredNotices,
                 "saved app microphone shortcut performs no discovery, audio write, readback or OSD");
             var beforeGlobal = SessionVolumeService.LastInput;
             await app.TestHotkey(HotkeyActions.ActMuteInput);
@@ -54,9 +54,8 @@ internal static class InputMuteChecks
             Check(await Step(AutoRuleAction.SetAppInputMute, true)
                 && SessionVolumeService.LastInput == (202345, (bool?)true), "existing specified-app input action remains distinct");
             SessionVolumeService.InputApplied = false;
-            int readbacks = app.AppInputReadbacks.Count;
-            Check(!await Step(AutoRuleAction.SetCurrentAppInputMute, true) && app.AppInputReadbacks.Count == readbacks,
-                "failed capture verification fails automation without publishing success");
+            Check(!await Step(AutoRuleAction.SetCurrentAppInputMute, true),
+                "failed capture verification still fails automation after overview capture controls are removed");
             SessionVolumeService.InputApplied = true;
             using (var canceled = new CancellationTokenSource())
             {

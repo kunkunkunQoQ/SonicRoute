@@ -64,8 +64,8 @@ namespace SonicRoute
             [ActSystemVolUp] = "Ctrl+Alt+Shift+WheelUp",
             [ActSystemVolDown] = "Ctrl+Alt+Shift+WheelDown",
             [ActSwitchOutput] = "Ctrl+Alt+D",
-            [ActMute] = "Ctrl+Shift+M", // 当前应用播放静音。
-            [ActMuteInput] = "Ctrl+Shift+N", // 全局麦克风静音。
+            [ActMute] = "Ctrl+Shift+M",   // Ctrl+Alt+M 常被其他程序注册（本机实测被占用），改用 Ctrl+Shift+M
+            [ActMuteInput] = "Ctrl+Shift+N",      // 麦克风静音，与扬声器静音 Ctrl+Shift+M 区分
             [ActSwitchAllOutput] = "Ctrl+Alt+Shift+O", // 切换全局应用输出设备
             [ActSwitchAllInput] = "Ctrl+Alt+Shift+I",  // 切换全局应用输入设备
             [ActResetAllApps] = "Ctrl+Alt+Shift+R",     // 还原全部应用默认设备

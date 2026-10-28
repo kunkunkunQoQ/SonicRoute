@@ -26,13 +26,13 @@ slider width and expand-arrow position, the shared native scrollbar in the right
 gutter, scrolling to the end, collapse recovery and absence of queued audio writes.
 It renders the unshown product panel and uses only missing-PID audio reads.
 
-`--overview-mute <image-directory>` checks the relocated playback/capture mute
-switches in the actual product BAML. It covers nine languages, light/dark themes,
-920/780-DIP widths, shared switch styling, current-PID readback, microphone-option
-hiding, absent recording sessions, no Click on programmatic updates, close guards,
-and the independent unbound app-microphone hotkey entry. Explicit mute writes use
-only managed fake sessions for missing PIDs; capture verification subsequently
-uses native read-only discovery. No windows are shown and no real audio is written.
+`--overview-mute <image-directory>` checks the overview playback mute button in
+the actual product BAML. It covers nine languages, light/dark themes, 920/780-DIP
+widths, reuse of QuickPanelToolButton, placement left of the slider, removal of
+the device-row switches and plus/minus buttons, current-PID readback and Click,
+ignored-write failure handling, no capture-state work, close guards and the
+related hotkey/settings list. Writes use managed fake playback sessions only;
+no windows are shown and no real audio is written.
 
 Build each runtime separately (default NET10):
 
@@ -107,17 +107,9 @@ configuration directory; it does not show windows or write real audio state.
 The saved offscreen PNGs include 96/144 raster DPI variants, not physical monitor
 DPI, DWM presentation, hardware input or whole-app performance measurements.
 
-`--overview-mute <absolute-image-directory>` checks the overview mute controls,
-current-app state/readback and the related hotkey/settings list. It checks the
-card padding, label and knob's visual hit route, the non-interactive shared
-switch visual, and calls the actual ToggleButton click path for playback mute
-and unmute. Each click must write once to the selected fake session and leave
-the switch enabled after readback. It shows no window, injects no physical
-input, and writes only managed fake audio sessions.
-
 `--overview-mute-readback` runs just the current-app overview state and click
-checks. It also verifies that microphone-click completion preserves the input
-device ItemsSource, starts no full device refresh, and performs no playback
-state read. A missing capture session after a failed checked write must leave
-the switch disabled with the actual state. It does not repeat theme, language,
-layout or hotkey-list checks when those paths have not changed.
+checks. Programmatic readback must never write audio; actual Button.OnClick
+toggles only the selected playback PID, verifies its readback and rejects an
+ignored write. Removing capture controls must leave no capture mute reads or
+writes, even with the microphone option enabled. It skips theme, language,
+layout and hotkey-list checks when those paths have not changed.

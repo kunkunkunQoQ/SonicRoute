@@ -44,8 +44,8 @@ namespace SonicRoute
         private AudioAppInfo? _appsSelected;
         private bool _suppressVolume;
         private bool _overviewVolumeReady;
-        private bool _overviewMuteBusy, _overviewMicMuteBusy;
-        private int _overviewMuteVersion, _overviewMicMuteVersion;
+        private bool _overviewMuteBusy;
+        private int _overviewMuteVersion;
         private bool _appsVolumeReady;
         private bool _suppressAppCombo;
         private bool _suppressDevCombo;
@@ -587,7 +587,7 @@ namespace SonicRoute
             try
             {
                 int request = ++_overviewStateRequest;
-                int muteVersion = _overviewMuteVersion, micVersion = _overviewMicMuteVersion;
+                int muteVersion = _overviewMuteVersion;
                 uint? targetPid = _overviewApp?.ProcessId;
                 var outs = PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config);
                 // 输入下拉框显示全部设备（与输出下拉一致，不受「保留的设备」筛选影响）
@@ -597,8 +597,6 @@ namespace SonicRoute
 
                 if (_overviewApp == null)
                 {
-                    OverviewMicMuteButton.IsChecked = false;
-                    OverviewMicMuteButton.IsEnabled = false;
                     RenderQuickButtons(OverviewOutputQuickPanel, outs);
                     OverviewInputCombo.Tag = null;
                     RenderInputQuickButtons();
@@ -608,26 +606,17 @@ namespace SonicRoute
 
                 var pid = (int)_overviewApp.ProcessId;
                 // 并行读取可见功能的状态；隐藏输入路由时不查询其持久化端点。
-                var tMic = _config.ExperimentalMic
-                    ? _uiLifetime.ReadAsync(() => SessionVolumeService.ReadInputState(pid))
-                    : Task.FromResult((Available: false, Muted: false));
                 var tOut = _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
                 var tIn = _config.ExperimentalMic
                     ? _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture))
                     : Task.FromResult<string?>(null);
                 var tState = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadState(pid));
-                await Task.WhenAll(tMic, tOut, tIn, tState);
+                await Task.WhenAll(tOut, tIn, tState);
                 if (_isClosed || request != _overviewStateRequest || targetPid != _overviewApp?.ProcessId) return;
                 var outId = tOut.Result;
                 var inId = tIn.Result;
                 int vol = tState.Result.Volume;
                 bool muted = tState.Result.Muted;
-
-                if (!_overviewMicMuteBusy && micVersion == _overviewMicMuteVersion)
-                {
-                    OverviewMicMuteButton.IsChecked = tMic.Result.Muted;
-                    OverviewMicMuteButton.IsEnabled = tMic.Result.Available;
-                }
 
                 string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
 
@@ -656,7 +645,7 @@ namespace SonicRoute
                 if (!_overviewMuteBusy && muteVersion == _overviewMuteVersion)
                 {
                     SetVolumeUi(vol >= 0 ? vol : null);
-                    OverviewMuteButton.IsChecked = muted;
+                    ApplyOverviewMuteVisual(muted);
                 }
 
             }
@@ -669,12 +658,10 @@ namespace SonicRoute
             bool ready = percent != null;
             _overviewVolumeReady = ready;
             OverviewVolumeSlider.IsEnabled = ready;
-            OverviewMinus.IsEnabled = ready;
-            OverviewPlus.IsEnabled = ready;
             OverviewMuteButton.IsEnabled = ready && !_overviewMuteBusy;
             if (!ready || percent == null)
             {
-                OverviewMuteButton.IsChecked = false;
+                ApplyOverviewMuteVisual(false);
                 OverviewVolumeSlider.Value = 0;
                 OverviewVolumeText.Text = "—";
             }
@@ -830,81 +817,52 @@ namespace SonicRoute
                 : L10n.T("Ov.VolFail");
         }
 
-        private void OverviewMinus_Click(object sender, RoutedEventArgs e)
+        private void ApplyOverviewMuteVisual(bool muted)
         {
-            if (_suppressVolume) return;
-            OverviewVolumeSlider.Value = Math.Max(0, OverviewVolumeSlider.Value - 5);
+            if (muted) OverviewMuteButton.SetResourceReference(Button.ForegroundProperty, "Theme.Accent");
+            else OverviewMuteButton.ClearValue(Button.ForegroundProperty);
         }
 
-        private void OverviewPlus_Click(object sender, RoutedEventArgs e)
+        private async void OverviewMuteButton_Click(object sender, RoutedEventArgs e) => await ChangeOverviewMuteAsync();
+
+        private async Task ChangeOverviewMuteAsync()
         {
-            if (_suppressVolume) return;
-            OverviewVolumeSlider.Value = Math.Min(100, OverviewVolumeSlider.Value + 5);
-        }
-
-        private async void OverviewMuteButton_Click(object sender, RoutedEventArgs e) => await ChangeOverviewMuteAsync(false);
-
-        private async void OverviewMicMuteButton_Click(object sender, RoutedEventArgs e) => await ChangeOverviewMuteAsync(true);
-
-        private async Task ChangeOverviewMuteAsync(bool input)
-        {
-            if (_isClosed || _overviewApp == null || (input
-                ? !_config.ExperimentalMic || _overviewMicMuteBusy : !_overviewVolumeReady || _overviewMuteBusy)) return;
-            var control = input ? OverviewMicMuteButton : OverviewMuteButton;
+            if (_isClosed || _overviewApp == null || !_overviewVolumeReady || _overviewMuteBusy) return;
             int pid = (int)_overviewApp.ProcessId;
-            bool target = control.IsChecked == true, available = false;
+            bool available = false;
             MarkLastUsed(_overviewApp);
-            if (input) { _overviewMicMuteBusy = true; ++_overviewMicMuteVersion; }
-            else { _overviewMuteBusy = true; ++_overviewMuteVersion; }
-            control.IsEnabled = false;
+            _overviewMuteBusy = true; ++_overviewMuteVersion;
+            OverviewMuteButton.IsEnabled = false;
             try
             {
                 var result = await Task.Run(() =>
                 {
-                    if (input)
-                    {
-                        var changed = SessionVolumeService.ChangeInputMuteChecked(pid, target);
-                        // A confirmed write already rediscovered and verified the capture sessions.
-                        // Only failure needs another capture read; neither case reloads routing/playback UI.
-                        var inputState = changed.Applied ? (Available: true, changed.Muted) : SessionVolumeService.ReadInputState(pid);
-                        return (inputState.Muted, changed.Applied, inputState.Available);
-                    }
-                    bool applied = SessionVolumeService.SetMute(pid, target);
+                    var changed = SessionVolumeService.ToggleMuteChecked(pid);
                     var state = SessionVolumeService.ReadState(pid);
-                    return (state.Muted, Applied: applied && state.Muted == target, Available: state.Volume >= 0);
+                    return (state.Muted, Applied: changed.Applied && state.Muted == changed.Muted, Available: state.Volume >= 0);
                 });
                 if (_isClosed || _overviewApp?.ProcessId != (uint)pid) return;
                 available = result.Available;
-                control.IsChecked = result.Muted;
+                ApplyOverviewMuteVisual(result.Muted);
                 OverviewStatusText.Text = L10n.T(result.Applied && available
-                    ? (input ? (result.Muted ? "Ov.MicMuted" : "Ov.MicUnmuted") : (result.Muted ? "Ov.Muted" : "Ov.Unmuted"))
-                    : (input ? "Ov.AppMicUnavailable" : "Tray.AudioUnavailable"));
+                    ? (result.Muted ? "Ov.Muted" : "Ov.Unmuted") : "Tray.AudioUnavailable");
             }
             finally
             {
-                if (input) { _overviewMicMuteBusy = false; ++_overviewMicMuteVersion; }
-                else { _overviewMuteBusy = false; ++_overviewMuteVersion; }
+                _overviewMuteBusy = false; ++_overviewMuteVersion;
                 if (!_isClosed)
                 {
                     if (_overviewApp?.ProcessId != (uint)pid) _ = RefreshOverviewDevicesVolumeAsync();
-                    else control.IsEnabled = available && (input ? _config.ExperimentalMic : _overviewVolumeReady);
+                    else OverviewMuteButton.IsEnabled = available && _overviewVolumeReady;
                 }
             }
-        }
-
-        internal void ApplyAppInputMuteReadback(int pid, bool muted)
-        {
-            if (_isClosed || _overviewApp?.ProcessId != (uint)pid || _overviewMicMuteBusy) return;
-            ++_overviewMicMuteVersion;
-            OverviewMicMuteButton.IsChecked = muted;
-            OverviewMicMuteButton.IsEnabled = _config.ExperimentalMic;
         }
 
         internal void ApplyAppMuteReadback(int pid, bool muted)
         {
             if (_isClosed || _overviewApp?.ProcessId != (uint)pid || _overviewMuteBusy) return;
             ++_overviewMuteVersion;
-            OverviewMuteButton.IsChecked = muted;
+            ApplyOverviewMuteVisual(muted);
             OverviewMuteButton.IsEnabled = _overviewVolumeReady;
             if (!_overviewVolumeReady && IsVisible) _ = RefreshOverviewDevicesVolumeAsync();
         }

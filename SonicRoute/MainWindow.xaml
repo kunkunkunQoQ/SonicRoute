@@ -409,27 +409,6 @@
             <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
-        <!-- 整张卡片由同一个 CheckBox 接收点击，右侧复用现有开关外观。 -->
-        <Style x:Key="OverviewMuteSwitch" TargetType="CheckBox">
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Margin" Value="0,0,12,8"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template"><Setter.Value>
-                <ControlTemplate TargetType="CheckBox">
-                    <Border Style="{StaticResource Card}" Padding="12,4">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="{TemplateBinding Content}" Style="{StaticResource AppsControlTitle}"
-                                       VerticalAlignment="Center" Margin="0,0,14,0"/>
-                            <CheckBox Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34"
-                                      IsChecked="{TemplateBinding IsChecked}" IsEnabled="{TemplateBinding IsEnabled}"
-                                      IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center"/>
-                        </Grid>
-                    </Border>
-                </ControlTemplate>
-            </Setter.Value></Setter>
-        </Style>
-
     <Style x:Key="ThemeSettingsCard" TargetType="Border" BasedOn="{StaticResource Card}">
         <Setter Property="CornerRadius" Value="16"/><Setter Property="Padding" Value="20"/>
         <Setter Property="Margin" Value="0,0,0,14"/>
@@ -1144,10 +1123,6 @@
                             <ComboBox x:Name="OverviewOutputCombo" Margin="0,0,12,8"
                                       Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
                                       SelectionChanged="OverviewOutputCombo_SelectionChanged"/>
-                            <CheckBox x:Name="OverviewMuteButton" Style="{StaticResource OverviewMuteSwitch}" IsEnabled="False"
-                                      Content="{Binding [Ov.MuteApp], Source={x:Static local:L10n.Instance}}"
-                                      AutomationProperties.Name="{Binding [Ov.MuteApp], Source={x:Static local:L10n.Instance}}"
-                                      Click="OverviewMuteButton_Click"/>
                         </WrapPanel>
                         <ItemsControl x:Name="OverviewOutputQuickPanel">
                             <ItemsControl.ItemsPanel>
@@ -1166,10 +1141,6 @@
                             <ComboBox x:Name="OverviewInputCombo" Margin="0,0,12,8"
                                       Width="320" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
                                       SelectionChanged="OverviewInputCombo_SelectionChanged"/>
-                            <CheckBox x:Name="OverviewMicMuteButton" Style="{StaticResource OverviewMuteSwitch}" IsEnabled="False"
-                                      Content="{Binding [Ov.MuteAppMic], Source={x:Static local:L10n.Instance}}"
-                                      AutomationProperties.Name="{Binding [Ov.MuteAppMic], Source={x:Static local:L10n.Instance}}"
-                                      Click="OverviewMicMuteButton_Click"/>
                         </WrapPanel>
                         <ItemsControl x:Name="OverviewInputQuickPanel">
                             <ItemsControl.ItemsPanel>
@@ -1185,17 +1156,18 @@
                         <TextBlock Text="{Binding [Ov.Volume], Source={x:Static local:L10n.Instance}}"
                                    Style="{StaticResource SectionTitle}"/>
                         <DockPanel MouseWheel="OverviewVolume_MouseWheel">
-                            <Button x:Name="OverviewMinus" Content="−" Style="{StaticResource GhostButton}"
-                                    Width="34" Padding="0" DockPanel.Dock="Left" Margin="0,0,8,0" Click="OverviewMinus_Click"/>
-                            <Button x:Name="OverviewPlus" Content="+" Style="{StaticResource GhostButton}"
-                                    Width="34" Padding="0" DockPanel.Dock="Right" Margin="8,0,0,0" Click="OverviewPlus_Click"/>
+                            <Button x:Name="OverviewMuteButton" Content="{Binding [Qp.Mute], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource QuickPanelToolButton}" DockPanel.Dock="Left" MinWidth="54" Height="28"
+                                    Margin="0,0,10,0" VerticalAlignment="Center" IsEnabled="False"
+                                    AutomationProperties.Name="{Binding [Ov.MuteApp], Source={x:Static local:L10n.Instance}}"
+                                    Click="OverviewMuteButton_Click"/>
                             <TextBlock x:Name="OverviewVolumeText" Text="0%"
                                        FontSize="13" FontWeight="SemiBold"
                                        Foreground="{DynamicResource Theme.TextPrimary}"
                                        DockPanel.Dock="Right" Width="46" TextAlignment="Right"
                                        VerticalAlignment="Center" Margin="0,0,4,0"/>
                             <Slider x:Name="OverviewVolumeSlider" Minimum="0" Maximum="100"
-                                    VerticalAlignment="Center" IsMoveToPointEnabled="True"
+                                    VerticalAlignment="Center" IsMoveToPointEnabled="True" Height="32"
                                     ValueChanged="OverviewVolumeSlider_ValueChanged"/>
                         </DockPanel>
                         <TextBlock x:Name="OverviewStatusText" Text=""

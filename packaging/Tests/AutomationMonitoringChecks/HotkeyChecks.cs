@@ -12,8 +12,6 @@ public sealed partial class App
     internal int GlobalCalls;
     private void ToggleQuickPanel() { }
     internal Task TestHotkey(string action) => ExecuteHotkeyCoreAsync(action);
-    internal readonly List<(int Pid, bool Muted)> AppInputReadbacks = new();
-    internal void ApplyAppInputMuteReadback(int pid, bool muted) => AppInputReadbacks.Add((pid, muted));
     internal void ApplyAppMuteReadback(int pid, bool muted) => _quickPanel?.ApplyAppMuteReadback(pid, muted);
     internal QuickPanelModernWindow? TestPanel { get => _quickPanel; set => _quickPanel = value; }
     private Task<string?> CycleDeviceAsync(int pid, EDataFlow flow) => Task.FromResult<string?>("test-device");

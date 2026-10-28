@@ -356,7 +356,6 @@ namespace SonicRoute
             _quickPanel?.RefreshAppIcons(processName);
         }
 
-        internal void ApplyAppInputMuteReadback(int pid, bool muted) => _mainWindow?.ApplyAppInputMuteReadback(pid, muted);
         internal void ApplyAppMuteReadback(int pid, bool muted)
         {
             _quickPanel?.ApplyAppMuteReadback(pid, muted);
