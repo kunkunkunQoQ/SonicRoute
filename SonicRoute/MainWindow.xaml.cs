@@ -2925,7 +2925,7 @@ namespace SonicRoute
             foreach (var (l10nKey, groupActions) in HotkeyActions.Groups)
             {
                 var visible = groupActions
-                    .Where(a => (a != HotkeyActions.ActSwitchInput && a != HotkeyActions.ActSwitchAllInput && a != HotkeyActions.ActMuteAppInput) || expMicOn)
+                    .Where(a => (a != HotkeyActions.ActSwitchInput && a != HotkeyActions.ActSwitchAllInput) || expMicOn)
                     .ToArray();
                 if (visible.Length == 0) continue;
                 var header = new TextBlock

@@ -10,8 +10,8 @@ namespace SonicRoute
     public static class HotkeyActions
     {
         public const string ActSwitchOutput = "切换当前应用快捷设备";
+        public const string ActMute = "静音当前应用";
         public const string ActMuteInput = "麦克风静音当前应用";
-        public const string ActMuteAppInput = "静音当前应用麦克风";
         public const string ActVolUp = "增大当前应用音量";
         public const string ActVolDown = "减小当前应用音量";
         public const string ActSystemVolUp = "增大系统默认输出音量";
@@ -37,8 +37,8 @@ namespace SonicRoute
             ActSystemVolUp,
             ActSystemVolDown,
             ActSwitchOutput,
+            ActMute,
             ActMuteInput,
-            ActMuteAppInput,
             ActSwitchAllOutput,
             ActSwitchAllInput,
             ActResetAllApps,
@@ -51,7 +51,7 @@ namespace SonicRoute
         /// <summary>快捷键分组：L10n 分类键 → 该组动作（用于快捷键设置页分类展示）。</summary>
         public static readonly (string L10nKey, string[] Actions)[] Groups =
         {
-            ("Hk.CatVolume", new[] { ActVolUp, ActVolDown, ActSystemVolUp, ActSystemVolDown, ActMuteInput, ActMuteAppInput }),
+            ("Hk.CatVolume", new[] { ActVolUp, ActVolDown, ActSystemVolUp, ActSystemVolDown, ActMute, ActMuteInput }),
             ("Hk.CatApp", new[] { ActSwitchOutput, ActSwitchInput }),
             ("Hk.CatGlobal", new[] { ActSwitchAllOutput, ActSwitchAllInput, ActResetAllApps, ActSetDefaultOutput, ActSetDefaultInput }),
             ("Hk.CatUi", new[] { ActPanel }),
@@ -64,8 +64,8 @@ namespace SonicRoute
             [ActSystemVolUp] = "Ctrl+Alt+Shift+WheelUp",
             [ActSystemVolDown] = "Ctrl+Alt+Shift+WheelDown",
             [ActSwitchOutput] = "Ctrl+Alt+D",
+            [ActMute] = "Ctrl+Shift+M", // 当前应用播放静音。
             [ActMuteInput] = "Ctrl+Shift+N", // 全局麦克风静音。
-            [ActMuteAppInput] = "", // 独立的应用录音动作；不占用现有全局麦克风快捷键。
             [ActSwitchAllOutput] = "Ctrl+Alt+Shift+O", // 切换全局应用输出设备
             [ActSwitchAllInput] = "Ctrl+Alt+Shift+I",  // 切换全局应用输入设备
             [ActResetAllApps] = "Ctrl+Alt+Shift+R",     // 还原全部应用默认设备
@@ -79,8 +79,8 @@ namespace SonicRoute
         public static string DisplayName(string action) => action switch
         {
             ActSwitchOutput => L10n.T("Act.SwitchOutput"),
+            ActMute => L10n.T("Act.Mute"),
             ActMuteInput => L10n.T("Act.MuteInput"),
-            ActMuteAppInput => L10n.T("Act.MuteAppInput"),
             ActVolUp => L10n.T("Act.VolUp"),
             ActVolDown => L10n.T("Act.VolDown"),
             ActSystemVolUp => L10n.T("Act.SystemVolUp"),

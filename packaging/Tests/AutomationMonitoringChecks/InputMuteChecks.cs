@@ -30,21 +30,18 @@ internal static class InputMuteChecks
                 && AutoRuleActions.SetsMute(AutoRuleAction.SetCurrentAppInputMute)
                 && !AutoRuleActions.SetsMute(AutoRuleAction.ToggleCurrentAppInputMute),
                 "current-app set/toggle reuse the correct editor parameters");
-            Check(HotkeyActions.All.Count(a => a == HotkeyActions.ActMuteAppInput) == 1
-                && HotkeyActions.Defaults[HotkeyActions.ActMuteAppInput] == ""
+            Check(!HotkeyActions.All.Contains("静音当前应用麦克风")
+                && !HotkeyActions.Defaults.ContainsKey("静音当前应用麦克风")
+                && HotkeyActions.Defaults[HotkeyActions.ActMute] == "Ctrl+Shift+M"
                 && HotkeyActions.Defaults[HotkeyActions.ActMuteInput] == "Ctrl+Shift+N",
-                "independent app microphone shortcut starts unbound and retains global binding");
+                "retired app microphone shortcut leaves playback and global microphone defaults intact");
             int globalWrites = GlobalMicMuteService.Writes.Count;
-            await app.TestHotkey(HotkeyActions.ActMuteAppInput);
-            Check(SessionVolumeService.LastInput == (202345, (bool?)null) && GlobalMicMuteService.Writes.Count == globalWrites,
-                "app microphone shortcut resolves the current app and never writes global microphones");
-            Check(app.AppInputReadbacks.Last() == (202345, true), "successful app microphone shortcut publishes its PID readback");
-            int readbacks = app.AppInputReadbacks.Count;
-            SessionVolumeService.InputApplied = false;
-            await app.TestHotkey(HotkeyActions.ActMuteAppInput);
-            Check(app.AppInputReadbacks.Count == readbacks && TrayFixture.LastText == "Ov.AppMicUnavailable",
-                "unconfirmed app microphone shortcut reports failure without a success readback");
-            SessionVolumeService.InputApplied = true;
+            var beforeRetired = SessionVolumeService.LastInput;
+            int retiredReads = AudioService.AppReads, retiredNotices = TrayFixture.Notices;
+            await app.TestHotkey("静音当前应用麦克风");
+            Check(SessionVolumeService.LastInput == beforeRetired && GlobalMicMuteService.Writes.Count == globalWrites
+                && app.AppInputReadbacks.Count == 0 && AudioService.AppReads == retiredReads && TrayFixture.Notices == retiredNotices,
+                "saved app microphone shortcut performs no discovery, audio write, readback or OSD");
             var beforeGlobal = SessionVolumeService.LastInput;
             await app.TestHotkey(HotkeyActions.ActMuteInput);
             Check(GlobalMicMuteService.Writes.Count == globalWrites + 1 && SessionVolumeService.LastInput == beforeGlobal,
@@ -57,7 +54,7 @@ internal static class InputMuteChecks
             Check(await Step(AutoRuleAction.SetAppInputMute, true)
                 && SessionVolumeService.LastInput == (202345, (bool?)true), "existing specified-app input action remains distinct");
             SessionVolumeService.InputApplied = false;
-            readbacks = app.AppInputReadbacks.Count;
+            int readbacks = app.AppInputReadbacks.Count;
             Check(!await Step(AutoRuleAction.SetCurrentAppInputMute, true) && app.AppInputReadbacks.Count == readbacks,
                 "failed capture verification fails automation without publishing success");
             SessionVolumeService.InputApplied = true;
@@ -72,9 +69,9 @@ internal static class InputMuteChecks
             Check(!await Step(AutoRuleAction.SetCurrentAppInputMute, true) && SessionVolumeService.LastInput == beforeMissing,
                 "automation without a current app fails without an audio write");
             int notices = TrayFixture.Notices;
-            await app.TestHotkey(HotkeyActions.ActMuteAppInput);
-            Check(TrayFixture.Notices == notices + 1 && SessionVolumeService.LastInput == beforeMissing,
-                "shortcut without a current app gives feedback without an audio write");
+            await app.TestHotkey("静音当前应用麦克风");
+            Check(TrayFixture.Notices == notices && SessionVolumeService.LastInput == beforeMissing,
+                "retired microphone shortcut also remains inert without a current app");
             Check(GlobalMicMuteService.Writes.Count == globalWrites + 1,
                 "all current-app paths leave global microphone state untouched");
             return passed;
