@@ -5,40 +5,46 @@ body:
   - type: markdown
     attributes:
       value: |
-        ### 欢迎分享你的创新灵感与玩法构想！
+        ### 💡 欢迎分享你的创新灵感与玩法构想！
         在这里畅所欲言，探讨关于音频路由、自动化编排、外设联动或桌面交互的各种可能。
         社区成员可以自由讨论、补充设计并投票 👍 支持；讨论成熟且符合项目定位的构想后续将转化为正式功能。
+        
+        > [!NOTE]
+        > **设计原则参考**：SonicRoute 坚持 **事件优先驱动**、**极致控制闲时资源占用**、**不注入进程/免虚拟声卡驱动** 的轻量设计原则。在构思功能时，优先考虑无需引入重型常驻轮询的优雅交互方案。
 
   - type: input
     id: idea_title
     attributes:
       label: 一句话灵感标题
       description: 概括你的新想法
-      placeholder: "例如：支持依据应用前台焦点自动平滑淡入淡出（Duck Audio）其他背景应用"
+      placeholder: "例如：支持依据游戏前台焦点自动平滑淡入淡出（Duck Audio）背景音乐"
     validations:
       required: true
 
   - type: dropdown
     id: area
     attributes:
-      label: 涉及的领域
+      label: 涉及的功能领域
       description: 该灵感主要影响哪一部分
       options:
-        - 自动化规则与智能触发 (Automation)
-        - 桌面面板与托盘滚轮体验 (UI & UX)
-        - 麦克风与全域静音体系 (Microphone & Mute)
-        - 极客短命令与本地 IPC 联动 (CLI & Scripts)
-        - 虚拟声卡与多轨道录播生态 (Virtual Audio / OBS)
-        - 其他奇思妙想
+        - 🤖 自动化规则与智能触发 (Automation & Triggers)
+        - 🎚️ 桌面面板与输出设备扩展 (Quick Panel & Output Volumes)
+        - 🖱️ 托盘滚轮盲操与交互手势 (Tray Wheel & UI/UX)
+        - 🎙️ 麦克风控制与全域静音体系 (Microphone & Mute)
+        - ⌨️ 全局快捷键与鼠标侧键映射 (Hotkeys & Input Hooks)
+        - 💻 极客短命令与本地 IPC 联动 (CLI, Scripts & Stream Deck)
+        - 📹 虚拟声卡与多轨道录播生态 (Virtual Audio & OBS)
+        - 🎨 主题样式、动画与 OSD 视觉 (Themes & Visuals)
+        - 💡 其他奇思妙想与跨界脑洞
     validations:
       required: true
 
   - type: textarea
     id: motivation
     attributes:
-      label: 为什么会有这个想法？它能带来什么好处？
-      description: 阐明使用场景、受众人群以及相比现有方式的优势
-      placeholder: "例如：开黑或者打 FPS 听声辨位时，背景音乐如果能自动微弱压低 60%，就能免去频繁切出调节..."
+      label: 为什么会有这个想法？它能解决什么痛点？
+      description: 阐明日常使用场景、受众人群以及相比现有手动操作的优势
+      placeholder: "例如：打 FPS 游戏需要听脚步声时，背景音乐如果能自动微弱压低 60%，就能免去频繁切出窗口调节..."
     validations:
       required: true
 
@@ -46,16 +52,25 @@ body:
     id: details
     attributes:
       label: 设想的交互流程或实现思路
-      description: 你期望用户在界面上如何配置？它是自动生效还是快捷键触发？
-      placeholder: "描述你脑海中的交互草图或逻辑流程..."
+      description: 你期望用户在界面上如何配置？它是自动生效、快捷键触发还是通过命令调用？
+      placeholder: "描述你脑海中的交互流程、界面选项或逻辑步骤..."
     validations:
       required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: 现有的替代方案或临时解决方式 (可选)
+      description: 你目前是如何临时应对这个需求的？（例如通过 AHK 脚本、第三方软件串联等）
+      placeholder: "例如：目前通过编写一段 AutoHotkey 脚本检测前台进程并调用 sr 短命令..."
+    validations:
+      required: false
 
   - type: textarea
     id: references
     attributes:
       label: 参考案例或类似方案 (可选)
-      description: 是否有其他软件有类似体验？或者有什么文档/协议可以借鉴？
-      placeholder: "例如：Discord 的 Streamer Mode、Elgato 的 Wave Link 压音功能..."
+      description: 是否有其他软件有类似体验？或者有什么文档/协议/API 可以借鉴？
+      placeholder: "例如：Discord 的 Streamer Mode 压音功能、Elgato Wave Link 的监听分轨..."
     validations:
       required: false

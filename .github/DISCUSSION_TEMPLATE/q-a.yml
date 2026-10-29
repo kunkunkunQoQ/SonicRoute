@@ -5,42 +5,77 @@ body:
   - type: markdown
     attributes:
       value: |
-        ### ⚠️ 遇到软件问题、Bug 或功能异常？请优先前往 Issues！
+        ### 💬 欢迎在此探讨 SonicRoute 的日常使用、配置技巧与方案搭配！
 
         > [!IMPORTANT]
         > **如果遇到软件故障、崩溃闪退、设备切换失败、快捷键无响应或报错**：
         > **请务必优先前往 👉 [GitHub Issues 提交 Bug 反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml)！**
         > 
-        > - 🐛 **Bug 与功能故障排查**：请前往 **Issues** 提交。Issue 配备了标准化版本、Windows 环境、重现步骤与音频设备信息采集模板，能够第一时间被开发者跟踪排查并排期修复；在 Discussions 中发帖容易被遗漏或缺乏关键排障信息。
+        > - 🐛 **Bug 与功能故障**：请前往 **Issues** 提交。Issue 配备了标准化版本、Windows 环境、重现步骤与音频设备信息采集模板，能第一时间被排期跟踪与修复；在 Discussions 中发帖容易被遗漏或缺乏关键排障日志。
         > - 💬 **使用咨询与经验交流**：如果您对软件的正常使用方法、配置逻辑或场景搭配有疑问，欢迎在此发帖交流。
-        > - 📖 **查阅现有文档**：发帖前建议先查阅：
-        >   - [Wiki 01-使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
-        >   - [Wiki 04-自动化规则指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
-        >   - [Wiki 06-常见问题汇总与排障](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)
+        > - 📖 **官方文档速查**：
+        >   - [Wiki 01 · 快速上手与日常使用](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
+        >   - [Wiki 03 · 全局快捷键与无感盲操](https://github.com/kunkunkunQoQ/SonicRoute/wiki/03-%E5%BF%AB%E6%8D%B7%E9%94%AE)
+        >   - [Wiki 04 · 自动化规则与配方库](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
+        >   - [Wiki 06 · 常见问题与排障指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)
+        > - 🤖 **AI 极速总结与低消耗排错**：
+        >   - 如果你正在使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查问题或编写脚本，推荐直接参考专用机器规范 [README.ai.md](https://github.com/kunkunkunQoQ/SonicRoute/blob/master/README.ai.md) 或 [Wiki AI](https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI)，高密度 DSL 结构大幅节省上下文 Token 开销并秒级定位根因。
 
   - type: checkboxes
     id: confirm_not_bug
     attributes:
       label: 提问前须知确认
       options:
-        - label: "我确认此贴为日常使用咨询或经验探讨；若为软件缺陷、崩溃或功能故障，我已知晓并优先前往 [Issues](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml) 提交"
+        - label: "我确认此贴为日常使用咨询、配置探讨或经验交流；若为软件缺陷、崩溃或异常故障，我已知晓并优先前往 [Issues](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml) 提交"
           required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 咨询类别
+      description: 你的问题主要涉及哪个功能领域
+      options:
+        - 🎧 应用程序声音分流与设备路由 (Audio Routing)
+        - 🎚️ 快速面板与全部输出设备扩展 (Quick Panel & Output Volumes)
+        - 🖱️ 托盘区域滚轮与盲操手势 (Tray Wheel & Gestures)
+        - ⌨️ 全局快捷键与鼠标侧键绑定 (Hotkeys & Hooks)
+        - 🤖 自动化规则编排与多步连招 (Automation Rules)
+        - 💻 命令行 sr 与外部生态联动 (CLI, Scripts & Stream Deck)
+        - ⚙️ 安装选型、运行库要求与开机自启 (Installation & Runtimes)
+        - 💬 其他常规使用与场景疑问
+    validations:
+      required: true
+
+  - type: dropdown
+    id: edition
+    attributes:
+      label: 所用软件版本形态 (Edition)
+      description: 请选择你正在使用的版本形态
+      options:
+        - Lite x64 (.NET 10, 官方推荐单文件版)
+        - Legacy x64 (.NET Framework 4.8, 免运行库版)
+        - Lite ARM64 (.NET 10, 实验性 ARM64 版)
+        - Lite NET8 (.NET 8 兼容版)
+        - Microsoft Store (微软应用商店版)
+        - 自行拉取源码编译版 (Source Build)
+    validations:
+      required: true
 
   - type: input
     id: summary
     attributes:
       label: 一句话咨询概括
       description: 简明扼要地描述你的疑问
-      placeholder: "例如：如何让《原神》和网易云音乐分别走耳机和音箱？"
+      placeholder: "例如：如何让《CS2》独占耳机，同时网易云音乐走音箱并随游戏启动自动调节？"
     validations:
       required: true
 
   - type: input
     id: env
     attributes:
-      label: 运行环境
-      description: 请提供系统版本与软件版本
-      placeholder: "例如：Windows 11 23H2 + SonicRoute v1.26 (Lite x64)"
+      label: 操作系统版本与环境说明 (可选)
+      description: Windows 操作系统版本与声卡设备
+      placeholder: "例如：Windows 11 23H2 (Build 22631) + SonicRoute v1.29 + USB 耳机 + 3.5mm 音箱"
     validations:
       required: false
 
@@ -49,23 +84,23 @@ body:
     attributes:
       label: 详细背景与期望效果
       description: 你想实现什么样的音频调度效果？当前具体卡在哪个步骤或遇到了什么现象？
-      placeholder: "详细说明你的操作流程与现状..."
+      placeholder: "详细说明你的操作流程、当前现状以及你希望达到的效果..."
     validations:
       required: true
 
   - type: textarea
     id: tried
     attributes:
-      label: 已经尝试过的排查手段
-      description: 是否在设置中保留了对应设备？是否尝试过滑动面板或重启软件？
-      placeholder: "例如：已在保留设备勾选了耳机；在 Windows 声音设置里能看到设备..."
+      label: 已经尝试过的设置或排查手段 (可选)
+      description: 是否在设置中勾选了保留设备？是否在快速面板中试过手动调节？
+      placeholder: "例如：已在「设置 → 保留的设备」勾选了耳机与音箱；按快捷键能看到 OSD 提示..."
     validations:
       required: false
 
   - type: textarea
     id: attachments
     attributes:
-      label: 相关截图 (建议)
-      description: 快速面板截图、自动化规则列表或 Windows 声音设置界面
+      label: 相关截图或配置 (建议)
+      description: 快速面板实时截图、自动化规则配置或 Windows 声音设置界面
     validations:
       required: false

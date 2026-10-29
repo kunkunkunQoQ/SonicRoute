@@ -6,18 +6,32 @@ body:
     attributes:
       value: |
         ### 💬 欢迎来到 SonicRoute 自由交流区！
-        这里是社区水吧与随聊专区，无论是日常使用唠嗑、音频设备八卦、开源心得，还是对项目未来的闲聊，都欢迎在此发言。
+        这里是社区水吧与随聊专区，无论是日常使用唠嗑、音频设备八卦、开源开发心得，还是对项目未来的畅想，都欢迎在此发言。
         
         > [!IMPORTANT]
         > **遇到软件缺陷、报错崩溃或功能异常？**
         > 请勿在此发帖，请直接前往 **[Issues 提交 Bug 反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml)**，以便快速获得排查与修复。
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: 交流板块
+      description: 你想聊的话题类型
+      options:
+        - ☕ 社区水吧与随想唠嗑 (Casual Chat)
+        - 🎧 耳机、音箱与音频设备种草与测评 (Gear & Hardware)
+        - 🖥 桌面搭配、工作流与外设玩法 (Desk Setup & Workflow)
+        - 💻 开源开发、C# / WPF 与技术杂谈 (Tech & Open Source)
+        - 💬 其他话题
+    validations:
+      required: true
 
   - type: input
     id: topic
     attributes:
       label: 讨论主题
       description: 简述你想聊的话题
-      placeholder: "例如：大家平时玩游戏都用什么耳机？有推荐的低延迟蓝牙方案吗？"
+      placeholder: "例如：大家平时玩游戏都用什么耳机？有推荐的低延迟无线方案吗？"
     validations:
       required: true
 
