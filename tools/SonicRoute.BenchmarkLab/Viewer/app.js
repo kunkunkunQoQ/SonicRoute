@@ -20,24 +20,18 @@
   }
   function cpuRate(s) { const duration = D.num(D.get(s, 'DurationSeconds')), cpu = D.num(D.get(s, 'TotalCpuTimeMs')); return duration > 0 && cpu !== null ? cpu / duration : null; }
   function difference(a, b) { return a > 0 && b !== null ? (b / a - 1) * 100 : null; }
-  function selectReport(index) { state.active = index; resetSelection(); render(); }
-  function renderReports() {
-    const box = $('report-list'); box.replaceChildren();
-    state.reports.forEach((report, i) => { const b = el('button', 'report-item' + (i === state.active ? ' active' : ''), report.demo ? '示例 · 轻盈的变化' : report.title); b.title = report.sourceName; b.setAttribute('aria-pressed', String(i === state.active)); b.onclick = () => selectReport(i); box.append(b); });
-    text('report-count', String(state.reports.length));
-  }
   function renderBanner() {
     const model = active(), status = model.status;
     const messages = {
-      pass: ['在本次条件下，未检出超阈值退化', '整体报告结论。结合逐轮波动、门限与测试范围一起理解；通过不代表没有任何性能变化。', 'PASS'],
-      regression: ['有些变化，值得再看一眼', '报告检出了有重复性证据的退化。选择场景，查看具体指标和逐轮数据。', 'REGRESSION'],
-      inconclusive: ['证据还不够，先为结论留白', '样本、重复性、波动或协议可比性存在限制。查看原报告说明，不将不确定解释为通过。', 'INCONCLUSIVE'],
-      error: ['这份测量中，存在失败的环节', '负载、测量或文件身份验证失败。已有数据供排查使用，不能作为性能通过的证据。', 'EXECUTION ERROR'],
-      measured: ['测量已记录，等待一个合适的参照', '这是单目标测量。可以了解资源消耗，但不能据此判断版本改善或退化。', 'MEASURED']
+      pass: ['未检出超过门限的退化', '仅适用于本次测试条件；仍需结合逐轮波动、测试范围和协议完成度。', 'PASS'],
+      regression: ['检测到性能退化', '报告检出了有重复性证据的退化。点击场景查看具体指标和逐轮数据。', 'REGRESSION'],
+      inconclusive: ['证据不足，暂时无法下结论', '样本、波动或协议可比性存在限制。不确定不等于通过。', 'INCONCLUSIVE'],
+      error: ['测试存在失败', '负载、测量或来源验证失败。已有数据可供排查，不能作为性能通过的证据。', 'EXECUTION ERROR'],
+      measured: ['测量完成，尚无版本对比', '单目标测量可以反映资源消耗，不能判断版本改善或退化。', 'MEASURED']
     };
     const message = messages[status] || messages.inconclusive;
     $('verdict-banner').className = 'verdict-banner' + (status === 'error' || status === 'regression' ? ' error' : status === 'inconclusive' || status === 'measured' ? ' warn' : '');
-    text('verdict-title', model.demo ? '示例展示 · 一次更轻盈的变化' : message[0]);
+    text('verdict-title', model.demo ? '合成示例，仅用于展示报告' : D.get(model.source,'IsAaControl')&&status!=='error' ? 'A/A 对照已记录，不能作版本优化结论' : message[0]);
     text('verdict-description', model.demo ? '以下均为合成数据，仅用于体验图表与筛选，不代表真实测量或优化效果。' : message[1]);
     text('verdict-pill', model.demo ? 'SYNTHETIC DEMO' : message[2]);
     window.BenchmarkIcons.set('verdict-icon',status==='error'||status==='regression'?'warning':status==='pass'?'check':'help',28);
@@ -177,7 +171,7 @@
     const unit = state.metric === 'cpu' ? '% · 单核口径' : 'MB';
     text('chart-subtitle', D.scenarioLabel(scenario().id) + ' · ' + (state.round === 'all' ? '所有轮次，独立曲线' : '第 ' + state.round + ' 轮') + ' · ' + unit);
     text('chart-note', state.metric === 'cpu' ? 'CPU 曲线为区间采样值（单核 100%）；卡片按累计 CPU / 实测时长计算。曲线按各轮开始时间对齐，非同时运行。' : '资源曲线按各轮开始时间对齐。卡片展示完整轮次汇总；采样间隙中的峰值可能未被捕获。');
-    if (!series.length) { container.append(el('div', 'chart-empty', '这份报告没有原始时间序列，可导入 run_evidence.json 查看曲线。')); return; }
+    if (!series.length) { container.append(el('div', 'chart-empty', '原始报告未提供时间序列，无法绘制曲线。')); return; }
     let maxX = 1, maxY = 0;
     for (const s of series) for (const p of s.points) { maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }
     maxY = Math.max(maxY * 1.16, state.metric === 'cpu' ? 1 : 10);
@@ -261,7 +255,7 @@
         el('td', '', D.metric(run.metrics, 'PrivateBytes') === null ? '—' : fmt(D.metric(run.metrics, 'PrivateBytes') / MB) + ' MB'), el('td', '', fmt(D.get(run.metrics, 'SampleCount'), 0)));
       const status = el('td'); status.append(badge(run.status)); status.title = run.error; row.append(status); body.append(row);
     }
-    if (!runs.length) { const row = el('tr'), cell = el('td', '', '汇总中没有逐轮证据。请补充导入 run_evidence.json。'); cell.colSpan = 7; row.append(cell); body.append(row); }
+    if (!runs.length) { const row = el('tr'), cell = el('td', '', '原始报告未提供逐轮证据。'); cell.colSpan = 7; row.append(cell); body.append(row); }
     // Render only on explicit expansion; large observations need not occupy the DOM while closed.
     $('raw-evidence').textContent = '';
     $('details-panel').ontoggle = () => {
@@ -271,52 +265,28 @@
     if ($('details-panel').open) $('details-panel').ontoggle();
   }
   function render() {
-    renderReports(); const model = active();
+    const model = active();
     text('dataset-title', model.title); text('data-tag', model.demo ? '合成示例' : model.kind === 'comparison' ? '版本对比' : '单目标测量'); $('data-tag').className = 'dataset-tag' + (!model.demo ? ' real' : '');
     const date = new Date(model.timestamp); text('dataset-date', !model.timestamp || Number.isNaN(date.getTime()) ? model.sourceName : date.toLocaleString('zh-CN', { hour12: false }));
-    workspace.render(state.view);renderBanner(); renderFilters(); renderOverview(); renderCards(); renderRoundChart(); renderIntervals(); renderChart(); renderComparison(); renderQuality(); renderRuns();
+    workspace.render(state.view);renderBanner();
+    if(state.view==='overview')renderOverview();
+    else {
+      renderFilters();
+      if(state.view==='details'){renderCards();renderRoundChart();renderIntervals();renderChart();renderComparison();renderQuality();}
+      else renderRuns();
+    }
     document.querySelectorAll('[data-metric]').forEach(b => { const selected = b.dataset.metric === state.metric; b.classList.toggle('selected', selected); b.setAttribute('aria-pressed', String(selected)); });
   }
-  async function importFiles(files) {
-    try {
-      const selected = Array.from(files); if (!selected.length) return;
-      if (selected.length > 12 || selected.reduce((n, f) => n + f.size, 0) > 80 * 1024 * 1024 || selected.some(f => f.size > 40 * 1024 * 1024)) throw new Error('每次最多导入 12 个文件，总大小 80 MB，单文件 40 MB。');
-      text('import-message', '正在整理报告…');
-      const documents = await Promise.all(selected.map(async file => ({ name: file.name, data: JSON.parse(await file.text()) })));
-      const models = D.importDocuments(documents);
-      for(const model of models)if(model.pendingAnalysis){await workspace.attach(model.pendingAnalysis,model);delete model.pendingAnalysis;}
-      const retained = state.reports.filter(r => !r.demo);
-      if (retained.length + models.length > 12) throw new Error('最多同时查看 12 份报告。刷新页面可清空当前工作空间。');
-      state.reports = retained;
-      state.reports.push(...models); state.active = state.reports.length - models.length; resetSelection(); render();
-      text('import-message', '已载入 ' + models.length + ' 份报告。数据仅在当前浏览器页面中读取。');
-    } catch (error) { text('import-message', '无法导入：' + error.message); }
-    finally { $('file-input').value = ''; }
-  }
   const workspace=window.BenchmarkWorkspace.create({getModel:active,format:fmt,setView:view=>{state.view=view;render();},selectScenario:id=>{state.scenario=id;state.round='all';state.view='details';render();window.scrollTo({top:0,behavior:'auto'});}});
-  const openFiles = () => $('file-input').click();
-  for (const id of ['import-button', 'import-side']) $(id).onclick = openFiles;
-  $('file-input').onchange = event => importFiles(event.target.files);
-  const drop = $('drop-zone'); drop.onclick = openFiles;
-  drop.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openFiles(); } };
-  drop.ondragover = event => { event.preventDefault(); drop.classList.add('dragover'); };
-  drop.ondragleave = () => drop.classList.remove('dragover');
-  drop.ondrop = event => { event.preventDefault(); drop.classList.remove('dragover'); importFiles(event.dataTransfer.files); };
   $('scenario-select').onchange = event => { state.scenario = event.target.value; state.round = 'all'; render(); };
   $('round-select').onchange = event => { state.round = event.target.value; render(); };
   document.querySelectorAll('[data-metric]').forEach(button => { button.onclick = () => { state.metric = button.dataset.metric; render(); }; });
-  $('demo-button').onclick = () => { const existing = state.reports.findIndex(r => r.demo); if (existing >= 0) selectReport(existing); else { state.reports.push(D.demo()); selectReport(state.reports.length - 1); } };
-  $('export-button').onclick = () => {
-    const model = active(), blob = new Blob([JSON.stringify({ ViewerSchemaVersion: 1, SourceName: model.sourceName, SyntheticExample: model.demo, Source: model.source, Metadata: model.metadata, Summary: model.summary, Analysis:model.analysis||null }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob), link = el('a'); link.href = url; link.download = (model.demo ? 'synthetic-example' : 'benchmark-organized') + '.json'; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
-  };
   try {
     const embedded = JSON.parse($('report-data').textContent);
     state.reports.push(embedded ? D.normalize(embedded, 'report.json') : D.demo());
-  } catch (error) { state.reports.push(D.demo()); text('import-message', '内嵌报告读取失败：' + error.message + '。当前显示合成示例。'); }
+  } catch (error) { $('report-error').hidden=false;text('report-error','报告读取失败：'+error.message+'。请由执行 AI 重新生成；不使用示例替代。');return; }
   resetSelection(); render();
-  if(active().pendingAnalysis){const owner=active();workspace.attach(owner.pendingAnalysis,owner).then(()=>{delete owner.pendingAnalysis;}).catch(e=>text('ai-message','内嵌 AI 总结未附加：'+e.message));}
   if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => {
-    if (Math.abs($('chart').clientWidth - renderedChartWidth) > 2) { renderChart();renderRoundChart();renderIntervals(); }
+    if (state.view==='details' && $('chart').clientWidth>0 && Math.abs($('chart').clientWidth - renderedChartWidth) > 2) { renderChart();renderRoundChart();renderIntervals(); }
   }).observe($('chart'));
 })();

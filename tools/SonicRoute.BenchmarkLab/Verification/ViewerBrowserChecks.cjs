@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../../..');
 const viewer = path.join(root, 'tools/SonicRoute.BenchmarkLab/Viewer');
@@ -40,12 +40,32 @@ async function screenshot(name) {
     clip: { x: 0, y: 0, width: layout.cssContentSize.width, height: layout.cssContentSize.height, scale: 1 } });
   fs.writeFileSync(path.join(evidenceDir, name), Buffer.from(r.data, 'base64'));
 }
-async function importFile(file) {
-  const { root: document } = await call('DOM.getDocument');
-  const { nodeId } = await call('DOM.querySelector', { nodeId: document.nodeId, selector: '#file-input' });
-  await call('DOM.setFileInputFiles', { nodeId, files: [file] });
-  await evaluate("document.getElementById('file-input').dispatchEvent(new Event('change',{bubbles:true}))");
-  await waitFor(() => evaluate("document.getElementById('import-message').textContent.startsWith('已载入') || document.getElementById('import-message').textContent.startsWith('无法导入')"), 'file import');
+const tool=process.argv[5]||null;
+function localPage(file,data){
+  let html=fs.readFileSync(path.join(viewer,'index.html'),'utf8');
+  html=html.replace('<link rel="stylesheet" href="style.css">',()=>'<style>'+fs.readFileSync(path.join(viewer,'style.css'),'utf8')+'</style>');
+  html=html.replace('<script id="report-data" type="application/json">null</script>',()=>'<script id="report-data" type="application/json">'+JSON.stringify(data).replace(/</g,'\\u003c')+'</script>');
+  for(const asset of ['data.js','icons.js','workspace.js','app.js'])html=html.replace('<script src="'+asset+'"></script>',()=>'<script>'+fs.readFileSync(path.join(viewer,asset),'utf8')+'</script>');
+  fs.writeFileSync(file,html);return file;
+}
+function fixturePage(name,raw,reviewed=true){
+  const dir=path.join(output,name);fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir,'report.json'),JSON.stringify(raw));
+  if(tool){
+    const command=extra=>JSON.parse(execFileSync(tool,['report','--input',dir,...extra,'--json'],{encoding:'utf8',windowsHide:true}));
+    const prepared=command([]);
+    if(!reviewed)return prepared.ReportHtml;
+    const file=path.join(dir,'ai-review.json'),review=JSON.parse(fs.readFileSync(file,'utf8'));
+    Object.assign(review,{Status:'complete',Author:{Kind:'ai',Model:'QA fixture model'},GeneratedUtc:new Date().toISOString(),Summary:'这是一份报告呈现测试：仅验证图表和 AI 总结的交付流程，不用于判断产品性能。',Findings:[{Title:'图表与结论一起交付',Detail:'打开报告就能阅读已写入的总结，并查看各场景的对比。',ScenarioId:raw.Scenarios[0].ScenarioId}],Limitations:['此报告使用 QA 夹具；合成数据不能代表产品提速。'],Recommendations:['实际测量按预先约定的轮数、基线和协议执行。']});
+    fs.writeFileSync(file,JSON.stringify(review));const ready=command(['--finalize']);assert.equal(ready.ReviewStatus,'complete');return ready.ReportHtml;
+  }
+  const hash='a'.repeat(64),review=reviewed?{Schema:'BenchmarkLab.AIReview.v1',Status:'complete',ReportSha256:hash,Author:{Kind:'ai',Model:'QA fixture model'},GeneratedUtc:new Date().toISOString(),Summary:'浏览器 QA 夹具，仅验证呈现。',Findings:[],Limitations:['合成数据'],Recommendations:[]}:null;
+  return localPage(path.join(dir,'report.html'),{ViewerSchemaVersion:1,Source:raw,ReportSha256:hash,Review:review,ReviewHistory:review?[{Number:1,Review:review}]:[]});
+}
+async function navigate(file){
+  const url=pathToFileURL(path.resolve(file)).href;
+  await call('Page.navigate',{url});
+  await waitFor(()=>evaluate('location.href==='+JSON.stringify(url)+" && document.getElementById('ai-content')?.children.length>0"),'reader report');
 }
 (async () => {
   try {
@@ -61,76 +81,55 @@ async function importFile(file) {
     await new Promise((resolve, reject) => { socket.addEventListener('open', resolve, { once: true }); socket.addEventListener('error', reject, { once: true }); });
     await call('Runtime.enable'); await call('Page.enable');
     await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false });
-    await call('Page.navigate', { url: pathToFileURL(path.join(viewer, 'index.html')).href });
-    await waitFor(() => evaluate("document.getElementById('metric-grid').children.length===4"), 'viewer rendering');
-    await check('synthetic example is prominently marked', "document.getElementById('verdict-pill').textContent==='SYNTHETIC DEMO'");
-    await check('desktop has no page overflow', 'document.documentElement.scrollWidth<=innerWidth');
-    await check('overview exposes AI workspace and all-scene paired bars', "!document.getElementById('ai-panel').closest('[hidden]') && document.querySelectorAll('.landscape-row').length===3 && document.getElementById('evidence').hidden");
-    await check('paired bars visibly encode different measured lengths', "(()=>{const bars=document.querySelectorAll('.landscape-fill');return bars[0].getBoundingClientRect().width>bars[1].getBoundingClientRect().width && bars[1].getBoundingClientRect().width>0})()");
-    await check('recognizable local SVG icons accompany action labels', "document.querySelector('#ai-request svg')!==null && document.querySelector('#import-button svg')!==null && document.querySelector('#ai-request').textContent.includes('AI')");
+    const readyPage=fixturePage('ready',D.demo().source);
+    await navigate(readyPage);
+    await check('synthetic identity is prominent even with a completed AI review',"document.getElementById('verdict-pill').textContent==='SYNTHETIC DEMO'");
+    await check('reader immediately sees AI summary without manual steps',"document.getElementById('ai-state').textContent==='已完成' && document.getElementById('ai-content').textContent.includes('QA fixture model')");
+    await check('reader has no upload, paste, model-entry or editing workflow',"document.querySelectorAll('input,textarea,dialog').length===0 && !document.getElementById('ai-request') && !document.querySelector('.sidebar')");
+    await check('report works offline with every script and stylesheet embedded',"document.querySelectorAll('script[src],link[rel=stylesheet]').length===0");
+    await check('desktop stays within viewport','document.documentElement.scrollWidth<=innerWidth');
+    await check('overview has paired bars for all scenarios and hides raw tables',"document.querySelectorAll('.landscape-row').length===3 && document.getElementById('evidence').hidden && document.getElementById('review-history').hidden");
+    await check('overview avoids building hidden detailed charts',"document.querySelectorAll('#chart svg,#round-chart svg,#interval-chart svg,#runs-body tr').length===0");
+    await check('paired bars visibly encode different measured lengths',"(()=>{const bars=document.querySelectorAll('.landscape-fill');return bars[0].getBoundingClientRect().width>bars[1].getBoundingClientRect().width && bars[1].getBoundingClientRect().width>0})()");
+    await check('AI summary is visible in the first screen',"document.getElementById('ai-content').getBoundingClientRect().top<innerHeight");
+    await check('navigation and summary use recognizable SVG icons',"document.querySelectorAll('.view-tabs .ui-icon').length===3 && !!document.querySelector('.ai-panel h2 svg')");
     await screenshot('desktop.png');
-    await evaluate("document.getElementById('ai-request').click()");
-    await waitFor(() => evaluate("document.getElementById('ai-dialog').open"), 'AI analysis material');
-    await check('AI material contains bound report and real round evidence', "document.getElementById('ai-text').value.includes('ReportSha256') && document.getElementById('ai-text').value.includes('SamplingQuality')");
-    await evaluate("document.getElementById('ai-dialog-close').click();document.getElementById('ai-paste').click();document.getElementById('ai-model').value='Browser QA model';document.getElementById('ai-text').value='合成示例的 AI 阅读测试 <img src=x onerror=window.PWNED=1>';document.getElementById('ai-apply').click()");
-    await waitFor(() => evaluate("!document.getElementById('ai-dialog').open"), 'AI paste');
-    await check('AI summary displays model provenance and renders hostile text safely', "document.getElementById('ai-content').textContent.includes('Browser QA model') && document.getElementById('ai-state').textContent==='已附加 AI 解读' && !window.PWNED && !document.querySelector('img[src=x]')");
-    await evaluate("document.getElementById('ai-paste').click();document.getElementById('ai-text').value=JSON.stringify({Schema:'BenchmarkLab.AIAnalysis.v1',ReportSha256:'0'.repeat(64)});document.getElementById('ai-apply').click()");
-    await waitFor(() => evaluate("document.getElementById('ai-dialog-message').textContent.includes('另一份报告')"), 'mismatched AI identity');
-    await check('mismatched AI summary preserves previous interpretation', "document.getElementById('ai-content').textContent.includes('Browser QA model') && document.getElementById('ai-dialog').open");
-    await evaluate("document.getElementById('ai-dialog-close').click();document.getElementById('landscape-metric').value='memory';document.getElementById('landscape-metric').dispatchEvent(new Event('change'))");
-    await evaluate("document.getElementById('ai-paste').click();document.getElementById('ai-model').value='QA 示例';document.getElementById('ai-text').value='这是合成数据，仅用于展示 AI 解读区域。真实结论应结合轮次、采样质量与置信区间。';document.getElementById('ai-apply').click()");
-    await waitFor(()=>evaluate("!document.getElementById('ai-dialog').open"),'clean summary preview');
-    await check('overview metric selector updates paired-bar units', "document.querySelector('.landscape-number').textContent.includes('MB')");
-    await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-    await check('mobile overview and AI panel remain within viewport', 'document.documentElement.scrollWidth<=innerWidth');
-    await screenshot('mobile-overview.png');
-    await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false });
-    await check('all six same-scenario runs and resource chart render', "document.querySelectorAll('#runs-body tr').length===6 && document.querySelectorAll('#chart polyline').length===6");
-    await check('scenario overview and round distribution display real report scope', "document.querySelectorAll('.scene-card').length===3 && document.querySelectorAll('#round-chart circle').length===6");
-    await check('confidence chart renders structured example intervals', "document.querySelectorAll('#interval-chart circle').length===4");
-    await evaluate("document.querySelectorAll('.scene-card')[1].click()");
-    await check('clicking a scenario card updates the shared filter', "document.getElementById('scenario-select').value==='rules_scaling_10'");
-    await evaluate("document.querySelectorAll('.scene-card')[0].click()");
-    await check('scene opens focused charts view', "!document.getElementById('trends').hidden && document.querySelector('.decision-grid').hidden");
+    await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await check('mobile overview stays within viewport','document.documentElement.scrollWidth<=innerWidth');
+    await screenshot('mobile.png');
+    await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1080,deviceScaleFactor:1,mobile:false});
+    await evaluate("document.getElementById('landscape-metric').value='memory';document.getElementById('landscape-metric').dispatchEvent(new Event('change'))");
+    await check('metric selector changes overview units',"document.querySelector('.landscape-number').textContent.includes('MB')");
+    await evaluate("document.querySelectorAll('.landscape-row')[1].click()");
+    await check('clicking a scenario opens its detailed charts',"document.getElementById('scenario-select').value==='rules_scaling_10' && !document.getElementById('trends').hidden && document.querySelector('.decision-grid').hidden");
+    await check('same-scenario round distribution and six curves retain evidence',"document.querySelectorAll('#round-chart circle').length===6 && document.querySelectorAll('#chart polyline').length===6");
+    await check('structured intervals appear in detailed view',"document.querySelectorAll('#interval-chart circle').length===4");
     await screenshot('desktop-details.png');
     await evaluate("document.getElementById('round-select').value='2';document.getElementById('round-select').dispatchEvent(new Event('change'))");
-    await check('round filter displays only its two runs', "document.querySelectorAll('#runs-body tr').length===2 && document.getElementById('comparison-body').textContent.includes('单轮观察')");
-    await check('single round does not fabricate confidence intervals', "document.querySelectorAll('#interval-chart circle').length===0 && document.getElementById('interval-chart').textContent.includes('不根据单轮')");
+    await check('one round does not fabricate a confidence interval',"document.querySelectorAll('#interval-chart circle').length===0 && document.getElementById('interval-chart').textContent.includes('不根据单轮')");
     await evaluate("document.querySelector('[data-metric=memory]').click()");
-    await check('memory control changes chart metric and accessible pressed state', "document.querySelector('[data-metric=memory]').getAttribute('aria-pressed')==='true' && document.getElementById('chart-subtitle').textContent.includes('MB')");
-    await evaluate("document.getElementById('scenario-select').value='target_absent';document.getElementById('scenario-select').dispatchEvent(new Event('change'))");
-    await check('scene filter resets round and refreshes evidence', "document.getElementById('round-select').value==='all' && document.getElementById('chart-subtitle').textContent.includes('目标应用不存在')");
-    await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-    await check('mobile remains within viewport', 'document.documentElement.scrollWidth<=innerWidth');
-    await screenshot('mobile.png');
-    await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1080, deviceScaleFactor: 1, mobile: false });
-    const fixture = D.demo().source; delete fixture.SyntheticExample; fixture.CandidateTarget = 'QA FIXTURE - NOT PRODUCT DATA.exe'; fixture.Runs[1].Result.Success = false; fixture.Runs[1].Result.ErrorMessage = '<img src=x onerror="window.PWNED=1">';
-    const file = path.join(output, 'failed-fixture.json'); fs.writeFileSync(file, JSON.stringify(fixture));
-    await importFile(file);
-    await check('new report cannot inherit previous AI interpretation', "document.getElementById('ai-state').textContent==='等待 AI 解读'");
-    await check('failed imported report does not display PASS', "document.getElementById('verdict-pill').textContent==='EXECUTION ERROR'");
-    await check('hostile observation text creates no DOM or script execution', "!window.PWNED && !document.querySelector('img[src=x]')");
-    await evaluate("document.getElementById('round-select').value='3';document.getElementById('round-select').dispatchEvent(new Event('change'))");
-    await check('filtering successful rounds retains failure notice', "document.getElementById('verdict-pill').textContent==='EXECUTION ERROR' && document.getElementById('quality-note').textContent.includes('测量失败')===false && document.getElementById('quality-note').textContent.includes('onerror')");
-    const invalid = path.join(output, 'invalid.json'); fs.writeFileSync(invalid, '{invalid');
-    await importFile(invalid);
-    await check('invalid JSON preserves current dataset and explains the error', "document.getElementById('import-message').textContent.startsWith('无法导入') && document.getElementById('verdict-pill').textContent==='EXECUTION ERROR'");
-    const wrap = path.join(output, 'exported-example.json'); fs.writeFileSync(wrap, JSON.stringify({ ViewerSchemaVersion: 1, SyntheticExample: true, Source: D.demo().source }));
-    await importFile(wrap);
-    await check('reimported example retains prominent synthetic label', "document.getElementById('verdict-pill').textContent==='SYNTHETIC DEMO'");
-    const annotated=await evaluate("(async()=>{const m=BenchmarkData.demo();return {ViewerSchemaVersion:1,Source:m.source,Analysis:{Schema:BenchmarkAnalysis.schema,ReportSha256:await BenchmarkAnalysis.fingerprint(m),Author:{Kind:'ai',Model:'Import QA model'},Summary:'合成示例，仅验证 AI 解读往返。',Findings:[],Limitations:['不是产品测量'],Recommendations:[]}}})()");
-    const annotatedFile=path.join(output,'annotated-example.json');fs.writeFileSync(annotatedFile,JSON.stringify(annotated));
-    await importFile(annotatedFile);
-    await waitFor(()=>evaluate("document.getElementById('ai-content').textContent.includes('Import QA model')"),'bound AI summary reimport');
-    await check('reimported AI interpretation retains synthetic identity and limitations',"document.getElementById('verdict-pill').textContent==='SYNTHETIC DEMO' && document.getElementById('ai-content').textContent.includes('不是产品测量')");
-    if (process.argv[4]) {
-      await call('Page.navigate', { url: pathToFileURL(path.resolve(process.argv[4])).href });
-      await waitFor(() => evaluate("document.getElementById('metric-grid').children.length===4"), 'standalone embedded report');
-      await check('generated standalone report loads its own data without example fallback', "document.getElementById('verdict-pill').textContent!=='SYNTHETIC DEMO' && !document.getElementById('import-message').textContent.includes('内嵌报告读取失败')");
-      await check('generated standalone report uses no external scripts or style files', "document.querySelectorAll('script[src],link[rel=stylesheet]').length===0");
-      await screenshot('embedded-report.png');
-    }
+    await check('resource control selects memory accessibly',"document.querySelector('[data-metric=memory]').getAttribute('aria-pressed')==='true' && document.getElementById('chart-subtitle').textContent.includes('MB')");
+    await evaluate("document.querySelector('[data-view=evidence]').click()");
+    await check('evidence view contains selected round records and AI log',"!document.getElementById('evidence').hidden && !document.getElementById('review-history').hidden && document.querySelectorAll('#runs-body tr').length===2 && document.getElementById('review-log').textContent.includes('QA fixture model')");
+    await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await check('mobile evidence scrolls tables without overflowing page','document.documentElement.scrollWidth<=innerWidth');
+    await screenshot('mobile-evidence.png');
+    await call('Emulation.setDeviceMetricsOverride',{width:1440,height:1080,deviceScaleFactor:1,mobile:false});
+    const failed=D.demo().source;delete failed.SyntheticExample;failed.Runs[1].Result.Success=false;failed.Runs[1].Result.ErrorMessage='<img src=x onerror="window.PWNED=1">';
+    await navigate(fixturePage('failed',failed));
+    await check('completed AI summary cannot hide a failed raw measurement',"document.getElementById('ai-state').textContent==='已完成' && document.getElementById('verdict-pill').textContent==='EXECUTION ERROR'");
+    await evaluate("document.querySelector('[data-view=details]').click();document.getElementById('round-select').value='3';document.getElementById('round-select').dispatchEvent(new Event('change'))");
+    await check('successful-round filter still retains report failure',"document.getElementById('verdict-pill').textContent==='EXECUTION ERROR' && document.getElementById('quality-note').textContent.includes('onerror') && !window.PWNED && !document.querySelector('img[src=x]')");
+    const attacked={ViewerSchemaVersion:1,Source:D.demo().source,ReportSha256:'a'.repeat(64),Review:{Schema:'BenchmarkLab.AIReview.v1',ReportSha256:'a'.repeat(64),Status:'complete',Author:{Kind:'ai',Model:'QA injection test'},GeneratedUtc:new Date().toISOString(),Summary:'<img src=x onerror="window.PWNED=1">',Findings:[],Limitations:[],Recommendations:[]}};
+    const attackFile=localPage(path.join(output,'hostile-review.html'),attacked);await navigate(attackFile);
+    await check('AI-authored markup is displayed as text',"document.getElementById('ai-content').textContent.includes('onerror') && !window.PWNED && !document.querySelector('img[src=x]')");
+    await navigate(fixturePage('pending',D.demo().source,false));
+    await check('pending review is explicit and offers no user editing task',"document.getElementById('ai-state').textContent==='未完成' && document.getElementById('ai-content').textContent.includes('实际测试报告由 AI') && document.querySelectorAll('input,textarea,dialog').length===0");
+    const invalid=localPage(path.join(output,'invalid.html'),{ViewerSchemaVersion:1,Source:{invalid:true}});
+    await call('Page.navigate',{url:pathToFileURL(invalid).href});
+    await waitFor(()=>evaluate("document.getElementById('report-error') && !document.getElementById('report-error').hidden"),'invalid report notice');
+    await check('invalid report fails visibly without silently showing a demo',"document.getElementById('report-error').textContent.includes('报告读取失败') && document.getElementById('verdict-pill').textContent!== 'SYNTHETIC DEMO'");
+    if(process.argv[4]){await navigate(process.argv[4]);await check('generated tool fixture loads original embedded data',"document.getElementById('verdict-pill').textContent!=='SYNTHETIC DEMO' && document.getElementById('report-error').hidden");await screenshot('embedded-report.png');}
     assert.deepEqual(exceptions, []); checks.push('no browser JavaScript exceptions');
   } finally {
     if (socket?.readyState === 1) { try { await call('Browser.close'); } catch {} socket.close(); }

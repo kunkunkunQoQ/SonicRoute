@@ -24,6 +24,10 @@ namespace SonicRoute.BenchmarkLab.Reporting
         public List<string> Caveats { get; set; } = new();
         public string ReportJson { get; set; } = string.Empty;
         public string ReportHtml { get; set; } = string.Empty;
+        public string SummaryKind { get; set; } = "rule-generated";
+        public string ReviewFile { get; set; } = string.Empty;
+        public string ReviewContextFile { get; set; } = string.Empty;
+        public string FinalizeCommand { get; set; } = string.Empty;
     }
 
     public static class AiSummaryFormatter
@@ -50,7 +54,10 @@ namespace SonicRoute.BenchmarkLab.Reporting
                 Improvements = new List<string>(result.ImprovementsSummary),
                 Caveats = new List<string>(result.Limitations),
                 ReportJson = Path.Combine(outputDir, "report.json"),
-                ReportHtml = Path.Combine(outputDir, "report.html")
+                ReportHtml = Path.Combine(outputDir, "report.html"),
+                ReviewFile = Path.Combine(outputDir, "ai-review.json"),
+                ReviewContextFile = Path.Combine(outputDir, "review-context.json"),
+                FinalizeCommand = "SonicRoute.BenchmarkLab report --input \"" + Path.GetFullPath(outputDir) + "\" --finalize --json"
             };
 
             // Aggregate stable metrics

@@ -109,11 +109,11 @@ try {
         }
     }
     if ($Scope -ne 'Tool') {
-        Invoke-Check 'viewer-data' 'node' @('--test', (Join-Path $PSScriptRoot 'Viewer\data.test.cjs'), (Join-Path $PSScriptRoot 'Viewer\analysis.test.cjs'))
-        foreach ($asset in 'app', 'workspace', 'analysis', 'icons') { Invoke-Check "viewer-syntax-$asset" 'node' @('--check', (Join-Path $PSScriptRoot "Viewer\$asset.js")) }
+        Invoke-Check 'viewer-data' 'node' @('--test', (Join-Path $PSScriptRoot 'Viewer\data.test.cjs'))
+        foreach ($asset in 'app', 'workspace', 'icons') { Invoke-Check "viewer-syntax-$asset" 'node' @('--check', (Join-Path $PSScriptRoot "Viewer\$asset.js")) }
         if ($Browser) {
             $html = if ($Target) { Join-Path $evidence 'target-smoke\report.html' } elseif ($tool -and (Test-Path -LiteralPath (Join-Path $evidence 'self-check-reports\report.html'))) { Join-Path $evidence 'self-check-reports\report.html' } else { '' }
-            Invoke-Check 'viewer-browser' 'node' @((Join-Path $PSScriptRoot 'Verification\ViewerBrowserChecks.cjs'), (Join-Path $runRoot 'work\browser'), (Join-Path $evidence 'browser'), $html)
+            Invoke-Check 'viewer-browser' 'node' @((Join-Path $PSScriptRoot 'Verification\ViewerBrowserChecks.cjs'), (Join-Path $runRoot 'work\browser'), (Join-Path $evidence 'browser'), $html, $tool)
         }
     }
     if (@(Get-ChildItem -LiteralPath $env:SONICROUTE_BENCHMARK_TEMP_ROOT -Force).Count -gt 0) { throw 'Owned test sandboxes remain; cleanup is incomplete.' }
@@ -124,7 +124,7 @@ try {
         New-Item -ItemType Directory -Path $delivery, (Join-Path $delivery 'Viewer') | Out-Null
         foreach ($file in 'SonicRoute.BenchmarkLab.exe', 'SonicRoute.BenchmarkLab.dll', 'SonicRoute.BenchmarkLab.deps.json', 'SonicRoute.BenchmarkLab.runtimeconfig.json') { Copy-Item -LiteralPath (Join-Path ([IO.Path]::GetDirectoryName($tool)) $file) -Destination $delivery }
         foreach ($file in 'README.md', 'AGENTS.md', 'AI_TESTING.md', 'BENCHMARK_POLICY.md', 'TESTING.md', 'ARTIFACTS.md', 'CLEANUP.md', 'UPGRADE-v1.2.md') { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $delivery }
-        foreach ($file in 'index.html', 'style.css', 'data.js', 'app.js', 'icons.js', 'analysis.js', 'workspace.js') { Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Viewer\$file") -Destination (Join-Path $delivery 'Viewer') }
+        foreach ($file in 'index.html', 'style.css', 'data.js', 'app.js', 'icons.js', 'workspace.js') { Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Viewer\$file") -Destination (Join-Path $delivery 'Viewer') }
         $manifest = @(Get-ChildItem -LiteralPath $delivery -File -Recurse | ForEach-Object { @{ Path = [IO.Path]::GetRelativePath($delivery, $_.FullName); Bytes = $_.Length; SHA256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } })
         $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence 'delivery-manifest.json') -Encoding utf8
     }

@@ -4,6 +4,15 @@ const D = require('./data.js');
 const clone = value => JSON.parse(JSON.stringify(value));
 const demoRaw = () => { const raw = clone(D.demo().source); delete raw.SyntheticExample; return raw; };
 
+test('ready report loads AI-authored summary and history without altering the raw verdict', () => {
+  const hash='a'.repeat(64),review={Schema:'BenchmarkLab.AIReview.v1',Status:'complete',ReportSha256:hash,Author:{Kind:'ai',Model:'QA'},GeneratedUtc:'2026-10-29T00:00:00Z',Summary:'仅测试报告呈现',Findings:[],Limitations:['合成数据'],Recommendations:[]};
+  const model=D.normalize({ViewerSchemaVersion:1,Source:D.demo().source,ReportSha256:hash,Review:review,ReviewHistory:[{Number:1,Review:review}]});
+  assert.equal(model.review.Summary,review.Summary);assert.equal(model.reviewHistory.length,1);assert.equal(model.status,'pass');assert.equal(model.demo,true);
+  assert.throws(()=>D.normalize({ViewerSchemaVersion:1,Source:D.demo().source,ReportSha256:'b'.repeat(64),Review:review}),/不匹配/);
+  review.Findings=[{Title:'错误引用',Detail:'测试',ScenarioId:'missing'}];
+  assert.throws(()=>D.normalize({ViewerSchemaVersion:1,Source:D.demo().source,ReportSha256:hash,Review:review}),/不匹配/);
+});
+
 test('example survives export/import with its visible synthetic identity', () => {
   const demo = D.demo();
   const [restored] = D.importDocuments([{ name: 'example.json', data: { ViewerSchemaVersion: 1, SyntheticExample: true, Source: demo.source } }]);

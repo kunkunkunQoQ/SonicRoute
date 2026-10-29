@@ -10,15 +10,14 @@
 
 性能观察室新增可点击场景总览、协议完成度、逐轮 CPU 分布 / 中位数 / 极差 / CV，以及置信区间对照门限图；旧报告缺区间时明确显示缺失，单轮不作区间推断。
 
-首页现在集中显示整体结论、场景 A/B 并排条形图和 AI 解读；“图表分析”“原始证据”按需展开。上传、图表、CPU、内存、AI、证据等操作采用本地 SVG 线条图标并保留文字。没有新增后台轮询或外部资源。
+成品报告首页集中显示整体结论、场景 A/B 并排条形图和 AI 解读；“图表分析”“原始证据”按需展开。图表、CPU、内存、AI、证据等操作采用本地 SVG 线条图标并保留文字。没有新增后台轮询或外部资源。
 
-**AI 解读流程**：点击“让 AI 分析”，复制或下载当前报告的分析材料交给 AI，再粘贴返回的 JSON / 纯文本，或导入总结文件。页面不自动调用模型。结构化总结使用 `BenchmarkLab.AIAnalysis.v1`，绑定 Source、Metadata、Summary 的规范化 SHA256；不匹配报告或不存在的场景会拒绝附加。纯文本明确由用户绑定到当前报告；模型来源是用户提供的信息。导出整理数据会保留解读，再次导入复核指纹。关闭前请导出保存。已有 `ai-summary.json` 是工具规则摘要，不能作为模型解读导入。
+**AI 报告流程**：compare/run 在输出目录自动写入 `ai-review.json` 待填写模板和 `review-context.json`。执行 AI 直接读取原始报告与只读上下文，填写模板；用户不需要复制材料或导入总结。`report --input <报告目录> --json` 可先准备报告视图；加上 `--finalize` 后工具校验报告指纹、场景和必填字段，生成含原始数据与 AI 总结的 `report.html`、`report-view.json`，并将总结记录到 `ReviewHistory`。用户只需打开成品报告 URL（本机 `file` URL 或已有静态网站 URL）。总结未完成时报告明确显示未完成，finalize 必须失败。规则摘要 `ai-summary.json` 不属于 AI 总结协议。修改总结后可再次 finalize；历史记录保留，相同内容不会重复追加。
 
 - `plan` 在运行前预览场景、轮次、顺序、桌面影响和预计时长，不启动目标。`--scenario idle_empty,target_absent` 按需选择多场景。
 - 同一场景的 A/B 相邻测量，逐轮交换顺序；资源均值按实际采样时间加权，采样延迟可追查。统计区间额外保存结构化方法、标准误、自由度和门限。
 - Schema 3 历史基线绑定有效时长、预热、间隔、场景与 generic 参数；旧基线可读，跨协议不判通过。SonicRoute 多文件包也复核相邻 DLL。
-- **性能观察室**：打开 `Viewer/index.html` 导入数据。支持版本、场景、轮次筛选，CPU / 私有内存 / 工作集曲线，逐轮表格及采样质量；数据只在页面内处理。示例始终注明合成。
-- compare 和 run 均生成自带数据的离线 `report.html`，无需联网或网页服务。`导出整理数据` 可保存并再次导入同一份完整数据。
+- **成品报告**：compare 和 run 均生成自带数据的离线 `report.html`，无需联网或网页服务；finalize 后 AI 总结与测量数据一同展示。AI 直接写 `ai-review.json`，用户打开成品报告 URL 阅读。
 - 测试规范、产物位置与清理规范分别见 [TESTING.md](TESTING.md)、[ARTIFACTS.md](ARTIFACTS.md)、[CLEANUP.md](CLEANUP.md)；升级设计见 [UPGRADE-v1.2.md](UPGRADE-v1.2.md)。
 - **AI 执行规范**：[AI_TESTING.md](AI_TESTING.md) 是 AI 的选择与执行入口，包含产品各功能专项索引。工具验证支持 `-Mode Targeted|Light|Full`；性能测量支持 `--mode targeted|light|full`，两者分别留证。
 
@@ -104,8 +103,9 @@ SonicRoute 场景使用独立数据与实例 ID，禁用更新、自启动和普
 
 ## 报告与退出码
 
-- report.json：来源、逐轮指标、样本、失败和负载证据；观察器 CPU 是工具全进程在测量期间的 CPU，包含负载生成，不是纯采样器开销。
+- report.json：来源、逐轮指标、样本、失败和负载证据；观察器 CPU 是工具全进程在测量期间的 CPU，包含负载生成，不是纯采样器开销。compare/run 同时在输出目录生成 AI review 模板和指纹上下文。
 - report.html：离线展示判定、原始 CPU/时长、门限与限制；不确定状态不显示绿色通过。
+- `report --input <报告目录> --json`：准备报告视图；加 `--finalize` 核验并完成 AI 总结，生成内嵌原始报告数据的 `report.html` 和 `report-view.json`，追加 `ReviewHistory`。该命令不修改原始测量文件。
 - ai-summary.md/json：快速摘要；完整波动与证据见 report.json。
 - run_summary.json / run_evidence.json / run_metadata.json：单目标汇总、逐轮证据、协议与身份；同目录 report.html 内嵌这些数据。Schema 3 保存完整场景协议；旧基线仍可读，缺协议证据时不作为有效门禁。
 

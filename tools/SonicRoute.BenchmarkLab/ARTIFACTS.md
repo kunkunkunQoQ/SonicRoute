@@ -10,6 +10,8 @@
 | 自检临时伴随文件 | `build-artifacts/benchmarklab/<RunId>/work/verification/` | 仅复制必要报告留证后删除 |
 | 浏览器临时配置 / 导入夹具 | `build-artifacts/benchmarklab/<RunId>/work/browser/` | 先退出自建浏览器，删除配置；外层清理其余 |
 | 长期验证证据 | `maintenance/plans/benchmarklab-runs/<RunId>/` | 保留；不自动删除或覆盖 |
+| AI review 输入与日志 | 每次 compare/run 输出目录内的 `ai-review.json`、`review-context.json`、`ai-review-log.jsonl` | 与报告一同保留；上下文只读，日志追加且相同内容不重复 |
+| 最终离线报告 | compare/run 输出目录内的 `report.html`、`report-view.json` | finalize 成功后保留；HTML 含原始数据与 AI 总结，可直接用 file URL 打开 |
 | 最终本机工具与网站 | `dist/tools/benchmarklab-<version>-<date>/` | 保留；不覆盖旧包 |
 | 最终 ZIP | `dist/tools/SonicRoute.BenchmarkLab-v<version>-x64-<date>.zip` | 保留，与交付哈希对应 |
 | 产品实验目标 | 原 `dist/experiments/<实验标识>/` | 只读输入；不由工具清理 |
@@ -35,6 +37,6 @@
 
 ## 留存边界
 
-证据至少包含构建 / 自检 / 数据与浏览器检查日志、协议预览、必要报告和截图、最终清理收据；交付时附逐文件 SHA256。不得把浏览器缓存、完整编译树、机器秘密或用户数据混入最终包。网站交付仅需 index.html、style.css、data.js、app.js；测试脚本留在源码中。
+证据至少包含构建 / 自检 / 数据与浏览器检查日志、协议预览、必要报告和截图、最终清理收据；交付时附逐文件 SHA256。性能报告目录还应保留 `ai-review.json`、`review-context.json`、`ai-review-log.jsonl` 及 finalize 生成的 `report.html`、`report-view.json`。不得把浏览器缓存、完整编译树、机器秘密或用户数据混入最终包。网站交付仅需 index.html、style.css、data.js、app.js；测试脚本留在源码中。
 
 初次升级前已经存在的 bin/obj、历史证据和冻结工具不归新入口所有，不得为了整齐自动清理。删除历史材料必须另有明确授权和逐项范围。

@@ -66,7 +66,10 @@
     if (raw.ViewerSchemaVersion === 1 && raw.Source) {
       const restored = normalize(raw.Source, raw.SourceName || sourceName, raw.Metadata, raw.Summary);
       restored.demo = restored.demo || raw.SyntheticExample === true;
-      if(raw.Analysis)restored.pendingAnalysis=raw.Analysis;
+      restored.reportHash=raw.ReportSha256||'';
+      restored.review=readReview(raw.Review,restored.reportHash,restored.scenarios.map(s=>s.id));
+      restored.reviewHistory=list(raw.ReviewHistory).map(entry=>({...entry,Review:readReview(entry.Review,restored.reportHash,restored.scenarios.map(s=>s.id))}));
+      if(restored.reviewHistory.some(entry=>!entry.Review))throw Error('总结日志不完整，请重新生成报告。');
       return restored;
     }
     let model = { sourceName, source: raw, metadata, summary, demo: get(raw, 'SyntheticExample') === true, kind: 'comparison', scenarios: [], runs: [], warnings: [], protocol: get(raw, 'Protocol'),
@@ -122,6 +125,17 @@
     else for (const document of summaries) models.push(normalize(document.data, document.name, metadata?.data));
     if (!models.length) throw new Error('未找到可读取的基准报告。');
     return models;
+  }
+  function readReview(review,hash,ids){
+    if(!review)return null;
+    if(review.Schema!=='BenchmarkLab.AIReview.v1'||review.Status!=='complete'||!hash||review.ReportSha256!==hash
+      ||review.Author?.Kind!=='ai'||typeof review.Author.Model!=='string'||!review.Author.Model.trim()
+      ||typeof review.Summary!=='string'||!review.Summary.trim()
+      ||!Array.isArray(review.Findings)||!Array.isArray(review.Limitations)||!Array.isArray(review.Recommendations)
+      ||review.Findings.some(f=>!f||typeof f.Title!=='string'||typeof f.Detail!=='string'||(f.ScenarioId!=null&&!ids.includes(f.ScenarioId)))
+      ||review.Limitations.some(v=>typeof v!=='string')||review.Recommendations.some(v=>typeof v!=='string'))
+      throw Error('AI 总结与报告不匹配或格式不完整，请由执行 AI 重新生成。');
+    return review;
   }
   function demo() {
     const MB = 1024 * 1024, runs = [], scenarios = [];

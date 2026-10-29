@@ -6,7 +6,7 @@
 
 1. 停止负载和采样，取消异步等待并等待采样任务完成，释放 COM/句柄/监听。
 2. 退出由本次测试创建且有归属证据的进程。产品使用独立实例与 Job；浏览器先发 Browser.close，再核对自建进程已退出。禁止按 SonicRoute / Edge / dotnet 进程名批量结束进程。
-3. 持久保存已经得到的报告、日志、协议、目标哈希、截图和错误；不把失败日志删掉冒充一次成功。
+3. 持久保存已经得到的报告、AI review 模板与只读上下文、追加式 review 日志、协议、目标哈希、截图和错误；不把失败日志删掉冒充一次成功。finalize 生成的 `report.html` 与 `report-view.json` 属于交付报告，不能作为临时材料删除。
 4. 各场景删除自身拥有的随机沙箱；沙箱归属标记不匹配、链接/联接点或文件被占用时，保留准确路径并输出 `CLEANUP_INCOMPLETE`。
 5. 外层验证脚本核验 `build-artifacts/benchmarklab/<RunId>` 的绝对父目录、RunId 和随机归属标记；逐层拒绝 reparse point，然后用原生 PowerShell `Remove-Item -LiteralPath` 清理这一目录。
 6. finally 恢复本进程临时环境变量，写 `receipt.json`。只有目录确实不存在时，`TemporaryDirectoryRemoved` 才可为 true。任何验证或清理失败，入口均返回失败。
@@ -17,7 +17,7 @@
 
 可以自动清理：当前 RunId 的 compiled、临时沙箱、探针副本、验证夹具、浏览器独立配置。其共同条件是：本次创建、归属可验证、绝对路径在规范边界内、没有链接、无本次活跃进程占用。
 
-必须保留：本轮证据目录、最终工具包及哈希、产品测试目标、正式 / 商店资产、旧测试包、Gemini 冻结基准、用户配置、旧根 WIP、其它 RunId、原先存在的 bin/obj 和浏览器个人配置。
+必须保留：本轮证据目录、性能输出目录中的原始报告与 AI review 文件（`ai-review.json`、`review-context.json`、`ai-review-log.jsonl`）、最终 `report.html` / `report-view.json`、最终工具包及哈希、产品测试目标、正式 / 商店资产、旧测试包、Gemini 冻结基准、用户配置、旧根 WIP、其它 RunId、原先存在的 bin/obj 和浏览器个人配置。
 
 ## 遗留材料处理
 

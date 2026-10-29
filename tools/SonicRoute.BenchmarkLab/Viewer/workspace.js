@@ -1,17 +1,11 @@
 (function(){
   'use strict';
   window.BenchmarkWorkspace={create(options){
-    const D=window.BenchmarkData,A=window.BenchmarkAnalysis,$=id=>document.getElementById(id),cache=new WeakMap();
-    let dialogOwner=null,dialogMode='request';
+    const D=window.BenchmarkData,$=id=>document.getElementById(id),model=options.getModel,fmt=options.format;
     const el=(tag,cls,value)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(value!==undefined)n.textContent=value;return n;};
-    const fmt=options.format,model=options.getModel;
-    const fingerprint=m=>{if(!cache.has(m))cache.set(m,A.fingerprint(m));return cache.get(m);};
-    const download=(name,value,type)=>{const url=URL.createObjectURL(new Blob([value],{type:type||'text/plain;charset=utf-8'}));const link=el('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);};
     function setView(view){
       for(const section of document.querySelectorAll('[data-view-section]'))section.hidden=!section.dataset.viewSection.split(' ').includes(view);
-      for(const control of document.querySelectorAll('[data-view]')){const selected=control.dataset.view===view;control.classList.toggle('selected',selected);control.classList.toggle('active',selected);control.setAttribute('aria-pressed',String(selected));}
-      const title={overview:'结论与 AI 解读',details:'图表分析',evidence:'原始证据'}[view];
-      document.querySelector('.topbar>span').textContent='性能观察室 / '+title;
+      for(const control of document.querySelectorAll('[data-view]')){const selected=control.dataset.view===view;control.classList.toggle('selected',selected);control.setAttribute('aria-pressed',String(selected));}
     }
     function coverage(){
       const m=model(),counts={pass:0,regression:0,inconclusive:0,error:0,measured:0};
@@ -42,53 +36,36 @@
         button.append(name,bars,change);button.onclick=()=>options.selectScenario(s.id);box.append(button);
       }
     }
-    function renderAI(){
-      const m=model(),analysis=m.analysis,box=$('ai-content');box.replaceChildren();
-      $('ai-state').textContent=analysis?'已附加 AI 解读':'等待 AI 解读';
-      if(!analysis){box.append(el('p','ai-empty-title','这里还没有 AI 总结'),el('p','','把当前报告交给 AI，得到中文结论、关键发现与下一步建议。'));
-        const steps=el('div','ai-steps');for(const label of ['1 整理分析材料','2 交给 AI','3 将总结放回这里'])steps.append(el('span','ai-step',label));box.append(steps);return;}
-      box.append(el('p','ai-summary-text',analysis.Summary));
-      if(analysis.Findings.length){box.append(el('h3','','关键发现'));const ul=el('ul');for(const f of analysis.Findings){const li=el('li');li.append(el('strong','',f.Title+'：'),document.createTextNode(f.Detail));if(f.ScenarioId){const link=el('button','text-button','查看 '+D.scenarioLabel(f.ScenarioId)+' ↗');link.onclick=()=>options.selectScenario(f.ScenarioId);li.append(link);}ul.append(li);}box.append(ul);}
-      for(const [title,items]of [['测试限制',analysis.Limitations],['下一步',analysis.Recommendations]])if(items.length){box.append(el('h3','',title));const ul=el('ul');for(const item of items)ul.append(el('li','',item));box.append(ul);}
-      box.append(el('p','ai-origin','用户提供的 AI 解读 · '+analysis.Author.Model+' · 报告 '+analysis.ReportSha256.slice(0,12)+'…'+(m.demo?' · 合成示例':'')+'。用于辅助阅读，不替代原始判定。'));
+    function renderReview(){
+      const m=model(),review=m.review,box=$('ai-content');box.replaceChildren();
+      $('ai-state').textContent=review?'已完成':'未完成';
+      $('report-completion').textContent=m.demo?'合成示例 · 非实测数据':review?'AI 已完成总结':'AI 总结尚未完成';
+      $('report-completion').className='completion-label'+(review?' complete':'');
+      if(!review){box.append(el('p','ai-summary-text',m.demo?'这里展示报告的阅读布局。实际测试报告由 AI 直接写入总结后交付。':'测试数据已记录，AI 总结尚未完成。'),el('p','review-pending',m.demo?'以下图表均为合成示例，不代表产品优化收益。':'当前报告不作为最终解读；完成后的结论会直接显示在这里。'));return;}
+      box.append(el('p','ai-summary-text',review.Summary));
+      if(review.Findings.length){const list=el('div','finding-grid');for(const f of review.Findings){const item=el('article','finding');item.append(el('h3','',f.Title),el('p','',f.Detail));if(f.ScenarioId){const link=el('button','text-button','查看相关图表');link.onclick=()=>options.selectScenario(f.ScenarioId);item.append(link);}list.append(item);}box.append(list);}
+      const notes=el('div','review-notes');
+      for(const [title,items,cls]of [['结论边界',review.Limitations,'limits'],['下一步',review.Recommendations,'next']])if(items.length){const section=el('div',cls);section.append(el('h3','',title));const ul=el('ul');for(const item of items)ul.append(el('li','',item));section.append(ul);notes.append(section);}
+      if(notes.children.length)box.append(notes);
+      const date=new Date(review.GeneratedUtc);box.append(el('p','ai-origin',review.Author.Model+' · '+(Number.isNaN(date.getTime())?review.GeneratedUtc:date.toLocaleString('zh-CN',{hour12:false}))+' · 已写入测试日志'));
     }
-    async function attach(raw,m=model()){
-      const sha=await fingerprint(m),checked=A.validate(raw,sha,m.scenarios.map(s=>s.id));m.analysis=checked;
-      if(model()===m){renderAI();$('ai-message').textContent='已附加到匹配的报告，原始数据和判定保留。';}
-      return checked;
+    function facts(){
+      const m=model(),box=$('report-facts');box.replaceChildren();const failed=m.runs.filter(r=>!r.success).length;
+      const items=[['chart',String(m.scenarios.length),'个测试场景'],['clock',String(m.runs.length),'次测量记录'],[failed?'warning':'shield',failed?failed+' 次失败':m.demo?'合成示例':D.get(m.source,'IsAaControl')?'A/A 对照':m.kind==='run'?'单目标测量':m.status==='pass'?'未检出退化':m.status==='regression'?'检出退化':m.status==='error'?'测量有失败':'证据不足',failed?'保留失败证据':'结论以本次条件为限']];
+      for(const [icon,value,label]of items){const item=el('div','report-fact');item.append(window.BenchmarkIcons.make(icon,23));const copy=el('div');copy.append(el('strong','',value),el('span','',label));item.append(copy);box.append(item);}
+      $('report-binding').textContent=m.reportHash?'报告 '+m.reportHash.slice(0,12):'本地 · 离线 · 可复查';
     }
-    async function openRequest(){
-      const owner=model();$('ai-message').textContent='正在整理分析材料…';
-      try{const request=await A.request(owner);if(model()!==owner)return;dialogOwner=owner;dialogMode='request';
-        $('ai-dialog-title').textContent='让 AI 分析当前报告';$('ai-dialog-help').textContent='复制或下载下方材料，交给当前对话中的 AI。收到 JSON 总结后，使用“粘贴 AI 总结”放回页面。';
-        $('ai-text-label').textContent='已整理的分析材料（含报告指纹与逐轮证据）';$('ai-text').value=request;$('ai-text').readOnly=true;
-        $('ai-model-label').hidden=true;$('ai-copy').hidden=false;$('ai-download').hidden=false;$('ai-apply').hidden=true;$('ai-dialog-message').textContent='';$('ai-dialog').showModal();$('ai-message').textContent='';
-      }catch(e){$('ai-message').textContent=e.message;}
+    function history(){
+      const m=model(),box=$('review-log');box.replaceChildren();const revisions=m.reviewHistory||[];
+      $('review-revision-count').textContent=revisions.length+' 次总结记录';
+      if(!revisions.length){box.append(el('p','muted','尚无已完成的 AI 总结记录。'));return;}
+      for(const entry of [...revisions].reverse()){const details=el('details','review-revision'),summary=el('summary','', '第 '+entry.Number+' 版 · '+entry.Review.Author.Model+' · '+entry.Review.GeneratedUtc);details.append(summary);const content=el('div','revision-content');content.append(el('p','',entry.Review.Summary));for(const f of entry.Review.Findings)content.append(el('h3','',f.Title),el('p','',f.Detail));for(const [title,items]of [['限制',entry.Review.Limitations],['建议',entry.Review.Recommendations]])if(items.length){content.append(el('h3','',title));const ul=el('ul');for(const item of items)ul.append(el('li','',item));content.append(ul);}details.append(content);box.append(details);}
     }
-    function openPaste(){dialogOwner=model();dialogMode='paste';$('ai-dialog-title').textContent='将 AI 总结放到报告中';$('ai-dialog-help').textContent='可粘贴符合模板的 JSON，也可粘贴纯文本总结。纯文本会注明由你提供，并绑定当前报告。';$('ai-text-label').textContent='AI 总结内容';$('ai-text').readOnly=false;$('ai-text').value='';$('ai-model').value='';$('ai-model-label').hidden=false;$('ai-copy').hidden=true;$('ai-download').hidden=true;$('ai-apply').hidden=false;$('ai-dialog-message').textContent='';$('ai-dialog').showModal();}
-    async function applyPaste(){
-      try{let value=$('ai-text').value.trim();if(!value)throw Error('请先粘贴总结内容。');if(value.length>60000)throw Error('总结内容过长。');
-        value=value.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');let raw;
-        if(value.startsWith('{'))raw=JSON.parse(value);else raw={Schema:A.schema,ReportSha256:await fingerprint(dialogOwner),Author:{Kind:'ai',Model:$('ai-model').value.trim()||'模型未注明（用户粘贴）'},Summary:value,Findings:[],Limitations:[],Recommendations:[],ProvidedBy:'user-paste'};
-        await attach(raw,dialogOwner);$('ai-dialog').close();
-      }catch(e){$('ai-dialog-message').textContent='无法保存：'+e.message;}
-    }
-    $('ai-request').onclick=openRequest;$('ai-paste').onclick=openPaste;$('ai-dialog-close').onclick=()=>$('ai-dialog').close();$('ai-apply').onclick=applyPaste;
-    $('ai-copy').onclick=async()=>{try{await navigator.clipboard.writeText($('ai-text').value);$('ai-dialog-message').textContent='已复制，可粘贴到 AI 对话。';}catch{$('ai-text').focus();$('ai-text').select();$('ai-dialog-message').textContent='浏览器未开放剪贴板，请按 Ctrl+C 复制已选中的内容，或下载材料。';}};
-    $('ai-download').onclick=()=>download('benchmark-ai-request.txt',$('ai-text').value);
-    $('ai-import').onclick=()=>$('ai-file-input').click();$('ai-file-input').onchange=async event=>{const owner=model(),file=event.target.files[0];try{if(!file)return;if(file.size>100000)throw Error('总结文件不能超过 100 KB。');await attach(JSON.parse(await file.text()),owner);}catch(e){if(model()===owner)$('ai-message').textContent='无法导入：'+e.message;}finally{$('ai-file-input').value='';}};
     $('landscape-metric').onchange=landscape;
-    for(const control of document.querySelectorAll('[data-view]'))control.onclick=event=>{event.preventDefault();options.setView(control.dataset.view);};
-    for(const id of ['trends','evidence'])$(id).dataset.viewSection=id==='trends'?'details':'evidence';
-    document.querySelector('.filters').dataset.viewSection='details evidence';$('metric-grid').dataset.viewSection='details';
-    for(const box of document.querySelectorAll('.content>.two-column'))box.dataset.viewSection='details';
-    const I=window.BenchmarkIcons;
-    I.set(document.querySelector('.brand-mark'),'wave',26);I.set(document.querySelector('.file-symbol'),'evidence',24);
-    for(const item of document.querySelectorAll('.nav-item'))I.set(item.querySelector('span'),({overview:'overview',details:'chart',evidence:'evidence'})[item.dataset.view],20);
+    for(const control of document.querySelectorAll('[data-view]'))control.onclick=()=>options.setView(control.dataset.view);
+    const I=window.BenchmarkIcons;I.set(document.querySelector('.brand-mark'),'wave',24);I.set(document.querySelector('.quality-leaf'),'shield',23);I.set(document.querySelector('.footer-mark'),'wave',18);
     for(const item of document.querySelectorAll('.view-tabs [data-view]'))item.prepend(I.make(({overview:'overview',details:'chart',evidence:'evidence'})[item.dataset.view],18));
-    for(const [id,name]of Object.entries({'import-button':'upload','import-side':'plus','export-button':'download','ai-request':'ai','ai-paste':'clipboard','ai-import':'folder','ai-copy':'copy','ai-download':'download','ai-apply':'check'}))I.button(id,name);
-    I.set('ai-dialog-close','close',20);I.set(document.querySelector('.quality-leaf'),'shield',25);I.set(document.querySelector('.footer-mark'),'wave',19);
-    for(const [selector,name]of [['.ai-panel h2','ai'],['.landscape-panel h2','compare'],['.overview-panel h2','shield'],['#evidence h2','evidence'],['#trends h2','chart']]){const node=document.querySelector(selector);node.classList.add('icon-heading');node.prepend(I.make(name,22));}
-    return {render(view){setView(view);coverage();landscape();renderAI();},setView,attach,fingerprint,openRequest,renderAI,download};
+    for(const [selector,name]of [['.ai-panel h2','ai'],['.landscape-panel h2','compare'],['#evidence h2','evidence'],['#trends h2','chart'],['#review-history h2','clipboard']]){const node=document.querySelector(selector);node.classList.add('icon-heading');node.prepend(I.make(name,21));}
+    return {render(view){setView(view);if(view==='overview'){coverage();landscape();renderReview();facts();}else if(view==='evidence')history();}};
   }};
 })();

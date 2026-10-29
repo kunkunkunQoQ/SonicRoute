@@ -42,6 +42,7 @@ namespace SonicRoute.BenchmarkLab
                     "compare" or "ab" => await ExecuteCompareAsync(remainingArgs, cancellation.Token),
                     "run" => await ExecuteRunAsync(remainingArgs, cancellation.Token),
                     "plan" => ExecutePlan(remainingArgs),
+                    "report" => ExecuteReport(remainingArgs),
                     "baseline" => ExecuteBaseline(remainingArgs),
                     "scenarios" => ExecuteScenarios(remainingArgs),
                     "verify" or "selftest" => await ExecuteVerifyAsync(remainingArgs),
@@ -94,6 +95,7 @@ namespace SonicRoute.BenchmarkLab
             Console.WriteLine(@"  compare, ab     执行两个版本或与历史基线的 A/B 性能对比 (交替多轮测试)");
             Console.WriteLine(@"  run             运行指定目标程序的性能基准测试 (可保存为基线)");
             Console.WriteLine(@"  plan            预览场景、轮次顺序、桌面影响和预计时长；不启动目标");
+            Console.WriteLine(@"  report          --input <报告目录> [--finalize] [--json]；将 AI 写入的 ai-review.json 生成为只读网页");
             Console.WriteLine(@"  baseline        管理已保存的历史性能基线 (list, show, delete)");
             Console.WriteLine(@"  scenarios       列出所有已注册的测试场景");
             Console.WriteLine(@"  verify          计算/报告/真实自建子进程检查；--target 显式追加软件隔离检查");
@@ -139,6 +141,17 @@ namespace SonicRoute.BenchmarkLab
             string? evidenceDirectory = options.GetValueOrDefault("output");
             if (evidenceDirectory != null) CreateOutputDirectory(evidenceDirectory);
             return await SonicRoute.BenchmarkLab.Verification.SelfVerification.RunAllAsync(targetExe, evidenceDirectory, options.GetValueOrDefault("feature"));
+        }
+
+        private static int ExecuteReport(string[] args)
+        {
+            var options = ParseOptions(args, reportOnly: true);
+            if (!options.TryGetValue("input", out var input) || string.IsNullOrWhiteSpace(input)) throw new ArgumentException("report requires --input <report directory>.");
+            if (options.Keys.Any(key => key.ToLowerInvariant() is not ("input" or "finalize" or "json"))) throw new ArgumentException("report only accepts --input, --finalize and --json.");
+            var result = ReviewPublisher.Publish(input, options.ContainsKey("finalize"));
+            if (options.ContainsKey("json")) Console.WriteLine(JsonSerializer.Serialize(result));
+            else Console.WriteLine($"Review: {result.ReviewStatus}\nReport: {result.ReportUrl}\nAI writes: {result.ReviewFile}");
+            return 0;
         }
 
         private static int ExecutePlan(string[] args)
@@ -247,12 +260,13 @@ namespace SonicRoute.BenchmarkLab
                 NumberOption(options, "baseline-max-age-days", 7, 0.01));
 
             // Generate reports
-            HtmlReporter.SaveComparisonReport(result, outputDir);
+            result.ReportHtmlPath = Path.Combine(outputDir, "report.html");
             var (aiMd, aiJson) = AiSummaryFormatter.Generate(result, outputDir);
             result.AiSummaryMdPath = Path.Combine(outputDir, "ai-summary.md");
             File.WriteAllText(result.AiSummaryMdPath, aiMd, Encoding.UTF8);
             File.WriteAllText(Path.Combine(outputDir, "ai-summary.json"), aiJson, Encoding.UTF8);
             JsonReporter.SaveComparisonReport(result, outputDir);
+            ReviewPublisher.Publish(outputDir);
 
             if (jsonOnly)
             {
@@ -334,7 +348,7 @@ namespace SonicRoute.BenchmarkLab
                 SourceFilesUnchanged = sourceFilesUnchanged, SourceError = sourceError,
                 Tier = tier.ToString(), RequestedDurationSeconds = duration, SampleIntervalMs = interval, Rounds = rounds, Environment = SystemEnvironmentInfo.CaptureCurrent() };
             File.WriteAllText(Path.Combine(outputDir, "run_metadata.json"), JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true }));
-            HtmlReporter.SaveRunReport(evidence, metadata, summaries, outputDir);
+            ReviewPublisher.Publish(outputDir);
             if (!sourceFilesUnchanged || evidence.Any(r => !r.Success))
             {
                 if (jsonOnly) Console.WriteLine(JsonSerializer.Serialize(new { Status = "EXECUTION_ERROR", Report = jsonPath, Evidence = "run_evidence.json" }));
@@ -431,11 +445,11 @@ namespace SonicRoute.BenchmarkLab
             return 0;
         }
 
-        private static Dictionary<string, string> ParseOptions(string[] args)
+        private static Dictionary<string, string> ParseOptions(string[] args, bool reportOnly = false)
         {
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var flags = new HashSet<string>(new[] { "quiet", "q", "json", "aa", "allow-desktop-interaction" }, StringComparer.OrdinalIgnoreCase);
-            var values = new HashSet<string>(new[] { "baseline", "candidate", "target", "suite", "scenario", "module", "mode", "feature", "rounds", "duration", "warmup", "baseline-max-age-days", "interval", "threshold-cpu", "threshold-mem", "output", "save-baseline", "args" }, StringComparer.OrdinalIgnoreCase);
+            var flags = new HashSet<string>(reportOnly ? new[] { "json", "finalize" } : new[] { "quiet", "q", "json", "aa", "allow-desktop-interaction" }, StringComparer.OrdinalIgnoreCase);
+            var values = new HashSet<string>(reportOnly ? new[] { "input" } : new[] { "baseline", "candidate", "target", "suite", "scenario", "module", "mode", "feature", "rounds", "duration", "warmup", "baseline-max-age-days", "interval", "threshold-cpu", "threshold-mem", "output", "save-baseline", "args" }, StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < args.Length; i++)
             {
                 string arg = args[i];

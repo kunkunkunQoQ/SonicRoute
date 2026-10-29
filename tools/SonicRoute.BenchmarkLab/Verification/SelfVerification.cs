@@ -26,7 +26,7 @@ public static class SelfVerification
             "CPU window normalization" or "Low CPU and zero baseline" => "cpu",
             "Real signals and round noise" or "Paired and Welch intervals" => "statistics",
             "Invalid measurement" or "Weighted CPU endpoints" or "Time weighted means and gap quality" => "sampling",
-            "Reports preserve uncertainty" => "reports",
+            "Reports preserve uncertainty" or "AI report publishing" => "reports",
             "Stable rule IDs and real JSONL" => "sandbox",
             "Owned temporary cleanup" => "cleanup",
             _ => "protocol"
@@ -109,6 +109,59 @@ public static class SelfVerification
             Check(markdown.Contains("尚未满足") && !JsonDocument.Parse(json).RootElement.GetProperty("DecisionReadiness").GetProperty("RecommendedProtocolMet").GetBoolean(), "AI summary cannot lose the distinction between a verdict and final decision readiness");
             suite.Runs.Clear();
             Check(JsonDocument.Parse(AiSummaryFormatter.Generate(suite, output).Json).RootElement.GetProperty("Status").GetString() == "INCONCLUSIVE", "non-failing uncertain measurement remains inconclusive");
+        });
+        Case("AI report publishing", () => {
+            string directory = Path.Combine(output, "review-workflow"); Directory.CreateDirectory(directory);
+            var suite = new SuiteComparisonResult { BaselineTarget = "A.exe", CandidateTarget = "B.exe", Rounds = 3,
+                OverallVerdict = OverallVerdict.Inconclusive, Scenarios = new() { Compare(Summary(0), Summary(15)) } };
+            JsonReporter.SaveComparisonReport(suite, directory);
+            string sourcePath = Path.Combine(directory, "report.json"), original = File.ReadAllText(sourcePath);
+            byte[] originalBytes = File.ReadAllBytes(sourcePath);
+            string reviewPath = Path.Combine(directory, "ai-review.json"), logPath = Path.Combine(directory, "ai-review-log.jsonl");
+            var pending = ReviewPublisher.Publish(directory);
+            Check(pending.ReviewStatus == "pending" && File.Exists(Path.Combine(directory, "review-context.json")) && !File.Exists(logPath), "report prepares editable AI review and context without inventing a summary");
+            string pendingHtml = File.ReadAllText(pending.ReportHtml);
+            bool Reject(Action action) { try { action(); return false; } catch (ArgumentException) { return true; } }
+            Check(Reject(() => ReviewPublisher.Publish(directory, true)) && pendingHtml == File.ReadAllText(pending.ReportHtml), "finalize rejects pending review while preserving the published report");
+            var review = JsonSerializer.Deserialize<ReviewPublisher.Review>(File.ReadAllText(reviewPath))!;
+            review.Status = "complete"; review.Author.Model = "QA fixture model"; review.GeneratedUtc = DateTime.UtcNow.ToString("O");
+            review.Summary = "QA fixture: evidence is inconclusive; not a product measurement. <script>window.PWNED=1</script>";
+            review.Findings.Add(new() { Title = "Evidence", Detail = "No product gain established.", ScenarioId = "fixture" });
+            review.Limitations.Add("Synthetic verification fixture.");
+            review.ReportSha256 = review.ReportSha256.ToUpperInvariant();
+            void SaveReview() => File.WriteAllText(reviewPath, JsonSerializer.Serialize(review));
+            SaveReview(); var complete = ReviewPublisher.Publish(directory, true);
+            Check(complete.ReviewStatus == "complete" && complete.ReportUrl.StartsWith("file:") && complete.Revisions == 1 && File.ReadAllText(sourcePath) == original, "AI directly writes the review and finalize embeds it without changing measurements");
+            string html = File.ReadAllText(complete.ReportHtml);
+            Check(!html.Contains("<script>window.PWNED") && html.Contains("\\u003Cscript\\u003E") && !html.Contains("ai-paste") && !html.Contains("<dialog"), "reader report safely embeds AI text and has no manual summary workflow");
+            Check(ReviewPublisher.Publish(directory, true).Revisions == 1 && File.ReadAllLines(logPath).Length == 1, "repeated finalize does not append duplicate AI log entries");
+            review.Summary = "QA revision two: still inconclusive."; SaveReview();
+            Check(ReviewPublisher.Publish(directory, true).Revisions == 2 && File.ReadAllLines(logPath)[0].Contains("QA fixture:"), "changed AI summary retains its previous log revision");
+            string completeHtml = File.ReadAllText(complete.ReportHtml), log = File.ReadAllText(logPath);
+            string digest = review.ReportSha256; review.ReportSha256 = new string('0', 64); SaveReview();
+            Check(Reject(() => ReviewPublisher.Publish(directory, true)) && File.ReadAllText(complete.ReportHtml) == completeHtml && File.ReadAllText(logPath) == log, "wrong-report review cannot replace report or logs");
+            review.ReportSha256 = digest; review.Findings[0].ScenarioId = "missing"; SaveReview();
+            Check(Reject(() => ReviewPublisher.Publish(directory, true)), "AI cannot cite a scenario absent from measurements");
+            review.Findings[0].ScenarioId = "fixture"; review.Author.Model = ""; SaveReview();
+            Check(Reject(() => ReviewPublisher.Publish(directory, true)), "complete AI review requires actual author provenance");
+            review.Author.Model = "QA fixture model"; review.GeneratedUtc = "not a date"; SaveReview();
+            Check(Reject(() => ReviewPublisher.Publish(directory, true)), "complete AI review requires a valid UTC timestamp");
+            review.GeneratedUtc = DateTime.UtcNow.ToString("O"); SaveReview(); File.AppendAllText(sourcePath, "\n");
+            Check(Reject(() => ReviewPublisher.Publish(directory, true)) && completeHtml == File.ReadAllText(complete.ReportHtml), "even a raw evidence byte change invalidates the old review");
+            File.WriteAllBytes(sourcePath, originalBytes);
+            File.AppendAllText(logPath, "{broken\n");
+            Check(Reject(() => ReviewPublisher.Publish(directory, true)) && completeHtml == File.ReadAllText(complete.ReportHtml), "invalid AI log history is retained and blocks publication");
+            File.WriteAllText(logPath, log);
+            string runDirectory = Path.Combine(directory, "single-target"); Directory.CreateDirectory(runDirectory);
+            File.WriteAllText(Path.Combine(runDirectory, "run_evidence.json"), JsonSerializer.Serialize(new[] { new ScenarioResult { ScenarioId = "fixture", Success = true, Metrics = Summary() } }));
+            File.WriteAllText(Path.Combine(runDirectory, "run_metadata.json"), "{\"Target\":\"one.exe\"}");
+            File.WriteAllText(Path.Combine(runDirectory, "run_summary.json"), JsonSerializer.Serialize(new Dictionary<string, ProcessMetricSummary> { ["fixture"] = Summary() }));
+            var runPending = ReviewPublisher.Publish(runDirectory);
+            string runReviewPath = Path.Combine(runDirectory, "ai-review.json");
+            review.ReportSha256 = runPending.ReportSha256; File.WriteAllText(runReviewPath, JsonSerializer.Serialize(review));
+            Check(ReviewPublisher.Publish(runDirectory, true).ReviewStatus == "complete", "single-target AI review binds evidence, metadata and summary together");
+            File.WriteAllText(Path.Combine(runDirectory, "run_summary.json"), "{}");
+            Check(Reject(() => ReviewPublisher.Publish(runDirectory, true)), "changing single-target summary invalidates its AI review");
         });
         Case("Stable rule IDs and real JSONL", () => {
             using var sandbox = new SonicRouteSandbox(); sandbox.PopulateRules(4, "example.exe", triggerType: 0);
