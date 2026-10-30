@@ -4,7 +4,7 @@ using System.Text.Json;
 using SonicRoute.Core;
 using SonicRoute.Core.Models;
 
-internal static class Program
+internal static partial class Program
 {
     private static readonly JsonSerializerOptions ReflectionJson = new() { WriteIndented = true };
     private static int _checks;
@@ -157,7 +157,9 @@ internal static class Program
         Check(File.ReadAllText(Directory.GetFiles(AutoRuleStore.RulesDir, "*.json").Single()) == JsonSerializer.Serialize(rule, ReflectionJson), "saved rule byte compatible");
         AutoRuleStore.Invalidate();
         var snapshot = AutoRuleStore.ReadSnapshot();
-        Check(snapshot.Rules!.Single().Id == rule.Id && snapshot.Rules!.Single().Actions.Count == 37, "actual store reload retains all actions");
+        var loadedRule = snapshot.Rules!.Single();
+        Check(loadedRule.Id == rule.Id && loadedRule.Actions.Select(step => step.Action)
+            .SequenceEqual(rule.Actions.Select(step => step.Action)), "actual store reload retains all actions in order");
         var claimed = AutoRuleStore.ClaimScheduledRun(rule, "2026-10-24 12:34");
         Check(claimed?.LastRunKey == "2026-10-24 12:34", "scheduled claim persists");
         Check(AutoRuleStore.ClaimScheduledRun(rule, "2026-10-24 12:34") == null, "scheduled duplicate rejected");
@@ -219,7 +221,8 @@ internal static class Program
             }
             if (args.Length > 0 && args[0] == "perf") { Perf(args[1], args[2]); return 0; }
 #endif
-            if (args.Length > 0 && args[0] == "shutdown") ShutdownCallbacks();
+            if (args.Length > 0 && args[0] == "abcde") Abcde();
+            else if (args.Length > 0 && args[0] == "shutdown") ShutdownCallbacks();
             else if (args.Length > 0 && args[0] == "legacy") Legacy(); else Checks();
             Console.WriteLine("PASS total=" + _checks); return 0;
         }

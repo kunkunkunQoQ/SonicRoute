@@ -91,7 +91,7 @@ namespace SonicRoute
                 {
                     if (favorite.IsChecked) { if (!favorites.Contains(id)) favorites.Add(id); }
                     else favorites.RemoveAll(value => value == id);
-                    ConfigService.Save(_config);
+                    SaveSettings(_config);
                 };
                 menu.Items.Add(command);
                 menu.Items.Add(favorite);

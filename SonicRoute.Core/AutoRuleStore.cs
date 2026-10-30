@@ -39,6 +39,7 @@ namespace SonicRoute.Core
         private sealed class Entry
         {
             internal AutoRule? Rule;
+            internal string? Fingerprint;
             internal long Length, Written;
         }
         private static readonly Dictionary<string, Entry> _files = new(StringComparer.OrdinalIgnoreCase);
@@ -119,6 +120,23 @@ namespace SonicRoute.Core
             {
                 EnsureLoaded();
                 return (_revision, knownRevision == _revision ? null : _cache!.Select(r => r.Clone()).ToList());
+            }
+        }
+
+        /// <summary>Display metadata is produced once for each saved/file-loaded rule, not every running-state refresh.</summary>
+        public static (long Revision, List<AutoRule>? Rules, Dictionary<string, string>? Fingerprints) ReadDisplaySnapshot(long knownRevision = -1)
+        {
+            lock (_lock)
+            {
+                EnsureLoaded();
+                if (knownRevision == _revision) return (_revision, null, null);
+                var fingerprints = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var rule in _cache!)
+                {
+                    var entry = _files[_byId[rule.Id]];
+                    fingerprints[rule.Id] = entry.Fingerprint ??= JsonSerializer.Serialize(entry.Rule, SaveOptions);
+                }
+                return (_revision, _cache!.Select(rule => rule.Clone()).ToList(), fingerprints);
             }
         }
 

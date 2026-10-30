@@ -14,10 +14,26 @@ namespace SonicRoute
         private bool _micMuteWatchPending, _ruleProbeRunning;
         private int _micNotificationQueued, _ruleNotificationQueued;
         private DispatcherTimer? _ruleReloadTimer, _ruleProbeTimer;
+        private bool _saveFailureReported;
+        private int _recoveryQueued;
+
+        private void ConfigSaveCompleted(bool saved)
+        {
+            if (_backgroundStopped || Dispatcher.HasShutdownStarted) return;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_backgroundStopped) return;
+                if (saved) { _saveFailureReported = false; return; }
+                if (_saveFailureReported) return;
+                _saveFailureReported = true;
+                ShowOsd(L10n.T("App.NameFull"), L10n.T("St.SaveFailed"));
+            }), DispatcherPriority.Background);
+        }
 
         private void StartBackgroundMonitoring()
         {
             if (_backgroundStopped || MicMonitor != null) return;
+            ConfigService.SaveCompleted += ConfigSaveCompleted;
             MicMonitor = new MicrophoneStateMonitor();
             MicMonitor.Invalidated += MicStateInvalidated;
             _micMuteWatchTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -57,11 +73,13 @@ namespace SonicRoute
                     _micMuteWatchPending = false;
                     bool trackInput = ConfigService.Load().MicMuteOsdTrackInputMuted;
                     long micVersion = _trayWheel?.MicStateVersion ?? 0;
-                    bool muted = await MicMonitor.ReadAsync(trackInput);
+                    var state = await MicMonitor.ReadCheckedAsync(trackInput);
+                    bool muted = state.Muted;
                     if (_backgroundStopped || Dispatcher.HasShutdownStarted) return;
                     if (ConfigService.Load().MicMuteOsdTrackInputMuted != trackInput
                         || (_trayWheel?.MicStateVersion ?? 0) != micVersion)
                     { _micMuteWatchPending = true; continue; }
+                    if (!state.Known) continue; // Preserve the last confirmed state through driver failures.
                     if (!_micMuteBaselineReady)
                     { _micMuteBaselineReady = true; _lastMicMutedBaseline = muted; continue; }
                     if (muted != _lastMicMutedBaseline)
@@ -92,9 +110,10 @@ namespace SonicRoute
 
         private void RecoverBackgroundMonitoring()
         {
-            if (_backgroundStopped || Dispatcher.HasShutdownStarted) return;
+            if (_backgroundStopped || Dispatcher.HasShutdownStarted || Interlocked.Exchange(ref _recoveryQueued, 1) != 0) return;
             Dispatcher.BeginInvoke(new Action(() =>
             {
+                Interlocked.Exchange(ref _recoveryQueued, 0);
                 if (_backgroundStopped) return;
                 CurrentAppService.RecoverForegroundWatcher();
                 AutoRuleService.RecoverWatcher();
@@ -160,6 +179,7 @@ namespace SonicRoute
         {
             if (_backgroundStopped) return;
             _backgroundStopped = true;
+            ConfigService.SaveCompleted -= ConfigSaveCompleted;
             _micMuteWatchTimer?.Stop();
             _ruleProbeTimer?.Stop(); _ruleProbeTimer = null;
             SystemEvents.PowerModeChanged -= BackgroundPowerModeChanged;

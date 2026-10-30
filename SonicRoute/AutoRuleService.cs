@@ -717,6 +717,7 @@ namespace SonicRoute
                             var target = await Task.Run(() => AutoRuleStore.Find(step.TargetRuleId));
                             token.ThrowIfCancellationRequested();
                             if (target == null) { if (detail != null) detail.Reason = "rule_missing"; return false; }
+                            if (detail != null) detail.TargetRuleName = target.Name;
                             var result = await ExecuteCoreAsync(target, path, "rule", parentRunId);
                             if (detail != null && (result.Busy || result.Canceled || result.Failed > 0 || result.Succeeded == 0))
                                 detail.Reason = path.Contains(target.Id) || path.Count >= 16 ? "cycle" : result.Busy ? "rule_busy" : "rule_failed";
@@ -783,6 +784,7 @@ namespace SonicRoute
                             string? id = AudioService.GetDefaultDeviceId(EDataFlow.eCapture);
                             if (string.IsNullOrWhiteSpace(id))
                             { if (detail != null) detail.Reason = "device_unavailable"; return false; }
+                            if (detail != null) detail.TargetDeviceId = id;
                             return ChangeEndpoint(step, id!);
                         }, token);
 
@@ -805,7 +807,7 @@ namespace SonicRoute
                                     return false;
                                 }
                                 int pid = (int)current.ProcessId;
-                                if (detail != null) detail.TargetApp = current.ProcessName ?? current.Label;
+                                if (detail != null) { detail.TargetApp = current.ProcessName ?? current.Label; detail.TargetPid = pid; }
                                 return SessionVolumeService.ChangeInputMuteChecked(pid,
                                     step.Action == AutoRuleAction.SetCurrentAppInputMute ? step.Muted : (bool?)null, token).Applied;
                             }, token);
@@ -898,11 +900,13 @@ namespace SonicRoute
         {
             int pid = ResolveAppPid(processName);
             if (pid <= 0 && detail != null) detail.Reason = "app_unavailable";
+            if (pid > 0 && detail != null) detail.TargetPid = pid;
             return pid > 0 && action(pid);
         }
 
         private static bool BatchSucceeded((int Succeeded, int Total) result, ExecutionHistoryStep? detail)
         {
+            if (detail != null) { detail.SucceededTargets = result.Succeeded; detail.TotalTargets = result.Total; }
             if (result.Total > 0 && result.Succeeded == result.Total) return true;
             if (detail != null) detail.Reason = result.Total == 0 ? "no_sessions" : "partial_failure";
             return false;
@@ -924,6 +928,7 @@ namespace SonicRoute
             var target = AudioService.GetDevices(flow).FirstOrDefault(device => string.Equals(device.Id, deviceId, StringComparison.OrdinalIgnoreCase));
             if (target == null)
             { if (detail != null) detail.Reason = "device_unavailable"; return false; }
+            if (detail != null) { detail.TargetDeviceId = target.Id; detail.TargetDeviceName = target.DisplayName; }
             return action(target.Id);
         }
 
@@ -933,6 +938,10 @@ namespace SonicRoute
             if (string.IsNullOrWhiteSpace(deviceId) || AudioService.IsSystemDefault(deviceId))
             { if (detail != null) detail.Reason = "device_not_selected"; return false; }
             var r = SystemDefaultDeviceService.SetDefault(flow, deviceId);
+            if (detail != null)
+            {
+                detail.TargetDeviceId = deviceId;
+            }
             return r.Success;
         }
 
@@ -957,6 +966,7 @@ namespace SonicRoute
         {
             int pid = ResolveAppPid(processName);
             if (pid <= 0) { if (detail != null) detail.Reason = "app_unavailable"; return false; }
+            if (detail != null) detail.TargetPid = pid;
             string target = string.IsNullOrWhiteSpace(deviceId)
                 ? AudioService.SystemDefaultDeviceId  // 空 = 还原跟随系统默认
                 : deviceId;

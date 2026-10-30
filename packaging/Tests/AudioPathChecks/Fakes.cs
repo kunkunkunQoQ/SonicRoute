@@ -10,16 +10,17 @@ namespace AudioPathChecks
         internal static int Enumerators, Scans, Activations, Lookups, Properties, Releases, Policies, PolicyDisposals;
         internal static int ScanFailure, CountFailure;
         internal static Action? BeforeScan;
+        internal static Action<object>? OnRelease;
         internal static readonly HashSet<int> RouteFailures = new();
         internal static readonly List<int> PolicyRoles = new();
         internal static int PolicyFailureRole = -1;
         internal static IMMDeviceEnumerator CreateEnumerator() { Enumerators++; return new Enumerator(); }
         internal static IPolicyConfig CreatePolicyClient() { Policies++; return new Policy(); }
-        internal static int Release(object value) { Releases++; return 0; }
+        internal static int Release(object value) { Releases++; OnRelease?.Invoke(value); return 0; }
         internal static void Reset()
         {
             Devices.Clear(); RouteFailures.Clear(); PolicyRoles.Clear();
-            ScanFailure = CountFailure = 0; PolicyFailureRole = -1; BeforeScan = null;
+            ScanFailure = CountFailure = 0; PolicyFailureRole = -1; BeforeScan = null; OnRelease = null;
             AudioService.InvalidateAppsCache(); AudioService.InvalidateDeviceCache();
             SessionVolumeService.Refresh(true);
 #if !BASELINE

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace SonicRoute.Updates
 {
@@ -90,16 +91,29 @@ namespace SonicRoute.Updates
         }
 
         internal static bool IsHash(string? hash) => hash != null && Regex.IsMatch(hash, "^[a-fA-F0-9]{64}$");
-        internal static string Hash(string path)
+        internal static string Hash(string path) => Hash(path, default);
+        internal static string Hash(string path, CancellationToken cancellation)
         {
+            cancellation.ThrowIfCancellationRequested();
             using var stream = File.OpenRead(path);
             using var sha = SHA256.Create();
-            return Hex(sha.ComputeHash(stream));
+            if (!cancellation.CanBeCanceled) return Hex(sha.ComputeHash(stream));
+            var buffer = new byte[65536];
+            int count;
+            while ((count = stream.Read(buffer, 0, buffer.Length)) != 0)
+            {
+                cancellation.ThrowIfCancellationRequested();
+                sha.TransformBlock(buffer, 0, count, buffer, 0);
+            }
+            cancellation.ThrowIfCancellationRequested();
+            sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            return Hex(sha.Hash!);
         }
         internal static string Hex(byte[] bytes) => BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
-        internal static void Verify(string path, string hash, long size)
+        internal static void Verify(string path, string hash, long size, CancellationToken cancellation = default)
         {
-            if (!IsHash(hash) || new FileInfo(path).Length != size || !Hash(path).Equals(hash, StringComparison.OrdinalIgnoreCase))
+            cancellation.ThrowIfCancellationRequested();
+            if (!IsHash(hash) || new FileInfo(path).Length != size || !Hash(path, cancellation).Equals(hash, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Update checksum mismatch.");
         }
 

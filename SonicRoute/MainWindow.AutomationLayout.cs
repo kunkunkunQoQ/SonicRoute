@@ -271,7 +271,7 @@ namespace SonicRoute
         {
             var previous = _config.AutomationRuleOrder;
             _config.AutomationRuleOrder = ids;
-            try { ConfigService.Save(_config); }
+            try { SaveSettings(_config); }
             catch { _config.AutomationRuleOrder = previous; ShowToast(L10n.T("Auto.SaveFailed")); return; }
             SortAutomationRules();
             _autoRuleListSignature = null;

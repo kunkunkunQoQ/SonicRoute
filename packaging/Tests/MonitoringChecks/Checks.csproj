@@ -6,7 +6,8 @@
   </PropertyGroup>
   <ItemGroup><Compile Include="Program.cs;Fakes.cs;OutputVolumes.cs;PanelPerformance.cs" /></ItemGroup>
   <Target Name="PrepareMonitoringSources" BeforeTargets="CoreCompile">
-    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Sources.ps1&quot; -OutputDirectory &quot;$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)&quot;" />
-    <ItemGroup><Compile Include="$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)/*.cs" /></ItemGroup>
+    <PropertyGroup><PreparedSources Condition="'$(PreparedSources)' == ''">$(IntermediateOutputPath)prepared</PreparedSources></PropertyGroup>
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Sources.ps1&quot; -OutputDirectory &quot;$(PreparedSources)&quot;" />
+    <ItemGroup><Compile Include="$(PreparedSources)/*.cs" /></ItemGroup>
   </Target>
 </Project>

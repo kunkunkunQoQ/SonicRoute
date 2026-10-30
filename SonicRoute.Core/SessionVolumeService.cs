@@ -38,8 +38,59 @@ namespace SonicRoute.Core
         private const int MissingCacheMilliseconds = 200;
         private static bool _snapshotComplete;
         private static int _cacheGeneration, _snapshotGeneration;
+        private static DateTime _lastCaptureEnum = DateTime.MinValue;
+        private static bool _captureSnapshotComplete;
+        private static int _captureSnapshotGeneration;
+        private static long _captureRefreshGeneration;
         private static Dictionary<int, List<ISimpleAudioVolume>> _renderVolumes = new();
         private static Dictionary<int, List<ISimpleAudioVolume>> _captureVolumes = new();
+        private sealed class SnapshotUse
+        {
+            internal int Readers;
+            internal Dictionary<int, List<ISimpleAudioVolume>>? Retired;
+        }
+        private static SnapshotUse _renderUse = new(), _captureUse = new();
+
+        // A short managed lease protects the snapshot, without holding a lock across a driver call.
+        private sealed class VolumeLease : IDisposable
+        {
+            internal readonly List<ISimpleAudioVolume> Volumes;
+            private SnapshotUse? _owner;
+            internal VolumeLease(SnapshotUse owner, List<ISimpleAudioVolume> volumes)
+            { _owner = owner; Volumes = volumes; owner.Readers++; }
+            public void Dispose()
+            {
+                Dictionary<int, List<ISimpleAudioVolume>>? release = null;
+                lock (_lock)
+                {
+                    var owner = _owner;
+                    if (owner == null) return;
+                    _owner = null;
+                    if (--owner.Readers == 0) { release = owner.Retired; owner.Retired = null; }
+                }
+                if (release != null) ReleaseVolumes(release);
+            }
+        }
+
+        private static VolumeLease? BorrowVolumes(int pid, bool capture)
+        {
+            if (capture) FindCaptureVolumes(pid, 5); else FindRenderVolumes(pid, 5);
+            lock (_lock)
+            {
+                var map = capture ? _captureVolumes : _renderVolumes;
+                return map.TryGetValue(pid, out var volumes) && volumes.Count != 0
+                    ? new VolumeLease(capture ? _captureUse : _renderUse, volumes) : null;
+            }
+        }
+
+        // Caller owns _lock. Retired interfaces are released by their final reader.
+        private static Dictionary<int, List<ISimpleAudioVolume>>? Retire(SnapshotUse use,
+            Dictionary<int, List<ISimpleAudioVolume>> volumes)
+        {
+            if (use.Readers == 0) return volumes;
+            use.Retired = volumes;
+            return null;
+        }
 
         /// <summary>设备/会话通知只使快照过期；不在回调内等待枚举锁或释放 COM。</summary>
         public static void InvalidateCache() => Interlocked.Increment(ref _cacheGeneration);
@@ -51,7 +102,7 @@ namespace SonicRoute.Core
             {
                 if (_renderVolumes.TryGetValue(pid, out var l) && l.Count > 0) return true;
             }
-            Refresh();
+            RefreshPlayback();
             lock (_lock)
             {
                 return _renderVolumes.TryGetValue(pid, out var l2) && l2.Count > 0;
@@ -63,21 +114,22 @@ namespace SonicRoute.Core
         {
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var list = FindRenderVolumes(pid, 5);
+                using var lease = BorrowVolumes(pid, false);
+                var list = lease?.Volumes;
                 if (list == null || list.Count == 0) return -1;
                 try
                 {
                     // 读组内第一个会话
                     if (list[0].GetMasterVolume(out float f) < 0)
                     {
-                        if (attempt == 0) { Refresh(true); continue; }
+                        if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                         return -1;
                     }
                     return (int)Math.Round(MathEx.Clamp(f, 0f, 1f) * 100f);
                 }
                 catch
                 {
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                     return -1;
                 }
             }
@@ -96,18 +148,48 @@ namespace SonicRoute.Core
                 lock (_lock)
                     state = ReadStateCore(pid, out failed);
                 if (!failed || attempt != 0) return state;
-                Refresh(true);
+                RefreshCore(EDataFlow.eRender, true);
             }
             return (-1, false);
+        }
+
+        /// <summary>Independent validity: a failed mute read must never look like confirmed unmute.</summary>
+        public static (int Volume, bool Muted, bool MuteKnown) ReadStateChecked(int pid)
+        {
+            (int Volume, bool Muted, bool MuteKnown) result = (-1, false, false);
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                using var lease = BorrowVolumes(pid, false);
+                if (lease == null) return (-1, false, false);
+                int percent = -1; bool muted = false, known = false;
+                try
+                {
+                    if (lease.Volumes[0].GetMasterVolume(out float value) >= 0 && !float.IsNaN(value) && !float.IsInfinity(value))
+                        percent = (int)Math.Round(MathEx.Clamp(value, 0f, 1f) * 100f);
+                }
+                catch { }
+                try { known = lease.Volumes[0].GetMute(out int value) >= 0; muted = known && value != 0; }
+                catch { }
+                result = (percent, muted, known);
+                if ((percent >= 0 && known) || attempt != 0) return result;
+                RefreshCore(EDataFlow.eRender, true);
+            }
+            return result;
         }
 
         // Caller owns _lock; preserve the existing first-session volume/mute semantics.
         private static (int Volume, bool Muted) ReadStateCore(int pid, out bool failed)
         {
+            var state = ReadStateCoreChecked(pid, out failed);
+            return (state.Volume, state.Muted);
+        }
+
+        private static (int Volume, bool Muted, bool MuteKnown) ReadStateCoreChecked(int pid, out bool failed)
+        {
             failed = false;
-            if (!_renderVolumes.TryGetValue(pid, out var sessions) || sessions.Count == 0) return (-1, false);
+            if (!_renderVolumes.TryGetValue(pid, out var sessions) || sessions.Count == 0) return (-1, false, false);
             int percent = -1;
-            bool muted = false;
+            bool muted = false, known = false;
             try
             {
                 if (sessions[0].GetMasterVolume(out float value) >= 0)
@@ -115,9 +197,9 @@ namespace SonicRoute.Core
                 else failed = true;
             }
             catch { failed = true; }
-            try { if (sessions[0].GetMute(out int value) >= 0) muted = value != 0; else failed = true; }
+            try { if (sessions[0].GetMute(out int value) >= 0) { muted = value != 0; known = true; } else failed = true; }
             catch { failed = true; }
-            return (percent, muted);
+            return (percent, muted, known);
         }
 
         /// <summary>设置音量百分比（0–100）；对进程全部输出会话生效。任一成功即视为成功。</summary>
@@ -125,7 +207,8 @@ namespace SonicRoute.Core
         {
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var list = FindRenderVolumes(pid, 5);
+                using var lease = BorrowVolumes(pid, false);
+                var list = lease?.Volumes;
                 if (list == null || list.Count == 0) return false;
                 var g = Guid.Empty;
                 float val = MathEx.Clamp(percent / 100f, 0f, 1f);
@@ -138,12 +221,12 @@ namespace SonicRoute.Core
                         if (v.SetMasterVolume(val, ref g) >= 0) any = true;
                     }
                     if (any) return true;
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                     return false;
                 }
                 catch
                 {
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                     return false;
                 }
             }
@@ -169,20 +252,21 @@ namespace SonicRoute.Core
         {
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var list = FindRenderVolumes(pid, 5);
+                using var lease = BorrowVolumes(pid, false);
+                var list = lease?.Volumes;
                 if (list == null || list.Count == 0) return false;
                 try
                 {
                     if (list[0].GetMute(out int m) < 0)
                     {
-                        if (attempt == 0) { Refresh(true); continue; }
+                        if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                         return false;
                     }
                     return m != 0;
                 }
                 catch
                 {
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                     return false;
                 }
             }
@@ -194,7 +278,8 @@ namespace SonicRoute.Core
         {
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var list = FindRenderVolumes(pid, 5);
+                using var lease = BorrowVolumes(pid, false);
+                var list = lease?.Volumes;
                 if (list == null || list.Count == 0) return false;
                 var g = Guid.Empty;
                 bool any = false;
@@ -205,12 +290,12 @@ namespace SonicRoute.Core
                         if (v.SetMute(mute ? 1 : 0, ref g) >= 0) any = true;
                     }
                     if (any) return true;
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                     return false;
                 }
                 catch
                 {
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eRender, true); continue; }
                     return false;
                 }
             }
@@ -220,20 +305,32 @@ namespace SonicRoute.Core
         /// <summary>切换静音，返回切换后的静音状态。</summary>
         public static bool ToggleMute(int pid)
         {
-            bool m = IsMuted(pid);
-            SetMute(pid, !m);
-            return !m;
+            return ToggleMuteChecked(pid).Muted;
         }
 
         /// <summary>切换静音并报告是否真正生效（(新静音状态, 是否生效)）。
         /// 应用没有任何输出会话时不可静音，返回 (false, false)——避免快捷键误报"已静音"却什么都没做。</summary>
         public static (bool Muted, bool Applied) ToggleMuteChecked(int pid)
         {
-            var list = FindRenderVolumes(pid, 5);
-            if (list == null || list.Count == 0) return (false, false);
-            bool m = IsMuted(pid);
-            bool ok = SetMute(pid, !m);
-            return (!m, ok);
+            lock (_adjustVolumeLock)
+            {
+                var state = ReadStateChecked(pid);
+                if (!state.MuteKnown) return (state.Muted, false);
+                bool target = !state.Muted;
+                bool written = SetMute(pid, target);
+                var actual = ReadStateChecked(pid);
+                return (actual.Muted, written && actual.MuteKnown && actual.Muted == target);
+            }
+        }
+
+        public static (bool Applied, int Actual) SetVolumePercentChecked(int pid, int percent)
+        {
+            lock (_adjustVolumeLock)
+            {
+                bool applied = SetVolumePercent(pid, percent);
+                int actual = GetVolumePercent(pid);
+                return (applied && actual == MathEx.Clamp(percent, 0, 100), actual);
+            }
         }
 
         // ------------------------------------------------------------------
@@ -243,29 +340,35 @@ namespace SonicRoute.Core
         /// <summary>所有有输出会话的应用是否都已静音（没有任何会话视为未静音）。</summary>
         public static bool AllMuted()
         {
-            Refresh(true);
+            RefreshCore(EDataFlow.eRender, true);
             lock (_lock) return ReadAllMutedCore().Muted;
         }
 
         /// <summary>面板同一轮读取应用状态与全部播放会话静音；包含未显示的应用和同 PID 的其它会话。</summary>
         public static (Dictionary<int, (int Volume, bool Muted)> Apps, bool AllMuted) ReadPanelState(IEnumerable<int> pids)
         {
+            var state = ReadPanelStateChecked(pids);
+            return (state.Apps.ToDictionary(pair => pair.Key, pair => (pair.Value.Volume, pair.Value.Muted)), state.AllMuted ?? false);
+        }
+
+        public static (Dictionary<int, (int Volume, bool Muted, bool MuteKnown)> Apps, bool? AllMuted) ReadPanelStateChecked(IEnumerable<int> pids)
+        {
             var ids = new HashSet<int>(pids);
             for (int attempt = 0; ; attempt++)
             {
-                Refresh(true);
+                RefreshCore(EDataFlow.eRender, true);
                 bool failed = false;
-                var states = new Dictionary<int, (int Volume, bool Muted)>();
-                bool allMuted;
+                var states = new Dictionary<int, (int Volume, bool Muted, bool MuteKnown)>();
+                bool? allMuted;
                 lock (_lock)
                 {
                     foreach (int pid in ids)
                     {
-                        states[pid] = ReadStateCore(pid, out bool appFailed);
+                        states[pid] = ReadStateCoreChecked(pid, out bool appFailed);
                         failed |= appFailed;
                     }
                     var global = ReadAllMutedCore();
-                    allMuted = global.Muted;
+                    allMuted = global.Known ? global.Muted : null;
                     failed |= !global.Known && _renderVolumes.Count != 0;
                     failed |= !_snapshotComplete || _snapshotGeneration != Volatile.Read(ref _cacheGeneration);
                 }
@@ -300,7 +403,7 @@ namespace SonicRoute.Core
                 if (result.Total == 0) return (false, false);
                 // Preserve the old final discovery: writes can rebuild streams, so checking
                 // only the interfaces used to write is not sufficient confirmation.
-                Refresh(true);
+                RefreshCore(EDataFlow.eRender, true);
                 lock (_lock)
                 {
                     var actual = ReadAllMutedCore();
@@ -330,7 +433,7 @@ namespace SonicRoute.Core
             {
                 if (_captureVolumes.TryGetValue(pid, out var l) && l.Count > 0) return true;
             }
-            Refresh();
+            RefreshCore(EDataFlow.eCapture, false);
             lock (_lock)
             {
                 return _captureVolumes.TryGetValue(pid, out var l2) && l2.Count > 0;
@@ -354,7 +457,7 @@ namespace SonicRoute.Core
                     catch { /* Retry after refreshing; keep references alive during the read. */ }
                     if (attempt != 0) return (true, false);
                 }
-                Refresh(true);
+                RefreshCore(EDataFlow.eCapture, true);
             }
             return (false, false);
         }
@@ -367,7 +470,8 @@ namespace SonicRoute.Core
         {
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                var list = FindCaptureVolumes(pid, 5);
+                using var lease = BorrowVolumes(pid, true);
+                var list = lease?.Volumes;
                 if (list == null || list.Count == 0) return false;
                 var g = Guid.Empty;
                 bool any = false;
@@ -378,12 +482,12 @@ namespace SonicRoute.Core
                         if (v.SetMute(mute ? 1 : 0, ref g) >= 0) any = true;
                     }
                     if (any) return true;
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eCapture, true); continue; }
                     return false;
                 }
                 catch
                 {
-                    if (attempt == 0) { Refresh(true); continue; }
+                    if (attempt == 0) { RefreshCore(EDataFlow.eCapture, true); continue; }
                     return false;
                 }
             }
@@ -430,7 +534,7 @@ namespace SonicRoute.Core
             lock (_adjustVolumeLock)
             {
                 token.ThrowIfCancellationRequested();
-                if (pid.HasValue) FindCaptureVolumes(pid.Value, 5); else Refresh(true);
+                if (pid.HasValue) FindCaptureVolumes(pid.Value, 5); else RefreshCore(flow, true);
                 bool target = muted ?? false;
                 bool capture = flow == EDataFlow.eCapture;
                 int succeeded = 0, total;
@@ -486,7 +590,7 @@ namespace SonicRoute.Core
                     // Recording apps can recreate sessions on writes. Reuse the existing forced
                     // refresh once, then verify every current session instead of trusting HRESULT.
                     token.ThrowIfCancellationRequested();
-                    Refresh(true);
+                    RefreshCore(flow, true);
                     lock (_lock)
                     {
                         if (!_captureVolumes.TryGetValue(pid!.Value, out var current) || current.Count == 0) return (0, total, false);
@@ -505,20 +609,27 @@ namespace SonicRoute.Core
         /// （旧引用释放）。带 2 秒节流：已有缓存且 2 秒内刷新过则跳过，降低高频操作
         /// （托盘滚轮/音量滑块）的 COM 枚举开销与内存/音频子系统压力。并发调用复用正在进行的
         /// 枚举；force=true 在没有并发枚举时强制执行。</summary>
-        public static void Refresh(bool force = false)
+        public static void Refresh(bool force = false) => RefreshCore(EDataFlow.eAll, force);
+        public static void RefreshPlayback(bool force = false) => RefreshCore(EDataFlow.eRender, force);
+
+        private static void RefreshCore(EDataFlow flow, bool force)
         {
+            bool render = flow != EDataFlow.eCapture, capture = flow != EDataFlow.eRender;
             lock (_refreshLock)
             {
                 long observedGeneration = _refreshGeneration;
+                long observedCapture = _captureRefreshGeneration;
                 while (_refreshInProgress) Monitor.Wait(_refreshLock);
-                if (_refreshGeneration != observedGeneration) return;
+                if ((!render || _refreshGeneration != observedGeneration)
+                    && (!capture || _captureRefreshGeneration != observedCapture)) return;
                 lock (_lock)
                 {
-                    double age = (DateTime.UtcNow - _lastEnum).TotalMilliseconds;
-                    int ttl = (_renderVolumes.Count + _captureVolumes.Count) > 0 ? 2000 : MissingCacheMilliseconds;
-                    if (!force && _snapshotComplete && _snapshotGeneration == Volatile.Read(ref _cacheGeneration)
-                        && age >= 0 && age < ttl)
-                        return;
+                    if (!force)
+                    {
+                        if (render && _snapshotComplete && SnapshotFresh(_renderVolumes.Count > 0 ? 2000 : MissingCacheMilliseconds)) render = false;
+                        if (capture && _captureSnapshotComplete && SnapshotFresh(_captureVolumes.Count > 0 ? 2000 : MissingCacheMilliseconds, true)) capture = false;
+                    }
+                    if (!render && !capture) return;
                 }
                 _refreshInProgress = true;
             }
@@ -527,43 +638,51 @@ namespace SonicRoute.Core
             var newCapture = new Dictionary<int, List<ISimpleAudioVolume>>();
             bool completed = false;
             int generation = Volatile.Read(ref _cacheGeneration);
-            bool complete;
+            bool renderComplete = false, captureComplete = false;
             try
             {
                 var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
                 try
                 {
-                    complete = CollectInto(enumerator, EDataFlow.eRender, newRender);
-                    complete &= CollectInto(enumerator, EDataFlow.eCapture, newCapture);
+                    if (render) renderComplete = CollectInto(enumerator, EDataFlow.eRender, newRender);
+                    if (capture) captureComplete = CollectInto(enumerator, EDataFlow.eCapture, newCapture);
                 }
                 finally
                 {
                     try { Marshal.ReleaseComObject(enumerator); } catch { }
                 }
 
+                Dictionary<int, List<ISimpleAudioVolume>>? retiredRender = null, retiredCapture = null;
                 lock (_lock)
                 {
-                    ReleaseVolumes(_renderVolumes);
-                    ReleaseVolumes(_captureVolumes);
-                    _renderVolumes = newRender;
-                    _captureVolumes = newCapture;
-                    _lastEnum = DateTime.UtcNow;
-                    _snapshotGeneration = generation;
-                    _snapshotComplete = complete;
+                    if (render)
+                    {
+                        retiredRender = Retire(_renderUse, _renderVolumes);
+                        _renderVolumes = newRender; _renderUse = new SnapshotUse();
+                        _lastEnum = DateTime.UtcNow; _snapshotGeneration = generation; _snapshotComplete = renderComplete;
+                    }
+                    if (capture)
+                    {
+                        retiredCapture = Retire(_captureUse, _captureVolumes);
+                        _captureVolumes = newCapture; _captureUse = new SnapshotUse();
+                        _lastCaptureEnum = DateTime.UtcNow; _captureSnapshotGeneration = generation; _captureSnapshotComplete = captureComplete;
+                    }
                     completed = true;
                 }
+                if (retiredRender != null) ReleaseVolumes(retiredRender);
+                if (retiredCapture != null) ReleaseVolumes(retiredCapture);
             }
             finally
             {
                 if (!completed)
                 {
-                    lock (_lock) _snapshotComplete = false;
+                    lock (_lock) { if (render) _snapshotComplete = false; if (capture) _captureSnapshotComplete = false; }
                     ReleaseVolumes(newRender);
                     ReleaseVolumes(newCapture);
                 }
                 lock (_refreshLock)
                 {
-                    if (completed) _refreshGeneration++;
+                    if (completed) { if (render) _refreshGeneration++; if (capture) _captureRefreshGeneration++; }
                     _refreshInProgress = false;
                     Monitor.PulseAll(_refreshLock);
                 }
@@ -650,10 +769,11 @@ namespace SonicRoute.Core
             return complete;
         }
 
-        private static bool SnapshotFresh(double milliseconds)
+        private static bool SnapshotFresh(double milliseconds, bool capture = false)
         {
-            double age = (DateTime.UtcNow - _lastEnum).TotalMilliseconds;
-            return _snapshotGeneration == Volatile.Read(ref _cacheGeneration) && age >= 0 && age < milliseconds;
+            double age = (DateTime.UtcNow - (capture ? _lastCaptureEnum : _lastEnum)).TotalMilliseconds;
+            return (capture ? _captureSnapshotGeneration : _snapshotGeneration) == Volatile.Read(ref _cacheGeneration)
+                && age >= 0 && age < milliseconds;
         }
 
         /// <summary>按 PID 取输出会话列表；缓存超过 maxAgeSeconds 秒则强制刷新后再取。
@@ -671,7 +791,7 @@ namespace SonicRoute.Core
                 }
                 else if (_snapshotComplete && SnapshotFresh(MissingCacheMilliseconds)) return null;
             }
-            Refresh(true);
+            RefreshCore(EDataFlow.eRender, true);
             lock (_lock)
             {
                 return _renderVolumes.TryGetValue(pid, out var l2) ? l2 : null;
@@ -685,11 +805,11 @@ namespace SonicRoute.Core
             {
                 if (_captureVolumes.TryGetValue(pid, out var l))
                 {
-                    if (SnapshotFresh(maxAgeSeconds * 1000)) return l;
+                    if (SnapshotFresh(maxAgeSeconds * 1000, true)) return l;
                 }
-                else if (_snapshotComplete && SnapshotFresh(MissingCacheMilliseconds)) return null;
+                else if (_captureSnapshotComplete && SnapshotFresh(MissingCacheMilliseconds, true)) return null;
             }
-            Refresh(true);
+            RefreshCore(EDataFlow.eCapture, true);
             lock (_lock)
             {
                 return _captureVolumes.TryGetValue(pid, out var l2) ? l2 : null;

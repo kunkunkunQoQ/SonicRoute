@@ -28,6 +28,8 @@ namespace SonicRoute.Core
         private bool _stopping;
         private bool _disposed;
         private int _targetsVersion;
+        private HashSet<int>? _visibleTargets;
+        private int _visibleVersion;
         private TaskCompletionSource<bool>? _completion;
         public Task Completion { get { lock (_gate) return _completion?.Task ?? Task.CompletedTask; } }
 
@@ -59,6 +61,18 @@ namespace SonicRoute.Core
                 if (_targets.SetEquals(next)) return;
                 _targets = next;
                 _targetsVersion++;
+                _wake.Set();
+            }
+        }
+
+        /// <summary>Sampling demand is separate from subscriptions: scrolling never rebuilds the COM graph.</summary>
+        public void UpdateVisibleTargets(IEnumerable<int> processIds)
+        {
+            var next = NewTargets(processIds);
+            lock (_gate)
+            {
+                if (_disposed || (_visibleTargets != null && _visibleTargets.SetEquals(next))) return;
+                _visibleTargets = next; _visibleVersion++;
                 _wake.Set();
             }
         }
@@ -112,14 +126,21 @@ namespace SonicRoute.Core
             var watch = Stopwatch.StartNew();
             long nextScan = 0;
             int seenVersion = -1;
+            int seenVisible = -1;
+            HashSet<int>? visible = null;
             try
             {
                 while (true)
                 {
                     bool targetsChanged = false;
+                    bool visibleChanged = false;
                     lock (_gate)
                     {
                         if (_stopping) break;
+                        if (seenVisible != _visibleVersion)
+                        {
+                            visible = _visibleTargets; seenVisible = _visibleVersion; visibleChanged = true;
+                        }
                         if (_targetsVersion != seenVersion)
                         {
                             // 发布后不修改目标集；更新只替换引用，工作线程可直接持有旧快照。
@@ -154,7 +175,7 @@ namespace SonicRoute.Core
                     foreach (var handle in graph.Sessions.Values)
                     {
                         if (IsStopping()) break;
-                        if (!handle.Active) continue;
+                        if (!handle.Active || (visible != null && !visible.Contains(handle.Pid))) continue;
                         active = true;
                         try
                         {
@@ -173,7 +194,7 @@ namespace SonicRoute.Core
                         catch { handle.Disconnected = 1; graph.RequireRecovery(); }
                     }
                     if (IsStopping()) break;
-                    bool peaksChanged = targetsChanged;
+                    bool peaksChanged = targetsChanged || visibleChanged;
                     foreach (int pid in targets)
                     {
                         float raw = rawPeaks[pid];
@@ -185,7 +206,7 @@ namespace SonicRoute.Core
 #endif
                         float previous = state.Smoothed;
                         float alpha = raw > previous ? Attack : Release;
-                        float smoothed = previous + (raw - previous) * alpha;
+                        float smoothed = visible != null && !visible.Contains(pid) ? 0f : previous + (raw - previous) * alpha;
                         if (smoothed < 0.001f) smoothed = 0f;
                         state.Smoothed = smoothed;
                         fading |= smoothed != 0f;
@@ -205,8 +226,9 @@ namespace SonicRoute.Core
                     // 任一电平变化时发送完整目标集，包含回零帧。
                     if (peaksChanged)
                     {
-                        var snapshot = new Dictionary<int, float>(targets.Count);
-                        foreach (int pid in targets) snapshot[pid] = display[pid].Published;
+                        var snapshot = new Dictionary<int, float>(visible == null ? targets.Count : Math.Min(targets.Count, visible.Count));
+                        foreach (int pid in targets)
+                            if (visible == null || visible.Contains(pid)) snapshot[pid] = display[pid].Published;
                         try { PeaksUpdated?.Invoke(snapshot); }
                         catch { } // UI 已关闭或 Dispatcher 已停止，不影响 COM 清理
                     }

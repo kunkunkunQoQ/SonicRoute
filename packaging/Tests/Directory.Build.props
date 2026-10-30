@@ -1,0 +1,8 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)../../Directory.Build.props" Condition="Exists('$(MSBuildThisFileDirectory)../../Directory.Build.props')" />
+  <PropertyGroup>
+    <!-- SDK determines intermediate paths before project-body properties are evaluated. -->
+    <_CheckRelativePath>$([MSBuild]::MakeRelative('$(MSBuildThisFileDirectory)', '$(MSBuildProjectDirectory)'))</_CheckRelativePath>
+    <ArtifactsProjectName>Tests_$(_CheckRelativePath.Replace('\', '_').Replace('/', '_'))</ArtifactsProjectName>
+  </PropertyGroup>
+</Project>

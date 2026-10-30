@@ -97,6 +97,7 @@ namespace SonicRoute
         {
             string text = L10n.T(OutputVolumesToggle.IsChecked == true ? "Qp.CollapseOutputVolumes" : "Qp.ExpandOutputVolumes");
             OutputVolumesToggle.ToolTip = text;
+            System.Windows.Automation.AutomationProperties.SetName(OutputVolumesToggle, text);
             OutputVolumesToggle.Content = OutputVolumesToggle.IsChecked == true ? "▾" : "▴";
             System.Windows.Automation.AutomationProperties.SetName(OutputVolumesToggle, text);
         }
@@ -105,7 +106,7 @@ namespace SonicRoute
         {
             var config = ConfigService.Load();
             config.QuickPanelShowAllOutputVolumes = OutputVolumesToggle.IsChecked == true;
-            ConfigService.Save(config);
+            ConfigService.QueueSave(config);
             UpdateOutputToggle();
             if (config.QuickPanelShowAllOutputVolumes) OpenOutputVolumes();
             else StopOutputVolumes();

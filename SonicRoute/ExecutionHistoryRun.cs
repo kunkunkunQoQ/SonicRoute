@@ -26,7 +26,8 @@ namespace SonicRoute
         internal ExecutionHistoryStep? Step(int index, AutoRuleStep step)
         {
             if (Entry.Steps.Count >= 100) return null;
-            var detail = new ExecutionHistoryStep { Number = index + 1, Action = (int)step.Action, TargetApp = Cut(step.TargetApp, 80) };
+            var detail = new ExecutionHistoryStep { Number = index + 1, Action = (int)step.Action, TargetApp = Cut(step.TargetApp, 80),
+                TargetDeviceId = AutoRuleActions.NeedsDevice(step.Action) ? Cut(step.TargetDeviceId, 160) : null };
             Entry.Steps.Add(detail);
             return detail;
         }

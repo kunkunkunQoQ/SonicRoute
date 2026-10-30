@@ -146,7 +146,7 @@ namespace SonicRoute.Updates
             return release;
         }
 
-        internal async Task DownloadAsync(UpdateRelease release, string destination, Action<long, double> progress, CancellationToken token)
+        internal async Task DownloadAsync(UpdateRelease release, string destination, Action<long, double> progress, CancellationToken token, Action? verifying = null)
         {
             var asset = release.Asset ?? throw new InvalidOperationException("No matching update asset.");
             var package = release.Package ?? throw new InvalidOperationException("No matching update package.");
@@ -155,7 +155,7 @@ namespace SonicRoute.Updates
             UpdateProtocol.RejectReparsePoints(destination + ".partial");
             if (File.Exists(destination))
             {
-                try { UpdateProtocol.Verify(destination, package.Sha256, package.Size); return; }
+                try { verifying?.Invoke(); UpdateProtocol.Verify(destination, package.Sha256, package.Size, token); return; }
                 catch (InvalidDataException) { File.Delete(destination); }
             }
             string partial = destination + ".partial";
@@ -187,7 +187,9 @@ namespace SonicRoute.Updates
                     output.Flush(true);
                 }
                 token.ThrowIfCancellationRequested();
-                UpdateProtocol.Verify(partial, package.Sha256, package.Size);
+                verifying?.Invoke();
+                UpdateProtocol.Verify(partial, package.Sha256, package.Size, token);
+                token.ThrowIfCancellationRequested();
                 File.Move(partial, destination);
                 progress(package.Size, 0);
             }

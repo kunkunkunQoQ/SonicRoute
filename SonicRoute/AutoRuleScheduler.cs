@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Text;
 using Microsoft.Win32;
 using SonicRoute.Core;
 using SonicRoute.Core.Models;
@@ -15,7 +17,7 @@ namespace SonicRoute
     /// - 单发等待：每次只计算所有启用定时规则中"最近一次执行时刻"，用一次性 Timer 等待，不做每秒/每分钟轮询。
     /// - 到点执行后立即重算下一次；规则增删改/启停（经 ReloadHotkeys）与系统时间变化、睡眠恢复时重新计算。
     /// - 睡眠/关机错过执行时刻：唤醒后不补执行（错过即跳过），直接重算下一次。
-    /// - 仅一次规则执行成功后自动禁用（不删除）；仅一次取"下一个到达时刻"（今天未过用今天，已过顺延明天），不使用日期。
+    /// - 仅一次规则领取并保存时停用（不删除），步骤失败不重试；下一个HH:mm，今天已过则明天，不使用日期。
     /// - 执行复用 AutoRuleService.ExecuteAsync（多步骤，与快捷键/应用触发完全一致）。
     /// </summary>
     public static class AutoRuleScheduler
@@ -33,20 +35,61 @@ namespace SonicRoute
 
         private static readonly string LogPath = Path.Combine(
             SonicRoute.Core.AppDataRoot.DirectoryPath, "scheduler.log");
+        private static readonly object _logGate = new(), _logWriteGate = new();
+        private static readonly Queue<string> _logQueue = new();
+        private static Task _logDrain = Task.CompletedTask;
 
-        /// <summary>诊断日志（调试定时触发用，限长 256KB 自动截断；失败静默）。</summary>
+        /// <summary>Bounded, demand-driven batches; no scheduler lock or periodic flush wakeup.</summary>
         internal static void Log(string msg)
+        {
+            string line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {msg}{Environment.NewLine}";
+            if (line.Length > 4096) line = line.Substring(0, 4094) + Environment.NewLine;
+            lock (_logGate)
+            {
+                if (_logQueue.Count < 512)
+                {
+                    _logQueue.Enqueue(line);
+                    if (_logDrain.IsCompleted) _logDrain = Task.Run(DrainLogs);
+                    return;
+                }
+            }
+            // Pressure fallback preserves diagnostics instead of growing without bound or losing errors.
+            WriteLogBatch(line);
+        }
+
+        private static void DrainLogs()
+        {
+            while (true)
+            {
+                var batch = new StringBuilder();
+                lock (_logGate)
+                {
+                    if (_logQueue.Count == 0) { _logDrain = Task.CompletedTask; return; }
+                    while (_logQueue.Count != 0 && batch.Length < 32 * 1024) batch.Append(_logQueue.Dequeue());
+                }
+                WriteLogBatch(batch.ToString());
+            }
+        }
+
+        internal static void FlushLogs()
+        {
+            Task pending;
+            lock (_logGate) pending = _logDrain;
+            pending.GetAwaiter().GetResult();
+        }
+
+        private static void WriteLogBatch(string lines)
         {
             try
             {
-                lock (_lock)
+                lock (_logWriteGate)
                 {
-                    var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {msg}{Environment.NewLine}";
+                    Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
                     var fi = new FileInfo(LogPath);
                     if (!fi.Exists || fi.Length > 256 * 1024)
-                        File.WriteAllText(LogPath, line);
+                        File.WriteAllText(LogPath, lines);
                     else
-                        File.AppendAllText(LogPath, line);
+                        File.AppendAllText(LogPath, lines);
                 }
             }
             catch { }
@@ -207,7 +250,7 @@ namespace SonicRoute
             if (!TimeSpan.TryParse(r.ScheduleTime, out var time)) return null;
             return r.ScheduleMode switch
             {
-                // 仅一次：取下一个到达时刻（今天未过用今天，已过用明天），执行成功后自动禁用
+                // 仅一次：下一次 HH:mm；由领取持久化停用，与步骤成功无关。
                 0 => NextDaily(time, from),
                 1 => NextDaily(time, from),
                 2 => NextWeekly(r.ScheduleWeekdays, time, from),

@@ -18,9 +18,9 @@ internal static class InputMuteChecks
         AudioService.Apps.Add(new AudioAppInfo { ProcessId = 202345, ProcessName = "InputTargetB" });
         SessionVolumeService.InputApplied = true;
         var execute = typeof(AutoRuleService).GetMethod("ExecuteStepAsync", BindingFlags.Static | BindingFlags.NonPublic)!;
-        Task<bool> Step(AutoRuleAction action, bool muted = false, CancellationToken token = default) =>
+        Task<bool> Step(AutoRuleAction action, bool muted = false, CancellationToken token = default, ExecutionHistoryStep? detail = null) =>
             (Task<bool>)execute.Invoke(null, new object?[] { new AutoRuleStep { Action = action, Muted = muted, TargetApp = "InputTargetB" },
-                token, new HashSet<string>(), null, null })!;
+                token, new HashSet<string>(), detail, null })!;
         try
         {
             Check((int)AutoRuleAction.SetAppInputMute == 28 && (int)AutoRuleAction.HideQuickPanel == 36
@@ -46,8 +46,11 @@ internal static class InputMuteChecks
             await app.TestHotkey(HotkeyActions.ActMuteInput);
             Check(GlobalMicMuteService.Writes.Count == globalWrites + 1 && SessionVolumeService.LastInput == beforeGlobal,
                 "existing global microphone shortcut keeps its original scope");
-            Check(await Step(AutoRuleAction.SetCurrentAppInputMute, false)
+            var actualTarget = new ExecutionHistoryStep();
+            Check(await Step(AutoRuleAction.SetCurrentAppInputMute, false, detail: actualTarget)
                 && SessionVolumeService.LastInput == (202345, (bool?)false), "automation current-app set applies its explicit off state");
+            Check(actualTarget.TargetApp == "InputTargetB" && actualTarget.TargetPid == 202345,
+                "automation history retains actual resolved current-app target and PID");
             config.FixedAppName = "InputTargetA";
             Check(await Step(AutoRuleAction.ToggleCurrentAppInputMute)
                 && SessionVolumeService.LastInput == (101234, (bool?)null), "automation resolves the current target at execution time");

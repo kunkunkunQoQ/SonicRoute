@@ -49,11 +49,13 @@ $start = $normalized.IndexOf('{', $at)
 $end = $normalized.IndexOf("`n                });", $start, [StringComparison]::Ordinal)
 if ($end -lt 0) { throw 'Panel row reader end changed; inspect the test extraction.' }
 $body = $normalized.Substring($start + 1, $end - $start - 1)
-$returnType = 'Dictionary<int, (int vol, bool muted, string? output)>'
-if ($snapshot) { $returnType = '(Dictionary<int, (int vol, bool muted, string? output)> States, bool? AllMuted)' }
-$adapter = if ($snapshot) { 'public static Dictionary<int, (int vol, bool muted, string? output)> Read(List<AudioAppInfo> apps, bool names) => ReadSnapshot(apps, names).States;' } else { '' }
+$rowDictionary = if ($body.Contains('audio.MuteKnown')) { 'Dictionary<int, (int vol, bool muted, bool known, string? output)>' } else { 'Dictionary<int, (int vol, bool muted, string? output)>' }
+$returnType = $rowDictionary
+if ($snapshot) { $returnType = "($rowDictionary States, bool? AllMuted)" }
+$adapter = if ($snapshot) { "public static $rowDictionary Read(List<AudioAppInfo> apps, bool names) => ReadSnapshot(apps, names).States;" } else { '' }
 $method = if ($snapshot) { 'ReadSnapshot' } else { 'Read' }
 $state = if ($snapshot) { 'var state = (Apps: apps, ShowOutputName: names, Read: (Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted)> Apps, bool AllMuted)>)SessionVolumeService.ReadPanelState);' } else { 'var state = (Apps: apps, ShowOutputName: names);' }
+if ($body.Contains('audio.MuteKnown')) { $state = 'var state = (Apps: apps, ShowOutputName: names, Read: (Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted, bool MuteKnown)> Apps, bool? AllMuted)>)SessionVolumeService.ReadPanelStateChecked);' }
 $reader = @"
 using System;
 using System.Collections.Generic;

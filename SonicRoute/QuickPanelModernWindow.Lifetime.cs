@@ -14,10 +14,13 @@ namespace SonicRoute
         private Task _volumeWriteTask = Task.CompletedTask;
         private (string? Id, int Percent, int Version, int Sequence)? _pendingSystemVolume;
         private readonly ConcurrentDictionary<string, int> _latestEndpointWrites = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<int, int> _latestAppWrites = new();
+        private int _appWriteSequence;
         private int _endpointWriteSequence;
         private int _systemVolumeWriteVersion;
         private bool _systemVolumeThrottled;
         private Func<string?, int, (bool Applied, int Actual)> _writeEndpointVolume = SystemVolumeService.SetVolumePercentChecked;
+        private Func<int, int, bool> _writeAppVolume = SessionVolumeService.SetVolumePercent;
 
         private int RegisterEndpointWrite(string? id)
         {
@@ -72,22 +75,32 @@ namespace SonicRoute
             if (_pendingVolume.Count == 0 && _pendingOutputVolume.Count == 0 && !_pendingSystemVolume.HasValue) return;
             var system = _pendingSystemVolume;
             _pendingSystemVolume = null;
-            var snapshot = new List<KeyValuePair<int, int>>(_pendingVolume);
+            var snapshot = new List<(int Pid, int Percent, int Sequence)>();
+            foreach (var item in _pendingVolume)
+            {
+                if (!_latestAppWrites.TryGetValue(item.Key, out int sequence))
+                    _latestAppWrites[item.Key] = sequence = ++_appWriteSequence;
+                snapshot.Add((item.Key, item.Value, sequence));
+            }
             var outputs = new List<(OutputVolumeTarget Target, int Percent, int Version, int Sequence)>(_pendingOutputVolume.Values);
             _pendingVolume.Clear();
             _pendingOutputVolume.Clear();
-            _volumeWriteTask = QueueVolumeWrites(_volumeWriteTask, snapshot, outputs, system, _latestEndpointWrites, _writeEndpointVolume, new WeakReference<QuickPanelModernWindow>(this));
+            _volumeWriteTask = QueueVolumeWrites(_volumeWriteTask, snapshot, outputs, system, _latestEndpointWrites, _latestAppWrites, _writeAppVolume, _writeEndpointVolume, new WeakReference<QuickPanelModernWindow>(this));
         }
 
-        private static Task QueueVolumeWrites(Task previous, List<KeyValuePair<int, int>> snapshot,
+        private static Task QueueVolumeWrites(Task previous, List<(int Pid, int Percent, int Sequence)> snapshot,
             List<(OutputVolumeTarget Target, int Percent, int Version, int Sequence)> outputs,
             (string? Id, int Percent, int Version, int Sequence)? system, ConcurrentDictionary<string, int> latest,
+            ConcurrentDictionary<int, int> latestApps,
+            Func<int, int, bool> writeApp,
             Func<string?, int, (bool Applied, int Actual)> writeEndpoint,
             WeakReference<QuickPanelModernWindow> owner) =>
             previous.ContinueWith(completed =>
             {
                 _ = completed.Exception;
-                foreach (var item in snapshot) SessionVolumeService.SetVolumePercent(item.Key, item.Value);
+                foreach (var item in snapshot)
+                    if (latestApps.TryGetValue(item.Pid, out int appSequence) && appSequence == item.Sequence)
+                        writeApp(item.Pid, item.Percent);
                 foreach (var item in outputs)
                 {
                     if (!System.Threading.Volatile.Read(ref item.Target.Available)
@@ -131,6 +144,7 @@ namespace SonicRoute
             _rows.Clear(); _recentDeviceRow = _scrollingRow = null;
             _outputDisplay = new(); _inputDisplay = new();
             _systemDeviceId = _appRowsSignature = null;
+            _appRowsLayoutKey = null;
             _loadTask = null;
             _globalMuteLoadState = null;
             lock (_peakGate) _latestPeaks = null;

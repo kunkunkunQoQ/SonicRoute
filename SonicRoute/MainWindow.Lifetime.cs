@@ -27,6 +27,8 @@ namespace SonicRoute
         {
             if (_isClosed) return;
             _isClosed = true;
+            _appVolumeWriter?.Dispose(); // Commit the final value before cancelling UI-only work.
+            _appVolumeWriter = null;
             ReleaseUpdateUi();
             ReleaseExecutionHistoryUi();
             ++_navigationVersion;

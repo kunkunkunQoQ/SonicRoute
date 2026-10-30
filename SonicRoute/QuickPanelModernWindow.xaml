@@ -97,6 +97,9 @@
                                               Margin="{TemplateBinding Padding}"/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
                             </Trigger>
@@ -155,6 +158,7 @@
 
         <!-- 行图标按钮（点击静音/取消静音该应用） -->
         <Style x:Key="RowIconButton" TargetType="Button">
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="2"/>
@@ -166,6 +170,10 @@
                             <ContentPresenter Margin="{TemplateBinding Padding}"/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
                             </Trigger>
@@ -212,6 +220,7 @@
             <!-- 输出设备选择 -->
             <DockPanel Grid.Row="1" Margin="0,10,0,0">
                 <ToggleButton x:Name="OutputVolumesToggle" Style="{StaticResource RowExpandButton}"
+                              AutomationProperties.Name="{Binding [Qp.ExpandOutputVolumes], Source={x:Static local:L10n.Instance}}"
                               Background="{DynamicResource Theme.SurfaceBg}"
                               DockPanel.Dock="Right" Width="30" Height="32" Margin="6,0,0,0"
                               Content="▴" Click="OutputVolumesToggle_Click"/>

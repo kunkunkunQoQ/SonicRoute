@@ -112,7 +112,12 @@ namespace SonicRoute.Core
 
         internal static void ImportAssets(JsonElement root, AppConfig config)
         {
-            if (!root.TryGetProperty("AppIconAssets", out var assets)) return; // Old JSON backups remain valid.
+            foreach (var asset in ReadImportAssets(root, config)) SaveValidatedPng(asset.Key, asset.Value, out _);
+        }
+
+        internal static List<KeyValuePair<string, byte[]>> ReadImportAssets(JsonElement root, AppConfig config)
+        {
+            if (!root.TryGetProperty("AppIconAssets", out var assets)) return new(); // Old JSON backups remain valid.
             if (assets.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Invalid icon assets.");
             var used = new HashSet<string>(config.AppIcons.Values, StringComparer.Ordinal);
             var pending = new List<KeyValuePair<string, byte[]>>();
@@ -128,8 +133,7 @@ namespace SonicRoute.Core
                 if (NameFor(bytes) != asset.Name) throw new InvalidDataException("Icon content does not match its name.");
                 if (used.Contains(asset.Name)) pending.Add(new KeyValuePair<string, byte[]>(asset.Name, bytes));
             }
-            // Validate every asset before creating files or changing the current configuration.
-            foreach (var asset in pending) SaveValidatedPng(asset.Key, asset.Value, out _);
+            return pending; // Validation/preview is pure; files are created only after import confirmation.
         }
 
         private static string NameFor(byte[] bytes)

@@ -36,6 +36,25 @@ internal static class Program
         }
         _endpointVolumesOnly = args.Contains("--endpoint-volumes-only");
         _meterOnly = args.Contains("--meter-only");
+        Case("visible demand samples only visible PIDs without rebuilding subscriptions", () =>
+        {
+            var a = new Session(901); var b = new Session(902); Boundary.Add(EDataFlow.eRender, a, b);
+            using var probe = new Probe(901, 902);
+            probe.Meter.UpdateVisibleTargets(new[] { 901 });
+            Wait(() => probe.Peak(901) > .5f && !Volatile.Read(ref probe.Latest).ContainsKey(902), "visible snapshot missing");
+            int hiddenReads = b.PeakReads, enumerators = Boundary.Enumerators;
+            Thread.Sleep(150);
+            Assert(b.PeakReads == hiddenReads, "offscreen native sampling continued");
+            var saved = Volatile.Read(ref probe.Latest);
+            probe.Meter.UpdateVisibleTargets(new[] { 902 });
+            Wait(() => probe.Peak(902) > .5f && !Volatile.Read(ref probe.Latest).ContainsKey(901), "new visible target not resumed");
+            Assert(Boundary.Enumerators == enumerators && saved.ContainsKey(901), "scroll rebuilt graph or mutated a published snapshot");
+            probe.Meter.UpdateVisibleTargets(Array.Empty<int>());
+            Wait(() => Volatile.Read(ref probe.Latest).Count == 0, "empty visible demand not published");
+            int before = a.PeakReads + b.PeakReads; Thread.Sleep(150);
+            Assert(a.PeakReads + b.PeakReads == before, "empty visible demand kept sampling");
+            Console.WriteLine("VISIBLE_SAMPLE_METRIC targets=2 visible=1 hiddenPeakReads=0 scrollingRebuilds=0 emptyPeakReads=0");
+        });
         OutputVolumeCases.Run(Case, Assert);
         Case("healthy active meter retains managers beyond old two-second scan", () =>
         {

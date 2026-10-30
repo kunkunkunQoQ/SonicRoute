@@ -56,23 +56,30 @@ namespace SonicRoute.Core
         /// <summary>一次激活端点读取音量和静音；读不到音量返回 -1、静音返回 false。</summary>
         public static (int Volume, bool Muted) ReadState(string? deviceId = null)
         {
+            var state = ReadStateChecked(deviceId);
+            return (state.Volume, state.Muted);
+        }
+
+        public static (int Volume, bool Muted, bool MuteKnown) ReadStateChecked(string? deviceId = null)
+        {
             IAudioEndpointVolume? volume = null;
             try
             {
                 volume = GetVolume(deviceId);
-                if (volume == null) return (-1, false);
+                if (volume == null) return (-1, false, false);
                 int percent = -1;
                 bool muted = false;
+                bool known = false;
                 try
                 {
                     if (volume.GetMasterVolumeLevelScalar(out float scalar) >= 0)
                         percent = (int)Math.Round(MathEx.Clamp(scalar, 0f, 1f) * 100f);
                 }
                 catch { }
-                try { muted = volume.GetMute(out int state) >= 0 && state != 0; } catch { }
-                return (percent, muted);
+                try { known = volume.GetMute(out int state) >= 0; muted = known && state != 0; } catch { }
+                return (percent, muted, known);
             }
-            catch { return (-1, false); }
+            catch { return (-1, false, false); }
             finally { if (volume != null) Marshal.ReleaseComObject(volume); }
         }
 

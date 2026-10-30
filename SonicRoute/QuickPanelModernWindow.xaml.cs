@@ -43,6 +43,9 @@ namespace SonicRoute
             public ScaleTransform? PeakTransform;
             public float PeakLevel;
             public bool IsMuted;
+            public bool MuteBusy;
+            public bool MuteKnown;
+            public Button? IconButton;
             public ToggleButton ExpandButton = null!;
             public TextBlock? Name;
             public string? NamePrimary, NameSuffix;
@@ -67,12 +70,14 @@ namespace SonicRoute
         private int _loadVersion;
         private int _globalMuteVersion;
         private (int Load, int OutputVersion, bool Muted)? _globalMuteLoadState;
-        private Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted)> Apps, bool AllMuted)> _readPanelState = SessionVolumeService.ReadPanelState;
+        private Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted, bool MuteKnown)> Apps, bool? AllMuted)> _readPanelState = SessionVolumeService.ReadPanelStateChecked;
         private int _micMuteVersion;
         private int _systemVolumeRequest;
         private AppRow? _recentDeviceRow;
         private AppRow? _scrollingRow;
         private string? _appRowsSignature;
+        private string? _appRowsLayoutKey;
+        private bool _rowIconsQueued;
         private bool _updatingRowVolumes;
         private readonly Dictionary<int, int> _pendingVolume = new();
         private DispatcherTimer? _volDebounce;
@@ -109,7 +114,7 @@ namespace SonicRoute
             AppListScroll.PreviewMouseWheel += (_, _) => StopRowScroll();
             AppListScroll.PreviewMouseDown += (_, _) => StopRowScroll();
             AppListScroll.PreviewKeyDown += (_, _) => StopRowScroll();
-            AppListScroll.ScrollChanged += (_, _) => QueueMeterViewport();
+            AppListScroll.ScrollChanged += (_, _) => { QueueMeterViewport(); QueueRowIconLoads(); };
             VersionText.Text = App.DisplayVersion;
             // 只有面板真正获得过焦点（托盘点击等正常交互）才在失焦时关闭；
             // 启动/脚本等未获焦场景下保持打开，避免一闪而过
@@ -479,7 +484,7 @@ namespace SonicRoute
             {
                 int request = ++_systemVolumeRequest;
                 string? deviceId = _systemDeviceId;
-                var (vol, muted) = await _uiLifetime.ReadAsync(() => SystemVolumeService.ReadState(deviceId));
+                var (vol, muted, known) = await _uiLifetime.ReadAsync(() => SystemVolumeService.ReadStateChecked(deviceId));
                 if (_isClosed || request != _systemVolumeRequest || !string.Equals(deviceId, _systemDeviceId, StringComparison.OrdinalIgnoreCase)) return;
 
                 _systemReady = false;
@@ -490,9 +495,9 @@ namespace SonicRoute
                 }
                 VolumeSlider.Value = vol;
                 VolumePercentText.Text = $"{vol}%";
-                ApplySystemMuteVisual(muted);
+                if (known) ApplySystemMuteVisual(muted);
                 VolumeSlider.IsEnabled = true;
-                MuteButton.IsEnabled = true;
+                MuteButton.IsEnabled = known;
                 _systemReady = true;
 
             }
@@ -658,7 +663,7 @@ namespace SonicRoute
                 int outputVersion = _globalMuteVersion, loadVersion = _loadVersion;
                 var snapshot = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName, Read: _readPanelState), static state =>
                 {
-                    var d = new Dictionary<int, (int vol, bool muted, string? output)>();
+                    var d = new Dictionary<int, (int vol, bool muted, bool known, string? output)>();
                     if (state.Apps.Count == 0) return (States: d, AllMuted: (bool?)null);
                     var panel = state.Read(state.Apps.Select(a => (int)a.ProcessId));
                     using var routes = state.ShowOutputName ? new AudioPolicyConfig(EDataFlow.eRender) : null;
@@ -674,7 +679,7 @@ namespace SonicRoute
                             output = persisted == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(persisted);
                         }
                         var audio = panel.Apps[pid];
-                        d[pid] = (audio.Volume, audio.Muted, output);
+                        d[pid] = (audio.Volume, audio.Muted, audio.MuteKnown, output);
                     }
                     return (States: d, AllMuted: (bool?)panel.AllMuted);
                 });
@@ -690,25 +695,52 @@ namespace SonicRoute
                         row.App = app;
                         var value = vols[(int)app.ProcessId];
                         UpdateRowName(row, value.output);
-                        row.Slider.IsEnabled = value.vol >= 0;
-                        if (value.vol >= 0) row.Slider.Value = value.vol;
-                        ApplyRowMutedVisual(row, value.vol >= 0 && value.muted);
+                        ApplyRowAudioState(row, value.vol, value.muted, value.known);
                     }
                     UpdateRowHighlights();
                     return;
                 }
-                StopMeter();
-                ClearRowVisuals();
-                AppListPanel.Items.Clear();
-                _rows.Clear();
+                string layoutKey = L10n.CurrentLanguage + "|" + legacyLayout + "|" + showOutputName;
+                double scrollOffset = AppListScroll.VerticalOffset;
+                if (_appRowsLayoutKey != layoutKey)
+                {
+                    StopMeter();
+                    ClearRowVisuals();
+                    AppListPanel.Items.Clear();
+                    _rows.Clear();
+                }
+                else
+                {
+                    var desired = apps.ToDictionary(app => (int)app.ProcessId);
+                    foreach (int stale in _rows.Keys.Where(pid => !desired.TryGetValue(pid, out var app)
+                        || !SameRowApp(_rows[pid].App, app)).ToList())
+                    {
+                        var removed = _rows[stale];
+                        removed.ExpandWrap.FinishImmediately();
+                        removed.ExpandArrow.BeginAnimation(RotateTransform.AngleProperty, null);
+                        ClearDeviceControls(removed); ++removed.DeviceBuildVersion;
+                        AppListPanel.Items.Remove(removed.RootElement);
+                        _rows.Remove(stale); _pendingVolume.Remove(stale);
+                        _latestAppWrites[stale] = ++_appWriteSequence;
+                    }
+                }
+                _appRowsLayoutKey = layoutKey;
                 _appRowsSignature = null;
 
-                var pendingIcons = new List<AppItem>();
                 foreach (var app in apps)
                 {
                     var pid = (int)app.ProcessId;
+                    if (_rows.TryGetValue(pid, out var retained))
+                    {
+                        retained.App = app;
+                        var value = vols[pid];
+                        UpdateRowName(retained, value.output);
+                        ApplyRowAudioState(retained, value.vol, value.muted, value.known);
+                        retained.DeviceSignature = null;
+                        if (retained.Expanded) _ = BuildRowDevicesAsync(retained);
+                        continue;
+                    }
                     var item = AppItem.From(app);
-                    pendingIcons.Add(item);
                     var row = new AppRow { App = app, IconItem = item, ShowOutputName = showOutputName, LegacyLayout = legacyLayout };
 
                     // 复用原图标静音、滑块与展开交互：中间上方显示名称，下方显示音量条。
@@ -744,6 +776,8 @@ namespace SonicRoute
                         Padding = new Thickness(2)
                     };
                     iconBtn.Click += async (_, _) => await RowIconToggleMuteAsync(row);
+                    row.IconButton = iconBtn;
+                    System.Windows.Automation.AutomationProperties.SetName(iconBtn, item.Label + " " + L10n.T("Qp.Mute"));
                     iconGrid.Children.Add(iconBtn);
                     row.MuteDot = new Border
                     {
@@ -769,6 +803,7 @@ namespace SonicRoute
                         ToolTip = L10n.T("Qp.ExpandDevices")
                     };
                     var glyph = new TextBlock { Text = "▾", RenderTransform = row.ExpandArrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
+                    System.Windows.Automation.AutomationProperties.SetName(expand, item.Label + " " + L10n.T("Qp.ExpandDevices"));
                     glyph.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
                     if (legacyLayout && showOutputName)
                     {
@@ -797,6 +832,7 @@ namespace SonicRoute
                     row.Slider.VerticalAlignment = VerticalAlignment.Center;
                     row.Slider.Margin = new Thickness(0, 0, 6, 0);
                     row.Slider.Tag = row;
+                    System.Windows.Automation.AutomationProperties.SetName(row.Slider, item.Label + " " + L10n.T("Ov.VolumeTitle"));
                     row.Slider.Foreground = (Brush)FindResource("Theme.Accent");
                     row.Slider.ApplyTemplate();
                     row.TrackBg = row.Slider.Template.FindName("PART_TrackBg", row.Slider) as Border;
@@ -861,19 +897,17 @@ namespace SonicRoute
                     // 初始音量/静音（无会话 -1 → 显示 —）
                     var v = vols[pid];
                     UpdateRowName(row, v.output);
-                    if (v.vol >= 0)
-                    {
-                        row.Slider.Value = v.vol;
-                        ApplyRowMutedVisual(row, v.muted);
-                    }
-                    else
-                    {
-                        row.Slider.IsEnabled = false;
-                        ApplyRowMutedVisual(row, false);
-                    }
+                    ApplyRowAudioState(row, v.vol, v.muted, v.known);
                 }
 
-                AppItem.LoadIconsAsync(pendingIcons, _uiLifetime.Token);
+                for (int index = 0; index < apps.Count; index++)
+                {
+                    var root = _rows[(int)apps[index].ProcessId].RootElement!;
+                    if (index < AppListPanel.Items.Count && ReferenceEquals(AppListPanel.Items[index], root)) continue;
+                    AppListPanel.Items.Remove(root);
+                    AppListPanel.Items.Insert(index, root);
+                }
+                AppListScroll.ScrollToVerticalOffset(scrollOffset);
 
                 _appRowsSignature = signature;
                 UpdateRowHighlights();
@@ -882,8 +916,36 @@ namespace SonicRoute
             {
                 ShowOsd(L10n.T("Qp.LoadFail") + " " + ex.Message);
             }
-            finally { _updatingRowVolumes = false; }
+            finally
+            {
+                _updatingRowVolumes = false;
+                if (!_isClosed) { UpdateMeterTargets(); QueueMeterViewport(); QueueRowIconLoads(); }
+            }
 
+        }
+
+        private static bool SameRowApp(AudioAppInfo a, AudioAppInfo b) => a.ProcessId == b.ProcessId
+            && string.Equals(a.ProcessName, b.ProcessName, StringComparison.Ordinal)
+            && string.Equals(a.DisplayName, b.DisplayName, StringComparison.Ordinal)
+            && string.Equals(a.IconPath, b.IconPath, StringComparison.Ordinal);
+
+        private void QueueRowIconLoads()
+        {
+            if (_isClosed || _rowIconsQueued) return;
+            _rowIconsQueued = true;
+            _uiLifetime.Post(Dispatcher, () =>
+            {
+                _rowIconsQueued = false;
+                if (_isClosed || !IsVisible) return;
+                var visible = new List<AppItem>();
+                foreach (var row in _rows.Values)
+                {
+                    if (row.IconItem.Icon != null || row.RootElement?.ActualHeight <= 0 || row.RootElement == null) continue;
+                    var bounds = row.RootElement.TransformToAncestor(AppListScroll).TransformBounds(new Rect(row.RootElement.RenderSize));
+                    if (bounds.Bottom > 0 && bounds.Top < AppListScroll.ActualHeight) visible.Add(row.IconItem);
+                }
+                AppItem.LoadIconsAsync(visible, _uiLifetime.Token);
+            }, DispatcherPriority.Render);
         }
 
         private static TextBlock NewRowName()
@@ -960,6 +1022,7 @@ namespace SonicRoute
             UpdateRowSliderLayout(row);
             if (_isClosed || _updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
             _pendingVolume[(int)row.App.ProcessId] = pct;
+            _latestAppWrites[(int)row.App.ProcessId] = ++_appWriteSequence;
             SchedulePendingVolumeFlush();
         }
 
@@ -981,8 +1044,23 @@ namespace SonicRoute
         }
 
         /// <summary>行静音视觉：静音后音量条/百分比变强调色 RGB 反色，图标右上显示反色圆点。</summary>
+        private void ApplyRowAudioState(AppRow row, int volume, bool muted, bool known)
+        {
+            row.Slider.IsEnabled = volume >= 0;
+            if (volume >= 0) row.Slider.Value = volume;
+            if (known) ApplyRowMutedVisual(row, muted);
+            row.MuteKnown = known;
+            if (row.IconButton != null)
+            {
+                row.IconButton.IsEnabled = known && volume >= 0 && !row.MuteBusy;
+                row.IconButton.ToolTip = known && volume >= 0 ? row.IconItem.Label : L10n.T("Tray.AudioUnavailable");
+            }
+        }
+
         private void ApplyRowMutedVisual(AppRow row, bool muted)
         {
+            row.MuteKnown = true;
+            if (row.IconButton != null) row.IconButton.IsEnabled = row.Slider.IsEnabled && !row.MuteBusy;
             row.Slider.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
             row.MuteDot.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
             row.IsMuted = muted;
@@ -1020,6 +1098,7 @@ namespace SonicRoute
                 var meter = _meter = new AudioMeterService();
                 _meterListener = peaks => OnPeaksUpdated(meter, peaks);
                 meter.PeaksUpdated += _meterListener;
+                meter.UpdateVisibleTargets(Array.Empty<int>());
                 meter.Start(_rows.Values.Where(r => r.Slider.IsEnabled && !r.IsMuted).Select(r => (int)r.App.ProcessId));
             }
             else UpdateMeterTargets();
@@ -1063,6 +1142,8 @@ namespace SonicRoute
                 _visibleMeterRows.Add(row);
                 ApplyVisiblePeak(row);
             }
+            _meter?.UpdateVisibleTargets(_visibleMeterRows.Where(row => row.Slider.IsEnabled && !row.IsMuted)
+                .Select(row => (int)row.App.ProcessId));
         }
 
         private void ApplyVisiblePeak(AppRow row)
@@ -1133,11 +1214,23 @@ namespace SonicRoute
 
         private async Task RowIconToggleMuteAsync(AppRow row)
         {
+            if (_isClosed || row.MuteBusy || !row.Slider.IsEnabled || !row.MuteKnown) return;
             var pid = (int)row.App.ProcessId;
-            bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
-            if (_isClosed) return;
-            ApplyRowMutedVisual(row, muted);
-            ShowOsd(AppDisplayName.Get(row.App), L10n.T(muted ? "Qp.Muted" : "Qp.Unmuted"));
+            row.MuteBusy = true;
+            if (row.IconButton != null) row.IconButton.IsEnabled = false;
+            try
+            {
+                var result = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
+                if (_isClosed || !_rows.TryGetValue(pid, out var current) || !ReferenceEquals(current, row)) return;
+                if (result.Applied) ApplyRowMutedVisual(row, result.Muted);
+                ShowOsd(AppDisplayName.Get(row.App), L10n.T(result.Applied
+                    ? (result.Muted ? "Qp.Muted" : "Qp.Unmuted") : "Tray.AudioUnavailable"));
+            }
+            finally
+            {
+                row.MuteBusy = false;
+                if (!_isClosed && row.IconButton != null) row.IconButton.IsEnabled = row.Slider.IsEnabled && row.MuteKnown;
+            }
         }
 
         private async void RowExpand_Changed(object sender, RoutedEventArgs e)
@@ -1375,7 +1468,7 @@ namespace SonicRoute
             // 与上次记录相同则跳过写盘（减少无谓配置全量保存）
             if (string.Equals(cfg.LastUsedAppName, name, StringComparison.OrdinalIgnoreCase)) return;
             cfg.LastUsedAppName = name;
-            ConfigService.Save(cfg);
+            ConfigService.QueueSave(cfg);
         }
 
         /// <summary>高亮当前应用行（前台自动跟随/概览切换的操作目标）。</summary>

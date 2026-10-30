@@ -38,6 +38,12 @@ internal static partial class Program
     {
         if (args.Length > 0 && args[0] == "--perf-session") return SessionPerformance(args.Length > 1 && args[1] == "concurrent");
 #if !BASELINE
+        if (args.Contains("--abcde"))
+        {
+            RunAbcdeChecks();
+            Console.WriteLine($"RESULT passed={_passed} failed={_failed} ABCDE=true OS_BOUNDARIES=FAKES_ONLY");
+            return _failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--panel-snapshot"))
         {
             RunPanelSnapshotChecks();
@@ -320,14 +326,14 @@ internal static partial class Program
         });
 #endif
 #if !BASELINE
-        Case("repeated missing render and capture requests share a complete empty scan", () =>
+        Case("repeated missing requests reuse one complete scan per flow", () =>
         {
             for (int i = 0; i < 100; i++)
             {
                 Assert(SessionVolumeService.ReadState(991).Volume == -1, "missing render became present");
                 Assert(!SessionVolumeService.IsInputMuted(992), "missing capture became muted");
             }
-            Assert(Boundary.Enumerators == 1, "repeated empty enumeration: " + Boundary.Enumerators);
+            Assert(Boundary.Enumerators == 2 && Boundary.Scans == 2, "repeated empty enumeration: " + Boundary.Enumerators);
         });
         Case("ordinary empty refresh is throttled but explicit refresh remains forced", () =>
         {

@@ -29,6 +29,7 @@
         </DataTemplate>
         <!-- 快速面板的工具按钮模板。 -->
         <Style x:Key="QuickPanelToolButton" TargetType="Button">
+            <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
@@ -47,6 +48,11 @@
                                               Margin="{TemplateBinding Padding}"/>
                         </Border>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
                             </Trigger>

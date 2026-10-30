@@ -19,7 +19,7 @@ namespace SonicRoute.Core
         private IAudioEndpointVolume? _default;
         private bool _deviceRegistered, _registrationIncomplete;
         private int _dirty = 1, _disposed, _needsRecovery = 1;
-        private Task<(bool All, bool Default)>? _read;
+        private Task<(bool All, bool Default, bool Known)>? _read;
         public event Action? Invalidated;
         public bool NeedsRecovery => Volatile.Read(ref _needsRecovery) != 0;
         public Task Completion { get; private set; } = Task.CompletedTask;
@@ -41,14 +41,27 @@ namespace SonicRoute.Core
                 return SelectAsync(_read, trackInput);
             }
         }
-        private static async Task<bool> SelectAsync(Task<(bool All, bool Default)> read, bool track)
+        private static async Task<bool> SelectAsync(Task<(bool All, bool Default, bool Known)> read, bool track)
         { var state = await read.ConfigureAwait(false); return state.All || (track && state.Default); }
 
-        private (bool All, bool Default) ReadCore()
+        public async Task<(bool Muted, bool Known)> ReadCheckedAsync(bool trackInput)
+        {
+            Task<(bool All, bool Default, bool Known)> read;
+            lock (_requestGate)
+            {
+                if (Volatile.Read(ref _disposed) != 0) return (false, false);
+                if (_read == null || _read.IsCompleted) _read = Task.Run(ReadCore);
+                read = _read;
+            }
+            var state = await read.ConfigureAwait(false);
+            return (state.All || (trackInput && state.Default), state.Known);
+        }
+
+        private (bool All, bool Default, bool Known) ReadCore()
         {
             lock (_gate)
             {
-                if (Volatile.Read(ref _disposed) != 0) return (false, false);
+                if (Volatile.Read(ref _disposed) != 0) return (false, false, false);
                 try
                 {
                     // 设备通知失败时仍按原2秒恢复周期重查拓扑；仅音量回调失败则复用有效接口。
@@ -64,7 +77,7 @@ namespace SonicRoute.Core
                     if (_default != null)
                     { Marshal.ThrowExceptionForHR(_default.GetMute(out int muted)); input = muted != 0; }
                     SetRecoveryRequired(_registrationIncomplete);
-                    return (all, input);
+                    return (all, input, _capture.Count > 0 || _default != null);
                 }
                 catch
                 {
@@ -72,8 +85,8 @@ namespace SonicRoute.Core
                     Interlocked.Exchange(ref _dirty, 1);
                     SetRecoveryRequired(true);
                     // 驱动重启/COM 失效时保留旧状态计算方式，下次检查重建接口。
-                    try { return (GlobalMicMuteService.IsAnyMuted(false), GlobalMicMuteService.IsAnyMuted(true)); }
-                    catch { return (false, false); }
+                    try { return (GlobalMicMuteService.IsAnyMuted(false), GlobalMicMuteService.IsAnyMuted(true), false); }
+                    catch { return (false, false, false); }
                 }
             }
         }

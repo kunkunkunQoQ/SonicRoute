@@ -95,9 +95,6 @@ namespace SonicRoute
         private bool _dispatchScheduled;
 
         // 目标应用解析缓存（与快速面板一致，避免每次滚轮全量枚举）
-        private readonly object _appsLock = new();
-        private List<AudioAppInfo>? _cachedApps;
-        private DateTime _cachedAt;
 
         private readonly OsdService _osdService;
         internal event Action? OsdAdjustFinished
@@ -359,16 +356,7 @@ namespace SonicRoute
         /// </summary>
         private AudioAppInfo? ResolveTargetApp(int foregroundPid)
         {
-            List<AudioAppInfo> apps;
-            lock (_appsLock)
-            {
-                if (_cachedApps == null || (DateTime.UtcNow - _cachedAt).TotalMilliseconds > 1500)
-                {
-                    _cachedApps = AudioService.GetApps();
-                    _cachedAt = DateTime.UtcNow;
-                }
-                apps = _cachedApps;
-            }
+            var apps = AudioService.GetApps(); // Reuse the shared cache and its notification generation.
             var cfg = ConfigService.Load();
             return CurrentAppService.Resolve(apps, cfg, foregroundPid);
         }

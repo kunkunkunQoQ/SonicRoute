@@ -110,6 +110,10 @@ namespace SonicRoute
             AppsListBox.IsSynchronizedWithCurrentItem = false;
             VolumePresets.Attach(OverviewVolumeSlider);
             VolumePresets.Attach(AppsVolumeSlider);
+            OverviewVolumeSlider.AddHandler(System.Windows.Controls.Primitives.Thumb.DragCompletedEvent,
+                new System.Windows.Controls.Primitives.DragCompletedEventHandler(AppVolumeDragCompleted), true);
+            AppsVolumeSlider.AddHandler(System.Windows.Controls.Primitives.Thumb.DragCompletedEvent,
+                new System.Windows.Controls.Primitives.DragCompletedEventHandler(AppVolumeDragCompleted), true);
             AppsRenameBox.LostKeyboardFocus += NameEdit_LostKeyboardFocus;
 
             Title = $"SonicRoute {App.DisplayVersion}";
@@ -220,7 +224,7 @@ namespace SonicRoute
                     var escAction = _recordingAction;
                     _recordingAction = null;
                     _config.Hotkeys[escAction] = "";
-                    ConfigService.Save(_config);
+                    SaveSettings(_config);
                     ((App)Application.Current).ReloadHotkeys();
                     BuildHotkeyList();
                 }
@@ -231,7 +235,7 @@ namespace SonicRoute
             var action = _recordingAction;
             _recordingAction = null;
             _config.Hotkeys[action] = combo;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             // 先重载注册（让 registered 反映新组合），再按最新注册刷新显示
             ((App)Application.Current).ReloadHotkeys();
             BuildHotkeyList();
@@ -257,7 +261,7 @@ namespace SonicRoute
             var action = _recordingAction;
             _recordingAction = null;
             _config.Hotkeys[action] = combo;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ((App)Application.Current).ReloadHotkeys();
             BuildHotkeyList();
         }
@@ -282,7 +286,7 @@ namespace SonicRoute
             var action = _recordingAction;
             _recordingAction = null;
             _config.Hotkeys[action] = combo;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ((App)Application.Current).ReloadHotkeys();
             BuildHotkeyList();
         }
@@ -559,7 +563,7 @@ namespace SonicRoute
             // 与上次记录相同则跳过写盘（切设备/切应用高频点击时减少无谓的配置全量保存）
             if (string.Equals(_config.LastUsedAppName, name, StringComparison.OrdinalIgnoreCase)) return;
             _config.LastUsedAppName = name;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         private async Task SetOverviewAppAsync(AudioAppInfo? app)
@@ -605,12 +609,13 @@ namespace SonicRoute
                 }
 
                 var pid = (int)_overviewApp.ProcessId;
+                bool volumePending = _appVolumeWriter?.HasPending(pid) == true;
                 // 并行读取可见功能的状态；隐藏输入路由时不查询其持久化端点。
                 var tOut = _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
                 var tIn = _config.ExperimentalMic
                     ? _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture))
                     : Task.FromResult<string?>(null);
-                var tState = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadState(pid));
+                var tState = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadStateChecked(pid));
                 await Task.WhenAll(tOut, tIn, tState);
                 if (_isClosed || request != _overviewStateRequest || targetPid != _overviewApp?.ProcessId) return;
                 var outId = tOut.Result;
@@ -644,8 +649,10 @@ namespace SonicRoute
 
                 if (!_overviewMuteBusy && muteVersion == _overviewMuteVersion)
                 {
-                    SetVolumeUi(vol >= 0 ? vol : null);
-                    ApplyOverviewMuteVisual(muted);
+                    if (!volumePending && _appVolumeWriter?.HasPending(pid) != true) SetVolumeUi(vol >= 0 ? vol : null);
+                    if (tState.Result.MuteKnown) ApplyOverviewMuteVisual(muted);
+                    OverviewMuteButton.IsEnabled = vol >= 0 && tState.Result.MuteKnown;
+                    OverviewMuteButton.ToolTip = L10n.T(OverviewMuteButton.IsEnabled ? "Qp.Mute" : "Tray.AudioUnavailable");
                 }
 
             }
@@ -796,26 +803,6 @@ namespace SonicRoute
             await RefreshOverviewDevicesVolumeAsync();
         }
 
-        private async void OverviewVolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_suppressVolume || _overviewApp == null || !_overviewVolumeReady) return;
-            int pct = (int)Math.Round(e.NewValue);
-            OverviewVolumeText.Text = $"{pct}%";
-            var pid = (int)_overviewApp.ProcessId;
-
-            bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, pct));
-            int actual = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
-            if (actual >= 0)
-            {
-                _suppressVolume = true;
-                OverviewVolumeSlider.Value = actual;
-                OverviewVolumeText.Text = $"{actual}%";
-                _suppressVolume = false;
-            }
-            OverviewStatusText.Text = ok && actual >= 0
-                ? string.Format(L10n.T("Ov.VolOk"), actual)
-                : L10n.T("Ov.VolFail");
-        }
 
         private void ApplyOverviewMuteVisual(bool muted)
         {
@@ -838,12 +825,13 @@ namespace SonicRoute
                 var result = await Task.Run(() =>
                 {
                     var changed = SessionVolumeService.ToggleMuteChecked(pid);
-                    var state = SessionVolumeService.ReadState(pid);
-                    return (state.Muted, Applied: changed.Applied && state.Muted == changed.Muted, Available: state.Volume >= 0);
+                    var state = SessionVolumeService.ReadStateChecked(pid);
+                    return (state.Muted, state.MuteKnown, Applied: changed.Applied && state.MuteKnown && state.Muted == changed.Muted,
+                        Available: state.Volume >= 0 && state.MuteKnown);
                 });
                 if (_isClosed || _overviewApp?.ProcessId != (uint)pid) return;
                 available = result.Available;
-                ApplyOverviewMuteVisual(result.Muted);
+                if (result.MuteKnown) ApplyOverviewMuteVisual(result.Muted);
                 OverviewStatusText.Text = L10n.T(result.Applied && available
                     ? (result.Muted ? "Ov.Muted" : "Ov.Unmuted") : "Tray.AudioUnavailable");
             }
@@ -1039,7 +1027,7 @@ namespace SonicRoute
             var cfg = ConfigService.Load();
             if (cfg.DisabledAutoSwitchApps.Contains(name)) cfg.DisabledAutoSwitchApps.Remove(name);
             else cfg.DisabledAutoSwitchApps.Add(name);
-            ConfigService.Save(cfg);
+            SaveSettings(cfg);
 
             foreach (var item in _appItems)
                 if (string.Equals(item.ProcessName, name, StringComparison.OrdinalIgnoreCase))
@@ -1087,7 +1075,7 @@ namespace SonicRoute
             bool isHidden = hidden.Any(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase));
             if (isHidden) hidden.RemoveAll(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase));
             else hidden.Add(name);
-            ConfigService.Save(cfg);
+            SaveSettings(cfg);
             foreach (var item in _appItems)
                 if (string.Equals(item.ProcessName, name, StringComparison.OrdinalIgnoreCase))
                     item.RefreshAutoSwitchState();
@@ -1122,33 +1110,27 @@ namespace SonicRoute
             _suppressVolume = false;
         }
 
-        private async void AppsVolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-        {
-            if (_suppressVolume || _appsSelected == null || !_appsVolumeReady) return;
-            int pct = (int)Math.Round(e.NewValue);
-            AppsVolumeText.Text = $"{pct}%";
-            var pid = (int)_appsSelected.ProcessId;
-
-            bool ok = await Task.Run(() => SessionVolumeService.SetVolumePercent(pid, pct));
-            int actual = await Task.Run(() => SessionVolumeService.GetVolumePercent(pid));
-            if (_isClosed || _appsSelected?.ProcessId != (uint)pid) return;
-            if (actual >= 0)
-            {
-                _suppressVolume = true;
-                AppsVolumeSlider.Value = actual;
-                AppsVolumeText.Text = $"{actual}%";
-                _suppressVolume = false;
-            }
-            if (!ok || actual < 0) ShowToast(L10n.T("Ov.VolFail"));
-        }
 
         private async void AppsMuteButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_isClosed || _appsSelected == null || !_appsVolumeReady) return;
+            if (_isClosed || _appsSelected == null || !_appsVolumeReady || _appsMuteBusy) return;
             int pid = (int)_appsSelected.ProcessId;
-            bool muted = await Task.Run(() => SessionVolumeService.ToggleMute(pid));
-            if (_isClosed || _appsSelected?.ProcessId != (uint)pid) return;
-            ApplyAppsMuteVisual(muted);
+            _appsMuteBusy = true;
+            ++_appsMuteVersion;
+            AppsMuteButton.IsEnabled = false;
+            try
+            {
+                var result = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
+                if (_isClosed || _appsSelected?.ProcessId != (uint)pid) return;
+                if (result.Applied) ApplyAppsMuteVisual(result.Muted);
+                else ShowToast(L10n.T("Tray.AudioUnavailable"));
+            }
+            finally
+            {
+                _appsMuteBusy = false;
+                ++_appsMuteVersion;
+                if (!_isClosed) AppsMuteButton.IsEnabled = _appsVolumeReady;
+            }
         }
 
         private async void AppsOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1212,14 +1194,16 @@ namespace SonicRoute
             try
             {
                 int request = ++_appsStateRequest;
+                int muteVersion = _appsMuteVersion;
                 var app = _appsSelected;
                 if (app == null) return;
                 var pid = (int)app.ProcessId;
+                bool volumePending = _appVolumeWriter?.HasPending(pid) == true;
                 var output = _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
                 var input = _config.ExperimentalMic
                     ? _uiLifetime.ReadAsync(() => AudioService.GetPersistedEndpoint(pid, EDataFlow.eCapture))
                     : Task.FromResult<string?>(null);
-                var state = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadState(pid));
+                var state = _uiLifetime.ReadAsync(() => SessionVolumeService.ReadStateChecked(pid));
                 await Task.WhenAll(output, input, state);
                 if (_isClosed || request != _appsStateRequest || _appsSelected?.ProcessId != app.ProcessId) return;
                 var outId = output.Result;
@@ -1243,8 +1227,13 @@ namespace SonicRoute
                 _suppressDevCombo = false;
                 int vol = state.Result.Volume;
                 bool muted = state.Result.Muted;
-                SetAppsVolumeUi(vol >= 0 ? vol : null);
-                ApplyAppsMuteVisual(muted);
+                if (!volumePending && _appVolumeWriter?.HasPending(pid) != true) SetAppsVolumeUi(vol >= 0 ? vol : null);
+                if (!_appsMuteBusy && muteVersion == _appsMuteVersion)
+                {
+                    if (state.Result.MuteKnown) ApplyAppsMuteVisual(muted);
+                    AppsMuteButton.IsEnabled = vol >= 0 && state.Result.MuteKnown;
+                    AppsMuteButton.ToolTip = L10n.T(AppsMuteButton.IsEnabled ? "Qp.Mute" : "Tray.AudioUnavailable");
+                }
 
             }
             catch (OperationCanceledException) when (_isClosed) { }
@@ -1272,7 +1261,7 @@ namespace SonicRoute
             if (cb.IsChecked == false) { if (!_config.HiddenOutputDevices.Contains(dev.Id)) _config.HiddenOutputDevices.Add(dev.Id); }
             else _config.HiddenOutputDevices.Remove(dev.Id);
             if (_suppressFilter) return;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             UpdateSelectAllLabels();
             // 快速切换界面立即生效（刷新设备显示）
             _ = RefreshOverviewDevicesVolumeAsync();
@@ -1288,7 +1277,7 @@ namespace SonicRoute
             if (cb.IsChecked == false) { if (!_config.HiddenInputDevices.Contains(dev.Id)) _config.HiddenInputDevices.Add(dev.Id); }
             else _config.HiddenInputDevices.Remove(dev.Id);
             if (_suppressFilter) return;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             UpdateSelectAllLabels();
         }
 
@@ -1315,7 +1304,7 @@ namespace SonicRoute
             try { foreach (var cb in boxes) cb.IsChecked = target; }
             finally { _suppressFilter = suppressed; }
             if (suppressed) return;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             UpdateSelectAllLabels();
             _ = RefreshOverviewDevicesVolumeAsync();
             if (_config.PanelOutputVolumesRetainedOnly && boxes[0].Tag is AudioDeviceInfo { Flow: EDataFlow.eRender })
@@ -1537,14 +1526,14 @@ namespace SonicRoute
             if (!IsLoaded || _suppressSettings || sender is not RadioButton rb) return;
             _config.DefaultAppMode = rb.Tag as string ?? "recent";
             FixedAppCombo.IsEnabled = _config.DefaultAppMode == "fixed";
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         private void FixedAppCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!IsLoaded || _suppressSettings || _suppressAppCombo) return;
             _config.FixedAppName = (FixedAppCombo.SelectedItem as AppItem)?.ProcessName ?? "";
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         private void Language_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1561,7 +1550,7 @@ namespace SonicRoute
         {
             L10n.Instance.ApplyImportedLanguage(code);
             _config.Language = L10n.CurrentLanguage;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ((App)Application.Current).RebuildTrayMenu();
             RefreshLangCombo(L10n.CurrentLanguage);
             RefreshCustomLangList();
@@ -1651,11 +1640,13 @@ namespace SonicRoute
             _themeSaveTimer?.Stop();
             if (!_themeSavePending) return;
             _themeSavePending = false;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         internal void FlushPendingSettings()
         {
+            _appVolumeWriter?.Flush();
+            if (_configImportCommitted) return;
             FlushNameChanges(refreshDisplay: false);
             FlushThemeChanges();
         }
@@ -1672,7 +1663,7 @@ namespace SonicRoute
             if (_themeSavePending)
             {
                 _themeSavePending = false;
-                ConfigService.Save(_config);
+                SaveSettings(_config);
             }
             if (_themeSaveTimer != null) _themeSaveTimer.Tick -= ThemeSaveTimer_Tick;
             _themeSaveTimer = null;
@@ -1707,7 +1698,7 @@ namespace SonicRoute
             _config.ThemeMode = mode;
             _themeSaveTimer?.Stop();
             _themeSavePending = false;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ApplyThemePreview();
         }
 
@@ -1749,14 +1740,14 @@ namespace SonicRoute
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.StartMinimized = SettingsStartMinimized.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         private void SettingsShowPanelOnStart_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.StartPanelOnStart = SettingsShowPanelOnStart.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         private void VolumeStepBox_LostFocus(object sender, RoutedEventArgs e) => SaveVolumeStep();
@@ -1776,7 +1767,7 @@ namespace SonicRoute
             if (step != v) VolumeStepBox.Text = step.ToString();
             if (_config.VolumeStep == step) return;
             _config.VolumeStep = step;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         /// <summary>托盘滚轮区域开关：true=整个托盘通知区响应；false=仅音跃托盘图标上响应（默认）。</summary>
@@ -1784,21 +1775,21 @@ namespace SonicRoute
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.TrayWheelEverywhere = SettingsTrayWheelEverywhere.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
         /// <summary>快速面板更改系统默认设备开关（默认开）：开启后快速面板下拉框切换设备 = 更改系统默认输出设备。</summary>
         private void SettingsPanelChangeSysDef_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.PanelChangeSystemDefault = SettingsPanelChangeSysDef.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
         }
 
         private void SettingsPanelOutputVolumesRetainedOnly_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.PanelOutputVolumesRetainedOnly = SettingsPanelOutputVolumesRetainedOnly.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ((App)Application.Current).QuickPanelInstance?.RefreshOutputVolumeFilter();
         }
 
@@ -1876,7 +1867,7 @@ namespace SonicRoute
             if (previous != result.Enabled)
             {
                 if (packaged) _config.AutoStartStore = result.Enabled; else _config.AutoStart = result.Enabled;
-                ConfigService.Save(_config);
+                SaveSettings(_config);
             }
             if (_isClosed) return;
             bool suppress = _suppressSettings;
@@ -2020,7 +2011,7 @@ namespace SonicRoute
         private void ApplyExperimentalMode(bool enabled)
         {
             _config.ExperimentalMode = enabled;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             if (!_config.ExperimentalMode) AutoRuleService.StopExecutionHistory();
             SyncExecutionHistoryOptions();
             // 导航"实验设置"入口立即显示/隐藏（功能本身重启生效）
@@ -2078,7 +2069,7 @@ namespace SonicRoute
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.BackgroundPollingFallbackEnabled = ExpBackgroundPollingCheck.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ((App)Application.Current).RefreshBackgroundMonitoringPolicy();
         }
 
@@ -2086,7 +2077,7 @@ namespace SonicRoute
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.ExperimentalMic = ExpMicOptionCheck.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ApplyExpMicUi(_config.ExperimentalMic);
             ExpMicPanelCheck.Visibility = _config.ExperimentalMic ? Visibility.Visible : Visibility.Collapsed;
             ShowToast(L10n.T("St.ExpMicNeedRestart"));
@@ -2096,7 +2087,7 @@ namespace SonicRoute
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.MicInPanel = ExpMicPanelCheck.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ShowToast(L10n.T("St.ExpMicPanelNeedRestart"));
         }
 
@@ -2104,7 +2095,7 @@ namespace SonicRoute
         {
             if (!IsSettingsChange(sender, e)) return;
             _config.CollapseDeviceSections = ExpCollapseCheck.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ApplyCollapseUi();
         }
 
@@ -2159,8 +2150,13 @@ namespace SonicRoute
                 {
                     var prepared = await Task.Run(() => ConfigService.PrepareImport(file));
                     if (_isClosed) return;
-                    // Commit the small, validated config and restart in the same UI turn.
-                    ok = prepared != null && ConfigService.ApplyImport(prepared);
+                    if (prepared != null && !await ConfirmConfigImportAsync(prepared)) return;
+                    if (prepared == null) { ShowToast(L10n.T("Exp.TransferFail")); return; }
+                    FlushPendingSettings();
+                    await ConfigService.PendingSaves;
+                    if (_isClosed) return;
+                    ok = await Task.Run(() => ConfigService.ApplyImport(prepared));
+                    if (ok) _configImportCommitted = true;
                 }
                 else
                 {
@@ -2168,7 +2164,7 @@ namespace SonicRoute
                     ok = await Task.Run(() => ConfigService.ExportTo(file, snapshot));
                     if (_isClosed) return;
                 }
-                ShowToast(L10n.T(ok ? import ? "Exp.ImportDone" : "Exp.ExportDone" : "Exp.TransferFail"));
+                if (!_isClosed) ShowToast(L10n.T(ok ? import ? "Exp.ImportDone" : "Exp.ExportDone" : "Exp.TransferFail"));
                 if (ok && import) RestartApp();
             }
             catch
@@ -2533,7 +2529,7 @@ namespace SonicRoute
             _osdPreviewPending = false;
             _themeSaveTimer?.Stop();
             _themeSavePending = false;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             SyncOsdSliders(); // 同步主题页滑条到还原值
             ShowToast(L10n.T("Exp.OsdResetDone"));
             app.PreviewOsd(); // 立即预览还原后的默认位置与尺寸（内部按需重定位到主屏默认位置）
@@ -2604,7 +2600,7 @@ namespace SonicRoute
             int v = MathEx.Clamp((int)Math.Round(e.NewValue), 350, 850);
             if (PanelHeightValue != null) PanelHeightValue.Text = v + " px";
             _config.QuickPanelHeight = v;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             // 快速面板打开时立即应用固定高度
             if (Application.Current is App app && app.QuickPanelInstance is { IsVisible: true } m)
                 m.ApplyPanelHeightFromConfig();
@@ -2689,7 +2685,7 @@ namespace SonicRoute
             bool enabled = OsdVolumeVisualCheck.IsChecked == true;
             if (_config.OsdVolumeVisualEnabled == enabled) return;
             _config.OsdVolumeVisualEnabled = enabled;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ((App)Application.Current).NotifyOsdVolumeVisualChanged();
         }
 
@@ -2750,7 +2746,7 @@ namespace SonicRoute
             if (_config.MicMuteOsdTrackInputMuted != on)
             {
                 _config.MicMuteOsdTrackInputMuted = on;
-                ConfigService.Save(_config);
+                SaveSettings(_config);
             }
             ((App)Application.Current).NotifyMicMuteOsdSettingChanged(_config.MicMuteOsdPersistent);
         }
@@ -2771,7 +2767,7 @@ namespace SonicRoute
             if (_config.MicMuteOsdPersistent != on)
             {
                 _config.MicMuteOsdPersistent = on;
-                ConfigService.Save(_config);
+                SaveSettings(_config);
             }
             ApplyMicMutePersistUi(on);
             ((App)Application.Current).NotifyMicMuteOsdSettingChanged(on);
@@ -2783,7 +2779,7 @@ namespace SonicRoute
             bool enabled = AppPeakMeterCheck.IsChecked == true;
             if (_config.ShowAppPeakMeter == enabled) return;
             _config.ShowAppPeakMeter = enabled;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             ((App)Application.Current).ApplyQuickPanelMeterSetting(enabled);
         }
 
@@ -2805,7 +2801,7 @@ namespace SonicRoute
             _config.QuickPanelUseLegacyAppRows = legacy;
             _config.QuickPanelShowOutputName = enabled;
             _config.QuickPanelCompactShowOutputName = compactName;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             // 复用面板关闭/释放流程，下次呼出按新选项加载，不创建隐藏面板。
             ((App)Application.Current).QuickPanelInstance?.Close();
         }
@@ -2962,7 +2958,7 @@ namespace SonicRoute
             _recordingAction = action;
             btn.Content = new TextBlock
             {
-                Text = L10n.T("Hk.PressNew"),
+                Text = L10n.T("Hk.RecordingPrompt"),
                 FontSize = 12.5,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -3159,9 +3155,7 @@ namespace SonicRoute
             {
                 var result = await _uiLifetime.ReadAsync(() =>
                 {
-                    var snapshot = AutoRuleStore.ReadSnapshot(revision);
-                    var fingerprints = snapshot.Rules?.ToDictionary(r => r.Id, r => JsonSerializer.Serialize(r), StringComparer.Ordinal);
-                    return (snapshot.Revision, snapshot.Rules, Fingerprints: fingerprints);
+                    return AutoRuleStore.ReadDisplaySnapshot(revision);
                 });
                 if (_isClosed || request != _autoRuleRefreshRequest
                     || AutomationPageHost.Visibility != Visibility.Visible) return;
@@ -3203,9 +3197,9 @@ namespace SonicRoute
                     bool executing = _autoRunIds.Contains(rule.Id);
                     UpdateAutomationRowState(row, executing);
                     row.Conflict.Visibility = IsAutoHotkeyConflict(rule) ? Visibility.Visible : Visibility.Collapsed;
-                    int index = AutoRuleList.Items.IndexOf(row.Element);
-                    if (index != built)
+                    if (built >= AutoRuleList.Items.Count || !ReferenceEquals(AutoRuleList.Items[built], row.Element))
                     {
+                        int index = AutoRuleList.Items.IndexOf(row.Element);
                         if (index >= 0) AutoRuleList.Items.RemoveAt(index);
                         AutoRuleList.Items.Insert(built, row.Element);
                     }
@@ -3508,6 +3502,7 @@ namespace SonicRoute
         private void UpdateAutoScheduleModePanels()
         {
             int mode = AutoScheduleModeCombo.SelectedIndex < 0 ? 0 : AutoScheduleModeCombo.SelectedIndex;
+            AutoScheduleModeCombo.ToolTip = mode == 0 ? L10n.T("Auto.ScheduleOnceHint") : null;
             AutoScheduleWeekdayPanel.Visibility = mode == 2 ? Visibility.Visible : Visibility.Collapsed;
         }
 

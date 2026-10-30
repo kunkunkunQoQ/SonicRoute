@@ -9,7 +9,7 @@ using SonicRoute.Core;
 
 namespace SonicRoute.Updates
 {
-    internal enum UpdateState { Idle, Checking, Latest, Available, MissingPackage, Downloading, Ready, Preparing, Failed, Cancelled }
+    internal enum UpdateState { Idle, Checking, Latest, Available, MissingPackage, Downloading, Ready, Preparing, Failed, Cancelled, Verifying }
 
     // One application-owned operation. UI windows only observe events; closing one never leaks a subscription.
     // No recurring timer, watcher, scan or resident HTTP connection while idle.
@@ -30,6 +30,9 @@ namespace SonicRoute.Updates
         internal long Bytes { get; private set; }
         internal double BytesPerSecond { get; private set; }
         internal string Error { get; private set; } = "";
+        internal string ErrorHint => Error.StartsWith("UnauthorizedAccessException", StringComparison.Ordinal) ? "Upd.Permission"
+            : Error.StartsWith("InvalidDataException", StringComparison.Ordinal) ? "Upd.IntegrityFailed"
+            : Error.StartsWith("HttpRequestException", StringComparison.Ordinal) ? "Upd.NetworkFailed" : "Upd.RetryHint";
         internal string LastOutcome { get; private set; } = "";
         internal bool NotificationsDismissed { get; private set; }
         internal bool IsPackaged => AppRuntimeIdentity.Current.IsPackaged;
@@ -142,7 +145,8 @@ namespace SonicRoute.Updates
                 await Task.Run(() => Cleanup(cache, path), cancel.Token).ConfigureAwait(false);
                 using var transport = new UpdateTransport(_handlerFactory?.Invoke());
                 await transport.DownloadAsync(release, path, (bytes, speed) =>
-                    { Bytes = bytes; BytesPerSecond = speed; Notify(); }, cancel.Token).ConfigureAwait(false);
+                    { State = UpdateState.Downloading; Bytes = bytes; BytesPerSecond = speed; Notify(); }, cancel.Token,
+                    () => { State = UpdateState.Verifying; Notify(); }).ConfigureAwait(false);
                 _payload = path; State = UpdateState.Ready;
             }
             catch (Exception e)

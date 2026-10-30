@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Threading.Tasks;
 using SonicRoute.Core.Models;
 
 namespace SonicRoute.Core
@@ -176,6 +177,23 @@ namespace SonicRoute.Core
         public bool MicMuteOsdTrackInputMuted { get; set; } = true;
 
         public double OsdFontScale { get; set; } = 1.0;
+
+        /// <summary>Copy mutable collections before a background save; scalar additions copy automatically.</summary>
+        public AppConfig Snapshot()
+        {
+            var copy = (AppConfig)MemberwiseClone();
+            copy.HiddenOutputDevices = new(HiddenOutputDevices ?? new());
+            copy.HiddenInputDevices = new(HiddenInputDevices ?? new());
+            copy.DisabledAutoSwitchApps = new(DisabledAutoSwitchApps ?? new());
+            copy.HiddenPanelApps = new(HiddenPanelApps ?? new());
+            copy.FavoriteRuleIds = new(FavoriteRuleIds ?? new());
+            copy.AutomationRuleOrder = new(AutomationRuleOrder ?? new());
+            copy.Hotkeys = new(Hotkeys ?? new(), Hotkeys?.Comparer ?? StringComparer.Ordinal);
+            copy.DeviceNames = new(DeviceNames ?? new(), DeviceNames?.Comparer ?? StringComparer.Ordinal);
+            copy.AppNames = new(AppNames ?? new(), AppNames?.Comparer ?? StringComparer.Ordinal);
+            copy.AppIcons = new(AppIcons ?? new(), AppIcons?.Comparer ?? StringComparer.OrdinalIgnoreCase);
+            return copy;
+        }
     }
 
     public static class ConfigService
@@ -189,6 +207,57 @@ namespace SonicRoute.Core
         // 避免反复读盘 + 反序列化，降低 GC 压力与内存波动。
         private static AppConfig? _cache;
         private static readonly object _lock = new();
+        private static readonly object _writeLock = new();
+        private static long _saveVersion;
+        private static (AppConfig Config, long Version)? _pendingSave;
+        private static Task _saveTask = Task.CompletedTask;
+        public static event Action<bool>? SaveCompleted;
+
+        /// <summary>Called by the settings owner: capture now, coalesce only not-yet-committed saves.</summary>
+        public static void QueueSave(AppConfig config)
+        {
+            var snapshot = config.Snapshot();
+            lock (_lock)
+            {
+                _cache = config;
+                _pendingSave = (snapshot, ++_saveVersion);
+                if (_saveTask.IsCompleted) _saveTask = Task.Run(DrainSaves);
+            }
+        }
+
+        private static void DrainSaves()
+        {
+            while (true)
+            {
+                (AppConfig Config, long Version) pending;
+                lock (_lock)
+                {
+                    if (!_pendingSave.HasValue) { _saveTask = Task.CompletedTask; return; }
+                    pending = _pendingSave.Value; _pendingSave = null;
+                }
+                bool saved = false, current = false;
+                try
+                {
+                    string json = JsonSerializer.Serialize(pending.Config, SaveOptions);
+                    lock (_writeLock)
+                    {
+                        lock (_lock) current = pending.Version == _saveVersion;
+                        if (current)
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
+                            AtomicFile.WriteAllText(ConfigPath, json);
+                            saved = true;
+                        }
+                    }
+                }
+                catch { }
+                lock (_lock) current = pending.Version == _saveVersion;
+                if (current) try { SaveCompleted?.Invoke(saved); } catch { }
+            }
+        }
+
+        public static Task PendingSaves { get { lock (_lock) return _saveTask; } }
+        public static void FlushPendingSaves() => PendingSaves.GetAwaiter().GetResult();
 
         public static AppConfig Load()
         {
@@ -225,24 +294,26 @@ namespace SonicRoute.Core
 
         public static void Save(AppConfig config)
         {
-            TrySave(config);
+            bool saved = TrySave(config);
+            try { SaveCompleted?.Invoke(saved); } catch { }
         }
 
         /// <summary>保存并报告是否成功落盘；保留原有内存缓存更新行为。</summary>
         public static bool TrySave(AppConfig config)
         {
-            lock (_lock)
+            lock (_writeLock)
             {
+                lock (_lock) { ++_saveVersion; _pendingSave = null; _cache = config; }
                 bool saved = false;
                 try
                 {
+                    var snapshot = config.Snapshot();
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
-                    AtomicFile.WriteAllText(ConfigPath, JsonSerializer.Serialize(config, SaveOptions));
+                    AtomicFile.WriteAllText(ConfigPath, JsonSerializer.Serialize(snapshot, SaveOptions));
                     saved = true;
                 }
                 catch { /* 保存失败保留原文件，不阻断运行。 */ }
-                _cache = config;
                 return saved;
             }
         }
@@ -264,12 +335,14 @@ namespace SonicRoute.Core
         public static bool TrySetAppIcon(string processName, string? fileName)
         {
             if (string.IsNullOrWhiteSpace(processName) || (fileName != null && !AppIconFiles.IsFileName(fileName))) return false;
+            AppConfig config;
+            Dictionary<string, string> previous, next;
             lock (_lock)
             {
-                var config = Load();
-                var previous = config.AppIcons;
+                config = Load();
+                previous = config.AppIcons;
                 if (AppIconFiles.GetFileName(config, processName) == fileName) return true;
-                var next = AppIconFiles.NormalizeMappings(previous);
+                next = AppIconFiles.NormalizeMappings(previous);
                 if (fileName == null) next.Remove(processName);
                 else
                 {
@@ -277,20 +350,21 @@ namespace SonicRoute.Core
                     next[processName] = fileName;
                 }
                 config.AppIcons = next;
-                if (TrySave(config)) return true;
-                config.AppIcons = previous;
-                return false;
             }
+            if (TrySave(config)) return true;
+            lock (_lock) if (ReferenceEquals(config.AppIcons, next)) config.AppIcons = previous;
+            return false;
         }
 
         /// <summary>一键清理配置文件：删除 config.json 并重置内存缓存为全新默认配置（实验设置功能）。</summary>
         public static AppConfig ResetToDefault()
         {
-            lock (_lock)
+            lock (_writeLock)
             {
+                lock (_lock) { ++_saveVersion; _pendingSave = null; }
                 try { if (File.Exists(ConfigPath)) File.Delete(ConfigPath); } catch { }
                 var cfg = new AppConfig();
-                _cache = cfg;
+                lock (_lock) _cache = cfg;
                 return cfg;
             }
         }
@@ -307,11 +381,9 @@ namespace SonicRoute.Core
             try
             {
                 if (string.Equals(Path.GetFullPath(destPath), Path.GetFullPath(ConfigPath), StringComparison.OrdinalIgnoreCase)) return false;
-                lock (_lock)
-                {
-                    if (!TrySave(Load())) return false;
-                    snapshot ??= CaptureExportSnapshot();
-                }
+                FlushPendingSaves();
+                if (!TrySave(Load())) return false;
+                snapshot ??= CaptureExportSnapshot();
                 using var document = JsonDocument.Parse(snapshot);
                 var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
                 if (config == null) return false;
@@ -341,8 +413,10 @@ namespace SonicRoute.Core
                 var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
                 if (config == null || (config.AppIcons?.Count ?? 0) > AppIconFiles.MaxIcons) return null;
                 config.AppIcons = AppIconFiles.NormalizeMappings(config.AppIcons);
-                AppIconFiles.ImportAssets(document.RootElement, config);
-                return TransferJson(document.RootElement, config, null);
+                var assets = AppIconFiles.ReadImportAssets(document.RootElement, config);
+                var encoded = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var asset in assets) encoded[asset.Key] = Convert.ToBase64String(asset.Value);
+                return TransferJson(document.RootElement, config, encoded);
             }
             catch { return null; }
         }
@@ -353,16 +427,29 @@ namespace SonicRoute.Core
             if (prepared.Length > AppIconFiles.MaxTransferBytes) return false;
             try
             {
-                lock (_lock)
+                using var document = JsonDocument.Parse(prepared);
+                var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
+                if (config == null) return false;
+                AppIconFiles.ImportAssets(document.RootElement, config);
+                byte[] ordinary = TransferJson(document.RootElement, config, null);
+                lock (_writeLock)
                 {
+                    lock (_lock) { ++_saveVersion; _pendingSave = null; }
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
-                    AtomicFile.WriteAllBytes(ConfigPath, prepared);
-                    _cache = null;
+                    AtomicFile.WriteAllBytes(ConfigPath, ordinary);
+                    lock (_lock) _cache = null;
                 }
                 return true;
             }
             catch { return false; }
+        }
+
+        public static AppConfig? ReadPreparedConfig(byte[] prepared)
+        {
+            if (prepared.Length > AppIconFiles.MaxTransferBytes) return null;
+            try { return JsonSerializer.Deserialize<AppConfig>(prepared, ReadOptions); }
+            catch { return null; }
         }
 
         // Asset data exists only in explicit backups, never in the frequently loaded/saved config.json.

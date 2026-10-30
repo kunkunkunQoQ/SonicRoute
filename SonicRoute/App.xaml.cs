@@ -234,7 +234,7 @@ namespace SonicRoute
         private static Task WarmupAudioAsync() => Task.Run(() =>
         {
             try { AudioService.GetApps(); } catch { }
-            try { SessionVolumeService.Refresh(); } catch { }
+            try { SessionVolumeService.RefreshPlayback(); } catch { }
         });
 
         private void StartRuleCommandServer(Task audioWarmup)
@@ -988,12 +988,14 @@ namespace SonicRoute
             _exiting = true;
             Updates.Dispose();
             _mainWindow?.FlushPendingSettings();
+            ConfigService.FlushPendingSaves();
             CancelUiReclaim();
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();
             _ruleCommandServer?.Dispose(); _ruleCommandServer = null;
             StopBackgroundMonitoring();
+            AutoRuleScheduler.FlushLogs();
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();
@@ -1007,12 +1009,14 @@ namespace SonicRoute
             Updates.Dispose();
             _exiting = true;
             _mainWindow?.FlushPendingSettings();
+            ConfigService.FlushPendingSaves();
             CancelUiReclaim();
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();
             _ruleCommandServer?.Dispose(); _ruleCommandServer = null;
             StopBackgroundMonitoring();
+            AutoRuleScheduler.FlushLogs();
             _trayWheel?.Dispose();
             _trayWheel = null;
             _hotkeys?.Dispose();

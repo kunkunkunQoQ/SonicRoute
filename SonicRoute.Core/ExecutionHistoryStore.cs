@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,6 +14,12 @@ namespace SonicRoute.Core
         public int Number { get; set; }
         public int Action { get; set; }
         public string TargetApp { get; set; } = "";
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? TargetPid { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? TargetDeviceId { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? TargetDeviceName { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? TargetRuleName { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? SucceededTargets { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? TotalTargets { get; set; }
         public string Status { get; set; } = "";
         public string Reason { get; set; } = "";
         public long ElapsedMs { get; set; }

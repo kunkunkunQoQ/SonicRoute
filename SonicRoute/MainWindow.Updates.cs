@@ -146,7 +146,7 @@ namespace SonicRoute
         {
             if (_syncingUpdates || _updateAutomatic == null || !ReferenceEquals(e.OriginalSource, _updateAutomatic)) return;
             _config.AutoCheckUpdates = _updateAutomatic.IsChecked == true;
-            ConfigService.Save(_config);
+            SaveSettings(_config);
             _updates?.AutomaticSettingChanged(_config.AutoCheckUpdates);
         }
 
@@ -175,14 +175,14 @@ namespace SonicRoute
                 _updateStatus.Text += string.Format("  {0:F1} / {1:F1} MB · {2:F1} KB/s", updates.Bytes / 1048576.0,
                     (updates.Release?.Package?.Size ?? 0) / 1048576.0, updates.BytesPerSecond / 1024.0);
             if (updates.State == UpdateState.Failed)
-                _updateStatus.Text += "\n" + L10n.T(updates.Error.StartsWith("UnauthorizedAccessException", StringComparison.Ordinal) ? "Upd.Permission" : "Upd.RetryHint");
+                _updateStatus.Text += "\n" + L10n.T(updates.ErrorHint);
             _updateNotes!.Visibility = _updateNotes.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-            _updateProgress!.Visibility = updates.State == UpdateState.Downloading ? Visibility.Visible : Visibility.Collapsed;
+            _updateProgress!.Visibility = updates.State is UpdateState.Downloading or UpdateState.Verifying ? Visibility.Visible : Visibility.Collapsed;
             _updateProgress.Value = updates.Release?.Package == null ? 0 : updates.Bytes * 100.0 / updates.Release.Package.Size;
             _updateCheck!.IsEnabled = !updates.Busy;
             _updateDownload!.Visibility = !store && updates.Release?.Package != null && !updates.Busy && updates.State != UpdateState.Ready ? Visibility.Visible : Visibility.Collapsed;
             _updateInstall!.Visibility = !store && updates.State == UpdateState.Ready ? Visibility.Visible : Visibility.Collapsed;
-            _updateCancel!.Visibility = updates.State == UpdateState.Downloading ? Visibility.Visible : Visibility.Collapsed;
+            _updateCancel!.Visibility = updates.State is UpdateState.Downloading or UpdateState.Verifying ? Visibility.Visible : Visibility.Collapsed;
             _updateLater!.Visibility = _updateIgnore!.Visibility = !store && updates.ShouldNotify ? Visibility.Visible : Visibility.Collapsed;
         }
 

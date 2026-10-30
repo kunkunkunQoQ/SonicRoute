@@ -18,8 +18,8 @@ internal static partial class Program
             Boundary.Reset(); Boundary.Add(EDataFlow.eRender, shown, hidden);
             var state = SessionVolumeService.ReadPanelState(new[] { 710 });
             Assert(state.Apps.Count == 1 && state.Apps[710] == (31, true) && !state.AllMuted, "hidden session omitted");
-            Assert(previous == 2 && Boundary.Enumerators == 1 && Boundary.Scans == 2 && shown.Writes + hidden.Writes == 0, "extra enumeration/write");
-            Console.WriteLine("PANEL_SCAN_METRIC coldPrevious=2 coldCurrent=1 flows=2 shown=1 hidden=1 writes=0");
+            Assert(previous == 2 && Boundary.Enumerators == 1 && Boundary.Scans == 1 && shown.Writes + hidden.Writes == 0, "extra enumeration/write");
+            Console.WriteLine("PANEL_SCAN_METRIC coldPrevious=2 coldCurrent=1 flows=1 shown=1 hidden=1 writes=0");
         });
         Case("panel keeps first-session row semantics and all-session global semantics", () =>
         {
