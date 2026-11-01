@@ -54,9 +54,11 @@ function render(language, text) {
     [editionIcons[0] + text.editionLiteX64, link(text.singleExe, downloadAsset('Lite-x64.exe')), text.liteRequirement],
     [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
     [editionIcons[1] + text.editionLiteArm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-arm64.exe')), text.arm64Requirement],
-    [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement],
-    ['📦 ' + text.editionLiteNet8X64, link(text.singleExe, downloadAsset('Lite-NET8-x64.exe')), text.net8RequirementX64],
-    ['📦 ' + text.editionLiteNet8Arm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-NET8-arm64.exe')), text.net8RequirementArm64]
+    [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
+  ];
+  const retiredRows = [
+    [text.editionLiteNet8X64, link(text.singleExe, downloadAsset('Lite-NET8-x64.exe')), text.net8RequirementX64],
+    [text.editionLiteNet8Arm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-NET8-arm64.exe')), text.net8RequirementArm64]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ') + ' | ' + link('🤖 AI', 'README.ai.md');
   const sponsorBadge = language.locale === 'zh-CN' ? '赞助-爱发电' : 'Support-Afdian';
@@ -93,6 +95,12 @@ function render(language, text) {
     fill(text.downloadIntro), '',
     '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
     ...rows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
+    '<details>',
+    '<summary><sub>📦 ' + attr(text.retiredNet8Title) + '</sub></summary>',
+    '',
+    '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
+    ...retiredRows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'),
+    '</details>', '',
     '> [!NOTE]',
     '> ' + fill(text.runtimeNote), '',
     '### 🏁 ' + text.quickStartTitle, '',

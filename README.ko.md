@@ -34,7 +34,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 - **포그라운드 스마트 추적 및 트레이 휠 간편 제어:** 시스템 이벤트를 통해 소리가 나는 활성 앱을 즉시 감지합니다. 작업 표시줄 트레이에서 휠 스크롤로 볼륨 조절 및 Alt+휠로 장치 전환이 가능하며, OSD 알림과 마이크 음소거로 화면 전환 없이 제어합니다.
 - **빠른 패널 및 실시간 오디오 레벨 표시:** 카드 패널은 350~850px 높이 조절과 위치 저장을 지원합니다. 앱별 볼륨 슬라이더와 실시간 오디오 레벨을 직관적으로 확인하세요.
 - **자동화 콤보 엔진 및 초고속 CLI(6가지 트리거 × 37개 작업):** 앱 실행/전환/종료, 예약, 단축키 등 6가지 트리거 지원. 장치 전환, 볼륨, 음소거, PowerShell 등을 조합할 수 있으며, 내장된 sr 명령어로 외부 스크립트 및 하드웨어와 손쉽게 연동됩니다.
-- **이벤트 우선 감지**: 시스템 알림을 우선 사용하고 필요 시 1초 간격의 스냅샷으로 보완하며 불필요한 데이터는 정리합니다. .NET 10 Lite, Legacy (.NET 4.8), Store 버전을 제공하며 (NET8 버전 제공 종료), 9개 언어를 지원합니다.
+- **이벤트 우선 감지**: 시스템 알림을 우선 사용하고 필요 시 1초 간격의 스냅샷으로 보완하며 불필요한 데이터는 정리합니다. .NET 10 Lite, Legacy (.NET 4.8), Store 버전을 제공하며, 9개 언어를 지원합니다.
 
 ## 🎮 일상적인 활용
 
@@ -52,7 +52,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 **현재 릴리스: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [릴리스 노트(중국어 간체)](docs/release-v1.29.md)
 
-일반 PC 환경에서는 **Lite x64** (단일 실행 파일, 가벼운 메모리 점유)를 권장합니다. 런타임 설치가 제한된 업무용 PC는 **Legacy x64** (추가 설치 불필요, 압축 해제 즉시 실행), ARM64 PC는 **Lite ARM64**를 선택하세요. **Microsoft Store**를 통한 설치 및 자동 업데이트도 지원합니다. NET8 호환 버전은 제공이 중단되어 향후 빌드되지 않습니다. 아래 링크는 최신 릴리스 v1.29입니다.
+일반 PC 환경에서는 **Lite x64** (단일 실행 파일, 가벼운 메모리 점유)를 권장합니다. 런타임 설치가 제한된 업무용 PC는 **Legacy x64** (추가 설치 불필요, 압축 해제 즉시 실행), ARM64 PC는 **Lite ARM64**를 선택하세요. **Microsoft Store**를 통한 설치 및 자동 업데이트도 지원합니다. 아래 링크는 최신 릴리스 v1.29입니다.
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
@@ -60,11 +60,18 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 | 🛡️ Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
 | ⚡ Lite ARM64 (.NET 10) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | 휴대용 ARM64 실행 파일; ARM64 .NET 10 Desktop Runtime 필요 |
 | 🔄 Microsoft Store (Store 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | .NET 10 Store 패키지에는 x64 .NET 10 Desktop Runtime이 필요합니다. 현재 제공 중인 버전은 Store 페이지에서 확인하세요(64비트 Windows 10/11). |
-| 📦 Lite NET8 x64 (지원 종료) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | 지원 종료 (이후 버전 미제공). x64 .NET 8 Desktop Runtime 필요, .NET 10 또는 Legacy 전환 권장 |
-| 📦 Lite NET8 ARM64 (지원 종료) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 지원 종료 (이후 버전 미제공). ARM64 .NET 8 Desktop Runtime 필요, .NET 10 전환 권장 |
+
+<details>
+<summary><sub>📦 이전 NET8 호환 버전 (제공 종료, 펼쳐서 보기)</sub></summary>
+
+| 에디션 | 다운로드 | 요구 사항 |
+|---|---|---|
+| Lite NET8 x64 (지원 종료) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | 지원 종료 (이후 버전 미제공). x64 .NET 8 Desktop Runtime 필요, .NET 10 또는 Legacy 전환 권장 |
+| Lite NET8 ARM64 (지원 종료) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 지원 종료 (이후 버전 미제공). ARM64 .NET 8 Desktop Runtime 필요, .NET 10 전환 권장 |
+</details>
 
 > [!NOTE]
-> 런타임 안내: 기본 Lite는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) 설치가 필요하며, Legacy 버전은 Windows 내장 .NET Framework 4.8을 사용하여 추가 설치가 필요 없습니다. NET8 호환 버전([.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0))은 공식 지원 및 제공이 종료되어 이후 버전에서는 제공되지 않으므로 .NET 10 또는 Legacy 버전으로 전환해 주시기 바랍니다.
+> 런타임 안내: 기본 Lite는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) 설치가 필요하며, Legacy 버전은 Windows 내장 .NET Framework 4.8을 사용하여 추가 설치가 필요 없습니다 (기존 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 호환 버전은 제공 종료).
 
 ### 🏁 3단계 빠른 시작
 
@@ -93,7 +100,7 @@ A: 네, 유지됩니다! 앱 오디오 라우팅은 Windows 오디오 엔진에 
 
 **Q: 각 버전에 필요한 Runtime은 무엇인가요?**
 
-A: 기본 Lite는 호환되는 .NET 10 Desktop Runtime이 필요하며, Legacy는 .NET Framework 4.8 기반으로 별도의 런타임이 필요하지 않습니다. 현재 Store 패키지는 x64 .NET 10 Desktop Runtime이 필요합니다. 과거 NET8 호환 버전은 제공이 종료되어 이후 버전에서는 제공되지 않습니다.
+A: 기본 Lite는 호환되는 .NET 10 Desktop Runtime이 필요하며, Legacy는 .NET Framework 4.8 기반으로 별도의 런타임이 필요하지 않습니다. 현재 Store 패키지는 x64 .NET 10 Desktop Runtime이 필요합니다 (과거 NET8 버전 제공 종료).
 
 **Q: 백그라운드 상주 중 CPU나 배터리를 소모하나요?**
 

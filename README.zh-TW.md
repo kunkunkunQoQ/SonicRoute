@@ -34,7 +34,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 - **前景焦點智慧跟隨與匣區滾輪盲操**：系統事件驅動秒級鎖定目前前景有聲應用；支援在工作列匣區捲動滾輪盲調音量，按住 Alt 捲動即時換軌裝置，配合螢幕浮動 OSD 提示與全域麥克風靜音，無需切換視窗。
 - **快速面板與即時出聲電平指示**：卡片式快速面板支援 350~850px 高度調整與位置儲存；直覺掌控各應用獨立音量，內建即時聲音電平指示。
 - **自動化連招引擎與極速 CLI（6 種觸發 × 37 種操作）**：支援應用啟閉與切換、排程、快捷鍵等 6 種觸發，自由組合設備切換、音量、靜音、程式關聯啟動與 PowerShell；內建 sr 具名管道短命令，無額外常駐開銷，輕鬆連動腳本與硬體控制台。
-- **事件優先偵測**：使用系統通知，並在需要時以每秒一次的快照檢查作為備援；不需要的資料會按需清理。提供 .NET 10 Lite、Legacy（.NET 4.8）與商店版（NET8 相容版已下架停更），支援九種語言。
+- **事件優先偵測**：使用系統通知，並在需要時以每秒一次的快照檢查作為備援；不需要的資料會按需清理。提供 .NET 10 Lite、Legacy（.NET 4.8）與商店版，支援九種語言。
 
 ## 🎮 日常使用情境
 
@@ -52,7 +52,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 **目前版本：[v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [發布說明（簡體中文）](docs/release-v1.29.md)
 
-推薦首選 **Lite x64**（單檔便攜、低記憶體佔用）；辦公或受限機型可選 **Legacy x64**（免裝執行階段，解壓縮即用）；ARM64 裝置選擇 **Lite ARM64**。亦可透過 **Microsoft Store** 取得並自動更新。NET8 相容版已下架停止提供，後續新版本不再提供 NET8 組建。下方直連均對應最新正式版 v1.29。
+推薦首選 **Lite x64**（單檔便攜、低記憶體佔用）；辦公或受限機型可選 **Legacy x64**（免裝執行階段，解壓縮即用）；ARM64 裝置選擇 **Lite ARM64**。亦可透過 **Microsoft Store** 取得並自動更新。下方直連均對應最新正式版 v1.29。
 
 | 版本 | 下載 | 需求 |
 |---|---|---|
@@ -60,11 +60,18 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 | 🛡️ Legacy x64（免裝執行庫） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用 |
 | ⚡ Lite ARM64（.NET 10）（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | ARM64 可攜版；需要 ARM64 .NET 10 Desktop Runtime |
 | 🔄 Microsoft Store（商店提供更新） | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | NET10 商店套件需要 x64 .NET 10 Desktop Runtime。上架版本請以 Microsoft Store 頁面為準；適用於 64 位元 Windows 10/11。 |
-| 📦 Lite NET8 x64（已下架） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | 已下架停更（後續版本不再提供）；需要 x64 .NET 8 Desktop Runtime，建議遷移至 .NET 10 或 Legacy |
-| 📦 Lite NET8 ARM64（已下架）（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 已下架停更（後續版本不再提供）；需要 ARM64 .NET 8 Desktop Runtime，建議遷移至 .NET 10 |
+
+<details>
+<summary><sub>📦 歷史 NET8 相容版（已下架停更，點擊展開）</sub></summary>
+
+| 版本 | 下載 | 需求 |
+|---|---|---|
+| Lite NET8 x64（已下架） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | 已下架停更（後續版本不再提供）；需要 x64 .NET 8 Desktop Runtime，建議遷移至 .NET 10 或 Legacy |
+| Lite NET8 ARM64（已下架）（實驗性） | [單一 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 已下架停更（後續版本不再提供）；需要 ARM64 .NET 8 Desktop Runtime，建議遷移至 .NET 10 |
+</details>
 
 > [!NOTE]
-> 執行階段說明：預設 Lite 需要安裝 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；Legacy 版本依賴系統自帶 .NET Framework 4.8，無需額外安裝執行階段。NET8 相容版（[.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)）現已下架停止維護，後續版本不再提供，請遷移至 .NET 10 或 Legacy 版。
+> 執行階段說明：預設 Lite 需要安裝 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；Legacy 版本依賴系統自帶 .NET Framework 4.8，無需額外安裝執行階段（歷史 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 相容版已下架停更）。
 
 ### 🏁 快速上手三步驟
 
@@ -93,7 +100,7 @@ A：會！應用程式路由由 Windows 核心音訊服務原生持久化保存�
 
 **Q：各版本需要什麼執行階段？**
 
-A：預設 Lite 需要相符的 .NET 10 Desktop Runtime；Legacy 以 .NET Framework 4.8 為基礎，不需額外安裝執行階段；目前商店套件需要 x64 .NET 10 Desktop Runtime。歷史 NET8 相容版已下架停止維護，後續版本不再提供。
+A：預設 Lite 需要相符的 .NET 10 Desktop Runtime；Legacy 以 .NET Framework 4.8 為基礎，不需額外安裝執行階段；目前商店套件需要 x64 .NET 10 Desktop Runtime（歷史 NET8 版已下架）。
 
 **Q：軟體在後台常駐會佔用 CPU 或耗電嗎？**
 

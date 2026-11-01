@@ -15,7 +15,7 @@
     "featuresTitle": "What SonicRoute offers",
     "downloadTitle": "Download and get started",
     "releaseNotes": "Release notes (Chinese)",
-    "downloadIntro": "Most users should choose Lite x64 (portable single file, top memory efficiency); choose Legacy x64 for restricted office PCs (no extra runtime required, extract and run); choose Lite ARM64 for ARM64 PCs. You can also install from the Microsoft Store for automatic updates. NET8-compatible editions are discontinued and will not be provided in future releases. Direct download links below are for {release}.",
+    "downloadIntro": "Most users should choose Lite x64 (portable single file, top memory efficiency); choose Legacy x64 for restricted office PCs (no extra runtime required, extract and run); choose Lite ARM64 for ARM64 PCs. You can also install from the Microsoft Store for automatic updates. Direct download links below are for {release}.",
     "edition": "Version",
     "requirements": "Requirements",
     "singleExe": "Single EXE",
@@ -24,7 +24,7 @@
     "liteRequirement": "Portable single-file executable; requires the matching x64 .NET 10 Desktop Runtime",
     "legacyRequirement": "No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use",
     "storeRequirement": "The .NET 10 Store package requires the x64 .NET 10 Desktop Runtime. See the Store page for the version currently available there; for 64-bit Windows 10/11.",
-    "runtimeNote": "Runtime requirements: Standard Lite requires {runtime}; Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation. NET8-compatible editions ({runtime8}) are discontinued and no longer provided in future releases; please migrate to .NET 10 or Legacy.",
+    "runtimeNote": "Runtime requirements: Standard Lite requires {runtime}; Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation (historical {runtime8} editions are discontinued).",
     "steps": [
         "**Launch & Keep in Tray**: Double-click to start; SonicRoute stays in your system tray (drag it out of the overflow menu to keep it pinned). Double-click the tray icon to open the main window.",
         "**Select & Route Devices**: Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.",
@@ -82,7 +82,7 @@
         "**Smart foreground focus and tray wheel blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust volume or Alt+scroll to switch devices, paired with on-screen OSD feedback and global mic mute, without leaving your active window.",
         "**Quick panel and live audio activity indicators.** The card panel features 350–850px adjustable height and position saving; control per-app volume sliders with real-time sound activity meters.",
         "**Automation combo engine and blazing CLI (6 triggers × 37 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.",
-        "**Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Available as .NET 10 Lite, Legacy (.NET 4.8), and a Store edition (NET8 editions discontinued), in nine languages."
+        "**Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Available as .NET 10 Lite, Legacy (.NET 4.8), and a Store edition, in nine languages."
     ],
     "comicTitle": "XiaoYue Comics",
     "comicDescription": "An absurd magical-girl comedy about a girl who hatches from an egg and makes a mess whenever she tries to help.",
@@ -117,7 +117,7 @@
     ],
     "faqAnswers": [
         "Yes! App audio routing is natively preserved by the Windows audio engine and stays active even after SonicRoute is closed. Only hotkeys, tray controls, and automation rules require SonicRoute running in the background.",
-        "Standard Lite requires the matching .NET 10 Desktop Runtime; Legacy needs no separate .NET Desktop Runtime package and uses .NET Framework 4.8. The current Store package requires the x64 .NET 10 Desktop Runtime. Historical NET8 editions are discontinued and will not be provided in future releases.",
+        "Standard Lite requires the matching .NET 10 Desktop Runtime; Legacy needs no separate .NET Desktop Runtime package and uses .NET Framework 4.8. The current Store package requires the x64 .NET 10 Desktop Runtime (historical NET8 editions discontinued).",
         "Detection prioritizes system events and uses a necessary one-second snapshot fallback when needed. Unneeded data is cleaned up on demand; actual CPU use depends on the system and workload."
     ],
     "net8RequirementX64": "Discontinued (not provided in future releases); requires the x64 .NET 8 Desktop Runtime; migrate to .NET 10 or Legacy",
@@ -128,5 +128,6 @@
     "aiPromptBody": "When using AI assistants (such as Cursor, Copilot, ChatGPT, or Claude) to troubleshoot issues, explore architecture, or write scripts, refer directly to {aiDoc}. Structured in a high-density DSL specifically for LLMs, it eliminates verbose prose, drastically reduces token consumption, and helps AI pinpoint root causes in seconds.",
     "quickStartTitle": "3-Step Quick Start",
     "cliTitle": "CLI & Automation Integration",
-    "releaseHighlightsTitle": "{release} Release Highlights"
+    "releaseHighlightsTitle": "{release} Release Highlights",
+    "retiredNet8Title": "Historical NET8 editions (discontinued, click to expand)"
 }

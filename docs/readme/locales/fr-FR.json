@@ -15,7 +15,7 @@
     "featuresTitle": "Ce que propose SonicRoute",
     "downloadTitle": "Télécharger et commencer",
     "releaseNotes": "Notes de version (en chinois)",
-    "downloadIntro": "Pour la plupart des utilisateurs, **Lite x64** est le meilleur choix (exécutable unique et portable, faible empreinte mémoire) ; privilégiez **Legacy x64** pour les PC professionnels restreints (aucun runtime externe requis, décompressez et lancez) ; pour les machines ARM64, utilisez **Lite ARM64**. Disponible également sur le **Microsoft Store** avec mises à jour automatiques. Les versions NET8 sont désormais abandonnées et ne seront plus fournies à l'avenir. Liens directs pour {release} ci-dessous.",
+    "downloadIntro": "Pour la plupart des utilisateurs, **Lite x64** est le meilleur choix (exécutable unique et portable, faible empreinte mémoire) ; privilégiez **Legacy x64** pour les PC professionnels restreints (aucun runtime externe requis, décompressez et lancez) ; pour les machines ARM64, utilisez **Lite ARM64**. Disponible également sur le **Microsoft Store** avec mises à jour automatiques. Liens directs pour {release} ci-dessous.",
     "edition": "Édition",
     "requirements": "Configuration requise",
     "singleExe": "Un seul EXE",
@@ -24,7 +24,7 @@
     "liteRequirement": "Exécutable portable à fichier unique ; nécessite le .NET 10 Desktop Runtime x64",
     "legacyRequirement": "Aucun .NET 8 requis ; s'exécute directement via le .NET Framework 4.8 intégré ; décompressez le ZIP",
     "storeRequirement": "Le paquet Store .NET 10 nécessite le .NET 10 Desktop Runtime x64. Consultez la page du Store pour connaître la version actuellement disponible ; pour Windows 10/11 64 bits.",
-    "runtimeNote": "Exigences d'exécution : Lite standard requiert {runtime} ; la version Legacy fonctionne avec .NET Framework 4.8 sans installation supplémentaire. Les éditions compatibles NET8 ({runtime8}) sont désormais abandonnées et ne seront plus fournies dans les versions ultérieures ; veuillez migrer vers .NET 10 ou Legacy.",
+    "runtimeNote": "Exigences d'exécution : Lite standard requiert {runtime} ; la version Legacy fonctionne avec .NET Framework 4.8 sans installation supplémentaire (anciennes versions {runtime8} abandonnées).",
     "steps": [
         "**Lancer et épingler dans la zone de notification** : Double-cliquez pour exécuter ; SonicRoute reste dans la barre des tâches (glissez l'icône hors du menu déroulant pour la garder visible). Un double-clic ouvre la fenêtre principale.",
         "**Sélectionner les appareils et assigner** : Cochez vos casques et enceintes dans « Paramètres → Appareils conservés ». Un clic gauche sur l'icône ouvre le panneau rapide pour router chaque application et régler ses curseurs de volume.",
@@ -82,7 +82,7 @@
         "**Suivi intelligent du premier plan et réglage à l'aveugle via la molette.** Les événements système ciblent l'application active en quelques millisecondes. Faites défiler la molette sur la zone de notification pour régler le volume ou utilisez Alt+molette pour changer de périphérique, avec affichage OSD et coupure micro globale.",
         "**Panneau rapide et indicateur de niveau sonore en direct :** le panneau sous forme de cartes offre une hauteur ajustable de 350 à 850 px et mémorise sa position ; contrôlez le volume individuel avec des indicateurs sonores en temps réel.",
         "**Moteur d'automatisation et CLI ultrarapide (6 déclencheurs × 37 actions) :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.",
-        "**Détection prioritairement événementielle :** utilise les notifications système et une vérification par seconde si nécessaire ; nettoyage à la demande. Disponible en Lite .NET 10, Legacy (.NET 4.8) et Store (éditions NET8 abandonnées) en 9 langues."
+        "**Détection prioritairement événementielle :** utilise les notifications système et une vérification par seconde si nécessaire ; nettoyage à la demande. Disponible en Lite .NET 10, Legacy (.NET 4.8) et Store en 9 langues."
     ],
     "comicTitle": "XiaoYue Comics",
     "comicDescription": "Une comédie absurde autour d’une magical girl née dans un œuf, dont chaque tentative d’aide provoque une nouvelle catastrophe.",
@@ -117,7 +117,7 @@
     ],
     "faqAnswers": [
         "Oui ! Le routage audio des applications est conservé nativement par le moteur audio de Windows et reste actif même après la fermeture de SonicRoute. Seuls les raccourcis, la molette et l'automatisation nécessitent son exécution.",
-        "Lite standard nécessite le .NET 10 Desktop Runtime correspondant ; Legacy ne nécessite aucun paquet supplémentaire et utilise .NET Framework 4.8. Le paquet Store actuel nécessite le .NET 10 Desktop Runtime x64. Les anciennes versions NET8 sont abandonnées et ne seront plus fournies.",
+        "Lite standard nécessite le .NET 10 Desktop Runtime correspondant ; Legacy ne nécessite aucun paquet supplémentaire et utilise .NET Framework 4.8. Le paquet Store actuel nécessite le .NET 10 Desktop Runtime x64 (anciennes versions NET8 abandonnées).",
         "La détection privilégie les événements système et utilise, si nécessaire, une vérification ponctuelle toutes les secondes. Les données inutiles sont nettoyées à la demande ; l’utilisation réelle du processeur dépend du système et de l’activité."
     ],
     "net8RequirementX64": "Version abandonnée (non fournie dans les prochaines versions) ; requiert .NET 8 Desktop Runtime x64 ; transition conseillée vers .NET 10 ou Legacy",
@@ -128,5 +128,6 @@
     "aiPromptBody": "Si vous utilisez des assistants IA (comme Cursor, Copilot, ChatGPT ou Claude) pour diagnostiquer un problème, comprendre l'architecture ou concevoir des scripts, nous vous recommandons de consulter {aiDoc}. Rédigé dans un DSL structuré haute densité pour les LLM, il évite les textes verbeux, réduit considérablement la consommation de tokens et cible la cause racine en quelques secondes.",
     "quickStartTitle": "Prise en main rapide en 3 étapes",
     "cliTitle": "CLI et automatisation (Power Users)",
-    "releaseHighlightsTitle": "Points forts de la version {release}"
+    "releaseHighlightsTitle": "Points forts de la version {release}",
+    "retiredNet8Title": "Anciennes éditions compatibles NET8 (abandonnées, cliquer pour déplier)"
 }
