@@ -55,8 +55,8 @@ body:
         - Lite x64 (.NET 10, 官方推荐单文件版)
         - Legacy x64 (.NET Framework 4.8, 免运行库版)
         - Lite ARM64 (.NET 10, 实验性 ARM64 版)
-        - Lite NET8 (.NET 8 兼容版)
         - Microsoft Store (微软应用商店版)
+        - Lite NET8 (.NET 8 兼容版, 已下架停更)
         - 自行拉取源码编译版 (Source Build)
     validations:
       required: true

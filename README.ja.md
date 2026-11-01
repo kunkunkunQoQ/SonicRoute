@@ -34,7 +34,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 - **フォアグラウンド追従とトレイホイール直感操作：** システムイベントにより音声アプリを瞬時に特定。タスクバーのトレイ領域でホイール操作による音量調整やAlt+ホイールでの出力先切替が可能。画面OSD表示とマイクミュートも備え、ウィンドウを切替えずに操作できます。
 - **クイックパネルとリアルタイム音声レベル表示：** カード型パネルは350〜850pxの高さ調整と位置の保存に対応。各アプリの音量スライダーとリアルタイム音声メーターで直感的に操作できます。
 - **自動化コンボエンジンと高速 CLI（6種のトリガー × 37種のアクション）：** アプリ起動・切り替え・終了、スケジュール、ショートカットなど 6 つのトリガーに対応。デバイス切り替え、音量、ミュート、PowerShell などを自由に組み合わせ可能。名前付きパイプによる sr コマンドで外部連携も容易です。
-- **イベント優先の検出：** システム通知を利用し、必要な場合は1秒間隔のスナップショット確認で補います。不要なデータは必要に応じて整理します。Legacy（.NET 4.8）、.NET 10 / NET8 の Lite、Store 版を9言語で提供します。
+- **イベント優先の検出**：システム通知を活用し、必要に応じて1秒ごとのスナップショットで補完。不要データはオンデマンドで解放。.NET 10 Lite、Legacy（.NET 4.8）、Store版を提供（NET8版は提供終了）、9言語に対応。
 
 ## 🎮 日常での使い方
 
@@ -52,19 +52,19 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 
 **現在のリリース：[v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [リリースノート（簡体字中国語）](docs/release-v1.29.md)
 
-一般的なPC環境では **Lite x64**（単一実行ファイル、省メモリで軽快）が最もおすすめです。実行環境の制約があるオフィスPCでは **Legacy x64**（ランタイム追加不要、解凍後即利用可）、ARM64 PCでは **Lite ARM64** を選択してください。**Microsoft Store** 経由でのインストール・自動更新にも対応しています。以下のリンクは最新安定版 v1.29 です。
+一般的なPC環境では **Lite x64**（単一実行ファイル、省メモリで軽快）が最もおすすめです。実行環境の制約があるオフィスPCでは **Legacy x64**（ランタイム追加不要、解凍後即利用可）、ARM64 PCでは **Lite ARM64** を選択してください。**Microsoft Store** 経由でのインストール・自動更新にも対応しています。NET8 互換版は提供終了となり、今後のリリースでは提供されません。以下のリンクは最新安定版 v1.29 です。
 
 | エディション | ダウンロード | 要件 |
 |---|---|---|
 | ⭐ Lite x64（.NET 10 推奨） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | ポータブル単一ファイル。x64 .NET 10 Desktop Runtime が必要です |
-| ⚡ Lite ARM64（.NET 10）（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | ポータブル ARM64 ファイル。ARM64 .NET 10 Desktop Runtime が必要です |
-| ☕ Lite NET8 x64 | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | NET8 互換 Lite。x64 .NET 8 Desktop Runtime が必要です |
-| ☕ Lite NET8 ARM64（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | NET8 互換 Lite。ARM64 .NET 8 Desktop Runtime が必要です |
 | 🛡️ Legacy x64（.NET 8 不要） | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 追加ランタイム不要。Windows 標準の .NET Framework 4.8 で動作し、ZIP を解凍するだけですぐに使えます |
+| ⚡ Lite ARM64（.NET 10）（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | ポータブル ARM64 ファイル。ARM64 .NET 10 Desktop Runtime が必要です |
 | 🔄 Microsoft Store（Store 経由で更新） | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | .NET 10 の Store パッケージには x64 .NET 10 Desktop Runtime が必要です。現在配信中のバージョンは Store ページで確認してください（64 ビット Windows 10/11 対象）。 |
+| 📦 Lite NET8 x64（提供終了） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | 提供終了（今後のリリースでは非提供）。x64 .NET 8 Desktop Runtime が必要。.NET 10 または Legacy への移行を推奨 |
+| 📦 Lite NET8 ARM64（提供終了）（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 提供終了（今後のリリースでは非提供）。ARM64 .NET 8 Desktop Runtime が必要。.NET 10 への移行を推奨 |
 
 > [!NOTE]
-> ランタイム要件：標準 Lite には [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)、NET8 互換版には [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) の導入が必要です（2026年11月以降サポート終了予定のため .NET 10 または Legacy への移行を推奨）。Legacy 版は Windows 標準の .NET Framework 4.8 でそのまま動作します。
+> ランタイム要件：標準 Lite には [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) が必要です。Legacy 版は Windows 標準の .NET Framework 4.8 で動作し追加導入は不要です。NET8 互換版（[.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)）は提供を終了しており、今後のバージョンでは提供されません。.NET 10 または Legacy への移行をお願いいたします。
 
 ### 🏁 3ステップで今すぐ始める
 
@@ -93,7 +93,7 @@ A：はい、維持されます。アプリのルーティングは Windows 側�
 
 **Q：各エディションに必要な Runtime は何ですか？**
 
-A：標準 Lite には対応する .NET 10 Desktop Runtime、Lite NET8 には .NET 8 が必要です。Legacy は追加の .NET Desktop Runtime が不要で、.NET Framework 4.8 で動作します。現在の Store パッケージには x64 .NET 10 Desktop Runtime が必要です。
+A：標準 Lite には対応する .NET 10 Desktop Runtime が必要です。Legacy 版は .NET Framework 4.8 上で動作し追加ランタイムは不要です。Store パッケージには x64 .NET 10 Desktop Runtime が必要です。旧 NET8 互換版は提供終了となり、今後のバージョンでは提供されません。
 
 **Q：バックグラウンド常駐中に CPU やバッテリーを消費しますか？**
 

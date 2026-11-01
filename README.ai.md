@@ -28,11 +28,11 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
 
 RELEASE_EDITIONS:
   - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.29-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.29-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
-  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
   - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.29-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
+  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.29-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
   - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_LITE_EXE, updates: MICROSOFT_STORE }
+  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
+  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
 
 CLI_AND_SHORT_COMMAND_SPEC:
   command_invocation: "sr <RuleName|RuleId> (invokes %LocalAppData%\\SonicRoute\\Command\\sr.cmd wrapping sr-client.ps1) OR SonicRoute.exe --run-rule <selector>"
@@ -138,7 +138,7 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
     symbols: ["AppRuntimeIdentity.Current", "AppRuntimeIdentity.CommandEdition", "WindowsVersion.Build"]
     facts:
       - "Lite editions require Windows Desktop Runtime (x64/ARM64), NOT standard console runtime."
-      - "Match the runtime major version and architecture: default Lite uses .NET 10; NET8-suffixed Lite uses .NET 8. Single EXE does not mean self-contained. Legacy x64 uses .NET Framework 4.8."
+      - "Match the runtime major version and architecture: default Lite uses .NET 10; Legacy x64 uses .NET Framework 4.8. NET8 editions are discontinued and will not be provided in future releases."
       - "Store packaging reuses the NET10 Lite x64 framework-dependent EXE; it does not bundle .NET 10 Desktop Runtime. Do not assume Store installs that runtime automatically or infer the live Store version from the repository version."
       - "OS requirement: Windows 10 Build 19041+ (v2004) or Windows 11."
 
@@ -173,7 +173,7 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Portable auto-check is off by default. If enabled and due (at least 24h since the last attempt), startup warmup and one 15s delay precede a single async check; there is no recurring update poll. Manual checks are in Settings."
       - "Only the fixed official GitHub stable latest release is accepted; draft/prerelease and nonnumeric tags are rejected. Download and installation each require user action; there is no forced unattended update."
       - "Protocol 2 explicitly matches edition, runtime and architecture. NET10, NET8, Legacy and ARM64/x64 never silently cross channels. Store identity disables the portable updater, including worker entry points."
-      - "NET8 maintenance ends after November 2026. Migration is manual through the official download page: x64 may choose NET10 or Legacy; ARM64 is directed to NET10 ARM64. Missing assets do not authorize another runtime or architecture."
+      - "NET8 maintenance ended. NET8 builds are discontinued and will not be provided for subsequent releases. Migration is manual through the official download page: x64 may choose NET10 or Legacy; ARM64 is directed to NET10 ARM64. Missing assets do not authorize another runtime or architecture."
       - "The original protocol-1 Lite contract means NET8 only; ambiguous dual-runtime protocol-1 metadata is refused. Old protocol-1 clients reject protocol 2. Version 1.24 has no native updater and first upgrades manually or through Store."
       - "GitHub asset digests, SHA256SUMS, manifest hashes/sizes, PE architecture, version and edition/runtime must agree. SHA-256 is integrity checking, not independent publisher authentication; portable packages/manifests are unsigned and trust official GitHub over system-validated HTTPS."
       - "The local trusted executable runs worker mode to wait, back up, replace, restart and roll back failures; downloaded scripts are never executed. Protected paths fail before exit, without silent elevation. Existing user config, rules, icons and other data are not installation targets."

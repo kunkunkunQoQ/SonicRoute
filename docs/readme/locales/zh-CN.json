@@ -15,7 +15,7 @@
     "featuresTitle": "SonicRoute 的特点",
     "downloadTitle": "下载与开始使用",
     "releaseNotes": "更新说明",
-    "downloadIntro": "推荐首选 **Lite x64**（单文件便携、低内存占用）；办公或受限机型可选 **Legacy x64**（免装运行库，解压即用）；ARM64 设备选择 **Lite ARM64**。亦可通过 **Microsoft Store** 获取并自动更新。下方直链均对应最新正式版 {release}。",
+    "downloadIntro": "推荐首选 **Lite x64**（单文件便携、低内存占用）；办公或受限机型可选 **Legacy x64**（免装运行库，解压即用）；ARM64 设备选择 **Lite ARM64**。亦可通过 **Microsoft Store** 获取并自动更新。NET8 兼容版已下架停止提供，后续新版本不再提供 NET8 构建。下方直链均对应最新正式版 {release}。",
     "edition": "版本",
     "requirements": "运行要求",
     "singleExe": "单个 EXE",
@@ -24,7 +24,7 @@
     "liteRequirement": "单文件便携版；需要匹配的 x64 .NET 10 Desktop Runtime",
     "legacyRequirement": "免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用",
     "storeRequirement": "NET10 商店包需要 x64 .NET 10 Desktop Runtime。在架版本以 Microsoft Store 页面为准；适用于 64 位 Windows 10/11。",
-    "runtimeNote": "运行库说明：默认 Lite 需要安装 {runtime}；NET8 兼容版需要 {runtime8}（将于 2026 年 11 月后停止维护并推荐迁移至 .NET 10 或 Legacy）。Legacy 版本依赖系统自带 .NET Framework 4.8，无需额外安装运行库。",
+    "runtimeNote": "运行库说明：默认 Lite 需要安装 {runtime}；Legacy 版本依赖系统自带 .NET Framework 4.8，无需额外安装运行库。NET8 兼容版（{runtime8}）现已下架停止维护，后续版本不再提供，请迁移至 .NET 10 或 Legacy 版。",
     "steps": [
         "**双击启动常驻**：下载解压或双击运行后软件常驻任务栏托盘（推荐从溢出区拖出固定以便随时查看）；双击托盘图标即可打开主窗口。",
         "**勾选设备与分流**：首次在「设置 → 保留的设备」勾选常用耳机与音箱；左键单击托盘图标呼出快速面板，滑动应用滑块即时分流设备与调节音量。",
@@ -82,7 +82,7 @@
         "**前台焦点智能跟随与托盘滚轮盲操**：系统事件驱动秒级锁定当前前台有声应用；支持在任务栏托盘滚动滚轮盲调音量，按住 Alt 滚动即时换轨设备，配合屏幕浮动 OSD 提示与全局麦克风静音，无需切出窗口。",
         "**快速面板与实时出声电平指示**：卡片式快速面板支持 350~850px 高度调节与位置保存；直观掌控各应用独立音量，内置实时声音电平指示。",
         "**自动化连招引擎与极速 CLI（6 种触发 × 37 种操作）**：支持应用启停与切换、定时、快捷键等 6 种触发，自由组合设备切换、音量、静音、程序关联启动与 PowerShell；内置 sr 命名管道短命令，无额外常驻开销，轻松联动脚本与硬件控制台。",
-        "**事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。提供 Legacy（.NET 4.8）、.NET 10 与 NET8 Lite，以及商店版，支持九种语言。"
+        "**事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。提供 .NET 10 Lite、Legacy（.NET 4.8）与商店版（NET8 兼容版已下架停更），支持九种语言。"
     ],
     "comicTitle": "小跃的奇妙日常",
     "comicDescription": "从鸡蛋里蹦出来的魔法少女，以及她越帮越忙的离谱日常。",
@@ -117,13 +117,13 @@
     ],
     "faqAnswers": [
         "会！应用路由由 Windows 核心音频服务原生持久化保存；关闭 SonicRoute 后依然有效。仅快捷键、托盘控制与自动化规则需要软件在后台常驻生效。",
-        "默认 Lite 需要匹配的 .NET 10 Desktop Runtime，Lite NET8 需要 .NET 8。Legacy 基于 .NET Framework 4.8，不需要额外安装 .NET Desktop Runtime。当前商店包需要 x64 .NET 10 Desktop Runtime。",
+        "默认 Lite 需要匹配的 .NET 10 Desktop Runtime；Legacy 基于 .NET Framework 4.8，不需要额外安装运行库；当前商店包需要 x64 .NET 10 Desktop Runtime。历史 NET8 兼容版已下架停止维护，后续版本不再提供。",
         "检测优先使用系统事件，必要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。实际 CPU 占用取决于系统和使用情况。"
     ],
-    "net8RequirementX64": "NET8 兼容版 Lite；需要 x64 .NET 8 Desktop Runtime",
-    "net8RequirementArm64": "NET8 兼容版 Lite；需要 ARM64 .NET 8 Desktop Runtime",
-    "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "net8RequirementX64": "已下架停更（后续版本不再提供）；需要 x64 .NET 8 Desktop Runtime，建议迁移至 .NET 10 或 Legacy",
+    "net8RequirementArm64": "已下架停更（后续版本不再提供）；需要 ARM64 .NET 8 Desktop Runtime，建议迁移至 .NET 10",
+    "editionLiteNet8X64": "Lite NET8 x64（已下架）",
+    "editionLiteNet8Arm64": "Lite NET8 ARM64（已下架）",
     "aiPromptTitle": "AI 快速总结与省 Token 排错",
     "aiPromptBody": "使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查问题、理解架构或编写脚本时，推荐直接参考专用机器规范 {aiDoc}。该文档以高密度结构化 DSL 整理核心机制与排障决策树，避免大模型扫描冗长图文，大幅节省上下文 Token 开销并秒级定位根因。",
     "quickStartTitle": "快速上手三步走",

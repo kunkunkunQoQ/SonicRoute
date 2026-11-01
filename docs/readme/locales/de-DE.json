@@ -15,7 +15,7 @@
     "featuresTitle": "Das bietet SonicRoute",
     "downloadTitle": "Herunterladen und loslegen",
     "releaseNotes": "Versionshinweise (Chinesisch)",
-    "downloadIntro": "Die meisten Nutzer sollten **Lite x64** wählen (portable Einzeldatei, minimale Speichernutzung); für restriktive Firmen-PCs empfiehlt sich **Legacy x64** (keine zusätzliche Runtime erforderlich, entpacken und starten); für ARM64-Geräte steht **Lite ARM64** bereit. Zudem kann die App über den **Microsoft Store** mit automatischen Updates installiert werden. Die folgenden Links beziehen sich auf {release}.",
+    "downloadIntro": "Die meisten Nutzer sollten **Lite x64** wählen (portable Einzeldatei, minimale Speichernutzung); für restriktive Firmen-PCs empfiehlt sich **Legacy x64** (keine zusätzliche Runtime erforderlich, entpacken und starten); für ARM64-Geräte steht **Lite ARM64** bereit. Zudem kann die App über den **Microsoft Store** mit automatischen Updates installiert werden. NET8-kompatible Editionen wurden eingestellt und werden künftig nicht mehr angeboten. Die folgenden Links beziehen sich auf {release}.",
     "edition": "Version",
     "requirements": "Voraussetzungen",
     "singleExe": "Einzelne EXE",
@@ -24,7 +24,7 @@
     "liteRequirement": "Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime",
     "legacyRequirement": "Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten",
     "storeRequirement": "Das NET10-Store-Paket benötigt die x64 .NET 10 Desktop Runtime. Welche Version aktuell im Store verfügbar ist, zeigt die Store-Seite; für 64-Bit Windows 10/11.",
-    "runtimeNote": "Laufzeitumgebung: Standard-Lite erfordert {runtime}; die NET8-kompatible Version benötigt {runtime8} (Wartung endet nach November 2026; Wechsel zu .NET 10 oder Legacy empfohlen). Die Legacy-Edition nutzt das im System integrierte .NET Framework 4.8 und benötigt keine zusätzlichen Runtimes.",
+    "runtimeNote": "Laufzeitumgebung: Standard-Lite erfordert {runtime}; die Legacy-Edition nutzt das integrierte .NET Framework 4.8 und benötigt keine zusätzlichen Runtimes. NET8-kompatible Editionen ({runtime8}) wurden eingestellt und werden in künftigen Versionen nicht mehr bereitgestellt; bitte wechseln Sie zu .NET 10 oder Legacy.",
     "steps": [
         "**Starten & im Infobereich anheften**: Per Doppelklick starten; SonicRoute bleibt im Windows-Infobereich aktiv (ziehen Sie das Symbol am besten dauerhaft in die Taskleiste). Ein Doppelklick öffnet das Hauptfenster.",
         "**Geräte auswählen & Audio zuweisen**: Unter „Einstellungen → Beibehaltene Geräte“ bevorzugte Kopfhörer und Lautsprecher aktivieren. Ein Klick auf das Tray-Symbol öffnet das Schnell-Panel zum sofortigen Zuweisen und Einstellen der Lautstärke jeder App.",
@@ -82,7 +82,7 @@
         "**Intelligenter Vordergrund-Fokus und blinde Tray-Rad-Steuerung.** Systemereignisse erfassen die aktive Audio-App in Millisekunden. Scrollen Sie direkt über dem Infobereich, um die Lautstärke anzupassen oder mit Alt+Mausrad Ausgabegeräte zu wechseln, ergänzt durch OSD-Hinweise und globale Mikrofon-Stummschaltung.",
         "**Schnellpanel und Echtzeit-Pegelanzeige:** Das Karten-Panel bietet eine anpassbare Höhe von 350–850 px und speichert seine Position; steuern Sie individuelle App-Lautstärken mit Pegelanzeigen für aktive Tonausgabe.",
         "**Automatisierungs-Engine und blitzschnelle CLI (6 Auslöser × 37 Aktionen):** Auslöser durch App-Start, -Fokus, -Beenden, Zeitpläne oder Hotkeys. Kombinieren Sie Audiosteuerung, Programmstarts und PowerShell-Skripte; nutzen Sie den Befehl sr zur nahtlosen Steuerung per Skript oder Hardware-Deck.",
-        "**Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine notwendige Momentaufnahme im Abstand von einer Sekunde; nicht benötigte Daten werden bei Bedarf bereinigt. Verfügbar als Legacy (.NET 4.8), Lite für .NET 10 und NET8 sowie Store-Version in 9 Sprachen."
+        "**Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine notwendige Momentaufnahme im Abstand von einer Sekunde; nicht benötigte Daten werden bereinigt. Verfügbar als .NET 10 Lite, Legacy (.NET 4.8) und Store-Version (NET8-Versionen eingestellt) in 9 Sprachen."
     ],
     "comicTitle": "XiaoYue Comics",
     "comicDescription": "Eine absurde Comedy über ein magisches Mädchen, das aus einem Ei schlüpft und mit jedem Hilfsversuch neues Chaos anrichtet.",
@@ -117,13 +117,13 @@
     ],
     "faqAnswers": [
         "Ja! Die Audio-Zuweisung wird nativ vom Windows-Audiosystem gespeichert und bleibt auch nach Beenden von SonicRoute aktiv. Nur Tastenkürzel, Infobereich-Gesten und Automatisierungsregeln erfordern die Hintergrund-Ausführung.",
-        "Lite Standard benötigt die passende .NET 10 Desktop Runtime; Lite NET8 benötigt .NET 8. Legacy benötigt kein zusätzliches .NET Desktop Runtime-Paket und läuft mit .NET Framework 4.8. Das aktuelle Store-Paket benötigt x64 .NET 10 Desktop Runtime.",
+        "Lite Standard benötigt die passende .NET 10 Desktop Runtime; Legacy benötigt kein zusätzliches .NET Desktop Runtime-Paket und läuft mit .NET Framework 4.8. Das aktuelle Store-Paket benötigt x64 .NET 10 Desktop Runtime. Frühere NET8-kompatible Editionen wurden eingestellt und entfallen künftig.",
         "Die Erkennung nutzt vorrangig Systemereignisse und ergänzt sie bei Bedarf durch eine notwendige Momentaufnahme im Abstand von einer Sekunde. Nicht benötigte Daten werden bei Bedarf bereinigt; die tatsächliche CPU-Auslastung hängt von System und Nutzung ab."
     ],
-    "net8RequirementX64": "NET8-kompatible Lite-Datei; benötigt die x64 .NET 8 Desktop Runtime",
-    "net8RequirementArm64": "NET8-kompatible Lite-Datei; benötigt die ARM64 .NET 8 Desktop Runtime",
-    "editionLiteNet8X64": "Lite NET8 x64",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64",
+    "net8RequirementX64": "Eingestellt (in künftigen Versionen nicht mehr enthalten); erfordert x64 .NET 8 Desktop Runtime; Wechsel zu .NET 10 oder Legacy empfohlen",
+    "net8RequirementArm64": "Eingestellt (in künftigen Versionen nicht mehr enthalten); erfordert ARM64 .NET 8 Desktop Runtime; Wechsel zu .NET 10 empfohlen",
+    "editionLiteNet8X64": "Lite NET8 x64 (Eingestellt)",
+    "editionLiteNet8Arm64": "Lite NET8 ARM64 (Eingestellt)",
     "aiPromptTitle": "KI-Zusammenfassung und token-effiziente Fehlerbehebung",
     "aiPromptBody": "Wenn Sie KI-Assistenten (wie Cursor, Copilot, ChatGPT oder Claude) zur Fehlerbehebung, Architekturanalyse oder Skripterstellung nutzen, empfiehlt sich die maschinenlesbare Spezifikation {aiDoc}. Sie ist in einer hochdichten, strukturierten DSL für LLMs verfasst, vermeidet lange Texte, spart drastisch Kontext-Tokens und ermöglicht eine sekundenschnelle Diagnose.",
     "quickStartTitle": "Schnellstart in 3 Schritten",

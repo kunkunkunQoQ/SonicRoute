@@ -34,7 +34,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de 
 - **Seguimiento inteligente del primer plano y ajuste ciego con la rueda.** Los eventos del sistema detectan la aplicación activa en milisegundos. Desplace la rueda sobre la bandeja del sistema para ajustar el volumen o use Alt+rueda para cambiar de dispositivo, con avisos OSD y silencio global de micrófono.
 - **Panel rápido e indicador de nivel de sonido en tiempo real:** el panel de tarjetas ofrece una altura ajustable de 350 a 850 px y guarda su posición; controle el volumen de cada aplicación con medidores de sonido en directo.
 - **Motor de automatización y CLI ultrarrápida (6 disparadores × 37 acciones):** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.
-- **Detección basada primero en eventos:** utiliza notificaciones del sistema y, cuando hace falta, una comprobación necesaria cada segundo; limpia los datos innecesarios bajo demanda. Disponible como Legacy (.NET 4.8), Lite para .NET 10 y NET8, y edición Store en 9 idiomas.
+- **Detección basada primero en eventos:** utiliza notificaciones del sistema y una comprobación por segundo si hace falta; limpieza bajo demanda. Disponible como Lite para .NET 10, Legacy (.NET 4.8) y edición Store (versiones NET8 descatalogadas) en 9 idiomas.
 
 ## 🎮 Para el día a día
 
@@ -52,19 +52,19 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de 
 
 **Versión actual: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [Notas de la versión (en chino)](docs/release-v1.29.md)
 
-Para la mayoría de usuarios se recomienda **Lite x64** (ejecutable único portátil, bajo consumo de memoria); use **Legacy x64** en equipos de trabajo restringidos (sin necesidad de runtime externo, descomprimir y ejecutar); elija **Lite ARM64** para equipos ARM64. También disponible en la **Microsoft Store** con actualizaciones automáticas. Enlaces directos para v1.29 a continuación.
+Para la mayoría de usuarios se recomienda **Lite x64** (ejecutable único portátil, bajo consumo de memoria); use **Legacy x64** en equipos de trabajo restringidos (sin necesidad de runtime externo, descomprimir y ejecutar); elija **Lite ARM64** para equipos ARM64. También disponible en la **Microsoft Store** con actualizaciones automáticas. Las versiones compatibles con NET8 se han descatalogado y ya no se suministrarán. Enlaces directos para v1.29 a continuación.
 
 | Edición | Descargar | Requisitos |
 |---|---|---|
 | ⭐ Lite x64 (.NET 10, Recomendado) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Ejecutable portátil de un solo archivo; requiere .NET 10 Desktop Runtime x64 |
-| ⚡ Lite ARM64 (.NET 10) (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | Ejecutable portátil ARM64; requiere .NET 10 Desktop Runtime ARM64 |
-| ☕ Lite NET8 x64 | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | Lite compatible con NET8; requiere .NET 8 Desktop Runtime x64 |
-| ☕ Lite NET8 ARM64 (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Lite compatible con NET8; requiere .NET 8 Desktop Runtime ARM64 |
 | 🛡️ Legacy x64 (Sin .NET 8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP |
+| ⚡ Lite ARM64 (.NET 10) (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | Ejecutable portátil ARM64; requiere .NET 10 Desktop Runtime ARM64 |
 | 🔄 Microsoft Store (actualizaciones de Store) | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | El paquete de Store con .NET 10 requiere .NET 10 Desktop Runtime x64. Consulta la página de Store para ver la versión disponible actualmente; para Windows 10/11 de 64 bits. |
+| 📦 Lite NET8 x64 (Descatalogado) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | Edición descatalogada (no disponible en versiones futuras); requiere .NET 8 Desktop Runtime x64; migre a .NET 10 o Legacy |
+| 📦 Lite NET8 ARM64 (Descatalogado) (experimental) | [Un solo EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Edición descatalogada (no disponible en versiones futuras); requiere .NET 8 Desktop Runtime ARM64; migre a .NET 10 |
 
 > [!NOTE]
-> Requisitos de entorno: La edición estándar Lite requiere [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); la edición NET8 requiere [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) (mantenimiento finaliza tras noviembre de 2026; se recomienda migrar a .NET 10 o Legacy). La edición Legacy aprovecha el .NET Framework 4.8 integrado en Windows y no necesita instalación adicional.
+> Requisitos de entorno: La edición estándar Lite requiere [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy aprovecha el .NET Framework 4.8 integrado sin descargas adicionales. Las ediciones compatibles con NET8 ([.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)) se han descatalogado y no se ofrecerán en futuras versiones; se recomienda migrar a .NET 10 o Legacy.
 
 ### 🏁 Inicio rápido en 3 pasos
 
@@ -93,7 +93,7 @@ A: ¡Sí! El enrutamiento de audio por aplicación es conservado de forma nativa
 
 **Q: ¿Qué runtime requiere cada edición?**
 
-A: Lite estándar requiere .NET 10 Desktop Runtime; Lite NET8 requiere .NET 8. Legacy no necesita un paquete .NET Desktop Runtime adicional y utiliza .NET Framework 4.8. El paquete Store actual requiere .NET 10 Desktop Runtime x64.
+A: Lite estándar requiere .NET 10 Desktop Runtime; Legacy no necesita un paquete adicional y utiliza .NET Framework 4.8. El paquete Store actual requiere .NET 10 Desktop Runtime x64. Las versiones anteriores de NET8 se han descatalogado y no se ofrecerán en adelante.
 
 **Q: ¿Consume CPU o batería mantener SonicRoute abierto en segundo plano?**
 
