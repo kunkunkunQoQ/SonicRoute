@@ -1,6 +1,7 @@
 param([switch]$Publish, [ValidatePattern('^[A-Za-z0-9_-]+$')][string]$OutputName = 'SonicRoute-Android-Perf-x64', [switch]$Direct,
     [ValidateSet('.pending','.next')][string]$StagingSlot = '.pending')
 $ErrorActionPreference = 'Stop'
+$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $labRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $env:DOTNET_CLI_HOME = Join-Path $labRoot 'outputs\dotnet-home'
 $env:NUGET_PACKAGES = Join-Path $labRoot 'outputs\nuget-packages'
@@ -11,10 +12,10 @@ $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
 $env:DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE = 'true'
 . (Join-Path $PSScriptRoot '../Updates/ReleaseLayout.ps1')
 $dotnetExe = Resolve-ReleaseDotnet
-$project = Join-Path $labRoot 'SonicRoute\SonicRoute\SonicRoute.csproj'
+$project = Join-Path $repositoryRoot 'SonicRoute\SonicRoute.csproj'
 $log = Join-Path $labRoot ('outputs\build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 function Get-LabSourceInputs {
-    $repo = Join-Path $labRoot 'SonicRoute'
+    $repo = $repositoryRoot
     $paths = & git -C $repo -c core.quotepath=false ls-files --cached --others --exclude-standard -- SonicRoute SonicRoute.Core SonicRoute.AndroidAudio StoreInterop build Directory.Build.props Directory.Build.targets AndroidRuntime
     if ($LASTEXITCODE -ne 0) { throw 'Cannot record build inputs.' }
     foreach ($relative in ($paths | Sort-Object -Unique)) {

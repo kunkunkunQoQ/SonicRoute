@@ -1,10 +1,10 @@
 # Android Lab 构建与检查
 
-仅在物理隔离的 SonicRoute-Android-Lab 内执行。原产品、Android研究源及Lab参考副本只读；所有产物/临时文件在Lab的outputs。Lab根同名脚本转发到本目录；不要重跑初始化脚本覆盖已有树。当前仅维护 .NET 10，停止 .NET 8 更新和构建检查，旧产物不删除。
+源码仓库可以使用任意目录名（本地当前为“当前项目”）。脚本从自身位置定位仓库；仓库的父目录是工作区容器，其下 `outputs` 保存产物与检查记录，`android-audio-test` 提供已有只读 SDK/原生构建参考。容器不必是 Git 仓库，不再依赖旧研究目录或名为 SonicRoute 的源码目录。不要重跑初始化脚本覆盖已有树。当前仅维护 .NET 10，停止 .NET 8 更新和构建检查，旧验收记录保留。
 
 默认构建为带手机功能、名称无 Lite 后缀的 SonicRoute；仅电脑版须显式 SonicRouteEdition=Lite，实际排除手机功能。普通发行包入口见 [EDITIONS.md](../EDITIONS.md)。本页 Build-Lab 固定选择 Full，并只由显式 --android-lab 启用实验数据和启动行为。
 
-- Build-Catalog.ps1：编译Catalog及MediaSessionBridge，使用现有只读SDK输入，新目录构建后生成JAR。
+- Build-Catalog.ps1：编译Catalog及MediaSessionBridge，使用容器内现有只读SDK输入，新目录构建后生成JAR；可用 `-ReferenceDirectory` / `-JdkBinDirectory` 指定输入和JDK。SDK哈希记录在当次输出目录，不要求第二份旧路径副本。
 - Build-VideoClient.ps1：新输出目录叠加参考四补丁与flex_resize、独立VD尺寸协议、OwnedDisplayPolicy，构建scrcpy并运行8个隐藏真实HWND自由边缘案例及最终尺寸/回收检查，输出video-client。OwnedDisplayPolicy只在支持该系统API/feature flag的Android16+可信虚拟屏请求忽略应用方向/宽高比/不可调整尺寸限制，不修改全局配置；不支持则保留标准创建路径。生产启动使用display-ime-policy=hide，手机软键盘不在虚拟屏/手机弹出，电脑SDK键盘输入保留。
 - 虚拟屏尺寸以手机主屏长短边为预算，窗口仅提供比例；复用创建时的屏幕信息，不在拖动时查询手机。私有、非presentation的自有屏幕在Android16+禁用抢夺top focus。Windows原生IME候选/组合UI开启，组合按键不重复转发；已提交Unicode经设备显式粘贴发送到目标屏，不读写电脑剪贴板，自动同步仍关闭。此Unicode路径会更新手机剪贴板，并要求应用输入框支持粘贴。原生构建附带手机预算/对齐以及IME按键配对检查；本次实机和交互验证见Lab/integration-docs/19-PHONE-WINDOW-INPUT-ISOLATION.md。
 - Build-VideoRuntime.ps1：新输出目录内下载并校验固定FFmpeg8.1/zlib1.3.2/NASM源，最小构建四DLL到video-runtime；不修改全局缓存。下载/configure/哈希有收据。

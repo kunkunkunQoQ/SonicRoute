@@ -1,13 +1,14 @@
 param([Parameter(Mandatory)][ValidatePattern('^[A-Za-z0-9_-]+$')][string]$Label,
     [string]$BaselineAppDirectory, [string]$MetricFilter)
 $ErrorActionPreference = 'Stop'
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $labRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $env:DOTNET_CLI_HOME = Join-Path $labRoot 'outputs\dotnet-home'
 $env:NUGET_PACKAGES = Join-Path $labRoot 'outputs\nuget-packages'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 . (Join-Path $PSScriptRoot '../Updates/ReleaseLayout.ps1')
 $dotnetExe = Resolve-ReleaseDotnet
-$project = Join-Path $labRoot 'SonicRoute\checks\AndroidPerformanceChecks\AndroidPerformanceChecks.csproj'
+$project = Join-Path $repositoryRoot 'checks\AndroidPerformanceChecks\AndroidPerformanceChecks.csproj'
 $output = Join-Path $labRoot ('outputs\performance-' + $Label)
 if (Test-Path -LiteralPath $output) { throw 'Performance evidence already exists; choose another label.' }
 New-Item -ItemType Directory -Path $output | Out-Null
