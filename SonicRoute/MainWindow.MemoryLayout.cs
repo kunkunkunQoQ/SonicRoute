@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using SonicRoute.Core;
 using SonicRoute.Core.Models;
 using ComboBox = System.Windows.Controls.ComboBox;
 
@@ -49,10 +50,11 @@ namespace SonicRoute
         // 一个快照共用数据项及列表，ComboBox 仍各自拥有容器和选中状态。
         private List<AppItem> GetAppCandidates(List<AudioAppInfo> apps)
         {
+            apps = apps.Where(a => !AudioService.IsInternalApplication(a.ProcessId, a.ProcessName)).ToList();
             if (!SameAutoApps(_candidateSnapshot, apps))
             {
-                var previous = _candidateItems.GroupBy(item => item.ProcessId).ToDictionary(group => group.Key, group => group.First());
-                _candidateItems = apps.Select(app => previous.TryGetValue((int)app.ProcessId, out var item)
+                var previous = _candidateItems.GroupBy(item => item.Identity).ToDictionary(group => group.Key, group => group.First());
+                _candidateItems = apps.Select(app => previous.TryGetValue(app.Identity, out var item)
                     && SameAutoApp(item.Info, app) ? item : AppItem.From(app)).ToList();
                 _candidateSnapshot = apps;
             }
@@ -60,9 +62,10 @@ namespace SonicRoute
         }
 
         private static bool SameAutoApp(AudioAppInfo a, AudioAppInfo b) =>
-            a.ProcessId == b.ProcessId && a.HasActiveSession == b.HasActiveSession
+            a.Identity == b.Identity && a.HasActiveSession == b.HasActiveSession
             && string.Equals(a.ProcessName, b.ProcessName, StringComparison.Ordinal)
             && string.Equals(a.DisplayName, b.DisplayName, StringComparison.Ordinal)
+            && string.Equals(a.SourceLabel, b.SourceLabel, StringComparison.Ordinal)
             && string.Equals(a.IconPath, b.IconPath, StringComparison.Ordinal);
 
         private void BindAutoAppCandidates(ComboBox combo, string? processName)

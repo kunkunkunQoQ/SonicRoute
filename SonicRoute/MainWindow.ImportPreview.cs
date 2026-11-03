@@ -22,7 +22,7 @@ namespace SonicRoute
                     .Concat(config.HiddenOutputDevices ?? new()).Concat(config.HiddenInputDevices ?? new())
                     .Distinct(StringComparer.OrdinalIgnoreCase);
                 int missingDevices = deviceChoices.Count(id => !AudioService.IsSystemDefault(id) && !devices.Contains(id));
-                var apps = new HashSet<string>(AudioService.GetApps().Select(app => app.ProcessName ?? ""), StringComparer.OrdinalIgnoreCase);
+                var apps = new HashSet<string>(ApplicationAudio.GetApps().Select(app => app.ProcessName ?? ""), StringComparer.OrdinalIgnoreCase);
                 var appChoices = (config.AppNames?.Keys ?? Enumerable.Empty<string>())
                     .Concat(config.AppIcons?.Keys ?? Enumerable.Empty<string>()).Concat(config.HiddenPanelApps ?? new())
                     .Concat(config.DisabledAutoSwitchApps ?? new());

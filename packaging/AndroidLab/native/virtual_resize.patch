@@ -1,0 +1,233 @@
+--- a/app/src/control_msg.h
++++ b/app/src/control_msg.h
+@@ -43,6 +43,7 @@
+     SC_CONTROL_MSG_TYPE_OPEN_HARD_KEYBOARD_SETTINGS,
+     SC_CONTROL_MSG_TYPE_START_APP,
+     SC_CONTROL_MSG_TYPE_RESET_VIDEO,
++    SC_CONTROL_MSG_TYPE_RESIZE_DISPLAY,
+ };
+ 
+ enum sc_copy_key {
+@@ -111,6 +112,7 @@
+         struct {
+             char *name;
+         } start_app;
++        struct { uint16_t width, height; } resize_display;
+     };
+ };
+ 
+--- a/app/src/control_msg.c
++++ b/app/src/control_msg.c
+@@ -1,4 +1,5 @@
+ #include "control_msg.h"
++#include "resize_packet.h"
+ 
+ #include <assert.h>
+ #include <inttypes.h>
+@@ -178,6 +179,8 @@
+         case SC_CONTROL_MSG_TYPE_UHID_DESTROY:
+             sc_write16be(&buf[1], msg->uhid_destroy.id);
+             return 3;
++        case SC_CONTROL_MSG_TYPE_RESIZE_DISPLAY:
++            return sr_resize_serialize(buf, msg->resize_display.width, msg->resize_display.height);
+         case SC_CONTROL_MSG_TYPE_START_APP: {
+             size_t len = write_string_tiny(&buf[1], msg->start_app.name, 255);
+             return 1 + len;
+@@ -315,6 +318,9 @@
+         case SC_CONTROL_MSG_TYPE_START_APP:
+             LOG_CMSG("start app \"%s\"", msg->start_app.name);
+             break;
++        case SC_CONTROL_MSG_TYPE_RESIZE_DISPLAY:
++            LOG_CMSG("resize owned display %ux%u", msg->resize_display.width, msg->resize_display.height);
++            break;
+         case SC_CONTROL_MSG_TYPE_RESET_VIDEO:
+             LOG_CMSG("reset video");
+             break;
+--- a/app/src/controller.h
++++ b/app/src/controller.h
+@@ -20,6 +20,8 @@
+     sc_mutex mutex;
+     sc_cond msg_cond;
+     bool stopped;
++    bool resize_pending;
++    struct sc_control_msg latest_resize;
+     struct sc_control_msg_queue queue;
+     struct sc_receiver receiver;
+ 
+--- a/app/src/controller.c
++++ b/app/src/controller.c
+@@ -58,6 +58,7 @@
+ 
+     controller->control_socket = control_socket;
+     controller->stopped = false;
++    controller->resize_pending = false;
+ 
+     assert(cbs && cbs->on_ended);
+     controller->cbs = cbs;
+@@ -99,6 +100,16 @@
+     bool pushed = false;
+ 
+     sc_mutex_lock(&controller->mutex);
++    if (msg->type == SC_CONTROL_MSG_TYPE_RESIZE_DISPLAY) {
++        if (!controller->stopped) {
++            controller->latest_resize = *msg;
++            controller->resize_pending = true;
++            sc_cond_signal(&controller->msg_cond);
++            pushed = true;
++        }
++        sc_mutex_unlock(&controller->mutex);
++        return pushed;
++    }
+     size_t size = sc_vecdeque_size(&controller->queue);
+     if (size < SC_CONTROL_MSG_QUEUE_LIMIT) {
+         bool was_empty = sc_vecdeque_is_empty(&controller->queue);
+@@ -152,7 +163,7 @@
+     for (;;) {
+         sc_mutex_lock(&controller->mutex);
+         while (!controller->stopped
+-                && sc_vecdeque_is_empty(&controller->queue)) {
++                && sc_vecdeque_is_empty(&controller->queue) && !controller->resize_pending) {
+             sc_cond_wait(&controller->msg_cond, &controller->mutex);
+         }
+         if (controller->stopped) {
+@@ -162,8 +173,14 @@
+             break;
+         }
+ 
+-        assert(!sc_vecdeque_is_empty(&controller->queue));
+-        struct sc_control_msg msg = sc_vecdeque_pop(&controller->queue);
++        struct sc_control_msg msg;
++        if (!sc_vecdeque_is_empty(&controller->queue)) {
++            msg = sc_vecdeque_pop(&controller->queue);
++        } else {
++            assert(controller->resize_pending);
++            msg = controller->latest_resize;
++            controller->resize_pending = false;
++        }
+         sc_mutex_unlock(&controller->mutex);
+ 
+         bool eos;
+--- a/server/src/main/java/com/genymobile/scrcpy/control/ControlMessage.java
++++ b/server/src/main/java/com/genymobile/scrcpy/control/ControlMessage.java
+@@ -25,6 +25,7 @@
+     public static final int TYPE_OPEN_HARD_KEYBOARD_SETTINGS = 15;
+     public static final int TYPE_START_APP = 16;
+     public static final int TYPE_RESET_VIDEO = 17;
++    public static final int TYPE_RESIZE_DISPLAY = 18;
+ 
+     public static final long SEQUENCE_INVALID = 0;
+ 
+@@ -54,6 +55,19 @@
+     private int vendorId;
+     private int productId;
+ 
++    private int resizeWidth;
++    private int resizeHeight;
++    public int getResizeWidth() { return resizeWidth; }
++    public int getResizeHeight() { return resizeHeight; }
++    public static ControlMessage createResizeDisplay(int width, int height) throws ControlProtocolException {
++        if (width < 240 || height < 240 || width > 8192 || height > 8192 || (width & 7) != 0 || (height & 7) != 0) {
++            throw new ControlProtocolException("Invalid virtual display resize");
++        }
++        ControlMessage msg = new ControlMessage();
++        msg.type = TYPE_RESIZE_DISPLAY; msg.resizeWidth = width; msg.resizeHeight = height;
++        return msg;
++    }
++
+     private ControlMessage() {
+     }
+ 
+--- a/server/src/main/java/com/genymobile/scrcpy/control/ControlMessageReader.java
++++ b/server/src/main/java/com/genymobile/scrcpy/control/ControlMessageReader.java
+@@ -54,6 +54,8 @@
+                 return parseUhidInput();
+             case ControlMessage.TYPE_UHID_DESTROY:
+                 return parseUhidDestroy();
++            case ControlMessage.TYPE_RESIZE_DISPLAY:
++                return ControlMessage.createResizeDisplay(dis.readUnsignedShort(), dis.readUnsignedShort());
+             case ControlMessage.TYPE_START_APP:
+                 return parseStartApp();
+             default:
+--- a/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
++++ b/server/src/main/java/com/genymobile/scrcpy/control/Controller.java
+@@ -328,6 +328,9 @@
+             case ControlMessage.TYPE_START_APP:
+                 startAppAsync(msg.getText());
+                 break;
++            case ControlMessage.TYPE_RESIZE_DISPLAY:
++                if (surfaceCapture != null) surfaceCapture.requestResize(msg.getResizeWidth(), msg.getResizeHeight());
++                break;
+             case ControlMessage.TYPE_RESET_VIDEO:
+                 resetVideo();
+                 break;
+--- a/server/src/main/java/com/genymobile/scrcpy/video/SurfaceCapture.java
++++ b/server/src/main/java/com/genymobile/scrcpy/video/SurfaceCapture.java
+@@ -93,4 +93,8 @@
+      * The capture implementation is free to ignore the request and do nothing.
+      */
+     public abstract void requestInvalidate();
++
++    // Only an owned NewDisplayCapture implements this. Physical-screen/camera capture ignores it.
++    public void requestResize(int width, int height) { }
++
+ }
+--- a/server/src/main/java/com/genymobile/scrcpy/video/NewDisplayCapture.java
++++ b/server/src/main/java/com/genymobile/scrcpy/video/NewDisplayCapture.java
+@@ -62,12 +62,14 @@
+     private final java.util.List<String> audioIgnoreApps;
+     private final java.util.List<String> audioFilterApps;
+ 
+-    private VirtualDisplay virtualDisplay;
++    private volatile VirtualDisplay virtualDisplay;
++    private final Object resizeLock = new Object();
++    private int requestedWidth, requestedHeight;
+     private Size videoSize;
+     private Size displaySize; // the logical size of the display (including rotation)
+     private Size physicalSize; // the physical size of the display (without rotation)
+ 
+-    private int dpi;
++    private volatile int dpi;
+ 
+     public NewDisplayCapture(VirtualDisplayListener vdListener, Options options) {
+         this.vdListener = vdListener;
+@@ -374,9 +376,11 @@
+         stopAppMonitor();
+         displaySizeMonitor.stopAndRelease();
+ 
+-        if (virtualDisplay != null) {
+-            virtualDisplay.release();
+-            virtualDisplay = null;
++        synchronized (resizeLock) {
++            if (virtualDisplay != null) {
++                virtualDisplay.release();
++                virtualDisplay = null;
++            }
+         }
+     }
+ 
+@@ -398,6 +402,25 @@
+     }
+ 
+     @Override
++    public void requestResize(int width, int height) {
++        if (width < 240 || height < 240 || width > 8192 || height > 8192) return;
++        synchronized (resizeLock) {
++            VirtualDisplay owned = virtualDisplay;
++            if (owned == null || owned.getDisplay().getDisplayId() <= 0) return;
++            if (requestedWidth == width && requestedHeight == height) return;
++            try {
++                // Resize the real owned display. DisplaySizeMonitor waits for the OS-reported
++                // size, then resets the encoder; start() publishes its matching PositionMapper.
++                owned.resize(width, height, dpi);
++                requestedWidth = width; requestedHeight = height;
++                Ln.d("Owned virtual display resize requested: " + width + "x" + height);
++            } catch (RuntimeException e) {
++                Ln.w("Could not resize owned virtual display", e);
++            }
++        }
++    }
++
++    @Override
+     public void requestInvalidate() {
+         invalidate();
+     }

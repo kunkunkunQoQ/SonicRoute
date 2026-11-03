@@ -189,7 +189,7 @@ try {
             Require ($index -gt $last) "Missing or misordered section: $heading";$last=$index
         }
         Require ($notes.Contains('### 1. 新增功能与特性') -and $notes.Contains('### 4. 其他变更') -and $notes.Contains('docs: usage clarification')) 'Detailed groups dropped non-feature commits'
-        foreach($asset in @('Lite-x64.exe','Lite-arm64.exe','Lite-NET8-x64.exe','Lite-NET8-arm64.exe','Legacy-x64.zip')){
+        foreach($asset in @('x64.zip','arm64.zip','Lite-x64.exe','Lite-arm64.exe','Legacy-x64.zip')){
             Require ($notes.Contains("https://github.com/example/SonicRoute/releases/download/v2.34/SonicRoute-v2.34-$asset")) 'Download link has a stale version/repository'
         }
         Require (!$notes.Contains('v1.27') -and $notes.Contains('MSIX 不内置运行时') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承')) 'Copied old version facts or overstated upgrade guarantees'
@@ -253,10 +253,14 @@ try {
     foreach($name in @($golden.Keys)){Case "missing asset $name" {$dir=Fixture;Remove-Item -LiteralPath (Join-Path $dir $name);Reject {Assert-LocalArtifacts $dir $version} 'exactly the seven'}}
     Case 'unexpected asset rejected' {$dir=Fixture;Set-Content "$dir/extra.ps1" 'untrusted';Reject {Assert-LocalArtifacts $dir $version} 'exactly the seven'}
     Case 'extra directory rejected' {$dir=Fixture;New-Item -ItemType Directory "$dir/nested"|Out-Null;Reject {Assert-LocalArtifacts $dir $version} 'exactly the seven'}
-    Case 'changed bytes without updated checksums' {$dir=Fixture;[IO.File]::AppendAllText("$dir/SonicRoute-v$version-Lite-NET8-x64.exe",'tampered');Reject {Assert-LocalArtifacts $dir $version} 'Hash mismatch'}
-    Case 'hash-consistent non-PE rejected' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-NET8-x64.exe";[IO.File]::WriteAllText((Join-Path $dir $asset),'not an executable');Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'version/edition|PE'}
-    Case 'real ARM64 cannot masquerade as x64' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-NET8-x64.exe";Copy-Item "$dir/SonicRoute-v$version-Lite-NET8-arm64.exe" (Join-Path $dir $asset) -Force;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'PE architecture'}
-    Case 'NET10 cannot masquerade as NET8' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-NET8-x64.exe";Copy-Item "$dir/SonicRoute-v$version-Lite-x64.exe" (Join-Path $dir $asset) -Force;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'version/edition/runtime'}
+    Case 'changed bytes without updated checksums' {$dir=Fixture;[IO.File]::AppendAllText("$dir/SonicRoute-v$version-Lite-x64.exe",'tampered');Reject {Assert-LocalArtifacts $dir $version} 'Hash mismatch'}
+    Case 'hash-consistent non-PE rejected' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-x64.exe";[IO.File]::WriteAllText((Join-Path $dir $asset),'not an executable');Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'version/edition|PE'}
+    Case 'real ARM64 cannot masquerade as x64' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-x64.exe";Copy-Item "$dir/SonicRoute-v$version-Lite-arm64.exe" (Join-Path $dir $asset) -Force;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'PE architecture'}
+    Case 'full executable cannot masquerade as Lite' {
+        $dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$asset="SonicRoute-v$version-Lite-x64.exe"
+        Copy-Item -LiteralPath "$dir/SonicRoute-v$version-x64.exe" -Destination (Join-Path $dir $asset) -Force
+        Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'version/edition/runtime'
+    }
     Case 'Protocol 1 refused for release matrix' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.protocolVersion=1;Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'schema/protocol'}
     Case 'string Protocol refused like client' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.protocolVersion='2';Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'schema/protocol'}
     Case 'duplicate package refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[1]=$m.packages[0];Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'Duplicate package'}
@@ -265,8 +269,8 @@ try {
     Case 'incorrect individual file hash refused' {$dir=Fixture;$m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;$m.packages[4].files[0].sha256='0'*64;Save-Manifest $dir $m;Reject {Assert-LocalArtifacts $dir $version} 'per-file path'}
     Case 'duplicate checksum line refused' {$dir=Fixture;Add-Content "$dir/SHA256SUMS.txt" (Get-Content "$dir/SHA256SUMS.txt"|Select-Object -First 1);Reject {Assert-LocalArtifacts $dir $version} 'duplicate SHA256SUMS'}
     Case 'embedded runtime dependency actually verified' {
-        $dir=Fixture;$asset="SonicRoute-v$version-Lite-NET8-x64.exe";$path=Join-Path $dir $asset
-        $config=[SonicRouteReleaseBundle]::Read($path);$replacement=$config.Replace('net8.0','net9.0').Replace('8.0.0','9.0.0')
+        $dir=Fixture;$asset="SonicRoute-v$version-Lite-x64.exe";$path=Join-Path $dir $asset
+        $config=[SonicRouteReleaseBundle]::Read($path);$replacement=$config.Replace('net10.0','net11.0').Replace('10.0.0','11.0.0')
         $bytes=[IO.File]::ReadAllBytes($path);$offset=[Text.Encoding]::GetEncoding(28591).GetString($bytes).IndexOf($config,[StringComparison]::Ordinal)
         Require ($offset -ge 0 -and $replacement.Length -eq $config.Length -and $replacement -ne $config) 'Invalid runtime fixture'
         $changed=[Text.Encoding]::UTF8.GetBytes($replacement);[array]::Copy($changed,0,$bytes,$offset,$changed.Length);[IO.File]::WriteAllBytes($path,$bytes)
@@ -276,7 +280,7 @@ try {
         $dir=Fixture;$asset="SonicRoute-v$version-Legacy-x64.zip";$path=Join-Path $dir $asset
         $zip=[IO.Compression.ZipFile]::Open($path,[IO.Compression.ZipArchiveMode]::Update)
         try{$e=$zip.CreateEntry('../config.json');$writer=[IO.StreamWriter]::new($e.Open());try{$writer.Write('unsafe')}finally{$writer.Dispose()}}finally{$zip.Dispose()}
-        $m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'Unsafe or unknown Legacy ZIP entry'
+        $m=Get-Content "$dir/SonicRoute-update.json" -Raw|ConvertFrom-Json;Refresh-Package $dir $m $asset;Reject {Assert-LocalArtifacts $dir $version} 'Unsafe or unknown ZIP entry'
     }
     Case 'receipt binds actual assets and source tree' {
         $receiptDir=Join-Path $harnessRoot 'receipt';New-Item -ItemType Directory $receiptDir|Out-Null

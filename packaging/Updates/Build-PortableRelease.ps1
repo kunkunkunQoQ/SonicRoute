@@ -19,11 +19,12 @@ try {
     & $dotnet build "$root/SonicRoute.sln" -c Release --nologo
     if($LASTEXITCODE -ne 0){throw 'Solution Release build failed.'}
     foreach($variant in $matrix){
-        if($variant.Edition -eq 'Lite'){
-            $destination=Join-Path $output "lite-$($variant.Framework)-$($variant.Architecture)"
+        if($variant.Edition -in @('Lite','Full')){
+            $destination=Join-Path $output "$($variant.Edition.ToLowerInvariant())-$($variant.Framework)-$($variant.Architecture)"
             Write-Host "Publishing $($variant.Asset) ($($variant.Framework), win-$($variant.Architecture))..."
-            & $dotnet publish "$root/SonicRoute/SonicRoute.csproj" -c Release -f $variant.Framework -r "win-$($variant.Architecture)" "-p:PublishProfile=win-$($variant.Architecture)" -o $destination --nologo
+            & $dotnet publish "$root/SonicRoute/SonicRoute.csproj" -c Release -f $variant.Framework -r "win-$($variant.Architecture)" "-p:SonicRouteEdition=$($variant.Edition)" "-p:PublishProfile=win-$($variant.Architecture)" -o $destination --nologo
             if($LASTEXITCODE -ne 0){throw "Publish failed: $($variant.Asset)"}
+            if (Test-Path -LiteralPath (Join-Path $destination 'AndroidRuntime')) { throw 'Single-EXE publish contains obsolete loose phone components.' }
             Copy-Item -LiteralPath (Join-Path $destination 'SonicRoute.exe') -Destination (Join-Path $assets $variant.Asset)
         } else {
             $destination=Join-Path $output 'legacy-x64'

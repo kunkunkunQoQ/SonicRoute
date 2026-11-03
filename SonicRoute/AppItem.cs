@@ -11,6 +11,8 @@ namespace SonicRoute
         public required AudioAppInfo Info { get; init; }
         public int ProcessId => (int)Info.ProcessId;
         public string ProcessName => Info.ProcessName ?? "";
+        public string Identity => Info.Identity;
+        public string Subtitle => Info.SourceLabel ?? ProcessName;
         public string Label => AppDisplayName.Get(Info);
 
         private ImageSource? _icon;
@@ -127,7 +129,9 @@ namespace SonicRoute
             bool queued = false;
             try
             {
-                var icon = AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
+                var icon = Info.IsExternal
+                    ? AppIconService.GetCustomIcon(ProcessName) ?? AppIconService.DecodePng(Info.ExternalIconPng)
+                    : AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
                 if (icon == null || cancellation.IsCancellationRequested) return;
                 var disp = System.Windows.Application.Current?.Dispatcher;
                 if (disp != null && !disp.CheckAccess())

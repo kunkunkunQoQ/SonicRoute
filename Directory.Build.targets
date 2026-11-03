@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup Condition="'$(SonicRouteEdition)' == 'Full' and '$(TargetFramework)' == 'net10.0-windows'">
+    <DefineConstants>$(DefineConstants);SONICROUTE_PHONE</DefineConstants>
+  </PropertyGroup>
+  <Target Name="ValidateSonicRouteEdition" BeforeTargets="PrepareForBuild"
+          Condition="'$(SonicRouteEdition)' != 'Full' and '$(SonicRouteEdition)' != 'Lite'">
+    <Error Text="SonicRouteEdition must be Full or Lite." />
+  </Target>
+  <Target Name="RejectPhoneFilesInLiteOutput" BeforeTargets="PrepareForPublish"
+          Condition="'$(MSBuildProjectName)' == 'SonicRoute' and '$(SonicRouteEdition)' == 'Lite'">
+    <Error Condition="Exists('$(PublishDir)AndroidRuntime') or Exists('$(PublishDir)SonicRoute.AndroidAudio.dll')"
+           Text="Lite output contains phone files from another build. Choose the separate Lite output directory." />
+  </Target>
+</Project>

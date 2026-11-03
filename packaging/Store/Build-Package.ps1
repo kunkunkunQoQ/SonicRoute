@@ -1,5 +1,5 @@
 param(
-    [string]$PublishDirectory=(Join-Path $PSScriptRoot '../../dist/publish/win-x64'),
+    [string]$PublishDirectory=(Join-Path $PSScriptRoot '../../dist/publish/Full/win-x64'),
     [string]$OutputDirectory,
     [string]$PackageVersion,
     [string]$SdkDirectory
@@ -22,12 +22,12 @@ if($version.Major -gt 65535 -or $version.Minor -gt 65535 -or $version.Build -gt 
 $publish=[IO.Path]::GetFullPath($PublishDirectory)
 $output=[IO.Path]::GetFullPath($OutputDirectory)
 $exe=Join-Path $publish 'SonicRoute.exe'
-if(-not (Test-Path -LiteralPath $exe)){throw 'Publish the Lite x64 single-file application first.'}
+if(-not (Test-Path -LiteralPath $exe)){throw 'Publish the Full x64 single-file application first.'}
 if(Test-Path -LiteralPath $output){throw 'Use a new output directory; existing packages are retained.'}
-# Store is the default NET10 x64 edition. Reject a stale NET8/ARM64 publish directory
+# Store always uses the phone-enabled Full NET10 x64 edition. Reject Lite/NET8/ARM64 inputs
 # before creating any package files; use the same read-only identity validator as portable releases.
 . "$PSScriptRoot/../Updates/ReleaseLayout.ps1"
-Assert-ReleaseExecutable $exe 'x64' 'Lite' 'net10' $PackageVersion
+Assert-ReleaseExecutable $exe 'x64' 'Full' 'net10' $PackageVersion
 if(-not $SdkDirectory){
     $sdkRoot=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
     $sdk=Get-ChildItem -LiteralPath $sdkRoot -Directory|Where-Object {
@@ -53,7 +53,7 @@ if($LASTEXITCODE -ne 0){throw 'PRI configuration failed.'}
 if($LASTEXITCODE -ne 0){throw 'PRI generation failed.'}
 & $makepri dump /if (Join-Path $package 'resources.pri') /of (Join-Path $output 'resources-dump.xml') > (Join-Path $output 'makepri-dump.log') 2>&1
 if($LASTEXITCODE -ne 0){throw 'PRI validation dump failed.'}
-$msix=Join-Path $output ('SonicRoute-v'+$PackageVersion+'-Lite-x64-unsigned.msix')
+$msix=Join-Path $output ('SonicRoute-v'+$PackageVersion+'-x64-unsigned.msix')
 & $makeappx pack /d $package /p $msix > (Join-Path $output 'makeappx.log') 2>&1
 if($LASTEXITCODE -ne 0){throw 'MSIX packing or manifest validation failed.'}
 Write-Output $msix

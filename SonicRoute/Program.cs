@@ -10,6 +10,9 @@ namespace SonicRoute
         [STAThread]
         public static void Main(string[] args)
         {
+#if SONICROUTE_PHONE
+            AndroidLabRuntime.Initialize(ref args);
+#endif
             try
             {
                 var identity = AppRuntimeIdentity.Current;

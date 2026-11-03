@@ -38,14 +38,6 @@ It renders light/dark product controls
 offscreen. Playback state uses managed read-only fixtures; route reads target
 missing PIDs, and no real audio is written or capture state queried.
 
-`--overview-mute <image-directory>` checks the overview playback mute button in
-the actual product BAML. It covers nine languages, light/dark themes, 920/780-DIP
-widths, reuse of QuickPanelToolButton, placement left of the slider, removal of
-the device-row switches and plus/minus buttons, current-PID readback and Click,
-ignored-write failure handling, no capture-state work, close guards and the
-related hotkey/settings list. Writes use managed fake playback sessions only;
-no windows are shown and no real audio is written.
-
 Build each runtime separately (default NET10):
 
 ```powershell
@@ -118,13 +110,6 @@ empty selection and close cleanup. It uses missing-PID fixtures and an isolated
 configuration directory; it does not show windows or write real audio state.
 The saved offscreen PNGs include 96/144 raster DPI variants, not physical monitor
 DPI, DWM presentation, hardware input or whole-app performance measurements.
-
-`--overview-mute-readback` runs just the current-app overview state and click
-checks. Programmatic readback must never write audio; actual Button.OnClick
-toggles only the selected playback PID, verifies its readback and rejects an
-ignored write. Removing capture controls must leave no capture mute reads or
-writes, even with the microphone option enabled. It skips theme, language,
-layout and hotkey-list checks when those paths have not changed.
 
 `--row-loading-only` limits execution to application-row name refresh and panel
 load cancellation. It covers compact/full default titles, alias and actual

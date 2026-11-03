@@ -31,7 +31,7 @@
   <Applications>
     <Application Id="App" Executable="SonicRoute.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements DisplayName="SonicRoute"
-                          Description="Windows 10/11 按应用音频快速切换工具（轻量版）"
+                          Description="Windows 10/11 按应用音频快速切换与手机音频流转工具"
                           Square150x150Logo="Assets\Square150x150Logo.png"
                           Square44x44Logo="Assets\Square44x44Logo.png"
                           BackgroundColor="transparent" />

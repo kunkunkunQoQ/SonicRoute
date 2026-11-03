@@ -1,5 +1,6 @@
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System;
 using System.Windows.Input;
 
 namespace SonicRoute
@@ -17,6 +18,19 @@ namespace SonicRoute
             {
                 RoutedEvent = MouseLeftButtonDownEvent
             });
+        }
+    }
+
+    internal static class VolumeTrackLayout
+    {
+        internal static bool Update(Slider slider, Border? background, Border? fill)
+        {
+            if (background == null || fill == null || background.ActualWidth <= 0) return false;
+            double range = slider.Maximum - slider.Minimum;
+            double fraction = range <= 0 ? 0 : (slider.Value - slider.Minimum) / range;
+            double width = Math.Max(0, background.ActualWidth * fraction);
+            if (fill.Width != width) fill.Width = width;
+            return true;
         }
     }
 }

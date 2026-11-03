@@ -1,3 +1,7 @@
 # Count only C# in GitHub Languages; retain other files and their syntax highlighting.
 * -linguist-detectable
 *.cs linguist-detectable
+
+# Preserve copied tool binaries and upstream notices byte-for-byte.
+AndroidRuntime/* -text
+packaging/AndroidLab/video-licenses/* -text

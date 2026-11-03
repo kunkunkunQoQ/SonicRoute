@@ -10,12 +10,12 @@ using SonicRoute.Core.Models;
 namespace SonicRoute
 {
     /// <summary>
-    /// 当前应用的统一解析与共享状态：快速面板、概览、托盘滚轮、全局快捷键全部操作同一个"当前应用"。
+    /// 当前应用的统一解析与共享状态：快速面板、托盘滚轮、全局快捷键全部操作同一个"当前应用"。
     ///
     /// 规则（始终只落在"有音频会话的应用"上）：
     ///  1. 用户显式配置 last/fixed 时精确匹配上次操作 / 指定应用；
     ///  2. 直接前台应用（有音频，且非本程序自身——窗口未抢焦点时能立刻命中）；
-    ///  3. 最近一次有音频的前台应用（前台监听维护；解决面板/概览抢焦点后永远落回列表第一个的问题）；
+    ///  3. 最近一次有音频的前台应用（前台监听维护；解决面板抢焦点后永远落回列表第一个的问题）；
     ///  4. 上次操作的应用；5. 任意第一个有音频应用。
     ///
     /// 前台监听（StartForegroundWatcher）：通过前台通知记录"最近有音频的前台应用"；
@@ -27,7 +27,7 @@ namespace SonicRoute
         private static AudioAppInfo? _current;
         private static AudioAppInfo? _lastForegroundAudio;
 
-        /// <summary>共享"当前应用"（面板/概览显示、快捷键静音/切设备的目标）。变更触发 CurrentChanged。</summary>
+        /// <summary>共享"当前应用"（面板显示、快捷键静音/切设备的目标）。变更触发 CurrentChanged。</summary>
         public static event Action? CurrentChanged;
         // 原始前台变化也供自动化复用；不受音频会话、当前应用选择模式和异步音频查询影响。
         internal static event Action<int>? ForegroundChanged;
@@ -57,7 +57,7 @@ namespace SonicRoute
         private static bool SameApp(AudioAppInfo? a, AudioAppInfo? b)
         {
             if (a == null || b == null) return a == null && b == null;
-            return a.ProcessId == b.ProcessId;
+            return a.Identity == b.Identity;
         }
 
         /// <summary>在前台应用列表里匹配一个音频应用：先精确 PID，再按进程名（解决哔哩哔哩等
@@ -68,9 +68,9 @@ namespace SonicRoute
             bool Off(AudioAppInfo a) =>
                 !string.IsNullOrWhiteSpace(a.ProcessName) && disabled.Contains(a.ProcessName);
 
-            var exact = apps.FirstOrDefault(a => a.ProcessId == (uint)fgPid);
+            var exact = apps.FirstOrDefault(a => !a.IsExternal && a.ProcessId == (uint)fgPid);
             if (exact != null && !Off(exact)) return exact;
-            string? fgName = ForegroundAppService.GetProcessNameSafe(fgPid);
+            string? fgName = ApplicationAudio.ForegroundAppName(fgPid);
             if (string.IsNullOrWhiteSpace(fgName)) return null;
             return apps.FirstOrDefault(a =>
                 string.Equals(a.ProcessName, fgName, StringComparison.OrdinalIgnoreCase) && !Off(a));
@@ -109,9 +109,9 @@ namespace SonicRoute
                 if (a != null) return a;
             }
 
-            // 3) 最近一次有音频的前台应用（跳过禁用；面板/概览在前台时仍能回到用户正在用的应用）
+            // 3) 最近一次有音频的前台应用（跳过禁用；面板在前台时仍能回到用户正在用的应用）
             var last = LastForegroundAudio;
-            if (last != null && apps.Any(x => x.ProcessId == last.ProcessId) && !Off(last)) return last;
+            if (last != null && apps.Any(x => x.Identity == last.Identity) && !Off(last)) return last;
 
             // 4) 上次操作的应用；5) 兜底（跳过禁用，全部禁用时回退列表第一个）
             var byLast = ByName(cfg.LastUsedAppName);
@@ -216,7 +216,7 @@ namespace SonicRoute
                 long generation = _foregroundGeneration;
                 AudioAppInfo? app = null;
                 bool failed = false;
-                try { app = await Task.Run(() => MatchForeground(AudioService.GetApps(), fg)); }
+                try { app = await Task.Run(() => MatchForeground(ApplicationAudio.GetApps(), fg)); }
                 catch { failed = true; }
                 if (!_started || generation != _foregroundGeneration) continue;
                 if (fg != ForegroundAppService.GetForegroundProcessId())
@@ -232,7 +232,7 @@ namespace SonicRoute
         private static void ApplyForeground(AudioAppInfo app)
         {
             var prev = LastForegroundAudio;
-            if (prev != null && prev.ProcessId == app.ProcessId) return;
+            if (prev != null && prev.Identity == app.Identity) return;
             LastForegroundAudio = app;
             var cfg = ConfigService.Load();
             if (cfg.DefaultAppMode == "recent") Current = app;

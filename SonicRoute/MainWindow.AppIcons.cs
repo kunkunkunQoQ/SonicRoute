@@ -124,7 +124,7 @@ namespace SonicRoute
         {
             if (_isClosed) return;
             var items = _appItems.Concat(_candidateItems);
-            foreach (var combo in new[] { OverviewAppCombo, FixedAppCombo, AutoTriggerAppCombo }.Concat(_autoStepAppCombos))
+            foreach (var combo in new[] { FixedAppCombo, AutoTriggerAppCombo }.Concat(_autoStepAppCombos))
                 if (combo != null) items = items.Concat(combo.Items.OfType<AppItem>());
             foreach (var item in items.Distinct().Where(item => string.Equals(item.ProcessName, processName, StringComparison.OrdinalIgnoreCase)))
                 item.ReloadIcon();

@@ -22,11 +22,11 @@ namespace SonicRoute
             IsPackaged = packaged;
             string? instanceId = System.Environment.GetEnvironmentVariable("SONICROUTE_INSTANCE_ID");
             string instanceSuffix = string.IsNullOrWhiteSpace(instanceId) ? "" : "_" + instanceId.Trim();
-            string suffix = instanceSuffix + (packaged ? "_Store" : legacy ? "_Legacy" : "");
+            string suffix = instanceSuffix + (packaged ? "_Store" : legacy ? "_Legacy" : BuildIdentity.Edition == "Full" ? "_Full" : "");
             MutexName = @"Local\SonicRoute" + suffix + "_9NQZGRTPM1NT";
             ActivateSinkTitle = "SonicRoute" + suffix + "_ActivateSink";
             ActivateMessageName = "SonicRoute" + suffix + "_ActivateMain";
-            CommandEdition = (string.IsNullOrWhiteSpace(instanceId) ? "" : instanceId.Trim() + "_") + (packaged ? "Store" : legacy ? "Legacy" : "Lite");
+            CommandEdition = (string.IsNullOrWhiteSpace(instanceId) ? "" : instanceId.Trim() + "_") + (packaged ? "Store" : legacy ? "Legacy" : BuildIdentity.Edition);
         }
     }
 }

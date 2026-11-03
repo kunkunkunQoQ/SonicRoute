@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SonicRoute"
-        Title="SonicRoute"
+        Title="{x:Static local:BuildIdentity.DisplayName}"
         Width="372"
         Height="450"
         WindowStyle="None"
@@ -109,6 +109,13 @@
             </Setter>
         </Style>
 
+        <!-- Shared phone/output companion controls. -->
+        <Style x:Key="PanelCompanionToggle" TargetType="ToggleButton" BasedOn="{StaticResource RowExpandButton}">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+        </Style>
+
 <!-- 应用行音量条：简化模板（进度/圆点用 Foreground 着色，静音时反色） -->
         <Style x:Key="RowSliderStyle" TargetType="Slider">
             <Setter Property="Height" Value="32"/>
@@ -210,8 +217,8 @@
             </Grid.RowDefinitions>
 
             <!-- 标题行 -->
-            <DockPanel Grid.Row="0">
-                <TextBlock Text="SonicRoute"
+            <DockPanel x:Name="PanelHeader" Grid.Row="0">
+                <TextBlock Text="{x:Static local:BuildIdentity.DisplayName}"
                            FontSize="14" FontWeight="Bold" Foreground="{DynamicResource Theme.TextPrimary}"/>
                 <TextBlock x:Name="VersionText" FontSize="10" Foreground="{DynamicResource Theme.TextSecondary}"
                            VerticalAlignment="Center" HorizontalAlignment="Right"/>
@@ -219,10 +226,9 @@
 
             <!-- 输出设备选择 -->
             <DockPanel Grid.Row="1" Margin="0,10,0,0">
-                <ToggleButton x:Name="OutputVolumesToggle" Style="{StaticResource RowExpandButton}"
+                <ToggleButton x:Name="OutputVolumesToggle" Style="{StaticResource PanelCompanionToggle}"
                               AutomationProperties.Name="{Binding [Qp.ExpandOutputVolumes], Source={x:Static local:L10n.Instance}}"
-                              Background="{DynamicResource Theme.SurfaceBg}"
-                              DockPanel.Dock="Right" Width="30" Height="32" Margin="6,0,0,0"
+                              DockPanel.Dock="Right" Margin="6,0,0,0"
                               Content="▴" Click="OutputVolumesToggle_Click"/>
                 <ComboBox x:Name="SystemDevCombo" Style="{StaticResource RoundedComboBox}" Height="32"
                           SelectionChanged="SystemDevCombo_SelectionChanged"/>
@@ -254,18 +260,9 @@
 
             <!-- 应用列表：全部有音频的应用，每行独立音量，行右侧展开设置输出/输入设备（区域内滚动） -->
             <ScrollViewer x:Name="AppListScroll" Grid.Row="4" MinHeight="36" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled" Margin="0,0,-14,0">
+                          Background="Transparent"
+                          HorizontalScrollBarVisibility="Disabled" Margin="0,0,-14,0" Style="{StaticResource PanelEdgeScrollViewer}">
                 <!-- Keep the application viewport fixed; the shared 14-DIP scrollbar uses the right margin. -->
-                <ScrollViewer.Style>
-                    <Style TargetType="ScrollViewer">
-                        <Setter Property="Padding" Value="0,0,14,0"/>
-                        <Style.Triggers>
-                            <Trigger Property="ComputedVerticalScrollBarVisibility" Value="Visible">
-                                <Setter Property="Padding" Value="0"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </ScrollViewer.Style>
                 <ItemsControl x:Name="AppListPanel">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -274,7 +271,6 @@
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
             </ScrollViewer>
-
             <Border Grid.Row="5" Height="1" Background="{DynamicResource Theme.Border}" Margin="0,8,0,10"/>
 
             <!-- 底部操作栏：三按钮一行，永远固定在面板最底部（应用展开/收起不影响） -->

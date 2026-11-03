@@ -28,7 +28,7 @@ internal static class Program
     static string Url(string tag,string file)=>UpdateProtocol.Repository+"/releases/download/"+tag+"/"+file;
     static async Task<UpdateRelease> Fetch(Fake fake,string architecture="x64",string current="v1.25"){using var transport=new UpdateTransport(fake);return await transport.CheckAsync(UpdateProtocol.CurrentRuntime=="net48"?"Legacy":"Lite",architecture,current,CancellationToken.None);}
     static List<UpdatePackage> Matrix()=>new(){Package("net10"),Package("net10","arm64"),Package("net8"),Package("net8","arm64"),Package("net48")};
-    static async Task Run(string assets,string output)
+    static async Task Run(string assets,string output,bool subset)
     {
         var runtime=UpdateProtocol.CurrentRuntime;var all=Matrix();
         var release=await Fetch(Wire(all));Check(release.Package?.Runtime==runtime,"explicit runtime selects only current channel from all five variants");
@@ -44,15 +44,16 @@ internal static class Program
         var wrong=Package(runtime=="net10"?"net8":"net10");Reject(()=>UpdateProtocol.ValidatePackage(wrong,wrong.Edition,wrong.Architecture),"direct staging validation rejects another runtime");
         var wrongLegacy=Package("net8");wrongLegacy.Edition="Legacy";Reject(()=>UpdateProtocol.ValidatePackage(wrongLegacy,"Legacy","x64","net8"),"Legacy cannot use a modern runtime");
         var manifest=JsonSerializer.Deserialize<UpdateManifest>(File.ReadAllText(Path.Combine(assets,UpdateProtocol.ManifestName)),UpdateProtocol.Json)!;
-        Check(manifest.ProtocolVersion==2&&manifest.Packages.Count==5,"real five-package build uses protocol 2");
+        Check(manifest.ProtocolVersion==2&&(subset?manifest.Packages.Count>0:manifest.Packages.Count==5),subset?"scoped real package subset uses protocol 2":"real five-package build uses protocol 2");
         foreach(var p in manifest.Packages){
-            var incoming=Path.Combine(output,"stage-"+p.Runtime+"-"+p.Architecture);var payload=Path.Combine(assets,p.Asset);
-            if(p.Runtime==runtime){UpdateInstaller.StagePayload(p,payload,incoming,manifest.Version);Check(File.Exists(Path.Combine(incoming,"SonicRoute.exe")),"actual hash-verified package stages and PE identity validates "+p.Runtime+" "+p.Architecture);}
-            else{Reject(()=>UpdateInstaller.StagePayload(p,payload,incoming,manifest.Version),"actual other-runtime package rejected before extraction "+p.Runtime+" "+p.Architecture);Check(!Directory.Exists(incoming),"wrong-runtime rejection creates no installation directory "+p.Runtime+" "+p.Architecture);}
+            var incoming=Path.Combine(output,"stage-"+p.Edition+"-"+p.Runtime+"-"+p.Architecture);var payload=Path.Combine(assets,p.Asset);
+            string edition=runtime=="net48"?"Legacy":"Lite";
+            if(p.Runtime==runtime&&p.Edition==edition){UpdateInstaller.StagePayload(p,payload,incoming,manifest.Version);Check(File.Exists(Path.Combine(incoming,"SonicRoute.exe")),"actual hash-verified package stages and PE identity validates "+p.Edition+" "+p.Runtime+" "+p.Architecture);}
+            else{Reject(()=>UpdateInstaller.StagePayload(p,payload,incoming,manifest.Version),"actual other-edition/runtime package rejected before extraction "+p.Edition+" "+p.Runtime+" "+p.Architecture);Check(!Directory.Exists(incoming),"wrong-edition/runtime rejection creates no installation directory "+p.Edition+" "+p.Runtime+" "+p.Architecture);}
         }
         if(runtime!="net48"){
-            var other=manifest.Packages.First(p=>p.Edition=="Lite"&&p.Runtime!=runtime&&p.Architecture=="x64");var forged=JsonSerializer.Deserialize<UpdatePackage>(JsonSerializer.Serialize(other,UpdateProtocol.Json),UpdateProtocol.Json)!;forged.Runtime=runtime;
-            Reject(()=>UpdateInstaller.StagePayload(forged,Path.Combine(assets,other.Asset),Path.Combine(output,"forged-runtime"),manifest.Version),"correct hash but falsely labelled modern runtime rejected by executable description");
+            var other=manifest.Packages.First(p=>p.Edition=="Full"&&p.Architecture=="x64");var forged=JsonSerializer.Deserialize<UpdatePackage>(JsonSerializer.Serialize(other,UpdateProtocol.Json),UpdateProtocol.Json)!;forged.Edition="Lite";forged.Runtime=runtime;
+            Reject(()=>UpdateInstaller.StagePayload(forged,Path.Combine(assets,other.Asset),Path.Combine(output,"forged-edition"),manifest.Version),"correct hash but a full executable falsely labelled as Lite is rejected");
         }
         var oldPlanPackage=Package("net8");oldPlanPackage.Runtime="";Check(UpdateProtocol.PackageRuntime(oldPlanPackage)=="net8"&&UpdateProtocol.ExecutableDescription(oldPlanPackage)=="SonicRoute Lite","old NET8 plan identity remains readable for recovery");
     }
@@ -78,5 +79,5 @@ internal static class Program
         UpdateInstaller.Apply(next);UpdateInstaller.Commit(next);
         Check(package.Files.All(f=>UpdateProtocol.Hash(Path.Combine(target,f.Path))==f.Sha256)&&File.ReadAllText(Path.Combine(target,"config.json"))=="user-owned-settings"&&File.ReadAllText(Path.Combine(target,"Automation","keep.json"))=="user-rule","actual Legacy payload installs with user settings and rules preserved (direct transaction, not old client auto-update)");
     }
-    static async Task<int> Main(string[] args){Directory.CreateDirectory(args[1]);try{await Run(Path.GetFullPath(args[0]),Path.GetFullPath(args[1]));if(args.Length==3)LegacyTransaction(Path.GetFullPath(args[0]),Path.GetFullPath(args[1]),Path.GetFullPath(args[2]));File.WriteAllText(Path.Combine(args[1],"result.json"),JsonSerializer.Serialize(new{Passed=true,Runtime=UpdateProtocol.CurrentRuntime,Checks=checks,NetworkIsFake=true,ActualReleasePackagesStaged=true,HistoricalLegacyFileTransaction=args.Length==3,InstalledOrExecutedCandidate=false},UpdateProtocol.Json));Console.WriteLine("PASS "+UpdateProtocol.CurrentRuntime+" "+checks.Count);return 0;}catch(Exception e){File.WriteAllText(Path.Combine(args[1],"failure.txt"),e.ToString());Console.WriteLine(e);return 1;}}
+    static async Task<int> Main(string[] args){Directory.CreateDirectory(args[1]);try{bool subset=args.Length==3&&args[2]=="--subset";await Run(Path.GetFullPath(args[0]),Path.GetFullPath(args[1]),subset);if(args.Length==3&&!subset)LegacyTransaction(Path.GetFullPath(args[0]),Path.GetFullPath(args[1]),Path.GetFullPath(args[2]));File.WriteAllText(Path.Combine(args[1],"result.json"),JsonSerializer.Serialize(new{Passed=true,Runtime=UpdateProtocol.CurrentRuntime,Checks=checks,NetworkIsFake=true,ActualReleasePackagesStaged=true,ScopedPackageSubset=subset,HistoricalLegacyFileTransaction=args.Length==3&&!subset,InstalledOrExecutedCandidate=false},UpdateProtocol.Json));Console.WriteLine("PASS "+UpdateProtocol.CurrentRuntime+" "+checks.Count);return 0;}catch(Exception e){File.WriteAllText(Path.Combine(args[1],"failure.txt"),e.ToString());Console.WriteLine(e);return 1;}}
 }

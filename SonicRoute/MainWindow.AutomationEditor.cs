@@ -61,7 +61,7 @@ namespace SonicRoute
             var grip = new Border
             {
                 Tag = block, Width = 22, Height = 34, Background = Brushes.Transparent,
-                Cursor = System.Windows.Input.Cursors.ScrollNS, Margin = new Thickness(0, 0, 8, 0),
+                Cursor = System.Windows.Input.Cursors.Arrow, Margin = new Thickness(0, 0, 8, 0),
                 ToolTip = L10n.T("Auto.DragOrder"), VerticalAlignment = VerticalAlignment.Center
             };
             var gripContent = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

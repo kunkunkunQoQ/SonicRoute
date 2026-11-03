@@ -215,6 +215,12 @@ namespace SonicRoute.Core
         // 应用（音频会话）枚举
         // ------------------------------------------------------------------
 
+        /// <summary>本程序的音频宿主会话不作为可操作应用显示；也排除同时运行的其它实例。</summary>
+        public static bool IsInternalApplication(uint processId, string? processName) =>
+            (processId != 0 && processId == (uint)AppInfo.CurrentProcessId)
+            || string.Equals(processName, "SonicRoute", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(processName, "SonicRoute.exe", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>枚举当前有音频会话的应用（所有播放/录音设备，按 PID 去重）。带 1 秒缓存，
         /// 避免语言切换 / 快速面板 / 托盘滚轮等场景并发重复枚举导致音频子系统卡顿。
         /// 需要强制刷新时传 refresh=true。</summary>
@@ -341,7 +347,7 @@ namespace SonicRoute.Core
                         try
                         {
                             int hrPid = session.GetProcessId(out uint pid);
-                            if (hrPid < 0 || pid == 0) continue;
+                            if (hrPid < 0 || pid == 0 || IsInternalApplication(pid, null)) continue;
 
                             int hrState = session.GetState(out var state);
                             if (hrState >= 0 && state == AudioSessionState.Expired) continue;
@@ -361,6 +367,7 @@ namespace SonicRoute.Core
                                 processes[pid] = process;
                             }
                             string? processName = process.Name;
+                            if (IsInternalApplication(pid, processName)) continue;
                             // 幽灵会话：进程已不存在（任务管理器也搜不到）但会话残留未标记 Expired。
                             // 过滤掉，避免完整界面应用列表出现无法操作的 PID 空项；权限受限的
                             // 真实进程（IsProcessAlive=true）仍保留 PID 显示。

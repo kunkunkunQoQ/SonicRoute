@@ -37,9 +37,7 @@ namespace SonicRoute
                 if (!_initialDeviceLoadComplete) return;
                 ReloadDeviceDisplay();
                 if (!_config.ExperimentalMic) return;
-                if (OverviewPage.Visibility == System.Windows.Visibility.Visible)
-                    await RefreshOverviewDevicesVolumeAsync();
-                else if (AppsPage.Visibility == System.Windows.Visibility.Visible)
+                if (AppsPage.Visibility == System.Windows.Visibility.Visible)
                     await RefreshAppsSelectionAsync();
             }
             catch (OperationCanceledException) when (_isClosed) { }

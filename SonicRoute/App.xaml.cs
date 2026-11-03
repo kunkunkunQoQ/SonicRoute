@@ -20,6 +20,12 @@ namespace SonicRoute
     /// </summary>
     public partial class App : Application
     {
+        static App()
+        {
+            // No hover bubbles anywhere in the product, including disabled controls and text runs.
+            System.Windows.Controls.ToolTipService.IsEnabledProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(false));
+            System.Windows.Controls.ToolTipService.IsEnabledProperty.OverrideMetadata(typeof(FrameworkContentElement), new FrameworkPropertyMetadata(false));
+        }
         private NotifyIcon? _trayIcon;
         private MainWindow? _mainWindow;
         private QuickPanelModernWindow? _quickPanel;
@@ -113,6 +119,10 @@ namespace SonicRoute
             L10n.Instance.SetLanguage(config.Language);
             ThemeService.Apply(config.ThemeMode, config.Accent);
             ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
+            bool phoneLab = false;
+#if SONICROUTE_PHONE
+            phoneLab = AndroidLabRuntime.StartInLabMode;
+#endif
 
             if (commandMode == RuleCommandLine.Mode.Run)
             {
@@ -125,16 +135,18 @@ namespace SonicRoute
             }
 
             // 正常启动在后台登记用户级短命令，不阻塞窗口与音频预热。
-            var shortCommandHelp = L10n.T("Auto.ShortCliHelp");
-            _ = Task.Run(() => RuleCommandLine.EnsureShortCommand(shortCommandHelp));
-            // 启动自检：自启开启时 Run 键路径与当前 exe 不一致则自动修复（应对绿色版搬家/改名后自启失效）
-            if (!IsPackaged())
-                AutoStartSelfRepair(config.AutoStart);
+            if (!phoneLab)
+            {
+                var shortCommandHelp = L10n.T("Auto.ShortCliHelp");
+                _ = Task.Run(() => RuleCommandLine.EnsureShortCommand(shortCommandHelp));
+                // Lab keeps its separate configuration and never repairs the installed startup entry.
+                if (!IsPackaged()) AutoStartSelfRepair(config.AutoStart);
+            }
 
             _trayIcon = new NotifyIcon
             {
                 Icon = IconFactory.CreateAppIcon(IconFactory.IsTaskbarDark()),
-                Text = $"音跃 SonicRoute {DisplayVersion}",
+                Text = string.Empty,
                 Visible = true
             };
 
@@ -202,7 +214,7 @@ namespace SonicRoute
             // 后台预热音频会话/应用缓存，避免首次滚轮/切语言时在 UI 线程做重量级 COM 枚举
             var audioWarmup = WarmupAudioAsync();
             var startupWarmup = Task.WhenAll(foregroundWarmup, audioWarmup);
-            StartUpdates(startupWarmup);
+            if (!phoneLab) StartUpdates(startupWarmup);
             _ = ReclaimAfterWarmupAsync(startupWarmup);
             StartRuleCommandServer(audioWarmup);
 
@@ -213,7 +225,7 @@ namespace SonicRoute
                 return;
             }
             bool showMain = !config.StartMinimized;
-            if (e.Args.Contains("--panel", StringComparer.OrdinalIgnoreCase))
+            if (phoneLab || e.Args.Contains("--panel", StringComparer.OrdinalIgnoreCase))
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ToggleQuickPanel(); }));
             else if (e.Args.Contains("--main", StringComparer.OrdinalIgnoreCase))
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ShowMainWindow(); }));
@@ -583,6 +595,15 @@ namespace SonicRoute
         {
             _uiReclaimTimer?.Stop();
         }
+        internal void ReleaseClosedUiWindow(Window window)
+        {
+            // WPF's automatic MainWindow reference can otherwise retain the first closed
+            // window for the tray lifetime, even after our own window field is cleared.
+            if (ReferenceEquals(MainWindow, window)) MainWindow = null;
+            window.DataContext = null;
+            _uiWorkingSetDirty = true;
+            ScheduleUiReclaim();
+        }
 
         private void ScheduleUiReclaim()
         {
@@ -615,7 +636,9 @@ namespace SonicRoute
             _uiReclaimTimer?.Stop();
             if (_mainWindow != null || _quickPanel != null || _trayMenu != null || !ShouldReclaimIdle()
                 || Dispatcher.HasShutdownStarted) return;
-            TrimWorkingSet();
+            // Reclaim unreachable UI/image objects without paging out the whole process:
+            // live phone transports, decoders, ADB services and listeners keep their owners.
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
             _uiWorkingSetDirty = false;
         }
 
@@ -628,20 +651,6 @@ namespace SonicRoute
 
         [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
         private static extern int NativeRegisterWindowMessage(string name);
-
-        /// <summary>请求系统移出不活跃的工作集页面；不释放私有提交量，也不保证页面不会重新进入工作集。</summary>
-        private static void TrimWorkingSet()
-        {
-            try
-            {
-                using var p = System.Diagnostics.Process.GetCurrentProcess();
-                SetProcessWorkingSetSize(p.Handle, new IntPtr(-1), new IntPtr(-1));
-            }
-            catch { }
-        }
-
-        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
-        private static extern bool SetProcessWorkingSetSize(IntPtr proc, IntPtr min, IntPtr max);
 
         /// <summary>重新加载全局快捷键（设置页修改后调用）。实验模式的隐藏动作仅在"实验模式+麦克风选项"开启时注册。</summary>
         internal void ReloadHotkeys(bool force = false)
@@ -715,7 +724,7 @@ namespace SonicRoute
 
             if (action == HotkeyActions.ActResetAllApps)
             {
-                var result = await Task.Run(() => AudioService.ResetAllPersistedEndpointsChecked());
+                var result = await Task.Run(() => ApplicationAudio.ResetAllPersistedEndpointsChecked());
                 _trayWheel?.ShowOsd(L10n.T("Act.ResetAllApps"), L10n.T(result.Applied
                     ? "Act.ResetAllAppsDone" : "Act.ResetAllAppsFailed"));
                 return;
@@ -738,7 +747,7 @@ namespace SonicRoute
             {
                 var cfg = ConfigService.Load();
                 int fg = foregroundPid ?? ForegroundAppService.GetForegroundProcessId();
-                try { target = await Task.Run(() => CurrentAppService.Resolve(AudioService.GetApps(), cfg, fg)); }
+                try { target = await Task.Run(() => CurrentAppService.Resolve(ApplicationAudio.GetApps(), cfg, fg)); }
                 catch { /* 会话发现失败只影响当前应用类动作，仍给出已有的无会话反馈。 */ }
                 if (target == null) { _trayWheel?.ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoOutputSession")); return; }
             }
@@ -749,8 +758,8 @@ namespace SonicRoute
             {
                 case HotkeyActions.ActMute:
                     // 当前应用快捷键始终控制同一个会话；面板顶部按钮只控制所选系统设备。
-                    var mr = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
-                    if (mr.Applied) ApplyAppMuteReadback(pid, mr.Muted);
+                    var mr = await Task.Run(() => ApplicationAudio.ToggleMuteChecked(target!));
+                    if (mr.Applied && target?.IsExternal != true) ApplyAppMuteReadback(pid, mr.Muted);
                     _trayWheel?.ShowOsd(name, mr.Applied
                         ? (mr.Muted ? L10n.T("Ov.AppMuted") : L10n.T("Ov.AppUnmuted"))
                         : L10n.T("Ov.NoOutputSession"));
@@ -770,26 +779,26 @@ namespace SonicRoute
                     {
                         int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
                         int delta = action == HotkeyActions.ActVolUp ? step : -step;
-                        var adjusted = await Task.Run(() => SessionVolumeService.AdjustVolumePercent(pid, delta));
+                        var adjusted = await Task.Run(() => ApplicationAudio.AdjustVolumePercent(target!, delta));
                         if (adjusted.Current < 0) { _trayWheel?.ShowOsd(name, "⚠ " + L10n.T("Ov.NoOutputSession")); break; }
                         if (adjusted.Applied && adjusted.Actual >= 0)
                         {
-                            if (_quickPanel is { IsVisible: true } modern)
+                            if (target?.IsExternal != true && _quickPanel is { IsVisible: true } modern)
                                 modern.ApplyAppVolumeReadback(pid, adjusted.Actual);
-                            _trayWheel?.ShowVolumeOsd(name, adjusted.Actual, $"🔉 {adjusted.Actual}%", target: "app:" + pid);
+                            _trayWheel?.ShowVolumeOsd(name, adjusted.Actual, $"🔉 {adjusted.Actual}%", target: target!.Identity);
                         }
                         else _trayWheel?.ShowOsd(name, L10n.T("Ov.VolAdjustFail"));
                         break;
                     }
 
                 case HotkeyActions.ActSwitchOutput:
-                    string? dev = await CycleDeviceAsync(pid, EDataFlow.eRender);
+                    string? dev = await CycleDeviceAsync(target!, EDataFlow.eRender);
                     _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(dev) ? L10n.T("Ov.NoDevice") : $"🔊 {dev}");
                     break;
 
                 case HotkeyActions.ActSwitchInput:
                     // 实验模式 - 麦克风选项开启后才注册的隐藏动作：切换当前应用的录音（输入）设备
-                    string? mdev = await CycleDeviceAsync(pid, EDataFlow.eCapture);
+                    string? mdev = await CycleDeviceAsync(target!, EDataFlow.eCapture);
                     _trayWheel?.ShowOsd(name, string.IsNullOrEmpty(mdev) ? L10n.T("Ov.NoMicDevice") : $"🎤 {mdev}");
 
                     break;
@@ -856,10 +865,10 @@ namespace SonicRoute
         /// <summary>构建可见设备列表（真实保留设备，按隐藏集合过滤）。</summary>
         private static List<AudioDeviceInfo> BuildVisibleDevices(EDataFlow flow, AppConfig config)
         {
-            var devs = AudioService.GetDevices(flow);
+            var devs = flow == EDataFlow.eRender ? ApplicationAudio.GetOutputDevices() : AudioService.GetDevices(flow);
             var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
             var list = devs.Where(d => !hidden.Contains(d.Id)).ToList();
-            // 列表头部加入"系统默认输出/输入"虚拟项（与快速面板/概览一致），选中即切回跟随系统默认
+            // 列表头部加入"系统默认输出/输入"虚拟项（与快速面板一致），选中即切回跟随系统默认
             return PanelDevices.WithSystemDefault(list, flow, config);
         }
         /// <summary>设备名（自定义名优先）。</summary>
@@ -872,11 +881,13 @@ namespace SonicRoute
 
         /// <summary>在当前应用的可见设备间循环切换，返回切换到的设备名；失败/无设备返回 null。
         /// 当前"跟随系统默认"（无持久化）且默认项在列表 → 从默认项按方向切换。</summary>
-        private static Task<string?> CycleDeviceAsync(int pid, EDataFlow flow) =>
-            Task.Run(() => CycleDevice(pid, flow, previous: false));
+        private static Task<string?> CycleDeviceAsync(AudioAppInfo app, EDataFlow flow) =>
+            Task.Run(() => CycleDevice(app, flow, previous: false));
 
         // 托盘Alt滚轮复用同一切换实现；合并多个刻度只读取/写入一次设备路由。
         internal static string? CycleDevice(int pid, EDataFlow flow, bool previous, int steps = 1)
+            => CycleDevice(new AudioAppInfo { ProcessId = (uint)pid }, flow, previous, steps);
+        internal static string? CycleDevice(AudioAppInfo app, EDataFlow flow, bool previous, int steps = 1)
         {
             try
             {
@@ -884,14 +895,14 @@ namespace SonicRoute
                 var visible = BuildVisibleDevices(flow, config);
                 if (visible.Count == 0) return null;
 
-                var persisted = AudioService.GetPersistedEndpoint(pid, flow);
+                var persisted = ApplicationAudio.GetPersistedEndpoint(app, flow);
                 string? curShort = persisted == null ? null : AudioPolicyConfig.UnpackDeviceId(persisted);
                 // 跟随系统默认（无持久化）→ 位于"系统默认"虚拟项（首位）。
                 int idx = visible.FindIndex(d => string.Equals(d.Id, curShort, StringComparison.OrdinalIgnoreCase));
                 if (idx < 0 && persisted == null && AudioService.IsSystemDefault(visible[0].Id)) idx = 0;  // 仅当"系统默认"虚拟项在列表首位时（未被隐藏），从它开始循环
                 int next = PanelDevices.CycleIndex(idx, visible.Count, previous, steps);
                 var target = visible[next];
-                var r = AudioService.ApplyEndpoint(pid, flow, target.Id);
+                var r = ApplicationAudio.ApplyEndpoint(app, flow, target.Id);
                 if (!r.Success) return null;
                 return DeviceDisplayName(config, target);
             }
@@ -912,9 +923,9 @@ namespace SonicRoute
             try
             {
                 var config = ConfigService.Load();
-                var devs = AudioService.GetDevices(flow);
+                var devs = flow == EDataFlow.eRender ? ApplicationAudio.GetOutputDevices() : AudioService.GetDevices(flow);
                 var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
-                var visible = devs.Where(d => !hidden.Contains(d.Id)).ToList();
+                var visible = devs.Where(d => !hidden.Contains(d.Id) && !ApplicationAudio.IsPhoneOutputDevice(d.Id)).ToList();
                 if (visible.Count == 0) return null;
 
                 // GetDefaultDeviceId 返回完整 ID（"{0.0.0.00000000}.{...}"），需解包为短 ID 才能与设备列表比较，
@@ -947,7 +958,7 @@ namespace SonicRoute
                 var visible = BuildVisibleDevices(flow, config);
                 if (visible.Count == 0) return null;
 
-                var apps = AudioService.GetApps();
+                var apps = ApplicationAudio.GetApps();
                 var target = visible[0]; // 无参考时默认第一个可见设备
                 // 参考设备：优先用第一个有音频会话应用的实际设备（会随上次切换更新，保证连续按能循环）；
                 // 应用跟随系统默认时退回用系统默认设备。
@@ -955,7 +966,7 @@ namespace SonicRoute
                 var firstApp = apps.FirstOrDefault();
                 if (firstApp != null)
                 {
-                    var persisted = AudioService.GetPersistedEndpoint((int)firstApp.ProcessId, flow);
+                    var persisted = ApplicationAudio.GetPersistedEndpoint(firstApp, flow);
                     if (persisted != null) refShort = AudioPolicyConfig.UnpackDeviceId(persisted);
                 }
                 if (refShort == null)
@@ -970,8 +981,7 @@ namespace SonicRoute
                 int done = 0;
                 foreach (var app in apps)
                 {
-                    if (app.ProcessId <= 0) continue;
-                    var r = AudioService.ApplyEndpoint((int)app.ProcessId, flow, target.Id);
+                    var r = ApplicationAudio.ApplyEndpoint(app, flow, target.Id);
                     if (r.Success) done++;
                 }
                 if (done == 0) return null;
@@ -1006,14 +1016,15 @@ namespace SonicRoute
 
         protected override void OnExit(ExitEventArgs e)
         {
-            Updates.Dispose();
             _exiting = true;
+            AutoRuleScheduler.Shutdown();
+            AutoRuleService.Shutdown();
+            ShutdownAndroidAudio();
+            Updates.Dispose();
             _mainWindow?.FlushPendingSettings();
             ConfigService.FlushPendingSaves();
             CancelUiReclaim();
             SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
-            AutoRuleScheduler.Shutdown();
-            AutoRuleService.Shutdown();
             _ruleCommandServer?.Dispose(); _ruleCommandServer = null;
             StopBackgroundMonitoring();
             AutoRuleScheduler.FlushLogs();

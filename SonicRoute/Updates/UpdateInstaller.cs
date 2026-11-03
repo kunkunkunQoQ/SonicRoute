@@ -99,7 +99,7 @@ namespace SonicRoute.Updates
             UpdateProtocol.ValidatePackage(package, package.Edition, package.Architecture);
             UpdateProtocol.Verify(payload, package.Sha256, package.Size);
             Directory.CreateDirectory(incoming);
-            if (package.Edition == "Lite")
+            if (package.Edition is "Lite" or "Full")
                 File.Copy(payload, Path.Combine(incoming, "SonicRoute.exe"));
             else
             {
@@ -114,6 +114,7 @@ namespace SonicRoute.Updates
                         || (entry.ExternalAttributes & 0x400) != 0 || ((entry.ExternalAttributes >> 16) & 0xf000) == 0xa000)
                         throw new InvalidDataException("Unsafe ZIP entry.");
                     using var source = entry.Open();
+                    Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(incoming, file.Path))!);
                     using var destination = new FileStream(Path.Combine(incoming, file.Path), FileMode.CreateNew, FileAccess.Write, FileShare.None);
                     var buffer = new byte[65536];
                     long total = 0;
@@ -167,7 +168,7 @@ namespace SonicRoute.Updates
                     plan.Originals.Add(old);
                 }
                 // Execute our current local program as the helper; nothing downloaded is run as an installer.
-                if (package.Edition == "Lite") DurableCopy(executable, plan.Runner);
+                if (package.Edition == "Lite" || package.Edition == "Full") DurableCopy(executable, plan.Runner);
                 else
                 {
                     foreach (string name in UpdateProtocol.LegacyFiles)
@@ -191,6 +192,7 @@ namespace SonicRoute.Updates
 
         private static void DurableCopy(string source, string destination)
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             using var input = File.OpenRead(source);
             using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             input.CopyTo(output); output.Flush(true);
@@ -220,6 +222,7 @@ namespace SonicRoute.Updates
             foreach (var file in plan.Package.Files.OrderBy(f => f.Path == "SonicRoute.exe" ? 1 : 0))
             {
                 string target = Path.Combine(plan.TargetDirectory, plan.DestinationName(file.Path));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                 string incoming = Path.Combine(plan.WorkDirectory, "incoming", file.Path);
                 if (File.Exists(target)) File.Replace(incoming, target, null);
                 else File.Move(incoming, target);

@@ -145,8 +145,6 @@ internal static partial class Program
             config.HiddenPanelApps.Clear(); config.DisabledAutoSwitchApps.Clear();
             var window = new MainWindow(); windows.Add(window);
             ((RadioButton)window.FindName("NavApps")).IsChecked = true;
-            ((Grid)window.FindName("OverviewPage")).Visibility = Visibility.Collapsed;
-            ((Grid)window.FindName("AppsPage")).Visibility = Visibility.Visible;
             // Keep fixture device snapshots local; do not invoke device discovery for rendering.
             window.GetType().GetField("_inputDevicesLoaded", Instance)!.SetValue(window, true);
             var outputDevices = new List<AudioDeviceInfo> {
@@ -304,11 +302,13 @@ internal static partial class Program
                         && volumeBounds.Right <= row.ActualWidth + .5 && slider.ActualHeight == 32;
                     Check(headerFits && volumeFits && new[] { "AppsDisableAutoButton", "AppsShowInPanelButton" }.All(name => {
                         var control = (CheckBox)window.FindName(name);
-                        var border = AppCardTree((Grid)window.FindName("AppsControls")).OfType<Border>().First(b => b.Child is Grid grid && AppCardTree(grid).Contains(control));
-                        var bounds = control.TransformToAncestor(border).TransformBounds(new Rect(control.RenderSize));
-                        return control.ActualWidth == 34 && bounds.Left >= 0 && bounds.Right <= border.ActualWidth + 0.5
-                            && Math.Abs(bounds.Top + bounds.Height / 2 - border.ActualHeight / 2) <= 0.5
-                            && Math.Abs(bounds.Right - (border.ActualWidth - 13)) <= 0.5;
+                        if (control.Parent is not Grid cell) return false;
+                        var bounds = control.TransformToAncestor(cell).TransformBounds(new Rect(control.RenderSize));
+                        return Grid.GetColumn(control) == 1 && control.HorizontalAlignment == HorizontalAlignment.Right
+                            && control.VerticalAlignment == VerticalAlignment.Center && control.ActualWidth == 34
+                            && bounds.Left >= -0.5 && bounds.Right <= cell.ActualWidth + 0.5
+                            && Math.Abs(bounds.Top + bounds.Height / 2 - cell.ActualHeight / 2) <= 0.5
+                            && Math.Abs(bounds.Right - cell.ActualWidth) <= 0.5;
                     }), mode + " " + locale + " width=" + width + " app volume mute/slider/percentage and remaining controls fit without clipping");
                 }
             }

@@ -79,6 +79,15 @@ namespace SonicRoute.Updates
             "System.Text.Encodings.Web.dll", "System.Text.Json.dll",
             "System.Threading.Tasks.Extensions.dll", "System.ValueTuple.dll"
         };
+#if SONICROUTE_PHONE
+        internal static readonly HashSet<string> FullFiles = ReadFullFiles();
+        private static HashSet<string> ReadFullFiles()
+        {
+            using var input = typeof(UpdateProtocol).Assembly.GetManifestResourceStream("SonicRoute.FullRelease.files.json")
+                ?? throw new InvalidDataException("Missing full-edition package layout.");
+            return new HashSet<string>(JsonSerializer.Deserialize<string[]>(input)!, StringComparer.Ordinal);
+        }
+#endif
 
         internal static Version? ParseVersion(string text)
         {
@@ -135,12 +144,16 @@ namespace SonicRoute.Updates
         internal static string PackageRuntime(UpdatePackage p) => !string.IsNullOrEmpty(p.Runtime) ? p.Runtime
             : p.Edition == "Legacy" ? "net48" : "net8";
 
-        internal static string ExecutableDescription(UpdatePackage p) => "SonicRoute " + p.Edition
+        internal static string ExecutableDescription(UpdatePackage p) => (p.Edition == "Full" ? "SonicRoute" : "SonicRoute " + p.Edition)
             + (p.Runtime == "net8" ? " NET8" : "");
 
         internal static void ValidatePackage(UpdatePackage p, string edition, string architecture, string runtime = CurrentRuntime)
         {
-            if (p.Edition != edition || p.Architecture != architecture || (edition != "Lite" && edition != "Legacy")
+            bool full = false;
+#if SONICROUTE_PHONE
+            full = edition == "Full" && runtime == "net10";
+#endif
+            if (p.Edition != edition || p.Architecture != architecture || (!full && edition != "Lite" && edition != "Legacy")
                 || PackageRuntime(p) != runtime || (edition == "Lite" && runtime != "net8" && runtime != "net10")
                 || (edition == "Legacy" && runtime != "net48")
                 || (architecture != "x64" && architecture != "arm64") || (edition == "Legacy" && architecture != "x64")
@@ -151,7 +164,11 @@ namespace SonicRoute.Updates
             long total = 0;
             foreach (var file in p.Files)
             {
-                if (!LegacyFiles.Contains(file.Path) || !names.Add(file.Path) || !IsHash(file.Sha256)
+                bool allowed = LegacyFiles.Contains(file.Path);
+#if SONICROUTE_PHONE
+                if (full) allowed = FullFiles.Contains(file.Path);
+#endif
+                if (!allowed || !names.Add(file.Path) || !IsHash(file.Sha256)
                     || file.Size <= 0 || file.Size > MaxPackageSize) throw new InvalidDataException("Invalid update file.");
                 total += file.Size;
             }
@@ -159,6 +176,11 @@ namespace SonicRoute.Updates
                 || (edition == "Lite" && (p.Files.Count != 1 || !p.Asset.EndsWith(".exe", StringComparison.Ordinal)))
                 || (edition == "Legacy" && (!names.Contains("SonicRoute.Core.dll") || !p.Asset.EndsWith(".zip", StringComparison.Ordinal))))
                 throw new InvalidDataException("Incomplete update package.");
+#if SONICROUTE_PHONE
+            if (full && (!p.Asset.EndsWith(".exe", StringComparison.Ordinal) || p.Asset.Contains("Lite")
+                || names.Count != FullFiles.Count || !FullFiles.SetEquals(names)))
+                throw new InvalidDataException("Incomplete full-edition update package.");
+#endif
         }
 
         internal static void VerifyExecutable(string path, string architecture, string version)

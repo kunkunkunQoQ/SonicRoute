@@ -27,12 +27,13 @@ namespace SonicRoute
         {
             if (_isClosed) return;
             _isClosed = true;
+            ReleaseExternalAudio();
+            ReleasePhoneManagement();
             _appVolumeWriter?.Dispose(); // Commit the final value before cancelling UI-only work.
             _appVolumeWriter = null;
             ReleaseUpdateUi();
             ReleaseExecutionHistoryUi();
             ++_navigationVersion;
-            ++_overviewRefreshRequest; ++_overviewStateRequest;
             ++_appsRefreshRequest; ++_appsStateRequest;
             ++_autoRuleRefreshRequest; ++_autoDeviceRefreshRequest;
             _uiLifetime.Dispose();
@@ -41,7 +42,6 @@ namespace SonicRoute
             StopAutoRefresh();
             StateChanged -= AutoRefreshWindowStateChanged;
             IsVisibleChanged -= AutoRefreshVisibilityChanged;
-            CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
             AutoRuleService.ExecutionStateChanged -= AutoExecutionStateChanged;
             PreviewKeyDown -= MainWindow_PreviewKeyDown;
             _hwndSource?.RemoveHook(TaskbarMinimizeWndProc);
@@ -61,10 +61,9 @@ namespace SonicRoute
             _suppressAppCombo = _suppressDevCombo = _suppressVolume = true;
             _suppressSettings = _suppressFilter = _suppressRename = _suppressAutoUi = true;
             ReleaseAutomationEditor();
-            foreach (var name in new[] { "OverviewAppCombo", "OverviewOutputCombo", "OverviewInputCombo",
-                "AppsOutputCombo", "AppsInputCombo", "AppsListBox", "FixedAppCombo", "AutoTriggerAppCombo",
+            foreach (var name in new[] { "AppsOutputCombo", "AppsInputCombo", "AppsListBox", "FixedAppCombo", "AutoTriggerAppCombo",
                 "AutoRuleList", "OutputNameList", "InputNameList", "OutputFilterList", "InputFilterList",
-                "OverviewOutputQuickPanel", "OverviewInputQuickPanel", "HotkeyList" })
+                "HotkeyList" })
             {
                 if (FindName(name) is ItemsControl items)
                 {
@@ -73,7 +72,7 @@ namespace SonicRoute
                 }
             }
             _outputs = new(); _outputDisplay = new(); _inputs = new(); _inputDisplay = new();
-            _overviewApp = _appsSelected = null;
+            _appsSelected = null;
             _appItems = new(); _settingsApps = new(); _autoApps = new();
             _candidateItems = new(); _candidateSnapshot = new(); _actionChoices = null;
             _autoOutputs = _autoInputs = null;
@@ -86,6 +85,7 @@ namespace SonicRoute
             _initialDeviceLoadComplete = false;
             _recordingAction = null;
             ReleaseDeferredPages();
+            if (Application.Current is App owner) owner.ReleaseClosedUiWindow(this);
         }
     }
 }

@@ -97,14 +97,14 @@ namespace SonicRoute
                 BeginTrayDeviceRead(output);
                 try
                 {
-                    var state = await lifetime.ReadAsync(() => (Devices: AudioService.GetDevices(EDataFlow.eRender),
+                    var state = await lifetime.ReadAsync(() => (Devices: ApplicationAudio.GetOutputDevices(),
                         Default: AudioService.GetDefaultDeviceId(EDataFlow.eRender)));
                     if (!TrayMenuAlive(owner, request) || read != outputRead || !output.IsSubmenuOpen) return;
                     var config = ConfigService.Load();
                     var active = state.Devices.FirstOrDefault(d => SameTrayDevice(d.Id, state.Default));
                     TrayNamedHeader(output, active == null ? L10n.T("Dev.SystemDefaultOut")
                         : string.Format(L10n.T("Tray.SystemOutput"), DeviceDisplayName(config, active)));
-                    UpdateTrayDeviceItems(output, state.Devices.Where(d => !config.HiddenOutputDevices.Contains(d.Id)), config, state.Default,
+                    UpdateTrayDeviceItems(output, state.Devices.Where(d => !config.HiddenOutputDevices.Contains(d.Id) && !ApplicationAudio.IsPhoneOutputDevice(d.Id)), config, state.Default,
                         (id, name) => _ = RunTrayAudioActionAsync(owner, L10n.T("Dev.SystemDefaultOut"), async () =>
                         {
                             var result = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, id));
@@ -162,10 +162,11 @@ namespace SonicRoute
 
         private static bool TrayTargetAvailable(TrayAppTarget target)
         {
-            var app = AudioService.GetApps(refresh: true).FirstOrDefault(a => a.ProcessId == target.App.ProcessId
+            if (target.App.IsExternal) return ApplicationAudio.HasSession(target.App);
+            var app = ApplicationAudio.GetApps(refresh: true).FirstOrDefault(a => a.Identity == target.App.Identity
                 && string.Equals(a.ProcessName, target.App.ProcessName, StringComparison.OrdinalIgnoreCase));
             return app != null && (!target.StartTicks.HasValue || TrayProcessStart(target.Pid) == target.StartTicks)
-                && SessionVolumeService.HasSession(target.Pid);
+                && ApplicationAudio.HasSession(target.App);
         }
 
         private async Task LoadTrayAppAsync(ContextMenu owner, MenuItem parent, int foregroundPid, int request, WindowUiLifetime lifetime)
@@ -173,14 +174,14 @@ namespace SonicRoute
             try
             {
                 if (!TrayMenuAlive(owner, request)) return;
-                var apps = await lifetime.ReadAsync(AudioService.GetAppsAsync());
+                var apps = await lifetime.ReadAsync(ApplicationAudio.GetAppsAsync());
                 if (!TrayMenuAlive(owner, request)) return;
                 var data = await lifetime.ReadAsync(() =>
                 {
                     var app = CurrentAppService.Resolve(apps, ConfigService.Load(), foregroundPid);
                     if (app == null) return (Target: (TrayAppTarget?)null, Volume: -1, Muted: false);
-                    var target = new TrayAppTarget { App = app, Name = AppDisplayName.Get(app), StartTicks = TrayProcessStart((int)app.ProcessId) };
-                    return (Target: (TrayAppTarget?)target, Volume: SessionVolumeService.GetVolumePercent(target.Pid), Muted: SessionVolumeService.IsMuted(target.Pid));
+                    var target = new TrayAppTarget { App = app, Name = AppDisplayName.Get(app), StartTicks = app.IsExternal ? null : TrayProcessStart((int)app.ProcessId) };
+                    return (Target: (TrayAppTarget?)target, Volume: ApplicationAudio.GetVolumePercent(app), Muted: ApplicationAudio.IsMuted(app));
                 });
                 if (!TrayMenuAlive(owner, request)) return;
                 if (data.Target == null || data.Volume < 0)
@@ -201,12 +202,12 @@ namespace SonicRoute
                 {
                     var result = await Task.Run(() =>
                     {
-                        bool ok = SessionVolumeService.SetMute(target.Pid, !data.Muted);
-                        return (Applied: ok && SessionVolumeService.IsMuted(target.Pid) == !data.Muted,
-                            Volume: SessionVolumeService.GetVolumePercent(target.Pid));
+                        bool ok = ApplicationAudio.SetMute(target.App, !data.Muted);
+                        return (Applied: ok && ApplicationAudio.IsMuted(target.App) == !data.Muted,
+                            Volume: ApplicationAudio.GetVolumePercent(target.App));
                     });
                     if (!result.Applied) throw new InvalidOperationException();
-                    if (result.Volume >= 0)
+                    if (result.Volume >= 0 && !target.App.IsExternal)
                         _quickPanel?.ApplyAppVolumeReadback(target.Pid, result.Volume, !data.Muted);
                     ShowOsd(target.Name, L10n.T(!data.Muted ? "Ov.AppMuted" : "Ov.AppUnmuted"));
                 });
@@ -223,12 +224,12 @@ namespace SonicRoute
                     {
                         var result = await Task.Run(() =>
                         {
-                            bool ok = SessionVolumeService.SetVolumePercent(target.Pid, percent);
-                            return (Applied: ok, Actual: SessionVolumeService.GetVolumePercent(target.Pid), Muted: SessionVolumeService.IsMuted(target.Pid));
+                            bool ok = ApplicationAudio.SetVolumePercent(target.App, percent);
+                            return (Applied: ok, Actual: ApplicationAudio.GetVolumePercent(target.App), Muted: ApplicationAudio.IsMuted(target.App));
                         });
                         if (!result.Applied || result.Actual < 0) throw new InvalidOperationException();
-                        _quickPanel?.ApplyAppVolumeReadback(target.Pid, result.Actual, result.Muted);
-                        ShowVolumeOsd(target.Name, result.Actual, string.Format(L10n.T("Qp.VolOk"), result.Actual), result.Muted, "app:" + target.Pid);
+                        if (!target.App.IsExternal) _quickPanel?.ApplyAppVolumeReadback(target.Pid, result.Actual, result.Muted);
+                        ShowVolumeOsd(target.Name, result.Actual, string.Format(L10n.T("Qp.VolOk"), result.Actual), result.Muted, target.App.Identity);
                     }), staysOpenOnClick: true);
                     VolumePresets.Update(presets.Items, data.Volume, true);
                 };
@@ -251,8 +252,8 @@ namespace SonicRoute
                 BeginTrayDeviceRead(output);
                 try
                 {
-                    var state = await lifetime.ReadAsync(() => (Devices: AudioService.GetDevices(EDataFlow.eRender),
-                        Persisted: AudioService.GetPersistedEndpoint(target.Pid, EDataFlow.eRender)));
+                    var state = await lifetime.ReadAsync(() => (Devices: ApplicationAudio.GetOutputDevices(),
+                        Persisted: ApplicationAudio.GetPersistedEndpoint(target.App, EDataFlow.eRender)));
                     if (!TrayMenuAlive(owner, request) || read != version || !output.IsSubmenuOpen) return;
                     var config = ConfigService.Load();
                     string selected = state.Persisted == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(state.Persisted);
@@ -260,9 +261,9 @@ namespace SonicRoute
                     UpdateTrayDeviceItems(output, devices, config, selected,
                         (id, name) => _ = RunTrayAppActionAsync(owner, target, async () =>
                         {
-                            var result = await Task.Run(() => AudioService.ApplyEndpoint(target.Pid, EDataFlow.eRender, id));
+                            var result = await Task.Run(() => ApplicationAudio.ApplyEndpoint(target.App, EDataFlow.eRender, id));
                             if (!result.Success) throw new InvalidOperationException();
-                            _quickPanel?.RefreshAppRouteReadback(target.Pid);
+                            if (!target.App.IsExternal) _quickPanel?.RefreshAppRouteReadback(target.Pid);
                             ShowOsd(target.Name, name);
                         }));
                 }

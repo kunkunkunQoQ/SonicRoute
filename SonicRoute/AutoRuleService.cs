@@ -27,7 +27,7 @@ namespace SonicRoute
     /// - 启动程序（v1.18 起）：每个启动项独立保存路径 + 打开方式，打开方式为空 = Windows 默认方式，
     ///   非空 = 用指定 EXE 打开并把目标路径作为参数；启动模式支持「全部启动 / 随机启动一个」。
     /// </summary>
-    public static class AutoRuleService
+    public static partial class AutoRuleService
     {
         public const string HotkeyPrefix = "Rule:";
         private static readonly HashSet<string> _executingRules = new(StringComparer.Ordinal);
@@ -265,11 +265,14 @@ namespace SonicRoute
             if (_shuttingDown) return;
             _watchDispatcher ??= Dispatcher.CurrentDispatcher;
             var rules = GetWatchRules();
-            bool needsSnapshot = _hasAppStart || _hasAppExit;
+            bool needsExternal = _hasAppStart || _hasAppExit;
+            RefreshExternalWatcher(needsExternal);
+            bool needsSnapshot = rules.Any(r => (r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)
+                && !r.TriggerApp.StartsWith("android:", StringComparison.OrdinalIgnoreCase));
             bool needsForeground = _hasAppSwitch;
             bool initializeForeground = needsForeground && !_foregroundSubscribed;
             string? target = _cachedSnapshotTarget;
-            if (!needsSnapshot && !needsForeground) { StopWatcher(); return; }
+            if (!needsSnapshot && !needsForeground) { StopWatcher(keepExternal: needsExternal); return; }
             if (needsForeground && !_foregroundSubscribed)
             {
                 _lastFgPid = -1;
@@ -361,8 +364,9 @@ namespace SonicRoute
             finally { _processEventRecoveryPending = false; }
         }
 
-        private static void StopWatcher()
+        private static void StopWatcher(bool keepExternal = false)
         {
+            if (!keepExternal) RefreshExternalWatcher(false);
             ++_watchGeneration;
             _watchFallbackTimer?.Stop(); _watchFallbackTimer = null;
             if (_foregroundSubscribed) CurrentAppService.ForegroundChanged -= ForegroundChanged;
@@ -585,7 +589,7 @@ namespace SonicRoute
                 int fg = _observedForegroundPid;
                 if (fg != 0 && fg != _lastFgPid)
                 {
-                    string? name = ForegroundAppService.GetProcessNameSafe(fg);
+                    string? name = ApplicationAudio.ForegroundAppName(fg);
                     if (!string.IsNullOrWhiteSpace(name))
                     {
                         foreach (var r in rules)
@@ -746,23 +750,23 @@ namespace SonicRoute
 
                     case AutoRuleAction.SetAppVolume:
                         {
-                            return await Task.Run(() => WithApp(step.TargetApp, pid =>
-                                SessionVolumeService.SetVolumePercent(pid, MathEx.Clamp(step.Volume, 0, 100)), detail));
+                            return await Task.Run(() => WithApp(step.TargetApp, app =>
+                                ApplicationAudio.SetVolumePercent(app, MathEx.Clamp(step.Volume, 0, 100)), detail));
                         }
 
                     case AutoRuleAction.ToggleAppMute:
                         {
-                            return await Task.Run(() => WithApp(step.TargetApp, pid =>
-                                SessionVolumeService.ToggleMuteChecked(pid).Applied, detail));
+                            return await Task.Run(() => WithApp(step.TargetApp, app =>
+                                ApplicationAudio.ToggleMuteChecked(app).Applied, detail));
                         }
 
                     case AutoRuleAction.SetAppMute:
-                        return await Task.Run(() => WithApp(step.TargetApp, pid =>
-                            SessionVolumeService.SetMute(pid, step.Muted), detail));
+                        return await Task.Run(() => WithApp(step.TargetApp, app =>
+                            ApplicationAudio.SetMute(app, step.Muted), detail));
 
                     case AutoRuleAction.AdjustAppVolume:
-                        return await Task.Run(() => WithApp(step.TargetApp, pid =>
-                            SessionVolumeService.AdjustVolumePercent(pid,
+                        return await Task.Run(() => WithApp(step.TargetApp, app =>
+                            ApplicationAudio.AdjustVolumePercent(app,
                                 MathEx.Clamp(step.VolumeDelta, -100, 100)).Applied, detail));
 
                     case AutoRuleAction.SetMicrophoneMute:
@@ -790,8 +794,8 @@ namespace SonicRoute
 
                     case AutoRuleAction.SetAppInputMute:
                     case AutoRuleAction.ToggleAppInputMute:
-                        return await Task.Run(() => WithApp(step.TargetApp, pid =>
-                            SessionVolumeService.ChangeInputMuteChecked(pid,
+                        return await Task.Run(() => WithApp(step.TargetApp, app =>
+                            ApplicationAudio.ChangeInputMuteChecked(app,
                                 step.Action == AutoRuleAction.SetAppInputMute ? step.Muted : (bool?)null, token).Applied, detail), token);
 
                     case AutoRuleAction.SetCurrentAppInputMute:
@@ -800,34 +804,35 @@ namespace SonicRoute
                             return await Task.Run(() =>
                             {
                                 token.ThrowIfCancellationRequested();
-                                var current = CurrentAppService.Resolve(AudioService.GetApps(), ConfigService.Load());
+                                var current = CurrentAppService.Resolve(ApplicationAudio.GetApps(), ConfigService.Load());
                                 if (current == null)
                                 {
                                     if (detail != null) detail.Reason = "app_unavailable";
                                     return false;
                                 }
                                 int pid = (int)current.ProcessId;
-                                if (detail != null) { detail.TargetApp = current.ProcessName ?? current.Label; detail.TargetPid = pid; }
-                                return SessionVolumeService.ChangeInputMuteChecked(pid,
+                                if (detail != null)
+                                { detail.TargetApp = AppDisplayName.Get(current); detail.TargetPid = current.IsExternal ? null : (int?)pid; detail.TargetSourceId = current.ExternalSourceId; }
+                                return ApplicationAudio.ChangeInputMuteChecked(current,
                                     step.Action == AutoRuleAction.SetCurrentAppInputMute ? step.Muted : (bool?)null, token).Applied;
                             }, token);
                         }
 
                     case AutoRuleAction.SetAllAppsVolume:
                     case AutoRuleAction.AdjustAllAppsVolume:
-                        return await Task.Run(() => BatchSucceeded(SessionVolumeService.ChangeAllPlaybackVolumeChecked(
+                        return await Task.Run(() => BatchSucceeded(ApplicationAudio.ChangeAllPlaybackVolumeChecked(
                             AutoRuleActions.AdjustsVolume(step.Action) ? step.VolumeDelta : step.Volume,
                             AutoRuleActions.AdjustsVolume(step.Action), token), detail), token);
 
                     case AutoRuleAction.SetAllAppsMute:
                     case AutoRuleAction.ToggleAllAppsMute:
-                        return await Task.Run(() => BatchSucceeded(SessionVolumeService.ChangeAllPlaybackMuteChecked(
+                        return await Task.Run(() => BatchSucceeded(ApplicationAudio.ChangeAllPlaybackMuteChecked(
                             step.Action == AutoRuleAction.SetAllAppsMute ? step.Muted : (bool?)null, token), detail), token);
 
                     case AutoRuleAction.ResetAllAppRouting:
                         return await Task.Run(() =>
                         {
-                            bool applied = AudioService.ResetAllPersistedEndpointsChecked().Applied;
+                            bool applied = ApplicationAudio.ResetAllPersistedEndpointsChecked().Applied;
                             if (!applied && detail != null) detail.Reason = "reset_unconfirmed";
                             return applied;
                         }, token);
@@ -896,12 +901,13 @@ namespace SonicRoute
             return false;
         }
 
-        private static bool WithApp(string processName, Func<int, bool> action, ExecutionHistoryStep? detail = null)
+        private static bool WithApp(string processName, Func<AudioAppInfo, bool> action, ExecutionHistoryStep? detail = null)
         {
-            int pid = ResolveAppPid(processName);
-            if (pid <= 0 && detail != null) detail.Reason = "app_unavailable";
-            if (pid > 0 && detail != null) detail.TargetPid = pid;
-            return pid > 0 && action(pid);
+            var app = ResolveAppTarget(processName);
+            if (app == null && detail != null) detail.Reason = "app_unavailable";
+            if (app != null && detail != null)
+            { detail.TargetPid = app.IsExternal ? null : (int?)app.ProcessId; detail.TargetSourceId = app.ExternalSourceId; if (app.IsExternal) detail.TargetApp = AppDisplayName.Get(app); }
+            return app != null && action(app);
         }
 
         private static bool BatchSucceeded((int Succeeded, int Total) result, ExecutionHistoryStep? detail)
@@ -946,10 +952,10 @@ namespace SonicRoute
         }
 
         /// <summary>按进程名解析当前有音频会话的应用 PID（进程名不区分大小写，不含扩展名）。</summary>
-        private static int ResolveAppPid(string processName)
+        private static AudioAppInfo? ResolveAppTarget(string processName)
         {
-            if (string.IsNullOrWhiteSpace(processName)) return -1;
-            var apps = AudioService.GetApps();
+            if (string.IsNullOrWhiteSpace(processName)) return null;
+            var apps = ApplicationAudio.GetApps();
             string cleanName = NormalizeAppName(processName);
             var app = apps.FirstOrDefault(a => string.Equals(a.ProcessName, cleanName, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(a.ProcessName, processName, StringComparison.OrdinalIgnoreCase));
@@ -959,18 +965,19 @@ namespace SonicRoute
                 app = apps.FirstOrDefault(a => string.Equals(a.Label, processName, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(a.Label, cleanName, StringComparison.OrdinalIgnoreCase));
             }
-            return app == null ? -1 : (int)app.ProcessId;
+            return app;
         }
 
         private static bool ApplyEndpointForApp(string processName, EDataFlow flow, string deviceId, ExecutionHistoryStep? detail = null)
         {
-            int pid = ResolveAppPid(processName);
-            if (pid <= 0) { if (detail != null) detail.Reason = "app_unavailable"; return false; }
-            if (detail != null) detail.TargetPid = pid;
+            var app = ResolveAppTarget(processName);
+            if (app == null) { if (detail != null) detail.Reason = "app_unavailable"; return false; }
+            if (detail != null)
+            { detail.TargetPid = app.IsExternal ? null : (int?)app.ProcessId; detail.TargetSourceId = app.ExternalSourceId; if (app.IsExternal) detail.TargetApp = AppDisplayName.Get(app); }
             string target = string.IsNullOrWhiteSpace(deviceId)
                 ? AudioService.SystemDefaultDeviceId  // 空 = 还原跟随系统默认
                 : deviceId;
-            var r = AudioService.ApplyEndpoint(pid, flow, target);
+            var r = ApplicationAudio.ApplyEndpoint(app, flow, target);
             return r.Success;
         }
 

@@ -20,12 +20,12 @@ if ($args.Count -eq 1 -and $args[0] -in @('--help', '-h')) {
     exit 0
 }
 
-$editions = @('Lite', 'Legacy', 'Store')
+$editions = @('Full', 'Lite', 'Legacy', 'Store')
 $selector = ''
 if ($args.Count -eq 1) {
     $selector = [string] $args[0]
-} elseif ($args.Count -eq 2 -and $args[0] -eq '--legacy') {
-    $editions = @('Legacy')
+} elseif ($args.Count -eq 2 -and $args[0] -in @('--full','--lite','--legacy')) {
+    $editions = @(@{'--full'='Full';'--lite'='Lite';'--legacy'='Legacy'}[$args[0]])
     $selector = [string] $args[1]
 }
 if ([string]::IsNullOrWhiteSpace($selector)) { Write-ErrorResult 2 'invalid_arguments'; exit 2 }
@@ -50,7 +50,7 @@ try {
     $body.CopyTo($request, 4)
     $write = $pipe.WriteAsync($request, 0, $request.Length)
     if (-not $write.Wait(10000)) { throw 'Write timeout' }
-    $write.GetAwaiter().GetResult()
+    [void] $write.GetAwaiter().GetResult()
 
     # Completion has no fixed timeout because rules can contain long delays.
     $header = [byte[]]::new(4)

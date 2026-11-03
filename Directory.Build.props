@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <SonicRouteEdition Condition="'$(SonicRouteEdition)' == ''">Full</SonicRouteEdition>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory)..\outputs\artifacts\$(SonicRouteEdition)</ArtifactsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+</Project>

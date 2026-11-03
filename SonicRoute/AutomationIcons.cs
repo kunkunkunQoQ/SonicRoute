@@ -16,6 +16,9 @@ namespace SonicRoute
         }
 
         public static Geometry Play { get; } = Frozen("M6,3 L21,12 L6,21 Z");
+        public static Geometry Pause { get; } = Frozen("M5,3 L10,3 L10,21 L5,21 Z M14,3 L19,3 L19,21 L14,21 Z");
+        public static Geometry PreviousTrack { get; } = Frozen("M4,3 L7,3 L7,10 L20,3 L20,21 L7,14 L7,21 L4,21 Z");
+        public static Geometry NextTrack { get; } = Frozen("M4,3 L17,10 L17,3 L20,3 L20,21 L17,21 L17,14 L4,21 Z");
         public static Geometry Waiting { get; } = Frozen("M5,3 L19,3 M5,21 L19,21 M7,3 L7,7 L17,17 L17,21 M17,3 L17,7 L7,17 L7,21");
         public static Geometry Edit { get; } = Frozen("M4,16 L16,4 Q18,2 20,4 Q22,6 20,8 L8,20 L3,21 Z M14,6 L18,10");
         public static Geometry Copy { get; } = Frozen("M9,8 L19,8 Q21,8 21,10 L21,20 Q21,22 19,22 L9,22 Q7,22 7,20 L7,10 Q7,8 9,8 Z M16,4 L16,2 L3,2 L3,16 L4,16");
@@ -42,6 +45,8 @@ namespace SonicRoute
         public static Geometry Experiment { get; } = Frozen("M8,2 L16,2 M9,2 L9,9 L3,20 Q2,22 5,22 L19,22 Q22,22 21,20 L15,9 L15,2 M6,16 L18,16");
         public static Geometry Info { get; } = Frozen("M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M12,7 L12.1,7 M12,11 L12,17");
         public static Geometry Monitor { get; } = Frozen("M2,3 L22,3 L22,17 L2,17 Z M12,17 L12,22 M7,22 L17,22");
+        public static Geometry Phone { get; } = Frozen("M7,1 L17,1 Q19,1 19,3 L19,21 Q19,23 17,23 L7,23 Q5,23 5,21 L5,3 Q5,1 7,1 Z M10,3 L14,3 M10,21 L14,21");
+        public static Geometry Pin { get; } = Frozen("M8,2 L16,2 L15,8 L19,12 L19,14 L13,14 L12,23 L11,14 L5,14 L5,12 L9,8 Z");
         public static Geometry File { get; } = Frozen("M5,2 L14,2 L20,8 L20,22 L5,22 Z M14,2 L14,8 L20,8");
         public static Geometry Sun { get; } = Frozen("M12,6 A6,6 0 1 0 12,18 A6,6 0 1 0 12,6 M12,0 L12,3 M12,21 L12,24 M0,12 L3,12 M21,12 L24,12 M3,3 L5,5 M19,19 L21,21 M3,21 L5,19 M19,5 L21,3");
         public static Geometry Moon { get; } = Frozen("M17,2 A10,10 0 1 0 22,17 A10,10 0 0 1 17,2 Z");

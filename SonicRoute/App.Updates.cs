@@ -11,7 +11,6 @@ namespace SonicRoute
 
         private void StartUpdates(Task warmup)
         {
-            Updates.Changed += OnUpdateChanged;
             _ = Updates.StartAsync(warmup);
             if (UpdateBootstrap.Pending is not InstallPlan plan) return;
             // One bounded handshake after startup, not a persistent watchdog or periodic timer.
@@ -33,18 +32,6 @@ namespace SonicRoute
                 else Updates.ReadOutcome();
             }
             catch { /* Worker preserves backups unless it receives readiness. */ }
-        }
-
-        private void OnUpdateChanged(string? notes)
-        {
-            if (Dispatcher.HasShutdownStarted) return;
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                if (_exiting) return;
-                // No toast, auto-opened window, focus change or full-screen detection loop.
-                if (_trayIcon != null) _trayIcon.Text = ("SonicRoute " + DisplayVersion +
-                    (Updates.ShouldNotify ? " → " + Updates.Release!.Tag : ""));
-            }));
         }
 
         internal void ShowUpdateSettings()

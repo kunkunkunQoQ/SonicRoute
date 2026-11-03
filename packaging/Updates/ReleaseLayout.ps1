@@ -11,7 +11,7 @@ function Resolve-ReleaseDotnet([string]$DotnetPath) {
         $sdk=(& $candidate --list-sdks 2>$null|Out-String)
         if($LASTEXITCODE -eq 0 -and $sdk -match '(?m)^10\.0\.\d+ \['){return [IO.Path]::GetFullPath($candidate)}
     }
-    throw 'A stable .NET 10 SDK is required for the five-target build. Install it or supply -DotnetPath; .NET 8 packages still target the .NET 8 runtime.'
+    throw 'A stable .NET 10 SDK is required. Install it or supply -DotnetPath.'
 }
 
 function Get-ReleaseSourceState([string]$RepositoryRoot) {
@@ -27,10 +27,10 @@ function Get-ReleaseSourceState([string]$RepositoryRoot) {
 function Get-ReleaseMatrix([string]$Version) {
     if ($Version -notmatch '^\d+\.\d+(\.\d+)?$') { throw 'Expected a stable numeric version.' }
     @(
+        [pscustomobject]@{ Edition='Full'; Runtime='net10'; Framework='net10.0-windows'; Architecture='x64'; Asset="SonicRoute-v$Version-x64.exe" }
+        [pscustomobject]@{ Edition='Full'; Runtime='net10'; Framework='net10.0-windows'; Architecture='arm64'; Asset="SonicRoute-v$Version-arm64.exe" }
         [pscustomobject]@{ Edition='Lite'; Runtime='net10'; Framework='net10.0-windows'; Architecture='x64'; Asset="SonicRoute-v$Version-Lite-x64.exe" }
         [pscustomobject]@{ Edition='Lite'; Runtime='net10'; Framework='net10.0-windows'; Architecture='arm64'; Asset="SonicRoute-v$Version-Lite-arm64.exe" }
-        [pscustomobject]@{ Edition='Lite'; Runtime='net8'; Framework='net8.0-windows'; Architecture='x64'; Asset="SonicRoute-v$Version-Lite-NET8-x64.exe" }
-        [pscustomobject]@{ Edition='Lite'; Runtime='net8'; Framework='net8.0-windows'; Architecture='arm64'; Asset="SonicRoute-v$Version-Lite-NET8-arm64.exe" }
         [pscustomobject]@{ Edition='Legacy'; Runtime='net48'; Framework='net48'; Architecture='x64'; Asset="SonicRoute-v$Version-Legacy-x64.zip" }
     )
 }
@@ -83,7 +83,7 @@ function Assert-ReleaseExecutable([string]$Path, [string]$Architecture, [string]
     $parts=$Version.Split('.')
     $numeric=[version](($parts+(@('0')*(4-$parts.Count)))-join '.')
     $info=[Diagnostics.FileVersionInfo]::GetVersionInfo($Path)
-    $description="SonicRoute $Edition"+$(if($Runtime -eq 'net8'){' NET8'}else{''})
+    $description=$(if($Edition -eq 'Full'){'SonicRoute'}else{"SonicRoute $Edition"})+$(if($Runtime -eq 'net8'){' NET8'}else{''})
     if ([version]$info.FileVersion -ne $numeric -or $info.FileDescription -cne $description) { throw "Wrong product version/edition/runtime description: $Path" }
     $reader=[IO.BinaryReader]::new([IO.File]::OpenRead($Path))
     try {
@@ -116,12 +116,13 @@ function Get-ReleasePackageFiles($Variant,[string]$AssetsDirectory,[string]$Vers
     $path=Join-Path $AssetsDirectory $Variant.Asset
     $item=Get-Item -LiteralPath $path -ErrorAction Stop
     if($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -le 0 -or $item.Length -gt 128MB){throw "Invalid release package: $path"}
-    if($Variant.Edition -eq 'Lite') {
+    if($Variant.Edition -in @('Lite','Full')) {
         Assert-ReleaseExecutable $path $Variant.Architecture $Variant.Edition $Variant.Runtime $Version
         return @([ordered]@{path='SonicRoute.exe';size=$item.Length;sha256=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()})
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $allowed=@(Get-LegacyReleaseFiles);$seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $allowed=@(Get-LegacyReleaseFiles)
+    $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $archive=[IO.Compression.ZipFile]::OpenRead($path)
     $scratch=Join-Path ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($AssetsDirectory))) ('SonicRoute-release-'+[guid]::NewGuid().ToString('N')+'.exe')
     $files=@();[long]$total=0
@@ -129,7 +130,7 @@ function Get-ReleasePackageFiles($Variant,[string]$AssetsDirectory,[string]$Vers
         foreach($entry in $archive.Entries){
             $total+=$entry.Length
             if($allowed -cnotcontains $entry.FullName -or !$seen.Add($entry.FullName) -or $entry.Length -le 0 -or $total -gt 128MB -or
-               ($entry.ExternalAttributes -band 0x400) -ne 0 -or (($entry.ExternalAttributes -shr 16) -band 0xf000) -eq 0xa000){throw "Unsafe or unknown Legacy ZIP entry: $($entry.FullName)"}
+               ($entry.ExternalAttributes -band 0x400) -ne 0 -or (($entry.ExternalAttributes -shr 16) -band 0xf000) -eq 0xa000){throw "Unsafe or unknown ZIP entry: $($entry.FullName)"}
             $stream=$entry.Open();$sha=[Security.Cryptography.SHA256]::Create()
             try{$hash=([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','').ToLowerInvariant()}finally{$stream.Dispose();$sha.Dispose()}
             $files+= [ordered]@{path=$entry.FullName;size=$entry.Length;sha256=$hash}
@@ -138,7 +139,7 @@ function Get-ReleasePackageFiles($Variant,[string]$AssetsDirectory,[string]$Vers
                 Assert-ReleaseExecutable $scratch $Variant.Architecture $Variant.Edition $Variant.Runtime $Version
             }
         }
-        if($seen.Count -ne $allowed.Count){throw 'Incomplete Legacy package.'}
+        if($seen.Count -ne $allowed.Count){throw 'Incomplete release package.'}
         return $files
     } finally {$archive.Dispose();if(Test-Path -LiteralPath $scratch){Remove-Item -LiteralPath $scratch}}
 }

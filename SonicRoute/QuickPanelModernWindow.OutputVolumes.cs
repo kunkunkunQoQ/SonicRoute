@@ -83,13 +83,14 @@ namespace SonicRoute
             };
         }
 
-        private void CloseAfterFocusLeaves()
+        internal void CloseAfterFocusLeaves()
         {
             if (_isClosed || !IsVisible || !_everFocused || _adjustMode) return;
             _uiLifetime.Post(Dispatcher, () =>
             {
                 if (!_isClosed && IsVisible && _everFocused && !_adjustMode && !IsActive
-                    && _outputPopupSurface?.IsKeyboardFocusWithin != true) Close();
+                    && _outputPopupSurface?.IsKeyboardFocusWithin != true
+                    && !AppIconDragController.IsDragging && !((App)System.Windows.Application.Current).KeepQuickPanelForAndroid) Close();
             });
         }
 
@@ -152,15 +153,23 @@ namespace SonicRoute
             return OutputVolumePopupLayout.Arrange(owner, work,
                 new Size(Math.Min(owner.Width, work.Width * .75),
                     Math.Min(work.Height * .75, Math.Min(owner.Height,
-                        OutputVolumeHeaderHeight + (_outputVolumeRows.Count == 0 ? 32 : _outputVolumeRows.Count * OutputVolumeRowHeight)))));
+                        OutputVolumeHeaderHeight + (_outputVolumeRows.Count == 0 ? 32 : _outputVolumeRows.Count * OutputVolumeRowHeight))))
+#if SONICROUTE_PHONE
+                    , (System.Windows.Application.Current as App)?.PhoneAudioRelativeBounds(this)
+#endif
+                    );
         }
+
+#if SONICROUTE_PHONE
+        internal void RefreshCompanionPlacement() { if (OutputVolumesPopup.IsOpen) PositionOutputPopup(); }
+#endif
 
         private static List<AudioDeviceInfo> OutputVolumeDevices(IEnumerable<AudioDeviceInfo> devices, AppConfig config)
         {
             var hidden = config.PanelOutputVolumesRetainedOnly
                 ? new HashSet<string>(config.HiddenOutputDevices ?? new List<string>(), StringComparer.OrdinalIgnoreCase) : null;
             return devices.Where(d => d.Flow == EDataFlow.eRender && !string.IsNullOrWhiteSpace(d.Id)
-                && !AudioService.IsSystemDefault(d.Id) && hidden?.Contains(d.Id) != true).ToList();
+                && !AudioService.IsSystemDefault(d.Id) && !ApplicationAudio.IsPhoneOutputDevice(d.Id) && hidden?.Contains(d.Id) != true).ToList();
         }
 
         internal void RefreshOutputVolumeFilter()
@@ -384,7 +393,7 @@ namespace SonicRoute
             for (int i = 0; same && i < outputs.Count; i++)
                 same = string.Equals(previous![i].Id, outputs[i].Id, StringComparison.OrdinalIgnoreCase)
                     && previous[i].DisplayName == outputs[i].DisplayName && previous[i].IsDefault == outputs[i].IsDefault;
-            _outputDisplay = PanelDevices.WithSystemDefault(outputs, EDataFlow.eRender, config);
+            _outputDisplay = PanelDevices.WithSystemDefault(DisplayDevices(ApplicationAudio.MergeExternalOutputs(outputs), config), EDataFlow.eRender, config);
             if (same) return;
             RefreshRowDeviceNames();
             string? selected = _systemDeviceId;

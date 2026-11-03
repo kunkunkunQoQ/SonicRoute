@@ -196,7 +196,7 @@ namespace SonicRoute
                     if (result.Current < 0) { ShowOsd(name, L10n.T("Ov.VolReadFail")); continue; }
                     ShowVolumeOsd(name, result.Actual,
                         result.Muted ? string.Format(L10n.T("Ov.MutedVol"), result.Actual) : $"🔊 {result.Actual}%",
-                        result.Muted, "app:" + result.App.ProcessId);
+                        result.Muted, result.App.Identity);
                 }
             }
             catch { /* 设备/会话退出时不让异步滚轮任务打断消息循环。 */ }
@@ -331,7 +331,7 @@ namespace SonicRoute
                 return (null, App.CycleSystemDefaultDevice(Core.Interop.EDataFlow.eRender, delta > 0, steps));
             var target = ResolveTargetApp(foregroundPid);
             if (target == null) return (null, null);
-            return (target, App.CycleDevice((int)target.ProcessId, Core.Interop.EDataFlow.eRender, delta > 0, steps));
+            return (target, App.CycleDevice(target, Core.Interop.EDataFlow.eRender, delta > 0, steps));
         }
 
         private (AudioAppInfo? App, string ProcessName, int Current, int Actual, bool Muted) AdjustVolume(int delta, int foregroundPid)
@@ -343,10 +343,10 @@ namespace SonicRoute
             // 已枚举出的进程名直接复用，缺失时才查询；标题仍按自定义名/进程名显示。
             string proc = target.ProcessName ?? ForegroundAppService.GetProcessNameSafe(pid) ?? "";
             int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
-            var result = SessionVolumeService.AdjustVolumePercent(pid, delta > 0 ? step : -step);
+            var result = ApplicationAudio.AdjustVolumePercent(target, delta > 0 ? step : -step);
             if (result.Current < 0) return (target, proc, -1, -1, false);
             int actual = result.Actual < 0 ? result.Requested : result.Actual;
-            bool muted = SessionVolumeService.IsMuted(pid);
+            bool muted = ApplicationAudio.IsMuted(target);
             return (target, proc, result.Current, actual, muted);
         }
 
@@ -356,7 +356,7 @@ namespace SonicRoute
         /// </summary>
         private AudioAppInfo? ResolveTargetApp(int foregroundPid)
         {
-            var apps = AudioService.GetApps(); // Reuse the shared cache and its notification generation.
+            var apps = ApplicationAudio.GetApps(); // Reuse the shared cache and its notification generation.
             var cfg = ConfigService.Load();
             return CurrentAppService.Resolve(apps, cfg, foregroundPid);
         }

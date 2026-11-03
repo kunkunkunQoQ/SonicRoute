@@ -35,7 +35,7 @@ internal static partial class Program
             if (!saved.ContainsKey(field)) saved[field] = field.GetValue(null);
             field.SetValue(null, value);
         }
-        var playback = new OverviewSession(); var capture = new OverviewSession();
+        var playback = new FakeAppVolumeSession(); var capture = new FakeAppVolumeSession();
         void Fresh()
         {
             Seed("_renderVolumes", apps.ToDictionary(a => (int)a.ProcessId, _ => new List<ISimpleAudioVolume> { playback }));

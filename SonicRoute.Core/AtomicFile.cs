@@ -11,13 +11,20 @@ namespace SonicRoute.Core
         private static readonly Encoding Utf8 = new UTF8Encoding(false);
         internal static void WriteAllText(string path, string text)
         {
-            Write(path, text, null);
+            Write(path, stream =>
+            {
+                using var writer = new StreamWriter(stream, Utf8, 1024, true);
+                writer.Write(text);
+                writer.Flush();
+            });
         }
 
         internal static void WriteAllBytes(string path, byte[] bytes) =>
-            Write(path, null, bytes);
+            Write(path, stream => stream.Write(bytes, 0, bytes.Length));
 
-        private static void Write(string path, string? text, byte[]? bytes)
+        // Callers with large JSON snapshots can serialize directly, without allocating
+        // another complete UTF-16 string. All callers keep the same atomic replacement.
+        internal static void Write(string path, Action<Stream> write)
         {
             string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             string rollback = temporary + ".rollback";
@@ -26,14 +33,7 @@ namespace SonicRoute.Core
             {
                 using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
-                    // 小缓冲编码，避免大配置/长规则再分配一份完整 UTF8 字节数组。
-                    if (bytes != null) stream.Write(bytes, 0, bytes.Length);
-                    else
-                    {
-                        using var writer = new StreamWriter(stream, Utf8, 1024, true);
-                        writer.Write(text);
-                        writer.Flush();
-                    }
+                    write(stream);
                     // Writer/Stream Dispose 将数据提交到 OS 写缓存，沿用原来的写盘策略。
                     // 不逐次强制物理磁盘同步，避免 UI 保存出现几百毫秒的尾部延迟。
                 }

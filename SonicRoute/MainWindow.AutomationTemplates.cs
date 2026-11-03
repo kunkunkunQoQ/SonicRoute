@@ -83,7 +83,7 @@ namespace SonicRoute
 
         private List<AudioDeviceInfo> AutomationDeviceChoices(AutoRuleStep step, EDataFlow flow, IEnumerable<AudioDeviceInfo> devices)
         {
-            var display = DisplayDevices(devices);
+            var display = DisplayDevices(step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput ? devices : devices.Where(d => !ApplicationAudio.IsPhoneOutputDevice(d.Id)));
             return step.Action is AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput
                 ? PanelDevices.WithSystemDefault(display, flow, _config) : display;
         }
@@ -115,7 +115,7 @@ namespace SonicRoute
                 {
                     if (string.IsNullOrWhiteSpace(step.TargetDeviceId) || (_autoTemplateDraft != null
                         && !_autoStepDeviceCombos.Keys.Any(combo => ReferenceEquals(combo.Tag, step) && combo.SelectedItem is AudioDeviceInfo))
-                        || (step.Action is not (AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput) && AudioService.IsSystemDefault(step.TargetDeviceId)))
+                        || (step.Action is not (AutoRuleAction.SetAppOutput or AutoRuleAction.SetAppInput) && (AudioService.IsSystemDefault(step.TargetDeviceId) || ApplicationAudio.IsPhoneOutputDevice(step.TargetDeviceId))))
                         return "Auto.DeviceRequired";
                 }
                 if ((step.Action == AutoRuleAction.LaunchProgram && step.CurrentLaunchItems().Count == 0)

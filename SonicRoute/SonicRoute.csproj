@@ -4,7 +4,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <StartupObject>SonicRoute.Program</StartupObject>
-    <TargetFrameworks Condition="'$(TargetFramework)' == ''">net10.0-windows;net8.0-windows</TargetFrameworks>
+    <TargetFrameworks Condition="'$(TargetFramework)' == ''">net10.0-windows</TargetFrameworks>
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <UseWPF>true</UseWPF>
@@ -18,9 +18,10 @@
     <PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
     <!-- 官方 portable RID（不使用 win10-x64 / win10-arm64） -->
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
-    <AssemblyTitle>SonicRoute Lite</AssemblyTitle>
-    <AssemblyTitle Condition="'$(TargetFramework)' == 'net8.0-windows'">SonicRoute Lite NET8</AssemblyTitle>
+    <AssemblyTitle>SonicRoute</AssemblyTitle>
+    <AssemblyTitle Condition="'$(SonicRouteEdition)' == 'Lite'">SonicRoute Lite</AssemblyTitle>
     <Product>音跃 SonicRoute</Product>
+    <Product Condition="'$(SonicRouteEdition)' == 'Lite'">音跃 SonicRoute Lite</Product>
     <Authors>困困困</Authors>
     <Company>困困困</Company>
     <Description>音跃 SonicRoute — 按应用切换 Windows 音频播放/录音设备，快速面板 + 完整管理界面</Description>
@@ -33,11 +34,21 @@
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="QRCoder" Version="1.7.0" Condition="'$(SonicRouteEdition)' == 'Full'" />
     <ProjectReference Include="..\SonicRoute.Core\SonicRoute.Core.csproj" /><ProjectReference Include="..\StoreInterop\StoreInterop.csproj" />
+    <ProjectReference Include="..\SonicRoute.AndroidAudio\SonicRoute.AndroidAudio.csproj" Condition="'$(SonicRouteEdition)' == 'Full'" />
     <Resource Include="SonicRoute.png" />
     <Resource Include="SonicRoute.ico" />
     <EmbeddedResource Include="Resources\Lang\*.json" />
     <EmbeddedResource Include="Resources\RuleCommand.ps1" LogicalName="SonicRoute.Resources.RuleCommand.ps1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(SonicRouteEdition)' == 'Lite'">
+    <Compile Remove="AndroidAudioHost.cs;AndroidAppDragController.cs;PhoneAudioWindow.xaml.cs;PhoneDevicePage.xaml.cs" />
+    <Page Remove="PhoneAudioWindow.xaml;PhoneDevicePage.xaml" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(SonicRouteEdition)' == 'Full'">
+    <EmbeddedResource Include="..\build\FullRelease.files.json" LogicalName="SonicRoute.FullRelease.files.json" />
   </ItemGroup>
 
   <!--

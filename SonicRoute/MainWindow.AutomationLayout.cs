@@ -47,7 +47,7 @@ namespace SonicRoute
             var grip = new Border
             {
                 Child = AutomationIcons.Create(AutomationIcons.Grip, 15), Background = Brushes.Transparent,
-                Tag = rule.Id, Cursor = Cursors.ScrollNS, ToolTip = L10n.T("Auto.DragRules")
+                Tag = rule.Id, Cursor = Cursors.Arrow, ToolTip = L10n.T("Auto.DragRules")
             };
             grip.MouseLeftButtonDown += AutomationRuleGrip_Down;
             grip.MouseMove += AutomationRuleGrip_Move;

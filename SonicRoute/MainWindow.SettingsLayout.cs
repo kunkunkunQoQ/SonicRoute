@@ -30,7 +30,7 @@ namespace SonicRoute
             var icon = device.Flow == EDataFlow.eCapture ? AutomationIcons.Microphone
                 : device.Id == AudioService.SystemDefaultDeviceId || full.IndexOf("HDMI", StringComparison.OrdinalIgnoreCase) >= 0
                     ? AutomationIcons.Monitor
-                    : full.IndexOf("head", StringComparison.OrdinalIgnoreCase) >= 0 || full.Contains("耳机") || full.Contains("耳機")
+                    : full.IndexOf("head", StringComparison.OrdinalIgnoreCase) >= 0 || full.Contains("耳机") || full.Contains("耳機") || full.Contains("蓝牙")
                         ? AutomationIcons.Headphones : AutomationIcons.Speaker;
             var layout = new Grid { ToolTip = full };
             layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });

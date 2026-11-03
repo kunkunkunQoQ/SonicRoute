@@ -123,6 +123,7 @@ namespace SonicRoute
         {
             if (_isClosed) return;
             _isClosed = true;
+            StopAndroidPanel();
             ++_loadVersion; ++_systemVolumeRequest; ++_globalMuteVersion; ++_micMuteVersion;
             // Pending slider changes are committed independently of UI cancellation.
             FlushPendingVolumes();
@@ -154,6 +155,7 @@ namespace SonicRoute
                 ReleaseMouseCapture();
                 ((App)Application.Current).NotifyQuickPanelAdjustFinished();
             }
+            ((App)Application.Current).ReleaseClosedUiWindow(this);
         }
     }
 }

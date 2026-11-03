@@ -53,12 +53,10 @@ jobs:
         run: |
           .\packaging\Updates\Invoke-ReleasePipeline.ps1 -Stage Preflight -Repo $env:TARGET_REPOSITORY -DryRun:($env:DRY_RUN -eq 'true')
 
-      - name: Setup .NET SDKs
+      - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
+          dotnet-version: '10.0.x'
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -81,12 +79,18 @@ jobs:
 
       - name: Verify client runtime isolation and actual package staging
         run: |
-          dotnet build packaging/Updates/tests/RuntimeChecks/Checks.csproj -c Release
-          if ($LASTEXITCODE -ne 0) { throw 'Client validation build failed.' }
-          foreach ($tfm in @('net10.0-windows', 'net8.0-windows', 'net48')) {
-            & "packaging/Updates/tests/RuntimeChecks/bin/Release/$tfm/Checks.exe" "$env:CANDIDATE_DIRECTORY/assets" "$env:RUNNER_TEMP/client-validation/$tfm"
+          foreach ($tfm in @('net10.0-windows', 'net48')) {
+            dotnet run --project packaging/Updates/tests/RuntimeChecks/Checks.csproj -c Release -f $tfm -p:SonicRouteEdition=Lite -- "$env:CANDIDATE_DIRECTORY/assets" "$env:RUNNER_TEMP/client-validation/$tfm"
             if ($LASTEXITCODE -ne 0) { throw "Client validation failed: $tfm" }
           }
+
+      - name: Verify full edition isolation and nested package transaction
+        run: |
+          dotnet run --project checks/EditionChecks/EditionChecks.csproj -c Debug -p:SonicRouteEdition=Full -- "$env:RUNNER_TEMP/client-validation/Full"
+          if ($LASTEXITCODE -ne 0) { throw 'Full edition validation failed.' }
+          $version = [string]([xml](Get-Content build/Version.props -Raw)).Project.PropertyGroup.SonicRouteVersion
+          dotnet run --project checks/EditionChecks/EditionChecks.csproj -c Debug -p:SonicRouteEdition=Full -- "$env:RUNNER_TEMP/client-validation/FullPayload" --payload "$env:CANDIDATE_DIRECTORY/assets/SonicRoute-v$version-x64.zip"
+          if ($LASTEXITCODE -ne 0) { throw 'Full package transaction failed.' }
 
       - name: Verify actual worker processes and rollback
         run: |

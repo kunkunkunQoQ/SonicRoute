@@ -1,10 +1,11 @@
 using System;
+using System.IO;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Windows;
@@ -44,8 +45,27 @@ namespace SonicRoute
         }
 
         private static readonly ConcurrentDictionary<string, CacheEntry> Cache = new(StringComparer.OrdinalIgnoreCase);
+        // Catalogue/source PNG arrays are immutable. Weak keys let a refreshed/retired catalogue
+        // release its images without a new global eviction timer or a second strong icon cache.
+        private static ConditionalWeakTable<byte[], Lazy<ImageSource?>> ExternalPngIcons = new();
 
         public static ImageSource? GetIconForApp(int pid, string processName) => GetIconForApp(pid, processName, null);
+        internal static ImageSource? GetCustomIcon(string processName)
+        {
+            string? custom = AppIconFiles.GetFileName(ConfigService.Load(), processName);
+            return custom == null ? null : GetOrExtract("png|" + custom);
+        }
+        internal static ImageSource? DecodePng(byte[]? png)
+        {
+            if (png == null || png.Length == 0) return null;
+            return Volatile.Read(ref ExternalPngIcons).GetValue(png, static bytes => new Lazy<ImageSource?>(() => DecodePngCore(bytes))).Value;
+        }
+        private static ImageSource DecodePngCore(byte[] png)
+        {
+            using var stream = new MemoryStream(png);
+            var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = stream; image.EndInit(); image.Freeze(); return image;
+        }
 
         public static ImageSource? GetIconForApp(int pid, string processName, string? sessionIconPath)
         {
@@ -285,6 +305,9 @@ namespace SonicRoute
             AudioService.SetAppIconMetadataEnabled(false);
             Volatile.Write(ref _cacheLimit, IdleCacheSize);
             TrimIfNeeded();
+            // Keep the immutable catalogue PNGs and phone connections; only decoded UI
+            // images are dropped when the last application UI closes. No disk reload.
+            Interlocked.Exchange(ref ExternalPngIcons, new ConditionalWeakTable<byte[], Lazy<ImageSource?>>());
         }
 
         [DllImport("kernel32.dll", SetLastError = true)]
