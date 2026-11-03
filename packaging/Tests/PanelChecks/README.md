@@ -138,3 +138,8 @@ existing targeted extra-panel readback and loading/late-result checks. Windows
 remain unshown; real device reads are limited to the existing pending-load
 cancellation fixture, and no real audio writes or input injection occur.
 Reported operation counts describe controlled fixtures, not whole-app CPU gains.
+# UI memory reclamation
+
+`--ui-memory` exercises the actual application idle entry with product startup disabled. Build/run Full and Lite with their respective `SonicRouteEdition`; use `PanelTestFramework=net48` and the Legacy reference for the Framework variant. Give parallel or cross-framework builds different `ArtifactsPath` directories: their restore assets otherwise share the same project extension directory. The current round builds them sequentially.
+
+The mode verifies startup/UI/menu/exit guards, cancellation and reuse of the single 1500ms timer, compilation of the edition-specific native call, and the 30-second cooldown. Lite/Legacy call EmptyWorkingSet only against the isolated check process, never the running product. Working set and private bytes are logged separately; this is not a full-product or long-term memory benchmark. Phone artwork and pending-dispatch cleanup is covered by AndroidUiChecks `--phone-demand`.

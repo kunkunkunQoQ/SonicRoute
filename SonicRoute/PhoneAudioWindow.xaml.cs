@@ -99,6 +99,7 @@ internal static class PhoneAudioWindowCache
 public partial class PhoneAudioWindow : Window
 {
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly WindowUiLifetime _mediaUiLifetime = new();
     private CancellationTokenSource? _visibleRead;
     private CancellationTokenSource? _catalogRead;
     private CancellationTokenSource? _mediaRead;
@@ -162,7 +163,7 @@ public partial class PhoneAudioWindow : Window
         };
         Closed += (_, _) =>
         {
-            _closed = true; _lifetime.Cancel(); _catalogRead?.Cancel(); StopMediaSubscription();
+            _closed = true; _mediaUiLifetime.Dispose(); _lifetime.Cancel(); _catalogRead?.Cancel(); StopMediaSubscription();
             ClearPcDropHighlight();
             AppIconDragController.DesktopDragStateChanged -= Pc_DragStateChanged;
             if (AndroidAudioHost.IsPhoneCreated)
@@ -681,7 +682,9 @@ public partial class PhoneAudioWindow : Window
     private void StopMediaSubscription()
     {
         _mediaRead?.Cancel(); _mediaDevice = null; _mediaClient = null;
-        _progressState = null;
+        // Retain cached app rows/metadata for fast reopen, not the last track's artwork.
+        _mediaState = _progressState = null; _mediaApps = null; _artworkBytes = null;
+        MediaArtwork.Source = MediaAppIcon.Source = null;
         lock (_mediaUiGate) { _pendingMediaState = null; _pendingMediaRead = null; }
         MediaPositionSlider.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, null);
     }
@@ -696,7 +699,7 @@ public partial class PhoneAudioWindow : Window
         }
         // A callback burst can arrive while the input/render thread is occupied by a
         // drag. Keep its latest snapshot, with at most one pending UI operation.
-        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(ApplyPendingMediaState));
+        _mediaUiLifetime.Post(Dispatcher, ApplyPendingMediaState);
     }
     private void ApplyPendingMediaState()
     {
@@ -716,10 +719,10 @@ public partial class PhoneAudioWindow : Window
             await previous;
             read.Token.ThrowIfCancellationRequested();
             var client = _mediaClient = new AndroidMediaSessionClient(AndroidAudioHost.Adb);
-            client.ConnectionQualityChanged += quality => Dispatcher.BeginInvoke(new Action(() =>
+            client.ConnectionQualityChanged += quality => _mediaUiLifetime.Post(Dispatcher, () =>
             {
                 if (!_closed && !read.IsCancellationRequested && ReferenceEquals(_mediaRead, read)) ApplyConnectionQuality(quality);
-            }));
+            });
             await AndroidAudioHost.WatchMediaAsync(client, device, state => QueueMediaState(state, read), read.Token);
             if (_enableMedia && !_closed && !read.IsCancellationRequested)
             {

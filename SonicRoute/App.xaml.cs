@@ -40,9 +40,7 @@ namespace SonicRoute
         private HotkeyService? _hotkeys;
         private TrayWheelService? _trayWheel;
         private CancellationTokenSource? _singleClickCts;
-        private System.Windows.Threading.DispatcherTimer? _uiReclaimTimer;
-        private bool _uiWorkingSetDirty = true;
-        private bool _startupWarmupComplete, _exiting;
+        private bool _exiting;
         private static Mutex? _instanceMutex;
         private bool _ownsInstanceMutex;
         private RuleCommandServer? _ruleCommandServer;
@@ -589,57 +587,6 @@ namespace SonicRoute
                 _mainWindow.WindowState = WindowState.Normal;
             _mainWindow.Topmost = true;
             _mainWindow.Topmost = false;
-        }
-
-        private void CancelUiReclaim()
-        {
-            _uiReclaimTimer?.Stop();
-        }
-        internal void ReleaseClosedUiWindow(Window window)
-        {
-            // WPF's automatic MainWindow reference can otherwise retain the first closed
-            // window for the tray lifetime, even after our own window field is cleared.
-            if (ReferenceEquals(MainWindow, window)) MainWindow = null;
-            window.DataContext = null;
-            _uiWorkingSetDirty = true;
-            ScheduleUiReclaim();
-        }
-
-        private void ScheduleUiReclaim()
-        {
-            if (!ShouldReclaimIdle() || _mainWindow != null || _quickPanel != null || _trayMenu != null || Dispatcher.HasShutdownStarted) return;
-            if (_uiReclaimTimer == null)
-            {
-                _uiReclaimTimer = new System.Windows.Threading.DispatcherTimer(
-                    System.Windows.Threading.DispatcherPriority.ApplicationIdle, Dispatcher)
-                { Interval = TimeSpan.FromMilliseconds(1500) };
-                _uiReclaimTimer.Tick += ReclaimUiWhenIdle;
-            }
-            _uiReclaimTimer.Stop();
-            _uiReclaimTimer.Start();
-        }
-
-        private async Task ReclaimAfterWarmupAsync(Task warmup)
-        {
-            try { await warmup.ConfigureAwait(false); }
-            catch { /* A failed warmup must not leave the startup idle request waiting forever. */ }
-            try { await Dispatcher.InvokeAsync(() => { _startupWarmupComplete = true; ScheduleUiReclaim(); }).Task.ConfigureAwait(false); }
-            catch (OperationCanceledException) { }
-            catch (InvalidOperationException) { }
-        }
-
-        private bool ShouldReclaimIdle() => _uiWorkingSetDirty && _startupWarmupComplete && !_exiting;
-
-        private void ReclaimUiWhenIdle(object? sender, EventArgs e)
-        {
-            // 复用单次延迟：先停止，再在同一个空闲 Dispatcher 回合核验并回收，不周期唤醒。
-            _uiReclaimTimer?.Stop();
-            if (_mainWindow != null || _quickPanel != null || _trayMenu != null || !ShouldReclaimIdle()
-                || Dispatcher.HasShutdownStarted) return;
-            // Reclaim unreachable UI/image objects without paging out the whole process:
-            // live phone transports, decoders, ADB services and listeners keep their owners.
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
-            _uiWorkingSetDirty = false;
         }
 
         // Single-instance activation uses a hidden message window.

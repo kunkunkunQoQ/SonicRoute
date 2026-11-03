@@ -96,9 +96,27 @@ internal static partial class Program
                 for (int i = 0; i < 10; i++) Call(phone, "DevicesChanged");
                 Check(!mediaLifetime.IsCancellationRequested && ReferenceEquals(typeof(PhoneAudioWindow).GetField("_mediaTask", Hidden)!.GetValue(phone), mediaTask.Task),
                     "repeated same-device notifications reuse the live media subscription");
+                var cover = new System.Windows.Media.DrawingImage(new System.Windows.Media.GeometryDrawing(
+                    System.Windows.Media.Brushes.Blue, null, new System.Windows.Media.RectangleGeometry(new Rect(0,0,96,96))));
+                ((Image)phone.FindName("MediaArtwork")).Source = cover;
+                Set(phone, "_artworkBytes", new byte[1024 * 1024]);
+                Call(phone, "QueueMediaState", media, mediaLifetime);
                 phone.Hide();
                 Check(mediaLifetime.IsCancellationRequested, "hiding the phone panel cancels its media and latency lifetime");
+                Check(typeof(PhoneAudioWindow).GetField("_artworkBytes", Hidden)!.GetValue(phone) == null
+                    && typeof(PhoneAudioWindow).GetField("_mediaState", Hidden)!.GetValue(phone) == null
+                    && typeof(PhoneAudioWindow).GetField("_pendingMediaState", Hidden)!.GetValue(phone) == null
+                    && ((Image)phone.FindName("MediaArtwork")).Source == null
+                    && ((Image)phone.FindName("MediaAppIcon")).Source == null && ReferenceEquals(savedRows, apps.ItemsSource),
+                    "hiding releases cover bytes/images and media snapshots while retaining cached app rows");
                 mediaTask.TrySetResult(); Set(phone, "_enableMedia", false); Set(phone, "_mediaRead", null!);
+                var uiLifetime = typeof(PhoneAudioWindow).GetField("_mediaUiLifetime", Hidden)!.GetValue(phone)!;
+                bool queuedRan = false;
+                var pending = (System.Windows.Threading.DispatcherOperation)uiLifetime.GetType().GetMethod("Post", Hidden)!.Invoke(
+                    uiLifetime, [phone.Dispatcher, (Action)(() => queuedRan = true), System.Windows.Threading.DispatcherPriority.Background])!;
+                phone.Close(); DrainUi();
+                Check(!queuedRan && pending.Status == System.Windows.Threading.DispatcherOperationStatus.Aborted,
+                    "closing the phone panel aborts queued media UI work without stopping audio/video providers");
             }
             finally { phone.Close(); }
 

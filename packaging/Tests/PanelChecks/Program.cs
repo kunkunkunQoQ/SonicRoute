@@ -154,6 +154,12 @@ internal static partial class Program
             // No App.Run/Startup or Window.Show: do not register hotkeys, run automation,
             // start audio discovery, or write actual endpoint state in this BAML/lifetime check.
             app = new ProbeApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+            if (args.Contains("--ui-memory"))
+            {
+                CheckUiMemory(app);
+                Console.WriteLine($"RESULT passed={_checks} UI_MEMORY=true USER_PROCESS_TRIMMED=false PHONE_ACCESS=false");
+                return 0;
+            }
             if (args.Contains("--tray-hit-only"))
             {
                 CheckNativeTrayHit();
