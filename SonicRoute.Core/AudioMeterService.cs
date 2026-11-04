@@ -31,7 +31,15 @@ namespace SonicRoute.Core
         private HashSet<int>? _visibleTargets;
         private int _visibleVersion;
         private TaskCompletionSource<bool>? _completion;
+        private readonly Func<int, (bool Active, float Peak)>? _externalReader;
         public Task Completion { get { lock (_gate) return _completion?.Task ?? Task.CompletedTask; } }
+
+        public AudioMeterService(Func<int, (bool Active, float Peak)>? externalReader = null)
+        {
+            _externalReader = externalReader;
+        }
+
+        public void WakeExternal() => Wake();
 
         /// <summary>来自工作线程；接收方须自行切换到 UI 线程。每个快照只包含目标 PID。</summary>
         public event Action<IReadOnlyDictionary<int, float>>? PeaksUpdated;
@@ -110,10 +118,10 @@ namespace SonicRoute.Core
             }
         }
 
-        private static HashSet<int> NewTargets(IEnumerable<int> pids)
+        private HashSet<int> NewTargets(IEnumerable<int> pids)
         {
             var result = new HashSet<int>();
-            foreach (int pid in pids) if (pid > 0) result.Add(pid);
+            foreach (int pid in pids) if (pid > 0 || (_externalReader != null && pid < 0)) result.Add(pid);
             return result;
         }
 
@@ -123,6 +131,7 @@ namespace SonicRoute.Core
             var rawPeaks = new Dictionary<int, float>();
             var display = new Dictionary<int, (float Smoothed, float Published)>();
             var targets = new HashSet<int>();
+            var nativeTargets = new HashSet<int>();
             var watch = Stopwatch.StartNew();
             long nextScan = 0;
             int seenVersion = -1;
@@ -150,11 +159,22 @@ namespace SonicRoute.Core
                         }
                     }
 
-                    if (targetsChanged || graph?.TopologyDirty == true
+                    bool nativeChanged = false;
+                    if (targetsChanged)
+                    {
+                        var nextNative = new HashSet<int>();
+                        foreach (int pid in targets) if (pid > 0) nextNative.Add(pid);
+                        if (!nativeTargets.SetEquals(nextNative)) { nativeTargets = nextNative; nativeChanged = true; }
+                        rawPeaks.Clear();
+                        foreach (int pid in targets) rawPeaks[pid] = 0f;
+                        foreach (int pid in new List<int>(display.Keys))
+                            if (!targets.Contains(pid)) display.Remove(pid);
+                    }
+                    if (nativeChanged || graph?.TopologyDirty == true
                         || (graph?.NeedsRecovery == true && watch.ElapsedMilliseconds >= nextScan))
                     {
                         graph?.Dispose(); graph = null;
-                        if (targets.Count != 0) graph = new MeterGraph(targets, Wake, IsStopping);
+                        if (nativeTargets.Count != 0) graph = new MeterGraph(nativeTargets, Wake, IsStopping);
                         if (targetsChanged)
                         {
                             rawPeaks.Clear();
@@ -169,10 +189,10 @@ namespace SonicRoute.Core
                     if (targets.Count == 0) { _wake.WaitOne(); continue; }
 
                     if (IsStopping()) break;
-                    graph!.Pump();
+                    graph?.Pump();
                     bool active = false, fading = false;
                     foreach (int pid in targets) rawPeaks[pid] = 0f;
-                    foreach (var handle in graph.Sessions.Values)
+                    if (graph != null) foreach (var handle in graph.Sessions.Values)
                     {
                         if (IsStopping()) break;
                         if (!handle.Active || (visible != null && !visible.Contains(handle.Pid))) continue;
@@ -192,6 +212,24 @@ namespace SonicRoute.Core
                             }
                         }
                         catch { handle.Disconnected = 1; graph.RequireRecovery(); }
+                    }
+                    if (IsStopping()) break;
+                    if (_externalReader != null)
+                    {
+                        foreach (int id in targets)
+                        {
+                            if (IsStopping()) break;
+                            if (id >= 0 || (visible != null && !visible.Contains(id))) continue;
+                            try
+                            {
+                                var ext = _externalReader(id);
+                                if (!ext.Active) continue;
+                                active = true;
+                                if (!float.IsNaN(ext.Peak) && ext.Peak > 0f)
+                                    rawPeaks[id] = Math.Min(1f, ext.Peak);
+                            }
+                            catch { }
+                        }
                     }
                     if (IsStopping()) break;
                     bool peaksChanged = targetsChanged || visibleChanged;
@@ -234,7 +272,7 @@ namespace SonicRoute.Core
                     }
                     // 正常无活动会话并完成回零后只等通知。Active静音流仍按原33ms读取。
                     int wait = active || fading ? SampleIntervalMs : Timeout.Infinite;
-                    if (graph.NeedsRecovery)
+                    if (graph?.NeedsRecovery == true)
                     {
                         int recoveryWait = (int)Math.Max(1, nextScan - watch.ElapsedMilliseconds);
                         wait = wait == Timeout.Infinite ? recoveryWait : Math.Min(wait, recoveryWait);

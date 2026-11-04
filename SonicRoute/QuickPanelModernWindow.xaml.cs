@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -1079,6 +1079,7 @@ namespace SonicRoute
             try
             {
                 foreach (var row in _rows.Values) ApplyRowMutedVisual(row, muted);
+                ApplyAllAndroidRowsMutedVisual(muted);
             }
             finally { _updatingRowVolumes = updating; }
             if (!updating) UpdateMeterTargets();
@@ -1089,20 +1090,22 @@ namespace SonicRoute
         {
             if (_isClosed) return;
             _meterEnabled = enabled;
-            if (!enabled || !IsVisible || _rows.Count == 0)
+            if (!enabled || !IsVisible || (_rows.Count == 0 && !HasAndroidMeterRows))
             {
                 StopMeter();
                 foreach (var row in _rows.Values) { row.PeakLevel = 0f; UpdatePeakVisual(row); }
+                ResetAndroidMeterPeaks();
                 return;
             }
 
             if (_meter == null)
             {
-                var meter = _meter = new AudioMeterService();
+                var meter = _meter = CreateAudioMeterService();
+                SubscribeAndroidMeter(true);
                 _meterListener = peaks => OnPeaksUpdated(meter, peaks);
                 meter.PeaksUpdated += _meterListener;
                 meter.UpdateVisibleTargets(Array.Empty<int>());
-                meter.Start(_rows.Values.Where(r => r.Slider.IsEnabled && !r.IsMuted).Select(r => (int)r.App.ProcessId));
+                meter.Start(GetMeterTargets(visibleOnly: false));
             }
             else UpdateMeterTargets();
             QueueMeterViewport();
@@ -1110,6 +1113,7 @@ namespace SonicRoute
 
         private void StopMeter()
         {
+            SubscribeAndroidMeter(false);
             var meter = _meter;
             _meter = null;
             if (meter != null)
@@ -1119,6 +1123,7 @@ namespace SonicRoute
             }
             _meterListener = null;
             _visibleMeterRows.Clear();
+            ResetAndroidMeterPeaks(clearVisible: true);
             _displayPeaks = null;
             lock (_peakGate) _latestPeaks = null;
         }
@@ -1145,8 +1150,8 @@ namespace SonicRoute
                 _visibleMeterRows.Add(row);
                 ApplyVisiblePeak(row);
             }
-            _meter?.UpdateVisibleTargets(_visibleMeterRows.Where(row => row.Slider.IsEnabled && !row.IsMuted)
-                .Select(row => (int)row.App.ProcessId));
+            RefreshAndroidMeterViewport();
+            _meter?.UpdateVisibleTargets(GetMeterTargets(visibleOnly: true));
         }
 
         private void ApplyVisiblePeak(AppRow row)
@@ -1160,8 +1165,20 @@ namespace SonicRoute
 
         private void UpdateMeterTargets()
         {
-            _meter?.UpdateTargets(_rows.Values.Where(r => r.Slider.IsEnabled && !r.IsMuted)
-                .Select(r => (int)r.App.ProcessId));
+            UpdateMeterTargetsCore(); }
+        private IEnumerable<int> GetMeterTargets(bool visibleOnly) =>
+            (visibleOnly ? (IEnumerable<AppRow>)_visibleMeterRows : _rows.Values)
+                .Where(r => r.Slider.IsEnabled && !r.IsMuted).Select(r => (int)r.App.ProcessId)
+                .Concat(GetAndroidMeterTargets(visibleOnly));
+
+        private void UpdateMeterTargetsCore()
+        {
+            if (_isClosed || !_meterEnabled || !IsVisible) return;
+            if (_rows.Count == 0 && !HasAndroidMeterRows) { StopMeter(); return; }
+            if (_meter == null) { SetMeterEnabled(true); return; }
+            _meter.UpdateTargets(GetMeterTargets(visibleOnly: false));
+            if (_visibleMeterRows.Count > 0 || HasVisibleAndroidMeterRows)
+                _meter.UpdateVisibleTargets(GetMeterTargets(visibleOnly: true));
         }
 
         private void OnPeaksUpdated(AudioMeterService source, IReadOnlyDictionary<int, float> peaks)
@@ -1183,29 +1200,29 @@ namespace SonicRoute
                     if (_isClosed || !_meterEnabled || !IsVisible || latest == null) return;
                     _displayPeaks = latest;
                     foreach (var row in _visibleMeterRows) ApplyVisiblePeak(row);
+                    ApplyVisibleAndroidPeaks();
                 }), DispatcherPriority.Render);
             }
             catch { Interlocked.Exchange(ref _peakDispatchPending, 0); }
         }
 
-        private void UpdatePeakVisual(AppRow row)
+        private void UpdatePeakVisual(Slider slider, Border? trackBg, Border? peakVisual, ScaleTransform? peakTransform, float peakLevel, bool isMuted)
         {
-            if (row.PeakVisual == null || row.PeakTransform == null) return;
-            bool show = _meterEnabled && !row.IsMuted && row.Slider.IsEnabled && row.PeakLevel > 0.001f;
-            // 覆盖层始终保留原布局尺寸；静默切换不让音量条模板重复 Measure/Arrange。
+            if (peakVisual == null || peakTransform == null) return;
+            bool show = _meterEnabled && !isMuted && slider.IsEnabled && peakLevel > 0.001f;
             var visibility = show ? Visibility.Visible : Visibility.Hidden;
-            if (row.PeakVisual.Visibility != visibility) row.PeakVisual.Visibility = visibility;
-            // 动态帧只改变 ScaleX；Slider.Value 和 Thumb 均不由 Meter 修改。
-            double scale = show ? MathEx.Clamp(row.PeakLevel * (float)(row.Slider.Value / 100d), 0f, 1f) : 0d;
-            double width = row.TrackBg?.ActualWidth ?? 0;
+            if (peakVisual.Visibility != visibility) peakVisual.Visibility = visibility;
+            double scale = show ? MathEx.Clamp(peakLevel * (float)(slider.Value / 100d), 0f, 1f) : 0d;
+            double width = trackBg?.ActualWidth ?? 0;
             if (width > 0)
             {
-                double pixels = width * VisualTreeHelper.GetDpi(row.Slider).DpiScaleX;
+                double pixels = width * VisualTreeHelper.GetDpi(slider).DpiScaleX;
                 scale = Math.Round(scale * pixels) / pixels;
             }
-            // 同一物理像素位置不重复更新 Transform；缩放/轨道尺寸改变时重算。
-            if (row.PeakTransform.ScaleX != scale) row.PeakTransform.ScaleX = scale;
+            if (peakTransform.ScaleX != scale) peakTransform.ScaleX = scale;
         }
+
+        private void UpdatePeakVisual(AppRow row) => UpdatePeakVisual(row.Slider, row.TrackBg, row.PeakVisual, row.PeakTransform, row.PeakLevel, row.IsMuted);
 
         /// <summary>点击行图标：静音/取消静音该应用。</summary>
         internal void RefreshAppIcons(string processName)

@@ -16,6 +16,10 @@ public sealed class AndroidPcmSource : IWaveProvider
     private long _dropped, _underflow;
     private long _written, _nonSilent, _read;
     private float _lastPeak;
+    private float _meterUnreadPeak = -1f, _meterActivePeak;
+    private long _lastWriteTick = -1000, _lastNonSilentWriteTick = -1000;
+    private int _meterWaiting;
+    public static event Action? PeakActivity;
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
     public int BufferedSamples { get { lock (_gate) return _count; } }
     public long DroppedSamples => Interlocked.Read(ref _dropped);
@@ -53,6 +57,10 @@ public sealed class AndroidPcmSource : IWaveProvider
         { float absolute = Math.Abs(sample); peak = Math.Max(peak, absolute); if (absolute > 0.0001f) nonSilent++; }
         Interlocked.Add(ref _written, samples.Length); Interlocked.Add(ref _nonSilent, nonSilent);
         Volatile.Write(ref _lastPeak, peak);
+        float gain = Volatile.Read(ref _gain);
+        float meterPeak = float.IsNaN(peak) || float.IsNaN(gain) || peak <= 0.0001f || gain <= 0f
+            ? 0f : Math.Clamp(peak * gain, 0f, 1f);
+        bool wake = false;
         lock (_gate)
         {
             // Trim accumulated delay to 150 ms after a 250 ms burst; never grow the queue.
@@ -72,7 +80,47 @@ public sealed class AndroidPcmSource : IWaveProvider
             int first = Math.Min(samples.Length, _samples.Length - end);
             samples[..first].CopyTo(_samples.AsSpan(end));
             samples[first..].CopyTo(_samples);
+            long now = Environment.TickCount64;
+            if (meterPeak > _meterUnreadPeak) _meterUnreadPeak = meterPeak;
+            _meterActivePeak = meterPeak;
+            _lastWriteTick = now;
+            if (meterPeak > 0f)
+            {
+                _lastNonSilentWriteTick = now;
+                wake = Interlocked.Exchange(ref _meterWaiting, 0) != 0;
+            }
             _count += samples.Length;
+        }
+        if (wake && PeakActivity is { } listeners)
+        {
+            foreach (Action listener in listeners.GetInvocationList())
+                try { listener(); } catch { }
+        }
+    }
+
+    public (bool Active, float Peak) ReadMeterPeak()
+    {
+        lock (_gate)
+        {
+            long now = Environment.TickCount64;
+            float peak;
+            if (_meterUnreadPeak >= 0f && now - _lastWriteTick <= 150)
+            {
+                peak = _meterUnreadPeak;
+                _meterUnreadPeak = -1f;
+            }
+            else if (_meterActivePeak > 0f && now - _lastNonSilentWriteTick <= 80)
+            {
+                peak = _meterActivePeak;
+            }
+            else
+            {
+                _meterUnreadPeak = -1f;
+                peak = _meterActivePeak = 0f;
+            }
+            bool active = peak > 0f || now - _lastNonSilentWriteTick <= 80;
+            Volatile.Write(ref _meterWaiting, active ? 0 : 1);
+            return (active, peak);
         }
     }
 
@@ -115,7 +163,17 @@ public sealed class AndroidPcmSource : IWaveProvider
         for (; i < samples.Length; i++) destination[i] = Math.Clamp(samples[i] * gain, -1, 1);
     }
 
-    public void Clear() { lock (_gate) { _start = _count = 0; } }
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _start = _count = 0;
+            _meterUnreadPeak = -1f;
+            _meterActivePeak = 0f;
+            _lastWriteTick = _lastNonSilentWriteTick = -1000;
+            Volatile.Write(ref _meterWaiting, 0);
+        }
+    }
 }
 
 public sealed class WasapiPcmPlayer : IPcmPlayer

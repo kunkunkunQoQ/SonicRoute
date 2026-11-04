@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using SonicRoute;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
@@ -75,6 +76,7 @@ internal static partial class Program
             pills = Descendants<Button>(root).Where(b => b.Tag is AudioDeviceInfo).ToArray();
             Check(pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId).Content?.ToString() == "小米13 扬声器",
                 "renaming also refreshes an already-expanded incoming route group");
+            CheckAndroidPeakMeter(panel, first, second);
 
             typeof(PhoneAudioWindow).GetMethod("EnsurePcDropZones", Hidden)!.Invoke(phone, [true]);
             Check(Descendants<TextBlock>((Grid)phone.FindName("PcDropZonesGrid")).Any(t => t.Text == "仅在小米13 扬声器播放"),
@@ -115,7 +117,7 @@ internal static partial class Program
             Pump(store.FlushAsync());
             File.WriteAllText(Path.Combine(output, "speaker-routing.json"), JsonSerializer.Serialize(new
             { Passed = true, Assertions = _checks, Scans = scans, RealPhoneAccess = false,
-                Scope = "Fixture sessions; actual quick/full controls and dispatcher retirement. No real phone or audible acceptance." },
+                Scope = "Fixture sessions; actual quick/full controls, Android peak meter bar, and dispatcher retirement. No real phone or audible acceptance." },
                 new JsonSerializerOptions { WriteIndented = true }));
             return 0;
         }
@@ -126,6 +128,96 @@ internal static partial class Program
             var deadline = DateTime.UtcNow.AddSeconds(3);
             while (manager.Sources.Contains(source) && DateTime.UtcNow < deadline) Pump(Task.Delay(10));
             DrainUi();
+        }
+    }
+
+    private static void CheckAndroidPeakMeter(QuickPanelModernWindow panel, AndroidAudioSource first, AndroidAudioSource second)
+    {
+        var content = (FrameworkElement)panel.Content;
+        content.Measure(new Size(372, 450)); content.Arrange(new Rect(0, 0, 372, 450)); content.UpdateLayout();
+        var rows = (System.Collections.IDictionary)typeof(QuickPanelModernWindow).GetField("_androidRows", Hidden)!.GetValue(panel)!;
+        object firstRow = rows[first.Id]!;
+        object secondRow = rows[second.Id]!;
+        var rowType = firstRow.GetType();
+        int firstMeterId = (int)rowType.GetField("MeterId", Hidden)!.GetValue(firstRow)!;
+        int secondMeterId = (int)rowType.GetField("MeterId", Hidden)!.GetValue(secondRow)!;
+        Check(firstMeterId < 0 && secondMeterId < 0 && firstMeterId != secondMeterId,
+            "Android rows allocate distinct negative meter IDs that cannot collide with Windows PIDs");
+        var slider = (Slider)rowType.GetField("Volume", Hidden)!.GetValue(firstRow)!;
+        var peakVisual = (Border?)rowType.GetField("PeakVisual", Hidden)!.GetValue(firstRow);
+        var peakTransform = (ScaleTransform?)rowType.GetField("PeakTransform", Hidden)!.GetValue(firstRow);
+        Check(peakVisual != null && peakTransform != null
+            && ReferenceEquals(peakVisual.Background, panel.FindResource("Theme.AccentPeak"))
+            && peakVisual.Visibility == Visibility.Hidden && peakTransform.ScaleX == 0d && peakTransform.ScaleY == 1d,
+            "Android row slider binds PART_PeakVisual with Theme.AccentPeak and an idle ScaleTransform");
+
+        var pcm = new AndroidPcmSource();
+        var pcmField = typeof(AndroidAudioSession).GetField("_pcm", Hidden)!;
+        pcmField.SetValue(first.Session, pcm);
+        int wakeups = 0;
+        Action onPeakActivity = () => Interlocked.Increment(ref wakeups);
+        AndroidPcmSource.PeakActivity += onPeakActivity;
+        var createMeter = typeof(QuickPanelModernWindow).GetMethod("CreateAudioMeterService", Hidden)!;
+        var meter = (AudioMeterService)createMeter.Invoke(panel, null)!;
+        try
+        {
+            Check(pcm.ReadMeterPeak() == (false, 0f), "initial Android meter read returns idle and arms wakeup");
+            pcm.Write(new float[960]);
+            Check(wakeups == 0 && pcm.ReadMeterPeak() == (false, 0f), "silent PCM frames do not wake the meter service");
+            var loud = new float[960]; Array.Fill(loud, 0.8f);
+            pcm.Write(loud);
+            pcm.Write(loud);
+            Check(wakeups == 1, "consecutive active PCM writes coalesce to a single wakeup while waiting");
+            var read = pcm.ReadMeterPeak();
+            Check(read.Active && Math.Abs(read.Peak - 0.8f) < 0.001f && Math.Abs(pcm.LastPeak - 0.8f) < 0.001f,
+                "Android meter peak preserves pre-volume signal level alongside raw LastPeak");
+
+            IReadOnlyDictionary<int, float>? latestPeaks = null;
+            using var sampled = new ManualResetEventSlim();
+            meter.PeaksUpdated += snapshot => { latestPeaks = snapshot; sampled.Set(); };
+            meter.UpdateVisibleTargets([firstMeterId]);
+            meter.Start([firstMeterId, secondMeterId]);
+            pcm.Write(loud);
+            meter.WakeExternal();
+            Check(sampled.Wait(2000), "AudioMeterService samples external Android sources on demand");
+            Check(latestPeaks != null && latestPeaks.TryGetValue(firstMeterId, out float metered) && metered > 0.5f
+                && !latestPeaks.ContainsKey(secondMeterId),
+                "visible Android peak sampling updates only visible targets");
+
+            typeof(QuickPanelModernWindow).GetField("_meterEnabled", Hidden)!.SetValue(panel, true);
+            typeof(QuickPanelModernWindow).GetField("_displayPeaks", Hidden)!.SetValue(panel,
+                new Dictionary<int, float> { [firstMeterId] = 0.8f, [secondMeterId] = 0.8f });
+            typeof(QuickPanelModernWindow).GetMethod("RefreshMeterViewport", Hidden)!.Invoke(panel, null);
+            float rowPeak = (float)rowType.GetField("PeakLevel", Hidden)!.GetValue(firstRow)!;
+            Check(Math.Abs(rowPeak - 0.8f) < 0.001f && peakVisual!.Visibility == Visibility.Visible
+                && Math.Abs(peakTransform!.ScaleX - 0.8d) < 0.02d,
+                "visible Android row displays the real-time peak bar scaled to full volume");
+            slider.Value = 50;
+            Check(peakVisual.Visibility == Visibility.Visible && Math.Abs(peakTransform.ScaleX - 0.4d) < 0.02d,
+                "changing the Android row volume immediately rescales PART_PeakVisual within the filled track");
+            var targetsMethod = typeof(QuickPanelModernWindow).GetMethod("GetMeterTargets", Hidden)!;
+            first.Session.SetMute(true); DrainUi();
+            var activeTargets = ((IEnumerable<int>)targetsMethod.Invoke(panel, [false])!).ToArray();
+            Check((bool)rowType.GetField("Muted", Hidden)!.GetValue(firstRow)!
+                && (float)rowType.GetField("PeakLevel", Hidden)!.GetValue(firstRow)! == 0f
+                && peakVisual.Visibility == Visibility.Hidden && peakTransform.ScaleX == 0d
+                && !activeTargets.Contains(firstMeterId),
+                "muting an Android row immediately hides its peak visual and removes it from active meter targets");
+            first.Session.SetMute(false); DrainUi();
+            activeTargets = ((IEnumerable<int>)targetsMethod.Invoke(panel, [false])!).ToArray();
+            Check(!(bool)rowType.GetField("Muted", Hidden)!.GetValue(firstRow)! && activeTargets.Contains(firstMeterId),
+                "unmuting an Android row restores its meter target eligibility");
+            slider.Value = 100;
+            panel.SetMeterEnabled(false);
+            Check((float)rowType.GetField("PeakLevel", Hidden)!.GetValue(firstRow)! == 0f
+                && peakVisual.Visibility == Visibility.Hidden && peakTransform.ScaleX == 0d,
+                "disabling the meter clears Android row peaks and hides PART_PeakVisual");
+        }
+        finally
+        {
+            AndroidPcmSource.PeakActivity -= onPeakActivity;
+            Pump(meter.DisposeAsync());
+            pcmField.SetValue(first.Session, null);
         }
     }
 }

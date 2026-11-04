@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 #if SONICROUTE_PHONE
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,8 +28,13 @@ public partial class QuickPanelModernWindow
     private sealed class AndroidRow
     {
         internal AndroidAudioSource Source = null!;
+        internal int MeterId;
         internal StackPanel Root = null!, Details = null!;
         internal Slider Volume = null!;
+        internal Border? TrackBg, TrackFill, PeakVisual;
+        internal ScaleTransform? PeakTransform;
+        internal float PeakLevel;
+        internal bool Muted;
         internal Button Icon = null!;
         internal AppItem IconItem = null!;
         internal ToggleButton Expand = null!;
@@ -40,9 +46,20 @@ public partial class QuickPanelModernWindow
         internal readonly List<(Button Button, string Id)> Devices = new();
     }
     private readonly Dictionary<string, AndroidRow> _androidRows = new(StringComparer.Ordinal);
+    private readonly List<AndroidRow> _visibleAndroidMeterRows = new();
+    private readonly ConcurrentDictionary<int, AndroidAudioSource> _androidMeterSources = new();
+    private int _nextAndroidMeterId;
     private int _androidRefreshQueued;
     private bool? _androidDropShared;
     private int AndroidRowOffset => _androidRows.Values.Count(r => AppListPanel.Items.Contains(r.Root));
+    private bool HasAndroidMeterRows => _androidRows.Count > 0;
+    private bool HasVisibleAndroidMeterRows => _visibleAndroidMeterRows.Count > 0;
+    private int NextAndroidMeterId()
+    {
+        int id = --_nextAndroidMeterId;
+        if (id >= 0) id = _nextAndroidMeterId = -1;
+        return id;
+    }
     private void InitializeAndroidPanel()
     {
         InitializeAndroidDropOverlay();
@@ -106,12 +123,15 @@ public partial class QuickPanelModernWindow
     }
     private void StopAndroidPanel()
     {
+        SubscribeAndroidMeter(false);
         ClearAndroidDropHighlight();
         ApplicationAudio.Changed -= Android_StateChanged;
         AndroidAudioHost.DragStateChanged -= Android_DragStateChanged;
         IsVisibleChanged -= AndroidPanelVisibilityChanged;
         foreach (var row in _androidRows.Values) row.Wrap.FinishImmediately();
         _androidRows.Clear();
+        _visibleAndroidMeterRows.Clear();
+        _androidMeterSources.Clear();
     }
     internal void UpdatePhoneAudioButton()
     {
@@ -183,7 +203,10 @@ public partial class QuickPanelModernWindow
         });
     }
     private void AndroidPanelVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
-    { if (IsVisible) Android_StateChanged(); }
+    {
+        if (IsVisible) Android_StateChanged();
+        else StopMeter();
+    }
     private void RefreshAndroidRow(bool fromBuildAppRows = false)
     {
         if (_isClosed) return;
@@ -223,11 +246,14 @@ public partial class QuickPanelModernWindow
         {
             if (sources.Any(s => ReferenceEquals(s, row.Source)) && row.Legacy == legacy && row.ShowOutputName == outputName) continue;
             row.Wrap.FinishImmediately(); AppListPanel.Items.Remove(row.Root); _androidRows.Remove(row.Source.Id);
+            _androidMeterSources.TryRemove(row.MeterId, out _);
+            _visibleAndroidMeterRows.Remove(row);
         }
         for (int i = 0; i < sources.Count; i++)
         {
             var source = sources[i];
             if (!_androidRows.TryGetValue(source.Id, out var row)) _androidRows[source.Id] = row = CreateAndroidRow(source, legacy, outputName);
+            _androidMeterSources[row.MeterId] = source;
             var state = source.Session.State;
             if ((int)row.Volume.Value != state.Volume)
             {
@@ -236,8 +262,11 @@ public partial class QuickPanelModernWindow
                 finally { row.ApplyingState = false; }
             }
             row.Volume.IsEnabled = state.State == CaptureState.Receiving;
+            row.Muted = state.Muted;
+            if (state.Muted || !row.Volume.IsEnabled) row.PeakLevel = 0f;
             row.Volume.Foreground = state.Muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
             row.Icon.Opacity = state.Muted ? 0.45 : 1;
+            UpdateAndroidPeakVisual(row);
             row.IconItem.RefreshName();
             string phoneName = AndroidAudioHost.Phone.GetDisplayName(source.Device);
             bool phoneNameChanged = row.PhoneName != phoneName;
@@ -250,10 +279,15 @@ public partial class QuickPanelModernWindow
                 AppListPanel.Items.Remove(row.Root); AppListPanel.Items.Insert(i, row.Root);
             }
         }
+        if (!fromBuildAppRows && !_isClosed)
+        {
+            UpdateMeterTargets();
+            QueueMeterViewport();
+        }
     }
     private AndroidRow CreateAndroidRow(AndroidAudioSource source, bool legacy, bool showOutputName)
     {
-        var row = new AndroidRow { Source = source, Legacy = legacy, ShowOutputName = showOutputName };
+        var row = new AndroidRow { Source = source, MeterId = NextAndroidMeterId(), Legacy = legacy, ShowOutputName = showOutputName };
         var session = source.Session; var state = session.State;
         row.IconItem = AppItem.From(ApplicationAudio.Describe(source));
         AppItem.LoadIconsAsync(new List<AppItem> { row.IconItem });
@@ -284,13 +318,25 @@ public partial class QuickPanelModernWindow
         volume.VerticalAlignment = VerticalAlignment.Center; volume.Margin = new Thickness(0, 0, 6, 0);
         volume.Style = (Style)FindResource("RowSliderStyle"); volume.SetResourceReference(Slider.ForegroundProperty, "Theme.Accent");
         volume.ApplyTemplate();
-        var track = volume.Template.FindName("PART_TrackBg", volume) as Border;
-        var fill = volume.Template.FindName("PART_TrackFill", volume) as Border;
-        if (track != null) track.SizeChanged += (_, _) => VolumeTrackLayout.Update(volume, track, fill);
+        row.TrackBg = volume.Template.FindName("PART_TrackBg", volume) as Border;
+        row.TrackFill = volume.Template.FindName("PART_TrackFill", volume) as Border;
+        row.PeakVisual = volume.Template.FindName("PART_PeakVisual", volume) as Border;
+        if (row.PeakVisual != null)
+        {
+            row.PeakTransform = new ScaleTransform(0, 1);
+            row.PeakVisual.RenderTransform = row.PeakTransform;
+        }
+        if (row.TrackBg != null)
+            row.TrackBg.SizeChanged += (_, _) =>
+            {
+                UpdateAndroidSliderLayout(row);
+                if (_meterEnabled && IsVisible && !_visibleAndroidMeterRows.Contains(row))
+                    QueueMeterViewport();
+            };
         System.Windows.Automation.AutomationProperties.SetName(volume, source.App.Name + " 手机音量");
         volume.ValueChanged += (_, e) =>
         {
-            VolumeTrackLayout.Update(volume, track, fill);
+            UpdateAndroidSliderLayout(row);
             if (!row.ApplyingState && (int)Math.Round(e.NewValue) != session.State.Volume) session.SetVolume((int)Math.Round(e.NewValue));
         };
         VolumePresets.Attach(volume);
@@ -310,6 +356,77 @@ public partial class QuickPanelModernWindow
         row.Expand.Unchecked += (_, _) => ExpandAndroidRow(row, false);
         return row;
     }
+    private AudioMeterService CreateAudioMeterService() => new(ReadAndroidMeterPeak);
+    private void SubscribeAndroidMeter(bool enabled)
+    {
+        AndroidPcmSource.PeakActivity -= OnAndroidPeakActivity;
+        if (enabled) AndroidPcmSource.PeakActivity += OnAndroidPeakActivity;
+    }
+    private void OnAndroidPeakActivity() => _meter?.WakeExternal();
+    private (bool Active, float Peak) ReadAndroidMeterPeak(int meterId)
+    {
+        if (!_androidMeterSources.TryGetValue(meterId, out var source)) return (false, 0f);
+        var session = source.Session;
+        var state = session.State;
+        if (state.State != CaptureState.Receiving || state.Muted || session.Pcm is not { } pcm) return (false, 0f);
+        return pcm.ReadMeterPeak();
+    }
+    private IEnumerable<int> GetAndroidMeterTargets(bool visibleOnly)
+    {
+        var rows = visibleOnly ? (IEnumerable<AndroidRow>)_visibleAndroidMeterRows : _androidRows.Values;
+        return rows.Where(r => r.Volume.IsEnabled && !r.Muted).Select(r => r.MeterId);
+    }
+    private void RefreshAndroidMeterViewport()
+    {
+        _visibleAndroidMeterRows.Clear();
+        foreach (var row in _androidRows.Values)
+        {
+            if (row.Volume.ActualHeight <= 0 || !AppListPanel.Items.Contains(row.Root)) continue;
+            var bounds = row.Volume.TransformToAncestor(AppListScroll).TransformBounds(new Rect(row.Volume.RenderSize));
+            if (bounds.Bottom <= 0 || bounds.Top >= AppListScroll.ActualHeight) continue;
+            _visibleAndroidMeterRows.Add(row);
+            ApplyVisibleAndroidPeak(row);
+        }
+    }
+    private void ApplyVisibleAndroidPeaks()
+    {
+        foreach (var row in _visibleAndroidMeterRows) ApplyVisibleAndroidPeak(row);
+    }
+    private void ApplyVisibleAndroidPeak(AndroidRow row)
+    {
+        if (row.Muted || !row.Volume.IsEnabled) return;
+        float next = _displayPeaks != null && _displayPeaks.TryGetValue(row.MeterId, out float level) ? level : 0f;
+        if (row.PeakLevel == next) return;
+        row.PeakLevel = next;
+        UpdateAndroidPeakVisual(row);
+    }
+    private void ResetAndroidMeterPeaks(bool clearVisible = false)
+    {
+        if (clearVisible) _visibleAndroidMeterRows.Clear();
+        foreach (var row in _androidRows.Values)
+        {
+            row.PeakLevel = 0f;
+            UpdateAndroidPeakVisual(row);
+        }
+    }
+    private void ApplyAllAndroidRowsMutedVisual(bool muted)
+    {
+        foreach (var row in _androidRows.Values)
+        {
+            row.Muted = muted;
+            if (muted) row.PeakLevel = 0f;
+            row.Volume.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
+            row.Icon.Opacity = muted ? 0.45 : 1;
+            UpdateAndroidPeakVisual(row);
+        }
+    }
+    private void UpdateAndroidSliderLayout(AndroidRow row)
+    {
+        if (!VolumeTrackLayout.Update(row.Volume, row.TrackBg, row.TrackFill)) return;
+        UpdateAndroidPeakVisual(row);
+    }
+    private void UpdateAndroidPeakVisual(AndroidRow row) =>
+        UpdatePeakVisual(row.Volume, row.TrackBg, row.PeakVisual, row.PeakTransform, row.PeakLevel, row.Muted);
     private void ExpandAndroidRow(AndroidRow row, bool expanded)
     {
         if (_isClosed || row.Expanded == expanded) return;
@@ -376,6 +493,15 @@ public partial class QuickPanelModernWindow
     }
 #else
     private int AndroidRowOffset => 0;
+    private bool HasAndroidMeterRows => false;
+    private bool HasVisibleAndroidMeterRows => false;
+    private SonicRoute.Core.AudioMeterService CreateAudioMeterService() => new();
+    private void SubscribeAndroidMeter(bool enabled) { }
+    private System.Collections.Generic.IEnumerable<int> GetAndroidMeterTargets(bool visibleOnly) => System.Linq.Enumerable.Empty<int>();
+    private void RefreshAndroidMeterViewport() { }
+    private void ApplyVisibleAndroidPeaks() { }
+    private void ResetAndroidMeterPeaks(bool clearVisible = false) { }
+    private void ApplyAllAndroidRowsMutedVisual(bool muted) { }
     private void RefreshAndroidAppIcons(string processName) { }
     private void InitializeAndroidPanel() { }
     private void StopAndroidPanel() { }

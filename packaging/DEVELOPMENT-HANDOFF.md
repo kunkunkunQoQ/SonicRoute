@@ -4,29 +4,37 @@
 
 ## 当前已完成
 
-- Lite / Legacy 从上一提交 `e8eadf5` 的“托管全代回收叠加工作集收缩”，改回 v1.29 的单次 `SetProcessWorkingSetSize(-1, -1)`。1500ms单次延迟、关窗/预热/可见窗口门控和30秒限频保留；Full 不编译原生工作集收缩入口，活动手机连接、音频和虚拟屏继续独立运行。
-- 手机输出名称统一使用保存的设备名，例如“小米13 扬声器”。改名不会改变设备ID，已展开的设备选项也随事件更新。
-- 手机应用流入电脑后，快速面板和完整界面均可选此应用所属手机的扬声器。复用返回手机的处理，先停止该应用的虚拟屏呈现所有者，再关闭对应虚拟屏/电脑接收，避免晚到事件重新采集。相邻应用和另一台手机的同包应用不受影响。其他手机或蓝牙目的地仍不支持直接转发此入站音频，选择器不列出这些目的地。
-- 构建脚本识别重命名后的 `SonicRoute*` 运行进程，同时保护发行目录和顶层单EXE；目标被占用时提前停止，不结束用户程序。
+- **手机应用流转到电脑主面板实时音量条（峰值电平条）**：
+  - `AndroidPcmSource` 在 `Write` 中记录音量缩放前的信号峰值并暴露 `ReadMeterPeak()` 与 `PeakActivity` 按需唤醒事件（仅在电平表等待唤醒且写入非静音样本时触发一次，静音或连续帧零重复唤醒），同时保留原始 `LastPeak` 语义。
+  - `AudioMeterService` 支持负目标 ID（`pid < 0`）的外部峰值读取委托 `externalReader` 与 `WakeExternal()`，并将正 Windows PID 与负外部 ID 分离：仅监控或变更 Android 行时完全不创建、不枚举 Windows COM `MeterGraph`；可见 Android 行与原生 PC 应用共享同一套 33ms 采样、`Attack = 0.65f` / `Release = 0.15f` 平滑、`0.001f` 量化及静默归零后 `Timeout.Infinite` 休眠。
+  - `QuickPanelModernWindow` 提取公共 `UpdatePeakVisual`，在 `AndroidRow` 中绑定 `RowSliderStyle` 模板内的 `PART_PeakVisual` 与 `ScaleTransform(0, 1)`，接入视口可见行过滤（`_visibleAndroidMeterRows`）、音量滑块拖动即时缩放峰值条、静音立即隐藏并移出活动采样目标、面板隐藏/关闭或设置关闭 `ShowAppPeakMeter` 时退订事件并清零。Lite 与 Legacy（`net48`）通过 `#if SONICROUTE_PHONE` 隔离，不引入手机组件。
+- **既有能力保持**：
+  - Lite / Legacy 保持 v1.29 的单次 `SetProcessWorkingSetSize(-1, -1)`（1500ms 延迟、关窗/预热/可见窗口门控与 30 秒限频）；Full 不裁剪工作集，保护活动手机连接、音频和虚拟屏。
+  - 手机输出名称统一使用保存的设备名（如“小米13 扬声器”），入站手机应用在快速面板和完整界面均可选所属手机扬声器以返回手机播放。
 
 ## 验证与边界
 
-58项定向检查通过：Full 回收13、Lite 16、Legacy16、手机扬声器路由13。Lite/Legacy原生收缩只作用于隔离检查进程；其回调没有增加全代收集次数。手机检查使用模拟会话，运行真实快速/完整界面事件和UI派发，不访问手机或创建音频回传循环。
-
-已构建 Full/Lite x64 ReadyToRun 单EXE及 Legacy/net48 原13文件ZIP，未启用程序压缩。未做整版CPU/重开基准、长期占用、真机听音或ARM64验收。微软文档说明原生工作集收缩的两种API用途相同；不能仅凭更换入口名称宣称CPU问题已实测解决。
-
-本地当前交付入口在父容器的“测试版”目录。此次顶层 `SonicRoute-v1.30-x64.exe` 正由用户运行，仍是旧测试包；**新版Full是 `测试版/Full-x64/SonicRoute.exe`**。Lite使用顶层Lite EXE，Legacy使用Legacy-x64目录或新ZIP。启动新Full前先从托盘退出旧Full，避免只激活旧实例。普通“运行版”未覆盖。本地收据保存精确路径、源码输入与哈希。
+- 本轮定向检查全部通过：
+  - `checks/AndroidUiChecks --speaker-routing`：26 项断言通过（含 13 项 Android 实时峰值电平条与 13 项手机扬声器路由断言）。
+  - `checks/AndroidAudioChecks --phone-demand`：21 项断言通过。
+  - `packaging/Tests/MonitoringChecks --framework net10.0-windows`：33 项断言通过。
+  - `packaging/Tests/PanelChecks --panel-performance`（Full / Lite / net48）：77 × 3 = 231 项断言通过。
+- 已构建 Full/Lite x64 ReadyToRun 单 EXE 及 Legacy/net48 原 13 文件 ZIP，未启用程序压缩。未连接真机，未做真机听音、整版 CPU 基准或 ARM64 验收。
+- 本地当前交付入口在父容器的“测试版”目录。构建时 `测试版/Full-x64/SonicRoute.exe` 正由用户运行（PID 10636），未结束用户进程；**包含本轮手机实时音量条的新版 Full 为顶层 `测试版/SonicRoute-v1.30-x64.exe`**（以及 `outputs/android-peak-meter-20261104/editions/Full-x64/SonicRoute.exe`）。Lite 使用 `测试版/SonicRoute-v1.30-Lite-x64.exe`（或 `测试版/Lite-x64/SonicRoute.exe`），Legacy 使用 `测试版/SonicRoute-v1.30-Legacy-x64.zip`（或 `测试版/Legacy-x64/SonicRoute.exe`）。启动新 Full 前请先从托盘退出正在运行的旧 Full 实例，避免单实例互斥只激活旧进程；退出旧实例后也可将 `SonicRoute-v1.30-x64.exe` 覆盖回 `Full-x64/SonicRoute.exe`。普通“运行版”未覆盖。
 
 ## 给下一位 AI
 
-1. 先读本地 `AGENTS.md`、父容器 `AI_CONTEXT.md`、本文件和 [WORKLOG.md](WORKLOG.md)，检查 `git status`、分支和远端；不要假定旧记录中的分支、路径或程序版本仍有效。唯一当前源码在父容器“当前项目”，旧Lab仅作归档参考。
-2. 本轮要求已完成，后续开发范围由用户的新请求决定。若用户反馈CPU仍高，先在同一场景区分回收瞬时开销、重新访问页面的成本和其他后台工作，再决定是否修改策略；不要新增周期GC或轮询来压工作集数字。
+1. 先读本地 `AGENTS.md`、父容器 `AI_CONTEXT.md`、本文件和 [WORKLOG.md](WORKLOG.md)，检查 `git status`、分支和远端；不要假定旧记录中的分支、路径或程序版本仍有效。唯一当前源码在父容器“当前项目”，旧 Lab 仅作归档参考。
+2. 本轮要求已完成，后续开发范围由用户的新请求决定。开发时优先控制闲时 CPU 和加载成本，复用事件、服务、控件与缓存；关窗只撤销 UI 自己的工作，保留活动音频、手机连接和虚拟屏。
 3. 每轮向 [WORKLOG.md](WORKLOG.md) 追加用户要求、改动、原因、必要验证结果、实际运行的构建/提交和未验证项；重要取舍写清依据。结束前更新本文件的“当前已完成/后续”状态，保留历史记录，不把计划当成已实现。
-4. 在本地父容器 `integration-docs` 保存本轮交付收据和交接摘要，并更新父容器 `AI_CONTEXT.md` 的最新入口；维护方便上一位AI继续接手的记录。公开仓库不提交私有配置、ADB凭据、设备连接地址、日志或运行包。
-5. 优先控制闲时CPU和加载成本，复用事件、服务、控件与缓存；关窗只撤销UI自己的工作。保留活动音频、手机连接和虚拟屏。不恢复已撤销的“电脑应用拖出后切到其窗口”功能。Store固定Full，Lite/Legacy不引入手机组件。
+4. 在本地父容器 `integration-docs` 保存本轮交付收据和交接摘要，并更新父容器 `AI_CONTEXT.md` 的最新入口；维护方便下一位 AI 继续接手的记录。公开仓库不提交私有配置、ADB 凭据、设备连接地址、日志或运行包。
+5. 不恢复已撤销的“电脑应用拖出后切到其窗口”功能。Store 固定 Full，Lite/Legacy 不引入手机组件。
 
 ## 定向检查入口
 
-`packaging/Tests/PanelChecks` 的 `--ui-memory` 按Full、Lite和net48分别构建运行；不同框架/版本使用不同ArtifactsPath并串行构建，防止共享project.assets.json。`checks/AndroidUiChecks` 的 `--speaker-routing` 使用模拟设备与会话验证本轮路由。它复用既有测试资源加载器来禁止产品Startup，避免测试注册全局快捷键或启动用户级后台服务。
+- `checks/AndroidUiChecks` 的 `--speaker-routing`：使用模拟设备与会话验证手机扬声器路由及主面板 Android 应用行实时峰值电平条（`PART_PeakVisual`）。
+- `checks/AndroidAudioChecks` 的 `--phone-demand`：验证 `AndroidPcmSource` SIMD/标量峰值计算与按需加载。
+- `packaging/Tests/MonitoringChecks`（`--framework net10.0-windows`）：验证 `AudioMeterService` 事件驱动唤醒与会话图生命周期（若机器无 `pwsh.exe`，可在临时 PATH 目录放置指向 `powershell.exe` 的 `pwsh.cmd`）。
+- `packaging/Tests/PanelChecks` 的 `--panel-performance` / `--ui-memory`：按 Full、Lite 和 net48 分别使用独立 `ArtifactsPath` 串行构建运行。
 
-未发Release、tag或商店包。源码按用户本轮要求推送GitHub，是否推送成功以远端核验和本地最新收据为准。
+未发 Release、tag 或商店包。源码按用户要求提交并推送 GitHub，是否推送成功以远端核验和本地最新收据为准。
