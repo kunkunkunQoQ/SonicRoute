@@ -73,3 +73,12 @@
 - 诊断过程边界：首次 native 静音探针成功不足以覆盖其他媒体正在蓝牙播放的场景；电脑到手机真机检查暴露共享深缓冲路由问题，低延迟输出修复后通过。滞后的路由回调还暴露检查需等待当前目标，已同时限定生产确认逻辑和检查条件。音乐暂停时的静音不能当作声音验证通过；最终真机检查明确播放前置条件后重新通过。早期探针/中间构建不作为最终交付证据。
 - 构建：只更新固定 Full x64 ReadyToRun 单 EXE 入口，无程序压缩、无新版本目录。普通运行版和 Lite/Legacy 未动；Store 保持 Full。原运行的旧 Full 由用户从托盘退出后替换，未结束用户进程。
 - 未测：人工听感、整版长期 CPU/内存、其他 Android 机型/版本及 ARM64。没有 Release/tag/Store 提交。本地证据及源码/包/远端提交的最终状态见父容器 `integration-docs/33-EXPLICIT-PHONE-OUTPUT.md` 和 `explicit-phone-output-receipt.json`。
+
+
+## 2026-11-04：关于页开源许可文字链接
+
+- 用户要求：将“许可与第三方声明”按钮改成“开源许可”文字链接，放在作者主页旁边。
+- 实现：移除独立按钮，在原作者主页链接行 GitHub 后追加相同分隔符及 Hyperlink，复用原字体和 Theme.Accent 动态颜色。仅 Full 显示，加载时防止重复插入；点击继续按需读取原内嵌许可并打开文本，不在页面加载时读取许可内容或启动连接。
+- 验证：Full x64 ReadyToRun 单 EXE 发布构建通过，检查 XAML 事件与 Hyperlink 类型；未扩展手机真机/性能测试，人工视觉与点击可在新版中确认。
+- 交付：固定 `测试版/Full-x64/SonicRoute.exe` 已更新。顶层 `测试版/SonicRoute-v1.30-x64.exe` 正由用户运行，保留该文件与会话，未结束用户进程；当前新版入口以本地 34 号记录和收据为准。Lite/Legacy 和普通运行版未构建或替换，原有 SmartVolume 调参保留。
+- 同步：本轮 UI 与交接随同提交到 GitHub；实际提交及文件 Hash 见父容器 `integration-docs/about-license-link-receipt.json`。没有 Release/tag/Store 发布。

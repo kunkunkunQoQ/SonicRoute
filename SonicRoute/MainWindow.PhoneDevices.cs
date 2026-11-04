@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.Windows;
 #if SONICROUTE_PHONE
 using System.Windows.Controls;
+using System.Windows.Documents;
 using SonicRoute.AndroidAudio;
 using Button = System.Windows.Controls.Button;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
@@ -15,16 +16,21 @@ namespace SonicRoute;
 
 public partial class MainWindow
 {
-    private void ThirdPartyNotices_Loaded(object sender, RoutedEventArgs e)
+    private void AboutLinks_Loaded(object sender, RoutedEventArgs e)
     {
 #if SONICROUTE_PHONE
-        if (sender is Button button) button.Visibility = Visibility.Visible;
+        if (sender is not TextBlock links || links.Inlines.OfType<Hyperlink>().Any(link => link.Name == "OpenSourceLicensesLink")) return;
+        var licenseLink = new Hyperlink(new Run("开源许可")) { Name = "OpenSourceLicensesLink" };
+        licenseLink.SetResourceReference(Hyperlink.ForegroundProperty, "Theme.Accent");
+        licenseLink.Click += ThirdPartyNotices_Click;
+        links.Inlines.Add(new Run(" ‖ "));
+        links.Inlines.Add(licenseLink);
 #endif
     }
     private async void ThirdPartyNotices_Click(object sender, RoutedEventArgs e)
     {
 #if SONICROUTE_PHONE
-        var button = (Button)sender; button.IsEnabled = false;
+        var link = (Hyperlink)sender; link.IsEnabled = false;
         try
         {
             string path = System.IO.Path.Combine(AndroidAudioHost.Adb.RuntimeDirectory, "THIRD-PARTY-NOTICES.txt");
@@ -36,7 +42,7 @@ public partial class MainWindow
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }
         catch (Exception ex) { ShowToast(ex.Message); }
-        finally { button.IsEnabled = true; }
+        finally { link.IsEnabled = true; }
 #else
         await Task.CompletedTask;
 #endif

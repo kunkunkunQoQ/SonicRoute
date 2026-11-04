@@ -873,8 +873,6 @@
                     <!-- ⑥ 其他 + 关于 -->
                     <Border Style="{StaticResource Card}">
                         <StackPanel>
-                            <Button Content="许可与第三方声明" Visibility="Collapsed" Loaded="ThirdPartyNotices_Loaded"
-                                    HorizontalAlignment="Left" Style="{StaticResource QuickPanelToolButton}" Click="ThirdPartyNotices_Click"/>
                             <TextBlock x:Name="AboutAuthorText"
                                        FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                        Margin="0,16,0,0"
@@ -887,7 +885,7 @@
                                     </MultiBinding>
                                 </TextBlock.Text>
                             </TextBlock>
-                            <TextBlock Margin="0,12,0,0" FontSize="13"
+                            <TextBlock Margin="0,12,0,0" FontSize="13" Loaded="AboutLinks_Loaded"
                                        Foreground="{DynamicResource Theme.TextSecondary}">
                                 <Run Text="{Binding [St.AuthorHome], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                 <Hyperlink x:Name="BiliLink" Click="BiliLink_Click"
