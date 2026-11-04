@@ -15,7 +15,7 @@
     "featuresTitle": "SonicRoute 的功能",
     "downloadTitle": "下載與快速入門",
     "releaseNotes": "發布說明（簡體中文）",
-    "downloadIntro": "需要可選 Android 手機音訊與虛擬螢幕功能時選擇 **Full x64**；只使用電腦音訊功能可選 **Lite x64**；受限環境可選依賴系統 .NET Framework 4.8 的 **Legacy x64**。ARM64 版本為實驗性。Full 包含可選手機整合，Lite 與 Legacy 不含手機功能。商店套件以 Full 為建置來源，目前上架版本以 Store 頁面為準。下方直連對應 {release}。",
+    "downloadIntro": "推薦首選 **Lite x64**（單檔便攜、低記憶體佔用）；辦公或受限機型可選 **Legacy x64**（免裝執行階段，解壓縮即用）；ARM64 裝置選擇 **Lite ARM64**。亦可透過 **Microsoft Store** 取得並自動更新。下方直連均對應最新正式版 {release}。",
     "edition": "版本",
     "requirements": "需求",
     "singleExe": "單一 EXE",
@@ -23,8 +23,8 @@
     "storeInstall": "從 Store 安裝",
     "liteRequirement": "單一檔案可攜版；需要相符的 x64 .NET 10 Desktop Runtime",
     "legacyRequirement": "免裝額外執行庫，適合受限辦公電腦；依賴系統內建 .NET Framework 4.8，解壓即用",
-    "storeRequirement": "以 Full 建置並包含其可選手機功能。需要 x64 .NET 10 Desktop Runtime；商店頁面顯示目前上架版本。",
-    "runtimeNote": "執行階段說明：Full 與 Lite 都需要安裝 {runtime}；Legacy 依賴系統自帶 .NET Framework 4.8，無需額外安裝執行階段（歷史 {runtime8} 相容版已下架停更）。",
+    "storeRequirement": "NET10 商店套件需要 x64 .NET 10 Desktop Runtime。上架版本請以 Microsoft Store 頁面為準；適用於 64 位元 Windows 10/11。",
+    "runtimeNote": "執行階段說明：預設 Lite 需要安裝 {runtime}；Legacy 版本依賴系統自帶 .NET Framework 4.8，無需額外安裝執行階段（歷史 {runtime8} 相容版已下架停更）。",
     "steps": [
         "**按兩下啟動常駐**：下載解壓縮或按兩下執行後軟體常駐工作列系統匣（建議從溢出區拖出固定以便隨時檢視）；按兩下系統匣圖示即可打開主視窗。",
         "**勾選裝置與分流**：首次在「設定 → 保留的裝置」勾選常用耳機與音響；按一下系統匣圖示呼出快速面板，滑動應用程式滑桿即時分流裝置與調整音量。",
@@ -51,7 +51,7 @@
     "configureAutomation": "設定自動化",
     "automationExample": "把繁瑣的手動改設定，變成一次配置、隨開隨用的自動化體驗。",
     "currentRelease": "目前版本",
-    "releaseSummary": "v1.30 為 Full 加入可選 Android 手機音訊與虛擬螢幕整合，支援依應用程式路由、手機輸出控制與手機應用程式電平條；Lite 與 Legacy 維持電腦功能。開發階段的定向紀錄包含小米 13 路由驗證；其他裝置涵蓋與人工聽感尚未驗收。詳見 {history}。",
+    "releaseSummary": "v1.29 新增輸出裝置獨立音量管理面板，按需載入並由系統事件即時重新整理，支援篩選僅顯示保留裝置；新增 Shift+滾輪全域調節系統總音量，與普通滾輪、Alt+滾輪裝置換軌無縫協同。更多歷史改動詳見 {history}。",
     "docTopic": "主題",
     "docGuides": "指南",
     "docTopics": [
@@ -81,8 +81,8 @@
         "**應用獨立聲音分流與雙向路由（播放 + 錄音）**：為每個應用分別指定輸出與輸入設備，讓遊戲與語音走耳機和麥克風，音樂走音箱。設定由 Windows 原生持久化，結束軟體後依然生效，不破壞系統混音器設定。",
         "**前景焦點智慧跟隨與匣區滾輪盲操**：系統事件驅動秒級鎖定目前前景有聲應用；支援在工作列匣區捲動滾輪盲調音量，按住 Alt 捲動即時換軌裝置，配合螢幕浮動 OSD 提示與全域麥克風靜音，無需切換視窗。",
         "**快速面板與即時出聲電平指示**：卡片式快速面板支援 350~850px 高度調整與位置儲存；直覺掌控各應用獨立音量，內建即時聲音電平指示。",
-        "**自動化連招引擎與極速 CLI（6 種觸發 × 39 種操作）**：支援應用啟閉與切換、排程、快捷鍵等 6 種觸發，自由組合設備切換、音量、靜音、程式關聯啟動與 PowerShell；內建 sr 具名管道短命令，無額外常駐開銷，輕鬆連動腳本與硬體控制台。",
-        "**事件優先偵測**：使用系統通知，並在需要時以每秒一次的快照檢查作為備援；不需要的資料會按需清理。Full 提供可選 Android 手機音訊與虛擬螢幕整合；Lite 與 Legacy 僅含電腦功能。支援九種語言。"
+        "**自動化連招引擎與極速 CLI（6 種觸發 × 37 種操作）**：支援應用啟閉與切換、排程、快捷鍵等 6 種觸發，自由組合設備切換、音量、靜音、程式關聯啟動與 PowerShell；內建 sr 具名管道短命令，無額外常駐開銷，輕鬆連動腳本與硬體控制台。",
+        "**事件優先偵測**：使用系統通知，並在需要時以每秒一次的快照檢查作為備援；不需要的資料會按需清理。提供 .NET 10 Lite、Legacy（.NET 4.8）與商店版，支援九種語言。"
     ],
     "comicTitle": "小躍的奇妙日常",
     "comicDescription": "從雞蛋裡蹦出來的魔法少女，以及她越幫越忙的離譜日常。",
@@ -103,10 +103,10 @@
         "一鍵全域麥克風靜音（快捷鍵 Ctrl+Shift+N），配合螢幕常駐 OSD 浮窗，一眼確認是否閉麥",
         "為各應用指定獨立實體或虛擬軌道，避免錄影時把私人聊天或系統提示音混入錄像"
     ],
-    "editionLiteX64": "Lite x64（.NET 10，僅電腦功能）",
-    "editionLiteArm64": "Lite ARM64（.NET 10，僅電腦功能）",
-    "editionLegacyX64": "Legacy x64（僅電腦功能，.NET Framework 4.8）",
-    "editionStore": "Microsoft Store（以 Full 建置）",
+    "editionLiteX64": "Lite x64（.NET 10 推薦首選）",
+    "editionLiteArm64": "Lite ARM64（.NET 10）",
+    "editionLegacyX64": "Legacy x64（免裝執行庫）",
+    "editionStore": "Microsoft Store（商店提供更新）",
     "arm64Requirement": "ARM64 可攜版；需要 ARM64 .NET 10 Desktop Runtime",
     "commandSnippetComment": "觸發指定自動化規則（需 SonicRoute 正在運行）",
     "faqQuickTitle": "常見問題速覽",
@@ -129,9 +129,5 @@
     "quickStartTitle": "快速上手三步驟",
     "cliTitle": "命令列與自動化連動（極客推薦）",
     "releaseHighlightsTitle": "{release} 版本亮點速覽",
-    "retiredNet8Title": "歷史 NET8 相容版（已下架停更，點擊展開）",
-    "editionFullX64": "Full x64（.NET 10，含可選手機整合）",
-    "editionFullArm64": "Full ARM64（.NET 10，實驗性）",
-    "fullRequirement": "單一 EXE；需要相符的 x64 .NET 10 Desktop Runtime，包含可選 Android 整合。",
-    "fullArm64Requirement": "實驗性 ARM64 單一 EXE；需要 ARM64 .NET 10 Desktop Runtime。原生 ARM64 與其使用的 x64 輔助程序未驗證。"
+    "retiredNet8Title": "歷史 NET8 相容版（已下架停更，點擊展開）"
 }

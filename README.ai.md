@@ -7,9 +7,9 @@
 SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
-  version: "v1.30 (1.30.0.0)"
+  version: "v1.29 (1.29.0.0)"
   source_version: "v1.30"
-  source_status: "Same version number as the published release; source may contain later commits."
+  source_status: "Development version; not the current published release."
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
@@ -27,12 +27,10 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   cross_platform: "FALSE (strictly Win32/WPF/.NET CoreAudio; never macOS/Linux)"
 
 RELEASE_EDITIONS:
-  - { edition: Full, runtime: net10, architecture: x64, asset: "SonicRoute-v1.30-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Full, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.30-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.30-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.30-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
-  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.30-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
-  - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }
+  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.29-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
+  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.29-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
+  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-v1.29-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
+  - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_LITE_EXE, updates: MICROSOFT_STORE }
   - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
   - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
 
@@ -197,11 +195,11 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Optional execution history: ExecutionHistory/{CommandEdition}, only when experimental mode and execution history are enabled. SONICROUTE_DATA_DIRECTORY can override the root with an absolute path for isolated tooling."
 
   VERSION_ARCHIVE_AND_CHANGELOG:
-    intent: "Release history, changelog, v1.30 upgrade notes"
-    keywords: ["changelog", "history", "version", "update", "v1.30", "v1.25", "v1.24", "更新日志", "版本历史"]
+    intent: "Release history, changelog, v1.29 upgrade notes"
+    keywords: ["changelog", "history", "version", "update", "v1.29", "v1.25", "v1.24", "更新日志", "版本历史"]
     wiki: "09-版本历史.md"
-    source: ["docs/release-v1.30.md"]
-    symbols: ["v1.30"]
+    source: ["docs/release-v1.29.md"]
+    symbols: ["v1.29"]
     facts:
       - "v1.29: Expandable output endpoint volume panel, independent retained-device filter, deferred loading and event-driven incremental refresh; Shift wheel controls system volume. JSON/language and audio-meter work was reduced without a whole-app CPU claim."
       - "v1.28: Inline application renaming, shared routing card, independent mute/activity and hidden-panel markers; Alt wheel changes app output, Alt+Shift wheel changes system output. Existing device hotkeys remain."

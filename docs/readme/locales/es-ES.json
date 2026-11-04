@@ -15,7 +15,7 @@
     "featuresTitle": "Qué ofrece SonicRoute",
     "downloadTitle": "Descarga y primeros pasos",
     "releaseNotes": "Notas de la versión (en chino)",
-    "downloadIntro": "Elija **Full x64** para audio Android y pantallas virtuales, **Lite x64** para funciones de audio solo en PC o **Legacy x64** para .NET Framework 4.8. Las ediciones ARM64 son experimentales. La integración opcional con móviles solo está en Full. El paquete Store se basa en Full; la versión disponible se indica en la página de Store. Enlaces directos para {release}.",
+    "downloadIntro": "Para la mayoría de usuarios se recomienda **Lite x64** (ejecutable único portátil, bajo consumo de memoria); use **Legacy x64** en equipos de trabajo restringidos (sin necesidad de runtime externo, descomprimir y ejecutar); elija **Lite ARM64** para equipos ARM64. También disponible en la **Microsoft Store** con actualizaciones automáticas. Enlaces directos para {release} a continuación.",
     "edition": "Edición",
     "requirements": "Requisitos",
     "singleExe": "Un solo EXE",
@@ -23,8 +23,8 @@
     "storeInstall": "Instalar desde Store",
     "liteRequirement": "Ejecutable portátil de un solo archivo; requiere .NET 10 Desktop Runtime x64",
     "legacyRequirement": "No requiere .NET 8; funciona directamente con el .NET Framework 4.8 integrado de Windows; extraiga el ZIP",
-    "storeRequirement": "Basado en Full e incluye sus funciones móviles opcionales. Requiere .NET 10 Desktop Runtime x64; la página Store indica la versión disponible.",
-    "runtimeNote": "Full y Lite requieren {runtime}; Legacy utiliza el .NET Framework 4.8 integrado sin instalaciones adicionales (versiones históricas {runtime8} descatalogadas).",
+    "storeRequirement": "El paquete de Store con .NET 10 requiere .NET 10 Desktop Runtime x64. Consulta la página de Store para ver la versión disponible actualmente; para Windows 10/11 de 64 bits.",
+    "runtimeNote": "Requisitos de entorno: La edición estándar Lite requiere {runtime}; Legacy aprovecha el .NET Framework 4.8 integrado sin descargas adicionales (versiones históricas {runtime8} descatalogadas).",
     "steps": [
         "**Iniciar y anclar a la bandeja** : Haga doble clic para iniciar; SonicRoute permanece residente en la bandeja del sistema (arrastre el icono para mantenerlo visible). Un doble clic abre la ventana principal.",
         "**Elegir dispositivos y enrutar** : Marque sus auriculares y altavoces en «Ajustes → Dispositivos conservados». Un clic izquierdo en la bandeja despliega el panel rápido para enrutar cada app y ajustar su volumen.",
@@ -51,7 +51,7 @@
     "configureAutomation": "Configurar automatización",
     "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
     "currentRelease": "Versión actual",
-    "releaseSummary": "v1.30 añade a Full integración opcional de audio Android y pantallas virtuales, con enrutamiento por aplicación, control de salidas del móvil e indicadores de nivel. Lite y Legacy mantienen solo funciones de PC. Las pruebas dirigidas de desarrollo incluyeron el enrutamiento en Xiaomi 13; otros dispositivos y la escucha humana no están validados. Consulte {history}.",
+    "releaseSummary": "La versión 1.29 añade un panel de volumen para dispositivos de salida actualizado por eventos del sistema y con filtro para dispositivos conservados, además del ajuste de volumen general mediante Shift+rueda en combinación con el enrutamiento Alt+rueda. Registro de cambios en {history}.",
     "docTopic": "Tema",
     "docGuides": "Guías",
     "docTopics": [
@@ -81,8 +81,8 @@
         "**Enrutamiento bidireccional y separación de audio por app (reproducción + grabación):** asigne dispositivos de salida y entrada específicos a cada aplicación (juegos y voz a auriculares, música a altavoces). La configuración se guarda de forma nativa en Windows incluso al cerrar el programa.",
         "**Seguimiento inteligente del primer plano y ajuste ciego con la rueda.** Los eventos del sistema detectan la aplicación activa en milisegundos. Desplace la rueda sobre la bandeja del sistema para ajustar el volumen o use Alt+rueda para cambiar de dispositivo, con avisos OSD y silencio global de micrófono.",
         "**Panel rápido e indicador de nivel de sonido en tiempo real:** el panel de tarjetas ofrece una altura ajustable de 350 a 850 px y guarda su posición; controle el volumen de cada aplicación con medidores de sonido en directo.",
-        "**Motor de automatización y CLI ultrarrápida (6 disparadores × 39 acciones):** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.",
-        "**Detección basada primero en eventos:** notificaciones del sistema y comprobación por segundo si hace falta. La integración móvil solo está en Full; Lite y Legacy son solo para PC. Disponible en 9 idiomas."
+        "**Motor de automatización y CLI ultrarrápida (6 disparadores × 37 acciones):** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.",
+        "**Detección basada primero en eventos:** utiliza notificaciones del sistema y una comprobación por segundo si hace falta; limpieza bajo demanda. Disponible como Lite para .NET 10, Legacy (.NET 4.8) y edición Store en 9 idiomas."
     ],
     "comicTitle": "XiaoYue Comics",
     "comicDescription": "Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nuevo desastre cada vez que intenta ayudar.",
@@ -103,10 +103,10 @@
         "Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla",
         "Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación"
     ],
-    "editionLiteX64": "Lite x64 (.NET 10, solo PC)",
-    "editionLiteArm64": "Lite ARM64 (.NET 10, solo PC)",
-    "editionLegacyX64": "Legacy x64 (solo PC, .NET Framework 4.8)",
-    "editionStore": "Microsoft Store (basado en Full)",
+    "editionLiteX64": "Lite x64 (.NET 10, Recomendado)",
+    "editionLiteArm64": "Lite ARM64 (.NET 10)",
+    "editionLegacyX64": "Legacy x64 (Sin .NET 8)",
+    "editionStore": "Microsoft Store (actualizaciones de Store)",
     "arm64Requirement": "Ejecutable portátil ARM64; requiere .NET 10 Desktop Runtime ARM64",
     "commandSnippetComment": "Ejecutar regla de automatización (SonicRoute debe estar en ejecución)",
     "faqQuickTitle": "Preguntas frecuentes (FAQ)",
@@ -129,9 +129,5 @@
     "quickStartTitle": "Inicio rápido en 3 pasos",
     "cliTitle": "Línea de comandos y automatización (Avanzado)",
     "releaseHighlightsTitle": "Aspectos destacados de la versión {release}",
-    "retiredNet8Title": "Ediciones anteriores compatibles con NET8 (descatalogadas, clic para desplegar)",
-    "editionFullX64": "Full x64 (.NET 10, integración móvil)",
-    "editionFullArm64": "Full ARM64 (.NET 10, experimental)",
-    "fullRequirement": "Ejecutable único; requiere .NET 10 Desktop Runtime x64 correspondiente. Integración Android opcional.",
-    "fullArm64Requirement": "Ejecutable ARM64 experimental; requiere .NET 10 Desktop Runtime ARM64. ARM64 nativo y los procesos auxiliares x64 no están validados."
+    "retiredNet8Title": "Ediciones anteriores compatibles con NET8 (descatalogadas, clic para desplegar)"
 }

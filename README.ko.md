@@ -33,8 +33,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 - **앱별 개별 사운드 분할 및 양방향 라우팅(재생 + 녹음):** 앱마다 재생 및 녹음 장치를 개별 지정하여 게임과 음성 채팅은 헤드셋으로, 음악은 스피커로 전달합니다. 설정은 Windows에 네이티브로 유지되어 프로그램을 종료해도 유지됩니다.
 - **포그라운드 스마트 추적 및 트레이 휠 간편 제어:** 시스템 이벤트를 통해 소리가 나는 활성 앱을 즉시 감지합니다. 작업 표시줄 트레이에서 휠 스크롤로 볼륨 조절 및 Alt+휠로 장치 전환이 가능하며, OSD 알림과 마이크 음소거로 화면 전환 없이 제어합니다.
 - **빠른 패널 및 실시간 오디오 레벨 표시:** 카드 패널은 350~850px 높이 조절과 위치 저장을 지원합니다. 앱별 볼륨 슬라이더와 실시간 오디오 레벨을 직관적으로 확인하세요.
-- **자동화 콤보 엔진 및 초고속 CLI(6가지 트리거 × 39개 작업):** 앱 실행/전환/종료, 예약, 단축키 등 6가지 트리거 지원. 장치 전환, 볼륨, 음소거, PowerShell 등을 조합할 수 있으며, 내장된 sr 명령어로 외부 스크립트 및 하드웨어와 손쉽게 연동됩니다.
-- **이벤트 우선 감지**: 시스템 알림을 우선 사용하고 필요 시 1초 간격 스냅샷으로 보완합니다. 휴대폰 통합은 Full에만 포함되고 Lite와 Legacy는 PC 기능만 제공합니다. 9개 언어를 지원합니다.
+- **자동화 콤보 엔진 및 초고속 CLI(6가지 트리거 × 37개 작업):** 앱 실행/전환/종료, 예약, 단축키 등 6가지 트리거 지원. 장치 전환, 볼륨, 음소거, PowerShell 등을 조합할 수 있으며, 내장된 sr 명령어로 외부 스크립트 및 하드웨어와 손쉽게 연동됩니다.
+- **이벤트 우선 감지**: 시스템 알림을 우선 사용하고 필요 시 1초 간격의 스냅샷으로 보완하며 불필요한 데이터는 정리합니다. .NET 10 Lite, Legacy (.NET 4.8), Store 버전을 제공하며, 9개 언어를 지원합니다.
 
 ## 🎮 일상적인 활용
 
@@ -50,18 +50,16 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 ## 🚀 다운로드 및 시작하기
 
-**현재 릴리스: [v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.30)** · 2026-11-04 · [릴리스 노트(중국어 간체)](docs/release-v1.30.md)
+**현재 릴리스: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [릴리스 노트(중국어 간체)](docs/release-v1.29.md)
 
-Android 휴대폰 오디오 및 가상 디스플레이 기능이 필요하면 **Full x64**, PC 오디오 기능만 사용하면 **Lite x64**, .NET Framework 4.8 환경은 **Legacy x64**를 선택하세요. ARM64 버전은 실험용입니다. 휴대폰 통합은 Full에만 포함됩니다. Store 패키지는 Full을 기반으로 빌드되며, 현재 제공 버전은 Store 페이지를 기준으로 합니다. 아래 링크는 v1.30용입니다.
+일반 PC 환경에서는 **Lite x64** (단일 실행 파일, 가벼운 메모리 점유)를 권장합니다. 런타임 설치가 제한된 업무용 PC는 **Legacy x64** (추가 설치 불필요, 압축 해제 즉시 실행), ARM64 PC는 **Lite ARM64**를 선택하세요. **Microsoft Store**를 통한 설치 및 자동 업데이트도 지원합니다. 아래 링크는 최신 릴리스 v1.29입니다.
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| ⭐ Full x64 (.NET 10, 휴대폰 통합) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) | 단일 EXE이며 x64 .NET 10 Desktop Runtime이 필요합니다. Android 통합은 선택 기능입니다. |
-| ⚡ Full ARM64 (.NET 10, 실험용) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 실험용 ARM64 단일 EXE이며 ARM64 .NET 10 Desktop Runtime이 필요합니다. 네이티브 ARM64 및 x64 보조 프로세스는 검증되지 않았습니다. |
-| ⭐ Lite x64 (.NET 10, PC 전용) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) | 휴대용 단일 실행 파일; x64 .NET 10 Desktop Runtime 필요 |
-| 🛡️ Legacy x64 (PC 전용, .NET Framework 4.8) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
-| ⚡ Lite ARM64 (.NET 10, PC 전용) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 휴대용 ARM64 실행 파일; ARM64 .NET 10 Desktop Runtime 필요 |
-| 🔄 Microsoft Store (Full 기반) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Full을 기반으로 빌드되어 선택형 휴대폰 기능을 포함합니다. x64 .NET 10 Desktop Runtime이 필요하며 현재 제공 버전은 Store 페이지에서 확인하세요. |
+| ⭐ Lite x64 (.NET 10 권장) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | 휴대용 단일 실행 파일; x64 .NET 10 Desktop Runtime 필요 |
+| 🛡️ Legacy x64 (.NET 8 불필요) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
+| ⚡ Lite ARM64 (.NET 10) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | 휴대용 ARM64 실행 파일; ARM64 .NET 10 Desktop Runtime 필요 |
+| 🔄 Microsoft Store (Store 업데이트) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | .NET 10 Store 패키지에는 x64 .NET 10 Desktop Runtime이 필요합니다. 현재 제공 중인 버전은 Store 페이지에서 확인하세요(64비트 Windows 10/11). |
 
 <details>
 <summary><sub>📦 이전 NET8 호환 버전 (제공 종료, 펼쳐서 보기)</sub></summary>
@@ -73,7 +71,7 @@ Android 휴대폰 오디오 및 가상 디스플레이 기능이 필요하면 **
 </details>
 
 > [!NOTE]
-> Full과 Lite는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) 설치가 필요하며, Legacy는 Windows 내장 .NET Framework 4.8을 사용하므로 추가 설치가 필요 없습니다 (기존 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 호환 버전은 제공 종료).
+> 런타임 안내: 기본 Lite는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) 설치가 필요하며, Legacy 버전은 Windows 내장 .NET Framework 4.8을 사용하여 추가 설치가 필요 없습니다 (기존 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 호환 버전은 제공 종료).
 
 ### 🏁 3단계 빠른 시작
 
@@ -90,9 +88,9 @@ Android 휴대폰 오디오 및 가상 디스플레이 기능이 필요하면 **
 sr "규칙 이름 또는 ID"
 ```
 
-### 🆕 v1.30 릴리스 주요 변경사항
+### 🆕 v1.29 릴리스 주요 변경사항
 
-v1.30은 Full에 선택형 Android 휴대폰 오디오 및 가상 디스플레이 통합을 추가하여 앱별 라우팅, 휴대폰 출력 제어와 피크 레벨 표시를 지원합니다. Lite와 Legacy는 PC 기능만 제공합니다. 개발 단계의 대상 검사에는 Xiaomi 13 라우팅이 포함되며, 다른 기기와 실제 청취는 아직 검증되지 않았습니다. 자세한 내용은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)를 확인하세요.
+v1.29에서는 시스템 이벤트 기반 온디맨드 갱신과 보존 장치 필터링을 지원하는 출력 장치 볼륨 패널이 추가되었습니다. 또한 마스터 볼륨 조절을 위한 Shift+휠 동작이 추가되어 기존 앱 볼륨 조절 및 Alt+휠 장치 전환과 유기적으로 작동합니다. 자세한 이력은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)를 확인하세요.
 
 ### ❓ 자주 묻는 질문 (FAQ)
 
