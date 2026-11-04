@@ -27,3 +27,33 @@
   - `packaging/Tests/PanelChecks`（`--panel-performance`，覆盖 `Full`、`Lite`、`Legacy`/`net48`）：77 × 3 = 231 项断言通过。
 - 构建：已构建 Full/Lite x64 ReadyToRun 单 EXE 与 Legacy/net48 13 文件 ZIP（未启用压缩）。构建时用户正运行 `测试版/Full-x64/SonicRoute.exe`（PID 10636），按规范未结束用户进程；新版 Full 已写入顶层 `测试版/SonicRoute-v1.30-x64.exe` 及 `outputs/android-peak-meter-20261104/editions/Full-x64/SonicRoute.exe`；Lite 与 Legacy 已直接更新至 `测试版/`；普通 `运行版/SonicRoute.exe` 未覆盖。
 - 未验证：真机流转下快速面板实时峰值条的肉眼观感与听音验收、整版长时 CPU 占用与 ARM64。未发 Release/tag/商店包。
+
+## 2026-11-04：入站手机应用显示源手机蓝牙设备、固定直显与默认智能音量
+
+- 用户要求：
+  1. 让快速面板主面板（`QuickPanelModernWindow`）和完整界面（`MainWindow`）中流转到电脑的手机应用，在输出设备列表中除源手机扬声器外也显示该源手机已连接的蓝牙输出设备，点击源手机扬声器或蓝牙设备均返回手机播放。
+  2. 完整界面手机设备页（`PhoneDevicePage`）“快速面板显示应用”列表：只要固定（保留在列表中）就直接显示在快速手机面板（`PhoneAudioWindow`），取消固定则移除，无需额外显示开关。
+  3. 将完整界面每个固定应用右侧的开关改为“智能音量”（`SmartVolume`），默认开启，开启时自动将手机流转音频控制在舒适响度范围（解决开 10% 音量仍过大的问题）。
+- 基线：`c6d418c`（本地 `codex/memory-reclaim-20261104` 与远端 `master` 同步）。
+- 实现：
+  - **源手机蓝牙 + 扬声器路由**：
+    - `SonicRoute/AndroidAudioHost.cs`：新增 `OutputsForDevice(AndroidDevice device)`，基于 `GetDropZonesForDevice(device)` 返回该源手机的扬声器与全部已连接蓝牙输出设备（`AudioDeviceInfo`）；在 `AddAudioAsync` 启动入站流转时按 3 秒限频顺带触发一次非阻塞 `ProbeOutputsIfConnectedAsync([device])`，确保尚未打开快速手机面板时也能探测源手机蓝牙输出。
+    - `SonicRoute/ApplicationAudio.cs`：`OutputsForApp` 对外部 Android 应用追加 `AndroidAudioHost.OutputsForDevice(source.Device)`（仍排除其他手机输出）；将 `IsSourceSpeaker` 扩展为 `IsSourcePhoneOutput`，使快速面板或完整界面选中该源手机的扬声器或蓝牙设备时均走异步 `ReturnAndroidToPhoneAsync` 返回手机，避免把手机虚拟设备 ID 传入 Windows WASAPI 播放器。
+    - `SonicRoute/QuickPanelModernWindow.AndroidAudio.cs`：`RefreshAndroidRow` 檢測已展开的 `AndroidRow` 上源手机输出集合（`phoneOutputsChanged`）变化并即时刷新设备胶囊按钮。
+  - **固定即显示在快速手机面板 & 默认开启“智能音量”**：
+    - `SonicRoute.AndroidAudio/AndroidPhoneStore.cs`：`AndroidPhoneProfile.QuickPanelApps` 始终等于 `RetainedApps`（固定即显示，取消固定即移除）；将原 `HiddenQuickPanelApps` 替换为按禁用列表持久化的 `DisabledSmartVolumeApps`（JSON 字段 `DisabledSmartVolumePackages`），使所有新旧固定应用默认开启智能音量（`IsSmartVolumeEnabled(device, package) == true`），并提供 `SetSmartVolume(package, enabled)`。
+    - `SonicRoute.AndroidAudio/AndroidModels.cs`、`AndroidPcmSource.cs`、`AndroidAudioSession.cs`、`AndroidAudioManager.cs`：`AndroidAudioState` 新增 `bool SmartVolume = true`；`AndroidPcmSource` 在 `Write` 中维护峰值包络 `_smartEnvelope`（快攻 `0.35f`、慢释 `0.04f`），在 `ComputeEffectiveGain()` 中当 `SmartVolume` 开启时结合感知音量曲线 `volume * (0.5f + 0.5f * volume)` 与动态响度范围因子 `Clamp(0.35f / Pow(Max(env, 0.02f), 0.70f), 0.20f, 1.40f)` 计算实际增益（例如满幅 `0.9` 信号在 10% 滑块音量下有效增益约 `0.021` 而非线性 `0.10`）；`AndroidAudioHost.OnPhoneStoreChanged` 实时调用 `Sources.SyncSmartVolume(Phone.IsSmartVolumeEnabled)` 同步活动会话。
+    - `SonicRoute/PhoneDevicePage.xaml` 与 `PhoneDevicePage.xaml.cs`：将“快速面板显示应用”行右侧 `AutomationSwitch` 绑定改为 `SmartVolume`（`AutomationProperties.Name="智能音量"`、`ToolTip="智能音量"`），副标题更新为“固定在此处的应用会显示在快速手机面板中；右侧开关控制智能音量（默认开启，自动平衡音量范围）。”
+- 必要检查：
+  - `checks/AndroidUiChecks`：
+    - `--speaker-routing`：29 项断言通过（源手机扬声器+蓝牙胶囊与下拉框展示、改名同步、点击蓝牙胶囊返回手机、SmartVolume 默认开启/10% 满幅信号衰减/实时开关同步、实时峰值条）。
+    - `--device-actions`：31 项断言通过。
+    - `--phone-layout`：72 项断言通过（含 `PhoneDevicePage` 智能音量开关默认开启、切换后保持 `QuickPanelApps` 显示等）。
+    - `--phone-refinements`：60 项断言通过。
+  - `checks/AndroidAudioChecks`：
+    - `--phone-demand`：21 项断言通过（`new AndroidPcmSource()` 原始实例保持线性增益，SIMD/标量精确采样断言全过）。
+    - `--device-actions`：39 项断言通过。
+    - `--phone-library`：22 项断言通过（v1 迁移默认开启 SmartVolume、固定直显、按手机独立持久化 SmartVolume 状态）。
+  - `packaging/Tests/PanelChecks`（`--panel-performance`，覆盖 `Full`、`Lite`、`Legacy`/`net48`）：77 × 3 = 231 项断言通过。
+- 构建：已重新构建 Full/Lite x64 ReadyToRun 单 EXE 与 Legacy/net48 13 文件 ZIP（无运行进程占用，`测试版/Full-x64/SonicRoute.exe`、`测试版/SonicRoute-v1.30-x64.exe`、`测试版/Lite-x64/SonicRoute.exe`、`测试版/SonicRoute-v1.30-Lite-x64.exe`、`测试版/Legacy-x64/`、`测试版/SonicRoute-v1.30-Legacy-x64.zip` 全部更新到最新；普通 `运行版/SonicRoute.exe` 未覆盖）。
+- 未验证：真机蓝牙连接下入站手机应用切回手机蓝牙的真机听音、真机 10% 智能音量主观听感、整版长时 CPU 占用与 ARM64。未发 Release/tag/商店包。

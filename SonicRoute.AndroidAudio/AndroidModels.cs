@@ -174,7 +174,7 @@ public sealed record AndroidApp(string Package, string Name, int Uid, string Cat
 public enum CaptureState { Idle, Starting, Receiving, Stopping, Failed }
 
 public sealed record AndroidAudioState(CaptureState State, AndroidDevice? Device = null, AndroidApp? App = null,
-    string? Error = null, int Volume = 100, bool Muted = false, string? OutputId = null)
+    string? Error = null, int Volume = 100, bool Muted = false, string? OutputId = null, bool SmartVolume = true)
 {
     public string? SourceId => Device is null || App is null ? null : $"android:{Device.Serial}:{App.Package}:{App.Uid}";
 }

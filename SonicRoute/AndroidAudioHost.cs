@@ -35,7 +35,7 @@ internal static class AndroidAudioHost
         new AndroidAudioSettingsStore(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-audio.json")));
     private static readonly Lazy<AndroidAudioManager> LazySources = new(() =>
     {
-        var sources = new AndroidAudioManager(Adb, LazySettings.Value);
+        var sources = new AndroidAudioManager(Adb, LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
         sources.Changed += ApplicationAudio.NotifyChanged;
         return sources;
     });
@@ -67,7 +67,7 @@ internal static class AndroidAudioHost
     private static readonly Lazy<AndroidPhoneStore> LazyPhone = new(() =>
     {
         var phone = new AndroidPhoneStore(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-phone.json"));
-        phone.Changed += InvalidateOutputSnapshot;
+        phone.Changed += OnPhoneStoreChanged;
         phone.DisplayNamesChanged += PhoneOutputsChanged;
         phone.OutputsChanged += PhoneOutputsChanged;
         return phone;
@@ -96,6 +96,7 @@ internal static class AndroidAudioHost
             if (Phone.IsRemoved(device)) throw new IOException("此手机已移除，请先添加设备。");
             start = Sources.AddAsync(device, app, keepPhoneAudio, displayOwned: displayOwned);
         }
+        _ = ProbeOutputsIfConnectedAsync([device], token: MediaShutdown.Token);
         return await start.ConfigureAwait(false);
     }
     internal static Task<IVirtualDisplayClient> OpenDisplayAsync(AndroidDevice device, AndroidApp app, int x, int y)
@@ -160,6 +161,12 @@ internal static class AndroidAudioHost
             return _outputSnapshot = BuildOutputSnapshot();
         }
     }
+    private static void OnPhoneStoreChanged()
+    {
+        InvalidateOutputSnapshot();
+        if (LazySources.IsValueCreated && LazyPhone.IsValueCreated)
+            Sources.SyncSmartVolume(Phone.IsSmartVolumeEnabled);
+    }
     private static void InvalidateOutputSnapshot()
     { lock (OutputSnapshotGate) _outputSnapshot = null; }
     private static void PhoneOutputsChanged()
@@ -204,6 +211,14 @@ internal static class AndroidAudioHost
         DisplayName = OutputDisplayName(device, AndroidOutputSink.DefaultSpeaker),
         Flow = EDataFlow.eRender
     };
+    internal static IReadOnlyList<AudioDeviceInfo> OutputsForDevice(AndroidDevice device)
+    {
+        var zones = GetDropZonesForDevice(device);
+        var result = new List<AudioDeviceInfo>(zones.Count);
+        foreach (var (sink, id) in zones)
+            result.Add(new AudioDeviceInfo { Id = id, DisplayName = OutputDisplayName(device, sink), Flow = EDataFlow.eRender });
+        return result;
+    }
     internal static IReadOnlyList<(AndroidOutputSink Sink, string DeviceId)> GetDropZonesForDevice(AndroidDevice? device)
     {
         if (device == null) return Array.Empty<(AndroidOutputSink, string)>();

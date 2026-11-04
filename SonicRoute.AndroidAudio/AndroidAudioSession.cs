@@ -51,7 +51,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             {
                 _transport = _transportFactory();
                 Stream stream = await _transport.ConnectAsync(device, app, keepPhoneAudio, runToken).ConfigureAwait(false);
-                _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f };
+                _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f, SmartVolume = State.SmartVolume };
                 _player = await Task.Run(() => _playerFactory(_pcm, State.OutputId), runToken).ConfigureAwait(false);
                 AttachOutputFailure(_player, generation);
                 _player.Play();
@@ -135,9 +135,15 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         if (State.Muted == muted) return;
         ChangeMute(muted);
     }
+    public void SetSmartVolume(bool enabled)
+    {
+        if (State.SmartVolume == enabled) return;
+        ChangeSmartVolume(enabled);
+    }
     // Keep the capturing delegates out of the no-change fast path.
     private void ChangeVolume(int volume) => Update(s => s with { Volume = volume });
     private void ChangeMute(bool muted) => Update(s => s with { Muted = muted });
+    private void ChangeSmartVolume(bool enabled) => Update(s => s with { SmartVolume = enabled });
     public async Task SetOutputAsync(string? endpointId)
     {
         await _operations.WaitAsync().ConfigureAwait(false);
@@ -164,7 +170,11 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             next = change(_state);
             if (next == _state) return _state;
             Volatile.Write(ref _state, next);
-            if (_pcm is { } pcm) pcm.Volume = next.Muted ? 0 : next.Volume / 100f;
+            if (_pcm is { } pcm)
+            {
+                pcm.SmartVolume = next.SmartVolume;
+                pcm.Volume = next.Muted ? 0 : next.Volume / 100f;
+            }
         }
         var listeners = Changed;
         if (listeners != null) foreach (Action<AndroidAudioState> listener in listeners.GetInvocationList())

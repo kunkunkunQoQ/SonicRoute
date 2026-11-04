@@ -18,29 +18,34 @@ internal static partial class Program
         }));
         var legacy = new AndroidPhoneStore(legacyPath);
         Check(legacy.Profile.RetainedApps.Count == 1 && legacy.Profile.QuickPanelApps.Count == 1
-            && legacy.Profile.QuickPanelApps[0].Package == legacyApp.Package,
-            "v1 phone library migration defaults every retained app to visible");
+            && legacy.Profile.QuickPanelApps[0].Package == legacyApp.Package
+            && legacy.IsSmartVolumeEnabled(legacyDevice, legacyApp.Package),
+            "v1 phone library migration defaults every retained app to visible and SmartVolume enabled");
 
         int legacyChanges = 0; legacy.Changed += () => ++legacyChanges;
-        legacy.SetQuickPanelVisible(legacyApp.Package, false);
-        Check(legacy.Profile.HiddenQuickPanelApps.SequenceEqual(new[] { legacyApp.Package })
-            && legacy.Profile.QuickPanelApps.Count == 0, "quick-panel visibility toggle hides the retained app only");
+        legacy.SetSmartVolume(legacyApp.Package, false);
+        Check(legacy.Profile.DisabledSmartVolumeApps.SequenceEqual(new[] { legacyApp.Package })
+            && !legacy.IsSmartVolumeEnabled(legacyDevice, legacyApp.Package)
+            && legacy.Profile.QuickPanelApps.Count == 1, "SmartVolume toggle updates the app's SmartVolume setting while keeping pinned apps in QuickPanelApps");
         await legacy.FlushAsync();
         var hiddenReload = new AndroidPhoneStore(legacyPath);
-        Check(hiddenReload.Profile.HiddenQuickPanelApps.SequenceEqual(new[] { legacyApp.Package })
-            && hiddenReload.Profile.QuickPanelApps.Count == 0, "hidden quick-panel state persists across reload");
+        Check(hiddenReload.Profile.DisabledSmartVolumeApps.SequenceEqual(new[] { legacyApp.Package })
+            && !hiddenReload.IsSmartVolumeEnabled(legacyDevice, legacyApp.Package)
+            && hiddenReload.Profile.QuickPanelApps.Count == 1, "disabled SmartVolume state persists across reload");
         int afterHide = legacyChanges;
-        legacy.SetQuickPanelVisible(legacyApp.Package, false);
-        Check(legacyChanges == afterHide, "repeating an unchanged visibility request is a no-op");
-        legacy.SetQuickPanelVisible(legacyApp.Package, true);
-        Check(legacy.Profile.HiddenQuickPanelApps.Count == 0 && ReferenceEquals(legacy.Profile.QuickPanelApps, legacy.Profile.RetainedApps),
-            "all-visible quick-panel list reuses the retained-app list");
-        legacy.SetQuickPanelVisible(legacyApp.Package, false);
+        legacy.SetSmartVolume(legacyApp.Package, false);
+        Check(legacyChanges == afterHide, "repeating an unchanged SmartVolume request is a no-op");
+        legacy.SetSmartVolume(legacyApp.Package, true);
+        Check(legacy.Profile.DisabledSmartVolumeApps.Count == 0 && legacy.IsSmartVolumeEnabled(legacyDevice, legacyApp.Package)
+            && ReferenceEquals(legacy.Profile.QuickPanelApps, legacy.Profile.RetainedApps),
+            "QuickPanelApps always reuses the retained-app list and SmartVolume restores to default on");
+        legacy.SetSmartVolume(legacyApp.Package, false);
         legacy.Remove(legacyApp.Package);
         await legacy.FlushAsync();
         var legacyReload = new AndroidPhoneStore(legacyPath);
-        Check(legacyReload.Profile.RetainedApps.Count == 0 && legacyReload.Profile.HiddenQuickPanelApps.Count == 0,
-            "removal clears both retained and hidden state and persists across reload");
+        Check(legacyReload.Profile.RetainedApps.Count == 0 && legacyReload.Profile.QuickPanelApps.Count == 0
+            && legacyReload.Profile.DisabledSmartVolumeApps.Count == 0,
+            "unpinning clears retained, quick-panel and SmartVolume state and persists across reload");
 
         string file = Path.Combine(directory, "multi.json");
         var store = new AndroidPhoneStore(file);
@@ -53,14 +58,16 @@ internal static partial class Program
 
         store.RememberDevice(phoneAUsb);
         store.Retain(appA);
-        store.SetQuickPanelVisible(appA.Package, false);
+        store.SetSmartVolume(appA.Package, false);
         store.RememberDevice(phoneB);
         store.Retain(appB);
         Check(store.Profiles.Count == 2 && store.Profile.LastDevice == phoneB,
             "explicitly remembering a second phone creates and selects a separate library");
         Check(store.Profiles.Single(p => p.LastDevice?.HardwareId == "hw-A").RetainedApps.Single().Name == appA.Name
+            && !store.IsSmartVolumeEnabled(phoneAUsb, appA.Package)
+            && store.IsSmartVolumeEnabled(phoneB, appB.Package)
             && store.Profile.RetainedApps.Single().Uid == appB.Uid && store.Profile.QuickPanelApps.Count == 1,
-            "same package keeps independent names, UIDs and hidden state across phones");
+            "same package keeps independent names, UIDs and SmartVolume state across phones");
 
         store.ObserveDevices(new[] { phoneAUsb with { Name = "A scanned" }, phoneB with { Name = "B scanned" } });
         Check(store.Profile.LastDevice?.HardwareId == "hw-B" && store.Profile.RetainedApps.Single().Name == appB.Name,
@@ -87,11 +94,11 @@ internal static partial class Program
 
         int changes = 0; store.Changed += () => ++changes;
         var selectedList = store.Profile.QuickPanelApps;
-        store.SetQuickPanelVisible(appB.Package, true);
+        store.SetSmartVolume(appB.Package, true);
         store.Retain(appB);
         store.UpdateMetadata(phoneB, new[] { appB });
         Check(changes == 0 && ReferenceEquals(selectedList, store.Profile.QuickPanelApps),
-            "unchanged visibility, retain and metadata events emit no change and preserve list references");
+            "unchanged SmartVolume, retain and metadata events emit no change and preserve list references");
         store.Rename("Phone B");
         await store.FlushAsync();
         var restored = new AndroidPhoneStore(file);
@@ -123,11 +130,11 @@ internal static partial class Program
         mergeStore.RememberDevice(mergeUsb);
         mergeStore.Rename("Saved USB name");
         mergeStore.Retain(usbSavedApp);
-        mergeStore.SetQuickPanelVisible(usbSavedApp.Package, false);
+        mergeStore.SetSmartVolume(usbSavedApp.Package, false);
         mergeStore.RememberDevice(mergeIp);
         mergeStore.Rename("Saved IP name");
         mergeStore.Retain(ipSavedApp);
-        mergeStore.SetQuickPanelVisible(ipSavedApp.Package, false);
+        mergeStore.SetSmartVolume(ipSavedApp.Package, false);
         string selectedIpId = mergeStore.Profile.Id;
         var identifiedMergeIp = mergeIp with { HardwareId = "hw-merge", Name = "IP resolved" };
         var mergeMdns = new AndroidDevice("adb-merge._adb-tls-connect._tcp", "mDNS resolved", "device", true, "hw-merge");
@@ -136,10 +143,10 @@ internal static partial class Program
             && mergeStore.Profile.Name == "Saved IP name" && mergeStore.SelectProfile(selectedIpId)
             && mergeStore.Profile.RetainedApps.Select(a => a.Package).ToHashSet(StringComparer.Ordinal)
                 .SetEquals(new[] { usbSavedApp.Package, ipSavedApp.Package })
-            && mergeStore.Profile.HiddenQuickPanelApps.ToHashSet(StringComparer.Ordinal)
+            && mergeStore.Profile.DisabledSmartVolumeApps.ToHashSet(StringComparer.Ordinal)
                 .SetEquals(new[] { usbSavedApp.Package, ipSavedApp.Package })
-            && mergeStore.Profile.QuickPanelApps.Count == 0,
-            "raw scan merges stale USB and IP libraries, preserves selected identity, membership and hidden items");
+            && mergeStore.Profile.QuickPanelApps.Count == 2,
+            "raw scan merges stale USB and IP libraries, preserves selected identity, membership and SmartVolume settings");
 
         string settingsPath = Path.Combine(directory, "audio-settings.json");
         await File.WriteAllTextAsync(settingsPath, JsonSerializer.Serialize(new

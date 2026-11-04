@@ -13,6 +13,8 @@ public sealed class AndroidPcmSource : IWaveProvider
     private readonly float[] _samples = new float[SampleRate * Channels / 2]; // 500 ms maximum
     private int _start, _count;
     private float _volume = 1, _gain = 1;
+    private bool _smartVolume;
+    private float _smartEnvelope;
     private long _dropped, _underflow;
     private long _written, _nonSilent, _read;
     private float _lastPeak;
@@ -30,6 +32,8 @@ public sealed class AndroidPcmSource : IWaveProvider
     public float LastPeak => Volatile.Read(ref _lastPeak);
     public float Volume { get => Volatile.Read(ref _volume); set => Volatile.Write(ref _volume, Math.Clamp(value, 0, 1)); }
     public float HeaderGain { get => Volatile.Read(ref _gain); set => Volatile.Write(ref _gain, value); }
+    public bool SmartVolume { get => Volatile.Read(ref _smartVolume); set => Volatile.Write(ref _smartVolume, value); }
+    public float EffectiveGain => ComputeEffectiveGain();
 
     public void Write(ReadOnlySpan<float> samples)
     {
@@ -57,6 +61,12 @@ public sealed class AndroidPcmSource : IWaveProvider
         { float absolute = Math.Abs(sample); peak = Math.Max(peak, absolute); if (absolute > 0.0001f) nonSilent++; }
         Interlocked.Add(ref _written, samples.Length); Interlocked.Add(ref _nonSilent, nonSilent);
         Volatile.Write(ref _lastPeak, peak);
+        if (!float.IsNaN(peak) && peak >= 0f)
+        {
+            float prev = Volatile.Read(ref _smartEnvelope);
+            float alpha = peak > prev ? 0.35f : 0.04f;
+            Volatile.Write(ref _smartEnvelope, prev + (peak - prev) * alpha);
+        }
         float gain = Volatile.Read(ref _gain);
         float meterPeak = float.IsNaN(peak) || float.IsNaN(gain) || peak <= 0.0001f || gain <= 0f
             ? 0f : Math.Clamp(peak * gain, 0f, 1f);
@@ -128,7 +138,7 @@ public sealed class AndroidPcmSource : IWaveProvider
     {
         if (count % WaveFormat.BlockAlign != 0) throw new ArgumentException("Unaligned PCM read.");
         Span<float> destination = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(offset, count));
-        float gain = Volume * HeaderGain;
+        float gain = ComputeEffectiveGain();
         lock (_gate)
         {
             int take = Math.Min(destination.Length, _count);
@@ -141,6 +151,20 @@ public sealed class AndroidPcmSource : IWaveProvider
             Interlocked.Add(ref _underflow, destination.Length - take);
         }
         return count; // live source: an underrun is silence, not EOF
+    }
+
+    private float ComputeEffectiveGain()
+    {
+        float volume = Volume;
+        float headerGain = HeaderGain;
+        if (!SmartVolume) return volume * headerGain;
+        if (volume <= 0f || headerGain <= 0f || float.IsNaN(headerGain)) return 0f;
+        float curved = volume * (0.5f + 0.5f * volume);
+        float env = Math.Max(Volatile.Read(ref _smartEnvelope), Volatile.Read(ref _lastPeak));
+        float rangeFactor = float.IsNaN(env) || env <= 0.0005f
+            ? 0.35f
+            : Math.Clamp(0.35f / MathF.Pow(Math.Max(env, 0.02f), 0.70f), 0.20f, 1.40f);
+        return curved * headerGain * rangeFactor;
     }
 
     private static void ApplyGain(ReadOnlySpan<float> samples, Span<float> destination, float gain)
@@ -168,6 +192,7 @@ public sealed class AndroidPcmSource : IWaveProvider
         lock (_gate)
         {
             _start = _count = 0;
+            _smartEnvelope = 0f;
             _meterUnreadPeak = -1f;
             _meterActivePeak = 0f;
             _lastWriteTick = _lastNonSilentWriteTick = -1000;

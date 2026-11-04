@@ -29,25 +29,29 @@ internal static partial class Program
         var other = new AndroidDevice("fixture-two", "Other model", "device", true, "speaker-two");
         discovery.Publish([device, other]);
         var store = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
-        store.RememberDevice(device); store.Rename("小米13");
+        var music = new AndroidApp("cn.test.music", "Music", 1001, "media");
+        store.RememberDevice(device); store.Rename("小米13"); store.Retain(music);
         string profile = store.Profile.Id;
         store.RememberDevice(other); store.Rename("备用手机"); store.SelectProfile(profile);
         var bluetooth = new AndroidOutputSink("bt:8:test", AndroidOutputSinkKind.Bluetooth, 3, 8, "耳机");
         store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker, bluetooth]);
         var readOutputs = host.GetMethod("GetOutputDevices", statics)!.CreateDelegate<Func<IReadOnlyList<AudioDeviceInfo>>>();
         string speakerId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker");
+        string bluetoothId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), bluetooth.Key);
         string otherId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(other), "speaker");
         var initial = readOutputs();
         Check(initial.Single(d => d.Id == speakerId).DisplayName == "小米13 扬声器"
+            && initial.Single(d => d.Id == bluetoothId).DisplayName == "耳机 (小米13 · 蓝牙)"
             && initial.Single(d => d.Id == otherId).DisplayName == "备用手机 扬声器",
-            "speaker labels use each saved phone name and retain independent identities");
+            "speaker and Bluetooth labels use each saved phone name and retain independent identities");
         Check(ReferenceEquals(initial, readOutputs()), "unchanged output choices reuse the cached snapshot");
         store.Rename("我的小米13");
-        Check(!ReferenceEquals(initial, readOutputs()) && readOutputs().Single(d => d.Id == speakerId).DisplayName == "我的小米13 扬声器",
-            "renaming refreshes the label without changing its endpoint identity");
+        Check(!ReferenceEquals(initial, readOutputs())
+            && readOutputs().Single(d => d.Id == speakerId).DisplayName == "我的小米13 扬声器"
+            && readOutputs().Single(d => d.Id == bluetoothId).DisplayName == "耳机 (我的小米13 · 蓝牙)",
+            "renaming refreshes speaker and Bluetooth labels without changing endpoint identities");
 
         var manager = (AndroidAudioManager)host.GetProperty("Sources", statics)!.GetValue(null)!;
-        var music = new AndroidApp("cn.test.music", "Music", 1001, "media");
         var first = AddFixture(manager, device, music);
         var second = AddFixture(manager, device, music with { Package = "cn.test.video", Name = "Video", Uid = 1002 });
         var neighbour = AddFixture(manager, other, music);
@@ -67,16 +71,27 @@ internal static partial class Program
             var root = (FrameworkElement)((ItemsControl)panel.FindName("AppListPanel")).Items[0];
             Descendants<ToggleButton>(root).Single().IsChecked = true;
             var pills = Descendants<Button>(root).Where(b => b.Tag is AudioDeviceInfo).ToArray();
-            Check(pills.Length == 3 && pills.Count(b => ((AudioDeviceInfo)b.Tag).Id == speakerId) == 1
-                && pills.All(b => !AndroidOutputIdentity.IsPhoneOutput(((AudioDeviceInfo)b.Tag).Id) || ((AudioDeviceInfo)b.Tag).Id == speakerId),
-                "incoming quick-panel choices include PC endpoints and only this source phone's speaker");
-            Check(pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId).Content?.ToString() == "我的小米13 扬声器",
-                "phone speaker reuses a normal endpoint pill with the saved device label");
+            Check(pills.Length == 4
+                && pills.Count(b => ((AudioDeviceInfo)b.Tag).Id == speakerId) == 1
+                && pills.Count(b => ((AudioDeviceInfo)b.Tag).Id == bluetoothId) == 1
+                && pills.All(b => !AndroidOutputIdentity.IsPhoneOutput(((AudioDeviceInfo)b.Tag).Id)
+                    || ((AudioDeviceInfo)b.Tag).Id == speakerId || ((AudioDeviceInfo)b.Tag).Id == bluetoothId),
+                "incoming quick-panel choices include PC endpoints plus this source phone's speaker and Bluetooth devices");
+            var speakerPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId);
+            var btPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == bluetoothId);
+            Check(speakerPill.Content?.ToString() == "我的小米13 扬声器"
+                && btPill.Content?.ToString() == "耳机"
+                && ((AudioDeviceInfo)btPill.Tag).DisplayName == "耳机 (我的小米13 · 蓝牙)",
+                "phone speaker and Bluetooth reuse normal endpoint pills with the saved device label");
             store.Rename("小米13"); DrainUi();
             pills = Descendants<Button>(root).Where(b => b.Tag is AudioDeviceInfo).ToArray();
-            Check(pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId).Content?.ToString() == "小米13 扬声器",
-                "renaming also refreshes an already-expanded incoming route group");
-            CheckAndroidPeakMeter(panel, first, second);
+            speakerPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId);
+            btPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == bluetoothId);
+            Check(speakerPill.Content?.ToString() == "小米13 扬声器"
+                && btPill.Content?.ToString() == "耳机"
+                && ((AudioDeviceInfo)btPill.Tag).DisplayName == "耳机 (小米13 · 蓝牙)",
+                "renaming also refreshes an already-expanded incoming route group for both speaker and Bluetooth");
+            CheckAndroidPeakMeter(panel, first, second, store, device, music);
 
             typeof(PhoneAudioWindow).GetMethod("EnsurePcDropZones", Hidden)!.Invoke(phone, [true]);
             Check(Descendants<TextBlock>((Grid)phone.FindName("PcDropZonesGrid")).Any(t => t.Text == "仅在小米13 扬声器播放"),
@@ -90,12 +105,13 @@ internal static partial class Program
             var apps = (ListBox)main.FindName("AppsListBox"); apps.ItemsSource = items; apps.SelectedIndex = 0;
             Pump((Task)typeof(MainWindow).GetMethod("RefreshAppsSelectionAsync", Hidden)!.Invoke(main, null)!);
             var combo = (ComboBox)main.FindName("AppsOutputCombo");
-            Check(combo.Items.OfType<AudioDeviceInfo>().Count(d => AndroidOutputIdentity.IsPhoneOutput(d.Id)) == 1
-                && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId).DisplayName == "小米13 扬声器",
-                "full app details expose the same source phone speaker without foreign phone routes");
+            Check(combo.Items.OfType<AudioDeviceInfo>().Count(d => AndroidOutputIdentity.IsPhoneOutput(d.Id)) == 2
+                && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId).DisplayName == "小米13 扬声器"
+                && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == bluetoothId).DisplayName == "耳机 (小米13 · 蓝牙)",
+                "full app details expose the source phone speaker and Bluetooth devices without foreign phone routes");
             Check(((ItemsControl)main.FindName("AppsOutputQuickPanel")).Items.OfType<Button>()
-                .Any(b => b.Tag is AudioDeviceInfo d && d.Id == speakerId),
-                "full app quick device buttons include the source phone speaker");
+                .Count(b => b.Tag is AudioDeviceInfo d && (d.Id == speakerId || d.Id == bluetoothId)) == 2,
+                "full app quick device buttons include both the source phone speaker and Bluetooth device");
 
             var apply = UnifiedAudio.GetMethod("ApplyEndpointAsync", statics)!;
             var app = ExternalApps().Single(a => a.ExternalSourceId == first.Id);
@@ -103,10 +119,10 @@ internal static partial class Program
             Pump(rejected);
             Check(!rejected.Result.Success && manager.Sources.Count == 3,
                 "a foreign phone endpoint is rejected without retiring or rerouting a stream");
-            pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            btPill.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             WaitForRetirement(first);
             Check(!manager.Sources.Contains(first) && manager.Sources.Contains(second) && manager.Sources.Contains(neighbour),
-                "the real quick-panel speaker handler returns only its selected source to the phone");
+                "the real quick-panel phone Bluetooth handler returns only its selected source to the phone");
             combo.SelectedItem = combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId);
             WaitForRetirement(second);
             Check(!manager.Sources.Contains(second) && manager.Sources.Contains(neighbour),
@@ -117,7 +133,7 @@ internal static partial class Program
             Pump(store.FlushAsync());
             File.WriteAllText(Path.Combine(output, "speaker-routing.json"), JsonSerializer.Serialize(new
             { Passed = true, Assertions = _checks, Scans = scans, RealPhoneAccess = false,
-                Scope = "Fixture sessions; actual quick/full controls, Android peak meter bar, and dispatcher retirement. No real phone or audible acceptance." },
+                Scope = "Fixture sessions; actual quick/full controls, source-phone Bluetooth + speaker routing, SmartVolume attenuation, Android peak meter bar, and dispatcher retirement. No real phone or audible acceptance." },
                 new JsonSerializerOptions { WriteIndented = true }));
             return 0;
         }
@@ -131,7 +147,8 @@ internal static partial class Program
         }
     }
 
-    private static void CheckAndroidPeakMeter(QuickPanelModernWindow panel, AndroidAudioSource first, AndroidAudioSource second)
+    private static void CheckAndroidPeakMeter(QuickPanelModernWindow panel, AndroidAudioSource first, AndroidAudioSource second,
+        AndroidPhoneStore store, AndroidDevice device, AndroidApp music)
     {
         var content = (FrameworkElement)panel.Content;
         content.Measure(new Size(372, 450)); content.Arrange(new Rect(0, 0, 372, 450)); content.UpdateLayout();
@@ -144,14 +161,16 @@ internal static partial class Program
         Check(firstMeterId < 0 && secondMeterId < 0 && firstMeterId != secondMeterId,
             "Android rows allocate distinct negative meter IDs that cannot collide with Windows PIDs");
         var slider = (Slider)rowType.GetField("Volume", Hidden)!.GetValue(firstRow)!;
-        var peakVisual = (Border?)rowType.GetField("PeakVisual", Hidden)!.GetValue(firstRow);
-        var peakTransform = (ScaleTransform?)rowType.GetField("PeakTransform", Hidden)!.GetValue(firstRow);
-        Check(peakVisual != null && peakTransform != null
-            && ReferenceEquals(peakVisual.Background, panel.FindResource("Theme.AccentPeak"))
-            && peakVisual.Visibility == Visibility.Hidden && peakTransform.ScaleX == 0d && peakTransform.ScaleY == 1d,
+        var peakVisualObj = (Border?)rowType.GetField("PeakVisual", Hidden)!.GetValue(firstRow);
+        var peakTransformObj = (ScaleTransform?)rowType.GetField("PeakTransform", Hidden)!.GetValue(firstRow);
+        Check(peakVisualObj != null && peakTransformObj != null
+            && ReferenceEquals(peakVisualObj.Background, panel.FindResource("Theme.AccentPeak"))
+            && peakVisualObj.Visibility == Visibility.Hidden && peakTransformObj.ScaleX == 0d && peakTransformObj.ScaleY == 1d,
             "Android row slider binds PART_PeakVisual with Theme.AccentPeak and an idle ScaleTransform");
+        var peakVisual = peakVisualObj!;
+        var peakTransform = peakTransformObj!;
 
-        var pcm = new AndroidPcmSource();
+        var pcm = new AndroidPcmSource { SmartVolume = first.Session.State.SmartVolume };
         var pcmField = typeof(AndroidAudioSession).GetField("_pcm", Hidden)!;
         pcmField.SetValue(first.Session, pcm);
         int wakeups = 0;
@@ -161,6 +180,26 @@ internal static partial class Program
         var meter = (AudioMeterService)createMeter.Invoke(panel, null)!;
         try
         {
+            Check(first.Session.State.SmartVolume && pcm.SmartVolume && store.IsSmartVolumeEnabled(device, music.Package),
+                "SmartVolume is enabled by default on phone profile and active Android session");
+            first.Session.SetVolume(10); DrainUi();
+            var fullScale = new float[960]; Array.Fill(fullScale, 0.9f);
+            pcm.Write(fullScale);
+            float smartGainAt10 = pcm.EffectiveGain;
+            var readBuf = new byte[960 * sizeof(float)];
+            pcm.Read(readBuf, 0, readBuf.Length);
+            float smartSample = Math.Abs(BitConverter.ToSingle(readBuf, 0));
+            store.SetSmartVolume(music.Package, false);
+            Check(!first.Session.State.SmartVolume && !pcm.SmartVolume
+                && Math.Abs(pcm.EffectiveGain - 0.10f) < 0.0001f && smartGainAt10 < 0.025f && smartSample < 0.025f,
+                "SmartVolume automatically attenuates loud full-scale audio at 10% slider volume and live-toggles off via store");
+            store.SetSmartVolume(music.Package, true);
+            Check(first.Session.State.SmartVolume && pcm.SmartVolume,
+                "re-enabling SmartVolume in store immediately updates the active Android session and PCM source");
+            first.Session.SetVolume(100); DrainUi();
+            pcm.Clear();
+            wakeups = 0;
+
             Check(pcm.ReadMeterPeak() == (false, 0f), "initial Android meter read returns idle and arms wakeup");
             pcm.Write(new float[960]);
             Check(wakeups == 0 && pcm.ReadMeterPeak() == (false, 0f), "silent PCM frames do not wake the meter service");
@@ -189,8 +228,8 @@ internal static partial class Program
                 new Dictionary<int, float> { [firstMeterId] = 0.8f, [secondMeterId] = 0.8f });
             typeof(QuickPanelModernWindow).GetMethod("RefreshMeterViewport", Hidden)!.Invoke(panel, null);
             float rowPeak = (float)rowType.GetField("PeakLevel", Hidden)!.GetValue(firstRow)!;
-            Check(Math.Abs(rowPeak - 0.8f) < 0.001f && peakVisual!.Visibility == Visibility.Visible
-                && Math.Abs(peakTransform!.ScaleX - 0.8d) < 0.02d,
+            Check(Math.Abs(rowPeak - 0.8f) < 0.001f && peakVisual.Visibility == Visibility.Visible
+                && Math.Abs(peakTransform.ScaleX - 0.8d) < 0.02d,
                 "visible Android row displays the real-time peak bar scaled to full volume");
             slider.Value = 50;
             Check(peakVisual.Visibility == Visibility.Visible && Math.Abs(peakTransform.ScaleX - 0.4d) < 0.02d,

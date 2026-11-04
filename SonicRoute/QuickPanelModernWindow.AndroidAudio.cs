@@ -273,7 +273,11 @@ public partial class QuickPanelModernWindow
             row.PhoneName = phoneName;
             row.Root.ToolTip = state.Error ?? $"{row.IconItem.Label} · 来自 {phoneName}";
             UpdateAndroidRoute(row);
-            if ((outputsChanged || phoneNameChanged) && row.Expanded) BuildAndroidDevices(row);
+            bool phoneOutputsChanged = row.Expanded && !AndroidAudioHost.GetDropZonesForDevice(source.Device)
+                .Select(static z => z.DeviceId)
+                .Where(id => !config.HiddenOutputDevices.Contains(id))
+                .SequenceEqual(row.Devices.Select(static d => d.Id).Where(ApplicationAudio.IsPhoneOutputDevice));
+            if ((outputsChanged || phoneNameChanged || phoneOutputsChanged) && row.Expanded) BuildAndroidDevices(row);
             if (i >= AppListPanel.Items.Count || !ReferenceEquals(AppListPanel.Items[i], row.Root))
             {
                 AppListPanel.Items.Remove(row.Root); AppListPanel.Items.Insert(i, row.Root);

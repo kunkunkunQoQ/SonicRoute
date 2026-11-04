@@ -85,10 +85,10 @@ internal static partial class Program
 
         string phonePath = Path.Combine(output, "phone.json");
         var store = new AndroidPhoneStore(phonePath);
-        store.RememberDevice(device); store.Rename("小米测试"); store.Retain(app); store.SetQuickPanelVisible(app.Package, false);
+        store.RememberDevice(device); store.Rename("小米测试"); store.Retain(app); store.SetSmartVolume(app.Package, false);
         await store.FlushAsync();
         var restored = new AndroidPhoneStore(phonePath);
-        Check(restored.Profile.Name == "小米测试" && restored.Profile.QuickPanelApps.Count == 0
+        Check(restored.Profile.Name == "小米测试" && restored.Profile.QuickPanelApps.Count == 1 && !restored.IsSmartVolumeEnabled(device, app.Package)
             && restored.Profile.RetainedApps[0].IconPng!.SequenceEqual(app.IconPng!),
             "streamed phone preferences preserve Unicode names, icons and hidden membership");
         var settings = new AndroidAudioSettingsStore(Path.Combine(output, "audio.json"));

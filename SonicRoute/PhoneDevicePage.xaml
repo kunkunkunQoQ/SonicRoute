@@ -54,9 +54,9 @@
                     <Button Tag="{Binding Item.App}" Style="{StaticResource PhonePinButton}" Click="RetainApp_Click" ToolTip="{Binding ActionText}" AutomationProperties.Name="{Binding ActionText}">
                         <Viewbox Style="{StaticResource PhonePinGraphic}"><Path Data="{x:Static local:AutomationIcons.Pin}" Fill="{DynamicResource Theme.Accent}"/></Viewbox>
                     </Button>
-                    <CheckBox IsChecked="{Binding QuickPanelVisible, Mode=OneWay}" Style="{DynamicResource AutomationSwitch}"
-                              Width="34" Margin="8,0,0,0" VerticalAlignment="Center" Checked="QuickPanelVisibility_Changed" Unchecked="QuickPanelVisibility_Changed"
-                              ToolTip="在快速手机面板显示" AutomationProperties.Name="在快速手机面板显示"/>
+                    <CheckBox IsChecked="{Binding SmartVolume, Mode=OneWay}" Style="{DynamicResource AutomationSwitch}"
+                              Width="34" Margin="8,0,0,0" VerticalAlignment="Center" Checked="SmartVolume_Changed" Unchecked="SmartVolume_Changed"
+                              ToolTip="智能音量" AutomationProperties.Name="智能音量"/>
                 </StackPanel>
             </Grid>
         </DataTemplate>
@@ -108,7 +108,7 @@
                     <TextBlock Text="快速面板显示应用" FontSize="17" FontWeight="SemiBold"/>
                     <TextBlock x:Name="RetainedCount" Grid.Column="1" Style="{StaticResource PhoneHint}" VerticalAlignment="Center"/>
                 </Grid>
-                <TextBlock Text="使用开关选择显示在快速手机面板中的应用。" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
+                <TextBlock Text="固定的应用将直接显示在快速手机面板中；开启智能音量可自动平衡声音范围。" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
                 <Border Style="{StaticResource PhoneCard}" Padding="12,6">
                     <StackPanel>
                         <ItemsControl x:Name="RetainedApps" ItemTemplate="{StaticResource PhoneLibraryItem}"/>

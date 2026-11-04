@@ -95,11 +95,11 @@ internal static partial class Program
         Check(displays.Count == 2 && clients[2].Disposed && !clients[3].Disposed && !clients[1].Disposed,
             "returning one app closes only its virtual screen and preserves all other apps and phones");
         var batch = new AndroidPhoneStore(Path.Combine(output, "batch-phones.json"));
-        batch.RememberDevice(one); batch.Retain(app); batch.SetQuickPanelVisible(app.Package, false);
+        batch.RememberDevice(one); batch.Retain(app); batch.SetSmartVolume(app.Package, false);
         int notifications = 0; batch.Changed += () => notifications++;
         var extra = app with { Package = "cn.test.extra" };
         batch.RetainMany([app, extra, extra, app with { Package = "cn.test.third" }]);
-        Check(notifications == 1 && batch.Profile.RetainedApps.Count == 3 && batch.Profile.HiddenQuickPanelApps.Contains(app.Package),
+        Check(notifications == 1 && batch.Profile.RetainedApps.Count == 3 && batch.Profile.DisabledSmartVolumeApps.Contains(app.Package),
             "batch add deduplicates packages, preserves existing switches and notifies once");
         batch.RetainMany([app, extra]); batch.RetainMany([]);
         Check(notifications == 1, "empty and already-added batches do not refresh or save");
@@ -109,7 +109,7 @@ internal static partial class Program
         Check(invalidBatch && batch.Profile.RetainedApps.Count == 3 && notifications == 1,
             "batch validates every item before making changes");
         await batch.FlushAsync();
-        Check(new AndroidPhoneStore(batch.FilePath).Profile.QuickPanelApps.Count == 2,
+        Check(new AndroidPhoneStore(batch.FilePath).Profile.QuickPanelApps.Count == 3 && !new AndroidPhoneStore(batch.FilePath).IsSmartVolumeEnabled(one, app.Package),
             "one persisted batch restores added apps and preserves the hidden existing app");
         settings.RememberWindow(one, app.Package, new(1003, 613));
         settings.Remember(one, app.Package, 37, "fixture-output");

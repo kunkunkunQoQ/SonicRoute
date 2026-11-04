@@ -4,23 +4,28 @@
 
 ## 当前已完成
 
+- **入站手机应用显示源手机蓝牙设备 + 固定直显 + 默认开启“智能音量”（SmartVolume）**：
+  - `AndroidAudioHost.OutputsForDevice(device)` 与 `ApplicationAudio.OutputsForApp`：流转到电脑的手机应用在快速面板（`QuickPanelModernWindow`）和完整界面（`MainWindow`）中，除 PC 输出设备与源手机扬声器外，同时展示该源手机已连接的蓝牙输出设备（仍排除其他手机输出）；点击源手机扬声器或蓝牙输出均走 `ReturnAndroidToPhoneAsync` 返回手机播放。
+  - `AndroidPhoneStore`：只要应用固定在 `RetainedApps` 中就直接显示在快速手机面板（`QuickPanelApps == RetainedApps`），取消固定则移除；原显示开关位置改为按应用独立持久化的“智能音量”（`DisabledSmartVolumeApps` 禁用表，所有新旧固定应用默认开启 `SmartVolume = true`）。
+  - `AndroidPcmSource` / `AndroidAudioSession` / `AndroidAudioManager` / `PhoneDevicePage`：开启“智能音量”时，按感知曲线 `volume * (0.5f + 0.5f * volume)` 与峰值包络动态响度因子自动压制满幅过响信号（如 10% 滑块音量下满幅 `0.9` 输入有效增益约 `0.021`），完整界面开关切换后实时同步到活动手机流。
 - **手机应用流转到电脑主面板实时音量条（峰值电平条）**：
-  - `AndroidPcmSource` 在 `Write` 中记录音量缩放前的信号峰值并暴露 `ReadMeterPeak()` 与 `PeakActivity` 按需唤醒事件（仅在电平表等待唤醒且写入非静音样本时触发一次，静音或连续帧零重复唤醒），同时保留原始 `LastPeak` 语义。
-  - `AudioMeterService` 支持负目标 ID（`pid < 0`）的外部峰值读取委托 `externalReader` 与 `WakeExternal()`，并将正 Windows PID 与负外部 ID 分离：仅监控或变更 Android 行时完全不创建、不枚举 Windows COM `MeterGraph`；可见 Android 行与原生 PC 应用共享同一套 33ms 采样、`Attack = 0.65f` / `Release = 0.15f` 平滑、`0.001f` 量化及静默归零后 `Timeout.Infinite` 休眠。
-  - `QuickPanelModernWindow` 提取公共 `UpdatePeakVisual`，在 `AndroidRow` 中绑定 `RowSliderStyle` 模板内的 `PART_PeakVisual` 与 `ScaleTransform(0, 1)`，接入视口可见行过滤（`_visibleAndroidMeterRows`）、音量滑块拖动即时缩放峰值条、静音立即隐藏并移出活动采样目标、面板隐藏/关闭或设置关闭 `ShowAppPeakMeter` 时退订事件并清零。Lite 与 Legacy（`net48`）通过 `#if SONICROUTE_PHONE` 隔离，不引入手机组件。
+  - `AndroidPcmSource.ReadMeterPeak()`、`AudioMeterService` 负目标 ID（`pid < 0`）与 `QuickPanelModernWindow` `AndroidRow` 共享 `PART_PeakVisual` 实时电平条，仅在面板可见、开启峰值显示且未静音时按需采样，静音或衰减归零后自动休眠。
 - **既有能力保持**：
   - Lite / Legacy 保持 v1.29 的单次 `SetProcessWorkingSetSize(-1, -1)`（1500ms 延迟、关窗/预热/可见窗口门控与 30 秒限频）；Full 不裁剪工作集，保护活动手机连接、音频和虚拟屏。
-  - 手机输出名称统一使用保存的设备名（如“小米13 扬声器”），入站手机应用在快速面板和完整界面均可选所属手机扬声器以返回手机播放。
 
 ## 验证与边界
 
-- 本轮定向检查全部通过：
-  - `checks/AndroidUiChecks --speaker-routing`：26 项断言通过（含 13 项 Android 实时峰值电平条与 13 项手机扬声器路由断言）。
+- 本轮定向检查共 505 项断言全部通过：
+  - `checks/AndroidUiChecks --speaker-routing`：29 项断言通过（源手机扬声器+蓝牙胶囊与下拉框、改名同步、点击蓝牙返回手机、SmartVolume 默认开启/10% 衰减/实时开关、Android 实时峰值电平条）。
+  - `checks/AndroidUiChecks --device-actions`：31 项断言通过。
+  - `checks/AndroidUiChecks --phone-layout`：72 项断言通过。
+  - `checks/AndroidUiChecks --phone-refinements`：60 项断言通过。
   - `checks/AndroidAudioChecks --phone-demand`：21 项断言通过。
-  - `packaging/Tests/MonitoringChecks --framework net10.0-windows`：33 项断言通过。
+  - `checks/AndroidAudioChecks --device-actions`：39 项断言通过。
+  - `checks/AndroidAudioChecks --phone-library`：22 项断言通过。
   - `packaging/Tests/PanelChecks --panel-performance`（Full / Lite / net48）：77 × 3 = 231 项断言通过。
 - 已构建 Full/Lite x64 ReadyToRun 单 EXE 及 Legacy/net48 原 13 文件 ZIP，未启用程序压缩。未连接真机，未做真机听音、整版 CPU 基准或 ARM64 验收。
-- 本地当前交付入口在父容器的“测试版”目录。构建时 `测试版/Full-x64/SonicRoute.exe` 正由用户运行（PID 10636），未结束用户进程；**包含本轮手机实时音量条的新版 Full 为顶层 `测试版/SonicRoute-v1.30-x64.exe`**（以及 `outputs/android-peak-meter-20261104/editions/Full-x64/SonicRoute.exe`）。Lite 使用 `测试版/SonicRoute-v1.30-Lite-x64.exe`（或 `测试版/Lite-x64/SonicRoute.exe`），Legacy 使用 `测试版/SonicRoute-v1.30-Legacy-x64.zip`（或 `测试版/Legacy-x64/SonicRoute.exe`）。启动新 Full 前请先从托盘退出正在运行的旧 Full 实例，避免单实例互斥只激活旧进程；退出旧实例后也可将 `SonicRoute-v1.30-x64.exe` 覆盖回 `Full-x64/SonicRoute.exe`。普通“运行版”未覆盖。
+- 本地当前交付入口在父容器的“测试版”目录：`测试版/SonicRoute-v1.30-x64.exe`（及 `测试版/Full-x64/SonicRoute.exe`）、`测试版/SonicRoute-v1.30-Lite-x64.exe`（及 `测试版/Lite-x64/SonicRoute.exe`）、`测试版/SonicRoute-v1.30-Legacy-x64.zip`（及 `测试版/Legacy-x64/SonicRoute.exe`）均已更新至最新。普通“运行版”未覆盖。
 
 ## 给下一位 AI
 
@@ -32,9 +37,8 @@
 
 ## 定向检查入口
 
-- `checks/AndroidUiChecks` 的 `--speaker-routing`：使用模拟设备与会话验证手机扬声器路由及主面板 Android 应用行实时峰值电平条（`PART_PeakVisual`）。
-- `checks/AndroidAudioChecks` 的 `--phone-demand`：验证 `AndroidPcmSource` SIMD/标量峰值计算与按需加载。
-- `packaging/Tests/MonitoringChecks`（`--framework net10.0-windows`）：验证 `AudioMeterService` 事件驱动唤醒与会话图生命周期（若机器无 `pwsh.exe`，可在临时 PATH 目录放置指向 `powershell.exe` 的 `pwsh.cmd`）。
-- `packaging/Tests/PanelChecks` 的 `--panel-performance` / `--ui-memory`：按 Full、Lite 和 net48 分别使用独立 `ArtifactsPath` 串行构建运行。
+- `checks/AndroidUiChecks` 的 `--speaker-routing` / `--device-actions` / `--phone-layout` / `--phone-refinements`：验证源手机扬声器+蓝牙路由、智能音量开关、固定直显与主面板 Android 实时峰值电平条。
+- `checks/AndroidAudioChecks` 的 `--phone-demand` / `--device-actions` / `--phone-library`：验证 `AndroidPcmSource` SIMD/标量峰值计算、`AndroidPhoneStore` 固定直显与 SmartVolume 持久化。
+- `packaging/Tests/PanelChecks` 的 `--panel-performance` / `--ui-memory`：按 Full、Lite 和 net48（`-p:PanelTestFramework=net48`）分别使用独立 `ArtifactsPath` 串行构建运行。
 
 未发 Release、tag 或商店包。源码按用户要求提交并推送 GitHub，是否推送成功以远端核验和本地最新收据为准。

@@ -75,7 +75,7 @@ internal static partial class Program
             return count;
         }));
 
-        foreach (var saved in phoneApps.Skip(6)) store.SetQuickPanelVisible(saved.Package, false);
+        foreach (var saved in phoneApps.Skip(6)) store.SetSmartVolume(saved.Package, false);
         store.FlushAsync().GetAwaiter().GetResult();
         metrics.Add(Measure("phone-open-six-apps", 20,
             "20 offscreen constructions with six cached visible apps; 30 saved, remainder hidden", () =>
@@ -90,7 +90,7 @@ internal static partial class Program
             DrainAuditUi();
             return count;
         }));
-        foreach (var saved in phoneApps.Skip(6)) store.SetQuickPanelVisible(saved.Package, true);
+        foreach (var saved in phoneApps.Skip(6)) store.SetSmartVolume(saved.Package, true);
         store.FlushAsync().GetAwaiter().GetResult();
 
         var phone = CreateAuditPhone(device);

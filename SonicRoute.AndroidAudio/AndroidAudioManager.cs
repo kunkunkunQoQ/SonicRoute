@@ -31,14 +31,16 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     private readonly Queue<string> _history = new();
     private readonly Func<AndroidAudioSession> _factory;
     private readonly AndroidAudioSettingsStore? _settings;
+    private readonly Func<AndroidDevice, string, bool>? _smartVolume;
     private bool _disposed;
     public event Action? Changed;
     public IReadOnlyList<AndroidAudioSource> Sources => Volatile.Read(ref _snapshot);
     private void PublishSources() => Volatile.Write(ref _snapshot, _sources.Count == 0
         ? Array.Empty<AndroidAudioSource>() : Array.AsReadOnly(_sources.ToArray()));
-    public AndroidAudioManager(AdbClient adb, AndroidAudioSettingsStore? settings = null) : this(() => new AndroidAudioSession(adb), settings) { }
-    public AndroidAudioManager(Func<AndroidAudioSession> factory, AndroidAudioSettingsStore? settings = null)
-    { _factory = factory; _settings = settings; }
+    public AndroidAudioManager(AdbClient adb, AndroidAudioSettingsStore? settings = null, Func<AndroidDevice, string, bool>? smartVolume = null)
+        : this(() => new AndroidAudioSession(adb), settings, smartVolume) { }
+    public AndroidAudioManager(Func<AndroidAudioSession> factory, AndroidAudioSettingsStore? settings = null, Func<AndroidDevice, string, bool>? smartVolume = null)
+    { _factory = factory; _settings = settings; _smartVolume = smartVolume; }
 
     public Task<AndroidAudioSource> AddAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio = true, string? outputId = null, bool displayOwned = false)
     {
@@ -57,6 +59,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
             source = new AndroidAudioSource(device, app, _factory(), keepPhoneAudio) { DisplayOwned = displayOwned };
             var saved = _settings?.Get(device, app.Package) ?? new AndroidAppAudioSettings();
             source.Session.SetVolume(saved.Volume);
+            source.Session.SetSmartVolume(_smartVolume?.Invoke(device, app.Package) ?? true);
             outputId ??= saved.OutputId;
             int index = replaced == null ? _sources.Count : _sources.IndexOf(replaced);
             if (replaced != null && replaced.App.Uid == app.Uid)
@@ -64,6 +67,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
                 var previous = replaced.Session.State;
                 source.Session.SetVolume(previous.Volume);
                 source.Session.SetMute(previous.Muted);
+                if (_smartVolume == null) source.Session.SetSmartVolume(previous.SmartVolume);
                 outputId = previous.OutputId;
             }
             if (replaced != null) Detach(replaced);
@@ -85,6 +89,14 @@ public sealed class AndroidAudioManager : IAsyncDisposable
         Notify();
         _ = StartAsync(source, replaced, keepPhoneAudio, outputId);
         return source.Started.Task;
+    }
+
+    public void SyncSmartVolume(Func<AndroidDevice, string, bool> resolve)
+    {
+        AndroidAudioSource[] snapshot;
+        lock (_gate) snapshot = _sources.ToArray();
+        foreach (var source in snapshot)
+            source.Session.SetSmartVolume(resolve(source.Device, source.App.Package));
     }
 
     private async Task StartAsync(AndroidAudioSource source, AndroidAudioSource? replaced, bool keepPhoneAudio, string? outputId)

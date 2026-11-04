@@ -7,7 +7,7 @@ namespace SonicRoute.AndroidAudio;
 public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice, IReadOnlyList<AndroidApp> RetainedApps)
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
-    public IReadOnlyList<string> HiddenQuickPanelApps { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> DisabledSmartVolumeApps { get; init; } = Array.Empty<string>();
     public IReadOnlyList<AndroidApp> QuickPanelApps { get; init; } = RetainedApps;
     public IReadOnlyList<AndroidOutputSink> OutputSinks { get; init; } = [AndroidOutputSink.DefaultSpeaker];
 }
@@ -47,7 +47,7 @@ public sealed class AndroidPhoneStore
             {
                 var saved = json.RootElement.Deserialize<LegacyFile>();
                 if (saved?.Apps == null) return;
-                profiles = [LoadProfile(new(Guid.NewGuid().ToString("N"), saved.Name, saved.Device, saved.Apps, saved.HiddenPackages))];
+                profiles = [LoadProfile(new(Guid.NewGuid().ToString("N"), saved.Name, saved.Device, saved.Apps, saved.DisabledSmartVolumePackages))];
                 selected = profiles[0].Id;
             }
             else if (version == 2)
@@ -74,7 +74,7 @@ public sealed class AndroidPhoneStore
         return WithQuickPanelApps(new(CleanName(saved.Name), saved.Device, Array.AsReadOnly(apps))
         {
             Id = saved.Id,
-            HiddenQuickPanelApps = Array.AsReadOnly((saved.HiddenPackages ?? []).Take(1000).Where(packages.Contains).Distinct(StringComparer.Ordinal).ToArray())
+            DisabledSmartVolumeApps = Array.AsReadOnly((saved.DisabledSmartVolumePackages ?? []).Take(1000).Where(packages.Contains).Distinct(StringComparer.Ordinal).ToArray())
         });
     }
     private static string CleanName(string? value) => string.IsNullOrWhiteSpace(value) ? "我的手机" : value.Trim()[..Math.Min(value.Trim().Length, 64)];
@@ -86,6 +86,16 @@ public sealed class AndroidPhoneStore
     public AndroidPhoneProfile? FindProfile(AndroidDevice device)
     { lock (_gate) return _state.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.Matches(p.LastDevice, device)); }
     public string GetDisplayName(AndroidDevice device) => FindProfile(device)?.Name ?? device.Name;
+    public bool IsSmartVolumeEnabled(AndroidDevice? device, string package)
+    {
+        lock (_gate)
+        {
+            var profile = device != null
+                ? _state.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.Matches(p.LastDevice, device))
+                : _state.Profiles.FirstOrDefault(p => p.Id == _state.SelectedId);
+            return profile == null || !profile.DisabledSmartVolumeApps.Contains(package, StringComparer.Ordinal);
+        }
+    }
     public bool SelectProfile(string id)
     {
         bool found = false;
@@ -154,9 +164,9 @@ public sealed class AndroidPhoneStore
         {
             var primary = group.FirstOrDefault(p => p.Id == selected) ?? group.First();
             var apps = group.OrderByDescending(p => p.Id == primary.Id).SelectMany(p => p.RetainedApps).DistinctBy(a => a.Package).ToArray();
-            var hidden = group.SelectMany(p => p.HiddenQuickPanelApps).Distinct(StringComparer.Ordinal).ToArray();
+            var disabledSmart = group.SelectMany(p => p.DisabledSmartVolumeApps).Distinct(StringComparer.Ordinal).ToArray();
             var merged = WithQuickPanelApps(primary with { Name = primary.Name == "我的手机" ? group.FirstOrDefault(p => p.Name != "我的手机")?.Name ?? primary.Name : primary.Name,
-                RetainedApps = Array.AsReadOnly(apps), HiddenQuickPanelApps = Array.AsReadOnly(hidden) });
+                RetainedApps = Array.AsReadOnly(apps), DisabledSmartVolumeApps = Array.AsReadOnly(disabledSmart) });
             profiles[profiles.FindIndex(p => p.Id == primary.Id)] = merged;
             profiles.RemoveAll(p => p.Id != primary.Id && group.Any(member => member.Id == p.Id));
             changed = true;
@@ -179,21 +189,17 @@ public sealed class AndroidPhoneStore
     }
     public void Remove(string package) => ChangeProfile(null, p => !p.RetainedApps.Any(a => a.Package == package) ? p
         : p with { RetainedApps = Array.AsReadOnly(p.RetainedApps.Where(a => a.Package != package).ToArray()),
-            HiddenQuickPanelApps = p.HiddenQuickPanelApps.Contains(package)
-                ? Array.AsReadOnly(p.HiddenQuickPanelApps.Where(a => a != package).ToArray()) : p.HiddenQuickPanelApps });
-    public void SetQuickPanelVisible(string package, bool visible)
+            DisabledSmartVolumeApps = p.DisabledSmartVolumeApps.Contains(package)
+                ? Array.AsReadOnly(p.DisabledSmartVolumeApps.Where(a => a != package).ToArray()) : p.DisabledSmartVolumeApps });
+    public void SetSmartVolume(string package, bool enabled)
     {
         AdbClient.ValidatePackage(package);
-        ChangeProfile(null, p => !p.RetainedApps.Any(a => a.Package == package) || visible == !p.HiddenQuickPanelApps.Contains(package) ? p
-            : p with { HiddenQuickPanelApps = Array.AsReadOnly(visible
-                ? p.HiddenQuickPanelApps.Where(a => a != package).ToArray() : p.HiddenQuickPanelApps.Append(package).ToArray()) });
+        ChangeProfile(null, p => !p.RetainedApps.Any(a => a.Package == package) || enabled == !p.DisabledSmartVolumeApps.Contains(package) ? p
+            : p with { DisabledSmartVolumeApps = Array.AsReadOnly(enabled
+                ? p.DisabledSmartVolumeApps.Where(a => a != package).ToArray() : p.DisabledSmartVolumeApps.Append(package).ToArray()) });
     }
-    private static AndroidPhoneProfile WithQuickPanelApps(AndroidPhoneProfile profile)
-    {
-        if (profile.HiddenQuickPanelApps.Count == 0) return profile with { QuickPanelApps = profile.RetainedApps };
-        var hidden = profile.HiddenQuickPanelApps.ToHashSet(StringComparer.Ordinal);
-        return profile with { QuickPanelApps = Array.AsReadOnly(profile.RetainedApps.Where(a => !hidden.Contains(a.Package)).ToArray()) };
-    }
+    private static AndroidPhoneProfile WithQuickPanelApps(AndroidPhoneProfile profile) =>
+        profile with { QuickPanelApps = profile.RetainedApps };
     public void UpdateMetadata(IReadOnlyList<AndroidApp> apps) => UpdateMetadataCore(null, apps);
     public void UpdateMetadata(AndroidDevice device, IReadOnlyList<AndroidApp> apps)
     {
@@ -244,7 +250,7 @@ public sealed class AndroidPhoneStore
         if (index < 0) return state;
         var previous = state.Profiles[index]; var next = change(previous);
         if (next == previous) return state;
-        if (!ReferenceEquals(next.RetainedApps, previous.RetainedApps) || !ReferenceEquals(next.HiddenQuickPanelApps, previous.HiddenQuickPanelApps))
+        if (!ReferenceEquals(next.RetainedApps, previous.RetainedApps))
             next = WithQuickPanelApps(next);
         var profiles = state.Profiles.ToArray(); profiles[index] = next;
         return state with { Profiles = Array.AsReadOnly(profiles) };
@@ -282,7 +288,7 @@ public sealed class AndroidPhoneStore
                 await Task.Delay(150).ConfigureAwait(false);
                 State state; long revision; lock (_gate) { state = _state; revision = _revision; }
                 var saved = new PhoneFile(2, state.SelectedId, state.Profiles.Select(p => new SavedPhone(p.Id, p.Name, p.LastDevice,
-                    p.RetainedApps.ToArray(), p.HiddenQuickPanelApps.ToArray())).ToArray(), state.RemovedDevices?.ToArray());
+                    p.RetainedApps.ToArray(), p.DisabledSmartVolumeApps.ToArray())).ToArray(), state.RemovedDevices?.ToArray());
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
                 AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, JsonOptions));
                 lock (_gate) if (revision == _revision) { _writing = false; return; }
@@ -292,7 +298,7 @@ public sealed class AndroidPhoneStore
         { lock (_gate) _writing = false; Trace.WriteLine("Save phone library: " + ex.Message); }
     }
     public Task FlushAsync() { lock (_gate) return _save; }
-    private sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? HiddenPackages = null);
-    private sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? HiddenPackages = null);
+    private sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
+    private sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
     private sealed record PhoneFile(int Version, string SelectedId, SavedPhone[] Phones, AndroidDevice[]? RemovedDevices = null);
 }

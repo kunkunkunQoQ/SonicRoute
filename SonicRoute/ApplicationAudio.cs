@@ -58,9 +58,9 @@ internal static class ApplicationAudio
         {
             var source = Source(app);
             var list = outputs.Where(d => !IsPhoneOutputDevice(d.Id)).ToList();
-            // An active incoming source can outlive the device-discovery snapshot.
+            // An active incoming source can outlive the device-discovery snapshot; include its speaker and Bluetooth outputs.
             if (source != null)
-                list.Add(AndroidAudioHost.SpeakerOutput(source.Device));
+                list.AddRange(AndroidAudioHost.OutputsForDevice(source.Device));
             return list;
         }
 #endif
@@ -100,10 +100,9 @@ internal static class ApplicationAudio
     };
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null
         : AndroidAudioHost.Sources.Sources.FirstOrDefault(s => s.Id == app.ExternalSourceId);
-    private static bool IsSourceSpeaker(AndroidAudioSource source, string deviceId) =>
-        AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out string sinkKey)
-        && string.Equals(phoneKey, AndroidDeviceIdentity.Key(source.Device), StringComparison.OrdinalIgnoreCase)
-        && string.Equals(sinkKey, "speaker", StringComparison.OrdinalIgnoreCase);
+    private static bool IsSourcePhoneOutput(AndroidAudioSource source, string deviceId) =>
+        AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out _)
+        && string.Equals(phoneKey, AndroidDeviceIdentity.Key(source.Device), StringComparison.OrdinalIgnoreCase);
 #endif
     internal static (int Volume, bool Muted, bool MuteKnown) ReadStateChecked(AudioAppInfo app)
     {
@@ -233,7 +232,7 @@ internal static class ApplicationAudio
             {
                 if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
                 {
-                    if (!IsSourceSpeaker(source, deviceId)) return (false, -1, "请选择此应用所在手机的扬声器。");
+                    if (!IsSourcePhoneOutput(source, deviceId)) return (false, -1, "请选择此应用所在手机的输出设备。");
                     var owner = (App)System.Windows.Application.Current;
                     var payload = new AndroidAppDrag(source.Device, source.App);
                     // Presentation ownership belongs to the UI dispatcher. Stop it before

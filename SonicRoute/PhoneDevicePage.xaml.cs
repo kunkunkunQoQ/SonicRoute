@@ -1,4 +1,4 @@
-﻿#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -35,15 +35,15 @@ public sealed class PhoneAppChoice : INotifyPropertyChanged
         }
     }
     public string ActionText => Retained ? "从快速面板显示应用中移除" : "添加到快速面板显示应用";
-    private bool _quickPanelVisible;
-    public bool QuickPanelVisible
+    private bool _smartVolume;
+    public bool SmartVolume
     {
-        get => _quickPanelVisible;
-        internal set { if (_quickPanelVisible == value) return; _quickPanelVisible = value; PropertyChanged?.Invoke(this, new(nameof(QuickPanelVisible))); }
+        get => _smartVolume;
+        internal set { if (_smartVolume == value) return; _smartVolume = value; PropertyChanged?.Invoke(this, new(nameof(SmartVolume))); }
     }
     public event PropertyChangedEventHandler? PropertyChanged;
-    public PhoneAppChoice(PhoneAppItem item, bool retained, bool quickPanelVisible = true)
-    { Item = item; _retained = retained; _quickPanelVisible = quickPanelVisible; }
+    public PhoneAppChoice(PhoneAppItem item, bool retained, bool smartVolume = true)
+    { Item = item; _retained = retained; _smartVolume = smartVolume; }
 }
 
 public partial class PhoneDevicePage : UserControl, IDisposable
@@ -60,7 +60,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private AndroidDevice? _device;
     private bool _active, _disposed, _busy, _showConnection, _suppressName, _applyingConnection;
     private IReadOnlyList<AndroidApp>? _retainedSnapshot;
-    private IReadOnlyList<string>? _visibilitySnapshot;
+    private IReadOnlyList<string>? _smartVolumeSnapshot;
     public PhoneDevicePage() : this(null) { }
     internal PhoneDevicePage(AndroidWirelessConnection? wireless, Func<AndroidQrPairing>? createQr = null)
     {
@@ -117,11 +117,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         {
             _retainedSnapshot = profile.RetainedApps;
             RetainedApps.ItemsSource = profile.RetainedApps.Select(a => new PhoneAppChoice(new PhoneAppItem(a), true,
-                !profile.HiddenQuickPanelApps.Contains(a.Package))).ToArray();
+                !profile.DisabledSmartVolumeApps.Contains(a.Package))).ToArray();
         }
-        else if (!ReferenceEquals(_visibilitySnapshot, profile.HiddenQuickPanelApps))
-            foreach (PhoneAppChoice choice in RetainedApps.Items) choice.QuickPanelVisible = !profile.HiddenQuickPanelApps.Contains(choice.Item.Package);
-        _visibilitySnapshot = profile.HiddenQuickPanelApps;
+        else if (!ReferenceEquals(_smartVolumeSnapshot, profile.DisabledSmartVolumeApps))
+            foreach (PhoneAppChoice choice in RetainedApps.Items) choice.SmartVolume = !profile.DisabledSmartVolumeApps.Contains(choice.Item.Package);
+        _smartVolumeSnapshot = profile.DisabledSmartVolumeApps;
         RetainedCount.Text = $"{profile.RetainedApps.Count} 个";
         RetainedEmpty.Visibility = profile.RetainedApps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RetainedPanel.Visibility = DeviceCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
@@ -360,11 +360,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         var apps = CatalogApps.SelectedItems.Cast<PhoneAppChoice>().Where(choice => !choice.Retained).Select(choice => choice.Item.App).ToArray();
         AndroidAudioHost.Phone.RetainMany(apps);
     }
-    private void QuickPanelVisibility_Changed(object sender, RoutedEventArgs e)
+    private void SmartVolume_Changed(object sender, RoutedEventArgs e)
     {
         if (sender is CheckBox { DataContext: PhoneAppChoice choice } toggle && RetainedApps.Items.Contains(choice)
-            && choice.QuickPanelVisible != (toggle.IsChecked == true))
-            AndroidAudioHost.Phone.SetQuickPanelVisible(choice.Item.Package, toggle.IsChecked == true);
+            && choice.SmartVolume != (toggle.IsChecked == true))
+            AndroidAudioHost.Phone.SetSmartVolume(choice.Item.Package, toggle.IsChecked == true);
     }
     private void RetainApp_Click(object sender, RoutedEventArgs e)
     {

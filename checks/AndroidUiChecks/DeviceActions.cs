@@ -143,7 +143,7 @@ internal static partial class Program
             DrainUi();
             Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 1
                 && phone.FindName("PcSpeakerDropZone") is Border && phone.FindName("PcBluetoothDropZone_1") == null
-                && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在手机扬声器播放"),
+                && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在我的手机 扬声器播放"),
                 "phone panel shows a single speaker-only drop cell when no Bluetooth output is connected");
 
             var btScoDup = new AndroidOutputSink("bt:Xiaomi_Buds_4_Pro", AndroidOutputSinkKind.Bluetooth, 16, 7, "Xiaomi Buds 4 Pro", "00:00:00:00:00:00");
@@ -154,7 +154,7 @@ internal static partial class Program
             Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 2
                 && phone.FindName("PcSpeakerDropZone") is Border && phone.FindName("PcBluetoothDropZone_1") is Border
                 && phone.FindName("PcBluetoothDropZone_2") == null
-                && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在手机扬声器播放")
+                && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在我的手机 扬声器播放")
                 && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在 Xiaomi Buds 4 Pro 播放"),
                 "connecting a playable Bluetooth device deduplicates SCO + A2DP and dynamically splits the phone drop overlay into speaker and Bluetooth cells");
 

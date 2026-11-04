@@ -85,22 +85,27 @@ internal static partial class Program
 
             Render((FrameworkElement)main.Content, 1040, 720, System.IO.Path.Combine(output, "phone-management-light.png"));
             var firstChoice = retained.Items.Cast<PhoneAppChoice>().First();
-            var quickPanelToggle = Descendants<CheckBox>(retained).First(c =>
-                System.Windows.Automation.AutomationProperties.GetName(c) == "在快速手机面板显示");
+            var smartVolumeToggle = Descendants<CheckBox>(retained).First(c =>
+                System.Windows.Automation.AutomationProperties.GetName(c) == "智能音量");
             Check(Descendants<Button>(retained).Any(b => b.ToolTip?.ToString()?.Contains("快速面板") == true)
-                && quickPanelToggle.Style == page.FindResource("AutomationSwitch")
+                && smartVolumeToggle.Style == page.FindResource("AutomationSwitch")
+                && smartVolumeToggle.IsChecked == true
+                && store.IsSmartVolumeEnabled(first, firstChoice.Item.App.Package)
                 && ((Button)page.FindName("AddAppsButton")).Content?.ToString() == "＋  添加快速面板显示应用",
-                "retained rows pair a pin with the shared AutomationSwitch and use the updated add-app wording");
-            quickPanelToggle.IsChecked = false;
-            Check(store.Profile.RetainedApps.Any(a => a.Package == firstChoice.Item.App.Package)
-                && store.Profile.QuickPanelApps.All(a => a.Package != firstChoice.Item.App.Package)
-                && retained.Items.Count == retainedCount,
-                "turning off quick-panel visibility hides an app without removing its retained membership");
-            quickPanelToggle.IsChecked = true;
-            Check(store.Profile.RetainedApps.Any(a => a.Package == firstChoice.Item.App.Package)
+                "retained rows pair a pin with the default-on SmartVolume switch and use the updated add-app wording");
+            smartVolumeToggle.IsChecked = false;
+            Check(!store.IsSmartVolumeEnabled(first, firstChoice.Item.App.Package)
+                && store.Profile.DisabledSmartVolumeApps.Contains(firstChoice.Item.App.Package)
+                && store.Profile.RetainedApps.Any(a => a.Package == firstChoice.Item.App.Package)
                 && store.Profile.QuickPanelApps.Any(a => a.Package == firstChoice.Item.App.Package)
                 && retained.Items.Count == retainedCount,
-                "turning visibility back on restores the saved app without losing its membership");
+                "turning off SmartVolume updates the app's smart-volume preference while pinned apps always remain in QuickPanelApps");
+            smartVolumeToggle.IsChecked = true;
+            Check(store.IsSmartVolumeEnabled(first, firstChoice.Item.App.Package)
+                && !store.Profile.DisabledSmartVolumeApps.Contains(firstChoice.Item.App.Package)
+                && store.Profile.QuickPanelApps.Any(a => a.Package == firstChoice.Item.App.Package)
+                && retained.Items.Count == retainedCount,
+                "turning SmartVolume back on restores the default smart-volume state");
 
             foreach (bool dark in new[] { false, true })
             {
