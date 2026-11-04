@@ -189,7 +189,7 @@ try {
             Require ($index -gt $last) "Missing or misordered section: $heading";$last=$index
         }
         Require ($notes.Contains('### 1. 新增功能与特性') -and $notes.Contains('### 4. 其他变更') -and $notes.Contains('docs: usage clarification')) 'Detailed groups dropped non-feature commits'
-        foreach($asset in @('x64.zip','arm64.zip','Lite-x64.exe','Lite-arm64.exe','Legacy-x64.zip')){
+        foreach($asset in @('x64.exe','arm64.exe','Lite-x64.exe','Lite-arm64.exe','Legacy-x64.zip')){
             Require ($notes.Contains("https://github.com/example/SonicRoute/releases/download/v2.34/SonicRoute-v2.34-$asset")) 'Download link has a stale version/repository'
         }
         Require (!$notes.Contains('v1.27') -and $notes.Contains('MSIX 不内置运行时') -and $notes.Contains('不是独立发布者数字签名') -and !$notes.Contains('无损继承')) 'Copied old version facts or overstated upgrade guarantees'

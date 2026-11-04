@@ -89,7 +89,7 @@ jobs:
           dotnet run --project checks/EditionChecks/EditionChecks.csproj -c Debug -p:SonicRouteEdition=Full -- "$env:RUNNER_TEMP/client-validation/Full"
           if ($LASTEXITCODE -ne 0) { throw 'Full edition validation failed.' }
           $version = [string]([xml](Get-Content build/Version.props -Raw)).Project.PropertyGroup.SonicRouteVersion
-          dotnet run --project checks/EditionChecks/EditionChecks.csproj -c Debug -p:SonicRouteEdition=Full -- "$env:RUNNER_TEMP/client-validation/FullPayload" --payload "$env:CANDIDATE_DIRECTORY/assets/SonicRoute-v$version-x64.zip"
+          dotnet run --project checks/EditionChecks/EditionChecks.csproj -c Debug -p:SonicRouteEdition=Full -- "$env:RUNNER_TEMP/client-validation/FullPayload" --payload "$env:CANDIDATE_DIRECTORY/assets/SonicRoute-v$version-x64.exe"
           if ($LASTEXITCODE -ne 0) { throw 'Full package transaction failed.' }
 
       - name: Verify actual worker processes and rollback

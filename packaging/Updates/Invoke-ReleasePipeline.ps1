@@ -463,7 +463,7 @@ function Get-OrGenerateChangelog {
     [void]$sb.AppendLine("## 🔄 升级与数据保留指引")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("- **v1.25 及后续便携版**：打开「设置 → 软件更新」，检查、下载并完成校验后，确认重启更新。")
-    [void]$sb.AppendLine("- **v1.24 及更早版本或手动更新**：先在托盘菜单选择「退出」，再替换对应 EXE；SonicRoute 完整版和 Legacy 请完整解压对应 ZIP。")
+    [void]$sb.AppendLine("- **v1.24 及更早版本或手动更新**：先在托盘菜单选择「退出」，再替换完整版或 Lite 的单个 EXE；Legacy 请完整解压对应 ZIP。")
     [void]$sb.AppendLine("- **用户数据**：设置、快捷键、自动化规则及自定义图标继续使用 ``%LocalAppData%\SonicRoute\``；更新器不替换这些数据，建议手动更新前备份。")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("---")
@@ -536,7 +536,7 @@ function Write-StepSummary {
     if($Checklist.ReadOnlyRevalidation){[void]$sb.AppendLine('- [x] Read-only revalidation of an existing release; this candidate is not authorized to overwrite that release')}
     [void]$sb.AppendLine("- $(&$mark ($Checklist.SolutionBuildVerified)) Full solution Release build verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ArtifactsCompiled)) Five packages (SonicRoute x64/ARM64, Lite x64/ARM64, Legacy x64) compiled")
-    [void]$sb.AppendLine("- $(&$mark ($Checklist.LocalArtifactsVerified)) PE machine architecture (0x8664/0xaa64), Full ZIP 22-file and Legacy ZIP 13-file whitelists verified")
+    [void]$sb.AppendLine("- $(&$mark ($Checklist.LocalArtifactsVerified)) PE machine architecture (0x8664/0xaa64), Full/Lite single-EXE identities and Legacy ZIP 13-file whitelist verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ManifestVerified)) SHA256SUMS.txt & SonicRoute-update.json 1-to-1 matrix bijection verified")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.ChangelogGenerated)) Changelog curated/generated with conventional commit categorization")
     [void]$sb.AppendLine("- $(&$mark ($Checklist.RemoteAssetsVerified)) Remote asset size, count ($($LocalAssets.Count)/$($LocalAssets.Count)) & downloaded SHA-256 verified byte-for-byte")
