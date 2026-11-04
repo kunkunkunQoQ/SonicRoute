@@ -58,8 +58,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 | 版本 | 下載 | 需求 |
 |---|---|---|
-| ⭐ Full（.NET 10，含可選手機互聯） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) · [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 單 EXE 便攜版；需要匹配架構的 .NET 10 Desktop Runtime，包含可選 Android 手機音訊與虛擬螢幕集成。 |
-| ⭐ Lite（.NET 10，僅電腦音訊） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) · [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 單檔案便攜版；需要匹配架構的 .NET 10 Desktop Runtime，僅包含電腦音訊功能。 |
+| ⭐ Full（.NET 10，含可選手機互聯） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 單 EXE 便攜版；需要匹配架構的 .NET 10 Desktop Runtime，包含可選 Android 手機音訊與虛擬螢幕集成。 |
+| ⭐ Lite（.NET 10，僅電腦音訊） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 單檔案便攜版；需要匹配架構的 .NET 10 Desktop Runtime，僅包含電腦音訊功能。 |
 | 🛡️ Legacy x64（僅電腦功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公機；依賴系統自帶 .NET Framework 4.8，解壓即用。 |
 | 🔄 Microsoft Store（基於 Full） | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 以 Full 為建置來源；需要 x64 .NET 10 Desktop Runtime，在架版本以 Store 頁面為準。 |
 
@@ -68,7 +68,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 | 版本 | 下載 | 需求 |
 |---|---|---|
-| Lite NET8（已下架） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) · [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 已下架停更（後續版本不再提供）；建議遷移至 .NET 10 或 Legacy。 |
+| Lite NET8（已下架） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 已下架停更（後續版本不再提供）；建議遷移至 .NET 10 或 Legacy。 |
 </details>
 
 > [!NOTE]

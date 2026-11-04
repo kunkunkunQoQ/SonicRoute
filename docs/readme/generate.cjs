@@ -53,13 +53,13 @@ function render(language, text) {
   const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 ', '📱 '];
   const editionIcons = ['⭐ ', '⚡ ', '🛡️ ', '🔄 '];
   const rows = [
-    [editionIcons[0] + text.editionFull, `${link('x64', downloadAsset('x64.exe'))} · ${link('ARM64' + experimentalSuffix, downloadAsset('arm64.exe'))}`, text.fullRequirement],
-    [editionIcons[0] + text.editionLite, `${link('x64', downloadAsset('Lite-x64.exe'))} · ${link('ARM64' + experimentalSuffix, downloadAsset('Lite-arm64.exe'))}`, text.liteRequirement],
+    [editionIcons[0] + text.editionFull, `${link('x64', downloadAsset('x64.exe'))} / ${link('ARM64' + experimentalSuffix, downloadAsset('arm64.exe'))}`, text.fullRequirement],
+    [editionIcons[0] + text.editionLite, `${link('x64', downloadAsset('Lite-x64.exe'))} / ${link('ARM64' + experimentalSuffix, downloadAsset('Lite-arm64.exe'))}`, text.liteRequirement],
     [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
     [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
   ];
   const retiredRows = [
-    [text.editionLiteNet8, `${link('x64', historicalNet8Asset('Lite-NET8-x64.exe'))} · ${link('ARM64' + experimentalSuffix, historicalNet8Asset('Lite-NET8-arm64.exe'))}`, text.net8Requirement]
+    [text.editionLiteNet8, `${link('x64', historicalNet8Asset('Lite-NET8-x64.exe'))} / ${link('ARM64' + experimentalSuffix, historicalNet8Asset('Lite-NET8-arm64.exe'))}`, text.net8Requirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ') + ' | ' + link('🤖 AI', 'README.ai.md');
   const sponsorBadge = language.locale === 'zh-CN' ? '赞助-爱发电' : 'Support-Afdian';

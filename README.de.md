@@ -58,8 +58,8 @@ Für Android-Audio und virtuelle Displays wählen Sie **Full x64**; für PC-Audi
 
 | Version | Herunterladen | Voraussetzungen |
 |---|---|---|
-| ⭐ Full (.NET 10, mit optionaler Smartphone-Integration) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) · [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Einzel-EXE Portable Edition; erfordert passende .NET 10 Desktop Runtime, enthält optionale Android-Audio- und Virtual-Display-Integration. |
-| ⭐ Lite (.NET 10, nur PC-Audio) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) · [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Einzeldatei-Portable-Edition; erfordert passende .NET 10 Desktop Runtime, enthält nur PC-Audiofunktionen. |
+| ⭐ Full (.NET 10, mit optionaler Smartphone-Integration) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Einzel-EXE Portable Edition; erfordert passende .NET 10 Desktop Runtime, enthält optionale Android-Audio- und Virtual-Display-Integration. |
+| ⭐ Lite (.NET 10, nur PC-Audio) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Einzeldatei-Portable-Edition; erfordert passende .NET 10 Desktop Runtime, enthält nur PC-Audiofunktionen. |
 | 🛡️ Legacy x64 (nur PC-Audio, .NET Framework 4.8) | [Vollständiges ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | Keine zusätzliche Laufzeitumgebung erforderlich; nutzt integriertes .NET Framework 4.8, entpacken und starten. |
 | 🔄 Microsoft Store (basiert auf Full) | [Aus dem Store installieren](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Auf Basis von Full erstellt; benötigt x64 .NET 10 Desktop Runtime; Verfügbarkeit richtet sich nach Store-Seite. |
 
@@ -68,7 +68,7 @@ Für Android-Audio und virtuelle Displays wählen Sie **Full x64**; für PC-Audi
 
 | Version | Herunterladen | Voraussetzungen |
 |---|---|---|
-| Lite NET8 (Eingestellt) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) · [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Eingestellt und nicht mehr gepflegt; Migration auf .NET 10 oder Legacy empfohlen. |
+| Lite NET8 (Eingestellt) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Eingestellt und nicht mehr gepflegt; Migration auf .NET 10 oder Legacy empfohlen. |
 </details>
 
 > [!NOTE]
