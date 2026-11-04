@@ -18,9 +18,11 @@ internal static partial class Program
         bool phone = type.Assembly.GetType("SonicRoute.AndroidAudioHost") != null;
         bool enabled = (bool)type.GetField("IdleWorkingSetTrimEnabled", BindingFlags.Static | BindingFlags.NonPublic)!.GetRawConstantValue()!;
         Check(enabled == !phone, "working-set policy is enabled only in Lite/Legacy");
-        var native = type.GetMethod("NativeEmptyWorkingSet", BindingFlags.Static | BindingFlags.NonPublic);
+        var native = type.GetMethod("NativeSetProcessWorkingSetSize", BindingFlags.Static | BindingFlags.NonPublic);
         Check((native?.GetCustomAttribute<DllImportAttribute>() != null) == enabled,
             "Full does not compile the working-set native call");
+        if (enabled) Check(native!.GetCustomAttribute<DllImportAttribute>()!.EntryPoint == "SetProcessWorkingSetSize",
+            "Lite/Legacy reuse the v1.29 working-set API");
 
         var window = new Window { DataContext = new object() };
         app.MainWindow = window;
@@ -53,7 +55,10 @@ internal static partial class Program
         Check(!(bool)Invoke("TryTrimIdleWorkingSet")! && (!enabled || (long)Get("_lastWorkingSetTrimAt")! == at),
             "rapid repeated closes cannot retrim within the cooldown");
 
+        int collections = GC.CollectionCount(GC.MaxGeneration);
         Invoke("ReclaimUiWhenIdle", null, EventArgs.Empty);
+        if (enabled) Check(GC.CollectionCount(GC.MaxGeneration) == collections,
+            "Lite/Legacy idle reclamation does not force a full managed collection");
         Check(!timer.IsEnabled && !(bool)Get("_uiWorkingSetDirty")!,
             "idle work stops its timer and consumes the UI dirty request");
         if (enabled) Check(!(bool)Get("_uiWorkingSetTrimRequested")!, "working-set request is consumed without a retry loop");

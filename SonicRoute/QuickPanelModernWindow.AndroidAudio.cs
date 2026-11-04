@@ -36,6 +36,7 @@ public partial class QuickPanelModernWindow
         internal RotateTransform Arrow = new(0);
         internal bool Expanded, Legacy, ShowOutputName, ApplyingState;
         internal TextBlock? Name;
+        internal string? PhoneName;
         internal readonly List<(Button Button, string Id)> Devices = new();
     }
     private readonly Dictionary<string, AndroidRow> _androidRows = new(StringComparer.Ordinal);
@@ -186,13 +187,17 @@ public partial class QuickPanelModernWindow
     private void RefreshAndroidRow(bool fromBuildAppRows = false)
     {
         if (_isClosed) return;
+        bool outputsChanged = false;
         if (!fromBuildAppRows)
         {
             var cfg = ConfigService.Load();
             if (SystemDevCombo?.ItemsSource is IList<AudioDeviceInfo> sysOutputs)
             {
-                _outputDisplay = PanelDevices.WithSystemDefault(
+                var outputs = PanelDevices.WithSystemDefault(
                     DisplayDevices(ApplicationAudio.MergeExternalOutputs(sysOutputs), cfg), EDataFlow.eRender, cfg);
+                outputsChanged = outputs.Count != _outputDisplay.Count || !_outputDisplay.Zip(outputs,
+                    static (a, b) => a.Id == b.Id && a.DisplayName == b.DisplayName).All(static same => same);
+                if (outputsChanged) _outputDisplay = outputs;
             }
             foreach (var pcRow in _rows.Values)
             {
@@ -234,8 +239,12 @@ public partial class QuickPanelModernWindow
             row.Volume.Foreground = state.Muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
             row.Icon.Opacity = state.Muted ? 0.45 : 1;
             row.IconItem.RefreshName();
-            row.Root.ToolTip = state.Error ?? $"{row.IconItem.Label} · 来自 {AndroidAudioHost.Phone.GetDisplayName(source.Device)}";
+            string phoneName = AndroidAudioHost.Phone.GetDisplayName(source.Device);
+            bool phoneNameChanged = row.PhoneName != phoneName;
+            row.PhoneName = phoneName;
+            row.Root.ToolTip = state.Error ?? $"{row.IconItem.Label} · 来自 {phoneName}";
             UpdateAndroidRoute(row);
+            if ((outputsChanged || phoneNameChanged) && row.Expanded) BuildAndroidDevices(row);
             if (i >= AppListPanel.Items.Count || !ReferenceEquals(AppListPanel.Items[i], row.Root))
             {
                 AppListPanel.Items.Remove(row.Root); AppListPanel.Items.Insert(i, row.Root);
@@ -326,7 +335,8 @@ public partial class QuickPanelModernWindow
     {
         row.Details.Children.Clear(); row.Devices.Clear();
         var cfg = ConfigService.Load();
-        var outputs = _outputDisplay.Where(d => !cfg.HiddenOutputDevices.Contains(d.Id) && !ApplicationAudio.IsPhoneOutputDevice(d.Id));
+        var outputs = ApplicationAudio.OutputsForApp(row.IconItem.Info, _outputDisplay)
+            .Where(d => !cfg.HiddenOutputDevices.Contains(d.Id));
         var wrap = AddRowDeviceGroup(row.Details, outputs, "Qp.Output", new Thickness(0, 0, 0, 8), (button, device) =>
         {
             row.Devices.Add((button, device.Id));
@@ -345,7 +355,11 @@ public partial class QuickPanelModernWindow
     private async Task SetAndroidOutputAsync(AndroidRow row, AudioDeviceInfo device)
     {
         foreach (var entry in row.Devices) entry.Button.IsEnabled = false;
-        try { await row.Source.Session.SetOutputAsync(device.Id == AudioService.SystemDefaultDeviceId ? null : device.Id); }
+        try
+        {
+            var result = await ApplicationAudio.ApplyEndpointAsync(row.IconItem.Info, EDataFlow.eRender, device.Id);
+            if (!result.Success && !_isClosed) ShowOsd("手机音频", result.Message);
+        }
         catch (Exception ex) { if (!_isClosed) ShowOsd("手机音频", ex.Message); }
         finally { if (!_isClosed) { UpdateAndroidRoute(row); foreach (var entry in row.Devices) entry.Button.IsEnabled = true; } }
     }

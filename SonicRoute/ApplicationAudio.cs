@@ -51,6 +51,21 @@ internal static class ApplicationAudio
 #endif
         return list;
     }
+    internal static IEnumerable<AudioDeviceInfo> OutputsForApp(AudioAppInfo? app, IEnumerable<AudioDeviceInfo> outputs)
+    {
+#if SONICROUTE_PHONE
+        if (app?.IsExternal == true)
+        {
+            var source = Source(app);
+            var list = outputs.Where(d => !IsPhoneOutputDevice(d.Id)).ToList();
+            // An active incoming source can outlive the device-discovery snapshot.
+            if (source != null)
+                list.Add(AndroidAudioHost.SpeakerOutput(source.Device));
+            return list;
+        }
+#endif
+        return outputs;
+    }
     internal static List<AudioAppInfo> GetApps(bool refresh = false) => MergeExternal(AudioService.GetApps(refresh));
     internal static bool HasExternal =>
 #if SONICROUTE_PHONE
@@ -85,6 +100,10 @@ internal static class ApplicationAudio
     };
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null
         : AndroidAudioHost.Sources.Sources.FirstOrDefault(s => s.Id == app.ExternalSourceId);
+    private static bool IsSourceSpeaker(AndroidAudioSource source, string deviceId) =>
+        AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out string sinkKey)
+        && string.Equals(phoneKey, AndroidDeviceIdentity.Key(source.Device), StringComparison.OrdinalIgnoreCase)
+        && string.Equals(sinkKey, "speaker", StringComparison.OrdinalIgnoreCase);
 #endif
     internal static (int Volume, bool Muted, bool MuteKnown) ReadStateChecked(AudioAppInfo app)
     {
@@ -191,21 +210,46 @@ internal static class ApplicationAudio
             return AudioService.ApplyEndpoint((int)app.ProcessId, flow, deviceId);
         }
 #if SONICROUTE_PHONE
+        // Synchronous callers (automation/hotkeys/tray) already execute on workers.
+        return ApplyExternalEndpointAsync(app, flow, deviceId).GetAwaiter().GetResult();
+#else
+        return (false, -1, "此音频会话没有录音路由或已经结束。");
+#endif
+    }
+    internal static Task<(bool Success, int HResult, string Message)> ApplyEndpointAsync(AudioAppInfo app, EDataFlow flow, string deviceId)
+    {
+#if SONICROUTE_PHONE
+        if (app.IsExternal) return ApplyExternalEndpointAsync(app, flow, deviceId);
+#endif
+        return Task.FromResult(ApplyEndpoint(app, flow, deviceId));
+    }
+#if SONICROUTE_PHONE
+    private static async Task<(bool Success, int HResult, string Message)> ApplyExternalEndpointAsync(AudioAppInfo app, EDataFlow flow, string deviceId)
+    {
         var source = Source(app);
         if (source != null && flow == EDataFlow.eRender)
         {
-            if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
-                return (false, -1, "手机音频应用请拖回手机音频面板以返回手机播放。");
             try
             {
-                source.Session.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).GetAwaiter().GetResult();
+                if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
+                {
+                    if (!IsSourceSpeaker(source, deviceId)) return (false, -1, "请选择此应用所在手机的扬声器。");
+                    var owner = (App)System.Windows.Application.Current;
+                    var payload = new AndroidAppDrag(source.Device, source.App);
+                    // Presentation ownership belongs to the UI dispatcher. Stop it before
+                    // retiring the source so late display notifications cannot recapture it.
+                    var returned = owner.Dispatcher.CheckAccess() ? owner.ReturnAndroidToPhoneAsync(payload)
+                        : owner.Dispatcher.InvokeAsync(() => owner.ReturnAndroidToPhoneAsync(payload)).Task.Unwrap();
+                    await returned.ConfigureAwait(false);
+                }
+                else await source.Session.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
                 return (true, 0, "");
             }
             catch (Exception ex) { return (false, ex.HResult, ex.Message); }
         }
-#endif
         return (false, -1, "此音频会话没有录音路由或已经结束。");
     }
+#endif
     internal static (bool Muted, bool Applied) ChangeInputMuteChecked(AudioAppInfo app, bool? muted, CancellationToken token = default)
         => app.IsExternal ? (false, false) : SessionVolumeService.ChangeInputMuteChecked((int)app.ProcessId, muted, token);
 

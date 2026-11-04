@@ -13,7 +13,9 @@ namespace SonicRoute
         {
             // Reuse the shared retained devices, names, wrapping and active style.
             RenderDeviceQuickButtons(AppsOutputQuickPanel,
-                PanelDevices.WithSystemDefault(DisplayDevices(VisibleOutputs), EDataFlow.eRender, _config),
+                ApplicationAudio.OutputsForApp(_appsSelected,
+                    PanelDevices.WithSystemDefault(DisplayDevices(_outputs), EDataFlow.eRender, _config))
+                    .Where(d => !_config.HiddenOutputDevices.Contains(d.Id)),
                 device => SelectAppsRouteDevice(AppsOutputCombo, device), (AppsOutputCombo.SelectedItem as AudioDeviceInfo)?.Id);
             RenderDeviceQuickButtons(AppsInputQuickPanel,
                 _config.ExperimentalMic ? PanelDevices.WithSystemDefault(DisplayDevices(VisibleInputs), EDataFlow.eCapture, _config)

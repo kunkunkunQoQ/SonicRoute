@@ -176,19 +176,15 @@ internal static class AndroidAudioHost
         {
             if (profile.LastDevice is not { } device || store.IsRemoved(device) || !IsPhoneOnline(device)) continue;
             string phoneKey = AndroidDeviceIdentity.Key(device);
-            string phoneName = string.IsNullOrWhiteSpace(profile.Name) ? device.Name : profile.Name;
             var sinks = profile.OutputSinks is { Count: > 0 } ? profile.OutputSinks : [AndroidOutputSink.DefaultSpeaker];
             foreach (var sink in sinks)
             {
                 string id = AndroidOutputIdentity.FormatDeviceId(phoneKey, sink.Key);
                 if (!seenIds.Add(id)) continue;
-                string displayName = sink.Kind == AndroidOutputSinkKind.Speaker
-                    ? $"手机扬声器 ({phoneName})"
-                    : $"{sink.Name} ({phoneName} · 蓝牙)";
                 list.Add(new AudioDeviceInfo
                 {
                     Id = id,
-                    DisplayName = displayName,
+                    DisplayName = OutputDisplayName(device, sink),
                     Flow = EDataFlow.eRender,
                     IsDefault = false
                 });
@@ -196,6 +192,18 @@ internal static class AndroidAudioHost
         }
         return list.AsReadOnly();
     }
+    internal static string OutputDisplayName(AndroidDevice? device, AndroidOutputSink sink)
+    {
+        string phoneName = device == null ? "手机" : LazyPhone.IsValueCreated ? Phone.GetDisplayName(device) : device.Name;
+        return sink.Kind == AndroidOutputSinkKind.Speaker
+            ? $"{phoneName} 扬声器" : $"{sink.Name} ({phoneName} · 蓝牙)";
+    }
+    internal static AudioDeviceInfo SpeakerOutput(AndroidDevice device) => new()
+    {
+        Id = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker"),
+        DisplayName = OutputDisplayName(device, AndroidOutputSink.DefaultSpeaker),
+        Flow = EDataFlow.eRender
+    };
     internal static IReadOnlyList<(AndroidOutputSink Sink, string DeviceId)> GetDropZonesForDevice(AndroidDevice? device)
     {
         if (device == null) return Array.Empty<(AndroidOutputSink, string)>();

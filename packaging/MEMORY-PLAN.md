@@ -1,11 +1,11 @@
 # 分版本内存优化方案
 
-状态：2026-11-04 用户要求已实现并构建Full/Lite/Legacy测试包，Lite、Legacy/net48允许收缩工作集；此前“只设计”的限制在本轮范围内被覆盖。57项定向检查通过，未做整版长期内存或真机听音对比，不预设内存下降百分比。商店使用 Full，Lite 与 Legacy 独立构建。
+状态：2026-11-04 用户反馈 Lite/Legacy 回收时 CPU 开销高，要求恢复 v1.29 方式。本轮改为原有单次工作集收缩，不叠加全代 GC；保留关闭门控和30秒限频。Full 不进行全进程工作集收缩。商店使用 Full，Lite 与 Legacy 独立构建。此前57项检查是上一轮证据，不能作为本轮 CPU 改善结论。
 
 ## 本轮实现
 
 - 共享回收入口统一到 `SonicRoute/App.Memory.cs`，复用原有1500ms单次延迟；重新打开界面取消待回收请求，不增加闲时轮询。
-- Lite / Legacy：仅实际关闭界面、启动预热结束、主界面/快速面板/托盘菜单和其他可见WPF窗口均不占用UI时，尝试 `EmptyWorkingSet(GetCurrentProcess())`。每次尝试至少间隔30秒；被可见界面或冷却时间挡住时不创建重试定时器。启动本身不触发工作集收缩。
+- Lite / Legacy：仅实际关闭界面、启动预热结束、主界面/快速面板/托盘菜单和其他可见WPF窗口均不占用UI时，复用 v1.29 的 `SetProcessWorkingSetSize(current, -1, -1)` 单次请求，不额外调用 `GC.Collect`。每次尝试至少间隔30秒；被可见界面或冷却时间挡住时不创建重试定时器。启动本身不触发工作集收缩。
 - Full：不编译工作集收缩的原生调用。隐藏手机面板时清除曲目封面、原始封面字节、媒体快照与待派发数据，保留手机应用行与目录缓存；关闭时复用 `WindowUiLifetime` 取消尚未执行的媒体UI回调。活动连接、音频与虚拟屏的所有权不变。
 - 缓存上限、目录LRU、服务合并和COM生命周期没有发现足以支持改动的新证据，本轮不盲目修改。工作集收缩属于驻留页整理，不等同于解决内存泄漏；同时记录私有内存与重开体验。
 
@@ -48,11 +48,18 @@
 
 只在发现持续增长、具体残留或明确回退时扩大跟踪。本轮只做回收门控、原生调用和手机UI引用释放的定向检查，并构建Full/Lite/Legacy测试包；不操作正在运行的用户程序或手机流，不把隔离测试进程的工作集变化当整版性能结论。
 
-Windows API依据：[EmptyWorkingSet](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-emptyworkingset)、[GetCurrentProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess)。
+Windows API依据：[SetProcessWorkingSetSize](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-setprocessworkingsetsize)、[GetCurrentProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess)。微软说明 `SetProcessWorkingSetSize(-1, -1)` 与 `EmptyWorkingSet` 都用于移出驻留页；因此不能把更换 API 名称本身说成 CPU 修复证据。本轮实质调整是不再让 Lite/Legacy 额外触发全代托管回收，仍需用户实际使用确认 CPU 与重开体验。
 
-## 本轮验证结果
+## 上一轮验证结果（e8eadf5，历史）
 
 - Full回收门控13项、Lite 14项、Legacy/net48 14项、手机按需/引用释放16项，共57项。测试只收缩自身隔离检查进程的工作集，不影响正在运行的程序或共享ADB。
 - Full确认原生工作集收缩调用未编入；Lite/Legacy实际原生调用成功，重复请求被30秒冷却挡住，单次定时器停止，启动/托盘菜单/退出门控生效。
 - 手机面板隐藏后封面及媒体快照引用清除，应用行缓存保留；关窗撤销待执行回调；整个UI检查没有创建音频/虚拟屏工作器或ADB。
 - Full、Lite正常ReadyToRun单EXE及Legacy原13文件ZIP构建通过。测试包放工作区固定“测试版”目录，不覆盖正在运行的普通版。组件检查工作集下降不当作实际私有内存或整版性能降幅，重开体验、长期使用和真机声音由后续试用验证。
+
+## 本轮验证与交接
+
+- 回收检查：Full 13项、Lite 16项、Legacy/net48 16项；后两者实际验证 v1.29 原生入口，以及空闲回调不增加全代托管收集次数。仍验证启动/可见窗口/托盘/退出门控、单次计时器、重开取消与限频。
+- 手机扬声器13项：保存的手机名称、改名和设备ID稳定、缓存复用、快速/完整界面选择、跨手机隔离，以及真实控件事件经UI/后台派发停止对应会话。合计58项定向检查；手机部分使用隔离配置与模拟音频会话，不访问真机，不把此结果当作CPU或听音基准。
+- Full/Lite单EXE与Legacy原13文件ZIP构建通过。用户正在运行旧的顶层Full测试EXE，未替换该文件或结束进程；本轮Full使用固定发布目录内的新EXE。精确路径与哈希见本地交付收据。
+- 最新交接与下一位AI的记录要求见 [DEVELOPMENT-HANDOFF.md](DEVELOPMENT-HANDOFF.md)，变更记录见 [WORKLOG.md](WORKLOG.md)。

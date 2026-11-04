@@ -229,7 +229,8 @@ public partial class PhoneAudioWindow : Window
             zones = [(AndroidOutputSink.DefaultSpeaker, "")];
 
         var sigBuilder = new StringBuilder();
-        sigBuilder.Append(device == null ? "" : AndroidDeviceIdentity.Key(device)).Append('|');
+        sigBuilder.Append(device == null ? "" : AndroidDeviceIdentity.Key(device)).Append('|')
+            .Append(AndroidAudioHost.OutputDisplayName(device, AndroidOutputSink.DefaultSpeaker)).Append('|');
         foreach (var (sink, deviceId) in zones)
             sigBuilder.Append(sink.Key).Append(':').Append(sink.Name).Append(':').Append(deviceId).Append(';');
         string signature = sigBuilder.ToString();
@@ -250,10 +251,10 @@ public partial class PhoneAudioWindow : Window
             var (sink, deviceId) = zones[i];
             string cellName = i == 0 ? "PcSpeakerDropZone" : $"PcBluetoothDropZone_{i}";
             string title = sink.Kind == AndroidOutputSinkKind.Speaker
-                ? "仅在手机扬声器播放"
+                ? $"仅在{AndroidAudioHost.OutputDisplayName(device, sink)}播放"
                 : $"仅在 {sink.Name} 播放";
             string description = sink.Kind == AndroidOutputSinkKind.Speaker
-                ? "松开后，电脑应用仅在手机扬声器出声"
+                ? $"松开后，电脑应用仅在{AndroidAudioHost.OutputDisplayName(device, sink)}出声"
                 : "松开后，电脑应用仅在此蓝牙设备出声";
             var corners = zones.Count == 1
                 ? new CornerRadius(6)

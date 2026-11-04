@@ -15,6 +15,11 @@ using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
+    private sealed class RoutingFixtureApp : App
+    {
+        protected override void OnStartup(StartupEventArgs e) { }
+        protected override void OnExit(ExitEventArgs e) { }
+    }
     private static int _checks;
     private const BindingFlags Hidden = BindingFlags.NonPublic | BindingFlags.Instance;
     [STAThread]
@@ -26,13 +31,16 @@ internal static partial class Program
             string output = Path.GetFullPath(args[0]); Directory.CreateDirectory(output);
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(output, "ui-data-" + Guid.NewGuid().ToString("N")));
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidUiChecks");
-            var app = new App(); app.InitializeComponent();
+            App app = args.Contains("--speaker-routing") ? new RoutingFixtureApp() : new App();
+            if (app is RoutingFixtureApp) app.Resources = ProductResources();
+            else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
             if (args.Contains("--interaction-audit")) return InteractionAuditUi(output);
             if (args.Contains("--device-actions")) return DeviceActionsUi(output);
             if (args.Contains("--restore-live")) return RestoreDisplayLive(output, args[2]);
             if (args.Contains("--phone-demand")) return PhoneDemandUi(output);
+            if (args.Contains("--speaker-routing")) return SpeakerRoutingUi(output);
             if (args.Contains("--qr-live")) return QrPairingLive(output);
             var config = ConfigService.Load(); config.QuickPanelUseLegacyAppRows = true; config.QuickPanelCompactShowOutputName = false;
             var catalog = JsonSerializer.Deserialize<Catalog>(File.ReadAllText(args[1]))!;

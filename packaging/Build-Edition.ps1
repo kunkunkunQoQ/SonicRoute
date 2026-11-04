@@ -22,21 +22,24 @@ $env:NUGET_PACKAGES = Join-Path $lab 'outputs\nuget-packages'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $destination = Join-Path $OutputRoot ($Edition + '-' + $Architecture)
 Assert-EditionPath $destination
+$version = [string]([xml](Get-Content -LiteralPath (Join-Path $repo 'build\Version.props') -Raw)).Project.PropertyGroup.SonicRouteVersion
+$variant = Get-ReleaseMatrix $version | Where-Object { $_.Edition -eq $Edition -and $_.Architecture -eq $Architecture }
+$asset = Join-Path $OutputRoot $variant.Asset
+Assert-EditionPath $asset
 if (Test-Path -LiteralPath $destination) {
     foreach ($item in Get-ChildItem -LiteralPath $destination -Force -Recurse) {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Existing edition output contains a link or junction.' }
     }
 }
-$active = @(Get-Process -Name SonicRoute -ErrorAction SilentlyContinue | Where-Object {
-    try { !$_.Path -or $_.Path.StartsWith($destination + '\',[StringComparison]::OrdinalIgnoreCase) } catch { $true }
+$active = @(Get-Process -Name 'SonicRoute*' -ErrorAction SilentlyContinue | Where-Object {
+    try { !$_.Path -or $_.Path.StartsWith($destination + '\',[StringComparison]::OrdinalIgnoreCase) -or
+        [string]::Equals($_.Path, $asset, [StringComparison]::OrdinalIgnoreCase) } catch { $true }
 })
-if ($active.Count) { throw 'This edition output is running; exit it before rebuilding.' }
+if ($active.Count) { throw 'This edition output or named package is running; keep it unchanged until it exits.' }
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
 $env:TEMP = $env:TMP = Join-Path $OutputRoot ('.tmp\' + $Edition + '-' + $Architecture)
 Assert-EditionPath $env:TEMP
 New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
-$version = [string]([xml](Get-Content -LiteralPath (Join-Path $repo 'build\Version.props') -Raw)).Project.PropertyGroup.SonicRouteVersion
-$variant = Get-ReleaseMatrix $version | Where-Object { $_.Edition -eq $Edition -and $_.Architecture -eq $Architecture }
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $log = Join-Path $OutputRoot ('build-' + $Edition + '-' + $Architecture + '-' + $stamp + '.log')
 $arguments = @('publish',(Join-Path $repo 'SonicRoute\SonicRoute.csproj'),'-c','Release','-f','net10.0-windows','-r',('win-'+$Architecture),
@@ -45,8 +48,6 @@ if ($NoReadyToRun) { $arguments += '-p:PublishReadyToRun=false' }
 & $dotnet @arguments *> $log
 $buildExit = $LASTEXITCODE
 if ($buildExit -ne 0) { Get-Content -LiteralPath $log -Tail 18; throw ('Edition build failed: ' + $log) }
-$asset = Join-Path $OutputRoot $variant.Asset
-Assert-EditionPath $asset
 $temporaryAsset = Join-Path $OutputRoot ($variant.Asset + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
 if ($Edition -eq 'Lite' -and (Test-Path -LiteralPath (Join-Path $destination 'AndroidRuntime'))) { throw 'Lite output contains phone runtime files.' }
 # Only the single executable is distributed; legacy loose files in a reused Full build

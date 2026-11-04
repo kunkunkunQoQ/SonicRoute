@@ -452,7 +452,7 @@ namespace SonicRoute
             _suppressDevCombo = true;
             try
             {
-                AppsOutputCombo.ItemsSource = _outputDisplay;
+                AppsOutputCombo.ItemsSource = ApplicationAudio.OutputsForApp(_appsSelected, _outputDisplay);
                 AppsInputCombo.ItemsSource = _inputDisplay;
                 if (appsId != null) AppsOutputCombo.SelectedItem = _outputDisplay.FirstOrDefault(d => d.Id == appsId);
                 if (appsInputId != null) AppsInputCombo.SelectedItem = _inputDisplay.FirstOrDefault(d => d.Id == appsInputId);
@@ -601,6 +601,11 @@ namespace SonicRoute
             ShowPhoneDeviceDetails(false);
             AppsRenameBox.Visibility = Visibility.Collapsed;
             _appsSelected = (AppsListBox.SelectedItem as AppItem)?.Info;
+            bool routesSuppressed = _suppressDevCombo;
+            _suppressDevCombo = true;
+            try { AppsOutputCombo.ItemsSource = ApplicationAudio.OutputsForApp(_appsSelected, _outputDisplay); }
+            finally { _suppressDevCombo = routesSuppressed; }
+            RenderAppsRouteButtons();
             AppsInputCard.IsEnabled = _appsSelected?.IsExternal != true;
             AppsIconPreview.Content = AppsListBox.SelectedItem;
             AppsRoutingPanel.IsEnabled = AppsControls.IsEnabled = _appsSelected != null;

@@ -66,8 +66,10 @@ namespace SonicRoute
             _uiReclaimTimer?.Stop();
             if (_mainWindow != null || _quickPanel != null || _trayMenu != null || !ShouldReclaimIdle()
                 || Dispatcher.HasShutdownStarted) return;
+#if SONICROUTE_PHONE
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
-#if !SONICROUTE_PHONE
+#else
+            // Match v1.29: one native working-set request, without a forced full GC.
             TryTrimIdleWorkingSet();
             _uiWorkingSetTrimRequested = false;
 #endif
@@ -89,7 +91,7 @@ namespace SonicRoute
                 return false; // Do not reschedule; another UI close can request the next pass.
             _lastWorkingSetTrimAt = now;
             bool trimmed;
-            try { trimmed = NativeEmptyWorkingSet(NativeCurrentProcess()); }
+            try { trimmed = NativeSetProcessWorkingSetSize(NativeCurrentProcess(), new IntPtr(-1), new IntPtr(-1)); }
             catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException) { return false; }
             return trimmed;
 #endif
@@ -99,9 +101,9 @@ namespace SonicRoute
         [DllImport("kernel32.dll", EntryPoint = "GetCurrentProcess")]
         private static extern IntPtr NativeCurrentProcess();
 
-        [DllImport("psapi.dll", EntryPoint = "EmptyWorkingSet", SetLastError = true)]
+        [DllImport("kernel32.dll", EntryPoint = "SetProcessWorkingSetSize", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool NativeEmptyWorkingSet(IntPtr process);
+        private static extern bool NativeSetProcessWorkingSetSize(IntPtr process, IntPtr minimum, IntPtr maximum);
 #endif
     }
 }
