@@ -92,3 +92,20 @@
 - 验证：Full x64 ReadyToRun 单 EXE 发布构建通过，检查 XAML 事件与 Hyperlink 类型；未扩展手机真机/性能测试，人工视觉与点击可在新版中确认。
 - 交付：固定 `测试版/Full-x64/SonicRoute.exe` 已更新。顶层 `测试版/SonicRoute-v1.30-x64.exe` 正由用户运行，保留该文件与会话，未结束用户进程；当前新版入口以本地 34 号记录和收据为准。Lite/Legacy 和普通运行版未构建或替换，原有 SmartVolume 调参保留。
 - 同步：本轮 UI 与交接随同提交到 GitHub；实际提交及文件 Hash 见父容器 `integration-docs/about-license-link-receipt.json`。没有 Release/tag/Store 发布。
+
+
+## 2026-11-04：核对并补齐 v1.29 -> v1.30 发行说明与更新记录
+
+- 用户要求：调用子代理核对 `v1.29` 到 `v1.30` 的 GitHub Releases、Wiki 更新记录与真实代码提交差异，并将遗漏的真实更新内容补充到发布说明与版本历史文档中。
+- 核对结果（`v1.29` `18e11a6` -> `v1.30` `1079f74`，共 37 个提交、340 个文件变更）：
+  - 原 `docs/release-v1.30.md`、GitHub Release `v1.30` 正文及 `SonicRoute.wiki/09-版本历史.md` 主要记录了 Full 手机集成改动，遗漏了 `3c0fcfc..29a46d8` 期间合入的桌面端功能与体验改进，以及 `README.ai.md` 中未同步的 `v1.30` 版本归档条目与 Store Full 打包说明。
+- 补充内容：
+  1. `docs/release-v1.30.md`、GitHub Release `v1.30` 在线正文（Release ID `433710996`）与 `SonicRoute.wiki/09-版本历史.md`：
+     - 主题页新增快速面板应用行布局选项（紧凑单行 / 完整双行布局切换，以及紧凑/完整模式下输出设备名显示开关）、加大应用音量滑块垂直拖拽命中区域、修复滚动条显隐引起的宽度跳变。
+     - 自动化新增 `SetCurrentAppInputMute`（37）与 `ToggleCurrentAppInputMute`（38）两项当前前台应用麦克风静音动作（共 39 种动作）、动作选择器按类别分组展示、执行历史多目标确认统计（“已确认 X / Y 个目标”）及一次性定时触发状态提示。
+     - 概览页与应用页音量卡片静音按钮与状态标签对齐、精简冗余“当前：”前缀、移除主窗口与快速面板外层 `DropShadowEffect` 阴影、统一 9 语言“播放 / 录音”术语、Full 版关于页 GitHub 旁“开源许可”文字链接。
+     - 配置导入前结构化预览确认弹窗（`MainWindow.ImportPreview.cs`）、高频滑块拖动合并写入器（`CoalescedVolumeWriter`）、快照异步配置落盘（`ConfigService.QueueSave`）、更新器下载与校验支持取消。
+  2. `docs/readme/generate.cjs` 与 `README.ai.md`：修正 Store 打包说明（复用 NET10 Full x64 EXE），在 `VERSION_ARCHIVE_AND_CHANGELOG` 补充 `v1.30` 完整变更记录，并通过 `node docs/readme/generate.cjs --check` 校验。
+  3. 修正 `测试版/README.md` 历史段落中残留的“点击源手机扬声器或蓝牙返回手机”旧表述，明确自 `ccc4254` 起切换至源手机输出继续受主面板控制、退出或拖回左侧手机面板才交还手机。
+- 边界：仅更新文档与在线 Release 说明正文，不移动 `v1.30` 标签（`1079f743618981972dfb620ddae47ecec82ad2fd`），不改动已发布的 7 个 Release 附件，保留开发工作区未提交的 `SonicRoute.AndroidAudio/AndroidPcmSource.cs` SmartVolume 调参，不结束任何运行中进程或共享 ADB。
+
