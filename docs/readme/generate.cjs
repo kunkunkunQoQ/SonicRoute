@@ -50,19 +50,16 @@ function render(language, text) {
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
     return variables[key];
   });
-  const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 '];
+  const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 ', '📱 '];
   const editionIcons = ['⭐ ', '⚡ ', '🛡️ ', '🔄 '];
   const rows = [
-    [editionIcons[0] + text.editionFullX64, link(text.singleExe, downloadAsset('x64.exe')), text.fullRequirement],
-    [editionIcons[1] + text.editionFullArm64, link(text.singleExe, downloadAsset('arm64.exe')), text.fullArm64Requirement],
-    [editionIcons[0] + text.editionLiteX64, link(text.singleExe, downloadAsset('Lite-x64.exe')), text.liteRequirement],
+    [editionIcons[0] + text.editionFull, `${link('x64', downloadAsset('x64.exe'))} · ${link('ARM64' + experimentalSuffix, downloadAsset('arm64.exe'))}`, text.fullRequirement],
+    [editionIcons[0] + text.editionLite, `${link('x64', downloadAsset('Lite-x64.exe'))} · ${link('ARM64' + experimentalSuffix, downloadAsset('Lite-arm64.exe'))}`, text.liteRequirement],
     [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
-    [editionIcons[1] + text.editionLiteArm64 + experimentalSuffix, link(text.singleExe, downloadAsset('Lite-arm64.exe')), text.arm64Requirement],
     [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
   ];
   const retiredRows = [
-    [text.editionLiteNet8X64, link(text.singleExe, historicalNet8Asset('Lite-NET8-x64.exe')), text.net8RequirementX64],
-    [text.editionLiteNet8Arm64 + experimentalSuffix, link(text.singleExe, historicalNet8Asset('Lite-NET8-arm64.exe')), text.net8RequirementArm64]
+    [text.editionLiteNet8, `${link('x64', historicalNet8Asset('Lite-NET8-x64.exe'))} · ${link('ARM64' + experimentalSuffix, historicalNet8Asset('Lite-NET8-arm64.exe'))}`, text.net8Requirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ') + ' | ' + link('🤖 AI', 'README.ai.md');
   const sponsorBadge = language.locale === 'zh-CN' ? '赞助-爱发电' : 'Support-Afdian';

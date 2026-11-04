@@ -33,6 +33,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 - **应用独立声音分流与双向路由（播放 + 录音）**：为每个应用分别指定输出与输入设备，让游戏与语音走耳机和麦克风，音乐走音箱。配置由 Windows 原生持久化，退出软件依然生效，不破坏系统混音器配置。
 - **前台焦点智能跟随与托盘滚轮盲操**：系统事件驱动秒级锁定当前前台有声应用；支持在任务栏托盘滚动滚轮盲调音量，按住 Alt 滚动即时换轨设备，配合屏幕浮动 OSD 提示与全局麦克风静音，无需切出窗口。
 - **快速面板与实时出声电平指示**：卡片式快速面板支持 350~850px 高度调节与位置保存；直观掌控各应用独立音量，内置实时声音电平指示。
+- **Android 手机互联与独立虚拟屏幕（Full 版）**：支持手机音频接入电脑独立分流与调音，电脑声音送入手机播放；支持手机应用在电脑独立虚拟屏幕窗口自适应显示，快速面板直显源手机扬声器与蓝牙设备并持续接管，搭配默认智能音量（SmartVolume）感知平衡响度。
 - **自动化连招引擎与极速 CLI（6 种触发 × 39 种操作）**：支持应用启停与切换、定时、快捷键等 6 种触发，自由组合设备切换、音量、静音、程序关联启动与 PowerShell；内置 sr 命名管道短命令，无额外常驻开销，轻松联动脚本与硬件控制台。
 - **事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。Full 提供可选 Android 手机音频与虚拟屏幕集成；Lite 与 Legacy 仅含电脑功能。支持九种语言。
 
@@ -47,6 +48,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 | ⚡ **每次开游戏都要插拔耳机、改 Windows 设置** | 设定规则：游戏打开时自动「切换耳机 + 音量 40% + 启动语音软件」，退出游戏自动切回音箱 |
 | 🎙️ **临时离开电脑、拿外卖或私密通话** | 一键全局麦克风静音（快捷键 Ctrl+Shift+N），配合屏幕常驻 OSD 浮窗，一眼确认是否闭麦 |
 | 📹 **OBS 游戏直播 / 录屏教程** | 为各应用指定独立物理或虚拟轨道，避免录屏时把私人聊天或系统提示音混入录像 |
+| 📱 **手机声音接入电脑播放，或在电脑上操作手机应用** | 把手机音乐、视频或游戏声音接入电脑耳机或音箱独立调音；手机画面放入电脑独立虚拟窗口中操作，快速面板直接控制源手机扬声器与蓝牙设备，无需频繁看手机 |
 
 ## 🚀 下载与开始使用
 
@@ -56,20 +58,17 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| ⭐ Full x64（.NET 10，含可选手机集成） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) | 单 EXE；需要匹配的 x64 .NET 10 Desktop Runtime，包含可选 Android 集成。 |
-| ⚡ Full ARM64（.NET 10，实验性） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 实验性 ARM64 单 EXE；需要 ARM64 .NET 10 Desktop Runtime。原生 ARM64 与其使用的 x64 帮助进程未验证。 |
-| ⭐ Lite x64（.NET 10，仅电脑功能） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) | 单文件便携版；需要匹配的 x64 .NET 10 Desktop Runtime |
-| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用 |
-| ⚡ Lite ARM64（.NET 10，仅电脑功能）（实验） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | ARM64 便携版；需要 ARM64 .NET 10 Desktop Runtime |
-| 🔄 Microsoft Store（基于 Full） | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 以 Full 构建并包含其可选手机功能。需要 x64 .NET 10 Desktop Runtime；商店页面显示当前在架版本。 |
+| ⭐ Full（.NET 10，含可选手机互联） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) · [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 单 EXE 便携版；需要匹配架构的 .NET 10 Desktop Runtime，包含可选 Android 手机音频与虚拟屏幕集成。 |
+| ⭐ Lite（.NET 10，仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) · [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 单文件便携版；需要匹配架构的 .NET 10 Desktop Runtime，仅包含电脑音频功能。 |
+| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用。 |
+| 🔄 Microsoft Store（基于 Full） | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 以 Full 为构建来源；需要 x64 .NET 10 Desktop Runtime，在架版本以 Store 页面为准。 |
 
 <details>
 <summary><sub>📦 历史 NET8 兼容版（已下架停更，点击展开）</sub></summary>
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| Lite NET8 x64（已下架） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | 已下架停更（后续版本不再提供）；需要 x64 .NET 8 Desktop Runtime，建议迁移至 .NET 10 或 Legacy |
-| Lite NET8 ARM64（已下架）（实验） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 已下架停更（后续版本不再提供）；需要 ARM64 .NET 8 Desktop Runtime，建议迁移至 .NET 10 |
+| Lite NET8（已下架） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) · [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 已下架停更（后续版本不再提供）；建议迁移至 .NET 10 或 Legacy。 |
 </details>
 
 > [!NOTE]

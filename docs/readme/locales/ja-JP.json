@@ -21,9 +21,9 @@
     "singleExe": "単体 EXE",
     "fullZip": "完全版 ZIP",
     "storeInstall": "Store からインストール",
-    "liteRequirement": "ポータブル単一ファイル。x64 .NET 10 Desktop Runtime が必要です",
-    "legacyRequirement": "追加ランタイム不要。Windows 標準の .NET Framework 4.8 で動作し、ZIP を解凍するだけですぐに使えます",
-    "storeRequirement": "Fullを基に構築され、任意のスマートフォン機能を含みます。x64 .NET 10 Desktop Runtimeが必要です。配信中の版はStoreページをご確認ください。",
+    "liteRequirement": "単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。",
+    "legacyRequirement": "追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。",
+    "storeRequirement": "Full をベースにビルド。x64 .NET 10 Desktop Runtime が必要。提供バージョンは Store ページに準拠。",
     "runtimeNote": "FullとLiteには {runtime} が必要です。LegacyはWindows標準の.NET Framework 4.8で動作し、追加導入は不要です（旧 {runtime8} 互換版は提供終了）。",
     "steps": [
         "**起動してタスクトレイに常駐**：解凍またはダブルクリックで起動するとタスクトレイに常驻します（いつでも確認できるようオーバーフローからドラッグして固定を推奨）。トレイアイコンをダブルクリックでメイン画面を開きます。",
@@ -81,6 +81,7 @@
         "**アプリごとの音声分離と双方向ルーティング（再生＋録音）：** アプリごとに再生・録音デバイスを個別に設定。ゲームや通話はヘッドセットへ、音楽はスピーカーへ振り分けられます。設定は Windows にネイティブ保存され、アプリ終了後も維持されます。",
         "**フォアグラウンド追従とトレイホイール直感操作：** システムイベントにより音声アプリを瞬時に特定。タスクバーのトレイ領域でホイール操作による音量調整やAlt+ホイールでの出力先切替が可能。画面OSD表示とマイクミュートも備え、ウィンドウを切替えずに操作できます。",
         "**クイックパネルとリアルタイム音声レベル表示：** カード型パネルは350〜850pxの高さ調整と位置の保存に対応。各アプリの音量スライダーとリアルタイム音声メーターで直感的に操作できます。",
+        "**Android スマホ連携＆独立仮想ディスプレイ (Full 版)**：スマホ音声を PC に取り込んでアプリ別音量調整・出力、PC 音声をスマホへ送信可能。スマホアプリを PC 上の独立した仮想画面ウィンドウで適応表示し、クイックパネルからスマホスピーカーや Bluetooth を操作・スマート音量で均一化。",
         "**自動化コンボエンジンと高速 CLI（6種のトリガー × 39種のアクション）：** アプリ起動・切り替え・終了、スケジュール、ショートカットなど 6 つのトリガーに対応。デバイス切り替え、音量、ミュート、PowerShell などを自由に組み合わせ可能。名前付きパイプによる sr コマンドで外部連携も容易です。",
         "**イベント優先の検出**：システム通知を活用し、必要に応じて1秒ごとのスナップショットで補完。不要データはオンデマンドで解放。スマートフォン連携はFullのみで、LiteとLegacyはPC機能のみです。9言語に対応。"
     ],
@@ -94,20 +95,19 @@
         "**ゲームをプレイしながら裏で音楽や動画を流したい**",
         "**ゲーム起動のたびにヘッドセットを繋ぎ直したり設定を変えている**",
         "**席を外す時やプライベートな通話への切り替え**",
-        "**OBS でのゲーム配信や画面録画チュートリアル**"
+        "**OBS でのゲーム配信や画面録画チュートリアル**",
+        "**スマホの音声を PC で再生、または PC 上でスマホアプリを操作**"
     ],
     "useCaseActions": [
         "Discord などの通話音量を個別に調整し、ゲーム音はそのまま維持。ヘッドセットと通話を分離可能",
         "音楽はスピーカー、ゲームはヘッドホンへ。ゲームを中断せず、トレイ領域でホイール操作して音楽の音量調整やAlt+ホイールで出力デバイスを切替",
         "ゲーム起動時に「ヘッドセットへ切り替え＋音量40%＋通話起動」、終了時にスピーカーへ自動復帰",
         "Ctrl+Shift+N で全マイクを一括ミュート。画面上の OSD バナーで消音状態を一目で確認",
-        "アプリごとに独立した音声トラックを割り当て、プライベートな会話や通知音が録画に入るのを防止"
+        "アプリごとに独立した音声トラックを割り当て、プライベートな会話や通知音が録画に入るのを防止",
+        "スマホの音楽・動画・ゲーム音声を PC ヘッドホンやスピーカーで個別調整。スマホ画面を独立した仮想ウィンドウで操作し、スマホのスピーカー／Bluetooth もクイックパネルから直接制御可能。"
     ],
-    "editionLiteX64": "Lite x64（.NET 10、PC機能のみ）",
-    "editionLiteArm64": "Lite ARM64（.NET 10、PC機能のみ）",
-    "editionLegacyX64": "Legacy x64（PC機能のみ、.NET Framework 4.8）",
-    "editionStore": "Microsoft Store（Fullベース）",
-    "arm64Requirement": "ポータブル ARM64 ファイル。ARM64 .NET 10 Desktop Runtime が必要です",
+    "editionLegacyX64": "Legacy x64 (PC 音声のみ、.NET Framework 4.8)",
+    "editionStore": "Microsoft Store (Full ベース)",
     "commandSnippetComment": "自動化ルールを実行（SonicRoute が起動中である必要があります）",
     "faqQuickTitle": "よくある質問（FAQ）",
     "faqQuestions": [
@@ -120,18 +120,15 @@
         "標準 Lite には対応する .NET 10 Desktop Runtime が必要です。Legacy 版は .NET Framework 4.8 上で動作し追加ランタイムは不要です。Store パッケージには x64 .NET 10 Desktop Runtime が必要です（旧 NET8 版は提供終了）。",
         "検出はシステムイベントを優先し、必要な場合に限り1秒間隔のスナップショット確認で補います。不要なデータは必要に応じて整理します。実際の CPU 使用量は環境と利用状況によって異なります。"
     ],
-    "net8RequirementX64": "提供終了（今後のリリースでは非提供）。x64 .NET 8 Desktop Runtime が必要。.NET 10 または Legacy への移行を推奨",
-    "net8RequirementArm64": "提供終了（今後のリリースでは非提供）。ARM64 .NET 8 Desktop Runtime が必要。.NET 10 への移行を推奨",
-    "editionLiteNet8X64": "Lite NET8 x64（提供終了）",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64（提供終了）",
     "aiPromptTitle": "AIによる高速要約と省トークンでのトラブルシューティング",
     "aiPromptBody": "Cursor、Copilot、ChatGPT、Claude などの AI アシスタントで不具合の調査、設計の把握、スクリプト作成を行う際は、専用の機械仕様書 {aiDoc} を直接参照することをお勧めします。LLM 向けの高密度構造化 DSL で整理されており、冗長な文章を排除してコンテキストのトークン消費を大幅に削減し、素早く原因を特定できます。",
     "quickStartTitle": "3ステップで今すぐ始める",
     "cliTitle": "コマンドラインと自動化連携（上級者向け）",
     "releaseHighlightsTitle": "{release} リリースの主な改善点",
     "retiredNet8Title": "過去の NET8 互換版（提供終了・クリックで展開）",
-    "editionFullX64": "Full x64（.NET 10、スマートフォン連携）",
-    "editionFullArm64": "Full ARM64（.NET 10、実験版）",
-    "fullRequirement": "単一EXE。x64 .NET 10 Desktop Runtimeが必要です。Android連携は任意機能です。",
-    "fullArm64Requirement": "実験的なARM64単一EXE。ARM64 .NET 10 Desktop Runtimeが必要です。ネイティブARM64とx64補助プロセスは未検証です。"
+    "fullRequirement": "単一 EXE ポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。オプションの Android 音声・仮想ディスプレイ連携を含む。",
+    "editionFull": "Full (.NET 10、スマホ連携対応)",
+    "editionLite": "Lite (.NET 10、PC 音声のみ)",
+    "editionLiteNet8": "Lite NET8 (提供終了)",
+    "net8Requirement": "提供・更新を終了しました。.NET 10 または Legacy への移行を推奨します。"
 }

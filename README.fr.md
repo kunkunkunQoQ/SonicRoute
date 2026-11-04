@@ -33,6 +33,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d�
 - **Routage audio indépendant et bidirectionnel par application (lecture + enregistrement) :** attribuez des périphériques d'entrée et de sortie dédiés à chaque application (jeux et voix sur le casque, musique sur les haut-parleurs). Les paramètres sont conservés nativement par Windows après fermeture.
 - **Suivi intelligent du premier plan et réglage à l'aveugle via la molette.** Les événements système ciblent l'application active en quelques millisecondes. Faites défiler la molette sur la zone de notification pour régler le volume ou utilisez Alt+molette pour changer de périphérique, avec affichage OSD et coupure micro globale.
 - **Panneau rapide et indicateur de niveau sonore en direct :** le panneau sous forme de cartes offre une hauteur ajustable de 350 à 850 px et mémorise sa position ; contrôlez le volume individuel avec des indicateurs sonores en temps réel.
+- **Intégration smartphone Android & affichage virtuel indépendant (Full)**: Redirigez l'audio mobile vers le PC avec réglage du volume par application et vumètres crête, ou transférez l'audio du PC vers le téléphone ; affichez les applications mobiles dans une fenêtre virtuelle adaptative sur PC, contrôlez les sorties du téléphone depuis le panneau rapide et équilibrez le niveau sonore avec SmartVolume.
 - **Moteur d'automatisation et CLI ultrarapide (6 déclencheurs × 39 actions) :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.
 - **Détection prioritairement événementielle :** notifications système et vérification ponctuelle par seconde si nécessaire. L’intégration mobile est réservée à Full ; Lite et Legacy restent dédiés au PC. Disponible en neuf langues.
 
@@ -47,6 +48,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d�
 | ⚡ **Changer de casque et modifier les paramètres Windows à chaque jeu** | Règle auto : lancer le jeu → basculer sur casque + volume à 40 % + lancer Discord ; retour enceintes à la fermeture |
 | 🎙️ **S'éloigner du PC ou passer un appel privé rapidement** | Coupez tous les micros avec Ctrl+Maj+N et confirmez l'état en un coup d'œil grâce à la bannière OSD à l'écran |
 | 📹 **Diffusion en direct sur OBS ou enregistrement de tutoriels** | Attribuez des pistes audio distinctes par application pour ne jamais inclure vos conversations privées en vidéo |
+| 📱 **Écouter l'audio mobile sur PC ou piloter ses applications mobiles sur le bureau** | Acheminez musique, vidéos ou jeux mobiles vers vos écouteurs PC avec mixage indépendant ; affichez l'écran dans une fenêtre virtuelle et basculez les haut-parleurs/Bluetooth depuis le panneau rapide. |
 
 ## 🚀 Télécharger et commencer
 
@@ -56,20 +58,17 @@ Choisissez **Full x64** pour l’audio Android et les écrans virtuels, **Lite x
 
 | Édition | Télécharger | Configuration requise |
 |---|---|---|
-| ⭐ Full x64 (.NET 10, intégration mobile) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) | Exécutable unique ; nécessite le .NET 10 Desktop Runtime x64 correspondant. Intégration Android facultative. |
-| ⚡ Full ARM64 (.NET 10, expérimental) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Exécutable ARM64 expérimental ; nécessite le runtime .NET 10 Desktop ARM64. ARM64 natif et les processus auxiliaires x64 ne sont pas validés. |
-| ⭐ Lite x64 (.NET 10, PC uniquement) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) | Exécutable portable à fichier unique ; nécessite le .NET 10 Desktop Runtime x64 |
-| 🛡️ Legacy x64 (PC uniquement, .NET Framework 4.8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | Aucun .NET 8 requis ; s'exécute directement via le .NET Framework 4.8 intégré ; décompressez le ZIP |
-| ⚡ Lite ARM64 (.NET 10, PC uniquement) (expérimental) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Exécutable portable ARM64 ; nécessite le .NET 10 Desktop Runtime ARM64 |
-| 🔄 Microsoft Store (basé sur Full) | [Installer depuis le Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Basé sur Full et incluant ses fonctions mobiles facultatives. Nécessite le .NET 10 Desktop Runtime x64 ; la page Store indique la version disponible. |
+| ⭐ Full (.NET 10, avec intégration smartphone facultative) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) · [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Édition portable mono-EXE ; requiert le .NET 10 Desktop Runtime correspondant, inclut l'intégration Android audio et affichage virtuel. |
+| ⭐ Lite (.NET 10, audio PC uniquement) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) · [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Édition portable en un seul fichier ; requiert le .NET 10 Desktop Runtime correspondant, audio PC uniquement. |
+| 🛡️ Legacy x64 (audio PC uniquement, .NET Framework 4.8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | Aucun runtime externe requis ; repose sur .NET Framework 4.8 intégré, décompressez et lancez. |
+| 🔄 Microsoft Store (basé sur Full) | [Installer depuis le Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Compilé à partir de Full ; requiert .NET 10 Desktop Runtime x64 ; la version en ligne dépend du Store. |
 
 <details>
 <summary><sub>📦 Anciennes éditions compatibles NET8 (abandonnées, cliquer pour déplier)</sub></summary>
 
 | Édition | Télécharger | Configuration requise |
 |---|---|---|
-| Lite NET8 x64 (Abandonné) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | Version abandonnée (non fournie dans les prochaines versions) ; requiert .NET 8 Desktop Runtime x64 ; transition conseillée vers .NET 10 ou Legacy |
-| Lite NET8 ARM64 (Abandonné) (expérimental) | [Un seul EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Version abandonnée (non fournie dans les prochaines versions) ; requiert .NET 8 Desktop Runtime ARM64 ; transition conseillée vers .NET 10 |
+| Lite NET8 (Abandonné) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) · [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Version abandonnée et non maintenue ; migration vers .NET 10 ou Legacy recommandée. |
 </details>
 
 > [!NOTE]

@@ -21,9 +21,9 @@
     "singleExe": "Einzelne EXE",
     "fullZip": "Vollständiges ZIP",
     "storeInstall": "Aus dem Store installieren",
-    "liteRequirement": "Einzelne portable Datei; benötigt die passende x64 .NET 10 Desktop Runtime",
-    "legacyRequirement": "Kein .NET 8 erforderlich; nutzt das integrierte .NET Framework 4.8; ZIP entpacken und direkt starten",
-    "storeRequirement": "Basiert auf Full und enthält dessen optionale Telefonfunktionen. Benötigt x64 .NET 10 Desktop Runtime; die Store-Seite zeigt die verfügbare Version.",
+    "liteRequirement": "Einzeldatei-Portable-Edition; erfordert passende .NET 10 Desktop Runtime, enthält nur PC-Audiofunktionen.",
+    "legacyRequirement": "Keine zusätzliche Laufzeitumgebung erforderlich; nutzt integriertes .NET Framework 4.8, entpacken und starten.",
+    "storeRequirement": "Auf Basis von Full erstellt; benötigt x64 .NET 10 Desktop Runtime; Verfügbarkeit richtet sich nach Store-Seite.",
     "runtimeNote": "Full und Lite erfordern {runtime}; die Legacy-Edition nutzt das integrierte .NET Framework 4.8 und benötigt keine zusätzlichen Runtimes (frühere {runtime8}-Editionen wurden eingestellt).",
     "steps": [
         "**Starten & im Infobereich anheften**: Per Doppelklick starten; SonicRoute bleibt im Windows-Infobereich aktiv (ziehen Sie das Symbol am besten dauerhaft in die Taskleiste). Ein Doppelklick öffnet das Hauptfenster.",
@@ -81,6 +81,7 @@
         "**App-unabhängiges Audio-Routing (Wiedergabe + Aufnahme):** Weisen Sie Apps individuelle Ausgabe- und Eingabegeräte zu – Spiele und Chat auf das Headset, Musik auf die Lautsprecher. Einstellungen bleiben nativ in Windows erhalten, auch wenn SonicRoute beendet wird.",
         "**Intelligenter Vordergrund-Fokus und blinde Tray-Rad-Steuerung.** Systemereignisse erfassen die aktive Audio-App in Millisekunden. Scrollen Sie direkt über dem Infobereich, um die Lautstärke anzupassen oder mit Alt+Mausrad Ausgabegeräte zu wechseln, ergänzt durch OSD-Hinweise und globale Mikrofon-Stummschaltung.",
         "**Schnellpanel und Echtzeit-Pegelanzeige:** Das Karten-Panel bietet eine anpassbare Höhe von 350–850 px und speichert seine Position; steuern Sie individuelle App-Lautstärken mit Pegelanzeigen für aktive Tonausgabe.",
+        "**Android-Smartphone-Integration & unabhängiges virtuelles Display (Full)**: Smartphone-Audio auf den PC leiten mit individueller Lautstärke und Pegelanzeige oder PC-Audio ans Smartphone übertragen; Smartphone-Apps in adaptivem virtuellem Displayfenster auf dem PC anzeigen, Smartphone-Ausgaben über das Schnellpanel steuern und Lautstärke per SmartVolume dynamisch ausgleichen.",
         "**Automatisierungs-Engine und blitzschnelle CLI (6 Auslöser × 39 Aktionen):** Auslöser durch App-Start, -Fokus, -Beenden, Zeitpläne oder Hotkeys. Kombinieren Sie Audiosteuerung, Programmstarts und PowerShell-Skripte; nutzen Sie den Befehl sr zur nahtlosen Steuerung per Skript oder Hardware-Deck.",
         "**Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine Momentaufnahme pro Sekunde. Telefonintegration ist nur in Full enthalten; Lite und Legacy bieten PC-Funktionen. In neun Sprachen verfügbar."
     ],
@@ -94,20 +95,19 @@
         "**Beim Zocken im Hintergrund Musik hören oder Videos schauen**",
         "**Vor jedem Spiel Headsets umstecken und Windows-Einstellungen anpassen**",
         "**Kurz vom PC aufstehen oder ein privates Telefonat führen**",
-        "**OBS-Gaming-Streams oder Aufnahme von Tutorials**"
+        "**OBS-Gaming-Streams oder Aufnahme von Tutorials**",
+        "**Smartphone-Audio auf PC abspielen oder Smartphone-Apps am PC steuern**"
     ],
     "useCaseActions": [
         "Voice-Chat (Discord) separat regeln, ohne den Spielsound zu verändern; Spiel und Chat auf getrennte Geräte legen",
         "Musik auf Lautsprecher, Spiele auf Headset. Maus über das Tray-Symbol bewegen und scrollen zur Lautstärkeregelung oder mit Alt+Mausrad das Gerät wechseln, ohne Alt+Tab.",
         "Regel erstellen: Spielstart → Headset wählen + Lautstärke 40 % + Chat starten; beim Beenden zurück auf Lautsprecher",
         "Alle Mikrofone mit Strg+Umschalt+N stummschalten und den Status sofort per OSD-Banner auf dem Bildschirm ablesen",
-        "Apps dedizierten Audiospuren zuweisen, damit private Gespräche und Systemtöne nicht in der Aufnahme landen"
+        "Apps dedizierten Audiospuren zuweisen, damit private Gespräche und Systemtöne nicht in der Aufnahme landen",
+        "Smartphone-Musik, Videos oder Spiele über PC-Kopfhörer oder Lautsprecher separat regeln; Apps in virtuellem Fenster bedienen und Ausgänge direkt im Schnellpanel umschalten."
     ],
-    "editionLiteX64": "Lite x64 (.NET 10, nur PC)",
-    "editionLiteArm64": "Lite ARM64 (.NET 10, nur PC)",
-    "editionLegacyX64": "Legacy x64 (nur PC, .NET Framework 4.8)",
-    "editionStore": "Microsoft Store (auf Full basierend)",
-    "arm64Requirement": "Portable ARM64-Datei; benötigt die passende ARM64 .NET 10 Desktop Runtime",
+    "editionLegacyX64": "Legacy x64 (nur PC-Audio, .NET Framework 4.8)",
+    "editionStore": "Microsoft Store (basiert auf Full)",
     "commandSnippetComment": "Automatisierungsregel ausführen (SonicRoute muss bereits laufen)",
     "faqQuickTitle": "Häufig gestellte Fragen (FAQ)",
     "faqQuestions": [
@@ -120,18 +120,15 @@
         "Lite Standard benötigt die passende .NET 10 Desktop Runtime; Legacy benötigt kein zusätzliches .NET Desktop Runtime-Paket und läuft mit .NET Framework 4.8. Das aktuelle Store-Paket benötigt x64 .NET 10 Desktop Runtime (frühere NET8-Editionen eingestellt).",
         "Die Erkennung nutzt vorrangig Systemereignisse und ergänzt sie bei Bedarf durch eine notwendige Momentaufnahme im Abstand von einer Sekunde. Nicht benötigte Daten werden bei Bedarf bereinigt; die tatsächliche CPU-Auslastung hängt von System und Nutzung ab."
     ],
-    "net8RequirementX64": "Eingestellt (in künftigen Versionen nicht mehr enthalten); erfordert x64 .NET 8 Desktop Runtime; Wechsel zu .NET 10 oder Legacy empfohlen",
-    "net8RequirementArm64": "Eingestellt (in künftigen Versionen nicht mehr enthalten); erfordert ARM64 .NET 8 Desktop Runtime; Wechsel zu .NET 10 empfohlen",
-    "editionLiteNet8X64": "Lite NET8 x64 (Eingestellt)",
-    "editionLiteNet8Arm64": "Lite NET8 ARM64 (Eingestellt)",
     "aiPromptTitle": "KI-Zusammenfassung und token-effiziente Fehlerbehebung",
     "aiPromptBody": "Wenn Sie KI-Assistenten (wie Cursor, Copilot, ChatGPT oder Claude) zur Fehlerbehebung, Architekturanalyse oder Skripterstellung nutzen, empfiehlt sich die maschinenlesbare Spezifikation {aiDoc}. Sie ist in einer hochdichten, strukturierten DSL für LLMs verfasst, vermeidet lange Texte, spart drastisch Kontext-Tokens und ermöglicht eine sekundenschnelle Diagnose.",
     "quickStartTitle": "Schnellstart in 3 Schritten",
     "cliTitle": "CLI & Automationsintegration (Power-User)",
     "releaseHighlightsTitle": "{release} Release-Highlights",
     "retiredNet8Title": "Frühere NET8-kompatible Editionen (eingestellt, zum Aufklappen klicken)",
-    "editionFullX64": "Full x64 (.NET 10, Telefonintegration)",
-    "editionFullArm64": "Full ARM64 (.NET 10, experimentell)",
-    "fullRequirement": "Einzelne EXE; benötigt die passende x64 .NET 10 Desktop Runtime. Android-Integration ist optional.",
-    "fullArm64Requirement": "Experimentelle ARM64-Einzeldatei; benötigt ARM64 .NET 10 Desktop Runtime. Native ARM64 und x64-Hilfsprozesse sind nicht validiert."
+    "fullRequirement": "Einzel-EXE Portable Edition; erfordert passende .NET 10 Desktop Runtime, enthält optionale Android-Audio- und Virtual-Display-Integration.",
+    "editionFull": "Full (.NET 10, mit optionaler Smartphone-Integration)",
+    "editionLite": "Lite (.NET 10, nur PC-Audio)",
+    "editionLiteNet8": "Lite NET8 (Eingestellt)",
+    "net8Requirement": "Eingestellt und nicht mehr gepflegt; Migration auf .NET 10 oder Legacy empfohlen."
 }

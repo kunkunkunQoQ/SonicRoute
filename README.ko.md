@@ -33,6 +33,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 - **앱별 개별 사운드 분할 및 양방향 라우팅(재생 + 녹음):** 앱마다 재생 및 녹음 장치를 개별 지정하여 게임과 음성 채팅은 헤드셋으로, 음악은 스피커로 전달합니다. 설정은 Windows에 네이티브로 유지되어 프로그램을 종료해도 유지됩니다.
 - **포그라운드 스마트 추적 및 트레이 휠 간편 제어:** 시스템 이벤트를 통해 소리가 나는 활성 앱을 즉시 감지합니다. 작업 표시줄 트레이에서 휠 스크롤로 볼륨 조절 및 Alt+휠로 장치 전환이 가능하며, OSD 알림과 마이크 음소거로 화면 전환 없이 제어합니다.
 - **빠른 패널 및 실시간 오디오 레벨 표시:** 카드 패널은 350~850px 높이 조절과 위치 저장을 지원합니다. 앱별 볼륨 슬라이더와 실시간 오디오 레벨을 직관적으로 확인하세요.
+- **Android 모바일 연동 및 독립 가상 디스플레이 (Full 버전)**: 스마트폰 오디오를 PC로 받아 앱별 볼륨 조절 및 분류, PC 사운드를 모바일로 전송 가능. 모바일 앱 화면을 독립된 PC 가상 디스플레이 창에서 적응형으로 표시하고, 퀵 패널에서 모바일 스피커/블루투스를 직접 제어하며 스마트 볼륨으로 음량을 자동 균형화.
 - **자동화 콤보 엔진 및 초고속 CLI(6가지 트리거 × 39개 작업):** 앱 실행/전환/종료, 예약, 단축키 등 6가지 트리거 지원. 장치 전환, 볼륨, 음소거, PowerShell 등을 조합할 수 있으며, 내장된 sr 명령어로 외부 스크립트 및 하드웨어와 손쉽게 연동됩니다.
 - **이벤트 우선 감지**: 시스템 알림을 우선 사용하고 필요 시 1초 간격 스냅샷으로 보완합니다. 휴대폰 통합은 Full에만 포함되고 Lite와 Legacy는 PC 기능만 제공합니다. 9개 언어를 지원합니다.
 
@@ -47,6 +48,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 | ⚡ **게임을 할 때마다 헤드셋을 다시 연결하거나 설정을 바꿀 때** | 게임 실행 시 '헤드셋 전환 + 볼륨 40% + 음성 앱 실행', 게임 종료 시 스피커로 자동 복귀 규칙 설정 |
 | 🎙️ **잠시 자리를 비우거나 개인적인 통화를 해야 할 때** | Ctrl+Shift+N으로 모든 마이크를 즉시 음소거하고, 화면 OSD 배너로 상태를 한눈에 확인 |
 | 📹 **OBS 게임 방송 또는 화면 녹화 튜토리얼 제작 시** | 앱별로 독립된 오디오 트랙을 지정하여 개인 대화나 알림음이 녹화에 섞여 들어가는 것 방지 |
+| 📱 **모바일 오디오를 PC로 스트리밍하거나 PC에서 모바일 앱 제어** | 스마트폰 음악, 영상, 게임 사운드를 PC 헤드폰이나 스피커로 개별 조절. 모바일 앱 화면을 가상 디스플레이 창으로 확인 및 조작하며 퀵 패널에서 스피커/블루투스 출력을 손쉽게 관리. |
 
 ## 🚀 다운로드 및 시작하기
 
@@ -56,20 +58,17 @@ Android 휴대폰 오디오 및 가상 디스플레이 기능이 필요하면 **
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| ⭐ Full x64 (.NET 10, 휴대폰 통합) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) | 단일 EXE이며 x64 .NET 10 Desktop Runtime이 필요합니다. Android 통합은 선택 기능입니다. |
-| ⚡ Full ARM64 (.NET 10, 실험용) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 실험용 ARM64 단일 EXE이며 ARM64 .NET 10 Desktop Runtime이 필요합니다. 네이티브 ARM64 및 x64 보조 프로세스는 검증되지 않았습니다. |
-| ⭐ Lite x64 (.NET 10, PC 전용) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) | 휴대용 단일 실행 파일; x64 .NET 10 Desktop Runtime 필요 |
-| 🛡️ Legacy x64 (PC 전용, .NET Framework 4.8) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 추가 런타임 불필요, 제한된 환경에 적합; Windows 내장 .NET Framework 4.8 기반, 압축 해제 후 즉시 실행 |
-| ⚡ Lite ARM64 (.NET 10, PC 전용) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 휴대용 ARM64 실행 파일; ARM64 .NET 10 Desktop Runtime 필요 |
-| 🔄 Microsoft Store (Full 기반) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Full을 기반으로 빌드되어 선택형 휴대폰 기능을 포함합니다. x64 .NET 10 Desktop Runtime이 필요하며 현재 제공 버전은 Store 페이지에서 확인하세요. |
+| ⭐ Full (.NET 10, 모바일 연동 포함) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) · [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 단일 EXE 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. 선택적 Android 오디오 및 가상 디스플레이 연동 포함. |
+| ⭐ Lite (.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) · [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 단일 파일 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. PC 오디오 기능만 포함. |
+| 🛡️ Legacy x64 (PC 오디오 전용, .NET Framework 4.8) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 추가 런타임 불필요. 제한된 업무용 PC 적합. 시스템 내장 .NET Framework 4.8 기반으로 압축 해제 후 즉시 사용. |
+| 🔄 Microsoft Store (Full 기반) | [Store에서 설치](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Full 기반 빌드. x64 .NET 10 Desktop Runtime 필요. 스토어 제공 버전은 Store 페이지 기준. |
 
 <details>
 <summary><sub>📦 이전 NET8 호환 버전 (제공 종료, 펼쳐서 보기)</sub></summary>
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| Lite NET8 x64 (지원 종료) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) | 지원 종료 (이후 버전 미제공). x64 .NET 8 Desktop Runtime 필요, .NET 10 또는 Legacy 전환 권장 |
-| Lite NET8 ARM64 (지원 종료) (실험적) | [단일 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 지원 종료 (이후 버전 미제공). ARM64 .NET 8 Desktop Runtime 필요, .NET 10 전환 권장 |
+| Lite NET8 (지원 종료) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) · [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 제공 및 업데이트가 종료되었습니다. .NET 10 또는 Legacy 버전으로 이전을 권장합니다. |
 </details>
 
 > [!NOTE]
