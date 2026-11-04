@@ -1,8 +1,5 @@
 using System.Diagnostics;
-using System.Net.Sockets;
 using System.Runtime.InteropServices;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace SonicRoute.AndroidAudio;
 
@@ -186,126 +183,43 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
 
     private async Task RunStreamAsync(ActiveRoute route, AndroidDevice? device, CancellationToken token)
     {
-        var adb = adbFactory();
-        await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        adb.ValidateServer();
-        string catalog = Path.Combine(adb.RuntimeDirectory, "sonicroute-catalog.jar");
-        if (!File.Exists(catalog)) throw new FileNotFoundException("Missing Android audio output helper.", catalog);
-
-        string id = Guid.NewGuid().ToString("N");
-        string socketName = "sonicroute_pc_out_" + id;
-        string remote = "/data/local/tmp/sonicroute_pc_out_" + id + ".jar";
-        string remoteServer = remote + ".server";
-        Process? helper = null;
-        string? remotePid = null;
-        string? forwardedPort = null;
-        TcpClient? tcp = null;
         bool unexpectedExit = false;
-
         try
         {
+            var adb = adbFactory();
             if (device is not { State: "device" })
-            {
-                var currentDevices = await adb.DevicesAsync(token).ConfigureAwait(false);
-                device = currentDevices.FirstOrDefault(d =>
-                    d.State == "device" && string.Equals(AndroidDeviceIdentity.Key(d), route.PhoneKey, StringComparison.OrdinalIgnoreCase));
-                if (device == null)
-                    throw new IOException("手机未连接或离线。");
-                route.Device = device;
-            }
-
+                device = (await adb.DevicesAsync(token).ConfigureAwait(false)).FirstOrDefault(d => d.State == "device"
+                    && string.Equals(AndroidDeviceIdentity.Key(d), route.PhoneKey, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new IOException("手机未连接或离线。");
+            await using var output = await AndroidAudioOutputConnection.OpenAsync(adb, device, route.SinkKey, token,
+                (phone, sinks) => OutputsObserved?.Invoke(phone, sinks),
+                (key, type, name) =>
+                {
+                    route.RoutedKey = key; route.RoutedType = type; route.RoutedName = name;
+                    RoutedDeviceObserved?.Invoke(route.ProcessId, key, type, name);
+                }).ConfigureAwait(false);
+            route.Device = device = output.Device;
+            route.EnsureSilenceLease(() => SafeAcquireSilenceLease(route.ProcessId));
+            using var capture = CancellationTokenSource.CreateLinkedTokenSource(token);
+            void Failed(Exception _) { try { capture.Cancel(); } catch (ObjectDisposedException) { } }
+            output.Failed += Failed;
             try
             {
-                await adb.RunAsync(token, "-s", device.Serial, "push", catalog, remote).ConfigureAwait(false);
-            }
-            catch (Exception) when (!token.IsCancellationRequested)
-            {
-                var currentDevices = await adb.DevicesAsync(token).ConfigureAwait(false);
-                var refreshed = currentDevices.FirstOrDefault(d =>
-                    d.State == "device" && string.Equals(AndroidDeviceIdentity.Key(d), route.PhoneKey, StringComparison.OrdinalIgnoreCase));
-                if (refreshed == null)
-                    throw;
-                device = refreshed;
-                route.Device = device;
-                await adb.RunAsync(token, "-s", device.Serial, "push", catalog, remote).ConfigureAwait(false);
-            }
-
-            route.EnsureSilenceLease(() => SafeAcquireSilenceLease(route.ProcessId));
-            await adb.RunAsync(token, "-s", device.Serial, "push", adb.ServerFile, remoteServer).ConfigureAwait(false);
-            token.ThrowIfCancellationRequested();
-
-            helper = adb.StartWithInput("-s", device.Serial, "shell",
-                "echo SR_PCOUT_PID:$$; CLASSPATH=" + remote + ":" + remoteServer + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
-                + socketName + " " + QuoteShellArg(route.SinkKey));
-            route.AttachHelper(helper);
-
-            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var stdoutTask = Task.Run(async () =>
-            {
-                try
-                {
-                    while (await helper.StandardOutput.ReadLineAsync(token).ConfigureAwait(false) is { } line)
+                await route.AttachOutputAsync(output).ConfigureAwait(false);
+                if (output.Completion.IsCompleted) throw await output.Completion.ConfigureAwait(false);
+                await PcProcessLoopbackCapture.RunMtaCaptureLoopAsync(route.ProcessId, output.Stream, capture.Token,
+                    () => StopProcess(route.ProcessId, restorePreviousEndpoint: true), (bytes, nonSilent) =>
                     {
-                        if (line.StartsWith("SR_PCOUT_PID:", StringComparison.Ordinal))
-                        {
-                            string candidate = line[13..].Trim();
-                            if (Regex.IsMatch(candidate, @"\A[1-9]\d*\z")) remotePid = candidate;
-                        }
-                        else if (line.StartsWith('{'))
-                        {
-                            using var doc = JsonDocument.Parse(line);
-                            var root = doc.RootElement;
-                            if (root.TryGetProperty("outputs", out var outputsElem) && outputsElem.ValueKind == JsonValueKind.Array)
-                            {
-                                var sinks = AndroidOutputSink.ParseList(outputsElem);
-                                try { OutputsObserved?.Invoke(device, sinks); } catch { }
-                            }
-                            if (root.TryGetProperty("routed", out var routedElem) && routedElem.ValueKind == JsonValueKind.Object)
-                            {
-                                string rKey = routedElem.TryGetProperty("key", out var rk) ? (rk.GetString() ?? "") : "";
-                                int rType = routedElem.TryGetProperty("type", out var rt) && rt.TryGetInt32(out int parsedType) ? parsedType : 0;
-                                string rName = routedElem.TryGetProperty("name", out var rn) ? (rn.GetString() ?? "") : "";
-                                route.RoutedKey = rKey;
-                                route.RoutedType = rType;
-                                route.RoutedName = rName;
-                                try { RoutedDeviceObserved?.Invoke(route.ProcessId, rKey, rType, rName); } catch { }
-                            }
-                            if (root.TryGetProperty("listening", out var listening) && listening.ValueKind == JsonValueKind.True)
-                                ready.TrySetResult();
-                            else if (root.TryGetProperty("error", out var err))
-                                ready.TrySetException(new IOException(err.GetString() ?? "Android AudioOutputBridge failed."));
-                        }
-                    }
-                    ready.TrySetException(new IOException("手机音频输出辅助进程已提前退出。"));
-                }
-                catch (OperationCanceledException) { ready.TrySetCanceled(token); }
-                catch (Exception ex) { ready.TrySetException(ex); }
-            }, token);
-
-            await ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
-            string portText = (await adb.RunAsync(token, "-s", device.Serial, "forward", "tcp:0", "localabstract:" + socketName).ConfigureAwait(false)).Trim();
-            if (!int.TryParse(portText, out int port) || port <= 0)
-                throw new IOException("ADB 端口转发失败: " + portText);
-            forwardedPort = portText;
-
-            tcp = new TcpClient { NoDelay = true, SendBufferSize = 16384, SendTimeout = 5000 };
-            // Synchronous PCM writes use bounded backpressure. Cancel this route's
-            // socket as well so a stalled phone cannot retain its capture thread.
-            using var cancelSocket = token.UnsafeRegister(static socket => ((TcpClient)socket!).Dispose(), tcp);
-            await tcp.ConnectAsync("127.0.0.1", port, token).ConfigureAwait(false);
-            using var netStream = tcp.GetStream();
-
-            route.FlushPendingSinkSwitch();
-            await PcProcessLoopbackCapture.RunMtaCaptureLoopAsync(route.ProcessId, netStream, token, () =>
-            {
-                StopProcess(route.ProcessId, restorePreviousEndpoint: true);
-            }, (bytes, nonSilent) =>
-            {
-                Interlocked.Add(ref route.BytesStreamed, bytes);
-                if (nonSilent > 0) Interlocked.Add(ref route.NonSilentBytesStreamed, nonSilent);
-            }).ConfigureAwait(false);
+                        Interlocked.Add(ref route.BytesStreamed, bytes);
+                        if (nonSilent > 0) Interlocked.Add(ref route.NonSilentBytesStreamed, nonSilent);
+                    }).ConfigureAwait(false);
+                if (output.Completion.IsCompleted) throw await output.Completion.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested && output.Completion.IsCompleted)
+            { throw await output.Completion.ConfigureAwait(false); }
+            finally { output.Failed -= Failed; route.DetachOutput(); }
         }
-        catch (OperationCanceledException) { }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception ex)
         {
             unexpectedExit = !token.IsCancellationRequested;
@@ -313,45 +227,14 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         }
         finally
         {
-            route.DetachHelper();
-            try { tcp?.Dispose(); } catch { }
-            if (helper != null)
-            {
-                try { helper.StandardInput.WriteLine("quit"); helper.StandardInput.Flush(); helper.StandardInput.Close(); } catch { }
-                using var close = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { await helper.WaitForExitAsync(close.Token).ConfigureAwait(false); }
-                catch { try { if (!helper.HasExited) helper.Kill(true); } catch { } }
-                helper.Dispose();
-            }
-            if (device != null)
-            {
-                using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                if (forwardedPort != null)
-                {
-                    try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "forward", "--remove", "tcp:" + forwardedPort).ConfigureAwait(false); }
-                    catch { }
-                }
-                if (remotePid != null)
-                {
-                    try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "kill", "-TERM", remotePid).ConfigureAwait(false); }
-                    catch { }
-                }
-                try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote, remoteServer).ConfigureAwait(false); }
-                catch { }
-            }
             if (!token.IsCancellationRequested && !route.IsStopped)
             {
                 StopProcess(route.ProcessId, restorePreviousEndpoint: true);
                 if (unexpectedExit && device != null)
-                {
                     try { DeviceDisconnected?.Invoke(device); } catch { }
-                }
             }
         }
     }
-
-    private static string QuoteShellArg(string value) =>
-        "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
 
     private sealed class ActiveRoute(
         int processId,
@@ -364,8 +247,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         private readonly object _routeLock = new();
         private readonly CancellationTokenSource _cts = new();
         private IPcProcessSilenceLease? _silenceLease = silenceLease;
-        private Process? _helper;
-        private string? _pendingSinkKey;
+        private AndroidAudioOutputConnection? _output;
         private Task _streamTask = Task.CompletedTask;
         public int ProcessId { get; } = processId;
         public string TargetDeviceId { get; set; } = targetDeviceId;
@@ -390,50 +272,36 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             }
         }
 
-        public void AttachHelper(Process helper)
+        public Task AttachOutputAsync(AndroidAudioOutputConnection output)
         {
-            lock (_routeLock) _helper = helper;
+            lock (_routeLock)
+            {
+                _output = output;
+                return output.SwitchTargetAsync(SinkKey, _cts.Token);
+            }
         }
 
-        public void DetachHelper()
-        {
-            lock (_routeLock) _helper = null;
-        }
+        public void DetachOutput() { lock (_routeLock) _output = null; }
 
         public void RequestSinkSwitch(string sinkKey)
         {
-            Process? helper;
             lock (_routeLock)
             {
                 SinkKey = sinkKey;
-                _pendingSinkKey = sinkKey;
-                helper = _helper;
+                if (_output != null) _ = SwitchOutputAsync(_output, sinkKey);
             }
-            if (helper != null) TryWriteTarget(helper, sinkKey);
         }
 
-        public void FlushPendingSinkSwitch()
+        private async Task SwitchOutputAsync(AndroidAudioOutputConnection output, string sinkKey)
         {
-            Process? helper;
-            string? sinkKey;
-            lock (_routeLock)
+            try { await output.SwitchTargetAsync(sinkKey, _cts.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+            catch (Exception ex)
             {
-                helper = _helper;
-                sinkKey = _pendingSinkKey;
-                _pendingSinkKey = null;
+                Trace.WriteLine("Phone output switch: " + ex.Message);
+                // Fail this route rather than play through an unrequested default device.
+                output.Abort(ex);
             }
-            if (helper != null && !string.IsNullOrEmpty(sinkKey))
-                TryWriteTarget(helper, sinkKey);
-        }
-
-        private static void TryWriteTarget(Process helper, string sinkKey)
-        {
-            try
-            {
-                helper.StandardInput.WriteLine("target " + sinkKey);
-                helper.StandardInput.Flush();
-            }
-            catch { }
         }
 
         public void EnsureSilenceLease(Func<IPcProcessSilenceLease?> factory)

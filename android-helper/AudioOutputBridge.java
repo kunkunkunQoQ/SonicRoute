@@ -19,6 +19,7 @@ import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -219,7 +220,6 @@ public final class AudioOutputBridge {
                     fallback = d;
                 }
             }
-            if (primaryBt.size() == 1) return primaryBt.get(0);
             if (fallback != null && primaryBt.isEmpty()) return fallback;
         }
         return null;
@@ -264,6 +264,51 @@ public final class AudioOutputBridge {
         }
     }
 
+    /** Pins only our playback session; never changes the phone's global media strategy. */
+    static final class DeviceRoute implements AutoCloseable {
+        private final AudioManager manager;
+        private final Method unregister;
+        private Object policy;
+
+        DeviceRoute(Context context, AudioManager manager, String ruleName, int value,
+                    AudioDeviceInfo target, Looper looper) throws Exception {
+            if (target == null) throw new IllegalStateException("所选手机输出设备不可用。");
+            this.manager = manager;
+            Class<?> ruleClass = Class.forName("android.media.audiopolicy.AudioMixingRule");
+            Class<?> ruleBuilderClass = Class.forName("android.media.audiopolicy.AudioMixingRule$Builder");
+            Object ruleBuilder = ruleBuilderClass.getConstructor().newInstance();
+            int ruleId = ruleClass.getField(ruleName).getInt(null);
+            ruleBuilderClass.getMethod("addMixRule", int.class, Object.class).invoke(ruleBuilder, ruleId, Integer.valueOf(value));
+            Object rule = ruleBuilderClass.getMethod("build").invoke(ruleBuilder);
+            Class<?> mixClass = Class.forName("android.media.audiopolicy.AudioMix");
+            Class<?> mixBuilderClass = Class.forName("android.media.audiopolicy.AudioMix$Builder");
+            Object mixBuilder = mixBuilderClass.getConstructor(ruleClass).newInstance(rule);
+            mixBuilderClass.getMethod("setRouteFlags", int.class).invoke(mixBuilder, 1); // ROUTE_FLAG_RENDER
+            mixBuilderClass.getMethod("setDevice", AudioDeviceInfo.class).invoke(mixBuilder, target);
+            mixBuilderClass.getMethod("setFormat", AudioFormat.class).invoke(mixBuilder,
+                new AudioFormat.Builder().setSampleRate(SAMPLE_RATE).setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build());
+            Object mix = mixBuilderClass.getMethod("build").invoke(mixBuilder);
+            Class<?> policyClass = Class.forName("android.media.audiopolicy.AudioPolicy");
+            Class<?> builderClass = Class.forName("android.media.audiopolicy.AudioPolicy$Builder");
+            Object builder = builderClass.getConstructor(Context.class).newInstance(context);
+            builderClass.getMethod("setLooper", Looper.class).invoke(builder, looper);
+            builderClass.getMethod("addMix", mixClass).invoke(builder, mix);
+            Object candidate = builderClass.getMethod("build").invoke(builder);
+            unregister = AudioManager.class.getMethod("unregisterAudioPolicy", policyClass);
+            int result = ((Integer)AudioManager.class.getMethod("registerAudioPolicy", policyClass).invoke(manager, candidate)).intValue();
+            if (result != 0) throw new IllegalStateException("手机拒绝指定应用输出设备 (" + result + ")。");
+            policy = candidate;
+        }
+
+        @Override public synchronized void close() {
+            if (policy == null) return;
+            Object previous = policy; policy = null;
+            try { unregister.invoke(manager, previous); } catch (Throwable error) { error.printStackTrace(System.err); }
+        }
+    }
+
+
     public static void main(String[] args) {
         try {
             Looper.prepareMainLooper();
@@ -296,6 +341,8 @@ public final class AudioOutputBridge {
             final String[] targetHolder = new String[] { args[2] };
             final float[] volumeHolder = new float[] { 1.0f };
             final boolean[] mutedHolder = new boolean[] { false };
+            final boolean[] routeVerified = new boolean[] { false };
+            final DeviceRoute[] routeHolder = new DeviceRoute[1];
 
             HandlerThread callbackThread = new HandlerThread("sonicroute-out-looper");
             callbackThread.setDaemon(true);
@@ -317,7 +364,18 @@ public final class AudioOutputBridge {
                     SAMPLE_RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
                 int bufferBytes = Math.max(minBuffer > 0 ? minBuffer * 2 : 15360, BYTES_PER_FRAME * 960 * 4);
 
+                final int sessionId = audioManager.generateAudioSessionId();
+                if (sessionId <= 0) throw new IllegalStateException("无法建立独立手机播放会话。");
+                try {
+                    routeHolder[0] = new DeviceRoute(context, audioManager, "RULE_MATCH_AUDIO_SESSION_ID", sessionId,
+                        findTargetDevice(audioManager, targetHolder[0]), callbackThread.getLooper());
+                } catch (NoSuchFieldException unsupportedSessionRule) {
+                    // Older releases use the track preference plus actual-route validation.
+                }
                 final AudioTrack track = new AudioTrack.Builder()
+                    .setSessionId(sessionId)
+                    // A deep-buffer media output may remain routed to another app's Bluetooth device.
+                    .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                     .setAudioAttributes(new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
@@ -330,17 +388,36 @@ public final class AudioOutputBridge {
                     .setBufferSizeInBytes(bufferBytes)
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build();
-                try { track.setVolume(1.0f); } catch (Throwable ignored) { }
+                track.setVolume(0f); // Do not play through an unverified default output.
 
                 boolean initialPreferred = applyPreferred(track, audioManager, targetHolder[0]);
-                if (targetHolder[0].startsWith("bt:") && !initialPreferred) {
+                if (!initialPreferred) {
                     try { track.release(); } catch (Throwable ignored) { }
                     try { client.close(); } catch (Throwable ignored) { }
-                    emitJson(new JSONObject().put("error", "目标蓝牙设备未连接或不可播放。"));
+                    emitJson(new JSONObject().put("error", "所选手机输出设备未连接或不可播放。"));
                     System.exit(1);
                     return;
                 }
 
+                final Runnable routingDeadline = () -> {
+                    synchronized (targetHolder) {
+                        if (routeVerified[0]) return;
+                        try { emitJson(new JSONObject().put("error", "手机未切换到所选输出设备，已停止流转。")); } catch (Throwable ignored) { }
+                        try { client.close(); } catch (Throwable ignored) { }
+                    }
+                };
+                final Runnable verifyRouting = () -> {
+                    synchronized (targetHolder) {
+                        AudioDeviceInfo expected = findTargetDevice(audioManager, targetHolder[0]);
+                        AudioDeviceInfo actual = track.getRoutedDevice();
+                        boolean matches = expected != null && actual != null && expected.getId() == actual.getId();
+                        routeVerified[0] = matches;
+                        track.setVolume(matches && !mutedHolder[0] ? volumeHolder[0] : 0f);
+                        if (matches) callbackHandler.removeCallbacks(routingDeadline);
+                        else if (!callbackHandler.hasCallbacks(routingDeadline)) callbackHandler.postDelayed(routingDeadline, 2000);
+                        emitRouted(track, targetHolder[0], matches);
+                    }
+                };
                 final Runnable checkOutputsAction = new Runnable() {
                     @Override public void run() {
                         try {
@@ -356,15 +433,16 @@ public final class AudioOutputBridge {
                             }
                             String currentTarget;
                             synchronized (targetHolder) { currentTarget = targetHolder[0]; }
-                            if (currentTarget.startsWith("bt:") && findTargetDevice(audioManager, currentTarget) == null) {
+                            if (findTargetDevice(audioManager, currentTarget) == null) {
                                 emitJson(new JSONObject().put("outputs", currentOutputs));
-                                emitJson(new JSONObject().put("error", "蓝牙音频设备已断开连接。"));
+                                emitJson(new JSONObject().put("error", "所选手机音频设备已断开连接。"));
                                 try { client.close(); } catch (Throwable ignored) { }
                                 return;
                             }
                             if (changed) {
                                 boolean applied = applyPreferred(track, audioManager, currentTarget);
-                                emitRouted(track, currentTarget, applied);
+                                if (!applied) { track.setVolume(0f); client.close(); }
+                                verifyRouting.run();
                             }
                         } catch (Throwable ignored) { }
                     }
@@ -400,9 +478,7 @@ public final class AudioOutputBridge {
 
                 track.addOnRoutingChangedListener(router -> {
                     checkOutputsAction.run();
-                    String currentTarget;
-                    synchronized (targetHolder) { currentTarget = targetHolder[0]; }
-                    emitRouted(track, currentTarget, true);
+                    verifyRouting.run();
                 }, callbackHandler);
 
                 Thread controlThread = new Thread(() -> {
@@ -417,32 +493,42 @@ public final class AudioOutputBridge {
                             } else if (line.startsWith("target ")) {
                                 String nextTarget = line.substring(7).trim();
                                 if (!nextTarget.isEmpty()) {
-                                    synchronized (targetHolder) { targetHolder[0] = nextTarget; }
-                                    boolean applied = applyPreferred(track, audioManager, nextTarget);
-                                    if (nextTarget.startsWith("bt:") && !applied) {
-                                        emitJson(new JSONObject().put("outputs", collectOutputs(audioManager)));
-                                        emitJson(new JSONObject().put("error", "目标蓝牙设备未连接或不可播放。"));
-                                        try { client.close(); } catch (Throwable ignored) { }
-                                        break;
+                                    synchronized (targetHolder) {
+                                        track.setVolume(0f); routeVerified[0] = false;
+                                        DeviceRoute nextRoute = null;
+                                        try {
+                                            nextRoute = new DeviceRoute(context, audioManager, "RULE_MATCH_AUDIO_SESSION_ID", sessionId,
+                                                findTargetDevice(audioManager, nextTarget), callbackThread.getLooper());
+                                        } catch (NoSuchFieldException unsupportedSessionRule) { }
+                                        if (!applyPreferred(track, audioManager, nextTarget)) {
+                                            if (nextRoute != null) nextRoute.close();
+                                            throw new IllegalStateException("所选手机输出设备不可播放。");
+                                        }
+                                        DeviceRoute previousRoute = routeHolder[0];
+                                        routeHolder[0] = nextRoute; targetHolder[0] = nextTarget;
+                                        if (previousRoute != null) previousRoute.close();
+                                        callbackHandler.removeCallbacks(routingDeadline);
+                                        verifyRouting.run();
                                     }
-                                    emitRouted(track, nextTarget, applied);
                                 }
                             } else if (line.startsWith("volume ")) {
                                 int pct = Integer.parseInt(line.substring(7).trim());
                                 float gain = Math.max(0f, Math.min(1f, pct / 100f));
-                                synchronized (volumeHolder) {
+                                synchronized (targetHolder) {
                                     volumeHolder[0] = gain;
-                                    track.setVolume(mutedHolder[0] ? 0f : gain);
+                                    track.setVolume(routeVerified[0] && !mutedHolder[0] ? gain : 0f);
                                 }
                             } else if (line.startsWith("mute ")) {
                                 boolean mute = "1".equals(line.substring(5).trim()) || "true".equalsIgnoreCase(line.substring(5).trim());
-                                synchronized (volumeHolder) {
+                                synchronized (targetHolder) {
                                     mutedHolder[0] = mute;
-                                    track.setVolume(mute ? 0f : volumeHolder[0]);
+                                    track.setVolume(routeVerified[0] && !mute ? volumeHolder[0] : 0f);
                                 }
                             }
                         }
-                    } catch (Throwable ignored) { }
+                    } catch (Throwable error) {
+                        try { emitJson(new JSONObject().put("error", error.toString())); client.close(); } catch (Throwable ignored) { }
+                    }
                 }, "sonicroute-out-ctrl");
                 controlThread.setDaemon(true);
                 controlThread.start();
@@ -462,9 +548,7 @@ public final class AudioOutputBridge {
                             if (!playing) {
                                 track.play();
                                 playing = true;
-                                String currentTarget;
-                                synchronized (targetHolder) { currentTarget = targetHolder[0]; }
-                                emitRouted(track, currentTarget, initialPreferred);
+                                verifyRouting.run();
                             }
                         }
                         pending = total - aligned;
@@ -482,6 +566,9 @@ public final class AudioOutputBridge {
                     try { track.release(); } catch (Throwable ignored) { }
                     try { client.close(); } catch (Throwable ignored) { }
                 }
+            } finally {
+                if (routeHolder[0] != null) routeHolder[0].close();
+                callbackThread.quitSafely();
             }
             System.exit(0);
         } catch (Throwable error) {

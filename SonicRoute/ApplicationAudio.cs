@@ -233,13 +233,7 @@ internal static class ApplicationAudio
                 if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
                 {
                     if (!IsSourcePhoneOutput(source, deviceId)) return (false, -1, "请选择此应用所在手机的输出设备。");
-                    var owner = (App)System.Windows.Application.Current;
-                    var payload = new AndroidAppDrag(source.Device, source.App);
-                    // Presentation ownership belongs to the UI dispatcher. Stop it before
-                    // retiring the source so late display notifications cannot recapture it.
-                    var returned = owner.Dispatcher.CheckAccess() ? owner.ReturnAndroidToPhoneAsync(payload)
-                        : owner.Dispatcher.InvokeAsync(() => owner.ReturnAndroidToPhoneAsync(payload)).Task.Unwrap();
-                    await returned.ConfigureAwait(false);
+                    await source.Session.SetOutputAsync(deviceId).ConfigureAwait(false);
                 }
                 else await source.Session.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
                 return (true, 0, "");

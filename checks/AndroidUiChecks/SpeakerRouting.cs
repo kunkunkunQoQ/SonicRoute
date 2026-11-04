@@ -120,20 +120,30 @@ internal static partial class Program
             Check(!rejected.Result.Success && manager.Sources.Count == 3,
                 "a foreign phone endpoint is rejected without retiring or rerouting a stream");
             btPill.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            WaitForOutput(first, bluetoothId);
+            Check(manager.Sources.Count == 3 && first.Session.State.State == CaptureState.Receiving
+                && first.Session.State.OutputId == bluetoothId && second.Session.State.OutputId == null,
+                "quick-panel Bluetooth selection retains the controlled session and other applications");
+            first.Session.SetVolume(37); first.Session.SetMute(true); DrainUi();
+            Check(first.Session.State.Volume == 37 && first.Session.State.Muted && manager.Sources.Contains(first),
+                "phone playback remains under main-panel volume and mute control");
+            first.Session.SetMute(false);
+            combo.SelectedItem = combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId);
+            WaitForOutput(second, speakerId);
+            Check(manager.Sources.Count == 3 && second.Session.State.State == CaptureState.Receiving
+                && second.Session.State.OutputId == speakerId && neighbour.Session.State.OutputId == null,
+                "full app speaker selection retains the controlled session without affecting another phone");
+            Descendants<Button>(root).Single(b => b.Content?.ToString() == "退出").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             WaitForRetirement(first);
             Check(!manager.Sources.Contains(first) && manager.Sources.Contains(second) && manager.Sources.Contains(neighbour),
-                "the real quick-panel phone Bluetooth handler returns only its selected source to the phone");
-            combo.SelectedItem = combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId);
-            WaitForRetirement(second);
-            Check(!manager.Sources.Contains(second) && manager.Sources.Contains(neighbour),
-                "full app speaker selection completes through the worker/dispatcher path without affecting another phone");
+                "only explicit exit relinquishes control, using the same return operation as dragging back to the phone panel");
             Check(scans == 0 && !(bool)host.GetProperty("IsPcToPhoneCreated", statics)!.GetValue(null)!
                 && !(bool)host.GetProperty("AreDisplaysCreated", statics)!.GetValue(null)!,
                 "speaker routing checks create no scan, PC-to-phone loop or virtual-display worker");
             Pump(store.FlushAsync());
             File.WriteAllText(Path.Combine(output, "speaker-routing.json"), JsonSerializer.Serialize(new
             { Passed = true, Assertions = _checks, Scans = scans, RealPhoneAccess = false,
-                Scope = "Fixture sessions; actual quick/full controls, source-phone Bluetooth + speaker routing, SmartVolume attenuation, Android peak meter bar, and dispatcher retirement. No real phone or audible acceptance." },
+                Scope = "Fixture sessions; quick/full output choices retain source, volume and mute; explicit exit releases source. SmartVolume and Android peak meter retained. No real phone or audible acceptance." },
                 new JsonSerializerOptions { WriteIndented = true }));
             return 0;
         }
@@ -143,6 +153,12 @@ internal static partial class Program
         {
             var deadline = DateTime.UtcNow.AddSeconds(3);
             while (manager.Sources.Contains(source) && DateTime.UtcNow < deadline) Pump(Task.Delay(10));
+            DrainUi();
+        }
+        void WaitForOutput(AndroidAudioSource source, string id)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(3);
+            while (source.Session.State.OutputId != id && DateTime.UtcNow < deadline) Pump(Task.Delay(10));
             DrainUi();
         }
     }

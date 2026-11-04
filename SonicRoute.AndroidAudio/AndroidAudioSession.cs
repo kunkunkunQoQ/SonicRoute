@@ -17,17 +17,27 @@ public sealed class AndroidAudioSession : IAsyncDisposable
     private int _generation;
     private bool _disposed;
     private Exception? _renderFailure;
+    private bool _requestedPhoneAudio, _capturePhoneAudio;
+    private CancellationToken _sourceLifetime;
     public event Action<AndroidAudioState>? Changed;
     public AndroidAudioState State => Volatile.Read(ref _state);
     public AndroidPcmSource? Pcm => Volatile.Read(ref _pcm);
     public long PacketsDecoded => _receiver?.PacketsDecoded ?? 0;
     public long TimestampDiscontinuities => _receiver?.TimestampDiscontinuities ?? 0;
+    public (long Bytes, long NonSilentBytes, int RoutedType)? PhoneOutputDiagnostics =>
+        _player is AndroidPhonePcmPlayer phone ? phone.Diagnostics : null;
     private ScrcpyOpusReceiver? _receiver;
 
     public AndroidAudioSession(AdbClient adb)
     {
         _transportFactory = () => new ScrcpyAdbTransport(adb, Log);
-        _playerFactory = (source, id) => new WasapiPcmPlayer(source, id);
+        _playerFactory = (source, id) =>
+        {
+            if (!AndroidOutputIdentity.IsPhoneOutput(id)) return new WasapiPcmPlayer(source, id);
+            var device = State.Device ?? throw new InvalidOperationException("手机音频会话尚未启动。");
+            string sink = GetSourcePhoneSink(device, id!);
+            return new AndroidPhonePcmPlayer(adb, device, source, sink, _run?.Token ?? default);
+        };
     }
     public AndroidAudioSession(Func<IAudioTransport> transportFactory, Func<AndroidPcmSource, string?, IPcmPlayer> playerFactory)
     { _transportFactory = transportFactory; _playerFactory = playerFactory; }
@@ -38,46 +48,56 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (State.State is CaptureState.Starting or CaptureState.Receiving
-                && State.Device?.Serial == device.Serial && State.App?.Package == app.Package && State.App.Uid == app.Uid) return;
-            await StopCoreAsync().ConfigureAwait(false);
-            int generation = ++_generation;
-            _run = CancellationTokenSource.CreateLinkedTokenSource(token);
-            _renderFailure = null;
-            var runToken = _run.Token;
-            Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null });
-            Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}");
-            try
-            {
-                _transport = _transportFactory();
-                Stream stream = await _transport.ConnectAsync(device, app, keepPhoneAudio, runToken).ConfigureAwait(false);
-                _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f, SmartVolume = State.SmartVolume };
-                _player = await Task.Run(() => _playerFactory(_pcm, State.OutputId), runToken).ConfigureAwait(false);
-                AttachOutputFailure(_player, generation);
-                _player.Play();
-                _receiver = new ScrcpyOpusReceiver();
-                var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                _receiveTask = _receiver.ReceiveAsync(stream, _pcm, () =>
-                {
-                    if (generation != Volatile.Read(ref _generation)) return;
-                    Update(s => s with { State = CaptureState.Receiving });
-                    first.TrySetResult();
-                }, runToken);
-                _ = ObserveReceiveAsync(_receiveTask, generation);
-                using var startup = CancellationTokenSource.CreateLinkedTokenSource(runToken);
-                startup.CancelAfter(TimeSpan.FromSeconds(15));
-                Task completed = await Task.WhenAny(first.Task, _receiveTask).WaitAsync(startup.Token).ConfigureAwait(false);
-                await completed.ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                await StopCoreAsync().ConfigureAwait(false);
-                Update(s => s with { State = CaptureState.Failed, Device = device, App = app, Error = ex.Message });
-                Log("Start failed: " + ex.Message);
-                throw;
-            }
+            _requestedPhoneAudio = keepPhoneAudio;
+            _sourceLifetime = token;
+            await StartCoreAsync(device, app, keepPhoneAudio && !AndroidOutputIdentity.IsPhoneOutput(State.OutputId), token).ConfigureAwait(false);
         }
         finally { _operations.Release(); }
+    }
+
+    private async Task StartCoreAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token)
+    {
+        if (State.State is CaptureState.Starting or CaptureState.Receiving
+            && State.Device?.Serial == device.Serial && State.App?.Package == app.Package && State.App.Uid == app.Uid
+            && _capturePhoneAudio == keepPhoneAudio) return;
+        await StopCoreAsync().ConfigureAwait(false);
+        _capturePhoneAudio = keepPhoneAudio;
+        int generation = ++_generation;
+        _run = CancellationTokenSource.CreateLinkedTokenSource(token);
+        _renderFailure = null;
+        var runToken = _run.Token;
+        Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null });
+        Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}");
+        try
+        {
+            _transport = _transportFactory();
+            Stream stream = await _transport.ConnectAsync(device, app, keepPhoneAudio, runToken).ConfigureAwait(false);
+            _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f, SmartVolume = State.SmartVolume };
+            _player = await Task.Run(() => _playerFactory(_pcm, State.OutputId), runToken).ConfigureAwait(false);
+            AttachOutputFailure(_player, generation);
+            _player.Play();
+            _receiver = new ScrcpyOpusReceiver();
+            var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _receiveTask = _receiver.ReceiveAsync(stream, _pcm, () =>
+            {
+                if (generation != Volatile.Read(ref _generation)) return;
+                Update(s => s with { State = CaptureState.Receiving });
+                first.TrySetResult();
+            }, runToken);
+            _ = ObserveReceiveAsync(_receiveTask, generation);
+            using var startup = CancellationTokenSource.CreateLinkedTokenSource(runToken);
+            startup.CancelAfter(TimeSpan.FromSeconds(15));
+            Task completed = await Task.WhenAny(first.Task, _receiveTask).WaitAsync(startup.Token).ConfigureAwait(false);
+            await completed.ConfigureAwait(false);
+            if (_player is AndroidPhonePcmPlayer phone) await phone.WaitForRoutingAsync(runToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await StopCoreAsync().ConfigureAwait(false);
+            Update(s => s with { State = CaptureState.Failed, Device = device, App = app, Error = ex.Message });
+            Log("Start failed: " + ex.Message);
+            throw;
+        }
     }
 
     private async Task ObserveReceiveAsync(Task receive, int generation)
@@ -149,11 +169,35 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         await _operations.WaitAsync().ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (State.OutputId == endpointId) return;
+            bool phoneOutput = AndroidOutputIdentity.IsPhoneOutput(endpointId);
+            string? sink = phoneOutput && State.Device != null ? GetSourcePhoneSink(State.Device, endpointId!) : null;
+            bool keepPhoneAudio = _requestedPhoneAudio && !phoneOutput;
+            if (_pcm != null && _capturePhoneAudio != keepPhoneAudio)
+            {
+                // Disable native duplication before rendering back to a phone, otherwise
+                // its default Bluetooth path would play an uncontrolled second copy.
+                var old = State;
+                Update(s => s with { OutputId = endpointId });
+                try { await StartCoreAsync(old.Device!, old.App!, keepPhoneAudio, _sourceLifetime).ConfigureAwait(false); }
+                catch { Update(s => s with { OutputId = old.OutputId }); throw; }
+                return;
+            }
+            if (sink != null && _player is AndroidPhonePcmPlayer phone)
+            {
+                await phone.SwitchTargetAsync(sink, _run?.Token ?? default).ConfigureAwait(false);
+                Update(s => s with { OutputId = endpointId });
+                return;
+            }
             if (_pcm != null)
             {
                 IPcmPlayer next = await Task.Run(() => _playerFactory(_pcm, endpointId)).ConfigureAwait(false);
-                try { _player?.Stop(); next.Play(); }
+                try
+                {
+                    _player?.Stop(); next.Play();
+                    if (next is AndroidPhonePcmPlayer output) await output.WaitForRoutingAsync(_run?.Token ?? default).ConfigureAwait(false);
+                }
                 catch { next.Dispose(); _player?.Play(); throw; }
                 _player?.Dispose(); _player = next;
                 AttachOutputFailure(next, _generation);
@@ -161,6 +205,14 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             Update(s => s with { OutputId = endpointId });
         }
         finally { _operations.Release(); }
+    }
+    private static string GetSourcePhoneSink(AndroidDevice device, string endpointId)
+    {
+        if (!AndroidOutputIdentity.TryParseDeviceId(endpointId, out string phone, out string sink)
+            || !string.Equals(phone, AndroidDeviceIdentity.Key(device), StringComparison.OrdinalIgnoreCase)
+            || (sink != "speaker" && !sink.StartsWith("bt:", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("请选择此应用所在手机的输出设备。");
+        return sink;
     }
     private AndroidAudioState Update(Func<AndroidAudioState, AndroidAudioState> change)
     {
@@ -183,12 +235,18 @@ public sealed class AndroidAudioSession : IAsyncDisposable
     }
     private void AttachOutputFailure(IPcmPlayer player, int generation)
     {
-        if (player is WasapiPcmPlayer wasapi) wasapi.Failed += error =>
+        void Failed(Exception error)
         {
             if (generation != Volatile.Read(ref _generation) || !ReferenceEquals(_player, player)) return;
-            Volatile.Write(ref _renderFailure, error); Log("WASAPI output: " + error.Message);
+            Volatile.Write(ref _renderFailure, error); Log("Audio output: " + error.Message);
             try { _run?.Cancel(); } catch (ObjectDisposedException) { }
-        };
+        }
+        if (player is WasapiPcmPlayer wasapi) wasapi.Failed += Failed;
+        else if (player is AndroidPhonePcmPlayer phone)
+        {
+            phone.Failed += Failed;
+            if (phone.Failure is { } error) Failed(error);
+        }
     }
     public void Log(string line)
     {

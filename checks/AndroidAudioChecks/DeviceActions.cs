@@ -196,6 +196,9 @@ internal static partial class Program
 
     private static async Task PcToPhoneLiveAsync(string[] args)
     {
+        using var trace = new System.Diagnostics.TextWriterTraceListener(Console.Error);
+        System.Diagnostics.Trace.Listeners.Add(trace);
+        System.Diagnostics.Trace.AutoFlush = true;
         string runtime = Path.GetFullPath(args[1]);
         string output = Path.GetFullPath(args[2]);
         Directory.CreateDirectory(output);
@@ -239,6 +242,7 @@ internal static partial class Program
         int leaseAcquired = 0, leaseReleased = 0, leaseRestored = 0;
         var observedOutputsTcs = new TaskCompletionSource<IReadOnlyList<AndroidOutputSink>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var routedTcs = new TaskCompletionSource<(string Key, int Type, string Name)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        string expectedSink = "speaker";
 
         await using var pcToPhone = new PcToPhoneAudioManager(
             adb,
@@ -246,7 +250,7 @@ internal static partial class Program
         pcToPhone.OutputsObserved += (_, sinks) => observedOutputsTcs.TrySetResult(sinks);
         pcToPhone.RoutedDeviceObserved += (pid, key, type, name) =>
         {
-            if (pid == Environment.ProcessId && !string.IsNullOrEmpty(key))
+            if (pid == Environment.ProcessId && string.Equals(key, expectedSink, StringComparison.OrdinalIgnoreCase))
                 routedTcs.TrySetResult((key, type, name));
         };
 
@@ -280,13 +284,14 @@ internal static partial class Program
         (string Key, int Type, string Name) routedInfo = default;
         try
         {
-            var routeResult = pcToPhone.RouteProcess(Environment.ProcessId, targetSpkId, device);
-            Check(routeResult.Success && leaseAcquired == 1,
-                "live RouteProcess starts streaming for the target process and acquires its silence lease");
+            bool resolveDevice = args.Contains("--resolve-device");
+            var routeResult = pcToPhone.RouteProcess(Environment.ProcessId, targetSpkId, resolveDevice ? null : device);
+            Check(routeResult.Success && leaseAcquired == (resolveDevice ? 0 : 1),
+                "live RouteProcess starts the target route and acquires silence only after a device is available");
 
             var observedSinks = await observedOutputsTcs.Task.WaitAsync(TimeSpan.FromSeconds(10), cts.Token);
             routedInfo = await routedTcs.Task.WaitAsync(TimeSpan.FromSeconds(10), cts.Token);
-            Check(observedSinks.Count >= 1 && routedInfo.Key == "speaker" && routedInfo.Type == 2,
+            Check(observedSinks.Count >= 1 && routedInfo.Key == "speaker" && routedInfo.Type == 2 && leaseAcquired == 1,
                 "live AudioOutputBridge play reports speaker routing via AudioTrack.setPreferredDevice/getRoutedDevice");
 
             var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -299,6 +304,20 @@ internal static partial class Program
             }
             Check(diag is { BytesStreamed: >= 48000 * 4, NonSilentBytesStreamed: > 0 },
                 "live Windows 11 Process Loopback captures and streams non-silent 48kHz stereo PCM to the phone AudioTrack");
+            var bluetooth = outputs.FirstOrDefault(s => s.Kind == AndroidOutputSinkKind.Bluetooth && s.AndroidDeviceType != 7);
+            if (bluetooth != null)
+            {
+                expectedSink = bluetooth.Key; routedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                var switched = pcToPhone.RouteProcess(Environment.ProcessId, AndroidOutputIdentity.FormatDeviceId(phoneKey, bluetooth.Key), device);
+                var actualBt = await routedTcs.Task.WaitAsync(TimeSpan.FromSeconds(8), cts.Token);
+                Check(switched.Success && actualBt.Key == bluetooth.Key && actualBt.Type == bluetooth.AndroidDeviceType && leaseAcquired == 1,
+                    "live PC-to-phone Bluetooth switch reuses its output connection and silence lease");
+                expectedSink = "speaker"; routedTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                switched = pcToPhone.RouteProcess(Environment.ProcessId, targetSpkId, device);
+                var actualSpeaker = await routedTcs.Task.WaitAsync(TimeSpan.FromSeconds(8), cts.Token);
+                Check(switched.Success && actualSpeaker.Key == "speaker" && actualSpeaker.Type == 2 && leaseAcquired == 1,
+                    "live PC-to-phone speaker selection returns to actual built-in hardware with Bluetooth still connected");
+            }
         }
         finally
         {
@@ -312,8 +331,8 @@ internal static partial class Program
         string tmpFiles = await adb.RunAsync(cts.Token, "-s", device.Serial, "shell", "ls", "/data/local/tmp");
         string forwards = await adb.RunAsync(cts.Token, "-s", device.Serial, "forward", "--list");
         Check(!psOut.Contains("org.sonicroute.android.AudioOutputBridge")
-            && !tmpFiles.Contains("sonicroute_pc_out_")
-            && !forwards.Contains("sonicroute_pc_out_")
+            && !tmpFiles.Contains("sonicroute_pc_out_") && !tmpFiles.Contains("sonicroute_out_")
+            && !forwards.Contains("sonicroute_pc_out_") && !forwards.Contains("sonicroute_out_")
             && leaseReleased == 1 && leaseRestored == 1,
             "stopping live PC-to-Phone playback terminates the remote AudioOutputBridge helper, removes ADB forwards/temp files and restores the silence lease");
 
@@ -322,6 +341,7 @@ internal static partial class Program
         {
             Passed = true,
             Assertions = _checks,
+            ResolvedDeviceOnDemand = args.Contains("--resolve-device"),
             RealDeviceAccess = true,
             Device = device,
             DetectedOutputs = outputs,
@@ -329,8 +349,8 @@ internal static partial class Program
             StreamedBytes = diag?.BytesStreamed ?? 0,
             NonSilentStreamedBytes = diag?.NonSilentBytesStreamed ?? 0,
             RemoteProcessCleaned = !psOut.Contains("org.sonicroute.android.AudioOutputBridge"),
-            TempFilesCleaned = !tmpFiles.Contains("sonicroute_pc_out_"),
-            ForwardsCleaned = !forwards.Contains("sonicroute_pc_out_"),
+            TempFilesCleaned = !tmpFiles.Contains("sonicroute_pc_out_") && !tmpFiles.Contains("sonicroute_out_"),
+            ForwardsCleaned = !forwards.Contains("sonicroute_pc_out_") && !forwards.Contains("sonicroute_out_"),
             Scope = "Live Xiaomi 13 AudioOutputBridge list/play, MediaSessionBridge outputs, Windows 11 Process Loopback non-silent PCM streaming and clean teardown"
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"PASS {_checks} live PC-to-Phone assertions; evidence: {resultPath}");

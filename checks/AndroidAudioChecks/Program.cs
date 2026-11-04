@@ -15,6 +15,8 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--explicit-output") { await ExplicitOutputAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--explicit-output-live") { await ExplicitOutputLiveAsync(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--device-actions") { await DeviceActionsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--pc-to-phone-live") { await PcToPhoneLiveAsync(args); return 0; }
             if (args.Length > 0 && args[0] == "--phone-demand") { await PhoneDemandAsync(args[1]); return 0; }

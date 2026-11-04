@@ -57,3 +57,19 @@
   - `packaging/Tests/PanelChecks`（`--panel-performance`，覆盖 `Full`、`Lite`、`Legacy`/`net48`）：77 × 3 = 231 项断言通过。
 - 构建：已重新构建 Full/Lite x64 ReadyToRun 单 EXE 与 Legacy/net48 13 文件 ZIP（无运行进程占用，`测试版/Full-x64/SonicRoute.exe`、`测试版/SonicRoute-v1.30-x64.exe`、`测试版/Lite-x64/SonicRoute.exe`、`测试版/SonicRoute-v1.30-Lite-x64.exe`、`测试版/Legacy-x64/`、`测试版/SonicRoute-v1.30-Legacy-x64.zip` 全部更新到最新；普通 `运行版/SonicRoute.exe` 未覆盖）。
 - 未验证：真机蓝牙连接下入站手机应用切回手机蓝牙的真机听音、真机 10% 智能音量主观听感、整版长时 CPU 占用与 ARM64。未发 Release/tag/商店包。
+
+
+## 2026-11-04：明确手机输出并保留主面板接管
+
+- 用户更正：电脑应用到手机、手机应用收到电脑后再选手机输出，两条路径的扬声器都不能误走手机默认蓝牙；选扬声器/蓝牙继续受主面板音量、静音、智能音量控制，退出才交还手机。拖回左侧手机面板复用退出。此要求取代上轮“点源手机输出即返回手机”的设计。
+- 原因与实现：
+  - `AudioOutputBridge.java`：普通 `setPreferredDevice` 被接受并不表示实际输出已切换；小米13有其他媒体在蓝牙播放时，深缓冲媒体输出仍会合并到蓝牙。为自己的 AudioTrack 请求低延迟输出、注册会话范围的 render 策略，按真实硬件 ID 验证；未验证时保持静音，路由回调和设备回调推进状态，限定失败超时；撤销盲选唯一蓝牙的兜底。未修改手机全局媒体策略。
+  - `AndroidPcmOutput.cs`：提取两条路径共用的帮助进程/ADB 转发/PCM 连接，严格确认目标，忽略快速切换后滞后的旧路由通知；电脑进程保留原回环捕获和静音租约。入站手机应用通过同一接口渲染原 PCM 源的处理后数据，保留主面板控制；同手机扬声器/蓝牙切换复用连接、捕获与解码。
+  - `AndroidAudioSession.cs`：手机输出不交给 WASAPI，不伪造 Windows PID；只有原生同时播放标记变化才重建捕获以消除默认设备上的未受控副本，保留源对象和控制偏好，切回 PC 恢复原同时播放偏好。输出错误纳入现有失败/清理流程。
+  - `ApplicationAudio.cs`、`QuickPanelModernWindow.AndroidAudio.cs`：选择手机设备只改 renderer，退出与拖回手机面板共用原返回操作，不在输出选择时关闭虚拟屏。
+- 性能：按 PCM 到达事件处理，缓冲复用；没有新增闲时扫描或周期清理。保持手机播放受电脑控制需要活动 PCM 上行约 192,000 B/s，低延迟轨道也有必要的活动开销，未宣称整版 CPU/内存降低。关闭只清理自己的帮助进程、端口和文件，不重启/结束共享 ADB。
+- 保留原改动：接手已有 `AndroidPcmSource.cs` SmartVolume 调参，剔除新增 PCM 通知后内容与接手指纹一致。本次提交只纳入新增通知，不纳入已有调参；本地运行包包含该调参。
+- 必要检查：`AndroidUiChecks --speaker-routing` 31、`AndroidAudioChecks --explicit-output` 9、`--phone-demand` 21、`--device-actions` 39、真机 `--explicit-output-live` 9、真机 `--pc-to-phone-live` 9，共 118 项通过。真实手机为小米13、波点音乐和已连接蓝牙；分别有真实非静音 Opus/PCM 及 Windows 进程回环音频，均验证扬声器→蓝牙→扬声器的实际类型，入站路径另验证静音与仍受控退出。
+- 诊断过程边界：首次 native 静音探针成功不足以覆盖其他媒体正在蓝牙播放的场景；电脑到手机真机检查暴露共享深缓冲路由问题，低延迟输出修复后通过。滞后的路由回调还暴露检查需等待当前目标，已同时限定生产确认逻辑和检查条件。音乐暂停时的静音不能当作声音验证通过；最终真机检查明确播放前置条件后重新通过。早期探针/中间构建不作为最终交付证据。
+- 构建：只更新固定 Full x64 ReadyToRun 单 EXE 入口，无程序压缩、无新版本目录。普通运行版和 Lite/Legacy 未动；Store 保持 Full。原运行的旧 Full 由用户从托盘退出后替换，未结束用户进程。
+- 未测：人工听感、整版长期 CPU/内存、其他 Android 机型/版本及 ARM64。没有 Release/tag/Store 提交。本地证据及源码/包/远端提交的最终状态见父容器 `integration-docs/33-EXPLICIT-PHONE-OUTPUT.md` 和 `explicit-phone-output-receipt.json`。

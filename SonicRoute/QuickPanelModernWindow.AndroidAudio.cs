@@ -468,7 +468,7 @@ public partial class QuickPanelModernWindow
         System.Windows.Automation.AutomationProperties.SetName(exit, row.Source.App.Name + " 退出");
         exit.Click += async (_, _) =>
         {
-            try { await AndroidAudioHost.Sources.RemoveAsync(row.Source.Id); }
+            try { await ((App)System.Windows.Application.Current).ReturnAndroidToPhoneAsync(new AndroidAppDrag(row.Source.Device, row.Source.App)); }
             catch (Exception ex) { if (!_isClosed) ShowOsd("手机音频", ex.Message); }
         };
         wrap.Children.Add(exit); UpdateAndroidRoute(row);

@@ -22,6 +22,8 @@ public sealed class AndroidPcmSource : IWaveProvider
     private long _lastWriteTick = -1000, _lastNonSilentWriteTick = -1000;
     private int _meterWaiting;
     public static event Action? PeakActivity;
+    // Only a phone renderer subscribes; silence still carries timing without polling.
+    internal event Action? DataAvailable;
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
     public int BufferedSamples { get { lock (_gate) return _count; } }
     public long DroppedSamples => Interlocked.Read(ref _dropped);
@@ -106,6 +108,7 @@ public sealed class AndroidPcmSource : IWaveProvider
             foreach (Action listener in listeners.GetInvocationList())
                 try { listener(); } catch { }
         }
+        DataAvailable?.Invoke();
     }
 
     public (bool Active, float Peak) ReadMeterPeak()
