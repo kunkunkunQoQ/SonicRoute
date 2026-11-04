@@ -33,8 +33,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 - **アプリごとの音声分離と双方向ルーティング（再生＋録音）：** アプリごとに再生・録音デバイスを個別に設定。ゲームや通話はヘッドセットへ、音楽はスピーカーへ振り分けられます。設定は Windows にネイティブ保存され、アプリ終了後も維持されます。
 - **フォアグラウンド追従とトレイホイール直感操作：** システムイベントにより音声アプリを瞬時に特定。タスクバーのトレイ領域でホイール操作による音量調整やAlt+ホイールでの出力先切替が可能。画面OSD表示とマイクミュートも備え、ウィンドウを切替えずに操作できます。
 - **クイックパネルとリアルタイム音声レベル表示：** カード型パネルは350〜850pxの高さ調整と位置の保存に対応。各アプリの音量スライダーとリアルタイム音声メーターで直感的に操作できます。
-- **自動化コンボエンジンと高速 CLI（6種のトリガー × 37種のアクション）：** アプリ起動・切り替え・終了、スケジュール、ショートカットなど 6 つのトリガーに対応。デバイス切り替え、音量、ミュート、PowerShell などを自由に組み合わせ可能。名前付きパイプによる sr コマンドで外部連携も容易です。
-- **イベント優先の検出**：システム通知を活用し、必要に応じて1秒ごとのスナップショットで補完。不要データはオンデマンドで解放。.NET 10 Lite、Legacy（.NET 4.8）、Store版を提供し、9言語に対応。
+- **自動化コンボエンジンと高速 CLI（6種のトリガー × 39種のアクション）：** アプリ起動・切り替え・終了、スケジュール、ショートカットなど 6 つのトリガーに対応。デバイス切り替え、音量、ミュート、PowerShell などを自由に組み合わせ可能。名前付きパイプによる sr コマンドで外部連携も容易です。
+- **イベント優先の検出**：システム通知を活用し、必要に応じて1秒ごとのスナップショットで補完。不要データはオンデマンドで解放。スマートフォン連携はFullのみで、LiteとLegacyはPC機能のみです。9言語に対応。
 
 ## 🎮 日常での使い方
 
@@ -50,16 +50,18 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 
 ## 🚀 ダウンロードと使い始め方
 
-**現在のリリース：[v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [リリースノート（簡体字中国語）](docs/release-v1.29.md)
+**現在のリリース：[v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.30)** · 2026-11-04 · [リリースノート（簡体字中国語）](docs/release-v1.30.md)
 
-一般的なPC環境では **Lite x64**（単一実行ファイル、省メモリで軽快）が最もおすすめです。実行環境の制約があるオフィスPCでは **Legacy x64**（ランタイム追加不要、解凍後即利用可）、ARM64 PCでは **Lite ARM64** を選択してください。**Microsoft Store** 経由でのインストール・自動更新にも対応しています。以下のリンクは最新安定版 v1.29 です。
+Androidスマートフォンの音声・仮想ディスプレイ機能を使う場合は **Full x64**、PCの音声機能のみなら **Lite x64**、.NET Framework 4.8を利用する環境では **Legacy x64** を選択してください。ARM64版は実験的です。スマートフォン連携はFullのみです。Store版はFullを基に構築されますが、現在配信中の版はStoreページでご確認ください。以下は v1.30 のリンクです。
 
 | エディション | ダウンロード | 要件 |
 |---|---|---|
-| ⭐ Lite x64（.NET 10 推奨） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | ポータブル単一ファイル。x64 .NET 10 Desktop Runtime が必要です |
-| 🛡️ Legacy x64（.NET 8 不要） | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 追加ランタイム不要。Windows 標準の .NET Framework 4.8 で動作し、ZIP を解凍するだけですぐに使えます |
-| ⚡ Lite ARM64（.NET 10）（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | ポータブル ARM64 ファイル。ARM64 .NET 10 Desktop Runtime が必要です |
-| 🔄 Microsoft Store（Store 経由で更新） | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | .NET 10 の Store パッケージには x64 .NET 10 Desktop Runtime が必要です。現在配信中のバージョンは Store ページで確認してください（64 ビット Windows 10/11 対象）。 |
+| ⭐ Full x64（.NET 10、スマートフォン連携） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) | 単一EXE。x64 .NET 10 Desktop Runtimeが必要です。Android連携は任意機能です。 |
+| ⚡ Full ARM64（.NET 10、実験版） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 実験的なARM64単一EXE。ARM64 .NET 10 Desktop Runtimeが必要です。ネイティブARM64とx64補助プロセスは未検証です。 |
+| ⭐ Lite x64（.NET 10、PC機能のみ） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) | ポータブル単一ファイル。x64 .NET 10 Desktop Runtime が必要です |
+| 🛡️ Legacy x64（PC機能のみ、.NET Framework 4.8） | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 追加ランタイム不要。Windows 標準の .NET Framework 4.8 で動作し、ZIP を解凍するだけですぐに使えます |
+| ⚡ Lite ARM64（.NET 10、PC機能のみ）（実験的） | [単体 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | ポータブル ARM64 ファイル。ARM64 .NET 10 Desktop Runtime が必要です |
+| 🔄 Microsoft Store（Fullベース） | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Fullを基に構築され、任意のスマートフォン機能を含みます。x64 .NET 10 Desktop Runtimeが必要です。配信中の版はStoreページをご確認ください。 |
 
 <details>
 <summary><sub>📦 過去の NET8 互換版（提供終了・クリックで展開）</sub></summary>
@@ -71,7 +73,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 </details>
 
 > [!NOTE]
-> ランタイム要件：標準 Lite には [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) が必要です。Legacy 版は Windows 標準の .NET Framework 4.8 で動作し追加導入は不要です（旧 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 互換版は提供終了）。
+> FullとLiteには [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) が必要です。LegacyはWindows標準の.NET Framework 4.8で動作し、追加導入は不要です（旧 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 互換版は提供終了）。
 
 ### 🏁 3ステップで今すぐ始める
 
@@ -88,9 +90,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 sr "ルール名または ID"
 ```
 
-### 🆕 v1.29 リリースの主な改善点
+### 🆕 v1.30 リリースの主な改善点
 
-v1.29 では出力デバイス別の音量管理パネルが追加され、システムイベントに応じたオンデマンド更新や保持デバイスの絞り込み表示に対応しました。また、Shift+ホイールによるマスター音量調整が追加され、既存のアプリ音量調整や Alt+ホイールでのデバイス切り替えとシームレスに連携できます。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) をご覧ください。
+v1.30ではFullに任意のAndroidスマートフォン音声・仮想ディスプレイ連携を追加し、アプリ別ルーティング、スマートフォン側出力の制御、ピークレベル表示に対応しました。LiteとLegacyはPC機能のみです。開発段階の対象検査にはXiaomi 13でのルーティングが含まれます。他機種や人による聴感確認は未完了です。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ よくある質問（FAQ）
 
