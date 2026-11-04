@@ -33,8 +33,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 - **Independent app audio routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.
 - **Smart foreground focus and tray wheel blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust volume or Alt+scroll to switch devices, paired with on-screen OSD feedback and global mic mute, without leaving your active window.
 - **Quick panel and live audio activity indicators.** The card panel features 350–850px adjustable height and position saving; control per-app volume sliders with real-time sound activity meters.
-- **Automation combo engine and blazing CLI (6 triggers × 37 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.
-- **Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Available as .NET 10 Lite, Legacy (.NET 4.8), and a Store edition, in nine languages.
+- **Automation combo engine and blazing CLI (6 triggers × 39 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.
+- **Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Full adds optional Android phone audio and virtual-display integration; Lite and Legacy remain PC-only. Available in nine languages.
 
 ## 🎮 Everyday uses
 
@@ -50,16 +50,18 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 ## 🚀 Download and get started
 
-**Current release: [v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [Release notes (Chinese)](docs/release-v1.29.md)
+**Current release: [v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.30)** · 2026-11-04 · [Release notes (Chinese)](docs/release-v1.30.md)
 
-Most users should choose Lite x64 (portable single file, top memory efficiency); choose Legacy x64 for restricted office PCs (no extra runtime required, extract and run); choose Lite ARM64 for ARM64 PCs. You can also install from the Microsoft Store for automatic updates. Direct download links below are for v1.29.
+Choose Full x64 for optional Android phone audio and virtual-display integration; choose Lite x64 for PC-only audio features, Legacy x64 for .NET Framework 4.8 systems, or the experimental ARM64 editions for ARM64 PCs. Full includes phone integration; Lite and Legacy do not. The Store package is built from Full, but its currently available version is shown on the Store page. Direct download links below are for v1.30.
 
 | Version | Download | Requirements |
 |---|---|---|
-| ⭐ Lite x64 (.NET 10, Recommended) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | Portable single-file executable; requires the matching x64 .NET 10 Desktop Runtime |
-| 🛡️ Legacy x64 (No .NET 8 required) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
-| ⚡ Lite ARM64 (.NET 10) (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | Portable ARM64 executable; requires the matching ARM64 .NET 10 Desktop Runtime |
-| 🔄 Microsoft Store (Store updates) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | The .NET 10 Store package requires the x64 .NET 10 Desktop Runtime. See the Store page for the version currently available there; for 64-bit Windows 10/11. |
+| ⭐ Full x64 (.NET 10, Android integration) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) | Single-file executable; requires the matching x64 .NET 10 Desktop Runtime. Includes optional Android integration. |
+| ⚡ Full ARM64 (.NET 10, experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Experimental single-file ARM64 build; requires the ARM64 .NET 10 Desktop Runtime. Native ARM64 and the x64 helper processes are not validated. |
+| ⭐ Lite x64 (.NET 10, PC-only) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) | Portable single-file executable; requires the matching x64 .NET 10 Desktop Runtime |
+| 🛡️ Legacy x64 (PC-only, .NET Framework 4.8) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | No .NET 8 needed; runs directly via built-in .NET Framework 4.8; extract ZIP to use |
+| ⚡ Lite ARM64 (.NET 10, PC-only) (experimental) | [Single EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Portable ARM64 executable; requires the matching ARM64 .NET 10 Desktop Runtime |
+| 🔄 Microsoft Store (Full-based package) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Built from Full and includes its optional Android features. Requires x64 .NET 10 Desktop Runtime; the Store page shows the version currently available there. |
 
 <details>
 <summary><sub>📦 Historical NET8 editions (discontinued, click to expand)</sub></summary>
@@ -71,7 +73,7 @@ Most users should choose Lite x64 (portable single file, top memory efficiency);
 </details>
 
 > [!NOTE]
-> Runtime requirements: Standard Lite requires [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation (historical [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) editions are discontinued).
+> Full and Lite require [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation (historical [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) editions are discontinued).
 
 ### 🏁 3-Step Quick Start
 
@@ -88,9 +90,9 @@ The `sr` command communicates with a running SonicRoute instance via named pipe 
 sr "Rule name or ID"
 ```
 
-### 🆕 v1.29 Release Highlights
+### 🆕 v1.30 Release Highlights
 
-v1.29 adds an output device volume panel refreshed on demand by system events, supporting filtered views of preserved devices; adds Shift+wheel for system master volume alongside existing app volume and Alt+wheel device routing. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for full release notes.
+v1.30 adds optional Android phone audio and virtual-display integration to Full, with per-app routing, source-phone output control and phone app peak meters. Lite and Legacy remain PC-only. Development-stage targeted checks included Xiaomi 13 routing; broader device coverage and human listening remain unverified. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
 
 ### ❓ Quick FAQ
 

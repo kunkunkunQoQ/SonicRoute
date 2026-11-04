@@ -33,8 +33,8 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 - **应用独立声音分流与双向路由（播放 + 录音）**：为每个应用分别指定输出与输入设备，让游戏与语音走耳机和麦克风，音乐走音箱。配置由 Windows 原生持久化，退出软件依然生效，不破坏系统混音器配置。
 - **前台焦点智能跟随与托盘滚轮盲操**：系统事件驱动秒级锁定当前前台有声应用；支持在任务栏托盘滚动滚轮盲调音量，按住 Alt 滚动即时换轨设备，配合屏幕浮动 OSD 提示与全局麦克风静音，无需切出窗口。
 - **快速面板与实时出声电平指示**：卡片式快速面板支持 350~850px 高度调节与位置保存；直观掌控各应用独立音量，内置实时声音电平指示。
-- **自动化连招引擎与极速 CLI（6 种触发 × 37 种操作）**：支持应用启停与切换、定时、快捷键等 6 种触发，自由组合设备切换、音量、静音、程序关联启动与 PowerShell；内置 sr 命名管道短命令，无额外常驻开销，轻松联动脚本与硬件控制台。
-- **事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。提供 .NET 10 Lite、Legacy（.NET 4.8）与商店版，支持九种语言。
+- **自动化连招引擎与极速 CLI（6 种触发 × 39 种操作）**：支持应用启停与切换、定时、快捷键等 6 种触发，自由组合设备切换、音量、静音、程序关联启动与 PowerShell；内置 sr 命名管道短命令，无额外常驻开销，轻松联动脚本与硬件控制台。
+- **事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。Full 提供可选 Android 手机音频与虚拟屏幕集成；Lite 与 Legacy 仅含电脑功能。支持九种语言。
 
 ## 🎮 这样使用
 
@@ -50,16 +50,18 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 
 ## 🚀 下载与开始使用
 
-**当前正式版：[v1.29](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.29)** · 2026-10-27 · [更新说明](docs/release-v1.29.md)
+**当前正式版：[v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.30)** · 2026-11-04 · [更新说明](docs/release-v1.30.md)
 
-推荐首选 **Lite x64**（单文件便携、低内存占用）；办公或受限机型可选 **Legacy x64**（免装运行库，解压即用）；ARM64 设备选择 **Lite ARM64**。亦可通过 **Microsoft Store** 获取并自动更新。下方直链均对应最新正式版 v1.29。
+需要可选 Android 手机音频与虚拟屏幕功能时选择 **Full x64**；只使用电脑音频功能可选 **Lite x64**；受限环境可选依赖系统 .NET Framework 4.8 的 **Legacy x64**。ARM64 版本为实验性。Full 包含可选手机集成，Lite 与 Legacy 不含手机功能。商店包以 Full 为构建来源，当前在架版本以 Store 页面为准。下方直链对应 v1.30。
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| ⭐ Lite x64（.NET 10 推荐首选） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-x64.exe) | 单文件便携版；需要匹配的 x64 .NET 10 Desktop Runtime |
-| 🛡️ Legacy x64（免装运行库） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用 |
-| ⚡ Lite ARM64（.NET 10）（实验） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-arm64.exe) | ARM64 便携版；需要 ARM64 .NET 10 Desktop Runtime |
-| 🔄 Microsoft Store（商店提供更新） | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | NET10 商店包需要 x64 .NET 10 Desktop Runtime。在架版本以 Microsoft Store 页面为准；适用于 64 位 Windows 10/11。 |
+| ⭐ Full x64（.NET 10，含可选手机集成） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) | 单 EXE；需要匹配的 x64 .NET 10 Desktop Runtime，包含可选 Android 集成。 |
+| ⚡ Full ARM64（.NET 10，实验性） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 实验性 ARM64 单 EXE；需要 ARM64 .NET 10 Desktop Runtime。原生 ARM64 与其使用的 x64 帮助进程未验证。 |
+| ⭐ Lite x64（.NET 10，仅电脑功能） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) | 单文件便携版；需要匹配的 x64 .NET 10 Desktop Runtime |
+| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用 |
+| ⚡ Lite ARM64（.NET 10，仅电脑功能）（实验） | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | ARM64 便携版；需要 ARM64 .NET 10 Desktop Runtime |
+| 🔄 Microsoft Store（基于 Full） | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 以 Full 构建并包含其可选手机功能。需要 x64 .NET 10 Desktop Runtime；商店页面显示当前在架版本。 |
 
 <details>
 <summary><sub>📦 历史 NET8 兼容版（已下架停更，点击展开）</sub></summary>
@@ -71,7 +73,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 </details>
 
 > [!NOTE]
-> 运行库说明：默认 Lite 需要安装 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；Legacy 版本依赖系统自带 .NET Framework 4.8，无需额外安装运行库（历史 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 兼容版已下架停更）。
+> 运行库说明：Full 与 Lite 都需要安装 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；Legacy 依赖系统自带 .NET Framework 4.8，无需额外安装运行库（历史 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 兼容版已下架停更）。
 
 ### 🏁 快速上手三步走
 
@@ -88,9 +90,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 sr "规则名称或ID"
 ```
 
-### 🆕 v1.29 版本亮点速览
+### 🆕 v1.30 版本亮点速览
 
-v1.29 新增输出设备独立音量管理面板，按需加载并由系统事件即时刷新，支持筛选仅显示保留设备；新增 Shift+滚轮全局调节系统总音量，与普通滚轮、Alt+滚轮设备换轨无缝协同。更多历史改动详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.30 为 Full 增加可选 Android 手机音频与虚拟屏幕集成，支持按应用路由、手机输出控制和手机应用电平条；Lite 与 Legacy 保持电脑功能。开发阶段的定向记录包含小米 13 路由验证；其他设备覆盖和人工听感尚未验收。详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ 常见问题速览
 
