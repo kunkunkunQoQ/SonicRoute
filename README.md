@@ -18,8 +18,6 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 > **AI 快速总结与省 Token 排错**：使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查问题、理解架构或编写脚本时，推荐直接参考专用机器规范 [README.ai.md](README.ai.md)。该文档以高密度结构化 DSL 整理核心机制与排障决策树，避免大模型扫描冗长图文，大幅节省上下文 Token 开销并秒级定位根因。
 
 <div>
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="使用指南"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="点击看板娘查看使用指南"></a>
-<br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute 快速面板：顶部输出设备与各应用音量"></a>
 <a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute 自动化规则编辑器：选择应用触发器与音频操作步骤"></a>
 </div>
@@ -27,8 +25,6 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 <sub>界面预览：快速面板（支持自适应与透明亚克力风格）即时控制音量与设备；自动化规则编辑器自由编排触发器与执行动作。</sub>
 
 ## ✨ SonicRoute 的特点
-
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7" title="功能特性"><img src="docs/images/mascot-music-hoodie.png" width="68" align="right" alt="点击看板娘查看功能特性"></a>
 
 - **应用独立声音分流与双向路由（播放 + 录音）**：为每个应用分别指定输出与输入设备，让游戏与语音走耳机和麦克风，音乐走音箱。配置由 Windows 原生持久化，退出软件依然生效，不破坏系统混音器配置。
 - **前台焦点智能跟随与托盘滚轮盲操**：系统事件驱动秒级锁定当前前台有声应用；支持在任务栏托盘滚动滚轮盲调音量，按住 Alt 滚动即时换轨设备，配合屏幕浮动 OSD 提示与全局麦克风静音，无需切出窗口。
@@ -39,7 +35,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 
 ## 🎮 这样使用
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99" title="自动化规则"><img src="docs/images/mascot-automation.png" width="48" align="middle" alt="点击小机器人查看自动化规则"></a> 把繁琐的手动改设置，变成一次配置、随开随用的自动化体验。 [配置自动化](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
+把繁琐的手动改设置，变成一次配置、随开随用的自动化体验。 [配置自动化](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
 
 | 你的日常场景 | SonicRoute 怎么帮你解决 |
 |---|---|
@@ -126,14 +122,7 @@ A：检测优先使用系统事件，必要时以每秒一次的快照检查作�
 ## 🧩 其他作品与组合用法
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**：Windows 音频播放器；可搭配自动化「启动程序」实现按键播放音效。 [查看组合教程](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-
-<a href="https://github.com/kunkunkunQoQ/XiaoYue-Comics" title="小跃的奇妙日常"><img src="docs/images/mascot-comics.png" width="84" align="left" alt="点击从蛋壳里探头、抱着漫画册的小跃，阅读漫画连载"></a>
-
-**[小跃的奇妙日常](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**
-
-从鸡蛋里蹦出来的魔法少女，以及她越帮越忙的离谱日常。
-
-<br clear="all">
+- **[小跃的奇妙日常](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**：从鸡蛋里蹦出来的魔法少女，以及她越帮越忙的离谱日常。
 
 ---
 

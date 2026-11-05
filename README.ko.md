@@ -18,8 +18,6 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 > **AI를 위한 빠른 요약 및 토큰 절약 문제 해결**: Cursor, Copilot, ChatGPT, Claude 등 AI 어시스턴트로 문제를 진단하거나 구조를 파악하고 스크립트를 작성할 때 전용 사양서 [README.ai.md](README.ai.md) 문서를 직접 참조하는 것을 권장합니다. LLM을 위한 고밀도 구조화 DSL로 핵심 사실을 정리하여 불필요한 텍스트를 줄이고, 토큰 소비를 대폭 절약하며 원인을 신속하게 도출합니다.
 
 <div>
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97" title="사용자 가이드(중국어 간체)"><img src="docs/images/mascot-panel-peek.png" width="104" align="middle" alt="마스코트를 클릭해 사용자 가이드 열기"></a>
-<br>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute 빠른 패널: 위쪽의 출력 장치와 앱별 볼륨 제어"></a>
 <a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute 자동화 규칙 편집기: 앱 트리거 및 오디오 동작 단계 선택"></a>
 </div>
@@ -27,8 +25,6 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 <sub>인터페이스 미리보기: 높이 조절 및 아크릴 스타일을 지원하는 퀵 패널로 앱 볼륨과 장치를 즉시 제어하고, 자동화 편집기에서 트리거와 동작을 자유롭게 구성할 수 있습니다.</sub>
 
 ## ✨ SonicRoute의 주요 기능
-
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7" title="기능"><img src="docs/images/mascot-music-hoodie.png" width="68" align="right" alt="마스코트를 클릭해 SonicRoute 기능 살펴보기"></a>
 
 - **앱별 개별 사운드 분할 및 양방향 라우팅(재생 + 녹음):** 앱마다 재생 및 녹음 장치를 개별 지정하여 게임과 음성 채팅은 헤드셋으로, 음악은 스피커로 전달합니다. 설정은 Windows에 네이티브로 유지되어 프로그램을 종료해도 유지됩니다.
 - **포그라운드 스마트 추적 및 트레이 휠 간편 제어:** 시스템 이벤트를 통해 소리가 나는 활성 앱을 즉시 감지합니다. 작업 표시줄 트레이에서 휠 스크롤로 볼륨 조절 및 Alt+휠로 장치 전환이 가능하며, OSD 알림과 마이크 음소거로 화면 전환 없이 제어합니다.
@@ -39,7 +35,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 
 ## 🎮 일상적인 활용
 
-<a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99" title="자동화"><img src="docs/images/mascot-automation-kr.png" width="48" align="middle" alt="작은 로봇을 클릭해 자동화 규칙 알아보기"></a> 번거로운 수동 설정을 한 번의 구성으로 언제나 간편한 자동화로 전환하세요. [자동화 설정](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
+번거로운 수동 설정을 한 번의 구성으로 언제나 간편한 자동화로 전환하세요. [자동화 설정](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
 
 | 일상 속 사용 시나리오 | SonicRoute의 해결 방법 |
 |---|---|
@@ -128,14 +124,7 @@ A: 감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1
 ## 🧩 다른 프로젝트와 함께 사용하기
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: Windows용 오디오 플레이어입니다. 자동화의 ‘프로그램 실행’ 동작과 함께 사용하면 단축키로 효과음을 재생할 수 있습니다. [설정 가이드(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-
-<a href="https://github.com/kunkunkunQoQ/XiaoYue-Comics" title="XiaoYue Comics"><img src="docs/images/mascot-comics.png" width="84" align="left" alt="달걀 껍데기에서 고개를 내밀고 만화책을 든 샤오웨를 클릭해 연재 만화 읽기"></a>
-
-**[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**
-
-달걀에서 튀어나온 마법소녀가 도와주려 할 때마다 일이 더 꼬이는 황당한 일상을 그린 개그 만화입니다.
-
-<br clear="all">
+- **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**: 달걀에서 튀어나온 마법소녀가 도와주려 할 때마다 일이 더 꼬이는 황당한 일상을 그린 개그 만화입니다.
 
 ---
 
