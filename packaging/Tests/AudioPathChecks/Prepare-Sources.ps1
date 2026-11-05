@@ -26,7 +26,7 @@ function Read-Source([string]$relative) {
 $files = @('AudioService.cs', 'SystemVolumeService.cs', 'GlobalMicMuteService.cs', 'SessionVolumeService.cs',
     'Interop/WasapiInterfaces.cs', 'Interop/AudioNotificationInterfaces.cs', 'Interop/ComInterop.cs',
     'Interop/ISimpleAudioVolume.cs', 'Interop/PolicyConfigClient.cs', 'Models/AudioAppInfo.cs',
-    'Models/AudioDeviceInfo.cs', 'Compat/MathEx.cs', 'Compat/CompatEnv.cs', 'Compat/Net48CompilerShims.cs')
+    'Models/AudioDeviceInfo.cs', 'Compat/MathEx.cs', 'Compat/CompatEnv.cs', 'Compat/Net48CompilerShims.cs', 'Compat/AppInfo.cs')
 foreach ($file in $files) {
     $text = Read-Source "SonicRoute.Core/$file"
     # Only OS construction/release boundaries are substituted. Method bodies, locks,
@@ -35,6 +35,12 @@ foreach ($file in $files) {
     $text = $text.Replace('Marshal.ReleaseComObject(', 'AudioPathChecks.Boundary.Release(')
     $text = $text.Replace('new PolicyConfigClient()', 'AudioPathChecks.Boundary.CreatePolicyClient()')
     [IO.File]::WriteAllText((Join-Path $OutputDirectory ([IO.Path]::GetFileName($file))), $text, $encoding)
+}
+# Exercise the shared desktop facade against the same fake COM boundaries, including net48.
+# The Android branch is covered by AndroidAudioChecks / AndroidUiChecks instead.
+if (!$Revision) {
+    $applicationAudio = (Read-Source 'SonicRoute/ApplicationAudio.cs').Replace('#if SONICROUTE_PHONE', '#if false')
+    [IO.File]::WriteAllText((Join-Path $OutputDirectory 'ApplicationAudio.cs'), $applicationAudio, $encoding)
 }
 $panel = Read-Source 'SonicRoute/QuickPanelModernWindow.xaml.cs'
 $anchor = 'var vols = await _uiLifetime.ReadAsync((Apps: apps, ShowOutputName: showOutputName), static state =>'
@@ -59,6 +65,9 @@ if ($body.Contains('audio.MuteKnown')) { $state = 'var state = (Apps: apps, Show
 $reader = @"
 using System;
 using System.Collections.Generic;
+#if !BASELINE
+using SonicRoute;
+#endif
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;

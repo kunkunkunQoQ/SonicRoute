@@ -78,6 +78,32 @@ internal static partial class Program
             var data = new DataObject(AndroidAppDrag.Format, payload);
             var drop = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs), BindingFlags.Instance | BindingFlags.NonPublic,
                 null, [data, DragDropKeyStates.None, DragDropEffects.Copy | DragDropEffects.Move, phone, new Point(20, 200)], null)!;
+            var dragging = host.GetProperty("IsDragging", statics)!;
+            var returnOverlay = (Border)phone.FindName("PcDropHighlight");
+            var returnCell = (Border)phone.FindName("AndroidReturnDropZone");
+            try
+            {
+                dragging.SetValue(null, true);
+                foreach (string theme in new[] { "light", "dark" })
+                {
+                    ThemeService.Apply(theme, "#00CBE9");
+                    Render((FrameworkElement)phone.Content, 235, 450, Path.Combine(output, "phone-return-" + theme + ".png"));
+                    DrainUi();
+                    Check(returnOverlay.Visibility == Visibility.Visible && returnCell.Visibility == Visibility.Visible
+                        && ((ListBox)phone.FindName("PhoneApps")).Visibility == Visibility.Hidden
+                        && Descendants<TextBlock>(returnCell).Any(t => t.Text == "返回手机播放"
+                            && ReferenceEquals(t.Foreground, phone.FindResource("Theme.TextPrimary"))),
+                        theme + " phone drag immediately shows the themed return card before entering the panel");
+                }
+                drop.RoutedEvent = System.Windows.DragDrop.DragLeaveEvent;
+                Call(phone, "PhoneApp_DragLeave", phone, drop);
+                Check(returnOverlay.Visibility == Visibility.Visible && returnCell.Visibility == Visibility.Visible,
+                    "leaving the phone panel retains the return card for the active gesture without list flashing");
+            }
+            finally { dragging.SetValue(null, false); }
+            DrainUi();
+            Check(returnOverlay.Visibility == Visibility.Collapsed && ((ListBox)phone.FindName("PhoneApps")).Visibility == Visibility.Visible,
+                "ending or cancelling the phone drag restores the existing app list");
             drop.RoutedEvent = System.Windows.DragDrop.PreviewDragOverEvent;
             Call(phone, "PhoneApp_DragOver", phone, drop);
             Check(drop.Effects == DragDropEffects.Move && drop.Handled, "phone panel accepts a phone app as a return-to-phone move");

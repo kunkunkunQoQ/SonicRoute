@@ -35,6 +35,7 @@ import java.util.Set;
 public final class AudioOutputBridge {
     private static final int SAMPLE_RATE = 48000;
     private static final int BYTES_PER_FRAME = 4; // 16-bit stereo
+    private static final int FRAMES_PER_CHUNK = SAMPLE_RATE / 50;
 
     static AudioManager getAudioManager(Context context) {
         try {
@@ -236,6 +237,8 @@ public final class AudioOutputBridge {
             JSONObject info = new JSONObject();
             info.put("target", targetKey);
             info.put("preferredApplied", preferredApplied);
+            info.put("bufferFrames", track.getBufferSizeInFrames());
+            info.put("startThresholdFrames", track.getStartThresholdInFrames());
             if (routed != null) {
                 String address = safeAddress(routed);
                 info.put("id", routed.getId());
@@ -262,6 +265,13 @@ public final class AudioOutputBridge {
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private static void prepareStartThreshold(AudioTrack track) {
+        // Retain jitter capacity, but start after one PCM chunk instead of filling it.
+        // Android may change this threshold when the output device changes.
+        try { track.setStartThresholdInFrames(Math.min(FRAMES_PER_CHUNK, track.getBufferSizeInFrames())); }
+        catch (RuntimeException ignored) { } // A vendor may require its default threshold.
     }
 
     /** Pins only our playback session; never changes the phone's global media strategy. */
@@ -362,7 +372,7 @@ public final class AudioOutputBridge {
 
                 int minBuffer = AudioTrack.getMinBufferSize(
                     SAMPLE_RATE, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT);
-                int bufferBytes = Math.max(minBuffer > 0 ? minBuffer * 2 : 15360, BYTES_PER_FRAME * 960 * 4);
+                int bufferBytes = Math.max(minBuffer > 0 ? minBuffer * 2 : 15360, BYTES_PER_FRAME * FRAMES_PER_CHUNK * 4);
 
                 final int sessionId = audioManager.generateAudioSessionId();
                 if (sessionId <= 0) throw new IllegalStateException("无法建立独立手机播放会话。");
@@ -388,6 +398,7 @@ public final class AudioOutputBridge {
                     .setBufferSizeInBytes(bufferBytes)
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build();
+                prepareStartThreshold(track);
                 track.setVolume(0f); // Do not play through an unverified default output.
 
                 boolean initialPreferred = applyPreferred(track, audioManager, targetHolder[0]);
@@ -477,6 +488,7 @@ public final class AudioOutputBridge {
                 if (!outputCallbackRegistered) callbackHandler.postDelayed(periodicWatch, 5000);
 
                 track.addOnRoutingChangedListener(router -> {
+                    prepareStartThreshold(track);
                     checkOutputsAction.run();
                     verifyRouting.run();
                 }, callbackHandler);
@@ -495,18 +507,33 @@ public final class AudioOutputBridge {
                                 if (!nextTarget.isEmpty()) {
                                     synchronized (targetHolder) {
                                         track.setVolume(0f); routeVerified[0] = false;
+                                        long started = System.nanoTime();
+                                        boolean wasPlaying = track.getPlayState() == AudioTrack.PLAYSTATE_PLAYING;
+                                        // Do not drain/reopen an active track for both policy changes.
+                                        // Resume once against the final route and discard stale queued PCM.
+                                        if (wasPlaying) track.pause();
+                                        track.flush();
                                         DeviceRoute nextRoute = null;
                                         try {
                                             nextRoute = new DeviceRoute(context, audioManager, "RULE_MATCH_AUDIO_SESSION_ID", sessionId,
                                                 findTargetDevice(audioManager, nextTarget), callbackThread.getLooper());
                                         } catch (NoSuchFieldException unsupportedSessionRule) { }
+                                        long registered = System.nanoTime();
+                                        DeviceRoute previousRoute = routeHolder[0];
+                                        if (previousRoute != null) previousRoute.close();
+                                        long released = System.nanoTime();
                                         if (!applyPreferred(track, audioManager, nextTarget)) {
                                             if (nextRoute != null) nextRoute.close();
                                             throw new IllegalStateException("所选手机输出设备不可播放。");
                                         }
-                                        DeviceRoute previousRoute = routeHolder[0];
+                                        long preferred = System.nanoTime();
                                         routeHolder[0] = nextRoute; targetHolder[0] = nextTarget;
-                                        if (previousRoute != null) previousRoute.close();
+                                        prepareStartThreshold(track);
+                                        if (wasPlaying) track.play();
+                                        emitJson(new JSONObject().put("switchSetup", new JSONObject()
+                                            .put("policyMs", (registered - started) / 1000000.0)
+                                            .put("preferredMs", (preferred - released) / 1000000.0)
+                                            .put("releaseMs", (released - registered) / 1000000.0)));
                                         callbackHandler.removeCallbacks(routingDeadline);
                                         verifyRouting.run();
                                     }
@@ -535,7 +562,7 @@ public final class AudioOutputBridge {
 
                 try {
                     InputStream input = client.getInputStream();
-                    byte[] pcm = new byte[BYTES_PER_FRAME * 960]; // 20ms frame chunks (3840 bytes)
+                    byte[] pcm = new byte[BYTES_PER_FRAME * FRAMES_PER_CHUNK]; // 20ms frame chunks (3840 bytes)
                     int pending = 0;
                     boolean playing = false;
                     while (true) {

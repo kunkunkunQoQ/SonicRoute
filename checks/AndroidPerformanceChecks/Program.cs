@@ -60,6 +60,19 @@ internal static partial class Program
                     for (int i = 0; i < 250000; i++) checksum += manager.Sources.Count;
                     return checksum;
                 }));
+                string lookupId = manager.Sources[1].Id;
+                metrics.Add(Measure("source-lookup-linear", 250000, "Previous facade lookup: two fixture sources, captured predicate and linear scan", () =>
+                {
+                    int checksum = 0;
+                    for (int i = 0; i < 250000; i++) if (FindByScan(manager, lookupId) != null) checksum++;
+                    return checksum;
+                }));
+                metrics.Add(Measure("source-lookup-indexed", 250000, "Current facade lookup: same two sources and identity, published index, no device access", () =>
+                {
+                    int checksum = 0;
+                    for (int i = 0; i < 250000; i++) if (manager.FindSource(lookupId) != null) checksum++;
+                    return checksum;
+                }));
                 source.Session.SetVolume(50);
                 int notifications = 0;
                 source.Session.Changed += _ => notifications++;
@@ -190,6 +203,8 @@ internal static partial class Program
         }
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
+    private static AndroidAudioSource? FindByScan(AndroidAudioManager manager, string id) =>
+        manager.Sources.FirstOrDefault(source => source.Id == id);
     private static string Hash(string path) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
 
     private static Metric Measure(string name, int operations, string scope, Func<double> action, int rounds = 5, bool totalAllocations = false)

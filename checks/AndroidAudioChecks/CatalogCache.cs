@@ -13,7 +13,8 @@ internal static partial class Program
         });
         Check(!File.Exists(path) && fetches == 0, "catalogue cache construction has no disk or device work");
         var reads = await Task.WhenAll(Enumerable.Range(0,8).Select(_ => cache.GetAsync(device, false, default)));
-        Check(fetches == 1 && reads.All(a => ReferenceEquals(a, reads[0])) && File.Exists(path),
+        string deviceFile = Directory.GetFiles(directory, "phone-app-catalog.json.*.json").Single();
+        Check(fetches == 1 && reads.All(a => ReferenceEquals(a, reads[0])) && File.Exists(deviceFile),
             "concurrent catalogue opens share a single fetch and immutable in-memory snapshot");
         var restored = new AndroidAppCatalogCache(path, (_, _) => throw new Exception("Disk cache should satisfy reopen"));
         var disk = await restored.GetAsync(device, false, default);
@@ -26,7 +27,7 @@ internal static partial class Program
         var other = new AndroidAppCatalogCache(path, (_, _) => { ++otherFetches; return Task.FromResult<IReadOnlyList<AndroidApp>>(new[] { app }); });
         await other.GetAsync(device with { Serial = "different-phone" }, false, default);
         Check(otherFetches == 1, "catalogue saved for another phone is never shown as this device's catalogue");
-        string before = File.ReadAllText(path);
+        string before = File.ReadAllText(deviceFile);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var cancelledCache = new AndroidAppCatalogCache(path, async (_, token) =>
         { entered.SetResult(); await Task.Delay(Timeout.Infinite, token); return new[] { app }; });
@@ -34,12 +35,12 @@ internal static partial class Program
         var pending = cancelledCache.GetAsync(device, true, cancellation.Token);
         await entered.Task; cancellation.Cancel();
         bool cancelled = false; try { await pending; } catch (OperationCanceledException) { cancelled = true; }
-        Check(cancelled && File.ReadAllText(path) == before && !cancelledCache.TryGet(device, out _),
+        Check(cancelled && File.ReadAllText(deviceFile) == before && !cancelledCache.TryGet(device, out _),
             "cancelling an in-flight catalogue fetch preserves the saved catalogue and publishes no partial data");
         var invalid = new AndroidAppCatalogCache(path, (_, _) => Task.FromResult<IReadOnlyList<AndroidApp>>(new[] { app, app }));
         bool rejected = false; try { await invalid.GetAsync(device, true, default); } catch (ArgumentException) { rejected = true; }
-        Check(rejected && File.ReadAllText(path) == before, "invalid refreshed catalogue cannot overwrite the saved file");
-        File.WriteAllText(path, "{broken-json");
+        Check(rejected && File.ReadAllText(deviceFile) == before, "invalid refreshed catalogue cannot overwrite the saved file");
+        File.WriteAllText(deviceFile, "{broken-json");
         int recovered = 0;
         var corrupt = new AndroidAppCatalogCache(path, (_, _) => { ++recovered; return Task.FromResult<IReadOnlyList<AndroidApp>>(new[] { app }); });
         await corrupt.GetAsync(device, false, default);

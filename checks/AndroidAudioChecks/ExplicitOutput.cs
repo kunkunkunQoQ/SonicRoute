@@ -3,7 +3,7 @@ using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
-    private static async Task ExplicitOutputLiveAsync(string runtime, string output)
+    private static async Task ExplicitOutputLiveAsync(string runtime, string output, bool allowSilence = false)
     {
         Directory.CreateDirectory(output);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
@@ -12,7 +12,7 @@ internal static partial class Program
         var outputs = await adb.OutputsAsync(device, timeout.Token);
         var bluetooth = outputs.First(s => s.Kind == AndroidOutputSinkKind.Bluetooth && s.AndroidDeviceType != 7);
         string package = "cn.wenyu.bodian";
-        await ResumeTestMusicAsync(adb, device, package, timeout.Token);
+        if (!allowSilence) await ResumeTestMusicAsync(adb, device, package, timeout.Token);
         int uid = await adb.ResolveUidAsync(device, package, timeout.Token);
         var app = new AndroidApp(package, "波点音乐", uid, "media");
         string speaker = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker");
@@ -21,13 +21,15 @@ internal static partial class Program
         var phases = new List<object>();
         await using (var session = new AndroidAudioSession(adb))
         {
+            double switchMs = 0;
             session.SetVolume(30); session.SetSmartVolume(true);
             await session.StartAsync(device, app, keepPhoneAudio: true, timeout.Token);
+            Console.WriteLine($"DIAG capture-before-switch nonSilent={session.Pcm!.NonSilentSamplesWritten}");
             string identity = session.State.SourceId!;
-            await session.SetOutputAsync(speaker);
+            await TimedSwitchAsync(speaker);
             await CheckPhonePhaseAsync("speaker", 2);
             var source = session.Pcm;
-            await session.SetOutputAsync(bt);
+            await TimedSwitchAsync(bt);
             await CheckPhonePhaseAsync("bluetooth", bluetooth.AndroidDeviceType);
             Check(ReferenceEquals(source, session.Pcm), "live speaker/Bluetooth switch preserves capture, decoder and PCM queue");
             session.SetMute(true);
@@ -39,11 +41,11 @@ internal static partial class Program
                 && session.State.State == CaptureState.Receiving && session.State.Muted,
                 "live phone mute sends only silent post-gain PCM while capture and main-panel control remain active");
             session.SetMute(false); session.SetVolume(20);
-            await session.SetOutputAsync(speaker);
+            await TimedSwitchAsync(speaker);
             await CheckPhonePhaseAsync("speaker-after-unmute", 2);
             Check(session.State.Volume == 20 && session.State.SmartVolume && session.State.SourceId == identity,
                 "live phone routing preserves source identity, volume and SmartVolume");
-            await session.SetOutputAsync(null);
+            await TimedSwitchAsync(null);
             Check(session.State.State == CaptureState.Receiving && session.PhoneOutputDiagnostics == null
                 && session.State.SourceId == identity, "live return to PC keeps the same controlled phone session");
             await session.StopAsync();
@@ -52,6 +54,7 @@ internal static partial class Program
 
             async Task CheckPhonePhaseAsync(string label, int expectedType)
             {
+                Console.WriteLine($"LATENCY session-{label} commandMs={switchMs:F1}");
                 var pcm = session.Pcm!;
                 var prior = session.PhoneOutputDiagnostics!.Value;
                 var deadline = DateTime.UtcNow.AddSeconds(3);
@@ -60,19 +63,39 @@ internal static partial class Program
                 {
                     await Task.Delay(100, timeout.Token);
                     current = session.PhoneOutputDiagnostics!.Value;
-                } while (current.NonSilentBytes <= prior.NonSilentBytes && DateTime.UtcNow < deadline);
+                } while (current.NonSilentBytes <= prior.NonSilentBytes && DateTime.UtcNow < deadline && !allowSilence);
                 Console.WriteLine($"DIAG {label}: type={current.RoutedType}/{expectedType}; bytes={prior.Bytes}->{current.Bytes}; nonSilent={prior.NonSilentBytes}->{current.NonSilentBytes}; decoded={pcm.NonSilentSamplesWritten}; state={session.State.State}; error={session.State.Error}");
-                Check(current.RoutedType == expectedType && current.Bytes > prior.Bytes && current.NonSilentBytes > prior.NonSilentBytes
-                    && pcm.NonSilentSamplesWritten > 0 && session.State.State == CaptureState.Receiving,
-                    "live " + label + " uses the actual requested hardware and carries real non-silent music");
+                bool nonSilent = current.NonSilentBytes > prior.NonSilentBytes && pcm.NonSilentSamplesWritten > 0;
+                Check(current.RoutedType == expectedType && current.Bytes > prior.Bytes && (allowSilence || nonSilent)
+                    && session.State.State == CaptureState.Receiving,
+                    "live " + label + " verifies actual hardware and " + (allowSilence ? "PCM delivery (silence allowed)" : "real non-silent music"));
                 phases.Add(new { Phase = label, ActualHardwareType = current.RoutedType,
-                    BytesSent = current.Bytes, NonSilentBytesSent = current.NonSilentBytes, DecodedNonSilentSamples = pcm.NonSilentSamplesWritten });
+                    SwitchCommandMs = switchMs, BytesSent = current.Bytes, NonSilentBytesSent = current.NonSilentBytes, DecodedNonSilentSamples = pcm.NonSilentSamplesWritten });
+            }
+            async Task TimedSwitchAsync(string? id)
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                try { await session.SetOutputAsync(id); }
+                catch
+                {
+                    var player = typeof(AndroidAudioSession).GetField("_player", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(session);
+                    var connection = player?.GetType().GetField("_output", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)?.GetValue(player);
+                    if (connection != null)
+                        foreach (string property in new[] { "LastRouteReport", "SwitchSetup" })
+                            Console.WriteLine("FAILED-DIAG " + property + ": " + connection.GetType().GetProperty(property,
+                                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(connection));
+                    Console.WriteLine(session.GetLog());
+                    throw;
+                }
+                switchMs = clock.Elapsed.TotalMilliseconds;
+                Console.WriteLine(session.GetLog());
             }
         }
         string after = await adb.RunAsync(timeout.Token, "forward", "--list");
         Check(before.Trim() == after.Trim(), "live verification removes only its forwards and preserves pre-existing connections");
         await File.WriteAllTextAsync(Path.Combine(output, "explicit-output-live.json"), JsonSerializer.Serialize(new
         { Passed = true, Assertions = _checks, RealPhoneAccess = true, Phases = phases,
+            SilenceAllowed = allowSilence,
             Scope = "Actual WavePoint Opus capture, gained PCM relay, verified native output, mute, return to PC and owned cleanup. Human listening remains manual." },
             new JsonSerializerOptions { WriteIndented = true }));
     }

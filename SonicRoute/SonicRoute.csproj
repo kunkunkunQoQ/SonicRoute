@@ -1,6 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="../build/Version.props" />
-
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <StartupObject>SonicRoute.Program</StartupObject>

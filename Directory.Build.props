@@ -1,4 +1,5 @@
 <Project>
+  <Import Project="$(MSBuildThisFileDirectory)build/Version.props" />
   <PropertyGroup>
     <SonicRouteEdition Condition="'$(SonicRouteEdition)' == ''">Full</SonicRouteEdition>
     <UseArtifactsOutput>true</UseArtifactsOutput>

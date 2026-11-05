@@ -32,6 +32,10 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
     public Task<Exception> Completion => _ended.Task;
     public Task WaitForRoutingAsync(CancellationToken token) => _verified!.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
     public int RoutedType { get; private set; }
+    internal int BufferFrames { get; private set; }
+    internal int StartThresholdFrames { get; private set; }
+    internal string? LastRouteReport { get; private set; }
+    internal (double PolicyMs, double PreferredMs, double ReleaseMs) SwitchSetup { get; private set; }
     public event Action<Exception>? Failed;
 
     private AndroidAudioOutputConnection(AdbClient adb, AndroidDevice device, string target, CancellationToken token,
@@ -61,25 +65,36 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         _adb.ValidateServer();
         string catalog = Path.Combine(_adb.RuntimeDirectory, "sonicroute-catalog.jar");
         if (Device.State != "device") await RefreshDeviceAsync(token).ConfigureAwait(false);
-        try { await _adb.RunAsync(token, "-s", Device.Serial, "push", catalog, Remote).ConfigureAwait(false); }
+        try { await PushRuntimeAsync().ConfigureAwait(false); }
         catch (Exception) when (!token.IsCancellationRequested)
         {
             await RefreshDeviceAsync(token).ConfigureAwait(false);
-            await _adb.RunAsync(token, "-s", Device.Serial, "push", catalog, Remote).ConfigureAwait(false);
+            await PushRuntimeAsync().ConfigureAwait(false);
         }
-        await _adb.RunAsync(token, "-s", Device.Serial, "push", _adb.ServerFile, Remote + ".server").ConfigureAwait(false);
-        _helper = _adb.StartWithInput("-s", Device.Serial, "shell",
-            "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + ":" + Remote + ".server exec app_process / org.sonicroute.android.AudioOutputBridge play "
-            + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'");
-        _stdout = ReadOutputAsync(); _stderr = ReadErrorAsync();
-        await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
-        _port = (await _adb.RunAsync(token, "-s", Device.Serial, "forward", "tcp:0", "localabstract:" + _socket).ConfigureAwait(false)).Trim();
+        Task<string> forwarding = _adb.RunAsync(token, "-s", Device.Serial, "forward", "tcp:0", "localabstract:" + _socket);
+        try
+        {
+            _helper = _adb.StartWithInput("-s", Device.Serial, "shell",
+                "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + ":" + Remote + ".server exec app_process / org.sonicroute.android.AudioOutputBridge play "
+                + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'");
+            _stdout = ReadOutputAsync(); _stderr = ReadErrorAsync();
+            await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Join even if helper startup fails, so DisposeAsync owns the exact forward.
+            _port = (await forwarding.ConfigureAwait(false)).Trim();
+        }
         if (!int.TryParse(_port, out int port) || port is < 1 or > 65535) throw new IOException("手机音频端口转发失败。");
         _tcp = new TcpClient { NoDelay = true, SendBufferSize = 8192, SendTimeout = 5000 };
         _cancelSocket = _lifetime.Token.UnsafeRegister(static socket => ((TcpClient)socket!).Dispose(), _tcp);
         await _tcp.ConnectAsync("127.0.0.1", port, token).ConfigureAwait(false);
         // Feed real-time PCM before awaiting hardware acknowledgement; the helper
         // keeps an unverified output muted, preventing default-device leakage.
+
+        Task PushRuntimeAsync() => Task.WhenAll(
+            _adb.RunAsync(token, "-s", Device.Serial, "push", catalog, Remote),
+            _adb.RunAsync(token, "-s", Device.Serial, "push", _adb.ServerFile, Remote + ".server"));
     }
 
     private async Task RefreshDeviceAsync(CancellationToken token)
@@ -143,6 +158,9 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
                 {
                     using var json = JsonDocument.Parse(line);
                     var root = json.RootElement;
+                    if (root.TryGetProperty("switchSetup", out var setup))
+                        SwitchSetup = (setup.GetProperty("policyMs").GetDouble(), setup.GetProperty("preferredMs").GetDouble(),
+                            setup.GetProperty("releaseMs").GetDouble());
                     if (root.TryGetProperty("outputs", out var outputs))
                     {
                         var sinks = AndroidOutputSink.ParseList(outputs);
@@ -151,6 +169,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
                     }
                     if (root.TryGetProperty("routed", out var routed))
                     {
+                        LastRouteReport = routed.GetRawText();
                         string key = routed.GetProperty("key").GetString() ?? "";
                         int type = routed.GetProperty("type").GetInt32();
                         string name = routed.GetProperty("name").GetString() ?? "";
@@ -159,7 +178,13 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
                         lock (_routeGate)
                         {
                             accepted = applied && string.Equals(key, _target, StringComparison.OrdinalIgnoreCase);
-                            if (accepted) { RoutedType = type; _verified?.TrySetResult(); }
+                            if (accepted)
+                            {
+                                RoutedType = type;
+                                if (routed.TryGetProperty("bufferFrames", out var buffer)) BufferFrames = buffer.GetInt32();
+                                if (routed.TryGetProperty("startThresholdFrames", out var threshold)) StartThresholdFrames = threshold.GetInt32();
+                                _verified?.TrySetResult();
+                            }
                         }
                         if (accepted) try { _onRouted?.Invoke(key, type, name); } catch { }
                     }

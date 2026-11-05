@@ -26,7 +26,19 @@ public sealed class AndroidAudioManager : IAsyncDisposable
 {
     private readonly object _gate = new();
     private readonly List<AndroidAudioSource> _sources = new();
-    private IReadOnlyList<AndroidAudioSource> _snapshot = Array.Empty<AndroidAudioSource>();
+    // Publish order and identity lookup together; readers never rebuild or lock the registry.
+    private sealed class SourceSnapshot
+    {
+        internal static readonly SourceSnapshot Empty = new(Array.Empty<AndroidAudioSource>());
+        internal readonly IReadOnlyList<AndroidAudioSource> Sources;
+        internal readonly Dictionary<string, AndroidAudioSource> ById;
+        internal SourceSnapshot(AndroidAudioSource[] sources)
+        {
+            Sources = Array.AsReadOnly(sources);
+            ById = sources.ToDictionary(s => s.Id, StringComparer.Ordinal);
+        }
+    }
+    private SourceSnapshot _snapshot = SourceSnapshot.Empty;
     private readonly HashSet<Task> _retiring = new();
     private readonly Queue<string> _history = new();
     private readonly Func<AndroidAudioSession> _factory;
@@ -34,9 +46,11 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     private readonly Func<AndroidDevice, string, bool>? _smartVolume;
     private bool _disposed;
     public event Action? Changed;
-    public IReadOnlyList<AndroidAudioSource> Sources => Volatile.Read(ref _snapshot);
+    public IReadOnlyList<AndroidAudioSource> Sources => Volatile.Read(ref _snapshot).Sources;
+    public AndroidAudioSource? FindSource(string id) =>
+        Volatile.Read(ref _snapshot).ById.TryGetValue(id, out var source) ? source : null;
     private void PublishSources() => Volatile.Write(ref _snapshot, _sources.Count == 0
-        ? Array.Empty<AndroidAudioSource>() : Array.AsReadOnly(_sources.ToArray()));
+        ? SourceSnapshot.Empty : new SourceSnapshot(_sources.ToArray()));
     public AndroidAudioManager(AdbClient adb, AndroidAudioSettingsStore? settings = null, Func<AndroidDevice, string, bool>? smartVolume = null)
         : this(() => new AndroidAudioSession(adb), settings, smartVolume) { }
     public AndroidAudioManager(Func<AndroidAudioSession> factory, AndroidAudioSettingsStore? settings = null, Func<AndroidDevice, string, bool>? smartVolume = null)

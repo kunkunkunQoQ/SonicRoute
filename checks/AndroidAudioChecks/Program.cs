@@ -15,8 +15,11 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--output-latency-live") { await OutputLatencyLiveAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--output-startup") { await OutputStartupAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--explicit-output") { await ExplicitOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--explicit-output-live") { await ExplicitOutputLiveAsync(args[1], args[2]); return 0; }
+            if (args.Length > 0 && args[0] == "--output-switch-latency-live") { await ExplicitOutputLiveAsync(args[1], args[2], allowSilence: true); return 0; }
             if (args.Length > 0 && args[0] == "--device-actions") { await DeviceActionsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--pc-to-phone-live") { await PcToPhoneLiveAsync(args); return 0; }
             if (args.Length > 0 && args[0] == "--phone-demand") { await PhoneDemandAsync(args[1]); return 0; }
@@ -122,6 +125,8 @@ internal static partial class Program
             () => { multiStarts++; return new FakeTransport(wire, () => multiStops++, mode => multiModes.Add(mode)); }, (_, _) => new FakePlayer()));
         var first = await multi.AddAsync(device, app);
         var second = await multi.AddAsync(device, app with { Package = "cn.test.second", Uid = 124 });
+        Check(ReferenceEquals(multi.FindSource(first.Id), first) && ReferenceEquals(multi.FindSource(second.Id), second)
+            && multi.FindSource("missing-source") == null, "source identity lookup preserves independent targets and unknown identities");
         var stableSources = multi.Sources;
         first.Session.SetVolume(60);
         Check(ReferenceEquals(stableSources, multi.Sources) && stableSources[0].Session.State.Volume == 60,
@@ -144,6 +149,8 @@ internal static partial class Program
         Check(second.Session.Pcm!.Volume == 1 && !second.Session.State.Muted && second.Session.State.OutputId == null,
             "one application's volume mute and route do not change another");
         var switched = await multi.AddAsync(device, app, false, "ignored-new-output");
+        Check(ReferenceEquals(multi.FindSource(first.Id), switched) && ReferenceEquals(multi.FindSource(second.Id), second),
+            "replacing an audio mode publishes the new source to identity lookup without disturbing another app");
         Check(!ReferenceEquals(first, switched) && !switched.KeepPhoneAudio && multiModes.SequenceEqual(new[] { true, true, false })
             && multiStarts == 3 && multiStops == 1 && ReferenceEquals(multi.Sources[0], switched),
             "changing the drop zone reconnects only that app with the requested phone audio mode and stable position");
@@ -153,14 +160,20 @@ internal static partial class Program
         Check(ReferenceEquals(switched, await multi.AddAsync(device, app, false)) && multiStarts == 3,
             "repeating the same drop mode shares the existing connection");
         await multi.RemoveAsync(first.Id);
+        Check(multi.FindSource(first.Id) == null && ReferenceEquals(multi.FindSource(second.Id), second),
+            "removed identities disappear before their owned transport is released");
         Check(stableSources.Count == 2 && multi.Sources.Count == 1 && !ReferenceEquals(stableSources, multi.Sources),
             "source membership changes publish a new snapshot without mutating a previous reader's view");
         Check(multiStops == 2 && multi.Sources.Count == 1 && second.Session.State.State == CaptureState.Receiving,
             "exit releases only its selected source");
-        await multi.AddAsync(device, second.App with { Uid = 456 });
+        var uidReplacement = await multi.AddAsync(device, second.App with { Uid = 456 });
+        Check(multi.FindSource(second.Id) == null && ReferenceEquals(multi.FindSource(uidReplacement.Id), uidReplacement),
+            "UID changes retire the old identity and publish the replacement");
         Check(multiStarts == 4 && multiStops == 3 && multi.Sources.Single().App.Uid == 456,
             "UID replacement affects only the matching package");
         await multi.StopAllAsync();
+        Check(multi.FindSource(uidReplacement.Id) == null && multi.FindSource(first.Id) == null,
+            "stop all clears the identity index together with source membership");
         Check(multi.Sources.Count == 0 && multiStops == 4, "stop all releases every independent source");
         await multi.StopAllAsync(); Check(multiStops == 4, "repeated stop all is idempotent");
         await using var pending = new AndroidAudioManager(() => new AndroidAudioSession(() => new PendingTransport(), (_, _) => new FakePlayer()));
@@ -274,7 +287,7 @@ internal static partial class Program
         }
         await settings.FlushAsync();
         var restored = new AndroidAudioSettingsStore(path);
-        Check(restored.Get(app.Package) == new AndroidAppAudioSettings(37, "saved-output"), "separate phone settings file survives a new store instance");
+        Check(restored.Get(device, app.Package) == new AndroidAppAudioSettings(37, "saved-output"), "separate phone settings file survives a new store instance");
         await using (var manager = new AndroidAudioManager(factory, restored))
         {
             var first = await manager.AddAsync(device, app);
@@ -287,7 +300,7 @@ internal static partial class Program
                 "explicit system-default selection and zero volume survive remove and re-add");
         }
         await restored.FlushAsync();
-        Check(new AndroidAudioSettingsStore(path).Get(app.Package) == new AndroidAppAudioSettings(0, null), "system-default preference stays null after writing and reloading");
+        Check(new AndroidAudioSettingsStore(path).Get(device, app.Package) == new AndroidAppAudioSettings(0, null), "system-default preference stays null after writing and reloading");
         string snapshot = File.ReadAllText(path);
         await restored.FlushAsync();
         Check(snapshot == File.ReadAllText(path) && !Directory.GetFiles(root, "*.tmp").Any(), "completed preference saves leave no temporary files or idle writes");
@@ -314,7 +327,7 @@ internal static partial class Program
         finally { release.Set(); }
         await older; await orderedSettings.FlushAsync();
         Check(orderedSource.Session.State.Volume == 67 && Math.Abs(orderedSource.Session.Pcm!.Volume - 0.67f) < 0.001f
-            && new AndroidAudioSettingsStore(orderedSettings.FilePath).Get(app.Package).Volume == 67,
+            && new AndroidAudioSettingsStore(orderedSettings.FilePath).Get(device, app.Package).Volume == 67,
             "out-of-order source callbacks preserve current PCM gain and saved volume");
     }
 

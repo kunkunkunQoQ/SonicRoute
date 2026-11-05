@@ -38,6 +38,14 @@ internal static partial class Program
     {
         if (args.Length > 0 && args[0] == "--perf-session") return SessionPerformance(args.Length > 1 && args[1] == "concurrent");
 #if !BASELINE
+        if (args.Contains("--application-audio"))
+        {
+            RunApplicationAudioChecks();
+            Console.WriteLine($"RESULT passed={_passed} failed={_failed} runtime={Environment.Version} OS_BOUNDARIES=FAKES_ONLY");
+            return _failed == 0 ? 0 : 1;
+        }
+#endif
+#if !BASELINE
         if (args.Contains("--abcde"))
         {
             RunAbcdeChecks();

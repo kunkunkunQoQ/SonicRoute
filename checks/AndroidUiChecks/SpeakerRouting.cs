@@ -55,6 +55,22 @@ internal static partial class Program
         var first = AddFixture(manager, device, music);
         var second = AddFixture(manager, device, music with { Package = "cn.test.video", Name = "Video", Uid = 1002 });
         var neighbour = AddFixture(manager, other, music);
+        var firstInfo = ExternalApps().Single(a => a.ExternalSourceId == first.Id);
+        var adjustVolume = UnifiedAudio.GetMethod("AdjustVolumePercent", statics)!;
+        var toggleMute = UnifiedAudio.GetMethod("ToggleMuteChecked", statics)!;
+        var adjusted = ((int Current, int Requested, int Actual, bool Applied))adjustVolume.Invoke(null, [firstInfo, -85])!;
+        Check(adjusted == (100, 15, 15, true) && second.Session.State.Volume == 100 && neighbour.Session.State.Volume == 100,
+            "shared volume adjustment controls only the resolved source and preserves other phone sessions");
+        var clamped = ((int Current, int Requested, int Actual, bool Applied))adjustVolume.Invoke(null, [firstInfo, 200])!;
+        Check(clamped == (15, 100, 100, true), "shared source adjustment preserves clamping and actual-state feedback");
+        var muted = ((bool Muted, bool Applied))toggleMute.Invoke(null, [firstInfo])!;
+        var unmuted = ((bool Muted, bool Applied))toggleMute.Invoke(null, [firstInfo])!;
+        Check(muted == (true, true) && unmuted == (false, true) && !second.Session.State.Muted && !neighbour.Session.State.Muted,
+            "shared mute toggle uses the selected source without changing another session");
+        var absent = new AudioAppInfo { ProcessId = 0, ExternalSourceId = "missing-source" };
+        Check(((int, int, int, bool))adjustVolume.Invoke(null, [absent, 10])! == (-1, -1, -1, false)
+            && ((bool, bool))toggleMute.Invoke(null, [absent])! == (false, false),
+            "retired or unknown identities cannot fall through to a Windows audio control");
         var config = ConfigService.Load(); config.QuickPanelShowPhoneAudio = false;
         var windows = new List<AudioDeviceInfo>
         {

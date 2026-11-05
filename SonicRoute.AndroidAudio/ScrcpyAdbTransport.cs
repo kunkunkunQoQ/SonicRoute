@@ -85,20 +85,16 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         _socket?.Dispose(); _socket = null; // EOF causes encoder stop and AudioPolicy release
         if (_server != null)
         {
+            // This audio-only server does not read a control socket. Its encoder may
+            // retain the write-only ADB tunnel after local EOF; request owned shutdown
+            // now instead of paying the full exit timeout on every capture-mode switch.
+            bool requested = false;
+            if (!_server.HasExited) requested = await RequestOwnedServerExitAsync(cleanup.Token).ConfigureAwait(false);
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             try { await _server.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
             catch (OperationCanceledException)
             {
-                if (_serverPid > 0 && _serial != null)
-                {
-                    try
-                    {
-                        string command = await _adb.RunAsync(cleanup.Token, "-s", _serial, "shell", "cat", $"/proc/{_serverPid}/cmdline").ConfigureAwait(false);
-                        if (command.Contains("com.genymobile.scrcpy.Server", StringComparison.Ordinal) && command.Contains("scid=" + _scid, StringComparison.Ordinal))
-                            await _adb.RunAsync(cleanup.Token, "-s", _serial, "shell", "kill", "-TERM", _serverPid.ToString()).ConfigureAwait(false);
-                    }
-                    catch (Exception ex) { _log("Owned server cleanup: " + ex.Message); }
-                }
+                if (!requested) await RequestOwnedServerExitAsync(cleanup.Token).ConfigureAwait(false);
                 try { if (!_server.HasExited) _server.Kill(true); } catch (InvalidOperationException) { }
             }
             _logLifetime.Cancel();
@@ -119,5 +115,20 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
             }
         }
         _logLifetime.Dispose();
+    }
+
+    private async Task<bool> RequestOwnedServerExitAsync(CancellationToken token)
+    {
+        int pid = Volatile.Read(ref _serverPid);
+        if (pid <= 0 || _serial == null) return false;
+        try
+        {
+            string command = await _adb.RunAsync(token, "-s", _serial, "shell", "cat", $"/proc/{pid}/cmdline").ConfigureAwait(false);
+            if (!command.Contains("com.genymobile.scrcpy.Server", StringComparison.Ordinal)
+                || !command.Contains("scid=" + _scid, StringComparison.Ordinal)) return false;
+            await _adb.RunAsync(token, "-s", _serial, "shell", "kill", "-TERM", pid.ToString()).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) { _log("Owned server cleanup: " + ex.Message); return false; }
     }
 }

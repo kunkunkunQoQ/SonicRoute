@@ -1,4 +1,4 @@
-﻿[
+[
     {
         "Path":  "adb.exe",
         "Group":  "adb",
@@ -26,8 +26,8 @@
     {
         "Path":  "sonicroute-catalog.jar",
         "Group":  "audio",
-        "Bytes":  17376,
-        "SHA256":  "21F5CD612C981EE847020BDDCA2D2768E8018A32E9B35B5B9271784A1C4A882C"
+        "Bytes":  17791,
+        "SHA256":  "C4A32A2ACDD87854495EE35AF357B468F27875F494C5A80AC753A1DC911EE080"
     },
     {
         "Path":  "VirtualDisplay/avcodec-62.dll",

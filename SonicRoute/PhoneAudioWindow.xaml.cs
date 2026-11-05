@@ -126,6 +126,8 @@ public partial class PhoneAudioWindow : Window
     private PhoneAppItem? _dragItem;
     private bool _closed, _refreshing, _suppressDeviceChanged;
     private Border PcDropHighlight = null!;
+    private Border _androidReturnDropZone = null!;
+    private bool _androidReturnHovered;
     private Grid _pcDropGrid = null!;
     private sealed record PcDropCell(Border Border, string Name, string DeviceId, string Title, AndroidOutputSink Sink);
     private readonly List<PcDropCell> _pcDropCells = new();
@@ -150,6 +152,7 @@ public partial class PhoneAudioWindow : Window
                 AndroidAudioHost.Phone.OutputsChanged += PhoneOutputsChanged;
                 PhoneAudioWindowCache.DevicesChanged += DevicesChanged;
                 DeviceNamesChanged(); RetainedAppsChanged(); UpdateMediaSubscription();
+                Android_ReturnDragStateChanged();
                 if (_enableMedia && IsLoaded) _ = InitializeDevicesAsync();
             }
             else
@@ -166,6 +169,7 @@ public partial class PhoneAudioWindow : Window
             _closed = true; _mediaUiLifetime.Dispose(); _lifetime.Cancel(); _catalogRead?.Cancel(); StopMediaSubscription();
             ClearPcDropHighlight();
             AppIconDragController.DesktopDragStateChanged -= Pc_DragStateChanged;
+            AndroidAudioHost.DragStateChanged -= Android_ReturnDragStateChanged;
             if (AndroidAudioHost.IsPhoneCreated)
             {
                 AndroidAudioHost.Phone.Changed -= RetainedAppsChanged;
@@ -186,6 +190,11 @@ public partial class PhoneAudioWindow : Window
     private void InitializePcDropOverlay()
     {
         _pcDropGrid = new Grid { Name = "PcDropZonesGrid" };
+        _androidReturnDropZone = CreateDropCell("AndroidReturnDropZone", "返回手机播放", "松开后，由手机控制声音", new CornerRadius(6));
+        _androidReturnDropZone.Visibility = Visibility.Collapsed;
+        var modes = new Grid();
+        modes.Children.Add(_pcDropGrid);
+        modes.Children.Add(_androidReturnDropZone);
         PcDropHighlight = new Border
         {
             Name = "PcDropHighlight",
@@ -193,7 +202,7 @@ public partial class PhoneAudioWindow : Window
             BorderThickness = new Thickness(2),
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false,
-            Child = _pcDropGrid
+            Child = modes
         };
         PcDropHighlight.SetResourceReference(Border.BorderBrushProperty, "Theme.Accent");
         PcDropHighlight.SetResourceReference(BackgroundProperty, "Theme.SurfaceBg");
@@ -202,6 +211,7 @@ public partial class PhoneAudioWindow : Window
         host.Children.Insert(host.Children.IndexOf(PhoneEmptyPanel) + 1, PcDropHighlight);
         RegisterName(PcDropHighlight.Name, PcDropHighlight);
         RegisterName(_pcDropGrid.Name, _pcDropGrid);
+        RegisterName(_androidReturnDropZone.Name, _androidReturnDropZone);
 
         var style = new Style(typeof(ListBox), PhoneApps.Style);
         var trigger = new DataTrigger
@@ -214,6 +224,7 @@ public partial class PhoneAudioWindow : Window
         PhoneApps.Style = style;
 
         AppIconDragController.DesktopDragStateChanged += Pc_DragStateChanged;
+        AndroidAudioHost.DragStateChanged += Android_ReturnDragStateChanged;
     }
 
     internal void EnsurePcDropZones(bool force = false)
@@ -264,41 +275,8 @@ public partial class PhoneAudioWindow : Window
                         ? new CornerRadius(0, 0, 6, 6)
                         : new CornerRadius(0);
 
-            var labels = new StackPanel
-            {
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(8)
-            };
-            var heading = new TextBlock
-            {
-                Text = title,
-                FontWeight = FontWeights.SemiBold,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis
-            };
-            heading.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextPrimary");
-            var detail = new TextBlock
-            {
-                Text = description,
-                FontSize = 11,
-                Margin = new Thickness(0, 6, 0, 0),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis
-            };
-            detail.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
-            labels.Children.Add(heading);
-            labels.Children.Add(detail);
-
-            var border = new Border
-            {
-                Name = cellName,
-                Tag = deviceId,
-                CornerRadius = corners,
-                Background = System.Windows.Media.Brushes.Transparent,
-                Child = labels
-            };
-            System.Windows.Automation.AutomationProperties.SetName(border, title);
+            var border = CreateDropCell(cellName, title, description, corners);
+            border.Tag = deviceId;
             RegisterName(cellName, border);
             Grid.SetRow(border, i);
             _pcDropGrid.Children.Add(border);
@@ -315,6 +293,22 @@ public partial class PhoneAudioWindow : Window
         ApplyPcDropCellBackgrounds(_pcDropTargetIndex);
     }
 
+    private static Border CreateDropCell(string name, string title, string description, CornerRadius corners)
+    {
+        var labels = new StackPanel { HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8) };
+        var heading = new TextBlock { Text = title, FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextPrimary");
+        var detail = new TextBlock { Text = description, FontSize = 11, Margin = new Thickness(0, 6, 0, 0),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        detail.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
+        labels.Children.Add(heading); labels.Children.Add(detail);
+        var cell = new Border { Name = name, CornerRadius = corners, Child = labels };
+        System.Windows.Automation.AutomationProperties.SetName(cell, title);
+        return cell;
+    }
+
     private void ApplyPcDropCellBackgrounds(int? activeIndex)
     {
         for (int i = 0; i < _pcDropCells.Count; i++)
@@ -326,6 +320,9 @@ public partial class PhoneAudioWindow : Window
 
     private void SetPcDropTarget(int? index)
     {
+        if (AndroidAudioHost.IsDragging) { SetAndroidReturnTarget(false); return; }
+        _androidReturnDropZone.Visibility = Visibility.Collapsed;
+        _pcDropGrid.Visibility = Visibility.Visible;
         bool visible = index != null || AppIconDragController.IsDesktopDragging;
         if (visible) EnsurePcDropZones();
         if (_pcDropTargetIndex == index && (PcDropHighlight.Visibility == Visibility.Visible) == visible) return;
@@ -340,6 +337,26 @@ public partial class PhoneAudioWindow : Window
     }
 
     internal void ClearPcDropHighlight() => SetPcDropTarget(null);
+
+    private void Android_ReturnDragStateChanged()
+    {
+        if (_closed) return;
+        if (!Dispatcher.CheckAccess()) { _mediaUiLifetime.Post(Dispatcher, Android_ReturnDragStateChanged); return; }
+        SetAndroidReturnTarget(false);
+        if (!AndroidAudioHost.IsDragging) SetPcDropTarget(null);
+    }
+
+    private void SetAndroidReturnTarget(bool hovered)
+    {
+        bool visible = hovered || AndroidAudioHost.IsDragging;
+        if (_androidReturnHovered == hovered && (_androidReturnDropZone.Visibility == Visibility.Visible) == visible) return;
+        _androidReturnHovered = hovered;
+        _androidReturnDropZone.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) { PcDropHighlight.Visibility = Visibility.Collapsed; return; }
+        _pcDropGrid.Visibility = Visibility.Collapsed;
+        _androidReturnDropZone.SetResourceReference(BackgroundProperty, hovered ? "Theme.Overlay" : "Theme.SurfaceBg");
+        PcDropHighlight.Visibility = Visibility.Visible;
+    }
 
     private static int GetPcDropZoneIndex(double y, double height, int count)
     {
@@ -577,7 +594,7 @@ public partial class PhoneAudioWindow : Window
     {
         if (e.Data.GetDataPresent(AndroidAppDrag.Format, false) && e.Data.GetData(AndroidAppDrag.Format, false) is AndroidAppDrag)
         {
-            SetPcDropTarget(null);
+            SetAndroidReturnTarget(true);
             e.Effects = System.Windows.DragDropEffects.Move;
             e.Handled = true;
             return;
@@ -600,7 +617,7 @@ public partial class PhoneAudioWindow : Window
     private void PhoneApp_DragLeave(object sender, System.Windows.DragEventArgs e)
     {
         var point = e.GetPosition(PhoneApps);
-        if (AppIconDragController.IsDesktopDragging)
+        if (AppIconDragController.IsDesktopDragging || AndroidAudioHost.IsDragging)
         {
             var cursor = System.Windows.Forms.Cursor.Position;
             point = PhoneApps.PointFromScreen(new Point(cursor.X, cursor.Y));

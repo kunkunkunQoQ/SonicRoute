@@ -1,6 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <Import Project="../build/Version.props" />
-
   <PropertyGroup>
     <!-- net48 双目标（Spike）：net10.0-windows 行为保持不变；net48 为 .NET Framework 4.8 兼容分支 -->
     <TargetFrameworks>net10.0-windows;net48</TargetFrameworks>

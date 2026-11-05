@@ -99,7 +99,7 @@ internal static class ApplicationAudio
         HasActiveSession = source.Session.State.State == CaptureState.Receiving
     };
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null
-        : AndroidAudioHost.Sources.Sources.FirstOrDefault(s => s.Id == app.ExternalSourceId);
+        : AndroidAudioHost.Sources.FindSource(app.ExternalSourceId!);
     private static bool IsSourcePhoneOutput(AndroidAudioSource source, string deviceId) =>
         AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out _)
         && string.Equals(phoneKey, AndroidDeviceIdentity.Key(source.Device), StringComparison.OrdinalIgnoreCase);
@@ -135,9 +135,13 @@ internal static class ApplicationAudio
         if (source == null) return (-1, -1, -1, false);
         lock (source.Session)
         {
-            int current = GetVolumePercent(app), requested = MathEx.Clamp(current + delta, 0, 100);
-            var result = current < 0 ? (Applied: false, Actual: -1) : SetVolumePercentChecked(app, requested);
-            return (current, requested, result.Actual, result.Applied);
+            var state = source.Session.State;
+            int current = state.State == CaptureState.Receiving ? state.Volume : -1;
+            int requested = MathEx.Clamp(current + delta, 0, 100);
+            if (current < 0) return (current, requested, -1, false);
+            source.Session.SetVolume(requested);
+            int actual = source.Session.State.Volume;
+            return (state.Volume, requested, actual, actual == requested);
         }
 #else
         return (-1, -1, -1, false);
@@ -161,8 +165,10 @@ internal static class ApplicationAudio
         if (source == null) return (false, false);
         lock (source.Session)
         {
-            var state = ReadStateChecked(app); bool target = !state.Muted;
-            return (target, state.MuteKnown && SetMute(app, target));
+            var state = source.Session.State; bool target = !state.Muted;
+            if (state.State != CaptureState.Receiving) return (true, false);
+            source.Session.SetMute(target);
+            return (target, source.Session.State.Muted == target);
         }
 #else
         return (false, false);
@@ -258,11 +264,32 @@ internal static class ApplicationAudio
     }
     internal static (int Succeeded, int Total) ChangeAllPlaybackMuteChecked(bool? muted, CancellationToken token = default)
     {
-        bool target = muted ?? !AllMuted();
+        var result = ApplyAllPlaybackMute(muted, token);
+        return (result.Succeeded, result.Total);
+    }
+    private static (bool Muted, int Succeeded, int Total) ApplyAllPlaybackMute(bool? muted, CancellationToken token)
+    {
+        // One target list and one state read per app for both the decision and the write.
+        // Unknown mute states remain unknown; a read failure must not turn into "all muted".
+        token.ThrowIfCancellationRequested();
+        var apps = GetApps(refresh: true);
+        var states = new List<(AudioAppInfo App, int Volume)>(apps.Count);
+        bool anyKnown = false, allMuted = true;
+        foreach (var app in apps)
+        {
+            token.ThrowIfCancellationRequested();
+            var state = ReadStateChecked(app);
+            states.Add((app, state.Volume));
+            if (state.MuteKnown) { anyKnown = true; allMuted &= state.Muted; }
+        }
+        bool target = muted ?? !(anyKnown && allMuted);
         (int Succeeded, int Total) result = (0, 0);
-        foreach (var app in GetApps(refresh: true))
-        { token.ThrowIfCancellationRequested(); if (!HasSession(app)) continue; ++result.Total; if (SetMute(app, target)) ++result.Succeeded; }
-        return result;
+        foreach (var state in states)
+        {
+            token.ThrowIfCancellationRequested(); if (state.Volume < 0) continue; ++result.Total;
+            if (SetMute(state.App, target)) ++result.Succeeded;
+        }
+        return (target, result.Succeeded, result.Total);
     }
     internal static bool AllMuted()
     {
@@ -271,8 +298,8 @@ internal static class ApplicationAudio
     }
     internal static (bool Muted, bool Applied) ToggleAllMuteChecked()
     {
-        bool target = !AllMuted(); var result = ChangeAllPlaybackMuteChecked(target);
-        return (target, result.Total > 0 && result.Succeeded == result.Total);
+        var result = ApplyAllPlaybackMute(null, default);
+        return (result.Muted, result.Total > 0 && result.Succeeded == result.Total);
     }
     internal static (int OutOk, int InOk, int Total, bool Applied) ResetAllPersistedEndpointsChecked()
     {

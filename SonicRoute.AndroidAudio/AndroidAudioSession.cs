@@ -68,12 +68,21 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         var runToken = _run.Token;
         Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null });
         Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}");
+        Task<IPcmPlayer>? preparingOutput = null;
         try
         {
             _transport = _transportFactory();
-            Stream stream = await _transport.ConnectAsync(device, app, keepPhoneAudio, runToken).ConfigureAwait(false);
             _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f, SmartVolume = State.SmartVolume };
-            _player = await Task.Run(() => _playerFactory(_pcm, State.OutputId), runToken).ConfigureAwait(false);
+            Task<Stream> connecting = _transport.ConnectAsync(device, app, keepPhoneAudio, runToken);
+            if (AndroidOutputIdentity.IsPhoneOutput(State.OutputId))
+            {
+                var pcm = _pcm;
+                string outputId = State.OutputId!;
+                // Capture and phone playback need separate helpers, not sequential startup.
+                preparingOutput = Task.Run(() => _playerFactory(pcm, outputId), runToken);
+            }
+            Stream stream = await connecting.ConfigureAwait(false);
+            _player = await (preparingOutput ?? Task.Run(() => _playerFactory(_pcm, State.OutputId), runToken)).ConfigureAwait(false);
             AttachOutputFailure(_player, generation);
             _player.Play();
             _receiver = new ScrcpyOpusReceiver();
@@ -93,6 +102,13 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         }
         catch (Exception ex)
         {
+            _run.Cancel();
+            if (preparingOutput != null && _player == null)
+            {
+                // A factory may finish during cancellation. Join it before disposing its PCM
+                // or lifetime so the owned helper/socket cannot escape failed startup.
+                try { _player = await preparingOutput.ConfigureAwait(false); } catch { }
+            }
             await StopCoreAsync().ConfigureAwait(false);
             Update(s => s with { State = CaptureState.Failed, Device = device, App = app, Error = ex.Message });
             Log("Start failed: " + ex.Message);

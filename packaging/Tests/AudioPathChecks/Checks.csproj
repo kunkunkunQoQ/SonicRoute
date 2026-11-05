@@ -9,7 +9,7 @@
     <SourceRoot Condition="'$(SourceRoot)' == ''">$(MSBuildProjectDirectory)/../../..</SourceRoot>
     <DefineConstants Condition="'$(BaselineRevision)' != ''">$(DefineConstants);BASELINE</DefineConstants>
   </PropertyGroup>
-  <ItemGroup><Compile Include="Program.cs;Fakes.cs;TuningChecks.cs;InputStateChecks.cs;PanelSnapshotChecks.cs;AbcdeChecks.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="Program.cs;Fakes.cs;TuningChecks.cs;InputStateChecks.cs;PanelSnapshotChecks.cs;AbcdeChecks.cs;ApplicationAudioChecks.cs" /></ItemGroup>
   <Target Name="PrepareAudioSources" BeforeTargets="CoreCompile">
     <PropertyGroup><PreparedSources Condition="'$(PreparedSources)' == ''">$(IntermediateOutputPath)prepared/$(BaselineRevision)</PreparedSources></PropertyGroup>
     <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Sources.ps1&quot; -SourceRoot &quot;$(SourceRoot)&quot; -OutputDirectory &quot;$(PreparedSources)&quot; -Revision &quot;$(BaselineRevision)&quot;" />
