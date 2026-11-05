@@ -69,13 +69,29 @@ namespace SonicRoute
             && string.Equals(a.IconPath, b.IconPath, StringComparison.Ordinal);
 
         private void BindAutoAppCandidates(ComboBox combo, string? processName)
+            => BindPreparedAppCandidates(combo, processName, GetAppCandidates(_autoApps));
+
+        private void BindAutoAppCandidateBatch()
+        {
+            // One filtered snapshot per UI refresh, independent selections per consumer.
+            var candidates = GetAppCandidates(_autoApps);
+            var trigger = (AutoTriggerAppCombo.SelectedItem as AppItem)?.ProcessName;
+            BindPreparedAppCandidates(AutoTriggerAppCombo, trigger, candidates);
+            foreach (var combo in _autoStepAppCombos)
+            {
+                var target = combo.Tag is AutoRuleStep step ? step.TargetApp : (combo.SelectedItem as AppItem)?.ProcessName;
+                BindPreparedAppCandidates(combo, target, candidates);
+            }
+        }
+
+        private void BindPreparedAppCandidates(ComboBox combo, string? processName, List<AppItem> candidates)
         {
             bool previous = _suppressAutoUi;
             _suppressAutoUi = true;
             try
             {
                 combo.IsSynchronizedWithCurrentItem = false;
-                combo.ItemsSource = GetAppCandidates(_autoApps);
+                combo.ItemsSource = candidates;
                 SelectAutoApp(combo, processName);
             }
             finally { _suppressAutoUi = previous; }

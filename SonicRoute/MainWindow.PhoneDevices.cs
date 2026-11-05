@@ -6,6 +6,7 @@ using System.Windows;
 #if SONICROUTE_PHONE
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Navigation;
 using SonicRoute.AndroidAudio;
 using Button = System.Windows.Controls.Button;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
@@ -20,34 +21,24 @@ public partial class MainWindow
     {
 #if SONICROUTE_PHONE
         if (sender is not TextBlock links || links.Inlines.OfType<Hyperlink>().Any(link => link.Name == "OpenSourceLicensesLink")) return;
-        var licenseLink = new Hyperlink(new Run("开源许可")) { Name = "OpenSourceLicensesLink" };
+        var licenseLink = new Hyperlink(new Run("开源许可")) { Name = "OpenSourceLicensesLink",
+            NavigateUri = new Uri("https://github.com/kunkunkunQoQ/SonicRoute/blob/master/packaging/AndroidLab/THIRD-PARTY-NOTICES.md") };
         licenseLink.SetResourceReference(Hyperlink.ForegroundProperty, "Theme.Accent");
-        licenseLink.Click += ThirdPartyNotices_Click;
+        licenseLink.RequestNavigate += ThirdPartyNotices_RequestNavigate;
         links.Inlines.Add(new Run(" ‖ "));
         links.Inlines.Add(licenseLink);
 #endif
     }
-    private async void ThirdPartyNotices_Click(object sender, RoutedEventArgs e)
-    {
 #if SONICROUTE_PHONE
-        var link = (Hyperlink)sender; link.IsEnabled = false;
+    private void ThirdPartyNotices_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        e.Handled = true;
         try
         {
-            string path = System.IO.Path.Combine(AndroidAudioHost.Adb.RuntimeDirectory, "THIRD-PARTY-NOTICES.txt");
-            await Task.Run(() =>
-            {
-                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-                System.IO.File.WriteAllText(path, AndroidRuntimeBundle.ReadNotices(), System.Text.Encoding.UTF8);
-            });
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
         }
         catch (Exception ex) { ShowToast(ex.Message); }
-        finally { link.IsEnabled = true; }
-#else
-        await Task.CompletedTask;
-#endif
     }
-#if SONICROUTE_PHONE
     private StackPanel PhoneDevicesHost = null!;
     private Border PhoneDetailsHost = null!;
     private PhoneDevicePage? _phoneDevicePage;

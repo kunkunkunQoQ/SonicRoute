@@ -2730,18 +2730,7 @@ namespace SonicRoute
                 if (_isClosed || navigationVersion != _navigationVersion
                     || !AutoRefreshWindowVisible) return;
                 _autoApps = apps;
-
-                // 触发应用下拉：重填并保留选中
-                var prevTrigger = (AutoTriggerAppCombo.SelectedItem as AppItem)?.Info.ProcessName;
-                LoadAutoAppCombo(AutoTriggerAppCombo);
-                SelectAutoApp(AutoTriggerAppCombo, prevTrigger);
-
-                // 已打开的步骤应用下拉：重填并保留选中
-                foreach (var combo in _autoStepAppCombos)
-                {
-                    var prev = combo.Tag is AutoRuleStep step ? step.TargetApp : (combo.SelectedItem as AppItem)?.Info.ProcessName;
-                    BindAutoAppCandidates(combo, prev);
-                }
+                BindAutoAppCandidateBatch();
             }
             catch { /* 静默：单次刷新失败不影响页面 */ }
             finally

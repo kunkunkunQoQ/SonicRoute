@@ -96,7 +96,7 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
             var process = adb.StartWithInput("-s", device.Serial, "shell",
                 "echo SR_MEDIA_PID:$$; CLASSPATH=" + remote + ":" + server + " exec app_process / org.sonicroute.android.MediaSessionBridge " + id);
             _process = process;
-            stderr = process.StandardError.ReadToEndAsync();
+            stderr = ReadDiagnosticTailAsync(process.StandardError);
             while (await process.StandardOutput.ReadLineAsync(token).ConfigureAwait(false) is { } line)
             {
                 if (line.StartsWith("SR_MEDIA_PID:", StringComparison.Ordinal))
@@ -151,6 +151,36 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
             if (stderr != null) { try { Trace.WriteLine(await stderr.ConfigureAwait(false)); } catch { } }
             process?.Dispose();
         }
+    }
+    internal const int DiagnosticTailCharacters = 16 * 1024;
+    internal static async Task<string> ReadDiagnosticTailAsync(TextReader reader, CancellationToken token = default)
+    {
+        // Drain the existing pipe without accumulating the helper's entire lifetime.
+        // Grow only on actual output; even a newline-free log stays within 32 KiB.
+        char[] chunk = new char[1024], tail = new char[1024];
+        int count = 0, write = 0, read;
+        while ((read = await reader.ReadAsync(chunk.AsMemory(), token).ConfigureAwait(false)) != 0)
+        {
+            if (tail.Length < DiagnosticTailCharacters && count + read > tail.Length)
+            {
+                Array.Resize(ref tail, Math.Min(DiagnosticTailCharacters, Math.Max(count + read, tail.Length * 2)));
+                write = count;
+            }
+            int first = Math.Min(read, tail.Length - write);
+            chunk.AsSpan(0, first).CopyTo(tail.AsSpan(write));
+            chunk.AsSpan(first, read - first).CopyTo(tail);
+            write = (write + read) % tail.Length;
+            count = Math.Min(tail.Length, count + read);
+        }
+        int start = count == tail.Length ? write : 0;
+        // Truncating the head must not leave half of a Unicode surrogate pair.
+        if (count > 0 && char.IsLowSurrogate(tail[start])) { start = (start + 1) % tail.Length; --count; }
+        return string.Create(count, (tail, start), static (text, state) =>
+        {
+            int first = Math.Min(text.Length, state.tail.Length - state.start);
+            state.tail.AsSpan(state.start, first).CopyTo(text);
+            state.tail.AsSpan(0, text.Length - first).CopyTo(text[first..]);
+        });
     }
     private async Task WatchLatencyAsync(CancellationToken token)
     {

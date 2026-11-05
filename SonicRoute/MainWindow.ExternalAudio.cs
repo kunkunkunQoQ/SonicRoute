@@ -72,7 +72,10 @@ public partial class MainWindow
         if (_isClosed) return;
         SyncExternalOutputDevices();
         var selected = (AppsListBox.SelectedItem as AppItem)?.Identity;
+        var previousApps = _appItems;
         var merged = MergeExternalItems(_appItems);
+        // Controls sharing one prior candidate list also share its refreshed result.
+        var candidates = new Dictionary<IEnumerable<AppItem>, List<AppItem>> { [previousApps] = merged };
         if (!_appItems.SequenceEqual(merged))
         {
             _appItems = merged; AppsListBox.ItemsSource = merged;
@@ -88,8 +91,9 @@ public partial class MainWindow
             foreach (var combo in new[] { FixedAppCombo, AutoTriggerAppCombo }.Concat(_autoStepAppCombos))
             {
                 if (combo?.ItemsSource is not IEnumerable<AppItem> previous) continue;
-                var current = previous.ToList(); var items = MergeExternalItems(current);
-                if (current.SequenceEqual(items)) continue;
+                if (!candidates.TryGetValue(previous, out var items))
+                    candidates[previous] = items = MergeExternalItems(previous);
+                if (previous.SequenceEqual(items)) continue;
                 var old = combo.SelectedItem as AppItem;
                 string? targetName = old?.ProcessName ?? (combo.Tag as AutoRuleStep)?.TargetApp;
                 combo.ItemsSource = items;

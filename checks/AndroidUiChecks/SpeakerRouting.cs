@@ -156,6 +156,27 @@ internal static partial class Program
             Check(scans == 0 && !(bool)host.GetProperty("IsPcToPhoneCreated", statics)!.GetValue(null)!
                 && !(bool)host.GetProperty("AreDisplaysCreated", statics)!.GetValue(null)!,
                 "speaker routing checks create no scan, PC-to-phone loop or virtual-display worker");
+            typeof(MainWindow).GetMethod("EnsureSettingsPage", Hidden)!.Invoke(main, null);
+            typeof(MainWindow).GetMethod("EnsureAutomationPage", Hidden)!.Invoke(main, null);
+            var candidateApps = ExternalApps();
+            var candidates = (List<AppItem>)typeof(MainWindow).GetMethod("GetAppCandidates", Hidden)!.Invoke(main, [candidateApps])!;
+            var fixedChoice = (ComboBox)typeof(MainWindow).GetField("FixedAppCombo", Hidden)!.GetValue(main)!;
+            var autoChoice = (ComboBox)typeof(MainWindow).GetField("AutoTriggerAppCombo", Hidden)!.GetValue(main)!;
+            typeof(MainWindow).GetField("_suppressAppCombo", Hidden)!.SetValue(main, true);
+            typeof(MainWindow).GetField("_suppressAutoUi", Hidden)!.SetValue(main, true);
+            fixedChoice.ItemsSource = autoChoice.ItemsSource = candidates;
+            fixedChoice.SelectedItem = candidates.Single(item => item.Info.ExternalSourceId == second.Id);
+            autoChoice.SelectedItem = candidates.Single(item => item.Info.ExternalSourceId == neighbour.Id);
+            typeof(MainWindow).GetField("_appItems", Hidden)!.SetValue(main, candidates);
+            store.Rename("Batch phone");
+            typeof(MainWindow).GetMethod("RefreshExternalAudioLists", Hidden)!.Invoke(main, null);
+            Check(ReferenceEquals(fixedChoice.ItemsSource, autoChoice.ItemsSource),
+                "a phone metadata batch merges a shared candidate source once for all consumers");
+            Check((fixedChoice.SelectedItem as AppItem)?.Info.ExternalSourceId == second.Id
+                && (autoChoice.SelectedItem as AppItem)?.Info.ExternalSourceId == neighbour.Id,
+                "phone batch reuse retains independent selections for apps on different devices");
+            Check(fixedChoice.Items.OfType<AppItem>().Single(item => item.Info.ExternalSourceId == second.Id).Info.SourceLabel == "来自 Batch phone",
+                "shared phone candidate refresh carries the newest device metadata");
             Pump(store.FlushAsync());
             File.WriteAllText(Path.Combine(output, "speaker-routing.json"), JsonSerializer.Serialize(new
             { Passed = true, Assertions = _checks, Scans = scans, RealPhoneAccess = false,

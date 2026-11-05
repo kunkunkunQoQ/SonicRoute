@@ -15,6 +15,7 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--media-log-tail") { await MediaLogTailAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-latency-live") { await OutputLatencyLiveAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-startup") { await OutputStartupAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--explicit-output") { await ExplicitOutputAsync(args[1]); return 0; }

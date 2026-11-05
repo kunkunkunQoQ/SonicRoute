@@ -2,6 +2,16 @@
 
 更新：2026-11-05。提交、远端、运行包及本地未提交内容以实际 Git 状态和父容器最新收据为准。
 
+## 当前交付：有界手机日志、批次候选复用与在线许可
+
+- 用户本轮明确执行两项优化；图标优化仍取消。媒体会话 helper 的 stderr 从累计整段输出改为持续排空、仅保留最近 16,384 个 UTF-16 字符（尾部正文最多约 32 KiB），按实际输出增长，长时间运行和无换行日志不再无限累计。没有新增轮询或清理定时器，不改变活动连接和工作集策略。
+- 自动化一次刷新共用一次过滤后的应用候选；手机事件更新按同一原候选列表复用合并结果，仅当前批次有效。每个下拉独立选择，按身份保留不同手机应用，不依赖可变元数据对象的引用长期缓存。图标模型和加载逻辑未改。
+- Full 关于页“开源许可”改为浏览器打开 [完整许可索引](AndroidLab/THIRD-PARTY-NOTICES.md)，不再为点击入口准备 ADB 或额外导出本地文本。依赖要求的完整许可副本仍内嵌在单 EXE；Lite/Legacy 仍无该入口和手机资源。
+- 上次红色任务是 [70e8ce1 的 README consistency](https://github.com/kunkunkunQoQ/SonicRoute/actions/runs/42021504857)，并非 C# 编译失败。隔离复现确认版本升到 1.31 后 README.ai.md 未同步；另一 AI 后续 bd4b880 已修好且 [CI 通过](https://github.com/kunkunkunQoQ/SonicRoute/actions/runs/42022456282)。本轮保留该提交，未修改 README/Wiki；当前 10 份 README 一致性检查通过。
+- Full/Lite/Legacy 编译及定向检查通过：共同候选/许可 UI 分别 9/8/7 项，尾日志 7 项，手机路由与候选 UI 38 项，共 69 项。未展示窗口、未访问真机。40 应用、13 消费者、100 批的本地微基准，Full 临时分配 12,573,640→1,284,040 字节；不是整版内存、CPU 或加载速度结论。
+- 已构建 Full x64 / 1.31.0.0 ReadyToRun 单 EXE，更新父容器正常运行版；SHA-256 `750AB038313061EFC86D46467BC25E22AD8389CE08E65E81ABEE1DED89D7B6F3`，26,842,481 字节。保留正在运行的 Store 1.30 和共享 ADB，未启动新包。既有 AndroidPcmSource.cs SmartVolume 调参仍未提交、Hash 未变，本地包包含该 WIP；无新 Release/tag/Store 提交，未重发 Lite/Legacy 运行包。
+- 本地完整交接、失败检查记录与提交/推送收据见父容器 `integration-docs/38-MEMORY-FOLLOWUP-AND-ONLINE-LICENSE.md`、`integration-docs/memory-followup-receipt.json` 和 `outputs/memory-followup-20261105/`。下文“仅审查”为上一轮历史状态，本轮仅执行上述两项。
+
 ## 本轮提交：1.31 已完成改动；新的内存优化仅审查
 
 - 用户于 2026-11-05 要求提交当前已完成工作：统一1.31版本入口、公共音频路径优化、手机输出切换与拖拽返回提示及其定向检查；沿用上一轮构建和测试证据，不为提交重复整套构建。

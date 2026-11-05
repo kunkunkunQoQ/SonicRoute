@@ -152,6 +152,12 @@ internal static partial class Program
             }
             app.Resources = ProductResources();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            if (args.Contains("--memory-followup"))
+            {
+                CheckMemoryFollowup(windows);
+                Console.WriteLine($"RESULT passed={_checks} MEMORY_FOLLOWUP=true PHONE_ACCESS=false WINDOWS_SHOWN=false");
+                return 0;
+            }
             var assembly = typeof(App).Assembly;
             Check(assembly.GetType("SonicRoute.QuickPanelWindow") == null && assembly.GetType("SonicRoute.IQuickPanel") == null,
                 "removed panel and two-panel abstraction absent from actual product assembly");

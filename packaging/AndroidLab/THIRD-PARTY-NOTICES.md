@@ -1,6 +1,21 @@
-# Third-party notices for the SonicRoute Android Lab package
+# Third-party licenses and notices for SonicRoute
 
-This file is a package-side notice draft for the current experiment. It records the local NuGet package metadata and upstream source-file notices. It is not a legal opinion or a complete license determination. The experiment package has not been published.
+This is the online entry for the third-party notices included in SonicRoute Full. The application opens this page in your browser without exporting an additional local text file. Required license copies remain included in the application. Component-specific source notices and build observations are recorded below; this inventory is not a legal opinion.
+
+## Complete license texts
+
+| Component | Full text |
+| --- | --- |
+| SonicRoute and its Android helpers | [MIT](../../LICENSE) |
+| Concentus / Opus | [Copyright, redistribution conditions and disclaimer](#concentus-222) |
+| NAudio | [MIT and source-file notices](#naudio-221) |
+| Android platform-tools / ADB | [Complete aggregate notice](../../AndroidRuntime/ADB-NOTICE.txt) |
+| scrcpy audio server | [Apache 2.0](../../AndroidRuntime/SCRCPY-LICENSE.txt) |
+| Modified scrcpy video client/server | [Apache 2.0](video-licenses/scrcpy-LICENSE.txt) |
+| FFmpeg libraries | [LGPL 2.1 or later](video-licenses/FFmpeg-LICENSE.txt) |
+| SDL2 | [zlib license](video-licenses/SDL2-LICENSE.txt) |
+| zlib | [zlib license](video-licenses/zlib-LICENSE.txt) |
+| QRCoder | [MIT](QRCoder-LICENSE.txt) |
 
 ## SonicRoute and its Android catalog helper
 
@@ -75,7 +90,7 @@ The target runtime manifest is `SonicRoute.AndroidAudio/VirtualDisplayRuntime.fi
 
 The four FFmpeg DLLs are a minimal local build retaining H264/HEVC/PNG decoding, PNG/image2 demuxing, file protocol, ASM optimization, and w32threads. The local build enables zlib and statically links zlib 1.3.2; it has no separate zlib runtime DLL. No GPL configure switch or external GPL library was used. The runtime check reports `avcodec_license()` as `LGPL version 2.1 or later`. `FFmpeg-LICENSE.txt` now contains the actual source-tree `COPYING.LGPLv2.1`; `zlib-LICENSE.txt` contains the zlib notice. These are file/build observations, not a legal conclusion. The earlier BtbN gpl-shared FFmpeg/GPL-3 inventory applies only to the previous reference-runtime stage and does not describe the newly built DLLs.
 
-The local experiment has not been published. Keep the complete license texts under `SonicRoute/packaging/AndroidLab/video-licenses/` (`FFmpeg-LICENSE.txt`, `SDL2-LICENSE.txt`, `scrcpy-LICENSE.txt`, and `zlib-LICENSE.txt`) with the corresponding files when packaging. The earlier local runtime test decoded H264 and HEVC 64×128 frames and a PNG 64×64 image (`outputs/runtime-check-20261101-173500/check.log`). The current Android 16 Bilibili virtual-display sizing/input evidence is separate, under `outputs/bili-flex-final-20261102` and `outputs/bili-flex-keyboard-gpu-20261102`. A cached upstream GPL FFmpeg command-line tool was used read-only for DXGI diagnostic screenshots; it and its DLLs are not part of the product runtime. This inventory is not legal advice or release clearance. Recheck the actual package contents and notices before any distribution.
+Keep the complete license texts under `packaging/AndroidLab/video-licenses/` (`FFmpeg-LICENSE.txt`, `SDL2-LICENSE.txt`, `scrcpy-LICENSE.txt`, and `zlib-LICENSE.txt`) with the corresponding files when packaging. The earlier local runtime test decoded H264 and HEVC 64×128 frames and a PNG 64×64 image (`outputs/runtime-check-20261101-173500/check.log`). The current Android 16 Bilibili virtual-display sizing/input evidence is separate, under `outputs/bili-flex-final-20261102` and `outputs/bili-flex-keyboard-gpu-20261102`. A cached upstream GPL FFmpeg command-line tool was used read-only for DXGI diagnostic screenshots; it and its DLLs are not part of the product runtime. This inventory is not legal advice or release clearance. Recheck the actual package contents and notices before any distribution.
 
 ## QRCoder 1.7.0
 
