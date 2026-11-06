@@ -13,6 +13,27 @@ namespace SonicRoute;
 public partial class App
 {
 #if SONICROUTE_PHONE
+    private PhoneClipboardSync? _phoneClipboard;
+    private Task<PhoneClipboardSync>? _phoneClipboardLoad;
+    internal event Action? PhoneClipboardChanged;
+    private void StartPhoneClipboard()
+    {
+        if (System.IO.File.Exists(PhoneClipboardSync.SettingsPath)) _ = PreparePhoneClipboardAsync();
+    }
+    internal Task<PhoneClipboardSync> PreparePhoneClipboardAsync() => _phoneClipboardLoad ??= LoadPhoneClipboardAsync();
+    private async Task<PhoneClipboardSync> LoadPhoneClipboardAsync()
+    {
+        var sync = _phoneClipboard = new PhoneClipboardSync(PhoneClipboardSync.SettingsPath, Dispatcher,
+            new DesktopClipboardLink(_activateSink), () => new SonicRoute.AndroidAudio.AndroidClipboardClient(AndroidAudioHost.Adb));
+        sync.Changed += OnPhoneClipboardChanged;
+        try { await sync.InitializeAsync(); }
+        catch (OperationCanceledException) { }
+        return sync;
+    }
+    private void OnPhoneClipboardChanged() => PhoneClipboardChanged?.Invoke();
+    internal bool PhoneClipboardEnabled(SonicRoute.AndroidAudio.AndroidDevice? device) => _phoneClipboard?.IsEnabled(device) == true;
+    internal string PhoneClipboardStatus(SonicRoute.AndroidAudio.AndroidDevice? device) => _phoneClipboard?.Status(device) ?? "自动同步手机与电脑复制的文字";
+    internal void PhoneClipboardProfilesChanged() => _phoneClipboard?.ProfilesChanged();
     internal void ShowPhoneManagement()
     {
         ShowMainWindow();
@@ -151,6 +172,11 @@ public partial class App
     }
     private void ShutdownAndroidAudio()
     {
+        if (_phoneClipboard != null)
+        {
+            _phoneClipboard.Changed -= OnPhoneClipboardChanged;
+            _phoneClipboard.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
         AndroidAudioHost.StopMedia();
         if (_androidDisplayNotifications) AndroidAudioHost.Displays.Failed -= AndroidDisplayFailed;
         if (AndroidAudioHost.AreDisplaysCreated) AndroidAudioHost.Displays.DisposeAsync().AsTask().GetAwaiter().GetResult();
@@ -158,6 +184,7 @@ public partial class App
         AndroidAudioHost.FlushSettings();
     }
 #else
+    private void StartPhoneClipboard() { }
     internal bool KeepQuickPanelForAndroid => false;
     internal bool IsPhoneAudioVisible => false;
     private void ShutdownAndroidAudio() { }

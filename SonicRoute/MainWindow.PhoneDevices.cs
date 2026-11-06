@@ -7,8 +7,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Navigation;
+using System.ComponentModel;
+using System.Windows.Data;
+using Binding = System.Windows.Data.Binding;
 using SonicRoute.AndroidAudio;
 using Button = System.Windows.Controls.Button;
+using ListBox = System.Windows.Controls.ListBox;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 #endif
@@ -42,7 +46,10 @@ public partial class MainWindow
     private StackPanel PhoneDevicesHost = null!;
     private Border PhoneDetailsHost = null!;
     private PhoneDevicePage? _phoneDevicePage;
-    private readonly Dictionary<string, (Button Button, TextBlock Name, TextBlock State)> _phoneSidebarDevices = new();
+    private ListBox _phoneDevicesList = null!;
+    private System.Windows.Media.ImageSource _phoneSidebarIcon = null!;
+    private readonly Dictionary<string, PhoneSidebarItem> _phoneSidebarDevices = new();
+    private bool _suppressPhoneSelection;
     private Border? _phoneSidebarCount;
     private bool _phoneInitialized;
     private Task? _phoneInitialization;
@@ -73,17 +80,31 @@ public partial class MainWindow
         Grid.SetColumn(PhoneDetailsHost, 1); AppsPage.Children.Add(PhoneDetailsHost);
         RegisterName(PhoneDetailsHost.Name, PhoneDetailsHost);
         PhoneDevicesHost.Visibility = Visibility.Visible;
-        var heading = new TextBlock { Text = "手机", Margin = new Thickness(2,0,0,5), FontSize = 12, FontWeight = FontWeights.SemiBold };
-        heading.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
-        var headingGrid = new Grid(); headingGrid.ColumnDefinitions.Add(new()); headingGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        var heading = new TextBlock { Text = "手机", Margin = new Thickness(0,0,8,0), VerticalAlignment = VerticalAlignment.Center };
+        heading.SetResourceReference(StyleProperty, "SectionTitle");
+        var headingGrid = new Grid { Margin = new Thickness(2,0,2,12) }; headingGrid.ColumnDefinitions.Add(new()); headingGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         headingGrid.Children.Add(heading);
-        _phoneSidebarCount = new Border { CornerRadius = new CornerRadius(5), Padding = new Thickness(5,1,5,1), VerticalAlignment = VerticalAlignment.Top };
+        _phoneSidebarCount = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(6,3,6,3), VerticalAlignment = VerticalAlignment.Center };
         _phoneSidebarCount.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceAlt");
+        var count = new TextBlock { FontSize = 11 }; count.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
+        _phoneSidebarCount.Child = count;
+        var pen = new System.Windows.Media.Pen { Thickness = 1.5 };
+        BindingOperations.SetBinding(pen, System.Windows.Media.Pen.BrushProperty, new Binding(nameof(TextBlock.Foreground)) { Source = count });
+        _phoneSidebarIcon = new System.Windows.Media.DrawingImage(new System.Windows.Media.GeometryDrawing(null, pen, AutomationIcons.Phone));
         Grid.SetColumn(_phoneSidebarCount,1); headingGrid.Children.Add(_phoneSidebarCount); PhoneDevicesHost.Children.Add(headingGrid);
+        _phoneDevicesList = new ListBox { Name = "PhoneDevicesList", BorderThickness = new Thickness(0),
+            Background = System.Windows.Media.Brushes.Transparent, FontSize = 13, MaxHeight = 220,
+            ItemTemplate = (DataTemplate)FindResource("AppsCardItemTemplate"), ItemContainerStyle = (Style)FindResource("RoundedListBoxItem") };
+        ScrollViewer.SetHorizontalScrollBarVisibility(_phoneDevicesList, ScrollBarVisibility.Disabled);
+        VirtualizingPanel.SetIsVirtualizing(_phoneDevicesList, true);
+        VirtualizingPanel.SetVirtualizationMode(_phoneDevicesList, VirtualizationMode.Recycling);
+        _phoneDevicesList.SelectionChanged += PhoneSidebar_SelectionChanged;
+        RegisterName(_phoneDevicesList.Name, _phoneDevicesList);
+        PhoneDevicesHost.Children.Add(_phoneDevicesList);
         var add = new Button { Content = "＋  添加设备", Height = 26, FontSize = 12, Padding = new Thickness(6,2,6,2), Margin = new Thickness(0,0,0,8) };
         add.SetResourceReference(StyleProperty,"QuickPanelToolButton");
         add.SetResourceReference(ForegroundProperty,"Theme.TextPrimary");
-        add.Click += (_,_) => { SelectPhoneManagement(); _phoneDevicePage?.ShowConnection(); };
+        add.Click += (_,_) => { SelectPhoneManagement(); _phoneDevicePage?.ShowConnection(); UpdatePhoneSidebarSelection(); };
         PhoneDevicesHost.Children.Add(add);
         var line = new Border { Height = 1, Margin = new Thickness(2,0,2,8) }; line.SetResourceReference(Border.BackgroundProperty,"Theme.Border"); PhoneDevicesHost.Children.Add(line);
         AndroidAudioHost.Phone.Changed += PhoneLibraryChanged;
@@ -96,22 +117,38 @@ public partial class MainWindow
         PhoneLibraryChanged();
         if (discover) _ = RefreshPhoneDevicesAsync();
     }
-    private (Button Button, TextBlock Name, TextBlock State) CreatePhoneSidebarDevice(string id)
+    private sealed class PhoneSidebarItem(string id, System.Windows.Media.ImageSource icon) : INotifyPropertyChanged
     {
-        var button = new Button { Margin = new Thickness(0,0,0,4), Padding = new Thickness(6), HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        button.SetResourceReference(StyleProperty, "QuickPanelToolButton");
-        button.SetResourceReference(BackgroundProperty, "Theme.Overlay");
-        var row = new Grid(); row.ColumnDefinitions.Add(new(){ Width = new GridLength(25) }); row.ColumnDefinitions.Add(new());
-        button.SizeChanged += (_, e) => row.Width = Math.Max(0, e.NewSize.Width - 14);
-        row.Children.Add(AutomationIcons.Create(AutomationIcons.Phone, 20));
-        var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        var name = new TextBlock { FontSize = 12, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-        name.SetResourceReference(TextBlock.ForegroundProperty,"Theme.TextPrimary");
-        var state = new TextBlock { FontSize = 10, Margin = new Thickness(0,1,0,0), TextTrimming = TextTrimming.CharacterEllipsis };
-        state.SetResourceReference(TextBlock.ForegroundProperty,"Theme.TextSecondary");
-        labels.Children.Add(name); labels.Children.Add(state); Grid.SetColumn(labels,1); row.Children.Add(labels); button.Content = row;
-        button.Click += (_,_) => { AndroidAudioHost.Phone.SelectProfile(id); SelectPhoneManagement(); _phoneDevicePage?.ShowDevice(); };
-        return (button, name, state);
+        public string Id { get; } = id;
+        public System.Windows.Media.ImageSource Icon { get; } = icon;
+        public string Label { get; private set; } = "";
+        public string Subtitle { get; private set; } = "";
+        public bool IsActive { get; private set; }
+        public bool IsMuted => false;
+        public bool IsHiddenInPanel => false;
+        public event PropertyChangedEventHandler? PropertyChanged;
+        internal void Update(string label, string subtitle, bool active)
+        {
+            if (Label != label) { Label = label; PropertyChanged?.Invoke(this, new(nameof(Label))); }
+            if (Subtitle != subtitle) { Subtitle = subtitle; PropertyChanged?.Invoke(this, new(nameof(Subtitle))); }
+            if (IsActive != active) { IsActive = active; PropertyChanged?.Invoke(this, new(nameof(IsActive))); }
+        }
+    }
+    private void PhoneSidebar_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressPhoneSelection || _phoneDevicesList.SelectedItem is not PhoneSidebarItem item) return;
+        AndroidAudioHost.Phone.SelectProfile(item.Id);
+        SelectPhoneManagement(); _phoneDevicePage?.ShowDevice(); UpdatePhoneSidebarSelection();
+    }
+    private void UpdatePhoneSidebarSelection()
+    {
+        bool suppressed = _suppressPhoneSelection; _suppressPhoneSelection = true;
+        try
+        {
+            _phoneDevicesList.SelectedItem = PhoneDetailsHost.Visibility == Visibility.Visible && _phoneDevicePage?.IsConnectionPage == false
+                && _phoneSidebarDevices.TryGetValue(AndroidAudioHost.Phone.Profile.Id, out var selected) ? selected : null;
+        }
+        finally { _suppressPhoneSelection = suppressed; }
     }
     private void PhoneManagementVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
     { if (!IsVisible) SuspendPhoneManagement(); else ActivatePhoneManagement(); }
@@ -136,22 +173,25 @@ public partial class MainWindow
         var store = AndroidAudioHost.Phone;
         var profiles = store.Profiles.Where(p => p.LastDevice != null).ToArray();
         var ids = profiles.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
-        foreach (string removed in _phoneSidebarDevices.Keys.Where(id => !ids.Contains(id)).ToArray())
-        { PhoneDevicesHost.Children.Remove(_phoneSidebarDevices[removed].Button); _phoneSidebarDevices.Remove(removed); }
-        int index = 1;
-        foreach (var profile in profiles)
+        bool selectionSuppressed = _suppressPhoneSelection;
+        _suppressPhoneSelection = true;
+        try
         {
-            if (!_phoneSidebarDevices.TryGetValue(profile.Id, out var entry))
+            foreach (string removed in _phoneSidebarDevices.Keys.Where(id => !ids.Contains(id)).ToArray())
+            { _phoneDevicesList.Items.Remove(_phoneSidebarDevices[removed]); _phoneSidebarDevices.Remove(removed); }
+            foreach (var profile in profiles)
             {
-                entry = CreatePhoneSidebarDevice(profile.Id); _phoneSidebarDevices.Add(profile.Id, entry);
-                PhoneDevicesHost.Children.Insert(index, entry.Button);
+                if (!_phoneSidebarDevices.TryGetValue(profile.Id, out var entry))
+                {
+                    entry = new PhoneSidebarItem(profile.Id, _phoneSidebarIcon);
+                    _phoneSidebarDevices.Add(profile.Id, entry); _phoneDevicesList.Items.Add(entry);
+                }
+                var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
+                entry.Update(profile.Name, device == null ? "未连接" : device.IsWifi ? "Wi-Fi 已连接" : "USB 已连接", device != null);
             }
-            entry.Name.Text = profile.Name;
-            var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
-            entry.State.Text = device == null ? "未连接" : device.IsWifi ? "Wi-Fi 已连接" : "USB 已连接";
-            entry.Button.SetResourceReference(BackgroundProperty, store.Profile.Id == profile.Id ? "Theme.Overlay" : "Theme.SurfaceBg");
-            ++index;
         }
+        finally { _suppressPhoneSelection = selectionSuppressed; }
+        UpdatePhoneSidebarSelection();
         var count = _phoneSidebarCount!.Child as TextBlock;
         if (count == null) { count = new TextBlock { FontSize = 11 }; count.SetResourceReference(TextBlock.ForegroundProperty,"Theme.TextSecondary"); _phoneSidebarCount.Child = count; }
         count.Text = profiles.Length.ToString();
@@ -165,7 +205,6 @@ public partial class MainWindow
         PhoneDetailsHost.Child = _phoneDevicePage;
         ShowPhoneDeviceDetails(true);
         AppsListBox.SelectedItem = null;
-        ShowPhoneDeviceDetails(true); // selection clearing raises the ordinary app selection handler
         _phoneDevicePage.Activate();
     }
     private void ShowPhoneDeviceDetails(bool show)
@@ -173,6 +212,7 @@ public partial class MainWindow
         if (!_phoneInitialized) return;
         PhoneDetailsHost.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         AppsDetailsScroll.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
+        UpdatePhoneSidebarSelection();
         if (!show) _phoneDevicePage?.Suspend();
     }
     private void ActivatePhoneManagement()
@@ -187,12 +227,8 @@ public partial class MainWindow
         if (_isClosed || !_phoneInitialized || PhoneDetailsHost.Visibility != Visibility.Visible) return;
         try
         {
-            var devices = await PhoneAudioWindowCache.ReadDevicesAsync(_uiLifetime.Token);
-            if (_isClosed) return;
-            devices = PhoneAudioWindowCache.Devices ?? devices;
-            AndroidAudioHost.Phone.ObserveDevices(devices);
-            _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(devices, force: true, _uiLifetime.Token);
-            PhoneLibraryChanged(); _phoneDevicePage?.ApplyDevices(devices);
+            if (_phoneDevicePage != null) await _phoneDevicePage.RefreshAsync();
+            if (!_isClosed) PhoneLibraryChanged();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!_isClosed) PhoneDevicesHost.ToolTip = ex.Message; }
@@ -204,6 +240,8 @@ public partial class MainWindow
         AndroidAudioHost.Phone.OutputsChanged -= PhoneLibraryChanged;
         PhoneAudioWindowCache.DevicesChanged -= PhoneDevicesChanged;
         IsVisibleChanged -= PhoneManagementVisibilityChanged; StateChanged -= PhoneManagementStateChanged;
+        _phoneDevicesList.SelectionChanged -= PhoneSidebar_SelectionChanged;
+        _phoneDevicesList.Items.Clear();
         _phoneDevicePage?.Dispose(); _phoneDevicePage = null; PhoneDetailsHost.Child = null; PhoneDevicesHost.Children.Clear(); _phoneSidebarDevices.Clear();
     }
 #else

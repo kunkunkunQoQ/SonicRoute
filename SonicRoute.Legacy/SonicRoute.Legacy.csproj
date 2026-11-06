@@ -54,7 +54,7 @@
   <!-- ============ 共享源码（Link，不复制） ============ -->
   <ItemGroup>
     <Compile Include="..\SonicRoute\**\*.cs"
-             Exclude="..\SonicRoute\bin\**;..\SonicRoute\obj\**"
+             Exclude="..\SonicRoute\bin\**;..\SonicRoute\obj\**;..\SonicRoute\PhoneClipboardSync.cs"
              Link="%(RecursiveDir)%(Filename)%(Extension)" />
     <ApplicationDefinition Include="..\SonicRoute\App.xaml" Link="App.xaml" />
     <Page Include="..\SonicRoute\MainWindow.xaml" Link="MainWindow.xaml" />

@@ -31,8 +31,9 @@ internal static partial class Program
             string output = Path.GetFullPath(args[0]); Directory.CreateDirectory(output);
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(output, "ui-data-" + Guid.NewGuid().ToString("N")));
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidUiChecks");
-            App app = args.Contains("--speaker-routing") ? new RoutingFixtureApp() : new App();
-            if (app is RoutingFixtureApp) app.Resources = ProductResources();
+            App app = args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") ? new RoutingFixtureApp() : new App();
+            if (app is RoutingFixtureApp)
+            { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
@@ -41,6 +42,7 @@ internal static partial class Program
             if (args.Contains("--restore-live")) return RestoreDisplayLive(output, args[2]);
             if (args.Contains("--phone-demand")) return PhoneDemandUi(output);
             if (args.Contains("--speaker-routing")) return SpeakerRoutingUi(output);
+            if (args.Contains("--phone-clipboard")) return PhoneClipboardChecks(output);
             if (args.Contains("--qr-live")) return QrPairingLive(output);
             var config = ConfigService.Load(); config.QuickPanelUseLegacyAppRows = true; config.QuickPanelCompactShowOutputName = false;
             var catalog = JsonSerializer.Deserialize<Catalog>(File.ReadAllText(args[1]))!;
@@ -55,6 +57,18 @@ internal static partial class Program
                 .GetProperty("Phone", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
             var retainedCatalog = catalog.Apps.Where(a => new[] { "cn.wenyu.bodian", "com.netease.cloudmusic", "tv.danmaku.bili", "com.tencent.mm", "com.tencent.mobileqq", "com.spotify.music" }.Contains(a.Package)).ToArray();
             foreach (var item in retainedCatalog) phoneStore.Retain(item);
+            if (args.Contains("--phone-pages"))
+            {
+                CheckPhoneDeviceManagement(catalog, phoneStore, output);
+                CheckPhoneConnectionEvents(catalog);
+                CheckPhoneCatalogPage(catalog, phoneStore, output);
+                File.WriteAllText(Path.Combine(output, "phone-pages-summary.json"), JsonSerializer.Serialize(new
+                { Assertions = _checks, RealAdb = false, ProductStarted = false,
+                    Scope = "shared phone/PC rows, theme, independent catalog page, extended selection, explicit bottom refresh" },
+                    new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine($"PASS {_checks} focused phone-page assertions; no phone connection or product startup.");
+                return 0;
+            }
             var manager = (AndroidAudioManager)typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!
                 .GetProperty("Sources", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
             if (args.Contains("--phone-layout") || args.Contains("--phone-refinements"))

@@ -337,7 +337,7 @@
                            TextTrimming="CharacterEllipsis" MaxWidth="230"/>
             </StackPanel>
         </DataTemplate>
-        <!-- 应用页只改变列表展示；图标、选择容器和状态读取仍复用原实现。 -->
+        <!-- 手机设备与普通应用共用图标、文字、状态点和列表项样式。 -->
         <DataTemplate x:Key="AppsCardItemTemplate">
             <Grid Margin="0,3">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="32"/><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/></Grid.ColumnDefinitions>
@@ -358,7 +358,7 @@
                          ToolTip="{Binding [Apps.AudioActive], Source={x:Static local:L10n.Instance}}"/>
             </Grid>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding Info.HasActiveSession}" Value="True"><Setter TargetName="StateDot" Property="Visibility" Value="Visible"/></DataTrigger>
+                <DataTrigger Binding="{Binding IsActive}" Value="True"><Setter TargetName="StateDot" Property="Visibility" Value="Visible"/></DataTrigger>
                 <DataTrigger Binding="{Binding IsMuted}" Value="True">
                     <Setter TargetName="StateDot" Property="Visibility" Value="Visible"/>
                     <Setter TargetName="StateDot" Property="Fill" Value="{DynamicResource Theme.AccentInverse}"/>
@@ -1072,7 +1072,13 @@
         </Border>
 
         <!-- ======================= 内容区 ======================= -->
-        <Grid Grid.Column="1" Margin="26,20,26,20">
+        <Grid Grid.Column="1">
+            <Grid.Style><Style TargetType="Grid">
+                <Setter Property="Margin" Value="26,20,26,20"/>
+                <Style.Triggers><DataTrigger Binding="{Binding IsChecked, ElementName=NavApps}" Value="True">
+                    <Setter Property="Margin" Value="26,20,26,8"/>
+                </DataTrigger></Style.Triggers>
+            </Style></Grid.Style>
             <!-- 应用：列表与详情复用原选择、音频操作及窗口生命周期。 -->
             <Grid x:Name="AppsPage">
                 <Grid.ColumnDefinitions>

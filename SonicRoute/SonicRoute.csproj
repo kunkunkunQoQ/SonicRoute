@@ -42,7 +42,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(SonicRouteEdition)' == 'Lite'">
-    <Compile Remove="AndroidAudioHost.cs;AndroidAppDragController.cs;PhoneAudioWindow.xaml.cs;PhoneDevicePage.xaml.cs" />
+    <Compile Remove="AndroidAudioHost.cs;AndroidAppDragController.cs;PhoneAudioWindow.xaml.cs;PhoneDevicePage.xaml.cs;PhoneClipboardSync.cs" />
     <Page Remove="PhoneAudioWindow.xaml;PhoneDevicePage.xaml" />
   </ItemGroup>
   <ItemGroup Condition="'$(SonicRouteEdition)' == 'Full'">

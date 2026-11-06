@@ -40,19 +40,25 @@ internal static partial class Program
                 "overview navigation, visual tree and controller are removed and Apps is the default page");
             typeof(MainWindow).GetMethod("InitializePhoneManagement", Hidden)!.Invoke(main, new object[] { false });
             typeof(MainWindow).GetMethod("SelectPhoneManagement", Hidden)!.Invoke(main, null);
+            DrainUi();
             var page = (PhoneDevicePage)((Border)main.FindName("PhoneDetailsHost")).Child;
             Check(((FrameworkElement)main.FindName("AppsDetailsScroll")).Visibility == Visibility.Collapsed
                 && ((StackPanel)main.FindName("PhoneDevicesHost")).Visibility == Visibility.Visible,
                 "selecting the phone switches the existing Apps details pane to device management");
 
             var sidebar = (StackPanel)main.FindName("PhoneDevicesHost");
-            var profileButtons = sidebar.Children.OfType<Button>().Where(b => b.Content is FrameworkElement).ToArray();
+            var deviceList = (ListBox)main.FindName("PhoneDevicesList");
+            var profileRows = deviceList.Items.Cast<object>().ToArray();
             var addButton = sidebar.Children.OfType<Button>().Single(b => b.Content?.ToString() == "＋  添加设备");
-            string SidebarName(Button button) => Descendants<TextBlock>(button).FirstOrDefault()?.Text ?? "";
-            Check(store.Profiles.Count == 2 && profileButtons.Length == 2
-                && profileButtons.Select(SidebarName).ToHashSet().SetEquals(new[] { "工作手机", "客厅手机" })
-                && sidebar.Children.OfType<Button>().Count() == 3,
+            string SidebarName(object row) => (string)row.GetType().GetProperty("Label")!.GetValue(row)!;
+            Check(store.Profiles.Count == 2 && profileRows.Length == 2
+                && profileRows.Select(SidebarName).ToHashSet().SetEquals(new[] { "工作手机", "客厅手机" })
+                && sidebar.Children.OfType<Button>().Count() == 1,
                 "two distinct hardware identities create separate named phone rows beside Add Device");
+            var appsList = (ListBox)main.FindName("AppsListBox");
+            Check(ReferenceEquals(deviceList.ItemTemplate, appsList.ItemTemplate)
+                && ReferenceEquals(deviceList.ItemContainerStyle, appsList.ItemContainerStyle),
+                "phone and PC rows share the actual icon/text/status template and item selection style");
 
             var retained = (ItemsControl)page.FindName("RetainedApps");
             int retainedCount = store.Profile.RetainedApps.Count;
@@ -62,11 +68,11 @@ internal static partial class Program
                 "the phone sidebar keeps a separate Add Device action");
 
             store.Rename("书房手机");
-            var firstButton = profileButtons.Single(b => SidebarName(b) == "书房手机");
+            var firstRow = profileRows.Single(b => SidebarName(b) == "书房手机");
             Check(store.GetDisplayName(first) == "书房手机" && store.GetDisplayName(second) == "客厅手机"
                 && store.GetDisplayName(first with { Name = "Raw model" }) == "书房手机",
                 "custom phone names resolve by hardware identity without leaking raw model names or another phone's alias");
-            Check(((TextBlock)page.FindName("DeviceName")).Text == "书房手机" && SidebarName(firstButton) == "书房手机",
+            Check(((TextBlock)page.FindName("DeviceName")).Text == "书房手机" && SidebarName(firstRow) == "书房手机",
                 "renaming the active phone updates only its profile row and management name");
             store.Rename("工作手机");
             var rename = (Button)page.FindName("RenameButton"); var nameEditor = (TextBox)page.FindName("PhoneNameBox");
@@ -77,13 +83,23 @@ internal static partial class Program
             Check(nameEditor.Visibility == Visibility.Visible && nameEditor.Text == "工作手机",
                 "phone rename opens the prefilled inline editor for the selected profile");
             nameEditor.Text = "书房手机";
-            Check(store.Profile.Name == "书房手机" && SidebarName(firstButton) == "书房手机",
+            Check(store.Profile.Name == "书房手机" && SidebarName(firstRow) == "书房手机",
                 "inline phone edits save to the selected profile and update its sidebar row");
             nameEditor.Text = "工作手机";
             typeof(PhoneDevicePage).GetMethod("Name_LostFocus", Hidden)!.Invoke(page, new object?[] { nameEditor, null });
             Check(nameEditor.Visibility == Visibility.Collapsed, "leaving the inline name editor ends editing without extra confirmation");
 
             Render((FrameworkElement)main.Content, 1040, 720, System.IO.Path.Combine(output, "phone-management-light.png"));
+            var phoneHeading = (Grid)sidebar.Children[0];
+            var sidebarContent = (DockPanel)main.FindName("AppsSidebarContent");
+            var pcHeading = sidebarContent.Children.OfType<Grid>().Single();
+            Check(Math.Abs(phoneHeading.ActualHeight - pcHeading.ActualHeight) < .5
+                && ((FrameworkElement)((FrameworkElement)main.FindName("AppsPage")).Parent).Margin.Bottom == 8,
+                "phone and PC section headings have equal height and Apps uses the lower window space");
+            var clipboard = (CheckBox)page.FindName("ClipboardSyncToggle");
+            Check(clipboard.Style == page.FindResource("AutomationSwitch") && clipboard.IsChecked == false
+                && ((StackPanel)page.FindName("RetainedPanel")).Children[^1] == page.FindName("ClipboardCard"),
+                "per-phone clipboard switch defaults off and uses the shared themed control at the bottom");
             var firstChoice = retained.Items.Cast<PhoneAppChoice>().First();
             var smartVolumeToggle = Descendants<CheckBox>(retained).First(c =>
                 System.Windows.Automation.AutomationProperties.GetName(c) == "智能音量");
@@ -122,17 +138,17 @@ internal static partial class Program
                     (dark ? "dark" : "light") + " retained app names follow the active text color inside generated rows");
             }
 
-            var secondButton = profileButtons.Single(b => SidebarName(b) == "客厅手机");
-            secondButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var secondRow = profileRows.Single(b => SidebarName(b) == "客厅手机");
+            deviceList.SelectedItem = secondRow;
             Check(store.Profile.Id == secondId && ((TextBlock)page.FindName("DeviceName")).Text == "客厅手机"
                 && ((TextBlock)page.FindName("DeviceDescription")).Text.Contains("已连接"),
                 "selecting the second sidebar row activates its matching online device profile");
-            firstButton = profileButtons.Single(b => SidebarName(b) == "工作手机");
-            firstButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            firstRow = profileRows.Single(b => SidebarName(b) == "工作手机");
+            deviceList.SelectedItem = firstRow;
             cache.GetMethod("SetDevices", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { new[] { second } });
             DrainUi();
-            Check(profileButtons.Length == 2 && SidebarName(firstButton) == "工作手机"
-                && Descendants<TextBlock>(firstButton).Any(t => t.Text == "未连接")
+            Check(profileRows.Length == 2 && SidebarName(firstRow) == "工作手机"
+                && (string)firstRow.GetType().GetProperty("Subtitle")!.GetValue(firstRow)! == "未连接"
                 && store.Profile.Id == firstId
                 && ((TextBlock)page.FindName("DeviceDescription")).Text.Contains("未连接")
                 && ((Button)page.FindName("ReconnectButton")).IsEnabled

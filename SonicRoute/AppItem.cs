@@ -14,6 +14,7 @@ namespace SonicRoute
         public string Identity => Info.Identity;
         public string Subtitle => Info.SourceLabel ?? ProcessName;
         public string Label => AppDisplayName.Get(Info);
+        public bool IsActive => Info.HasActiveSession;
 
         private ImageSource? _icon;
         private int _iconLoading;

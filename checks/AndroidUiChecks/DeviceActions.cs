@@ -52,7 +52,9 @@ internal static partial class Program
                     && ((TextBlock)page.FindName("DeviceName")).ActualWidth > 30,
                     theme + " narrow device card keeps commands in one compact row without losing the name");
             }
+            discovery.Publish([one with { State = "device" }, two]);
             CheckCatalogBatchSelection(page, store, app, output);
+            discovery.Publish([one, two]);
             phone.Show(); Pump((Task)Call(phone, "InitializeDevicesAsync")!);
             CheckSharedDragPreview(phone);
             remove.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
@@ -62,7 +64,7 @@ internal static partial class Program
             var sidebar = (StackPanel)main.FindName("PhoneDevicesHost");
             Check(store.Profiles.Count == 1 && store.Profile.Name == "Second" && combo.Items.Count == 1
                 && combo.SelectedItem is AndroidDevice selected && selected.HardwareId == two.HardwareId
-                && sidebar.Children.OfType<Button>().Count(b => b.Content is FrameworkElement) == 1,
+                && ((ListBox)main.FindName("PhoneDevicesList")).Items.Count == 1,
                 "offline removal immediately updates the sidebar and quick phone selection");
             Check(!LazyCreated("LazyAdb") && !LazyCreated("LazySources") && !LazyCreated("LazyDisplays") && scans == 0,
                 "unused phone removal starts no tools, audio, video or discovery");
@@ -289,7 +291,7 @@ internal static partial class Program
             : app with { Package = "cn.test.choice" + i, Name = "Choice " + i, Uid = 1001 + i }), i == 0)).ToArray();
         typeof(PhoneDevicePage).GetField("_catalog", Hidden)!.SetValue(page, choices.Select(c => c.Item).ToArray());
         typeof(PhoneDevicePage).GetField("_catalogChoices", Hidden)!.SetValue(page, choices);
-        var panel = (FrameworkElement)page.FindName("CatalogPanel"); panel.Visibility = Visibility.Visible;
+        Call("SetCatalogVisible", true);
         Call("ApplyCatalogFilter");
         var list = (ListBox)page.FindName("CatalogApps"); var rows = list.ItemsSource;
         var menu = (MenuItem)page.FindName("AddSelectedAppsMenu");
@@ -325,7 +327,9 @@ internal static partial class Program
         Check(list.Items.Count == 1 && list.SelectedItems.Cast<PhoneAppChoice>().All(c => c.Item.Package == choices[4].Item.Package),
             "filter changes leave no hidden rows selected for a later batch");
         Call("CloseCatalog_Click", page, new RoutedEventArgs());
-        Check(list.Items.Count == 0 && !list.ContextMenu.IsOpen, "closing the catalogue releases selections and its context menu");
+        Check(list.Items.Count == 0 && !list.ContextMenu.IsOpen
+            && ((FrameworkElement)page.FindName("DeviceScroll")).Visibility == Visibility.Visible,
+            "closing the catalogue restores the device page and releases selections and its context menu");
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)

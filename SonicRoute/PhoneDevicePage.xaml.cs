@@ -61,6 +61,9 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private bool _active, _disposed, _busy, _showConnection, _suppressName, _applyingConnection;
     private IReadOnlyList<AndroidApp>? _retainedSnapshot;
     private IReadOnlyList<string>? _smartVolumeSnapshot;
+    private double _deviceScrollOffset;
+    private bool _suppressClipboard;
+    internal bool IsConnectionPage => _showConnection || AndroidAudioHost.Phone.Profile.LastDevice == null;
     public PhoneDevicePage() : this(null) { }
     internal PhoneDevicePage(AndroidWirelessConnection? wireless, Func<AndroidQrPairing>? createQr = null)
     {
@@ -75,15 +78,19 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         if (_disposed || _active) return;
         _active = true;
         AndroidAudioHost.Phone.Changed += ProfileChanged;
+        if (System.Windows.Application.Current is App application)
+        { application.PhoneClipboardChanged += RefreshClipboard; _ = LoadClipboardAsync(application); }
         ProfileChanged();
         if (PhoneAudioWindowCache.Devices == null) _ = RunAsync(RefreshDevicesCoreAsync);
     }
-    internal void ShowConnection() { _showConnection = true; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); }
-    internal void ShowDevice() { _showConnection = false; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); }
+    internal void ShowConnection() { _showConnection = true; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop(); }
+    internal void ShowDevice() { _showConnection = false; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop(); }
+    internal Task RefreshAsync() => CatalogPanel.Visibility == Visibility.Visible ? LoadCatalogAsync(true) : RunAsync(RefreshDevicesCoreAsync);
     internal void Suspend()
     {
         _active = false; _operation?.Cancel();
         AndroidAudioHost.Phone.Changed -= ProfileChanged;
+        if (System.Windows.Application.Current is App application) application.PhoneClipboardChanged -= RefreshClipboard;
         ReleaseCatalog();
         PhoneNameBox.Visibility = Visibility.Collapsed;
         PairCodeBox.Clear(); PairQrImage.Source = null; PairQrImage.Visibility = Visibility.Collapsed;
@@ -92,7 +99,6 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         AndroidAudioHost.Phone.ObserveDevices(devices);
         ProfileChanged();
-        if (_device == null) CatalogPanel.Visibility = Visibility.Collapsed;
     }
     private void ProfileChanged()
     {
@@ -108,7 +114,9 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         }
         _device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
         PhoneAudioWindowCache.SelectedSerial = _device?.Serial ?? profile.LastDevice?.Serial;
-        bool connection = _showConnection || profile.LastDevice == null;
+        bool connection = IsConnectionPage;
+        if ((connection || _device == null) && CatalogPanel.Visibility == Visibility.Visible)
+        { _operation?.Cancel(); ReleaseCatalog(); }
         DeviceName.Text = profile.Name;
         var display = _device ?? profile.LastDevice;
         DeviceDescription.Text = display == null ? "未连接" : $"{AndroidAudioHost.Phone.GetDisplayName(display)} · {(display.IsWifi ? "Wi-Fi" : "USB")} · {(_device == null ? "未连接" : "已连接")}";
@@ -134,6 +142,34 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         UnpairButton.IsEnabled = display != null && !_busy;
         RemoveDeviceButton.IsEnabled = profile.LastDevice != null && !_busy;
         if (appsChanged && CatalogPanel.Visibility == Visibility.Visible) ApplyCatalogFilter();
+        RefreshClipboard();
+    }
+    private async Task LoadClipboardAsync(App application)
+    {
+        await application.PreparePhoneClipboardAsync();
+        if (!_disposed && _active) RefreshClipboard();
+    }
+    private void RefreshClipboard()
+    {
+        if (_disposed || !_active || System.Windows.Application.Current is not App application) return;
+        var device = AndroidAudioHost.Phone.Profile.LastDevice;
+        _suppressClipboard = true;
+        try { ClipboardSyncToggle.IsChecked = application.PhoneClipboardEnabled(device); ClipboardSyncToggle.IsEnabled = device != null; }
+        finally { _suppressClipboard = false; }
+        ClipboardStatus.Text = application.PhoneClipboardStatus(device);
+    }
+    private async void ClipboardSync_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppressClipboard || _disposed || !_active || AndroidAudioHost.Phone.Profile.LastDevice is not { } device
+            || System.Windows.Application.Current is not App application) return;
+        bool enabled = ClipboardSyncToggle.IsChecked == true;
+        try
+        {
+            var sync = await application.PreparePhoneClipboardAsync();
+            if (!AndroidAudioHost.Phone.IsRemoved(device)) sync.SetEnabled(device, enabled);
+        }
+        catch (Exception) { if (!_disposed) OperationStatus.Text = "剪贴板设置暂时无法保存。"; }
+        if (!_disposed) RefreshClipboard();
     }
     private async Task RunAsync(Func<CancellationToken, Task> action, string success = "")
     {
@@ -158,7 +194,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private void SetBusy(bool busy)
     {
-        PairButton.IsEnabled = ConnectButton.IsEnabled = RefreshDevicesButton.IsEnabled = CatalogRefreshButton.IsEnabled = !busy;
+        PairButton.IsEnabled = ConnectButton.IsEnabled = !busy;
         QrButton.Content = busy ? "取消配对" : "显示二维码";
         QrButton.IsEnabled = true;
     }
@@ -167,6 +203,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         var devices = await PhoneAudioWindowCache.ReadDevicesAsync(token);
         token.ThrowIfCancellationRequested();
         ApplyDevices(PhoneAudioWindowCache.Devices ?? devices);
+        _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(devices, force: true, _lifetime.Token);
     }
     private void ApplyConnection(AndroidConnectionResult result, CancellationToken token)
     {
@@ -182,7 +219,6 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         }
         finally { _applyingConnection = false; }
     }
-    private async void RefreshDevices_Click(object sender, RoutedEventArgs e) => await RunAsync(RefreshDevicesCoreAsync);
     private async void RemoveDevice_Click(object sender, RoutedEventArgs e)
     {
         var profile = AndroidAudioHost.Phone.Profile;
@@ -299,13 +335,24 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private void Name_KeyDown(object sender, KeyEventArgs e) => InlineNameEdit.KeyDown(PhoneNameBox, e);
     private void Name_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => PhoneNameBox.Visibility = Visibility.Collapsed;
     private async void AddApps_Click(object sender, RoutedEventArgs e)
-    { CatalogPanel.Visibility = Visibility.Visible; await LoadCatalogAsync(false); }
-    private async void RefreshCatalog_Click(object sender, RoutedEventArgs e) => await LoadCatalogAsync(true);
+    {
+        if (_disposed || !_active || _busy || _device == null) return;
+        SetCatalogVisible(true);
+        CatalogSearch.Focus();
+        await LoadCatalogAsync(false);
+    }
     private void CloseCatalog_Click(object sender, RoutedEventArgs e) { _operation?.Cancel(); ReleaseCatalog(); }
+    private void SetCatalogVisible(bool visible)
+    {
+        if (visible && CatalogPanel.Visibility != Visibility.Visible) _deviceScrollOffset = DeviceScroll.VerticalOffset;
+        DeviceScroll.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+        CatalogPanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) DeviceScroll.ScrollToVerticalOffset(_deviceScrollOffset);
+    }
     private void ReleaseCatalog()
     {
         CatalogApps.ContextMenu.IsOpen = false;
-        CatalogPanel.Visibility = Visibility.Collapsed;
+        SetCatalogVisible(false);
         CatalogApps.ItemsSource = null;
         _catalog = Array.Empty<PhoneAppItem>(); _catalogChoices = Array.Empty<PhoneAppChoice>(); _catalogSerial = null;
     }

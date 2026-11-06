@@ -26,8 +26,8 @@
     {
         "Path":  "sonicroute-catalog.jar",
         "Group":  "audio",
-        "Bytes":  17791,
-        "SHA256":  "C4A32A2ACDD87854495EE35AF357B468F27875F494C5A80AC753A1DC911EE080"
+        "Bytes":  19852,
+        "SHA256":  "1751E7D20C29E19D0BAB27E91A37FE27AB863DFC2C863E8EF7B1D62D96346005"
     },
     {
         "Path":  "VirtualDisplay/avcodec-62.dll",

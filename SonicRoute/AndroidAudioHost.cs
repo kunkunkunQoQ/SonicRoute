@@ -163,6 +163,7 @@ internal static class AndroidAudioHost
     }
     private static void OnPhoneStoreChanged()
     {
+        (System.Windows.Application.Current as App)?.PhoneClipboardProfilesChanged();
         InvalidateOutputSnapshot();
         if (LazySources.IsValueCreated && LazyPhone.IsValueCreated)
             Sources.SyncSmartVolume(Phone.IsSmartVolumeEnabled);

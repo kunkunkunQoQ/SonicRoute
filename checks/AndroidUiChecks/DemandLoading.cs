@@ -61,7 +61,7 @@ internal static partial class Program
             var choices = new[] { new PhoneAppChoice(new PhoneAppItem(app), true),
                 new PhoneAppChoice(new PhoneAppItem(app with { Package = "cn.test.video", Name = "Video", Uid = 1002 }), false) };
             Set(page, "_catalog", choices.Select(a => a.Item).ToArray()); Set(page, "_catalogChoices", choices);
-            ((FrameworkElement)page.FindName("CatalogPanel")).Visibility = Visibility.Visible;
+            Call(page, "SetCatalogVisible", true);
             Call(page, "ApplyCatalogFilter");
             var catalogList = (ListBox)page.FindName("CatalogApps"); var bound = catalogList.ItemsSource;
             store.Retain(choices[1].Item.App);

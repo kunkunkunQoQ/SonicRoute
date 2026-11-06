@@ -53,6 +53,8 @@ internal static partial class Program
     {
         var cache = typeof(App).Assembly.GetType("SonicRoute.PhoneAudioWindowCache")!;
         const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
+        var phoneStore = (AndroidPhoneStore)typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!
+            .GetProperty("Phone", statics)!.GetValue(null)!;
         var discoveryProperty = cache.GetProperty("Discovery", statics)!;
         var previousDiscovery = discoveryProperty.GetValue(null);
         var previousSerial = cache.GetField("SelectedSerial", statics)!.GetValue(null);
@@ -88,7 +90,7 @@ internal static partial class Program
             typeof(MainWindow).GetField("_phoneDevicePage", Hidden)!.SetValue(main, page);
             typeof(MainWindow).GetMethod("SelectPhoneManagement", Hidden)!.Invoke(main, null);
             var sidebar = (StackPanel)main.FindName("PhoneDevicesHost");
-            var deviceButton = sidebar.Children.OfType<Button>().First();
+            var deviceList = (ListBox)main.FindName("PhoneDevicesList");
             var addButton = sidebar.Children.OfType<Button>().Last();
             void Click(string name) => ((Button)page.FindName(name)).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             void ShowConnection() => addButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -97,7 +99,7 @@ internal static partial class Program
             {
                 Until(() => !(bool)typeof(PhoneDevicePage).GetField("_busy", Hidden)!.GetValue(page)!);
                 Pump((Task)typeof(PhoneAudioWindow).GetMethod("InitializeDevicesAsync", Hidden)!.Invoke(phone, null)!);
-                Check(deviceButton.Visibility == Visibility.Visible
+                Check(deviceList.Items.Count > 0 && deviceList.SelectedItem != null
                     && ((ComboBox)phone.FindName("DeviceCombo")).SelectedItem is AndroidDevice selected && selected.Serial == target.Serial
                     && ((FrameworkElement)page.FindName("DeviceCard")).Visibility == Visibility.Visible,
                     label + " publishes the authorized phone to the sidebar, device page and reopened quick panel");
@@ -124,22 +126,28 @@ internal static partial class Program
             discovery.Publish(new[] { target });
             Check(((FrameworkElement)page.FindName("ConnectionPanel")).Visibility == Visibility.Visible,
                 "device notifications do not navigate away from the Add Device page");
-            deviceButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            deviceList.SelectedItem = deviceList.Items.Cast<object>().Single(row =>
+                (string)row.GetType().GetProperty("Id")!.GetValue(row)! ==
+                phoneStore.Profile.Id);
             Check(((FrameworkElement)page.FindName("DeviceCard")).Visibility == Visibility.Visible,
                 "the sibling phone sidebar entry explicitly returns to its own management page");
 
             ShowConnection(); Empty();
             var usb = new AndroidDevice("usb-fixture", "USB phone", "device", false);
-            var phoneStore = (AndroidPhoneStore)typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!
-                .GetProperty("Phone", statics)!.GetValue(null)!;
             string selectedProfile = phoneStore.Profile.Id;
-            scanned = new[] { usb }; Click("RefreshDevicesButton");
+            scanned = new[] { usb };
+            Pump((Task)typeof(MainWindow).GetMethod("RefreshPhoneDevicesAsync", Hidden)!.Invoke(main, null)!);
             Until(() => !(bool)typeof(PhoneDevicePage).GetField("_busy", Hidden)!.GetValue(page)!);
             Pump((Task)typeof(PhoneAudioWindow).GetMethod("InitializeDevicesAsync", Hidden)!.Invoke(phone, null)!);
             var combo = (ComboBox)phone.FindName("DeviceCombo");
             Check(phoneStore.Profile.Id == selectedProfile && combo.Items.Cast<AndroidDevice>().Any(d => d.Serial == usb.Serial)
                 && phoneStore.FindProfile(usb) != null,
                 "USB refresh adds a separate phone without switching or overwriting the selected phone");
+            var input = (FrameworkElement)page.FindName("ConnectAddressBox");
+            var connect = (FrameworkElement)page.FindName("ConnectButton");
+            Check(input.Parent == connect.Parent && Grid.GetColumn(input) == 0 && Grid.GetColumn(connect) == 1
+                && page.FindName("RefreshDevicesButton") == null && page.FindName("CatalogRefreshButton") == null,
+                "Direct Connect places its button beside the address and removes local refresh buttons");
             combo.SelectedItem = combo.Items.Cast<AndroidDevice>().Single(d => d.Serial == usb.Serial);
             Check(combo.SelectedItem is AndroidDevice selectedUsb && !selectedUsb.IsWifi
                 && phoneStore.Profile.LastDevice?.Serial == usb.Serial,

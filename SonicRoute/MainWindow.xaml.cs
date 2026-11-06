@@ -598,7 +598,7 @@ namespace SonicRoute
         private async void AppsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ++_appsStateRequest;
-            ShowPhoneDeviceDetails(false);
+            if (AppsListBox.SelectedItem != null) ShowPhoneDeviceDetails(false);
             AppsRenameBox.Visibility = Visibility.Collapsed;
             _appsSelected = (AppsListBox.SelectedItem as AppItem)?.Info;
             bool routesSuppressed = _suppressDevCombo;

@@ -205,6 +205,7 @@ namespace SonicRoute
                 if (msg == _activateMsg) { Dispatcher.BeginInvoke(ShowMainWindow); handled = true; }
                 return IntPtr.Zero;
             });
+            StartPhoneClipboard();
 
             // 前台监听：recent 模式下自动跟随前台音频应用（抖音/游戏等），并维护"最近有音频的前台应用"
             var foregroundWarmup = CurrentAppService.StartForegroundWatcher();
