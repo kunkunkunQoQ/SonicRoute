@@ -49,7 +49,7 @@ public sealed class AndroidWirelessConnection
         int colon = address.LastIndexOf(':');
         if (colon < 1 || !int.TryParse(address[(colon + 1)..], out int port) || port is < 1 or > 65535
             || !IPAddress.TryParse(address[..colon].Trim('[', ']'), out var ip))
-            throw new ArgumentException("请输入手机显示的 IP:端口，例如 192.168.1.100:37099。");
+            throw AndroidError.WithCode(new ArgumentException("请输入手机显示的 IP:端口，例如 192.168.1.100:37099。"), AndroidErrorCode.InvalidAddress);
         return ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{ip}]:{port}" : $"{ip}:{port}";
     }
     private static string Host(string address) => address[..address.LastIndexOf(':')];
@@ -76,14 +76,14 @@ public sealed class AndroidWirelessConnection
     }
     public Task<AndroidPairingResult> PairCodeAsync(string address, string code, CancellationToken token)
     {
-        if (!Regex.IsMatch(code, "\\A[0-9]{6}\\z")) throw new ArgumentException("请输入手机显示的 6 位配对码。");
+        if (!Regex.IsMatch(code, "\\A[0-9]{6}\\z")) throw AndroidError.WithCode(new ArgumentException("请输入手机显示的 6 位配对码。"), AndroidErrorCode.InvalidPairCode);
         return PairAsync(ValidateAddress(address), code, token);
     }
     private async Task<AndroidPairingResult> PairAsync(string address, string password, CancellationToken token)
     {
         string result = await RunAsync(token, "pair", address, password).ConfigureAwait(false);
         if (!result.Contains("Successfully paired", StringComparison.OrdinalIgnoreCase))
-            throw new IOException("配对未完成，请检查地址、配对码和手机上的配对窗口。");
+            throw AndroidError.WithCode(new IOException("配对未完成，请检查地址、配对码和手机上的配对窗口。"), AndroidErrorCode.PairFailed);
         var guid = Regex.Match(result, @"\[guid=([^\]\s]+)\]", RegexOptions.IgnoreCase);
         return new(address, guid.Success ? guid.Groups[1].Value : null);
     }
@@ -111,7 +111,7 @@ public sealed class AndroidWirelessConnection
             }
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { throw new TimeoutException("二维码已过期，点击重新生成；也可以使用配对码连接。"); }
+        { throw AndroidError.WithCode(new TimeoutException("二维码已过期，点击重新生成；也可以使用配对码连接。"), AndroidErrorCode.QrExpired); }
         finally { discoveryLifetime.Cancel(); try { await discovery.ConfigureAwait(false); } catch (OperationCanceledException) { } }
     }
     public static bool MatchesPairingName(string actual, string expected) => actual.Equals(expected, StringComparison.OrdinalIgnoreCase)
@@ -121,7 +121,7 @@ public sealed class AndroidWirelessConnection
     {
         string result = await RunAsync(token, "connect", address).ConfigureAwait(false);
         if (!result.Contains("connected to", StringComparison.OrdinalIgnoreCase))
-            throw new IOException("连接未完成，请填写无线调试首页的连接地址，配对端口不能用于连接。");
+            throw AndroidError.WithCode(new IOException("连接未完成，请填写无线调试首页的连接地址，配对端口不能用于连接。"), AndroidErrorCode.ConnectFailed);
     }
     public async Task<AndroidConnectionResult> ConnectAsync(string address, CancellationToken token)
     {
@@ -134,7 +134,7 @@ public sealed class AndroidWirelessConnection
             return await WaitForDeviceAsync(Host(address), address, null, null, deadline.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { throw new IOException("连接尚未就绪，请确认手机已授权，并检查无线调试首页的当前连接地址。"); }
+        { throw AndroidError.WithCode(new IOException("连接尚未就绪，请确认手机已授权，并检查无线调试首页的当前连接地址。"), AndroidErrorCode.ConnectNotReady); }
     }
     public async Task<AndroidConnectionResult> FinishPairingAsync(AndroidPairingResult pairing, CancellationToken token)
     {
@@ -146,19 +146,19 @@ public sealed class AndroidWirelessConnection
             TimeSpan.FromSeconds(12), discoveryLifetime.Token);
         try { return await WaitForDeviceAsync(host, null, pairing.Guid, null, deadline.Token, discovery).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { throw new IOException("配对已成功，但设备尚未连接。请在下方填写无线调试首页的连接地址，无需重新配对。"); }
+        { throw AndroidError.WithCode(new IOException("配对已成功，但设备尚未连接。请在下方填写无线调试首页的连接地址，无需重新配对。"), AndroidErrorCode.PairedButNotConnected); }
         finally { discoveryLifetime.Cancel(); try { await discovery.ConfigureAwait(false); } catch (OperationCanceledException) { } }
     }
     public async Task<AndroidConnectionResult> ReconnectAsync(AndroidDevice device, CancellationToken token)
     {
-        if (!device.IsWifi) throw new InvalidOperationException("请连接 USB 并在手机确认调试授权，然后刷新设备。");
+        if (!device.IsWifi) throw AndroidError.WithCode(new InvalidOperationException("请连接 USB 并在手机确认调试授权，然后刷新设备。"), AndroidErrorCode.UsbReconnectHint);
         string? address = null, guid = null;
         try { address = ValidateAddress(device.Serial); }
         catch (ArgumentException)
         {
             string name = ServiceName(device.Serial, ConnectType);
             if (!device.Serial.Contains("." + ConnectType, StringComparison.OrdinalIgnoreCase) || !name.StartsWith("adb-", StringComparison.OrdinalIgnoreCase))
-                throw new IOException("保存的无线地址已失效，请填写无线调试首页的当前连接地址。");
+                throw AndroidError.WithCode(new IOException("保存的无线地址已失效，请填写无线调试首页的当前连接地址。"), AndroidErrorCode.SavedWifiAddressExpired);
             int dash = name.LastIndexOf('-');
             guid = dash > 3 ? name[..dash] : name;
         }
@@ -177,7 +177,7 @@ public sealed class AndroidWirelessConnection
             return await WaitForDeviceAsync(address == null ? null : Host(address), address, guid, device.Serial, deadline.Token, discovery).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { throw new IOException("设备未连接，请开启手机无线调试，或填写首页的当前连接地址。"); }
+        { throw AndroidError.WithCode(new IOException("设备未连接，请开启手机无线调试，或填写首页的当前连接地址。"), AndroidErrorCode.DeviceNotConnectedWifiHint); }
         finally { discoveryLifetime.Cancel(); try { await discovery.ConfigureAwait(false); } catch (OperationCanceledException) { } }
     }
     private static bool MatchesGuid(string serial, string? guid)
@@ -248,27 +248,27 @@ public sealed class AndroidWirelessConnection
             }
             if (attempt < 14) await _delay(TimeSpan.FromSeconds(1), token).ConfigureAwait(false);
         }
-        throw new IOException("设备尚未就绪，请在手机确认调试授权；已配对时可填写无线调试首页的连接地址，无需重新配对。", lastError);
+        throw AndroidError.WithCode(new IOException("设备尚未就绪，请在手机确认调试授权；已配对时可填写无线调试首页的连接地址，无需重新配对。", lastError), AndroidErrorCode.DeviceNotReadyConfirmAuth);
     }
 
     public static string PairingFingerprint(string publicKey)
     {
         string encoded = publicKey.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
-            ?? throw new InvalidDataException("缺少电脑的 ADB 公钥。");
+            ?? throw AndroidError.WithCode(new InvalidDataException("缺少电脑的 ADB 公钥。"), AndroidErrorCode.MissingAdbPublicKey);
         byte[] key;
         try { key = Convert.FromBase64String(encoded); }
-        catch (FormatException) { throw new InvalidDataException("电脑的 ADB 公钥格式不正确。"); }
-        if (key.Length is < 64 or > 8192) throw new InvalidDataException("电脑的 ADB 公钥格式不正确。");
+        catch (FormatException) { throw AndroidError.WithCode(new InvalidDataException("电脑的 ADB 公钥格式不正确。"), AndroidErrorCode.InvalidAdbPublicKey); }
+        if (key.Length is < 64 or > 8192) throw AndroidError.WithCode(new InvalidDataException("电脑的 ADB 公钥格式不正确。"), AndroidErrorCode.InvalidAdbPublicKey);
         // Android's paired-device identifier is MD5 of its binary public key; this is not an authentication hash.
         return string.Join(':', MD5.HashData(key).Select(b => b.ToString("X2")));
     }
     public async Task UnpairAsync(AndroidDevice device, CancellationToken token)
     {
         var adb = _adb ?? throw new InvalidOperationException("Unpairing requires the bundled ADB runtime.");
-        if (device.State != "device") throw new IOException("手机未连接，请先重连，或在手机无线调试中移除此电脑。");
+        if (device.State != "device") throw AndroidError.WithCode(new IOException("手机未连接，请先重连，或在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairPhoneOffline);
         string publicKey = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".android", "adbkey.pub");
         if (!File.Exists(publicKey) || new FileInfo(publicKey).Length > 16384)
-            throw new IOException("无法确认此电脑的配对身份，请在手机无线调试中移除此电脑。");
+            throw AndroidError.WithCode(new IOException("无法确认此电脑的配对身份，请在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairIdentityUnavailable);
         string fingerprint = PairingFingerprint(await File.ReadAllTextAsync(publicKey, token).ConfigureAwait(false));
         var runtime = new VirtualDisplayRuntime(adb);
         await Task.Run(runtime.ValidateControl, token).ConfigureAwait(false);
@@ -281,7 +281,7 @@ public sealed class AndroidWirelessConnection
                 "com.genymobile.scrcpy.control.PairingControl", fingerprint, remote).ConfigureAwait(false); }
             catch (IOException ex) when (ex.Message.Contains("SR_UNPAIR_REQUESTED", StringComparison.Ordinal)) { return; }
             if (!result.Contains("SR_UNPAIR_REQUESTED", StringComparison.Ordinal) && !result.Contains("SR_UNPAIR_NOT_PAIRED", StringComparison.Ordinal))
-                throw new IOException("手机未确认取消配对，请在无线调试中移除此电脑。");
+                throw AndroidError.WithCode(new IOException("手机未确认取消配对，请在无线调试中移除此电脑。"), AndroidErrorCode.UnpairNotConfirmed);
         }
         finally
         {
@@ -293,7 +293,7 @@ public sealed class AndroidWirelessConnection
 
     public Task DisconnectAsync(AndroidDevice device, CancellationToken token)
     {
-        if (!device.IsWifi) throw new InvalidOperationException("USB 连接请拔出数据线；已停止此手机的接收。");
+        if (!device.IsWifi) throw AndroidError.WithCode(new InvalidOperationException("USB 连接请拔出数据线；已停止此手机的接收。"), AndroidErrorCode.UsbDisconnectHint);
         return RunAsync(token, "disconnect", device.Serial);
     }
 }

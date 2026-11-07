@@ -50,6 +50,7 @@ public partial class QuickPanelModernWindow
     private readonly ConcurrentDictionary<int, AndroidAudioSource> _androidMeterSources = new();
     private int _nextAndroidMeterId;
     private int _androidRefreshQueued;
+    private bool _androidLanguageDirty;
     private bool? _androidDropShared;
     private int AndroidRowOffset => _androidRows.Values.Count(r => AppListPanel.Items.Contains(r.Root));
     private bool HasAndroidMeterRows => _androidRows.Count > 0;
@@ -78,6 +79,7 @@ public partial class QuickPanelModernWindow
         AppListScroll.DragLeave += Android_DragLeave;
         ApplicationAudio.Changed += Android_StateChanged;
         AndroidAudioHost.DragStateChanged += Android_DragStateChanged;
+        L10n.Instance.PropertyChanged += AndroidLanguageChanged;
         IsVisibleChanged += AndroidPanelVisibilityChanged;
         Android_DragStateChanged();
         UpdatePhoneAudioButton();
@@ -106,8 +108,8 @@ public partial class QuickPanelModernWindow
             System.Windows.Automation.AutomationProperties.SetName(border, title);
             RegisterName(name, border); return border;
         }
-        AndroidComputerDropZone = Zone("AndroidComputerDropZone", "仅在电脑播放", "松开后，手机不再出声", new CornerRadius(6,6,0,0));
-        AndroidSharedDropZone = Zone("AndroidSharedDropZone", "手机与电脑同时播放", "松开后，保留手机声音", new CornerRadius(0,0,6,6));
+        AndroidComputerDropZone = Zone("AndroidComputerDropZone", L10n.T("Phone.DropComputerOnlyTitle"), L10n.T("Phone.DropComputerOnlyDesc"), new CornerRadius(6,6,0,0));
+        AndroidSharedDropZone = Zone("AndroidSharedDropZone", L10n.T("Phone.DropBothPlayTitle"), L10n.T("Phone.DropBothPlayDesc"), new CornerRadius(0,0,6,6));
         Grid.SetRow(AndroidSharedDropZone, 1); grid.Children.Add(AndroidComputerDropZone); grid.Children.Add(AndroidSharedDropZone);
         var divider = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Bottom };
         divider.SetResourceReference(BackgroundProperty, "Theme.Accent"); grid.Children.Add(divider);
@@ -127,17 +129,38 @@ public partial class QuickPanelModernWindow
         ClearAndroidDropHighlight();
         ApplicationAudio.Changed -= Android_StateChanged;
         AndroidAudioHost.DragStateChanged -= Android_DragStateChanged;
+        L10n.Instance.PropertyChanged -= AndroidLanguageChanged;
         IsVisibleChanged -= AndroidPanelVisibilityChanged;
         foreach (var row in _androidRows.Values) row.Wrap.FinishImmediately();
         _androidRows.Clear();
         _visibleAndroidMeterRows.Clear();
         _androidMeterSources.Clear();
     }
+    private void AndroidLanguageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (_isClosed) return;
+        UpdateZoneText(AndroidComputerDropZone, L10n.T("Phone.DropComputerOnlyTitle"), L10n.T("Phone.DropComputerOnlyDesc"));
+        UpdateZoneText(AndroidSharedDropZone, L10n.T("Phone.DropBothPlayTitle"), L10n.T("Phone.DropBothPlayDesc"));
+        UpdatePhoneAudioButton();
+        _androidLanguageDirty = true;
+        if (!IsLoaded || IsVisible) RefreshAndroidRow();
+        else Android_StateChanged();
+    }
+    private static void UpdateZoneText(Border? zone, string title, string description)
+    {
+        if (zone?.Child is StackPanel { Children.Count: >= 2 } labels
+            && labels.Children[0] is TextBlock heading && labels.Children[1] is TextBlock detail)
+        {
+            heading.Text = title;
+            detail.Text = description;
+            System.Windows.Automation.AutomationProperties.SetName(zone, title);
+        }
+    }
     internal void UpdatePhoneAudioButton()
     {
         bool enabled = ConfigService.Load().QuickPanelShowPhoneAudio;
         PhoneAudioButton.IsChecked = enabled;
-        System.Windows.Automation.AutomationProperties.SetName(PhoneAudioButton, enabled ? "关闭手机音频" : "打开手机音频");
+        System.Windows.Automation.AutomationProperties.SetName(PhoneAudioButton, enabled ? L10n.T("Phone.ClosePhoneAudio") : L10n.T("Phone.OpenPhoneAudio"));
         if (enabled) PhoneAudioButton.SetResourceReference(BackgroundProperty, "Theme.Overlay");
         else PhoneAudioButton.SetResourceReference(BackgroundProperty, "Theme.SurfaceBg");
     }
@@ -191,7 +214,7 @@ public partial class QuickPanelModernWindow
         {
             await AndroidAudioHost.AddAudioAsync(payload.Device, payload.App, keepPhoneAudio);
         }
-        catch (Exception ex) { if (!_isClosed) ShowOsd("手机音频", ex.Message); }
+        catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
     }
     private void Android_StateChanged()
     {
@@ -267,22 +290,33 @@ public partial class QuickPanelModernWindow
             row.Volume.Foreground = state.Muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
             row.Icon.Opacity = state.Muted ? 0.45 : 1;
             UpdateAndroidPeakVisual(row);
-            row.IconItem.RefreshName();
             string phoneName = AndroidAudioHost.Phone.GetDisplayName(source.Device);
             bool phoneNameChanged = row.PhoneName != phoneName;
             row.PhoneName = phoneName;
-            row.Root.ToolTip = state.Error ?? $"{row.IconItem.Label} · 来自 {phoneName}";
+            if (phoneNameChanged || _androidLanguageDirty)
+            {
+                row.IconItem.RefreshSourceLabel(string.Format(L10n.T("Phone.FromDevice"), phoneName));
+                row.Icon.ToolTip = string.Format(L10n.T("Phone.RowIconDragTooltip"), source.App.Name);
+                System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), source.App.Name));
+                row.Expand.ToolTip = L10n.T("Qp.ExpandDevices");
+                System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), source.App.Name));
+                System.Windows.Automation.AutomationProperties.SetName(row.Volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), source.App.Name));
+            }
+            row.IconItem.RefreshName();
+            string errText = AndroidErrorTranslation.Format(state);
+            row.Root.ToolTip = !string.IsNullOrEmpty(errText) ? errText : string.Format(L10n.T("Phone.RowFromPhoneTooltip"), row.IconItem.Label, phoneName);
             UpdateAndroidRoute(row);
             bool phoneOutputsChanged = row.Expanded && !AndroidAudioHost.GetDropZonesForDevice(source.Device)
                 .Select(static z => z.DeviceId)
                 .Where(id => !config.HiddenOutputDevices.Contains(id))
                 .SequenceEqual(row.Devices.Select(static d => d.Id).Where(ApplicationAudio.IsPhoneOutputDevice));
-            if ((outputsChanged || phoneNameChanged || phoneOutputsChanged) && row.Expanded) BuildAndroidDevices(row);
+            if ((outputsChanged || phoneNameChanged || phoneOutputsChanged || _androidLanguageDirty) && row.Expanded) BuildAndroidDevices(row);
             if (i >= AppListPanel.Items.Count || !ReferenceEquals(AppListPanel.Items[i], row.Root))
             {
                 AppListPanel.Items.Remove(row.Root); AppListPanel.Items.Insert(i, row.Root);
             }
         }
+        _androidLanguageDirty = false;
         if (!fromBuildAppRows && !_isClosed)
         {
             UpdateMeterTargets();
@@ -299,12 +333,12 @@ public partial class QuickPanelModernWindow
         var header = new Border { Height = legacy ? 36 : 52, Padding = new Thickness(4, 0, 4, 0), CornerRadius = new CornerRadius(8) };
         var dock = new DockPanel();
         row.Icon = new Button { Width = 30, Height = 30, VerticalAlignment = VerticalAlignment.Center,
-            Style = (Style)FindResource("RowIconButton"), ToolTip = source.App.Name + " · 手机音频\n拖到面板外打开独立屏幕" };
+            Style = (Style)FindResource("RowIconButton"), ToolTip = string.Format(L10n.T("Phone.RowIconDragTooltip"), source.App.Name) };
         row.Icon.Content = new ContentControl { Content = row.IconItem, Width = 22, Height = 22,
             ContentTemplate = (DataTemplate)FindResource("AppIconTemplate") };
         row.Icon.Click += (_, _) => session.SetMute(!session.State.Muted);
         AndroidAppDragController.Attach(row.Icon, () => new AndroidAppDrag(source.Device, source.App));
-        System.Windows.Automation.AutomationProperties.SetName(row.Icon, source.App.Name + " 手机音频静音");
+        System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), source.App.Name));
         DockPanel.SetDock(row.Icon, Dock.Left); dock.Children.Add(row.Icon);
         row.Expand = new ToggleButton { Width = legacy && showOutputName ? 80 : 32, Height = legacy ? 24 : 32,
             VerticalAlignment = VerticalAlignment.Center, Style = (Style)FindResource("RowExpandButton"), ToolTip = L10n.T("Qp.ExpandDevices") };
@@ -315,7 +349,7 @@ public partial class QuickPanelModernWindow
             row.Name = NewRowName(); row.Name.MaxWidth = 58; label.Children.Add(row.Name); label.Children.Add(glyph); row.Expand.Content = label;
         }
         else row.Expand.Content = glyph;
-        System.Windows.Automation.AutomationProperties.SetName(row.Expand, source.App.Name + " 输出与退出");
+        System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), source.App.Name));
         DockPanel.SetDock(row.Expand, Dock.Right); dock.Children.Add(row.Expand);
         Slider volume = legacy ? new Slider() : new AppRowVolumeSlider(); row.Volume = volume;
         volume.Minimum = 0; volume.Maximum = 100; volume.Value = state.Volume; volume.Height = legacy ? 32 : 48;
@@ -337,7 +371,7 @@ public partial class QuickPanelModernWindow
                 if (_meterEnabled && IsVisible && !_visibleAndroidMeterRows.Contains(row))
                     QueueMeterViewport();
             };
-        System.Windows.Automation.AutomationProperties.SetName(volume, source.App.Name + " 手机音量");
+        System.Windows.Automation.AutomationProperties.SetName(volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), source.App.Name));
         volume.ValueChanged += (_, e) =>
         {
             UpdateAndroidSliderLayout(row);
@@ -463,13 +497,13 @@ public partial class QuickPanelModernWindow
             row.Devices.Add((button, device.Id));
             button.Click += async (_, _) => await SetAndroidOutputAsync(row, device);
         });
-        var exit = new Button { Content = "退出", ToolTip = "停止接收此手机应用" };
+        var exit = new Button { Content = L10n.T("Tray.Exit"), ToolTip = L10n.T("Phone.StopReceivingApp") };
         exit.SetResourceReference(StyleProperty, "DevButton");
-        System.Windows.Automation.AutomationProperties.SetName(exit, row.Source.App.Name + " 退出");
+        System.Windows.Automation.AutomationProperties.SetName(exit, string.Format(L10n.T("Phone.RowExitAutomation"), row.Source.App.Name));
         exit.Click += async (_, _) =>
         {
             try { await ((App)System.Windows.Application.Current).ReturnAndroidToPhoneAsync(new AndroidAppDrag(row.Source.Device, row.Source.App)); }
-            catch (Exception ex) { if (!_isClosed) ShowOsd("手机音频", ex.Message); }
+            catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
         };
         wrap.Children.Add(exit); UpdateAndroidRoute(row);
     }
@@ -479,16 +513,16 @@ public partial class QuickPanelModernWindow
         try
         {
             var result = await ApplicationAudio.ApplyEndpointAsync(row.IconItem.Info, EDataFlow.eRender, device.Id);
-            if (!result.Success && !_isClosed) ShowOsd("手机音频", result.Message);
+            if (!result.Success && !_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), result.Message);
         }
-        catch (Exception ex) { if (!_isClosed) ShowOsd("手机音频", ex.Message); }
+        catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
         finally { if (!_isClosed) { UpdateAndroidRoute(row); foreach (var entry in row.Devices) entry.Button.IsEnabled = true; } }
     }
     private void UpdateAndroidRoute(AndroidRow row)
     {
         string id = row.Source.Session.State.OutputId ?? AudioService.SystemDefaultDeviceId;
         if (row.Name != null) row.Name.Text = row.ShowOutputName
-            ? ShortName(_outputDisplay.FirstOrDefault(d => d.Id == id)?.DisplayName ?? "系统输出") : row.IconItem.Label;
+            ? ShortName(_outputDisplay.FirstOrDefault(d => d.Id == id)?.DisplayName ?? L10n.T("Dev.SystemDefaultOut")) : row.IconItem.Label;
         foreach (var entry in row.Devices) entry.Button.SetResourceReference(StyleProperty, entry.Id == id ? "DevButtonActive" : "DevButton");
     }
     private void RefreshAndroidAppIcons(string processName)

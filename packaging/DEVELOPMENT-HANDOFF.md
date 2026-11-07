@@ -1,6 +1,24 @@
 # 开发交接
 
-更新：2026-11-06。提交、远端、运行包及本地未提交内容以实际 Git 状态和父容器最新收据为准。
+更新：2026-11-07。提交、远端、运行包及本地未提交内容以实际 Git 状态和父容器最新收据为准。
+
+## 当前交付：设置页崩溃修复与Gemini本地化完整复核
+
+- 用户随后授权提交本轮已完成的九语资源、本地化接入、设置崩溃修复及回归检查；只提交明确审查的文件，既有AndroidPcmSource.cs SmartVolume WIP保留，不纳入提交。复用下述检查和运行包，本次提交不重复构建/扩测，不修改README/Wiki或创建Release/tag/Store；最终提交及远端状态以Git和父容器提交收据为准。
+- 2026-11-07 用户反馈点击设置立即退出，并要求完整检查Gemini改动。Windows应用事件1026及隔离的真实设置页BAML Loaded事件均确认：新开源许可Run.Text绑定默认TwoWay，无法写回只读L10n索引器。已显式改成OneWay，保留实时翻译。
+- 同时修复挂起手机详情页后切换语言、再进入时缓存应用描述/操作名称不刷新的问题；AppItem新增带变更检测的来源标签通知，快速面板字幕绑定不再只通知Label。手机行仅在语言或手机名称变化时刷新相关翻译文案，删除重复峰值绘制及废弃的虚拟屏字符串通知处理器。没有新增轮询、连接重启或工作集裁剪，旧SmartVolume WIP Hash保持不变。
+- 审查原工作区37份差异中的36份Gemini文件，排除接手前AndroidPcmSource.cs WIP。九语各新增191个Phone键，原有译文语义未改；此前已通过的键/占位符校验继续适用，所有XAML翻译Run显式单向绑定。新增设置页回归覆盖真实加载事件、重复加载、浅深色/九语、手机页挂起恢复、来源绑定、58种错误标识、虚拟屏状态及关闭后解绑。
+- 本轮定向离线检查670项通过：设置与本地化390、手机页面60、路由38、剪贴板23、库设备操作39、库模块120；Full/Lite/Legacy编译通过。Lite790、Legacy46条警告，未治理无关/生成代码警告；最后Full增量发布日志无警告输出，不代表干净全量构建零警告。没有新真机、可见整窗人工点击、扫码/听音或整版性能结论。
+- 最新正常入口仍为父容器 `运行版/SonicRoute.exe`，Full x64 ReadyToRun单EXE /1.31.0.0 /27,125,105字节，SHA256 `BF7749876034BB8DB74DC1020FDC174CC9A006BD4CE431CFC916A82FB77CD2E7`。命名产物固定复用 `outputs/editions/SonicRoute-v1.31-x64.exe`。未启动、未停止共享ADB；本地包包含本轮本地化及仍未提交的既有SmartVolume调参，不能当作纯提交发行包。根入口及42号记录、`integration-docs/localization-review-receipt.json`和`outputs/localization-review-20261107/`记录构建时状态，后续提交以提交收据为准，以下简查包Hash已过时。
+
+## 前轮开发：手机功能九国语言本地化与实时语言切换
+
+- 2026-11-07 主代理按用户“简单检查并构建测试”要求复核：九语各816键、191个 `Phone.*` 键（含58个错误标识）、无重复/缺失键及占位符不一致，静态引用齐全；删除虚拟屏状态窗恢复按钮的两处重复赋值。Full x64 ReadyToRun 单EXE发布成功，27,125,105字节、SHA256 `684E8087C76DA7548CCA85CD7DAE8E742ED93077E89E92C3386945D3CD1CDB9A`，已更新父容器 `运行版/SonicRoute.exe`，未启动。构建无错误，日志有790条警告输出（含生成代码可空性与平台兼容性）；未顺带清理无关警告，也未重复下面前一位AI报告的UI/三版检查。当前未提交/推送，本地包包含现有SmartVolume WIP；未连接手机、无新增运行时语言切换或性能结论。收据在父容器 `outputs/phone-l10n-20261107/delivery-receipt.json`，当前交接见 `integration-docs/41-PHONE-LOCALIZATION-TEST-BUILD.md`。
+- 补齐手机相关功能在全部九种内置语言（`zh-CN`、`zh-TW`、`en-US`、`ja-JP`、`ko-KR`、`fr-FR`、`de-DE`、`es-ES`、`ru-RU`）下的本地化资源与实时切换更新，复用现有 `L10n.Instance`（XAML `Binding [Key]` 与代码 `L10n.T`），不新增翻译框架、轮询或后台定时器。
+- `SonicRoute.AndroidAudio` 新增稳定错误标识 `AndroidErrorCode`（实际58项，前一位AI报告的62项已更正）与 `AndroidError.WithCode` / `TryGetCode` 及 `AndroidVirtualDisplayManager.FailedError` 事件，不反向依赖 WPF 或 `SonicRoute`；展示层由 `AndroidErrorTranslation` 按 `Phone.Err.*` 键翻译。`PhoneClipboardSync` 内部连接状态改为稳定枚举 `SessionState`，不再依赖中文状态文案判断逻辑。
+- 已打开的界面（`MainWindow` 手机侧栏与开源许可链接、外部手机音频 `AppItem.SourceLabel`、`PhoneDevicePage` 设备详情/配对/应用目录/剪贴板/操作状态、`PhoneAudioWindow` 媒体卡片/分类描述/延迟提示/双向拖拽区域、`QuickPanelModernWindow` 手机音频开关/拖拽层/应用行输出与退出、`VirtualDisplayStatusWindow` 独立屏幕状态窗）均订阅 `L10n.Instance.PropertyChanged` 并在语言切换时原地刷新，无需重新连接手机；窗口或页面挂起/关闭即解绑，不持有已关闭界面引用。
+- 保持应用名、自定义手机名、歌名、歌手、包名、地址与协议字段原值；紧凑按钮采用适配窄布局的简洁译文。Full/Lite/Legacy 条件编译隔离保持不变，用户配置与 `%LocalAppData%\SonicRoute\Lang` 外置语言文件未修改。既有 `SonicRoute.AndroidAudio/AndroidPcmSource.cs` 未提交改动完整保留。
+- 必要验证完成：九语共 816 键齐全、0 重复键、占位符一致；Full、Lite（`-p:SonicRouteEdition=Lite`）、Legacy（`net48`）均 0 错误编译通过；`AndroidUiChecks`（`--phone-clipboard` 23 项、`--device-actions` 35 项、`--speaker-routing` 38 项、`--phone-pages` 60 项）及 `zh-CN` / `ja-JP` / `en-US` 实时切换与九语紧凑布局抽查全部通过。未启动全套性能测试或真机连接流程。
 
 ## 本次提交：按设备剪贴板同步、界面留白与前轮手机页面
 

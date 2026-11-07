@@ -26,15 +26,16 @@ public partial class MainWindow
         bool active = IsVisible && !_isClosed;
         if (active == _externalAudioSubscribed) return;
         _externalAudioSubscribed = active;
-        if (active) { ApplicationAudio.Changed += ExternalAudioChanged; RefreshExternalAudioLists(); }
-        else ApplicationAudio.Changed -= ExternalAudioChanged;
+        if (active) { ApplicationAudio.Changed += ExternalAudioChanged; L10n.Instance.PropertyChanged += ExternalAudioLanguageChanged; RefreshExternalAudioLists(); }
+        else { ApplicationAudio.Changed -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
     }
     private void ReleaseExternalAudio()
     {
         IsVisibleChanged -= ExternalAudioVisibilityChanged;
-        if (_externalAudioSubscribed) ApplicationAudio.Changed -= ExternalAudioChanged;
+        if (_externalAudioSubscribed) { ApplicationAudio.Changed -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
         _externalAudioSubscribed = false;
     }
+    private void ExternalAudioLanguageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => ExternalAudioChanged();
     private void ExternalAudioChanged()
     {
         if (_isClosed || Interlocked.Exchange(ref _externalAudioQueued, 1) != 0) return;
@@ -60,11 +61,16 @@ public partial class MainWindow
         var previous = current.ToDictionary(item => item.Identity);
         var apps = ApplicationAudio.MergeExternal(previous.Values.Select(item => item.Info));
         var items = apps.Select(info => previous.TryGetValue(info.Identity, out var item) && SameAutoApp(item.Info, info)
-            ? item : AppItem.From(info)).ToList();
+            ? ReuseExternalItem(item, info) : AppItem.From(info)).ToList();
         foreach (var item in items.Where(item => item.Info.IsExternal))
         { item.RefreshName(); item.RefreshAutoSwitchState(); item.IsMuted = ApplicationAudio.IsMuted(item.Info); }
         AppItem.LoadIconsAsync(items.Where(item => item.Info.IsExternal).ToList());
         return items;
+    }
+    private static AppItem ReuseExternalItem(AppItem item, AudioAppInfo info)
+    {
+        if (item.Info.IsExternal) item.Info.SourceLabel = info.SourceLabel;
+        return item;
     }
     private void RefreshExternalAudioLists()
     {

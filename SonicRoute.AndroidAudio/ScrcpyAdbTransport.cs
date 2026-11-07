@@ -24,9 +24,9 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         _adb.ValidateServer();
         int uid = await _adb.ResolveUidAsync(device, app.Package, token).ConfigureAwait(false);
-        if (uid != app.Uid) throw new IOException("应用 UID 已改变，请刷新列表后重新拖入。");
+        if (uid != app.Uid) throw AndroidError.WithCode(new IOException("应用 UID 已改变，请刷新列表后重新拖入。"), AndroidErrorCode.AppUidChanged);
         string sdkText = await _adb.RunAsync(token, "-s", _serial, "shell", "getprop", "ro.build.version.sdk").ConfigureAwait(false);
-        if (!int.TryParse(sdkText.Trim(), out int sdk) || sdk < 33) throw new NotSupportedException("应用音频捕获要求 Android 13 或更高；已验证的参考机型为 Android 16。");
+        if (!int.TryParse(sdkText.Trim(), out int sdk) || sdk < 33) throw AndroidError.WithCode(new NotSupportedException("应用音频捕获要求 Android 13 或更高；已验证的参考机型为 Android 16。"), AndroidErrorCode.Android13Required);
         if (!File.Exists(_adb.ServerFile)) throw new FileNotFoundException("Missing verified scrcpy server.", _adb.ServerFile);
         _remote = "/data/local/tmp/sonicroute_audio_" + _scid + ".jar";
         await _adb.RunAsync(token, "-s", _serial, "push", _adb.ServerFile, _remote).ConfigureAwait(false);
@@ -56,7 +56,7 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
             catch (Exception ex) when (ex is SocketException or EndOfStreamException)
             {
                 socket.Dispose();
-                if (_server.HasExited) throw new IOException("手机音频服务已退出；请查看日志。");
+                if (_server.HasExited) throw AndroidError.WithCode(new IOException("手机音频服务已退出；请查看日志。"), AndroidErrorCode.AudioServiceExited);
                 await Task.Delay(100, connect.Token).ConfigureAwait(false); // startup only; no idle retries
             }
             catch { socket.Dispose(); throw; }

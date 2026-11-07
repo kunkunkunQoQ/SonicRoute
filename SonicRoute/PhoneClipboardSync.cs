@@ -39,8 +39,16 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = true });
         internal Task Completion = Task.CompletedTask;
         internal bool Ready, Finished;
-        internal string Status = "正在连接…";
+        internal SessionState State = SessionState.Connecting;
     }
+    private enum SessionState { Connecting, Connected, Disconnected, DesktopUnavailable }
+    private static string SessionStatusText(SessionState state) => state switch
+    {
+        SessionState.Connected => L10n.T("Phone.ClipboardConnected"),
+        SessionState.Disconnected => L10n.T("Phone.ClipboardDisconnected"),
+        SessionState.DesktopUnavailable => L10n.T("Phone.ClipboardDesktopUnavailable"),
+        _ => L10n.T("Phone.ClipboardConnecting")
+    };
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<AndroidDevice> _enabled = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
@@ -55,8 +63,8 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     private CancellationTokenSource? _clipboardWork;
     public event Action? Changed;
     public bool IsEnabled(AndroidDevice? device) => device != null && _enabled.Any(d => AndroidDeviceIdentity.Matches(d, device));
-    public string Status(AndroidDevice? device) => _saveError ? "设置暂未保存，请检查配置目录" : device == null || !IsEnabled(device) ? "自动同步手机与电脑复制的文字"
-        : _sessions.TryGetValue(AndroidDeviceIdentity.Key(device), out var session) ? session.Status : "等待手机连接";
+    public string Status(AndroidDevice? device) => _saveError ? L10n.T("Phone.ClipboardSaveError") : device == null || !IsEnabled(device) ? L10n.T("Phone.ClipboardDefaultHint")
+        : _sessions.TryGetValue(AndroidDeviceIdentity.Key(device), out var session) ? SessionStatusText(session.State) : L10n.T("Phone.ClipboardWaitingPhone");
 
     public async Task InitializeAsync()
     {
@@ -85,7 +93,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         if (_disposed || enabled == IsEnabled(device)) return;
         if (enabled)
         {
-            if (_enabled.Count >= 32) throw new InvalidOperationException("最多同步32台手机。");
+            if (_enabled.Count >= 32) throw AndroidError.WithCode(new InvalidOperationException("最多同步32台手机。"), AndroidErrorCode.MaxClipboardPhones);
             _enabled.Add(device);
         }
         else _enabled.RemoveAll(d => AndroidDeviceIdentity.Matches(d, device));
@@ -150,14 +158,14 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     private async Task RunAsync(string key, Session session)
     {
         Task watch = Task.CompletedTask, send = Task.CompletedTask;
-        string status = "连接中断，刷新设备可重试";
+        SessionState endState = SessionState.Disconnected;
         try
         {
             session.Stop.Token.ThrowIfCancellationRequested();
             watch = session.Client.WatchAsync(session.Device, () => Post(() =>
             {
                 if (!Current(key, session) || session.Stop.IsCancellationRequested) return;
-                session.Ready = true; session.Status = "已连接 · 双向同步文字";
+                session.Ready = true; session.State = SessionState.Connected;
                 UpdateDesktopListener(); Changed?.Invoke();
             }), text => Post(() => { if (Current(key, session) && session.Ready && !session.Stop.IsCancellationRequested) AcceptText(text, session); }), session.Stop.Token);
             send = SendAsync(session);
@@ -172,7 +180,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             Post(() =>
             {
                 if (!Current(key, session)) return;
-                session.Ready = false; session.Finished = true; session.Status = status;
+                session.Ready = false; session.Finished = true; if (session.State != SessionState.DesktopUnavailable) session.State = endState;
                 UpdateDesktopListener(); Changed?.Invoke();
             });
             session.Stop.Dispose();
@@ -197,7 +205,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         {
             desktop.Changed -= DesktopChanged;
             _clipboardWork?.Cancel(); _clipboardWork?.Dispose(); _clipboardWork = null;
-            foreach (var session in _sessions.Values) { session.Status = "电脑剪贴板暂时不可用"; Cancel(session); }
+            foreach (var session in _sessions.Values) { session.State = SessionState.DesktopUnavailable; Cancel(session); }
         }
         if (!listening) { _lastText = null; Interlocked.Increment(ref _version); _readPending = false; _desktopWrite = null; }
     }

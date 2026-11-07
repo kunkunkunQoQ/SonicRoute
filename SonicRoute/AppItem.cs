@@ -110,6 +110,13 @@ namespace SonicRoute
         public void RefreshName() =>
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Label)));
 
+        internal void RefreshSourceLabel(string? label)
+        {
+            if (string.Equals(Info.SourceLabel, label, StringComparison.Ordinal)) return;
+            Info.SourceLabel = label;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Subtitle)));
+        }
+
         public static AppItem From(AudioAppInfo a) => new() { Info = a };
 
         /// <summary>只由 UI 调用；废弃旧请求，并复用普通加载流程。</summary>

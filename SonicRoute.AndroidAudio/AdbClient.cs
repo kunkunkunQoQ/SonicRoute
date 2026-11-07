@@ -25,7 +25,7 @@ public sealed class AdbClient
             PrepareRuntime("audio");
             using var file = File.OpenRead(ServerFile);
             if (Convert.ToHexString(SHA256.HashData(file)) != VerifiedServerSha256)
-                throw new InvalidDataException("手机音频组件校验失败，请重新下载完整版本。");
+                throw AndroidError.WithCode(new InvalidDataException("手机音频组件校验失败，请重新下载完整版本。"), AndroidErrorCode.ServerVerifyFailed);
             _serverVerified = true;
         }
     }
@@ -39,7 +39,7 @@ public sealed class AdbClient
     private Process StartCore(bool input, string[] arguments)
     {
         PrepareRuntime("adb");
-        if (!File.Exists(Executable)) throw new FileNotFoundException("缺少 Android 音频运行文件，请使用完整实验包。", Executable);
+        if (!File.Exists(Executable)) throw AndroidError.WithCode(new FileNotFoundException("缺少 Android 音频运行文件，请使用完整实验包。", Executable), AndroidErrorCode.MissingRuntime);
         var info = new ProcessStartInfo(Executable) { UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = RuntimeDirectory, RedirectStandardInput = input };
@@ -127,7 +127,7 @@ public sealed class AdbClient
             if (packages.Count == 0) return Array.Empty<AndroidApp>();
             if (packages.Count > 1000) throw new ArgumentException("Too many retained applications.");
         }
-        if (device.State != "device") throw new IOException("请先在手机上允许 ADB 调试授权。");
+        if (device.State != "device") throw AndroidError.WithCode(new IOException("请先在手机上允许 ADB 调试授权。"), AndroidErrorCode.AuthorizeAdbFirst);
         await PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         ValidateServer();
         string catalog = Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
@@ -170,7 +170,7 @@ public sealed class AdbClient
 
     public async Task<IReadOnlyList<AndroidOutputSink>> OutputsAsync(AndroidDevice device, CancellationToken token)
     {
-        if (device.State != "device") throw new IOException("请先在手机上允许 ADB 调试授权。");
+        if (device.State != "device") throw AndroidError.WithCode(new IOException("请先在手机上允许 ADB 调试授权。"), AndroidErrorCode.AuthorizeAdbFirst);
         await PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         ValidateServer();
         string catalog = Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
@@ -208,9 +208,9 @@ public sealed class AdbClient
         string text = await RunAsync(token, "-s", device.Serial, "shell", "pm", "list", "packages", "-U").ConfigureAwait(false);
         var match = Regex.Match(text, @"(?m)^package:" + Regex.Escape(package) + @"\s+uid:(\d+)\s*$");
         if (!match.Success || !int.TryParse(match.Groups[1].Value, out int uid) || uid <= 0)
-            throw new IOException("目标应用或 UID 已不可用，请刷新手机应用列表。");
+            throw AndroidError.WithCode(new IOException("目标应用或 UID 已不可用，请刷新手机应用列表。"), AndroidErrorCode.AppOrUidUnavailable);
         if (Regex.Matches(text, @"(?m)^package:\S+\s+uid:" + uid + @"\s*$").Count > 1)
-            throw new IOException("目标应用与其他包共享 UID，无法保证单应用隔离；此实验版拒绝启动该目标。");
+            throw AndroidError.WithCode(new IOException("目标应用与其他包共享 UID，无法保证单应用隔离；此实验版拒绝启动该目标。"), AndroidErrorCode.SharedUidUnsupported);
         return uid;
     }
 

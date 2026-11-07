@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 #if SONICROUTE_PHONE
 using SonicRoute.Core;
@@ -32,7 +32,7 @@ public partial class App
     }
     private void OnPhoneClipboardChanged() => PhoneClipboardChanged?.Invoke();
     internal bool PhoneClipboardEnabled(SonicRoute.AndroidAudio.AndroidDevice? device) => _phoneClipboard?.IsEnabled(device) == true;
-    internal string PhoneClipboardStatus(SonicRoute.AndroidAudio.AndroidDevice? device) => _phoneClipboard?.Status(device) ?? "自动同步手机与电脑复制的文字";
+    internal string PhoneClipboardStatus(SonicRoute.AndroidAudio.AndroidDevice? device) => _phoneClipboard?.Status(device) ?? L10n.T("Phone.ClipboardDefaultHint");
     internal void PhoneClipboardProfilesChanged() => _phoneClipboard?.ProfilesChanged();
     internal void ShowPhoneManagement()
     {
@@ -56,7 +56,7 @@ public partial class App
         {
             if (!_androidDisplayNotifications)
             {
-                AndroidAudioHost.Displays.Failed += AndroidDisplayFailed;
+                AndroidAudioHost.Displays.FailedError += AndroidDisplayFailedError;
                 _androidDisplayNotifications = true;
             }
             var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(screenX, screenY)).WorkingArea;
@@ -75,7 +75,7 @@ public partial class App
         catch (Exception ex)
         {
             System.Diagnostics.Trace.WriteLine("Android independent window: " + ex);
-            if (!_exiting) _trayIcon?.ShowBalloonTip(5000, payload.App.Name, ex.Message, System.Windows.Forms.ToolTipIcon.Info);
+            if (!_exiting) _trayIcon?.ShowBalloonTip(5000, payload.App.Name, AndroidErrorTranslation.Format(ex), System.Windows.Forms.ToolTipIcon.Info);
         }
     }
     private async Task WatchDisplayAsync(SonicRoute.AndroidAudio.IVirtualDisplayClient display, VirtualDisplayPresentation watch)
@@ -99,12 +99,13 @@ public partial class App
             await Task.WhenAll(sources.Select(source => AndroidAudioHost.Sources.RemoveAsync(source.Id)));
         }
     }
-    private void AndroidDisplayFailed(string message)
+    private void AndroidDisplayFailedError(SonicRoute.AndroidAudio.AndroidApp? app, Exception ex)
     {
-        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => AndroidDisplayFailed(message))); return; }
-        if (!_exiting) _trayIcon?.ShowBalloonTip(5000, "手机独立屏幕", message, System.Windows.Forms.ToolTipIcon.Info);
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => AndroidDisplayFailedError(app, ex))); return; }
+        string detail = AndroidErrorTranslation.Format(ex);
+        string body = app != null ? $"{app.Name}：{detail}" : detail;
+        if (!_exiting) _trayIcon?.ShowBalloonTip(5000, L10n.T("Phone.DisplayFallbackTitle"), body, System.Windows.Forms.ToolTipIcon.Info);
     }
-
     internal void TogglePhoneAudioWindow(QuickPanelModernWindow panel)
     {
         var config = ConfigService.Load();
@@ -178,7 +179,7 @@ public partial class App
             _phoneClipboard.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
         AndroidAudioHost.StopMedia();
-        if (_androidDisplayNotifications) AndroidAudioHost.Displays.Failed -= AndroidDisplayFailed;
+        if (_androidDisplayNotifications) AndroidAudioHost.Displays.FailedError -= AndroidDisplayFailedError;
         if (AndroidAudioHost.AreDisplaysCreated) AndroidAudioHost.Displays.DisposeAsync().AsTask().GetAwaiter().GetResult();
         if (AndroidAudioHost.IsCreated) AndroidAudioHost.Sources.DisposeAsync().AsTask().GetAwaiter().GetResult();
         AndroidAudioHost.FlushSettings();

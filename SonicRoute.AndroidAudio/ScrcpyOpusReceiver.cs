@@ -18,7 +18,7 @@ public sealed class ScrcpyOpusReceiver
         byte[] codec = new byte[4];
         await stream.ReadExactlyAsync(codec, token).ConfigureAwait(false);
         uint codecId = BinaryPrimitives.ReadUInt32BigEndian(codec);
-        if (codecId is 0 or 1) throw new InvalidDataException("手机未能建立应用音频捕获，请检查 Android 版本及应用支持情况。");
+        if (codecId is 0 or 1) throw AndroidError.WithCode(new InvalidDataException("手机未能建立应用音频捕获，请检查 Android 版本及应用支持情况。"), AndroidErrorCode.AudioCaptureNotEstablished);
         if (codecId != 0x6f707573) throw new InvalidDataException("Expected scrcpy Opus audio stream.");
         byte[] header = new byte[12], payload = ArrayPool<byte>.Shared.Rent(4096);
         try

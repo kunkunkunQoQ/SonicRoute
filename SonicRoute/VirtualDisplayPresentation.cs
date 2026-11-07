@@ -94,7 +94,8 @@ internal sealed class VirtualDisplayStatusWindow : Window
     private readonly IVirtualDisplayClient _client;
     private readonly TextBlock _title = new() { FontSize = 18, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _detail = new() { Margin = new Thickness(0, 10, 0, 18), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
-    private readonly Button _restore = new() { Content = "切回电脑", Padding = new Thickness(18, 8, 18, 8), HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+    private readonly Button _restore = new() { Content = L10n.T("Phone.DisplaySwitchToPc"), Padding = new Thickness(18, 8, 18, 8), HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
+    private VirtualDisplayState _state;
     private readonly WinEventProc _location;
     private IntPtr _owner, _hook;
     private bool _closed, _queued;
@@ -114,18 +115,19 @@ internal sealed class VirtualDisplayStatusWindow : Window
         var body = new StackPanel { Margin = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
         body.Children.Add(_title); body.Children.Add(_detail); body.Children.Add(_restore); Content = body;
         _location = (_, _, hwnd, objectId, _, _, _) => { if (hwnd == _owner && objectId == 0) QueuePosition(); };
+        L10n.Instance.PropertyChanged += OnLanguageChanged;
         Closed += (_, _) =>
         {
+            L10n.Instance.PropertyChanged -= OnLanguageChanged;
             _closed = true; if (_hook != IntPtr.Zero) { UnhookWinEvent(_hook); _hook = IntPtr.Zero; }
             ((App)System.Windows.Application.Current).ReleaseClosedUiWindow(this);
         };
     }
     internal void UpdateState(VirtualDisplayState state)
     {
-        _title.Text = state switch { VirtualDisplayState.OnPhone => "正在手机上使用", VirtualDisplayState.Recovering => "正在恢复画面", _ => "应用画面已暂停" };
-        _detail.Text = state == VirtualDisplayState.OnPhone ? "手机退出后会尝试恢复到电脑" : state == VirtualDisplayState.Recovering ? "请稍候" : "可以重新打开到这个窗口";
+        _state = state;
+        RefreshText();
         _restore.IsEnabled = state != VirtualDisplayState.Recovering;
-        _restore.Content = state == VirtualDisplayState.OnPhone ? "切回电脑" : "恢复画面";
         if (!IsVisible && !_closed)
         {
             try
@@ -139,6 +141,16 @@ internal sealed class VirtualDisplayStatusWindow : Window
             catch (ArgumentException) { Close(); }
             catch (InvalidOperationException) { Close(); }
         }
+    }
+    private void OnLanguageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!_closed) RefreshText();
+    }
+    private void RefreshText()
+    {
+        _title.Text = _state switch { VirtualDisplayState.OnPhone => L10n.T("Phone.DisplayUsingOnPhone"), VirtualDisplayState.Recovering => L10n.T("Phone.DisplayRecovering"), _ => L10n.T("Phone.DisplayScreenPaused") };
+        _detail.Text = _state == VirtualDisplayState.OnPhone ? L10n.T("Phone.DisplayUsingOnPhoneDetail") : _state == VirtualDisplayState.Recovering ? L10n.T("Phone.DisplayPleaseWait") : L10n.T("Phone.DisplayCanReopenHere");
+        _restore.Content = _state == VirtualDisplayState.OnPhone ? L10n.T("Phone.DisplaySwitchToPc") : L10n.T("Phone.DisplayRestoreScreen");
     }
     private void QueuePosition()
     {

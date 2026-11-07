@@ -56,7 +56,7 @@
                     </Button>
                     <CheckBox IsChecked="{Binding SmartVolume, Mode=OneWay}" Style="{DynamicResource AutomationSwitch}"
                               Width="34" Margin="8,0,0,0" VerticalAlignment="Center" Checked="SmartVolume_Changed" Unchecked="SmartVolume_Changed"
-                              ToolTip="智能音量" AutomationProperties.Name="智能音量"/>
+                              ToolTip="{Binding [Phone.SmartVolumeTitle], Source={x:Static local:L10n.Instance}}" AutomationProperties.Name="{Binding [Phone.SmartVolumeTitle], Source={x:Static local:L10n.Instance}}"/>
                 </StackPanel>
             </Grid>
         </DataTemplate>
@@ -86,9 +86,9 @@
                                     </Style></TextBlock.Style>
                                 </TextBlock>
                                 <TextBox x:Name="PhoneNameBox" Visibility="Collapsed" MaxLength="64" FontSize="16" FontWeight="SemiBold" Padding="4,0"
-                                         TextChanged="Name_TextChanged" KeyDown="Name_KeyDown" LostKeyboardFocus="Name_LostFocus" AutomationProperties.Name="手机名称"/>
+                                         TextChanged="Name_TextChanged" KeyDown="Name_KeyDown" LostKeyboardFocus="Name_LostFocus" AutomationProperties.Name="{Binding [Phone.DeviceNameAutomation], Source={x:Static local:L10n.Instance}}"/>
                                 <Button x:Name="RenameButton" Grid.Column="1" Style="{StaticResource GhostButton}" Width="26" Height="26" Margin="6,0,0,0"
-                                        VerticalAlignment="Center" Click="Rename_Click" AutomationProperties.Name="重命名手机">
+                                        VerticalAlignment="Center" Click="Rename_Click" AutomationProperties.Name="{Binding [Phone.RenamePhoneAutomation], Source={x:Static local:L10n.Instance}}">
                                     <Viewbox Width="14" Height="14"><Path Data="{x:Static local:AutomationIcons.Edit}" Width="24" Height="24" Stroke="{DynamicResource Theme.TextSecondary}"
                                               StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/></Viewbox>
                                 </Button>
@@ -96,10 +96,10 @@
                             <TextBlock x:Name="DeviceDescription" Style="{StaticResource PhoneHint}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" FontSize="11" Margin="0,4,8,0"/>
                         </StackPanel>
                         <StackPanel x:Name="DeviceCommands" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0">
-                            <Button x:Name="ReconnectButton" Content="重连" Style="{StaticResource PhoneDeviceActionButton}" Click="Reconnect_Click"/>
-                            <Button x:Name="DisconnectButton" Content="断开" Style="{StaticResource PhoneDeviceActionButton}" Click="Disconnect_Click"/>
-                            <Button x:Name="UnpairButton" Content="取消配对" Style="{StaticResource PhoneDeviceActionButton}" Click="Unpair_Click"/>
-                            <Button x:Name="RemoveDeviceButton" Content="移除设备" Style="{StaticResource PhoneDeviceActionButton}" Margin="0" Click="RemoveDevice_Click"/>
+                            <Button x:Name="ReconnectButton" Content="{Binding [Phone.Reconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Reconnect_Click"/>
+                            <Button x:Name="DisconnectButton" Content="{Binding [Phone.Disconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Disconnect_Click"/>
+                            <Button x:Name="UnpairButton" Content="{Binding [Phone.Unpair], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Unpair_Click"/>
+                            <Button x:Name="RemoveDeviceButton" Content="{Binding [Phone.DeleteDevice], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Margin="0" Click="RemoveDevice_Click"/>
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -107,26 +107,26 @@
             <StackPanel x:Name="RetainedPanel">
                 <Grid Margin="4,0,4,6">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="快速面板显示应用" FontSize="17" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding [Phone.QuickPanelAppsTitle], Source={x:Static local:L10n.Instance}}" FontSize="17" FontWeight="SemiBold"/>
                     <TextBlock x:Name="RetainedCount" Grid.Column="1" Style="{StaticResource PhoneHint}" VerticalAlignment="Center"/>
                 </Grid>
-                <TextBlock Text="固定的应用将直接显示在快速手机面板中；开启智能音量可自动平衡声音范围。" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
+                <TextBlock Text="{Binding [Phone.PinDesc], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
                 <Border Style="{StaticResource PhoneCard}" Padding="12,6">
                     <StackPanel>
                         <ItemsControl x:Name="RetainedApps" ItemTemplate="{StaticResource PhoneLibraryItem}"/>
-                        <TextBlock x:Name="RetainedEmpty" Text="添加常用 App，下次打开即可使用。" Style="{StaticResource PhoneHint}" Margin="0,12"/>
+                        <TextBlock x:Name="RetainedEmpty" Text="{Binding [Phone.RetainedEmptyHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,12"/>
                     </StackPanel>
                 </Border>
-                <Button x:Name="AddAppsButton" Content="＋  添加快速面板显示应用" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Height="38" Margin="0,0,0,12" Click="AddApps_Click"/>
+                <Button x:Name="AddAppsButton" Content="{Binding [Phone.AddQuickPanelAppButton], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Height="38" Margin="0,0,0,12" Click="AddApps_Click"/>
                 <Border x:Name="ClipboardCard" Style="{StaticResource PhoneCard}" Margin="0">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Margin="0,0,12,0">
-                            <TextBlock Text="剪贴板同步" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="ClipboardStatus" Text="自动同步手机与电脑复制的文字" Style="{StaticResource PhoneHint}" FontSize="11" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding [Phone.ClipboardSyncTitle], Source={x:Static local:L10n.Instance}}" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="ClipboardStatus" Text="{Binding [Phone.ClipboardDefaultHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" FontSize="11" Margin="0,4,0,0"/>
                         </StackPanel>
                         <CheckBox x:Name="ClipboardSyncToggle" Grid.Column="1" Style="{DynamicResource AutomationSwitch}" Width="34"
-                                  VerticalAlignment="Center" Checked="ClipboardSync_Changed" Unchecked="ClipboardSync_Changed" AutomationProperties.Name="自动同步剪贴板"/>
+                                  VerticalAlignment="Center" Checked="ClipboardSync_Changed" Unchecked="ClipboardSync_Changed" AutomationProperties.Name="{Binding [Phone.ClipboardEnableToggle], Source={x:Static local:L10n.Instance}}"/>
                     </Grid>
                 </Border>
             </StackPanel>
@@ -136,32 +136,32 @@
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Border x:Name="QrPairCard" Style="{StaticResource PhoneCard}">
                     <StackPanel>
-                        <TextBlock Text="扫码配对" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock Text="开发者选项 → 无线调试 → 二维码配对" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
+                        <TextBlock Text="{Binding [Phone.QrPairTitle], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding [Phone.QrPairSteps], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
                         <Image x:Name="PairQrImage" Width="166" Height="166" Visibility="Collapsed" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        <Button x:Name="QrButton" Content="显示二维码" Style="{StaticResource QuickPanelToolButton}" Click="QrPair_Click" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        <Button x:Name="QrButton" Content="{Binding [Phone.ShowQr], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Click="QrPair_Click" HorizontalAlignment="Center" Margin="0,6,0,0"/>
                     </StackPanel>
                 </Border>
                 <Border x:Name="CodePairCard" Style="{StaticResource PhoneCard}" Grid.Column="1">
                     <StackPanel>
-                        <TextBlock Text="配对码连接" FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock Text="无线调试 → 使用配对码配对设备" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
-                        <TextBlock Text="配对地址（IP:端口）" Margin="0,0,0,6"/>
-                        <TextBox x:Name="PairAddressBox" Style="{StaticResource ModernTextBox}" AutomationProperties.Name="配对地址"/>
-                        <TextBlock Text="6 位配对码" Margin="0,8,0,6"/>
-                        <TextBox x:Name="PairCodeBox" MaxLength="6" FontSize="18" FontFamily="Consolas" Style="{StaticResource ModernTextBox}" AutomationProperties.Name="6 位配对码"/>
-                        <Button x:Name="PairButton" Content="配对并连接" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Margin="0,8,0,0" Click="PairCode_Click"/>
+                        <TextBlock Text="{Binding [Phone.CodePairTitle], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding [Phone.CodePairSteps], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
+                        <TextBlock Text="{Binding [Phone.PairingAddressLabel], Source={x:Static local:L10n.Instance}}" Margin="0,0,0,6"/>
+                        <TextBox x:Name="PairAddressBox" Style="{StaticResource ModernTextBox}" AutomationProperties.Name="{Binding [Phone.PairingAddressAutomation], Source={x:Static local:L10n.Instance}}"/>
+                        <TextBlock Text="{Binding [Phone.PairingCodeLabel], Source={x:Static local:L10n.Instance}}" Margin="0,8,0,6"/>
+                        <TextBox x:Name="PairCodeBox" MaxLength="6" FontSize="18" FontFamily="Consolas" Style="{StaticResource ModernTextBox}" AutomationProperties.Name="{Binding [Phone.PairingCodeAutomation], Source={x:Static local:L10n.Instance}}"/>
+                        <Button x:Name="PairButton" Content="{Binding [Phone.PairAndConnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Margin="0,8,0,0" Click="PairCode_Click"/>
                     </StackPanel>
                 </Border>
                 </Grid>
                 <Border Style="{StaticResource PhoneCard}">
                     <StackPanel>
-                        <TextBlock Text="直接连接" FontWeight="SemiBold"/>
-                        <TextBlock Text="无线调试首页 IP:端口（非配对端口）。USB 授权后刷新。" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
+                        <TextBlock Text="{Binding [Phone.DirectConnectTitle], Source={x:Static local:L10n.Instance}}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding [Phone.DirectConnectDesc], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
                         <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBox x:Name="ConnectAddressBox" Style="{StaticResource ModernTextBox}" Height="32" AutomationProperties.Name="连接地址"/>
-                            <Button x:Name="ConnectButton" Grid.Column="1" Content="连接" Style="{StaticResource PhoneCommandButton}" Height="32" Margin="8,0,0,0" Click="Connect_Click"/>
+                            <TextBox x:Name="ConnectAddressBox" Style="{StaticResource ModernTextBox}" Height="32" AutomationProperties.Name="{Binding [Phone.ConnectAddressAutomation], Source={x:Static local:L10n.Instance}}"/>
+                            <Button x:Name="ConnectButton" Grid.Column="1" Content="{Binding [Phone.ConnectShort], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneCommandButton}" Height="32" Margin="8,0,0,0" Click="Connect_Click"/>
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -173,10 +173,10 @@
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                 <DockPanel Margin="0,0,0,12">
-                    <Button x:Name="CloseCatalogButton" Content="完成" DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Height="32" MinWidth="64" Margin="10,0,0,0" Click="CloseCatalog_Click"/>
-                    <TextBlock Text="添加快速面板显示应用" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    <Button x:Name="CloseCatalogButton" Content="{Binding [Phone.DoneButton], Source={x:Static local:L10n.Instance}}" DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Height="32" MinWidth="64" Margin="10,0,0,0" Click="CloseCatalog_Click"/>
+                    <TextBlock Text="{Binding [Phone.AppPickerTitle], Source={x:Static local:L10n.Instance}}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
                 </DockPanel>
-                <TextBox x:Name="CatalogSearch" Grid.Row="1" Style="{StaticResource ModernTextBox}" local:InputAppearance.HasSearchIcon="True" Height="34" TextChanged="CatalogSearch_Changed" AutomationProperties.Name="搜索手机应用"/>
+                <TextBox x:Name="CatalogSearch" Grid.Row="1" Style="{StaticResource ModernTextBox}" local:InputAppearance.HasSearchIcon="True" Height="34" TextChanged="CatalogSearch_Changed" AutomationProperties.Name="{Binding [Phone.AppPickerSearchAutomation], Source={x:Static local:L10n.Instance}}"/>
                 <TextBlock x:Name="CatalogStatus" Grid.Row="2" Style="{StaticResource PhoneHint}" Margin="0,8"/>
                 <ListBox x:Name="CatalogApps" Grid.Row="3" Background="Transparent" BorderThickness="0" SelectionMode="Extended"
                          ItemContainerStyle="{StaticResource RoundedListBoxItem}"
@@ -185,7 +185,7 @@
                          PreviewMouseRightButtonDown="CatalogApps_RightButtonDown" ContextMenuOpening="CatalogMenu_Opening">
                     <ListBox.ContextMenu>
                         <ContextMenu Style="{DynamicResource ConvenienceMenu}">
-                            <MenuItem x:Name="AddSelectedAppsMenu" Header="添加所选应用" Style="{DynamicResource ConvenienceMenuItem}" Click="AddSelectedApps_Click"/>
+                            <MenuItem x:Name="AddSelectedAppsMenu" Header="{Binding [Phone.AddSelectedApps], Source={x:Static local:L10n.Instance}}" Style="{DynamicResource ConvenienceMenuItem}" Click="AddSelectedApps_Click"/>
                         </ContextMenu>
                     </ListBox.ContextMenu>
                     <ListBox.ItemTemplate><DataTemplate>

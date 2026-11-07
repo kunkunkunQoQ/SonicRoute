@@ -25,7 +25,10 @@ public partial class MainWindow
     {
 #if SONICROUTE_PHONE
         if (sender is not TextBlock links || links.Inlines.OfType<Hyperlink>().Any(link => link.Name == "OpenSourceLicensesLink")) return;
-        var licenseLink = new Hyperlink(new Run("开源许可")) { Name = "OpenSourceLicensesLink",
+        var licenseRun = new Run();
+        BindingOperations.SetBinding(licenseRun, Run.TextProperty, new Binding("[Phone.OpenSourceLicenses]")
+        { Source = L10n.Instance, Mode = BindingMode.OneWay });
+        var licenseLink = new Hyperlink(licenseRun) { Name = "OpenSourceLicensesLink",
             NavigateUri = new Uri("https://github.com/kunkunkunQoQ/SonicRoute/blob/master/packaging/AndroidLab/THIRD-PARTY-NOTICES.md") };
         licenseLink.SetResourceReference(Hyperlink.ForegroundProperty, "Theme.Accent");
         licenseLink.RequestNavigate += ThirdPartyNotices_RequestNavigate;
@@ -80,7 +83,8 @@ public partial class MainWindow
         Grid.SetColumn(PhoneDetailsHost, 1); AppsPage.Children.Add(PhoneDetailsHost);
         RegisterName(PhoneDetailsHost.Name, PhoneDetailsHost);
         PhoneDevicesHost.Visibility = Visibility.Visible;
-        var heading = new TextBlock { Text = "手机", Margin = new Thickness(0,0,8,0), VerticalAlignment = VerticalAlignment.Center };
+        var heading = new TextBlock { Margin = new Thickness(0,0,8,0), VerticalAlignment = VerticalAlignment.Center };
+        BindingOperations.SetBinding(heading, TextBlock.TextProperty, new Binding("[Phone.Title]") { Source = L10n.Instance });
         heading.SetResourceReference(StyleProperty, "SectionTitle");
         var headingGrid = new Grid { Margin = new Thickness(2,0,2,12) }; headingGrid.ColumnDefinitions.Add(new()); headingGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         headingGrid.Children.Add(heading);
@@ -101,7 +105,8 @@ public partial class MainWindow
         _phoneDevicesList.SelectionChanged += PhoneSidebar_SelectionChanged;
         RegisterName(_phoneDevicesList.Name, _phoneDevicesList);
         PhoneDevicesHost.Children.Add(_phoneDevicesList);
-        var add = new Button { Content = "＋  添加设备", Height = 26, FontSize = 12, Padding = new Thickness(6,2,6,2), Margin = new Thickness(0,0,0,8) };
+        var add = new Button { Height = 26, FontSize = 12, Padding = new Thickness(6,2,6,2), Margin = new Thickness(0,0,0,8) };
+        BindingOperations.SetBinding(add, ContentControl.ContentProperty, new Binding("[Phone.AddDeviceButton]") { Source = L10n.Instance });
         add.SetResourceReference(StyleProperty,"QuickPanelToolButton");
         add.SetResourceReference(ForegroundProperty,"Theme.TextPrimary");
         add.Click += (_,_) => { SelectPhoneManagement(); _phoneDevicePage?.ShowConnection(); UpdatePhoneSidebarSelection(); };
@@ -109,6 +114,7 @@ public partial class MainWindow
         var line = new Border { Height = 1, Margin = new Thickness(2,0,2,8) }; line.SetResourceReference(Border.BackgroundProperty,"Theme.Border"); PhoneDevicesHost.Children.Add(line);
         AndroidAudioHost.Phone.Changed += PhoneLibraryChanged;
         AndroidAudioHost.Phone.OutputsChanged += PhoneLibraryChanged;
+        L10n.Instance.PropertyChanged += PhoneLanguageChanged;
         PhoneAudioWindowCache.DevicesChanged += PhoneDevicesChanged;
         IsVisibleChanged += PhoneManagementVisibilityChanged; StateChanged += PhoneManagementStateChanged;
         var cachedDevices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
@@ -187,7 +193,7 @@ public partial class MainWindow
                     _phoneSidebarDevices.Add(profile.Id, entry); _phoneDevicesList.Items.Add(entry);
                 }
                 var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
-                entry.Update(profile.Name, device == null ? "未连接" : device.IsWifi ? "Wi-Fi 已连接" : "USB 已连接", device != null);
+                entry.Update(profile.Name, device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
             }
         }
         finally { _suppressPhoneSelection = selectionSuppressed; }
@@ -222,22 +228,40 @@ public partial class MainWindow
         if (PhoneDetailsHost.Visibility == Visibility.Visible) _phoneDevicePage?.Activate();
     }
     private void SuspendPhoneManagement() => _phoneDevicePage?.Suspend();
+    private Exception? _phoneRefreshError;
+    private void PhoneLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_isClosed || !_phoneInitialized) return;
+        SyncExternalOutputDevices();
+        var store = AndroidAudioHost.Phone;
+        foreach (var profile in store.Profiles.Where(p => p.LastDevice != null))
+        {
+            if (_phoneSidebarDevices.TryGetValue(profile.Id, out var entry))
+            {
+                var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
+                entry.Update(profile.Name, device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
+            }
+        }
+        if (_phoneRefreshError != null) PhoneDevicesHost.ToolTip = AndroidErrorTranslation.Format(_phoneRefreshError);
+    }
     private async Task RefreshPhoneDevicesAsync()
     {
         if (_isClosed || !_phoneInitialized || PhoneDetailsHost.Visibility != Visibility.Visible) return;
         try
         {
             if (_phoneDevicePage != null) await _phoneDevicePage.RefreshAsync();
+            _phoneRefreshError = null; PhoneDevicesHost.ToolTip = null;
             if (!_isClosed) PhoneLibraryChanged();
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!_isClosed) PhoneDevicesHost.ToolTip = ex.Message; }
+        catch (Exception ex) { if (!_isClosed) { _phoneRefreshError = ex; PhoneDevicesHost.ToolTip = AndroidErrorTranslation.Format(ex); } }
     }
     private void ReleasePhoneManagement()
     {
         if (!_phoneInitialized) return;
         AndroidAudioHost.Phone.Changed -= PhoneLibraryChanged;
         AndroidAudioHost.Phone.OutputsChanged -= PhoneLibraryChanged;
+        L10n.Instance.PropertyChanged -= PhoneLanguageChanged;
         PhoneAudioWindowCache.DevicesChanged -= PhoneDevicesChanged;
         IsVisibleChanged -= PhoneManagementVisibilityChanged; StateChanged -= PhoneManagementStateChanged;
         _phoneDevicesList.SelectionChanged -= PhoneSidebar_SelectionChanged;

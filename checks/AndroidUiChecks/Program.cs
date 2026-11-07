@@ -31,12 +31,13 @@ internal static partial class Program
             string output = Path.GetFullPath(args[0]); Directory.CreateDirectory(output);
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(output, "ui-data-" + Guid.NewGuid().ToString("N")));
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidUiChecks");
-            App app = args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") ? new RoutingFixtureApp() : new App();
+            App app = args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") ? new RoutingFixtureApp() : new App();
             if (app is RoutingFixtureApp)
             { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
+            if (args.Contains("--settings-localization")) return SettingsLocalizationChecks(output);
             if (args.Contains("--interaction-audit")) return InteractionAuditUi(output);
             if (args.Contains("--device-actions")) return DeviceActionsUi(output);
             if (args.Contains("--restore-live")) return RestoreDisplayLive(output, args[2]);

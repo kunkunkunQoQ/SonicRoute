@@ -95,7 +95,7 @@ internal static class ApplicationAudio
     internal static AudioAppInfo Describe(AndroidAudioSource source) => new()
     {
         ProcessId = 0, ExternalSourceId = source.Id, ProcessName = AndroidKey(source.App.Package),
-        DisplayName = source.App.Name, SourceLabel = "来自 " + AndroidAudioHost.Phone.GetDisplayName(source.Device), ExternalIconPng = source.App.IconPng,
+        DisplayName = source.App.Name, SourceLabel = string.Format(L10n.T("Phone.FromDevice"), AndroidAudioHost.Phone.GetDisplayName(source.Device)), ExternalIconPng = source.App.IconPng,
         HasActiveSession = source.Session.State.State == CaptureState.Receiving
     };
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null
@@ -218,7 +218,7 @@ internal static class ApplicationAudio
         // Synchronous callers (automation/hotkeys/tray) already execute on workers.
         return ApplyExternalEndpointAsync(app, flow, deviceId).GetAwaiter().GetResult();
 #else
-        return (false, -1, "此音频会话没有录音路由或已经结束。");
+        return (false, -1, L10n.T("Phone.Err.NoAudioRouteOrEnded"));
 #endif
     }
     internal static Task<(bool Success, int HResult, string Message)> ApplyEndpointAsync(AudioAppInfo app, EDataFlow flow, string deviceId)
@@ -238,15 +238,15 @@ internal static class ApplicationAudio
             {
                 if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
                 {
-                    if (!IsSourcePhoneOutput(source, deviceId)) return (false, -1, "请选择此应用所在手机的输出设备。");
+                    if (!IsSourcePhoneOutput(source, deviceId)) return (false, -1, L10n.T("Phone.Err.SelectSourcePhoneOutput"));
                     await source.Session.SetOutputAsync(deviceId).ConfigureAwait(false);
                 }
                 else await source.Session.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
                 return (true, 0, "");
             }
-            catch (Exception ex) { return (false, ex.HResult, ex.Message); }
+            catch (Exception ex) { return (false, ex.HResult, AndroidErrorTranslation.Format(ex)); }
         }
-        return (false, -1, "此音频会话没有录音路由或已经结束。");
+        return (false, -1, L10n.T("Phone.Err.NoAudioRouteOrEnded"));
     }
 #endif
     internal static (bool Muted, bool Applied) ChangeInputMuteChecked(AudioAppInfo app, bool? muted, CancellationToken token = default)

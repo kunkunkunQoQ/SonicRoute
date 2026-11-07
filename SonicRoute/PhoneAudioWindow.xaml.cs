@@ -69,8 +69,8 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
     public string Category => EffectiveCategory switch { 0 => "games", 1 or 2 or 3 => "media", 4 => "social", _ => App.Category };
     public string Description => EffectiveCategory switch
     {
-        1 => "影音 · 音乐", 2 => "影音 · 视频", 3 => "影音 · 图片",
-        _ => Category switch { "media" => "影音", "games" => "游戏 · 音频", "social" => "社交 · 交流", _ => "其他应用" }
+        1 => L10n.T("Phone.Cat.MediaMusic"), 2 => L10n.T("Phone.Cat.MediaVideo"), 3 => L10n.T("Phone.Cat.MediaImage"),
+        _ => Category switch { "media" => L10n.T("Phone.Cat.Media"), "games" => L10n.T("Phone.Cat.GameAudio"), "social" => L10n.T("Phone.Cat.SocialChat"), _ => L10n.T("Phone.Cat.OtherApp") }
     };
     private bool _isPlaying;
     public bool IsPlaying
@@ -79,6 +79,7 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
         internal set { if (_isPlaying == value) return; _isPlaying = value; PropertyChanged?.Invoke(this, new(nameof(IsPlaying))); }
     }
     public event PropertyChangedEventHandler? PropertyChanged;
+    internal void RefreshLanguage() => PropertyChanged?.Invoke(this, new(nameof(Description)));
     public PhoneAppItem(AndroidApp app)
     {
         App = app;
@@ -134,12 +135,23 @@ public partial class PhoneAudioWindow : Window
     private string? _pcDropSignature;
     private int? _pcDropTargetIndex;
     private bool _pcDropZonesDirty = true;
+    private string _connStatusKey = "Phone.Disconnected";
+    private string? _connDetailKey;
+    private Exception? _connError;
+    private string? _connRawMessage;
+    private bool _connKeptOldList;
+    private AndroidConnectionQuality? _lastQuality;
+    private bool _hasQuality;
+    private bool _hasAppliedMediaDetails;
+    private string? _mediaErrorKey;
+    private Exception? _mediaErrorEx;
 
     public PhoneAudioWindow() : this(true) { }
     public PhoneAudioWindow(bool loadDevicesOnShow)
     {
         _enableMedia = loadDevicesOnShow;
         InitializeComponent();
+        L10n.Instance.PropertyChanged += OnLanguageChanged;
         InitializePcDropOverlay();
         if (loadDevicesOnShow) Loaded += async (_, _) => await InitializeDevicesAsync();
         IsVisibleChanged += (_, _) =>
@@ -166,7 +178,7 @@ public partial class PhoneAudioWindow : Window
         };
         Closed += (_, _) =>
         {
-            _closed = true; _mediaUiLifetime.Dispose(); _lifetime.Cancel(); _catalogRead?.Cancel(); StopMediaSubscription();
+            _closed = true; L10n.Instance.PropertyChanged -= OnLanguageChanged; _mediaUiLifetime.Dispose(); _lifetime.Cancel(); _catalogRead?.Cancel(); StopMediaSubscription();
             ClearPcDropHighlight();
             AppIconDragController.DesktopDragStateChanged -= Pc_DragStateChanged;
             AndroidAudioHost.DragStateChanged -= Android_ReturnDragStateChanged;
@@ -190,7 +202,7 @@ public partial class PhoneAudioWindow : Window
     private void InitializePcDropOverlay()
     {
         _pcDropGrid = new Grid { Name = "PcDropZonesGrid" };
-        _androidReturnDropZone = CreateDropCell("AndroidReturnDropZone", "返回手机播放", "松开后，由手机控制声音", new CornerRadius(6));
+        _androidReturnDropZone = CreateDropCell("AndroidReturnDropZone", L10n.T("Phone.ReturnToPhoneTitle"), L10n.T("Phone.ReturnToPhoneDesc"), new CornerRadius(6));
         _androidReturnDropZone.Visibility = Visibility.Collapsed;
         var modes = new Grid();
         modes.Children.Add(_pcDropGrid);
@@ -241,6 +253,7 @@ public partial class PhoneAudioWindow : Window
 
         var sigBuilder = new StringBuilder();
         sigBuilder.Append(device == null ? "" : AndroidDeviceIdentity.Key(device)).Append('|')
+            .Append(L10n.CurrentLanguage).Append('|')
             .Append(AndroidAudioHost.OutputDisplayName(device, AndroidOutputSink.DefaultSpeaker)).Append('|');
         foreach (var (sink, deviceId) in zones)
             sigBuilder.Append(sink.Key).Append(':').Append(sink.Name).Append(':').Append(deviceId).Append(';');
@@ -261,12 +274,15 @@ public partial class PhoneAudioWindow : Window
             _pcDropGrid.RowDefinitions.Add(new RowDefinition());
             var (sink, deviceId) = zones[i];
             string cellName = i == 0 ? "PcSpeakerDropZone" : $"PcBluetoothDropZone_{i}";
+            string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
+            string targetName = sink.Kind == AndroidOutputSinkKind.Speaker ? AndroidAudioHost.OutputDisplayName(device, sink) : sinkName;
             string title = sink.Kind == AndroidOutputSinkKind.Speaker
-                ? $"仅在{AndroidAudioHost.OutputDisplayName(device, sink)}播放"
-                : $"仅在 {sink.Name} 播放";
+                ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"), targetName)
+                : string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), targetName);
+
             string description = sink.Kind == AndroidOutputSinkKind.Speaker
-                ? $"松开后，电脑应用仅在{AndroidAudioHost.OutputDisplayName(device, sink)}出声"
-                : "松开后，电脑应用仅在此蓝牙设备出声";
+                ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerDesc"), AndroidAudioHost.OutputDisplayName(device, sink))
+                : L10n.T("Phone.PcDropOnlyOnBtDesc");
             var corners = zones.Count == 1
                 ? new CornerRadius(6)
                 : i == 0
@@ -293,6 +309,16 @@ public partial class PhoneAudioWindow : Window
         ApplyPcDropCellBackgrounds(_pcDropTargetIndex);
     }
 
+    private static void UpdateDropCellText(Border? cell, string title, string description)
+    {
+        if (cell?.Child is StackPanel { Children.Count: >= 2 } labels
+            && labels.Children[0] is TextBlock heading && labels.Children[1] is TextBlock detail)
+        {
+            heading.Text = title;
+            detail.Text = description;
+            System.Windows.Automation.AutomationProperties.SetName(cell, title);
+        }
+    }
     private static Border CreateDropCell(string name, string title, string description, CornerRadius corners)
     {
         var labels = new StackPanel { HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
@@ -405,18 +431,18 @@ public partial class PhoneAudioWindow : Window
     {
         if (_closed || _refreshing) return false;
         _refreshing = true; RefreshButton.IsEnabled = false;
-        SetConnectionStatus("加载中");
+        SetConnectionStatusKey("Phone.StatusLoading");
         try
         {
             string? previous = (DeviceCombo.SelectedItem as AndroidDevice)?.Serial ?? PhoneAudioWindowCache.SelectedSerial;
             var devices = await PhoneAudioWindowCache.ReadDevicesAsync(_visibleRead?.Token ?? _lifetime.Token);
             if (_closed) return false;
             BindDevices(PhoneAudioWindowCache.Devices ?? devices, previous);
-            if (DeviceCombo.SelectedItem == null) SetConnectionStatus("未连接", "未发现已授权手机；请先连接 USB 或无线 ADB。");
+            if (DeviceCombo.SelectedItem == null) SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailNoAuthorizedPhone");
             return true;
         }
         catch (OperationCanceledException) { return false; }
-        catch (Exception ex) { if (!_closed) SetConnectionStatus("未连接", ex.Message); return false; }
+        catch (Exception ex) { if (!_closed) SetConnectionStatusError("Phone.Disconnected", ex); return false; }
         finally { _refreshing = false; if (!_closed) RefreshButton.IsEnabled = true; }
     }
     private void BindDevices(IReadOnlyList<AndroidDevice> devices, string? preferredSerial = null)
@@ -436,7 +462,7 @@ public partial class PhoneAudioWindow : Window
             DeviceCombo.SelectedItem = currentChoices.FirstOrDefault(d => AndroidDeviceIdentity.Matches(d, profile.LastDevice));
             PhoneAudioWindowCache.SelectedSerial = (DeviceCombo.SelectedItem as AndroidDevice)?.Serial;
             if (DeviceCombo.SelectedItem == null)
-            { _apps = Array.Empty<PhoneAppItem>(); _retainedSnapshot = null; ApplyFilter(); SetConnectionStatus("未连接"); }
+            { _apps = Array.Empty<PhoneAppItem>(); _retainedSnapshot = null; ApplyFilter(); SetConnectionStatusKey("Phone.Disconnected"); }
             if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)
                 EnsurePcDropZones(force: true);
         }
@@ -463,7 +489,7 @@ public partial class PhoneAudioWindow : Window
         _catalogRead?.Cancel();
         UpdateMediaSubscription();
         if (DeviceCombo.SelectedItem is not AndroidDevice device)
-        { _apps = Array.Empty<PhoneAppItem>(); _retainedSnapshot = null; ApplyFilter(); SetConnectionStatus("未连接"); return; }
+        { _apps = Array.Empty<PhoneAppItem>(); _retainedSnapshot = null; ApplyFilter(); SetConnectionStatusKey("Phone.Disconnected"); return; }
         ConnectionSignal.Visibility = device.IsWifi ? Visibility.Visible : Visibility.Collapsed;
         ConnectionUsbIcon.Visibility = device.IsWifi ? Visibility.Collapsed : Visibility.Visible;
         RetainedAppsChanged();
@@ -471,12 +497,13 @@ public partial class PhoneAudioWindow : Window
             _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(new[] { device }, force: forceRefresh, _lifetime.Token);
         if (!forceRefresh)
         {
-            SetConnectionStatus(device.State == "device" ? "已连接" : "未连接",
-                device.State == "device" ? null : "设备未连接；已保留上次加载的应用列表。");
+            SetConnectionStatusKey(device.State == "device" ? "Phone.ConnectedStatus" : "Phone.Disconnected",
+                device.State == "device" ? null : "Phone.DetailOfflineKeptApps");
+
             return;
         }
         if (device.State != "device")
-        { SetConnectionStatus("未连接", "设备未连接；缓存保留，请在手机确认调试授权后刷新。"); return; }
+        { SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailOfflineConfirmAuth"); return; }
         await LoadCatalogAsync(device);
     }
     private async Task LoadCatalogAsync(AndroidDevice device)
@@ -484,7 +511,7 @@ public partial class PhoneAudioWindow : Window
         _catalogRead?.Cancel();
         using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _catalogRead = read;
-        SetConnectionStatus("加载中", "正在读取手机应用与图标。");
+        SetConnectionStatusKey("Phone.StatusLoading", "Phone.DetailLoadingAppsAndIcons");
         try
         {
             var packages = AndroidAudioHost.Phone.Profile.QuickPanelApps.Select(a => a.Package).ToArray();
@@ -492,13 +519,13 @@ public partial class PhoneAudioWindow : Window
             if (_closed || read.IsCancellationRequested || !ReferenceEquals(DeviceCombo.SelectedItem, device)) return;
             AndroidAudioHost.Phone.UpdateMetadata(device, apps);
             RetainedAppsChanged();
-            SetConnectionStatus("已连接");
+            SetConnectionStatusKey("Phone.ConnectedStatus");
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             if (!_closed && !read.IsCancellationRequested)
-                SetConnectionStatus("加载失败", (_apps.Count > 0 ? "已保留旧列表。" : "") + ex.Message);
+                SetConnectionStatusError("Phone.StatusLoadFailed", ex, _apps.Count > 0);
         }
         finally { if (ReferenceEquals(_catalogRead, read)) _catalogRead = null; }
     }
@@ -564,8 +591,30 @@ public partial class PhoneAudioWindow : Window
     { if (System.Windows.Application.Current is App app) app.ShowPhoneManagement(); }
     private void Search_Changed(object sender, TextChangedEventArgs e)
     { if (SearchHint != null) SearchHint.Visibility = string.IsNullOrEmpty(SearchBox.Text) ? Visibility.Visible : Visibility.Collapsed; ApplyFilter(); }
-    private void SetConnectionStatus(string status, string? detail = null)
-    { ConnectionText.Text = status; ConnectionText.ToolTip = detail; }
+    private void SetConnectionStatusKey(string statusKey, string? detailKey = null)
+    {
+        _connStatusKey = statusKey; _connDetailKey = detailKey; _connError = null; _connRawMessage = null; _connKeptOldList = false;
+        UpdateConnectionStatusText();
+    }
+    private void SetConnectionStatusError(string statusKey, Exception ex, bool keptOldList = false)
+    {
+        _connStatusKey = statusKey; _connDetailKey = null; _connError = ex; _connRawMessage = null; _connKeptOldList = keptOldList;
+        UpdateConnectionStatusText();
+    }
+    private void SetConnectionStatusMessage(string statusKey, string message)
+    {
+        _connStatusKey = statusKey; _connDetailKey = null; _connError = null; _connRawMessage = message; _connKeptOldList = false;
+        UpdateConnectionStatusText();
+    }
+    private void UpdateConnectionStatusText()
+    {
+        ConnectionText.Text = L10n.T(_connStatusKey);
+        ConnectionText.ToolTip = _connError != null
+            ? (_connKeptOldList ? L10n.T("Phone.DetailKeptOldListPrefix") : "") + AndroidErrorTranslation.Format(_connError)
+            : _connRawMessage
+                ?? (_connDetailKey != null ? L10n.T(_connDetailKey) : null);
+    }
+
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
         _catalogRead?.Cancel();
@@ -633,7 +682,7 @@ public partial class PhoneAudioWindow : Window
             e.Handled = true;
             e.Effects = System.Windows.DragDropEffects.Move;
             try { await ((App)System.Windows.Application.Current).ReturnAndroidToPhoneAsync(payload); }
-            catch (Exception ex) { if (!_closed) SetConnectionStatus("未完成", ex.Message); }
+            catch (Exception ex) { if (!_closed) SetConnectionStatusError("Phone.StatusIncomplete", ex); }
             return;
         }
         if (e.Data.GetDataPresent(AppIconDragController.DesktopFormat, false)
@@ -648,7 +697,7 @@ public partial class PhoneAudioWindow : Window
             if (cell == null || string.IsNullOrWhiteSpace(cell.DeviceId))
             {
                 e.Effects = System.Windows.DragDropEffects.None;
-                if (!_closed) SetConnectionStatus("未连接", "请先连接手机设备。");
+                if (!_closed) SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailConnectPhoneFirst");
                 return;
             }
             e.Effects = System.Windows.DragDropEffects.Copy;
@@ -660,10 +709,10 @@ public partial class PhoneAudioWindow : Window
                     if (result.Success)
                         ((App)System.Windows.Application.Current).ShowOsd(AppDisplayName.Get(pcApp), "🔊 " + cell.Title);
                     else
-                        SetConnectionStatus("未完成", result.Message);
+                        SetConnectionStatusMessage("Phone.StatusIncomplete", result.Message);
                 }
             }
-            catch (Exception ex) { if (!_closed) SetConnectionStatus("未完成", ex.Message); }
+            catch (Exception ex) { if (!_closed) SetConnectionStatusError("Phone.StatusIncomplete", ex); }
             return;
         }
         ClearPcDropHighlight();
@@ -679,7 +728,7 @@ public partial class PhoneAudioWindow : Window
     private async Task StartFromKeyboardAsync(AndroidDevice device, AndroidApp app)
     {
         try { await AndroidAudioHost.AddAudioAsync(device, app); }
-        catch (Exception ex) { if (!_closed) SetConnectionStatus("操作失败", ex.Message); }
+        catch (Exception ex) { if (!_closed) SetConnectionStatusError("Phone.StatusOperationFailed", ex); }
     }
     private void UpdateMediaSubscription()
     {
@@ -761,8 +810,8 @@ public partial class PhoneAudioWindow : Window
             {
                 ApplyMediaState(null);
                 ApplyConnectionQuality(new(null));
-                MediaSubtitle.Text = "音乐控制暂不可用";
-                MediaSubtitle.ToolTip = ex.Message;
+                SetMediaError("Phone.MediaControlUnavailable", ex);
+
                 if (_enableMedia && IsVisible)
                 {
                     PhoneAudioWindowCache.InvalidateDevices();
@@ -778,12 +827,19 @@ public partial class PhoneAudioWindow : Window
     }
     private void ApplyConnectionQuality(AndroidConnectionQuality? quality)
     {
+        _lastQuality = quality;
+        _hasQuality = true;
         int strength = quality?.SignalLevel ?? 0;
         SignalDot.Opacity = strength >= 1 ? 1 : 0.2;
         SignalNear.Opacity = strength >= 2 ? 1 : 0.2;
         SignalOuter.Opacity = strength >= 4 ? 1 : strength == 3 ? 0.6 : 0.2;
-        string text = quality == null ? "正在测量连接延迟" : quality.RoundTripMs is { } ms
-            ? $"连接往返延迟 {ms:0} ms" : "连接响应超时";
+        RefreshConnectionQualityText();
+    }
+    private void RefreshConnectionQualityText()
+    {
+        var quality = _lastQuality;
+        string text = quality == null ? L10n.T("Phone.MeasuringLatency") : quality.RoundTripMs is { } ms
+            ? string.Format(L10n.T("Phone.LatencyRoundTripFormat"), ms) : L10n.T("Phone.LatencyTimeout");
         ConnectionSignal.ToolTip = text;
         System.Windows.Automation.AutomationProperties.SetName(ConnectionSignal, text);
     }
@@ -828,6 +884,10 @@ public partial class PhoneAudioWindow : Window
     }
     private void ApplyMediaDetails(AndroidMediaState? state, byte[]? artwork, bool artworkChanged)
     {
+        _mediaState = state;
+        _hasAppliedMediaDetails = true;
+        _mediaErrorKey = null;
+        _mediaErrorEx = null;
         var app = state == null ? null : _apps.FirstOrDefault(a => a.Package == state.Package);
         string? appName = app?.Name;
         if (artworkChanged)
@@ -850,13 +910,14 @@ public partial class PhoneAudioWindow : Window
         MediaArtworkPlaceholder.Visibility = MediaArtwork.Source == null ? Visibility.Visible : Visibility.Collapsed;
         MediaAppIcon.Source = app?.Icon;
         MediaAppBadgeFrame.Visibility = artwork is { Length: > 0 } && app?.Icon != null ? Visibility.Visible : Visibility.Collapsed;
-        MediaTitle.Text = state?.HasSession == true ? (state.Title.Length > 0 ? state.Title : appName ?? state.Package) : "手机音乐";
+        MediaTitle.Text = state?.HasSession == true ? (state.Title.Length > 0 ? state.Title : appName ?? state.Package) : L10n.T("Phone.MediaDefaultTitle");
         MediaSubtitle.Text = state?.HasSession == true
-            ? string.Join(" · ", new[] { state.Artist.Length > 0 ? state.Artist : state.Playing ? "正在播放" : "已暂停", appName }
-                .Where(value => !string.IsNullOrEmpty(value))) : "手机暂无播放";
+            ? string.Join(" · ", new[] { state.Artist.Length > 0 ? state.Artist : state.Playing ? L10n.T("Phone.MediaPlaying") : L10n.T("Phone.MediaPaused"), appName }
+                .Where(value => !string.IsNullOrEmpty(value))) : L10n.T("Phone.MediaNonePlaying");
+
         MediaSubtitle.ToolTip = null;
         MediaPlayPausePath.Data = state?.Playing == true ? AutomationIcons.Pause : AutomationIcons.Play;
-        System.Windows.Automation.AutomationProperties.SetName(MediaPlayPauseButton, state?.Playing == true ? "暂停" : "播放");
+        System.Windows.Automation.AutomationProperties.SetName(MediaPlayPauseButton, state?.Playing == true ? L10n.T("Phone.MediaPause") : L10n.T("Phone.MediaPlay"));
         MediaPreviousButton.IsEnabled = state?.CanPrevious == true;
         MediaPlayPauseButton.IsEnabled = state?.CanToggle == true;
         MediaNextButton.IsEnabled = state?.CanNext == true;
@@ -937,7 +998,7 @@ public partial class PhoneAudioWindow : Window
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
-        { if (!_closed) { UpdateMediaProgress(_mediaState); MediaSubtitle.Text = "进度调整未完成"; MediaSubtitle.ToolTip = ex.Message; } }
+        { if (!_closed) { UpdateMediaProgress(_mediaState); SetMediaError("Phone.MediaSeekIncomplete", ex); } }
     }
     private void MediaPosition_MouseDown(object sender, MouseButtonEventArgs e) => BeginMediaSeek();
     private async void MediaPosition_MouseUp(object sender, MouseButtonEventArgs e) => await CommitMediaSeekAsync();
@@ -955,7 +1016,33 @@ public partial class PhoneAudioWindow : Window
         if (client == null || read == null) return;
         try { await client.SendAsync(command, read.Token); }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!_closed) { MediaSubtitle.Text = "操作未完成，请重试"; MediaSubtitle.ToolTip = ex.Message; } }
+        catch (Exception ex) { if (!_closed) SetMediaError("Phone.MediaActionIncompleteRetry", ex); }
+    }
+    private void SetMediaError(string key, Exception ex)
+    {
+        _mediaErrorKey = key;
+        _mediaErrorEx = ex;
+        UpdateMediaErrorText();
+    }
+    private void UpdateMediaErrorText()
+    {
+        if (_mediaErrorKey != null) MediaSubtitle.Text = L10n.T(_mediaErrorKey);
+        MediaSubtitle.ToolTip = _mediaErrorEx != null ? AndroidErrorTranslation.Format(_mediaErrorEx) : null;
+    }
+    private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_closed) return;
+        UpdateDropCellText(_androidReturnDropZone, L10n.T("Phone.ReturnToPhoneTitle"), L10n.T("Phone.ReturnToPhoneDesc"));
+        _pcDropZonesDirty = true;
+        if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)
+            EnsurePcDropZones(force: true);
+        foreach (var item in _apps) item.RefreshLanguage();
+        UpdateConnectionStatusText();
+        if (_hasQuality) RefreshConnectionQualityText();
+        if (_mediaErrorKey != null && _mediaErrorEx != null)
+            UpdateMediaErrorText();
+        else if (_hasAppliedMediaDetails)
+            ApplyMediaDetails(_mediaState, _artworkBytes, false);
     }
     private async void MediaPrevious_Click(object sender, RoutedEventArgs e) => await SendMediaAsync("previous");
     private async void MediaPlayPause_Click(object sender, RoutedEventArgs e) => await SendMediaAsync("toggle");

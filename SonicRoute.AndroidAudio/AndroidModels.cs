@@ -173,8 +173,100 @@ public sealed record AndroidApp(string Package, string Name, int Uid, string Cat
 
 public enum CaptureState { Idle, Starting, Receiving, Stopping, Failed }
 
+public enum AndroidErrorCode
+{
+    ServerVerifyFailed,
+    MissingRuntime,
+    AuthorizeAdbFirst,
+    AppOrUidUnavailable,
+    SharedUidUnsupported,
+    AudioSessionNotStarted,
+    AudioConnectionStopped,
+    SelectSourcePhoneOutput,
+    ClipboardMessageTooLong,
+    ClipboardPermissionError,
+    ClipboardDisconnected,
+    ClipboardNotConnected,
+    MediaConnectionEnded,
+    MediaNotConnected,
+    AudioPortForwardFailed,
+    PhoneOffline,
+    SelectedPhoneOutputDisconnected,
+    PhoneAudioOutputStopped,
+    PhoneAudioOutputFailed,
+    PhoneAudioHelperExited,
+    MaxSavedPhones,
+    InvalidAddress,
+    InvalidPairCode,
+    PairFailed,
+    QrExpired,
+    ConnectFailed,
+    ConnectNotReady,
+    PairedButNotConnected,
+    UsbReconnectHint,
+    SavedWifiAddressExpired,
+    DeviceNotConnectedWifiHint,
+    DeviceNotReadyConfirmAuth,
+    MissingAdbPublicKey,
+    InvalidAdbPublicKey,
+    UnpairPhoneOffline,
+    UnpairIdentityUnavailable,
+    UnpairNotConfirmed,
+    UsbDisconnectHint,
+    AppUidChanged,
+    Android13Required,
+    AudioServiceExited,
+    AudioCaptureNotEstablished,
+    MissingDisplayRuntime,
+    InvalidDisplayRuntime,
+    InvalidDisplayControlRuntime,
+    DisplayPhoneNotConnected,
+    DisplayAppUidChanged,
+    DisplayStartFailed,
+    DisplayOpenFailed,
+    DisplayOpenTimeout,
+    DisplayConnectionEnded,
+    PhoneRemovedAddFirst,
+    ReconnectNoDeviceFound,
+    MaxClipboardPhones,
+    InvalidProcessId,
+    InvalidPhoneOutputId,
+    InvalidPhoneOutputDevice,
+    NoAudioRouteOrEnded
+}
+
+public static class AndroidError
+{
+    private const string CodeKey = "AndroidErrorCode";
+
+    public static T WithCode<T>(T exception, AndroidErrorCode code) where T : Exception
+    {
+        exception.Data[CodeKey] = (int)code;
+        return exception;
+    }
+
+    public static bool TryGetCode(Exception? exception, out AndroidErrorCode code)
+    {
+        for (var cur = exception; cur != null; cur = cur.InnerException)
+        {
+            if (cur.Data[CodeKey] is int raw && Enum.IsDefined(typeof(AndroidErrorCode), raw))
+            {
+                code = (AndroidErrorCode)raw;
+                return true;
+            }
+            if (cur.Data[CodeKey] is AndroidErrorCode typed)
+            {
+                code = typed;
+                return true;
+            }
+        }
+        code = default;
+        return false;
+    }
+}
+
 public sealed record AndroidAudioState(CaptureState State, AndroidDevice? Device = null, AndroidApp? App = null,
-    string? Error = null, int Volume = 100, bool Muted = false, string? OutputId = null, bool SmartVolume = true)
+    string? Error = null, int Volume = 100, bool Muted = false, string? OutputId = null, bool SmartVolume = true, AndroidErrorCode? ErrorCode = null)
 {
     public string? SourceId => Device is null || App is null ? null : $"android:{Device.Serial}:{App.Package}:{App.Uid}";
 }

@@ -50,9 +50,9 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
                 { string value = line[17..].Trim(); if (Regex.IsMatch(value, @"\A[1-9]\d*\z")) pid = value; }
                 else if (line.StartsWith('{'))
                 {
-                    if (line.Length > MaxTextBytes * 6 + 32) throw new IOException("剪贴板消息过长。");
+                    if (line.Length > MaxTextBytes * 6 + 32) throw AndroidError.WithCode(new IOException("剪贴板消息过长。"), AndroidErrorCode.ClipboardMessageTooLong);
                     using var json = JsonDocument.Parse(line);
-                    if (json.RootElement.TryGetProperty("error", out _)) throw new IOException("手机暂时无法同步剪贴板，请检查系统权限。");
+                    if (json.RootElement.TryGetProperty("error", out _)) throw AndroidError.WithCode(new IOException("手机暂时无法同步剪贴板，请检查系统权限。"), AndroidErrorCode.ClipboardPermissionError);
                     if (json.RootElement.TryGetProperty("revision", out var revision)) Interlocked.Exchange(ref _revision, revision.GetInt64());
                     if (json.RootElement.TryGetProperty("ready", out var value) && value.GetBoolean())
                     { started = true; startup.CancelAfter(Timeout.Infinite); ready(); }
@@ -60,7 +60,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
                 }
             }
             token.ThrowIfCancellationRequested();
-            throw new IOException("剪贴板连接已断开，刷新设备可重试。");
+            throw AndroidError.WithCode(new IOException("剪贴板连接已断开，刷新设备可重试。"), AndroidErrorCode.ClipboardDisconnected);
         }
         finally
         {
@@ -93,7 +93,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
     public async Task SendAsync(string text, long expectedRevision, CancellationToken token)
     {
         if (!IsSupported(text)) return;
-        var process = _process ?? throw new IOException("剪贴板尚未连接。");
+        var process = _process ?? throw AndroidError.WithCode(new IOException("剪贴板尚未连接。"), AndroidErrorCode.ClipboardNotConnected);
         // The coordinator supplies one bounded writer per phone, rather than queued writes per copy.
         string line = JsonSerializer.Serialize(new { text, revision = expectedRevision });
         await process.StandardInput.WriteLineAsync(line.AsMemory(), token).ConfigureAwait(false);

@@ -149,7 +149,7 @@ public sealed class AndroidPhoneStore
             AndroidPhoneProfile next;
             if (index < 0)
             {
-                if (profiles.Count >= 32) throw new InvalidOperationException("最多可保存 32 台手机。");
+                if (profiles.Count >= 32) throw AndroidError.WithCode(new InvalidOperationException("最多可保存 32 台手机。"), AndroidErrorCode.MaxSavedPhones);
                 next = new("我的手机", device, Array.Empty<AndroidApp>());
                 profiles.Add(next); changed = true;
             }

@@ -34,7 +34,13 @@ public sealed class PhoneAppChoice : INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new(nameof(ActionText)));
         }
     }
-    public string ActionText => Retained ? "从快速面板显示应用中移除" : "添加到快速面板显示应用";
+    public string ActionText => Retained ? L10n.T("Phone.RemoveFromQuickPanel") : L10n.T("Phone.AddToQuickPanel");
+    internal void RefreshLanguage()
+    {
+        Item.RefreshLanguage();
+        PropertyChanged?.Invoke(this, new(nameof(ActionText)));
+        PropertyChanged?.Invoke(this, new(nameof(Item)));
+    }
     private bool _smartVolume;
     public bool SmartVolume
     {
@@ -63,6 +69,10 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private IReadOnlyList<string>? _smartVolumeSnapshot;
     private double _deviceScrollOffset;
     private bool _suppressClipboard;
+    private enum CatalogStatusKind { None, Loading, Empty, Loaded }
+    private CatalogStatusKind _catalogStatusKind;
+    private string _opStatusKey = "";
+    private Exception? _opStatusError;
     internal bool IsConnectionPage => _showConnection || AndroidAudioHost.Phone.Profile.LastDevice == null;
     public PhoneDevicePage() : this(null) { }
     internal PhoneDevicePage(AndroidWirelessConnection? wireless, Func<AndroidQrPairing>? createQr = null)
@@ -78,9 +88,10 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         if (_disposed || _active) return;
         _active = true;
         AndroidAudioHost.Phone.Changed += ProfileChanged;
+        L10n.Instance.PropertyChanged += OnLanguageChanged;
         if (System.Windows.Application.Current is App application)
         { application.PhoneClipboardChanged += RefreshClipboard; _ = LoadClipboardAsync(application); }
-        ProfileChanged();
+        RefreshLocalizedUi();
         if (PhoneAudioWindowCache.Devices == null) _ = RunAsync(RefreshDevicesCoreAsync);
     }
     internal void ShowConnection() { _showConnection = true; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop(); }
@@ -90,6 +101,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         _active = false; _operation?.Cancel();
         AndroidAudioHost.Phone.Changed -= ProfileChanged;
+        L10n.Instance.PropertyChanged -= OnLanguageChanged;
         if (System.Windows.Application.Current is App application) application.PhoneClipboardChanged -= RefreshClipboard;
         ReleaseCatalog();
         PhoneNameBox.Visibility = Visibility.Collapsed;
@@ -99,6 +111,25 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         AndroidAudioHost.Phone.ObserveDevices(devices);
         ProfileChanged();
+    }
+    private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_disposed || !_active) return;
+        RefreshLocalizedUi();
+    }
+    private void RefreshLocalizedUi()
+    {
+        ProfileChanged();
+        SetBusy(_busy);
+        UpdateOperationStatus();
+        UpdateCatalogStatus();
+        foreach (PhoneAppChoice choice in RetainedApps.Items) choice.RefreshLanguage();
+        foreach (var choice in _catalogChoices) choice.RefreshLanguage();
+        if (CatalogPanel.Visibility == Visibility.Visible)
+        {
+            int count = CatalogApps.SelectedItems.Cast<PhoneAppChoice>().Count(choice => !choice.Retained);
+            AddSelectedAppsMenu.Header = count == 0 ? L10n.T("Phone.AddSelectedApps") : string.Format(L10n.T("Phone.AddSelectedAppsCount"), count);
+        }
     }
     private void ProfileChanged()
     {
@@ -119,7 +150,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         { _operation?.Cancel(); ReleaseCatalog(); }
         DeviceName.Text = profile.Name;
         var display = _device ?? profile.LastDevice;
-        DeviceDescription.Text = display == null ? "未连接" : $"{AndroidAudioHost.Phone.GetDisplayName(display)} · {(display.IsWifi ? "Wi-Fi" : "USB")} · {(_device == null ? "未连接" : "已连接")}";
+        DeviceDescription.Text = display == null ? L10n.T("Phone.Disconnected") : $"{AndroidAudioHost.Phone.GetDisplayName(display)} · {(display.IsWifi ? "Wi-Fi" : "USB")} · {(_device == null ? L10n.T("Phone.Disconnected") : L10n.T("Phone.ConnectedStatus"))}";
         bool appsChanged = !ReferenceEquals(_retainedSnapshot, profile.RetainedApps);
         if (appsChanged)
         {
@@ -130,14 +161,14 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         else if (!ReferenceEquals(_smartVolumeSnapshot, profile.DisabledSmartVolumeApps))
             foreach (PhoneAppChoice choice in RetainedApps.Items) choice.SmartVolume = !profile.DisabledSmartVolumeApps.Contains(choice.Item.Package);
         _smartVolumeSnapshot = profile.DisabledSmartVolumeApps;
-        RetainedCount.Text = $"{profile.RetainedApps.Count} 个";
+        RetainedCount.Text = string.Format(L10n.T("Phone.RetainedCountFormat"), profile.RetainedApps.Count);
         RetainedEmpty.Visibility = profile.RetainedApps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         RetainedPanel.Visibility = DeviceCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
         ConnectionPanel.Visibility = connection ? Visibility.Visible : Visibility.Collapsed;
         RenameButton.Visibility = RetainedPanel.Visibility;
         AddAppsButton.IsEnabled = _device != null && !_busy;
         DisconnectButton.IsEnabled = _device != null && !_busy;
-        DisconnectButton.Content = _device?.IsWifi == false ? "停止接收" : "断开";
+        DisconnectButton.Content = _device?.IsWifi == false ? L10n.T("Phone.StopReceiving") : L10n.T("Phone.Disconnect");
         ReconnectButton.IsEnabled = display != null && !_busy;
         UnpairButton.IsEnabled = display != null && !_busy;
         RemoveDeviceButton.IsEnabled = profile.LastDevice != null && !_busy;
@@ -168,8 +199,27 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             var sync = await application.PreparePhoneClipboardAsync();
             if (!AndroidAudioHost.Phone.IsRemoved(device)) sync.SetEnabled(device, enabled);
         }
-        catch (Exception) { if (!_disposed) OperationStatus.Text = "剪贴板设置暂时无法保存。"; }
+        catch (Exception) { if (!_disposed) SetOperationStatusKey("Phone.ClipboardSaveError"); }
         if (!_disposed) RefreshClipboard();
+    }
+    private void SetOperationStatusKey(string key) { _opStatusKey = key; _opStatusError = null; UpdateOperationStatus(); }
+    private void SetOperationStatusError(Exception ex) { _opStatusKey = ""; _opStatusError = ex; UpdateOperationStatus(); }
+    private void UpdateOperationStatus()
+    {
+        if (_opStatusError != null) OperationStatus.Text = AndroidErrorTranslation.Format(_opStatusError);
+        else if (!string.IsNullOrEmpty(_opStatusKey)) OperationStatus.Text = L10n.T(_opStatusKey);
+        else OperationStatus.Text = "";
+    }
+    private void SetCatalogStatus(CatalogStatusKind kind) { _catalogStatusKind = kind; UpdateCatalogStatus(); }
+    private void UpdateCatalogStatus()
+    {
+        CatalogStatus.Text = _catalogStatusKind switch
+        {
+            CatalogStatusKind.Loading => L10n.T("Phone.LoadingPhoneApps"),
+            CatalogStatusKind.Empty => L10n.T("Phone.CatalogEmpty"),
+            CatalogStatusKind.Loaded => L10n.T("Phone.CatalogSelectionHint"),
+            _ => ""
+        };
     }
     private async Task RunAsync(Func<CancellationToken, Task> action, string success = "")
     {
@@ -177,14 +227,14 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         _busy = true;
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _operation = operation;
-        SetBusy(true); OperationStatus.Text = "正在处理…";
+        SetBusy(true); SetOperationStatusKey("Phone.ProcessingStatus");
         try
         {
             await action(operation.Token);
-            if (!_disposed && !operation.IsCancellationRequested) OperationStatus.Text = success;
+            if (!_disposed && !operation.IsCancellationRequested) SetOperationStatusKey(success);
         }
-        catch (OperationCanceledException) { if (!_disposed) OperationStatus.Text = "已取消"; }
-        catch (Exception ex) { if (!_disposed && !operation.IsCancellationRequested) OperationStatus.Text = ex.Message; }
+        catch (OperationCanceledException) { if (!_disposed) SetOperationStatusKey("Phone.StatusCancelled"); }
+        catch (Exception ex) { if (!_disposed && !operation.IsCancellationRequested) SetOperationStatusError(ex); }
         finally
         {
             if (ReferenceEquals(_operation, operation)) _operation = null;
@@ -195,7 +245,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private void SetBusy(bool busy)
     {
         PairButton.IsEnabled = ConnectButton.IsEnabled = !busy;
-        QrButton.Content = busy ? "取消配对" : "显示二维码";
+        QrButton.Content = busy ? L10n.T("Phone.CancelPairing") : L10n.T("Phone.ShowQr");
         QrButton.IsEnabled = true;
     }
     private async Task RefreshDevicesCoreAsync(CancellationToken token)
@@ -229,14 +279,14 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             try { await AndroidAudioHost.RemovePhoneAsync(profile.Id, device); }
             finally { _applyingConnection = false; }
             _showConnection = AndroidAudioHost.Phone.Profile.LastDevice == null;
-        }, "已移除设备；手机上的配对授权仍保留。");
+        }, "Phone.StatusRemovedKeepAuth");
     }
     private async void Unpair_Click(object sender, RoutedEventArgs e)
     {
         var device = _device ?? AndroidAudioHost.Phone.Profile.LastDevice; if (device == null) return;
         await RunAsync(async token =>
         {
-            if (_device == null) throw new IOException("手机未连接，请先重连，或在手机无线调试中移除此电脑。");
+            if (_device == null) throw AndroidError.WithCode(new IOException("手机未连接，请先重连，或在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairPhoneOffline);
             if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
             if (AndroidAudioHost.IsCreated)
                 foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)).ToArray())
@@ -248,7 +298,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             PhoneAudioWindowCache.SetDevices((PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>())
                 .Where(d => !d.IsWifi || !AndroidDeviceIdentity.Matches(d, device)).ToArray());
             ApplyDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
-        }, "已发送取消配对请求；再次连接需重新配对，应用与音量设置已保留。");
+        }, "Phone.StatusUnpairRequested");
     }
     private void PairMethods_SizeChanged(object sender, SizeChangedEventArgs e)
     {
@@ -260,7 +310,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
         string address = ConnectAddressBox.Text.Trim();
-        await RunAsync(async token => ApplyConnection(await Wireless.ConnectAsync(address, token), token), "已连接");
+        await RunAsync(async token => ApplyConnection(await Wireless.ConnectAsync(address, token), token), "Phone.ConnectedStatus");
     }
     private async void PairCode_Click(object sender, RoutedEventArgs e)
     {
@@ -269,9 +319,9 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         await RunAsync(async token =>
         {
             var pairing = await Wireless.PairCodeAsync(address, code, token);
-            OperationStatus.Text = "配对成功，正在连接…";
+            SetOperationStatusKey("Phone.StatusPairedConnecting");
             ApplyConnection(await Wireless.FinishPairingAsync(pairing, token), token);
-        }, "已连接");
+        }, "Phone.ConnectedStatus");
     }
     private async void QrPair_Click(object sender, RoutedEventArgs e)
     {
@@ -287,11 +337,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         PairQrImage.Visibility = Visibility.Visible;
         await RunAsync(async token =>
         {
-            OperationStatus.Text = "请用手机扫码（2 分钟有效，离页取消）。";
+            SetOperationStatusKey("Phone.StatusQrScanPrompt");
             var pairing = await Wireless.PairQrAsync(qr, token);
-            OperationStatus.Text = "配对成功，正在连接…";
+            SetOperationStatusKey("Phone.StatusPairedConnecting");
             ApplyConnection(await Wireless.FinishPairingAsync(pairing, token), token);
-        }, "已连接");
+        }, "Phone.ConnectedStatus");
         PairQrImage.Source = null; PairQrImage.Visibility = Visibility.Collapsed;
     }
     private async void Reconnect_Click(object sender, RoutedEventArgs e) => await RunAsync(async token =>
@@ -300,7 +350,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         if (last == null) return;
         if (last.IsWifi) ApplyConnection(await Wireless.ReconnectAsync(last, token), token);
         else await RefreshDevicesCoreAsync(token);
-        if (_device == null) throw new IOException("未发现设备，请开启无线调试或更新连接地址。");
+        if (_device == null) throw AndroidError.WithCode(new IOException("未发现设备，请开启无线调试或更新连接地址。"), AndroidErrorCode.ReconnectNoDeviceFound);
     });
     private async void Disconnect_Click(object sender, RoutedEventArgs e)
     {
@@ -322,7 +372,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
                 foreach (var alias in aliases) await Wireless.DisconnectAsync(alias, token);
             }
             await RefreshDevicesCoreAsync(token);
-        }, device.IsWifi ? "手机已断开，快速面板显示应用与音量设置已保存。" : "已停止手机接收；拔出数据线即可断开 USB。");
+        }, device.IsWifi ? "Phone.StatusWifiDisconnectedSaved" : "Phone.StatusUsbStoppedUnplug");
     }
     private void Rename_Click(object sender, RoutedEventArgs e)
     {
@@ -354,7 +404,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         CatalogApps.ContextMenu.IsOpen = false;
         SetCatalogVisible(false);
         CatalogApps.ItemsSource = null;
-        _catalog = Array.Empty<PhoneAppItem>(); _catalogChoices = Array.Empty<PhoneAppChoice>(); _catalogSerial = null;
+        _catalog = Array.Empty<PhoneAppItem>(); _catalogChoices = Array.Empty<PhoneAppChoice>(); _catalogSerial = null; _catalogStatusKind = CatalogStatusKind.None;
     }
     private async Task LoadCatalogAsync(bool refresh)
     {
@@ -362,7 +412,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         if (!refresh && _catalogSerial == device.Serial) { ApplyCatalogFilter(); return; }
         await RunAsync(async token =>
         {
-            CatalogStatus.Text = "正在读取手机应用…";
+            SetCatalogStatus(CatalogStatusKind.Loading);
             var apps = await AndroidAudioHost.Catalog.GetAsync(device, refresh, token);
             token.ThrowIfCancellationRequested();
             if (_device?.Serial != device.Serial) return;
@@ -383,7 +433,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             || a.Item.Package.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (CatalogApps.ItemsSource is not IReadOnlyList<PhoneAppChoice> previous || !previous.SequenceEqual(filtered))
             CatalogApps.ItemsSource = filtered;
-        CatalogStatus.Text = _catalog.Count == 0 ? "还没有加载应用。" : "Ctrl 多选 · Shift 连选 · Ctrl+A 全选，右键批量添加。";
+        SetCatalogStatus(_catalog.Count == 0 ? CatalogStatusKind.Empty : CatalogStatusKind.Loaded);
     }
     private void CatalogApps_RightButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -398,7 +448,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         if (_disposed || !_active || CatalogPanel.Visibility != Visibility.Visible) { e.Handled = true; return; }
         int count = CatalogApps.SelectedItems.Cast<PhoneAppChoice>().Count(choice => !choice.Retained);
-        AddSelectedAppsMenu.Header = count == 0 ? "添加所选应用" : $"添加所选应用（{count}）";
+        AddSelectedAppsMenu.Header = count == 0 ? L10n.T("Phone.AddSelectedApps") : string.Format(L10n.T("Phone.AddSelectedAppsCount"), count);
         AddSelectedAppsMenu.IsEnabled = !_busy && count > 0;
     }
     private void AddSelectedApps_Click(object sender, RoutedEventArgs e)

@@ -34,7 +34,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         _playerFactory = (source, id) =>
         {
             if (!AndroidOutputIdentity.IsPhoneOutput(id)) return new WasapiPcmPlayer(source, id);
-            var device = State.Device ?? throw new InvalidOperationException("手机音频会话尚未启动。");
+            var device = State.Device ?? throw AndroidError.WithCode(new InvalidOperationException("手机音频会话尚未启动。"), AndroidErrorCode.AudioSessionNotStarted);
             string sink = GetSourcePhoneSink(device, id!);
             return new AndroidPhonePcmPlayer(adb, device, source, sink, _run?.Token ?? default);
         };
@@ -66,7 +66,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         _run = CancellationTokenSource.CreateLinkedTokenSource(token);
         _renderFailure = null;
         var runToken = _run.Token;
-        Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null });
+        Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null, ErrorCode = null });
         Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}");
         Task<IPcmPlayer>? preparingOutput = null;
         try
@@ -110,7 +110,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
                 try { _player = await preparingOutput.ConfigureAwait(false); } catch { }
             }
             await StopCoreAsync().ConfigureAwait(false);
-            Update(s => s with { State = CaptureState.Failed, Device = device, App = app, Error = ex.Message });
+            Update(s => s with { State = CaptureState.Failed, Device = device, App = app, Error = ex.Message, ErrorCode = AndroidError.TryGetCode(ex, out var code) ? code : null });
             Log("Start failed: " + ex.Message);
             throw;
         }
@@ -129,7 +129,8 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             var old = State;
             await StopCoreAsync().ConfigureAwait(false);
             Update(s => s with { State = CaptureState.Failed, Device = old.Device, App = old.App,
-                Error = failure?.Message ?? "音频连接已停止，请检查手机连接后重新拖入。" });
+                Error = failure?.Message ?? "音频连接已停止，请检查手机连接后重新拖入。",
+                ErrorCode = failure == null ? AndroidErrorCode.AudioConnectionStopped : AndroidError.TryGetCode(failure, out var code) ? code : null });
             Log("Receive ended: " + State.Error);
         }
         finally { _operations.Release(); }
@@ -158,7 +159,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         _pcm?.Clear(); _pcm = null;
         _run?.Dispose(); _run = null;
         _receiveTask = null; _receiver = null;
-        Update(s => s with { State = CaptureState.Idle, Device = null, App = null, Error = null });
+        Update(s => s with { State = CaptureState.Idle, Device = null, App = null, Error = null, ErrorCode = null });
     }
     public void SetVolume(int percent)
     {
@@ -227,7 +228,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         if (!AndroidOutputIdentity.TryParseDeviceId(endpointId, out string phone, out string sink)
             || !string.Equals(phone, AndroidDeviceIdentity.Key(device), StringComparison.OrdinalIgnoreCase)
             || (sink != "speaker" && !sink.StartsWith("bt:", StringComparison.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("请选择此应用所在手机的输出设备。");
+            throw AndroidError.WithCode(new InvalidOperationException("请选择此应用所在手机的输出设备。"), AndroidErrorCode.SelectSourcePhoneOutput);
         return sink;
     }
     private AndroidAudioState Update(Func<AndroidAudioState, AndroidAudioState> change)

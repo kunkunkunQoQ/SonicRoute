@@ -85,7 +85,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             // Join even if helper startup fails, so DisposeAsync owns the exact forward.
             _port = (await forwarding.ConfigureAwait(false)).Trim();
         }
-        if (!int.TryParse(_port, out int port) || port is < 1 or > 65535) throw new IOException("手机音频端口转发失败。");
+        if (!int.TryParse(_port, out int port) || port is < 1 or > 65535) throw AndroidError.WithCode(new IOException("手机音频端口转发失败。"), AndroidErrorCode.AudioPortForwardFailed);
         _tcp = new TcpClient { NoDelay = true, SendBufferSize = 8192, SendTimeout = 5000 };
         _cancelSocket = _lifetime.Token.UnsafeRegister(static socket => ((TcpClient)socket!).Dispose(), _tcp);
         await _tcp.ConnectAsync("127.0.0.1", port, token).ConfigureAwait(false);
@@ -102,7 +102,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         string key = AndroidDeviceIdentity.Key(Device);
         Device = (await _adb.DevicesAsync(token).ConfigureAwait(false)).FirstOrDefault(d => d.State == "device"
             && string.Equals(AndroidDeviceIdentity.Key(d), key, StringComparison.OrdinalIgnoreCase))
-            ?? throw new IOException("手机未连接或离线。");
+            ?? throw AndroidError.WithCode(new IOException("手机未连接或离线。"), AndroidErrorCode.PhoneOffline);
     }
 
     public async Task SwitchTargetAsync(string target, CancellationToken token)
@@ -116,7 +116,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
                 ThrowIfEnded();
                 if (string.Equals(_target, target, StringComparison.OrdinalIgnoreCase)) return;
                 if (!_outputs.Any(s => string.Equals(s.Key, target, StringComparison.OrdinalIgnoreCase)))
-                    throw new IOException("所选手机输出设备未连接。");
+                    throw AndroidError.WithCode(new IOException("所选手机输出设备未连接。"), AndroidErrorCode.SelectedPhoneOutputDisconnected);
                 _target = target;
                 verified = (_verified = new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
             }
@@ -139,7 +139,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
     }
     private void ThrowIfEnded()
     {
-        if (_ended.Task.IsCompletedSuccessfully) throw new IOException("手机音频输出已停止。", _ended.Task.Result);
+        if (_ended.Task.IsCompletedSuccessfully) throw AndroidError.WithCode(new IOException("手机音频输出已停止。", _ended.Task.Result), AndroidErrorCode.PhoneAudioOutputStopped);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
     }
 
@@ -189,10 +189,10 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
                         if (accepted) try { _onRouted?.Invoke(key, type, name); } catch { }
                     }
                     if (root.TryGetProperty("listening", out var listening) && listening.ValueKind == JsonValueKind.True) _ready.TrySetResult();
-                    if (root.TryGetProperty("error", out var error)) throw new IOException(error.GetString() ?? "手机音频输出失败。");
+                    if (root.TryGetProperty("error", out var error)) throw error.GetString() is { Length: > 0 } errText ? new IOException(errText) : AndroidError.WithCode(new IOException("手机音频输出失败。"), AndroidErrorCode.PhoneAudioOutputFailed);
                 }
             }
-            if (!_lifetime.IsCancellationRequested) Fail(new IOException(_lastError ?? "手机音频输出辅助进程已退出。"));
+            if (!_lifetime.IsCancellationRequested) Fail(_lastError != null ? new IOException(_lastError) : AndroidError.WithCode(new IOException("手机音频输出辅助进程已退出。"), AndroidErrorCode.PhoneAudioHelperExited));
         }
         catch (Exception) when (_lifetime.IsCancellationRequested) { }
         catch (Exception ex) { Fail(ex); }

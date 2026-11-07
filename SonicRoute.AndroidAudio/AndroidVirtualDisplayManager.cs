@@ -31,6 +31,7 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
     private bool _disposed;
     public int Count { get { lock (_gate) return _entries.Count; } }
     public event Action<string>? Failed;
+    public event Action<AndroidApp?, Exception>? FailedError;
     public AndroidVirtualDisplayManager(Func<IVirtualDisplayClient> factory) => _factory = factory;
 
     public Task<IVirtualDisplayClient> OpenAsync(AndroidDevice device, AndroidApp app, int x, int y)
@@ -83,12 +84,12 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
         {
             // A startup error is delivered to the opener; subsequent failures use the event.
             if (!entry.Ready.TrySetException(ex))
-                try { Failed?.Invoke(app.Name + "：" + ex.Message); } catch { }
+                try { Failed?.Invoke(app.Name + "：" + ex.Message); FailedError?.Invoke(app, ex); } catch { }
         }
         finally
         {
             try { await entry.Client.DisposeAsync().ConfigureAwait(false); }
-            catch (Exception ex) { try { Failed?.Invoke(ex.Message); } catch { } }
+            catch (Exception ex) { try { Failed?.Invoke(ex.Message); FailedError?.Invoke(null, ex); } catch { } }
             lock (_gate) _entries.Remove(id);
             entry.Lifetime.Dispose(); entry.Closed.TrySetResult();
         }

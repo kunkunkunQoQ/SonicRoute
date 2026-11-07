@@ -25,6 +25,7 @@ internal static class AndroidAudioHost
     static AndroidAudioHost()
     {
         PhoneAudioWindowCache.DevicesChanged += OnCachedDevicesChanged;
+        L10n.Instance.PropertyChanged += (_, _) => PhoneOutputsChanged();
     }
     private static readonly Lazy<AdbClient> LazyAdb = new(() => new(new AndroidRuntimeBundle(Path.Combine(
         Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")
@@ -93,7 +94,7 @@ internal static class AndroidAudioHost
         Task<AndroidAudioSource> start;
         lock (PhoneOperations)
         {
-            if (Phone.IsRemoved(device)) throw new IOException("此手机已移除，请先添加设备。");
+            if (Phone.IsRemoved(device)) throw AndroidError.WithCode(new IOException("此手机已移除，请先添加设备。"), AndroidErrorCode.PhoneRemovedAddFirst);
             start = Sources.AddAsync(device, app, keepPhoneAudio, displayOwned: displayOwned);
         }
         _ = ProbeOutputsIfConnectedAsync([device], token: MediaShutdown.Token);
@@ -103,7 +104,7 @@ internal static class AndroidAudioHost
     {
         lock (PhoneOperations)
         {
-            if (Phone.IsRemoved(device)) throw new IOException("此手机已移除，请先添加设备。");
+            if (Phone.IsRemoved(device)) throw AndroidError.WithCode(new IOException("此手机已移除，请先添加设备。"), AndroidErrorCode.PhoneRemovedAddFirst);
             return Displays.OpenAsync(device, app, x, y);
         }
     }
@@ -168,7 +169,7 @@ internal static class AndroidAudioHost
         if (LazySources.IsValueCreated && LazyPhone.IsValueCreated)
             Sources.SyncSmartVolume(Phone.IsSmartVolumeEnabled);
     }
-    private static void InvalidateOutputSnapshot()
+    internal static void InvalidateOutputSnapshot()
     { lock (OutputSnapshotGate) _outputSnapshot = null; }
     private static void PhoneOutputsChanged()
     {
@@ -202,9 +203,10 @@ internal static class AndroidAudioHost
     }
     internal static string OutputDisplayName(AndroidDevice? device, AndroidOutputSink sink)
     {
-        string phoneName = device == null ? "手机" : LazyPhone.IsValueCreated ? Phone.GetDisplayName(device) : device.Name;
+        string phoneName = device == null ? L10n.T("Phone.Title") : LazyPhone.IsValueCreated ? Phone.GetDisplayName(device) : device.Name;
+        string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
         return sink.Kind == AndroidOutputSinkKind.Speaker
-            ? $"{phoneName} 扬声器" : $"{sink.Name} ({phoneName} · 蓝牙)";
+            ? string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName) : string.Format(L10n.T("Phone.BluetoothOutputFormat"), sinkName, phoneName);
     }
     internal static AudioDeviceInfo SpeakerOutput(AndroidDevice device) => new()
     {
@@ -237,14 +239,15 @@ internal static class AndroidAudioHost
     internal static (bool Success, int HResult, string Message) RoutePcAppToPhone(int processId, string deviceId)
     {
         if (!AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out _))
-            return (false, -1, "无效的手机输出设备。");
+            return (false, -1, L10n.T("Phone.Err.InvalidPhoneOutputDevice"));
         var connected = PhoneAudioWindowCache.Devices?.FirstOrDefault(d =>
             d.State == "device" && string.Equals(AndroidDeviceIdentity.Key(d), phoneKey, StringComparison.OrdinalIgnoreCase));
         var fallback = connected ?? (LazyPhone.IsValueCreated
             ? Phone.Profiles.FirstOrDefault(p => p.LastDevice != null
                 && string.Equals(AndroidDeviceIdentity.Key(p.LastDevice), phoneKey, StringComparison.OrdinalIgnoreCase))?.LastDevice
             : null);
-        return PcToPhone.RouteProcess(processId, deviceId, fallback);
+        var res = PcToPhone.RouteProcess(processId, deviceId, fallback);
+        return res.Success ? (true, 0, L10n.T("History.Status.success")) : (false, res.HResult, processId <= 0 ? L10n.T("Phone.Err.InvalidProcessId") : L10n.T("Phone.Err.InvalidPhoneOutputId"));
     }
     internal static bool StopPcAppToPhone(int processId, bool restorePreviousEndpoint) =>
         LazyPcToPhone.IsValueCreated && PcToPhone.StopProcess(processId, restorePreviousEndpoint);
@@ -411,6 +414,26 @@ internal static class AndroidLabRuntime
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(AppContext.BaseDirectory, "LabData"));
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SONICROUTE_INSTANCE_ID")))
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidLabMultiApp");
+    }
+}
+internal static class AndroidErrorTranslation
+{
+    internal static string Format(Exception? ex)
+    {
+        if (ex == null) return "";
+        if (AndroidError.TryGetCode(ex, out var code))
+            return Format(code, ex.Message);
+        return ex.Message ?? "";
+    }
+
+    internal static string Format(AndroidAudioState state) =>
+        state.ErrorCode is { } code ? Format(code, state.Error) : (state.Error ?? "");
+
+    internal static string Format(AndroidErrorCode code, string? fallback = null)
+    {
+        string key = "Phone.Err." + code;
+        string translated = L10n.T(key);
+        return !string.Equals(translated, key, StringComparison.Ordinal) ? translated : (fallback ?? "");
     }
 }
 #endif

@@ -30,10 +30,10 @@ public sealed class VirtualDisplayRuntime(AdbClient adb)
             {
                 string path = Path.Combine(DirectoryPath, file.Name);
                 if (Path.GetFileName(file.Name) != file.Name || !File.Exists(path))
-                    throw new FileNotFoundException("缺少独立屏幕组件，请使用完整实验包。", path);
+                    throw AndroidError.WithCode(new FileNotFoundException("缺少独立屏幕组件，请使用完整实验包。", path), AndroidErrorCode.MissingDisplayRuntime);
                 using var input = File.OpenRead(path);
                 if (input.Length != file.Bytes || Convert.ToHexString(SHA256.HashData(input)) != file.SHA256)
-                    throw new InvalidDataException("独立屏幕组件与实验包不符，请恢复完整文件。");
+                    throw AndroidError.WithCode(new InvalidDataException("独立屏幕组件与实验包不符，请恢复完整文件。"), AndroidErrorCode.InvalidDisplayRuntime);
             }
             _verified = true; // immutable package is checked once, on the first actual request
         }
@@ -49,7 +49,7 @@ public sealed class VirtualDisplayRuntime(AdbClient adb)
             var file = JsonSerializer.Deserialize<RuntimeFile[]>(manifest)!.Single(f => f.Name == "scrcpy-server-video");
             using var input = File.OpenRead(ServerFile);
             if (input.Length != file.Bytes || Convert.ToHexString(SHA256.HashData(input)) != file.SHA256)
-                throw new InvalidDataException("独立屏幕控制组件校验失败，请恢复完整文件。");
+                throw AndroidError.WithCode(new InvalidDataException("独立屏幕控制组件校验失败，请恢复完整文件。"), AndroidErrorCode.InvalidDisplayControlRuntime);
             _controlVerified = true;
         }
     }
@@ -125,10 +125,10 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
     public async Task StartAsync(AndroidDevice device, AndroidApp app, int x, int y, CancellationToken token)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (device.State != "device") throw new IOException("手机尚未连接，请刷新设备后重试。");
+        if (device.State != "device") throw AndroidError.WithCode(new IOException("手机尚未连接，请刷新设备后重试。"), AndroidErrorCode.DisplayPhoneNotConnected);
         await Task.Run(runtime.Validate, token).ConfigureAwait(false);
         int uid = await adb.ResolveUidAsync(device, app.Package, token).ConfigureAwait(false);
-        if (uid != app.Uid) throw new IOException("应用身份已改变，请刷新手机应用列表。");
+        if (uid != app.Uid) throw AndroidError.WithCode(new IOException("应用身份已改变，请刷新手机应用列表。"), AndroidErrorCode.DisplayAppUidChanged);
         token.ThrowIfCancellationRequested(); _serial = device.Serial;
         _device = device; _package = app.Package;
         _settings = settings?.Invoke(); // Already on the startup worker; unused video never reads preferences.
@@ -137,7 +137,7 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
         string? icon = CacheIcon(app, Path.Combine(dataRoot, "phone-app-icons"));
         var saved = _settings?.Get(device, app.Package);
         _process = Process.Start(CreateStartInfo(adb, device, app, x, y, icon, saved?.DisplaySize, saved?.WindowSize))
-            ?? throw new IOException("独立屏幕未能启动。");
+            ?? throw AndroidError.WithCode(new IOException("独立屏幕未能启动。"), AndroidErrorCode.DisplayStartFailed);
         ProcessId = _process.Id;
         _completion = ObserveAsync(_process);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -146,11 +146,11 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
         {
             Task first = await Task.WhenAny(_ready.Task, _completion).WaitAsync(deadline.Token).ConfigureAwait(false);
             await first.ConfigureAwait(false);
-            if (_process.HasExited) throw ConnectionError("独立屏幕未能打开，请检查手机连接后重试。");
+            if (_process.HasExited) throw ConnectionError("独立屏幕未能打开，请检查手机连接后重试。", AndroidErrorCode.DisplayOpenFailed);
             await Task.Run(DiscoverOwnedServer, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { Trace.WriteLine(LastLog()); throw new TimeoutException("打开独立屏幕超时，请检查手机连接。"); }
+        { Trace.WriteLine(LastLog()); throw AndroidError.WithCode(new TimeoutException("打开独立屏幕超时，请检查手机连接。"), AndroidErrorCode.DisplayOpenTimeout); }
     }
     private async Task ObserveAsync(Process process)
     {
@@ -158,7 +158,7 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
         var stderr = ReadLogAsync(process.StandardError);
         await process.WaitForExitAsync().ConfigureAwait(false);
         await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
-        if (process.ExitCode != 0) throw ConnectionError("独立屏幕连接已结束，请检查手机连接后重试。");
+        if (process.ExitCode != 0) throw ConnectionError("独立屏幕连接已结束，请检查手机连接后重试。", AndroidErrorCode.DisplayConnectionEnded);
     }
     private async Task ReadLogAsync(StreamReader reader)
     {
@@ -225,8 +225,8 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
     }
     private string LastLog()
     { lock (_logs) return string.Join(Environment.NewLine, _logs.TakeLast(8)); }
-    private IOException ConnectionError(string message)
-    { Trace.WriteLine(LastLog()); return new IOException(message); }
+    private IOException ConnectionError(string message, AndroidErrorCode code)
+    { Trace.WriteLine(LastLog()); return AndroidError.WithCode(new IOException(message), code); }
 
     // One on-demand query of this exact client's live adb child supplies its random server id.
     // A fallback cleanup may then touch only that id; no global scrcpy/ADB termination is used.

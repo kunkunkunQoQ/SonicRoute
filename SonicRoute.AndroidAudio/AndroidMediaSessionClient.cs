@@ -120,7 +120,7 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
             }
             await process.WaitForExitAsync(token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
-            throw new IOException("手机音乐连接已结束；重新打开面板或刷新可重试。");
+            throw AndroidError.WithCode(new IOException("手机音乐连接已结束；重新打开面板或刷新可重试。"), AndroidErrorCode.MediaConnectionEnded);
         }
         finally
         {
@@ -227,7 +227,7 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
         await _commands.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            var process = _process ?? throw new IOException("手机音乐尚未连接。");
+            var process = _process ?? throw AndroidError.WithCode(new IOException("手机音乐尚未连接。"), AndroidErrorCode.MediaNotConnected);
             await process.StandardInput.WriteLineAsync(command.AsMemory(), token).ConfigureAwait(false);
             await process.StandardInput.FlushAsync(token).ConfigureAwait(false);
         }
