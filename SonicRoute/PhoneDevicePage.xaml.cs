@@ -100,6 +100,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     internal void Suspend()
     {
         _active = false; _operation?.Cancel();
+        CancelStreamingWork();
         AndroidAudioHost.Phone.Changed -= ProfileChanged;
         L10n.Instance.PropertyChanged -= OnLanguageChanged;
         if (System.Windows.Application.Current is App application) application.PhoneClipboardChanged -= RefreshClipboard;
@@ -163,7 +164,8 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         _smartVolumeSnapshot = profile.DisabledSmartVolumeApps;
         RetainedCount.Text = string.Format(L10n.T("Phone.RetainedCountFormat"), profile.RetainedApps.Count);
         RetainedEmpty.Visibility = profile.RetainedApps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RetainedPanel.Visibility = DeviceCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
+        RetainedPanel.Visibility = DeviceCard.Visibility = StreamingCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
+        RefreshStreamingSettings(connection ? null : display);
         ConnectionPanel.Visibility = connection ? Visibility.Visible : Visibility.Collapsed;
         RenameButton.Visibility = RetainedPanel.Visibility;
         AddAppsButton.IsEnabled = _device != null && !_busy;

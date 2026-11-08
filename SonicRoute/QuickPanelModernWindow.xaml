@@ -19,6 +19,7 @@
             <Border x:Name="OutputPopupSurface" Width="366" Padding="14,12" ClipToBounds="True"
                     Background="{DynamicResource Theme.WindowBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
                     BorderThickness="1" CornerRadius="12" PreviewKeyDown="OutputPopup_PreviewKeyDown">
+                <Border.RenderTransform><TranslateTransform x:Name="OutputPopupSlide"/></Border.RenderTransform>
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <DockPanel Height="24" Margin="0,0,0,8">

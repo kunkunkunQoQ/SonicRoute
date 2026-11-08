@@ -8,6 +8,7 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
 {
     private readonly AdbClient _adb;
     private readonly Action<string> _log;
+    private readonly Func<AndroidDevice, AndroidStreamSettings>? _streaming;
     private readonly string _scid = Random.Shared.Next(1, int.MaxValue).ToString("x8");
     private readonly CancellationTokenSource _logLifetime = new();
     private string? _serial, _remote;
@@ -16,15 +17,20 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
     private TcpClient? _socket;
     private Task? _logs;
     private bool _disposed;
-    public ScrcpyAdbTransport(AdbClient adb, Action<string>? log = null) { _adb = adb; _log = log ?? (_ => { }); }
+    public ScrcpyAdbTransport(AdbClient adb, Action<string>? log = null, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
+    { _adb = adb; _log = log ?? (_ => { }); _streaming = streaming; }
 
     public async Task<Stream> ConnectAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token)
     {
         _serial = device.Serial;
+        var streaming = (_streaming?.Invoke(device) ?? new()).Normalize();
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         _adb.ValidateServer();
-        int uid = await _adb.ResolveUidAsync(device, app.Package, token).ConfigureAwait(false);
-        if (uid != app.Uid) throw AndroidError.WithCode(new IOException("应用 UID 已改变，请刷新列表后重新拖入。"), AndroidErrorCode.AppUidChanged);
+        if (!app.IsDeviceAudio)
+        {
+            int uid = await _adb.ResolveUidAsync(device, app.Package, token).ConfigureAwait(false);
+            if (uid != app.Uid) throw AndroidError.WithCode(new IOException("应用 UID 已改变，请刷新列表后重新拖入。"), AndroidErrorCode.AppUidChanged);
+        }
         string sdkText = await _adb.RunAsync(token, "-s", _serial, "shell", "getprop", "ro.build.version.sdk").ConfigureAwait(false);
         if (!int.TryParse(sdkText.Trim(), out int sdk) || sdk < 33) throw AndroidError.WithCode(new NotSupportedException("应用音频捕获要求 Android 13 或更高；已验证的参考机型为 Android 16。"), AndroidErrorCode.Android13Required);
         if (!File.Exists(_adb.ServerFile)) throw new FileNotFoundException("Missing verified scrcpy server.", _adb.ServerFile);
@@ -34,7 +40,7 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         if (!int.TryParse(forward.Trim(), out _port) || _port is < 1 or > 65535) throw new IOException("Invalid ADB forward port.");
         string command = "echo SR_PID:$$; CLASSPATH=" + _remote + " exec app_process / com.genymobile.scrcpy.Server 3.3.4 "
             + $"scid={_scid} log_level=info video=false audio=true control=false audio_codec=opus audio_source=playback "
-            + $"audio_dup={keepPhoneAudio.ToString().ToLowerInvariant()} audio_target_packages={app.Package} audio_mix_mode=uid "
+            + CaptureOptions(app, keepPhoneAudio) + " " + streaming.AudioOptions() + " "
             + "tunnel_forward=true send_device_meta=false send_dummy_byte=true cleanup=false";
         _server = _adb.Start("-s", _serial, "shell", command);
         _logs = Task.WhenAll(ReadLogAsync(_server.StandardOutput), ReadLogAsync(_server.StandardError));
@@ -61,6 +67,13 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
             }
             catch { socket.Dispose(); throw; }
         }
+    }
+
+    internal static string CaptureOptions(AndroidApp app, bool keepPhoneAudio)
+    {
+        if (!app.IsDeviceAudio) AdbClient.ValidatePackage(app.Package);
+        string target = app.IsDeviceAudio ? "" : " audio_target_packages=" + app.Package;
+        return $"audio_dup={keepPhoneAudio.ToString().ToLowerInvariant()}{target} audio_mix_mode=uid";
     }
 
     private async Task ReadLogAsync(StreamReader reader)

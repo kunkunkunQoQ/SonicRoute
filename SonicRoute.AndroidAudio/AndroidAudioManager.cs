@@ -39,7 +39,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
         }
     }
     private SourceSnapshot _snapshot = SourceSnapshot.Empty;
-    private readonly HashSet<Task> _retiring = new();
+    private readonly HashSet<AndroidAudioSource> _retiring = new();
     private readonly Queue<string> _history = new();
     private readonly Func<AndroidAudioSession> _factory;
     private readonly AndroidAudioSettingsStore? _settings;
@@ -52,7 +52,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     private void PublishSources() => Volatile.Write(ref _snapshot, _sources.Count == 0
         ? SourceSnapshot.Empty : new SourceSnapshot(_sources.ToArray()));
     public AndroidAudioManager(AdbClient adb, AndroidAudioSettingsStore? settings = null, Func<AndroidDevice, string, bool>? smartVolume = null)
-        : this(() => new AndroidAudioSession(adb), settings, smartVolume) { }
+        : this(() => new AndroidAudioSession(adb, settings == null ? null : settings.GetStreaming), settings, smartVolume) { }
     public AndroidAudioManager(Func<AndroidAudioSession> factory, AndroidAudioSettingsStore? settings = null, Func<AndroidDevice, string, bool>? smartVolume = null)
     { _factory = factory; _settings = settings; _smartVolume = smartVolume; }
 
@@ -60,9 +60,15 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     {
         AndroidAudioSource source;
         AndroidAudioSource? replaced;
+        AndroidAudioSource[] releaseBeforeStart;
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            // A display may use an existing device capture, but must not replace an
+            // explicit whole-phone choice with a second capture of the same audio.
+            if (displayOwned && _sources.FirstOrDefault(s => AndroidDeviceIdentity.Matches(s.Device, device)
+                && s.App.IsDeviceAudio && s.Session.State.State != CaptureState.Failed) is { } wholePhone)
+                return wholePhone.Started.Task;
             replaced = _sources.FirstOrDefault(s => AndroidDeviceIdentity.Matches(s.Device, device) && s.App.Package == app.Package);
             if (replaced != null && !displayOwned) replaced.DisplayOwned = false; // an explicit playback choice always wins
             if (displayOwned && replaced != null && replaced.App.Uid == app.Uid && replaced.Session.State.State != CaptureState.Failed)
@@ -75,7 +81,13 @@ public sealed class AndroidAudioManager : IAsyncDisposable
             source.Session.SetVolume(saved.Volume);
             source.Session.SetSmartVolume(_smartVolume?.Invoke(device, app.Package) ?? true);
             outputId ??= saved.OutputId;
-            int index = replaced == null ? _sources.Count : _sources.IndexOf(replaced);
+            bool Conflicts(AndroidAudioSource other) => AndroidDeviceIdentity.Matches(other.Device, device)
+                && (other.App.Package == app.Package || other.App.IsDeviceAudio || app.IsDeviceAudio);
+            var conflicts = _sources.Where(Conflicts).ToArray();
+            // Include already-retiring captures: a rapid device -> app -> second app
+            // switch must finish releasing the device policy before either app starts.
+            releaseBeforeStart = _retiring.Where(Conflicts).Concat(conflicts).Distinct().ToArray();
+            int index = conflicts.Length == 0 ? _sources.Count : _sources.IndexOf(conflicts[0]);
             if (replaced != null && replaced.App.Uid == app.Uid)
             {
                 var previous = replaced.Session.State;
@@ -84,7 +96,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
                 if (_smartVolume == null) source.Session.SetSmartVolume(previous.SmartVolume);
                 outputId = previous.OutputId;
             }
-            if (replaced != null) Detach(replaced);
+            foreach (var conflict in conflicts) Detach(conflict);
             source.Handler = _ =>
             {
                 lock (_gate)
@@ -97,11 +109,11 @@ public sealed class AndroidAudioManager : IAsyncDisposable
                 Notify();
             };
             source.Session.Changed += source.Handler;
-            _sources.Insert(index, source);
+            _sources.Insert(Math.Min(index, _sources.Count), source);
             PublishSources();
         }
         Notify();
-        _ = StartAsync(source, replaced, keepPhoneAudio, outputId);
+        _ = StartAsync(source, releaseBeforeStart, keepPhoneAudio, outputId);
         return source.Started.Task;
     }
 
@@ -113,11 +125,11 @@ public sealed class AndroidAudioManager : IAsyncDisposable
             source.Session.SetSmartVolume(resolve(source.Device, source.App.Package));
     }
 
-    private async Task StartAsync(AndroidAudioSource source, AndroidAudioSource? replaced, bool keepPhoneAudio, string? outputId)
+    private async Task StartAsync(AndroidAudioSource source, AndroidAudioSource[] releaseBeforeStart, bool keepPhoneAudio, string? outputId)
     {
         try
         {
-            if (replaced != null) await RetireAsync(replaced).ConfigureAwait(false);
+            await Task.WhenAll(releaseBeforeStart.Select(RetireAsync)).ConfigureAwait(false);
             source.Lifetime.Token.ThrowIfCancellationRequested();
             await source.Session.SetOutputAsync(outputId).ConfigureAwait(false);
             await source.Session.StartAsync(source.Device, source.App, keepPhoneAudio, source.Lifetime.Token).ConfigureAwait(false);
@@ -141,11 +153,12 @@ public sealed class AndroidAudioManager : IAsyncDisposable
         Notify();
         await release.ConfigureAwait(false);
     }
-    public async Task ReleaseDisplayAudioAsync(AndroidAudioSource source)
+    public async Task ReleaseDisplayAudioAsync(AndroidAudioSource source, string? ownerPackage = null)
     {
         lock (_gate)
         {
-            if (!source.DisplayOwned || !_sources.Contains(source)) return;
+            if (!source.DisplayOwned || !_sources.Contains(source)
+                || (ownerPackage != null && ownerPackage != source.App.Package)) return;
             Detach(source); PublishSources();
         }
         var release = RetireAsync(source); Notify(); await release.ConfigureAwait(false);
@@ -154,7 +167,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     private void Detach(AndroidAudioSource source)
     {
         _sources.Remove(source);
-        _retiring.Add(source.Released.Task);
+        _retiring.Add(source);
         source.Session.Changed -= source.Handler;
         source.Lifetime.Cancel();
     }
@@ -168,7 +181,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     {
         try { await ReleaseAsync(source).ConfigureAwait(false); source.Released.TrySetResult(); }
         catch (Exception ex) { source.Released.TrySetException(ex); }
-        finally { lock (_gate) _retiring.Remove(source.Released.Task); }
+        finally { lock (_gate) _retiring.Remove(source); }
     }
 
     private async Task ReleaseAsync(AndroidAudioSource source)
@@ -221,7 +234,7 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     {
         lock (_gate) _disposed = true;
         await StopAllAsync().ConfigureAwait(false);
-        Task[] retiring; lock (_gate) retiring = _retiring.ToArray();
+        Task[] retiring; lock (_gate) retiring = _retiring.Select(s => s.Released.Task).ToArray();
         await Task.WhenAll(retiring).ConfigureAwait(false);
     }
 }

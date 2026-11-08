@@ -15,6 +15,9 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--stream-settings") { await StreamSettingsAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--encoder-catalog") { await EncoderCatalogAsync(args[1], args[2]); return 0; }
+            if (args.Length > 0 && args[0] == "--device-audio") { await DeviceAudioAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--media-log-tail") { await MediaLogTailAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-latency-live") { await OutputLatencyLiveAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-startup") { await OutputStartupAsync(args[1]); return 0; }
@@ -52,7 +55,7 @@ internal static partial class Program
         Check(process.ExitCode == 0 && help.Contains("--new-display") && help.Contains("--start-app"),
             "packaged native client loads its video DLLs and accepts the video-only launch options without starting ADB");
         await File.WriteAllTextAsync(args[2], JsonSerializer.Serialize(new { Package = Path.GetFullPath(args[1]), Success = true,
-            ManifestFiles = 7, NativeExitCode = process.ExitCode, DeviceAccess = false, Assertions = _checks }, new JsonSerializerOptions { WriteIndented = true }));
+            ManifestFiles = 8, NativeExitCode = process.ExitCode, DeviceAccess = false, Assertions = _checks }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"PASS {_checks} package assertions; no phone access or capture.");
     }
     private static async Task ModulesAsync()

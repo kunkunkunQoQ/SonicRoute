@@ -1,12 +1,9 @@
 #if SONICROUTE_PHONE
 using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Interop;
-using System.Windows.Media;
 using SonicRoute.AndroidAudio;
 using Button = System.Windows.Controls.Button;
 
@@ -76,7 +73,7 @@ internal sealed class VirtualDisplayPresentation(IVirtualDisplayClient client, A
                     if (!receive && _source != null)
                     {
                         var released = _source; _source = null;
-                        await AndroidAudioHost.Sources.ReleaseDisplayAudioAsync(released);
+                        await AndroidAudioHost.Sources.ReleaseDisplayAudioAsync(released, payload.App.Package);
                     }
                     else if (receive && _source == null)
                         _source = await AndroidAudioHost.AddAudioAsync(payload.Device, payload.App, false, displayOwned: true);
@@ -89,22 +86,16 @@ internal sealed class VirtualDisplayPresentation(IVirtualDisplayClient client, A
 }
 
 /// <summary>Reuses application theme/buttons. Target-process location events only while this notice is visible.</summary>
-internal sealed class VirtualDisplayStatusWindow : Window
+internal sealed class VirtualDisplayStatusWindow : VirtualDisplayOverlayWindow
 {
     private readonly IVirtualDisplayClient _client;
     private readonly TextBlock _title = new() { FontSize = 18, FontWeight = FontWeights.SemiBold, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _detail = new() { Margin = new Thickness(0, 10, 0, 18), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
     private readonly Button _restore = new() { Content = L10n.T("Phone.DisplaySwitchToPc"), Padding = new Thickness(18, 8, 18, 8), HorizontalAlignment = System.Windows.HorizontalAlignment.Center };
     private VirtualDisplayState _state;
-    private readonly WinEventProc _location;
-    private IntPtr _owner, _hook;
-    private bool _closed, _queued;
-
-    internal VirtualDisplayStatusWindow(IVirtualDisplayClient client)
+    internal VirtualDisplayStatusWindow(IVirtualDisplayClient client) : base(client)
     {
-        _client = client; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
-        ShowInTaskbar = false; ShowActivated = false; Width = 300; Height = 200;
-        FontFamily = new System.Windows.Media.FontFamily("Segoe UI, Microsoft YaHei UI, Microsoft YaHei");
+        _client = client;
         SetResourceReference(BackgroundProperty, "Theme.SurfaceBg");
         _title.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextPrimary");
         _detail.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
@@ -114,37 +105,19 @@ internal sealed class VirtualDisplayStatusWindow : Window
         _restore.Click += (_, _) => { _restore.IsEnabled = false; _client.Restore(); };
         var body = new StackPanel { Margin = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
         body.Children.Add(_title); body.Children.Add(_detail); body.Children.Add(_restore); Content = body;
-        _location = (_, _, hwnd, objectId, _, _, _) => { if (hwnd == _owner && objectId == 0) QueuePosition(); };
         L10n.Instance.PropertyChanged += OnLanguageChanged;
-        Closed += (_, _) =>
-        {
-            L10n.Instance.PropertyChanged -= OnLanguageChanged;
-            _closed = true; if (_hook != IntPtr.Zero) { UnhookWinEvent(_hook); _hook = IntPtr.Zero; }
-            ((App)System.Windows.Application.Current).ReleaseClosedUiWindow(this);
-        };
+        Closed += (_, _) => L10n.Instance.PropertyChanged -= OnLanguageChanged;
     }
     internal void UpdateState(VirtualDisplayState state)
     {
         _state = state;
         RefreshText();
         _restore.IsEnabled = state != VirtualDisplayState.Recovering;
-        if (!IsVisible && !_closed)
-        {
-            try
-            {
-                using var process = Process.GetProcessById(_client.ProcessId); _owner = process.MainWindowHandle;
-                if (_owner == IntPtr.Zero) return;
-                new WindowInteropHelper(this).Owner = _owner;
-                _hook = SetWinEventHook(0x800B, 0x800B, IntPtr.Zero, _location, (uint)_client.ProcessId, 0, 0);
-                Show(); Position();
-            }
-            catch (ArgumentException) { Close(); }
-            catch (InvalidOperationException) { Close(); }
-        }
+        SetOverlayVisible(true);
     }
     private void OnLanguageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (!_closed) RefreshText();
+        if (!IsClosed) RefreshText();
     }
     private void RefreshText()
     {
@@ -152,26 +125,5 @@ internal sealed class VirtualDisplayStatusWindow : Window
         _detail.Text = _state == VirtualDisplayState.OnPhone ? L10n.T("Phone.DisplayUsingOnPhoneDetail") : _state == VirtualDisplayState.Recovering ? L10n.T("Phone.DisplayPleaseWait") : L10n.T("Phone.DisplayCanReopenHere");
         _restore.Content = _state == VirtualDisplayState.OnPhone ? L10n.T("Phone.DisplaySwitchToPc") : L10n.T("Phone.DisplayRestoreScreen");
     }
-    private void QueuePosition()
-    {
-        if (_closed || _queued) return; _queued = true;
-        Dispatcher.BeginInvoke(new Action(() => { _queued = false; if (!_closed) Position(); }));
-    }
-    private void Position()
-    {
-        if (!GetClientRect(_owner, out var rect)) return;
-        var point = new NativePoint(); if (!ClientToScreen(_owner, ref point)) return;
-        int width = rect.Right, height = rect.Bottom;
-        if (width <= 0 || height <= 0) return;
-        SetWindowPos(new WindowInteropHelper(this).Handle, IntPtr.Zero, point.X, point.Y, width, height, 0x14);
-    }
-    private delegate void WinEventProc(IntPtr hook, uint ev, IntPtr hwnd, int objectId, int childId, uint thread, uint time);
-    [StructLayout(LayoutKind.Sequential)] private struct NativeRect { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] private struct NativePoint { public int X, Y; }
-    [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hwnd, out NativeRect rect);
-    [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hwnd, ref NativePoint point);
-    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int width, int height, uint flags);
-    [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc callback, uint process, uint thread, uint flags);
-    [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
 }
 #endif

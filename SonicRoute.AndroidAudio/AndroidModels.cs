@@ -168,6 +168,12 @@ public static class AndroidDeviceIdentity
 
 public sealed record AndroidApp(string Package, string Name, int Uid, string Category, byte[]? IconPng = null, int PlatformCategory = -1)
 {
+    // A deliberate device source, never inferred from a missing app or unresolved UID.
+    // ':' cannot occur in an Android package, so this identity cannot enter the app catalog.
+    public const string DeviceAudioPackage = "sonicroute:device-audio";
+    public static AndroidApp DeviceAudio { get; } = new(DeviceAudioPackage, "整机", -1, "device");
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsDeviceAudio => Package == DeviceAudioPackage && Uid == -1;
     public override string ToString() => Name;
 }
 

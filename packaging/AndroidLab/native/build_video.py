@@ -35,6 +35,8 @@ shutil.copytree(reference / 'third_party/scrcpy-experimental', stage,
 patches = sorted((reference / 'patches').glob('*.patch'))
 for patch in patches:
     run(['git', '-C', stage, 'apply', '--ignore-space-change', patch])
+shutil.copyfile(native / 'phone_icon.ico', stage / 'app/data/icon.ico')
+shutil.copyfile(repo / 'AndroidRuntime/VirtualDisplay/phone-icon.png', stage / 'app/data/icon.png')
 run(['git', '-C', stage, 'apply', '--ignore-space-change', native / 'virtual_resize.patch'])
 display_manager = stage / 'server/src/main/java/com/genymobile/scrcpy/wrappers/DisplayManager.java'
 manager_text = display_manager.read_text(encoding='utf-8')
@@ -94,12 +96,24 @@ text = screen.read_text(encoding='utf-8')
 for old, new in [
     ('#include "screen.h"', '#include "screen.h"\n#include "flex_resize.h"\n#include "resize_packet.h"'),
     ('    struct sc_screen *screen = data;\n    assert(screen->video);',
-     '    struct sc_screen *screen = data;\n    if (sr_flex_enabled()) return 0;\n    assert(screen->video);'),
+     '    struct sc_screen *screen = data;\n    if (sr_flex_enabled() || sr_mirror_enabled()) return 0;\n    assert(screen->video);'),
     ('    SDL_ShowWindow(screen->window);', '    sr_flex_install(screen);\n    SDL_ShowWindow(screen->window);'),
+    ('        sc_screen_show_initial_window(screen);',
+     '        sc_screen_show_initial_window(screen);\n        LOGI("SonicRoute first-frame");'),
     ('    SDL_DestroyWindow(screen->window);', '    sr_flex_uninstall(screen);\n    SDL_DestroyWindow(screen->window);'),
     ('    SDL_Rect *rect = &screen->rect;', '    SDL_Rect *rect = &screen->rect;\n    if (sr_flex_enabled()) { *rect = (SDL_Rect) {0, 0, dw, dh}; return; }'),
     ('    if (!screen->fullscreen && !screen->maximized && !screen->minimized) {\n        resize_for_content',
-     '    if (sr_flex_enabled()) { screen->content_size = new_content_size; return; }\n    if (!screen->fullscreen && !screen->maximized && !screen->minimized) {\n        resize_for_content')
+     '    if (sr_flex_enabled()) { screen->content_size = new_content_size; return; }\n'
+     '    sr_flex_content_changing(screen, true);\n'
+     '    if (!screen->fullscreen && !screen->maximized && !screen->minimized) {\n        resize_for_content'),
+    ('    screen->content_size = new_content_size;\n}',
+     '    screen->content_size = new_content_size;\n    sr_flex_content_changing(screen, false);\n}'),
+    ('sc_screen_toggle_fullscreen(struct sc_screen *screen) {\n    assert(screen->video);',
+     'sc_screen_toggle_fullscreen(struct sc_screen *screen) {\n    assert(screen->video);\n'
+     '    if (sr_mirror_enabled()) {\n'
+     '        if (screen->maximized) SDL_RestoreWindow(screen->window);\n'
+     '        else SDL_MaximizeWindow(screen->window);\n'
+     '        return;\n    }')
 ]:
     expected = 2 if old.startswith('    SDL_DestroyWindow') else 1
     if text.count(old) != expected:
@@ -138,6 +152,7 @@ static void sr_flex_window_size(LONG width, LONG height) {
 '''
 screen.write_text(text, encoding='utf-8')
 shutil.copyfile(native / 'flex_resize.h', stage / 'app/src/flex_resize.h')
+shutil.copyfile(native / 'mirror_resize.h', stage / 'app/src/mirror_resize.h')
 shutil.copyfile(native / 'ime_routing.h', stage / 'app/src/ime_routing.h')
 shutil.copyfile(native / 'resize_packet.h', stage / 'app/src/resize_packet.h')
 input_header = stage / 'app/src/input_manager.h'
@@ -183,7 +198,16 @@ run([toolchain / 'x86_64-w64-mingw32-clang.exe', '-std=c11', '-Wall', '-Wextra',
      '-L' + str(prefix / 'lib'), '-lSDL2', '-luser32', '-o', check])
 packets = work / 'resize-packets.bin'
 run([check, packets])
-video_server, server_receipt = build_server(work, repo, stage, run, packets, env)
+mirror_check = work / 'mirror-check.exe'
+run([toolchain / 'x86_64-w64-mingw32-clang.exe', '-std=c11', '-Wall', '-Wextra',
+     '-I' + str(prefix / 'include'), '-I' + str(native), native / 'mirror_check.c',
+     '-L' + str(prefix / 'lib'), '-lSDL2', '-luser32', '-o', mirror_check])
+run([mirror_check])
+if '--client-only' in sys.argv[3:]:
+    video_server = repo / 'AndroidRuntime/VirtualDisplay/scrcpy-server-video'
+    server_receipt = dict(ReusedPinnedServer=True, Checks='Server unchanged; client-only build')
+else:
+    video_server, server_receipt = build_server(work, repo, stage, run, packets, env)
 output = repo.parent / 'outputs/video-client'
 output.mkdir(exist_ok=True)
 target = output / 'scrcpy.exe'
@@ -191,9 +215,13 @@ shutil.copyfile(build / 'app/scrcpy.exe', target)
 server_target = output / video_server.name
 shutil.copyfile(video_server, server_target)
 receipt = dict(Executable=str(target), Bytes=target.stat().st_size, SHA256=sha(target),
+               PhoneIcon=dict(GeometrySourceSHA256=sha(repo / 'SonicRoute/AutomationIcons.cs'),
+                   PngSHA256=sha(repo / 'AndroidRuntime/VirtualDisplay/phone-icon.png'),
+                   IcoSHA256=sha(native / 'phone_icon.ico')),
                Server=dict(Name=server_target.name, Bytes=server_target.stat().st_size, SHA256=sha(server_target), **server_receipt),
                ReferencePatches=[dict(Name=p.name, SHA256=sha(p)) for p in patches],
                NativeSources=[dict(Name=p.name, SHA256=sha(p)) for p in native.iterdir() if p.is_file()],
-               FlexCheck='8 unconstrained edges, intermediate/final control packets, bounds/deduplication, UI-thread presentation and hook cleanup; hidden HWND, no phone')
+               FlexCheck='8 unconstrained edges, intermediate/final control packets, bounds/deduplication, UI-thread presentation and hook cleanup; hidden HWND, no phone',
+               MirrorCheck='8 proportional edges, fitted maximize/snap/restore, changing orientation, caption icon suppression, no resize packets or idle work; hidden HWND, no phone')
 (output / 'build-receipt.json').write_text(json.dumps(receipt, indent=2), encoding='utf-8')
 print('READY ' + str(target) + ' ' + receipt['SHA256'], flush=True)

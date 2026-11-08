@@ -79,6 +79,8 @@ internal static class AndroidAudioHost
     // actually needs them. A closing view cancels its wait, not another caller's load.
     private static readonly Lazy<Task<AndroidPhoneStore>> PhoneRead = new(() => Task.Run(() => Phone));
     private static readonly Lazy<Task<AndroidAudioManager>> SourcesRead = new(() => Task.Run(() => Sources));
+    private static readonly Lazy<Task<AndroidAudioSettingsStore>> SettingsRead = new(() => Task.Run(() => LazySettings.Value));
+    internal static Task<AndroidAudioSettingsStore> PrepareStreamingAsync(CancellationToken token) => SettingsRead.Value.WaitAsync(token);
     internal static async Task PreparePhoneAsync(CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested();

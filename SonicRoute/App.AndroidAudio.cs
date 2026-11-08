@@ -52,6 +52,8 @@ public partial class App
     internal async Task OpenAndroidDisplayAsync(AndroidAppDrag payload, int screenX, int screenY)
     {
         if (_exiting) return;
+        if (payload.App.IsDeviceAudio)
+            payload = payload with { App = payload.App with { Name = ApplicationAudio.AndroidName(payload.App, payload.Device) } };
         try
         {
             if (!_androidDisplayNotifications)

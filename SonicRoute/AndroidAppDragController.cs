@@ -13,7 +13,7 @@ internal static class AndroidAppDragController
     internal static void Run(FrameworkElement source, AndroidAppDrag payload)
     {
         var result = AppIconDragController.Run(source, new DataObject(AndroidAppDrag.Format, payload),
-            new PhoneAppItem(payload.App).Icon, payload.App.Name, active => AndroidAudioHost.IsDragging = active);
+            new PhoneAppItem(payload.App).Icon, ApplicationAudio.AndroidName(payload.App, payload.Device), active => AndroidAudioHost.IsDragging = active);
         var app = (App)Application.Current;
         app.QuickPanelInstance?.ClearAndroidDropHighlight();
         if (result.Outside) _ = app.OpenAndroidDisplayAsync(payload, result.X, result.Y);

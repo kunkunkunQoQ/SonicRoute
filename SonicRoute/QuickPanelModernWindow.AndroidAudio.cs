@@ -295,12 +295,14 @@ public partial class QuickPanelModernWindow
             row.PhoneName = phoneName;
             if (phoneNameChanged || _androidLanguageDirty)
             {
+                string appName = source.App.IsDeviceAudio ? phoneName : source.App.Name;
+                if (source.App.IsDeviceAudio) row.IconItem.Info.DisplayName = appName;
                 row.IconItem.RefreshSourceLabel(string.Format(L10n.T("Phone.FromDevice"), phoneName));
-                row.Icon.ToolTip = string.Format(L10n.T("Phone.RowIconDragTooltip"), source.App.Name);
-                System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), source.App.Name));
+                row.Icon.ToolTip = string.Format(L10n.T("Phone.RowIconDragTooltip"), appName);
+                System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
                 row.Expand.ToolTip = L10n.T("Qp.ExpandDevices");
-                System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), source.App.Name));
-                System.Windows.Automation.AutomationProperties.SetName(row.Volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), source.App.Name));
+                System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), appName));
+                System.Windows.Automation.AutomationProperties.SetName(row.Volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), appName));
             }
             row.IconItem.RefreshName();
             string errText = AndroidErrorTranslation.Format(state);
@@ -326,6 +328,7 @@ public partial class QuickPanelModernWindow
     private AndroidRow CreateAndroidRow(AndroidAudioSource source, bool legacy, bool showOutputName)
     {
         var row = new AndroidRow { Source = source, MeterId = NextAndroidMeterId(), Legacy = legacy, ShowOutputName = showOutputName };
+        string appName = ApplicationAudio.AndroidName(source.App, source.Device);
         var session = source.Session; var state = session.State;
         row.IconItem = AppItem.From(ApplicationAudio.Describe(source));
         AppItem.LoadIconsAsync(new List<AppItem> { row.IconItem });
@@ -333,12 +336,12 @@ public partial class QuickPanelModernWindow
         var header = new Border { Height = legacy ? 36 : 52, Padding = new Thickness(4, 0, 4, 0), CornerRadius = new CornerRadius(8) };
         var dock = new DockPanel();
         row.Icon = new Button { Width = 30, Height = 30, VerticalAlignment = VerticalAlignment.Center,
-            Style = (Style)FindResource("RowIconButton"), ToolTip = string.Format(L10n.T("Phone.RowIconDragTooltip"), source.App.Name) };
+            Style = (Style)FindResource("RowIconButton"), ToolTip = string.Format(L10n.T("Phone.RowIconDragTooltip"), appName) };
         row.Icon.Content = new ContentControl { Content = row.IconItem, Width = 22, Height = 22,
             ContentTemplate = (DataTemplate)FindResource("AppIconTemplate") };
         row.Icon.Click += (_, _) => session.SetMute(!session.State.Muted);
         AndroidAppDragController.Attach(row.Icon, () => new AndroidAppDrag(source.Device, source.App));
-        System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), source.App.Name));
+        System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
         DockPanel.SetDock(row.Icon, Dock.Left); dock.Children.Add(row.Icon);
         row.Expand = new ToggleButton { Width = legacy && showOutputName ? 80 : 32, Height = legacy ? 24 : 32,
             VerticalAlignment = VerticalAlignment.Center, Style = (Style)FindResource("RowExpandButton"), ToolTip = L10n.T("Qp.ExpandDevices") };
@@ -349,7 +352,7 @@ public partial class QuickPanelModernWindow
             row.Name = NewRowName(); row.Name.MaxWidth = 58; label.Children.Add(row.Name); label.Children.Add(glyph); row.Expand.Content = label;
         }
         else row.Expand.Content = glyph;
-        System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), source.App.Name));
+        System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), appName));
         DockPanel.SetDock(row.Expand, Dock.Right); dock.Children.Add(row.Expand);
         Slider volume = legacy ? new Slider() : new AppRowVolumeSlider(); row.Volume = volume;
         volume.Minimum = 0; volume.Maximum = 100; volume.Value = state.Volume; volume.Height = legacy ? 32 : 48;
@@ -371,7 +374,7 @@ public partial class QuickPanelModernWindow
                 if (_meterEnabled && IsVisible && !_visibleAndroidMeterRows.Contains(row))
                     QueueMeterViewport();
             };
-        System.Windows.Automation.AutomationProperties.SetName(volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), source.App.Name));
+        System.Windows.Automation.AutomationProperties.SetName(volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), appName));
         volume.ValueChanged += (_, e) =>
         {
             UpdateAndroidSliderLayout(row);

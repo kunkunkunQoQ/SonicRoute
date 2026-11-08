@@ -60,6 +60,9 @@
                 </StackPanel>
             </Grid>
         </DataTemplate>
+        <DataTemplate x:Key="EncoderOptionTemplate">
+            <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" Style="{x:Null}"/>
+        </DataTemplate>
     </UserControl.Resources>
     <Grid>
         <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -104,15 +107,54 @@
                     </Grid>
                 </StackPanel>
             </Border>
-            <StackPanel x:Name="RetainedPanel">
-                <Grid Margin="4,0,4,6">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <TextBlock Text="{Binding [Phone.QuickPanelAppsTitle], Source={x:Static local:L10n.Instance}}" FontSize="17" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="RetainedCount" Grid.Column="1" Style="{StaticResource PhoneHint}" VerticalAlignment="Center"/>
+            <Border x:Name="StreamingCard" Style="{StaticResource PhoneCard}"
+                    ToolTip="{Binding [Phone.StreamApplyHint], Source={x:Static local:L10n.Instance}}">
+                <Grid TextElement.FontSize="11">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*" MinWidth="80"/>
+                        <ColumnDefinition Width="96"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="{Binding [Phone.StreamAudioLabel], Source={x:Static local:L10n.Instance}}"
+                               VerticalAlignment="Center" Margin="0,0,8,6"/>
+                    <ComboBox x:Name="AudioEncoderCombo" Grid.Column="1" Style="{StaticResource RoundedComboBox}"
+                              ItemTemplate="{StaticResource EncoderOptionTemplate}"
+                              Height="28" FontSize="11" Margin="0,0,8,6"
+                              ToolTip="{Binding [Phone.StreamEncoder], Source={x:Static local:L10n.Instance}}"
+                              DropDownOpened="StreamEncoder_DropDownOpened" SelectionChanged="StreamSettings_Changed"/>
+                    <ComboBox x:Name="AudioBitRateCombo" Grid.Column="2" Style="{StaticResource RoundedComboBox}"
+                              ToolTip="{Binding [Phone.StreamBitRate], Source={x:Static local:L10n.Instance}}"
+                              Height="28" FontSize="11" Margin="0,0,8,6" SelectionChanged="StreamSettings_Changed"/>
+
+                    <TextBlock Grid.Row="1" Text="{Binding [Phone.StreamVideoLabel], Source={x:Static local:L10n.Instance}}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="VideoEncoderCombo" Grid.Row="1" Grid.Column="1" Style="{StaticResource RoundedComboBox}"
+                              ItemTemplate="{StaticResource EncoderOptionTemplate}"
+                              Height="28" FontSize="11" Margin="0,0,8,0"
+                              ToolTip="{Binding [Phone.StreamEncoder], Source={x:Static local:L10n.Instance}}"
+                              DropDownOpened="StreamEncoder_DropDownOpened" SelectionChanged="StreamSettings_Changed"/>
+                    <ComboBox x:Name="VideoBitRateCombo" Grid.Row="1" Grid.Column="2" Style="{StaticResource RoundedComboBox}"
+                              ToolTip="{Binding [Phone.StreamBitRate], Source={x:Static local:L10n.Instance}}"
+                              Height="28" FontSize="11" Margin="0,0,8,0" SelectionChanged="StreamSettings_Changed"/>
+                    <ComboBox x:Name="VideoFpsCombo" Grid.Row="1" Grid.Column="3" Style="{StaticResource RoundedComboBox}"
+                              ToolTip="{Binding [Phone.StreamFps], Source={x:Static local:L10n.Instance}}"
+                              MinWidth="80" Height="28" FontSize="11" SelectionChanged="StreamSettings_Changed"/>
                 </Grid>
-                <TextBlock Text="{Binding [Phone.PinDesc], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
-                <Border Style="{StaticResource PhoneCard}" Padding="12,6">
+            </Border>
+            <StackPanel x:Name="RetainedPanel">
+                <Border Style="{StaticResource PhoneCard}" Padding="12,10,12,8">
                     <StackPanel>
+                        <Grid Margin="4,0,4,6">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding [Phone.QuickPanelAppsTitle], Source={x:Static local:L10n.Instance}}" FontSize="17" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="RetainedCount" Grid.Column="1" Style="{StaticResource PhoneHint}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Text="{Binding [Phone.PinDesc], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
                         <ItemsControl x:Name="RetainedApps" ItemTemplate="{StaticResource PhoneLibraryItem}"/>
                         <TextBlock x:Name="RetainedEmpty" Text="{Binding [Phone.RetainedEmptyHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,12"/>
                     </StackPanel>

@@ -119,6 +119,60 @@ public sealed class AdbClient
         return devices;
     }
 
+    public async Task<AndroidEncoderCatalog> EncodersAsync(AndroidDevice device, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(12));
+        await PrepareRuntimeAsync("audio", deadline.Token).ConfigureAwait(false);
+        string helper = Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
+        string remote = "/data/local/tmp/sonicroute_encoders_" + Guid.NewGuid().ToString("N") + ".jar";
+        try
+        {
+            await RunAsync(deadline.Token, "-s", device.Serial, "push", helper, remote).ConfigureAwait(false);
+            string output = await RunAsync(deadline.Token, "-s", device.Serial, "shell", "CLASSPATH=" + remote,
+                "app_process", "/", "org.sonicroute.android.EncoderCatalog").ConfigureAwait(false);
+            return ParseEncoders(output);
+        }
+        finally
+        {
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException) { Trace.WriteLine("Encoder query cleanup: " + ex.Message); }
+        }
+    }
+
+    public static AndroidEncoderCatalog ParseEncoders(string output)
+    {
+        foreach (string line in output.Split('\n'))
+        {
+            if (!line.TrimStart().StartsWith('{')) continue;
+            using var json = JsonDocument.Parse(line);
+            if (!json.RootElement.TryGetProperty("audio", out var audio)
+                || !json.RootElement.TryGetProperty("video", out var video)
+                || audio.ValueKind != JsonValueKind.Array
+                || video.ValueKind != JsonValueKind.Array) continue;
+            static string[] Names(JsonElement array) => array.EnumerateArray().Take(256)
+                .Select(x => x.ValueKind == JsonValueKind.String ? x.GetString() : null)
+                .Where(AndroidStreamSettings.IsEncoderName)
+                .Select(x => x!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+            Dictionary<string, AndroidEncoderKind>? kinds = null;
+            if (json.RootElement.TryGetProperty("details", out var details) && details.ValueKind == JsonValueKind.Object)
+            {
+                kinds = new(StringComparer.Ordinal);
+                foreach (var entry in details.EnumerateObject().Take(512))
+                {
+                    if (!AndroidStreamSettings.IsEncoderName(entry.Name) || entry.Value.ValueKind != JsonValueKind.Object) continue;
+                    bool hw = entry.Value.TryGetProperty("hw", out var hwProp) && hwProp.ValueKind == JsonValueKind.True;
+                    bool sw = entry.Value.TryGetProperty("sw", out var swProp) && swProp.ValueKind == JsonValueKind.True;
+                    if (hw) kinds[entry.Name] = AndroidEncoderKind.Hardware;
+                    else if (sw) kinds[entry.Name] = AndroidEncoderKind.Software;
+                }
+            }
+            return new(Names(audio), Names(video), kinds);
+        }
+        throw new InvalidDataException("The phone did not return an encoder catalogue.");
+    }
+
     public async Task<IReadOnlyList<AndroidApp>> AppsAsync(AndroidDevice device, CancellationToken token, IReadOnlyList<string>? packages = null)
     {
         if (packages != null)

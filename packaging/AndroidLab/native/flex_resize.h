@@ -5,6 +5,10 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <SDL2/SDL_stdinc.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
+#include "mirror_resize.h"
 static bool sr_flex_enabled(void) {
     static int enabled = -1;
     if (enabled == -1) {
@@ -25,7 +29,7 @@ static void sr_flex_restore(struct sc_screen *screen);
 static void sr_flex_window_size(LONG width, LONG height);
 struct sr_flex_state {
     WNDPROC original; struct sc_screen *screen;
-    bool sizing, presenting;
+    bool sizing, presenting, mirror, content_changing;
     LONG width, height, window_width, window_height; ULONGLONG last;
 };
 static void sr_flex_remember_window(struct sr_flex_state *state, LONG width, LONG height) {
@@ -48,14 +52,22 @@ static void sr_flex_emit(HWND hwnd, struct sr_flex_state *state, LONG w, LONG h,
 static LRESULT CALLBACK sr_flex_wndproc(HWND hwnd, UINT message, WPARAM w, LPARAM l) {
     struct sr_flex_state *state = (struct sr_flex_state *) GetPropW(hwnd, SR_FLEX_PROP);
     if (!state) return DefWindowProcW(hwnd, message, w, l);
+    if (state->mirror && message == WM_GETMINMAXINFO && l) {
+        CallWindowProcW(state->original, hwnd, message, w, l);
+        sr_mirror_maximum(hwnd, state->screen, (MINMAXINFO *) l);
+        return 0;
+    }
+    if (state->mirror && !state->content_changing && message == WM_WINDOWPOSCHANGING && l)
+        sr_mirror_position(hwnd, state->screen, (WINDOWPOS *) l);
     if (message == SR_RESTORE_MESSAGE) { sr_flex_restore(state->screen); return 0; }
     // Preserve SDL/TSF/IMM processing. Ordered markers affect only Android forwarding.
     if (message == WM_IME_STARTCOMPOSITION) sr_ime_notify(SR_IME_BEGIN);
     if (message == WM_ENTERSIZEMOVE) state->sizing = true;
     if (message == WM_SIZING && state->sizing && l) {
+        if (state->mirror) sr_mirror_sizing(hwnd, state->screen, w, (RECT *) l);
         RECT outer, client; GetWindowRect(hwnd, &outer); GetClientRect(hwnd, &client);
         RECT *proposed = (RECT *) l;
-        sr_flex_emit(hwnd, state, proposed->right - proposed->left - (outer.right - outer.left - client.right),
+        if (!state->mirror) sr_flex_emit(hwnd, state, proposed->right - proposed->left - (outer.right - outer.left - client.right),
             proposed->bottom - proposed->top - (outer.bottom - outer.top - client.bottom), false);
         // Do not alter the proposed rectangle: all eight edges/corners move freely.
     }
@@ -64,7 +76,7 @@ static LRESULT CALLBACK sr_flex_wndproc(HWND hwnd, UINT message, WPARAM w, LPARA
     if (message == WM_KILLFOCUS) sr_ime_notify(SR_IME_RESET);
     if (message == WM_EXITSIZEMOVE || (message == WM_SIZE && w != SIZE_MINIMIZED)) {
         RECT client; GetClientRect(hwnd, &client);
-        sr_flex_emit(hwnd, state, client.right, client.bottom, message == WM_EXITSIZEMOVE || !state->sizing);
+        if (!state->mirror) sr_flex_emit(hwnd, state, client.right, client.bottom, message == WM_EXITSIZEMOVE || !state->sizing);
         if (message == WM_EXITSIZEMOVE || !state->sizing) sr_flex_remember_window(state, client.right, client.bottom);
         if (message == WM_EXITSIZEMOVE) state->sizing = false;
     }
@@ -73,15 +85,35 @@ static LRESULT CALLBACK sr_flex_wndproc(HWND hwnd, UINT message, WPARAM w, LPARA
     if ((message == WM_SIZING || message == WM_EXITSIZEMOVE || (message == WM_SIZE && w != SIZE_MINIMIZED)) && !state->presenting) {
         state->presenting = true; sr_flex_present(state->screen); state->presenting = false;
     }
-    return result;
+    return state->mirror && message == WM_SIZING ? TRUE : result;
+}
+static void sr_flex_content_changing(struct sc_screen *screen, bool changing) {
+    if (!sr_mirror_enabled()) return;
+    SDL_SysWMinfo info; SDL_VERSION(&info.version);
+    if (!SDL_GetWindowWMInfo(screen->window, &info)) return;
+    HWND hwnd = info.info.win.window;
+    struct sr_flex_state *state = (struct sr_flex_state *) GetPropW(hwnd, SR_FLEX_PROP);
+    if (!state || !state->mirror) return;
+    state->content_changing = changing;
+    if (!changing && IsZoomed(hwnd)) {
+        MINMAXINFO limits = {0};
+        if (sr_mirror_maximum(hwnd, screen, &limits)) {
+            MONITORINFO monitor = { .cbSize = sizeof(monitor) };
+            if (GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor))
+                SetWindowPos(hwnd, NULL, monitor.rcMonitor.left + limits.ptMaxPosition.x,
+                    monitor.rcMonitor.top + limits.ptMaxPosition.y, limits.ptMaxSize.x, limits.ptMaxSize.y,
+                    SWP_NOACTIVATE | SWP_NOZORDER);
+        }
+    }
 }
 static void sr_flex_install(struct sc_screen *screen) {
-    if (!sr_flex_enabled()) return;
+    if (!sr_flex_enabled() && !sr_mirror_enabled()) return;
     SDL_SysWMinfo info; SDL_VERSION(&info.version);
     if (!SDL_GetWindowWMInfo(screen->window, &info)) return;
     HWND hwnd = info.info.win.window;
     if (GetPropW(hwnd, SR_FLEX_PROP)) return;
     struct sr_flex_state *state = calloc(1, sizeof(*state)); if (!state) return;
+    state->mirror = sr_mirror_enabled();
     state->screen = screen; state->original = (WNDPROC) GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
     RECT client; GetClientRect(hwnd, &client); state->width = sr_flex_dimension(client.right); state->height = sr_flex_dimension(client.bottom);
     if (!SetPropW(hwnd, SR_FLEX_PROP, (HANDLE) state)) { free(state); return; }
@@ -90,6 +122,14 @@ static void sr_flex_install(struct sc_screen *screen) {
         RemovePropW(hwnd, SR_FLEX_PROP); free(state);
         return;
     }
+    if (state->mirror) {
+        // Per-window frame style suppresses the caption icon without mutating SDL's class.
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, GetWindowLongPtrW(hwnd, GWL_EXSTYLE) | WS_EX_DLGMODALFRAME);
+        SendMessageW(hwnd, WM_SETICON, ICON_SMALL, 0);
+        SendMessageW(hwnd, WM_SETICON, ICON_BIG, 0);
+        SetWindowPos(hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
+    }
+    GetClientRect(hwnd, &client);
     sr_flex_remember_window(state, client.right, client.bottom);
 }
 static void sr_flex_uninstall(struct sc_screen *screen) {
@@ -103,5 +143,6 @@ static void sr_flex_uninstall(struct sc_screen *screen) {
 #else
 #define sr_flex_install(screen) ((void) 0)
 #define sr_flex_uninstall(screen) ((void) 0)
+#define sr_flex_content_changing(screen, changing) ((void) 0)
 #endif
 #endif

@@ -137,9 +137,20 @@ namespace SonicRoute
             bool queued = false;
             try
             {
+#if SONICROUTE_PHONE
+                ImageSource? icon;
+                if (Info.IsExternal && string.Equals(ProcessName,
+                    ApplicationAudio.AndroidKey(SonicRoute.AndroidAudio.AndroidApp.DeviceAudioPackage), StringComparison.Ordinal))
+                    icon = PhoneSourceIcon.Image;
+                else
+                    icon = Info.IsExternal
+                    ? AppIconService.GetCustomIcon(ProcessName) ?? AppIconService.DecodePng(Info.ExternalIconPng)
+                    : AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
+#else
                 var icon = Info.IsExternal
                     ? AppIconService.GetCustomIcon(ProcessName) ?? AppIconService.DecodePng(Info.ExternalIconPng)
                     : AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
+#endif
                 if (icon == null || cancellation.IsCancellationRequested) return;
                 var disp = System.Windows.Application.Current?.Dispatcher;
                 if (disp != null && !disp.CheckAccess())

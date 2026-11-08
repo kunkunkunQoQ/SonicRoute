@@ -1,6 +1,68 @@
 # 开发交接
 
-更新：2026-11-07。提交、远端、运行包及本地未提交内容以实际 Git 状态和父容器最新收据为准。
+更新：2026-11-08。提交、远端、运行包及本地未提交内容以实际 Git 状态和父容器最新收据为准。
+
+## 当前交付：友好编码器名称、九语本地化与 24/32/50 Mbps / 120 fps
+
+- 将`PhoneDevicePage` Opus/H.264 编码器选择器从裸 Codec ID 改为“厂商 + 硬件/软件编码 (原ID)”的九语友好说明，`SelectedValue` 与持久化仍用精确 ID；`EncoderCatalog.java`（API>=29）新增 `"details"`（`hw`/`sw`）输出，`AdbClient.ParseEncoders` 解析并向后兼容旧 JSON，离线已保存配置按前缀识别高通/联发科/三星 Exynos/海思/紫光展锐/瑞芯微/晶晨/Google/Android；按硬件优先于软件再于其他排序。
+- 语言切换通过 `_streamLanguage` 触发重刷实现九语实时更新；`EncoderOptionTemplate`（`TextTrimming="CharacterEllipsis"`、`Style="{x:Null}"`）适配窄边框省略显示且保留高亮前景色，`UpdateEncoderToolTip` 动态呈现完整说明。画面码率移除 `2 Mbps`、增加 `24/32/50 Mbps`（预设 `1/4/6/8/12/16/24/32/50 Mbps`），帧率增加 `120 fps`（预设 `15/24/30/60/120 fps`），第 3 列 `Auto` + `MinWidth="80"` 确保 520 DIP 下不截断；未新增轮询或定时器，默认值维持自动/128K/4M/30fps。
+- 校验全过：helper `sonicroute-catalog.jar` 重建（20,341 字节、Hash `3256BC6B...B03D`）与 `AndroidRuntime.files.json` 同步；13+8 运行时文件、九语 838 键（0 重复/占位符一致/HEAD 816 值不变）、`SerializationChecks`（net10）、`AndroidAudioChecks --stream-settings`（12 项）、真机（小米13）`--encoder-catalog`（只读未开流，实测返回 `c2.qti.avc.encoder -> Hardware` 等）、`AndroidUiChecks --panel-stream-settings`（29 项 + 520 DIP 浅/深图目视核验）及 `--settings-localization`（390 项）通过；Lite Release（0 警告）与 Legacy net48 Release（46 既有警告）编译通过；Full x64 ReadyToRun 单 EXE 发布成功（`27,211,121` 字节，SHA256 `6457C1DE82CF86363E0E5FFC9F727F710750DE668EB067649AA211AE49959ED9`）。
+- 交付与提交状态：用户要求推送 GitHub，本次提交纳入 44～50 号全部源码、运行时资产、检查与交接更新（既有 `AndroidPcmSource.cs` SmartVolume 调参 `D01B47…561EA` 保留在本地工作区，不纳入提交），复用既有检查与构建结果；无 Release/tag/Store 或 README/Wiki 改动，准确提交与远端状态以实际 Git 及父容器提交收据为准。构建包 `outputs/editions/SonicRoute-v1.31-x64.exe` 已生成；交付时 `运行版/SonicRoute.exe` 正由运行中旧实例占用，按约定保持未覆盖、未结束进程。未测真实 120fps/50Mbps 推流视听、展开弹窗截图或跨 DPI。完整本地细节见父容器 `integration-docs/50-FRIENDLY-ENCODERS-AND-120FPS.md` 与 `friendly-encoders-receipt.json`。
+
+## 历史交付：面板布局、入场动画与手机声画设置
+
+- 完整窗口应用列表滚动条右移6 DIP；手机应用固定卡片包含标题、数量、说明和列表。复用原模板/PhoneCard，不另造列表交互。
+- 额外面板等初次原生音量快照后显示，未读保持“—”、真实0%保留；更新/禁用Slider不因初始化排队写音量。手机和额外面板复用PanelEntranceMotion，关闭/隐藏清除动画时钟，定位不变。
+- 手机详情顶部两行：Opus编码器/码率，H.264编码器/码率/帧率；默认自动/128K/4M/30fps。按物理手机保存到既有android-audio.json（读v1/v2/v3、写v3），下次对应连接生效，不重启活动流。整机display0与普通应用屏都读取视频偏好；不恢复独立桌面。
+- EncoderCatalog与AdbClient.EncodersAsync仅在首次打开下拉时查询，12秒期限，当前设备页复用；挂起/切换取消并只删除自有临时JAR。编码器名/数字验证，配置后台按需加载，复用有限保存合并；无新增闲时轮询/定时器。
+- 9库、14UI、一次真机只读编码器查询、13runtime/九语824键和Full x64发布通过；浅/深520-DIP预览已查看。未做本轮声画接管/听音、性能/跨DPI或重复全套/native/Lite/Legacy。编译夹具小错误与选项显示问题已修正，初始日志留在父容器证据目录。
+- 正常入口已更新，同包outputs/editions/SonicRoute-v1.31-x64.exe：27,190,641字节、Hash BA7F2CA5CFEFCA5428644B8A8202C529823AC3A57FEEBEDCB169D8C067A31611。旧正常入口先备份；活动旧editions-next/PID19932保持011ACAB2…D114，退出旧托盘程序后打开正常入口，未自动启动/停止用户程序或ADB。
+- helper724230…B022（20,223字节），音视频server/native保持48号版本；原PCM调参D01B47…561EA完整保留并包含在本地包。HEAD26523e9，44～49未提交/推送，无发布。最新父容器49号记录、panel-stream-settings收据和根入口已同步；接手不重跑已通过检查。
+
+## 历史交付：整机入口恢复手机主屏镜像
+
+- 用户撤回整机独立桌面：拖出顶部手机名称卡片恢复display0主屏镜像和整机声音接管，Flex=0/Mirror=1、等比窗口、标题栏只显示手机名。手机名称/图标/拖拽和既有普通单应用虚拟屏保留。
+- 删除桌面应用选择UI/接口/任务事件/原生桌面监听集成/专用检查入口与文案；行模板回到手机面板，移除共享字典。保留原状态提示事件定位、D3D11 GPU与首帧就绪；无桌面事件等待、无副屏IME参数，忽略旧桌面尺寸，不改手机主屏分辨率。无新轮询或目录读取。
+- 视频server恢复经Hash校验的原D92B5E版本（100,749字节），native EXE仍D5847E（含既有镜像48项钩子/PE手机图标）；音频server/helper不变。不要按47号video-client历史构建回执把22CA3F桌面server复制回来，以当前runtime两份清单为准。
+- 25库、35UI、2包和Full x64发布通过；有界真机检查确认主屏真实内容、等比调整、无独立交互桌面及精确回收，无新增声音/截图保存。Android内部镜像Surface端点不等于独立桌面；早期统计所有scrcpy端点的过严断言已纠正。未新增性能/听音/跨DPI证据，不重复全套/native/Lite/Legacy。
+- 最新包`outputs/editions-next/SonicRoute-v1.31-x64.exe`，27,137,393字节、Hash `011ACAB21F5467BAA317ED0657774E2966C585A964563FE3BFA3CF6C1146D114`。交付检查时正常入口仍活动（PID46824、旧E57F45），未覆盖/结束；退出托盘旧版后使用新包。未自动启动产品、装APK或重启ADB。
+- HEAD26523e9，44～48累计功能未提交/推送；原PCM调参保持D01B47...561EA并包含在包中，九语817键/旧816值不变。父容器48号记录、restore-phone-mirror收据和根入口已同步，下节47号为历史。无发布操作。
+
+## 历史交付：独立桌面白屏修复，不安装其他桌面
+
+- 用户实测白屏，拒绝安装其他launcher。小米SDK36的SecondaryDisplayLauncher实际空内容；整机入口现在用电脑端内置应用桌面，双击/Enter把应用开到同一个自有虚拟屏，鼠标中键/HOME返回。无APK/默认桌面修改，不回退主屏镜像；物理屏继续使用另一应用。它是应用入口，不克隆OEM小组件，同应用多实例仍依Android/应用策略。
+- 复用OwnedAppMonitor的ITaskStackListener/100ms事件合并，按自有显示器识别home/app；列表只在HOME显示，应用可见后隐藏，失败不提前隐藏。原单包监听保持。电脑端共用PhoneAppListResources、PhoneAppItem、ModernTextBox、目录缓存和主题；原状态窗定位提取到VirtualDisplayOverlayWindow，处理Owner移动/大小/最小化/恢复/关闭，Alt+F4结束自有显示器。无新增轮询，关窗取消读取/启动、解绑并清空展示引用。
+- 本机手机截图已有计算器但旧SDL direct3d窗口仍白，整机子进程改用GPU D3D11，普通应用屏参数不改。Startup除首帧还须收到可用桌面事件；沿用25秒期限，不后台重试。整机音频路径/30fps/4Mbps/像素预算沿用。
+- 最终8项真机检查包含157个应用、搜索、同一显示器启动计算器、Windows实际内容、HOME、最小化/恢复、Alt+F4和回收；27库、35UI、2包及native检查通过。Full发布、Lite仅编译通过，13份runtime和九语819键检查通过，HEAD旧816个键值不变。未扩大为听音/中文输入/跨DPI/多手机/整版性能证据；早期只任务通过且Windows仍白的截图已明确不作为最终验收。
+- 正常入口已备份更新为Full x64单EXE，27,170,161字节、SHA256 `E57F459800C08EE0D2CC6E37478585DCFDCDDD4BB7B1AC592C05F5A220A0BAEA`；同Hash在父容器outputs/editions-next。替换时旧editions/441643包仍运行且保留原状，最终复查已退出，无SonicRoute/scrcpy活动进程，代理未关闭它；现在可开正常入口。未自动启动新产品、重启ADB或安装任何APK；诊断临时远端JAR已清理。
+- HEAD26523e9；44～47功能均未提交/推送，原AndroidPcmSource.cs保持D01B47...561EA并包含在新包。完整依据、源码边界、手动步骤及收据见父容器47号记录和desktop-white-screen-receipt.json；下节46号为历史。无Release/tag/Store或公共README/Wiki发布。
+
+## 历史交付：独立手机桌面与scrcpy手机图标
+
+- 用户明确选择整机入口打开独立手机虚拟桌面，手机主屏继续另用。设备入口改用new-display、系统装饰与local IME，不指定应用start-app；Flex=1/Mirror=0，像应用屏调整自有虚拟屏，整机声音仍复用原单一接管路径。旧主屏镜像/只等比方案已被取代，未自动回退主屏。应用多实例仍受系统/应用启动模式限制。
+- 新Build-PhoneIcon脚本从既有Phone Geometry生成多尺寸ICO及透明外部背景PNG，原生构建自动生成并替换scrcpy PE图标；设备桌面/无应用图标的native窗口使用固定phone-icon.png，真实应用图标保持。UI/拖拽仍使用缓存矢量，运行时不重复绘制；新增PNG仅2,546字节，随视频组件按需准备。
+- Native首帧日志仅一次；设备桌面只有收到首帧才Ready/Active，Texture大小本身不算就绪。25秒无帧限时失败清理，追加DesktopNoFrame错误（旧58项编号不变）和九语提示。未增加轮询或持续重连，桌面/音频按原所有权释放。
+- 24项库定向、35项UI、2项包、native自检与PE图标逐像素比对通过；Full构建及13份runtime/九语校验通过。只读查询小米SDK36的HOME/SECONDARY_HOME，确认提供SecondaryDisplayLauncher；没有创建显示器、启动应用/新产品、听音或测量性能，不能据此称真机桌面已验收。
+- 新固定测试包`outputs/editions/SonicRoute-v1.31-x64.exe`，27,141,489字节，SHA256 `44164377EAAAD3024C9A8D23C390B368702179E97648C04D2D6AF6587E46723E`。普通入口仍活动且保留23EC2B旧包，未覆盖/结束或停止ADB；用户退出后可开测试包。
+- HEAD26523e9；44～46功能均未提交/推送，原AndroidPcmSource.cs WIP保持D01B47...561EA，新包包含它。无Release/tag/Store或README/Wiki操作。完整方案、依据、手动步骤和边界见父容器46号记录及phone-desktop收据；下节45号为历史。
+
+## 当前交付：共享手机图标、纯名称标题栏、整机等比窗口
+
+- 整机卡片、主面板及拖拽预览统一使用缓存/冻结的`AutomationIcons.Phone`轮廓图，去掉整机卡片的彩色底和♫，底部选择器也引用同源Geometry；不光栅化、不读写图标文件、不增加监听。普通应用图标保留原自定义/PNG流程，新代码Full条件隔离。
+- 整机启动设`SONICROUTE_PHONE_MIRROR=1`，复用native钩子约束八边/角及程序尺寸为当前画面比例，按当前工作区等比最大化/恢复、旋转更新比例；标题栏只保留手机名。整机不发Android尺寸包、不走跨线程resize绘制，不新增定时器；单应用VD继续自由缩放。全屏快捷键在镜像模式改为等比最大化/恢复。
+- native客户端单独重建，`Build-VideoClient.ps1 -ClientOnly`复用原固定视频server，清单同步；48项隐藏HWND镜像断言、旧自由缩放/IME自检、35项UI/图标、19项库参数、2项包检查通过。Full发布和Lite必要编译通过；无新真机/跨DPI/声画/整机性能验收，没重跑旧670项或全部模块/路由。
+- 最新入口为父容器`运行版/SonicRoute.exe`，与`outputs/editions-next/SonicRoute-v1.31-x64.exe`同Hash `23EC2B45B5C6751DAF76AD7C8CBC92B444FA78FC64DFC3901B1DE9E50BFE8154`，27,137,393字节。正常入口空闲后已替换并备份；用户运行中的旧editions/E8F25包保留，未结束/覆盖或自动启动程序，ADB未停。
+- 44/45号功能均仍未提交，HEAD26523e9；原AndroidPcmSource.cs调参保持D01B47...561EA，新包包含它。无Release/tag/Store、README/Wiki改动；细节、手动步骤、边界见父容器45号记录和mirror-window-receipt.json。下节44号构建状态为历史。
+
+## 当前交付：手机名称整机音频入口与手机主屏镜像
+
+- 手机应用列表顶部增加设备音频项，直接复用底部选择器的自定义手机名、现有卡片、搜索/排序、拖拽/Enter/Esc/返回，以及接管行的音量、静音、输出与退出。九语只各增加一条说明，原816个资源值不变；改名/换机原地更新。
+- 拖出设备项时复用固定视频客户端镜像主屏display0，无new-display/start-app/虚拟屏分辨率调整；声音复用单一托管playback捕获，覆盖手机及虚拟屏内应用允许捕获的声音。普通应用保持UID隔离；明确的设备保留身份才省略包过滤，UID失败不回退整机。
+- 同手机整机/单应用互斥；启动新范围前等待冲突及正在释放的旧策略，重复操作复用连接，其他手机独立。画面音频借用增加发起包校验，关闭普通应用屏幕不能释放借用的整机声音。手机回放轨道标记不可再捕获，helper jar与清单同步更新。
+- 性能：新行不创建ADB、不扫描；复用事件、缓存、可见界面刷新和原生命周期，不增加轮询。画面按需启动，沿用30fps/4Mbps上限；视频客户端不另播声音。不声称无活动开销或整版性能提升。
+- 208项定向离线检查通过（新库19、新UI31、库模块120、既有路由38），含浅深色、九语、改名/换机、快速策略释放与跨手机隔离。Java/D8、Full x64 ReadyToRun发布和12份组件清单校验通过；未重跑Lite/Legacy或670项旧检查。无新真机声音、镜像运行、回采/蓝牙或CPU/内存/延迟结论。
+- 固定测试包为父容器`outputs/editions/SonicRoute-v1.31-x64.exe`，27,133,297字节，SHA256 `E8F25C70C2BFA9A86E88416C4F3C626A7E74409E65722DEBB74338FB70A1C065`。普通运行版仍在运行，原文件Hash BF7749...2E7保持；未停止产品或ADB、未替换运行版、未自动启动新包。
+- HEAD仍26523e9，本轮功能尚未提交/推送。原AndroidPcmSource.cs WIP保留Hash D01B47...561EA，测试包包含它和当前改动；无Release/tag/Store或README/Wiki操作。完整记录和手动步骤见父容器44号记录及device-audio-receipt.json。43号交接为此前基线，不能再称仅一份文件未提交。
 
 ## 当前交付：设置页崩溃修复与Gemini本地化完整复核
 

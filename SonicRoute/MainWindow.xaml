@@ -1100,7 +1100,7 @@
                         </Grid>
                         <ListBox x:Name="AppsListBox" BorderThickness="0" Background="Transparent" FontSize="13"
                                  ItemTemplate="{StaticResource AppsCardItemTemplate}" ItemContainerStyle="{StaticResource RoundedListBoxItem}"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True"
+                                 Margin="0,0,-6,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True"
                                  VirtualizingPanel.VirtualizationMode="Recycling" SelectionChanged="AppsListBox_SelectionChanged"/>
                     </DockPanel>
                 </Border>

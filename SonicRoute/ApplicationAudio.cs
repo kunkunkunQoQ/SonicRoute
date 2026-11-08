@@ -92,10 +92,12 @@ internal static class ApplicationAudio
     }
 #if SONICROUTE_PHONE
     internal static string AndroidKey(string package) => "android:" + package;
+    internal static string AndroidName(AndroidApp app, AndroidDevice? device = null) => app.IsDeviceAudio && device != null
+        ? AndroidAudioHost.Phone.GetDisplayName(device) : app.Name;
     internal static AudioAppInfo Describe(AndroidAudioSource source) => new()
     {
         ProcessId = 0, ExternalSourceId = source.Id, ProcessName = AndroidKey(source.App.Package),
-        DisplayName = source.App.Name, SourceLabel = string.Format(L10n.T("Phone.FromDevice"), AndroidAudioHost.Phone.GetDisplayName(source.Device)), ExternalIconPng = source.App.IconPng,
+        DisplayName = AndroidName(source.App, source.Device), SourceLabel = string.Format(L10n.T("Phone.FromDevice"), AndroidAudioHost.Phone.GetDisplayName(source.Device)), ExternalIconPng = source.App.IconPng,
         HasActiveSession = source.Session.State.State == CaptureState.Receiving
     };
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null

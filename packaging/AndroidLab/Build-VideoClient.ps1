@@ -1,6 +1,11 @@
+param([switch]$ClientOnly)
 $ErrorActionPreference = 'Stop'
 $repo = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $lab = Split-Path -Parent $repo
+$iconShell = Join-Path $PSHOME 'pwsh.exe'
+if (!(Test-Path -LiteralPath $iconShell)) { $iconShell = Join-Path $PSHOME 'powershell.exe' }
+& $iconShell -NoProfile -STA -File (Join-Path $PSScriptRoot 'Build-PhoneIcon.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Shared phone icon export failed.' }
 $outputRoot = [System.IO.Path]::GetFullPath((Join-Path $lab 'outputs'))
 $work = Join-Path $outputRoot ('video-build-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 if (!$work.StartsWith($outputRoot + '\', [System.StringComparison]::OrdinalIgnoreCase) -or (Test-Path -LiteralPath $work)) {
@@ -16,7 +21,9 @@ $oldByteCode = $env:PYTHONDONTWRITEBYTECODE
 try {
     $env:PYTHONDONTWRITEBYTECODE = '1'
     $python = Join-Path $env:LOCALAPPDATA 'AndroidAudioTest\python\python.exe'
-    & $python -B (Join-Path $PSScriptRoot 'native\build_video.py') ($drive + '\') $repo *> (Join-Path $work 'build.log')
+    $buildArguments=@('-B',(Join-Path $PSScriptRoot 'native\build_video.py'),($drive + '\'),$repo)
+    if ($ClientOnly) { $buildArguments += '--client-only' }
+    & $python @buildArguments *> (Join-Path $work 'build.log')
     $result = $LASTEXITCODE
     Get-Content -LiteralPath (Join-Path $work 'build.log') -Tail 12
     if ($result -ne 0) { throw ('Native client build failed: ' + (Join-Path $work 'build.log')) }

@@ -67,6 +67,7 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
     private AndroidAudioSettingsStore? _settings;
     private AndroidDevice? _device;
     private string? _package;
+    private bool _isDeviceAudio;
     private bool _disposed;
     private VirtualDisplayState _state = VirtualDisplayState.Starting;
     public Task Completion => _completion;
@@ -75,12 +76,14 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
     public event Action<VirtualDisplayState>? StateChanged;
 
     public static ProcessStartInfo CreateStartInfo(AdbClient adb, AndroidDevice device, AndroidApp app, int x, int y,
-        string? iconPath = null, AndroidVirtualDisplaySize? displaySize = null, AndroidWindowSize? windowSize = null)
+        string? iconPath = null, AndroidVirtualDisplaySize? displaySize = null, AndroidWindowSize? windowSize = null,
+        AndroidStreamSettings? streaming = null)
     {
-        AdbClient.ValidatePackage(app.Package);
-        // First launch uses the phone's own size. Subsequent launches restore the last
-        // accepted framebuffer, still constrained to the phone's pixel budget on Android.
-        string display = displaySize?.IsValid() == true
+        if (!app.IsDeviceAudio) AdbClient.ValidatePackage(app.Package);
+        streaming = (streaming ?? new()).Normalize();
+        // Device capture mirrors the existing physical display. Only ordinary app
+        // windows create a virtual display and restore its accepted framebuffer size.
+        string display = app.IsDeviceAudio ? "--display-id=0" : displaySize?.IsValid() == true
             ? "--new-display=" + displaySize.Width.ToString(CultureInfo.InvariantCulture) + "x" + displaySize.Height.ToString(CultureInfo.InvariantCulture)
             : "--new-display";
         var info = new ProcessStartInfo(Path.Combine(adb.RuntimeDirectory, "VirtualDisplay", "scrcpy.exe"))
@@ -90,11 +93,24 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
         };
         foreach (string argument in new[] {
-            "--serial=" + device.Serial, display, "--video-codec=h264", "--start-app=" + app.Package,
-            "--no-audio", "--no-clipboard-autosync", "--no-vd-system-decorations", "--display-ime-policy=hide",
-            "--force-adb-forward", "--max-fps=30", "--video-bit-rate=4M", "--window-title=" + app.Name,
+            "--serial=" + device.Serial, display, "--video-codec=h264",
+            "--no-audio", "--no-clipboard-autosync",
+            "--force-adb-forward", "--max-fps=" + streaming.MaxFps.ToString(CultureInfo.InvariantCulture),
+            "--video-bit-rate=" + streaming.VideoBitRate.ToString(CultureInfo.InvariantCulture), "--window-title=" + app.Name,
             "--window-x=" + x.ToString(CultureInfo.InvariantCulture),
             "--window-y=" + y.ToString(CultureInfo.InvariantCulture) }) info.ArgumentList.Add(argument);
+        if (streaming.VideoEncoder != null) info.ArgumentList.Add("--video-encoder=" + streaming.VideoEncoder);
+        if (!app.IsDeviceAudio)
+        {
+            info.ArgumentList.Add("--start-app=" + app.Package);
+            info.ArgumentList.Add("--no-vd-system-decorations");
+            info.ArgumentList.Add("--display-ime-policy=hide");
+        }
+        else
+        {
+            // Retain the GPU renderer validated on this Windows system.
+            info.Environment["SDL_RENDER_DRIVER"] = "direct3d11";
+        }
         if (windowSize?.IsValid() == true)
         {
             info.ArgumentList.Add("--window-width=" + windowSize.Width.ToString(CultureInfo.InvariantCulture));
@@ -103,13 +119,17 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
         info.Environment["ADB"] = adb.Executable;
         // Video has its own matching resize protocol; the pinned audio server stays unchanged.
         info.Environment["SCRCPY_SERVER_PATH"] = new VirtualDisplayRuntime(adb).ServerFile;
-        info.Environment["SONICROUTE_FLEX_DISPLAY"] = "1";
-        info.Environment["SONICROUTE_APP_PACKAGE"] = app.Package;
+        // Mirror windows scale at the phone's aspect ratio, without resizing the phone.
+        info.Environment["SONICROUTE_FLEX_DISPLAY"] = app.IsDeviceAudio ? "0" : "1";
+        info.Environment["SONICROUTE_PHONE_MIRROR"] = app.IsDeviceAudio ? "1" : "0";
+        if (!app.IsDeviceAudio) info.Environment["SONICROUTE_APP_PACKAGE"] = app.Package;
+        else info.Environment.Remove("SONICROUTE_APP_PACKAGE");
         if (app.Category != "games") info.ArgumentList.Add("--prefer-text");
-        // SDL must show the computer IME's composition/candidate UI; the Android IME stays hidden.
+        // Keep the computer IME's composition/candidate UI available for text input.
         info.Environment["SDL_IME_SHOW_UI"] = "1";
         info.Environment["SDL_IME_INTERNAL_EDITING"] = "1";
-        if (iconPath != null) info.Environment["SCRCPY_ICON_PATH"] = Path.GetFullPath(iconPath);
+        info.Environment["SCRCPY_ICON_PATH"] = iconPath != null ? Path.GetFullPath(iconPath)
+            : Path.Combine(adb.RuntimeDirectory, "VirtualDisplay", "phone-icon.png");
         return info;
     }
     public static string? CacheIcon(AndroidApp app, string cacheDirectory)
@@ -127,16 +147,19 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (device.State != "device") throw AndroidError.WithCode(new IOException("手机尚未连接，请刷新设备后重试。"), AndroidErrorCode.DisplayPhoneNotConnected);
         await Task.Run(runtime.Validate, token).ConfigureAwait(false);
-        int uid = await adb.ResolveUidAsync(device, app.Package, token).ConfigureAwait(false);
-        if (uid != app.Uid) throw AndroidError.WithCode(new IOException("应用身份已改变，请刷新手机应用列表。"), AndroidErrorCode.DisplayAppUidChanged);
+        if (!app.IsDeviceAudio)
+        {
+            int uid = await adb.ResolveUidAsync(device, app.Package, token).ConfigureAwait(false);
+            if (uid != app.Uid) throw AndroidError.WithCode(new IOException("应用身份已改变，请刷新手机应用列表。"), AndroidErrorCode.DisplayAppUidChanged);
+        }
         token.ThrowIfCancellationRequested(); _serial = device.Serial;
-        _device = device; _package = app.Package;
+        _device = device; _package = app.Package; _isDeviceAudio = app.IsDeviceAudio;
         _settings = settings?.Invoke(); // Already on the startup worker; unused video never reads preferences.
         string dataRoot = Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")
             ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SonicRoute");
         string? icon = CacheIcon(app, Path.Combine(dataRoot, "phone-app-icons"));
         var saved = _settings?.Get(device, app.Package);
-        _process = Process.Start(CreateStartInfo(adb, device, app, x, y, icon, saved?.DisplaySize, saved?.WindowSize))
+        _process = Process.Start(CreateStartInfo(adb, device, app, x, y, icon, saved?.DisplaySize, saved?.WindowSize, _settings?.GetStreaming(device)))
             ?? throw AndroidError.WithCode(new IOException("独立屏幕未能启动。"), AndroidErrorCode.DisplayStartFailed);
         ProcessId = _process.Id;
         _completion = ObserveAsync(_process);
@@ -150,7 +173,10 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
             await Task.Run(DiscoverOwnedServer, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
-        { Trace.WriteLine(LastLog()); throw AndroidError.WithCode(new TimeoutException("打开独立屏幕超时，请检查手机连接。"), AndroidErrorCode.DisplayOpenTimeout); }
+        {
+            Trace.WriteLine(LastLog());
+            throw AndroidError.WithCode(new TimeoutException("打开独立屏幕超时，请检查手机连接。"), AndroidErrorCode.DisplayOpenTimeout);
+        }
     }
     private async Task ObserveAsync(Process process)
     {
@@ -167,7 +193,12 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
             lock (_logs) { while (_logs.Count >= 80) _logs.Dequeue(); _logs.Enqueue(line.Length > 1024 ? line[..1024] : line); }
             if (TryReadDisplaySize(line) is { } size)
             {
-                if (_settings != null && _device != null && _package != null) _settings.RememberDisplay(_device, _package, size);
+                if (!_isDeviceAudio && _settings != null && _device != null && _package != null) _settings.RememberDisplay(_device, _package, size);
+                if (!_isDeviceAudio) _ready.TrySetResult();
+            }
+            if (_isDeviceAudio && IsFirstFrame(line))
+            {
+                _state = VirtualDisplayState.Active; StateChanged?.Invoke(_state);
                 _ready.TrySetResult();
             }
             if (_settings != null && _device != null && _package != null && TryReadWindowSize(line) is { } window)
@@ -178,6 +209,7 @@ public sealed class VirtualDisplayClient(AdbClient adb, VirtualDisplayRuntime ru
             }
         }
     }
+    public static bool IsFirstFrame(string line) => string.Equals(line, "INFO: SonicRoute first-frame", StringComparison.Ordinal);
     public static AndroidVirtualDisplaySize? TryReadDisplaySize(string line)
     {
         if (!TryReadSize(line, "INFO: Texture: ", out int width, out int height)) return null;

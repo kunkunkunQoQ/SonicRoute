@@ -58,12 +58,13 @@ namespace SonicRoute
         private OutputVolumeMonitor? _outputVolumeMonitor;
         private OutputVolumeLoad? _outputLoad;
         private Border? _outputPopupSurface;
+        private PanelEntranceMotion? _outputEntranceMotion;
         private StackPanel? _outputVolumeRowsPanel;
         private TextBlock? _outputVolumeEmptyText;
         private const double OutputVolumeRowHeight = 64;
         private const double OutputVolumeHeaderHeight = 58;
         private DispatcherTimer? _outputRecoveryTimer;
-        private bool _outputRefreshRunning, _outputRefreshAgain, _outputRepositionFlip;
+        private bool _outputRefreshRunning, _outputRefreshAgain, _outputRepositionFlip, _outputOpening;
         private int _outputPopupVersion;
 
         private void InitializeOutputVolumes()
@@ -119,6 +120,8 @@ namespace SonicRoute
             if (_outputVolumeMonitor == null)
             {
                 CreateOutputPopupContent();
+                _outputOpening = true;
+                _outputEntranceMotion?.Prepare();
                 LocationChanged += OutputOwnerLocationChanged;
                 DpiChanged += OutputOwnerDpiChanged;
                 ++_outputPopupVersion;
@@ -131,14 +134,27 @@ namespace SonicRoute
                     _outputDisplay.FirstOrDefault(d => d.IsDefault)?.Id);
             }
             PositionOutputPopup();
-            OutputVolumesPopup.IsOpen = true;
             _ = RefreshOutputVolumesAsync();
+        }
+
+        private void ShowPreparedOutputPopup()
+        {
+            if (!_outputOpening || _isClosed || !IsVisible || !_contentReady
+                || OutputVolumesToggle.IsChecked != true || _adjustMode) return;
+            // Read the initial values before presenting the panel. Phone-panel
+            // construction can delay that read; an unknown slider is not 0%.
+            PositionOutputPopup();
+            _outputOpening = false;
+            OutputVolumesPopup.IsOpen = true;
+            _outputEntranceMotion?.Play();
         }
 
         private void CreateOutputPopupContent()
         {
             if (_outputPopupSurface != null) return;
             _outputPopupSurface = (Border)((DataTemplate)FindResource("OutputVolumePopupTemplate")).LoadContent();
+            _outputEntranceMotion = new PanelEntranceMotion(_outputPopupSurface,
+                (TranslateTransform)_outputPopupSurface.RenderTransform);
             _outputVolumeRowsPanel = (StackPanel)_outputPopupSurface.FindName("OutputVolumeRowsPanel");
             _outputVolumeEmptyText = (TextBlock)_outputPopupSurface.FindName("OutputVolumeEmptyText");
             _outputPopupSurface.LostKeyboardFocus += OutputPopupLostKeyboardFocus;
@@ -262,14 +278,14 @@ namespace SonicRoute
             load.Lifetime.Post(Dispatcher, () =>
             {
                 Interlocked.Exchange(ref load.NotificationQueued, 0);
-                if (ReferenceEquals(load, _outputLoad) && !_isClosed && OutputVolumesPopup.IsOpen)
+                if (ReferenceEquals(load, _outputLoad) && !_isClosed && (OutputVolumesPopup.IsOpen || _outputOpening))
                     _ = RefreshOutputVolumesAsync();
             });
         }
 
         private async Task RefreshOutputVolumesAsync()
         {
-            if (_isClosed || !OutputVolumesPopup.IsOpen || _outputVolumeMonitor == null || _outputLoad == null) return;
+            if (_isClosed || !(OutputVolumesPopup.IsOpen || _outputOpening) || _outputVolumeMonitor == null || _outputLoad == null) return;
             if (_outputRefreshRunning) { _outputRefreshAgain = true; return; }
             _outputRefreshRunning = true;
             var monitor = _outputVolumeMonitor;
@@ -310,6 +326,7 @@ namespace SonicRoute
                     var states = await load.Lifetime.ReadAsync(monitor.ReadAsync(load.Targets, versions.Keys));
                     if (!Current()) return;
                     ApplyOutputVolumeSnapshot(states, versions);
+                    ShowPreparedOutputPopup();
                     if (_systemDeviceId == null || !_outputDisplay.Any(d => string.Equals(d.Id, _systemDeviceId, StringComparison.OrdinalIgnoreCase)))
                         ApplySystemVolumeUnavailable();
                 } while (_outputRefreshAgain && Current());
@@ -317,7 +334,11 @@ namespace SonicRoute
             catch (OperationCanceledException) when (load.Lifetime.Token.IsCancellationRequested) { }
             catch
             {
-                if (Current()) Interlocked.Exchange(ref load.TopologyDirty, 1);
+                if (Current())
+                {
+                    Interlocked.Exchange(ref load.TopologyDirty, 1);
+                    ShowPreparedOutputPopup(); // A failed read stays unavailable and can use the existing recovery.
+                }
             }
             finally
             {
@@ -336,7 +357,7 @@ namespace SonicRoute
                     }
                     else _outputRecoveryTimer?.Stop();
                 }
-                else if (!_isClosed && OutputVolumesPopup.IsOpen) _ = RefreshOutputVolumesAsync();
+                else if (!_isClosed && (OutputVolumesPopup.IsOpen || _outputOpening)) _ = RefreshOutputVolumesAsync();
             }
         }
 
@@ -468,9 +489,9 @@ namespace SonicRoute
             row.Root = root;
             row.Slider.ValueChanged += (_, _) =>
             {
+                if (row.Updating || _isClosed || !row.Target.Available || !row.Slider.IsEnabled) return;
                 int displayed = (int)Math.Round(row.Slider.Value);
                 if (row.DisplayVolume != displayed) { row.Percent.Text = displayed + "%"; row.DisplayVolume = displayed; }
-                if (row.Updating || _isClosed || !row.Target.Available) return;
                 row.Pending = true;
                 if (string.Equals(id, _systemDeviceId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -586,6 +607,9 @@ namespace SonicRoute
         private void StopOutputVolumes()
         {
             ++_outputPopupVersion;
+            _outputOpening = false;
+            _outputEntranceMotion?.Stop();
+            _outputEntranceMotion = null;
             var load = _outputLoad;
             _outputLoad = null;
             load?.Lifetime.Dispose();

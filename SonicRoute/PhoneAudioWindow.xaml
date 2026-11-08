@@ -11,8 +11,11 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <local:PhoneDeviceNameConverter x:Key="PhoneDeviceName"/>
     </Window.Resources>
-    <Border Background="{DynamicResource Theme.WindowBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
+    <Border x:Name="PhoneSurface" Background="{DynamicResource Theme.WindowBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
             BorderThickness="1" CornerRadius="12" Padding="8,12">
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="PhoneSlide"/>
+        </Border.RenderTransform>
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
@@ -140,26 +143,34 @@
                         </ControlTemplate></Setter.Value></Setter>
                     </Style>
                 </ListBox.ItemContainerStyle>
-                <ListBox.ItemTemplate><DataTemplate>
-                    <DockPanel Height="42">
-                        <Grid Width="28" Height="28" Margin="2,0,6,0">
-                            <Border Background="{DynamicResource Theme.Accent}" CornerRadius="7"/>
-                            <TextBlock Text="{Binding Initial}" Foreground="White" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            <Image Source="{Binding Icon}" Stretch="Uniform"/>
-                        </Grid>
-                        <Border DockPanel.Dock="Right" Background="{DynamicResource Theme.SurfaceBg}"
-                                CornerRadius="6" Padding="5,2" Margin="6,0,0,0" VerticalAlignment="Center"
-                                Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}">
-                            <TextBlock Text="{Binding [Phone.PlayingBadge], Source={x:Static local:L10n.Instance}}" FontSize="9" Foreground="{DynamicResource Theme.Accent}" VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="13" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Theme.TextPrimary}"/>
-                            <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" FontSize="10"
-                                       Foreground="{DynamicResource Theme.TextSecondary}"/>
-                        </StackPanel>
-                    </DockPanel>
-                </DataTemplate></ListBox.ItemTemplate>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Height="42">
+                            <Grid Width="28" Height="28" Margin="2,0,6,0">
+                                <Border x:Name="AppIconAccent" Background="{DynamicResource Theme.Accent}" CornerRadius="7"/>
+                                <TextBlock x:Name="AppIconInitial" Text="{Binding Initial}" Foreground="White" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                            </Grid>
+                            <Border DockPanel.Dock="Right" Background="{DynamicResource Theme.SurfaceBg}"
+                                    CornerRadius="6" Padding="5,2" Margin="6,0,0,0" VerticalAlignment="Center"
+                                    Visibility="{Binding IsPlaying, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="{Binding [Phone.PlayingBadge], Source={x:Static local:L10n.Instance}}" FontSize="9" Foreground="{DynamicResource Theme.Accent}" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Theme.TextPrimary}"/>
+                                <TextBlock Text="{Binding Description}" TextTrimming="CharacterEllipsis" FontSize="10"
+                                           Foreground="{DynamicResource Theme.TextSecondary}"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding App.IsDeviceAudio}" Value="True">
+                                <Setter TargetName="AppIconAccent" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="AppIconInitial" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
             </ListBox>
             <StackPanel x:Name="PhoneEmptyPanel" Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
                 <TextBlock Text="{Binding [Phone.NoDisplayedApps], Source={x:Static local:L10n.Instance}}" Foreground="{DynamicResource Theme.TextSecondary}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
@@ -172,7 +183,7 @@
                         BorderThickness="1" CornerRadius="10" Padding="6,2,4,2">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
-                        <Path Data="M7,1 C5.9,1 5,1.9 5,3 L5,21 C5,22.1 5.9,23 7,23 L17,23 C18.1,23 19,22.1 19,21 L19,3 C19,1.9 18.1,1 17,1 Z M9,3 L15,3 M10,21 L14,21"
+                        <Path Data="{x:Static local:AutomationIcons.Phone}"
                               Width="14" Height="20" Stretch="Uniform" HorizontalAlignment="Left" Margin="1,0,0,0" VerticalAlignment="Center"
                               Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
                         <ComboBox x:Name="DeviceCombo" Grid.Column="1" Grid.ColumnSpan="3" Height="24" Background="Transparent" BorderThickness="0"

@@ -39,15 +39,17 @@ public sealed class PhoneDeviceNameConverter : DependencyObject, System.Windows.
 public sealed class PhoneAppItem : INotifyPropertyChanged
 {
     public AndroidApp App { get; }
-    public string Name => App.Name;
+    private string? _deviceName;
+    public string Name => App.IsDeviceAudio ? _deviceName ?? App.Name : App.Name;
     public string Package => App.Package;
-    public string Initial => string.IsNullOrEmpty(Name) ? "♪" : Name[..1];
+    public string Initial => App.IsDeviceAudio ? "♫" : string.IsNullOrEmpty(Name) ? "♪" : Name[..1];
     private ImageSource? _icon;
     private bool _iconDecoded;
     public ImageSource? Icon
     {
         get
         {
+            if (App.IsDeviceAudio) return PhoneSourceIcon.Image;
             if (!Volatile.Read(ref _iconDecoded))
             {
                 _icon = AppIconService.DecodePng(App.IconPng);
@@ -67,7 +69,7 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
         _ => -1
     };
     public string Category => EffectiveCategory switch { 0 => "games", 1 or 2 or 3 => "media", 4 => "social", _ => App.Category };
-    public string Description => EffectiveCategory switch
+    public string Description => App.IsDeviceAudio ? L10n.T("Phone.DeviceAudioDescription") : EffectiveCategory switch
     {
         1 => L10n.T("Phone.Cat.MediaMusic"), 2 => L10n.T("Phone.Cat.MediaVideo"), 3 => L10n.T("Phone.Cat.MediaImage"),
         _ => Category switch { "media" => L10n.T("Phone.Cat.Media"), "games" => L10n.T("Phone.Cat.GameAudio"), "social" => L10n.T("Phone.Cat.SocialChat"), _ => L10n.T("Phone.Cat.OtherApp") }
@@ -80,6 +82,13 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
     }
     public event PropertyChangedEventHandler? PropertyChanged;
     internal void RefreshLanguage() => PropertyChanged?.Invoke(this, new(nameof(Description)));
+    internal void UpdateDeviceName(AndroidDevice device)
+    {
+        string name = AndroidAudioHost.Phone.GetDisplayName(device);
+        if (_deviceName == name) return;
+        _deviceName = name;
+        PropertyChanged?.Invoke(this, new(nameof(Name)));
+    }
     public PhoneAppItem(AndroidApp app)
     {
         App = app;
@@ -101,6 +110,8 @@ public partial class PhoneAudioWindow : Window
 {
     private readonly CancellationTokenSource _lifetime = new();
     private readonly WindowUiLifetime _mediaUiLifetime = new();
+    private readonly PanelEntranceMotion _entranceMotion;
+    private bool _entrancePrepared;
     private CancellationTokenSource? _visibleRead;
     private CancellationTokenSource? _catalogRead;
     private CancellationTokenSource? _mediaRead;
@@ -121,6 +132,7 @@ public partial class PhoneAudioWindow : Window
     private bool _seeking;
     private string? _seekPackage, _seekTitle;
     private IReadOnlyList<PhoneAppItem> _apps = Array.Empty<PhoneAppItem>();
+    private readonly PhoneAppItem _deviceAudioItem = new(AndroidApp.DeviceAudio);
     private IReadOnlyList<AndroidApp>? _retainedSnapshot;
     private string? _boundProfileId;
     private Point _dragStart;
@@ -151,13 +163,17 @@ public partial class PhoneAudioWindow : Window
     {
         _enableMedia = loadDevicesOnShow;
         InitializeComponent();
+        _entranceMotion = new PanelEntranceMotion(PhoneSurface, PhoneSlide);
         L10n.Instance.PropertyChanged += OnLanguageChanged;
         InitializePcDropOverlay();
+        Loaded += PhoneAudioWindow_Loaded;
         if (loadDevicesOnShow) Loaded += async (_, _) => await InitializeDevicesAsync();
         IsVisibleChanged += (_, _) =>
         {
             if (IsVisible)
             {
+                PreparePhoneEntrance();
+                if (IsLoaded) _entranceMotion.Play();
                 _pcDropZonesDirty = true;
                 _visibleRead?.Dispose(); _visibleRead = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
                 AndroidAudioHost.Phone.Changed += RetainedAppsChanged; AndroidAudioHost.Phone.DisplayNamesChanged += DeviceNamesChanged;
@@ -169,6 +185,7 @@ public partial class PhoneAudioWindow : Window
             }
             else
             {
+                _entranceMotion.Stop(); _entrancePrepared = false;
                 AndroidAudioHost.Phone.Changed -= RetainedAppsChanged; AndroidAudioHost.Phone.DisplayNamesChanged -= DeviceNamesChanged;
                 AndroidAudioHost.Phone.OutputsChanged -= PhoneOutputsChanged;
                 PhoneAudioWindowCache.DevicesChanged -= DevicesChanged;
@@ -178,6 +195,7 @@ public partial class PhoneAudioWindow : Window
         };
         Closed += (_, _) =>
         {
+            _entranceMotion.Stop(); _entrancePrepared = false;
             _closed = true; L10n.Instance.PropertyChanged -= OnLanguageChanged; _mediaUiLifetime.Dispose(); _lifetime.Cancel(); _catalogRead?.Cancel(); StopMediaSubscription();
             ClearPcDropHighlight();
             AppIconDragController.DesktopDragStateChanged -= Pc_DragStateChanged;
@@ -197,6 +215,20 @@ public partial class PhoneAudioWindow : Window
             _suppressDeviceChanged = true; DeviceCombo.ItemsSource = null;
             ((App)System.Windows.Application.Current).ReleaseClosedUiWindow(this);
         };
+    }
+
+    private void PhoneAudioWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (!IsVisible || _closed) return;
+        PreparePhoneEntrance();
+        _entranceMotion.Play();
+    }
+
+    private void PreparePhoneEntrance()
+    {
+        if (!IsVisible || _closed || _entrancePrepared) return;
+        _entranceMotion.Prepare();
+        _entrancePrepared = true;
     }
 
     private void InitializePcDropOverlay()
@@ -543,8 +575,9 @@ public partial class PhoneAudioWindow : Window
     {
         if (PhoneApps == null || SearchBox == null) return;
         string query = SearchBox.Text.Trim();
-        var filtered = _apps.Where(a => query.Length == 0 || a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || a.Package.Contains(query, StringComparison.OrdinalIgnoreCase)).OrderByDescending(a => a.IsPlaying).ToArray();
+        var filtered = _apps.Where(a => a.App.IsDeviceAudio || query.Length == 0 || a.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
+                || a.Package.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(a => a.App.IsDeviceAudio).ThenByDescending(a => a.IsPlaying).ToArray();
         if (PhoneApps.ItemsSource is not IReadOnlyList<PhoneAppItem> previous || !previous.SequenceEqual(filtered))
             PhoneApps.ItemsSource = filtered;
         PhoneEmptyPanel.Visibility = _apps.Count == 0 && PcDropHighlight?.Visibility != Visibility.Visible
@@ -560,16 +593,19 @@ public partial class PhoneAudioWindow : Window
             BindDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
             _ = ShowSelectedDeviceAsync(false);
         }
+        if (DeviceCombo.SelectedItem is not AndroidDevice device)
+        { _apps = Array.Empty<PhoneAppItem>(); _retainedSnapshot = null; ApplyFilter(); return; }
+        _deviceAudioItem.UpdateDeviceName(device);
         if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)
             EnsurePcDropZones();
         var snapshot = profile.QuickPanelApps;
         if (ReferenceEquals(_retainedSnapshot, snapshot)) return;
         _retainedSnapshot = snapshot;
-        if (_apps.Count == 0) _apps = CreateItems(snapshot, _lifetime.Token);
+        if (_apps.Count == 0) _apps = new[] { _deviceAudioItem }.Concat(CreateItems(snapshot, _lifetime.Token)).ToArray();
         else
         {
             var existing = _apps.ToDictionary(a => a.Package, StringComparer.Ordinal);
-            _apps = snapshot.Select(a => existing.TryGetValue(a.Package, out var item) && item.App == a ? item : new PhoneAppItem(a)).ToArray();
+            _apps = new[] { _deviceAudioItem }.Concat(snapshot.Select(a => existing.TryGetValue(a.Package, out var item) && item.App == a ? item : new PhoneAppItem(a))).ToArray();
         }
         ApplyFilter(); ApplyMediaState(_mediaState);
     }
@@ -579,6 +615,7 @@ public partial class PhoneAudioWindow : Window
         if (_closed) return;
         var names = (PhoneDeviceNameConverter)Resources["PhoneDeviceName"];
         names.Revision = unchecked(names.Revision + 1);
+        if (DeviceCombo.SelectedItem is AndroidDevice device) _deviceAudioItem.UpdateDeviceName(device);
     }
     private async void DevicesChanged()
     {
@@ -858,7 +895,7 @@ public partial class PhoneAudioWindow : Window
             bool playbackChanged = false;
             foreach (var item in _apps)
             {
-                bool isPlaying = _playingPackages.Contains(item.Package);
+                bool isPlaying = item.App.IsDeviceAudio ? _playingPackages.Count > 0 : _playingPackages.Contains(item.Package);
                 playbackChanged |= item.IsPlaying != isPlaying;
                 item.IsPlaying = isPlaying;
             }
@@ -1037,6 +1074,7 @@ public partial class PhoneAudioWindow : Window
         if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)
             EnsurePcDropZones(force: true);
         foreach (var item in _apps) item.RefreshLanguage();
+        ApplyFilter();
         UpdateConnectionStatusText();
         if (_hasQuality) RefreshConnectionQualityText();
         if (_mediaErrorKey != null && _mediaErrorEx != null)

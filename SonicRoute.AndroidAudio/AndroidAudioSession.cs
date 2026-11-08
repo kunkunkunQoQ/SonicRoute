@@ -28,9 +28,9 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         _player is AndroidPhonePcmPlayer phone ? phone.Diagnostics : null;
     private ScrcpyOpusReceiver? _receiver;
 
-    public AndroidAudioSession(AdbClient adb)
+    public AndroidAudioSession(AdbClient adb, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
     {
-        _transportFactory = () => new ScrcpyAdbTransport(adb, Log);
+        _transportFactory = () => new ScrcpyAdbTransport(adb, Log, streaming);
         _playerFactory = (source, id) =>
         {
             if (!AndroidOutputIdentity.IsPhoneOutput(id)) return new WasapiPcmPlayer(source, id);

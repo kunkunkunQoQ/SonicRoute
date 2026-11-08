@@ -1,8 +1,9 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdbool.h>
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
-struct sc_screen { SDL_Window *window; };
+struct sc_screen { SDL_Window *window; struct { int width, height; } content_size; bool fullscreen; };
 #include "flex_resize.h"
 #include "resize_packet.h"
 static LONG request_width, request_height;
@@ -38,7 +39,8 @@ int main(int argc, char **argv) {
     owner = GetCurrentThreadId();
     assert(SDL_Init(SDL_INIT_VIDEO) == 0);
     SDL_setenv("SONICROUTE_FLEX_DISPLAY", "1", 1);
-    struct sc_screen screen = { SDL_CreateWindow("offline resize check", 10,10,640,360,SDL_WINDOW_HIDDEN|SDL_WINDOW_RESIZABLE) };
+    struct sc_screen screen = { .window = SDL_CreateWindow("offline resize check", 10,10,640,360,SDL_WINDOW_HIDDEN|SDL_WINDOW_RESIZABLE),
+        .content_size = {640, 360} };
     assert(screen.window);
     SDL_SysWMinfo info; SDL_VERSION(&info.version); assert(SDL_GetWindowWMInfo(screen.window,&info));
     HWND hwnd = info.info.win.window;
