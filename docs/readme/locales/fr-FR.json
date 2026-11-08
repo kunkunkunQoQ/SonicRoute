@@ -51,7 +51,7 @@
     "configureAutomation": "Configurer l’automatisation",
     "automationExample": "Transformez les réglages manuels fastidieux en une expérience automatisée prête à l'emploi.",
     "currentRelease": "Version actuelle",
-    "releaseSummary": "v1.30 ajoute à Full l’intégration facultative de l’audio Android et des écrans virtuels, avec routage par application, contrôle des sorties du téléphone et indicateurs de niveau. Lite et Legacy restent dédiés au PC. Les tests ciblés de développement ont inclus le routage sur Xiaomi 13 ; les autres appareils et l’écoute humaine ne sont pas validés. Détails : {history}.",
+    "releaseSummary": "v1.31 ajoute à Full le miroir plein écran du smartphone, la synchronisation bidirectionnelle du presse-papiers texte, des noms d’encodeurs conviviaux avec détection matérielle, des débits de 24/32/50 Mbps et 120 fps, tout en complétant la localisation en neuf langues et la stabilité des paramètres ; Lite et Legacy restent dédiés au PC. Détails : {history}.",
     "docTopic": "Sujet",
     "docGuides": "Guides",
     "docTopics": [

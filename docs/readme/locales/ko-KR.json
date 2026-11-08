@@ -51,7 +51,7 @@
     "configureAutomation": "자동화 설정",
     "automationExample": "번거로운 수동 설정을 한 번의 구성으로 언제나 간편한 자동화로 전환하세요.",
     "currentRelease": "현재 릴리스",
-    "releaseSummary": "v1.30은 Full에 선택형 Android 휴대폰 오디오 및 가상 디스플레이 통합을 추가하여 앱별 라우팅, 휴대폰 출력 제어와 피크 레벨 표시를 지원합니다. Lite와 Legacy는 PC 기능만 제공합니다. 개발 단계의 대상 검사에는 Xiaomi 13 라우팅이 포함되며, 다른 기기와 실제 청취는 아직 검증되지 않았습니다. 자세한 내용은 {history}를 확인하세요.",
+    "releaseSummary": "v1.31은 Full에 전체 휴대폰 메인 화면 미러링과 멀티 기기 양방향 텍스트 클립보드 동기화를 추가하고 친화적 인코더 이름 표시, 24/32/50 Mbps 고비트레이트 및 120 fps 사전 설정을 지원합니다. 9개 국어 현지화 완성 및 설정 페이지 안정화도 포함됩니다. Lite와 Legacy는 PC 기능만 제공합니다. 자세한 내용은 {history}를 확인하세요.",
     "docTopic": "주제",
     "docGuides": "가이드",
     "docTopics": [

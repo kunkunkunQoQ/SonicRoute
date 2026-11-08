@@ -2,6 +2,20 @@
 
 后续AI每轮追加记录，并同步 `DEVELOPMENT-HANDOFF.md` 和本地父容器的当前交接。记录区分已实现、已验证、待验证和明确不做；不能用模拟检查代替真实CPU、音频或设备验收。
 
+## 2026-11-08：1.31 文档体系与 Wiki 补齐
+
+- 核对并补齐 1.31 相关的发布文档与知识库：
+  - 新建 `docs/release-v1.31.md`，记录 1.31 核心亮点、详细演进、验证范围与资产校验。
+  - 更新 `docs/readme/shared.json` 与全部 9 份语言配置中的 `releaseSummary`，更新 `docs/readme/generate.cjs`，重新生成并校验 10 份 README 文件。
+  - 同步推送 `SonicRoute.wiki`：更新 `09-版本历史.md`（追加 1.31 条目）、`08-版本相关.md`（下载矩阵）、`Home.md`（正式版标签与场景）、`01-使用指南.md`（主屏镜像、剪贴板同步、编码器与120fps）、`02-功能特性.md`、`07-技术实现.md` 与 `AI.md`。
+- 边界：既有 `AndroidPcmSource.cs` SmartVolume 调参继续保留在本地，不纳入提交。
+
+## 2026-11-08：1.31 微软商店包
+
+- 用户要求基于另一AI最新改动构建商店版且少做检查。HEADffc58a0，复用50号Full x64/6457C1…9ED9，不重编译或重跑应用测试；原PCM调参D01B47…561EA保持，本次包包含该WIP。
+- 既有Store脚本Full身份/运行时、MakePri/MakeAppx及最终MSIX清单/包内EXE Hash检查通过。交付父容器商店包/SonicRoute-v1.31.0.0-x64-unsigned.msix，12,074,907字节、Hash2816759C…411B6。
+- 旧1.30包和正常运行入口保留，未停产品/ADB、签名、安装、上传商店或发布Release/tag。51号记录/机器回执/根入口同步；本轮仅交接文档未提交，商店实际安装升级未测。
+
 ## 2026-11-08：友好编码器名称、九语本地化与 24/32/50 Mbps / 120 fps
 
 - 手机详情页音频/视频编码器选择器由裸 Codec ID（如 `c2.qti.avc.encoder`）改为按硬件/软件能力 + SoC 厂商前缀的九语友好说明并括号保留原 ID（如 `高通 · 硬件编码 (c2.qti.avc.encoder)`、`Android · 软件编码 (c2.android.avc.encoder)`）；按硬件优先于软件再于其他排序，保留精确 Codec ID 作为持久化值与 CLI 参数。`EncoderCatalog.java`（API>=29）输出 `"details"` `{hw,sw}` 能力，`AdbClient.ParseEncoders` 兼容无 `"details"` 旧响应，离线已保存配置按前缀规则兜底展示友好说明。

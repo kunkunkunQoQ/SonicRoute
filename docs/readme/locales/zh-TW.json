@@ -51,7 +51,7 @@
     "configureAutomation": "設定自動化",
     "automationExample": "把繁瑣的手動改設定，變成一次配置、隨開隨用的自動化體驗。",
     "currentRelease": "目前版本",
-    "releaseSummary": "v1.30 為 Full 加入可選 Android 手機音訊與虛擬螢幕整合，支援依應用程式路由、手機輸出控制與手機應用程式電平條；Lite 與 Legacy 維持電腦功能。開發階段的定向紀錄包含小米 13 路由驗證；其他裝置涵蓋與人工聽感尚未驗收。詳見 {history}。",
+    "releaseSummary": "v1.31 為 Full 加入整機主螢幕鏡像恢復與多裝置剪貼簿雙向同步，手機頁面支援友善編碼器名稱與線上硬體偵測、24/32/50 Mbps 高位元速率與 120 fps 預設，並補齊九語本地化與設定頁穩定性修復；Lite 與 Legacy 維持電腦音訊功能。詳見 {history}。",
     "docTopic": "主題",
     "docGuides": "指南",
     "docTopics": [

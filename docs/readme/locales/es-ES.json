@@ -51,7 +51,7 @@
     "configureAutomation": "Configurar automatización",
     "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
     "currentRelease": "Versión actual",
-    "releaseSummary": "v1.30 añade a Full integración opcional de audio Android y pantallas virtuales, con enrutamiento por aplicación, control de salidas del móvil e indicadores de nivel. Lite y Legacy mantienen solo funciones de PC. Las pruebas dirigidas de desarrollo incluyeron el enrutamiento en Xiaomi 13; otros dispositivos y la escucha humana no están validados. Consulte {history}.",
+    "releaseSummary": "v1.31 añade a Full duplicación de pantalla principal del móvil y sincronización bidireccional del portapapeles, nombres descriptivos de codificadores con detección de hardware, ajustes de 24/32/50 Mbps y 120 fps, y completa la localización en nueve idiomas junto a mejoras de estabilidad en configuración; Lite y Legacy mantienen solo funciones de PC. Consulte {history}.",
     "docTopic": "Tema",
     "docGuides": "Guías",
     "docTopics": [

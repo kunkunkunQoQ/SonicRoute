@@ -51,7 +51,7 @@
     "configureAutomation": "Set up automation",
     "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease": "Current release",
-    "releaseSummary": "v1.30 adds optional Android phone audio and virtual-display integration to Full, with per-app routing, source-phone output control and phone app peak meters. Lite and Legacy remain PC-only. Development-stage targeted checks included Xiaomi 13 routing; broader device coverage and human listening remain unverified. See {history} for details.",
+    "releaseSummary": "v1.31 restores whole-phone display0 screen mirroring and adds multi-device bidirectional text clipboard sync to Full, introduces friendly encoder names with hardware detection, 24/32/50 Mbps bitrates and 120 fps stream presets, and completes nine-language localization and settings page stability fixes; Lite and Legacy remain PC-only. See {history} for details.",
     "docTopic": "Topic",
     "docGuides": "Guides",
     "docTopics": [

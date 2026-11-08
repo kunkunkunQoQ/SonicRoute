@@ -48,15 +48,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 
 ## 🚀 ダウンロードと使い始め方
 
-**現在のリリース：[v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.30)** · 2026-11-04 · [リリースノート（簡体字中国語）](docs/release-v1.30.md)
+**現在のリリース：[v1.31](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.31)** · 2026-11-08 · [リリースノート（簡体字中国語）](docs/release-v1.31.md)
 
-Androidスマートフォンの音声・仮想ディスプレイ機能を使う場合は **Full x64**、PCの音声機能のみなら **Lite x64**、.NET Framework 4.8を利用する環境では **Legacy x64** を選択してください。ARM64版は実験的です。スマートフォン連携はFullのみです。Store版はFullを基に構築されますが、現在配信中の版はStoreページでご確認ください。以下は v1.30 のリンクです。
+Androidスマートフォンの音声・仮想ディスプレイ機能を使う場合は **Full x64**、PCの音声機能のみなら **Lite x64**、.NET Framework 4.8を利用する環境では **Legacy x64** を選択してください。ARM64版は実験的です。スマートフォン連携はFullのみです。Store版はFullを基に構築されますが、現在配信中の版はStoreページでご確認ください。以下は v1.31 のリンクです。
 
 | エディション | ダウンロード | 要件 |
 |---|---|---|
-| ⭐ Full (.NET 10、スマホ連携対応) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 単一 EXE ポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。オプションの Android 音声・仮想ディスプレイ連携を含む。 |
-| ⭐ Lite (.NET 10、PC 音声のみ) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。 |
-| 🛡️ Legacy x64 (PC 音声のみ、.NET Framework 4.8) | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。 |
+| ⭐ Full (.NET 10、スマホ連携対応) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-arm64.exe) | 単一 EXE ポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。オプションの Android 音声・仮想ディスプレイ連携を含む。 |
+| ⭐ Lite (.NET 10、PC 音声のみ) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-arm64.exe) | 単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。 |
+| 🛡️ Legacy x64 (PC 音声のみ、.NET Framework 4.8) | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Legacy-x64.zip) | 追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。 |
 | 🔄 Microsoft Store (Full ベース) | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Full をベースにビルド。x64 .NET 10 Desktop Runtime が必要。提供バージョンは Store ページに準拠。 |
 
 <details>
@@ -85,9 +85,9 @@ Androidスマートフォンの音声・仮想ディスプレイ機能を使う�
 sr "ルール名または ID"
 ```
 
-### 🆕 v1.30 リリースの主な改善点
+### 🆕 v1.31 リリースの主な改善点
 
-v1.30ではFullに任意のAndroidスマートフォン音声・仮想ディスプレイ連携を追加し、アプリ別ルーティング、スマートフォン側出力の制御、ピークレベル表示に対応しました。LiteとLegacyはPC機能のみです。開発段階の対象検査にはXiaomi 13でのルーティングが含まれます。他機種や人による聴感確認は未完了です。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.31ではFullに全画面ミラーリングと複数デバイス間の双方向テキストクリップボード同期を追加し、エンコーダー親切名・ハードウェア検出、24/32/50 Mbps高ビットレートおよび120 fpsプリセットに対応しました。9言語ローカライズ完了と設定画面の安定性修正も含まれます。LiteとLegacyはPC機能のみです。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ よくある質問（FAQ）
 

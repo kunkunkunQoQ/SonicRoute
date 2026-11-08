@@ -51,7 +51,7 @@
     "configureAutomation": "自動化を設定",
     "automationExample": "面倒な手動設定を、一度設定すればずっと快適な自動化体験へ。",
     "currentRelease": "現在のリリース",
-    "releaseSummary": "v1.30ではFullに任意のAndroidスマートフォン音声・仮想ディスプレイ連携を追加し、アプリ別ルーティング、スマートフォン側出力の制御、ピークレベル表示に対応しました。LiteとLegacyはPC機能のみです。開発段階の対象検査にはXiaomi 13でのルーティングが含まれます。他機種や人による聴感確認は未完了です。詳細は {history}。",
+    "releaseSummary": "v1.31ではFullに全画面ミラーリングと複数デバイス間の双方向テキストクリップボード同期を追加し、エンコーダー親切名・ハードウェア検出、24/32/50 Mbps高ビットレートおよび120 fpsプリセットに対応しました。9言語ローカライズ完了と設定画面の安定性修正も含まれます。LiteとLegacyはPC機能のみです。詳細は {history}。",
     "docTopic": "トピック",
     "docGuides": "ガイド",
     "docTopics": [

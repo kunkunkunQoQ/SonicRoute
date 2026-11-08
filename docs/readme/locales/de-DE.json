@@ -51,7 +51,7 @@
     "configureAutomation": "Automatisierung einrichten",
     "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease": "Aktuelle Version",
-    "releaseSummary": "v1.30 ergänzt Full um optionale Android-Audio- und virtuelle Display-Integration mit App-Routing, Steuerung der Telefonausgabe und Pegelanzeigen. Lite und Legacy bleiben auf PC-Funktionen beschränkt. Gezielte Entwicklungstests umfassten Routing mit Xiaomi 13; andere Geräte und Hörtests sind nicht abgenommen. Details unter {history}.",
+    "releaseSummary": "v1.31 ergänzt Full um Hauptbildschirm-Spiegelung und bidirektionale Mehrgeräte-Zwischenablagesynchronisierung, benutzerfreundliche Encoder-Namen mit Hardware-Erkennung, 24/32/50 Mbps sowie 120 fps Voreinstellungen und behebt Abstürze der Einstellungsseite bei vollständiger Lokalisierung in neun Sprachen; Lite und Legacy bleiben auf PC-Audio beschränkt. Details unter {history}.",
     "docTopic": "Thema",
     "docGuides": "Anleitungen",
     "docTopics": [

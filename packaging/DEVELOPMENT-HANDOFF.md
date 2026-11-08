@@ -2,7 +2,20 @@
 
 更新：2026-11-08。提交、远端、运行包及本地未提交内容以实际 Git 状态和父容器最新收据为准。
 
-## 当前交付：友好编码器名称、九语本地化与 24/32/50 Mbps / 120 fps
+## 当前交付：1.31 文档体系与 Wiki 同步
+
+- 新增 `docs/release-v1.31.md` 完整发版文档。
+- 更新 `docs/readme/shared.json`（v1.31 / 2026-11-08 / 下一版 v1.32）、`generate.cjs` 中的 AI 机器规范与 9 种语言的 `releaseSummary`；重新生成全套 10 份 README 并通过 `node docs/readme/generate.cjs --check` 校验。
+- 同步推送 `SonicRoute.wiki` 仓库：补齐 `09-版本历史.md` 1.31 条目，更新 `08-版本相关.md`、`Home.md`、`01-使用指南.md`（整机主屏镜像、双向剪贴板同步、编码器画质/120fps、拖拽返回提示）、`02-功能特性.md`、`07-技术实现.md` 与 `AI.md`。
+- 保留本地 `AndroidPcmSource.cs` SmartVolume WIP（`D01B47…561EA`）。
+
+## 历史交付：1.31 微软商店包
+
+- 用户要求基于50号最新代码构建商店版、少做检查。源码HEADffc58a0；复用最新Full x64 EXE（6457C1…9ED9），未重新编译或重跑应用测试。原PCM调参D01B47…561EA完整保留并包含在本地Full/MSIX中。
+- 现有Store打包脚本的Full身份/运行时校验、MakePri/MakeAppx和最终MSIX身份/1.31.0.0/x64/包内EXE Hash对照通过。正常入口/旧商店包/用户产品和ADB保持，未安装、签名、提交商店或发布。
+- 父容器`商店包/SonicRoute-v1.31.0.0-x64-unsigned.msix`，12,074,907字节，SHA256 `2816759C241C11C5C639B0D0C23A13095A29C3CFAB92766B093A0DEA576411B6`；同目录版本化构建信息。51号记录、store-1.31-package回执和根入口已同步；证据在outputs/store-package-20261108。本轮文档未提交/推送。
+
+## 历史交付：友好编码器名称、九语本地化与 24/32/50 Mbps / 120 fps
 
 - 将`PhoneDevicePage` Opus/H.264 编码器选择器从裸 Codec ID 改为“厂商 + 硬件/软件编码 (原ID)”的九语友好说明，`SelectedValue` 与持久化仍用精确 ID；`EncoderCatalog.java`（API>=29）新增 `"details"`（`hw`/`sw`）输出，`AdbClient.ParseEncoders` 解析并向后兼容旧 JSON，离线已保存配置按前缀识别高通/联发科/三星 Exynos/海思/紫光展锐/瑞芯微/晶晨/Google/Android；按硬件优先于软件再于其他排序。
 - 语言切换通过 `_streamLanguage` 触发重刷实现九语实时更新；`EncoderOptionTemplate`（`TextTrimming="CharacterEllipsis"`、`Style="{x:Null}"`）适配窄边框省略显示且保留高亮前景色，`UpdateEncoderToolTip` 动态呈现完整说明。画面码率移除 `2 Mbps`、增加 `24/32/50 Mbps`（预设 `1/4/6/8/12/16/24/32/50 Mbps`），帧率增加 `120 fps`（预设 `15/24/30/60/120 fps`），第 3 列 `Auto` + `MinWidth="80"` 确保 520 DIP 下不截断；未新增轮询或定时器，默认值维持自动/128K/4M/30fps。

@@ -48,15 +48,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 
 ## 🚀 Скачивание и начало работы
 
-**Текущая версия: [v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.30)** · 2026-11-04 · [Примечания к выпуску (на китайском)](docs/release-v1.30.md)
+**Текущая версия: [v1.31](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.31)** · 2026-11-08 · [Примечания к выпуску (на китайском)](docs/release-v1.31.md)
 
-Выберите **Full x64** для Android-аудио и виртуальных дисплеев, **Lite x64** для функций аудио только на ПК или **Legacy x64** для .NET Framework 4.8. Версии ARM64 экспериментальные. Необязательная интеграция телефона есть только в Full. Пакет Store основан на Full; актуальная версия указана на странице Store. Прямые ссылки для v1.30.
+Выберите **Full x64** для Android-аудио и виртуальных дисплеев, **Lite x64** для функций аудио только на ПК или **Legacy x64** для .NET Framework 4.8. Версии ARM64 экспериментальные. Необязательная интеграция телефона есть только в Full. Пакет Store основан на Full; актуальная версия указана на странице Store. Прямые ссылки для v1.31.
 
 | Вариант | Скачать | Требования |
 |---|---|---|
-| ⭐ Full (.NET 10, с поддержкой интеграции смартфона) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) / [ARM64 (экспериментально)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Портативная сборка в одном EXE; требует соответствующий .NET 10 Desktop Runtime, включает интеграцию Android-аудио и виртуального экрана. |
-| ⭐ Lite (.NET 10, только звук ПК) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) / [ARM64 (экспериментально)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Однофайловая портативная сборка; требует соответствующий .NET 10 Desktop Runtime, только функционал звука ПК. |
-| 🛡️ Legacy x64 (только звук ПК, .NET Framework 4.8) | [Полный ZIP-архив](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | Не требует дополнительных сред; использует встроенный .NET Framework 4.8, распакуйте и запускайте. |
+| ⭐ Full (.NET 10, с поддержкой интеграции смартфона) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-x64.exe) / [ARM64 (экспериментально)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-arm64.exe) | Портативная сборка в одном EXE; требует соответствующий .NET 10 Desktop Runtime, включает интеграцию Android-аудио и виртуального экрана. |
+| ⭐ Lite (.NET 10, только звук ПК) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-x64.exe) / [ARM64 (экспериментально)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-arm64.exe) | Однофайловая портативная сборка; требует соответствующий .NET 10 Desktop Runtime, только функционал звука ПК. |
+| 🛡️ Legacy x64 (только звук ПК, .NET Framework 4.8) | [Полный ZIP-архив](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Legacy-x64.zip) | Не требует дополнительных сред; использует встроенный .NET Framework 4.8, распакуйте и запускайте. |
 | 🔄 Microsoft Store (на базе Full) | [Установить из Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Собрано на основе Full; требуется x64 .NET 10 Desktop Runtime; актуальная версия определяется страницей Store. |
 
 <details>
@@ -85,9 +85,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) 
 sr "Название правила или ID"
 ```
 
-### 🆕 Главные нововведения v1.30
+### 🆕 Главные нововведения v1.31
 
-В v1.30 Full получил необязательную интеграцию Android-аудио и виртуальных дисплеев, маршрутизацию по приложениям, управление выходами телефона и индикаторы уровня. Lite и Legacy остаются версиями только для ПК. Целевые проверки на этапе разработки включали маршрутизацию на Xiaomi 13; другие устройства и прослушивание человеком не проверялись. Подробности: [История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+В v1.31 Full получил зеркалирование основного экрана телефона, двустороннюю синхронизацию текстового буфера обмена, понятные имена кодировщиков с аппаратным определением, пресеты 24/32/50 Мбит/с и 120 fps, а также полную локализацию на 9 языках и исправление стабильности настроек; Lite и Legacy остаются версиями для ПК. Подробности: [История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Часто задаваемые вопросы (FAQ)
 
