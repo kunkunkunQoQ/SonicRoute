@@ -162,11 +162,11 @@ public sealed class AndroidPcmSource : IWaveProvider
         float headerGain = HeaderGain;
         if (!SmartVolume) return volume * headerGain;
         if (volume <= 0f || headerGain <= 0f || float.IsNaN(headerGain)) return 0f;
-        float curved = volume * (0.5f + 0.5f * volume);
+        float curved = volume * (0.12f + 0.88f * volume);
         float env = Math.Max(Volatile.Read(ref _smartEnvelope), Volatile.Read(ref _lastPeak));
-        float rangeFactor = float.IsNaN(env) || env <= 0.0005f
-            ? 0.35f
-            : Math.Clamp(0.35f / MathF.Pow(Math.Max(env, 0.02f), 0.70f), 0.20f, 1.40f);
+        float rangeFactor = float.IsNaN(env) || env <= 0.15f
+            ? 0.25f
+            : Math.Clamp(0.25f * MathF.Pow(0.15f / env, 0.70f), 0.08f, 0.25f);
         return curved * headerGain * rangeFactor;
     }
 
