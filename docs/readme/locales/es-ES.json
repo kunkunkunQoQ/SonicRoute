@@ -116,8 +116,8 @@
         "¿Consume CPU o batería mantener SonicRoute abierto en segundo plano?"
     ],
     "faqAnswers": [
-        "¡Sí! El enrutamiento de audio por aplicación es conservado de forma nativa por el motor de Windows y sigue activo aunque cierre SonicRoute. Solo los atajos, la rueda de la bandeja y la automatización requieren que permanezca en segundo plano.",
-        "Lite estándar requiere .NET 10 Desktop Runtime; Legacy no necesita un paquete adicional y utiliza .NET Framework 4.8. El paquete Store actual requiere .NET 10 Desktop Runtime x64 (versiones NET8 descatalogadas).",
+        "Windows conserva las rutas por aplicación y las sesiones de audio existentes tras cerrar SonicRoute. Los atajos, los controles de bandeja, la automatización, el audio del teléfono, la duplicación de pantalla y la sincronización del portapapeles requieren que SonicRoute siga abierto.",
+        "Full y Lite requieren el .NET 10 Desktop Runtime correspondiente; Legacy utiliza .NET Framework 4.8. El paquete Store requiere el runtime x64 de .NET 10. Las versiones NET8 ya no se mantienen, pero sus descargas históricas siguen disponibles.",
         "La detección prioriza los eventos del sistema y, cuando hace falta, usa una comprobación necesaria cada segundo. Los datos innecesarios se limpian bajo demanda; el uso real de CPU depende del sistema y de la actividad."
     ],
     "aiPromptTitle": "Resumen con IA y resolución de problemas con ahorro de tokens",

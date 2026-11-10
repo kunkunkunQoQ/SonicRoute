@@ -116,8 +116,8 @@
         "Verbraucht SonicRoute im Hintergrund spürbar CPU oder Akku?"
     ],
     "faqAnswers": [
-        "Ja! Die Audio-Zuweisung wird nativ vom Windows-Audiosystem gespeichert und bleibt auch nach Beenden von SonicRoute aktiv. Nur Tastenkürzel, Infobereich-Gesten und Automatisierungsregeln erfordern die Hintergrund-Ausführung.",
-        "Lite Standard benötigt die passende .NET 10 Desktop Runtime; Legacy benötigt kein zusätzliches .NET Desktop Runtime-Paket und läuft mit .NET Framework 4.8. Das aktuelle Store-Paket benötigt x64 .NET 10 Desktop Runtime (frühere NET8-Editionen eingestellt).",
+        "Windows behält App-Audiorouten und bestehende Audiositzungen nach dem Beenden von SonicRoute bei. Hotkeys, Taskleistensteuerung, Automatisierung, Smartphone-Audio, Bildschirmspiegelung und Zwischenablagesynchronisierung benötigen ein laufendes SonicRoute.",
+        "Full und Lite benötigen die passende .NET 10 Desktop Runtime; Legacy nutzt .NET Framework 4.8. Das Store-Paket benötigt die x64 .NET 10 Desktop Runtime. NET8 wird nicht mehr gepflegt; archivierte Downloads bleiben verfügbar.",
         "Die Erkennung nutzt vorrangig Systemereignisse und ergänzt sie bei Bedarf durch eine notwendige Momentaufnahme im Abstand von einer Sekunde. Nicht benötigte Daten werden bei Bedarf bereinigt; die tatsächliche CPU-Auslastung hängt von System und Nutzung ab."
     ],
     "aiPromptTitle": "KI-Zusammenfassung und token-effiziente Fehlerbehebung",

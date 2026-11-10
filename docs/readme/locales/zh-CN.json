@@ -24,7 +24,7 @@
     "liteRequirement": "单文件便携版；需要匹配架构的 .NET 10 Desktop Runtime，仅包含电脑音频功能。",
     "legacyRequirement": "免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用。",
     "storeRequirement": "以 Full 为构建来源；需要 x64 .NET 10 Desktop Runtime，在架版本以 Store 页面为准。",
-    "runtimeNote": "运行库说明：Full 与 Lite 都需要安装 {runtime}；Legacy 依赖系统自带 .NET Framework 4.8，无需额外安装运行库（历史 {runtime8} 兼容版已下架停更）。",
+    "runtimeNote": "运行库说明：Full 与 Lite 都需要安装 {runtime}；Legacy 依赖系统自带 .NET Framework 4.8，无需额外安装运行库（历史 {runtime8} 兼容版已停止维护，历史下载保留）。",
     "steps": [
         "**双击启动常驻**：下载解压或双击运行后软件常驻任务栏托盘（推荐从溢出区拖出固定以便随时查看）；双击托盘图标即可打开主窗口。",
         "**勾选设备与分流**：首次在「设置 → 保留的设备」勾选常用耳机与音箱；左键单击托盘图标呼出快速面板，滑动应用滑块即时分流设备与调节音量。",
@@ -116,8 +116,8 @@
         "软件在后台常驻会占用 CPU 或耗电吗？"
     ],
     "faqAnswers": [
-        "会！应用路由由 Windows 核心音频服务原生持久化保存；关闭 SonicRoute 后依然有效。仅快捷键、托盘控制与自动化规则需要软件在后台常驻生效。",
-        "默认 Lite 需要匹配的 .NET 10 Desktop Runtime；Legacy 基于 .NET Framework 4.8，不需要额外安装运行库；当前商店包需要 x64 .NET 10 Desktop Runtime（历史 NET8 版已下架）。",
+        "Windows 会保留应用路由和现有音频会话。快捷键、托盘控制、自动化以及手机音频、镜像、剪贴板同步需要 SonicRoute 继续运行。",
+        "Full 与 Lite 需要匹配架构的 .NET 10 Desktop Runtime；Legacy 使用 .NET Framework 4.8。Store 包需要 x64 .NET 10 Desktop Runtime。历史 NET8 已停更，旧资产仍可下载。",
         "检测优先使用系统事件，必要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。实际 CPU 占用取决于系统和使用情况。"
     ],
     "aiPromptTitle": "AI 快速总结与省 Token 排错",
@@ -125,10 +125,10 @@
     "quickStartTitle": "快速上手三步走",
     "cliTitle": "命令行与自动化联动（极客推荐）",
     "releaseHighlightsTitle": "{release} 版本亮点速览",
-    "retiredNet8Title": "历史 NET8 兼容版（已下架停更，点击展开）",
+    "retiredNet8Title": "历史 NET8 兼容版（已停更，保留历史下载，点击展开）",
     "fullRequirement": "单 EXE 便携版；需要匹配架构的 .NET 10 Desktop Runtime，包含可选 Android 手机音频与虚拟屏幕集成。",
     "editionFull": "Full（.NET 10，含可选手机互联）",
     "editionLite": "Lite（.NET 10，仅电脑音频）",
-    "editionLiteNet8": "Lite NET8（已下架）",
-    "net8Requirement": "已下架停更（后续版本不再提供）；建议迁移至 .NET 10 或 Legacy。"
+    "editionLiteNet8": "Lite NET8（已停更）",
+    "net8Requirement": "已停更，保留历史下载（后续版本不再提供）；建议迁移至 .NET 10 或 Legacy。"
 }

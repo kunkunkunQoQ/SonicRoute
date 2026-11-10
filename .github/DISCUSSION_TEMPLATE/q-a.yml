@@ -52,11 +52,13 @@ body:
       label: 所用软件版本形态 (Edition)
       description: 请选择你正在使用的版本形态
       options:
-        - Lite x64 (.NET 10, 官方推荐单文件版)
+        - Full x64 (.NET 10, 含手机功能)
+        - Lite x64 (.NET 10, 仅电脑音频)
         - Legacy x64 (.NET Framework 4.8, 免运行库版)
-        - Lite ARM64 (.NET 10, 实验性 ARM64 版)
-        - Microsoft Store (微软应用商店版)
-        - Lite NET8 (.NET 8 兼容版, 已下架停更)
+        - Full ARM64 (.NET 10, 实验性, 请注明实际版本)
+        - Lite ARM64 (.NET 10, 实验性, 请注明实际版本)
+        - Microsoft Store (Full, 微软应用商店版)
+        - 历史 Lite NET8 (.NET 8, 已停止维护)
         - 自行拉取源码编译版 (Source Build)
     validations:
       required: true
@@ -75,7 +77,7 @@ body:
     attributes:
       label: 操作系统版本与环境说明 (可选)
       description: Windows 操作系统版本与声卡设备
-      placeholder: "例如：Windows 11 23H2 (Build 22631) + SonicRoute v1.29 + USB 耳机 + 3.5mm 音箱"
+      placeholder: "例如：Windows 11 24H2 + SonicRoute v1.31 Full x64 + USB 耳机 + 3.5mm 音箱"
     validations:
       required: false
 

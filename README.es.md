@@ -54,8 +54,8 @@ Elija **Full x64** para audio Android y pantallas virtuales, **Lite x64** para f
 
 | Edición | Descargar | Requisitos |
 |---|---|---|
-| ⭐ Full (.NET 10, con integración móvil opcional) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-arm64.exe) | Edición portable en un solo EXE; requiere .NET 10 Desktop Runtime adecuado, incluye integración de audio y pantalla virtual de Android. |
-| ⭐ Lite (.NET 10, solo audio de PC) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-arm64.exe) | Edición portable de un solo archivo; requiere .NET 10 Desktop Runtime adecuado, solo funciones de audio para PC. |
+| ⭐ Full (.NET 10, con integración móvil opcional) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-x64.exe) / [ARM64 (experimental) · v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Edición portable en un solo EXE; requiere .NET 10 Desktop Runtime adecuado, incluye integración de audio y pantalla virtual de Android. |
+| ⭐ Lite (.NET 10, solo audio de PC) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-x64.exe) / [ARM64 (experimental) · v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Edición portable de un solo archivo; requiere .NET 10 Desktop Runtime adecuado, solo funciones de audio para PC. |
 | 🛡️ Legacy x64 (solo audio de PC, .NET Framework 4.8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Legacy-x64.zip) | Sin dependencias adicionales; utiliza .NET Framework 4.8 integrado, descomprimir y ejecutar. |
 | 🔄 Microsoft Store (basado en Full) | [Instalar desde Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Construido a partir de Full; requiere x64 .NET 10 Desktop Runtime; la versión vigente depende de la tienda. |
 
@@ -93,11 +93,11 @@ v1.31 añade a Full duplicación de pantalla principal del móvil y sincronizaci
 
 **Q: ¿Se mantienen el enrutamiento de aplicaciones y el volumen tras cerrar SonicRoute?**
 
-A: ¡Sí! El enrutamiento de audio por aplicación es conservado de forma nativa por el motor de Windows y sigue activo aunque cierre SonicRoute. Solo los atajos, la rueda de la bandeja y la automatización requieren que permanezca en segundo plano.
+A: Windows conserva las rutas por aplicación y las sesiones de audio existentes tras cerrar SonicRoute. Los atajos, los controles de bandeja, la automatización, el audio del teléfono, la duplicación de pantalla y la sincronización del portapapeles requieren que SonicRoute siga abierto.
 
 **Q: ¿Qué runtime requiere cada edición?**
 
-A: Lite estándar requiere .NET 10 Desktop Runtime; Legacy no necesita un paquete adicional y utiliza .NET Framework 4.8. El paquete Store actual requiere .NET 10 Desktop Runtime x64 (versiones NET8 descatalogadas).
+A: Full y Lite requieren el .NET 10 Desktop Runtime correspondiente; Legacy utiliza .NET Framework 4.8. El paquete Store requiere el runtime x64 de .NET 10. Las versiones NET8 ya no se mantienen, pero sus descargas históricas siguen disponibles.
 
 **Q: ¿Consume CPU o batería mantener SonicRoute abierto en segundo plano?**
 

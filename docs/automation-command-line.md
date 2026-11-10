@@ -1,6 +1,6 @@
 # 命令行直接执行自动化规则
 
-适用于 v1.22 的 Lite、Legacy 与商店构建；短命令最早于 v1.20 阶段 27 提供。下载见 [Wiki · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
+适用于当前 Full、Lite、Legacy 与商店构建；短命令最早于 v1.20 阶段 27 提供。各版本使用独立实例与命名管道；商店版的更新由 Microsoft Store 管理。下载见 [Wiki · 版本相关](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3)。
 
 ## 基本用法
 
@@ -13,9 +13,11 @@ sr "规则ID"
 
 首次正常启动新版会自动登记用户级命令入口，请关闭并重新打开终端（Windows Terminal 需关闭旧进程，单开新标签可能仍沿用旧环境）。之后无需切换到软件所在目录，不需要管理员权限。登记只向用户 PATH 追加 `%LocalAppData%\SonicRoute\Command`，保留其他路径；文件内容及 PATH 未变化时不会反复写入。
 
-短命令直接连接运行中的实例，不会重新启动 SonicRoute；软件未运行时返回退出码 6。默认依次查找普通版 Lite、Legacy 和商店版；连接成功后仅在该实例执行。可以指定 Legacy：
+短命令直接连接运行中的实例，不会重新启动 SonicRoute；软件未运行时返回退出码 6。默认依次查找 Full、Lite、Legacy 和商店版；连接成功后仅在该实例执行。可以显式选择便携版本：
 
 ```powershell
+sr --full "规则名称"
+sr --lite "规则名称"
 sr --legacy "规则名称"
 sr --help
 ```

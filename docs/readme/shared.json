@@ -69,6 +69,7 @@
     }
   ],
   "nextRelease": "v1.32",
+  "arm64LastRelease": "v1.30",
   "net8LastRelease": "v1.29",
   "triggerCount": 6,
   "actionCount": 39,

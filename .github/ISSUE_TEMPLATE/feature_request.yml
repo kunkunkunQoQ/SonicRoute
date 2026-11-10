@@ -76,5 +76,5 @@ body:
       options:
         - label: 我已查阅 [Wiki 02-功能特性](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) 与 [Wiki 04-自动化规则](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)，确认当前版本尚无此原生实现
           required: true
-        - label: 我理解 SonicRoute 的核心理念是“极致轻量、零轮询、低系统闲时开销”，该提议不会引入沉重冗余的常驻后台负担
+        - label: 我理解 SonicRoute 优先采用事件驱动和按需工作，控制闲时开销；确需周期检测时应说明启用与停止条件
           required: true

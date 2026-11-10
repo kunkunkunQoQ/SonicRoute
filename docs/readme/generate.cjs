@@ -17,6 +17,7 @@ const attr = text => text.replaceAll('&', '&amp;').replaceAll('"', '&quot;').rep
 const tableCell = text => text.replaceAll('|', '\\|');
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.release) || !/^\d{4}-\d{2}-\d{2}$/.test(shared.releaseDate)) throw new Error('Invalid shared release metadata');
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.net8LastRelease)) throw new Error('Invalid last NET8 release metadata');
+if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.arm64LastRelease)) throw new Error('Invalid last ARM64 release metadata');
 if (!/^v\d+\.\d+(?:\.\d+)?$/.test(shared.nextRelease) || !Number.isInteger(shared.triggerCount) || !Number.isInteger(shared.actionCount) || shared.triggerCount < 1 || shared.actionCount < 1) throw new Error('Invalid shared roadmap or feature counts');
 const interfaceLocales = fs.readdirSync(path.join(root, 'SonicRoute/Resources/Lang')).filter(name => name.endsWith('.json')).map(name => name.slice(0, -5)).sort();
 if (JSON.stringify(interfaceLocales) !== JSON.stringify(shared.languages.map(language => language.locale).sort())) throw new Error('README languages differ from built-in interface languages');
@@ -39,8 +40,9 @@ function render(language, text) {
   const period = cjk ? '。' : '.';
   const experimentalSuffix = cjk ? '（' + text.experimental + '）' : ' (' + text.experimental + ')';
   const releaseUrl = shared.repository + '/releases';
-  const downloadAsset = suffix => releaseUrl + '/download/' + shared.release + '/SonicRoute-' + shared.release + '-' + suffix;
-  const historicalNet8Asset = suffix => releaseUrl + '/download/' + shared.net8LastRelease + '/SonicRoute-' + shared.net8LastRelease + '-' + suffix;
+  const downloadAsset = (suffix, release = shared.release) => releaseUrl + '/download/' + release + '/SonicRoute-' + release + '-' + suffix;
+  const historicalNet8Asset = suffix => downloadAsset(suffix, shared.net8LastRelease);
+  const arm64Label = 'ARM64' + experimentalSuffix + (shared.arm64LastRelease === shared.release ? '' : ' · ' + shared.arm64LastRelease);
   const variables = { release: shared.release, version: shared.release.slice(1), nextRelease: shared.nextRelease,
     triggerCount: shared.triggerCount, actionCount: shared.actionCount, ruleCommand: 'sr "' + text.ruleExample + '"',
     faq: link(text.faq, wiki(pages.faq)), history: link(text.history, wiki(pages.history)),
@@ -53,8 +55,8 @@ function render(language, text) {
   const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 ', '📱 '];
   const editionIcons = ['⭐ ', '⚡ ', '🛡️ ', '🔄 '];
   const rows = [
-    [editionIcons[0] + text.editionFull, `${link('x64', downloadAsset('x64.exe'))} / ${link('ARM64' + experimentalSuffix, downloadAsset('arm64.exe'))}`, text.fullRequirement],
-    [editionIcons[0] + text.editionLite, `${link('x64', downloadAsset('Lite-x64.exe'))} / ${link('ARM64' + experimentalSuffix, downloadAsset('Lite-arm64.exe'))}`, text.liteRequirement],
+    [editionIcons[0] + text.editionFull, `${link('x64', downloadAsset('x64.exe'))} / ${link(arm64Label, downloadAsset('arm64.exe', shared.arm64LastRelease))}`, text.fullRequirement],
+    [editionIcons[0] + text.editionLite, `${link('x64', downloadAsset('Lite-x64.exe'))} / ${link(arm64Label, downloadAsset('Lite-arm64.exe', shared.arm64LastRelease))}`, text.liteRequirement],
     [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
     [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
   ];
@@ -173,10 +175,10 @@ function renderAI(shared) {
     "",
     "RELEASE_EDITIONS:",
     `  - { edition: Full, runtime: net10, architecture: x64, asset: "SonicRoute-${shared.release}-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }`,
-    `  - { edition: Full, runtime: net10, architecture: arm64, asset: "SonicRoute-${shared.release}-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }`,
+    `  - { edition: Full, runtime: net10, architecture: arm64, release: "${shared.arm64LastRelease}", asset: "SonicRoute-${shared.arm64LastRelease}-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }`,
     `  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-${shared.release}-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }`,
     `  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-${shared.release}-Legacy-x64.zip", deployment: MULTIFILE_ZIP }`,
-    `  - { edition: Lite, runtime: net10, architecture: arm64, asset: "SonicRoute-${shared.release}-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }`,
+    `  - { edition: Lite, runtime: net10, architecture: arm64, release: "${shared.arm64LastRelease}", asset: "SonicRoute-${shared.arm64LastRelease}-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }`,
     "  - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }",
     `  - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-${shared.net8LastRelease}-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }`,
     `  - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-${shared.net8LastRelease}-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }`,
@@ -235,7 +237,7 @@ function renderAI(shared) {
     "      - \"IPC via Named Pipe SonicRoute.RuleCommand.{Edition}.{SessionId}.{UserSid}.\"",
     "      - \"Exit codes 0..8 (0=ok, 1=step_failed, 2=invalid_arguments, 3=rule_not_found, etc.).\"",
     "      - \"Waits for rule completion; no fixed execution timeout (10s write timeout).\"",
-    "      - \"sr --legacy selects the Legacy instance. There is no separate sr.exe; use the registered sr.cmd or the application executable.\"",
+    "      - \"sr defaults to Full, Lite, Legacy, then Store; --full/--lite/--legacy selects that portable edition. There is no separate sr.exe; use the registered sr.cmd or the application executable.\"",
     "",
     "  PANEL_AND_TRAY:",
     "    intent: \"QuickPanel UI, tray volume scroll wheel, custom icons, blind control\"",
@@ -299,7 +301,7 @@ function renderAI(shared) {
     "      - \"Event-driven first architecture using WinEventHook and CoreAudio events.\"",
     "      - \"Enabled process-start/exit rules use WMI events, with a 1-second snapshot fallback when enabled or events are unavailable. WMI recovery backs off from 2 to 30 seconds; no process rules means no dedicated process listener/snapshot timer.\"",
     "      - \"Enabled visible quick-panel meters sample active sessions and fade-out at 33ms. With no active session after fade-out, they wait for notifications; an active silent stream still samples. Conditional failure recovery is retained; close stops and disposes the meter.\"",
-    "      - \"Closing windows releases UI work. Existing deferred idle reclaim can trim the process working set after 1.5 seconds; a smaller working set is not proof of a smaller managed heap or lower CPU.\"",
+    "      - \"Closing windows releases UI work. Full preserves active phone work and never trims the whole-process working set; eligible idle reclaim may request nonblocking Optimized GC. Lite/Legacy can request one working-set trim after 1.5 seconds with a 30-second cooldown. A smaller working set does not establish a smaller heap or lower CPU.\"",
     "",
     "  SOURCE_ARCHITECTURE_AND_BUILD:",
     "    intent: \"Codebase architecture, COM interop, multi-target compile\"",
@@ -308,7 +310,7 @@ function renderAI(shared) {
     "    source: [\"SonicRoute.sln\", \"SonicRoute/SonicRoute.csproj\", \"SonicRoute.Core/SonicRoute.Core.csproj\", \"build/Version.props\", \"global.json\"]",
     "    symbols: [\"SonicRoute\", \"SonicRoute.Core\"]",
     "    facts:",
-    "      - \"SonicRoute WPF targets net10.0-windows and net8.0-windows. SonicRoute.Core targets net10.0-windows, net8.0-windows and net48; it does not target netstandard2.0.\"",
+    "      - \"SonicRoute WPF targets net10.0-windows. SonicRoute.Core targets net10.0-windows and net48, not net8 or netstandard2.0. Some isolated compatibility fixtures still target net8; those are not product builds.\"",
     "      - \"SonicRoute.Legacy uses the shared application source with a net48/x64 shell. SDK selection is maintained in global.json; development versions come only from build/Version.props.\"",
     "",
     "  UPDATE_AND_RELEASE:",
@@ -348,7 +350,7 @@ function renderAI(shared) {
     `    source: ["${shared.releaseNotes}"]`,
     `    symbols: ["${shared.release}"]`,
     "    facts:",
-    "      - \"v1.31: Full restores aspect-preserving display0 main-display screen mirror with shared phone icon assets and GPU D3D11 rendering, adds per-device bidirectional text clipboard sync (64KiB cap, loop suppression), introduces friendly localized encoder labels with Android 29+ hardware detection and offline vendor fallback, adds 24/32/50 Mbps presets and 120 fps stream support, improves audio startup latency via 20ms PCM threshold, completes nine-language localization (838 keys) and fixes settings page crash on read-only binding; Lite/Legacy remain PC-only without phone modules.\",",
+    "      - \"v1.31: Full restores aspect-preserving display0 main-display screen mirror with shared phone icon assets and GPU D3D11 rendering, adds per-device bidirectional text clipboard sync (64KiB cap, loop suppression), introduces friendly localized encoder labels with Android 29+ hardware detection and offline vendor fallback, adds 24/32/50 Mbps presets and a 120 fps limit option, uses 20ms PCM blocks and a bounded AudioTrack startup threshold, completes nine-language localization (838 keys) and fixes settings page crash on read-only binding; Lite/Legacy remain PC-only without phone modules.\"",
     "      - \"v1.30: Full adds optional Android phone audio routing, explicit phone speaker/Bluetooth output control, quick-panel phone peak meters, default-on SmartVolume and per-app virtual displays; desktop adds compact/full quick-panel app row layout options, 39 automation actions (current-app mic mute), config import preview and coalesced volume writes; Lite/Legacy exclude phone modules and NET8 builds are discontinued.\"",
     "      - \"v1.29: Expandable output endpoint volume panel, independent retained-device filter, deferred loading and event-driven incremental refresh; Shift wheel controls system volume. JSON/language and audio-meter work was reduced without a whole-app CPU claim.\"",
     "      - \"v1.28: Inline application renaming, shared routing card, independent mute/activity and hidden-panel markers; Alt wheel changes app output, Alt+Shift wheel changes system output. Existing device hotkeys remain.\"",

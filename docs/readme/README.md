@@ -21,7 +21,7 @@ node docs/readme/generate.cjs --check
 
 第一条生成九份语言 README 和一份 README.ai.md，共十份；第二条只检查，不写文件。检查缺少语言、字段、列表项数、占位符和生成结果不同步时返回非零退出码。GitHub Actions 会运行同一检查（包括开发版本文件修改），不自动翻译或提交。
 
-发布新版时统一更新 shared.json 中的 release、releaseDate、releaseNotes；由 release 自动拼出五个程序包直链，不逐份手改。最新下载入口始终指向 Releases/latest，商店独立使用其在架版本。releaseSummary维护各语言的版本摘要；详细变化仍由现有发布说明维护。后续计划的版本号由 nextRelease 统一维护。修改 build/Version.props 后也要重新生成 README.ai.md，不能把开发版本冒充正式版；AI 索引内的源码、参数、路径及事实说明仍需人工对照实现，生成一致性检查不等于事实自动验收。
+发布新版时统一更新 shared.json 中的 release、releaseDate、releaseNotes；x64 程序链接读取 release，ARM64 读取 arm64LastRelease，历史 NET8 读取 net8LastRelease。只有对应架构的资产实际发布后才更新该字段；较旧的 ARM64 下载会显示其版本号，不能假设每次发布都包含完整构建矩阵。最新下载入口始终指向 Releases/latest，商店独立使用其在架版本。releaseSummary维护各语言的版本摘要；详细变化仍由现有发布说明维护。后续计划的版本号由 nextRelease 统一维护。修改 build/Version.props 后也要重新生成 README.ai.md，不能把开发版本冒充正式版；AI 索引内的源码、参数、路径及事实说明仍需人工对照实现，生成一致性检查不等于事实自动验收。
 
 修改功能说明时，以实现和中文文案核对语义，再更新九种文案、生成并审读。`features` 不再区分核心/次要功能，用四个以内的重点说明用户可以少做哪些操作；使用示例只保留具体场景，避免重复功能介绍。详细步骤放在 Wiki。各字段里的占位符必须保留；`{release}`、`{version}`、`{nextRelease}`统一版本，`{triggerCount}`、`{actionCount}`统一数量，`{arch}`、`{runtime}`、`{faq}`、`{history}`统一架构与链接，`{ruleCommand}`统一命令示例。`sr` 是命令名，只有示例规则名称可以本地化。翻译要符合当地表达，模式和控件名称参考 SonicRoute/Resources/Lang；JSON 结构检查不代表母语审校。
 
@@ -30,5 +30,7 @@ node docs/readme/generate.cjs --check
 ---
 
 The nine READMEs share one layout and link manifest. Edit shared.json for versions, links and common facts, locales/<language>.json for text, and generate.cjs for layout. Keep features to four practical benefits and use short, concrete examples. Downloads, getting-started steps, release summary, documentation table, roadmap, other projects and artwork share the same layout.
+
+Download links use `release` for current x64 builds, `arm64LastRelease` for the last actually published ARM64 builds, and `net8LastRelease` for discontinued .NET 8 assets. Update each field only after those assets exist; the generator labels an older ARM64 download with its version.
 
 Run the commands above with Node.js 24; no dependencies are needed. They cover the nine language READMEs plus README.ai.md. Maintain AI implementation facts in renderAI(); its stable version comes from shared.json and its source version from build/Version.props. Regenerate after changing either version source. Commit both the sources and generated Markdown. `--check` is read-only and fails when a translation is incomplete or the generated files are stale. The workflow checks consistency, not factual accuracy; it does not translate, publish or commit changes.

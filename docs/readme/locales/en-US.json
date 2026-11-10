@@ -116,8 +116,8 @@
         "Does running SonicRoute in the background consume CPU or battery?"
     ],
     "faqAnswers": [
-        "Yes! App audio routing is natively preserved by the Windows audio engine and stays active even after SonicRoute is closed. Only hotkeys, tray controls, and automation rules require SonicRoute running in the background.",
-        "Standard Lite requires the matching .NET 10 Desktop Runtime; Legacy needs no separate .NET Desktop Runtime package and uses .NET Framework 4.8. The current Store package requires the x64 .NET 10 Desktop Runtime (historical NET8 editions discontinued).",
+        "Windows keeps app routes and existing audio sessions after SonicRoute closes. Hotkeys, tray controls, automation, phone audio, screen mirroring and clipboard sync require SonicRoute to keep running.",
+        "Full and Lite require the matching .NET 10 Desktop Runtime; Legacy uses .NET Framework 4.8. The Store package needs the x64 .NET 10 Desktop Runtime. Historical NET8 builds are no longer maintained, but archived downloads remain available.",
         "Detection prioritizes system events and uses a necessary one-second snapshot fallback when needed. Unneeded data is cleaned up on demand; actual CPU use depends on the system and workload."
     ],
     "aiPromptTitle": "AI Summaries & Low-Token Troubleshooting",

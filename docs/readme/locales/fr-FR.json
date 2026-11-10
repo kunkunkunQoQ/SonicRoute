@@ -116,8 +116,8 @@
         "L'exécution de SonicRoute en arrière-plan consomme-t-elle du processeur ou de la batterie ?"
     ],
     "faqAnswers": [
-        "Oui ! Le routage audio des applications est conservé nativement par le moteur audio de Windows et reste actif même après la fermeture de SonicRoute. Seuls les raccourcis, la molette et l'automatisation nécessitent son exécution.",
-        "Lite standard nécessite le .NET 10 Desktop Runtime correspondant ; Legacy ne nécessite aucun paquet supplémentaire et utilise .NET Framework 4.8. Le paquet Store actuel nécessite le .NET 10 Desktop Runtime x64 (anciennes versions NET8 abandonnées).",
+        "Windows conserve les routages par application et les sessions audio existantes après la fermeture de SonicRoute. Les raccourcis, la zone de notification, l’automatisation, l’audio du téléphone, la recopie d’écran et la synchronisation du presse-papiers nécessitent que SonicRoute reste ouvert.",
+        "Full et Lite nécessitent le .NET 10 Desktop Runtime correspondant ; Legacy utilise .NET Framework 4.8. Le paquet Store nécessite le runtime x64 .NET 10. Les anciennes versions NET8 ne sont plus maintenues, mais restent disponibles en archive.",
         "La détection privilégie les événements système et utilise, si nécessaire, une vérification ponctuelle toutes les secondes. Les données inutiles sont nettoyées à la demande ; l’utilisation réelle du processeur dépend du système et de l’activité."
     ],
     "aiPromptTitle": "Résumé IA et dépannage à faible consommation de tokens",

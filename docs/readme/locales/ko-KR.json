@@ -24,7 +24,7 @@
     "liteRequirement": "단일 파일 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. PC 오디오 기능만 포함.",
     "legacyRequirement": "추가 런타임 불필요. 제한된 업무용 PC 적합. 시스템 내장 .NET Framework 4.8 기반으로 압축 해제 후 즉시 사용.",
     "storeRequirement": "Full 기반 빌드. x64 .NET 10 Desktop Runtime 필요. 스토어 제공 버전은 Store 페이지 기준.",
-    "runtimeNote": "Full과 Lite는 {runtime} 설치가 필요하며, Legacy는 Windows 내장 .NET Framework 4.8을 사용하므로 추가 설치가 필요 없습니다 (기존 {runtime8} 호환 버전은 제공 종료).",
+    "runtimeNote": "Full과 Lite는 {runtime} 설치가 필요하며, Legacy는 Windows 내장 .NET Framework 4.8을 사용하므로 추가 설치가 필요 없습니다 (기존 {runtime8} 호환 버전은 유지보수 종료, 기존 다운로드 제공).",
     "steps": [
         "**실행 및 트레이 고정**: 더블 클릭하여 실행하면 작업 표시줄 트레이에 상주합니다 (오버플로 영역에서 밖으로 끌어내어 항상 표시 권장). 트레이 아이콘을 더블 클릭하면 메인 창이 열립니다.",
         "**장치 선택 및 앱 라우팅**: '설정 → 보존할 장치'에서 사용하는 헤드폰과 스피커를 선택합니다. 트레이 아이콘을 클릭하여 퀵 패널을 열고 슬라이더로 앱별 출력 장치와 볼륨을 즉시 조절합니다.",
@@ -116,8 +116,8 @@
         "백그라운드 상주 중 CPU나 배터리를 소모하나요?"
     ],
     "faqAnswers": [
-        "네, 유지됩니다! 앱 오디오 라우팅은 Windows 오디오 엔진에 의해 기본적으로 영구 저장되므로 프로그램을 종료해도 유지됩니다. 단축키, 트레이 제어, 자동화 규칙만 상주가 필요합니다.",
-        "기본 Lite는 호환되는 .NET 10 Desktop Runtime이 필요하며, Legacy는 .NET Framework 4.8 기반으로 별도의 런타임이 필요하지 않습니다. 현재 Store 패키지는 x64 .NET 10 Desktop Runtime이 필요합니다 (과거 NET8 버전 제공 종료).",
+        "SonicRoute를 종료해도 Windows의 앱별 출력 경로와 기존 오디오 세션은 유지됩니다. 단축키, 트레이 제어, 자동화, 휴대전화 오디오, 화면 미러링 및 클립보드 동기화에는 SonicRoute 실행이 필요합니다.",
+        "Full과 Lite에는 해당 아키텍처의 .NET 10 Desktop Runtime이 필요하며, Legacy는 .NET Framework 4.8을 사용합니다. Store 패키지에는 x64 .NET 10 Desktop Runtime이 필요합니다. 이전 NET8 버전은 유지보수가 종료되었지만 기존 파일은 계속 다운로드할 수 있습니다.",
         "감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1초 간격 스냅샷 확인을 보완적으로 사용합니다. 불필요한 데이터는 필요할 때 정리하며 실제 CPU 사용량은 시스템과 작업에 따라 다릅니다."
     ],
     "aiPromptTitle": "AI를 위한 빠른 요약 및 토큰 절약 문제 해결",
@@ -125,10 +125,10 @@
     "quickStartTitle": "3단계 빠른 시작",
     "cliTitle": "CLI 및 자동화 연동 (파워 유저)",
     "releaseHighlightsTitle": "{release} 릴리스 주요 변경사항",
-    "retiredNet8Title": "이전 NET8 호환 버전 (제공 종료, 펼쳐서 보기)",
+    "retiredNet8Title": "이전 NET8 호환 버전 (유지보수 종료, 기존 다운로드 제공, 펼쳐서 보기)",
     "fullRequirement": "단일 EXE 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. 선택적 Android 오디오 및 가상 디스플레이 연동 포함.",
     "editionFull": "Full (.NET 10, 모바일 연동 포함)",
     "editionLite": "Lite (.NET 10, PC 오디오 전용)",
     "editionLiteNet8": "Lite NET8 (지원 종료)",
-    "net8Requirement": "제공 및 업데이트가 종료되었습니다. .NET 10 또는 Legacy 버전으로 이전을 권장합니다."
+    "net8Requirement": "업데이트가 종료되었으며 기존 다운로드는 유지됩니다. .NET 10 또는 Legacy 버전으로 이전을 권장합니다."
 }

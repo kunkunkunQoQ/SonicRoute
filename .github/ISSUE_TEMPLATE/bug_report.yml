@@ -15,7 +15,7 @@ body:
     attributes:
       label: 软件版本号
       description: 可在设置页底部或托盘图标悬停提示查看
-      placeholder: "例如：1.24 或 1.25-preview"
+      placeholder: "例如：1.31，并注明正式版、预览版或自行构建"
     validations:
       required: true
 
@@ -25,10 +25,13 @@ body:
       label: 软件版本形态
       description: 请选择你正在使用的 SonicRoute 分发版本
       options:
-        - Lite x64（推荐主力 · 单文件 .NET 8 桌面版）
-        - Lite ARM64（Surface Pro / 骁龙 PC 原生 · .NET 8）
+        - Full x64（含手机功能 · 单文件 .NET 10）
+        - Lite x64（仅电脑音频 · 单文件 .NET 10）
+        - Full ARM64（实验性 · 含手机功能 · 请注明实际版本）
+        - Lite ARM64（实验性 · .NET 10 · 请注明实际版本）
         - Legacy x64（免额外运行库 · 系统自带 .NET 4.8）
-        - Microsoft Store（微软商店版 · 自动静默更新）
+        - Microsoft Store（Full · 由商店更新）
+        - 历史 Lite NET8（.NET 8 · 已停止维护）
         - 自行拉取源码编译构建
     validations:
       required: true
@@ -58,6 +61,8 @@ body:
         - 全局麦克风硬件级闭麦与状态同步
         - 物理设备热插拔 / 睡眠唤醒恢复
         - 蓝牙耳机连接与低延迟切换
+        - Android 设备连接、手机音频或剪贴板同步
+        - 手机主屏镜像、应用虚拟屏或声画编码设置
         - 虚拟声卡兼容性 (Voicemeeter / SteelSeries Sonar 等)
         - OSD 屏幕浮动提示
         - 开机自启与后台常驻

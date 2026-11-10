@@ -14,8 +14,8 @@ See [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) for candidate creation, the s
 4. The workflow automatically:
    - Reads the target release version from `build/Version.props` (e.g. `1.25` → `v1.25`).
    - Asserts preflight conditions (strictly `master` branch, commit SHA binding, monotonic version increase against remote releases and local tags, absence of conflicting published releases).
-   - Compiles and packages SonicRoute .NET 10 x64/ARM64 ZIPs (with phone support), Lite .NET 10 x64/ARM64 single EXEs (without phone support), and Legacy x64 via `Build-PortableRelease.ps1`.
-   - Validates local artifacts (PE machine types `0x8664`/`0xaa64`, FileVersion, 22-file allowlist for Full ZIP and 13-file allowlist for Legacy ZIP, `SHA256SUMS.txt`, `SonicRoute-update.json` protocol 2 schema).
+   - Compiles and packages Full and Lite .NET 10 x64/ARM64 single EXEs, plus the Legacy x64 ZIP, via `Build-PortableRelease.ps1`. Full embeds the phone runtime; Lite excludes it.
+   - Validates PE architecture (`0x8664`/`0xaa64`), FileVersion, edition/runtime, Full's embedded component manifests and single-EXE payload, the Legacy ZIP allowlist, `SHA256SUMS.txt`, and the protocol 2 update manifest.
    - Generates release notes: prioritizes curated `docs/release-v<version>.md` if maintained, or automatically extracts and groups conventional commits and PRs since the previous official release tag.
    - Creates a **Draft Release** pinned to the validated commit SHA and uploads all 7 assets.
    - Performs **Remote Cryptographic Re-verification**: re-queries the GitHub API for asset counts and sizes, downloads each asset back to an isolated temporary sandbox, and re-computes its SHA-256 hash locally.
@@ -56,23 +56,25 @@ CI runs RuntimeChecks for NET10 and NET48, the Full edition/resource/payload che
 
 ## Local Manual Build
 
-Build from the reviewed release source in the isolated public worktree. Use a fresh absolute output directory:
+Build from the reviewed release source in the current checkout. Use a fresh absolute output directory:
 
 ```powershell
-./packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory E:/releases/SonicRoute-1.25
+./packaging/Updates/Build-PortableRelease.ps1 -OutputDirectory E:/releases/SonicRoute-candidate
 ```
 
 The script reads `build/Version.props`, selects the SDK from the repository directory so `global.json` also applies to calls from another working directory, and restores the caller's directory on exit. It builds Full and Lite .NET 10 for x64/ARM64 plus Legacy x64 in sequence, retains LICENSE in the Legacy ZIP, validates PE architecture, file version and edition/runtime, and generates:
 
 - `SonicRoute-v<version>-Lite-x64.exe`
 - `SonicRoute-v<version>-Lite-arm64.exe`
-- `SonicRoute-v<version>-x64.zip`
-- `SonicRoute-v<version>-arm64.zip`
+- `SonicRoute-v<version>-x64.exe`
+- `SonicRoute-v<version>-arm64.exe`
 - `SonicRoute-v<version>-Legacy-x64.zip`
 - `SonicRoute-update.json` (explicit edition/runtime/architecture, protocol, package and per-file hashes/sizes)
 - `SHA256SUMS.txt` (the five packages and manifest)
 
 Create an official **draft** GitHub Release with a numeric `v<version>` tag, upload all seven assets, check their server-side `size` and `digest` against local SHA-256, then publish as a stable Latest release. Never publish an incomplete draft. Missing packages or older releases without a manifest remain available for manual downloads; the client will not guess a replacement package. No updater code change is needed for the next version. For an existing set of five built packages, run `New-UpdateManifest.ps1 -AssetsDirectory <directory> -Version <version>` before uploading. It refuses to overwrite existing metadata.
+
+This is the pipeline's complete build matrix, not a claim that every historical release contains all targets. The published v1.31 has three x64 programs plus two metadata files; the last published experimental ARM64 programs remain v1.30. Download links must follow actual release assets.
 
 MSIX packaging and Microsoft Store updates are unchanged. The portable update code rejects packaged execution, including its internal worker entry points. The original manual extract/copy/run workflow is retained. A version older than 1.25 does not contain this updater: its first upgrade to 1.25 is manual or via Microsoft Store.
 
@@ -82,11 +84,11 @@ Check and full-changelog actions are in the Software update card heading. Releas
 
 ## Trust and compatibility
 
-The client trusts only the fixed official repository through system-validated HTTPS. Asset redirects are restricted to GitHub's HTTPS asset hosts. GitHub API asset digests, SHA256SUMS, manifest package digests, file sizes, per-file hashes, PE machine, executable version and explicit edition/runtime must agree. ZIP entries are restricted to known program files: Legacy flat files or the exact Full layout including AndroidRuntime subdirectories; settings, automation, icons, language overrides and other user files are never installation targets. Future additional Legacy dependencies require an explicit reviewed protocol allowlist change.
+The client trusts only the fixed official repository through system-validated HTTPS. Asset redirects are restricted to GitHub's HTTPS asset hosts. GitHub API asset digests, SHA256SUMS, manifest package digests, file sizes, per-file hashes, PE machine, executable version and explicit edition/runtime must agree. Full and Lite replace one executable; only Legacy uses the ZIP program-file allowlist. Settings, automation, icons, language overrides and other user files are never installation targets. Future additional Legacy dependencies require an explicit reviewed protocol allowlist change.
 
 ### Runtime matching and .NET 8 retirement
 
-The default SonicRoute ZIPs include phone support and carry no Full/Lite/Android edition suffix. The `Lite-x64.exe` / `Lite-arm64.exe` assets exclude all phone code and dependencies. Both use .NET 10; see [EDITIONS.md](../EDITIONS.md). Historical .NET 8 compatibility assets retain `Lite-NET8-x64.exe` / `Lite-NET8-arm64.exe`; Legacy remains the x64 .NET Framework 4.8 ZIP. Protocol 2 adds an explicit `runtime` (`net10`, `net8`, `net48`) alongside edition and architecture. Old protocol-1 clients refuse protocol 2 rather than accidentally install a .NET 10 package as their former Lite/.NET 8 variant. Current clients interpret the original protocol-1 Lite contract only as .NET 8 and do not automatically install ambiguous dual-runtime protocol-1 manifests. Historical NET8 binaries also carry `SonicRoute Lite NET8` in PE file description, checked during manifest generation and staging; other binary identities remain unchanged.
+The default SonicRoute single EXEs include phone support and carry no Full/Lite/Android edition suffix. The `Lite-x64.exe` / `Lite-arm64.exe` assets exclude all phone code and dependencies. Both use .NET 10; see [EDITIONS.md](../EDITIONS.md). Historical .NET 8 compatibility assets retain `Lite-NET8-x64.exe` / `Lite-NET8-arm64.exe`; Legacy remains the x64 .NET Framework 4.8 ZIP. Protocol 2 adds an explicit `runtime` (`net10`, `net8`, `net48`) alongside edition and architecture. Old protocol-1 clients refuse protocol 2 rather than accidentally install a .NET 10 package as their former Lite/.NET 8 variant. Current clients interpret the original protocol-1 Lite contract only as .NET 8 and do not automatically install ambiguous dual-runtime protocol-1 manifests. Historical NET8 binaries also carry `SonicRoute Lite NET8` in PE file description, checked during manifest generation and staging; other binary identities remain unchanged.
 
 This branch no longer builds, releases or maintains NET8. Historical NET8 assets and protocol recovery support remain available. Its update card states the installed runtime and provides the existing styled button to open the official latest release download page. x64 users can manually migrate to .NET 10 or Legacy 4.8; ARM64 users are directed to .NET 10 ARM64 only. The updater continues to install matching-runtime updates when offered and never silently migrates runtimes/editions. A release without a matching .NET 8 package stays a missing-package/manual-download case, not an automatic .NET 10 fallback. No date polling or forced retirement switch is added; this is a maintained release policy, not a local-clock-based shutdown.
 

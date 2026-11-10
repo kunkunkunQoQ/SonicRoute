@@ -17,7 +17,7 @@
 **输入**：目标版本已写入 `Version.props`；工作树干净；已检出的完整 commit；可用的稳定 .NET 10 SDK；未被占用的新绝对输出目录。
 
 ```powershell
-$candidate = 'E:\releases\SonicRoute-v1.26-candidate-<commit>'
+$candidate = 'E:\releases\SonicRoute-candidate-<commit>'
 .\packaging\Updates\Build-PortableRelease.ps1 -OutputDirectory $candidate
 ```
 
@@ -63,19 +63,19 @@ $candidate = 'E:\releases\SonicRoute-v1.26-candidate-<commit>'
 
 ## CI 与权限边界
 
-Actions 默认勾选 Dry Run。正式发布必须明确取消勾选并选择 master；策略预检在构建前执行，错误分支明确失败。CI 将只读验证与正式发布拆分为不同 job：只读验证负责一致性、Harness、构建、三运行时检查及 NET10/NET8 更新助手进程/回滚检查，不持有发布写权限；只有正式发布 job 在 master 且未选择 dry_run 时取得 Contents write 权限，并复验同一候选及收据。Checkout 不持久保存凭据。尚未实际运行的托管 CI 必须另记 NOT TESTED，不把本地 Harness 或 DryRun 通过视为托管 CI 已通过。
+Actions 默认勾选 Dry Run。正式发布必须明确取消勾选并选择 master；策略预检在构建前执行，错误分支明确失败。CI 将只读验证与正式发布拆分为不同 job：只读验证负责一致性、Harness、构建、NET10/NET48 客户端检查、Full资源/单EXE更新检查及NET10更新助手进程/回滚检查，不持有发布写权限；历史NET8协议兼容夹具保留，但不构建NET8应用。只有正式发布 job 在 master 且未选择 dry_run 时取得 Contents write 权限，并复验同一候选及收据。Checkout 不持久保存凭据。尚未实际运行的托管 CI 必须另记 NOT TESTED，不把本地 Harness 或 DryRun 通过视为托管 CI 已通过。
 
 发布失败后使用 **Re-run failed jobs**，保留成功验证 job 的输出，发布 job 按该 job 输出的 artifact 名下载原候选。候选按验证 attempt 分名保存 14 天。**Re-run all jobs** 或重新 dispatch 会重建；不要把它们称为复用同一候选。验证中途失败时，能取得的资产、收据和检查结果进入单独的 failure artifact，仅用于诊断，不能拿它当正式候选；尚未生成有效收据的文件不得发布。
 
-## 1.26 / 1.27 操作顺序
+## 新版本操作顺序
 
 每个版本单独执行以下步骤，不共用或改写候选目录：
 
-1. 更新 `Version.props` 为 `1.26`（下一次发布再更新为 `1.27`），确认准备发布的完整 commit 和干净工作树。
-2. 为该版本和 commit 选一个从未存在过的绝对候选路径，例如 `E:\releases\SonicRoute-v1.26-candidate-<commit>`；执行 Build，核对七资产与目录外 receipt。
+1. 更新 `Version.props` 为拟发布的下一数值版本，确认准备发布的完整 commit 和干净工作树；不得改写已经发布的版本。
+2. 为该版本和 commit 选一个从未存在过的绝对候选路径，例如 `E:\releases\SonicRoute-candidate-<commit>`；执行 Build，按当前完整矩阵核对七资产与目录外 receipt。
 3. 对该目录执行 `VerifyLocal`，再执行完整 `FullPipeline -SkipBuild -DryRun`；通过后冻结候选内容。
 4. 仅在确认 `master`、commit、候选、receipt 和 GitHub CLI 写权限无误后，对同一候选执行 `-Stage Publish`。
 5. 发布完成后确认 Release 页面为正式发布状态且资产齐全。失败则保留 Draft 和候选，针对同一 commit/资产排查及重试。
-6. 1.27 从新的 commit、新的版本号和全新的候选目录重新开始；不得把 1.26 候选或结果当作 1.27 验证。
+6. 下一版本从新的 commit、新的版本号和全新的候选目录重新开始；不得沿用上一版本的候选或验证结论。
 
 上述步骤用于后续新版本；同版本已公开时，正式发布必须被拒绝。只读复验不创建新 Release，也不提审 Microsoft Store。

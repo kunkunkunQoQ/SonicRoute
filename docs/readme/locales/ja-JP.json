@@ -24,7 +24,7 @@
     "liteRequirement": "単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。",
     "legacyRequirement": "追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。",
     "storeRequirement": "Full をベースにビルド。x64 .NET 10 Desktop Runtime が必要。提供バージョンは Store ページに準拠。",
-    "runtimeNote": "FullとLiteには {runtime} が必要です。LegacyはWindows標準の.NET Framework 4.8で動作し、追加導入は不要です（旧 {runtime8} 互換版は提供終了）。",
+    "runtimeNote": "FullとLiteには {runtime} が必要です。LegacyはWindows標準の.NET Framework 4.8で動作し、追加導入は不要です（旧 {runtime8} 互換版は保守終了・過去のダウンロードは継続）。",
     "steps": [
         "**起動してタスクトレイに常駐**：解凍またはダブルクリックで起動するとタスクトレイに常驻します（いつでも確認できるようオーバーフローからドラッグして固定を推奨）。トレイアイコンをダブルクリックでメイン画面を開きます。",
         "**デバイス選択と個別ルーティング**：「設定 → 保持するデバイス」でお手持ちのヘッドホンやスピーカーにチェックを入れます。トレイアイコンをクリックしてクイックパネルを開き、スライダーでアプリごとに音量調整と出力先切り替えを行います。",
@@ -116,8 +116,8 @@
         "バックグラウンド常駐中に CPU やバッテリーを消費しますか？"
     ],
     "faqAnswers": [
-        "はい、維持されます。アプリのルーティングは Windows 側のオーディオエンジンによってネイティブに保存されるため、終了後も有効です。ホットキーや自動化ルールのみ常駐が必要です。",
-        "標準 Lite には対応する .NET 10 Desktop Runtime が必要です。Legacy 版は .NET Framework 4.8 上で動作し追加ランタイムは不要です。Store パッケージには x64 .NET 10 Desktop Runtime が必要です（旧 NET8 版は提供終了）。",
+        "SonicRouteを終了しても、Windowsのアプリ別出力先と既存の音声セッションは維持されます。ホットキー、トレイ操作、自動化、スマートフォン音声、画面ミラーリング、クリップボード同期にはSonicRouteの実行が必要です。",
+        "FullとLiteには対応する.NET 10 Desktop Runtimeが必要です。Legacyは.NET Framework 4.8を使用し、Store版にはx64の.NET 10 Desktop Runtimeが必要です。旧NET8版の保守は終了していますが、過去のファイルは引き続きダウンロードできます。",
         "検出はシステムイベントを優先し、必要な場合に限り1秒間隔のスナップショット確認で補います。不要なデータは必要に応じて整理します。実際の CPU 使用量は環境と利用状況によって異なります。"
     ],
     "aiPromptTitle": "AIによる高速要約と省トークンでのトラブルシューティング",
@@ -125,10 +125,10 @@
     "quickStartTitle": "3ステップで今すぐ始める",
     "cliTitle": "コマンドラインと自動化連携（上級者向け）",
     "releaseHighlightsTitle": "{release} リリースの主な改善点",
-    "retiredNet8Title": "過去の NET8 互換版（提供終了・クリックで展開）",
+    "retiredNet8Title": "過去の NET8 互換版（保守終了・過去のダウンロードあり・クリックで展開）",
     "fullRequirement": "単一 EXE ポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。オプションの Android 音声・仮想ディスプレイ連携を含む。",
     "editionFull": "Full (.NET 10、スマホ連携対応)",
     "editionLite": "Lite (.NET 10、PC 音声のみ)",
-    "editionLiteNet8": "Lite NET8 (提供終了)",
-    "net8Requirement": "提供・更新を終了しました。.NET 10 または Legacy への移行を推奨します。"
+    "editionLiteNet8": "Lite NET8 (保守終了)",
+    "net8Requirement": "更新は終了しています。過去のダウンロードは引き続き利用できます。.NET 10 または Legacy への移行を推奨します。"
 }

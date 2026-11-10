@@ -53,7 +53,7 @@ body:
     attributes:
       label: 操作系统与 SonicRoute 版本
       description: 你的运行环境
-      placeholder: "例如：Windows 11 24H2 + SonicRoute v1.24 Lite x64"
+      placeholder: "例如：Windows 11 24H2 + SonicRoute v1.31 Full x64"
     validations:
       required: true
 
