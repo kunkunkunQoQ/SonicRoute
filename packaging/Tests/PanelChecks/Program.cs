@@ -120,7 +120,7 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Contains("--output-popup-live"))
+        if (args.Contains("--output-popup-live") || args.Contains("--tray-submenu-live"))
         {
             AttachOutputTestDesktop();
             Directory.CreateDirectory(args.Last());
@@ -152,6 +152,12 @@ internal static partial class Program
             }
             app.Resources = ProductResources();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            if (args.Contains("--tray-submenu-live"))
+            {
+                CheckTraySubmenuPlacement(args.Last());
+                Console.WriteLine($"RESULT passed={_checks} TRAY_SUBMENU=true PRIVATE_DESKTOP=true APP_STARTUP=false AUDIO_ACCESS=NONE");
+                return 0;
+            }
             if (args.Contains("--memory-followup"))
             {
                 CheckMemoryFollowup(windows);

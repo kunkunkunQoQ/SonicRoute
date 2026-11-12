@@ -1,4 +1,5 @@
-param([string]$Framework = 'net10.0-windows', [string]$DotNetHost = '', [string]$OutputDirectory = '', [switch]$Followup, [switch]$Optimization)
+param([string]$Framework = 'net10.0-windows', [string]$DotNetHost = '', [string]$OutputDirectory = '', [switch]$Followup, [switch]$Optimization,
+      [switch]$TrayMenu, [string]$AssemblyPath = '')
 $ErrorActionPreference = 'Stop'
 $sourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot ('bin/output-popup/' + $Framework) }
@@ -44,15 +45,17 @@ public static class OutputPopupLauncher {
  }
 }
 '@
-$modeArguments = if ($Followup) { '--output-popup-live --output-followup-live' } else { '--output-popup-live' }
+$modeArguments = if ($TrayMenu) { '--tray-submenu-live' } elseif ($Followup) { '--output-popup-live --output-followup-live' } else { '--output-popup-live' }
 if ($Optimization) { $modeArguments += ' --output-optimization-live' }
 if ($Framework -eq 'net48') {
     $hostPath = Join-Path $PSScriptRoot 'bin/Release/net48/PanelRemovalChecks.exe'
+    if ($AssemblyPath) { $hostPath = [IO.Path]::GetFullPath($AssemblyPath) }
     $arguments = $modeArguments + ' "' + $resultDirectory + '"'
 } else {
     if (!$DotNetHost) { $DotNetHost = (Get-Command dotnet -ErrorAction Stop).Source }
     $hostPath = $DotNetHost
     $assembly = Join-Path $PSScriptRoot "bin/Release/$Framework/PanelRemovalChecks.dll"
+    if ($AssemblyPath) { $assembly = [IO.Path]::GetFullPath($AssemblyPath) }
     $arguments = '"' + $assembly + '" ' + $modeArguments + ' "' + $resultDirectory + '"'
 }
 $code = [OutputPopupLauncher]::Run($hostPath, $arguments, $sourceRoot)
