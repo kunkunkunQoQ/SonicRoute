@@ -14,15 +14,22 @@ SonicRoute 是常駐於 Windows 系統匣的音訊工具：可為個別應用程
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介面語言 · MIT 授權
 
-> [!TIP]
-> **AI 快速總結與省 Token 排錯**：使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查問題、理解架構或編寫腳本時，建議直接參考專用機器規範 [README.ai.md](README.ai.md)。該文件以高密度結構化 DSL 提煉核心機制與排障決策樹，避免大模型掃描冗長圖文，大幅節省上下文 Token 開銷並秒級定位根因。
+<div>
+<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="SonicRoute 即時示範：將手機應用程式音訊拖曳至電腦快速面板並切換輸出裝置"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="SonicRoute 自動化規則編輯器：選擇應用程式觸發器與音訊操作步驟"></a>
+</div>
+
+<sub>介面預覽：左側示範手機與電腦音訊拖曳分流與快速切換輸出；右側展示自動化規則編輯器自由編排觸發器與執行動作。</sub>
+
+<details>
+<summary><sub>🖼️ 展開查看更多介面截圖（快速面板 &amp; 手機互聯管理）</sub></summary>
 
 <div>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute 快速面板：頂端輸出裝置與各應用程式音量控制"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="SonicRoute 自動化規則編輯器：選擇應用程式觸發器與音訊操作步驟"></a>
+<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="SonicRoute 手機互聯管理介面：Android 裝置配對、固定顯示應用程式與虛擬螢幕音訊設定"></a>
 </div>
 
-<sub>介面預覽：快速面板（支援自適應與透明壓克力風格）即時控制音量與裝置；自動化規則編輯器自由編排觸發器與執行動作。</sub>
+</details>
 
 ## ✨ SonicRoute 的功能
 
@@ -114,6 +121,9 @@ A：偵測優先使用系統事件，必要時以每秒一次的快照檢查作�
 | 觸發條件、操作與指令碼整合 | [自動化](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) · [命令列](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E5%91%BD%E4%BB%A4%E8%A1%8C%E6%89%A7%E8%A1%8C%E8%A7%84%E5%88%99) |
 | 安裝與疑難排解 | [常見問題](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) |
 | 原始碼、建置與發布 | [原始碼與建置](https://github.com/kunkunkunQoQ/SonicRoute/wiki/07-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) · [發布資訊](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3) · [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) |
+
+> [!TIP]
+> **AI 快速總結與省 Token 排錯**：使用 Cursor、Copilot、ChatGPT 或 Claude 等 AI 助手排查問題、理解架構或編寫腳本時，建議直接參考專用機器規範 [README.ai.md](README.ai.md)。該文件以高密度結構化 DSL 提煉核心機制與排障決策樹，避免大模型掃描冗長圖文，大幅節省上下文 Token 開銷並秒級定位根因。
 
 ## 📌 開發規劃
 

@@ -1,45 +1,45 @@
-title: "[交流]: "
+title: "[General / 交流]: "
 labels:
   - general
 body:
   - type: markdown
     attributes:
       value: |
-        ### 💬 欢迎来到 SonicRoute 自由交流区！
-        这里是社区水吧与随聊专区，无论是日常使用唠嗑、音频设备八卦、开源开发心得，还是对项目未来的畅想，都欢迎在此发言。
-        
+        ### 💬 欢迎来到 SonicRoute 自由交流区！/ Welcome to SonicRoute General Discussions!
+        无论是日常使用分享、音频设备探讨、开源开发交流，还是对项目的看法与建议，都欢迎在此畅所欲言。
+
         > [!IMPORTANT]
-        > **遇到软件缺陷、报错崩溃或功能异常？**
-        > 请勿在此发帖，请直接前往 **[Issues 提交 Bug 反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml)**，以便快速获得排查与修复。
+        > **遇到软件缺陷、崩溃报错或功能异常？ / Found a bug or crash?**
+        > 请直接前往 **[Issues 提交 Bug 反馈](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml)**，以便追踪排查。 / Please open a **[Bug Report in Issues](https://github.com/kunkunkunQoQ/SonicRoute/issues/new?template=bug_report.yml)** instead.
 
   - type: dropdown
     id: category
     attributes:
-      label: 交流板块
-      description: 你想聊的话题类型
+      label: 交流板块 / Topic Category
+      description: 你想聊的话题类型 / What would you like to discuss?
       options:
-        - ☕ 社区水吧与随想唠嗑 (Casual Chat)
-        - 🎧 耳机、音箱与音频设备种草与测评 (Gear & Hardware)
-        - 🖥 桌面搭配、工作流与外设玩法 (Desk Setup & Workflow)
-        - 💻 开源开发、C# / WPF 与技术杂谈 (Tech & Open Source)
-        - 💬 其他话题
+        - ☕ 社区水吧与日常随聊 / Casual Chat
+        - 🎧 耳机、音箱与硬件测评 / Gear, Headphones & DACs
+        - 🖥 桌面搭配与外设工作流 / Desk Setup & Workflow
+        - 💻 C# / WPF 与开源技术探讨 / Dev & Open Source
+        - 💬 其他话题 / Other
     validations:
       required: true
 
   - type: input
     id: topic
     attributes:
-      label: 讨论主题
-      description: 简述你想聊的话题
-      placeholder: "例如：大家平时玩游戏都用什么耳机？有推荐的低延迟无线方案吗？"
+      label: 讨论主题 / Topic
+      description: 简述你想聊的话题 / Briefly summarize the topic
+      placeholder: "e.g., Favorite low-latency wireless headset for gaming + per-app routing?"
     validations:
       required: true
 
   - type: textarea
     id: content
     attributes:
-      label: 详细内容与见解
-      description: 展开讲讲你的看法或抛出讨论点
-      placeholder: "分享你的思考、日常体验或好奇的问题..."
+      label: 详细内容 / Details
+      description: 分享你的想法、体验或问题 / Share your thoughts, setup experience, or discussion prompt
+      placeholder: "Write your message here..."
     validations:
       required: true

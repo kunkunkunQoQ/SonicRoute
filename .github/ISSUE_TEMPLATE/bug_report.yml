@@ -1,134 +1,131 @@
-name: 🐛 Bug 缺陷报告
-description: 发现 SonicRoute 运行异常、路由未生效、自动化编排错误或界面崩溃？按此提交
+name: 🐛 Bug 缺陷报告 / Bug Report
+description: 发现运行异常、路由未生效、自动化编排错误或崩溃？ / Report a crash, routing failure, unexpected behavior, or UI issue
 title: "[Bug]: "
 labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        ### 感谢提交反馈！
-        提交前强烈建议先查阅 [Wiki 06-常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) 与 [Discussions 讨论区](https://github.com/kunkunkunQoQ/SonicRoute/discussions)。
-        *(如某些旧式游戏采用独占模式需重启游戏生效，或特定浏览器需要播放声音后才出现在 Windows 混音器中)*
+        ### 感谢提交反馈！/ Thank you for reporting an issue!
+        提交前建议先查阅 [Wiki 06-常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)（中文）或 [README.ai.md](https://github.com/kunkunkunQoQ/SonicRoute/blob/master/README.ai.md) 与 [Discussions](https://github.com/kunkunkunQoQ/SonicRoute/discussions)。
+        *(Note: some legacy games using exclusive audio require restarting after route changes, and apps must create a WASAPI session before appearing in the mixer.)*
 
   - type: input
     id: version
     attributes:
-      label: 软件版本号
-      description: 可在设置页底部或托盘图标悬停提示查看
-      placeholder: "例如：1.31，并注明正式版、预览版或自行构建"
+      label: 软件版本号 / SonicRoute Version
+      description: 可在设置页底部或托盘悬停查看 / Found at the bottom of Settings or on tray icon hover
+      placeholder: "e.g., 1.31 (Official Release / Preview / Source Build)"
     validations:
       required: true
 
   - type: dropdown
     id: edition
     attributes:
-      label: 软件版本形态
-      description: 请选择你正在使用的 SonicRoute 分发版本
+      label: 软件版本形态 / Edition
+      description: 请选择你正在使用的版本形态 / Select the SonicRoute edition you are running
       options:
-        - Full x64（含手机功能 · 单文件 .NET 10）
-        - Lite x64（仅电脑音频 · 单文件 .NET 10）
-        - Full ARM64（实验性 · 含手机功能 · 请注明实际版本）
-        - Lite ARM64（实验性 · .NET 10 · 请注明实际版本）
-        - Legacy x64（免额外运行库 · 系统自带 .NET 4.8）
-        - Microsoft Store（Full · 由商店更新）
-        - 历史 Lite NET8（.NET 8 · 已停止维护）
-        - 自行拉取源码编译构建
+        - Full x64（含手机功能 · 单文件 .NET 10 / With Android audio & virtual display）
+        - Lite x64（仅电脑音频 · 单文件 .NET 10 / PC audio only）
+        - Full ARM64（实验性 / Experimental · With mobile integration）
+        - Lite ARM64（实验性 / Experimental · .NET 10 PC audio only）
+        - Legacy x64（免额外运行库 · .NET Framework 4.8）
+        - Microsoft Store（Full · Installed from Store）
+        - 历史 Lite NET8（已停更 / Discontinued archive build）
+        - 自行编译构建 / Built from source
     validations:
       required: true
 
   - type: input
     id: windows
     attributes:
-      label: Windows 操作系统版本
-      description: 可按 Win+R 输入 winver 或在「系统设置 → 关于」查看
-      placeholder: "例如：Windows 11 24H2 专业版 (内部版本 26100.2033)"
+      label: Windows 版本 / Windows Version
+      description: 按 Win+R 输入 winver 查看 / Run `winver` via Win+R or check Windows Settings → System → About
+      placeholder: "e.g., Windows 11 24H2 Pro (Build 26100.2033)"
     validations:
       required: true
 
   - type: dropdown
     id: category
     attributes:
-      label: 涉及的功能模块
-      description: 问题主要发生在哪一功能区域
+      label: 涉及的功能模块 / Affected Module
+      description: 问题主要发生在哪一功能区域 / Which area is primarily affected?
       options:
-        - 应用音频定向分流 (Per-App Audio Routing)
-        - 系统默认端点切换 (Default Playback/Record Device)
-        - 自动化规则与编排引擎 (AutoRuleScheduler)
-        - 前台进程与全屏感知 (ForegroundAppService)
-        - 命令行工具与命名管道 (sr CLI / IPC)
-        - 快捷面板与交互滑块 (QuickPanel)
-        - 系统托盘与滚轮盲调 (TrayService)
-        - 全局麦克风硬件级闭麦与状态同步
-        - 物理设备热插拔 / 睡眠唤醒恢复
-        - 蓝牙耳机连接与低延迟切换
-        - Android 设备连接、手机音频或剪贴板同步
-        - 手机主屏镜像、应用虚拟屏或声画编码设置
-        - 虚拟声卡兼容性 (Voicemeeter / SteelSeries Sonar 等)
-        - OSD 屏幕浮动提示
-        - 开机自启与后台常驻
-        - 内存/CPU 资源占用异常
-        - 其他界面或文本问题
+        - 应用音频定向分流 / Per-App Audio Routing
+        - 系统默认端点切换 / Default Playback & Recording Device Switching
+        - 自动化规则与编排引擎 / Automation Rules (AutoRuleScheduler)
+        - 前台窗口与全屏感知 / Foreground App Detection
+        - 命令行与命名管道 / CLI (sr) & Named Pipe IPC
+        - 快速面板与滑块交互 / Quick Panel & Volume Sliders
+        - 托盘图标与滚轮盲操 / System Tray & Wheel Controls
+        - 全局麦克风静音与状态同步 / Global Mic Mute & Sync
+        - 热插拔与睡眠唤醒恢复 / Hot-Plug & Sleep/Wake Recovery
+        - 蓝牙耳机切换与延迟 / Bluetooth Audio & Switching
+        - Android 手机连接、音频或剪贴板同步 / Android Pairing, Phone Audio & Clipboard Sync
+        - 手机镜像、应用虚拟屏或编码设置 / Phone Screen Mirroring, Virtual Display & Encoder
+        - 虚拟声卡兼容性 / Virtual Audio Drivers (Voicemeeter, Sonar, etc.)
+        - 屏幕浮动提示 / On-Screen Display (OSD)
+        - 开机自启与后台驻留 / Auto-Start & Tray Residency
+        - 内存或 CPU 占用异常 / Memory or CPU Usage
+        - 其他界面或本地化文本问题 / Other UI or Localization Issue
     validations:
       required: true
 
   - type: input
     id: devices
     attributes:
-      label: 涉及的音频设备与应用
-      description: 请写明测试时使用的具体耳机、音箱、声卡型号及出现异常的软件
-      placeholder: "例如：耳机 森海塞尔 HD560S (USB DAC) + 音箱 漫步者 S880 (光纤) + 网易云音乐"
+      label: 涉及的音频设备与应用 / Audio Devices & Apps Involved
+      description: 请填写测试使用的耳机、音箱、声卡型号及应用名 / List exact headphones, speakers, DAC/interface, and affected app(s)
+      placeholder: "e.g., Sennheiser HD560S (USB DAC) + Edifier S880 + Spotify / CS2"
     validations:
       required: true
 
   - type: textarea
     id: desc
     attributes:
-      label: 问题现象描述
-      description: 发生了什么？预期的正确行为是什么？
-      placeholder: "请清晰、详细地描述异常现象..."
+      label: 问题描述 / Problem Description
+      description: 实际发生了什么？预期应该怎样？ / What happened vs. what did you expect to happen?
+      placeholder: "Describe the unexpected behavior clearly..."
     validations:
       required: true
 
   - type: textarea
     id: repro
     attributes:
-      label: 重现步骤
-      description: 请列出一步步的复现操作，这对于开发者排查至关重要
+      label: 复现步骤 / Steps to Reproduce
+      description: 请列出逐步复现操作 / List step-by-step instructions to reproduce
       placeholder: |
-        1. 启动 SonicRoute，并在「保留的设备」中勾选耳机与音箱
-        2. 打开《英雄联盟》并将声音输出通过快捷面板指定为耳机
-        3. 打开音乐播放器并指定为音箱
-        4. 拔出耳机再重新插入 / 切换前台窗口...
-        5. 发现异常：...
+        1. Launch SonicRoute and check your devices in Settings → Kept devices
+        2. Route a game to Headphones and music player to Speakers in Quick Panel
+        3. Unplug/replug headset or switch foreground window...
+        4. Observe the error: ...
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: 规则执行日志 / 异常信息 (可选)
-      description: 可提供「自动化规则 → 查看执行日志」中的记录，或提供配置目录 `%LocalAppData%\SonicRoute` 中的信息（请勿包含个人敏感路径）
-      placeholder: "粘贴相关日志文本..."
+      label: 执行日志或异常信息（可选）/ Logs or Error Messages (Optional)
+      description: 可提供规则执行历史或 `%LocalAppData%\SonicRoute` 日志片段（请移除个人敏感信息）/ Paste relevant rule history or log lines (redact personal paths)
+      placeholder: "Paste relevant log text..."
     validations:
       required: false
 
   - type: textarea
     id: screenshots
     attributes:
-      label: 截图或录屏 (强烈建议)
-      description: 直接将图片拖入或粘贴到此处（快速面板状态、主界面设置或 Windows 声音设置截图能极大加快修复速度）
+      label: 截图或录屏（建议提供）/ Screenshots or Screen Recording (Recommended)
+      description: 可直接拖入或粘贴图片 / Drag and drop Quick Panel, Settings, or Windows Sound settings screenshots here
     validations:
       required: false
 
   - type: checkboxes
     id: checklist
     attributes:
-      label: 提交确认清单
-      description: 请在提交前逐一确认
+      label: 提交确认 / Checklist
+      description: 请在提交前确认以下事项 / Please confirm before submitting
       options:
-        - label: 我已查阅 [Wiki 06-常见问题](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98)，确认非已知系统机制限制
+        - label: 我已确认不是已知系统限制，且在 Issues / Discussions 中搜索过同类问题 / I checked existing Issues & Discussions to avoid duplicates
           required: true
-        - label: 我已在 Issues 和 Discussions 中搜索过，确认此前尚无相同或极为相似的问题报告
-          required: true
-        - label: 我使用的是官方发布的最新版本或已知稳定版，且已尝试过重启软件或重新检查保留设备
+        - label: 我使用的是官方最新版（或已知版本），且已尝试重启 SonicRoute 或重新检查「保留的设备 / Kept devices」/ I tested restarting SonicRoute and verified Settings → Kept devices
           required: true

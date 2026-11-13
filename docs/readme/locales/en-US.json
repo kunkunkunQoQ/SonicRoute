@@ -8,9 +8,12 @@
     "support": "Support on Afdian",
     "experimental": "experimental",
     "languages": "Nine languages",
-    "preview": "Interface preview: Quick panel (with adaptive height and acrylic style) for instant app volume and routing; automation editor for custom triggers and action chains.",
+    "preview": "Interface preview: Live drag-and-drop quick panel & mobile audio routing (left); automation rule editor for custom triggers and action chains (right).",
+    "demoAlt": "SonicRoute live demo: drag mobile app audio to the PC Quick Panel, expand per-app output routes, and drag back",
     "panelAlt": "SonicRoute Quick panel: output device and per-app volume controls",
     "automationPreviewAlt": "SonicRoute automation rule editor: select app triggers and audio action steps",
+    "phonePreviewAlt": "SonicRoute Phone Management: Android device pairing, pinned mobile apps, and virtual display audio settings",
+    "moreScreenshots": "More screenshots: Quick Panel & Phone Management",
     "mascotAlt": "Click the mascot to open the user guide",
     "featuresTitle": "What SonicRoute offers",
     "downloadTitle": "Download and get started",
@@ -27,7 +30,7 @@
     "runtimeNote": "Full and Lite require {runtime}; Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation (historical {runtime8} editions are discontinued).",
     "steps": [
         "**Launch & Keep in Tray**: Double-click to start; SonicRoute stays in your system tray (drag it out of the overflow menu to keep it pinned). Double-click the tray icon to open the main window.",
-        "**Select & Route Devices**: Check your headphones and speakers under Settings → Preserved devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.",
+        "**Select & Route Devices**: Check your headphones and speakers under Settings → Kept devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.",
         "**Tray Blind Control & Shortcuts**: Hover over the system tray and scroll to adjust app volume, Alt+scroll to switch audio routes, or Shift+scroll for master volume; combine with global mute hotkeys and automation for seamless in-game control."
     ],
     "commandNote": "The `sr` command communicates with a running SonicRoute instance via named pipe in milliseconds (will not start an instance if absent). Launch SonicRoute once to register the command, then restart your terminal to integrate with scripts, AutoHotkey, or Stream Deck. If needed, refer to {faq}.",

@@ -1,72 +1,68 @@
-title: "[分享]: "
+title: "[Showcase / 分享]: "
 labels:
   - showcase
 body:
   - type: markdown
     attributes:
       value: |
-        ### 🎉 欢迎秀出你的神仙调校方案与规则食谱！
-        无论是「游戏开黑无感分流」、「多设备耳机音箱扩展接力」，还是「SilentPlayer 联动虚拟音效板」，你的分享都能给其他玩家带来巨大启发！
-        优秀且具有通用性的调校方案，后续将被官方收录进 [Wiki 04 · 自动化实战配方库](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99#recipe-book)！
+        ### 🎉 欢迎分享你的音频路由方案与自动化配方！/ Share Your Setup & Automation Recipes!
+        无论是双设备接力、游戏语音隔离、OBS 分轨录屏，还是手机与电脑协同玩法，都欢迎分享！
 
   - type: input
     id: recipe_name
     attributes:
-      label: 玩法/食谱名称
-      description: 给你的调校方案起一个响亮、易记的名字
-      placeholder: "例如：【配方】双显示器居家办公：全自动办公会议与游戏背景音流转方案"
+      label: 方案 / 配方名称 / Setup or Recipe Name
+      description: 给你的调校方案起个名字 / Give your setup or rule recipe a clear title
+      placeholder: "e.g., Zero-friction gaming + music separation with auto-headset switching"
     validations:
       required: true
 
   - type: dropdown
     id: category
     attributes:
-      label: 方案主场景
-      description: 属于哪种典型的音频调度需求
+      label: 方案场景 / Scenario Category
+      description: 属于哪种典型使用场景 / Which use case fits best?
       options:
-        - 🎮 游戏开黑与语音隔离（游戏独占耳机，语音软件走耳麦，背景音乐走音箱）
-        - 💼 居家办公与摸鱼自如（工作会议专属通道，非前台应用音量压低）
-        - 🎚️ 多输出设备独立控音（耳机、音箱、显示器声卡多路硬件音量分控）
-        - 🎧 双设备/多设备无感接力（白天桌面音箱，夜间戴上耳机全自动平滑重定向）
-        - 📹 OBS 直播推流与录屏分轨（虚拟轨道物理隔离，私密语音绝不进录像）
-        - 🎹 音效板与串流联动（配合 SilentPlayer / 声卡硬件旋钮 / 脚本调用）
-        - ⚡ 极客 CLI 与自动化脚本流（sr 命令行深度编排）
-        - 🎛️ 托盘盲操与硬件旋钮流（滚轮盲调、Shift/Alt 组合修饰、Stream Deck 旋钮）
+        - 🎮 游戏开黑与语音隔离 / Gaming + Voice Chat Separation
+        - 💼 居家办公与会议优先 / Work Calls & Background Ducking
+        - 🎚️ 多输出设备分控 / Multi-Device Volume Control
+        - 🎧 耳机与音箱自动接力 / Auto Switching Between Headset & Speakers
+        - 📹 OBS 推流与多轨录屏 / Streaming & Multi-Track Recording
+        - 📱 手机音频与虚拟屏协同 / Android Audio & Virtual Display Setup
+        - ⚡ 命令行 sr 与外设脚本流 / CLI (sr), AHK & Stream Deck Workflows
     validations:
       required: true
 
   - type: input
     id: devices
     attributes:
-      label: 你的设备搭配
-      description: 列出方案中用到的物理端点、外设或虚拟通道
-      placeholder: "例如：罗技 G PRO X 无线耳机 + 漫步者 S2000MKIII 音箱 + 飞傲 K7 解码器 + Stream Deck"
+      label: 使用设备与外设 / Devices & Gear Used
+      description: 列出方案中涉及的耳机、音箱、声卡或控制器 / List headsets, speakers, DACs, phones, or macro pads
+      placeholder: "e.g., Logitech G PRO X + Edifier speakers + Stream Deck"
     validations:
       required: true
 
   - type: textarea
     id: config_details
     attributes:
-      label: 核心配置与规则链步骤
-      description: 一步步分享你是如何设置保留设备、触发器（应用启动/前台变动/快捷键）与操作步骤的
+      label: 核心配置与规则步骤 / Setup & Automation Steps
+      description: 分享触发器与每步动作配置 / Describe triggers, devices, and automation steps
       placeholder: |
-        - 触发器：检测到 cs2.exe 成为前台窗口
-        - 步骤 1：延时 2000ms 等待游戏音频初始化
-        - 步骤 2：将 cs2.exe 路由至「罗技耳机」，音量设为 80%
-        - 步骤 3：将 cloudmusic.exe 音量下调至 20%，路由至「漫步者音箱」
-        - 步骤 4：启动 Discord 并弹出 OSD 确认提示...
+        - Trigger: cs2.exe enters foreground
+        - Step 1: Switch cs2.exe to Headset at 80%
+        - Step 2: Lower music player to 20% on Speakers
+        - Step 3: Show OSD confirmation
     validations:
       required: true
 
   - type: textarea
     id: rules_snippet
     attributes:
-      label: 规则 JSON 片段或 sr 命令行 (可选)
-      description: 若有导出规则或脚本命令，可直接贴在这里供大家一键导入或复现
+      label: 规则片段或 sr 命令行（可选）/ CLI Snippet or Rule Export (Optional)
+      description: 可贴出相关命令或 JSON 片段供参考 / Share reusable `sr` commands or rule snippets
       placeholder: |
         ```bash
-        # 命令行一键调用示例
-        sr "竞技开黑模式"
+        sr "Gaming Mode"
         ```
     validations:
       required: false
@@ -74,16 +70,16 @@ body:
   - type: textarea
     id: screenshots
     attributes:
-      label: 效果截图或录屏 (强烈建议)
-      description: 快速面板实时分流状态、规则编辑界面截图或桌面实拍
+      label: 效果截图或录屏（可选）/ Screenshots or Clips (Optional)
+      description: 贴出快速面板或规则界面截图 / Drop screenshots of your Quick Panel or rule editor
     validations:
       required: false
 
   - type: textarea
     id: thoughts
     attributes:
-      label: 使用体验与避坑指南
-      description: 这一套用下来有什么爽点？有哪些设置细节需要特别注意？
-      placeholder: "例如：注意在 Windows 声音设置里不要勾选声卡独占；配合 OSD 提示看一眼就知道生效了..."
+      label: 心得与注意事项（可选）/ Tips & Caveats (Optional)
+      description: 值得注意的细节与避坑经验 / Any useful tips for others reproducing this setup?
+      placeholder: "e.g., Disable audio exclusive mode in Windows sound settings if games lock the endpoint..."
     validations:
       required: false

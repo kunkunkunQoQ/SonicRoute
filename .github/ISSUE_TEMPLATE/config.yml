@@ -1,17 +1,17 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 📖 Wiki 核心指南与常见问题 (FAQ)
+  - name: 📖 Wiki 指南与常见问题 / User Guide & FAQ (Wiki is in Simplified Chinese)
     url: https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98
-    about: 80% 的使用疑问与系统限制（如游戏无声、设备未切换）在此已有解答
-  - name: 💬 社区使用咨询与交流 (Discussions Q&A)
+    about: 80% 的常见疑问与系统限制在此已有解答 / Most common setup & system behavior questions are answered here
+  - name: 💬 社区使用咨询 / Q&A Discussions
     url: https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/q-a
-    about: 日常使用咨询与分流探讨（遇到软件 Bug、崩溃或功能故障请直接点击上方 Bug 反馈）
-  - name: 🎉 玩法分享与规则食谱 (Discussions Show & Tell)
+    about: 日常使用与分流配置交流（Bug 或崩溃请使用上方反馈模板）/ Usage questions & setup tips (use Bug Report above for crashes or defects)
+  - name: 🎉 玩法分享与规则配方 / Show & Tell (Rule Recipes)
     url: https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/show-and-tell
-    about: 分享你调校的神仙自动化规则、双设备接力配置或音效板联动
-  - name: 💡 灵感头脑风暴 (Discussions Ideas)
+    about: 分享你的自动化规则、双设备接力方案或脚本联动 / Share your automation recipes, hardware setups, or CLI scripts
+  - name: 💡 灵感与脑洞讨论 / Ideas & Brainstorming
     url: https://github.com/kunkunkunQoQ/SonicRoute/discussions/categories/ideas
-    about: 尚未成型的构想、新玩法探讨或设计灵感交流
-  - name: 💖 赞助支持 · 爱发电 (Afdian)
+    about: 探讨尚未成型的功能构想与交互灵感 / Discuss early feature ideas or workflow improvements
+  - name: 💖 赞助支持 · 爱发电 / Support on Afdian
     url: https://afdian.com/a/koukou021
-    about: 如果 SonicRoute 帮到了你，欢迎在爱发电请小跃喝杯咖啡~
+    about: 如果 SonicRoute 帮到了你，欢迎请作者喝杯咖啡 / Support SonicRoute development on Afdian

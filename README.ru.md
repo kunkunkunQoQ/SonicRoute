@@ -14,15 +14,22 @@
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) · Девять языков интерфейса · Лицензия MIT
 
-> [!TIP]
-> **Быстрый анализ с помощью ИИ и диагностика с экономией токенов**: При использовании ИИ-ассистентов (Cursor, Copilot, ChatGPT или Claude) для диагностики проблем, изучения архитектуры или написания скриптов рекомендуем обращаться к спецификации [README.ai.md](README.ai.md). Она составлена на плотном структурированном DSL для LLM, избавляет от чтения длинных текстов, существенно экономит токены контекста и помогает быстро найти первопричину.
+<div>
+<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Демонстрация SonicRoute: перетаскивание аудио мобильного приложения на быструю панель ПК и выбор устройства вывода"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Редактор правил автоматизации SonicRoute: выбор триггеров приложений и шагов аудиодействий"></a>
+</div>
+
+<sub>Предпросмотр интерфейса: слева демонстрация перетаскивания аудио приложений между телефоном и ПК; справа редактор правил автоматизации для триггеров и действий.</sub>
+
+<details>
+<summary><sub>🖼️ Показать ещё скриншоты: быстрая панель и управление телефоном</sub></summary>
 
 <div>
 <a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="Быстрая панель SonicRoute: устройство вывода и управление громкостью приложений"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="395" align="top" alt="Редактор правил автоматизации SonicRoute: выбор триггеров приложений и шагов аудиодействий"></a>
+<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Управление смартфоном SonicRoute: подключение Android, закреплённые приложения и звук виртуального экрана"></a>
 </div>
 
-<sub>Предпросмотр интерфейса: панель быстрого доступа (с адаптивной высотой и акриловым эффектом) для регулировки громкости и перенаправления; редактор правил для объединения триггеров и действий.</sub>
+</details>
 
 ## ✨ Возможности SonicRoute
 
@@ -114,6 +121,9 @@ A: Обнаружение в первую очередь использует с
 | Триггеры, действия и интеграция со скриптами | [Автоматизация](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) · [Командная строка](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E5%91%BD%E4%BB%A4%E8%A1%8C%E6%89%A7%E8%A1%8C%E8%A7%84%E5%88%99) |
 | Установка и устранение неполадок | [Частые вопросы](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) |
 | Исходный код, сборки и выпуски | [Техническая реализация](https://github.com/kunkunkunQoQ/SonicRoute/wiki/07-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) · [Сведения о версии](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3) · [История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) |
+
+> [!TIP]
+> **Быстрый анализ с помощью ИИ и диагностика с экономией токенов**: При использовании ИИ-ассистентов (Cursor, Copilot, ChatGPT или Claude) для диагностики проблем, изучения архитектуры или написания скриптов рекомендуем обращаться к спецификации [README.ai.md](README.ai.md). Она составлена на плотном структурированном DSL для LLM, избавляет от чтения длинных текстов, существенно экономит токены контекста и помогает быстро найти первопричину.
 
 ## 📌 План развития
 
