@@ -3,9 +3,14 @@ using System.Windows;
 #if SONICROUTE_PHONE
 using SonicRoute.Core;
 using SonicRoute.Core.Compat;
+using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Interop;
 #endif
 
 namespace SonicRoute;
@@ -15,22 +20,206 @@ public partial class App
 #if SONICROUTE_PHONE
     private PhoneClipboardSync? _phoneClipboard;
     private Task<PhoneClipboardSync>? _phoneClipboardLoad;
+    private bool _usbArrivalHookAttached;
+    private bool _usbArrivalScanRunning;
+    private bool _usbArrivalRescanRequested;
+    private CancellationTokenSource? _usbArrivalDebounce;
+    private CancellationTokenSource? _usbArrivalShutdown;
     internal event Action? PhoneClipboardChanged;
+    internal bool HasActivePhoneClipboard => _phoneClipboard?.HasActiveWork == true;
+    private static string PhoneClipboardSettingsPath =>
+        Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-clipboard.json");
     private void StartPhoneClipboard()
     {
-        if (System.IO.File.Exists(PhoneClipboardSync.SettingsPath)) _ = PreparePhoneClipboardAsync();
+        string path = PhoneClipboardSettingsPath;
+        if (!File.Exists(path)) return;
+        _ = StartPhoneClipboardIfConfiguredAsync(path);
+    }
+    private async Task StartPhoneClipboardIfConfiguredAsync(string path)
+    {
+        bool configured = await Task.Run(() => HasConfiguredClipboardDevices(path)).ConfigureAwait(true);
+        if (!configured || _exiting) return;
+        _ = StartConfiguredPhoneClipboard();
+    }
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private Task<PhoneClipboardSync> StartConfiguredPhoneClipboard() => PreparePhoneClipboardAsync();
+    private static bool HasConfiguredClipboardDevices(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length == 0 || info.Length > 64 * 1024) return false;
+            using var stream = File.OpenRead(path);
+            using var doc = JsonDocument.Parse(stream);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+            if (!root.TryGetProperty("Version", out var versionProp)
+                || versionProp.ValueKind != JsonValueKind.Number
+                || !versionProp.TryGetInt32(out int version)
+                || version != 1)
+                return false;
+            if (!root.TryGetProperty("EnabledDevices", out var devicesProp)
+                || devicesProp.ValueKind != JsonValueKind.Array)
+                return false;
+            int count = devicesProp.GetArrayLength();
+            if (count == 0 || count > 32) return false;
+            foreach (var item in devicesProp.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                if (!item.TryGetProperty("Serial", out var serialProp) || serialProp.ValueKind != JsonValueKind.String)
+                    continue;
+                string? serial = serialProp.GetString();
+                if (string.IsNullOrWhiteSpace(serial) || serial.Length > 512) continue;
+                if (item.TryGetProperty("HardwareId", out var hwProp) && hwProp.ValueKind != JsonValueKind.Null)
+                {
+                    if (hwProp.ValueKind != JsonValueKind.String) continue;
+                    if ((hwProp.GetString()?.Length ?? 0) > 128) continue;
+                }
+                return true;
+            }
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
     }
     internal Task<PhoneClipboardSync> PreparePhoneClipboardAsync() => _phoneClipboardLoad ??= LoadPhoneClipboardAsync();
     private async Task<PhoneClipboardSync> LoadPhoneClipboardAsync()
     {
-        var sync = _phoneClipboard = new PhoneClipboardSync(PhoneClipboardSync.SettingsPath, Dispatcher,
-            new DesktopClipboardLink(_activateSink), () => new SonicRoute.AndroidAudio.AndroidClipboardClient(AndroidAudioHost.Adb));
+        var sync = _phoneClipboard = new PhoneClipboardSync(PhoneClipboardSettingsPath, Dispatcher,
+            new DesktopClipboardLink(_activateSink), () => new SonicRoute.AndroidAudio.AndroidClipboardClient(AndroidAudioHost.Adb),
+            enabled => enabled.Any(d => !d.IsWifi) && SonicRoute.AndroidAudio.AdbDevicePresence.HasPresentUsbDevices());
         sync.Changed += OnPhoneClipboardChanged;
         try { await sync.InitializeAsync(); }
         catch (OperationCanceledException) { }
+        UpdateUsbClipboardArrivalHook();
         return sync;
     }
-    private void OnPhoneClipboardChanged() => PhoneClipboardChanged?.Invoke();
+    private void OnPhoneClipboardChanged()
+    {
+        UpdateUsbClipboardArrivalHook();
+        PhoneClipboardChanged?.Invoke();
+    }
+    private void UpdateUsbClipboardArrivalHook()
+    {
+        bool wantHook = !_exiting && _activateSink is { IsDisposed: false } && _phoneClipboard?.HasEnabledUsbTargets == true;
+        if (wantHook == _usbArrivalHookAttached) return;
+        if (wantHook)
+        {
+            _usbArrivalShutdown = new CancellationTokenSource();
+            _activateSink!.AddHook(UsbClipboardDeviceChangeMessage);
+            _usbArrivalHookAttached = true;
+        }
+        else
+        {
+            DetachUsbClipboardArrivalHook();
+        }
+    }
+    private void DetachUsbClipboardArrivalHook()
+    {
+        _usbArrivalRescanRequested = false;
+        CancelUsbArrivalDebounce();
+        if (_usbArrivalShutdown != null)
+        {
+            try { _usbArrivalShutdown.Cancel(); } catch (ObjectDisposedException) { }
+            _usbArrivalShutdown.Dispose();
+            _usbArrivalShutdown = null;
+        }
+        if (_usbArrivalHookAttached && _activateSink is { IsDisposed: false })
+            _activateSink.RemoveHook(UsbClipboardDeviceChangeMessage);
+        _usbArrivalHookAttached = false;
+    }
+    private void CancelUsbArrivalDebounce()
+    {
+        if (_usbArrivalDebounce == null) return;
+        try { _usbArrivalDebounce.Cancel(); } catch (ObjectDisposedException) { }
+        _usbArrivalDebounce.Dispose();
+        _usbArrivalDebounce = null;
+    }
+    private IntPtr UsbClipboardDeviceChangeMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WmDeviceChange = 0x0219;
+        const int DbtDevNodesChanged = 0x0007;
+        const int DbtDeviceArrival = 0x8000;
+        if (message == WmDeviceChange)
+        {
+            int evt = unchecked((int)wParam.ToInt64());
+            if (evt == DbtDeviceArrival || evt == DbtDevNodesChanged)
+                QueueUsbClipboardArrivalScan();
+        }
+        return IntPtr.Zero;
+    }
+    private void QueueUsbClipboardArrivalScan()
+    {
+        if (_exiting || !_usbArrivalHookAttached || _phoneClipboard == null || !_phoneClipboard.ShouldScanOnUsbArrival())
+            return;
+        if (_usbArrivalScanRunning)
+        {
+            _usbArrivalRescanRequested = true;
+            return;
+        }
+        CancelUsbArrivalDebounce();
+        var cts = _usbArrivalDebounce = new CancellationTokenSource();
+        _ = RunUsbClipboardArrivalScanAsync(cts);
+    }
+    private async Task RunUsbClipboardArrivalScanAsync(CancellationTokenSource debounceCts)
+    {
+        var shutdownToken = _usbArrivalShutdown?.Token ?? new CancellationToken(true);
+        try
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(debounceCts.Token, shutdownToken);
+            await Task.Delay(250, linked.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            if (ReferenceEquals(_usbArrivalDebounce, debounceCts))
+            {
+                _usbArrivalDebounce = null;
+                debounceCts.Dispose();
+            }
+            return;
+        }
+        if (ReferenceEquals(_usbArrivalDebounce, debounceCts))
+        {
+            _usbArrivalDebounce = null;
+            debounceCts.Dispose();
+        }
+        if (_exiting || !_usbArrivalHookAttached || shutdownToken.IsCancellationRequested
+            || _phoneClipboard == null || !_phoneClipboard.ShouldScanOnUsbArrival())
+            return;
+        if (_usbArrivalScanRunning)
+        {
+            _usbArrivalRescanRequested = true;
+            return;
+        }
+        try
+        {
+            bool present = await Task.Run(SonicRoute.AndroidAudio.AdbDevicePresence.HasPresentUsbDevices, shutdownToken);
+            if (!present || _exiting || !_usbArrivalHookAttached || shutdownToken.IsCancellationRequested
+                || _phoneClipboard == null || !_phoneClipboard.ShouldScanOnUsbArrival())
+                return;
+            _usbArrivalScanRunning = true;
+            try
+            {
+                await PhoneAudioWindowCache.ReadDevicesAsync(shutdownToken);
+            }
+            finally
+            {
+                _usbArrivalScanRunning = false;
+            }
+            if (_usbArrivalRescanRequested && !_exiting && _usbArrivalHookAttached && !shutdownToken.IsCancellationRequested)
+            {
+                _usbArrivalRescanRequested = false;
+                QueueUsbClipboardArrivalScan();
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine("USB clipboard arrival check: " + ex.Message);
+        }
+    }
     internal bool PhoneClipboardEnabled(SonicRoute.AndroidAudio.AndroidDevice? device) => _phoneClipboard?.IsEnabled(device) == true;
     internal string PhoneClipboardStatus(SonicRoute.AndroidAudio.AndroidDevice? device) => _phoneClipboard?.Status(device) ?? L10n.T("Phone.ClipboardDefaultHint");
     internal void PhoneClipboardProfilesChanged() => _phoneClipboard?.ProfilesChanged();
@@ -46,6 +235,7 @@ public partial class App
     internal bool KeepQuickPanelForAndroid => AndroidAudioHost.IsDragging || AppIconDragController.IsDesktopDragging || _phoneAudioWindow?.IsActive == true
         || _phoneAudioWindow?.IsKeyboardFocusWithin == true;
     internal bool IsPhoneAudioVisible => _phoneAudioWindow?.IsVisible == true;
+    internal bool IsPhoneWindowOpen => _phoneAudioWindow != null || _openingPhonePanel != null;
     internal Rect? PhoneAudioRelativeBounds(QuickPanelModernWindow panel) => _phoneAudioWindow is { IsVisible: true } phone && phone.Owner == panel
         ? new Rect(phone.Left - panel.Left, phone.Top - panel.Top, phone.Width, phone.Height) : null;
 
@@ -135,8 +325,8 @@ public partial class App
         {
             if (closed || ownerClosing) return;
             double height = panel.ActualHeight > 0 ? panel.ActualHeight : panel.Height;
-            double width = panel.ActualWidth > 0 ? panel.ActualWidth : panel.Width;
-            var rect = new Rect(-phone.Width - 12, 0, phone.Width, Math.Max(1, height));
+            double width = panel.RootBorder.ActualWidth > 0 ? panel.RootBorder.ActualWidth : (panel.ActualWidth > 0 ? panel.ActualWidth : panel.Width);
+            var rect = new Rect(-phone.Width - 6, 0, phone.Width, Math.Max(1, height));
             if (OsdPlacement.TryRelativeWorkArea(panel, out var area))
                 rect = PhoneCompanionLayout.Arrange(new Rect(0,0,width,height), area, phone.Width);
             if (phone.Height != rect.Height) phone.Height = rect.Height;
@@ -168,11 +358,18 @@ public partial class App
                 if (config.QuickPanelShowPhoneAudio) { config.QuickPanelShowPhoneAudio = false; ConfigService.QueueSave(config); }
                 panel.UpdatePhoneAudioButton();
             }
+            if (!_exiting && !HasActiveUiWindows())
+            {
+                AppIconService.TrimForIdle();
+                AndroidAudioHost.TrimForIdle();
+                ScheduleUiReclaim();
+            }
         };
         PositionPhone(); phone.Show(); panel.RefreshCompanionPlacement();
     }
     private void ShutdownAndroidAudio()
     {
+        DetachUsbClipboardArrivalHook();
         if (_phoneClipboard != null)
         {
             _phoneClipboard.Changed -= OnPhoneClipboardChanged;
@@ -186,6 +383,8 @@ public partial class App
     }
 #else
     private void StartPhoneClipboard() { }
+    internal bool HasActivePhoneClipboard => false;
+    internal bool IsPhoneWindowOpen => false;
     internal bool KeepQuickPanelForAndroid => false;
     internal bool IsPhoneAudioVisible => false;
     private void ShutdownAndroidAudio() { }
@@ -196,7 +395,7 @@ internal static class PhoneCompanionLayout
 {
     internal static Rect Arrange(Rect owner, Rect work, double desiredWidth)
     {
-        const double gap = 12;
+        const double gap = 6;
         double width = Math.Min(desiredWidth, work.Width), height = Math.Min(owner.Height, work.Height);
         double left = owner.Left - gap - width, right = owner.Right + gap;
         double x = left >= work.Left ? left : right + width <= work.Right ? right

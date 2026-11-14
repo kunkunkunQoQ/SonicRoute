@@ -60,11 +60,43 @@ namespace SonicRoute
             if (png == null || png.Length == 0) return null;
             return Volatile.Read(ref ExternalPngIcons).GetValue(png, static bytes => new Lazy<ImageSource?>(() => DecodePngCore(bytes))).Value;
         }
-        private static ImageSource DecodePngCore(byte[] png)
+        private static ImageSource DecodePngCore(byte[] png) => DecodePngSized(png, AppIconFiles.IconSize);
+
+        internal static BitmapImage DecodePngSized(byte[] png, int maxDimension)
         {
-            using var stream = new MemoryStream(png);
-            var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
-            image.StreamSource = stream; image.EndInit(); image.Freeze(); return image;
+            using var stream = new MemoryStream(png, writable: false);
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            // 仅当源图大于目标上限时设置单边 DecodePixel，保持原始宽高比；小图保持 1:1 原始像素。
+            if (maxDimension > 0 && TryReadPngDimensions(png, out int width, out int height)
+                && (width > maxDimension || height > maxDimension))
+            {
+                if (width >= height) image.DecodePixelWidth = maxDimension;
+                else image.DecodePixelHeight = maxDimension;
+            }
+            image.StreamSource = stream;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+
+        internal static bool TryReadPngDimensions(byte[] data, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (data == null || data.Length < 24) return false;
+            if (data[0] != 0x89 || data[1] != 0x50 || data[2] != 0x4E || data[3] != 0x47
+                || data[4] != 0x0D || data[5] != 0x0A || data[6] != 0x1A || data[7] != 0x0A)
+                return false;
+            if (data[12] != (byte)'I' || data[13] != (byte)'H' || data[14] != (byte)'D' || data[15] != (byte)'R')
+                return false;
+            uint w = ((uint)data[16] << 24) | ((uint)data[17] << 16) | ((uint)data[18] << 8) | data[19];
+            uint h = ((uint)data[20] << 24) | ((uint)data[21] << 16) | ((uint)data[22] << 8) | data[23];
+            if (w == 0 || h == 0 || w > int.MaxValue || h > int.MaxValue) return false;
+            width = (int)w;
+            height = (int)h;
+            return true;
         }
 
         public static ImageSource? GetIconForApp(int pid, string processName, string? sessionIconPath)

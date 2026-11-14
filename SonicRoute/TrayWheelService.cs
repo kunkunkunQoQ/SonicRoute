@@ -373,6 +373,7 @@ namespace SonicRoute
         internal void PreviewOsd() => _osdService.Preview();
         internal void ApplyOsdSize(double w, double fs) => _osdService.ApplySize(w, fs);
         internal void SetOsdSize(int w, double fs) => _osdService.PreviewSize(w, fs);
+        internal void ReleaseIdleOsd() => _osdService.ReleaseWindowIfIdle();
 
         public void Dispose()
         {

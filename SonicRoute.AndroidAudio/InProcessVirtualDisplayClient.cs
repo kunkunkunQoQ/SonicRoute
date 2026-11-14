@@ -317,9 +317,10 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 
     private async Task RunVideoLoopAsync(Stream videoStream, CancellationToken ct)
     {
+        const int BasePacketBufferSize = 64 * 1024;
         var merger = new ScrcpyPacketMerger();
         byte[] header12 = new byte[12];
-        byte[] packetBuf = new byte[256 * 1024];
+        byte[] packetBuf = new byte[BasePacketBufferSize];
         int lastWidth = 0;
         int lastHeight = 0;
 
@@ -350,29 +351,37 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
             {
                 await videoStream.ReadExactlyAsync(header12, ct).ConfigureAwait(false);
                 var hdr = ScrcpyVideoPacketHeader.Parse(header12);
-                if (packetBuf.Length < hdr.PayloadLength)
-                    packetBuf = new byte[Math.Max(hdr.PayloadLength, packetBuf.Length * 2)];
+                byte[]? rented = hdr.PayloadLength > packetBuf.Length
+                    ? ArrayPool<byte>.Shared.Rent(hdr.PayloadLength)
+                    : null;
+                byte[] targetBuf = rented ?? packetBuf;
+                try
+                {
+                    await videoStream.ReadExactlyAsync(targetBuf.AsMemory(0, hdr.PayloadLength), ct).ConfigureAwait(false);
 
-                await videoStream.ReadExactlyAsync(packetBuf.AsMemory(0, hdr.PayloadLength), ct).ConfigureAwait(false);
+                    var merged = merger.Process(targetBuf.AsSpan(0, hdr.PayloadLength), hdr.IsConfig);
+                    if (merged.IsEmpty) continue;
 
-                var merged = merger.Process(packetBuf.AsSpan(0, hdr.PayloadLength), hdr.IsConfig);
-                if (merged.IsEmpty) continue;
-
-                _decoder!.DecodePacket(
-                    merged,
-                    hdr.PtsUs,
-                    (tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix) =>
-                    {
-                        OnFrameSizeChanged(cropW, cropH);
-                        _renderer!.PresentHardwareTexture(tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix);
-                        MarkFirstFrameIfNeeded();
-                    },
-                    (nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix) =>
-                    {
-                        OnFrameSizeChanged(cropW, cropH);
-                        _renderer!.PresentSoftwareNv12(nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix);
-                        MarkFirstFrameIfNeeded();
-                    });
+                    _decoder!.DecodePacket(
+                        merged,
+                        hdr.PtsUs,
+                        (tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix) =>
+                        {
+                            OnFrameSizeChanged(cropW, cropH);
+                            _renderer!.PresentHardwareTexture(tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix);
+                            MarkFirstFrameIfNeeded();
+                        },
+                        (nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix) =>
+                        {
+                            OnFrameSizeChanged(cropW, cropH);
+                            _renderer!.PresentSoftwareNv12(nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix);
+                            MarkFirstFrameIfNeeded();
+                        });
+                }
+                finally
+                {
+                    if (rented != null) ArrayPool<byte>.Shared.Return(rented);
+                }
             }
         }
         catch (EndOfStreamException) { }

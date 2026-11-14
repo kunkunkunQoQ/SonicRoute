@@ -4,6 +4,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
@@ -456,6 +457,39 @@ internal static class AndroidAudioHost
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         return task;
     }
+    internal static bool HasActiveWork()
+    {
+        if (IsDragging) return true;
+        if (IsCreated && Sources.Sources.Count > 0) return true;
+        if (AreDisplaysCreated && (Displays.Count > 0 || HasActiveDisplayResources())) return true;
+        if (IsPcToPhoneCreated && PcToPhone.ActiveCount > 0) return true;
+        lock (MediaWatches)
+        {
+            if (MediaWatches.Count > 0) return true;
+        }
+        return (System.Windows.Application.Current as App)?.HasActivePhoneClipboard == true;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool HasActiveDisplayResources() =>
+        D3D11VideoSurfaceRenderer.ActiveInstanceCount > 0 || MediaFoundationH264Decoder.ActiveInstanceCount > 0;
+
+    internal static void TrimForIdle()
+    {
+        bool phoneUiOpen = (System.Windows.Application.Current is App app && app.IsPhoneWindowOpen)
+            || PhoneDevicePage.HasActivePage;
+        if (!phoneUiOpen && IsCatalogCreated)
+            Catalog.TrimForIdle();
+        if (!phoneUiOpen && !HasActiveWork())
+        {
+            lock (ProbeTimestamps) ProbeTimestamps.Clear();
+            if (IsAdbCreated)
+                _ = Adb.ReleaseIdleConnectionsAsync(includeIdleTcp: false).ContinueWith(
+                    static t => System.Diagnostics.Trace.WriteLine("Idle ADB cleanup: " + t.Exception?.GetBaseException().Message),
+                    CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+    }
+
     internal static void StopMedia()
     {
         MediaShutdown.Cancel();

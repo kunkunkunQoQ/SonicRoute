@@ -95,7 +95,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private readonly string _title;
     private readonly bool _isMirrorMode;
     private readonly bool _preferText;
-    private readonly byte[]? _iconPng;
+    private byte[]? _iconPng;
     private readonly int _initialX;
     private readonly int _initialY;
     private readonly int _initialClientWidth;
@@ -367,6 +367,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     {
         if (_isMirrorMode)
         {
+            _iconPng = null;
             // Keep caption clean without generic Win32 icon, matching mirror_resize.h.
             SendMessage(hwnd, WmSetIcon, IconBig, 0);
             SendMessage(hwnd, WmSetIcon, IconSmall, 0);
@@ -375,6 +376,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         }
 
         byte[]? png = _iconPng is { Length: > 0 } ? _iconPng : WicIconLoader.LoadDefaultPhoneIconPng();
+        _iconPng = null;
         if (png == null) return;
 
         int bigPx = Math.Max(32, GetSystemMetrics(11 /* SM_CXICON */));
@@ -651,6 +653,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 Volatile.Write(ref _hwnd, 0);
                 WicIconLoader.DestroyIconSafe(ref _bigIcon);
                 WicIconLoader.DestroyIconSafe(ref _smallIcon);
+                _iconPng = null;
                 PostQuitMessage(0);
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
@@ -1231,6 +1234,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
             try { await _closed.Task.WaitAsync(TimeSpan.FromSeconds(4)).ConfigureAwait(false); }
             catch { }
         }
+        _iconPng = null;
     }
 
     private delegate nint WndProcDelegate(nint hwnd, uint msg, nint wParam, nint lParam);

@@ -2,6 +2,12 @@
 
 后续AI每轮追加记录，并同步 `DEVELOPMENT-HANDOFF.md` 和本地父容器的当前交接。记录区分已实现、已验证、待验证和明确不做；不能用模拟检查代替真实CPU、音频或设备验收。
 
+## 2026-11-14晚：闲时内存/资源优化提交与 1.32 微软商店包
+
+- 收口提交 31 项既有代码/检查改动及交接文档到 GitHub `origin/master`：涵盖 ADB 池化与 64 KiB POH 传输缓冲、轻量 USB 设备探测与闲时连接释放、D3D11 预编译着色器与 COM 闲时卸载、目录缓存与图标/封面按需缩放解码、8 秒闲时 OSD 窗口释放、取色器/主题字典按窗按需加载、`WM_DEVICECHANGE` USB 剪贴板防抖恢复及 Full 闲时无活动手机任务时的 LOH 压缩门禁（不裁剪 Full 全进程工作集）。
+- 复用此前已完成的 `outputs/mem-verify-20261114-final` 定向离线验证及 `测试版/` 三版构建（Full x64 11,191,624 字节 `A4677986…FEAB87`、Lite x64 6,019,637 字节、Legacy x64 ZIP 982,241 字节）与 3 项 Full payload 检查，新增 `node docs/readme/generate.cjs --check`（10 份 README 一致）与 `git diff --check`。
+- 基于最新 Full x64 发布目录 `测试版/Full-x64/` 通过 `packaging/Store/Build-Package.ps1` 构建并校验 `商店包/SonicRoute-v1.32.0.0-x64-unsigned.msix`（5,192,439 字节，SHA256 `D10814360EE75379E62F84921A87470F5BEF15D8364C0F2E89294C0ECA1D747D`）：MakePri/MakeAppx 成功、Store Identity/Version `1.32.0.0`/x64/未签名及包内 `SonicRoute.exe` SHA256 与最新 Full 一致。未修改产品代码、未打断活动进程或共享 ADB、未签名/安装/上传商店，未创建 GitHub Release/tag。
+
 ## 2026-11-14后续：默认输出自动跟随、备份与自研合入
 
 - 修复手机整机/单应用选择“系统输出”后不跟随默认播放设备变化的问题：共享原生默认输出通知，只重绑电脑播放器，不重启捕获/解码或改OutputId偏好；保留音量、静音和智能音量。默认通知按实际Render/Multimedia角色过滤和去重，快速变化在原串行操作中合并，显式设备不跟随；最后默认输出会话停止即释放原生订阅，无后台轮询。

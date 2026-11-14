@@ -64,6 +64,8 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private string? _catalogSerial;
     private string? _profileId;
     private AndroidDevice? _device;
+    private static int _activePageCount;
+    internal static bool HasActivePage => Volatile.Read(ref _activePageCount) > 0;
     private bool _active, _disposed, _busy, _showConnection, _suppressName, _applyingConnection;
     private IReadOnlyList<AndroidApp>? _retainedSnapshot;
     private IReadOnlyList<string>? _smartVolumeSnapshot;
@@ -87,6 +89,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         if (_disposed || _active) return;
         _active = true;
+        Interlocked.Increment(ref _activePageCount);
         AndroidAudioHost.Phone.Changed += ProfileChanged;
         L10n.Instance.PropertyChanged += OnLanguageChanged;
         if (System.Windows.Application.Current is App application)
@@ -99,14 +102,21 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     internal Task RefreshAsync() => CatalogPanel.Visibility == Visibility.Visible ? LoadCatalogAsync(true) : RunAsync(RefreshDevicesCoreAsync);
     internal void Suspend()
     {
-        _active = false; _operation?.Cancel();
+        if (_active)
+        {
+            _active = false;
+            Interlocked.Decrement(ref _activePageCount);
+        }
+        _operation?.Cancel();
         CancelStreamingWork();
         AndroidAudioHost.Phone.Changed -= ProfileChanged;
         L10n.Instance.PropertyChanged -= OnLanguageChanged;
         if (System.Windows.Application.Current is App application) application.PhoneClipboardChanged -= RefreshClipboard;
         ReleaseCatalog();
+        _device = null;
         PhoneNameBox.Visibility = Visibility.Collapsed;
         PairCodeBox.Clear(); PairQrImage.Source = null; PairQrImage.Visibility = Visibility.Collapsed;
+        AndroidAudioHost.TrimForIdle();
     }
     internal void ApplyDevices(IReadOnlyList<AndroidDevice> devices)
     {
@@ -393,7 +403,13 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         CatalogSearch.Focus();
         await LoadCatalogAsync(false);
     }
-    private void CloseCatalog_Click(object sender, RoutedEventArgs e) { _operation?.Cancel(); ReleaseCatalog(); }
+    private void CloseCatalog_Click(object sender, RoutedEventArgs e)
+    {
+        _operation?.Cancel();
+        ReleaseCatalog();
+        if (AndroidAudioHost.IsCatalogCreated && !(System.Windows.Application.Current is App { IsPhoneWindowOpen: true }))
+            AndroidAudioHost.Catalog.TrimForIdle();
+    }
     private void SetCatalogVisible(bool visible)
     {
         if (visible && CatalogPanel.Visibility != Visibility.Visible) _deviceScrollOffset = DeviceScroll.VerticalOffset;
@@ -475,7 +491,14 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         if (_disposed) return;
         Suspend(); _disposed = true; _lifetime.Cancel(); AndroidAudioHost.Phone.Changed -= ProfileChanged;
-        RetainedApps.ItemsSource = CatalogApps.ItemsSource = null; _catalog = Array.Empty<PhoneAppItem>();
+        RetainedApps.ItemsSource = CatalogApps.ItemsSource = null;
+        _catalog = Array.Empty<PhoneAppItem>();
+        _catalogChoices = Array.Empty<PhoneAppChoice>();
+        _retainedSnapshot = null;
+        _smartVolumeSnapshot = null;
+        _device = null;
+        _wireless = null;
+        _opStatusError = null;
     }
 }
 #endif

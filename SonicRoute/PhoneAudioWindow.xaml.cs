@@ -210,7 +210,16 @@ public partial class PhoneAudioWindow : Window
             MediaPositionSlider.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty, null);
             _apps = Array.Empty<PhoneAppItem>(); PhoneApps.ItemsSource = null;
             _retainedSnapshot = null; _dragItem = null; _mediaState = null; _progressState = null; _mediaApps = null; _artworkBytes = null;
+            _mediaErrorEx = null; _connError = null;
             _playingPackages.Clear();
+            foreach (var cell in _pcDropCells)
+            {
+                try { UnregisterName(cell.Name); } catch { }
+            }
+            _pcDropCells.Clear();
+            _pcDropSignature = null;
+            _pcDropGrid?.Children.Clear();
+            _pcDropGrid?.RowDefinitions.Clear();
             MediaArtwork.Source = MediaAppIcon.Source = null;
             _suppressDeviceChanged = true; DeviceCombo.ItemsSource = null;
             ((App)System.Windows.Application.Current).ReleaseClosedUiWindow(this);
@@ -934,10 +943,7 @@ public partial class PhoneAudioWindow : Window
             {
                 try
                 {
-                    using var stream = new MemoryStream(artwork);
-                    var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
-                    image.DecodePixelWidth = 96; image.StreamSource = stream; image.EndInit(); image.Freeze();
-                    MediaArtwork.Source = image;
+                    MediaArtwork.Source = DecodeBoundedArtwork(artwork);
                 }
                 catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException)
                 { System.Diagnostics.Trace.WriteLine("Phone media artwork: " + ex.Message); }
@@ -958,6 +964,39 @@ public partial class PhoneAudioWindow : Window
         MediaPreviousButton.IsEnabled = state?.CanPrevious == true;
         MediaPlayPauseButton.IsEnabled = state?.CanToggle == true;
         MediaNextButton.IsEnabled = state?.CanNext == true;
+    }
+    private static BitmapSource? DecodeBoundedArtwork(byte[] artwork)
+    {
+        const int MaxArtworkDimensionPx = 112; // 56x56 DIP at 200% DPI
+        int srcWidth = 0, srcHeight = 0;
+        using (var probeStream = new MemoryStream(artwork, writable: false))
+        {
+            var decoder = BitmapDecoder.Create(probeStream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
+            if (decoder.Frames.Count > 0)
+            {
+                var frame = decoder.Frames[0];
+                srcWidth = frame.PixelWidth;
+                srcHeight = frame.PixelHeight;
+            }
+        }
+
+        using var stream = new MemoryStream(artwork, writable: false);
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        if (srcWidth > MaxArtworkDimensionPx || srcHeight > MaxArtworkDimensionPx)
+        {
+            if (srcWidth >= srcHeight) image.DecodePixelWidth = MaxArtworkDimensionPx;
+            else image.DecodePixelHeight = MaxArtworkDimensionPx;
+        }
+        else if (srcWidth <= 0 || srcHeight <= 0)
+        {
+            image.DecodePixelWidth = MaxArtworkDimensionPx;
+        }
+        image.StreamSource = stream;
+        image.EndInit();
+        image.Freeze();
+        return image;
     }
     private static string MediaTime(double milliseconds)
     {

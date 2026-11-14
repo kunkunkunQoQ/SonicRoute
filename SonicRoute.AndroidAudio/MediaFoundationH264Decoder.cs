@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.AndroidAudio;
@@ -68,9 +67,12 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     private static readonly Guid MfLowLatency = new("9c27891a-ed7a-40e1-88e8-b22727a024ee"); // same as CODECAPI_AVLowLatencyMode
     private static readonly Guid MfSaD3D11Aware = new("206b4fc8-fcf9-4c51-afe3-9764369e33a0");
 
+    private static int _activeInstanceCount;
+
     private readonly object _gate = new();
     private bool _mfStarted;
-    private bool _coUninitNeeded;
+    private nint _mtaCookie;
+    private bool _counted;
     private bool _streamingStarted;
     private bool _disposed;
 
@@ -92,13 +94,14 @@ public sealed class MediaFoundationH264Decoder : IDisposable
 
     public MediaFoundationH264Decoder(nint d3d11Device, int initialWidth = 0, int initialHeight = 0)
     {
-        int coHr = Win32Native.CoInitializeEx(0, Win32Native.COINIT_MULTITHREADED);
-        _coUninitNeeded = coHr is 0 or 1;
-        if (coHr < 0 && coHr != Win32Native.RPC_E_CHANGED_MODE)
-            ComVtbl.ThrowIfFailed(coHr, "CoInitializeEx");
+        Interlocked.Increment(ref _activeInstanceCount);
+        _counted = true;
 
         try
         {
+            int coHr = Win32Native.CoIncrementMTAUsage(out _mtaCookie);
+            ComVtbl.ThrowIfFailed(coHr, "CoIncrementMTAUsage");
+
             int mfHr = MFStartup(MfVersion, MfStartupNoSocket);
             ComVtbl.ThrowIfFailed(mfHr, "MFStartup");
             _mfStarted = true;
@@ -130,6 +133,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         }
     }
 
+    public static int ActiveInstanceCount => Volatile.Read(ref _activeInstanceCount);
     public bool IsHardwareAccelerated { get; private set; }
     public int Width => _cropWidth > 0 ? _cropWidth : _codedWidth;
     public int Height => _cropHeight > 0 ? _cropHeight : _codedHeight;
@@ -323,15 +327,9 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         ComVtbl.ThrowIfFailed(ComVtbl.Get<BufferLockFn>(buf.Handle, 3)(buf.Handle, out nint dstPtr, out _, out _), "IMFMediaBuffer.Lock");
         try
         {
-            byte[] temp = ArrayPool<byte>.Shared.Rent(data.Length);
-            try
+            unsafe
             {
-                data.CopyTo(temp);
-                Marshal.Copy(temp, 0, dstPtr, data.Length);
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(temp);
+                data.CopyTo(new Span<byte>((void*)dstPtr, data.Length));
             }
         }
         finally
@@ -491,22 +489,35 @@ public sealed class MediaFoundationH264Decoder : IDisposable
                         int h = Math.Max(2, _codedHeight);
                         int uvH = (h + 1) / 2;
                         int total = absPitch * (h + uvH);
-                        if (_swCopyBuffer.Length < total) _swCopyBuffer = new byte[total];
-                        if (pitch > 0)
+                        if (scan0 != 0 && absPitch > 0 && total > 0)
                         {
-                            Marshal.Copy(scan0, _swCopyBuffer, 0, total);
+                            if (pitch > 0)
+                            {
+                                ReadOnlySpan<byte> directSpan;
+                                unsafe
+                                {
+                                    directSpan = new ReadOnlySpan<byte>((void*)scan0, total);
+                                }
+                                onSoftwareFrame(
+                                    directSpan,
+                                    absPitch, h, _cropX, _cropY,
+                                    _cropWidth > 0 ? _cropWidth : _codedWidth,
+                                    _cropHeight > 0 ? _cropHeight : _codedHeight,
+                                    _colorMatrix);
+                            }
+                            else
+                            {
+                                if (_swCopyBuffer.Length < total) _swCopyBuffer = new byte[total];
+                                for (int row = 0; row < h + uvH; row++)
+                                    Marshal.Copy(scan0 + row * pitch, _swCopyBuffer, row * absPitch, absPitch);
+                                onSoftwareFrame(
+                                    _swCopyBuffer.AsSpan(0, total),
+                                    absPitch, h, _cropX, _cropY,
+                                    _cropWidth > 0 ? _cropWidth : _codedWidth,
+                                    _cropHeight > 0 ? _cropHeight : _codedHeight,
+                                    _colorMatrix);
+                            }
                         }
-                        else
-                        {
-                            for (int row = 0; row < h + uvH; row++)
-                                Marshal.Copy(scan0 + row * pitch, _swCopyBuffer, row * absPitch, absPitch);
-                        }
-                        onSoftwareFrame(
-                            _swCopyBuffer.AsSpan(0, total),
-                            absPitch, h, _cropX, _cropY,
-                            _cropWidth > 0 ? _cropWidth : _codedWidth,
-                            _cropHeight > 0 ? _cropHeight : _codedHeight,
-                            _colorMatrix);
                         return;
                     }
                     finally
@@ -521,14 +532,18 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         {
             try
             {
-                if (curLen > 0)
+                if (ptr != 0 && curLen > 0)
                 {
-                    if (_swCopyBuffer.Length < (int)curLen) _swCopyBuffer = new byte[(int)curLen];
-                    Marshal.Copy(ptr, _swCopyBuffer, 0, (int)curLen);
+                    int len = checked((int)curLen);
                     int stride = _stride > 0 ? _stride : Math.Max(1, _codedWidth);
-                    int codedH = Math.Max(2, _codedHeight > 0 ? _codedHeight : (int)curLen * 2 / (3 * stride));
+                    int codedH = Math.Max(2, _codedHeight > 0 ? _codedHeight : len * 2 / (3 * stride));
+                    ReadOnlySpan<byte> directSpan;
+                    unsafe
+                    {
+                        directSpan = new ReadOnlySpan<byte>((void*)ptr, len);
+                    }
                     onSoftwareFrame(
-                        _swCopyBuffer.AsSpan(0, (int)curLen),
+                        directSpan,
                         stride, codedH, _cropX, _cropY,
                         _cropWidth > 0 ? _cropWidth : _codedWidth,
                         _cropHeight > 0 ? _cropHeight : codedH,
@@ -560,8 +575,21 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             _reusableSoftwareSample.Dispose();
             _dxgiManager.Dispose();
             _mft.Dispose();
+            _swCopyBuffer = Array.Empty<byte>();
             if (_mfStarted) { try { MFShutdown(); } catch { } _mfStarted = false; }
-            if (_coUninitNeeded) { try { Win32Native.CoUninitialize(); } catch { } _coUninitNeeded = false; }
+
+            int remaining = _counted ? Interlocked.Decrement(ref _activeInstanceCount) : Volatile.Read(ref _activeInstanceCount);
+            _counted = false;
+            if (remaining == 0)
+            {
+                try { Win32Native.CoFreeUnusedLibrariesEx(0, 0); } catch { }
+            }
+
+            nint cookie = Interlocked.Exchange(ref _mtaCookie, 0);
+            if (cookie != 0)
+            {
+                try { Win32Native.CoDecrementMTAUsage(cookie); } catch { }
+            }
         }
     }
 

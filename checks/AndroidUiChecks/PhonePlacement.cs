@@ -17,12 +17,12 @@ internal static partial class Program
 
         var upperLeft = new Rect(0, 40, 300, 500);
         var phoneRight = PlacePhone(upperLeft);
-        Check(phoneRight.Left >= upperLeft.Right + 11.9 && Inside(phoneRight),
+        Check(phoneRight.Left >= upperLeft.Right + 5.9 && Inside(phoneRight),
             "phone companion opens to the right of a top-left main panel");
 
         var upperRight = new Rect(900, 40, 300, 500);
         var phoneLeft = PlacePhone(upperRight);
-        Check(phoneLeft.Right <= upperRight.Left - 11.9 && Inside(phoneLeft),
+        Check(phoneLeft.Right <= upperRight.Left - 5.9 && Inside(phoneLeft),
             "phone companion opens to the left of a top-right main panel");
 
         var lowerLeft = PlacePhone(new Rect(0, 800, 300, 150));

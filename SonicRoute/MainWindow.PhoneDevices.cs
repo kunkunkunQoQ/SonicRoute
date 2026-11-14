@@ -233,6 +233,7 @@ public partial class MainWindow
     private void ReleasePhoneManagement()
     {
         if (!_phoneInitialized) return;
+        _phoneInitialized = false;
         AndroidAudioHost.Phone.Changed -= PhoneLibraryChanged;
         AndroidAudioHost.Phone.OutputsChanged -= PhoneLibraryChanged;
         L10n.Instance.PropertyChanged -= PhoneLanguageChanged;
@@ -241,6 +242,9 @@ public partial class MainWindow
         _phoneDevicesList.SelectionChanged -= PhoneSidebar_SelectionChanged;
         _phoneDevicesList.Items.Clear();
         _phoneDevicePage?.Dispose(); _phoneDevicePage = null; PhoneDetailsHost.Child = null; PhoneDevicesHost.Children.Clear(); _phoneSidebarDevices.Clear();
+        _phoneSidebarIcon = null!; _phoneRefreshError = null; _phoneInitialization = null;
+        PhoneDevicesHost.ToolTip = null;
+        AndroidAudioHost.TrimForIdle();
     }
 #else
     private void InitializePhoneManagement() { }

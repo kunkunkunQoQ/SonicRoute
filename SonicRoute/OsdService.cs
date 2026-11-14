@@ -32,6 +32,8 @@ namespace SonicRoute
 
         private readonly Dispatcher _dispatcher = Application.Current.Dispatcher;
         private readonly DispatcherTimer _hideTimer;
+        private DispatcherTimer? _idleReleaseTimer;
+        private const int IdleReleaseSeconds = 8;
         private const int BarFramesPerSecond = 30;
         // RenderingTime 会量化至毫秒；33ms 门限保持 60Hz 屏幕上的约30帧过渡。
         private static readonly TimeSpan BarFrameInterval = TimeSpan.FromMilliseconds(1000 / BarFramesPerSecond);
@@ -110,6 +112,7 @@ namespace SonicRoute
         private void ShowCore(Notice notice, bool persistent = false, bool adjustment = false)
         {
             if (_disposed || _dispatcher.HasShutdownStarted || (_adjusting && !adjustment)) return;
+            _idleReleaseTimer?.Stop();
             try
             {
                 var config = ConfigService.Load();
@@ -581,6 +584,37 @@ namespace SonicRoute
             _window.Hide();
             _window.Opacity = 1;
             _temporaryNoticeCompletion?.TrySetResult(true); _temporaryNoticeCompletion = null;
+            ScheduleIdleRelease();
+        }
+
+        private void ScheduleIdleRelease()
+        {
+            if (_disposed || _window == null || _adjusting || _fadingOut || _micPersistent || _dragging
+                || _dispatcher.HasShutdownStarted)
+                return;
+            if (_idleReleaseTimer == null)
+            {
+                _idleReleaseTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+                {
+                    Interval = TimeSpan.FromSeconds(IdleReleaseSeconds)
+                };
+                _idleReleaseTimer.Tick += IdleReleaseTimer_Tick;
+            }
+            _idleReleaseTimer.Stop();
+            _idleReleaseTimer.Start();
+        }
+
+        private void IdleReleaseTimer_Tick(object? sender, EventArgs e)
+        {
+            _idleReleaseTimer?.Stop();
+            ReleaseWindowIfIdle();
+        }
+
+        internal void ReleaseWindowIfIdle()
+        {
+            if (_disposed || _window == null || _window.IsVisible || _adjusting || _fadingOut || _micPersistent || _dragging)
+                return;
+            ReleaseWindow();
         }
 
         // 仅合并同一监听策略、尚未完成的查询；不跨时刻缓存实际静音状态。
@@ -598,6 +632,7 @@ namespace SonicRoute
         internal void ShowMic(string title, bool muted)
         {
             if (_disposed) return;
+            _idleReleaseTimer?.Stop();
             ++_micVersion;
             _micPersistent = muted && ConfigService.Load().MicMuteOsdPersistent;
             _restorePending = _micPersistent && _adjusting;
@@ -657,6 +692,7 @@ namespace SonicRoute
         internal void BeginAdjust()
         {
             if (_disposed) return;
+            _idleReleaseTimer?.Stop();
             _adjusting = true;
             ShowCore(new Notice(L10n.T("Exp.OsdDragTitle"), L10n.T("Exp.OsdDragHint")), adjustment: true);
             _hideTimer.Stop();
@@ -756,18 +792,15 @@ namespace SonicRoute
             catch { _positionDirty = true; }
         }
 
-        public void Dispose()
+        private void ReleaseWindow()
         {
-            if (_disposed) return;
-            _disposed = true;
-            _temporaryNoticeCompletion?.TrySetResult(true); _temporaryNoticeCompletion = null;
-            ++_messageVersion; ++_micVersion;
-            _restorePending = false;
-            _hideTimer.Stop(); _hideTimer.Tick -= HideTimer_Tick;
+            if (!_disposed && (_adjusting || _fadingOut || _micPersistent || _dragging || _window?.IsVisible == true))
+                return;
+            _idleReleaseTimer?.Stop();
             _placementOperation?.Abort(); _placementOperation = null;
+            StopFade(); StopBar();
             SystemParameters.StaticPropertyChanged -= SystemParameters_Changed;
             SystemEvents.DisplaySettingsChanged -= DisplaySettings_Changed;
-            StopFade(); StopBar();
             try { _source?.RemoveHook(WindowMessages); } catch (ObjectDisposedException) { }
             _source = null;
             if (_window != null)
@@ -782,7 +815,27 @@ namespace SonicRoute
             _window = null; _surface = null; _stack = null; _title = null; _text = null;
             _volumePanel = null; _volumeRow = null; _track = null; _fill = null; _fillScale = null;
             _volumeIcon = null; _volumeCaption = null; _percent = null;
-            _micQuery = null; _notice = default; _hasNotice = false;
+            _notice = default; _hasNotice = false; _volumeVisible = false;
+            _barMuted = false; _metricsDirty = true; _positionDirty = true;
+            _nativeWidth = 0; _nativeHeight = 0;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _temporaryNoticeCompletion?.TrySetResult(true); _temporaryNoticeCompletion = null;
+            ++_messageVersion; ++_micVersion;
+            _restorePending = false;
+            _hideTimer.Stop(); _hideTimer.Tick -= HideTimer_Tick;
+            if (_idleReleaseTimer != null)
+            {
+                _idleReleaseTimer.Stop();
+                _idleReleaseTimer.Tick -= IdleReleaseTimer_Tick;
+                _idleReleaseTimer = null;
+            }
+            ReleaseWindow();
+            _micQuery = null;
             AdjustFinished = null;
         }
     }

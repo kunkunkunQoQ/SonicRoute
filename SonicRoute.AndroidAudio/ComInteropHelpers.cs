@@ -83,6 +83,15 @@ internal static class Win32Native
     public static extern void CoUninitialize();
 
     [DllImport("ole32.dll")]
+    public static extern int CoIncrementMTAUsage(out nint pCookie);
+
+    [DllImport("ole32.dll")]
+    public static extern int CoDecrementMTAUsage(nint cookie);
+
+    [DllImport("ole32.dll")]
+    public static extern void CoFreeUnusedLibrariesEx(uint dwUnloadDelay, uint dwReserved);
+
+    [DllImport("ole32.dll")]
     public static extern int CoCreateInstance(in Guid rclsid, nint pUnkOuter, uint dwClsContext, in Guid riid, out nint ppv);
 
     [DllImport("ole32.dll")]

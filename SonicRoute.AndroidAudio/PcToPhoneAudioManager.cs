@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -582,59 +583,83 @@ internal static class PcProcessLoopbackCapture
             int hrStart = client.Start();
             if (hrStart < 0) Marshal.ThrowExceptionForHR(hrStart);
 
-            byte[] pcmBuffer = new byte[48000 * 4];
-            long lastAliveCheck = Stopwatch.GetTimestamp();
-            WaitHandle[] waits = [token.WaitHandle, sampleEvent];
-
-            while (!token.IsCancellationRequested)
+            byte[] pcmBuffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
+            try
             {
-                if (useEventCallback)
-                    WaitHandle.WaitAny(waits, 50);
-                else if (token.WaitHandle.WaitOne(10))
-                    break;
+                long lastAliveCheck = Stopwatch.GetTimestamp();
+                WaitHandle[] waits = [token.WaitHandle, sampleEvent];
 
-                while (!token.IsCancellationRequested
-                    && capture!.GetNextPacketSize(out uint packetFrames) >= 0 && packetFrames > 0)
+                while (!token.IsCancellationRequested)
                 {
-                    int hrBuf = capture.GetBuffer(out IntPtr dataPtr, out uint numFrames, out uint flags, out _, out _);
-                    if (hrBuf < 0) break;
-                    int byteCount = (int)(numFrames * 4);
-                    if (byteCount > 0)
+                    if (useEventCallback)
+                        WaitHandle.WaitAny(waits, 50);
+                    else if (token.WaitHandle.WaitOne(10))
+                        break;
+
+                    while (!token.IsCancellationRequested
+                        && capture!.GetNextPacketSize(out uint packetFrames) >= 0 && packetFrames > 0)
                     {
-                        if (byteCount > pcmBuffer.Length) pcmBuffer = new byte[byteCount];
-                        if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0 || dataPtr == IntPtr.Zero)
-                            Array.Clear(pcmBuffer, 0, byteCount);
-                        else
-                            Marshal.Copy(dataPtr, pcmBuffer, 0, byteCount);
-                    }
-                    capture.ReleaseBuffer(numFrames);
-                    if (byteCount > 0)
-                    {
-                        destination.Write(pcmBuffer, 0, byteCount);
-                        if (onPacketStreamed != null)
+                        int hrBuf = capture.GetBuffer(out IntPtr dataPtr, out uint numFrames, out uint flags, out _, out _);
+                        if (hrBuf < 0) break;
+                        int byteCount = (int)(numFrames * 4);
+                        byte[]? oversized = null;
+                        try
                         {
-                            int nonSilent = 0;
-                            if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0)
+                            byte[] workBuffer = pcmBuffer;
+                            if (byteCount > 0)
                             {
-                                for (int i = 0; i < byteCount; i++)
+                                if (byteCount > pcmBuffer.Length)
                                 {
-                                    if (pcmBuffer[i] != 0) { nonSilent = byteCount; break; }
+                                    oversized = ArrayPool<byte>.Shared.Rent(byteCount);
+                                    workBuffer = oversized;
+                                }
+                                if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0 || dataPtr == IntPtr.Zero)
+                                    Array.Clear(workBuffer, 0, byteCount);
+                                else
+                                    Marshal.Copy(dataPtr, workBuffer, 0, byteCount);
+                            }
+                            capture.ReleaseBuffer(numFrames);
+                            numFrames = 0;
+                            if (byteCount > 0)
+                            {
+                                destination.Write(workBuffer, 0, byteCount);
+                                if (onPacketStreamed != null)
+                                {
+                                    int nonSilent = 0;
+                                    if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) == 0)
+                                    {
+                                        for (int i = 0; i < byteCount; i++)
+                                        {
+                                            if (workBuffer[i] != 0) { nonSilent = byteCount; break; }
+                                        }
+                                    }
+                                    onPacketStreamed(byteCount, nonSilent);
                                 }
                             }
-                            onPacketStreamed(byteCount, nonSilent);
+                        }
+                        finally
+                        {
+                            if (numFrames > 0)
+                                capture.ReleaseBuffer(numFrames);
+                            if (oversized != null)
+                                ArrayPool<byte>.Shared.Return(oversized);
+                        }
+                    }
+
+                    if (Stopwatch.GetElapsedTime(lastAliveCheck).TotalSeconds >= 2)
+                    {
+                        lastAliveCheck = Stopwatch.GetTimestamp();
+                        if (!IsProcessAlive(processId))
+                        {
+                            try { onProcessExited(); } catch { }
+                            break;
                         }
                     }
                 }
-
-                if (Stopwatch.GetElapsedTime(lastAliveCheck).TotalSeconds >= 2)
-                {
-                    lastAliveCheck = Stopwatch.GetTimestamp();
-                    if (!IsProcessAlive(processId))
-                    {
-                        try { onProcessExited(); } catch { }
-                        break;
-                    }
-                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(pcmBuffer);
             }
         }
         finally

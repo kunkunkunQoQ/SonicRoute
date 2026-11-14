@@ -28,6 +28,13 @@ public interface IDesktopClipboardLink : IDisposable
 public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, IDesktopClipboardLink desktop,
     Func<IAndroidClipboardClient> createClient) : IAsyncDisposable
 {
+    private readonly Func<IReadOnlyList<AndroidDevice>, bool>? _shouldScanOnStartup;
+    internal PhoneClipboardSync(string filePath, Dispatcher dispatcher, IDesktopClipboardLink desktop,
+        Func<IAndroidClipboardClient> createClient, Func<IReadOnlyList<AndroidDevice>, bool>? shouldScanOnStartup)
+        : this(filePath, dispatcher, desktop, createClient)
+    {
+        _shouldScanOnStartup = shouldScanOnStartup;
+    }
     internal static string SettingsPath => Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-clipboard.json");
     private sealed record Saved(int Version, AndroidDevice[] EnabledDevices);
     private sealed class Session(AndroidDevice device, IAndroidClipboardClient client, CancellationToken lifetime)
@@ -57,11 +64,30 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     private Saved? _pendingSave;
     private Task _save = Task.CompletedTask;
     private bool _saving, _watching, _disposed, _desktopListening, _readPending, _reading, _writing, _saveError;
+    private int _activeSessions;
     private long _version;
     private string? _lastText;
     private (string Text, long Version, long Revision)? _desktopWrite;
     private CancellationTokenSource? _clipboardWork;
     public event Action? Changed;
+    internal bool HasActiveWork => !_disposed && (_desktopListening || Volatile.Read(ref _activeSessions) > 0);
+    internal bool HasEnabledUsbTargets => !_disposed && _enabled.Any(d => !d.IsWifi);
+    internal bool ShouldScanOnUsbArrival()
+    {
+        if (_disposed || !HasEnabledUsbTargets) return false;
+        var devices = PhoneAudioWindowCache.Devices;
+        if (devices == null) return true;
+        foreach (var saved in _enabled)
+        {
+            if (saved.IsWifi) continue;
+            var live = devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, saved));
+            if (live == null) return true;
+            string key = AndroidDeviceIdentity.Key(live);
+            if (!_sessions.TryGetValue(key, out var session) || session.Finished || session.Stop.IsCancellationRequested)
+                return true;
+        }
+        return false;
+    }
     public bool IsEnabled(AndroidDevice? device) => device != null && _enabled.Any(d => AndroidDeviceIdentity.Matches(d, device));
     public string Status(AndroidDevice? device) => _saveError ? L10n.T("Phone.ClipboardSaveError") : device == null || !IsEnabled(device) ? L10n.T("Phone.ClipboardDefaultHint")
         : _sessions.TryGetValue(AndroidDeviceIdentity.Key(device), out var session) ? SessionStatusText(session.State) : L10n.T("Phone.ClipboardWaitingPhone");
@@ -83,7 +109,10 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         if (_disposed) return;
         if (saved != null) _enabled.AddRange(saved);
         Reconcile(false);
-        if (_enabled.Count > 0 && PhoneAudioWindowCache.Devices == null)
+        if (_enabled.Count > 0 && PhoneAudioWindowCache.Devices == null
+            && (_shouldScanOnStartup == null
+                || await Task.Run(() => _shouldScanOnStartup(_enabled.ToArray()), _lifetime.Token))
+            && !_disposed && PhoneAudioWindowCache.Devices == null)
             try { await PhoneAudioWindowCache.ReadDevicesAsync(_lifetime.Token); }
             catch (Exception) when (!_disposed) { Changed?.Invoke(); }
     }
@@ -148,7 +177,16 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             }
             var session = new Session(device, createClient(), _lifetime.Token);
             _sessions[key] = session;
-            session.Completion = Task.Run(async () => { try { await previous.ConfigureAwait(false); } catch { } await RunAsync(key, session).ConfigureAwait(false); });
+            Interlocked.Increment(ref _activeSessions);
+            session.Completion = Task.Run(async () =>
+            {
+                try
+                {
+                    try { await previous.ConfigureAwait(false); } catch { }
+                    await RunAsync(key, session).ConfigureAwait(false);
+                }
+                finally { Interlocked.Decrement(ref _activeSessions); }
+            });
             _pending.Add(session.Completion);
         }
         UpdateDesktopListener(); Changed?.Invoke();

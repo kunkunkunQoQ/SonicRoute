@@ -236,11 +236,19 @@ public sealed class AndroidPhoneStore
         var current = apps.ToDictionary(a => a.Package, StringComparer.Ordinal);
         ChangeProfile(id, p =>
         {
-            var updated = p.RetainedApps.Select(a => current.GetValueOrDefault(a.Package, a)).ToArray();
+            var updated = p.RetainedApps.Select(a =>
+            {
+                if (!current.TryGetValue(a.Package, out var nextApp)) return a;
+                // Preserve existing IconPng array reference when bytes are identical so UI weak caches do not re-decode.
+                if (a.IconPng != null && nextApp.IconPng != null && a.IconPng.AsSpan().SequenceEqual(nextApp.IconPng))
+                    nextApp = nextApp with { IconPng = a.IconPng };
+                return nextApp;
+            }).ToArray();
             bool same = updated.Zip(p.RetainedApps).All(pair => pair.First.Package == pair.Second.Package
                 && pair.First.Name == pair.Second.Name && pair.First.Uid == pair.Second.Uid
                 && pair.First.Category == pair.Second.Category && pair.First.PlatformCategory == pair.Second.PlatformCategory
-                && (pair.First.IconPng ?? []).AsSpan().SequenceEqual(pair.Second.IconPng ?? []));
+                && (ReferenceEquals(pair.First.IconPng, pair.Second.IconPng)
+                    || (pair.First.IconPng ?? []).AsSpan().SequenceEqual(pair.Second.IconPng ?? [])));
             return same ? p : p with { RetainedApps = Array.AsReadOnly(updated) };
         });
     }

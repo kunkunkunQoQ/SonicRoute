@@ -33,7 +33,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
     private const byte UsbDeviceDescriptorType = 0x01;
     private const byte UsbStringDescriptorType = 0x03;
     private const int UsbdPipeTypeBulk = 2;
-    private const int TransferStageSize = 256 * 1024;
+    private const int TransferStageSize = 64 * 1024;
 
     private readonly SafeFileHandle _deviceHandle;
     private readonly IntPtr _winUsbHandle;
@@ -43,10 +43,11 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
 
     private readonly SemaphoreSlim _rxOpLock = new(1, 1);
     private readonly SemaphoreSlim _txOpLock = new(1, 1);
+    private readonly byte[] _rxHeaderBuf = new byte[AdbPacketHeader.WireSize];
     private readonly byte[] _rxStage;
     private readonly byte[] _txStage;
-    private GCHandle _rxPin;
-    private GCHandle _txPin;
+    private readonly IntPtr _rxStagePtr;
+    private readonly IntPtr _txStagePtr;
     private IntPtr _rxOverlapped;
     private IntPtr _txOverlapped;
     private readonly ManualResetEvent _rxEvent = new(false);
@@ -70,10 +71,11 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
         _bulkOutPipeId = bulkOutPipeId;
         _maxPacketSize = maxPacketSize;
 
-        _rxStage = new byte[TransferStageSize];
-        _txStage = new byte[TransferStageSize];
-        _rxPin = GCHandle.Alloc(_rxStage, GCHandleType.Pinned);
-        _txPin = GCHandle.Alloc(_txStage, GCHandleType.Pinned);
+        // Allocate on POH so WinUSB DMA/overlapped transfers stay pinned without LOH GCHandle pressure.
+        _rxStage = GC.AllocateArray<byte>(TransferStageSize, pinned: true);
+        _txStage = GC.AllocateArray<byte>(TransferStageSize, pinned: true);
+        _rxStagePtr = Marshal.UnsafeAddrOfPinnedArrayElement(_rxStage, 0);
+        _txStagePtr = Marshal.UnsafeAddrOfPinnedArrayElement(_txStage, 0);
         _rxOverlapped = Marshal.AllocHGlobal(Marshal.SizeOf<NativeOverlapped>());
         _txOverlapped = Marshal.AllocHGlobal(Marshal.SizeOf<NativeOverlapped>());
     }
@@ -214,19 +216,48 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
 
     public async ValueTask<(AdbPacketHeader Header, int PayloadLength)> ReadPacketAsync(byte[] payloadBuffer, CancellationToken token)
     {
+        var (header, len, _) = await ReadPacketCoreAsync(payloadBuffer, payloadBuffer.Length, poolIfLarger: false, token).ConfigureAwait(false);
+        return (header, len);
+    }
+
+    public ValueTask<(AdbPacketHeader Header, int PayloadLength, byte[]? RentedBuffer)> ReadPacketPooledAsync(
+        byte[] baselineBuffer,
+        int maxPayloadBytes,
+        CancellationToken token)
+        => ReadPacketCoreAsync(baselineBuffer, maxPayloadBytes, poolIfLarger: true, token);
+
+    private async ValueTask<(AdbPacketHeader Header, int PayloadLength, byte[]? RentedBuffer)> ReadPacketCoreAsync(
+        byte[] baselineBuffer,
+        int maxPayloadBytes,
+        bool poolIfLarger,
+        CancellationToken token)
+    {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        byte[] headerBuf = new byte[AdbPacketHeader.WireSize];
-        await ReadExactUsbAsync(headerBuf, headerBuf.Length, allowZeroPacketSkip: true, token).ConfigureAwait(false);
-        if (!AdbPacketHeader.TryParse(headerBuf, out var header))
+        await ReadExactUsbAsync(_rxHeaderBuf, _rxHeaderBuf.Length, allowZeroPacketSkip: true, token).ConfigureAwait(false);
+        if (!AdbPacketHeader.TryParse(_rxHeaderBuf, out var header))
             throw new InvalidDataException($"Invalid ADB USB packet header magic (cmd=0x{header.Command:X8}).");
 
-        if (header.DataLength > (uint)payloadBuffer.Length)
-            throw new InvalidDataException($"ADB USB packet payload {header.DataLength} bytes exceeds buffer {payloadBuffer.Length} bytes.");
+        int limit = poolIfLarger ? maxPayloadBytes : baselineBuffer.Length;
+        if (header.DataLength > (uint)limit)
+            throw new InvalidDataException($"ADB USB packet payload {header.DataLength} bytes exceeds buffer {limit} bytes.");
 
         int len = (int)header.DataLength;
-        if (len > 0)
-            await ReadExactUsbAsync(payloadBuffer, len, allowZeroPacketSkip: false, token).ConfigureAwait(false);
-        return (header, len);
+        if (len == 0)
+            return (header, 0, null);
+
+        byte[]? rented = len > baselineBuffer.Length ? ArrayPool<byte>.Shared.Rent(len) : null;
+        byte[] target = rented ?? baselineBuffer;
+        try
+        {
+            await ReadExactUsbAsync(target, len, allowZeroPacketSkip: false, token).ConfigureAwait(false);
+            return (header, len, rented);
+        }
+        catch
+        {
+            if (rented != null)
+                ArrayPool<byte>.Shared.Return(rented);
+            throw;
+        }
     }
 
     public async ValueTask WritePacketAsync(AdbPacketHeader header, ReadOnlyMemory<byte> payload, CancellationToken token)
@@ -259,7 +290,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
                 int read = await TransferPipeAsync(
                     isRead: true,
                     _bulkInPipeId,
-                    _rxPin.AddrOfPinnedObject(),
+                    _rxStagePtr,
                     chunk,
                     _rxOverlapped,
                     _rxEvent,
@@ -294,7 +325,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
                 int written = await TransferPipeAsync(
                     isRead: false,
                     _bulkOutPipeId,
-                    _txPin.AddrOfPinnedObject(),
+                    _txStagePtr,
                     chunk,
                     _txOverlapped,
                     _txEvent,
@@ -438,8 +469,6 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
             if (_winUsbHandle != IntPtr.Zero)
                 WinUsb_Free(_winUsbHandle);
             _deviceHandle.Dispose();
-            if (_rxPin.IsAllocated) _rxPin.Free();
-            if (_txPin.IsAllocated) _txPin.Free();
             if (_rxOverlapped != IntPtr.Zero) { Marshal.FreeHGlobal(_rxOverlapped); _rxOverlapped = IntPtr.Zero; }
             if (_txOverlapped != IntPtr.Zero) { Marshal.FreeHGlobal(_txOverlapped); _txOverlapped = IntPtr.Zero; }
             _rxEvent.Dispose();
@@ -455,7 +484,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct SpDeviceInterfaceData
+    internal struct SpDeviceInterfaceData
     {
         public uint cbSize;
         public Guid InterfaceClassGuid;
@@ -496,11 +525,11 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
     }
 
     [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr SetupDiGetClassDevsW(ref Guid classGuid, IntPtr enumerator, IntPtr hwndParent, uint flags);
+    internal static extern IntPtr SetupDiGetClassDevsW(ref Guid classGuid, IntPtr enumerator, IntPtr hwndParent, uint flags);
 
     [DllImport("setupapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetupDiEnumDeviceInterfaces(
+    internal static extern bool SetupDiEnumDeviceInterfaces(
         IntPtr deviceInfoSet,
         IntPtr deviceInfoData,
         ref Guid interfaceClassGuid,
@@ -528,7 +557,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
 
     [DllImport("setupapi.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetupDiDestroyDeviceInfoList(IntPtr deviceInfoSet);
+    internal static extern bool SetupDiDestroyDeviceInfoList(IntPtr deviceInfoSet);
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern SafeFileHandle CreateFileW(
@@ -825,4 +854,34 @@ internal sealed class WinUsbDeviceWatcher : IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool UnregisterDeviceNotification(IntPtr handle);
+}
+
+/// <summary>
+/// Lightweight USB ADB interface presence probe that avoids opening WinUSB handles when no Android USB device is attached.
+/// </summary>
+public static class AdbDevicePresence
+{
+    private const uint DigcfPresent = 0x00000002;
+    private const uint DigcfDeviceInterface = 0x00000010;
+
+    public static bool HasPresentUsbDevices()
+    {
+        Guid guid = WinUsbAdbLink.AndroidAdbInterfaceGuid;
+        IntPtr devInfo = WinUsbAdbLink.SetupDiGetClassDevsW(ref guid, IntPtr.Zero, IntPtr.Zero, DigcfPresent | DigcfDeviceInterface);
+        if (devInfo == IntPtr.Zero || devInfo == new IntPtr(-1))
+            return false;
+
+        try
+        {
+            var data = new WinUsbAdbLink.SpDeviceInterfaceData
+            {
+                cbSize = (uint)Marshal.SizeOf<WinUsbAdbLink.SpDeviceInterfaceData>()
+            };
+            return WinUsbAdbLink.SetupDiEnumDeviceInterfaces(devInfo, IntPtr.Zero, ref guid, 0, ref data);
+        }
+        finally
+        {
+            WinUsbAdbLink.SetupDiDestroyDeviceInfoList(devInfo);
+        }
+    }
 }

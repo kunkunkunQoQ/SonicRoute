@@ -1,8 +1,17 @@
 # 开发交接
 
-更新：2026-11-14。用户已要求备份外部维护仓库，再将“自研”合入本“当前项目”。后续继续从本目录开发；原自研目录保留参考，不再作为并行交付入口。Git状态、运行包及未提交内容以实际Git和父容器最新收据为准。
+更新：2026-11-14。用户已要求将本轮闲时内存回收与资源精简改动提交 GitHub，并直接基于最新构建的 Full x64 版本打包微软商店 MSIX（仍为 `1.32` / `1.32.0.0`）。后续继续从本目录开发；Git 状态、运行包与商店包收据以实际 Git 和父容器最新记录为准。
 
-## 当前交付：系统默认输出跟随与自研合入
+## 当前交付：闲时资源回收提交与 1.32 微软商店包
+
+- 本轮提交包含 `SonicRoute.AndroidAudio`（14 文件）、`SonicRoute`（16 文件）及 `checks/AndroidUiChecks/PhonePlacement.cs`（1 文件）共 31 项既有代码/检查改动及本次交接更新：
+  - **ADB 与原生媒体资源精简**：ADB 包读取改为 `ArrayPool<byte>.Shared` 池化，WinUSB 传输缓冲收窄至 64 KiB POH 分配；新增 `AdbDevicePresence` 设备接口轻量探测与 `ReleaseIdleConnectionsAsync` 闲时连接清理；D3D11 渲染改用预编译着色器字节码与实例计数，补充 `MediaFoundationH264Decoder` 实例计数与 MTA COM 释放（`CoFreeUnusedLibrariesEx`）；目录缓存与手机存储补充 `TrimForIdle` 并在字节一致时复用 `IconPng` 引用。
+  - **UI 图标、弹窗与闲时回收门禁**：应用图标与媒体封面改用按上限尺寸解码（`DecodePngSized`、`DecodeBoundedArtwork`），托盘图标按系统小图标尺寸解码并即时销毁临时 HICON；OSD 增加 8 秒单次闲时窗口释放，取色器样式延后按需构建；`ThemeControls.xaml` / `SettingsControls.xaml` 移入 `MainWindow.xaml` 按窗加载；USB 剪贴板恢复复用 `WM_DEVICECHANGE` 事件防抖，不新增闲时轮询；Full 仅在无活动手机音视频/虚拟屏/剪贴板时触发一次 LOH 压缩，不做全进程工作集裁剪（Lite/Legacy 保持单次关窗工作集收缩）。
+- 已有构建与离线验证复用：改动后已在 `outputs/mem-verify-20261114-final/` 完成隔离离线验证（含音频/版本/UI/性能夹具检查）及 `node docs/readme/generate.cjs --check`（10 份 README 一致），并在父容器 `测试版/` 生成 1.32 三版测试包：Full x64 ReadyToRun 单 EXE（11,191,624 字节，SHA256 `A4677986A1774F20FAD8E3A86F1767C9C5ED4C874E162BBEA4C9A579EEFEAB87`，且通过 3 项 payload 检查）、Lite x64（6,019,637 字节）、Legacy x64 ZIP（982,241 字节）。
+- **微软商店包（1.32.0.0）**：直接复用最新已构建的 `测试版/Full-x64/SonicRoute.exe`（`A4677986…FEAB87`），通过 `packaging/Store/Build-Package.ps1` 生成未签名 MSIX，输出至父容器 `商店包/SonicRoute-v1.32.0.0-x64-unsigned.msix`（5,192,439 字节，SHA256 `D10814360EE75379E62F84921A87470F5BEF15D8364C0F2E89294C0ECA1D747D`）。Store Identity `8B44F47E.SonicRoute`、Publisher、`Version=1.32.0.0`、`x64`、MakePri/MakeAppx、无签名及包内 EXE SHA256 核对全部通过。
+- 本轮不重复编译产品、不打断运行中的 `测试版/SonicRoute-v1.32-Lite-x64.exe` 或共享 ADB，不替换 `运行版/SonicRoute.exe`，未执行商店签名/安装/提审、GitHub Release/tag 或真机长时验收；实际提交号与推送回读见父容器 `integration-docs/59-STORE-1.32-PACKAGE-AND-MEMORY-COMMIT.md` 与 `store-1.32-package-receipt.json`。
+
+## 历史交付：系统默认输出跟随与自研合入
 
 - 手机整机和单应用选择“系统输出”时，默认播放设备变化现在会只重建电脑播放器，保留原手机捕获、解码、PCM、音量/静音/智能音量及OutputId=null偏好，无需手动切换再切回。显式设备/手机输出保持原行为。
 - 复用WasapiDeviceLease的COM边界，共享一个IMMNotificationClient订阅，按实际播放器使用的Render/Multimedia角色触发；原生回调只排队，操作仍由会话信号量串行。合并重复/快速通知，切出默认输出或最后一个会话停止即取消订阅，无新周期检查。设备暂不可用时保留原播放器，下一次真实变化继续尝试。

@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
@@ -36,9 +37,12 @@ namespace SonicRoute
             ScheduleUiReclaim();
         }
 
+        private bool HasActiveUiWindows() =>
+            _mainWindow != null || _quickPanel != null || _trayMenu != null || IsPhoneWindowOpen;
+
         private void ScheduleUiReclaim()
         {
-            if (!ShouldReclaimIdle() || _mainWindow != null || _quickPanel != null || _trayMenu != null || Dispatcher.HasShutdownStarted) return;
+            if (!ShouldReclaimIdle() || HasActiveUiWindows() || Dispatcher.HasShutdownStarted) return;
             if (_uiReclaimTimer == null)
             {
                 _uiReclaimTimer = new DispatcherTimer(DispatcherPriority.ApplicationIdle, Dispatcher)
@@ -64,10 +68,21 @@ namespace SonicRoute
         {
             // One delayed dispatcher turn, never a periodic cleanup loop.
             _uiReclaimTimer?.Stop();
-            if (_mainWindow != null || _quickPanel != null || _trayMenu != null || !ShouldReclaimIdle()
-                || Dispatcher.HasShutdownStarted) return;
+            if (HasActiveUiWindows() || !ShouldReclaimIdle() || Dispatcher.HasShutdownStarted) return;
+            AppIconService.TrimForIdle();
+            _trayWheel?.ReleaseIdleOsd();
 #if SONICROUTE_PHONE
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
+            AndroidAudioHost.TrimForIdle();
+            if (!AndroidAudioHost.HasActiveWork() && !HasActivePhoneClipboard)
+            {
+                // 无活动投屏、音视频或剪贴板时压实一次 LOH 并归还空页，严禁在 Full 下裁剪整进程工作集。
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            }
+            else
+            {
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
+            }
 #else
             // Match v1.29: one native working-set request, without a forced full GC.
             TryTrimIdleWorkingSet();
@@ -83,7 +98,7 @@ namespace SonicRoute
             return false;
 #else
             if (!_uiWorkingSetTrimRequested || !_startupWarmupComplete || _exiting || Dispatcher.HasShutdownStarted
-                || _mainWindow != null || _quickPanel != null || _trayMenu != null) return false;
+                || HasActiveUiWindows()) return false;
             foreach (Window window in Windows)
                 if (window.IsVisible) return false;
             long now = Stopwatch.GetTimestamp();

@@ -426,7 +426,7 @@ namespace SonicRoute
                 _quickPanel.Closed += (_, _) =>
                 {
                     _quickPanel = null;
-                    if (_mainWindow == null)
+                    if (_mainWindow == null && !IsPhoneWindowOpen)
                     {
                         AppIconService.TrimForIdle();
                         ScheduleUiReclaim();
@@ -576,7 +576,7 @@ namespace SonicRoute
                 _mainWindow.Closed += (_, _) =>
                 {
                     _mainWindow = null;
-                    if (_quickPanel == null)
+                    if (_quickPanel == null && !IsPhoneWindowOpen)
                     {
                         AppIconService.TrimForIdle();
                         ScheduleUiReclaim();
@@ -1015,7 +1015,9 @@ namespace SonicRoute
             CloseTrayMenu();
             if (tray == null) return;
             try { tray.Visible = false; } catch { }
-            try { tray.Icon?.Dispose(); } catch { }
+            var icon = tray.Icon;
+            try { tray.Icon = null; } catch { }
+            try { icon?.Dispose(); } catch { }
             tray.Dispose();
         }
 

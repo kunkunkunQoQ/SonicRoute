@@ -342,6 +342,80 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Releases idle WinUSB and disconnected TCP connections without interrupting active streams,
+    /// forwards, or handshakes. Live idle TCP connections remain unless <paramref name="includeIdleTcp"/> is true.
+    /// </summary>
+    public async Task ReleaseIdleConnectionsAsync(bool includeIdleTcp = false)
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+
+        if (!_usbDevices.IsEmpty)
+        {
+            await _usbSyncGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                foreach (string key in _usbDevices.Keys.ToList())
+                {
+                    if (!_usbDevices.TryGetValue(key, out var slot))
+                        continue;
+                    if (slot.PendingHandshake is { IsCompleted: false }
+                        || slot.Connection is { HasActiveStreams: true }
+                        || HasActiveForward(slot.EffectiveSerial, slot.FallbackSerial))
+                    {
+                        continue;
+                    }
+                    if (_usbDevices.TryRemove(new KeyValuePair<string, UsbDeviceSlot>(key, slot)))
+                        await DisposeUsbSlotAsync(slot).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _usbSyncGate.Release();
+            }
+        }
+
+        foreach (string tcpKey in _tcpDevices.Keys.ToList())
+        {
+            if (!_tcpDevices.TryGetValue(tcpKey, out var tcp))
+                continue;
+            if (HasActiveForwardForTcp(tcp.Address))
+                continue;
+            if (tcp.Connection.IsConnected && (!includeIdleTcp || tcp.Connection.HasActiveStreams))
+                continue;
+            if (_tcpDevices.TryRemove(new KeyValuePair<string, TcpDeviceSlot>(tcpKey, tcp)))
+                await tcp.Connection.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private bool HasActiveForward(string primarySerial, string? alternateSerial = null)
+    {
+        foreach (var fwd in _forwards.Values)
+        {
+            if (fwd.Serial.Equals(primarySerial, StringComparison.Ordinal)
+                || (alternateSerial != null && fwd.Serial.Equals(alternateSerial, StringComparison.Ordinal)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool HasActiveForwardForTcp(string normalizedAddress)
+    {
+        foreach (var fwd in _forwards.Values)
+        {
+            if (fwd.Serial.Equals(normalizedAddress, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (TryNormalizeAddress(fwd.Serial, out string? norm)
+                && norm!.Equals(normalizedAddress, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private async Task<AdbMuxConnection> ResolveConnectionAsync(string serial, CancellationToken token)
     {
         ArgumentException.ThrowIfNullOrEmpty(serial);
@@ -697,6 +771,13 @@ internal sealed class ArbitratedAdbTransport : IAdbTransport, IAsyncDisposable
             return _socketTransport;
         }
         return _directTransport;
+    }
+
+    public Task ReleaseIdleConnectionsAsync(bool includeIdleTcp = false)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+            return Task.CompletedTask;
+        return _directTransport.ReleaseIdleConnectionsAsync(includeIdleTcp);
     }
 
     public async Task<string> VersionAsync(CancellationToken token) =>

@@ -87,6 +87,33 @@ internal interface IAdbPacketLink : IAsyncDisposable
     bool SupportsTlsUpgrade { get; }
     string? PeerCertificateSha256 { get; }
     ValueTask<(AdbPacketHeader Header, int PayloadLength)> ReadPacketAsync(byte[] payloadBuffer, CancellationToken token);
+    /// <summary>
+    /// Reads one ADB packet into <paramref name="baselineBuffer"/> when the payload fits, or rents an exact-needed
+    /// buffer from <see cref="ArrayPool{T}.Shared"/> returned in <c>RentedBuffer</c> for caller cleanup.
+    /// </summary>
+    async ValueTask<(AdbPacketHeader Header, int PayloadLength, byte[]? RentedBuffer)> ReadPacketPooledAsync(
+        byte[] baselineBuffer,
+        int maxPayloadBytes,
+        CancellationToken token)
+    {
+        if (baselineBuffer.Length >= maxPayloadBytes)
+        {
+            var (header, len) = await ReadPacketAsync(baselineBuffer, token).ConfigureAwait(false);
+            return (header, len, null);
+        }
+
+        byte[] rented = ArrayPool<byte>.Shared.Rent(maxPayloadBytes);
+        try
+        {
+            var (header, len) = await ReadPacketAsync(rented, token).ConfigureAwait(false);
+            return (header, len, rented);
+        }
+        catch
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+            throw;
+        }
+    }
     ValueTask WritePacketAsync(AdbPacketHeader header, ReadOnlyMemory<byte> payload, CancellationToken token);
     Task UpgradeToTlsAsync(
         X509Certificate2 clientCertificate,
@@ -98,6 +125,7 @@ internal interface IAdbPacketLink : IAsyncDisposable
 internal sealed class StreamAdbPacketLink : IAdbPacketLink
 {
     private readonly IDisposable? _owner;
+    private readonly byte[] _rxHeaderBuf = new byte[AdbPacketHeader.WireSize];
     private Stream _stream;
     private int _disposed;
 
@@ -113,18 +141,47 @@ internal sealed class StreamAdbPacketLink : IAdbPacketLink
 
     public async ValueTask<(AdbPacketHeader Header, int PayloadLength)> ReadPacketAsync(byte[] payloadBuffer, CancellationToken token)
     {
-        byte[] headerBuf = new byte[AdbPacketHeader.WireSize];
-        await ReadExactAsync(_stream, headerBuf, token).ConfigureAwait(false);
-        if (!AdbPacketHeader.TryParse(headerBuf, out var header))
+        var (header, len, _) = await ReadPacketCoreAsync(payloadBuffer, payloadBuffer.Length, poolIfLarger: false, token).ConfigureAwait(false);
+        return (header, len);
+    }
+
+    public ValueTask<(AdbPacketHeader Header, int PayloadLength, byte[]? RentedBuffer)> ReadPacketPooledAsync(
+        byte[] baselineBuffer,
+        int maxPayloadBytes,
+        CancellationToken token)
+        => ReadPacketCoreAsync(baselineBuffer, maxPayloadBytes, poolIfLarger: true, token);
+
+    private async ValueTask<(AdbPacketHeader Header, int PayloadLength, byte[]? RentedBuffer)> ReadPacketCoreAsync(
+        byte[] baselineBuffer,
+        int maxPayloadBytes,
+        bool poolIfLarger,
+        CancellationToken token)
+    {
+        await ReadExactAsync(_stream, _rxHeaderBuf, token).ConfigureAwait(false);
+        if (!AdbPacketHeader.TryParse(_rxHeaderBuf, out var header))
             throw new InvalidDataException($"Invalid ADB transport packet header magic (cmd=0x{header.Command:X8}, magic=0x{header.Magic:X8}).");
 
-        if (header.DataLength > (uint)payloadBuffer.Length)
-            throw new InvalidDataException($"ADB packet payload {header.DataLength} bytes exceeds buffer {payloadBuffer.Length} bytes.");
+        int limit = poolIfLarger ? maxPayloadBytes : baselineBuffer.Length;
+        if (header.DataLength > (uint)limit)
+            throw new InvalidDataException($"ADB packet payload {header.DataLength} bytes exceeds buffer {limit} bytes.");
 
         int len = (int)header.DataLength;
-        if (len > 0)
-            await ReadExactAsync(_stream, payloadBuffer.AsMemory(0, len), token).ConfigureAwait(false);
-        return (header, len);
+        if (len == 0)
+            return (header, 0, null);
+
+        byte[]? rented = len > baselineBuffer.Length ? ArrayPool<byte>.Shared.Rent(len) : null;
+        byte[] target = rented ?? baselineBuffer;
+        try
+        {
+            await ReadExactAsync(_stream, target.AsMemory(0, len), token).ConfigureAwait(false);
+            return (header, len, rented);
+        }
+        catch
+        {
+            if (rented != null)
+                ArrayPool<byte>.Shared.Return(rented);
+            throw;
+        }
     }
 
     public async ValueTask WritePacketAsync(AdbPacketHeader header, ReadOnlyMemory<byte> payload, CancellationToken token)
@@ -274,6 +331,7 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
     public bool IsTls { get; }
     public string? PeerCertificateSha256 => _link.PeerCertificateSha256;
     public bool IsConnected => Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _disconnected) == 0;
+    public bool HasActiveStreams => !_streams.IsEmpty;
 
     public event Action? Disconnected;
 
@@ -287,87 +345,103 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(link);
         ArgumentNullException.ThrowIfNull(keyStore);
 
-        byte[] handshakeBuf = new byte[MaxPayloadCap];
+        byte[] baselineBuf = ArrayPool<byte>.Shared.Rent(64 * 1024);
         byte[] bannerBytes = Utf8NoBom.GetBytes(HostBanner);
-        await link.WritePacketAsync(
-            AdbPacketHeader.Create(AdbCommands.Cnxn, VersionSkipChecksum, LocalMaxPayload, bannerBytes, computeChecksum: true),
-            bannerBytes,
-            token).ConfigureAwait(false);
-
-        bool isTls = false;
-        bool sentSignature = false;
-        bool sentPublicKey = false;
-        int authRounds = 0;
-
-        while (true)
+        try
         {
-            var (header, len) = await link.ReadPacketAsync(handshakeBuf, token).ConfigureAwait(false);
-            switch (header.Command)
+            await link.WritePacketAsync(
+                AdbPacketHeader.Create(AdbCommands.Cnxn, VersionSkipChecksum, LocalMaxPayload, bannerBytes, computeChecksum: true),
+                bannerBytes,
+                token).ConfigureAwait(false);
+
+            bool isTls = false;
+            bool sentSignature = false;
+            bool sentPublicKey = false;
+            int authRounds = 0;
+
+            while (true)
             {
-                case AdbCommands.Stls:
-                    if (isTls)
-                        throw new InvalidDataException("Unexpected duplicate ADB STLS packet during TLS handshake.");
-                    if (!link.SupportsTlsUpgrade)
-                        throw new InvalidDataException("ADB peer requested STLS on a non-TLS transport.");
-
-                    await link.WritePacketAsync(
-                        AdbPacketHeader.Create(AdbCommands.Stls, StlsVersion, 0, ReadOnlySpan<byte>.Empty, computeChecksum: true),
-                        ReadOnlyMemory<byte>.Empty,
-                        token).ConfigureAwait(false);
-                    await link.UpgradeToTlsAsync(keyStore.GetTlsClientCertificate(), serverCertificateValidator, targetHost, token).ConfigureAwait(false);
-                    isTls = true;
-                    // Per adb.exe client state machine, resend host CNXN after upgrading to TLS 1.3.
-                    await link.WritePacketAsync(
-                        AdbPacketHeader.Create(AdbCommands.Cnxn, VersionSkipChecksum, LocalMaxPayload, bannerBytes, computeChecksum: false),
-                        bannerBytes,
-                        token).ConfigureAwait(false);
-                    break;
-
-                case AdbCommands.Auth:
-                    if (header.Arg0 != AdbAuthType.Token)
-                        throw new InvalidDataException($"Unexpected ADB AUTH subcommand {header.Arg0} from peer.");
-                    if (++authRounds > 4)
-                        throw new IOException("ADB device rejected RSA key authentication.");
-
-                    if (!sentSignature)
+                var (header, len, rented) = await link.ReadPacketPooledAsync(baselineBuf, MaxPayloadCap, token).ConfigureAwait(false);
+                try
+                {
+                    byte[] payloadBuf = rented ?? baselineBuf;
+                    switch (header.Command)
                     {
-                        byte[] signature = keyStore.SignAuthToken(handshakeBuf.AsSpan(0, len));
-                        await link.WritePacketAsync(
-                            AdbPacketHeader.Create(AdbCommands.Auth, AdbAuthType.Signature, 0, signature, computeChecksum: !isTls),
-                            signature,
-                            token).ConfigureAwait(false);
-                        sentSignature = true;
-                    }
-                    else if (!sentPublicKey)
-                    {
-                        byte[] pubLine = Utf8NoBom.GetBytes(keyStore.GetPublicKeyLine() + "\0");
-                        await link.WritePacketAsync(
-                            AdbPacketHeader.Create(AdbCommands.Auth, AdbAuthType.RsaPublicKey, 0, pubLine, computeChecksum: !isTls),
-                            pubLine,
-                            token).ConfigureAwait(false);
-                        sentPublicKey = true;
-                    }
-                    else
-                    {
-                        throw new IOException("ADB device declined authentication after RSA public key was presented.");
-                    }
-                    break;
+                        case AdbCommands.Stls:
+                            if (isTls)
+                                throw new InvalidDataException("Unexpected duplicate ADB STLS packet during TLS handshake.");
+                            if (!link.SupportsTlsUpgrade)
+                                throw new InvalidDataException("ADB peer requested STLS on a non-TLS transport.");
 
-                case AdbCommands.Cnxn:
-                    uint negotiated = Math.Min(VersionSkipChecksum, Math.Max(VersionMin, header.Arg0));
-                    int peerMax = header.Arg1 == 0 ? 4096 : Math.Clamp((int)Math.Min(header.Arg1, int.MaxValue), 4096, MaxPayloadCap);
-                    string peerBanner = Utf8NoBom.GetString(handshakeBuf, 0, len).TrimEnd('\0');
-                    var conn = new AdbMuxConnection(link, negotiated, peerMax, peerBanner, isTls);
-                    conn.StartLoops();
-                    return conn;
+                            await link.WritePacketAsync(
+                                AdbPacketHeader.Create(AdbCommands.Stls, StlsVersion, 0, ReadOnlySpan<byte>.Empty, computeChecksum: true),
+                                ReadOnlyMemory<byte>.Empty,
+                                token).ConfigureAwait(false);
+                            await link.UpgradeToTlsAsync(keyStore.GetTlsClientCertificate(), serverCertificateValidator, targetHost, token).ConfigureAwait(false);
+                            isTls = true;
+                            // Per adb.exe client state machine, resend host CNXN after upgrading to TLS 1.3.
+                            await link.WritePacketAsync(
+                                AdbPacketHeader.Create(AdbCommands.Cnxn, VersionSkipChecksum, LocalMaxPayload, bannerBytes, computeChecksum: false),
+                                bannerBytes,
+                                token).ConfigureAwait(false);
+                            break;
 
-                case AdbCommands.Clse:
-                    // Ignore stale CLSE packets emitted by a previous host session after USB reconnect.
-                    break;
+                        case AdbCommands.Auth:
+                            if (header.Arg0 != AdbAuthType.Token)
+                                throw new InvalidDataException($"Unexpected ADB AUTH subcommand {header.Arg0} from peer.");
+                            if (++authRounds > 4)
+                                throw new IOException("ADB device rejected RSA key authentication.");
 
-                default:
-                    throw new InvalidDataException($"Unexpected ADB packet 0x{header.Command:X8} before CNXN completed.");
+                            if (!sentSignature)
+                            {
+                                byte[] signature = keyStore.SignAuthToken(payloadBuf.AsSpan(0, len));
+                                await link.WritePacketAsync(
+                                    AdbPacketHeader.Create(AdbCommands.Auth, AdbAuthType.Signature, 0, signature, computeChecksum: !isTls),
+                                    signature,
+                                    token).ConfigureAwait(false);
+                                sentSignature = true;
+                            }
+                            else if (!sentPublicKey)
+                            {
+                                byte[] pubLine = Utf8NoBom.GetBytes(keyStore.GetPublicKeyLine() + "\0");
+                                await link.WritePacketAsync(
+                                    AdbPacketHeader.Create(AdbCommands.Auth, AdbAuthType.RsaPublicKey, 0, pubLine, computeChecksum: !isTls),
+                                    pubLine,
+                                    token).ConfigureAwait(false);
+                                sentPublicKey = true;
+                            }
+                            else
+                            {
+                                throw new IOException("ADB device declined authentication after RSA public key was presented.");
+                            }
+                            break;
+
+                        case AdbCommands.Cnxn:
+                            uint negotiated = Math.Min(VersionSkipChecksum, Math.Max(VersionMin, header.Arg0));
+                            int peerMax = header.Arg1 == 0 ? 4096 : Math.Clamp((int)Math.Min(header.Arg1, int.MaxValue), 4096, MaxPayloadCap);
+                            string peerBanner = Utf8NoBom.GetString(payloadBuf, 0, len).TrimEnd('\0');
+                            var conn = new AdbMuxConnection(link, negotiated, peerMax, peerBanner, isTls);
+                            conn.StartLoops();
+                            return conn;
+
+                        case AdbCommands.Clse:
+                            // Ignore stale CLSE packets emitted by a previous host session after USB reconnect.
+                            break;
+
+                        default:
+                            throw new InvalidDataException($"Unexpected ADB packet 0x{header.Command:X8} before CNXN completed.");
+                    }
+                }
+                finally
+                {
+                    if (rented != null)
+                        ArrayPool<byte>.Shared.Return(rented);
+                }
             }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(baselineBuf);
         }
     }
 
@@ -534,40 +608,50 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
 
     private async Task ReadLoopAsync()
     {
-        byte[] scratch = new byte[Math.Max(LocalMaxPayload, PeerMaxPayload)];
+        int maxAllowedPayload = Math.Max(LocalMaxPayload, PeerMaxPayload);
+        byte[] baseline = ArrayPool<byte>.Shared.Rent(64 * 1024);
         Exception? failure = null;
         try
         {
             while (!_lifetime.IsCancellationRequested)
             {
-                var (header, len) = await _link.ReadPacketAsync(scratch, _lifetime.Token).ConfigureAwait(false);
-                if (!SkipChecksum && header.DataCheck != AdbPacketHeader.ComputeChecksum(scratch.AsSpan(0, len)))
-                    throw new InvalidDataException($"ADB packet payload checksum mismatch (cmd=0x{header.Command:X8}).");
-
-                switch (header.Command)
+                var (header, len, rented) = await _link.ReadPacketPooledAsync(baseline, maxAllowedPayload, _lifetime.Token).ConfigureAwait(false);
+                try
                 {
-                    case AdbCommands.Okay:
-                        if (_streams.TryGetValue(header.Arg1, out var okayStream))
-                            okayStream.OnOkay(header.Arg0);
-                        break;
+                    ReadOnlySpan<byte> payload = (rented ?? baseline).AsSpan(0, len);
+                    if (!SkipChecksum && header.DataCheck != AdbPacketHeader.ComputeChecksum(payload))
+                        throw new InvalidDataException($"ADB packet payload checksum mismatch (cmd=0x{header.Command:X8}).");
 
-                    case AdbCommands.Wrte:
-                        if (_streams.TryGetValue(header.Arg1, out var wrteStream))
-                            wrteStream.OnWrte(header.Arg0, scratch.AsSpan(0, len));
-                        else if (header.Arg0 != 0 && header.Arg1 != 0)
-                            PostControlPacket(AdbCommands.Clse, header.Arg1, header.Arg0);
-                        break;
+                    switch (header.Command)
+                    {
+                        case AdbCommands.Okay:
+                            if (_streams.TryGetValue(header.Arg1, out var okayStream))
+                                okayStream.OnOkay(header.Arg0);
+                            break;
 
-                    case AdbCommands.Clse:
-                        if (_streams.TryRemove(header.Arg1, out var closedStream))
-                            closedStream.OnRemoteClose(header.Arg0);
-                        break;
+                        case AdbCommands.Wrte:
+                            if (_streams.TryGetValue(header.Arg1, out var wrteStream))
+                                wrteStream.OnWrte(header.Arg0, payload);
+                            else if (header.Arg0 != 0 && header.Arg1 != 0)
+                                PostControlPacket(AdbCommands.Clse, header.Arg1, header.Arg0);
+                            break;
 
-                    case AdbCommands.Open:
-                        // Device-initiated reverse socket openings are refused cleanly with CLSE.
-                        if (header.Arg0 != 0)
-                            PostControlPacket(AdbCommands.Clse, 0, header.Arg0);
-                        break;
+                        case AdbCommands.Clse:
+                            if (_streams.TryRemove(header.Arg1, out var closedStream))
+                                closedStream.OnRemoteClose(header.Arg0);
+                            break;
+
+                        case AdbCommands.Open:
+                            // Device-initiated reverse socket openings are refused cleanly with CLSE.
+                            if (header.Arg0 != 0)
+                                PostControlPacket(AdbCommands.Clse, 0, header.Arg0);
+                            break;
+                    }
+                }
+                finally
+                {
+                    if (rented != null)
+                        ArrayPool<byte>.Shared.Return(rented);
                 }
             }
         }
@@ -578,6 +662,7 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         }
         finally
         {
+            ArrayPool<byte>.Shared.Return(baseline);
             NotifyDisconnected(failure ?? new EndOfStreamException("ADB direct connection closed."));
         }
     }

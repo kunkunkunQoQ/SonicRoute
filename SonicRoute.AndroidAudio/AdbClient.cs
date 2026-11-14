@@ -163,6 +163,16 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         throw new NotSupportedException("Unsupported ADB transport command: " + string.Join(' ', arguments));
     }
 
+    public Task ReleaseIdleConnectionsAsync(bool includeIdleTcp = false)
+    {
+        var transport = Volatile.Read(ref _resolvedTransport) ?? _explicitTransport;
+        if (transport is ArbitratedAdbTransport arbitrated)
+            return arbitrated.ReleaseIdleConnectionsAsync(includeIdleTcp);
+        if (transport is DirectAdbTransport direct)
+            return direct.ReleaseIdleConnectionsAsync(includeIdleTcp);
+        return Task.CompletedTask;
+    }
+
     public void Dispose()
     {
         var resolved = Interlocked.Exchange(ref _resolvedTransport, null);

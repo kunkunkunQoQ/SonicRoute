@@ -14,6 +14,10 @@
         FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
     <Window.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ThemeControls.xaml"/>
+                <ResourceDictionary Source="SettingsControls.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
         <!-- bool → 可见性（禁用自动切换状态点） -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>

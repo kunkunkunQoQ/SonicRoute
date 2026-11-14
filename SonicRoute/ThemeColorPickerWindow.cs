@@ -46,6 +46,8 @@ namespace SonicRoute
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             ShowInTaskbar = false;
             FontFamily = owner.FontFamily;
+            // 取色器专属样式仅在打开自定义颜色弹窗时按需解析，随关窗释放，不占用全局启动资源。
+            Resources = CreatePickerResources();
             SetResourceReference(BackgroundProperty, "Theme.SurfaceBg");
             SetResourceReference(ForegroundProperty, "Theme.TextPrimary");
 
@@ -163,6 +165,52 @@ namespace SonicRoute
             Content = root;
             SelectColor(initial);
         }
+
+        private static ResourceDictionary CreatePickerResources() =>
+            (ResourceDictionary)System.Windows.Markup.XamlReader.Parse(@"
+<ResourceDictionary xmlns=""http://schemas.microsoft.com/winfx/2006/xaml/presentation""
+                    xmlns:x=""http://schemas.microsoft.com/winfx/2006/xaml"">
+    <Style x:Key=""ColorLightnessSlider"" TargetType=""Slider"">
+        <Setter Property=""Width"" Value=""32""/>
+        <Setter Property=""Template""><Setter.Value>
+            <ControlTemplate TargetType=""Slider"">
+                <Grid>
+                    <Border Background=""{TemplateBinding Background}"" Margin=""0,6,12,6""/>
+                    <Track x:Name=""PART_Track"" Orientation=""{TemplateBinding Orientation}"" IsDirectionReversed=""{TemplateBinding IsDirectionReversed}"">
+                        <Track.DecreaseRepeatButton><RepeatButton Command=""{x:Static Slider.DecreaseLarge}"" Focusable=""False"">
+                            <RepeatButton.Template><ControlTemplate TargetType=""RepeatButton""><Border Background=""Transparent""/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton></Track.DecreaseRepeatButton>
+                        <Track.IncreaseRepeatButton><RepeatButton Command=""{x:Static Slider.IncreaseLarge}"" Focusable=""False"">
+                            <RepeatButton.Template><ControlTemplate TargetType=""RepeatButton""><Border Background=""Transparent""/></ControlTemplate></RepeatButton.Template>
+                        </RepeatButton></Track.IncreaseRepeatButton>
+                        <Track.Thumb><Thumb Width=""32"" Height=""12"">
+                            <Thumb.Template><ControlTemplate TargetType=""Thumb"">
+                                <Grid Background=""Transparent""><Path Data=""M8,0 L0,6 L8,12 Z"" Width=""8"" Height=""12"" HorizontalAlignment=""Right""
+                                    Fill=""{DynamicResource Theme.TextPrimary}"" Stroke=""{DynamicResource Theme.SurfaceBg}"" StrokeThickness=""1""/></Grid>
+                            </ControlTemplate></Thumb.Template>
+                        </Thumb></Track.Thumb>
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
+    <Style x:Key=""ColorSwatchButton"" TargetType=""Button"">
+        <Setter Property=""Width"" Value=""24""/><Setter Property=""Height"" Value=""24""/><Setter Property=""Margin"" Value=""2""/>
+        <Setter Property=""Cursor"" Value=""Hand""/><Setter Property=""BorderThickness"" Value=""1""/>
+        <Setter Property=""BorderBrush"" Value=""{DynamicResource Theme.Border}""/>
+        <Setter Property=""Template""><Setter.Value>
+            <ControlTemplate TargetType=""Button"">
+                <Border Background=""{TemplateBinding Background}"" BorderBrush=""{TemplateBinding BorderBrush}"" BorderThickness=""{TemplateBinding BorderThickness}"" CornerRadius=""4"">
+                    <ContentPresenter HorizontalAlignment=""Center"" VerticalAlignment=""Center""/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property=""IsMouseOver"" Value=""True""><Setter Property=""Opacity"" Value=""0.8""/></Trigger>
+                    <Trigger Property=""IsKeyboardFocused"" Value=""True""><Setter Property=""BorderBrush"" Value=""{DynamicResource Theme.Accent}""/></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value></Setter>
+    </Style>
+</ResourceDictionary>");
 
         private static TextBlock Label(string text, Thickness margin) => new TextBlock
         { Text = text, FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = margin };

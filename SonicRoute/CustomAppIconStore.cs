@@ -56,17 +56,7 @@ namespace SonicRoute
 
         internal static ImageSource? Load(string fileName)
         {
-            try
-            {
-                using var stream = new MemoryStream(AppIconFiles.ReadPng(fileName), false);
-                var image = new BitmapImage();
-                image.BeginInit();
-                image.CacheOption = BitmapCacheOption.OnLoad;
-                image.StreamSource = stream;
-                image.EndInit();
-                image.Freeze();
-                return image;
-            }
+            try { return AppIconService.DecodePngSized(AppIconFiles.ReadPng(fileName), AppIconFiles.IconSize); }
             catch { return null; }
         }
     }

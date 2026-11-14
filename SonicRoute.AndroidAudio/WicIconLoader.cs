@@ -55,7 +55,13 @@ public static class WicIconLoader
             using var factory = new ComPtr(factoryPtr);
 
             pngBuffer = Marshal.AllocHGlobal(pngBytes.Length);
-            Marshal.Copy(pngBytes.ToArray(), 0, pngBuffer, pngBytes.Length);
+            unsafe
+            {
+                fixed (byte* pSrc = pngBytes)
+                {
+                    Buffer.MemoryCopy(pSrc, (void*)pngBuffer, pngBytes.Length, pngBytes.Length);
+                }
+            }
 
             if (ComVtbl.Get<CreateStreamFn>(factory.Handle, 14)(factory.Handle, out nint streamPtr) < 0 || streamPtr == 0)
                 return false;
