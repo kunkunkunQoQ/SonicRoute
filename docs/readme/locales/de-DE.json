@@ -54,7 +54,7 @@
     "configureAutomation": "Automatisierung einrichten",
     "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease": "Aktuelle Version",
-    "releaseSummary": "v1.31 ergänzt Full um Hauptbildschirm-Spiegelung und bidirektionale Mehrgeräte-Zwischenablagesynchronisierung, benutzerfreundliche Encoder-Namen mit Hardware-Erkennung, 24/32/50 Mbps sowie 120 fps Voreinstellungen und behebt Abstürze der Einstellungsseite bei vollständiger Lokalisierung in neun Sprachen; Lite und Legacy bleiben auf PC-Audio beschränkt. Details unter {history}.",
+    "releaseSummary": "v1.32 integriert das reine C#-Android-Backend in Full, entfernt externe adb/scrcpy/FFmpeg/SDL2-Binärdateien bei deutlich kleinerer Einzel-EXE und ergänzt die automatische Nachführung des Windows-Standardwiedergabegeräts für „Systemausgabe“ sowie sechs Pipeline-Korrekturen; alle Editionen (Full/Lite/Legacy) beheben Überlappungen von Tray-Untermenüs bei langen Namen und optimieren den Leerlauf-Speicherverbrauch. Details unter {history}.",
     "docTopic": "Thema",
     "docGuides": "Anleitungen",
     "docTopics": [

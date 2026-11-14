@@ -54,7 +54,7 @@
     "configureAutomation": "Set up automation",
     "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease": "Current release",
-    "releaseSummary": "v1.31 restores whole-phone display0 screen mirroring and adds multi-device bidirectional text clipboard sync to Full, introduces friendly encoder names with hardware detection, 24/32/50 Mbps bitrates and 120 fps stream presets, and completes nine-language localization and settings page stability fixes; Lite and Legacy remain PC-only. See {history} for details.",
+    "releaseSummary": "v1.32 merges the pure C# Android backend into Full—removing external adb/scrcpy/FFmpeg/SDL2 binaries and slimming down the single EXE—and adds automatic Windows default playback device following for phone System Output alongside six pipeline fixes; all editions (Full/Lite/Legacy) fix tray long-name submenu overlap and optimize idle memory across icons, OSD, theme resources, and caches. See {history} for details.",
     "docTopic": "Topic",
     "docGuides": "Guides",
     "docTopics": [

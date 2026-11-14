@@ -55,15 +55,15 @@ Turn tedious manual sound adjustments into seamless, one-time automations. [Set 
 
 ## 🚀 Download and get started
 
-**Current release: [v1.31](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.31)** · 2026-11-08 · [Release notes (Chinese)](docs/release-v1.31.md)
+**Current release: [v1.32](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.32)** · 2026-11-14 · [Release notes (Chinese)](docs/release-v1.32.md)
 
-Choose Full x64 for optional Android phone audio and virtual-display integration; choose Lite x64 for PC-only audio features, Legacy x64 for .NET Framework 4.8 systems, or the experimental ARM64 editions for ARM64 PCs. Full includes phone integration; Lite and Legacy do not. The Store package is built from Full, but its currently available version is shown on the Store page. Direct download links below are for v1.31.
+Choose Full x64 for optional Android phone audio and virtual-display integration; choose Lite x64 for PC-only audio features, Legacy x64 for .NET Framework 4.8 systems, or the experimental ARM64 editions for ARM64 PCs. Full includes phone integration; Lite and Legacy do not. The Store package is built from Full, but its currently available version is shown on the Store page. Direct download links below are for v1.32.
 
 | Version | Download | Requirements |
 |---|---|---|
-| ⭐ Full (.NET 10, with optional mobile integration) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-x64.exe) / [ARM64 (experimental) · v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | Single EXE portable edition; requires matching .NET 10 Desktop Runtime, includes optional Android audio and virtual display. |
-| ⭐ Lite (.NET 10, PC audio only) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-x64.exe) / [ARM64 (experimental) · v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | Single-file portable edition; requires matching .NET 10 Desktop Runtime, PC audio features only. |
-| 🛡️ Legacy x64 (PC audio only, .NET Framework 4.8) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Legacy-x64.zip) | No extra runtime required; relies on built-in .NET Framework 4.8, unpack and run. |
+| ⭐ Full (.NET 10, with optional mobile integration) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | Single EXE portable edition; requires matching .NET 10 Desktop Runtime, includes optional Android audio and virtual display. |
+| ⭐ Lite (.NET 10, PC audio only) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | Single-file portable edition; requires matching .NET 10 Desktop Runtime, PC audio features only. |
+| 🛡️ Legacy x64 (PC audio only, .NET Framework 4.8) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | No extra runtime required; relies on built-in .NET Framework 4.8, unpack and run. |
 | 🔄 Microsoft Store (based on Full) | [Install from the Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Built from Full; requires x64 .NET 10 Desktop Runtime; current Store listing controls availability. |
 
 <details>
@@ -92,9 +92,9 @@ The `sr` command communicates with a running SonicRoute instance via named pipe 
 sr "Rule name or ID"
 ```
 
-### 🆕 v1.31 Release Highlights
+### 🆕 v1.32 Release Highlights
 
-v1.31 restores whole-phone display0 screen mirroring and adds multi-device bidirectional text clipboard sync to Full, introduces friendly encoder names with hardware detection, 24/32/50 Mbps bitrates and 120 fps stream presets, and completes nine-language localization and settings page stability fixes; Lite and Legacy remain PC-only. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
+v1.32 merges the pure C# Android backend into Full—removing external adb/scrcpy/FFmpeg/SDL2 binaries and slimming down the single EXE—and adds automatic Windows default playback device following for phone System Output alongside six pipeline fixes; all editions (Full/Lite/Legacy) fix tray long-name submenu overlap and optimize idle memory across icons, OSD, theme resources, and caches. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
 
 ### ❓ Quick FAQ
 

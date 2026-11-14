@@ -2,6 +2,12 @@
 
 后续AI每轮追加记录，并同步 `DEVELOPMENT-HANDOFF.md` 和本地父容器的当前交接。记录区分已实现、已验证、待验证和明确不做；不能用模拟检查代替真实CPU、音频或设备验收。
 
+## 2026-11-14夜：v1.32 正式发布准备（发布说明、多语言 README 与交接同步）
+
+- 新增 `docs/release-v1.32.md`，完整整理 `v1.31` 之后合入的纯 C# 自研 Android 后端、手机系统输出跟随 Windows 默认播放设备、六项自研修复、SmartVolume 调参入库、托盘长名称子菜单防重叠及全版本闲时内存/资源优化，并列出五目标下载矩阵、升级与数据保留方式以及实验/离线验证边界。
+- 同步更新 `docs/readme/shared.json`、`docs/readme/generate.cjs` 与 9 个 `docs/readme/locales/*.json` 中的 `releaseSummary`，运行 `node docs/readme/generate.cjs` 与 `--check` 验证 10 份生成 README 一致。
+- 同步更新 `DEVELOPMENT-HANDOFF.md`，下一步将在本地 `master` 提交推送并执行完整五目标发布构建与隔离验证。
+
 ## 2026-11-14晚：闲时内存/资源优化提交与 1.32 微软商店包
 
 - 收口提交 31 项既有代码/检查改动及交接文档到 GitHub `origin/master`：涵盖 ADB 池化与 64 KiB POH 传输缓冲、轻量 USB 设备探测与闲时连接释放、D3D11 预编译着色器与 COM 闲时卸载、目录缓存与图标/封面按需缩放解码、8 秒闲时 OSD 窗口释放、取色器/主题字典按窗按需加载、`WM_DEVICECHANGE` USB 剪贴板防抖恢复及 Full 闲时无活动手机任务时的 LOH 压缩门禁（不裁剪 Full 全进程工作集）。

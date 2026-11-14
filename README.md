@@ -55,15 +55,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 
 ## 🚀 下载与开始使用
 
-**当前正式版：[v1.31](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.31)** · 2026-11-08 · [更新说明](docs/release-v1.31.md)
+**当前正式版：[v1.32](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.32)** · 2026-11-14 · [更新说明](docs/release-v1.32.md)
 
-需要可选 Android 手机音频与虚拟屏幕功能时选择 **Full x64**；只使用电脑音频功能可选 **Lite x64**；受限环境可选依赖系统 .NET Framework 4.8 的 **Legacy x64**。ARM64 版本为实验性。Full 包含可选手机集成，Lite 与 Legacy 不含手机功能。商店包以 Full 为构建来源，当前在架版本以 Store 页面为准。下方直链对应 v1.31。
+需要可选 Android 手机音频与虚拟屏幕功能时选择 **Full x64**；只使用电脑音频功能可选 **Lite x64**；受限环境可选依赖系统 .NET Framework 4.8 的 **Legacy x64**。ARM64 版本为实验性。Full 包含可选手机集成，Lite 与 Legacy 不含手机功能。商店包以 Full 为构建来源，当前在架版本以 Store 页面为准。下方直链对应 v1.32。
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| ⭐ Full（.NET 10，含可选手机互联） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-x64.exe) / [ARM64（实验） · v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | 单 EXE 便携版；需要匹配架构的 .NET 10 Desktop Runtime，包含可选 Android 手机音频与虚拟屏幕集成。 |
-| ⭐ Lite（.NET 10，仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-x64.exe) / [ARM64（实验） · v1.30](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | 单文件便携版；需要匹配架构的 .NET 10 Desktop Runtime，仅包含电脑音频功能。 |
-| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用。 |
+| ⭐ Full（.NET 10，含可选手机互联） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | 单 EXE 便携版；需要匹配架构的 .NET 10 Desktop Runtime，包含可选 Android 手机音频与虚拟屏幕集成。 |
+| ⭐ Lite（.NET 10，仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | 单文件便携版；需要匹配架构的 .NET 10 Desktop Runtime，仅包含电脑音频功能。 |
+| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用。 |
 | 🔄 Microsoft Store（基于 Full） | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 以 Full 为构建来源；需要 x64 .NET 10 Desktop Runtime，在架版本以 Store 页面为准。 |
 
 <details>
@@ -92,9 +92,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · MIT 
 sr "规则名称或ID"
 ```
 
-### 🆕 v1.31 版本亮点速览
+### 🆕 v1.32 版本亮点速览
 
-v1.31 为 Full 增加整机主屏镜像恢复与多设备剪贴板双向同步，手机页面支持友好编码器名称与在线硬件检测、24/32/50 Mbps 高码率与 120 fps 预设，并补齐九语本地化与设置页稳定性修复；Lite 与 Legacy 保持电脑音频功能。详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.32 为 Full 合入纯 C# 自研 Android 后端，移除外部 adb/scrcpy/FFmpeg 等第三方二进制并大幅减小单文件体积，新增手机“系统输出”自动跟随 Windows 默认播放设备与多项管线修复；全版本（Full/Lite/Legacy）同步修复托盘长名称子菜单重叠并优化图标、OSD、主题字典与闲时内存占用。详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ 常见问题速览
 

@@ -54,7 +54,7 @@
     "configureAutomation": "Configurer l’automatisation",
     "automationExample": "Transformez les réglages manuels fastidieux en une expérience automatisée prête à l'emploi.",
     "currentRelease": "Version actuelle",
-    "releaseSummary": "v1.31 ajoute à Full le miroir plein écran du smartphone, la synchronisation bidirectionnelle du presse-papiers texte, des noms d’encodeurs conviviaux avec détection matérielle, des débits de 24/32/50 Mbps et 120 fps, tout en complétant la localisation en neuf langues et la stabilité des paramètres ; Lite et Legacy restent dédiés au PC. Détails : {history}.",
+    "releaseSummary": "v1.32 intègre le backend Android pur C# dans Full en supprimant les binaires externes adb/scrcpy/FFmpeg/SDL2 tout en réduisant nettement l'exécutable, et ajoute le suivi automatique du périphérique de lecture Windows par défaut ainsi que six correctifs ; toutes les éditions (Full/Lite/Legacy) corrigent le chevauchement des sous-menus de la zone de notification et optimisent la mémoire au repos. Détails : {history}.",
     "docTopic": "Sujet",
     "docGuides": "Guides",
     "docTopics": [

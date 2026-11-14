@@ -54,7 +54,7 @@
     "configureAutomation": "Configurar automatización",
     "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
     "currentRelease": "Versión actual",
-    "releaseSummary": "v1.31 añade a Full duplicación de pantalla principal del móvil y sincronización bidireccional del portapapeles, nombres descriptivos de codificadores con detección de hardware, ajustes de 24/32/50 Mbps y 120 fps, y completa la localización en nueve idiomas junto a mejoras de estabilidad en configuración; Lite y Legacy mantienen solo funciones de PC. Consulte {history}.",
+    "releaseSummary": "v1.32 integra el backend Android propio en C# en Full eliminando binarios externos (adb/scrcpy/FFmpeg/SDL2) con un EXE mucho más ligero, y añade seguimiento automático del dispositivo de reproducción predeterminado de Windows junto con seis correcciones; todas las ediciones (Full/Lite/Legacy) corrigen la superposición del submenú de bandeja con nombres largos y optimizan el uso de memoria en reposo. Consulte {history}.",
     "docTopic": "Tema",
     "docGuides": "Guías",
     "docTopics": [

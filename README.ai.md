@@ -7,9 +7,9 @@
 SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
-  version: "v1.31 (1.31.0.0)"
+  version: "v1.32 (1.32.0.0)"
   source_version: "v1.32"
-  source_status: "Development version; not the current published release."
+  source_status: "Same version number as the published release; source may contain later commits."
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
@@ -27,11 +27,11 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   cross_platform: "FALSE (strictly Win32/WPF/.NET CoreAudio; never macOS/Linux)"
 
 RELEASE_EDITIONS:
-  - { edition: Full, runtime: net10, architecture: x64, asset: "SonicRoute-v1.31-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Full, runtime: net10, architecture: arm64, release: "v1.30", asset: "SonicRoute-v1.30-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.31-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.31-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
-  - { edition: Lite, runtime: net10, architecture: arm64, release: "v1.30", asset: "SonicRoute-v1.30-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
+  - { edition: Full, runtime: net10, architecture: x64, asset: "SonicRoute-v1.32-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
+  - { edition: Full, runtime: net10, architecture: arm64, release: "v1.32", asset: "SonicRoute-v1.32-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
+  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.32-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
+  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.32-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
+  - { edition: Lite, runtime: net10, architecture: arm64, release: "v1.32", asset: "SonicRoute-v1.32-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
   - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }
   - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
   - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
@@ -197,12 +197,13 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Optional execution history: ExecutionHistory/{CommandEdition}, only when experimental mode and execution history are enabled. SONICROUTE_DATA_DIRECTORY can override the root with an absolute path for isolated tooling."
 
   VERSION_ARCHIVE_AND_CHANGELOG:
-    intent: "Release history, changelog, v1.31 upgrade notes"
-    keywords: ["changelog", "history", "version", "update", "v1.31", "v1.25", "v1.24", "更新日志", "版本历史"]
+    intent: "Release history, changelog, v1.32 upgrade notes"
+    keywords: ["changelog", "history", "version", "update", "v1.32", "v1.25", "v1.24", "更新日志", "版本历史"]
     wiki: "09-版本历史.md"
-    source: ["docs/release-v1.31.md"]
-    symbols: ["v1.31"]
+    source: ["docs/release-v1.32.md"]
+    symbols: ["v1.32"]
     facts:
+      - "v1.32: Full merges the pure C# Android backend (DirectAdbTransport/WinUsbAdbTransport/Spake25519/SspiPairingTls, MediaFoundation H.264/D3D11/Win32 NativeVideoWindow, and self-written Android server) removing external adb.exe, scrcpy, FFmpeg, and SDL2 binaries, adds automatic Windows default playback device following for phone System Output, commits six C# pipeline fixes and SmartVolume curve tuning, and pools ADB/media/catalog caches with idle LOH compaction; across all editions (Full/Lite/Legacy), fixes tray long-name submenu overlap and adds bounded icon decode, 8s idle OSD release, and per-window theme dictionary loading."
       - "v1.31: Full restores aspect-preserving display0 main-display screen mirror with shared phone icon assets and GPU D3D11 rendering, adds per-device bidirectional text clipboard sync (64KiB cap, loop suppression), introduces friendly localized encoder labels with Android 29+ hardware detection and offline vendor fallback, adds 24/32/50 Mbps presets and a 120 fps limit option, uses 20ms PCM blocks and a bounded AudioTrack startup threshold, completes nine-language localization (838 keys) and fixes settings page crash on read-only binding; Lite/Legacy remain PC-only without phone modules."
       - "v1.30: Full adds optional Android phone audio routing, explicit phone speaker/Bluetooth output control, quick-panel phone peak meters, default-on SmartVolume and per-app virtual displays; desktop adds compact/full quick-panel app row layout options, 39 automation actions (current-app mic mute), config import preview and coalesced volume writes; Lite/Legacy exclude phone modules and NET8 builds are discontinued."
       - "v1.29: Expandable output endpoint volume panel, independent retained-device filter, deferred loading and event-driven incremental refresh; Shift wheel controls system volume. JSON/language and audio-meter work was reduced without a whole-app CPU claim."

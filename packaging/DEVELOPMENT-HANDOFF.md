@@ -1,8 +1,14 @@
 # 开发交接
 
-更新：2026-11-14。用户已要求将本轮闲时内存回收与资源精简改动提交 GitHub，并直接基于最新构建的 Full x64 版本打包微软商店 MSIX（仍为 `1.32` / `1.32.0.0`）。后续继续从本目录开发；Git 状态、运行包与商店包收据以实际 Git 和父容器最新记录为准。
+更新：2026-11-14。正在执行 `v1.32` 正式发布准备：已补齐 `docs/release-v1.32.md` 并同步十份 `README*.md` 元数据；随后切换到干净的 `master` 分支完成五目标发布构建与全套发布管道验证。Git 状态、发布产物收据与公开状态以实际 Git、CI / `gh` 结果和父容器最新记录为准。
 
-## 当前交付：闲时资源回收提交与 1.32 微软商店包
+## 当前交付：v1.32 正式发布文档与 README 元数据同步
+
+- 新增 [`docs/release-v1.32.md`](../docs/release-v1.32.md)，汇总 `v1.31..HEAD`（`ffc58a08..60dd463c`）全部正式更新：Full 版纯 C# 自研 Android 后端合入并移除外部 `adb.exe`/`scrcpy.exe`/FFmpeg/SDL2 第三方二进制、手机“系统输出”自动跟随 Windows 默认播放设备、自研管线六项修复、SmartVolume 曲线调参入库，以及全版本托盘长名称子菜单防重叠、图标/界面字典/OSD/ADB 缓冲与多媒体缓存闲时优化；明确说明五目标下载矩阵及 ARM64 实验性未真机实测等验证边界，不预填未产生构建的循环字节数。
+- 更新 [`docs/readme/shared.json`](../docs/readme/shared.json)（`release: "v1.32"`、`releaseDate: "2026-11-14"`、`releaseNotes: "docs/release-v1.32.md"`、`nextRelease: "v1.33"`、`arm64LastRelease: "v1.32"`）、[`docs/readme/generate.cjs`](../docs/readme/generate.cjs) AI 索引条目及全部 9 个语种本地化摘要，重新生成并通过 `node docs/readme/generate.cjs --check`（10 份 README 一致）。
+- 后续步骤：切回/快进本地 `master` 分支提交并推送 `origin/master`，随后运行 `Build-PortableRelease.ps1` 构建五目标正式候选包并执行完整本地检查（`Test-ReleasePipelineHarness`、`RuntimeChecks`、`EditionChecks`、`Run-WorkerChecks` 与 `-Stage FullPipeline -SkipBuild -DryRun`）；若本机 `gh` 未登录则按既定规则停止并交由用户认证或触发 `.github/workflows/release.yml` 正式发布。
+
+## 历史交付：闲时资源回收提交与 1.32 微软商店包
 
 - 本轮提交包含 `SonicRoute.AndroidAudio`（14 文件）、`SonicRoute`（16 文件）及 `checks/AndroidUiChecks/PhonePlacement.cs`（1 文件）共 31 项既有代码/检查改动及本次交接更新：
   - **ADB 与原生媒体资源精简**：ADB 包读取改为 `ArrayPool<byte>.Shared` 池化，WinUSB 传输缓冲收窄至 64 KiB POH 分配；新增 `AdbDevicePresence` 设备接口轻量探测与 `ReleaseIdleConnectionsAsync` 闲时连接清理；D3D11 渲染改用预编译着色器字节码与实例计数，补充 `MediaFoundationH264Decoder` 实例计数与 MTA COM 释放（`CoFreeUnusedLibrariesEx`）；目录缓存与手机存储补充 `TrimForIdle` 并在字节一致时复用 `IconPng` 引用。
