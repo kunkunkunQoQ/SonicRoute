@@ -20,9 +20,10 @@ PART I: AUTHORITATIVE ENGLISH LICENSE TEXT
    owner of SonicRoute.
 
    "Software" means the SonicRoute source code, documentation, and executable
-   binaries covered by this License starting from the license-migration commit
-   in the v1.32 series and all subsequent commits and releases, excluding any
-   Separable Third-Party Components.
+   binaries covered by this License effective November 14, 2026 (starting from
+   the license-migration commit 442dac3 in the v1.32 series) and all subsequent
+   commits, copies, forks, and releases, excluding any Separable Third-Party
+   Components.
 
    "You" (or "Your") means an individual or legal entity exercising permissions
    granted by this License.
@@ -59,18 +60,26 @@ PART I: AUTHORITATIVE ENGLISH LICENSE TEXT
    tools, or upstream-derived files included with or referenced by the
    repository that carry their own separate licenses.
 
-2. Grant of Rights (Free Use, Study, Modification, and Internal Enterprise Use)
+2. Grant of Rights (Free Use, Study, Copying, Modification, and Internal Use)
 
    Subject to full compliance with all terms and conditions of this License, the
    Copyright Holder grants You a worldwide, royalty-free, non-exclusive license
    to:
-   (a) view, download, study, and execute the Software for personal, educational,
-   research, non-profit, or internal commercial/enterprise purposes;
-   (b) modify the Software and create Derivative Works for personal use,
-   research, or Internal Use, with no obligation to publish internal-only
-   modifications; and
+   (a) view, download, copy, clone, excerpt, study, and execute the Software
+   for personal, educational, research, non-profit, or internal
+   commercial/enterprise purposes;
+   (b) modify, adapt, or reuse portions of the Software and create Derivative
+   Works for personal use, research, or Internal Use, with no obligation to
+   publish internal-only modifications; and
    (c) publicly Distribute unmodified copies or Derivative Works strictly free
    of charge and in full compliance with Sections 3, 4, and 7.
+
+   Mandatory Compliance for Any Copying or Reuse:
+   Effective November 14, 2026 (starting from commit 442dac3 onward), any
+   copying, cloning, downloading, excerpting, reproducing, reusing, modifying,
+   distributing, or other use of the Software—whether in whole or in part, and
+   whether in source code or binary form—is conditioned upon and must strictly
+   comply with all terms of this License.
 
    Clarification on Business Use vs. Commercial Exploitation:
    Internal commercial use of the Software by any company or enterprise for its
@@ -166,11 +175,16 @@ PART I: AUTHORITATIVE ENGLISH LICENSE TEXT
    respective licenses. Recipients must comply with all applicable third-party
    license terms and retain their notices when redistributing.
 
-8. Effective Scope and Preservation of Prior MIT Releases
+8. Effective Date, Scope, and Preservation of Prior MIT Releases
 
-   This License takes effect beginning with the license-migration commit in the
-   v1.32 series and governs all covered SonicRoute source code from that commit
-   forward, as well as all future versions and releases.
+   This License takes effect on November 14, 2026, beginning with the
+   license-migration commit (442dac3) in the v1.32 series, and governs all
+   covered SonicRoute source code, documentation, and binaries from that commit
+   forward as well as all future versions and releases. Starting from November
+   14, 2026 (commit 442dac3 onward), any act of copying, cloning, excerpting,
+   reproducing, reusing, adapting, modifying, or distributing any covered code
+   (whether verbatim or modified, in whole or in part) is strictly bound by
+   this License.
 
    Non-Retroactivity: All versions, releases, and commits previously published
    or distributed under the MIT License—specifically v1.31 and all earlier
@@ -239,11 +253,15 @@ PART II: 简体中文参考说明（仅供参考，以Part I英文权威文本�
    如需商业转卖、OEM/产品收费捆绑、闭源集成等超出本协议范围的权限，请通过
    https://github.com/kunkunkunQoQ/SonicRoute（或 https://github.com/kunkunkunQoQ）
    联系版权所有者申请正式书面商业授权，并说明申请主体、使用/分发场景及商业范围。
-8. 历史版本与第三方组件边界：
-   - 本协议从 v1.32 系列本次许可证迁移提交起对有权重新授权的代码及未来新版本
-     生效。此前已按 MIT 发布的版本（包括 v1.31 及更早版本，以及已按 MIT 发布
-     的初始 v1.32 版本提交 4e3138fcf9ca1b0dc43798ad2075109989c4c136 / 标签
-     v1.32）继续永久保留其既有 MIT 授权，本变更不追溯撤销既有授权。
+8. 生效日期、代码复制约束与历史版本/第三方边界：
+   - 生效日期（2026 年 11 月 14 日起）：本协议自 2026 年 11 月 14 日（v1.32 系列
+     许可证迁移提交 442dac3）起生效，涵盖该提交及之后的所有提交、版本与未来新
+     版本。自该日期与提交起，任何对本软件全部或部分源码、文档或二进制文件的
+     复制、拷贝、克隆、摘录、复用、修改、分发或使用行为，均必须严格遵守本协议
+     全部条款。
+   - 历史 MIT 权利保留：此前已按 MIT 发布的版本（包括 v1.31 及更早版本，以及
+     已按 MIT 发布的初始 v1.32 版本提交 4e3138fcf9ca1b0dc43798ad2075109989c4c136
+     / 标签 v1.32）继续永久保留其既有 MIT 授权，本变更不追溯撤销既有授权。
    - 第三方依赖组件（如 Concentus、NAudio、QRCoder、System.Management、
      System.Text.Json、Microsoft.Windows.CsWinRT）及不可由原作者单方面变更许可
      的历史文件（如 packaging/AndroidLab/native/ 下的 Apache-2.0 scrcpy 相关

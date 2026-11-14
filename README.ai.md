@@ -13,7 +13,7 @@ SCHEMA_SPEC:
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   license: "SonicRoute Source Available License 1.0 (Source Available, NOT OSI Open Source; free for personal & internal enterprise use; commercial resale, paid bundling, paid distribution, closed-source derivatives & official impersonation prohibited without written authorization; see LICENSE)"
-  license_transition: "Effective from the license-migration commit in the v1.32 series onward. Previously published MIT releases (v1.31 and earlier, plus initial MIT v1.32 release at commit 4e3138f) retain their MIT license grant without retroactive revocation. Third-party dependencies and Apache-2.0 files in packaging/AndroidLab/native/ retain their original licenses."
+  license_transition: "Effective November 14, 2026 (from license-migration commit 442dac3 in the v1.32 series onward), any copying, cloning, excerpting, reuse, modification, or distribution of covered SonicRoute code must comply with LICENSE. Previously published MIT releases (v1.31 and earlier, plus initial MIT v1.32 release at commit 4e3138f) retain their MIT license grant without retroactive revocation. Third-party dependencies and Apache-2.0 files in packaging/AndroidLab/native/ retain their original licenses."
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
   download_latest: "https://github.com/kunkunkunQoQ/SonicRoute/releases/latest"
   store_url: "https://apps.microsoft.com/detail/9NQZGRTPM1NT"

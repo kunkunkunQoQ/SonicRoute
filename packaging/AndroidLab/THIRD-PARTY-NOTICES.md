@@ -14,7 +14,7 @@ This is the online entry for the third-party notices required exclusively by **S
 
 | Component | Full text |
 | --- | --- |
-| SonicRoute (from license-migration commit onward) | [SonicRoute Source Available License 1.0](../../LICENSE) |
+| SonicRoute (effective 2026-11-14, commit `442dac3` onward) | [SonicRoute Source Available License 1.0](../../LICENSE) |
 | SonicRoute and its Android helpers (v1.31 and earlier, and initial v1.32 release `4e3138f`) | [Historical MIT notice](#sonicroute-historical-mit-notice-and-catalog-helper) |
 | Concentus / Opus | [Copyright, redistribution conditions and disclaimer](#concentus-222) |
 | NAudio | [MIT and source-file notices](#naudio-221) |
@@ -30,7 +30,7 @@ This is the online entry for the third-party notices required exclusively by **S
 
 ## SonicRoute Historical MIT Notice and Catalog Helper
 
-Starting from the license-migration commit in the **v1.32** series onward, original SonicRoute code (including `android-helper/`) is governed by the **SonicRoute Source Available License (Version 1.0)** in [`LICENSE`](../../LICENSE). Previously published MIT versions—specifically **v1.31 and all earlier releases**, as well as the **initial MIT-licensed v1.32 release (commit `4e3138fcf9ca1b0dc43798ad2075109989c4c136` / tag `v1.32`)**—retain their MIT License grant without retroactive revocation. The catalog helper in `android-helper/Catalog.java` was originally written under MIT in `v1.30`/`v1.31` (compiled into `AndroidRuntime/sonicroute-catalog.jar` via `Build-Catalog.ps1`); the historical MIT notice preserved for those prior MIT releases is reproduced below:
+Effective **November 14, 2026** (starting from license-migration commit `442dac3` in the **v1.32** series onward), all covered SonicRoute source code, documentation, and binaries (including `android-helper/`) are governed by the **SonicRoute Source Available License (Version 1.0)** in [`LICENSE`](../../LICENSE); any copying, cloning, excerpting, reuse, modification, or distribution of covered code from that date and commit onward must comply with its terms. Previously published MIT versions—specifically **v1.31 and all earlier releases**, as well as the **initial MIT-licensed v1.32 release (commit `4e3138fcf9ca1b0dc43798ad2075109989c4c136` / tag `v1.32`)**—retain their MIT License grant without retroactive revocation. The catalog helper in `android-helper/Catalog.java` was originally written under MIT in `v1.30`/`v1.31` (compiled into `AndroidRuntime/sonicroute-catalog.jar` via `Build-Catalog.ps1`); the historical MIT notice preserved for those prior MIT releases is reproduced below:
 
 Copyright (c) 2026 kunkunkunQoQ
 
