@@ -14,20 +14,23 @@ This is the online entry for the third-party notices required exclusively by **S
 
 | Component | Full text |
 | --- | --- |
-| SonicRoute and its Android helpers | [MIT](../../LICENSE) |
+| SonicRoute (complete project offered under the new license from commit `442dac3`) | [SonicRoute Source Available License 1.0](../../LICENSE) |
+| SonicRoute and its Android helpers (historical MIT versions, regardless of when obtained or used) | [Historical MIT notice](#sonicroute-historical-mit-notice-and-catalog-helper) |
 | Concentus / Opus | [Copyright, redistribution conditions and disclaimer](#concentus-222) |
 | NAudio | [MIT and source-file notices](#naudio-221) |
 | Android platform-tools / ADB | [Complete aggregate notice](../../AndroidRuntime/ADB-NOTICE.txt) |
 | scrcpy audio server | [Apache 2.0](../../AndroidRuntime/SCRCPY-LICENSE.txt) |
 | Modified scrcpy video client/server | [Apache 2.0](video-licenses/scrcpy-LICENSE.txt) |
+| Historical scrcpy lab integration patches (`packaging/AndroidLab/native/`) | Apache 2.0 (see file headers) |
 | FFmpeg libraries | [LGPL 2.1 or later](video-licenses/FFmpeg-LICENSE.txt) |
 | SDL2 | [zlib license](video-licenses/SDL2-LICENSE.txt) |
 | zlib | [zlib license](video-licenses/zlib-LICENSE.txt) |
 | QRCoder | [MIT](QRCoder-LICENSE.txt) |
+| System.Management, System.Text.Json, Microsoft.Windows.CsWinRT | MIT (NuGet package metadata) |
 
-## SonicRoute and its Android catalog helper
+## SonicRoute Historical MIT Notice and Catalog Helper
 
-The catalog helper in `SonicRoute/android-helper/Catalog.java` is newly written in the SonicRoute MIT project copy. `Build-Catalog.ps1` compiles it with `javac`, converts it with D8, and creates `AndroidRuntime/sonicroute-catalog.jar`.
+From 2026-11-14 at commit 442dac3, the complete main-branch project, including previously written code, is offered under this License to the extent the copyright holder has the right to license it. This includes v1.32 without waiting for v1.33; Source Available revisions must be separately identified with their source commit and license. Original v1.32 (4e3138f / tag v1.32-mit-original) and its original artifacts remain MIT. Prior MIT versions (including v1.31 and earlier) retain their rights for continued use, modification and redistribution, even for copies obtained today or later. Third-party and non-relicensable code retain their licenses (see LICENSE and the component notices below). The catalog helper in `android-helper/Catalog.java` was originally published under MIT in v1.30/v1.31; its historical MIT notice remains valid and is reproduced below:
 
 Copyright (c) 2026 kunkunkunQoQ
 
@@ -36,6 +39,11 @@ Permission is hereby granted, free of charge, to any person obtaining a copy of 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### Current .NET Dependencies and Historical Apache-2.0 Lab Files
+
+- **Current `.NET` NuGet dependencies** (`SonicRoute`, `SonicRoute.Core`, `SonicRoute.AndroidAudio`, `StoreInterop`): `System.Management 8.0.0` (MIT), `System.Text.Json 8.0.5` (MIT, `net48` target), `Microsoft.Windows.CsWinRT 2.3.1` (MIT), `QRCoder 1.7.0` (MIT, Full only), `NAudio.Wasapi 2.2.1` / `NAudio.Core 2.2.1` (MIT + Ray Molenkamp zlib source notice, Full only), and `Concentus 2.2.2` (BSD-style / Opus license, Full only). All retain their original permissive licenses.
+- **Historical `packaging/AndroidLab/native/` integration patches and helpers**: Files carrying `SPDX-License-Identifier: Apache-2.0` (including `virtual_resize.patch`, `OwnedAppMonitor.java`, `OwnedDisplayPolicy.java`, `PairingControl.java`, `PhoneDisplaySizing.java`, `UnicodeInputBridge.java`, `flex_resize.h`, `ime_routing.h`, `mirror_resize.h`, and `resize_packet.h`) remain under **Apache-2.0** and are not relicensed.
 
 ## Concentus 2.2.2
 

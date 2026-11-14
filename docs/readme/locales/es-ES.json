@@ -79,7 +79,15 @@
     "footerTitle": "Un huevo de Pascua: ayer y mañana",
     "guideTitle": "Guía de usuario (en chino)",
     "downloadColumn": "Descargar",
-    "license": "Licencia MIT",
+    "license": "Source Available 1.0",
+    "licenseTitle": "Licencia",
+    "thirdPartyNotices": "avisos de terceros",
+    "licensePoints": [
+        "**Source Available (no es código abierto aprobado por la OSI)**: Según {licenseLink} (SonicRoute Source Available License 1.0), cualquiera puede usar, ver, estudiar y modificar SonicRoute de forma gratuita, incluido el uso interno en empresas.",
+        "**Redistribución pública y restricciones**: La distribución pública de obras derivadas exige conservar los avisos de derechos de autor, atribuir a SonicRoute y al repositorio original de GitHub, señalar las modificaciones y proporcionar el código fuente completo bajo esta misma licencia. Quedan prohibidos la reventa comercial, el empaquetado de pago, la distribución de pago, las versiones de código cerrado y la suplantación oficial sin autorización previa por escrito (consulte {licenseLink} para licencias comerciales).",
+        "**Alcance y derechos MIT conservados**: Desde el 2026-11-14, commit 442dac3, el proyecto completo de la rama principal, incluido el código anterior, se ofrece bajo esta licencia en la medida en que el titular pueda autorizarlo. Incluye v1.32 sin esperar a v1.33. Las revisiones Source Available deben identificarse por separado con su commit fuente y licencia. La v1.32 original (4e3138f / etiqueta v1.32-mit-original) y sus archivos originales siguen bajo MIT. Los derechos MIT de versiones anteriores (v1.31 y anteriores) siguen permitiendo usos, modificaciones y redistribuciones posteriores, incluso para copias obtenidas hoy o después. El código de terceros y el que no pueda relicenciarse conservan sus licencias (véase {noticesLink}).",
+        "**v1.32 source revision: v1.32-scsl-source-20261114**: This source snapshot is re-offered under SCSL-1.0, based on original commit 4e3138fcf9ca1b0dc43798ad2075109989c4c136 preserved at tag v1.32-mit-original. Program implementation and version are unchanged. Existing v1.32 binary release assets remain unchanged, with their original MIT rights. See [LICENSE-REVISION.md](LICENSE-REVISION.md)."
+    ],
     "features": [
         "**Enrutamiento bidireccional y separación de audio por app (reproducción + grabación):** asigne dispositivos de salida y entrada específicos a cada aplicación (juegos y voz a auriculares, música a altavoces). La configuración se guarda de forma nativa en Windows incluso al cerrar el programa.",
         "**Seguimiento inteligente del primer plano y ajuste ciego con la rueda.** Los eventos del sistema detectan la aplicación activa en milisegundos. Desplace la rueda sobre la bandeja del sistema para ajustar el volumen o use Alt+rueda para cambiar de dispositivo, con avisos OSD y silencio global de micrófono.",

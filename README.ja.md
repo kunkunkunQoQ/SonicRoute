@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | **日本語** | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian で支援](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian で支援](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **アプリごとに、音声の出力先デバイスを選べます。**
 
@@ -12,7 +12,7 @@ SonicRoute は Windows の通知領域に常駐するオーディオツールで
 
 📥 [最新リリースをダウンロード](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [ユーザーガイド](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡体字中国語）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI 言語 · MIT ライセンス
+Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI 言語 · [Source Available 1.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="SonicRoute ライブデモ：モバイルアプリの音声を PC クイックパネルへドラッグして出力先を切り替え"></a>
@@ -135,6 +135,13 @@ A：検出はシステムイベントを優先し、必要な場合に限り1秒
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**：Windows 向けオーディオプレーヤーです。「プログラムを起動」アクションと組み合わせると、ホットキーで効果音を再生できます。 [設定ガイド（簡体字中国語）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
 - **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**：卵から飛び出した魔法少女と、手伝うたびに事態が悪化するハチャメチャな日常を描くギャグ漫画。
+
+## 📜 ライセンス
+
+- **Source Available（OSI 承認のオープンソースではありません）**：[LICENSE](LICENSE)（SonicRoute Source Available License 1.0）に基づき、企業内部での無料利用を含め、誰でも無料で利用・閲覧・学習・改変できます。
+- **公開再配布と制限事項**：派生物を公開配布する場合は、著作権表示・SonicRoute の名称と元の GitHub リポジトリの明記・変更点の記載、および同一ライセンスでの対応ソースコードの無償提供が必須です。書面による事前許諾なく、商用再販・有料バンドル・有償配布・クローズドソース配布・公式なりすましを行うことは禁止されています（商用ライセンスの申請方法は [LICENSE](LICENSE) を参照）。
+- **適用範囲と従来の MIT の権利**：2026-11-14 のコミット 442dac3 から、著作権者が許諾できる範囲で、以前に書かれたコードを含むメインブランチのプロジェクト全体を本ライセンスで提供します。v1.32 系列も対象で、v1.33 を待ちません。Source Available 改訂版は別途識別し、ソースのコミットとライセンスを明記します。元の v1.32（4e3138f / タグ v1.32-mit-original）と元の配布物は MIT のままです。従来の MIT 版（v1.31 以前を含む）の権利は取り消されず、今日以降に入手したコピーでも MIT に従って使用、変更、再配布できます。第三者および再許諾できないコードは元のライセンスを維持します（[サードパーティライセンス表記](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)）。
+- **v1.32 source revision: v1.32-scsl-source-20261114**: This source snapshot is re-offered under SCSL-1.0, based on original commit 4e3138fcf9ca1b0dc43798ad2075109989c4c136 preserved at tag v1.32-mit-original. Program implementation and version are unchanged. Existing v1.32 binary release assets remain unchanged, with their original MIT rights. See [LICENSE-REVISION.md](LICENSE-REVISION.md).
 
 ---
 

@@ -79,7 +79,15 @@
     "footerTitle": "Ein Easter Egg: gestern und morgen",
     "guideTitle": "Benutzerhandbuch (Chinesisch)",
     "downloadColumn": "Herunterladen",
-    "license": "MIT-Lizenz",
+    "license": "Source Available 1.0",
+    "licenseTitle": "Lizenz",
+    "thirdPartyNotices": "Hinweise zu Drittanbietern",
+    "licensePoints": [
+        "**Source Available (kein OSI-anerkanntes Open Source)**: Gemäß {licenseLink} (SonicRoute Source Available License 1.0) darf jeder SonicRoute kostenlos nutzen, einsehen, studieren und verändern, einschließlich kostenloser interner Unternehmensnutzung.",
+        "**Öffentliche Weitergabe & Einschränkungen**: Die öffentliche Verbreitung abgeleiteter Werke erfordert die Beibehaltung der Urheberrechtshinweise, Nennung von SonicRoute und des ursprünglichen GitHub-Repositorys, Kennzeichnung aller Änderungen sowie Bereitstellung des vollständigen Quellcodes unter derselben Lizenz. Kommerzieller Weiterverkauf, kostenpflichtige Bündelung, bezahlte Verbreitung, Closed-Source-Veröffentlichung und Vortäuschen einer offiziellen Version sind ohne vorherige schriftliche Genehmigung untersagt (Informationen zur kommerziellen Lizenzierung siehe {licenseLink}).",
+        "**Geltungsbereich & MIT-Rechte**: Ab 2026-11-14, Commit 442dac3, wird das vollständige Projekt des Hauptbranches einschließlich zuvor geschriebenen Codes unter dieser Lizenz angeboten, soweit der Rechteinhaber dazu berechtigt ist. Dies umfasst v1.32 ohne Warten auf v1.33. Source-Available-Revisionen müssen gesondert mit Quellcode-Commit und Lizenz gekennzeichnet sein. Das ursprüngliche v1.32 (4e3138f / Tag v1.32-mit-original) und seine ursprünglichen Dateien bleiben MIT-lizenziert. MIT-Rechte früherer Versionen (v1.31 und älter) bleiben für weitere Nutzung, Änderung und Verbreitung erhalten, auch für erst heute oder später erworbene Kopien. Drittanbieter-Code und nicht neu lizenzierbarer Code behalten ihre Lizenzen (siehe {noticesLink}).",
+        "**v1.32 source revision: v1.32-scsl-source-20261114**: This source snapshot is re-offered under SCSL-1.0, based on original commit 4e3138fcf9ca1b0dc43798ad2075109989c4c136 preserved at tag v1.32-mit-original. Program implementation and version are unchanged. Existing v1.32 binary release assets remain unchanged, with their original MIT rights. See [LICENSE-REVISION.md](LICENSE-REVISION.md)."
+    ],
     "features": [
         "**App-unabhängiges Audio-Routing (Wiedergabe + Aufnahme):** Weisen Sie Apps individuelle Ausgabe- und Eingabegeräte zu – Spiele und Chat auf das Headset, Musik auf die Lautsprecher. Einstellungen bleiben nativ in Windows erhalten, auch wenn SonicRoute beendet wird.",
         "**Intelligenter Vordergrund-Fokus und blinde Tray-Rad-Steuerung.** Systemereignisse erfassen die aktive Audio-App in Millisekunden. Scrollen Sie direkt über dem Infobereich, um die Lautstärke anzupassen oder mit Alt+Mausrad Ausgabegeräte zu wechseln, ergänzt durch OSD-Hinweise und globale Mikrofon-Stummschaltung.",

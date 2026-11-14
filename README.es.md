@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | **Español** | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Apoyar en Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Apoyar en Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **Envía el audio de cada aplicación al dispositivo que elijas.**
 
@@ -12,7 +12,7 @@ Escucha música por los altavoces y juegos o llamadas con los auriculares. Sonic
 
 📥 [Descargar la última versión](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [Guía de usuario](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (en chino)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de interfaz · Licencia MIT
+Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nueve idiomas de interfaz · [Source Available 1.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Demostración de SonicRoute: arrastrar audio de app móvil al panel rápido del PC y cambiar la salida"></a>
@@ -135,6 +135,13 @@ La Wiki está actualmente en chino simplificado.
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: Un reproductor de audio para Windows. Combínalo con la acción de iniciar programas de la automatización para reproducir efectos de sonido mediante atajos. [Guía de configuración (en chino)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
 - **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**: Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nuevo desastre cada vez que intenta ayudar.
+
+## 📜 Licencia
+
+- **Source Available (no es código abierto aprobado por la OSI)**: Según [LICENSE](LICENSE) (SonicRoute Source Available License 1.0), cualquiera puede usar, ver, estudiar y modificar SonicRoute de forma gratuita, incluido el uso interno en empresas.
+- **Redistribución pública y restricciones**: La distribución pública de obras derivadas exige conservar los avisos de derechos de autor, atribuir a SonicRoute y al repositorio original de GitHub, señalar las modificaciones y proporcionar el código fuente completo bajo esta misma licencia. Quedan prohibidos la reventa comercial, el empaquetado de pago, la distribución de pago, las versiones de código cerrado y la suplantación oficial sin autorización previa por escrito (consulte [LICENSE](LICENSE) para licencias comerciales).
+- **Alcance y derechos MIT conservados**: Desde el 2026-11-14, commit 442dac3, el proyecto completo de la rama principal, incluido el código anterior, se ofrece bajo esta licencia en la medida en que el titular pueda autorizarlo. Incluye v1.32 sin esperar a v1.33. Las revisiones Source Available deben identificarse por separado con su commit fuente y licencia. La v1.32 original (4e3138f / etiqueta v1.32-mit-original) y sus archivos originales siguen bajo MIT. Los derechos MIT de versiones anteriores (v1.31 y anteriores) siguen permitiendo usos, modificaciones y redistribuciones posteriores, incluso para copias obtenidas hoy o después. El código de terceros y el que no pueda relicenciarse conservan sus licencias (véase [avisos de terceros](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
+- **v1.32 source revision: v1.32-scsl-source-20261114**: This source snapshot is re-offered under SCSL-1.0, based on original commit 4e3138fcf9ca1b0dc43798ad2075109989c4c136 preserved at tag v1.32-mit-original. Program implementation and version are unchanged. Existing v1.32 binary release assets remain unchanged, with their original MIT rights. See [LICENSE-REVISION.md](LICENSE-REVISION.md).
 
 ---
 

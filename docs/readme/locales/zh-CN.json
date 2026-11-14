@@ -79,7 +79,15 @@
     "footerTitle": "关于昨天是否经过明天的讨论",
     "guideTitle": "使用指南",
     "downloadColumn": "下载",
-    "license": "MIT 开源",
+    "license": "源码可见协议 1.0",
+    "licenseTitle": "许可证与授权说明",
+    "thirdPartyNotices": "第三方许可说明",
+    "licensePoints": [
+        "**源码可见协议（非 OSI 开源许可证）**：依据 {licenseLink}（SonicRoute Source Available License 1.0），任何人均可免费使用、查看、学习与修改源码，包括企业内部免费使用。",
+        "**公开发布与限制**：公开分发衍生作品时须保留版权声明、注明 SonicRoute 项目名称与 GitHub 原始仓库、标注修改内容，并以同协议免费提供完整对应源码；未经书面授权，禁止商业转卖、收费捆绑、付费分发、闭源分发及冒充官方（商业授权申请见 {licenseLink}）。",
+        "**生效范围与历史 MIT 权利**：自 2026-11-14 提交 442dac3 起，在版权所有者有权授权的范围内，主分支完整项目（包括此前编写的代码）统一以本协议提供。新授权发行范围包括 v1.32 系列，无需等待 v1.33；其 Source Available 修订版须独立标识并注明源码提交及许可。原始 v1.32（4e3138f / 标签 v1.32-mit-original）及原始发行产物仍为 MIT。历史 MIT 版本（含 v1.31 及更早版本）的权利不被撤销，即使今天或以后才取得副本，也可继续按 MIT 使用、修改及再分发。第三方及不可重新授权代码保留原许可（见 {noticesLink}）。",
+        "**v1.32 source revision: v1.32-scsl-source-20261114**: This source snapshot is re-offered under SCSL-1.0, based on original commit 4e3138fcf9ca1b0dc43798ad2075109989c4c136 preserved at tag v1.32-mit-original. Program implementation and version are unchanged. Existing v1.32 binary release assets remain unchanged, with their original MIT rights. See [LICENSE-REVISION.md](LICENSE-REVISION.md)."
+    ],
     "features": [
         "**应用独立声音分流与双向路由（播放 + 录音）**：为每个应用分别指定输出与输入设备，让游戏与语音走耳机和麦克风，音乐走音箱。配置由 Windows 原生持久化，退出软件依然生效，不破坏系统混音器配置。",
         "**前台焦点智能跟随与托盘滚轮盲操**：系统事件驱动秒级锁定当前前台有声应用；支持在任务栏托盘滚动滚轮盲调音量，按住 Alt 滚动即时换轨设备，配合屏幕浮动 OSD 提示与全局麦克风静音，无需切出窗口。",
