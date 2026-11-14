@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | **Русский** | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **Направляйте звук каждого приложения на нужное вам устройство.**
 
@@ -12,7 +12,7 @@
 
 📥 [Скачать последнюю версию](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [Руководство пользователя](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Вики (на китайском)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) · Девять языков интерфейса · Лицензия MIT
+Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) · Девять языков интерфейса · [Source Available 1.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Демонстрация SonicRoute: перетаскивание аудио мобильного приложения на быструю панель ПК и выбор устройства вывода"></a>
@@ -135,6 +135,12 @@ A: Обнаружение в первую очередь использует с
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: Аудиоплеер для Windows. Используйте действие запуска программы в автоматизации, чтобы включать звуковые эффекты с помощью горячих клавиш. [Руководство по настройке (на китайском)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
 - **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**: Абсурдная комедия о девочке-волшебнице, которая вылупилась из яйца и устраивает новый переполох при каждой попытке помочь.
+
+## 📜 Лицензия
+
+- **Source Available (не является открытой лицензией OSI)**: Согласно [LICENSE](LICENSE) (SonicRoute Source Available License 1.0), любой пользователь может бесплатно использовать, просматривать, изучать и изменять SonicRoute, включая бесплатное внутреннее использование в компаниях.
+- **Публичное распространение и ограничения**: При публичном распространении производных версий необходимо сохранять уведомления об авторских правах, указывать SonicRoute и исходный репозиторий GitHub, отмечать внесённые изменения и предоставлять полный исходный код на условиях этой же лицензии. Коммерческая перепродажа, платное включение в состав продуктов, платное распространение, распространение с закрытым исходным кодом и выдача за официальную версию запрещены без предварительного письменного разрешения (условия коммерческого лицензирования см. в [LICENSE](LICENSE)).
+- **Переход версий и сторонние компоненты**: Действует начиная с коммита перехода на новую лицензию в серии v1.32 и далее. Ранее опубликованные под MIT версии (v1.31 и ниже, а также первоначальный выпуск v1.32 под MIT в коммите 4e3138f) сохраняют права MIT без обратной силы, а сторонние компоненты сохраняют свои исходные лицензии (см. [уведомления о сторонних компонентах](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
 
 ---
 

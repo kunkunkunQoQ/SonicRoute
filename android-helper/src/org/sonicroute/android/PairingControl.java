@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-SonicRoute-Source-Available-1.0
 package org.sonicroute.android;
 
 import android.os.IBinder;
@@ -7,7 +7,7 @@ import java.lang.reflect.Array;
 import java.util.Map;
 
 /**
- * Standalone MIT wireless ADB host unpairing helper eliminating runtime dependence on third-party server binaries.
+ * Standalone SonicRoute wireless ADB host unpairing helper eliminating runtime dependence on third-party server binaries.
  * Preserves the {@code SR_UNPAIR_NOT_PAIRED} / {@code SR_UNPAIR_REQUESTED} stdout contract expected by
  * {@code AndroidWirelessConnection.UnpairAsync}.
  */

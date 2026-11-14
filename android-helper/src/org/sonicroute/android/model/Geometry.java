@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-SonicRoute-Source-Available-1.0
 package org.sonicroute.android.model;
 
 import android.graphics.Rect;

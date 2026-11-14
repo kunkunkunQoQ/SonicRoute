@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | **한국어** | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **앱마다 원하는 오디오 장치를 지정하세요.**
 
@@ -12,7 +12,7 @@ SonicRoute는 Windows 알림 영역에 상주하는 오디오 유틸리티입니
 
 📥 [최신 릴리스 다운로드](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [사용자 가이드](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개 언어 지원 · MIT 라이선스
+Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개 언어 지원 · [Source Available 1.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="SonicRoute 실시간 데모: 모바일 앱 오디오를 PC 빠른 패널로 드래그해 출력 장치 전환"></a>
@@ -135,6 +135,12 @@ A: 감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: Windows용 오디오 플레이어입니다. 자동화의 ‘프로그램 실행’ 동작과 함께 사용하면 단축키로 효과음을 재생할 수 있습니다. [설정 가이드(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
 - **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**: 달걀에서 튀어나온 마법소녀가 도와주려 할 때마다 일이 더 꼬이는 황당한 일상을 그린 개그 만화입니다.
+
+## 📜 라이선스
+
+- **Source Available(OSI 승인 오픈 소스가 아님)**: [LICENSE](LICENSE)(SonicRoute Source Available License 1.0)에 따라 기업 내부 무료 사용을 포함해 누구나 무료로 사용, 열람, 학습 및 수정할 수 있습니다.
+- **공개 재배포 및 제한 사항**: 파생 저작물을 공개 배포할 때는 저작권 표시, SonicRoute 프로젝트 이름 및 원본 GitHub 저장소 표기, 수정 내역 명시, 동일 라이선스에 따른 전체 소스 코드 무상 제공이 필수입니다. 사전 서면 허가 없이 상업적 재판매, 유료 번들링, 유료 배포, 비공개 소스 배포 및 공식 사칭은 금지됩니다(상업적 라이선스 신청은 [LICENSE](LICENSE) 참조).
+- **버전 전환 및 서드파티**: 본 라이선스는 v1.32 시리즈의 이번 전환 커밋부터 적용됩니다. 이전에 MIT로 공개된 버전(v1.31 이하 및 커밋 4e3138f의 초기 MIT v1.32 릴리스)은 MIT 권리를 영구 유지하며, 서드파티 구성 요소는 각 원 라이선스를 따릅니다([서드파티 라이선스 고지](packaging/AndroidLab/THIRD-PARTY-NOTICES.md) 참조).
 
 ---
 

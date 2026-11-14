@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-SonicRoute-Source-Available-1.0
 package org.sonicroute.android.control;
 
 import android.os.SystemClock;

@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | **繁體中文** | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: MIT](https://img.shields.io/github/license/kunkunkunQoQ/SonicRoute?color=4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![在 Afdian 支援我們](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![在 Afdian 支援我們](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **將每個應用程式的音訊輸出至您選擇的裝置。**
 
@@ -12,7 +12,7 @@ SonicRoute 是常駐於 Windows 系統匣的音訊工具：可為個別應用程
 
 📥 [下載最新版本](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介面語言 · MIT 授權
+Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介面語言 · [原始碼可見授權 1.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="SonicRoute 即時示範：將手機應用程式音訊拖曳至電腦快速面板並切換輸出裝置"></a>
@@ -135,6 +135,12 @@ A：偵測優先使用系統事件，必要時以每秒一次的快照檢查作�
 
 - **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**：Windows 音訊播放器。搭配「啟動程式」動作，即可透過快速鍵播放音效。 [設定指南（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
 - **[小躍的奇妙日常](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**：從雞蛋裡蹦出來的魔法少女，以及她越幫越忙的離譜日常。
+
+## 📜 授權條款說明
+
+- **原始碼可見協議（非 OSI 開源授權）**：依據 [LICENSE](LICENSE)（SonicRoute Source Available License 1.0），任何人皆可免費使用、檢視、學習與修改原始碼，包含企業內部免費使用。
+- **公開發布與限制**：公開分發衍生作品時須保留版權聲明、註明 SonicRoute 專案名稱與 GitHub 原始倉庫、標註修改內容，並以同協議免費提供完整對應原始碼；未經書面授權，禁止商業轉賣、收費綑綁、付費分發、閉源分發及冒充官方（商業授權申請詳見 [LICENSE](LICENSE)）。
+- **版本過渡與第三方元件**：本協議自 v1.32 系列本次遷移提交起對後續程式碼與新版本生效；此前已依 MIT 發布的版本（v1.31 及以前，以及已發布的初始 MIT 版 v1.32 提交 4e3138f）繼續永久保留 MIT 授權，第三方元件保留各自原有授權條款（詳見 [第三方授權聲明](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)）。
 
 ---
 

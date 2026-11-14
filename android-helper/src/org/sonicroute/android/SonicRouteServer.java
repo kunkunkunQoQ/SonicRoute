@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-SonicRoute-Source-Available-1.0
 package org.sonicroute.android;
 
 import android.os.Build;
@@ -27,7 +27,7 @@ import org.sonicroute.android.video.VideoCaptureSource;
 import org.sonicroute.android.video.VirtualDisplaySource;
 
 /**
- * Self-authored MIT Android streaming and control server entry point replacing third-party server binaries.
+ * Self-authored SonicRoute Android streaming and control server entry point replacing third-party server binaries.
  */
 public final class SonicRouteServer {
     private SonicRouteServer() {

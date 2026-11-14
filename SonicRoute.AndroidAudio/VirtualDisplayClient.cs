@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 
 namespace SonicRoute.AndroidAudio;
 
-/// <summary>Virtual-display runtime facade backed exclusively by SonicRoute's MIT catalog jar.</summary>
+/// <summary>Virtual-display runtime facade backed exclusively by SonicRoute's self-authored catalog jar.</summary>
 public sealed class VirtualDisplayRuntime(AdbClient adb)
 {
     public string DirectoryPath => adb.RuntimeDirectory;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-SonicRoute-Source-Available-1.0
 package org.sonicroute.android.control;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
@@ -29,7 +29,7 @@ import java.util.concurrent.FutureTask;
 import org.sonicroute.android.util.ServerLog;
 
 /**
- * MIT Unicode text commit bridge backed by a lazy shared {@link UiAutomation} connection
+ * SonicRoute Unicode text commit bridge backed by a lazy shared {@link UiAutomation} connection
  * ({@code eventTypes = 0}) over {@code localabstract:sonicroute-unicode-v1} so concurrent
  * virtual display processes share a single shell accessibility slot without polling.
  */

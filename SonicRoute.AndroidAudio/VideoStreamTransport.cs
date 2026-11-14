@@ -89,7 +89,7 @@ public sealed class DelegateVideoStreamTransport(VideoStreamTransportFactory fac
         => factory(request, cancellationToken);
 }
 
-/// <summary>Video transport: pushes the MIT server jar if needed, launches app_process via IAdbTransport, and opens direct localabstract streams.</summary>
+/// <summary>Video transport: pushes the SonicRoute server jar if needed, launches app_process via IAdbTransport, and opens direct localabstract streams.</summary>
 public sealed class AdbVideoStreamTransport : IVideoStreamTransport
 {
     private const string RemoteVideoServerPath = "/data/local/tmp/sonicroute-video-server.jar";

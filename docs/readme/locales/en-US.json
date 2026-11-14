@@ -79,7 +79,14 @@
     "footerTitle": "An Easter egg: yesterday and tomorrow",
     "guideTitle": "User guide (Chinese)",
     "downloadColumn": "Download",
-    "license": "MIT licensed",
+    "license": "Source Available 1.0",
+    "licenseTitle": "License",
+    "thirdPartyNotices": "third-party notices",
+    "licensePoints": [
+        "**Source Available (not OSI Open Source)**: Under {licenseLink} (SonicRoute Source Available License 1.0), anyone may freely use, view, study, and modify SonicRoute, including free internal enterprise use.",
+        "**Public redistribution & restrictions**: Publicly distributing derivative works requires retaining copyright notices, attributing SonicRoute and the original GitHub repository, marking modifications, and providing complete corresponding source code under this same license. Commercial resale, paid bundling, paid distribution, closed-source distribution, and official impersonation are prohibited without prior written authorization (see {licenseLink} for commercial licensing).",
+        "**Version transition & third-party licenses**: Effective from the license-migration commit in the v1.32 series onward. Previously published MIT releases (v1.31 and earlier, as well as the initial MIT-licensed v1.32 release at commit 4e3138f) permanently retain their MIT rights, and third-party components retain their original licenses (see {noticesLink})."
+    ],
     "features": [
         "**Independent app audio routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.",
         "**Smart foreground focus and tray wheel blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust volume or Alt+scroll to switch devices, paired with on-screen OSD feedback and global mic mute, without leaving your active window.",

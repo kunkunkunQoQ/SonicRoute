@@ -1,21 +1,253 @@
-MIT License
+SonicRoute Source Available License (Version 1.0)
 
 Copyright (c) 2026 kunkunkunQoQ
+Project: SonicRoute
+Repository: https://github.com/kunkunkunQoQ/SonicRoute
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+IMPORTANT NOTICE: THIS IS A SOURCE AVAILABLE LICENSE, NOT AN OPEN SOURCE
+INITIATIVE (OSI) APPROVED OPEN SOURCE LICENSE. Because it restricts commercial
+resale, paid distribution, and closed-source redistribution of modified works,
+it does not qualify as "Open Source" under the Open Source Definition or as
+"Free Software".
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+--------------------------------------------------------------------------------
+PART I: AUTHORITATIVE ENGLISH LICENSE TEXT
+--------------------------------------------------------------------------------
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. Definitions
+
+   "Copyright Holder" means kunkunkunQoQ, the original author and copyright
+   owner of SonicRoute.
+
+   "Software" means the SonicRoute source code, documentation, and executable
+   binaries covered by this License starting from the license-migration commit
+   in the v1.32 series and all subsequent commits and releases, excluding any
+   Separable Third-Party Components.
+
+   "You" (or "Your") means an individual or legal entity exercising permissions
+   granted by this License.
+
+   "Derivative Work" means any work based upon, adapted from, translated from,
+   or incorporating the Software or any substantial portion thereof, whether in
+   source code or compiled/binary form, including modifications, forks, ports,
+   and combined works.
+
+   "Internal Use" means installing, running, studying, testing, or modifying the
+   Software solely by You or within Your organization (including Your employees
+   and contractors acting exclusively for Your organization's internal business
+   or operational purposes), without making the Software or any Derivative Work
+   available externally to third parties.
+
+   "Distribute" (or "Distribution") means publishing, releasing, sharing,
+   transmitting, hosting for download, bundling, or otherwise making the
+   Software or a Derivative Work available in source or binary form to any
+   third party outside Your household or organization.
+
+   "Commercial Exploitation" means any Distribution or external provision of the
+   Software or a Derivative Work in exchange for direct or indirect monetary or
+   commercial consideration, including without limitation:
+   (a) selling, reselling, renting, leasing, or sublicensing copies for a fee;
+   (b) bundling or packaging the Software or a Derivative Work with paid
+   software, paid hardware/devices, commercial installers, or monetized adware;
+   (c) charging fees, subscriptions, paywalls, paid memberships, VIP download
+   fees, or paid support prerequisites for access to the Software or a
+   Derivative Work; or
+   (d) offering the Software or a Derivative Work (or a service whose primary
+   value derives from it) as a paid hosted, cloud, or managed service.
+
+   "Separable Third-Party Components" means third-party libraries, packages,
+   tools, or upstream-derived files included with or referenced by the
+   repository that carry their own separate licenses.
+
+2. Grant of Rights (Free Use, Study, Modification, and Internal Enterprise Use)
+
+   Subject to full compliance with all terms and conditions of this License, the
+   Copyright Holder grants You a worldwide, royalty-free, non-exclusive license
+   to:
+   (a) view, download, study, and execute the Software for personal, educational,
+   research, non-profit, or internal commercial/enterprise purposes;
+   (b) modify the Software and create Derivative Works for personal use,
+   research, or Internal Use, with no obligation to publish internal-only
+   modifications; and
+   (c) publicly Distribute unmodified copies or Derivative Works strictly free
+   of charge and in full compliance with Sections 3, 4, and 7.
+
+   Clarification on Business Use vs. Commercial Exploitation:
+   Internal commercial use of the Software by any company or enterprise for its
+   own internal operations is expressly permitted free of charge. Only
+   Commercial Exploitation as defined in Section 1 requires separate written
+   authorization under Section 5.
+
+3. Conditions for Public Distribution and Derivative Works
+
+   If You publicly Distribute the Software or any Derivative Work (in source code
+   or compiled/binary form), You MUST comply with ALL of the following:
+   (a) Copyright and License Retention: Retain all original copyright notices,
+   disclaimers, and a complete unmodified copy of this LICENSE file.
+   (b) Attribution: Prominently display the original project name "SonicRoute"
+   and a visible link to the original GitHub repository
+   (https://github.com/kunkunkunQoQ/SonicRoute) in source documentation and in
+   any accompanying documentation, release notes, or about notice of binary
+   distributions.
+   (c) Modification Notice: When distributing a modified version or Derivative
+   Work, include a clear and prominent notice identifying what was modified,
+   when, and by whom so recipients know it differs from official SonicRoute.
+   (d) Mandatory Source Code Availability (No Closed-Source Distribution): Any
+   Derivative Work covered by this License that You publicly Distribute in
+   compiled or binary form MUST be accompanied by its complete corresponding
+   modified source code (either bundled directly with the distribution or made
+   freely available at no cost via a clearly identified, publicly accessible
+   download or repository link maintained alongside the binary distribution).
+   (e) Share-Alike under This License: Any publicly distributed Derivative Work
+   (excluding Separable Third-Party Components) MUST be licensed as a whole to
+   all recipients under the terms of this SonicRoute Source Available License
+   (Version 1.0) at no charge. You may not impose closed-source, proprietary, or
+   additional restrictive terms on any covered code or Derivative Work.
+
+4. Prohibited Acts
+
+   Unless expressly authorized in writing by the Copyright Holder under
+   Section 5, You MUST NOT:
+   (a) engage in any Commercial Exploitation of the Software or any Derivative
+   Work (including commercial resale, paid bundling, or paid distribution);
+   (b) publicly Distribute any covered Derivative Work in closed-source or
+   binary-only form without providing the corresponding source code under
+   Section 3(d); or
+   (c) impersonate official SonicRoute releases or falsely claim official
+   endorsement, affiliation, certification, or sponsorship. You may not use the
+   "SonicRoute" or "音跃" name, official application icons/logos, official
+   updater/Store identifiers, or the Copyright Holder's name ("kunkunkunQoQ" /
+   "困困困") to pass off a modified version or third-party build as an official
+   release. Publicly distributed forks or modified builds must clearly identify
+   themselves as unofficial modified derivatives.
+
+5. Commercial Authorization Mechanism
+
+   Anyone seeking rights beyond this License—including commercial resale, paid
+   distribution, OEM/hardware or commercial software bundling, closed-source
+   commercial integration, or paid hosted offerings—must obtain prior written
+   authorization from the Copyright Holder under a separate written commercial
+   license agreement.
+
+   How to apply for commercial authorization:
+   Contact the Copyright Holder via the official repository or maintainer
+   channels listed at https://github.com/kunkunkunQoQ/SonicRoute (and
+   https://github.com/kunkunkunQoQ), specifying:
+   (1) applicant/organization legal name and contact information;
+   (2) intended commercial scope, product or bundle description, and target
+   distribution channels/scale; and
+   (3) requested rights (such as paid bundling, resale, or closed-source use).
+
+   No commercial exception or waiver is valid unless expressly confirmed in
+   writing by the Copyright Holder. All rights not expressly granted herein are
+   reserved by the Copyright Holder.
+
+6. Community Contributions
+
+   Eligible community contributions (such as pull requests, patches, bug fixes,
+   or localization improvements) submitted voluntarily to the official SonicRoute
+   repository are welcome and unrestricted. Unless explicitly agreed otherwise
+   in writing at the time of submission, by submitting a contribution to the
+   official repository You represent that You have the right to submit it and
+   grant the Copyright Holder a perpetual, worldwide, royalty-free, irrevocable
+   license to use, modify, distribute, and relicense Your contribution as part
+   of SonicRoute.
+
+7. Third-Party Components and Non-Relicensable Code
+
+   Nothing in this License supersedes, modifies, or overrides the original
+   licenses of Separable Third-Party Components or code that cannot legally be
+   relicensed by the Copyright Holder. Third-party dependencies (including NuGet
+   packages such as Concentus, NAudio.Wasapi, NAudio.Core, QRCoder,
+   System.Management, System.Text.Json, and Microsoft.Windows.CsWinRT) as well
+   as historical Apache-2.0 scrcpy integration patches/helpers under
+   packaging/AndroidLab/native/ and upstream notices referenced in
+   packaging/AndroidLab/THIRD-PARTY-NOTICES.md remain governed by their own
+   respective licenses. Recipients must comply with all applicable third-party
+   license terms and retain their notices when redistributing.
+
+8. Effective Scope and Preservation of Prior MIT Releases
+
+   This License takes effect beginning with the license-migration commit in the
+   v1.32 series and governs all covered SonicRoute source code from that commit
+   forward, as well as all future versions and releases.
+
+   Non-Retroactivity: All versions, releases, and commits previously published
+   or distributed under the MIT License—specifically v1.31 and all earlier
+   versions, as well as the initial MIT-licensed v1.32 release (Git tag v1.32
+   at commit 4e3138fcf9ca1b0dc43798ad2075109989c4c136 and earlier commits)—
+   permanently retain their existing MIT License grants. Nothing in this
+   License retroactively revokes, alters, or diminishes any MIT rights already
+   granted for those previously distributed versions.
+
+9. Termination
+
+   All rights granted to You under this License terminate automatically and
+   immediately upon any breach of its terms. Termination due to Commercial
+   Exploitation, closed-source distribution, or official impersonation is
+   immediate and permanent unless expressly reinstated in writing by the
+   Copyright Holder. For good-faith, non-commercial omissions under Section 3,
+   Your rights may be reinstated if You cure the non-compliance within 14 days
+   of receiving notice (provided You have not previously breached this License).
+   Downstream recipients who received compliant copies prior to termination
+   retain their rights so long as they remain in full compliance.
+
+10. Disclaimer of Warranty, Limitation of Liability, and Severability
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. IN NO EVENT
+    SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM,
+    DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
+    OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE
+    OR OTHER DEALINGS IN THE SOFTWARE.
+
+    If any provision of this License is held invalid or unenforceable under
+    applicable law, that provision shall be enforced to the maximum extent
+    permitted, and the remaining provisions shall remain in full force and
+    effect.
+
+--------------------------------------------------------------------------------
+PART II: 简体中文参考说明（仅供参考，以Part I英文权威文本为准）
+--------------------------------------------------------------------------------
+
+本协议名称为《SonicRoute 源码可见许可证（SonicRoute Source Available License 1.0）》。
+注意：这是一份“源码可见（Source Available）”协议，不属于 OSI 认可的开源许可证。
+如中文说明与英文正文存在任何歧义，一律以 Part I 英文正文为准。
+
+核心规则摘要：
+1. 免费使用、学习、查看与修改（含企业内部使用）：
+   任何个人、学校、研究机构或企业均可免费查看、学习、下载、运行和修改 SonicRoute
+   源码；企业内部部署或内部二次开发用于自身业务完全免费，无需公开内部修改源码。
+2. 禁止未经授权的商业转卖、收费捆绑与付费分发：
+   未经版权所有者（kunkunkunQoQ）事先书面授权，禁止销售/转卖 SonicRoute 或其
+   衍生作品，禁止将其与付费软件/硬件/商业安装包/广告安装包收费捆绑，禁止设置
+   付费下载、付费会员、收费订阅墙，亦禁止作为收费托管商业服务对外提供。
+3. 禁止闭源分发衍生作品（公开修改版必须开源）：
+   允许免费公开发布修改版或衍生作品，但公开分发编译版/二进制版时，必须同时免费
+   提供完整对应的修改后源码，且衍生作品整体仍须继续适用本协议（不可转为闭源）。
+4. 署名、原始仓库链接与修改标注：
+   公开分发原版或衍生作品时，必须保留原作者版权声明（Copyright (c) 2026
+   kunkunkunQoQ）与本 LICENSE 全文，注明“SonicRoute”项目名称及原始 GitHub
+   仓库地址（https://github.com/kunkunkunQoQ/SonicRoute），并明确标注所作修改。
+5. 禁止冒充官方或虚假背书：
+   禁止冒充 SonicRoute 官方版本、误导用户以为获得官方认可或赞助；公开发布的
+   修改版必须明确标示为非官方衍生版本。
+6. 不限制社区贡献：
+   正常的免费使用、个人研究、内部开发以及向官方仓库提交 PR 等社区贡献不受限制。
+7. 商业授权申请机制：
+   如需商业转卖、OEM/产品收费捆绑、闭源集成等超出本协议范围的权限，请通过
+   https://github.com/kunkunkunQoQ/SonicRoute（或 https://github.com/kunkunkunQoQ）
+   联系版权所有者申请正式书面商业授权，并说明申请主体、使用/分发场景及商业范围。
+8. 历史版本与第三方组件边界：
+   - 本协议从 v1.32 系列本次许可证迁移提交起对有权重新授权的代码及未来新版本
+     生效。此前已按 MIT 发布的版本（包括 v1.31 及更早版本，以及已按 MIT 发布
+     的初始 v1.32 版本提交 4e3138fcf9ca1b0dc43798ad2075109989c4c136 / 标签
+     v1.32）继续永久保留其既有 MIT 授权，本变更不追溯撤销既有授权。
+   - 第三方依赖组件（如 Concentus、NAudio、QRCoder、System.Management、
+     System.Text.Json、Microsoft.Windows.CsWinRT）及不可由原作者单方面变更许可
+     的历史文件（如 packaging/AndroidLab/native/ 下的 Apache-2.0 scrcpy 相关
+     集成补丁与辅助代码）继续保留其原有许可证，不受本协议覆盖。
+9. 免责声明：
+   本软件按“现状”提供，不提供任何明示或暗示的担保；作者及贡献者不对因使用或
+   分发本软件产生的任何直接或间接损害承担责任。

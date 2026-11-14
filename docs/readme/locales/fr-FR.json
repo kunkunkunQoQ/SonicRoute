@@ -79,7 +79,14 @@
     "footerTitle": "Un œuf de Pâques : hier et demain",
     "guideTitle": "Guide d’utilisation (en chinois)",
     "downloadColumn": "Télécharger",
-    "license": "Licence MIT",
+    "license": "Source Available 1.0",
+    "licenseTitle": "Licence",
+    "thirdPartyNotices": "mentions des composants tiers",
+    "licensePoints": [
+        "**Source Available (non approuvée OSI Open Source)** : Selon {licenseLink} (SonicRoute Source Available License 1.0), chacun peut librement utiliser, consulter, étudier et modifier SonicRoute gratuitement, y compris pour un usage interne en entreprise.",
+        "**Redistribution publique et restrictions** : Toute distribution publique d’œuvres dérivées exige de conserver les mentions de droit d’auteur, de citer SonicRoute et le dépôt GitHub d’origine, d’indiquer les modifications et de fournir le code source complet sous la même licence. La revente commerciale, la distribution groupée payante, la distribution payante, la diffusion à source fermée et l’usurpation de version officielle sont interdites sans autorisation écrite préalable (voir {licenseLink} pour les demandes commerciales).",
+        "**Transition de version et composants tiers** : Applicable à partir du commit de migration de licence dans la série v1.32. Les versions publiées précédemment sous licence MIT (v1.31 et antérieures, ainsi que la version initiale MIT v1.32 au commit 4e3138f) conservent leurs droits MIT de manière permanente, et les composants tiers restent soumis à leurs licences respectives (voir {noticesLink})."
+    ],
     "features": [
         "**Routage audio indépendant et bidirectionnel par application (lecture + enregistrement) :** attribuez des périphériques d'entrée et de sortie dédiés à chaque application (jeux et voix sur le casque, musique sur les haut-parleurs). Les paramètres sont conservés nativement par Windows après fermeture.",
         "**Suivi intelligent du premier plan et réglage à l'aveugle via la molette.** Les événements système ciblent l'application active en quelques millisecondes. Faites défiler la molette sur la zone de notification pour régler le volume ou utilisez Alt+molette pour changer de périphérique, avec affichage OSD et coupure micro globale.",

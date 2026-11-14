@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: LicenseRef-SonicRoute-Source-Available-1.0
 package org.sonicroute.android.audio;
 
 import android.media.AudioAttributes;
@@ -22,7 +22,7 @@ import org.sonicroute.android.platform.AndroidSystemPlatform;
 import org.sonicroute.android.util.ServerLog;
 
 /**
- * MIT-licensed {@code AudioPlaybackCapture} (via hidden {@code AudioPolicy}) plus direct mic fallback.
+ * Self-authored {@code AudioPlaybackCapture} (via hidden {@code AudioPolicy}) plus direct mic fallback.
  * Supports UID/package isolation, {@code audio_dup}, {@code audio_mix_mode=uid|pr}, and strict
  * no-global leak sentinel ({@code 0x7FFFFFFF}).
  */
