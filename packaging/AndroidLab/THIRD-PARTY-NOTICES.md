@@ -1,6 +1,14 @@
 # Third-party licenses and notices for SonicRoute
 
-This is the online entry for the third-party notices included in SonicRoute Full. The application opens this page in your browser without exporting an additional local text file. Required license copies remain included in the application. Component-specific source notices and build observations are recorded below; this inventory is not a legal opinion.
+> [!IMPORTANT]
+> **适用版本说明 / Applicability Notice**:
+> - **仅限 1.31 Full 版本需要**：本第三方开源许可声明清单**仅限 SonicRoute 1.31 Full 版本需要**。
+> - **后续版本及其他版本均不需要**：**后续版本的 Full（包括 1.32 Full 及后续所有版本）均不再需要此清单**；Lite、Legacy 等其他非 Full 发行版本也都不需要。
+> 
+> - **Required ONLY for v1.31 Full**: This third-party license and notice inventory is **required strictly and exclusively for SonicRoute v1.31 Full**.
+> - **NOT needed for subsequent Full or other versions**: Subsequent Full releases (**including v1.32 Full and all future versions**) no longer require or include this inventory; other editions such as Lite and Legacy do not require it either.
+
+This is the online entry for the third-party notices required exclusively by **SonicRoute 1.31 Full**. The application opens this page in your browser without exporting an additional local text file. Subsequent versions of Full (starting from **v1.32 Full and later**) as well as other editions (Lite, Legacy) do not require or reference this notice. Required license copies remain included in the application where applicable. Component-specific source notices and build observations are recorded below; this inventory is not a legal opinion.
 
 ## Complete license texts
 
@@ -84,9 +92,9 @@ Source references: [MMDevice.cs](https://raw.githubusercontent.com/naudio/NAudio
 
 The package build script copies the full upstream Apache-2.0 license to `AndroidRuntime/SCRCPY-LICENSE.txt` and the complete platform-tools aggregate notice to `AndroidRuntime/ADB-NOTICE.txt`. Keep both files with the corresponding `scrcpy-server`, `adb.exe`, and companion DLLs; do not replace either with this summary.
 
-## Current virtual-display runtime inventory
+## Virtual-display runtime inventory (1.31 Full only)
 
-The target runtime manifest is `SonicRoute.AndroidAudio/VirtualDisplayRuntime.files.json` and lists seven files: a locally built `scrcpy.exe` (593408 bytes), its separate video/control server, the unchanged reference SDL2.dll, and four locally built FFmpeg n8.1 DLLs. Exact sizes and SHA256 values live in that manifest; native build inputs/outputs are recorded in `outputs/video-client/build-receipt.json` and `outputs/video-runtime/build-receipt.json`. The client adds free resizing and Windows IME composition-key handling through `packaging/AndroidLab/native/flex_resize.h`. The video server includes the matching resize protocol, phone-resolution sizing budget, private-display focus policy, and explicit Unicode commit via device-side paste. Device clipboard content may change during Unicode input; the desktop clipboard is not synchronized. `OwnedDisplayPolicy.java` requests unrestricted application sizing only for its own trusted virtual display on supported Android 16+ systems, with a capability-checked standard fallback. This is a locally modified scrcpy build, not an unmodified upstream binary. It runs with `--video-codec=h264 --no-audio`; audio remains in SonicRoute's process and its original pinned audio server is separate.
+The target runtime manifest for 1.31 Full was `SonicRoute.AndroidAudio/VirtualDisplayRuntime.files.json` and lists seven files: a locally built `scrcpy.exe` (593408 bytes), its separate video/control server, the unchanged reference SDL2.dll, and four locally built FFmpeg n8.1 DLLs. Exact sizes and SHA256 values live in that manifest; native build inputs/outputs are recorded in `outputs/video-client/build-receipt.json` and `outputs/video-runtime/build-receipt.json`. The client adds free resizing and Windows IME composition-key handling through `packaging/AndroidLab/native/flex_resize.h`. The video server includes the matching resize protocol, phone-resolution sizing budget, private-display focus policy, and explicit Unicode commit via device-side paste. Device clipboard content may change during Unicode input; the desktop clipboard is not synchronized. `OwnedDisplayPolicy.java` requests unrestricted application sizing only for its own trusted virtual display on supported Android 16+ systems, with a capability-checked standard fallback. This is a locally modified scrcpy build, not an unmodified upstream binary. It runs with `--video-codec=h264 --no-audio`; audio remains in SonicRoute's process and its original pinned audio server is separate.
 
 The four FFmpeg DLLs are a minimal local build retaining H264/HEVC/PNG decoding, PNG/image2 demuxing, file protocol, ASM optimization, and w32threads. The local build enables zlib and statically links zlib 1.3.2; it has no separate zlib runtime DLL. No GPL configure switch or external GPL library was used. The runtime check reports `avcodec_license()` as `LGPL version 2.1 or later`. `FFmpeg-LICENSE.txt` now contains the actual source-tree `COPYING.LGPLv2.1`; `zlib-LICENSE.txt` contains the zlib notice. These are file/build observations, not a legal conclusion. The earlier BtbN gpl-shared FFmpeg/GPL-3 inventory applies only to the previous reference-runtime stage and does not describe the newly built DLLs.
 
