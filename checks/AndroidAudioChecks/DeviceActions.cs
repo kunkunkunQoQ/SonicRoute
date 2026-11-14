@@ -79,10 +79,12 @@ internal static partial class Program
             "INFO: Texture: 1080x2400 garbage", "INFO: Texture: -1080x2400" }.All(s => VirtualDisplayClient.TryReadDisplaySize(s) == null),
             "only valid client framebuffer dimensions drive persistence");
         var adb = new AdbClient(Path.Combine(output, "unused-runtime"));
-        var defaults = VirtualDisplayClient.CreateStartInfo(adb, alias, app, 0, 0);
-        var restored = VirtualDisplayClient.CreateStartInfo(adb, alias, app, 0, 0, displaySize: landscape);
-        Check(defaults.ArgumentList.Contains("--new-display") && restored.ArgumentList.Contains("--new-display=1920x1080")
-            && !Directory.Exists(adb.RuntimeDirectory), "native launch restores saved dimensions without eager tool extraction");
+        string defaultsCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(alias, app, "01020304", new VideoServerOptions()));
+        string restoredCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(alias, app, "01020304", new VideoServerOptions(InitialDisplaySize: landscape)));
+        Check(defaultsCmd.Contains(" new_display ") && restoredCmd.Contains(" new_display=1920x1080 ")
+            && !Directory.Exists(adb.RuntimeDirectory), "server launch restores saved dimensions without eager tool extraction");
 
         var clients = new List<FakeDisplay>();
         await using var displays = new AndroidVirtualDisplayManager(() => { var item = new FakeDisplay(); clients.Add(item); return item; });
@@ -117,11 +119,9 @@ internal static partial class Program
         var windowPrefs = new AndroidAudioSettingsStore(prefs);
         Check(windowPrefs.Get(one, app.Package) == new AndroidAppAudioSettings(37, "fixture-output", landscape, new(1003, 613))
             && windowPrefs.Get(two, app.Package).WindowSize == null, "window size survives display/audio writes and restart separately per phone");
-        var windowInfo = VirtualDisplayClient.CreateStartInfo(adb, alias, app, 0, 0, displaySize: landscape, windowSize: new(1003, 613));
-        Check(windowInfo.ArgumentList.Contains("--window-width=1003") && windowInfo.ArgumentList.Contains("--window-height=613")
-            && VirtualDisplayClient.TryReadWindowSize("INFO: SonicRoute window-size: 1003x613") == new AndroidWindowSize(1003, 613)
+        Check(VirtualDisplayClient.TryReadWindowSize("INFO: SonicRoute window-size: 1003x613") == new AndroidWindowSize(1003, 613)
             && VirtualDisplayClient.TryReadWindowSize("INFO: SonicRoute window-size: 0x0") == null,
-            "exact non-aligned window size is restored and minimized events are rejected");
+            "exact non-aligned window size parsing rejects minimized events");
 
         string spkId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(one), "speaker");
         string btKey = "bt:8:AA:BB:CC:DD:EE:FF";

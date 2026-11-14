@@ -217,7 +217,7 @@ namespace SonicRoute
             {
                 string action = Enum.IsDefined(typeof(AutoRuleAction), step.Action) ? L10n.T(AutoActionKey((AutoRuleAction)step.Action)) : step.Action.ToString(CultureInfo.InvariantCulture);
                 text.AppendLine(string.Format(L10n.T("History.Step"), step.Number, action));
-                if (step.TargetApp.Length > 0) text.AppendLine(step.TargetApp);
+                if (step.TargetApp.Length > 0) text.AppendLine(ApplicationAudio.FormatAppIdentifier(step.TargetApp));
                 if (step.TargetPid.HasValue) text.Append("PID ").AppendLine(step.TargetPid.Value.ToString(CultureInfo.InvariantCulture));
                 if (!string.IsNullOrEmpty(step.TargetDeviceId)) text.AppendLine(step.TargetDeviceName ?? step.TargetDeviceId);
                 if (!string.IsNullOrEmpty(step.TargetRuleName)) text.AppendLine(step.TargetRuleName);

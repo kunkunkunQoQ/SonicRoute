@@ -1,82 +1,204 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Security.Cryptography;
 
 namespace SonicRoute.AndroidAudio;
 
-public sealed class AdbClient
+public sealed class AdbClient : IDisposable, IAsyncDisposable
 {
     private readonly object _identityGate = new();
     private readonly Dictionary<string, string?> _identities = new(StringComparer.Ordinal);
     private readonly AndroidRuntimeBundle? _bundle;
     private readonly string? _runtimeDirectory;
-    private bool _serverVerified;
+    private readonly IAdbTransport? _explicitTransport;
+    private IAdbTransport? _resolvedTransport;
+    private bool _catalogVerified;
+
     public string RuntimeDirectory => _bundle?.DirectoryPath ?? _runtimeDirectory!;
-    public string Executable => Path.Combine(RuntimeDirectory, "adb.exe");
-    public string ServerFile => Path.Combine(RuntimeDirectory, "scrcpy-server");
-    public const string VerifiedServerSha256 = "BAFEFD8413783E404BC34520B7EA1A9EBAA985720FEFE9E450933CAEA89BDD05";
-    public void ValidateServer()
+    public string CatalogFile => Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
+
+    public void ValidateCatalog()
     {
         lock (_identityGate)
         {
-            if (_serverVerified) return;
+            if (_catalogVerified) return;
             PrepareRuntime("audio");
-            using var file = File.OpenRead(ServerFile);
-            if (Convert.ToHexString(SHA256.HashData(file)) != VerifiedServerSha256)
-                throw AndroidError.WithCode(new InvalidDataException("手机音频组件校验失败，请重新下载完整版本。"), AndroidErrorCode.ServerVerifyFailed);
-            _serverVerified = true;
+            if (!File.Exists(CatalogFile) || new FileInfo(CatalogFile).Length == 0)
+                throw AndroidError.WithCode(new InvalidDataException("手机目录服务组件缺失或损坏，请重新下载完整版本。"), AndroidErrorCode.ServerVerifyFailed);
+            _catalogVerified = true;
         }
     }
-    public AdbClient(string runtimeDirectory) => _runtimeDirectory = Path.GetFullPath(runtimeDirectory);
-    public AdbClient(AndroidRuntimeBundle bundle) => _bundle = bundle;
+
+    public AdbClient(string runtimeDirectory) : this(runtimeDirectory, null) { }
+    public AdbClient(AndroidRuntimeBundle bundle) : this(bundle, null) { }
+
+    public AdbClient(string runtimeDirectory, IAdbTransport? transport)
+    {
+        _runtimeDirectory = Path.GetFullPath(runtimeDirectory);
+        _explicitTransport = transport;
+    }
+
+    public AdbClient(AndroidRuntimeBundle bundle, IAdbTransport? transport)
+    {
+        _bundle = bundle ?? throw new ArgumentNullException(nameof(bundle));
+        _explicitTransport = transport;
+    }
+
     internal void PrepareRuntime(string group) => _bundle?.Prepare(group);
     internal Task PrepareRuntimeAsync(string group, CancellationToken token) => _bundle?.PrepareAsync(group, token) ?? Task.CompletedTask;
 
-    public Process Start(params string[] arguments) => StartCore(false, arguments);
-    internal Process StartWithInput(params string[] arguments) => StartCore(true, arguments);
-    private Process StartCore(bool input, string[] arguments)
+    internal Task<IAdbTransport> ResolveTransportAsync(CancellationToken token)
     {
-        PrepareRuntime("adb");
-        if (!File.Exists(Executable)) throw AndroidError.WithCode(new FileNotFoundException("缺少 Android 音频运行文件，请使用完整实验包。", Executable), AndroidErrorCode.MissingRuntime);
-        var info = new ProcessStartInfo(Executable) { UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8, WorkingDirectory = RuntimeDirectory, RedirectStandardInput = input };
-        foreach (string argument in arguments) info.ArgumentList.Add(argument);
-        return Process.Start(info) ?? throw new IOException("Unable to start ADB.");
+        token.ThrowIfCancellationRequested();
+        if (_explicitTransport != null) return Task.FromResult(_explicitTransport);
+        var existing = Volatile.Read(ref _resolvedTransport);
+        if (existing != null) return Task.FromResult(existing);
+
+        var created = new ArbitratedAdbTransport(new IPEndPoint(IPAddress.Loopback, 5037));
+        var prior = Interlocked.CompareExchange(ref _resolvedTransport, created, null);
+        if (prior != null)
+        {
+            _ = created.DisposeAsync();
+            return Task.FromResult(prior);
+        }
+        return Task.FromResult<IAdbTransport>(created);
     }
 
-    public async Task<string> RunAsync(CancellationToken token, params string[] arguments)
+    private async Task<T> ExecuteWithTransportAsync<T>(CancellationToken token, Func<IAdbTransport, Task<T>> operation)
     {
-        token.ThrowIfCancellationRequested();
-        await PrepareRuntimeAsync("adb", token).ConfigureAwait(false);
-        token.ThrowIfCancellationRequested();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(45));
-        using var process = Start(arguments);
-        var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
-        var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
+        var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
         try
         {
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            string output = await stdout.ConfigureAwait(false), error = await stderr.ConfigureAwait(false);
-            if (output.Length > 8 * 1024 * 1024) throw new InvalidDataException("ADB response exceeds catalogue limit.");
-            if (process.ExitCode != 0) throw new IOException($"ADB: {error.Trim()} {output.Trim()}".Trim());
-            return output;
+            return await operation(transport).ConfigureAwait(false);
         }
-        catch
+        catch (SocketException) when (_explicitTransport == null && !token.IsCancellationRequested)
         {
-            try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { }
-            try { await Task.WhenAll(stdout, stderr).ConfigureAwait(false); } catch { }
-            throw;
+            transport = await ResolveTransportAsync(token).ConfigureAwait(false);
+            return await operation(transport).ConfigureAwait(false);
         }
+    }
+
+    public Task<IAdbShellSession> OpenShellAsync(string serial, string command, bool redirectInput, CancellationToken token) =>
+        ExecuteWithTransportAsync(token, t => t.OpenShellAsync(serial, command, redirectInput, token));
+
+    public Task<Stream> OpenLocalAbstractAsync(string serial, string name, CancellationToken token) =>
+        ExecuteWithTransportAsync(token, t => t.OpenLocalAbstractAsync(serial, name, token));
+
+    public async Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> onChanged, CancellationToken token)
+    {
+        var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
+        await transport.TrackDevicesAsync(onChanged, token).ConfigureAwait(false);
+    }
+
+    public Task<string> RunAsync(CancellationToken token, params string[] arguments)
+    {
+        token.ThrowIfCancellationRequested();
+        if (arguments.Length == 1 && arguments[0] == "version")
+            return ExecuteWithTransportAsync(token, transport => transport.VersionAsync(token));
+
+        return ExecuteWithTransportAsync(token, transport => DispatchTransportCommandAsync(transport, arguments, token));
+    }
+
+    private async Task<string> DispatchTransportCommandAsync(IAdbTransport transport, string[] arguments, CancellationToken token)
+    {
+        if (arguments.Length is 1 or 2 && arguments[0] == "devices")
+        {
+            var devices = await transport.DevicesAsync(token).ConfigureAwait(false);
+            return FormatDevicesText(devices);
+        }
+        if (arguments.Length == 2 && arguments[0] == "mdns" && arguments[1] == "services")
+        {
+            var services = await transport.MdnsServicesAsync(token).ConfigureAwait(false);
+            return string.Join('\n', services.Select(s => $"{s.Name}\t{s.Type}\t{s.Address}"));
+        }
+        if (arguments.Length == 3 && arguments[0] == "pair")
+            return await transport.PairAsync(arguments[1], arguments[2], token).ConfigureAwait(false);
+        if (arguments.Length == 2 && arguments[0] == "connect")
+            return await transport.ConnectAsync(arguments[1], token).ConfigureAwait(false);
+        if (arguments.Length == 2 && arguments[0] == "disconnect")
+            return await transport.DisconnectAsync(arguments[1], token).ConfigureAwait(false);
+        if (arguments.Length == 2 && arguments[0] == "forward" && arguments[1] == "--list")
+        {
+            var rules = await transport.ListForwardsAsync(token).ConfigureAwait(false);
+            return string.Join('\n', rules.Select(r => $"{r.Serial} {r.Local} {r.Remote}"));
+        }
+
+        if (arguments.Length >= 3 && arguments[0] == "-s")
+        {
+            string serial = arguments[1];
+            string verb = arguments[2];
+            if (verb == "shell" && arguments.Length >= 4)
+            {
+                string cmd = string.Join(' ', arguments.Skip(3));
+                var result = await transport.RunShellAsync(serial, cmd, token).ConfigureAwait(false);
+                if (result.ExitCode != 0)
+                    throw new IOException($"ADB: {result.Error.Trim()} {result.Output.Trim()}".Trim());
+                return result.Output;
+            }
+            if (verb == "push" && arguments.Length == 5)
+            {
+                await transport.PushAsync(serial, arguments[3], arguments[4], token).ConfigureAwait(false);
+                return "";
+            }
+            if (verb == "forward" && arguments.Length == 5 && arguments[3] == "tcp:0"
+                && arguments[4].StartsWith("localabstract:", StringComparison.Ordinal))
+            {
+                int port = await transport.ForwardTcpToLocalAbstractAsync(serial, arguments[4]["localabstract:".Length..], token).ConfigureAwait(false);
+                return port.ToString(CultureInfo.InvariantCulture);
+            }
+            if (verb == "forward" && arguments.Length == 5 && arguments[3] == "--remove")
+            {
+                await transport.RemoveForwardAsync(serial, arguments[4], token).ConfigureAwait(false);
+                return "";
+            }
+            if (verb == "get-serialno" && arguments.Length == 3)
+                return await transport.GetSerialNoAsync(serial, token).ConfigureAwait(false);
+        }
+
+        throw new NotSupportedException("Unsupported ADB transport command: " + string.Join(' ', arguments));
+    }
+
+    public void Dispose()
+    {
+        var resolved = Interlocked.Exchange(ref _resolvedTransport, null);
+        if (resolved is IAsyncDisposable asyncDisposable)
+            asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        else if (resolved is IDisposable disposable)
+            disposable.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var resolved = Interlocked.Exchange(ref _resolvedTransport, null);
+        if (resolved is IAsyncDisposable asyncDisposable)
+            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+        else if (resolved is IDisposable disposable)
+            disposable.Dispose();
+    }
+
+    private static string FormatDevicesText(IReadOnlyList<AndroidDevice> devices)
+    {
+        var sb = new StringBuilder("List of devices attached\n");
+        foreach (var d in devices)
+        {
+            sb.Append(d.Serial).Append('\t').Append(d.State);
+            if (!string.IsNullOrWhiteSpace(d.Name) && d.Name != d.Serial)
+                sb.Append(" model:").Append(d.Name.Replace(' ', '_'));
+            if (!string.IsNullOrWhiteSpace(d.TransportId))
+                sb.Append(" transport_id:").Append(d.TransportId);
+            sb.Append('\n');
+        }
+        return sb.ToString();
     }
 
     public async Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token, bool deduplicate = true)
     {
-        string text = await RunAsync(token, "devices", "-l").ConfigureAwait(false);
-        var devices = ParseDevices(text);
+        var devices = await ExecuteWithTransportAsync(token, t => t.DevicesAsync(token)).ConfigureAwait(false);
         var resolved = await Task.WhenAll(devices.Select(device => ResolveIdentityAsync(device, token))).ConfigureAwait(false);
         return deduplicate ? AndroidDeviceIdentity.Distinct(resolved) : resolved;
     }
@@ -105,16 +227,89 @@ public sealed class AdbClient
         return device with { HardwareId = identity };
     }
 
+    private static readonly Regex KnownDeviceStateRegex = new(
+        @"\s+(?<state>no permissions(?:\s*\([^)]*\))?(?:;\s*see\s+\S+)?|device|offline|unauthorized|authorizing|connecting|bootloader|recovery|sideload|rescue|host|unknown)(?=\s|$)",
+        RegexOptions.IgnoreCase | RegexOptions.RightToLeft | RegexOptions.Compiled);
+
+    private static bool IsDeviceMetadataToken(string token)
+    {
+        int colon = token.IndexOf(':');
+        if (colon <= 0) return false;
+        for (int i = 0; i < colon; i++)
+        {
+            char c = token[i];
+            if (!(char.IsAsciiLetterOrDigit(c) || c == '_')) return false;
+        }
+        return true;
+    }
+
+    private static bool TryParseDeviceLine(string rawLine, out string serial, out string state, out string[] metadata)
+    {
+        serial = "";
+        state = "";
+        metadata = Array.Empty<string>();
+        string trimmed = rawLine.Trim();
+        if (trimmed.Length == 0 || trimmed.StartsWith('*')
+            || trimmed.Equals("List of devices attached", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("List of devices", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        int tab = trimmed.IndexOf('\t');
+        if (tab > 0)
+        {
+            serial = trimmed[..tab].Trim();
+            string rest = trimmed[(tab + 1)..].TrimStart();
+            if (rest.Length == 0) return false;
+            var parts = rest.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            state = parts[0];
+            metadata = parts.Length > 1 ? parts[1..] : Array.Empty<string>();
+            return serial.Length > 0 && state.Length > 0;
+        }
+
+        // Preserve serials containing spaces (e.g. mDNS collision aliases like "adb-id (2)._adb-tls-connect._tcp").
+        foreach (Match match in KnownDeviceStateRegex.Matches(trimmed))
+        {
+            Group stateGroup = match.Groups["state"];
+            string candidateSerial = trimmed[..match.Index].TrimEnd();
+            if (candidateSerial.Length == 0) continue;
+            string tail = trimmed[(stateGroup.Index + stateGroup.Length)..];
+            string[] candidateMeta = tail.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (!candidateMeta.All(IsDeviceMetadataToken)) continue;
+            serial = candidateSerial;
+            state = stateGroup.Value;
+            metadata = candidateMeta;
+            return true;
+        }
+
+        string[] fields = trimmed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (fields.Length < 2 || fields[0] == "List") return false;
+        int firstMeta = -1;
+        for (int i = fields.Length - 1; i >= 2 && IsDeviceMetadataToken(fields[i]); i--)
+            firstMeta = i;
+        if (firstMeta >= 2)
+        {
+            serial = string.Join(' ', fields[..(firstMeta - 1)]);
+            state = fields[firstMeta - 1];
+            metadata = fields[firstMeta..];
+            return true;
+        }
+
+        serial = fields[0];
+        state = fields[1];
+        metadata = fields.Length > 2 ? fields[2..] : Array.Empty<string>();
+        return true;
+    }
+
     public static IReadOnlyList<AndroidDevice> ParseDevices(string text)
     {
         var devices = new List<AndroidDevice>();
         foreach (string line in text.Split('\n'))
         {
-            string[] fields = line.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            if (fields.Length < 2 || fields[0] == "List" || fields[0].StartsWith('*')) continue;
-            string name = fields.FirstOrDefault(f => f.StartsWith("model:"))?[6..].Replace('_', ' ') ?? fields[0];
-            bool wifi = fields[0].Contains(':') || fields[0].Contains("_adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase);
-            devices.Add(new AndroidDevice(fields[0], name, fields[1], wifi, TransportId: fields.FirstOrDefault(f => f.StartsWith("transport_id:"))?[13..]));
+            if (!TryParseDeviceLine(line, out string serial, out string state, out string[] metadata)) continue;
+            string name = metadata.FirstOrDefault(f => f.StartsWith("model:", StringComparison.Ordinal))?[6..].Replace('_', ' ') ?? serial;
+            bool wifi = serial.Contains(':') || serial.Contains("_adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase);
+            string? transportId = metadata.FirstOrDefault(f => f.StartsWith("transport_id:", StringComparison.Ordinal))?[13..];
+            devices.Add(new AndroidDevice(serial, name, state, wifi, TransportId: transportId));
         }
         return devices;
     }
@@ -124,11 +319,11 @@ public sealed class AdbClient
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(12));
         await PrepareRuntimeAsync("audio", deadline.Token).ConfigureAwait(false);
-        string helper = Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
+        ValidateCatalog();
         string remote = "/data/local/tmp/sonicroute_encoders_" + Guid.NewGuid().ToString("N") + ".jar";
         try
         {
-            await RunAsync(deadline.Token, "-s", device.Serial, "push", helper, remote).ConfigureAwait(false);
+            await RunAsync(deadline.Token, "-s", device.Serial, "push", CatalogFile, remote).ConfigureAwait(false);
             string output = await RunAsync(deadline.Token, "-s", device.Serial, "shell", "CLASSPATH=" + remote,
                 "app_process", "/", "org.sonicroute.android.EncoderCatalog").ConfigureAwait(false);
             return ParseEncoders(output);
@@ -183,16 +378,13 @@ public sealed class AdbClient
         }
         if (device.State != "device") throw AndroidError.WithCode(new IOException("请先在手机上允许 ADB 调试授权。"), AndroidErrorCode.AuthorizeAdbFirst);
         await PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        ValidateServer();
-        string catalog = Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
-        if (!File.Exists(catalog)) throw new FileNotFoundException("Missing Android app catalogue helper.", catalog);
+        ValidateCatalog();
+        if (!File.Exists(CatalogFile)) throw new FileNotFoundException("Missing Android app catalogue helper.", CatalogFile);
         string remote = "/data/local/tmp/sonicroute_catalog_" + Guid.NewGuid().ToString("N") + ".jar";
-        string remoteServer = remote + ".server";
         try
         {
-            await RunAsync(token, "-s", device.Serial, "push", catalog, remote).ConfigureAwait(false);
-            await RunAsync(token, "-s", device.Serial, "push", ServerFile, remoteServer).ConfigureAwait(false);
-            var arguments = new List<string> { "-s", device.Serial, "shell", "CLASSPATH=" + remote + ":" + remoteServer,
+            await RunAsync(token, "-s", device.Serial, "push", CatalogFile, remote).ConfigureAwait(false);
+            var arguments = new List<string> { "-s", device.Serial, "shell", "CLASSPATH=" + remote,
                 "app_process", "/", "org.sonicroute.android.Catalog" };
             if (packages != null) { arguments.Add("--packages"); arguments.AddRange(packages.Distinct(StringComparer.Ordinal)); }
             string result = await RunAsync(token, arguments.ToArray()).ConfigureAwait(false);
@@ -217,7 +409,7 @@ public sealed class AdbClient
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote, remoteServer).ConfigureAwait(false); }
+            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch { /* device disconnection is surfaced by the original operation */ }
         }
     }
@@ -226,17 +418,14 @@ public sealed class AdbClient
     {
         if (device.State != "device") throw AndroidError.WithCode(new IOException("请先在手机上允许 ADB 调试授权。"), AndroidErrorCode.AuthorizeAdbFirst);
         await PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        ValidateServer();
-        string catalog = Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
-        if (!File.Exists(catalog)) throw new FileNotFoundException("Missing Android app catalogue helper.", catalog);
+        ValidateCatalog();
+        if (!File.Exists(CatalogFile)) throw new FileNotFoundException("Missing Android app catalogue helper.", CatalogFile);
         string remote = "/data/local/tmp/sonicroute_outputs_" + Guid.NewGuid().ToString("N") + ".jar";
-        string remoteServer = remote + ".server";
         try
         {
-            await RunAsync(token, "-s", device.Serial, "push", catalog, remote).ConfigureAwait(false);
-            await RunAsync(token, "-s", device.Serial, "push", ServerFile, remoteServer).ConfigureAwait(false);
+            await RunAsync(token, "-s", device.Serial, "push", CatalogFile, remote).ConfigureAwait(false);
             string result = await RunAsync(token, "-s", device.Serial, "shell",
-                "CLASSPATH=" + remote + ":" + remoteServer, "app_process", "/", "org.sonicroute.android.AudioOutputBridge", "list").ConfigureAwait(false);
+                "CLASSPATH=" + remote, "app_process", "/", "org.sonicroute.android.AudioOutputBridge", "list").ConfigureAwait(false);
             foreach (string line in result.Split('\n'))
             {
                 if (!line.TrimStart().StartsWith('{')) continue;
@@ -251,7 +440,7 @@ public sealed class AdbClient
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote, remoteServer).ConfigureAwait(false); }
+            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch { }
         }
     }

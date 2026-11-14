@@ -628,7 +628,6 @@
   "Phone.Disconnected": "未接続",
   "Phone.WifiConnected": "ワイヤレス接続中",
   "Phone.UsbConnected": "USB 接続中",
-  "Phone.OpenSourceLicenses": "オープンソースライセンス",
   "Phone.FromDevice": "{0} から",
   "Phone.DeviceNameAutomation": "端末名",
   "Phone.Disconnect": "切断",

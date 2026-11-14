@@ -11,20 +11,20 @@ internal static partial class Program
         var bundle = new AndroidRuntimeBundle(Path.Combine(output, "runtime"));
         var adb = new AdbClient(bundle);
         Check(!Directory.Exists(bundle.DirectoryPath), "unused phone services create no tool cache");
+        Check((await adb.RunAsync(default, "version")).Contains("Android Debug Bridge")
+            && !Directory.Exists(bundle.DirectoryPath),
+            "first in-process ADB version request extracts no external executables or DLLs");
         var runtime = new VirtualDisplayRuntime(adb);
         runtime.ValidateControl();
         Check(Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 1
-            && File.Exists(runtime.ServerFile), "unpair control prepares only its server, without ADB/audio/video DLLs");
+            && File.Exists(runtime.ServerFile), "unpair control prepares only sonicroute-catalog.jar, without ADB or third-party DLLs");
         runtime.Validate();
-        Check(Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 7
-            && !File.Exists(adb.ServerFile) && !File.Exists(adb.Executable),
-            "video validation prepares seven video/control files without unrelated audio tools");
-        Check((await adb.RunAsync(default, "version")).Contains("Android Debug Bridge")
-            && Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 10,
-            "first ADB version request adds only its three files without device discovery");
-        adb.ValidateServer();
-        Check(Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 12,
-            "audio/catalogue components remain independently demand loaded");
+        Check(Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 1
+            && !File.Exists(Path.Combine(bundle.DirectoryPath, "adb.exe")),
+            "video validation reuses sonicroute-catalog.jar without ADB/FFmpeg/SDL2/scrcpy binaries");
+        adb.ValidateCatalog();
+        Check(Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 1,
+            "audio/catalogue validation keeps only the unified helper jar");
 
         var device = new AndroidDevice("fixture-one", "Fixture", "device", true);
         var app = new AndroidApp("cn.test.one", "One", 1001, "media", [1, 2, 3]);

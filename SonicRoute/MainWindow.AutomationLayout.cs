@@ -197,6 +197,7 @@ namespace SonicRoute
                 return text.StartsWith(prefix, StringComparison.Ordinal) ? text.Substring(prefix.Length) : text;
             }
             string app = rule.TriggerApp ?? "";
+            if (app.StartsWith("android:", StringComparison.OrdinalIgnoreCase)) return ApplicationAudio.FormatAppIdentifier(app);
             return app.Length == 0 || app.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? app : app + ".exe";
         }
 

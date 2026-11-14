@@ -56,20 +56,30 @@ internal static partial class Program
             "saving streaming preferences preserves migrated application volume and output");
         Check(selected.AudioOptions() == "audio_bit_rate=192000 audio_encoder=c2.android.opus.encoder",
             "audio transport receives bitrate and selected Opus encoder");
-        var adb = new AdbClient(Path.Combine(output, "offline-runtime"));
-        var mirror = VirtualDisplayClient.CreateStartInfo(adb, phone, AndroidApp.DeviceAudio, 0, 0, streaming: selected);
-        var app = VirtualDisplayClient.CreateStartInfo(adb, phone, new("cn.test.music", "Music", 1001, "media"), 0, 0, streaming: highBounds);
-        Check(mirror.ArgumentList.Contains("--display-id=0") && mirror.ArgumentList.Contains("--video-encoder=c2.vendor.avc.encoder")
-            && mirror.ArgumentList.Contains("--video-bit-rate=32000000") && mirror.ArgumentList.Contains("--max-fps=120"),
+        var normSel = selected.Normalize();
+        var normHigh = highBounds.Normalize();
+        var normInvalid = invalid.Normalize();
+        string mirrorCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(phone, AndroidApp.DeviceAudio, "11223344", new VideoServerOptions(
+                NewDisplay: false, MirrorDeviceDisplay: true, MaxFps: normSel.MaxFps,
+                VideoBitRate: normSel.VideoBitRate, VideoEncoder: normSel.VideoEncoder, StartAppOnServer: false)));
+        string appCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(phone, new("cn.test.music", "Music", 1001, "media"), "11223344", new VideoServerOptions(
+                MaxFps: normHigh.MaxFps, VideoBitRate: normHigh.VideoBitRate, VideoEncoder: normHigh.VideoEncoder)));
+        Check(mirrorCmd.EndsWith(" display_id=0", StringComparison.Ordinal) && mirrorCmd.Contains(" video_encoder=c2.vendor.avc.encoder ")
+            && mirrorCmd.Contains(" video_bit_rate=32000000 ") && mirrorCmd.Contains(" max_fps=120 "),
             "phone mirror receives 32 Mbps and 120 fps without creating a desktop");
-        Check(app.ArgumentList.Contains("--new-display") && app.ArgumentList.Contains("--start-app=cn.test.music")
-            && app.ArgumentList.Contains("--video-bit-rate=50000000") && app.ArgumentList.Contains("--max-fps=120")
-            && app.ArgumentList.Contains("--no-audio"),
+        Check(appCmd.Contains(" new_display ") && appCmd.Contains(" start_app=cn.test.music ")
+            && appCmd.Contains(" video_bit_rate=50000000 ") && appCmd.Contains(" max_fps=120 ")
+            && appCmd.Contains(" audio=false "),
             "ordinary app screens share 50 Mbps and 120 fps phone video choices while audio stays managed separately");
-        var safe = VirtualDisplayClient.CreateStartInfo(adb, phone, AndroidApp.DeviceAudio, 0, 0, streaming: invalid);
-        Check(!safe.ArgumentList.Any(x => x.StartsWith("--video-encoder"))
-            && safe.ArgumentList.Contains("--max-fps=30") && safe.ArgumentList.Contains("--video-bit-rate=4000000"),
-            "invalid persisted video values never reach the command line");
+        string safeCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(phone, AndroidApp.DeviceAudio, "11223344", new VideoServerOptions(
+                NewDisplay: false, MirrorDeviceDisplay: true, MaxFps: normInvalid.MaxFps,
+                VideoBitRate: normInvalid.VideoBitRate, VideoEncoder: normInvalid.VideoEncoder, StartAppOnServer: false)));
+        Check(!safeCmd.Contains("video_encoder=")
+            && safeCmd.Contains(" max_fps=30 ") && safeCmd.Contains(" video_bit_rate=4000000 "),
+            "invalid persisted video values never reach the server command line");
         await File.WriteAllTextAsync(Path.Combine(output, "stream-settings-summary.json"), JsonSerializer.Serialize(new
         { Assertions = _checks, RealAdb = false, ProductStarted = false, Scope = "preferences migration, isolation, capability parsing, 24/32/50 Mbps, 120 fps, and both video paths" },
             new JsonSerializerOptions { WriteIndented = true }));

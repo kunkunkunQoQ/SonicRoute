@@ -75,7 +75,7 @@ namespace SonicRoute
             foreach (var item in items) parent.Items.Add(item);
         }
 
-        private void AddTrayAudioItems(ContextMenu owner, int foregroundPid)
+        private void AddTrayAudioItems(ContextMenu owner, int foregroundPid, IntPtr foregroundHwnd)
         {
             var lifetime = _trayMenuLifetime!;
             int request = _trayAudioRequest;
@@ -83,7 +83,7 @@ namespace SonicRoute
             current.Tag = "tray.current";
             TrayPlaceholder(current, "Tray.Loading");
             owner.Items.Add(current);
-            owner.Opened += async (_, _) => await LoadTrayAppAsync(owner, current, foregroundPid, request, lifetime);
+            owner.Opened += async (_, _) => await LoadTrayAppAsync(owner, current, foregroundPid, foregroundHwnd, request, lifetime);
 
             var output = ConvenienceMenus.Item(L10n.T("Dev.SystemDefaultOut"));
             output.Tag = "tray.output";
@@ -169,7 +169,7 @@ namespace SonicRoute
                 && ApplicationAudio.HasSession(target.App);
         }
 
-        private async Task LoadTrayAppAsync(ContextMenu owner, MenuItem parent, int foregroundPid, int request, WindowUiLifetime lifetime)
+        private async Task LoadTrayAppAsync(ContextMenu owner, MenuItem parent, int foregroundPid, IntPtr foregroundHwnd, int request, WindowUiLifetime lifetime)
         {
             try
             {
@@ -178,7 +178,7 @@ namespace SonicRoute
                 if (!TrayMenuAlive(owner, request)) return;
                 var data = await lifetime.ReadAsync(() =>
                 {
-                    var app = CurrentAppService.Resolve(apps, ConfigService.Load(), foregroundPid);
+                    var app = CurrentAppService.ResolveWithWindow(apps, ConfigService.Load(), foregroundPid, foregroundHwnd);
                     if (app == null) return (Target: (TrayAppTarget?)null, Volume: -1, Muted: false);
                     var target = new TrayAppTarget { App = app, Name = AppDisplayName.Get(app), StartTicks = app.IsExternal ? null : TrayProcessStart((int)app.ProcessId) };
                     return (Target: (TrayAppTarget?)target, Volume: ApplicationAudio.GetVolumePercent(app), Muted: ApplicationAudio.IsMuted(app));

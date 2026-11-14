@@ -165,6 +165,10 @@ namespace SonicRoute
         private static ProcessSnapshotService? _processSnapshot;
         private static int _lastFgPid;
         private static int _observedForegroundPid;
+#if SONICROUTE_PHONE
+        private static nint _lastFgHwnd;
+        private static nint _observedForegroundHwnd;
+#endif
         private static long _foregroundSequence;
         private static bool _watchTickRunning;
         private static bool _watchReadFailed, _watchExecutionRunning;
@@ -173,6 +177,9 @@ namespace SonicRoute
             internal AutoRule Rule = null!;
             internal long Revision, ForegroundSequence;
             internal int ForegroundPid;
+#if SONICROUTE_PHONE
+            internal nint ForegroundHwnd;
+#endif
         }
         private static readonly LinkedList<WatchRequest> _watchRequests = new();
         private static readonly Dictionary<string, LinkedListNode<WatchRequest>> _pendingWatchRules = new(StringComparer.Ordinal);
@@ -276,6 +283,9 @@ namespace SonicRoute
             if (needsForeground && !_foregroundSubscribed)
             {
                 _lastFgPid = -1;
+#if SONICROUTE_PHONE
+                _lastFgHwnd = 0;
+#endif
                 CurrentAppService.ForegroundChanged += ForegroundChanged;
                 _foregroundSubscribed = true;
             }
@@ -403,6 +413,9 @@ namespace SonicRoute
         private static void ForegroundChanged(int pid)
         {
             _observedForegroundPid = pid;
+#if SONICROUTE_PHONE
+            _observedForegroundHwnd = pid == AppInfo.CurrentProcessId ? ApplicationAudio.GetForegroundWindowHandle() : 0;
+#endif
             ++_foregroundSequence;
             _ = TickAsync(false, true);
         }
@@ -439,7 +452,12 @@ namespace SonicRoute
                         if (rule == null || !rule.Enabled || rule.Trigger != request.Rule.Trigger) continue;
                         if (!ReferenceEquals(rule, request.Rule) && JsonSerializer.Serialize(rule) != JsonSerializer.Serialize(request.Rule)) continue;
                         if (rule.Trigger == AutoRuleTrigger.AppSwitch && (request.ForegroundSequence != _foregroundSequence
-                            || request.ForegroundPid != ForegroundAppService.GetForegroundProcessId())) continue;
+                            || request.ForegroundPid != ForegroundAppService.GetForegroundProcessId()
+#if SONICROUTE_PHONE
+                            || (request.ForegroundPid == AppInfo.CurrentProcessId
+                                && request.ForegroundHwnd != ApplicationAudio.GetForegroundWindowHandle())
+#endif
+                            )) continue;
                         await ExecuteAsync(rule);
                     }
                     catch (Exception error) { AutoRuleScheduler.Log("应用触发执行失败: " + error.Message); }
@@ -494,11 +512,21 @@ namespace SonicRoute
             if (rules.Count == 0) { RefreshWatcher(); return; }
             long rulesRevision = _watchRulesRevision;
             List<WatchRequest>? requests = null;
-            void Trigger(AutoRule rule, int foregroundPid = 0)
+            void Trigger(AutoRule rule, int foregroundPid = 0
+#if SONICROUTE_PHONE
+                , nint foregroundHwnd = 0
+#endif
+                )
             {
                 requests ??= new List<WatchRequest>();
                 requests.Add(new WatchRequest
-                { Rule = rule, Revision = rulesRevision, ForegroundPid = foregroundPid, ForegroundSequence = _foregroundSequence });
+                {
+                    Rule = rule, Revision = rulesRevision, ForegroundPid = foregroundPid,
+#if SONICROUTE_PHONE
+                    ForegroundHwnd = foregroundHwnd,
+#endif
+                    ForegroundSequence = _foregroundSequence
+                });
             }
 
             // 应用启动 / 应用退出触发：进程快照 diff（新出现 = 启动；消失 = 退出）。
@@ -583,10 +611,29 @@ namespace SonicRoute
                 _snapshotNeedsBaseline = !capture.Complete;
             }
 
-            // 前台切换触发：前台 PID 变化且与目标进程名匹配（含空 = 任意应用）
+            // 前台切换触发：前台 (PID, 同进程虚拟屏 HWND) 变化且与目标进程名匹配（含空 = 任意应用）
             if (foreground && _hasAppSwitch)
             {
                 int fg = _observedForegroundPid;
+#if SONICROUTE_PHONE
+                nint fgHwnd = _observedForegroundHwnd;
+                bool fgChanged = fg != 0 && (fg != _lastFgPid || (fg == AppInfo.CurrentProcessId && fgHwnd != _lastFgHwnd));
+                if (fgChanged)
+                {
+                    string? name = ApplicationAudio.ForegroundAppName(fg, fgHwnd);
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        foreach (var r in rules)
+                        {
+                            if (r.Trigger == AutoRuleTrigger.AppSwitch && MatchApp(r.TriggerApp, name))
+                                Trigger(r, fg, fgHwnd);
+                        }
+                    }
+                }
+                if (generation != _watchGeneration) return;
+                _lastFgPid = fg;
+                _lastFgHwnd = fgHwnd;
+#else
                 if (fg != 0 && fg != _lastFgPid)
                 {
                     string? name = ApplicationAudio.ForegroundAppName(fg);
@@ -601,6 +648,7 @@ namespace SonicRoute
                 }
                 if (generation != _watchGeneration) return;
                 _lastFgPid = fg;
+#endif
             }
             // 基线已提交后再派发；执行等待不占用检测的单飞状态。
             if (requests != null) QueueWatchRules(requests);

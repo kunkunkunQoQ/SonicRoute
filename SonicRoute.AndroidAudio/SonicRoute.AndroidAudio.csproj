@@ -8,14 +8,10 @@
   <ItemGroup>
     <PackageReference Include="Concentus" Version="2.2.2" />
     <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
-    <PackageReference Include="System.Management" Version="8.0.0" />
-    <EmbeddedResource Include="VirtualDisplayRuntime.files.json" />
     <EmbeddedResource Include="AndroidRuntime.files.json" />
     <EmbeddedResource Include="../AndroidRuntime/*" Exclude="../AndroidRuntime/*.txt" LogicalName="SonicRoute.AndroidRuntime.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="../AndroidRuntime/VirtualDisplay/*" Exclude="../AndroidRuntime/VirtualDisplay/*.txt" LogicalName="SonicRoute.AndroidRuntime.VirtualDisplay.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="../LICENSE;../packaging/AndroidLab/THIRD-PARTY-NOTICES.md;../packaging/AndroidLab/QRCoder-LICENSE.txt;../AndroidRuntime/*.txt"
-                      LogicalName="SonicRoute.Notices.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="../packaging/AndroidLab/video-licenses/*.txt" LogicalName="SonicRoute.Notices.Video.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../AndroidRuntime/VirtualDisplay/phone-icon.png" LogicalName="SonicRoute.AndroidRuntime.VirtualDisplay.phone-icon.png" />
     <Compile Include="../SonicRoute.Core/AtomicFile.cs" Link="Shared/AtomicFile.cs" />
+    <InternalsVisibleTo Include="AndroidAudioChecks" />
   </ItemGroup>
 </Project>

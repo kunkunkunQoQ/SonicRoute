@@ -96,6 +96,7 @@ internal static partial class Program
             var renamedRow = renamedRows[source.Id]!;
             var renamedInfo = (AppItem)renamedRow.GetType().GetField("IconItem", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(renamedRow)!;
             Check(renamedInfo.Label == "我的手机", "active whole-phone source also follows a custom phone rename");
+            CheckRound4ExternalNames(device, store, music);
             store.Remove(music.Package);
             typeof(PhoneAudioWindow).GetMethod("RetainedAppsChanged", Hidden)!.Invoke(phone, null);
             Check(list.Items.Count == 1 && ReferenceEquals(list.Items[0], wholeItem)
@@ -122,5 +123,115 @@ internal static partial class Program
         {
             panel?.Close(); phone.Close(); L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
         }
+    }
+
+    private static void CheckRound4ExternalNames(AndroidDevice device, AndroidPhoneStore store, AndroidApp music)
+    {
+        var deviceAudioInfo = new SonicRoute.Core.Models.AudioAppInfo
+        {
+            ProcessId = 0,
+            ExternalSourceId = "android:device-audio-test",
+            ProcessName = "android:" + AndroidApp.DeviceAudioPackage,
+            DisplayName = "我的手机"
+        };
+        Check(AppDisplayName.Get(deviceAudioInfo) == "我的手机",
+            "AppDisplayName.Get(AudioAppInfo) resolves device-audio display name without raw android identifier");
+        Check(AppDisplayName.Get(deviceAudioInfo.ProcessName, deviceAudioInfo.ProcessName!) == "我的手机",
+            "AppDisplayName.Get(processName, fallback) resolves active android device-audio to phone name");
+
+        var emptyNameApp = new SonicRoute.Core.Models.AudioAppInfo
+        {
+            ProcessId = 0,
+            ExternalSourceId = "android:missing-display-name",
+            ProcessName = "android:" + music.Package,
+            DisplayName = ""
+        };
+        Check(!emptyNameApp.Label.StartsWith("android:", StringComparison.OrdinalIgnoreCase)
+            && AppDisplayName.Get(emptyNameApp) == music.Name,
+            "empty DisplayName on android AudioAppInfo resolves safely through ExternalNameResolver and Label fallback");
+
+        var catalogFile = Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "round4-catalog-" + Guid.NewGuid().ToString("N") + ".json");
+        try
+        {
+            var catalog = new AndroidAppCatalogCache(catalogFile, (_, _) => throw new InvalidOperationException("catalog cache check must not query ADB"));
+            var catalogApp = new AndroidApp("com.example.cached", "缓存音乐", 2002, "media");
+            Pump(new AndroidAppCatalogCache(catalogFile, (_, _) => Task.FromResult<IReadOnlyList<AndroidApp>>([catalogApp]))
+                .GetAsync(device, true, CancellationToken.None));
+            Check(catalog.TryFindCachedName(catalogApp.Package, [device]) == "缓存音乐",
+                "AndroidAppCatalogCache.TryFindCachedName reads saved catalog entry without ADB");
+        }
+        finally
+        {
+            foreach (var f in Directory.GetFiles(Path.GetDirectoryName(catalogFile)!, Path.GetFileName(catalogFile) + "*"))
+                File.Delete(f);
+        }
+
+        var triggerDetail = typeof(MainWindow).GetMethod("AutomationTriggerDetail", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var deviceTriggerRule = new SonicRoute.Core.Models.AutoRule { Trigger = SonicRoute.Core.Models.AutoRuleTrigger.AppSwitch, TriggerApp = "android:" + AndroidApp.DeviceAudioPackage };
+        var appTriggerRule = new SonicRoute.Core.Models.AutoRule { Trigger = SonicRoute.Core.Models.AutoRuleTrigger.AppStart, TriggerApp = "android:" + music.Package };
+        var winTriggerRule = new SonicRoute.Core.Models.AutoRule { Trigger = SonicRoute.Core.Models.AutoRuleTrigger.AppStart, TriggerApp = "chrome" };
+        Check((string)triggerDetail.Invoke(null, [deviceTriggerRule])! == "我的手机"
+            && (string)triggerDetail.Invoke(null, [appTriggerRule])! == music.Name
+            && (string)triggerDetail.Invoke(null, [winTriggerRule])! == "chrome.exe",
+            "AutomationTriggerDetail formats android triggers cleanly without appending .exe");
+
+        var historyRunType = typeof(App).Assembly.GetType("SonicRoute.ExecutionHistoryRun")!;
+        using var historyStore = new ExecutionHistoryStore(Path.GetDirectoryName(ConfigService.ConfigPath)!, 1);
+        var historyRun = Activator.CreateInstance(historyRunType, BindingFlags.Instance | BindingFlags.NonPublic, null,
+            [historyStore, new SonicRoute.Core.Models.AutoRule { Id = "r4", Name = "R4", Trigger = SonicRoute.Core.Models.AutoRuleTrigger.Hotkey }, "hotkey", ""], null)!;
+        var addStep = historyRunType.GetMethod("Step", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var phoneStep = (ExecutionHistoryStep)addStep.Invoke(historyRun,
+            [0, new SonicRoute.Core.Models.AutoRuleStep { Action = SonicRoute.Core.Models.AutoRuleAction.SetAppVolume, TargetApp = "android:" + AndroidApp.DeviceAudioPackage }])!;
+        var winStep = (ExecutionHistoryStep)addStep.Invoke(historyRun,
+            [1, new SonicRoute.Core.Models.AutoRuleStep { Action = SonicRoute.Core.Models.AutoRuleAction.SetAppVolume, TargetApp = "chrome" }])!;
+        Check(phoneStep.TargetApp == "我的手机" && winStep.TargetApp == "chrome",
+            "ExecutionHistoryRun.Step resolves android target identifiers to friendly display names");
+
+        var reuse = typeof(MainWindow).GetMethod("ReuseExternalItem", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var staleItem = AppItem.From(new SonicRoute.Core.Models.AudioAppInfo
+        {
+            ProcessId = 0,
+            ExternalSourceId = "android:device-audio-test",
+            ProcessName = "android:" + AndroidApp.DeviceAudioPackage,
+            DisplayName = "旧手机",
+            SourceLabel = "来自 旧手机"
+        });
+        reuse.Invoke(null, [staleItem, new SonicRoute.Core.Models.AudioAppInfo
+        {
+            ProcessId = 0,
+            ExternalSourceId = "android:device-audio-test",
+            ProcessName = "android:" + AndroidApp.DeviceAudioPackage,
+            DisplayName = "新手机",
+            SourceLabel = "来自 新手机"
+        }]);
+        Check(staleItem.Info.DisplayName == "新手机" && staleItem.Info.SourceLabel == "来自 新手机" && staleItem.Label == "新手机",
+            "ReuseExternalItem synchronizes both DisplayName and SourceLabel when reusing an external AppItem");
+
+        var emptySourceLabelApp = new SonicRoute.Core.Models.AudioAppInfo
+        {
+            ProcessId = 0,
+            ExternalSourceId = "android:device-audio-test",
+            ProcessName = "android:" + AndroidApp.DeviceAudioPackage,
+            DisplayName = "我的手机",
+            SourceLabel = null
+        };
+        var emptySourceItem = AppItem.From(emptySourceLabelApp);
+        Check(emptySourceItem.Subtitle == "", "external AppItem subtitle avoids leaking android identifier when SourceLabel is null");
+
+        var main = new MainWindow { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
+        try
+        {
+            typeof(MainWindow).GetField("_appsSelected", Hidden)!.SetValue(main, emptySourceLabelApp);
+            typeof(MainWindow).GetMethod("UpdateAppsDetailLabels", Hidden)!.Invoke(main, null);
+            var pidText = ((TextBlock)main.FindName("AppsDetailPid")).Text;
+            var titleText = ((TextBlock)main.FindName("AppsDetailTitle")).Text;
+            Check(titleText == "我的手机" && pidText == "",
+                "AppsDetailPid hides PID 0 and raw android identifier when external app has null SourceLabel");
+        }
+        finally { main.Close(); }
+
+        var resolvedEmpty = CurrentAppService.Resolve([deviceAudioInfo], ConfigService.Load(), Environment.ProcessId);
+        Check(resolvedEmpty != null, "CurrentAppService.Resolve handles current process foregroundPid without throwing when no virtual display window is focused");
+        GC.KeepAlive(store);
     }
 }

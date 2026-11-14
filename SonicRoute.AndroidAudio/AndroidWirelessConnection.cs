@@ -164,21 +164,45 @@ public sealed class AndroidWirelessConnection
         }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
-        using var discoveryLifetime = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
-        var discovery = DiscoverAsync(ConnectType, null, address == null ? null : Host(address), guid,
-            TimeSpan.FromSeconds(12), discoveryLifetime.Token);
+        string? host = address == null ? null : Host(address);
         try
         {
+            IReadOnlyList<AndroidDevice> currentDevices;
+            try { currentDevices = await DevicesAsync(deadline.Token).ConfigureAwait(false); }
+            catch (IOException) { currentDevices = Array.Empty<AndroidDevice>(); }
+            var ready = FindMatchingReadyDevice(currentDevices, host, address, guid, device.Serial, device.HardwareId);
+            if (ready != null) return new(ready, currentDevices);
+
+            bool connected = false;
             if (address != null)
             {
-                try { await SendConnectAsync(address, deadline.Token).ConfigureAwait(false); }
+                using var connectProbe = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+                connectProbe.CancelAfter(TimeSpan.FromSeconds(3));
+                try { await SendConnectAsync(address, connectProbe.Token).ConfigureAwait(false); connected = true; }
                 catch (IOException) { /* discover this host's current TLS endpoint below */ }
+                catch (OperationCanceledException) when (!deadline.IsCancellationRequested) { }
             }
-            return await WaitForDeviceAsync(address == null ? null : Host(address), address, guid, device.Serial, deadline.Token, discovery).ConfigureAwait(false);
+
+            if (address == null || !connected)
+            {
+                using var discoveryLifetime = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+                var discovery = DiscoverAsync(ConnectType, null, host, guid,
+                    TimeSpan.FromSeconds(12), discoveryLifetime.Token);
+                try
+                {
+                    return await WaitForDeviceAsync(host, address, guid, device.Serial, deadline.Token, discovery, device.HardwareId).ConfigureAwait(false);
+                }
+                finally
+                {
+                    discoveryLifetime.Cancel();
+                    try { await discovery.ConfigureAwait(false); } catch (OperationCanceledException) { }
+                }
+            }
+
+            return await WaitForDeviceAsync(host, address, guid, device.Serial, deadline.Token, null, device.HardwareId).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
         { throw AndroidError.WithCode(new IOException("设备未连接，请开启手机无线调试，或填写首页的当前连接地址。"), AndroidErrorCode.DeviceNotConnectedWifiHint); }
-        finally { discoveryLifetime.Cancel(); try { await discovery.ConfigureAwait(false); } catch (OperationCanceledException) { } }
     }
     private static bool MatchesGuid(string serial, string? guid)
     {
@@ -187,8 +211,37 @@ public sealed class AndroidWirelessConnection
         if (!guid.StartsWith("adb-", StringComparison.OrdinalIgnoreCase)) guid = "adb-" + guid;
         return name.Equals(guid, StringComparison.OrdinalIgnoreCase) || name.StartsWith(guid + "-", StringComparison.OrdinalIgnoreCase);
     }
+    private static AndroidDevice? FindMatchingReadyDevice(IReadOnlyList<AndroidDevice> devices, string? host, string? address,
+        string? guid, string? serial, string? hardwareId)
+    {
+        foreach (var d in devices)
+        {
+            if (d.State != "device" || !d.IsWifi) continue;
+            if (!string.IsNullOrWhiteSpace(hardwareId)
+                && string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase))
+                return d;
+            if (serial != null && string.Equals(d.Serial.TrimEnd('.'), serial.TrimEnd('.'), StringComparison.OrdinalIgnoreCase))
+                return d;
+            if (address != null && string.Equals(d.Serial.TrimEnd('.'), address, StringComparison.OrdinalIgnoreCase))
+                return d;
+            if (MatchesGuid(d.Serial, guid))
+                return d;
+            if (address == null && host != null)
+            {
+                try { if (Host(ValidateAddress(d.Serial)) == host) return d; }
+                catch (ArgumentException) { }
+            }
+        }
+        return null;
+    }
+    private static TimeSpan RetryDelay(int attempt) => attempt switch
+    {
+        < 2 => TimeSpan.FromMilliseconds(150),
+        < 5 => TimeSpan.FromMilliseconds(350),
+        _ => TimeSpan.FromMilliseconds(750),
+    };
     private async Task<AndroidConnectionResult> WaitForDeviceAsync(string? host, string? address, string? guid, string? serial, CancellationToken token,
-        Task<AndroidMdnsService?>? discovery = null)
+        Task<AndroidMdnsService?>? discovery = null, string? hardwareId = null)
     {
         var serials = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (serial != null) serials.Add(serial.TrimEnd('.'));
@@ -198,6 +251,9 @@ public sealed class AndroidWirelessConnection
         bool Matches(AndroidDevice d)
         {
             if (d.State != "device" || !d.IsWifi) return false;
+            if (!string.IsNullOrWhiteSpace(hardwareId)
+                && string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase))
+                return true;
             if (serials.Contains(d.Serial.TrimEnd('.')) || MatchesGuid(d.Serial, guid)) return true;
             try { return address == null && host != null && Host(ValidateAddress(d.Serial)) == host; }
             catch (ArgumentException) { return false; }
@@ -246,7 +302,20 @@ public sealed class AndroidWirelessConnection
                     catch (IOException ex) { lastError = ex; }
                 }
             }
-            if (attempt < 14) await _delay(TimeSpan.FromSeconds(1), token).ConfigureAwait(false);
+            if (attempt < 14)
+            {
+                var delay = _delay(RetryDelay(attempt), token);
+                if (discovery is { IsCompleted: false })
+                {
+                    if (await Task.WhenAny(delay, discovery).ConfigureAwait(false) == delay)
+                        await delay.ConfigureAwait(false);
+                    token.ThrowIfCancellationRequested();
+                }
+                else
+                {
+                    await delay.ConfigureAwait(false);
+                }
+            }
         }
         throw AndroidError.WithCode(new IOException("设备尚未就绪，请在手机确认调试授权；已配对时可填写无线调试首页的连接地址，无需重新配对。", lastError), AndroidErrorCode.DeviceNotReadyConfirmAuth);
     }
@@ -270,15 +339,15 @@ public sealed class AndroidWirelessConnection
         if (!File.Exists(publicKey) || new FileInfo(publicKey).Length > 16384)
             throw AndroidError.WithCode(new IOException("无法确认此电脑的配对身份，请在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairIdentityUnavailable);
         string fingerprint = PairingFingerprint(await File.ReadAllTextAsync(publicKey, token).ConfigureAwait(false));
-        var runtime = new VirtualDisplayRuntime(adb);
-        await Task.Run(runtime.ValidateControl, token).ConfigureAwait(false);
+        await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
+        adb.ValidateCatalog();
         string remote = "/data/local/tmp/sonicroute-pairing-" + Guid.NewGuid().ToString("N") + ".jar";
         try
         {
-            await adb.RunAsync(token, "-s", device.Serial, "push", runtime.ServerFile, remote).ConfigureAwait(false);
+            await adb.RunAsync(token, "-s", device.Serial, "push", adb.CatalogFile, remote).ConfigureAwait(false);
             string result;
             try { result = await adb.RunAsync(token, "-s", device.Serial, "shell", "CLASSPATH=" + remote, "app_process", "/",
-                "com.genymobile.scrcpy.control.PairingControl", fingerprint, remote).ConfigureAwait(false); }
+                "org.sonicroute.android.PairingControl", fingerprint, remote).ConfigureAwait(false); }
             catch (IOException ex) when (ex.Message.Contains("SR_UNPAIR_REQUESTED", StringComparison.Ordinal)) { return; }
             if (!result.Contains("SR_UNPAIR_REQUESTED", StringComparison.Ordinal) && !result.Contains("SR_UNPAIR_NOT_PAIRED", StringComparison.Ordinal))
                 throw AndroidError.WithCode(new IOException("手机未确认取消配对，请在无线调试中移除此电脑。"), AndroidErrorCode.UnpairNotConfirmed);

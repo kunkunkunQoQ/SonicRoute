@@ -19,13 +19,18 @@ namespace SonicRoute
         private void ShowTrayMenu()
         {
             if (_trayIcon == null || Dispatcher.HasShutdownStarted) return;
+#if SONICROUTE_PHONE
+            (int foregroundPid, nint foregroundHwnd) = ApplicationAudio.GetForegroundWindowContext();
+#else
             int foregroundPid = ForegroundAppService.GetForegroundProcessId();
+            IntPtr foregroundHwnd = IntPtr.Zero;
+#endif
             CloseTrayMenu();
             CancelUiReclaim();
             _uiWorkingSetDirty = true;
             try
             {
-                var menu = CreateTrayMenu(foregroundPid);
+                var menu = CreateTrayMenu(foregroundPid, foregroundHwnd);
 
                 // 托盘菜单需要前台宿主才能正常失焦关闭。仅在菜单打开时创建原生零尺寸窗口，
                 // 不创建隐藏 WPF Window，不保留常驻视觉树或轮询。
@@ -58,7 +63,7 @@ namespace SonicRoute
             catch { CloseTrayMenu(); }
         }
 
-        private ContextMenu CreateTrayMenu(int foregroundPid)
+        private ContextMenu CreateTrayMenu(int foregroundPid, IntPtr foregroundHwnd)
         {
             if (_trayMenu != null || _trayMenuLifetime != null) CloseTrayMenu();
             var menu = ConvenienceMenus.Create();
@@ -73,7 +78,7 @@ namespace SonicRoute
             if (Updates.ShouldNotify)
                 AddTrayAction(menu, string.Format(L10n.T("Upd.Notice"), Updates.Release!.Tag), ShowUpdateSettings);
             AddTraySeparator(menu.Items);
-            AddTrayAudioItems(menu, foregroundPid);
+            AddTrayAudioItems(menu, foregroundPid, foregroundHwnd);
             menu.Items.Add(BuildFavoriteRulesMenu(menu));
             AddTraySeparator(menu.Items);
             AddTrayWheelPause(menu);

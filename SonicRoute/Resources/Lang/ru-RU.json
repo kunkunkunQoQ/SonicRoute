@@ -628,7 +628,6 @@
   "Phone.Disconnected": "Не подключено",
   "Phone.WifiConnected": "Подключено по Wi-Fi",
   "Phone.UsbConnected": "Подключено по USB",
-  "Phone.OpenSourceLicenses": "Открытые лицензии",
   "Phone.FromDevice": "С {0}",
   "Phone.DeviceNameAutomation": "Имя телефона",
   "Phone.Disconnect": "Отключить",

@@ -632,9 +632,7 @@ namespace SonicRoute
             }
 
             CurrentAppService.Current = _appsSelected;
-            var pid = (int)_appsSelected.ProcessId;
-            AppsDetailTitle.Text = AppDisplayName.Get(_appsSelected);
-            AppsDetailPid.Text = _appsSelected.SourceLabel ?? $"PID {pid} · {_appsSelected.ProcessName ?? "?"}";
+            UpdateAppsDetailLabels();
             AppsRenameBox.IsEnabled = true;
             _suppressRename = true;
             AppsRenameBox.Text = _config.AppNames.TryGetValue(_appsSelected.ProcessName ?? "", out var rn) ? rn ?? "" : "";
@@ -643,6 +641,15 @@ namespace SonicRoute
             UpdateAppsDisableAutoButton();
             UpdateAppsShowInPanelButton();
             await RefreshAppsSelectionAsync();
+        }
+
+        private void UpdateAppsDetailLabels()
+        {
+            if (_appsSelected == null) return;
+            AppsDetailTitle.Text = AppDisplayName.Get(_appsSelected);
+            AppsDetailPid.Text = _appsSelected.IsExternal
+                ? (_appsSelected.SourceLabel ?? "")
+                : (_appsSelected.SourceLabel ?? $"PID {(int)_appsSelected.ProcessId} · {_appsSelected.ProcessName ?? "?"}");
         }
 
         /// <summary>切换选中应用的"禁用自动切换"状态（不影响手动选择，只影响自动检测/跟随）。</summary>

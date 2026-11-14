@@ -60,15 +60,8 @@ public final class MediaSessionBridge {
     private MediaSessionBridge(Context context) throws Exception {
         // app_process skips the zygote's media-module initialization on newer Android.
         // Initialize this helper process's registry only, and leave an existing one intact.
-        try {
-            Class<?> initializer = Class.forName("android.media.MediaFrameworkPlatformInitializer");
-            if (initializer.getMethod("getMediaServiceManager").invoke(null) == null) {
-                Class<?> serviceManager = Class.forName("android.media.MediaServiceManager");
-                initializer.getMethod("setMediaServiceManager", serviceManager)
-                    .invoke(null, serviceManager.getConstructor().newInstance());
-            }
-        } catch (ClassNotFoundException ignored) { /* older frameworks use ServiceManager directly */ }
-        // FakeContext attributes calls to the shell UID, rather than system_server's package.
+        AndroidWorkarounds.ensureMediaFrameworkInitialized();
+        // ShellContext attributes calls to the shell UID, rather than system_server's package.
         manager = (MediaSessionManager) MediaSessionManager.class.getConstructor(Context.class).newInstance(context);
         audioManager = AudioOutputBridge.getAudioManager(context);
     }
@@ -218,8 +211,8 @@ public final class MediaSessionBridge {
     public static void main(String[] args) {
         try {
             Looper.prepareMainLooper();
-            Class.forName("com.genymobile.scrcpy.Workarounds").getMethod("apply").invoke(null);
-            Context context = (Context) Class.forName("com.genymobile.scrcpy.FakeContext").getMethod("get").invoke(null);
+            AndroidWorkarounds.apply();
+            Context context = ShellContext.get();
             MediaSessionBridge bridge = new MediaSessionBridge(context);
             if (bridge.audioManager != null) {
                 try { bridge.audioManager.registerAudioDeviceCallback(bridge.deviceCallback, bridge.handler); }

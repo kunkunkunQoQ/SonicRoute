@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 
 namespace SonicRoute.AndroidAudio;
@@ -8,6 +9,7 @@ namespace SonicRoute.AndroidAudio;
 /// <summary>One owned phone playback connection, shared by Windows loopback and incoming-phone renderers.</summary>
 internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
 {
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private readonly AdbClient _adb;
     private readonly CancellationTokenSource _lifetime;
     private readonly SemaphoreSlim _switch = new(1, 1);
@@ -17,18 +19,19 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
     private readonly TaskCompletionSource<Exception> _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private TaskCompletionSource? _verified;
     private IReadOnlyList<AndroidOutputSink> _outputs = Array.Empty<AndroidOutputSink>();
-    private Process? _helper;
-    private TcpClient? _tcp;
+    private IAdbShellSession? _helper;
+    private StreamWriter? _writer;
+    private Stream? _pcmStream;
     private CancellationTokenRegistration _cancelSocket;
     private Task? _stdout, _stderr;
-    private string? _pid, _port, _lastError;
+    private string? _pid, _lastError;
     private string _target;
     private int _disposed;
     private readonly Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? _onOutputs;
     private readonly Action<string, int, string>? _onRouted;
     private string Remote => "/data/local/tmp/" + _socket + ".jar";
     public AndroidDevice Device { get; private set; }
-    public Stream Stream => _tcp!.GetStream();
+    public Stream Stream => _pcmStream!;
     public Task<Exception> Completion => _ended.Task;
     public Task WaitForRoutingAsync(CancellationToken token) => _verified!.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
     public int RoutedType { get; private set; }
@@ -62,8 +65,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         startup.CancelAfter(TimeSpan.FromSeconds(30));
         var token = startup.Token;
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        _adb.ValidateServer();
-        string catalog = Path.Combine(_adb.RuntimeDirectory, "sonicroute-catalog.jar");
+        _adb.ValidateCatalog();
         if (Device.State != "device") await RefreshDeviceAsync(token).ConfigureAwait(false);
         try { await PushRuntimeAsync().ConfigureAwait(false); }
         catch (Exception) when (!token.IsCancellationRequested)
@@ -71,30 +73,29 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             await RefreshDeviceAsync(token).ConfigureAwait(false);
             await PushRuntimeAsync().ConfigureAwait(false);
         }
-        Task<string> forwarding = _adb.RunAsync(token, "-s", Device.Serial, "forward", "tcp:0", "localabstract:" + _socket);
+
+        _helper = await _adb.OpenShellAsync(Device.Serial,
+            "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
+            + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'",
+            redirectInput: true, token).ConfigureAwait(false);
+        _writer = new StreamWriter(_helper.InputStream, Utf8NoBom, bufferSize: 1024, leaveOpen: true) { NewLine = "\n" };
+        _stdout = ReadOutputAsync();
+        _stderr = ReadErrorAsync();
+        await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+
         try
         {
-            _helper = _adb.StartWithInput("-s", Device.Serial, "shell",
-                "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + ":" + Remote + ".server exec app_process / org.sonicroute.android.AudioOutputBridge play "
-                + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'");
-            _stdout = ReadOutputAsync(); _stderr = ReadErrorAsync();
-            await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+            _pcmStream = await _adb.OpenLocalAbstractAsync(Device.Serial, _socket, token).ConfigureAwait(false);
         }
-        finally
+        catch (Exception ex) when (ex is IOException or SocketException)
         {
-            // Join even if helper startup fails, so DisposeAsync owns the exact forward.
-            _port = (await forwarding.ConfigureAwait(false)).Trim();
+            throw AndroidError.WithCode(new IOException("手机音频通道建立失败。", ex), AndroidErrorCode.AudioPortForwardFailed);
         }
-        if (!int.TryParse(_port, out int port) || port is < 1 or > 65535) throw AndroidError.WithCode(new IOException("手机音频端口转发失败。"), AndroidErrorCode.AudioPortForwardFailed);
-        _tcp = new TcpClient { NoDelay = true, SendBufferSize = 8192, SendTimeout = 5000 };
-        _cancelSocket = _lifetime.Token.UnsafeRegister(static socket => ((TcpClient)socket!).Dispose(), _tcp);
-        await _tcp.ConnectAsync("127.0.0.1", port, token).ConfigureAwait(false);
+        _cancelSocket = _lifetime.Token.UnsafeRegister(static stream => { try { ((Stream)stream!).Dispose(); } catch { } }, _pcmStream);
         // Feed real-time PCM before awaiting hardware acknowledgement; the helper
         // keeps an unverified output muted, preventing default-device leakage.
 
-        Task PushRuntimeAsync() => Task.WhenAll(
-            _adb.RunAsync(token, "-s", Device.Serial, "push", catalog, Remote),
-            _adb.RunAsync(token, "-s", Device.Serial, "push", _adb.ServerFile, Remote + ".server"));
+        Task PushRuntimeAsync() => _adb.RunAsync(token, "-s", Device.Serial, "push", _adb.CatalogFile, Remote);
     }
 
     private async Task RefreshDeviceAsync(CancellationToken token)
@@ -133,8 +134,8 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         lock (_control)
         {
             ThrowIfEnded();
-            _helper!.StandardInput.WriteLine(command);
-            _helper.StandardInput.Flush();
+            _writer!.WriteLine(command);
+            _writer.Flush();
         }
     }
     private void ThrowIfEnded()
@@ -147,7 +148,8 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
     {
         try
         {
-            while (await _helper!.StandardOutput.ReadLineAsync(_lifetime.Token).ConfigureAwait(false) is { } line)
+            using var reader = new StreamReader(_helper!.OutputStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 2048, leaveOpen: true);
+            while (await reader.ReadLineAsync(_lifetime.Token).ConfigureAwait(false) is { } line)
             {
                 if (line.StartsWith("SR_PCOUT_PID:", StringComparison.Ordinal))
                 {
@@ -163,46 +165,50 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
                             setup.GetProperty("releaseMs").GetDouble());
                     if (root.TryGetProperty("outputs", out var outputs))
                     {
-                        var sinks = AndroidOutputSink.ParseList(outputs);
-                        lock (_routeGate) _outputs = sinks;
-                        try { _onOutputs?.Invoke(Device, sinks); } catch { }
+                        var parsed = AndroidOutputSink.ParseList(outputs);
+                        lock (_routeGate) _outputs = parsed;
+                        try { _onOutputs?.Invoke(Device, parsed); } catch { }
                     }
-                    if (root.TryGetProperty("routed", out var routed))
+                    if (root.TryGetProperty("routed", out var routed) && routed.ValueKind == JsonValueKind.Object)
                     {
                         LastRouteReport = routed.GetRawText();
-                        string key = routed.GetProperty("key").GetString() ?? "";
-                        int type = routed.GetProperty("type").GetInt32();
-                        string name = routed.GetProperty("name").GetString() ?? "";
+                        string key = routed.TryGetProperty("key", out var k) ? (k.GetString() ?? "") : "";
+                        int type = routed.TryGetProperty("type", out var t) && t.TryGetInt32(out int typeVal) ? typeVal : 0;
+                        string name = routed.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
                         bool applied = routed.TryGetProperty("preferredApplied", out var p) && p.ValueKind == JsonValueKind.True;
                         bool accepted;
+                        TaskCompletionSource? verified = null;
                         lock (_routeGate)
                         {
                             accepted = applied && string.Equals(key, _target, StringComparison.OrdinalIgnoreCase);
                             if (accepted)
                             {
                                 RoutedType = type;
-                                if (routed.TryGetProperty("bufferFrames", out var buffer)) BufferFrames = buffer.GetInt32();
-                                if (routed.TryGetProperty("startThresholdFrames", out var threshold)) StartThresholdFrames = threshold.GetInt32();
-                                _verified?.TrySetResult();
+                                if (routed.TryGetProperty("bufferFrames", out var bf) && bf.TryGetInt32(out int bfVal)) BufferFrames = bfVal;
+                                if (routed.TryGetProperty("startThresholdFrames", out var st) && st.TryGetInt32(out int stVal)) StartThresholdFrames = stVal;
+                                verified = _verified;
                             }
                         }
+                        verified?.TrySetResult();
                         if (accepted) try { _onRouted?.Invoke(key, type, name); } catch { }
                     }
                     if (root.TryGetProperty("listening", out var listening) && listening.ValueKind == JsonValueKind.True) _ready.TrySetResult();
-                    if (root.TryGetProperty("error", out var error)) throw error.GetString() is { Length: > 0 } errText ? new IOException(errText) : AndroidError.WithCode(new IOException("手机音频输出失败。"), AndroidErrorCode.PhoneAudioOutputFailed);
+                    if (root.TryGetProperty("error", out var error))
+                        throw AndroidError.WithCode(new IOException(error.GetString() ?? "手机音频输出失败。"), AndroidErrorCode.PhoneAudioOutputFailed);
                 }
             }
-            if (!_lifetime.IsCancellationRequested) Fail(_lastError != null ? new IOException(_lastError) : AndroidError.WithCode(new IOException("手机音频输出辅助进程已退出。"), AndroidErrorCode.PhoneAudioHelperExited));
+            Fail(AndroidError.WithCode(new EndOfStreamException(string.IsNullOrEmpty(_lastError) ? "手机音频辅助进程已退出。" : _lastError), AndroidErrorCode.PhoneAudioHelperExited));
         }
-        catch (Exception) when (_lifetime.IsCancellationRequested) { }
-        catch (Exception ex) { Fail(ex); }
+        catch (Exception ex) when (!_lifetime.IsCancellationRequested) { Fail(ex); }
+        catch (OperationCanceledException) { }
     }
 
     private async Task ReadErrorAsync()
     {
         try
         {
-            while (await _helper!.StandardError.ReadLineAsync(_lifetime.Token).ConfigureAwait(false) is { } line)
+            using var reader = new StreamReader(_helper!.ErrorStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
+            while (await reader.ReadLineAsync(_lifetime.Token).ConfigureAwait(false) is { } line)
                 _lastError = line.Length > 512 ? line[..512] : line;
         }
         catch (Exception) when (_lifetime.IsCancellationRequested) { }
@@ -216,7 +222,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         lock (_routeGate) _verified?.TrySetException(error);
         // The Windows loopback owner observes Completion instead of the renderer-ready task.
         _ = _ready.Task.Exception; _ = _verified?.Task.Exception;
-        try { _tcp?.Dispose(); } catch { }
+        try { _pcmStream?.Dispose(); } catch { }
         try { Failed?.Invoke(error); } catch { }
     }
     internal void Abort(Exception error) => Fail(error);
@@ -224,12 +230,14 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _lifetime.Cancel(); _cancelSocket.Dispose(); _tcp?.Dispose();
+        _lifetime.Cancel(); _cancelSocket.Dispose();
+        if (_pcmStream != null) { try { await _pcmStream.DisposeAsync().ConfigureAwait(false); } catch { } }
         bool exited = _helper == null;
         if (_helper != null)
         {
-            lock (_control) try { _helper.StandardInput.WriteLine("quit"); _helper.StandardInput.Flush(); _helper.StandardInput.Close(); } catch { }
+            lock (_control) try { _writer?.WriteLine("quit"); _writer?.Flush(); } catch { }
             using var closing = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            try { await _helper.CloseInputAsync(closing.Token).ConfigureAwait(false); } catch { }
             try { await _helper.WaitForExitAsync(closing.Token).ConfigureAwait(false); exited = true; } catch { }
         }
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -248,11 +256,10 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             try { if (!_helper.HasExited) _helper.Kill(); } catch { }
             if (_stdout != null) try { await _stdout.ConfigureAwait(false); } catch { }
             if (_stderr != null) try { await _stderr.ConfigureAwait(false); } catch { }
-            _helper.Dispose();
+            _writer?.Dispose();
+            await _helper.DisposeAsync().ConfigureAwait(false);
         }
-        if (int.TryParse(_port, out int port) && port > 0)
-            try { await _adb.RunAsync(cleanup.Token, "-s", Device.Serial, "forward", "--remove", "tcp:" + port).ConfigureAwait(false); } catch { }
-        try { await _adb.RunAsync(cleanup.Token, "-s", Device.Serial, "shell", "rm", "-f", Remote, Remote + ".server").ConfigureAwait(false); } catch { }
+        try { await _adb.RunAsync(cleanup.Token, "-s", Device.Serial, "shell", "rm", "-f", Remote).ConfigureAwait(false); } catch { }
         _lifetime.Dispose();
     }
 }

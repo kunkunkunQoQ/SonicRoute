@@ -1,4 +1,4 @@
-param([ValidatePattern('^[A-Za-z0-9_-]+$')][string]$OutputName = 'SonicRoute-Android-Perf-x64', [switch]$Direct,
+﻿param([ValidatePattern('^[A-Za-z0-9_-]+$')][string]$OutputName = 'SonicRoute-Android-Perf-x64', [switch]$Direct,
     [ValidateSet('.pending','.next')][string]$StagingSlot = '.pending')
 $ErrorActionPreference = 'Stop'
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
@@ -16,11 +16,8 @@ foreach ($name in @('Start-Lab.ps1','启动手机音频.cmd','使用说明.md'))
 }
 $startScript = Join-Path $package 'Start-Lab.ps1'
 [System.IO.File]::WriteAllText($startScript, [System.IO.File]::ReadAllText($startScript), [System.Text.UTF8Encoding]::new($true))
-Copy-Item -LiteralPath (Join-Path $labRoot 'integration-docs\THIRD-PARTY-NOTICES.md') -Destination $package -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination (Join-Path $package 'SONICROUTE-LICENSE.txt') -Force
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'QRCoder-LICENSE.txt') -Destination $package -Force
-$required = @('AndroidRuntime\adb.exe','AndroidRuntime\AdbWinApi.dll','AndroidRuntime\AdbWinUsbApi.dll','AndroidRuntime\scrcpy-server',
-    'AndroidRuntime\sonicroute-catalog.jar','AndroidRuntime\ADB-NOTICE.txt','AndroidRuntime\SCRCPY-LICENSE.txt','THIRD-PARTY-NOTICES.md')
+$required = @('AndroidRuntime\sonicroute-catalog.jar')
 foreach ($name in $required) { if (!(Test-Path -LiteralPath (Join-Path $package $name))) { throw ('Missing package input: ' + $name) } }
 $videoTarget = Join-Path $package 'AndroidRuntime\VirtualDisplay'
 & (Join-Path $PSScriptRoot 'Copy-VideoRuntime.ps1') -PackageDirectory $package

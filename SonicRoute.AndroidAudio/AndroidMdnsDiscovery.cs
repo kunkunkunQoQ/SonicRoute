@@ -12,45 +12,146 @@ public static class AndroidMdnsDiscovery
     public static async Task<AndroidMdnsService?> FindAsync(string type, string? name, string? host, string? guid,
         TimeSpan duration, CancellationToken token)
     {
-        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token);
+        AndroidMdnsService? found = null;
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
+        IPAddress? preferredHost = host != null && IPAddress.TryParse(host.Trim('[', ']'), out var parsedHost) ? parsedHost : null;
+        await RunQueriesAsync([type], name, preferredHost, duration, (service, source) =>
+        {
+            if (!service.Type.Equals(type, StringComparison.OrdinalIgnoreCase)) return false;
+            if (name != null && !AndroidWirelessConnection.MatchesPairingName(service.Name, name)) return false;
+            if (host != null && (preferredHost == null || !source.Equals(preferredHost))) return false;
+            if (host == null && guid != null)
+            {
+                string prefix = guid.StartsWith("adb-", StringComparison.OrdinalIgnoreCase) ? guid : "adb-" + guid;
+                if (!service.Name.Equals(prefix, StringComparison.OrdinalIgnoreCase) && !service.Name.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            if (Interlocked.CompareExchange(ref found, service, null) == null)
+                stop.Cancel();
+            return true;
+        }, stop.Token, throwOnOuterCancel: token).ConfigureAwait(false);
+        return found;
+    }
+
+    internal static async Task<IReadOnlyList<AndroidMdnsService>> DiscoverAllAsync(TimeSpan duration, CancellationToken token)
+    {
+        var results = new Dictionary<string, AndroidMdnsService>(StringComparer.OrdinalIgnoreCase);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
+        int settleArmed = 0;
+        await RunQueriesAsync(["_adb-tls-pairing._tcp", "_adb-tls-connect._tcp"], null, null, duration, (service, _) =>
+        {
+            lock (results)
+                results[$"{service.Type}\0{service.Name}\0{service.Address}"] = service;
+            if (Interlocked.Exchange(ref settleArmed, 1) == 0)
+                stop.CancelAfter(TimeSpan.FromMilliseconds(200));
+            return false;
+        }, stop.Token, throwOnOuterCancel: token).ConfigureAwait(false);
+        lock (results)
+            return results.Values.ToList();
+    }
+
+    private static async Task RunQueriesAsync(string[] types, string? name, IPAddress? preferredHost, TimeSpan duration,
+        Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken queryToken, CancellationToken throwOnOuterCancel)
+    {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(queryToken);
         lifetime.CancelAfter(duration);
-        IPAddress[] addresses;
-        try { addresses = NetworkInterface.GetAllNetworkInterfaces()
-            .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-            .Select(a => a.Address).Where(a => a.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(a))
-            .Distinct().Take(8).ToArray(); }
-        catch (NetworkInformationException) { return null; }
-        var work = addresses.Select(a => QueryAsync(a, type, name, host, guid, lifetime.Token)).ToList();
+        IPAddress[] addresses = SelectCandidateAddresses(preferredHost);
+        if (addresses.Length == 0) return;
+
+        byte[][] queries = types.Select(t => BuildQuery(t, name)).ToArray();
+        var work = addresses.Select(a => QueryInterfaceAsync(a, queries, onService, lifetime.Token)).ToList();
         try
         {
-            while (work.Count > 0)
-            {
-                var completed = await Task.WhenAny(work).ConfigureAwait(false); work.Remove(completed);
-                if (await completed.ConfigureAwait(false) is { } found) return found;
-            }
-            token.ThrowIfCancellationRequested(); return null;
+            await Task.WhenAll(work).ConfigureAwait(false);
+            throwOnOuterCancel.ThrowIfCancellationRequested();
         }
-        finally
+        catch (OperationCanceledException) when (!throwOnOuterCancel.IsCancellationRequested) { }
+    }
+
+    private static IPAddress[] SelectCandidateAddresses(IPAddress? preferredHost)
+    {
+        try
         {
-            lifetime.Cancel();
-            try { await Task.WhenAll(work).ConfigureAwait(false); } catch (OperationCanceledException) { }
+            var candidates = new List<(int Rank, IPAddress Address)>();
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                    continue;
+                bool isVirtual = IsLikelyVirtualOrTunnel(nic);
+                foreach (var uni in nic.GetIPProperties().UnicastAddresses)
+                {
+                    if (uni.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(uni.Address))
+                        continue;
+                    int rank = preferredHost != null && IsSameSubnet(uni.Address, uni.IPv4Mask, preferredHost) ? 0
+                        : isVirtual ? 3
+                        : nic.NetworkInterfaceType is NetworkInterfaceType.Wireless80211 or NetworkInterfaceType.Ethernet ? 1
+                        : 2;
+                    candidates.Add((rank, uni.Address));
+                }
+            }
+            return candidates
+                .OrderBy(c => c.Rank)
+                .Select(c => c.Address)
+                .Distinct()
+                .Take(8)
+                .ToArray();
+        }
+        catch (NetworkInformationException)
+        {
+            return Array.Empty<IPAddress>();
         }
     }
-    private static async Task<AndroidMdnsService?> QueryAsync(IPAddress local, string type, string? name, string? host, string? guid, CancellationToken token)
+
+    private static bool IsSameSubnet(IPAddress local, IPAddress? mask, IPAddress target)
+    {
+        if (mask == null || local.AddressFamily != AddressFamily.InterNetwork || target.AddressFamily != AddressFamily.InterNetwork)
+            return false;
+        Span<byte> a = stackalloc byte[4], m = stackalloc byte[4], t = stackalloc byte[4];
+        if (!local.TryWriteBytes(a, out _) || !mask.TryWriteBytes(m, out _) || !target.TryWriteBytes(t, out _))
+            return false;
+        for (int i = 0; i < 4; i++)
+        {
+            if ((a[i] & m[i]) != (t[i] & m[i])) return false;
+        }
+        return true;
+    }
+
+    private static bool IsLikelyVirtualOrTunnel(NetworkInterface nic)
+    {
+        if ((int)nic.NetworkInterfaceType == 53 || nic.NetworkInterfaceType is NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp)
+            return true;
+        string text = nic.Name + " " + nic.Description;
+        return text.Contains("vEthernet", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("WSL", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("VMware", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Clash", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Wintun", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("TAP-", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Radmin", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("ZeroTier", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("Tailscale", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("WireGuard", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task QueryInterfaceAsync(IPAddress local, byte[][] queries,
+        Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken token)
     {
         try
         {
             using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             socket.Bind(new IPEndPoint(local, 0)); // Legacy unicast replies; no shared port, firewall change or daemon restart.
             socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
-            byte[] query = BuildQuery(type, name), buffer = new byte[4096];
+            byte[] buffer = new byte[4096];
             var endpoint = new IPEndPoint(IPAddress.Parse("224.0.0.251"), 5353);
             Task<SocketReceiveFromResult>? receive = null;
+            int probeDelayMs = 300;
             while (true)
             {
-                await socket.SendToAsync(query, SocketFlags.None, endpoint, token).ConfigureAwait(false);
-                var nextProbe = Task.Delay(TimeSpan.FromSeconds(3), token);
+                foreach (byte[] query in queries)
+                    await socket.SendToAsync(query, SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                var nextProbe = Task.Delay(TimeSpan.FromMilliseconds(probeDelayMs), token);
+                probeDelayMs = Math.Min(probeDelayMs * 2, 2500);
                 while (!nextProbe.IsCompleted)
                 {
                     receive ??= socket.ReceiveFromAsync(buffer, SocketFlags.None, new IPEndPoint(IPAddress.Any, 0), token).AsTask();
@@ -59,23 +160,15 @@ public static class AndroidMdnsDiscovery
                     var source = ((IPEndPoint)packet.RemoteEndPoint).Address;
                     foreach (var service in ParseResponse(buffer.AsSpan(0, packet.ReceivedBytes), source))
                     {
-                        if (!service.Type.Equals(type, StringComparison.OrdinalIgnoreCase)) continue;
-                        if (name != null && !AndroidWirelessConnection.MatchesPairingName(service.Name, name)) continue;
-                        if (host != null && (!IPAddress.TryParse(host.Trim('[', ']'), out var expected) || !source.Equals(expected))) continue;
-                        if (host == null && guid != null)
-                        {
-                            string prefix = guid.StartsWith("adb-", StringComparison.OrdinalIgnoreCase) ? guid : "adb-" + guid;
-                            if (!service.Name.Equals(prefix, StringComparison.OrdinalIgnoreCase) && !service.Name.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase)) continue;
-                        }
-                        return service;
+                        if (onService(service, source)) return;
                     }
                 }
                 token.ThrowIfCancellationRequested();
             }
         }
-        catch (OperationCanceledException) { return null; }
-        catch (SocketException) { return null; }
-        catch (NetworkInformationException) { return null; }
+        catch (OperationCanceledException) { }
+        catch (SocketException) { }
+        catch (NetworkInformationException) { }
     }
     public static byte[] BuildQuery(string type, string? name)
     {

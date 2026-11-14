@@ -26,9 +26,9 @@ internal static partial class Program
         try { await read(new StringReader("ignored"), cancelled.Token); }
         catch (OperationCanceledException) { observed = true; }
         Check(observed, "the existing pipe read remains cancellable without a polling loop");
-        string notices = AndroidRuntimeBundle.ReadNotices();
-        Check(new[] { "ADB-NOTICE", "FFmpeg-LICENSE", "SDL2-LICENSE", "zlib-LICENSE", "QRCoder-LICENSE", "Concentus", "NAudio" }.All(notices.Contains),
-            "online navigation preserves the required complete notices in the Full executable");
+        Check(!typeof(AndroidRuntimeBundle).Assembly.GetManifestResourceNames()
+            .Any(n => n.StartsWith("SonicRoute.Notices.", StringComparison.Ordinal)),
+            "Full executable embeds no open-source notice resources");
         Directory.CreateDirectory(output);
         await File.WriteAllTextAsync(Path.Combine(output, "media-log-tail.json"), JsonSerializer.Serialize(new
         { Assertions = _checks, RetainedCharacters = limit, PhoneAccess = false,

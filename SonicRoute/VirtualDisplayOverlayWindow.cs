@@ -38,11 +38,21 @@ internal class VirtualDisplayOverlayWindow : Window
         {
             try
             {
-                using var process = Process.GetProcessById(_client.ProcessId); _owner = process.MainWindowHandle;
-                if (_owner == IntPtr.Zero) return;
-                new WindowInteropHelper(this).Owner = _owner;
-                // Owner destruction/show/hide/move/resize only, scoped to its process.
-                _hook = SetWinEventHook(0x8001, 0x800B, IntPtr.Zero, _events, (uint)_client.ProcessId, 0, 0);
+                _owner = _client.WindowHandle;
+                if (_owner != IntPtr.Zero)
+                {
+                    uint tid = GetWindowThreadProcessId(_owner, out uint pid);
+                    new WindowInteropHelper(this).Owner = _owner;
+                    _hook = SetWinEventHook(0x8001, 0x800B, IntPtr.Zero, _events, pid, tid, 0);
+                }
+                else
+                {
+                    using var process = Process.GetProcessById(_client.ProcessId); _owner = process.MainWindowHandle;
+                    if (_owner == IntPtr.Zero) return;
+                    new WindowInteropHelper(this).Owner = _owner;
+                    // Owner destruction/show/hide/move/resize only, scoped to its process.
+                    _hook = SetWinEventHook(0x8001, 0x800B, IntPtr.Zero, _events, (uint)_client.ProcessId, 0, 0);
+                }
             }
             catch (ArgumentException) { Close(); return; }
             catch (InvalidOperationException) { Close(); return; }
@@ -75,5 +85,6 @@ internal class VirtualDisplayOverlayWindow : Window
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll")] private static extern IntPtr SetWinEventHook(uint min, uint max, IntPtr module, WinEventProc callback, uint process, uint thread, uint flags);
     [DllImport("user32.dll")] private static extern bool UnhookWinEvent(IntPtr hook);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
 }
 #endif

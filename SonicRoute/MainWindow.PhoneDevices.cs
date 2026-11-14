@@ -5,8 +5,6 @@ using System.Threading.Tasks;
 using System.Windows;
 #if SONICROUTE_PHONE
 using System.Windows.Controls;
-using System.Windows.Documents;
-using System.Windows.Navigation;
 using System.ComponentModel;
 using System.Windows.Data;
 using Binding = System.Windows.Data.Binding;
@@ -21,31 +19,7 @@ namespace SonicRoute;
 
 public partial class MainWindow
 {
-    private void AboutLinks_Loaded(object sender, RoutedEventArgs e)
-    {
 #if SONICROUTE_PHONE
-        if (sender is not TextBlock links || links.Inlines.OfType<Hyperlink>().Any(link => link.Name == "OpenSourceLicensesLink")) return;
-        var licenseRun = new Run();
-        BindingOperations.SetBinding(licenseRun, Run.TextProperty, new Binding("[Phone.OpenSourceLicenses]")
-        { Source = L10n.Instance, Mode = BindingMode.OneWay });
-        var licenseLink = new Hyperlink(licenseRun) { Name = "OpenSourceLicensesLink",
-            NavigateUri = new Uri("https://github.com/kunkunkunQoQ/SonicRoute/blob/master/packaging/AndroidLab/THIRD-PARTY-NOTICES.md") };
-        licenseLink.SetResourceReference(Hyperlink.ForegroundProperty, "Theme.Accent");
-        licenseLink.RequestNavigate += ThirdPartyNotices_RequestNavigate;
-        links.Inlines.Add(new Run(" ‖ "));
-        links.Inlines.Add(licenseLink);
-#endif
-    }
-#if SONICROUTE_PHONE
-    private void ThirdPartyNotices_RequestNavigate(object sender, RequestNavigateEventArgs e)
-    {
-        e.Handled = true;
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
-        }
-        catch (Exception ex) { ShowToast(ex.Message); }
-    }
     private StackPanel PhoneDevicesHost = null!;
     private Border PhoneDetailsHost = null!;
     private PhoneDevicePage? _phoneDevicePage;

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
+using NAudio.CoreAudioApi.Interfaces;
 
 namespace SonicRoute.AndroidAudio;
 
@@ -57,13 +58,37 @@ internal sealed class WasapiDeviceLease : IDisposable
         finally { Marshal.ReleaseComObject(endpoint); }
     }
 
+    internal static IDisposable ObserveDefaultOutput(IMMNotificationClient callback)
+    {
+        object enumerator = Activator.CreateInstance(Type.GetTypeFromCLSID(
+            new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), true)!)!;
+        try
+        {
+            Marshal.ThrowExceptionForHR(((IEndpointEnumerator)enumerator).RegisterEndpointNotificationCallback(callback));
+            return new NotificationLease(enumerator, callback);
+        }
+        catch { Marshal.ReleaseComObject(enumerator); throw; }
+    }
+
+    private sealed class NotificationLease(object enumerator, IMMNotificationClient callback) : IDisposable
+    {
+        private object? _enumerator = enumerator;
+        public void Dispose()
+        {
+            object? current = Interlocked.Exchange(ref _enumerator, null);
+            if (current == null) return;
+            try { ((IEndpointEnumerator)current).UnregisterEndpointNotificationCallback(callback); }
+            finally { Marshal.ReleaseComObject(current); }
+        }
+    }
+
     [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IEndpointEnumerator
     {
         [PreserveSig] int EnumAudioEndpoints(DataFlow flow, int states, out IntPtr collection);
         [PreserveSig] int GetDefaultAudioEndpoint(DataFlow flow, Role role, out IntPtr device);
         [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IntPtr device);
-        [PreserveSig] int RegisterEndpointNotificationCallback(IntPtr callback);
-        [PreserveSig] int UnregisterEndpointNotificationCallback(IntPtr callback);
+        [PreserveSig] int RegisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] IMMNotificationClient callback);
+        [PreserveSig] int UnregisterEndpointNotificationCallback([MarshalAs(UnmanagedType.Interface)] IMMNotificationClient callback);
     }
 }

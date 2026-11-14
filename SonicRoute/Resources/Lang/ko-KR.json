@@ -628,7 +628,6 @@
   "Phone.Disconnected": "연결 안 됨",
   "Phone.WifiConnected": "무선 연결됨",
   "Phone.UsbConnected": "USB 연결됨",
-  "Phone.OpenSourceLicenses": "오픈소스 라이선스",
   "Phone.FromDevice": "{0}에서",
   "Phone.DeviceNameAutomation": "휴대폰 이름",
   "Phone.Disconnect": "연결 해제",

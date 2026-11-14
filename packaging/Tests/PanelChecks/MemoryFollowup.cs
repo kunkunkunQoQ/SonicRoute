@@ -78,19 +78,10 @@ internal static partial class Program
         batch();
         Check(steps[0].SelectedIndex == -1 && ((AppItem)steps[1].SelectedItem).ProcessName == "candidate-2",
             "removing one app clears only that missing target while other selections survive");
-        var links = new TextBlock();
-        type.GetMethod("AboutLinks_Loaded", Instance)!.Invoke(main, new object[] { links, new RoutedEventArgs() });
-        type.GetMethod("AboutLinks_Loaded", Instance)!.Invoke(main, new object[] { links, new RoutedEventArgs() });
-        bool phone = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost") != null;
-        var licenses = links.Inlines.OfType<Hyperlink>().ToArray();
-        Check(phone ? licenses.Length == 1 && licenses[0].NavigateUri?.AbsoluteUri
-            == "https://github.com/kunkunkunQoQ/SonicRoute/blob/master/packaging/AndroidLab/THIRD-PARTY-NOTICES.md" : licenses.Length == 0,
-            "Full provides one online license link; Lite and Legacy retain no phone-license entry");
-        if (phone)
+        if (typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost") is { } host)
         {
-            var host = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!;
             Check(!(bool)host.GetProperty("IsAdbCreated", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!,
-                "about links and candidate batching do not prepare the Android runtime or create ADB");
+                "candidate batching does not prepare the Android runtime or create ADB");
         }
     }
 }

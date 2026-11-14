@@ -885,7 +885,7 @@
                                     </MultiBinding>
                                 </TextBlock.Text>
                             </TextBlock>
-                            <TextBlock Margin="0,12,0,0" FontSize="13" Loaded="AboutLinks_Loaded"
+                            <TextBlock Margin="0,12,0,0" FontSize="13"
                                        Foreground="{DynamicResource Theme.TextSecondary}">
                                 <Run Text="{Binding [St.AuthorHome], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                 <Hyperlink x:Name="BiliLink" Click="BiliLink_Click"

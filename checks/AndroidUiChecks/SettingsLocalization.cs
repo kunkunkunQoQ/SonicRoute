@@ -22,24 +22,26 @@ internal static partial class Program
                 typeof(MainWindow).GetMethod("EnsureSettingsPage", Hidden)!.Invoke(window, null);
                 var github = (Hyperlink)typeof(MainWindow).GetField("GithubLink", Hidden | BindingFlags.Public)!.GetValue(window)!;
                 var links = (TextBlock)github.Parent;
-                // The real BAML Loaded handler is the settings crash site. Do not show
-                // MainWindow: its own Loaded handler would start unrelated discovery.
                 links.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, links));
                 DrainUi();
-                var license = links.Inlines.OfType<Hyperlink>().Single(link => link.Name == "OpenSourceLicensesLink");
-                var label = license.Inlines.OfType<Run>().Single();
+                var hyperlinks = links.Inlines.OfType<Hyperlink>().Select(link => link.Name).ToArray();
+                Check(hyperlinks.SequenceEqual(["BiliLink", "IfdianLink", "GithubLink"])
+                    && !hyperlinks.Contains("OpenSourceLicensesLink"),
+                    theme + " settings about links contain only BiliLink, IfdianLink, and GithubLink without OpenSourceLicensesLink");
+                var label = links.Inlines.OfType<Run>().First();
                 Check(BindingOperations.GetBinding(label, Run.TextProperty)?.Mode == BindingMode.OneWay,
-                    theme + " settings license uses a read-only localization binding");
+                    theme + " settings author home label uses a read-only localization binding");
                 foreach (string language in L10n.SupportedLanguages.Select(entry => entry.Code))
                 {
                     L10n.Instance.SetLanguage(language);
                     DrainUi();
-                    Check(label.Text == L10n.T("Phone.OpenSourceLicenses") && label.Text != "Phone.OpenSourceLicenses",
-                        theme + " open settings license refreshes in " + language);
+                    Check(label.Text == L10n.T("St.AuthorHome") && label.Text != "St.AuthorHome",
+                        theme + " open settings about links refresh in " + language);
                 }
                 links.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, links));
-                Check(links.Inlines.OfType<Hyperlink>().Count(link => link.Name == license.Name) == 1,
-                    theme + " loading settings again retains exactly one license link");
+                Check(links.Inlines.OfType<Hyperlink>().Select(link => link.Name).SequenceEqual(["BiliLink", "IfdianLink", "GithubLink"])
+                    && links.Inlines.OfType<Hyperlink>().All(link => link.Name != "OpenSourceLicensesLink"),
+                    theme + " loading settings again retains only BiliLink, IfdianLink, and GithubLink");
             }
             finally { window.Close(); }
         }

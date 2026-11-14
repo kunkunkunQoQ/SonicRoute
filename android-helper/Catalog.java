@@ -17,8 +17,8 @@ public final class Catalog {
     public static void main(String[] args) throws Exception {
         try {
             android.os.Looper.prepareMainLooper();
-            Class.forName("com.genymobile.scrcpy.Workarounds").getMethod("apply").invoke(null);
-            Context context = (Context) Class.forName("com.genymobile.scrcpy.FakeContext").getMethod("get").invoke(null);
+            AndroidWorkarounds.apply();
+            Context context = ShellContext.get();
             PackageManager manager = context.getPackageManager();
             List<ApplicationInfo> applications;
             if (args.length > 0) {

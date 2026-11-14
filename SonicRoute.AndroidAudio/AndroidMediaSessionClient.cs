@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -68,7 +69,9 @@ public sealed record AndroidMediaState(string Package, string Title, string Arti
 /// <summary>One event stream for the selected phone, alive only while its panel is visible.</summary>
 public sealed class AndroidMediaSessionClient(AdbClient adb)
 {
-    private Process? _process;
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+    private IAdbShellSession? _session;
+    private StreamWriter? _writer;
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly object _latencyGate = new();
     private string? _pingId;
@@ -82,22 +85,25 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
         bool latencyStarted = false;
         AndroidMediaState? previous = null;
         await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        adb.ValidateServer();
+        adb.ValidateCatalog();
         string id = Guid.NewGuid().ToString("N");
         string remote = "/data/local/tmp/sonicroute_media_" + id + ".jar";
-        string server = remote + ".server";
         string? pid = null;
         Task<string>? stderr = null;
+        StreamReader? errReader = null;
         try
         {
-            await adb.RunAsync(token, "-s", device.Serial, "push", Path.Combine(adb.RuntimeDirectory, "sonicroute-catalog.jar"), remote).ConfigureAwait(false);
-            await adb.RunAsync(token, "-s", device.Serial, "push", adb.ServerFile, server).ConfigureAwait(false);
+            await adb.RunAsync(token, "-s", device.Serial, "push", adb.CatalogFile, remote).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
-            var process = adb.StartWithInput("-s", device.Serial, "shell",
-                "echo SR_MEDIA_PID:$$; CLASSPATH=" + remote + ":" + server + " exec app_process / org.sonicroute.android.MediaSessionBridge " + id);
-            _process = process;
-            stderr = ReadDiagnosticTailAsync(process.StandardError);
-            while (await process.StandardOutput.ReadLineAsync(token).ConfigureAwait(false) is { } line)
+            var session = await adb.OpenShellAsync(device.Serial,
+                "echo SR_MEDIA_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.MediaSessionBridge " + id,
+                redirectInput: true, token).ConfigureAwait(false);
+            _session = session;
+            _writer = new StreamWriter(session.InputStream, Utf8NoBom, bufferSize: 4096, leaveOpen: true) { NewLine = "\n" };
+            errReader = new StreamReader(session.ErrorStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
+            stderr = ReadDiagnosticTailAsync(errReader);
+            using var stdout = new StreamReader(session.OutputStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
+            while (await stdout.ReadLineAsync(token).ConfigureAwait(false) is { } line)
             {
                 if (line.StartsWith("SR_MEDIA_PID:", StringComparison.Ordinal))
                 { string candidate = line[13..].Trim(); if (Regex.IsMatch(candidate, @"\A[1-9]\d*\z")) pid = candidate; }
@@ -118,7 +124,7 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
                     }
                 }
             }
-            await process.WaitForExitAsync(token).ConfigureAwait(false);
+            await session.WaitForExitAsync(token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             throw AndroidError.WithCode(new IOException("手机音乐连接已结束；重新打开面板或刷新可重试。"), AndroidErrorCode.MediaConnectionEnded);
         }
@@ -126,14 +132,16 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
         {
             probes.Cancel();
             try { await latency.ConfigureAwait(false); } catch (OperationCanceledException) { }
-            var process = _process; _process = null;
-            if (process != null)
+            var session = _session; _session = null;
+            var writer = _writer; _writer = null;
+            if (session != null)
             {
-                try { process.StandardInput.Close(); } catch (InvalidOperationException) { } catch (IOException) { }
                 using var close = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { await process.WaitForExitAsync(close.Token).ConfigureAwait(false); }
-                catch { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } }
+                try { await session.CloseInputAsync(close.Token).ConfigureAwait(false); } catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException) { }
+                try { await session.WaitForExitAsync(close.Token).ConfigureAwait(false); }
+                catch { try { session.Kill(); } catch { } }
             }
+            writer?.Dispose();
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
             {
@@ -146,10 +154,11 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
                 }
             }
             catch (Exception ex) { Trace.WriteLine("Media helper exit: " + ex.Message); }
-            try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote, server).ConfigureAwait(false); }
+            try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch (Exception ex) { Trace.WriteLine("Media helper cleanup: " + ex.Message); }
             if (stderr != null) { try { Trace.WriteLine(await stderr.ConfigureAwait(false)); } catch { } }
-            process?.Dispose();
+            errReader?.Dispose();
+            if (session != null) await session.DisposeAsync().ConfigureAwait(false);
         }
     }
     internal const int DiagnosticTailCharacters = 16 * 1024;
@@ -227,9 +236,9 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
         await _commands.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            var process = _process ?? throw AndroidError.WithCode(new IOException("手机音乐尚未连接。"), AndroidErrorCode.MediaNotConnected);
-            await process.StandardInput.WriteLineAsync(command.AsMemory(), token).ConfigureAwait(false);
-            await process.StandardInput.FlushAsync(token).ConfigureAwait(false);
+            var writer = _writer ?? throw AndroidError.WithCode(new IOException("手机音乐尚未连接。"), AndroidErrorCode.MediaNotConnected);
+            await writer.WriteLineAsync(command.AsMemory(), token).ConfigureAwait(false);
+            await writer.FlushAsync(token).ConfigureAwait(false);
         }
         finally { _commands.Release(); }
     }

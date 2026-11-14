@@ -13,22 +13,41 @@ foreach ($relative in $sdkFiles) {
 }
 $work = Join-Path $labRoot ('outputs\catalog-build-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8))
 $classes = Join-Path $work 'classes'
+$stubs = Join-Path $work 'stubs'
 $dex = Join-Path $work 'dex'
 $runtime = Join-Path $repositoryRoot 'AndroidRuntime'
-New-Item -ItemType Directory -Path $classes,$dex,$runtime -Force | Out-Null
+New-Item -ItemType Directory -Path $classes,$stubs,$dex,$runtime -Force | Out-Null
 $jdkBin = if ($JdkBinDirectory) { [IO.Path]::GetFullPath($JdkBinDirectory) } elseif ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin' } else { 'C:\Program Files\BellSoft\LibericaJDK-21\bin' }
 $androidJar = Join-Path $reference $sdkFiles[0]
-$helperSources = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'android-helper') -Filter '*.java' -File | ForEach-Object FullName)
-& (Join-Path $jdkBin 'javac.exe') '-J-Duser.language=en' '-J-Duser.country=US' --release 8 -encoding UTF-8 -cp $androidJar -d $classes @helperSources
+$stubRoot = Join-Path $repositoryRoot 'android-helper\compile-stubs'
+$classpath = $androidJar
+$d8Args = @('--min-api', '31', '--lib', $androidJar, '--output', $dex)
+if (Test-Path -LiteralPath $stubRoot) {
+    $stubSources = @(Get-ChildItem -LiteralPath $stubRoot -Filter '*.java' -File -Recurse | ForEach-Object FullName)
+    if ($stubSources.Count -gt 0) {
+        & (Join-Path $jdkBin 'javac.exe') '-J-Duser.language=en' '-J-Duser.country=US' --release 8 -encoding UTF-8 -cp $androidJar -d $stubs @stubSources
+        if ($LASTEXITCODE -ne 0) { throw 'Catalogue stub compilation failed' }
+        $stubJar = Join-Path $work 'compile-stubs.jar'
+        & (Join-Path $jdkBin 'jar.exe') cf $stubJar -C $stubs .
+        if ($LASTEXITCODE -ne 0) { throw 'Catalogue stub archive failed' }
+        $classpath = $androidJar + [IO.Path]::PathSeparator + $stubs
+        $d8Args = @('--min-api', '31', '--lib', $androidJar, '--classpath', $stubJar, '--output', $dex)
+    }
+}
+$helperRoot = Join-Path $repositoryRoot 'android-helper'
+$helperTopSources = @(Get-ChildItem -LiteralPath $helperRoot -Filter '*.java' -File | ForEach-Object FullName)
+$helperSrcRoot = Join-Path $helperRoot 'src'
+$helperPkgSources = if (Test-Path -LiteralPath $helperSrcRoot) {
+    @(Get-ChildItem -LiteralPath $helperSrcRoot -Filter '*.java' -File -Recurse | ForEach-Object FullName)
+} else {
+    @()
+}
+$helperSources = @($helperTopSources + $helperPkgSources)
+& (Join-Path $jdkBin 'javac.exe') '-J-Duser.language=en' '-J-Duser.country=US' --release 8 -encoding UTF-8 -cp $classpath -d $classes @helperSources
 if ($LASTEXITCODE -ne 0) { throw 'Catalogue compilation failed' }
 $helperClasses = @(Get-ChildItem -LiteralPath $classes -Filter '*.class' -File -Recurse | ForEach-Object FullName)
-& (Join-Path $jdkBin 'java.exe') -cp (Join-Path $reference $sdkFiles[1]) com.android.tools.r8.D8 --min-api 31 --lib $androidJar --output $dex @helperClasses
+& (Join-Path $jdkBin 'java.exe') -cp (Join-Path $reference $sdkFiles[1]) com.android.tools.r8.D8 @d8Args @helperClasses
 if ($LASTEXITCODE -ne 0) { throw 'Catalogue dex failed' }
-& (Join-Path $jdkBin 'jar.exe') cf (Join-Path $runtime 'sonicroute-catalog.jar') -C $dex classes.dex
+& (Join-Path $jdkBin 'jar.exe') --create --date=2026-01-01T00:00:00Z --file (Join-Path $runtime 'sonicroute-catalog.jar') -C $dex classes.dex
 if ($LASTEXITCODE -ne 0) { throw 'Catalogue archive failed' }
-foreach ($name in @('adb.exe','AdbWinApi.dll','AdbWinUsbApi.dll','scrcpy-server')) {
-    Copy-Item -LiteralPath (Join-Path $reference ('dist\scrcpy-runtime\' + $name)) -Destination (Join-Path $runtime $name) -Force
-}
-Copy-Item -LiteralPath (Join-Path $reference 'tools\platform-tools\NOTICE.txt') -Destination (Join-Path $runtime 'ADB-NOTICE.txt') -Force
-Copy-Item -LiteralPath (Join-Path $reference 'third_party\scrcpy-experimental\LICENSE') -Destination (Join-Path $runtime 'SCRCPY-LICENSE.txt') -Force
 $copied | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $work 'catalog-sdk-manifest.json') -Encoding utf8

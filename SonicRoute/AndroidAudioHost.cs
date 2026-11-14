@@ -62,12 +62,12 @@ internal static class AndroidAudioHost
     private static readonly Lazy<AndroidVirtualDisplayManager> LazyDisplays = new(() =>
     {
         var runtime = new VirtualDisplayRuntime(Adb);
-        return new AndroidVirtualDisplayManager(() => new VirtualDisplayClient(Adb, runtime, () => LazySettings.Value));
+        return new AndroidVirtualDisplayManager(() => new InProcessVirtualDisplayClient(Adb, runtime, () => LazySettings.Value));
     });
     internal static AndroidAudioManager Sources => LazySources.Value;
     private static readonly Lazy<AndroidPhoneStore> LazyPhone = new(() =>
     {
-        var phone = new AndroidPhoneStore(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-phone.json"));
+        var phone = new AndroidPhoneStore(PhoneStorePath);
         phone.Changed += OnPhoneStoreChanged;
         phone.DisplayNamesChanged += PhoneOutputsChanged;
         phone.OutputsChanged += PhoneOutputsChanged;
@@ -119,7 +119,7 @@ internal static class AndroidAudioHost
         if (AreDisplaysCreated) cleanup.Add(Displays.CloseDeviceAsync(device));
         if (IsCreated)
             cleanup.AddRange(Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device))
-                .Select(s => Sources.RemoveAsync(s.Id)));
+                .Select(s => Sources.RemoveAsync(s.Id, restorePrevious: false)));
         if (IsPcToPhoneCreated) cleanup.Add(PcToPhone.StopPhoneAsync(device));
         await Task.WhenAll(cleanup);
         await Phone.FlushAsync();
@@ -344,7 +344,9 @@ internal static class AndroidAudioHost
     private static readonly Lazy<AndroidAppCatalogCache> LazyCatalog = new(() =>
         new AndroidAppCatalogCache(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-app-catalog.json"),
             (device, token) => Adb.AppsAsync(device, token)));
+    private static string PhoneStorePath => Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-phone.json");
     internal static AndroidAppCatalogCache Catalog => LazyCatalog.Value;
+    internal static bool IsCatalogCreated => LazyCatalog.IsValueCreated;
     private static bool _isDragging;
     internal static event Action? DragStateChanged;
     internal static bool IsDragging
@@ -355,6 +357,78 @@ internal static class AndroidAudioHost
     internal static bool IsCreated => LazySources.IsValueCreated;
     internal static AndroidVirtualDisplayManager Displays => LazyDisplays.Value;
     internal static bool AreDisplaysCreated => LazyDisplays.IsValueCreated;
+    internal static string? TryResolveAndroidName(string package)
+    {
+        if (string.IsNullOrWhiteSpace(package)) return L10n.T("Phone.AudioWindowTitle");
+        if (IsCreated)
+        {
+            foreach (var source in Sources.Sources)
+            {
+                if (!string.Equals(source.App.Package, package, StringComparison.OrdinalIgnoreCase)) continue;
+                string name = ApplicationAudio.AndroidName(source.App, source.Device);
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+        }
+        if (AreDisplaysCreated && Displays.FindByPackage(package) is { } display)
+        {
+            string name = ApplicationAudio.AndroidName(display.App, display.Device);
+            if (!string.IsNullOrWhiteSpace(name)) return name;
+        }
+        var cachedDevices = PhoneAudioWindowCache.Devices;
+        var store = IsPhoneCreated || File.Exists(PhoneStorePath) ? Phone : null;
+        if (string.Equals(package, AndroidApp.DeviceAudioPackage, StringComparison.OrdinalIgnoreCase))
+        {
+            var live = cachedDevices?.FirstOrDefault(d => d.State == "device") ?? cachedDevices?.FirstOrDefault();
+            if (live != null)
+            {
+                string liveName = store != null ? store.GetDisplayName(live) : live.Name;
+                if (!string.IsNullOrWhiteSpace(liveName)) return liveName;
+            }
+            if (store != null)
+            {
+                foreach (var profile in store.Profiles)
+                {
+                    if (profile.LastDevice is { } saved && !store.IsRemoved(saved))
+                    {
+                        string name = store.GetDisplayName(saved);
+                        if (!string.IsNullOrWhiteSpace(name)) return name;
+                    }
+                    if (!string.IsNullOrWhiteSpace(profile.Name)) return profile.Name;
+                }
+            }
+            return L10n.T("Phone.AudioWindowTitle");
+        }
+        if (store != null)
+        {
+            foreach (var profile in store.Profiles)
+            {
+                foreach (var app in profile.RetainedApps)
+                    if (string.Equals(app.Package, package, StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(app.Name))
+                        return app.Name;
+                foreach (var app in profile.QuickPanelApps)
+                    if (string.Equals(app.Package, package, StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(app.Name))
+                        return app.Name;
+            }
+        }
+        if (IsCatalogCreated || cachedDevices != null || store != null)
+        {
+            var devices = new List<AndroidDevice>();
+            if (cachedDevices != null) devices.AddRange(cachedDevices);
+            if (store != null)
+                foreach (var profile in store.Profiles)
+                    if (profile.LastDevice is { } saved)
+                        devices.Add(saved);
+            if (IsCatalogCreated || devices.Count > 0)
+            {
+                string? catalogName = Catalog.TryFindCachedName(package, devices);
+                if (!string.IsNullOrWhiteSpace(catalogName)) return catalogName;
+            }
+        }
+        return null;
+    }
+
     internal static void FlushSettings()
     {
         if (LazySettings.IsValueCreated) LazySettings.Value.FlushAsync().GetAwaiter().GetResult();

@@ -191,8 +191,7 @@ namespace SonicRoute
                         ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession"));
                         continue;
                     }
-                    string proc = result.ProcessName;
-                    string name = AppDisplayName.Get(proc, string.IsNullOrWhiteSpace(proc) ? "应用" : proc);
+                    string name = AppDisplayName.Get(result.App);
                     if (result.Current < 0) { ShowOsd(name, L10n.T("Ov.VolReadFail")); continue; }
                     ShowVolumeOsd(name, result.Actual,
                         result.Muted ? string.Format(L10n.T("Ov.MutedVol"), result.Actual) : $"🔊 {result.Actual}%",

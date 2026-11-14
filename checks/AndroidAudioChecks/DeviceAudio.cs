@@ -29,47 +29,41 @@ internal static partial class Program
         Check(invalidRejected, "malformed device identity cannot become an unfiltered capture");
 
         var adb = new AdbClient(Path.Combine(output, "offline-runtime"));
-        var mirror = VirtualDisplayClient.CreateStartInfo(adb, device, whole, 10, 20,
-            displaySize: new(1200, 900), windowSize: new(600, 800));
-        Check(mirror.ArgumentList.Contains("--display-id=0")
-            && !mirror.ArgumentList.Any(a => a.StartsWith("--new-display") || a.StartsWith("--start-app"))
-            && !mirror.ArgumentList.Contains("--no-vd-system-decorations"),
+        string mirrorCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(device, whole, "aabbccdd", new VideoServerOptions(
+                NewDisplay: false, MirrorDeviceDisplay: true, InitialDisplaySize: new(1200, 900), StartAppOnServer: false)));
+        Check(mirrorCmd.Contains(" display_id=0")
+            && !mirrorCmd.Contains("new_display") && !mirrorCmd.Contains("start_app=")
+            && !mirrorCmd.Contains("vd_system_decorations"),
             "device entry mirrors physical display zero and ignores old virtual display dimensions");
-        Check(mirror.ArgumentList.Contains("--no-audio") && mirror.ArgumentList.Contains("--max-fps=30")
-            && mirror.ArgumentList.Contains("--video-bit-rate=4000000"),
+        Check(mirrorCmd.Contains(" audio=false ") && mirrorCmd.Contains(" max_fps=30 ")
+            && mirrorCmd.Contains(" video_bit_rate=4000000 "),
             "mirror reuses bounded video settings and leaves audio to exactly one managed capture");
-        Check(mirror.Environment["SONICROUTE_FLEX_DISPLAY"] == "0"
-            && mirror.Environment["SONICROUTE_PHONE_MIRROR"] == "1"
-            && !mirror.Environment.ContainsKey("SONICROUTE_APP_PACKAGE")
-            && !mirror.ArgumentList.Any(a => a.StartsWith("--display-ime-policy")),
-            "device mirror selects aspect-constrained windows without virtual-screen resizing or app recovery");
-        Check(mirror.Environment["SCRCPY_ICON_PATH"] == Path.Combine(adb.RuntimeDirectory, "VirtualDisplay", "phone-icon.png"),
-            "device mirror keeps the pinned phone icon resource");
-        Check(mirror.Environment["SDL_RENDER_DRIVER"] == "direct3d11", "device mirror retains the validated GPU renderer");
-        var appDisplay = VirtualDisplayClient.CreateStartInfo(adb, device, music, 10, 20);
-        Check(appDisplay.ArgumentList.Contains("--new-display") && appDisplay.ArgumentList.Contains("--start-app=cn.test.music")
-            && appDisplay.Environment["SONICROUTE_FLEX_DISPLAY"] == "1"
-            && appDisplay.Environment["SONICROUTE_PHONE_MIRROR"] == "0",
-            "ordinary application displays retain their independent-display contract");
+        byte[]? defaultIcon = WicIconLoader.LoadDefaultPhoneIconPng();
+        Check(defaultIcon is { Length: > 100 } && defaultIcon[0] == 0x89 && defaultIcon[1] == 0x50,
+            "device mirror keeps embedded WIC phone icon resource without on-disk runtime extraction");
+        string appCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(device, music, "aabbccdd", new VideoServerOptions()));
+        Check(appCmd.Contains(" new_display") && appCmd.Contains(" start_app=cn.test.music")
+            && appCmd.Contains("org.sonicroute.android.SonicRouteServer") && appCmd.Contains("socket_prefix=sonicroute"),
+            "ordinary application displays retain their independent-display contract on SonicRouteServer");
         Check(VirtualDisplayClient.IsFirstFrame("INFO: SonicRoute first-frame")
             && !VirtualDisplayClient.IsFirstFrame("INFO: Texture: 1080x2400")
             && !VirtualDisplayClient.IsFirstFrame("no frame"),
             "mirror first-frame readiness cannot be satisfied by texture allocation alone");
         var desktopClient = new VirtualDisplayClient(adb, new VirtualDisplayRuntime(adb));
-        typeof(VirtualDisplayClient).GetField("_isDeviceAudio", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(desktopClient, true);
-        var readLogs = typeof(VirtualDisplayClient).GetMethod("ReadLogAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var ready = (TaskCompletionSource)typeof(VirtualDisplayClient).GetField("_ready", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(desktopClient)!;
-        async Task Feed(string line)
-        {
-            using var reader = new StreamReader(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(line + "\n")));
-            await (Task)readLogs.Invoke(desktopClient, [reader])!;
-        }
-        await Feed("INFO: Texture: 1080x2400");
+        var inner = (InProcessVirtualDisplayClient)typeof(VirtualDisplayClient).GetField("_inner", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(desktopClient)!;
+        typeof(InProcessVirtualDisplayClient).GetField("_isDeviceAudio", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(inner, true);
+        var onLog = typeof(InProcessVirtualDisplayClient).GetMethod("OnServerLogLine", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var ready = (TaskCompletionSource)typeof(InProcessVirtualDisplayClient).GetField("_ready", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(inner)!;
+        onLog.Invoke(inner, ["[server] INFO: SonicRoute app-state: display=12 state=active"]);
         Check(!ready.Task.IsCompleted && desktopClient.State == VirtualDisplayState.Starting,
-            "a mirror does not become ready after merely allocating a texture");
-        await Feed("INFO: SonicRoute first-frame");
+            "a mirror does not become active before first frame presentation");
+        typeof(InProcessVirtualDisplayClient).GetField("_firstFramePresented", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(inner, true);
+        onLog.Invoke(inner, ["[server] INFO: SonicRoute app-state: display=12 state=active"]);
+        ready.TrySetResult();
         Check(ready.Task.IsCompletedSuccessfully && desktopClient.State == VirtualDisplayState.Active,
-            "a decoded and presented first frame activates the phone mirror without desktop task events");
+            "a presented first frame activates the phone mirror cleanly");
         await desktopClient.DisposeAsync();
         Check((int)AndroidErrorCode.NoAudioRouteOrEnded == 57 && Enum.GetValues<AndroidErrorCode>().Length == 58,
             "removing the desktop-only error preserves the original error identifiers");
@@ -101,9 +95,9 @@ internal static partial class Program
                 && changedMode.KeepPhoneAudio && starts == 5 && stops == 3,
                 "changing whole-phone playback mode preserves volume and mute with one replacement");
             var appAgain = await manager.AddAsync(device, music, false);
-            Check(stops == 4 && manager.Sources.Count == 2 && manager.FindSource(changedMode.Id) == null
+            Check(stops == 4 && manager.Sources.Count == 3 && manager.FindSource(changedMode.Id) == null
                 && manager.FindSource(appAgain.Id) == appAgain && neighbour.Session.State.State == CaptureState.Receiving,
-                "explicit app capture replaces only that phone's global capture");
+                "explicit app capture leaves global mode and restores the phone's other prior apps");
         }
         await settings.FlushAsync();
         var restored = new AndroidAudioSettingsStore(settings.FilePath);

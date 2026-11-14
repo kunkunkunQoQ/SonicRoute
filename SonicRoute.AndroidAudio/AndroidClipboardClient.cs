@@ -16,7 +16,10 @@ public interface IAndroidClipboardClient
 public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardClient
 {
     public const int MaxTextBytes = 64 * 1024;
-    private Process? _process;
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+    private IAdbShellSession? _session;
+    private StreamWriter? _writer;
+    private readonly SemaphoreSlim _sendGate = new(1, 1);
     private long _revision;
     public long Revision => Interlocked.Read(ref _revision);
     public static bool IsSupported(string? text) => text != null && text.Length <= MaxTextBytes
@@ -26,25 +29,28 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
         && command.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(id);
     public async Task WatchAsync(AndroidDevice device, Action ready, Action<string> changed, CancellationToken token)
     {
-        await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false); adb.ValidateServer();
+        await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
+        adb.ValidateCatalog();
         string id = Guid.NewGuid().ToString("N"), remote = "/data/local/tmp/sonicroute_clipboard_" + Guid.NewGuid().ToString("N") + ".jar";
-        string server = remote + ".server";
         string? pid = null;
         Task<string>? stderr = null;
+        StreamReader? errReader = null;
         try
         {
-            await Task.WhenAll(
-                adb.RunAsync(token, "-s", device.Serial, "push", Path.Combine(adb.RuntimeDirectory, "sonicroute-catalog.jar"), remote),
-                adb.RunAsync(token, "-s", device.Serial, "push", adb.ServerFile, server)).ConfigureAwait(false);
+            await adb.RunAsync(token, "-s", device.Serial, "push", adb.CatalogFile, remote).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
-            var process = adb.StartWithInput("-s", device.Serial, "shell",
-                "echo SR_CLIPBOARD_PID:$$; CLASSPATH=" + remote + ":" + server + " exec app_process / org.sonicroute.android.ClipboardBridge " + id);
-            _process = process;
-            stderr = AndroidMediaSessionClient.ReadDiagnosticTailAsync(process.StandardError);
+            var session = await adb.OpenShellAsync(device.Serial,
+                "echo SR_CLIPBOARD_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.ClipboardBridge " + id,
+                redirectInput: true, token).ConfigureAwait(false);
+            _session = session;
+            _writer = new StreamWriter(session.InputStream, Utf8NoBom, bufferSize: 4096, leaveOpen: true) { NewLine = "\n" };
+            errReader = new StreamReader(session.ErrorStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
+            stderr = AndroidMediaSessionClient.ReadDiagnosticTailAsync(errReader);
+            using var stdout = new StreamReader(session.OutputStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
             using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
             startup.CancelAfter(TimeSpan.FromSeconds(15));
             bool started = false;
-            while (await process.StandardOutput.ReadLineAsync(started ? token : startup.Token).ConfigureAwait(false) is { } line)
+            while (await stdout.ReadLineAsync(started ? token : startup.Token).ConfigureAwait(false) is { } line)
             {
                 if (line.StartsWith("SR_CLIPBOARD_PID:", StringComparison.Ordinal))
                 { string value = line[17..].Trim(); if (Regex.IsMatch(value, @"\A[1-9]\d*\z")) pid = value; }
@@ -64,14 +70,16 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
         }
         finally
         {
-            var process = _process; _process = null;
-            if (process != null)
+            var session = _session; _session = null;
+            var writer = _writer; _writer = null;
+            if (session != null)
             {
-                try { process.StandardInput.Close(); } catch (Exception ex) when (ex is InvalidOperationException or IOException) { }
                 using var close = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { await process.WaitForExitAsync(close.Token).ConfigureAwait(false); }
-                catch { try { if (!process.HasExited) process.Kill(true); } catch (InvalidOperationException) { } }
+                try { await session.CloseInputAsync(close.Token).ConfigureAwait(false); } catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException) { }
+                try { await session.WaitForExitAsync(close.Token).ConfigureAwait(false); }
+                catch { try { session.Kill(); } catch { } }
             }
+            writer?.Dispose();
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(4));
             try
             {
@@ -84,19 +92,28 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
                 }
             }
             catch (Exception) { /* Transport may already be gone; never kill a shared process. */ }
-            try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote, server).ConfigureAwait(false); }
+            try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch (Exception) { }
             if (stderr != null) { try { await stderr.ConfigureAwait(false); } catch { } } // Drain but do not retain or log clipboard helper output.
-            process?.Dispose();
+            errReader?.Dispose();
+            if (session != null) await session.DisposeAsync().ConfigureAwait(false);
         }
     }
     public async Task SendAsync(string text, long expectedRevision, CancellationToken token)
     {
         if (!IsSupported(text)) return;
-        var process = _process ?? throw AndroidError.WithCode(new IOException("剪贴板尚未连接。"), AndroidErrorCode.ClipboardNotConnected);
-        // The coordinator supplies one bounded writer per phone, rather than queued writes per copy.
-        string line = JsonSerializer.Serialize(new { text, revision = expectedRevision });
-        await process.StandardInput.WriteLineAsync(line.AsMemory(), token).ConfigureAwait(false);
-        await process.StandardInput.FlushAsync(token).ConfigureAwait(false);
+        await _sendGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            var writer = _writer ?? throw AndroidError.WithCode(new IOException("剪贴板尚未连接。"), AndroidErrorCode.ClipboardNotConnected);
+            // The coordinator supplies one bounded writer per phone, rather than queued writes per copy.
+            string line = JsonSerializer.Serialize(new { text, revision = expectedRevision });
+            await writer.WriteLineAsync(line.AsMemory(), token).ConfigureAwait(false);
+            await writer.FlushAsync(token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
     }
 }

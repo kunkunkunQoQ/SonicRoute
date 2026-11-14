@@ -96,9 +96,7 @@ public partial class App
             await AndroidAudioHost.Displays.CloseApplicationAsync(payload.Device, payload.App.Package);
         if (AndroidAudioHost.IsCreated)
         {
-            var sources = AndroidAudioHost.Sources.Sources.Where(source =>
-                SonicRoute.AndroidAudio.AndroidDeviceIdentity.Matches(source.Device, payload.Device) && source.App.Package == payload.App.Package).ToArray();
-            await Task.WhenAll(sources.Select(source => AndroidAudioHost.Sources.RemoveAsync(source.Id)));
+            await AndroidAudioHost.Sources.RemoveApplicationAsync(payload.Device, payload.App.Package);
         }
     }
     private void AndroidDisplayFailedError(SonicRoute.AndroidAudio.AndroidApp? app, Exception ex)

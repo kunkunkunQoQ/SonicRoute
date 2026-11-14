@@ -62,21 +62,40 @@ namespace SonicRoute
 
         /// <summary>在前台应用列表里匹配一个音频应用：先精确 PID，再按进程名（解决哔哩哔哩等
         /// 客户端 UI 进程与音频 helper 进程同名不同 PID 的情况）。已"禁用自动切换"的应用不参与匹配。</summary>
-        private static AudioAppInfo? MatchForeground(List<AudioAppInfo> apps, int fgPid)
+        private static AudioAppInfo? MatchForeground(List<AudioAppInfo> apps, int fgPid
+#if SONICROUTE_PHONE
+            , nint fgHwnd = 0
+#endif
+            )
         {
             var disabled = ConfigService.Load().DisabledAutoSwitchApps;
             bool Off(AudioAppInfo a) =>
                 !string.IsNullOrWhiteSpace(a.ProcessName) && disabled.Contains(a.ProcessName);
 
-            var exact = apps.FirstOrDefault(a => !a.IsExternal && a.ProcessId == (uint)fgPid);
-            if (exact != null && !Off(exact)) return exact;
+#if SONICROUTE_PHONE
+            if (fgPid != AppInfo.CurrentProcessId)
+#endif
+            {
+                var exact = apps.FirstOrDefault(a => !a.IsExternal && a.ProcessId == (uint)fgPid);
+                if (exact != null && !Off(exact)) return exact;
+            }
+#if SONICROUTE_PHONE
+            string? fgName = ApplicationAudio.ForegroundAppName(fgPid, fgHwnd);
+#else
             string? fgName = ApplicationAudio.ForegroundAppName(fgPid);
+#endif
             if (string.IsNullOrWhiteSpace(fgName)) return null;
             return apps.FirstOrDefault(a =>
                 string.Equals(a.ProcessName, fgName, StringComparison.OrdinalIgnoreCase) && !Off(a));
         }
 
         public static AudioAppInfo? Resolve(List<AudioAppInfo> apps, AppConfig cfg, int? foregroundPid = null)
+            => ResolveCore(apps, cfg, foregroundPid, IntPtr.Zero);
+
+        internal static AudioAppInfo? ResolveWithWindow(List<AudioAppInfo> apps, AppConfig cfg, int foregroundPid, IntPtr foregroundHwnd)
+            => ResolveCore(apps, cfg, foregroundPid, foregroundHwnd);
+
+        private static AudioAppInfo? ResolveCore(List<AudioAppInfo> apps, AppConfig cfg, int? foregroundPid, IntPtr foregroundHwnd)
         {
             if (apps == null || apps.Count == 0) return null;
 
@@ -100,14 +119,39 @@ namespace SonicRoute
                 if (t != null && !Off(t)) return t;
             }
 
-            // 2) 直接前台应用（有音频、非本程序）——先精确 PID，再按进程名；MatchForeground 已跳过禁用应用
+            // 2) 直接前台应用（有音频、非本程序；进程内虚拟屏 HWND 按独立应用放行）——先精确 PID，再按进程名；MatchForeground 已跳过禁用应用
             int own = AppInfo.CurrentProcessId;
+#if SONICROUTE_PHONE
+            int fg;
+            nint fgHwnd = foregroundHwnd;
+            if (foregroundPid == null)
+            {
+                (fg, nint liveHwnd) = ApplicationAudio.GetForegroundWindowContext();
+                if (fgHwnd == 0) fgHwnd = liveHwnd;
+            }
+            else
+            {
+                fg = foregroundPid.Value;
+                if (fg == own && fgHwnd == 0)
+                {
+                    var ctx = ApplicationAudio.GetForegroundWindowContext();
+                    if (ctx.Pid == own) fgHwnd = ctx.Hwnd;
+                }
+            }
+            bool ownVirtualDisplay = fg == own && ApplicationAudio.IsVirtualDisplayWindow(fgHwnd);
+            if (fg > 0 && (fg != own || ownVirtualDisplay))
+            {
+                var a = MatchForeground(apps, fg, fgHwnd);
+                if (a != null) return a;
+            }
+#else
             int fg = foregroundPid ?? ForegroundAppService.GetForegroundProcessId();
             if (fg > 0 && fg != own)
             {
                 var a = MatchForeground(apps, fg);
                 if (a != null) return a;
             }
+#endif
 
             // 3) 最近一次有音频的前台应用（跳过禁用；面板在前台时仍能回到用户正在用的应用）
             var last = LastForegroundAudio;
@@ -120,6 +164,9 @@ namespace SonicRoute
         }
 
         private static int _ownPid, _lastCheckedFgPid, _foregroundRetryBudget;
+#if SONICROUTE_PHONE
+        private static nint _lastCheckedFgHwnd;
+#endif
         private static long _foregroundGeneration;
         private static bool _started, _requested, _needsRetry, _foregroundQueryFailed;
         private static Task _foregroundWork = Task.CompletedTask;
@@ -133,6 +180,9 @@ namespace SonicRoute
             _started = true;
             _ownPid = AppInfo.CurrentProcessId;
             _lastCheckedFgPid = -1;
+#if SONICROUTE_PHONE
+            _lastCheckedFgHwnd = 0;
+#endif
             _needsRetry = _foregroundQueryFailed = false;
             _foregroundSource = new ForegroundChangeSource(() => { _ = RequestForegroundAsync(); });
             _foregroundTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
@@ -192,15 +242,29 @@ namespace SonicRoute
         {
             if (!_started) return Task.CompletedTask;
             int fg = ForegroundAppService.GetForegroundProcessId();
-            if (fg != _lastCheckedFgPid)
+#if SONICROUTE_PHONE
+            nint fgHwnd = fg == _ownPid ? ApplicationAudio.GetForegroundWindowHandle() : 0;
+            bool changed = fg != _lastCheckedFgPid || (fg == _ownPid && fgHwnd != _lastCheckedFgHwnd);
+#else
+            bool changed = fg != _lastCheckedFgPid;
+#endif
+            if (changed)
                 try { ForegroundChanged?.Invoke(fg); } catch { }
-            if (!force && fg == _lastCheckedFgPid && !_needsRetry) return _foregroundWork;
-            if (!force && fg == _lastCheckedFgPid && !_foregroundWork.IsCompleted) return _foregroundWork;
-            if (force || fg != _lastCheckedFgPid) _foregroundRetryBudget = 2;
+            if (!force && !changed && !_needsRetry) return _foregroundWork;
+            if (!force && !changed && !_foregroundWork.IsCompleted) return _foregroundWork;
+            if (force || changed) _foregroundRetryBudget = 2;
             _lastCheckedFgPid = fg;
+#if SONICROUTE_PHONE
+            _lastCheckedFgHwnd = fgHwnd;
+#endif
             ++_foregroundGeneration;
             _needsRetry = false;
+#if SONICROUTE_PHONE
+            bool ownVirtualDisplay = fg == _ownPid && ApplicationAudio.IsVirtualDisplayWindow(fgHwnd);
+            _requested = fg > 0 && (fg != _ownPid || ownVirtualDisplay);
+#else
             _requested = fg > 0 && fg != _ownPid;
+#endif
             if (!_requested) _foregroundQueryFailed = false;
             UpdateForegroundTimer();
             if (_requested && _foregroundWork.IsCompleted) _foregroundWork = ProcessForegroundAsync();
@@ -213,13 +277,24 @@ namespace SonicRoute
             {
                 _requested = false;
                 int fg = _lastCheckedFgPid;
+#if SONICROUTE_PHONE
+                nint fgHwnd = _lastCheckedFgHwnd;
+#endif
                 long generation = _foregroundGeneration;
                 AudioAppInfo? app = null;
                 bool failed = false;
+#if SONICROUTE_PHONE
+                try { app = await Task.Run(() => MatchForeground(ApplicationAudio.GetApps(), fg, fgHwnd)); }
+#else
                 try { app = await Task.Run(() => MatchForeground(ApplicationAudio.GetApps(), fg)); }
+#endif
                 catch { failed = true; }
                 if (!_started || generation != _foregroundGeneration) continue;
-                if (fg != ForegroundAppService.GetForegroundProcessId())
+                if (fg != ForegroundAppService.GetForegroundProcessId()
+#if SONICROUTE_PHONE
+                    || (fg == _ownPid && fgHwnd != ApplicationAudio.GetForegroundWindowHandle())
+#endif
+                    )
                 { _ = RequestForegroundAsync(); continue; }
                 // 覆盖启动会话的短延迟；长期停在无音频应用时不持续枚举 COM。
                 _foregroundQueryFailed = failed;

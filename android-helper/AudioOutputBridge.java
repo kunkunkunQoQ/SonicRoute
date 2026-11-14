@@ -322,16 +322,9 @@ public final class AudioOutputBridge {
     public static void main(String[] args) {
         try {
             Looper.prepareMainLooper();
-            Class.forName("com.genymobile.scrcpy.Workarounds").getMethod("apply").invoke(null);
-            Context context = (Context) Class.forName("com.genymobile.scrcpy.FakeContext").getMethod("get").invoke(null);
-            try {
-                Class<?> initializer = Class.forName("android.media.MediaFrameworkPlatformInitializer");
-                if (initializer.getMethod("getMediaServiceManager").invoke(null) == null) {
-                    Class<?> serviceManager = Class.forName("android.media.MediaServiceManager");
-                    initializer.getMethod("setMediaServiceManager", serviceManager)
-                        .invoke(null, serviceManager.getConstructor().newInstance());
-                }
-            } catch (ClassNotFoundException ignored) { }
+            AndroidWorkarounds.apply();
+            Context context = ShellContext.get();
+            AndroidWorkarounds.ensureMediaFrameworkInitialized();
 
             final AudioManager audioManager = getAudioManager(context);
             if (args.length == 0 || "list".equals(args[0])) {
@@ -352,6 +345,7 @@ public final class AudioOutputBridge {
             final float[] volumeHolder = new float[] { 1.0f };
             final boolean[] mutedHolder = new boolean[] { false };
             final boolean[] routeVerified = new boolean[] { false };
+            final boolean[] quitting = new boolean[] { false };
             final DeviceRoute[] routeHolder = new DeviceRoute[1];
 
             HandlerThread callbackThread = new HandlerThread("sonicroute-out-looper");
@@ -502,6 +496,7 @@ public final class AudioOutputBridge {
                         while ((line = reader.readLine()) != null) {
                             line = line.trim();
                             if ("quit".equals(line)) {
+                                quitting[0] = true;
                                 try { client.close(); } catch (Throwable ignored) { }
                                 break;
                             } else if (line.startsWith("target ")) {
@@ -568,7 +563,13 @@ public final class AudioOutputBridge {
                     int pending = 0;
                     boolean playing = false;
                     while (true) {
-                        int read = input.read(pcm, pending, pcm.length - pending);
+                        int read;
+                        try {
+                            read = input.read(pcm, pending, pcm.length - pending);
+                        } catch (java.io.IOException readError) {
+                            if (quitting[0]) break;
+                            throw readError;
+                        }
                         if (read < 0) break;
                         int total = pending + read;
                         int aligned = total - (total % BYTES_PER_FRAME);

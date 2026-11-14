@@ -96,8 +96,8 @@ public final class ClipboardBridge {
     public static void main(String[] args) {
         try {
             Looper.prepareMainLooper();
-            Class.forName("com.genymobile.scrcpy.Workarounds").getMethod("apply").invoke(null);
-            Context context = (Context) Class.forName("com.genymobile.scrcpy.FakeContext").getMethod("get").invoke(null);
+            AndroidWorkarounds.apply();
+            Context context = ShellContext.get();
             ClipboardBridge bridge = new ClipboardBridge(context);
             bridge.clipboard.addPrimaryClipChangedListener(bridge.listener);
             send(new JSONObject().put("ready", true).put("revision", 0));

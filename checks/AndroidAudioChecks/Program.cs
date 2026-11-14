@@ -15,6 +15,8 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--stream-settings") { await StreamSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--encoder-catalog") { await EncoderCatalogAsync(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--device-audio") { await DeviceAudioAsync(args[1]); return 0; }
@@ -42,27 +44,35 @@ internal static partial class Program
     {
         var adb = new AdbClient(Path.Combine(args[1], "AndroidRuntime"));
         new VirtualDisplayRuntime(adb).Validate();
-        Check(true, "packaged audio server and isolated video server/client dependencies match the compiled runtime manifest");
-        var info = VirtualDisplayClient.CreateStartInfo(adb, new AndroidDevice("offline-package-check", "Offline", "device", false),
-            new AndroidApp("cn.test.app", "Offline", 123, "other"), 0, 0);
-        info.ArgumentList.Add("--help"); // parse the actual launch options and load DLLs, without contacting a phone
-        using var process = Process.Start(info)!;
-        var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
-        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        try { await process.WaitForExitAsync(deadline.Token); }
-        catch { try { process.Kill(true); } catch (InvalidOperationException) { } throw; }
-        string help = await stdout + await stderr;
-        Check(process.ExitCode == 0 && help.Contains("--new-display") && help.Contains("--start-app"),
-            "packaged native client loads its video DLLs and accepts the video-only launch options without starting ADB");
+        adb.ValidateCatalog();
+        Check(!File.Exists(Path.Combine(adb.RuntimeDirectory, "adb.exe"))
+            && !File.Exists(Path.Combine(adb.RuntimeDirectory, "AdbWinApi.dll"))
+            && !File.Exists(Path.Combine(adb.RuntimeDirectory, "AdbWinUsbApi.dll"))
+            && !File.Exists(Path.Combine(adb.RuntimeDirectory, "ADB-NOTICE.txt"))
+            && !File.Exists(Path.Combine(adb.RuntimeDirectory, "scrcpy-server"))
+            && !File.Exists(Path.Combine(adb.RuntimeDirectory, "VirtualDisplay", "scrcpy.exe"))
+            && !File.Exists(Path.Combine(adb.RuntimeDirectory, "VirtualDisplay", "SDL2.dll")),
+            "packaged catalog matches compiled runtime manifest without ADB/FFmpeg/SDL2/scrcpy binaries");
+        string cmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(new AndroidDevice("offline-package-check", "Offline", "device", false),
+                new AndroidApp("cn.test.app", "Offline", 123, "other"), "1234abcd", new VideoServerOptions()));
+        Check(cmd.Contains("org.sonicroute.android.SonicRouteServer") && cmd.Contains("socket_prefix=sonicroute")
+            && cmd.Contains("new_display") && cmd.Contains("start_app=cn.test.app"),
+            "in-process video transport formats SonicRouteServer options cleanly without external binaries");
+        await CheckVideoStage2Async();
         await File.WriteAllTextAsync(args[2], JsonSerializer.Serialize(new { Package = Path.GetFullPath(args[1]), Success = true,
-            ManifestFiles = 8, NativeExitCode = process.ExitCode, DeviceAccess = false, Assertions = _checks }, new JsonSerializerOptions { WriteIndented = true }));
+            ManifestFiles = 1, DeviceAccess = false, Assertions = _checks }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"PASS {_checks} package assertions; no phone access or capture.");
     }
     private static async Task ModulesAsync()
     {
-        var devices = AdbClient.ParseDevices("List of devices attached\nadb-a._adb-tls-connect._tcp device model:Test_Phone\nusb unauthorized\n");
+        var devices = AdbClient.ParseDevices("List of devices attached\nadb-a._adb-tls-connect._tcp device model:Test_Phone\nusb unauthorized\nadb-e1868f06-7gMgqD (2)._adb-tls-connect._tcp device product:fuxi model:2211133C device:fuxi transport_id:56\n");
         await CheckPhoneManagementAsync();
-        Check(devices.Count == 2 && devices[0].IsWifi && !devices[1].IsWifi && devices[1].State == "unauthorized", "ADB Wi-Fi and unauthorized states");
+        Check(devices.Count == 3 && devices[0].IsWifi && !devices[1].IsWifi && devices[1].State == "unauthorized"
+            && devices[2].IsWifi && devices[2].State == "device"
+            && devices[2].Serial == "adb-e1868f06-7gMgqD (2)._adb-tls-connect._tcp"
+            && devices[2].Name == "2211133C" && devices[2].TransportId == "56"
+            && AndroidDeviceIdentity.Key(devices[2]) == "device:e1868f06", "ADB Wi-Fi, mDNS collision suffix with spaces, and unauthorized states");
         bool rejected = false; try { AdbClient.ValidatePackage("cn.test.app;id"); } catch (ArgumentException) { rejected = true; }
         Check(rejected, "reject shell metacharacters in package");
         var pcm = new AndroidPcmSource();
@@ -75,6 +85,9 @@ internal static partial class Program
         Check(pcm.BufferedSamples <= 24000 && pcm.DroppedSamples > 0, "bounded queue trims stale latency");
         pcm.Clear(); Check(pcm.BufferedSamples == 0, "clear releases queued audio");
         CheckPcmWrapAndGain();
+        await CheckAdbSocketClientAsync();
+        await CheckDirectAdbAsync();
+        await CheckVideoStage2Async();
         byte[] wire = BuildWire();
         var receiver = new ScrcpyOpusReceiver(); var decoded = new AndroidPcmSource(); int firstFrames = 0;
         try { await receiver.ReceiveAsync(new FragmentedStream(wire), decoded, () => firstFrames++, default); } catch (EndOfStreamException) { }
@@ -393,30 +406,18 @@ internal static partial class Program
         await pending.DisposeAsync();
         bool cancelled = false; try { await starting; } catch (OperationCanceledException) { cancelled = true; }
         Check(cancelled && pendingClient.Disposed, "shutdown during virtual display startup cancels and cleans up its pending client");
-        var adb = new AdbClient(Path.Combine(Path.GetTempPath(), "SonicRoute-VirtualDisplay-ArgumentFixture"));
-        var info = VirtualDisplayClient.CreateStartInfo(adb, device, app with { Name = "测试 Window \"title\"" }, -400, 50);
-        Check(info.ArgumentList.Contains("--no-audio") && info.ArgumentList.Contains("--new-display")
-            && !info.ArgumentList.Any(a => a.StartsWith("--max-size=") || a.StartsWith("--window-width="))
-            && info.Environment["SONICROUTE_FLEX_DISPLAY"] == "1"
-            && !info.ArgumentList.Contains("--no-vd-destroy-content")
-            && info.ArgumentList.Contains("--start-app=" + app.Package) && info.ArgumentList.Contains("--no-clipboard-autosync")
-            && !info.UseShellExecute && info.Environment["ADB"] == adb.Executable
-            && info.Environment["SCRCPY_SERVER_PATH"] == new VirtualDisplayRuntime(adb).ServerFile
-            && info.Environment["SCRCPY_SERVER_PATH"] != adb.ServerFile,
-            "virtual windows isolate video, default to phone geometry and destroy VD content when closed");
-        string cache = Path.Combine(AppContext.BaseDirectory, "icon-fixture-" + Guid.NewGuid().ToString("N"));
-        byte[] iconBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7b0AAAAASUVORK5CYII=");
-        var iconApp = app with { IconPng = iconBytes };
-        string iconPath = VirtualDisplayClient.CacheIcon(iconApp, cache)!;
-        DateTime written = File.GetLastWriteTimeUtc(iconPath);
-        Check(File.ReadAllBytes(iconPath).SequenceEqual(iconBytes) && VirtualDisplayClient.CacheIcon(iconApp, cache) == iconPath
-            && File.GetLastWriteTimeUtc(iconPath) == written
-            && VirtualDisplayClient.CreateStartInfo(adb, device, iconApp, 0, 0, iconPath).Environment["SCRCPY_ICON_PATH"] == iconPath,
-            "virtual client receives the exact app PNG through its own cached icon path without repeated writes");
-        Check(VirtualDisplayClient.IsOwnedServerCommand("app_process / com.genymobile.scrcpy.Server 3.3.4 scid=1234abcd video=true", "1234abcd")
-            && !VirtualDisplayClient.IsOwnedServerCommand("app_process / com.genymobile.scrcpy.Server 3.3.4 scid=1234abce", "1234abcd")
+        string cmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(device, app with { Name = "测试 Window \"title\"" }, "1234abcd", new VideoServerOptions()));
+        Check(cmd.Contains("audio=false") && cmd.Contains(" new_display")
+            && cmd.Contains("org.sonicroute.android.SonicRouteServer") && cmd.Contains("socket_prefix=sonicroute")
+            && cmd.Contains("start_app=" + app.Package) && cmd.Contains("clipboard_autosync=false")
+            && cmd.Contains("vd_system_decorations=false display_ime_policy=hide"),
+            "virtual windows isolate video, target MIT SonicRouteServer, and destroy VD content when closed");
+        Check(VirtualDisplayClient.IsOwnedServerCommand("app_process / org.sonicroute.android.SonicRouteServer 3.3.4 scid=1234abcd video=true", "1234abcd")
+            && VirtualDisplayClient.IsOwnedServerCommand("app_process / com.genymobile.scrcpy.Server 3.3.4 scid=1234abcd video=true", "1234abcd")
+            && !VirtualDisplayClient.IsOwnedServerCommand("app_process / org.sonicroute.android.SonicRouteServer 3.3.4 scid=1234abce", "1234abcd")
             && !VirtualDisplayClient.IsOwnedServerCommand("other.Process scid=1234abcd", "1234abcd")
-            && !VirtualDisplayClient.IsOwnedServerCommand("com.genymobile.scrcpy.Server scid=1234abcd0", "1234abcd"),
+            && !VirtualDisplayClient.IsOwnedServerCommand("org.sonicroute.android.SonicRouteServer scid=1234abcd0", "1234abcd"),
             "forced cleanup requires the exact owned server identity and cannot match another stream");
     }
     private sealed class FakeDisplay : IVirtualDisplayClient

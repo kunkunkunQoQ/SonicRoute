@@ -25,8 +25,18 @@ namespace SonicRoute.Core.Models
 
         public string Label =>
             !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName! :
-            !string.IsNullOrWhiteSpace(ProcessName) ? ProcessName! :
+            !string.IsNullOrWhiteSpace(ProcessName) ? FormatProcessLabel(ProcessName!) :
             $"PID {ProcessId}";
+
+        private static string FormatProcessLabel(string processName)
+        {
+            const string prefix = "android:";
+            if (!processName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return processName;
+            string suffix = processName.Substring(prefix.Length).Trim();
+            if (suffix.Length == 0 || string.Equals(suffix, "sonicroute:device-audio", StringComparison.OrdinalIgnoreCase))
+                return "Phone";
+            return suffix;
+        }
 
         public override string ToString() => Label;
     }

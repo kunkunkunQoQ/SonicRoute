@@ -35,7 +35,7 @@ public sealed class AndroidRuntimeBundle
             return Path.Combine(root, identity);
         });
     }
-    private static int ComponentBit(string group) => group switch { "adb" => 1, "audio" => 2, "video" => 4, "control" => 8,
+    private static int ComponentBit(string group) => group switch { "audio" => 2,
         _ => throw new ArgumentException("Unknown phone runtime component.", nameof(group)) };
     internal Task PrepareAsync(string group, CancellationToken token) => (Volatile.Read(ref _prepared) & ComponentBit(group)) != 0
         ? Task.CompletedTask : Task.Run(() => Prepare(group, token), token);
@@ -97,18 +97,5 @@ public sealed class AndroidRuntimeBundle
         for (string? item = path; item != null; item = Path.GetDirectoryName(item))
             if ((File.Exists(item) || Directory.Exists(item)) && (File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("Phone runtime cache cannot contain links or junctions.");
-    }
-
-    /// <summary>Notices are readable on demand; no files are exported during application startup.</summary>
-    public static string ReadNotices()
-    {
-        var text = new StringBuilder();
-        foreach (string resource in Assembly.GetManifestResourceNames().Where(n => n.StartsWith("SonicRoute.Notices.", StringComparison.Ordinal)).Order())
-        {
-            using var stream = Assembly.GetManifestResourceStream(resource)!;
-            using var reader = new StreamReader(stream, Encoding.UTF8);
-            text.Append("\n\n===== ").Append(resource["SonicRoute.Notices.".Length..]).Append(" =====\n\n").Append(reader.ReadToEnd());
-        }
-        return text.ToString();
     }
 }

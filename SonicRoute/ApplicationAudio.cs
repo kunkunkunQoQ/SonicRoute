@@ -16,6 +16,37 @@ namespace SonicRoute;
 /// <summary>Shared application targets for UI, automation, hotkeys and tray. Native APIs only receive real PIDs.</summary>
 internal static class ApplicationAudio
 {
+#if SONICROUTE_PHONE
+    static ApplicationAudio() => AppDisplayName.ExternalNameResolver = ResolveExternalDisplayName;
+    internal static void EnsureNameResolver() => AppDisplayName.ExternalNameResolver = ResolveExternalDisplayName;
+
+    private static string? ResolveExternalDisplayName(string identifier)
+    {
+        const string prefix = "android:";
+        if (string.IsNullOrWhiteSpace(identifier) || !identifier.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return null;
+        return AndroidAudioHost.TryResolveAndroidName(identifier.Substring(prefix.Length).Trim());
+    }
+#endif
+
+    internal static string FormatAppIdentifier(string? identifier)
+    {
+        if (string.IsNullOrWhiteSpace(identifier)) return "";
+        const string prefix = "android:";
+        if (!identifier!.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return identifier;
+        string package = identifier.Substring(prefix.Length).Trim();
+#if SONICROUTE_PHONE
+        var customNames = ConfigService.Load().AppNames;
+        if (customNames.TryGetValue(identifier, out var custom) && !string.IsNullOrWhiteSpace(custom))
+            return custom;
+        string? resolved = AndroidAudioHost.TryResolveAndroidName(package);
+        if (!string.IsNullOrWhiteSpace(resolved)) return resolved!;
+#endif
+        if (package.Length == 0 || string.Equals(package, "sonicroute:device-audio", StringComparison.OrdinalIgnoreCase))
+            return "Phone";
+        return package;
+    }
+
     internal static event Action? Changed;
     internal static event Action? OutputsChanged;
     internal static void NotifyChanged()
@@ -73,14 +104,47 @@ internal static class ApplicationAudio
 #else
         false;
 #endif
-    internal static string? ForegroundAppName(int pid)
+    internal static string? ForegroundAppName(int pid) => ForegroundAppName(pid, 0);
+
+    internal static string? ForegroundAppName(int pid, nint hwnd)
     {
 #if SONICROUTE_PHONE
-        if (AndroidAudioHost.AreDisplaysCreated && AndroidAudioHost.Displays.FindApplication(pid) is { } display)
-            return AndroidKey(display.App.Package);
+        if (AndroidAudioHost.AreDisplaysCreated)
+        {
+            nint targetHwnd = hwnd;
+            if (targetHwnd == 0)
+            {
+                nint live = GetForegroundWindow();
+                if (live != 0 && GetWindowThreadProcessId(live, out uint livePid) != 0 && (int)livePid == pid)
+                    targetHwnd = live;
+            }
+            if (AndroidAudioHost.Displays.FindApplication(targetHwnd, pid) is { } display)
+                return AndroidKey(display.App.Package);
+        }
 #endif
         return ForegroundAppService.GetProcessNameSafe(pid);
     }
+
+#if SONICROUTE_PHONE
+    internal static nint GetForegroundWindowHandle() => GetForegroundWindow();
+
+    internal static (int Pid, nint Hwnd) GetForegroundWindowContext()
+    {
+        nint hwnd = GetForegroundWindow();
+        if (hwnd == 0) return (0, 0);
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        return ((int)pid, hwnd);
+    }
+
+    internal static bool IsVirtualDisplayWindow(nint hwnd)
+        => hwnd != 0 && AndroidAudioHost.AreDisplaysCreated && AndroidAudioHost.Displays.OwnsWindow(hwnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
+#endif
     internal static async Task<List<AudioAppInfo>> GetAppsAsync(bool refresh = false) => MergeExternal(await AudioService.GetAppsAsync(refresh).ConfigureAwait(false));
     internal static List<AudioAppInfo> MergeExternal(IEnumerable<AudioAppInfo> apps)
     {

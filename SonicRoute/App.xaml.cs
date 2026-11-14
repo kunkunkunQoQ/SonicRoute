@@ -22,6 +22,9 @@ namespace SonicRoute
     {
         static App()
         {
+#if SONICROUTE_PHONE
+            ApplicationAudio.EnsureNameResolver();
+#endif
             // No hover bubbles anywhere in the product, including disabled controls and text runs.
             System.Windows.Controls.ToolTipService.IsEnabledProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(false));
             System.Windows.Controls.ToolTipService.IsEnabledProperty.OverrideMetadata(typeof(FrameworkContentElement), new FrameworkPropertyMetadata(false));

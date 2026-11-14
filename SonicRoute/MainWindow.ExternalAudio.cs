@@ -69,7 +69,11 @@ public partial class MainWindow
     }
     private static AppItem ReuseExternalItem(AppItem item, AudioAppInfo info)
     {
-        if (item.Info.IsExternal) item.Info.SourceLabel = info.SourceLabel;
+        if (item.Info.IsExternal)
+        {
+            item.Info.DisplayName = info.DisplayName;
+            item.RefreshSourceLabel(info.SourceLabel);
+        }
         return item;
     }
     private void RefreshExternalAudioLists()
@@ -108,7 +112,11 @@ public partial class MainWindow
             }
         }
         finally { _suppressAppCombo = appsSuppressed; _suppressAutoUi = autoSuppressed; }
-        if (_appsSelected != null && AppsPage.IsVisible) _ = RefreshAppsSelectionAsync();
+        if (_appsSelected != null && AppsPage.IsVisible)
+        {
+            UpdateAppsDetailLabels();
+            _ = RefreshAppsSelectionAsync();
+        }
     }
 #else
     private void InitializeExternalAudio() { }

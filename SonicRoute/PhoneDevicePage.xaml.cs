@@ -292,7 +292,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
             if (AndroidAudioHost.IsCreated)
                 foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)).ToArray())
-                    await AndroidAudioHost.Sources.RemoveAsync(source.Id);
+                    await AndroidAudioHost.Sources.RemoveAsync(source.Id, restorePrevious: false);
             if (AndroidAudioHost.IsPcToPhoneCreated) await AndroidAudioHost.PcToPhone.StopPhoneAsync(device);
             AndroidAudioHost.Phone.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
             await Wireless.UnpairAsync(device, token);
@@ -362,7 +362,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             PhoneAudioWindowCache.InvalidateDevices();
             if (AndroidAudioHost.IsCreated)
                 foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)))
-                    await AndroidAudioHost.Sources.RemoveAsync(source.Id);
+                    await AndroidAudioHost.Sources.RemoveAsync(source.Id, restorePrevious: false);
             if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
             if (AndroidAudioHost.IsPcToPhoneCreated) await AndroidAudioHost.PcToPhone.StopPhoneAsync(device);
             AndroidAudioHost.Phone.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);

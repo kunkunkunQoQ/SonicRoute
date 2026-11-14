@@ -628,7 +628,6 @@
   "Phone.Disconnected": "未連線",
   "Phone.WifiConnected": "Wi-Fi 已連線",
   "Phone.UsbConnected": "USB 已連線",
-  "Phone.OpenSourceLicenses": "開源授權",
   "Phone.FromDevice": "來自 {0}",
   "Phone.DeviceNameAutomation": "手機名稱",
   "Phone.Disconnect": "中斷",

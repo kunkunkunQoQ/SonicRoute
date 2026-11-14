@@ -12,7 +12,7 @@ namespace SonicRoute
         public int ProcessId => (int)Info.ProcessId;
         public string ProcessName => Info.ProcessName ?? "";
         public string Identity => Info.Identity;
-        public string Subtitle => Info.SourceLabel ?? ProcessName;
+        public string Subtitle => Info.IsExternal ? (Info.SourceLabel ?? "") : (Info.SourceLabel ?? ProcessName);
         public string Label => AppDisplayName.Get(Info);
         public bool IsActive => Info.HasActiveSession;
 

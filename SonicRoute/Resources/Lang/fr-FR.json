@@ -628,7 +628,6 @@
   "Phone.Disconnected": "Déconnecté",
   "Phone.WifiConnected": "Connecté en Wi-Fi",
   "Phone.UsbConnected": "Connecté en USB",
-  "Phone.OpenSourceLicenses": "Licences open source",
   "Phone.FromDevice": "De {0}",
   "Phone.DeviceNameAutomation": "Nom du téléphone",
   "Phone.Disconnect": "Déconnecter",

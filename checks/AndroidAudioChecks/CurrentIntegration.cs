@@ -16,19 +16,19 @@ internal static partial class Program
         samples["ConstructMs"] = clock.Elapsed.TotalMilliseconds;
         Check(!Directory.Exists(bundle.DirectoryPath), "constructing bundled phone services performs no extraction");
         clock.Restart(); string version = await adb.RunAsync(default, "version"); samples["ColdAdbVersionMs"] = clock.Elapsed.TotalMilliseconds;
-        Check(version.Contains("Android Debug Bridge") && Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 3,
-            "first ADB request prepares only its three native files and runs without a phone");
+        Check(version.Contains("Android Debug Bridge") && !Directory.Exists(bundle.DirectoryPath),
+            "first ADB version request runs in-process without extracting binaries or touching a phone");
         clock.Restart(); new VirtualDisplayRuntime(adb).Validate(); samples["ColdVideoPrepareMs"] = clock.Elapsed.TotalMilliseconds;
-        Check(Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 10 && !File.Exists(adb.ServerFile),
-            "first video request materializes its own components without loading audio tools");
+        Check(Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).Length == 1 && File.Exists(adb.CatalogFile),
+            "catalog runtime materializes only sonicroute-catalog.jar without ADB/FFmpeg/SDL2/scrcpy binaries");
         var written = Directory.GetFiles(bundle.DirectoryPath, "*", SearchOption.AllDirectories).ToDictionary(p => p, File.GetLastWriteTimeUtc);
         clock.Restart(); var second = new AdbClient(new AndroidRuntimeBundle(Path.Combine(output, "cache")));
         await second.RunAsync(default, "version"); new VirtualDisplayRuntime(second).Validate(); samples["WarmAdbAndVideoMs"] = clock.Elapsed.TotalMilliseconds;
-        Check(written.All(p => File.GetLastWriteTimeUtc(p.Key) == p.Value), "a new process provider reuses validated tools without rewriting files");
+        Check(written.All(p => File.GetLastWriteTimeUtc(p.Key) == p.Value), "a new process provider reuses validated catalog without rewriting files");
         string helper = Path.Combine(bundle.DirectoryPath, "sonicroute-catalog.jar");
-        adb.ValidateServer();
+        adb.ValidateCatalog();
         byte[] correct = File.ReadAllBytes(helper), damaged = (byte[])correct.Clone(); damaged[0] ^= 1; File.WriteAllBytes(helper, damaged);
-        new AdbClient(new AndroidRuntimeBundle(Path.Combine(output, "cache"))).ValidateServer();
+        new AdbClient(new AndroidRuntimeBundle(Path.Combine(output, "cache"))).ValidateCatalog();
         Check(File.ReadAllBytes(helper).SequenceEqual(correct), "a damaged cached helper is repaired from the embedded component");
         using (var canceled = new CancellationTokenSource())
         {
@@ -36,9 +36,9 @@ internal static partial class Program
             try { await new AdbClient(unused).RunAsync(canceled.Token, "version"); } catch (OperationCanceledException) { stopped = true; }
             Check(stopped && !Directory.Exists(unused.DirectoryPath), "cancellation before first use creates no tools or process");
         }
-        string notices = AndroidRuntimeBundle.ReadNotices();
-        Check(new[] { "ADB-NOTICE", "FFmpeg-LICENSE", "SDL2-LICENSE", "zlib-LICENSE", "QRCoder-LICENSE", "Concentus", "NAudio" }.All(notices.Contains),
-            "single executable preserves readable notices for every bundled dependency");
+        Check(!typeof(AndroidRuntimeBundle).Assembly.GetManifestResourceNames()
+            .Any(n => n.StartsWith("SonicRoute.Notices.", StringComparison.Ordinal)),
+            "single executable embeds no open-source notice resources");
         Check(AndroidWirelessConnection.PairingFingerprint(Convert.ToBase64String(Enumerable.Range(0,64).Select(i=>(byte)i).ToArray()) + " test")
             == "B2:D3:F5:6B:C1:97:FD:98:5D:59:65:07:9B:5E:71:48", "unpairing uses Android's exact public-key fingerprint format");
         Check(AndroidWirelessConnection.ParseServices("studio-name (2)._adb-tls-pairing._tcp.local. _adb-tls-pairing._tcp.local. 192.0.2.5:37000")[0].Name == "studio-name (2)"
@@ -68,9 +68,14 @@ internal static partial class Program
             "virtual-display state accepts only structured logs for owned non-default displays");
         var device = new AndroidDevice("fixture", "Phone", "device", true); var app = new AndroidApp("cn.test.app", "Test",123,"media");
         await VirtualDisplaysAsync(device, app);
-        var info = VirtualDisplayClient.CreateStartInfo(adb, device, app, 1, 2);
-        Check(info.ArgumentList.Contains("--prefer-text") && !VirtualDisplayClient.CreateStartInfo(adb, device, app with {Category="games"}, 1, 2).ArgumentList.Contains("--prefer-text"),
-            "desktop IME text routing keeps raw game-key behavior isolated");
+        string normalCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(device, app, "1234abcd", new VideoServerOptions(RawKeyEvents: app.Category == "games")));
+        string gameCmd = AdbVideoStreamTransport.BuildServerShellCommand("/data/local/tmp/sonicroute-video-server.jar",
+            new VideoStreamOpenRequest(device, app with { Category = "games" }, "1234abcd", new VideoServerOptions(RawKeyEvents: true)));
+        Check(normalCmd.Contains("org.sonicroute.android.SonicRouteServer") && normalCmd.Contains("socket_prefix=sonicroute")
+            && !new VideoServerOptions(RawKeyEvents: app.Category == "games").RawKeyEvents
+            && new VideoServerOptions(RawKeyEvents: true).RawKeyEvents && gameCmd.Contains("start_app=cn.test.app"),
+            "desktop IME text routing keeps raw game-key behavior isolated on SonicRouteServer");
         byte[] wire = BuildWire();
         await using var manager = new AndroidAudioManager(() => new AndroidAudioSession(() => new FakeTransport(wire,()=>{}),(_,_)=>new FakePlayer()));
         var owned = await manager.AddAsync(device,app,false,displayOwned:true); await manager.ReleaseDisplayAudioAsync(owned);

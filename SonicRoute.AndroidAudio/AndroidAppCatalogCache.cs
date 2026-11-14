@@ -28,6 +28,33 @@ public sealed class AndroidAppCatalogCache(string filePath,
             apps = current?.Apps ?? Array.Empty<AndroidApp>(); return found;
         }
     }
+    /// <summary>Reads cached app name from in-memory snapshots or saved catalog files without invoking ADB.</summary>
+    public string? TryFindCachedName(string package, IEnumerable<AndroidDevice>? knownDevices = null)
+    {
+        if (string.IsNullOrWhiteSpace(package)) return null;
+        lock (_snapshotsGate)
+        {
+            foreach (var snapshot in _snapshots.Values)
+            {
+                foreach (var app in snapshot.Apps)
+                    if (string.Equals(app.Package, package, StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(app.Name))
+                        return app.Name;
+            }
+        }
+        if (knownDevices == null) return null;
+        foreach (var device in knownDevices)
+        {
+            if (TryGet(device, out _)) continue;
+            var saved = ReadSaved(device);
+            if (saved == null) continue;
+            foreach (var app in saved)
+                if (string.Equals(app.Package, package, StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(app.Name))
+                    return app.Name;
+        }
+        return null;
+    }
     public async Task<IReadOnlyList<AndroidApp>> GetAsync(AndroidDevice device, bool refresh, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();

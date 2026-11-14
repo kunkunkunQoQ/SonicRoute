@@ -1,80 +1,8 @@
 [
   {
-    "Path": "adb.exe",
-    "Group": "adb",
-    "Bytes": 8273560,
-    "SHA256": "B4A6B455702684652CCCF7B46258B29E653538904359A58FD4931CF3EF286B3F"
-  },
-  {
-    "Path": "AdbWinApi.dll",
-    "Group": "adb",
-    "Bytes": 108184,
-    "SHA256": "C1D653030B4BDE65D3E07E4D0B0979E17BE56DF1436CDD15528630F27808050D"
-  },
-  {
-    "Path": "AdbWinUsbApi.dll",
-    "Group": "adb",
-    "Bytes": 73368,
-    "SHA256": "0710E894D9B40F71A670C13C694079D564C92C1279DA382CFE4850983AAEBE1B"
-  },
-  {
-    "Path": "scrcpy-server",
-    "Group": "audio",
-    "Bytes": 95100,
-    "SHA256": "BAFEFD8413783E404BC34520B7EA1A9EBAA985720FEFE9E450933CAEA89BDD05"
-  },
-  {
     "Path": "sonicroute-catalog.jar",
     "Group": "audio",
-    "Bytes": 20341,
-    "SHA256": "3256BC6BB0306B2E972F6FC77F964E853578AEE5ED1315EB18562C8A8D72B03D"
-  },
-  {
-    "Path": "VirtualDisplay/avcodec-62.dll",
-    "Group": "video",
-    "Bytes": 3629568,
-    "SHA256": "70A08A7922D4D9CBD9B979EDC4DEEB762FB54E05862A3361437793B1F40A0E7F"
-  },
-  {
-    "Path": "VirtualDisplay/avformat-62.dll",
-    "Group": "video",
-    "Bytes": 329216,
-    "SHA256": "13C83DA3DE6EA5E5223B48063BEDB63FB93A027CEAC343F2A4B48D12955CB02A"
-  },
-  {
-    "Path": "VirtualDisplay/avutil-60.dll",
-    "Group": "video",
-    "Bytes": 868352,
-    "SHA256": "CB68B96847FB4ADE17D3120A5CE5CDB1235EBDF275ECA868D284108077BF5477"
-  },
-  {
-    "Path": "VirtualDisplay/scrcpy-server-video",
-    "Group": "control",
-    "Bytes": 100749,
-    "SHA256": "D92B5E536BF2D56E2AB7BD96F17245139707C353D7E04C311E82B651C16EFC80"
-  },
-  {
-    "Path": "VirtualDisplay/scrcpy.exe",
-    "Group": "video",
-    "Bytes": 596480,
-    "SHA256": "D5847E9895EBF933A5DBE76E9305B2921DC97D9ED176F11258B3F362A609DB6C"
-  },
-  {
-    "Path": "VirtualDisplay/phone-icon.png",
-    "Group": "video",
-    "Bytes": 2546,
-    "SHA256": "95F069EC777F6F153447C1BE2F1015695AF7AF7CC30CF5FDC53131DC9BB25D89"
-  },
-  {
-    "Path": "VirtualDisplay/SDL2.dll",
-    "Group": "video",
-    "Bytes": 1785344,
-    "SHA256": "53E8FA7E9ED43C30BD650C39396F0D9D2067D2FFF0B926C9433B75202592E4AA"
-  },
-  {
-    "Path": "VirtualDisplay/swresample-6.dll",
-    "Group": "video",
-    "Bytes": 143872,
-    "SHA256": "AC728D63097CC61B824DDF1F5C76341189570860168D64A9862CF8E277A8D3C1"
+    "Bytes": 83528,
+    "SHA256": "5B5B0ACA360B89258B7789FCE12122038F52FAE0ABA3BB510BB0479347F66947"
   }
 ]

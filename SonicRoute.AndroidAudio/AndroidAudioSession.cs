@@ -7,6 +7,9 @@ public sealed class AndroidAudioSession : IAsyncDisposable
     private readonly object _stateGate = new(), _logGate = new();
     private readonly Func<IAudioTransport> _transportFactory;
     private readonly Func<AndroidPcmSource, string?, IPcmPlayer> _playerFactory;
+    private readonly Func<Action, IDisposable>? _watchDefaultOutput;
+    private IDisposable? _defaultOutputWatch;
+    private int _defaultOutputRevision, _defaultOutputRefreshQueued;
     private readonly Queue<string> _logs = new();
     private AndroidAudioState _state = new(CaptureState.Idle);
     private CancellationTokenSource? _run;
@@ -30,6 +33,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
 
     public AndroidAudioSession(AdbClient adb, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
     {
+        _watchDefaultOutput = DefaultOutputNotifications.Subscribe;
         _transportFactory = () => new ScrcpyAdbTransport(adb, Log, streaming);
         _playerFactory = (source, id) =>
         {
@@ -39,8 +43,9 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             return new AndroidPhonePcmPlayer(adb, device, source, sink, _run?.Token ?? default);
         };
     }
-    public AndroidAudioSession(Func<IAudioTransport> transportFactory, Func<AndroidPcmSource, string?, IPcmPlayer> playerFactory)
-    { _transportFactory = transportFactory; _playerFactory = playerFactory; }
+    public AndroidAudioSession(Func<IAudioTransport> transportFactory, Func<AndroidPcmSource, string?, IPcmPlayer> playerFactory,
+        Func<Action, IDisposable>? watchDefaultOutput = null)
+    { _transportFactory = transportFactory; _playerFactory = playerFactory; _watchDefaultOutput = watchDefaultOutput; }
 
     public async Task StartAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio = true, CancellationToken token = default)
     {
@@ -73,6 +78,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         {
             _transport = _transportFactory();
             _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f, SmartVolume = State.SmartVolume };
+            if (string.IsNullOrEmpty(State.OutputId)) WatchDefaultOutput();
             Task<Stream> connecting = _transport.ConnectAsync(device, app, keepPhoneAudio, runToken);
             if (AndroidOutputIdentity.IsPhoneOutput(State.OutputId))
             {
@@ -147,6 +153,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
     {
         ++_generation;
         _run?.Cancel();
+        StopWatchingDefaultOutput();
         if (_transport != null) Update(s => s with { State = CaptureState.Stopping });
         if (_receiveTask != null) { try { await _receiveTask.ConfigureAwait(false); } catch { } }
         if (_player != null) { try { _player.Dispose(); } catch (Exception ex) { Log(ex.Message); } _player = null; }
@@ -209,19 +216,87 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             }
             if (_pcm != null)
             {
-                IPcmPlayer next = await Task.Run(() => _playerFactory(_pcm, endpointId)).ConfigureAwait(false);
+                bool watching = _defaultOutputWatch != null;
+                if (string.IsNullOrEmpty(endpointId)) WatchDefaultOutput();
                 try
                 {
-                    _player?.Stop(); next.Play();
-                    if (next is AndroidPhonePcmPlayer output) await output.WaitForRoutingAsync(_run?.Token ?? default).ConfigureAwait(false);
+                    await ReplaceOutputAsync(endpointId).ConfigureAwait(false);
                 }
-                catch { next.Dispose(); _player?.Play(); throw; }
-                _player?.Dispose(); _player = next;
-                AttachOutputFailure(next, _generation);
+                catch { if (!watching) StopWatchingDefaultOutput(); throw; }
             }
             Update(s => s with { OutputId = endpointId });
+            if (!string.IsNullOrEmpty(endpointId)) StopWatchingDefaultOutput();
         }
         finally { _operations.Release(); }
+    }
+
+    private async Task ReplaceOutputAsync(string? endpointId)
+    {
+        IPcmPlayer next = await Task.Run(() => _playerFactory(_pcm!, endpointId)).ConfigureAwait(false);
+        try
+        {
+            _player?.Stop(); next.Play();
+            if (next is AndroidPhonePcmPlayer output) await output.WaitForRoutingAsync(_run?.Token ?? default).ConfigureAwait(false);
+        }
+        catch { next.Dispose(); _player?.Play(); throw; }
+        _player?.Dispose(); _player = next;
+        AttachOutputFailure(next, _generation);
+    }
+
+    private void WatchDefaultOutput()
+    {
+        if (_defaultOutputWatch != null || _watchDefaultOutput == null) return;
+        try { _defaultOutputWatch = _watchDefaultOutput(DefaultOutputChanged); }
+        catch (Exception ex) { Log("Default output notifications: " + ex.Message); }
+    }
+
+    private void StopWatchingDefaultOutput()
+    {
+        var watch = _defaultOutputWatch;
+        _defaultOutputWatch = null;
+        try { watch?.Dispose(); } catch (Exception ex) { Log("Default output notifications: " + ex.Message); }
+    }
+
+    private void DefaultOutputChanged()
+    {
+        Interlocked.Increment(ref _defaultOutputRevision);
+        QueueDefaultOutputRefresh();
+    }
+
+    private void QueueDefaultOutputRefresh()
+    {
+        if (Interlocked.CompareExchange(ref _defaultOutputRefreshQueued, 1, 0) == 0)
+            _ = Task.Run(RefreshDefaultOutputAsync);
+    }
+
+    private async Task RefreshDefaultOutputAsync()
+    {
+        int handled = 0;
+        try
+        {
+            do
+            {
+                handled = Volatile.Read(ref _defaultOutputRevision);
+                await _operations.WaitAsync().ConfigureAwait(false);
+                try
+                {
+                    if (!_disposed && _defaultOutputWatch != null && _pcm != null && _player != null
+                        && string.IsNullOrEmpty(State.OutputId) && _run?.IsCancellationRequested == false)
+                    {
+                        await ReplaceOutputAsync(null).ConfigureAwait(false);
+                        Log("System output refreshed");
+                    }
+                }
+                catch (Exception ex) { Log("Default output refresh: " + ex.Message); }
+                finally { _operations.Release(); }
+                // Only drain notifications received during the swap; no idle loop or timer.
+            } while (handled != Volatile.Read(ref _defaultOutputRevision));
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _defaultOutputRefreshQueued, 0);
+            if (handled != Volatile.Read(ref _defaultOutputRevision)) QueueDefaultOutputRefresh();
+        }
     }
     private static string GetSourcePhoneSink(AndroidDevice device, string endpointId)
     {
