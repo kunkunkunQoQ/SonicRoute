@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     SonicRoute GitHub Releases Automated Pipeline Script
 .DESCRIPTION

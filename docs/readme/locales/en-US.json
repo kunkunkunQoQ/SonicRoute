@@ -54,7 +54,7 @@
     "configureAutomation": "Set up automation",
     "automationExample": "Turn tedious manual sound adjustments into seamless, one-time automations.",
     "currentRelease": "Current release",
-    "releaseSummary": "v1.32 merges the pure C# Android backend into Full—removing external adb/scrcpy/FFmpeg/SDL2 binaries and slimming down the single EXE—and adds automatic Windows default playback device following for phone System Output alongside six pipeline fixes; all editions (Full/Lite/Legacy) fix tray long-name submenu overlap and optimize idle memory across icons, OSD, theme resources, and caches. See {history} for details.",
+    "releaseSummary": "v1.32 merges the pure C# Android backend into Full—removing external adb/scrcpy/FFmpeg/SDL2 binaries and slimming down the single EXE—adds virtual display gamepad support, tightens phone companion panel spacing (6 DIP), adds Windows default playback device following for System Output, and delivers six pipeline fixes; all editions (Full/Lite/Legacy) fix tray long-name submenu overlap and optimize idle memory across icons, OSD, theme resources, and caches. See {history} for details.",
     "docTopic": "Topic",
     "docGuides": "Guides",
     "docTopics": [

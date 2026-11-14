@@ -94,7 +94,7 @@ sr "Nom ou ID de la règle"
 
 ### 🆕 Points forts de la version v1.32
 
-v1.32 intègre le backend Android pur C# dans Full en supprimant les binaires externes adb/scrcpy/FFmpeg/SDL2 tout en réduisant nettement l'exécutable, et ajoute le suivi automatique du périphérique de lecture Windows par défaut ainsi que six correctifs ; toutes les éditions (Full/Lite/Legacy) corrigent le chevauchement des sous-menus de la zone de notification et optimisent la mémoire au repos. Détails : [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+v1.32 intègre le backend Android pur C# dans Full en supprimant les binaires externes adb/scrcpy/FFmpeg/SDL2 tout en réduisant nettement l'exécutable, et ajoute la prise en charge des manettes sur l'écran virtuel, l'espacement resserré du panneau mobile (6 DIP), le suivi du périphérique de lecture Windows par défaut ainsi que six correctifs ; toutes les éditions (Full/Lite/Legacy) corrigent le chevauchement des sous-menus de la zone de notification et optimisent la mémoire au repos. Détails : [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Foire aux questions (FAQ)
 

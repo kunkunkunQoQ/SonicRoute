@@ -94,7 +94,7 @@ sr "Rule name or ID"
 
 ### 🆕 v1.32 Release Highlights
 
-v1.32 merges the pure C# Android backend into Full—removing external adb/scrcpy/FFmpeg/SDL2 binaries and slimming down the single EXE—and adds automatic Windows default playback device following for phone System Output alongside six pipeline fixes; all editions (Full/Lite/Legacy) fix tray long-name submenu overlap and optimize idle memory across icons, OSD, theme resources, and caches. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
+v1.32 merges the pure C# Android backend into Full—removing external adb/scrcpy/FFmpeg/SDL2 binaries and slimming down the single EXE—adds virtual display gamepad support, tightens phone companion panel spacing (6 DIP), adds Windows default playback device following for System Output, and delivers six pipeline fixes; all editions (Full/Lite/Legacy) fix tray long-name submenu overlap and optimize idle memory across icons, OSD, theme resources, and caches. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
 
 ### ❓ Quick FAQ
 

@@ -54,7 +54,7 @@
     "configureAutomation": "設定自動化",
     "automationExample": "把繁瑣的手動改設定，變成一次配置、隨開隨用的自動化體驗。",
     "currentRelease": "目前版本",
-    "releaseSummary": "v1.32 為 Full 併入純 C# 自研 Android 後端，移除外部 adb/scrcpy/FFmpeg 等第三方二進位檔並大幅縮小單檔體積，新增手機「系統輸出」自動跟隨 Windows 預設播放裝置與多項管線修復；全版本（Full/Lite/Legacy）同步修復匣長名稱子選單重疊並最佳化圖示、OSD、主題字典與閒置記憶體佔用。詳見 {history}。",
+    "releaseSummary": "v1.32 為 Full 併入純 C# 自研 Android 後端，移除外部 adb/scrcpy/FFmpeg 等第三方二進位檔並大幅縮小單檔體積，新增虛擬螢幕遊戲手把支援、調整手機面板間距（6 DIP）、手機「系統輸出」自動跟隨 Windows 預設播放裝置與多項管線修復；全版本（Full/Lite/Legacy）同步修復匣長名稱子選單重疊並最佳化圖示、OSD、主題字典與閒置記憶體佔用。詳見 {history}。",
     "docTopic": "主題",
     "docGuides": "指南",
     "docTopics": [

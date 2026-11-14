@@ -94,7 +94,7 @@ sr "규칙 이름 또는 ID"
 
 ### 🆕 v1.32 릴리스 주요 변경사항
 
-v1.32는 Full에 순수 C# 자체 개발 Android 백엔드를 통합해 외부 adb/scrcpy/FFmpeg/SDL2 바이너리를 제거하고 단일 EXE 크기를 크게 줄였으며, 휴대폰 '시스템 출력'의 Windows 기본 재생 장치 자동 추적 및 6가지 파이프라인 수정을 추가했습니다. 모든 에디션(Full/Lite/Legacy)에서 긴 이름의 트레이 하위 메뉴 겹침을 수정하고 아이콘·OSD·테마 리소스·유휴 메모리 점유율을 최적화했습니다. 자세한 내용은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)를 확인하세요.
+v1.32는 Full에 순수 C# 자체 개발 Android 백엔드를 통합해 외부 adb/scrcpy/FFmpeg/SDL2 바이너리를 제거하고 단일 EXE 크기를 크게 줄였으며, 가상 디스플레이 게임패드 지원, 휴대폰 패널 간격 조정(6 DIP), '시스템 출력'의 Windows 기본 재생 장치 자동 추적 및 6가지 파이프라인 수정을 추가했습니다. 모든 에디션(Full/Lite/Legacy)에서 긴 이름의 트레이 하위 메뉴 겹침을 수정하고 아이콘·OSD·테마 리소스·유휴 메모리 점유율을 최적화했습니다. 자세한 내용은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)를 확인하세요.
 
 ### ❓ 자주 묻는 질문 (FAQ)
 

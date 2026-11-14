@@ -1,6 +1,6 @@
 # SonicRoute v1.32 正式版（2026-11-14）
 
-`v1.32` 为 **Full** 版正式合入纯 C# 自研 Android 后端，彻底移除随包内嵌的 `adb.exe`、`scrcpy.exe`、FFmpeg 与 SDL2 等外部第三方运行时二进制，大幅缩小单文件体积；同时新增手机“系统输出”自动跟随 Windows 默认播放设备、合入自研管线六项关键修复及 SmartVolume 增益曲线调参。全版本（**Full / Lite / Legacy**）同步完成托盘长名称子菜单防重叠修复，以及图标、界面字典、OSD 窗口、ADB 缓冲与多媒体资源的按需加载和闲时内存优化。
+`v1.32` 为 **Full** 版正式合入纯 C# 自研 Android 后端，彻底移除随包内嵌的 `adb.exe`、`scrcpy.exe`、FFmpeg 与 SDL2 等外部第三方运行时二进制，大幅缩小单文件体积；新增虚拟屏游戏手柄透传支持、手机“系统输出”自动跟随 Windows 默认播放设备、调整手机附窗面板间距（`12 → 6` DIP），以及自研管线六项关键修复与 SmartVolume 增益曲线调参。全版本（**Full / Lite / Legacy**）同步完成托盘长名称子菜单防重叠修复，以及图标、界面字典、OSD 窗口、ADB 缓冲与多媒体资源的按需加载和闲时内存优化。
 
 > 发布构建遵循统一单源版本号 [`build/Version.props`](../build/Version.props)（`1.32` / `1.32.0.0`）。完整文件清单、构建校验哈希与更新元数据请以本版 Release 附件 [`SHA256SUMS.txt`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SHA256SUMS.txt) 与 [`SonicRoute-update.json`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-update.json) 为准。
 
@@ -14,6 +14,11 @@
   - 停止随程序嵌入 `adb.exe`、`AdbWinApi.dll`、`AdbWinUsbApi.dll`、`scrcpy.exe`、`scrcpy-server`、`scrcpy-server-video`、`SDL2.dll` 及 FFmpeg DLL（`avcodec-62.dll` / `avformat-62.dll` / `avutil-60.dll` / `swresample-6.dll`），仅保留配套轻量化 Android 端服务组件 `sonicroute-catalog.jar` 与图标资源。
   - ADB 通信与配对改由纯 C# 实现（`DirectAdbTransport`、`WinUsbAdbTransport`、`Spake25519`、`SspiPairingTls`），原生支持 TCP 与 WinUSB 连接及 TLS 1.3 配对；画面解码与虚拟屏渲染改用 Windows Media Foundation（`MediaFoundationH264Decoder`）、Direct3D 11（`D3D11VideoSurfaceRenderer`）与 Win32 原生窗口（`NativeVideoWindow` / `ScrcpyVideoProtocol` / `VideoStreamTransport` / `InProcessVirtualDisplayClient` / `NativeGamepadReader`），并配备自写 Java 服务 `SonicRouteServer`。
   - 从 `v1.32 Full` 起，不再依赖 `v1.30 Full` 与 `v1.31 Full` 时期外置运行时对应的第三方许可证分发清单（详见 [`packaging/AndroidLab/THIRD-PARTY-NOTICES.md`](../packaging/AndroidLab/THIRD-PARTY-NOTICES.md) 说明）；ARM64 `Full` 亦不再夹带任何外部 x64 辅助进程。
+- **虚拟屏游戏手柄透传支持（`NativeGamepadReader` / `GamepadController`）**：
+  - 虚拟屏与原生投屏窗口现已支持 Windows 游戏手柄直通：通过 `NativeGamepadReader` 同时采集 XInput（最多 `MaxSlots = 4` 个手柄槽位）与 Win32 RawInput HID 手柄/摇杆输入，经自研控制协议（`TYPE_INJECT_GAMEPAD_STATE`）由 Android 端 `GamepadController` 转换为标准 Android `InputDevice.SOURCE_GAMEPAD` / `SOURCE_JOYSTICK` 事件（支持左右摇杆轴、LT/RT 模拟扳机与迟滞触发数字键 `L2`/`R2`、D-Pad 十字键及 A/B/X/Y/L1/R1/Start/Select/Thumb/Mode 按键）。
+  - 仅在虚拟屏窗口获焦且未最小化时激活（不注册 `RIDEV_INPUTSINK` 全局后台输入钩子，XInput 轮询严格以窗口焦点与在线手柄存在为门控），窗口失焦、最小化、关闭或手柄断开时自动归零并释放所有按键状态，避免卡键。
+- **调整手机面板距离（`PhoneCompanionLayout`）**：
+  - 将速控面板旁并排弹出的手机面板（`PhoneAudioWindow`）间距由原本 `12` DIP 调整收窄为 `6` DIP（`const double gap = 6`），与音量浮窗保持统一紧凑间距，同时保持工作区边缘自适应与跟随移动约束。
 - **手机“系统输出”自动跟随 Windows 默认播放设备（`DefaultOutputNotifications`）**：
   - 当手机整机音频或单应用音频输出设置为 **系统输出**（`OutputId=null`）时，Windows 默认播放设备切换后会自动仅重建电脑端 WASAPI 播放器，完整保留原有手机捕获、解码、PCM 状态以及音量、静音与智能音量设置，无需手动切换后再切回。
   - 复用 `WasapiDeviceLease` 的 COM 边界并按实际使用的 `Render` / `Multimedia` 角色过滤，重复及快速通知在现有串行操作中合并；切出默认输出或最后一个相关会话停止后立即取消原生订阅，不新增后台轮询。新设备暂不可用时保留当前播放器并在下一次真实变化时重试；显式指定设备与回传手机扬声器/蓝牙保持原有行为。
@@ -70,7 +75,7 @@
 
 ## 验证范围与已知限制
 
-- **已完成校验范围**：涵盖完整五目标发布包构建与单 EXE 载体校验（Full payload、Lite `net10.0-windows` 与 `net48` 运行时/版型检查、独立更新器检查）、默认输出跟随与自研管线六项修复隔离/回环验证、托盘子菜单定位桌面检查、闲时内存隔离验证，以及十语 README 模板生成一致性校验。
+- **已完成校验范围**：涵盖完整五目标发布包构建与单 EXE 载体校验（Full payload、Lite `net10.0-windows` 与 `net48` 运行时/版型检查、独立更新器检查）、默认输出跟随与自研管线六项修复隔离/回环验证、手机面板布局间距（`PhonePlacement`）与托盘子菜单定位桌面检查、闲时内存隔离验证，以及十语 README 模板生成一致性校验。
 - **明确边界**：
   - **ARM64 原生硬件尚未实测**：`arm64` 构建产物在 x64 环境完成编译与打包校验，实际运行仍标记为实验性，需在原生 ARM64 设备上进一步实机确认。
   - **隔离验证与真实体验区分**：离线夹具、本地回环及单模块内存裁剪检查用于核对逻辑与释放路径，不等同于长时间高负载下的真实整版内存/CPU 基准或全机型 Android 真机听感测试。

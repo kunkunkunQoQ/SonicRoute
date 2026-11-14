@@ -54,7 +54,7 @@
     "configureAutomation": "自動化を設定",
     "automationExample": "面倒な手動設定を、一度設定すればずっと快適な自動化体験へ。",
     "currentRelease": "現在のリリース",
-    "releaseSummary": "v1.32ではFullに純粋C#製Androidバックエンドを統合し、外部adb/scrcpy/FFmpeg/SDL2バイナリを廃止して単一EXEを大幅に軽量化しました。また、スマホ「システム出力」のWindows既定再生デバイス自動追従や6件の不具合修正を追加し、全エディション（Full/Lite/Legacy）でトレイの長い名前によるサブメニュー重なり修正と待機時メモリ・リソース最適化を実施しています。詳細は {history}。",
+    "releaseSummary": "v1.32ではFullに純粋C#製Androidバックエンドを統合し、外部adb/scrcpy/FFmpeg/SDL2バイナリを廃止して単一EXEを大幅に軽量化しました。仮想ディスプレイのゲームパッド対応、スマホパネル間隔の調整（6 DIP）、スマホ「システム出力」のWindows既定再生デバイス自動追従や6件の不具合修正を追加し、全エディション（Full/Lite/Legacy）でトレイの長い名前によるサブメニュー重なり修正と待機時メモリ・リソース最適化を実施しています。詳細は {history}。",
     "docTopic": "トピック",
     "docGuides": "ガイド",
     "docTopics": [

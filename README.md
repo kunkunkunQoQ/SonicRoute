@@ -94,7 +94,7 @@ sr "规则名称或ID"
 
 ### 🆕 v1.32 版本亮点速览
 
-v1.32 为 Full 合入纯 C# 自研 Android 后端，移除外部 adb/scrcpy/FFmpeg 等第三方二进制并大幅减小单文件体积，新增手机“系统输出”自动跟随 Windows 默认播放设备与多项管线修复；全版本（Full/Lite/Legacy）同步修复托盘长名称子菜单重叠并优化图标、OSD、主题字典与闲时内存占用。详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.32 为 Full 合入纯 C# 自研 Android 后端，移除外部 adb/scrcpy/FFmpeg 等第三方二进制并大幅减小单文件体积，新增虚拟屏游戏手柄支持、调整手机面板间距（6 DIP）、手机“系统输出”自动跟随 Windows 默认播放设备与多项管线修复；全版本（Full/Lite/Legacy）同步修复托盘长名称子菜单重叠并优化图标、OSD、主题字典与闲时内存占用。详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ 常见问题速览
 

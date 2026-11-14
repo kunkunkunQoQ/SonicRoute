@@ -2,6 +2,12 @@
 
 后续AI每轮追加记录，并同步 `DEVELOPMENT-HANDOFF.md` 和本地父容器的当前交接。记录区分已实现、已验证、待验证和明确不做；不能用模拟检查代替真实CPU、音频或设备验收。
 
+## 2026-11-14夜：补充 v1.32 手柄与手机面板间距更新记录，并准备 GitHub Actions 发布
+
+- 根据用户要求在 `docs/release-v1.32.md`、`docs/readme/generate.cjs` 与 9 语 `docs/readme/locales/*.json` 补充记录虚拟屏游戏手柄支持（`NativeGamepadReader` / `GamepadController`）及手机附窗面板间距调整（`PhoneCompanionLayout` `12 -> 6` DIP），重新生成并验证全部 10 份 README 一致。
+- 为 `packaging/Updates/Invoke-ReleasePipeline.ps1` 补齐 UTF-8 BOM，解决 Windows PowerShell 5.1 解析中文字符串报错并确保 `Test-ReleasePipelineHarness.ps1` 与 `-DryRun` 可在本地与 CI `shell: powershell` 一致运行。
+- 同步 `DEVELOPMENT-HANDOFF.md`，提交推送 `master` 后运行 Harness 与 DryRun 并推进 GitHub Actions `release.yml` 发布流程。
+
 ## 2026-11-14夜：v1.32 正式发布准备（发布说明、多语言 README 与交接同步）
 
 - 新增 `docs/release-v1.32.md`，完整整理 `v1.31` 之后合入的纯 C# 自研 Android 后端、手机系统输出跟随 Windows 默认播放设备、六项自研修复、SmartVolume 调参入库、托盘长名称子菜单防重叠及全版本闲时内存/资源优化，并列出五目标下载矩阵、升级与数据保留方式以及实验/离线验证边界。

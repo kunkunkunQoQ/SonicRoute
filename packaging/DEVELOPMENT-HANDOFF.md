@@ -2,11 +2,11 @@
 
 更新：2026-11-14。正在执行 `v1.32` 正式发布准备：已补齐 `docs/release-v1.32.md` 并同步十份 `README*.md` 元数据；随后切换到干净的 `master` 分支完成五目标发布构建与全套发布管道验证。Git 状态、发布产物收据与公开状态以实际 Git、CI / `gh` 结果和父容器最新记录为准。
 
-## 当前交付：v1.32 正式发布文档与 README 元数据同步
+## 当前交付：v1.32 正式发布文档与 README 元数据同步（补充虚拟屏手柄与面板间距，准备 GitHub Actions 发布）
 
-- 新增 [`docs/release-v1.32.md`](../docs/release-v1.32.md)，汇总 `v1.31..HEAD`（`ffc58a08..60dd463c`）全部正式更新：Full 版纯 C# 自研 Android 后端合入并移除外部 `adb.exe`/`scrcpy.exe`/FFmpeg/SDL2 第三方二进制、手机“系统输出”自动跟随 Windows 默认播放设备、自研管线六项修复、SmartVolume 曲线调参入库，以及全版本托盘长名称子菜单防重叠、图标/界面字典/OSD/ADB 缓冲与多媒体缓存闲时优化；明确说明五目标下载矩阵及 ARM64 实验性未真机实测等验证边界，不预填未产生构建的循环字节数。
-- 更新 [`docs/readme/shared.json`](../docs/readme/shared.json)（`release: "v1.32"`、`releaseDate: "2026-11-14"`、`releaseNotes: "docs/release-v1.32.md"`、`nextRelease: "v1.33"`、`arm64LastRelease: "v1.32"`）、[`docs/readme/generate.cjs`](../docs/readme/generate.cjs) AI 索引条目及全部 9 个语种本地化摘要，重新生成并通过 `node docs/readme/generate.cjs --check`（10 份 README 一致）。
-- 后续步骤：切回/快进本地 `master` 分支提交并推送 `origin/master`，随后运行 `Build-PortableRelease.ps1` 构建五目标正式候选包并执行完整本地检查（`Test-ReleasePipelineHarness`、`RuntimeChecks`、`EditionChecks`、`Run-WorkerChecks` 与 `-Stage FullPipeline -SkipBuild -DryRun`）；若本机 `gh` 未登录则按既定规则停止并交由用户认证或触发 `.github/workflows/release.yml` 正式发布。
+- 更新 [`docs/release-v1.32.md`](../docs/release-v1.32.md)、[`docs/readme/generate.cjs`](../docs/readme/generate.cjs) AI 索引与全部 9 语 [`docs/readme/locales/*.json`](../docs/readme/locales/zh-CN.json) 摘要：除既有 `v1.31..HEAD` 核心变更外，补充记录 Full 版虚拟屏游戏手柄透传支持（`NativeGamepadReader` / `GamepadController`，聚焦门控 XInput + RawInput HID 最多 4 槽位，失焦/断连自动归零释放）以及手机附窗面板间距调整（`PhoneCompanionLayout` 由 `12` DIP 收窄至 `6` DIP），重新生成并通过 `node docs/readme/generate.cjs --check`（10 份 README 一致）。
+- 为 [`packaging/Updates/Invoke-ReleasePipeline.ps1`](./Updates/Invoke-ReleasePipeline.ps1) 补充 UTF-8 BOM（与同目录 `Test-ReleasePipelineHarness.ps1` 一致），修复中文 Windows PowerShell 5.1 及 `shell: powershell` CI 运行时解析无 BOM UTF-8 中文字符串的问题，确保本地 `Harness`/`DryRun` 与 GitHub Actions [`.github/workflows/release.yml`](../.github/workflows/release.yml) 一致可执行。
+- 后续步骤：在干净 `master` 分支提交并推送 `origin/master`，完成本地构建/Harness/`DryRun` 复核后通过 GitHub Actions `release.yml`（或人工登录执行）正式发布 `v1.32`。
 
 ## 历史交付：闲时资源回收提交与 1.32 微软商店包
 

@@ -94,7 +94,7 @@ sr "Nombre o ID de la regla"
 
 ### 🆕 Aspectos destacados de la versión v1.32
 
-v1.32 integra el backend Android propio en C# en Full eliminando binarios externos (adb/scrcpy/FFmpeg/SDL2) con un EXE mucho más ligero, y añade seguimiento automático del dispositivo de reproducción predeterminado de Windows junto con seis correcciones; todas las ediciones (Full/Lite/Legacy) corrigen la superposición del submenú de bandeja con nombres largos y optimizan el uso de memoria en reposo. Consulte [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+v1.32 integra el backend Android propio en C# en Full eliminando binarios externos (adb/scrcpy/FFmpeg/SDL2) con un EXE mucho más ligero, añade compatibilidad con mandos en pantalla virtual, ajusta el espaciado del panel del teléfono (6 DIP), añade seguimiento del dispositivo de reproducción predeterminado de Windows y seis correcciones; todas las ediciones (Full/Lite/Legacy) corrigen la superposición del submenú de bandeja con nombres largos y optimizan la memoria en reposo. Consulte [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Preguntas frecuentes (FAQ)
 

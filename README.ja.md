@@ -94,7 +94,7 @@ sr "ルール名または ID"
 
 ### 🆕 v1.32 リリースの主な改善点
 
-v1.32ではFullに純粋C#製Androidバックエンドを統合し、外部adb/scrcpy/FFmpeg/SDL2バイナリを廃止して単一EXEを大幅に軽量化しました。また、スマホ「システム出力」のWindows既定再生デバイス自動追従や6件の不具合修正を追加し、全エディション（Full/Lite/Legacy）でトレイの長い名前によるサブメニュー重なり修正と待機時メモリ・リソース最適化を実施しています。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.32ではFullに純粋C#製Androidバックエンドを統合し、外部adb/scrcpy/FFmpeg/SDL2バイナリを廃止して単一EXEを大幅に軽量化しました。仮想ディスプレイのゲームパッド対応、スマホパネル間隔の調整（6 DIP）、スマホ「システム出力」のWindows既定再生デバイス自動追従や6件の不具合修正を追加し、全エディション（Full/Lite/Legacy）でトレイの長い名前によるサブメニュー重なり修正と待機時メモリ・リソース最適化を実施しています。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ よくある質問（FAQ）
 
