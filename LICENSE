@@ -20,9 +20,9 @@ PART I: AUTHORITATIVE ENGLISH LICENSE TEXT
    owner of SonicRoute.
 
    "Software" means the SonicRoute source code, documentation, and executable
-   binaries covered by this License effective November 14, 2026 (starting from
-   the license-migration commit 442dac3 in the v1.32 series) and all subsequent
-   commits, copies, forks, and releases, excluding any Separable Third-Party
+   binaries (including both code originally authored prior to commit 442dac3
+   and code authored in or after commit 442dac3, as well as all subsequent
+   commits, copies, forks, and releases), excluding any Separable Third-Party
    Components.
 
    "You" (or "Your") means an individual or legal entity exercising permissions
@@ -74,12 +74,13 @@ PART I: AUTHORITATIVE ENGLISH LICENSE TEXT
    (c) publicly Distribute unmodified copies or Derivative Works strictly free
    of charge and in full compliance with Sections 3, 4, and 7.
 
-   Mandatory Compliance for Any Copying or Reuse:
-   Effective November 14, 2026 (starting from commit 442dac3 onward), any
-   copying, cloning, downloading, excerpting, reproducing, reusing, modifying,
-   distributing, or other use of the Software—whether in whole or in part, and
-   whether in source code or binary form—is conditioned upon and must strictly
-   comply with all terms of this License.
+   Mandatory Compliance for Any Copying or Use Starting November 14, 2026:
+   Effective November 14, 2026, any act of copying, cloning, downloading,
+   excerpting, reproducing, reusing, modifying, distributing, or otherwise
+   using any SonicRoute code, documentation, or binaries occurring on or after
+   November 14, 2026—regardless of whether the underlying code was originally
+   written before or after commit 442dac3, and whether in whole or in part—is
+   conditioned upon and must strictly comply with all terms of this License.
 
    Clarification on Business Use vs. Commercial Exploitation:
    Internal commercial use of the Software by any company or enterprise for its
@@ -175,24 +176,24 @@ PART I: AUTHORITATIVE ENGLISH LICENSE TEXT
    respective licenses. Recipients must comply with all applicable third-party
    license terms and retain their notices when redistributing.
 
-8. Effective Date, Scope, and Preservation of Prior MIT Releases
+8. Effective Date, Scope, and Prior Pre-Migration MIT Uses
 
-   This License takes effect on November 14, 2026, beginning with the
-   license-migration commit (442dac3) in the v1.32 series, and governs all
-   covered SonicRoute source code, documentation, and binaries from that commit
-   forward as well as all future versions and releases. Starting from November
-   14, 2026 (commit 442dac3 onward), any act of copying, cloning, excerpting,
-   reproducing, reusing, adapting, modifying, or distributing any covered code
-   (whether verbatim or modified, in whole or in part) is strictly bound by
-   this License.
+   This License takes effect on November 14, 2026 (at license-migration commit
+   442dac3 in the v1.32 series). Starting on and after November 14, 2026, any
+   copying, cloning, excerpting, reproducing, reusing, adapting, modifying,
+   distributing, or other use of SonicRoute code—regardless of whether the
+   relevant code was originally written before or after commit 442dac3—must
+   strictly comply with this License, and governs all current and future
+   versions and releases.
 
-   Non-Retroactivity: All versions, releases, and commits previously published
-   or distributed under the MIT License—specifically v1.31 and all earlier
-   versions, as well as the initial MIT-licensed v1.32 release (Git tag v1.32
-   at commit 4e3138fcf9ca1b0dc43798ad2075109989c4c136 and earlier commits)—
-   permanently retain their existing MIT License grants. Nothing in this
-   License retroactively revokes, alters, or diminishes any MIT rights already
-   granted for those previously distributed versions.
+   Non-Retroactivity for Prior Uses Before Migration: Uses, copies, and
+   distributions that occurred prior to the license migration on November 14,
+   2026 (prior to commit 442dac3) under previously published MIT versions—
+   specifically v1.31 and earlier versions, as well as the initial MIT-licensed
+   v1.32 release (Git tag v1.32 at commit
+   4e3138fcf9ca1b0dc43798ad2075109989c4c136 and earlier commits)—retain their
+   pre-existing MIT License rights without retroactive revocation of those
+   prior acts.
 
 9. Termination
 
@@ -253,15 +254,16 @@ PART II: 简体中文参考说明（仅供参考，以Part I英文权威文本�
    如需商业转卖、OEM/产品收费捆绑、闭源集成等超出本协议范围的权限，请通过
    https://github.com/kunkunkunQoQ/SonicRoute（或 https://github.com/kunkunkunQoQ）
    联系版权所有者申请正式书面商业授权，并说明申请主体、使用/分发场景及商业范围。
-8. 生效日期、代码复制约束与历史版本/第三方边界：
-   - 生效日期（2026 年 11 月 14 日起）：本协议自 2026 年 11 月 14 日（v1.32 系列
-     许可证迁移提交 442dac3）起生效，涵盖该提交及之后的所有提交、版本与未来新
-     版本。自该日期与提交起，任何对本软件全部或部分源码、文档或二进制文件的
-     复制、拷贝、克隆、摘录、复用、修改、分发或使用行为，均必须严格遵守本协议
+8. 生效日期、代码复制/使用约束与历史/第三方边界：
+   - 自 2026 年 11 月 14 日起的统一约束：本协议自 2026 年 11 月 14 日（v1.32
+     系列许可证迁移提交 442dac3）起全面生效。自 2026 年 11 月 14 日起新发生的
+     任何代码复制、拷贝、克隆、下载、摘录、复用、修改、分发或其他使用行为——
+     无论所涉代码最初编写于提交 442dac3 之前还是之后——均必须严格遵守本协议
      全部条款。
-   - 历史 MIT 权利保留：此前已按 MIT 发布的版本（包括 v1.31 及更早版本，以及
-     已按 MIT 发布的初始 v1.32 版本提交 4e3138fcf9ca1b0dc43798ad2075109989c4c136
-     / 标签 v1.32）继续永久保留其既有 MIT 授权，本变更不追溯撤销既有授权。
+   - 迁移前既有 MIT 使用行为保留：对于在本次迁移（2026 年 11 月 14 日提交
+     442dac3）之前，基于已按 MIT 发布的 v1.31 及更早版本与初始 v1.32（提交
+     4e3138fcf9ca1b0dc43798ad2075109989c4c136 / 标签 v1.32）已经发生的使用
+     行为，继续保留其既有 MIT 权利，不追溯撤销此前已发生的使用行为。
    - 第三方依赖组件（如 Concentus、NAudio、QRCoder、System.Management、
      System.Text.Json、Microsoft.Windows.CsWinRT）及不可由原作者单方面变更许可
      的历史文件（如 packaging/AndroidLab/native/ 下的 Apache-2.0 scrcpy 相关
