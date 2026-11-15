@@ -14,7 +14,7 @@ internal static partial class Program
         using var input=typeof(App).Assembly.GetManifestResourceStream("SonicRoute.Resources.RuleCommand.ps1")!;
         string script=new StreamReader(input).ReadToEnd();
         string prefix="EditionFixture"+Guid.NewGuid().ToString("N")+"_";
-        foreach(string edition in new[]{"Full","Lite","Legacy","Store"}) script=script.Replace("'"+edition+"'","'"+prefix+edition+"'");
+        foreach(string edition in new[]{"Full","Lite","Legacy","Store","StoreLite"}) script=script.Replace("'"+edition+"'","'"+prefix+edition+"'");
         string path=Path.Combine(output,"sr-fixture.ps1"); File.WriteAllText(path,script,new UTF8Encoding(true));
         foreach(string? option in new string?[]{null,"--lite","--full"})
         {

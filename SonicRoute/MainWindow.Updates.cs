@@ -189,7 +189,9 @@ namespace SonicRoute
         private void CheckUpdate_Click(object sender, RoutedEventArgs e)
         {
             OpenUpdateSettings();
-            if (_updates?.IsPackaged == true) OpenUpdateUrl("ms-windows-store://pdp/?ProductId=9NQZGRTPM1NT");
+            if (_updates?.IsPackaged == true) OpenUpdateUrl(BuildIdentity.Edition == "Lite"
+                ? "ms-windows-store://updates"
+                : "ms-windows-store://pdp/?ProductId=9NQZGRTPM1NT");
             else if (_updates != null) _ = _updates.CheckAsync(true);
         }
 

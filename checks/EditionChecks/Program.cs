@@ -54,6 +54,10 @@ internal static partial class Program
             var id = Activator.CreateInstance(runtimeIdentity, BindingFlags.NonPublic | BindingFlags.Instance, null, new object[]{false,false}, null)!;
             Check((string)runtimeIdentity.GetProperty("CommandEdition", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(id)! == "EditionChecks_" + edition,
                 "command endpoints distinguish full and Lite instances");
+            var packagedId = Activator.CreateInstance(runtimeIdentity, BindingFlags.NonPublic | BindingFlags.Instance, null, new object[]{true,false}, null)!;
+            string expectedStoreEdition = "EditionChecks_" + (phone ? "Store" : "StoreLite");
+            Check((string)runtimeIdentity.GetProperty("CommandEdition", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(packagedId)! == expectedStoreEdition,
+                "packaged store endpoints isolate Full Store and Lite Store instances");
             var application = new App(); application.InitializeComponent();
             var panel = new QuickPanelModernWindow();
             try
