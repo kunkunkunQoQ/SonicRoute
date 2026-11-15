@@ -26,7 +26,7 @@
     "storeInstall": "Instalar desde Store",
     "liteRequirement": "Edición portable de un solo archivo; requiere .NET 10 Desktop Runtime adecuado, solo funciones de audio para PC.",
     "legacyRequirement": "Sin dependencias adicionales; utiliza .NET Framework 4.8 integrado, descomprimir y ejecutar.",
-    "storeRequirement": "Construido a partir de Full; requiere x64 .NET 10 Desktop Runtime; la versión vigente depende de la tienda.",
+    "storeRequirement": "Ediciones Full / Lite; requiere x64 .NET 10 Desktop Runtime; versión según Store.",
     "runtimeNote": "Full y Lite requieren {runtime}; Legacy utiliza el .NET Framework 4.8 integrado sin instalaciones adicionales (versiones históricas {runtime8} descatalogadas).",
     "steps": [
         "**Iniciar y anclar a la bandeja** : Haga doble clic para iniciar; SonicRoute permanece residente en la bandeja del sistema (arrastre el icono para mantenerlo visible). Un doble clic abre la ventana principal.",
@@ -117,7 +117,7 @@
         "Envíe música, vídeos o juegos del teléfono a los auriculares del PC con ajuste independiente; interactúe mediante una ventana virtual y cambie salidas de altavoz o Bluetooth desde el panel rápido."
     ],
     "editionLegacyX64": "Legacy x64 (solo audio de PC, .NET Framework 4.8)",
-    "editionStore": "Microsoft Store (basado en Full)",
+    "editionStore": "Microsoft Store",
     "commandSnippetComment": "Ejecutar regla de automatización (SonicRoute debe estar en ejecución)",
     "faqQuickTitle": "Preguntas frecuentes (FAQ)",
     "faqQuestions": [

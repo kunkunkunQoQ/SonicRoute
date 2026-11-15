@@ -17,6 +17,7 @@ SCHEMA_SPEC:
   wiki_root: "https://github.com/kunkunkunQoQ/SonicRoute/wiki"
   download_latest: "https://github.com/kunkunkunQoQ/SonicRoute/releases/latest"
   store_url: "https://apps.microsoft.com/detail/9NQZGRTPM1NT"
+  store_lite_url: "https://apps.microsoft.com/detail/9N37LQ8SMLF6"
 
 SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   driver_isolation: "NO_VIRTUAL_AUDIO_CABLE | NO_KERNEL_DRIVERS | NO_TARGET_PROCESS_DLL_INJECTION"

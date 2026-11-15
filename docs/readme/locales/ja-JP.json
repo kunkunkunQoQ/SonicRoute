@@ -26,7 +26,7 @@
     "storeInstall": "Store からインストール",
     "liteRequirement": "単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。",
     "legacyRequirement": "追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。",
-    "storeRequirement": "Full をベースにビルド。x64 .NET 10 Desktop Runtime が必要。提供バージョンは Store ページに準拠。",
+    "storeRequirement": "Full / Lite 版を提供。x64 .NET 10 Desktop Runtime 必須。提供状況は Store に準拠。",
     "runtimeNote": "FullとLiteには {runtime} が必要です。LegacyはWindows標準の.NET Framework 4.8で動作し、追加導入は不要です（旧 {runtime8} 互換版は保守終了・過去のダウンロードは継続）。",
     "steps": [
         "**起動してタスクトレイに常駐**：解凍またはダブルクリックで起動するとタスクトレイに常驻します（いつでも確認できるようオーバーフローからドラッグして固定を推奨）。トレイアイコンをダブルクリックでメイン画面を開きます。",
@@ -117,7 +117,7 @@
         "スマホの音楽・動画・ゲーム音声を PC ヘッドホンやスピーカーで個別調整。スマホ画面を独立した仮想ウィンドウで操作し、スマホのスピーカー／Bluetooth もクイックパネルから直接制御可能。"
     ],
     "editionLegacyX64": "Legacy x64 (PC 音声のみ、.NET Framework 4.8)",
-    "editionStore": "Microsoft Store (Full ベース)",
+    "editionStore": "Microsoft Store",
     "commandSnippetComment": "自動化ルールを実行（SonicRoute が起動中である必要があります）",
     "faqQuickTitle": "よくある質問（FAQ）",
     "faqQuestions": [

@@ -26,7 +26,7 @@
     "storeInstall": "Install from the Store",
     "liteRequirement": "Single-file portable edition; requires matching .NET 10 Desktop Runtime, PC audio features only.",
     "legacyRequirement": "No extra runtime required; relies on built-in .NET Framework 4.8, unpack and run.",
-    "storeRequirement": "Built from Full; requires x64 .NET 10 Desktop Runtime; current Store listing controls availability.",
+    "storeRequirement": "Full / Lite editions; requires x64 .NET 10 Desktop Runtime; Store listing controls availability.",
     "runtimeNote": "Full and Lite require {runtime}; Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation (historical {runtime8} editions are discontinued).",
     "steps": [
         "**Launch & Keep in Tray**: Double-click to start; SonicRoute stays in your system tray (drag it out of the overflow menu to keep it pinned). Double-click the tray icon to open the main window.",
@@ -117,7 +117,7 @@
         "Route mobile music, videos, or games to PC headphones or speakers; interact with mobile apps inside adaptive virtual display windows, and manage phone speaker/Bluetooth outputs from Quick Panel"
     ],
     "editionLegacyX64": "Legacy x64 (PC audio only, .NET Framework 4.8)",
-    "editionStore": "Microsoft Store (based on Full)",
+    "editionStore": "Microsoft Store",
     "commandSnippetComment": "Trigger an automation rule (SonicRoute must be running)",
     "faqQuickTitle": "Quick FAQ",
     "faqQuestions": [

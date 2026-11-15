@@ -26,7 +26,7 @@
     "storeInstall": "Store에서 설치",
     "liteRequirement": "단일 파일 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. PC 오디오 기능만 포함.",
     "legacyRequirement": "추가 런타임 불필요. 제한된 업무용 PC 적합. 시스템 내장 .NET Framework 4.8 기반으로 압축 해제 후 즉시 사용.",
-    "storeRequirement": "Full 기반 빌드. x64 .NET 10 Desktop Runtime 필요. 스토어 제공 버전은 Store 페이지 기준.",
+    "storeRequirement": "Full / Lite 제공. x64 .NET 10 Desktop Runtime 필요. 제공 버전은 Store 페이지 기준.",
     "runtimeNote": "Full과 Lite는 {runtime} 설치가 필요하며, Legacy는 Windows 내장 .NET Framework 4.8을 사용하므로 추가 설치가 필요 없습니다 (기존 {runtime8} 호환 버전은 유지보수 종료, 기존 다운로드 제공).",
     "steps": [
         "**실행 및 트레이 고정**: 더블 클릭하여 실행하면 작업 표시줄 트레이에 상주합니다 (오버플로 영역에서 밖으로 끌어내어 항상 표시 권장). 트레이 아이콘을 더블 클릭하면 메인 창이 열립니다.",
@@ -117,7 +117,7 @@
         "스마트폰 음악, 영상, 게임 사운드를 PC 헤드폰이나 스피커로 개별 조절. 모바일 앱 화면을 가상 디스플레이 창으로 확인 및 조작하며 퀵 패널에서 스피커/블루투스 출력을 손쉽게 관리."
     ],
     "editionLegacyX64": "Legacy x64 (PC 오디오 전용, .NET Framework 4.8)",
-    "editionStore": "Microsoft Store (Full 기반)",
+    "editionStore": "Microsoft Store",
     "commandSnippetComment": "자동화 규칙 트리거 (SonicRoute가 실행 중이어야 함)",
     "faqQuickTitle": "자주 묻는 질문 (FAQ)",
     "faqQuestions": [

@@ -10,7 +10,7 @@
 
 SonicRoute 是常駐於 Windows 系統匣的音訊工具：可為個別應用程式選擇輸出與輸入裝置，讓音樂從喇叭播放，遊戲或通話則使用耳機。透過快速鍵、系統匣滾輪或面板控制音訊，並將日常操作組合成自動化規則。
 
-📥 [下載最新版本](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [下載最新版本](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介面語言 · [原始碼可見授權 1.0](LICENSE)
 
@@ -64,7 +64,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 | ⭐ Full（.NET 10，含可選手機互聯） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | 單 EXE 便攜版；需要匹配架構的 .NET 10 Desktop Runtime，包含可選 Android 手機音訊與虛擬螢幕集成。 |
 | ⭐ Lite（.NET 10，僅電腦音訊） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | 單檔案便攜版；需要匹配架構的 .NET 10 Desktop Runtime，僅包含電腦音訊功能。 |
 | 🛡️ Legacy x64（僅電腦功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | 免裝額外執行庫，適合受限辦公機；依賴系統自帶 .NET Framework 4.8，解壓即用。 |
-| 🔄 Microsoft Store（基於 Full） | [從 Store 安裝](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 以 Full 為建置來源；需要 x64 .NET 10 Desktop Runtime，在架版本以 Store 頁面為準。 |
+| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 提供 Full / Lite，需 x64 .NET 10 Desktop Runtime，在架版本以 Store 為準。 |
 
 <details>
 <summary><sub>📦 歷史 NET8 相容版（已停更，保留歷史下載，點擊展開）</sub></summary>

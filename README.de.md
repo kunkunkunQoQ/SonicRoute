@@ -10,7 +10,7 @@
 
 Lass Musik über deine Lautsprecher laufen und Spiele oder Anrufe über dein Headset. SonicRoute ist ein Windows-Audiowerkzeug im Infobereich: Wähle für einzelne Apps Ausgabe- und Eingabegeräte, steuere den Ton per Tastenkürzel, Mausrad im Infobereich oder Panel und kombiniere wiederkehrende Aktionen zu Automatisierungsregeln.
 
-📥 [Neueste Version herunterladen](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [Benutzerhandbuch](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (Chinesisch)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [Neueste Version herunterladen](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [Benutzerhandbuch](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (Chinesisch)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen · [Source Available 1.0](LICENSE)
 
@@ -64,7 +64,7 @@ Für Android-Audio und virtuelle Displays wählen Sie **Full x64**; für PC-Audi
 | ⭐ Full (.NET 10, mit optionaler Smartphone-Integration) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | Einzel-EXE Portable Edition; erfordert passende .NET 10 Desktop Runtime, enthält optionale Android-Audio- und Virtual-Display-Integration. |
 | ⭐ Lite (.NET 10, nur PC-Audio) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | Einzeldatei-Portable-Edition; erfordert passende .NET 10 Desktop Runtime, enthält nur PC-Audiofunktionen. |
 | 🛡️ Legacy x64 (nur PC-Audio, .NET Framework 4.8) | [Vollständiges ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | Keine zusätzliche Laufzeitumgebung erforderlich; nutzt integriertes .NET Framework 4.8, entpacken und starten. |
-| 🔄 Microsoft Store (basiert auf Full) | [Aus dem Store installieren](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Auf Basis von Full erstellt; benötigt x64 .NET 10 Desktop Runtime; Verfügbarkeit richtet sich nach Store-Seite. |
+| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full- / Lite-Edition; benötigt x64 .NET 10 Desktop Runtime; Store-Seite ist maßgeblich. |
 
 <details>
 <summary><sub>📦 Frühere NET8-kompatible Editionen (eingestellt, zum Aufklappen klicken)</sub></summary>

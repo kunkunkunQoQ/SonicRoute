@@ -10,7 +10,7 @@
 
 SonicRoute は Windows の通知領域に常駐するオーディオツールです。アプリごとに出力・入力デバイスを選び、音楽はスピーカーで、ゲームや通話はヘッドセットで再生できます。ホットキー、通知領域のホイール、パネルで音声を操作し、日常の操作を自動化ルールにまとめられます。
 
-📥 [最新リリースをダウンロード](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Microsoft Store](https://apps.microsoft.com/detail/9NQZGRTPM1NT) · [ユーザーガイド](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡体字中国語）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [最新リリースをダウンロード](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [ユーザーガイド](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡体字中国語）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI 言語 · [Source Available 1.0](LICENSE)
 
@@ -64,7 +64,7 @@ Androidスマートフォンの音声・仮想ディスプレイ機能を使う�
 | ⭐ Full (.NET 10、スマホ連携対応) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | 単一 EXE ポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。オプションの Android 音声・仮想ディスプレイ連携を含む。 |
 | ⭐ Lite (.NET 10、PC 音声のみ) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | 単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。 |
 | 🛡️ Legacy x64 (PC 音声のみ、.NET Framework 4.8) | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | 追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。 |
-| 🔄 Microsoft Store (Full ベース) | [Store からインストール](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | Full をベースにビルド。x64 .NET 10 Desktop Runtime が必要。提供バージョンは Store ページに準拠。 |
+| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full / Lite 版を提供。x64 .NET 10 Desktop Runtime 必須。提供状況は Store に準拠。 |
 
 <details>
 <summary><sub>📦 過去の NET8 互換版（保守終了・過去のダウンロードあり・クリックで展開）</sub></summary>

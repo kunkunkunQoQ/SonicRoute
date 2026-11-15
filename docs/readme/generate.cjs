@@ -60,7 +60,7 @@ function render(language, text) {
     [editionIcons[0] + text.editionFull, `${link('x64', downloadAsset('x64.exe'))} / ${link(arm64Label, downloadAsset('arm64.exe', shared.arm64LastRelease))}`, text.fullRequirement],
     [editionIcons[0] + text.editionLite, `${link('x64', downloadAsset('Lite-x64.exe'))} / ${link(arm64Label, downloadAsset('Lite-arm64.exe', shared.arm64LastRelease))}`, text.liteRequirement],
     [editionIcons[2] + text.editionLegacyX64, link(text.fullZip, downloadAsset('Legacy-x64.zip')), text.legacyRequirement],
-    [editionIcons[3] + text.editionStore, link(text.storeInstall, shared.store), text.storeRequirement]
+    [editionIcons[3] + text.editionStore, `${link('Full', shared.store)} / ${link('Lite', shared.storeLite)}`, text.storeRequirement]
   ];
   const retiredRows = [
     [text.editionLiteNet8, `${link('x64', historicalNet8Asset('Lite-NET8-x64.exe'))} / ${link('ARM64' + experimentalSuffix, historicalNet8Asset('Lite-NET8-arm64.exe'))}`, text.net8Requirement]
@@ -81,7 +81,7 @@ function render(language, text) {
       `[![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](${releaseUrl}) ` +
       `[![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](${releaseUrl}) ` + sponsor, '',
     '**' + text.tagline + '**', '', text.intro, '',
-    '📥 ' + [link(text.download, releaseUrl + '/latest'), link('Microsoft Store', shared.store), link(text.guide, wiki(pages.guide)), link(text.wiki, shared.repository + '/wiki')].join(' · '), '',
+    '📥 ' + [link(text.download, releaseUrl + '/latest'), `Microsoft Store (${link('Full', shared.store)} / ${link('Lite', shared.storeLite)})`, link(text.guide, wiki(pages.guide)), link(text.wiki, shared.repository + '/wiki')].join(' · '), '',
     shared.minimumWindows + ' · x64 / ARM64' + experimentalSuffix + ' · ' + text.languages + ' · ' + link(text.license, 'LICENSE'), '',
     '<div>',
     `<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="${attr(text.demoAlt)}"></a>`,
@@ -175,6 +175,7 @@ function renderAI(shared) {
     "  wiki_root: \"https://github.com/kunkunkunQoQ/SonicRoute/wiki\"",
     "  download_latest: \"https://github.com/kunkunkunQoQ/SonicRoute/releases/latest\"",
     "  store_url: \"https://apps.microsoft.com/detail/9NQZGRTPM1NT\"",
+    "  store_lite_url: \"https://apps.microsoft.com/detail/9N37LQ8SMLF6\"",
     "",
     "SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:",
     "  driver_isolation: \"NO_VIRTUAL_AUDIO_CABLE | NO_KERNEL_DRIVERS | NO_TARGET_PROCESS_DLL_INJECTION\"",

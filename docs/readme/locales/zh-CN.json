@@ -26,7 +26,7 @@
     "storeInstall": "商店安装",
     "liteRequirement": "单文件便携版；需要匹配架构的 .NET 10 Desktop Runtime，仅包含电脑音频功能。",
     "legacyRequirement": "免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用。",
-    "storeRequirement": "以 Full 为构建来源；需要 x64 .NET 10 Desktop Runtime，在架版本以 Store 页面为准。",
+    "storeRequirement": "提供 Full / Lite，需 x64 .NET 10 Desktop Runtime，在架版本以 Store 为准。",
     "runtimeNote": "运行库说明：Full 与 Lite 都需要安装 {runtime}；Legacy 依赖系统自带 .NET Framework 4.8，无需额外安装运行库（历史 {runtime8} 兼容版已停止维护，历史下载保留）。",
     "steps": [
         "**双击启动常驻**：下载解压或双击运行后软件常驻任务栏托盘（推荐从溢出区拖出固定以便随时查看）；双击托盘图标即可打开主窗口。",
@@ -117,7 +117,7 @@
         "把手机音乐、视频或游戏声音接入电脑耳机或音箱独立调音；手机画面放入电脑独立虚拟窗口中操作，快速面板直接控制源手机扬声器与蓝牙设备，无需频繁看手机"
     ],
     "editionLegacyX64": "Legacy x64（仅电脑功能，.NET Framework 4.8）",
-    "editionStore": "Microsoft Store（基于 Full）",
+    "editionStore": "Microsoft Store",
     "commandSnippetComment": "触发指定自动化规则（需 SonicRoute 正在运行）",
     "faqQuickTitle": "常见问题速览",
     "faqQuestions": [
