@@ -61,7 +61,8 @@
 | **Legacy (x64)** | `SonicRoute-v1.31-Legacy-x64.zip` | 978,226 字节 | 兼容版（.NET Framework 4.8），多文件绿色免安装 ZIP |
 | **更新清单** | `SonicRoute-update.json` | 6,779 字节 | 客户端自动更新检测清单（Protocol 2） |
 | **校验散列** | `SHA256SUMS.txt` | 374 字节 | SHA-256 完整性校验文件 |
-| **Microsoft Store** | [Store 页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | - | 基于 Full 构建（MSIX 本地构建版本 1.31.0.0，在架版本以商店页面为准） |
+| **Microsoft Store (Full)** | [Store 页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | - | 完整商店版（基于 Full 构建；MSIX 本地构建版本 1.31.0.0，在架版本以商店页面为准） |
+| **Microsoft Store (Lite)** | [Store 页面](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | - | 轻量商店版（仅保留 PC 音频功能；在架版本以商店页面为准） |
 
 > Full 与 Lite 需要匹配架构的 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0)；Legacy 依赖系统内置的 .NET Framework 4.8，免装额外运行库。
 

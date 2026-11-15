@@ -63,7 +63,8 @@
 | 🛡️ **Legacy x64** | 解压即用、免安装额外运行库，适合办公或受限环境；不含手机模块 | [`SonicRoute-v1.32-Legacy-x64.zip`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | Windows 内置 .NET Framework 4.8 |
 | 🧪 **Full ARM64**（实验性） | 面向 Windows on ARM64 原生单文件全功能包（已无外部 x64 `adb`/`scrcpy` 进程；未在真机验收） | [`SonicRoute-v1.32-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | [.NET 10 Desktop Runtime (ARM64)](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
 | 🧪 **Lite ARM64**（实验性） | 面向 Windows on ARM64 原生纯 PC 音频轻量包（未在真机验收） | [`SonicRoute-v1.32-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | [.NET 10 Desktop Runtime (ARM64)](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
-| 🔄 **Microsoft Store** | 商店版与托管自动更新用户（具体在架版本以微软商店审核同步进度为准） | [微软商店页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64 `.NET 10 Desktop Runtime` |
+| 🔄 **Microsoft Store (Full)** | 完整商店版与托管自动更新用户（具体在架版本以微软商店审核同步进度为准） | [微软商店页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64 `.NET 10 Desktop Runtime` |
+| 🔄 **Microsoft Store (Lite)** | 轻量商店版与托管自动更新用户（仅保留 PC 音频；在架版本以商店页面为准） | [微软商店页面](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | x64 `.NET 10 Desktop Runtime` |
 | 📋 **校验与更新清单** | 校验发布包完整性与供应用内更新器解析下载 | [`SHA256SUMS.txt`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SHA256SUMS.txt) / [`SonicRoute-update.json`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-update.json) | — |
 
 ### 升级与数据保留说明
