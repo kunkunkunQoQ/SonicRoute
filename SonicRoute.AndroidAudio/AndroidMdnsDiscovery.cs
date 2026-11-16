@@ -19,8 +19,8 @@ public static class AndroidMdnsDiscovery
         {
             if (!service.Type.Equals(type, StringComparison.OrdinalIgnoreCase)) return false;
             if (name != null && !AndroidWirelessConnection.MatchesPairingName(service.Name, name)) return false;
-            if (host != null && (preferredHost == null || !source.Equals(preferredHost))) return false;
-            if (host == null && guid != null)
+            if (guid == null && host != null && (preferredHost == null || !source.Equals(preferredHost))) return false;
+            if (guid != null)
             {
                 string prefix = guid.StartsWith("adb-", StringComparison.OrdinalIgnoreCase) ? guid : "adb-" + guid;
                 if (!service.Name.Equals(prefix, StringComparison.OrdinalIgnoreCase) && !service.Name.StartsWith(prefix + "-", StringComparison.OrdinalIgnoreCase)) return false;

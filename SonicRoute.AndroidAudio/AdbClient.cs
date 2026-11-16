@@ -104,6 +104,18 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         return ExecuteWithTransportAsync(token, transport => DispatchTransportCommandAsync(transport, arguments, token));
     }
 
+    internal async Task<(AdbClient Client, string Fingerprint)> BindPairingIdentityAsync(CancellationToken token)
+    {
+        var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
+        if (transport is ArbitratedAdbTransport arbitrated)
+            transport = await arbitrated.SelectAsync(token).ConfigureAwait(false);
+        string? fingerprint = transport is IAdbPairingIdentityProvider identity
+            ? await identity.GetPairingFingerprintAsync(token).ConfigureAwait(false) : null;
+        if (string.IsNullOrWhiteSpace(fingerprint))
+            throw AndroidError.WithCode(new IOException("无法确认此电脑的配对身份，请在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairIdentityUnavailable);
+        return (new AdbClient(RuntimeDirectory, transport), fingerprint);
+    }
+
     private async Task<string> DispatchTransportCommandAsync(IAdbTransport transport, string[] arguments, CancellationToken token)
     {
         if (arguments.Length is 1 or 2 && arguments[0] == "devices")
@@ -235,6 +247,14 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
             _identities[key] = identity; // one read per ADB transport, never an idle identity poll
         }
         return device with { HardwareId = identity };
+    }
+
+    internal Task<AndroidDevice> RefreshMissingIdentityAsync(AndroidDevice device, CancellationToken token)
+    {
+        string key = device.Serial + "\0" + device.TransportId;
+        lock (_identityGate)
+            if (_identities.TryGetValue(key, out var identity) && identity == null) _identities.Remove(key);
+        return ResolveIdentityAsync(device, token);
     }
 
     private static readonly Regex KnownDeviceStateRegex = new(

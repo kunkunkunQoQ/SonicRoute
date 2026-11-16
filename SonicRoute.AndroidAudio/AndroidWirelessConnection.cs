@@ -23,14 +23,16 @@ public sealed class AndroidWirelessConnection
     private const string ConnectType = "_adb-tls-connect._tcp";
     private readonly Func<CancellationToken, string[], Task<string>> _run;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly TimeProvider _timeProvider;
     private readonly Func<CancellationToken, Task<IReadOnlyList<AndroidDevice>>>? _devices;
     private readonly Func<string, string?, string?, string?, TimeSpan, CancellationToken, Task<AndroidMdnsService?>>? _discover;
     public AndroidWirelessConnection(AdbClient adb) : this((token, args) => adb.RunAsync(token, args))
     { _adb = adb; _devices = token => adb.DevicesAsync(token, deduplicate: false); _discover = AndroidMdnsDiscovery.FindAsync; }
     public AndroidWirelessConnection(Func<CancellationToken, string[], Task<string>> run,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        Func<string, string?, string?, string?, TimeSpan, CancellationToken, Task<AndroidMdnsService?>>? discover = null)
-    { _run = run; _delay = delay ?? Task.Delay; _discover = discover; }
+        Func<string, string?, string?, string?, TimeSpan, CancellationToken, Task<AndroidMdnsService?>>? discover = null,
+        TimeProvider? timeProvider = null)
+    { _run = run; _delay = delay ?? Task.Delay; _discover = discover; _timeProvider = timeProvider ?? TimeProvider.System; }
     private async Task<AndroidMdnsService?> DiscoverAsync(string type, string? name, string? host, string? guid,
         TimeSpan duration, CancellationToken token)
     {
@@ -74,10 +76,19 @@ public sealed class AndroidWirelessConnection
         }
         return services;
     }
-    public Task<AndroidPairingResult> PairCodeAsync(string address, string code, CancellationToken token)
+    public async Task<AndroidPairingResult> PairCodeAsync(string address, string code, CancellationToken token)
     {
         if (!Regex.IsMatch(code, "\\A[0-9]{6}\\z")) throw AndroidError.WithCode(new ArgumentException("请输入手机显示的 6 位配对码。"), AndroidErrorCode.InvalidPairCode);
-        return PairAsync(ValidateAddress(address), code, token);
+        address = ValidateAddress(address);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30), _timeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
+        try { return await PairAsync(address, code, deadline.Token).ConfigureAwait(false); }
+        catch (Exception ex) when (deadline.IsCancellationRequested
+            && ex is OperationCanceledException or IOException or SocketException or ObjectDisposedException)
+        {
+            if (token.IsCancellationRequested) throw new OperationCanceledException("Pairing cancelled.", ex, token);
+            throw AndroidError.WithCode(new TimeoutException("配对超时，请重新打开手机上的配对码窗口后重试。", ex), AndroidErrorCode.PairTimedOut);
+        }
     }
     private async Task<AndroidPairingResult> PairAsync(string address, string password, CancellationToken token)
     {
@@ -89,8 +100,8 @@ public sealed class AndroidWirelessConnection
     }
     public async Task<AndroidPairingResult> PairQrAsync(AndroidQrPairing qr, CancellationToken token)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(TimeSpan.FromMinutes(2));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2), _timeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
         using var discoveryLifetime = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
         var discovery = DiscoverAsync("_adb-tls-pairing._tcp", qr.ServiceName, null, null,
             TimeSpan.FromMinutes(2), discoveryLifetime.Token);
@@ -126,8 +137,8 @@ public sealed class AndroidWirelessConnection
     public async Task<AndroidConnectionResult> ConnectAsync(string address, CancellationToken token)
     {
         address = ValidateAddress(address);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20), _timeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
         try
         {
             await SendConnectAsync(address, deadline.Token).ConfigureAwait(false);
@@ -138,8 +149,8 @@ public sealed class AndroidWirelessConnection
     }
     public async Task<AndroidConnectionResult> FinishPairingAsync(AndroidPairingResult pairing, CancellationToken token)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20), _timeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
         using var discoveryLifetime = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
         string host = Host(ValidateAddress(pairing.Address));
         var discovery = DiscoverAsync(ConnectType, null, host, pairing.Guid,
@@ -162,8 +173,8 @@ public sealed class AndroidWirelessConnection
             int dash = name.LastIndexOf('-');
             guid = dash > 3 ? name[..dash] : name;
         }
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20), _timeProvider);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
         string? host = address == null ? null : Host(address);
         try
         {
@@ -214,12 +225,14 @@ public sealed class AndroidWirelessConnection
     private static AndroidDevice? FindMatchingReadyDevice(IReadOnlyList<AndroidDevice> devices, string? host, string? address,
         string? guid, string? serial, string? hardwareId)
     {
+        if (!string.IsNullOrWhiteSpace(hardwareId))
+            return devices.FirstOrDefault(d => d.State == "device" && d.IsWifi
+                && string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase));
+        if (guid != null)
+            return devices.FirstOrDefault(d => d.State == "device" && d.IsWifi && MatchesGuid(d.Serial, guid));
         foreach (var d in devices)
         {
             if (d.State != "device" || !d.IsWifi) continue;
-            if (!string.IsNullOrWhiteSpace(hardwareId)
-                && string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase))
-                return d;
             if (serial != null && string.Equals(d.Serial.TrimEnd('.'), serial.TrimEnd('.'), StringComparison.OrdinalIgnoreCase))
                 return d;
             if (address != null && string.Equals(d.Serial.TrimEnd('.'), address, StringComparison.OrdinalIgnoreCase))
@@ -247,23 +260,31 @@ public sealed class AndroidWirelessConnection
         if (serial != null) serials.Add(serial.TrimEnd('.'));
         if (address != null) serials.Add(address);
         var endpoints = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var identityRefreshes = new HashSet<string>(StringComparer.Ordinal);
         IOException? lastError = null;
         bool Matches(AndroidDevice d)
         {
             if (d.State != "device" || !d.IsWifi) return false;
-            if (!string.IsNullOrWhiteSpace(hardwareId)
-                && string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (!string.IsNullOrWhiteSpace(hardwareId))
+                return string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase);
             if (serials.Contains(d.Serial.TrimEnd('.')) || MatchesGuid(d.Serial, guid)) return true;
-            try { return address == null && host != null && Host(ValidateAddress(d.Serial)) == host; }
+            try { return guid == null && address == null && host != null && Host(ValidateAddress(d.Serial)) == host; }
             catch (ArgumentException) { return false; }
         }
-        for (int attempt = 0; attempt < 15; ++attempt)
+        for (int attempt = 0; !token.IsCancellationRequested; ++attempt)
         {
             token.ThrowIfCancellationRequested();
             IReadOnlyList<AndroidDevice> devices;
             try { devices = await DevicesAsync(token).ConfigureAwait(false); }
             catch (IOException ex) { lastError = ex; devices = Array.Empty<AndroidDevice>(); }
+            if (_adb != null && !string.IsNullOrWhiteSpace(hardwareId))
+            {
+                // One on-demand retry per transport repairs a cached transient identity failure.
+                // Keep the strong check without turning the readiness loop into identity polling.
+                devices = await Task.WhenAll(devices.Select(d => d.State == "device" && d.IsWifi
+                    && string.IsNullOrWhiteSpace(d.HardwareId) && identityRefreshes.Add(d.Serial + "\0" + d.TransportId)
+                        ? _adb.RefreshMissingIdentityAsync(d, token) : Task.FromResult(d))).ConfigureAwait(false);
+            }
             var ready = devices.FirstOrDefault(Matches);
             if (ready != null) return new(ready, devices);
             if (attempt % 2 == 0)
@@ -276,7 +297,8 @@ public sealed class AndroidWirelessConnection
                     if (discovery?.IsCompletedSuccessfully == true && await discovery.ConfigureAwait(false) is { } direct)
                         services = services.Append(direct).Distinct();
                     foreach (var service in services.Where(s => s.Type == ConnectType
-                        && (host != null && Host(s.Address) == host || guid != null && MatchesGuid(s.Name + "." + ConnectType, guid))))
+                        && (guid != null ? MatchesGuid(s.Name + "." + ConnectType, guid)
+                            : host != null && Host(s.Address) == host)))
                     {
                         serials.Add(service.Name + "." + ConnectType);
                         ready = devices.FirstOrDefault(Matches);
@@ -302,7 +324,7 @@ public sealed class AndroidWirelessConnection
                     catch (IOException ex) { lastError = ex; }
                 }
             }
-            if (attempt < 14)
+            if (!token.IsCancellationRequested)
             {
                 var delay = _delay(RetryDelay(attempt), token);
                 if (discovery is { IsCompleted: false })
@@ -317,6 +339,7 @@ public sealed class AndroidWirelessConnection
                 }
             }
         }
+        token.ThrowIfCancellationRequested();
         throw AndroidError.WithCode(new IOException("设备尚未就绪，请在手机确认调试授权；已配对时可填写无线调试首页的连接地址，无需重新配对。", lastError), AndroidErrorCode.DeviceNotReadyConfirmAuth);
     }
 
@@ -331,16 +354,18 @@ public sealed class AndroidWirelessConnection
         // Android's paired-device identifier is MD5 of its binary public key; this is not an authentication hash.
         return string.Join(':', MD5.HashData(key).Select(b => b.ToString("X2")));
     }
-    public async Task UnpairAsync(AndroidDevice device, CancellationToken token)
+    public async Task UnpairAsync(AndroidDevice device, CancellationToken token, Func<Task>? beforeUnpair = null)
     {
         var adb = _adb ?? throw new InvalidOperationException("Unpairing requires the bundled ADB runtime.");
         if (device.State != "device") throw AndroidError.WithCode(new IOException("手机未连接，请先重连，或在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairPhoneOffline);
-        string publicKey = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".android", "adbkey.pub");
-        if (!File.Exists(publicKey) || new FileInfo(publicKey).Length > 16384)
-            throw AndroidError.WithCode(new IOException("无法确认此电脑的配对身份，请在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairIdentityUnavailable);
-        string fingerprint = PairingFingerprint(await File.ReadAllTextAsync(publicKey, token).ConfigureAwait(false));
-        await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
+        // The caller's cleanup callback may own UI resources; retain its context until it runs.
+        var (boundAdb, fingerprint) = await adb.BindPairingIdentityAsync(token);
+        await adb.PrepareRuntimeAsync("audio", token);
         adb.ValidateCatalog();
+        token.ThrowIfCancellationRequested();
+        if (beforeUnpair != null) await beforeUnpair();
+        token.ThrowIfCancellationRequested();
+        adb = boundAdb;
         string remote = "/data/local/tmp/sonicroute-pairing-" + Guid.NewGuid().ToString("N") + ".jar";
         try
         {

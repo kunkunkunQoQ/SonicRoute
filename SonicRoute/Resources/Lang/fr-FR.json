@@ -699,6 +699,7 @@
   "Phone.Err.InvalidAddress": "Saisissez l’adresse IP:Port affichée sur le téléphone, ex. 192.168.1.100:37099.",
   "Phone.Err.InvalidPairCode": "Saisissez le code d’association à 6 chiffres affiché sur le téléphone.",
   "Phone.Err.PairFailed": "Échec de l’association. Vérifiez l’adresse, le code et la fenêtre sur le téléphone.",
+  "Phone.Err.PairTimedOut": "Le délai d’association a expiré. Rouvrez le code d’association sur le téléphone et réessayez.",
   "Phone.Err.QrExpired": "Le code QR a expiré. Cliquez pour le régénérer ou utilisez un code d’association.",
   "Phone.Err.ConnectFailed": "Échec de la connexion. Saisissez l’adresse de connexion du débogage sans fil (pas le port d’association).",
   "Phone.Err.ConnectNotReady": "Connexion non prête. Confirmez l’autorisation sur le téléphone et vérifiez l’adresse de connexion.",

@@ -699,6 +699,7 @@
   "Phone.Err.InvalidAddress": "請輸入手機顯示的 IP:連接埠，例如 192.168.1.100:37099。",
   "Phone.Err.InvalidPairCode": "請輸入手機顯示的 6 位數配對碼。",
   "Phone.Err.PairFailed": "配對未完成，請檢查位址、配對碼與手機上的配對視窗。",
+  "Phone.Err.PairTimedOut": "配對逾時，請重新開啟手機上的配對碼視窗後再試。",
   "Phone.Err.QrExpired": "QR 圖碼已過期，請點擊重新產生；也可改用配對碼連線。",
   "Phone.Err.ConnectFailed": "連線未完成，請填寫無線偵錯首頁的連線位址，配對連接埠無法用於連線。",
   "Phone.Err.ConnectNotReady": "連線尚未就緒，請確認手機已授權，並檢查無線偵錯首頁目前的連線位址。",

@@ -2,6 +2,12 @@ using System.Net;
 
 namespace SonicRoute.AndroidAudio;
 
+/// <summary>Only transports that know their actual authentication key can revoke its pairing.</summary>
+internal interface IAdbPairingIdentityProvider
+{
+    Task<string?> GetPairingFingerprintAsync(CancellationToken token);
+}
+
 /// <summary>Result of a completed non-interactive ADB shell invocation.</summary>
 public sealed record AdbShellResult(string Output, int ExitCode, string Error = "");
 

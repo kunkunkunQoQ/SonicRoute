@@ -1,8 +1,18 @@
 # 开发交接
 
-更新：2026-11-14。正在执行 `v1.32` 正式发布准备：已补齐 `docs/release-v1.32.md` 并同步十份 `README*.md` 元数据；随后切换到干净的 `master` 分支完成五目标发布构建与全套发布管道验证。Git 状态、发布产物收据与公开状态以实际 Git、CI / `gh` 结果和父容器最新记录为准。
+更新：2026-11-16。当前在master基线82cbc81上完成手机配对四项修复，开发版本1.33/1.33.0.0；用户后续要求提交，配对修复与版本升级纳入本次本地提交，未推送。公开版本元数据仍为1.32。实际Git、产物与发布状态以最新收据为准，不沿用下方1.32发布准备状态。
 
-## 当前交付：v1.32 正式发布文档与 README 元数据同步（补充虚拟屏手柄与面板间距，准备 GitHub Actions 发布）
+## 当前交付：配对修复与1.33 Full测试包
+
+- 已知GUID/HardwareId优先匹配，不允许同IP旧连接或错误mDNS服务覆盖；对缓存的临时身份缺失仅在本次显式重连每传输补读一次，不增加身份轮询。配对后等待改为整体20秒期限，保留原退避，不再固定15轮提前放弃。
+- 手动配对新增30秒期限和九语超时提示，主动取消与socket关闭引发的超时正确区分；QR仍2分钟。TimeProvider仅用于可测时钟，生产为System，所有期限资源随用户操作结束释放。
+- 取消配对从实际原生传输的已加载认证身份取指纹，不再读可能过期的.pub；绑定传输后才停止相关音视频并执行helper。无法确认外部ADB密钥时提示在手机取消，保持已有音频/窗口，不猜身份、不重写用户密钥；其他外部ADB功能不变。
+- 唯一版本源Version.props升1.33，文件/程序集版本1.33.0.0；AI索引同步，公开下载仍1.32。无新依赖/常驻轮询，原PCM D01B47…561EA保持。
+- 24项定向检查及真实TLS1.3本机正确/错误PIN回环通过；检查构建0警告/0错误、10份README/九语键及原值保持/diff空白通过。Full x64 ReadyToRun发布成功，最终增量日志无警告，不声称全树全量零警告；不跑应用全套/其他版本矩阵、真机授权或性能基准。
+- 父容器outputs/pairing-fixes-1.33-20261116/editions/SonicRoute-v1.33-x64.exe，11,208,008字节，SHA256 9F3DF5E39C21004C5287306B1081DBBB4968036C53FD37AFD9217080A1A8F4F2。运行中Store1.32、普通运行版和共享ADB保持；未自动启动或安装新版。详细实现、范围及最终Hash在父容器64号和delivery-receipt，63号为旧审查。
+- 用户已要求提交，本次本地提交包含配对修复、1.33及交接；未推送/Release/tag/Store。复用24项和现有包，不重复构建/全套测试；后续另查静音租约、剪贴板及退出/资源并发边界，不混入配对提交。
+
+## 历史交付：v1.32 正式发布文档与 README 元数据同步（补充虚拟屏手柄与面板间距，准备 GitHub Actions 发布）
 
 - 更新 [`docs/release-v1.32.md`](../docs/release-v1.32.md)、[`docs/readme/generate.cjs`](../docs/readme/generate.cjs) AI 索引与全部 9 语 [`docs/readme/locales/*.json`](../docs/readme/locales/zh-CN.json) 摘要：除既有 `v1.31..HEAD` 核心变更外，补充记录 Full 版虚拟屏游戏手柄透传支持（`NativeGamepadReader` / `GamepadController`，聚焦门控 XInput + RawInput HID 最多 4 槽位，失焦/断连自动归零释放）以及手机附窗面板间距调整（`PhoneCompanionLayout` 由 `12` DIP 收窄至 `6` DIP），重新生成并通过 `node docs/readme/generate.cjs --check`（10 份 README 一致）。
 - 为 [`packaging/Updates/Invoke-ReleasePipeline.ps1`](./Updates/Invoke-ReleasePipeline.ps1) 补充 UTF-8 BOM（与同目录 `Test-ReleasePipelineHarness.ps1` 一致），修复中文 Windows PowerShell 5.1 及 `shell: powershell` CI 运行时解析无 BOM UTF-8 中文字符串的问题，确保本地 `Harness`/`DryRun` 与 GitHub Actions [`.github/workflows/release.yml`](../.github/workflows/release.yml) 一致可执行。

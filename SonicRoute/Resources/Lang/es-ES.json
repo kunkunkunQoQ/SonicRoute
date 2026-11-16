@@ -699,6 +699,7 @@
   "Phone.Err.InvalidAddress": "Introduce la IP:Puerto que muestra el teléfono, por ejemplo 192.168.1.100:37099.",
   "Phone.Err.InvalidPairCode": "Introduce el código de vinculación de 6 dígitos que muestra el teléfono.",
   "Phone.Err.PairFailed": "No se completó la vinculación. Comprueba la dirección, el código y la ventana en el teléfono.",
+  "Phone.Err.PairTimedOut": "Se agotó el tiempo de vinculación. Vuelve a abrir el código de vinculación en el teléfono e inténtalo de nuevo.",
   "Phone.Err.QrExpired": "El código QR ha caducado. Haz clic para regenerarlo o usa un código de vinculación.",
   "Phone.Err.ConnectFailed": "No se completó la conexión. Introduce la dirección de conexión de Depuración inalámbrica (no el puerto de vinculación).",
   "Phone.Err.ConnectNotReady": "La conexión aún no está lista. Confirma la autorización en el teléfono y comprueba la dirección actual.",

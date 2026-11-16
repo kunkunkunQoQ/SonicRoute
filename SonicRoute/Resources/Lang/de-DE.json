@@ -699,6 +699,7 @@
   "Phone.Err.InvalidAddress": "Geben Sie die auf dem Smartphone angezeigte IP:Port ein, z. B. 192.168.1.100:37099.",
   "Phone.Err.InvalidPairCode": "Geben Sie den 6-stelligen Kopplungscode vom Smartphone ein.",
   "Phone.Err.PairFailed": "Kopplung fehlgeschlagen. Prüfen Sie Adresse, Code und das Kopplungsfenster auf dem Smartphone.",
+  "Phone.Err.PairTimedOut": "Zeitüberschreitung bei der Kopplung. Öffnen Sie den Kopplungscode auf dem Smartphone erneut und versuchen Sie es noch einmal.",
   "Phone.Err.QrExpired": "QR-Code abgelaufen. Klicken Sie zum Neuerstellen oder nutzen Sie den Kopplungscode.",
   "Phone.Err.ConnectFailed": "Verbindung fehlgeschlagen. Geben Sie die Verbindungsadresse der Startseite für kabelloses Debugging ein (nicht den Kopplungsport).",
   "Phone.Err.ConnectNotReady": "Verbindung noch nicht bereit. Bestätigen Sie die Berechtigung am Smartphone und prüfen Sie die Verbindungsadresse.",

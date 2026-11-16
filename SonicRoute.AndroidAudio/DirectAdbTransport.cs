@@ -10,7 +10,7 @@ namespace SonicRoute.AndroidAudio;
 /// Pure C# in-process ADB transport supporting WinUSB direct devices and TLS 1.3 / SPAKE2 wireless debugging
 /// without spawning adb.exe or loading external Win32 ADB DLLs.
 /// </summary>
-internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable
+internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdbPairingIdentityProvider
 {
     private readonly AdbKeyStore _keyStore;
     private readonly Func<IReadOnlyList<WinUsbDeviceDescriptor>> _enumerateUsb;
@@ -247,6 +247,13 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable
         string normalized = AndroidWirelessConnection.ValidateAddress(address);
         var (host, port) = SplitHostPort(normalized);
         return _pairImpl(host, port, password, token);
+    }
+
+    Task<string?> IAdbPairingIdentityProvider.GetPairingFingerprintAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        return Task.FromResult(_keyStore.LoadedFingerprint);
     }
 
     public async Task<string> ConnectAsync(string address, CancellationToken token)

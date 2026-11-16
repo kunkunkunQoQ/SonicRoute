@@ -84,16 +84,19 @@ internal static partial class Program
         Check(result.Device.Serial == "192.168.1.10:38000", "reconnect discovers the same host's new connection port when the saved port expires");
 
         reads = 0;
+        var failedClock = new PairingTestClock();
         wireless = new AndroidWirelessConnection((_, args) => Task.FromResult(args[0] switch
         {
             "devices" => ++reads > 0 ? header + "192.168.1.11:39000 device model:Other\n" : header,
             "mdns" => "other _adb-tls-connect._tcp 192.168.1.11:39000\n",
             _ => throw new IOException("not ready")
-        }), NoConnectionDelay);
+        }), (delay, token) => { failedClock.Advance(delay); token.ThrowIfCancellationRequested(); return Task.CompletedTask; }, timeProvider: failedClock);
         bool failed = false;
         try { await wireless.FinishPairingAsync(new("192.168.1.10:37000", "adb-phone"), default); }
         catch (IOException) { failed = true; }
-        Check(failed && reads == 15, "a different connected phone cannot turn a failed pairing completion into success and retries are bounded");
+        Check(failed && reads > 15 && failedClock.GetUtcNow() >= DateTimeOffset.UnixEpoch.AddSeconds(20)
+            && failedClock.GetUtcNow() < DateTimeOffset.UnixEpoch.AddSeconds(21),
+            "a different connected phone cannot satisfy pairing and retries stop at the overall deadline");
 
         using var canceled = new CancellationTokenSource();
         wireless = new AndroidWirelessConnection((token, args) => { token.ThrowIfCancellationRequested(); return Task.FromResult(header); },

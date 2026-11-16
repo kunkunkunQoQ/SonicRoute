@@ -60,6 +60,12 @@ internal sealed class AdbKeyStore : IDisposable
 
     public string GetFingerprint() => AndroidWirelessConnection.PairingFingerprint(GetPublicKeyLine());
 
+    // Query the identity already used by this transport; never create or reload a key for unpairing.
+    internal string? LoadedFingerprint
+    {
+        get { lock (_gate) return _disposed || _publicKeyLine == null ? null : AndroidWirelessConnection.PairingFingerprint(_publicKeyLine); }
+    }
+
     public X509Certificate2 GetTlsClientCertificate()
     {
         EnsureLoaded();

@@ -699,6 +699,7 @@
   "Phone.Err.InvalidAddress": "请输入手机显示的 IP:端口，例如 192.168.1.100:37099。",
   "Phone.Err.InvalidPairCode": "请输入手机显示的 6 位配对码。",
   "Phone.Err.PairFailed": "配对未完成，请检查地址、配对码和手机上的配对窗口。",
+  "Phone.Err.PairTimedOut": "配对超时，请重新打开手机上的配对码窗口后重试。",
   "Phone.Err.QrExpired": "二维码已过期，点击重新生成；也可以使用配对码连接。",
   "Phone.Err.ConnectFailed": "连接未完成，请填写无线调试首页的连接地址，配对端口不能用于连接。",
   "Phone.Err.ConnectNotReady": "连接尚未就绪，请确认手机已授权，并检查无线调试首页的当前连接地址。",

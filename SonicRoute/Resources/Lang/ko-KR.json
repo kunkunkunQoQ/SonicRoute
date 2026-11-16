@@ -699,6 +699,7 @@
   "Phone.Err.InvalidAddress": "휴대폰에 표시된 IP:포트(예: 192.168.1.100:37099)를 입력하세요.",
   "Phone.Err.InvalidPairCode": "휴대폰에 표시된 6자리 페어링 코드를 입력하세요.",
   "Phone.Err.PairFailed": "페어링하지 못했습니다. 주소, 페어링 코드 및 휴대폰의 페어링 창을 확인하세요.",
+  "Phone.Err.PairTimedOut": "페어링 시간이 초과되었습니다. 휴대폰에서 페어링 코드 화면을 다시 열고 시도하세요.",
   "Phone.Err.QrExpired": "QR 코드가 만료되었습니다. 클릭하여 다시 생성하거나 페어링 코드로 연결하세요.",
   "Phone.Err.ConnectFailed": "연결하지 못했습니다. 페어링 포트가 아닌 무선 디버깅 첫 화면의 연결 주소를 입력하세요.",
   "Phone.Err.ConnectNotReady": "연결이 준비되지 않았습니다. 휴대폰 인증을 확인하고 무선 디버깅의 현재 연결 주소를 확인하세요.",

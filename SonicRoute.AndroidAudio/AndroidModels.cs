@@ -238,7 +238,8 @@ public enum AndroidErrorCode
     InvalidProcessId,
     InvalidPhoneOutputId,
     InvalidPhoneOutputDevice,
-    NoAudioRouteOrEnded
+    NoAudioRouteOrEnded,
+    PairTimedOut
 }
 
 public static class AndroidError

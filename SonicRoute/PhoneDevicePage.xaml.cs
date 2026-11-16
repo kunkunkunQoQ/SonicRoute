@@ -299,13 +299,15 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         await RunAsync(async token =>
         {
             if (_device == null) throw AndroidError.WithCode(new IOException("手机未连接，请先重连，或在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairPhoneOffline);
-            if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
-            if (AndroidAudioHost.IsCreated)
-                foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)).ToArray())
-                    await AndroidAudioHost.Sources.RemoveAsync(source.Id, restorePrevious: false);
-            if (AndroidAudioHost.IsPcToPhoneCreated) await AndroidAudioHost.PcToPhone.StopPhoneAsync(device);
-            AndroidAudioHost.Phone.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
-            await Wireless.UnpairAsync(device, token);
+            await Wireless.UnpairAsync(device, token, async () =>
+            {
+                if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
+                if (AndroidAudioHost.IsCreated)
+                    foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)).ToArray())
+                        await AndroidAudioHost.Sources.RemoveAsync(source.Id, restorePrevious: false);
+                if (AndroidAudioHost.IsPcToPhoneCreated) await AndroidAudioHost.PcToPhone.StopPhoneAsync(device);
+                AndroidAudioHost.Phone.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
+            });
             PhoneAudioWindowCache.InvalidateDevices();
             PhoneAudioWindowCache.SetDevices((PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>())
                 .Where(d => !d.IsWifi || !AndroidDeviceIdentity.Matches(d, device)).ToArray());

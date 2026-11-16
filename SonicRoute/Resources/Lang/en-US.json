@@ -699,6 +699,7 @@
   "Phone.Err.InvalidAddress": "Enter the IP:Port shown on your phone, e.g. 192.168.1.100:37099.",
   "Phone.Err.InvalidPairCode": "Enter the 6-digit pairing code shown on your phone.",
   "Phone.Err.PairFailed": "Pairing failed. Check the address, pairing code, and pairing dialog on your phone.",
+  "Phone.Err.PairTimedOut": "Pairing timed out. Reopen the pairing-code dialog on your phone and try again.",
   "Phone.Err.QrExpired": "QR code expired. Click to regenerate, or connect using a pairing code.",
   "Phone.Err.ConnectFailed": "Connection failed. Enter the connection address from the Wireless debugging main page (not the pairing port).",
   "Phone.Err.ConnectNotReady": "Connection not ready. Confirm authorization on the phone and check the current Wireless debugging address.",
