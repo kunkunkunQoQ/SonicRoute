@@ -44,9 +44,6 @@
     "faq": "Preguntas frecuentes",
     "history": "Historial de versiones",
     "technical": "Implementación técnica",
-    "otherTitle": "Otros proyectos y combinaciones",
-    "silentPlayer": "Un reproductor de audio para Windows. Combínalo con la acción de iniciar programas de la automatización para reproducir efectos de sonido mediante atajos.",
-    "combinationGuide": "Guía de configuración (en chino)",
     "thanks": "Gracias por usar SonicRoute.",
     "author": "Autor",
     "easterEgg": "Descubre un huevo de Pascua",
@@ -95,9 +92,6 @@
         "**Motor de automatización y CLI ultrarrápida (6 disparadores × 39 acciones):** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.",
         "**Detección basada primero en eventos:** notificaciones del sistema y comprobación por segundo si hace falta. La integración móvil solo está en Full; Lite y Legacy son solo para PC. Disponible en 9 idiomas."
     ],
-    "comicTitle": "XiaoYue Comics",
-    "comicDescription": "Una comedia absurda sobre una chica mágica que sale de un huevo y provoca un nuevo desastre cada vez que intenta ayudar.",
-    "comicAlt": "Haz clic en XiaoYue asomándose de un huevo con un cómic para leer la serie",
     "scenario": "Escenario cotidiano",
     "whatYouCanDo": "Cómo le ayuda SonicRoute",
     "useCaseNames": [

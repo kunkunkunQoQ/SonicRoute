@@ -131,11 +131,6 @@ A：偵測優先使用系統事件，必要時以每秒一次的快照檢查作�
 
 [分享想法或回報問題](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 
-## 🧩 其他專案與組合用法
-
-- **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**：Windows 音訊播放器。搭配「啟動程式」動作，即可透過快速鍵播放音效。 [設定指南（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-- **[小躍的奇妙日常](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**：從雞蛋裡蹦出來的魔法少女，以及她越幫越忙的離譜日常。
-
 ## 📜 授權條款說明
 
 - **GPL-3.0 開源授權**：SonicRoute 採用 GNU 通用公共授權條款第 3 版，僅限該版本（GPL-3.0-only），詳見 [LICENSE](LICENSE)。允許商用、銷售與付費散布，須遵守 GPL 條款。

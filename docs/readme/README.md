@@ -25,11 +25,11 @@ node docs/readme/generate.cjs --check
 
 修改功能说明时，以实现和中文文案核对语义，再更新九种文案、生成并审读。`features` 不再区分核心/次要功能，用四个以内的重点说明用户可以少做哪些操作；使用示例只保留具体场景，避免重复功能介绍。详细步骤放在 Wiki。各字段里的占位符必须保留；`{release}`、`{version}`、`{nextRelease}`统一版本，`{triggerCount}`、`{actionCount}`统一数量，`{arch}`、`{runtime}`、`{faq}`、`{history}`统一架构与链接，`{ruleCommand}`统一命令示例。`sr` 是命令名，只有示例规则名称可以本地化。翻译要符合当地表达，模式和控件名称参考 SonicRoute/Resources/Lang；JSON 结构检查不代表母语审校。
 
-提交本目录的源文件、十份生成 README 以及检查流程。生成器不会读本地维护档案、用户配置或签名材料。功能介绍与场景保持简短，下载、入门、版本摘要、文档表、后续计划、其他作品和看板娘继续由同一版式维护。
+提交本目录的源文件、十份生成 README 以及检查流程。生成器不会读本地维护档案、用户配置或签名材料。功能介绍与场景保持简短，下载、入门、版本摘要、文档表、后续计划和看板娘继续由同一版式维护。
 
 ---
 
-The nine READMEs share one layout and link manifest. Edit shared.json for versions, links and common facts, locales/<language>.json for text, and generate.cjs for layout. Keep features to four practical benefits and use short, concrete examples. Downloads, getting-started steps, release summary, documentation table, roadmap, other projects and artwork share the same layout.
+The nine READMEs share one layout and link manifest. Edit shared.json for versions, links and common facts, locales/<language>.json for text, and generate.cjs for layout. Keep features to four practical benefits and use short, concrete examples. Downloads, getting-started steps, release summary, documentation table, roadmap and artwork share the same layout.
 
 Download links use `release` for current x64 builds, `arm64LastRelease` for the last actually published ARM64 builds, and `net8LastRelease` for discontinued .NET 8 assets. Update each field only after those assets exist; the generator labels an older ARM64 download with its version.
 

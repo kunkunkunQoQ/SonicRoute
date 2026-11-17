@@ -131,11 +131,6 @@ A：検出はシステムイベントを優先し、必要な場合に限り1秒
 
 [アイデアの共有・問題の報告](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 
-## 🧩 その他のプロジェクトと組み合わせ方
-
-- **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**：Windows 向けオーディオプレーヤーです。「プログラムを起動」アクションと組み合わせると、ホットキーで効果音を再生できます。 [設定ガイド（簡体字中国語）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-- **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**：卵から飛び出した魔法少女と、手伝うたびに事態が悪化するハチャメチャな日常を描くギャグ漫画。
-
 ## 📜 ライセンス
 
 - **GPL-3.0 オープンソース**：SonicRoute は GNU General Public License 第 3 版のみ（GPL-3.0-only）で提供されます。[LICENSE](LICENSE) を参照してください。GPL の条件に従う商用利用、販売、有償配布が可能です。

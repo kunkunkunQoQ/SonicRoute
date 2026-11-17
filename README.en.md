@@ -131,11 +131,6 @@ The Wiki is currently in Chinese.
 
 [Share an idea or report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
-## 🧩 Other projects and combinations
-
-- **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: A Windows audio player. Combine it with the Launch program action to play sound effects from hotkeys. [Setup guide (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-- **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**: An absurd magical-girl comedy about a girl who hatches from an egg and makes a mess whenever she tries to help.
-
 ## 📜 License
 
 - **GPL-3.0 open source**: SonicRoute is licensed under the GNU General Public License version 3 only (GPL-3.0-only); see [LICENSE](LICENSE). Commercial use, sale and paid distribution are permitted subject to GPL.

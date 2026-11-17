@@ -44,9 +44,6 @@
     "faq": "Häufige Fragen",
     "history": "Versionsverlauf",
     "technical": "Technische Umsetzung",
-    "otherTitle": "Weitere Projekte und Kombinationen",
-    "silentPlayer": "Ein Audioplayer für Windows. Kombiniere ihn mit der Programmstart-Aktion der Automatisierung, um Soundeffekte per Tastenkürzel abzuspielen.",
-    "combinationGuide": "Einrichtungsanleitung (Chinesisch)",
     "thanks": "Danke, dass du SonicRoute verwendest.",
     "author": "Autor",
     "easterEgg": "Entdecke ein Easter Egg",
@@ -95,9 +92,6 @@
         "**Automatisierungs-Engine und blitzschnelle CLI (6 Auslöser × 39 Aktionen):** Auslöser durch App-Start, -Fokus, -Beenden, Zeitpläne oder Hotkeys. Kombinieren Sie Audiosteuerung, Programmstarts und PowerShell-Skripte; nutzen Sie den Befehl sr zur nahtlosen Steuerung per Skript oder Hardware-Deck.",
         "**Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine Momentaufnahme pro Sekunde. Telefonintegration ist nur in Full enthalten; Lite und Legacy bieten PC-Funktionen. In neun Sprachen verfügbar."
     ],
-    "comicTitle": "XiaoYue Comics",
-    "comicDescription": "Eine absurde Comedy über ein magisches Mädchen, das aus einem Ei schlüpft und mit jedem Hilfsversuch neues Chaos anrichtet.",
-    "comicAlt": "Klicke auf XiaoYue mit Comicbuch in der Eierschale, um die Reihe zu lesen",
     "scenario": "Alltagsszenario",
     "whatYouCanDo": "So hilft SonicRoute",
     "useCaseNames": [

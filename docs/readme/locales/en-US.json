@@ -44,9 +44,6 @@
     "faq": "FAQ",
     "history": "Version history",
     "technical": "Technical implementation",
-    "otherTitle": "Other projects and combinations",
-    "silentPlayer": "A Windows audio player. Combine it with the Launch program action to play sound effects from hotkeys.",
-    "combinationGuide": "Setup guide (Chinese)",
     "thanks": "Thanks for using SonicRoute.",
     "author": "Author",
     "easterEgg": "Click the resting mascot to discover an Easter egg",
@@ -95,9 +92,6 @@
         "**Automation combo engine and blazing CLI (6 triggers × 39 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.",
         "**Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Full adds optional Android phone audio and virtual-display integration; Lite and Legacy remain PC-only. Available in nine languages."
     ],
-    "comicTitle": "XiaoYue Comics",
-    "comicDescription": "An absurd magical-girl comedy about a girl who hatches from an egg and makes a mess whenever she tries to help.",
-    "comicAlt": "Click XiaoYue peeking out of an eggshell with a comic book to read the series",
     "scenario": "Everyday scenario",
     "whatYouCanDo": "How SonicRoute helps",
     "useCaseNames": [

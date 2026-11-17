@@ -44,9 +44,6 @@
     "faq": "常見問題",
     "history": "版本紀錄",
     "technical": "原始碼與建置",
-    "otherTitle": "其他專案與組合用法",
-    "silentPlayer": "Windows 音訊播放器。搭配「啟動程式」動作，即可透過快速鍵播放音效。",
-    "combinationGuide": "設定指南（簡體中文）",
     "thanks": "感謝使用 SonicRoute。",
     "author": "作者",
     "easterEgg": "發現彩蛋",
@@ -95,9 +92,6 @@
         "**自動化連招引擎與極速 CLI（6 種觸發 × 39 種操作）**：支援應用啟閉與切換、排程、快捷鍵等 6 種觸發，自由組合設備切換、音量、靜音、程式關聯啟動與 PowerShell；內建 sr 具名管道短命令，無額外常駐開銷，輕鬆連動腳本與硬體控制台。",
         "**事件優先偵測**：使用系統通知，並在需要時以每秒一次的快照檢查作為備援；不需要的資料會按需清理。Full 提供可選 Android 手機音訊與虛擬螢幕整合；Lite 與 Legacy 僅含電腦功能。支援九種語言。"
     ],
-    "comicTitle": "小躍的奇妙日常",
-    "comicDescription": "從雞蛋裡蹦出來的魔法少女，以及她越幫越忙的離譜日常。",
-    "comicAlt": "點擊從蛋殼裡探頭、抱著漫畫冊的小躍，閱讀漫畫連載",
     "scenario": "你的日常場景",
     "whatYouCanDo": "SonicRoute 怎麼幫你解決",
     "useCaseNames": [

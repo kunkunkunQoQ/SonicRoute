@@ -131,11 +131,6 @@ A: 감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1
 
 [아이디어 공유 또는 문제 제보](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
-## 🧩 다른 프로젝트와 함께 사용하기
-
-- **[SilentPlayer](https://github.com/kunkunkunQoQ/SilentPlayer)**: Windows용 오디오 플레이어입니다. 자동화의 ‘프로그램 실행’ 동작과 함께 사용하면 단축키로 효과음을 재생할 수 있습니다. [설정 가이드(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97#52-%E7%BB%84%E5%90%88%E5%9C%BA%E6%99%AFsilentplayer-%E9%9F%B3%E6%95%88%E6%9D%BF%E7%B1%BB%E4%BC%BC-soundpad)
-- **[XiaoYue Comics](https://github.com/kunkunkunQoQ/XiaoYue-Comics)**: 달걀에서 튀어나온 마법소녀가 도와주려 할 때마다 일이 더 꼬이는 황당한 일상을 그린 개그 만화입니다.
-
 ## 📜 라이선스
 
 - **GPL-3.0 오픈 소스**: SonicRoute는 GNU 일반 공중 사용 허가서 제3판만 적용합니다(GPL-3.0-only). [LICENSE](LICENSE)를 참조하세요. GPL 조건에 따른 상업적 사용, 판매 및 유료 배포가 허용됩니다.

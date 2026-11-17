@@ -44,9 +44,6 @@
     "faq": "常见问题",
     "history": "版本历史",
     "technical": "技术实现",
-    "otherTitle": "其他作品与组合用法",
-    "silentPlayer": "Windows 音频播放器；可搭配自动化「启动程序」实现按键播放音效。",
-    "combinationGuide": "查看组合教程",
     "thanks": "感谢使用 SonicRoute。",
     "author": "作者主页",
     "easterEgg": "点击看板娘发现一个彩蛋",
@@ -95,9 +92,6 @@
         "**自动化连招引擎与极速 CLI（6 种触发 × 39 种操作）**：支持应用启停与切换、定时、快捷键等 6 种触发，自由组合设备切换、音量、静音、程序关联启动与 PowerShell；内置 sr 命名管道短命令，无额外常驻开销，轻松联动脚本与硬件控制台。",
         "**事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。Full 提供可选 Android 手机音频与虚拟屏幕集成；Lite 与 Legacy 仅含电脑功能。支持九种语言。"
     ],
-    "comicTitle": "小跃的奇妙日常",
-    "comicDescription": "从鸡蛋里蹦出来的魔法少女，以及她越帮越忙的离谱日常。",
-    "comicAlt": "点击从蛋壳里探头、抱着漫画册的小跃，阅读漫画连载",
     "scenario": "你的日常场景",
     "whatYouCanDo": "SonicRoute 怎么帮你解决",
     "useCaseNames": [
