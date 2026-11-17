@@ -168,9 +168,9 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         }
         catch (Exception ex)
         {
+            await DisposeAsync().ConfigureAwait(false);
             if (ex is OperationCanceledException && !token.IsCancellationRequested)
                 throw ConnectionError("连接手机屏幕失败。", AndroidErrorCode.DisplayOpenFailed);
-            await DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -345,6 +345,21 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
             }
         }
 
+        // These callbacks capture session state, not packet state. Keep one pair per
+        // stream rather than allocating two delegates for every encoded packet.
+        DecodedHardwareFrameHandler onHardwareFrame = (tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix) =>
+        {
+            OnFrameSizeChanged(cropW, cropH);
+            _renderer!.PresentHardwareTexture(tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix);
+            MarkFirstFrameIfNeeded();
+        };
+        DecodedSoftwareFrameHandler onSoftwareFrame = (nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix) =>
+        {
+            OnFrameSizeChanged(cropW, cropH);
+            _renderer!.PresentSoftwareNv12(nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix);
+            MarkFirstFrameIfNeeded();
+        };
+
         try
         {
             while (!ct.IsCancellationRequested)
@@ -362,21 +377,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
                     var merged = merger.Process(targetBuf.AsSpan(0, hdr.PayloadLength), hdr.IsConfig);
                     if (merged.IsEmpty) continue;
 
-                    _decoder!.DecodePacket(
-                        merged,
-                        hdr.PtsUs,
-                        (tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix) =>
-                        {
-                            OnFrameSizeChanged(cropW, cropH);
-                            _renderer!.PresentHardwareTexture(tex, slice, codedW, codedH, cropX, cropY, cropW, cropH, matrix);
-                            MarkFirstFrameIfNeeded();
-                        },
-                        (nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix) =>
-                        {
-                            OnFrameSizeChanged(cropW, cropH);
-                            _renderer!.PresentSoftwareNv12(nv12, stride, codedH, cropX, cropY, cropW, cropH, matrix);
-                            MarkFirstFrameIfNeeded();
-                        });
+                    _decoder!.DecodePacket(merged, hdr.PtsUs, onHardwareFrame, onSoftwareFrame);
                 }
                 finally
                 {

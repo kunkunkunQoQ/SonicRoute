@@ -15,6 +15,12 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--stream-performance")
+            {
+                if (args.Contains("--video-probe")) await StreamVideoProbeAsync(args[1]);
+                else await StreamPerformanceAsync(args[1], args.Contains("--pcm-only"));
+                return 0;
+            }
             if (args.Length > 0 && args[0] == "--pairing-fixes") { await PairingFixesAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }

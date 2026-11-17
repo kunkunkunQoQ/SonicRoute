@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Numerics;
 using System.Text;
 using System.Text.Json;
 
@@ -351,17 +352,39 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
         catch (Exception) when (_lifetime.IsCancellationRequested) { }
         catch (Exception ex) { OnFailure(ex); }
     }
-    private static bool ConvertPcm(byte[] floats, byte[] pcm, int samples)
+    internal static bool ConvertPcm(byte[] floats, byte[] pcm, int samples)
     {
         var source = MemoryMarshal.Cast<byte, float>(floats.AsSpan(0, samples * sizeof(float)));
         var target = MemoryMarshal.Cast<byte, short>(pcm.AsSpan(0, samples * sizeof(short)));
         bool nonSilent = false;
-        for (int i = 0; i < samples; i++)
+        int i = 0;
+        if (Vector.IsHardwareAccelerated)
         {
-            target[i] = float.IsFinite(source[i]) ? (short)Math.Clamp((int)(source[i] * 32768f), short.MinValue, short.MaxValue) : (short)0;
+            int width = Vector<float>.Count;
+            for (; i <= samples - width * 2; i += width * 2)
+            {
+                var low = ConvertPcmVector(new Vector<float>(source[i..]));
+                var high = ConvertPcmVector(new Vector<float>(source[(i + width)..]));
+                var packed = Vector.Narrow(low, high);
+                packed.CopyTo(target[i..]);
+                nonSilent |= !Vector.EqualsAll(packed, Vector<short>.Zero);
+            }
+        }
+        for (; i < samples; i++)
+        {
+            target[i] = float.IsFinite(source[i])
+                ? (short)(int)Math.Clamp(source[i] * 32768f, short.MinValue, short.MaxValue) : (short)0;
             nonSilent |= target[i] != 0;
         }
         return nonSilent;
+    }
+    private static Vector<int> ConvertPcmVector(Vector<float> samples)
+    {
+        var scaled = samples * new Vector<float>(32768f);
+        scaled = Vector.Min(Vector.Max(scaled, new Vector<float>(short.MinValue)), new Vector<float>(short.MaxValue));
+        // Match the scalar path: NaN and infinities are silence; finite overflow clips.
+        var finite = Vector.LessThan(Vector.Abs(samples), new Vector<float>(float.PositiveInfinity));
+        return Vector.ConvertToInt32(Vector.ConditionalSelect(finite, scaled, Vector<float>.Zero));
     }
     private void OnFailure(Exception error)
     {

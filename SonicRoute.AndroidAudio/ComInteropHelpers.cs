@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.AndroidAudio;
@@ -12,7 +13,15 @@ internal static class ComVtbl
     {
         nint vtbl = Marshal.ReadIntPtr(comPtr);
         nint fnPtr = Marshal.ReadIntPtr(vtbl, vtableSlot * nint.Size);
-        return Marshal.GetDelegateForFunctionPointer<TDelegate>(fnPtr);
+        // Cache function entry points, never COM instances. Read the live vtable each time:
+        // implementations may differ across devices, transforms and software fallbacks.
+        return DelegateCache<TDelegate>.Entries.GetOrAdd(fnPtr,
+            static address => Marshal.GetDelegateForFunctionPointer<TDelegate>(address));
+    }
+
+    private static class DelegateCache<TDelegate> where TDelegate : Delegate
+    {
+        internal static readonly ConcurrentDictionary<nint, TDelegate> Entries = new();
     }
 
     public static void SafeRelease(ref nint ptr)

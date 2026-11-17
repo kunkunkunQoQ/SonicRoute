@@ -92,6 +92,8 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
     private bool _hasSwFrame;
     private bool _counted;
     private bool _disposed;
+    private ShaderConstants _lastConstants;
+    private bool _constantsInitialized;
 
     public D3D11VideoSurfaceRenderer(nint hwnd, int initialWidth, int initialHeight, bool isMirrorMode = false)
     {
@@ -290,10 +292,13 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
 
             int hr = ComVtbl.Get<ResizeBuffersFn>(_swapChain.Handle, 13)(
                 _swapChain.Handle, 0, (uint)width, (uint)height, DxgiFormatB8G8R8A8Unorm, 0);
-            if (hr < 0) return;
-
-            _swapWidth = width;
-            _swapHeight = height;
+            if (hr >= 0)
+            {
+                _swapWidth = width;
+                _swapHeight = height;
+            }
+            // A failed resize retains the old buffers. Restore their RTV as well;
+            // otherwise the next decoded frame would try to clear a null render target.
             RebuildRenderTargetView();
             RenderLocked();
         }
@@ -496,6 +501,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
 
     private void RenderLocked()
     {
+        if (_disposed || _rtv.IsNull || _swapChain.IsNull) return;
         nint rtv = _rtv.Handle;
         ComVtbl.Get<OmSetRenderTargetsFn>(_context.Handle, 33)(_context.Handle, 1, in rtv, 0);
         ComVtbl.Get<ClearRenderTargetViewFn>(_context.Handle, 50)(_context.Handle, rtv, _blackColorPtr);
@@ -556,6 +562,9 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
 
     private void UpdateConstants(float u0, float v0, float uScale, float vScale, int matrixMode)
     {
+        if (_constantsInitialized && _lastConstants.U0 == u0 && _lastConstants.V0 == v0
+            && _lastConstants.UScale == uScale && _lastConstants.VScale == vScale
+            && _lastConstants.MatrixMode == matrixMode) return;
         if (ComVtbl.Get<MapFn>(_context.Handle, 14)(_context.Handle, _constantBuffer.Handle, 0, D3D11MapWriteDiscard, 0, out var mapped) < 0)
             return;
         try
@@ -568,7 +577,9 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
                 VScale = vScale,
                 MatrixMode = matrixMode
             };
-            Marshal.StructureToPtr(data, mapped.pData, false);
+            unsafe { *(ShaderConstants*)mapped.pData = data; }
+            _lastConstants = data;
+            _constantsInitialized = true;
         }
         finally
         {

@@ -440,10 +440,18 @@ public sealed class MediaFoundationH264Decoder : IDisposable
 
         ComVtbl.ThrowIfFailed(MFCreateSample(out nint sPtr), "MFCreateSample(Out)");
         var sample = new ComPtr(sPtr);
-        ComVtbl.ThrowIfFailed(MFCreateMemoryBuffer(needed, out nint bPtr), "MFCreateMemoryBuffer(Out)");
-        using (var buf = new ComPtr(bPtr))
-            ComVtbl.ThrowIfFailed(ComVtbl.Get<SampleAddBufferFn>(sample.Handle, 42)(sample.Handle, buf.Handle), "AddBuffer(Out)");
-        _reusableSoftwareSample = sample;
+        try
+        {
+            ComVtbl.ThrowIfFailed(MFCreateMemoryBuffer(needed, out nint bPtr), "MFCreateMemoryBuffer(Out)");
+            using (var buf = new ComPtr(bPtr))
+                ComVtbl.ThrowIfFailed(ComVtbl.Get<SampleAddBufferFn>(sample.Handle, 42)(sample.Handle, buf.Handle), "AddBuffer(Out)");
+            _reusableSoftwareSample = sample;
+        }
+        catch
+        {
+            sample.Dispose();
+            throw;
+        }
     }
 
     private void EmitSample(

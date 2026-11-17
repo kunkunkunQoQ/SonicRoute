@@ -238,9 +238,18 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             _player?.Stop(); next.Play();
             if (next is AndroidPhonePcmPlayer output) await output.WaitForRoutingAsync(_run?.Token ?? default).ConfigureAwait(false);
         }
-        catch { next.Dispose(); _player?.Play(); throw; }
-        _player?.Dispose(); _player = next;
+        catch
+        {
+            try { next.Dispose(); } catch (Exception ex) { Log("Replacement output cleanup: " + ex.Message); }
+            _player?.Play();
+            throw;
+        }
+        var previous = _player;
+        _player = next;
         AttachOutputFailure(next, _generation);
+        // The new renderer already owns playback. A driver failure while retiring
+        // the old output must not orphan it or report a failed output selection.
+        try { previous?.Dispose(); } catch (Exception ex) { Log("Previous output cleanup: " + ex.Message); }
     }
 
     private void WatchDefaultOutput()
