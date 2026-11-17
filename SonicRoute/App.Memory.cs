@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
-using System.Runtime;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -15,6 +15,23 @@ namespace SonicRoute
         private bool _startupWarmupComplete;
 #if SONICROUTE_PHONE
         internal const bool IdleWorkingSetTrimEnabled = false;
+        private int _retiredPhoneReclaimQueued;
+
+        internal void RequestRetiredPhoneReclaim()
+        {
+            if (_exiting || Dispatcher.HasShutdownStarted || Interlocked.Exchange(ref _retiredPhoneReclaimQueued, 1) != 0) return;
+            try
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    Interlocked.Exchange(ref _retiredPhoneReclaimQueued, 0);
+                    if (_exiting || HasActiveUiWindows()) return;
+                    _uiWorkingSetDirty = true;
+                    ScheduleUiReclaim();
+                }));
+            }
+            catch (InvalidOperationException) { Interlocked.Exchange(ref _retiredPhoneReclaimQueued, 0); }
+        }
 #else
         internal const bool IdleWorkingSetTrimEnabled = true;
         private bool _uiWorkingSetTrimRequested;
@@ -73,16 +90,8 @@ namespace SonicRoute
             _trayWheel?.ReleaseIdleOsd();
 #if SONICROUTE_PHONE
             AndroidAudioHost.TrimForIdle();
-            if (!AndroidAudioHost.HasActiveWork() && !HasActivePhoneClipboard)
-            {
-                // 无活动投屏、音视频或剪贴板时压实一次 LOH 并归还空页，严禁在 Full 下裁剪整进程工作集。
-                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
-            }
-            else
-            {
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Optimized, blocking: false);
-            }
+            // Retire owned UI/cache resources only. Let the runtime choose collection time:
+            // even a nonblocking GC request can pause active audio or a newly opened UI.
 #else
             // Match v1.29: one native working-set request, without a forced full GC.
             TryTrimIdleWorkingSet();

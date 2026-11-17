@@ -335,11 +335,14 @@ namespace SonicRoute
         internal static void TrimForIdle()
         {
             AudioService.SetAppIconMetadataEnabled(false);
-            Volatile.Write(ref _cacheLimit, IdleCacheSize);
+            // Close handlers and the delayed idle turn can share the same request. Only
+            // retire the decoded-image weak table on the transition into idle mode.
+            bool enteredIdle = Interlocked.Exchange(ref _cacheLimit, IdleCacheSize) != IdleCacheSize;
             TrimIfNeeded();
             // Keep the immutable catalogue PNGs and phone connections; only decoded UI
             // images are dropped when the last application UI closes. No disk reload.
-            Interlocked.Exchange(ref ExternalPngIcons, new ConditionalWeakTable<byte[], Lazy<ImageSource?>>());
+            if (enteredIdle)
+                Interlocked.Exchange(ref ExternalPngIcons, new ConditionalWeakTable<byte[], Lazy<ImageSource?>>());
         }
 
         [DllImport("kernel32.dll", SetLastError = true)]

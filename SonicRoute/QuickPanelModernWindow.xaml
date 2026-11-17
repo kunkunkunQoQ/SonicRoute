@@ -260,18 +260,35 @@
             </StackPanel>
 
             <!-- 应用列表：全部有音频的应用，每行独立音量，行右侧展开设置输出/输入设备（区域内滚动） -->
-            <ScrollViewer x:Name="AppListScroll" Grid.Row="4" MinHeight="36" VerticalScrollBarVisibility="Auto"
-                          Background="Transparent"
-                          HorizontalScrollBarVisibility="Disabled" Margin="0,0,-14,0" Style="{StaticResource PanelEdgeScrollViewer}">
-                <!-- Keep the application viewport fixed; the shared 14-DIP scrollbar uses the right margin. -->
-                <ItemsControl x:Name="AppListPanel">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                </ItemsControl>
-            </ScrollViewer>
+            <ListBox x:Name="AppListPanel" Grid.Row="4" MinHeight="36" Margin="0,0,-14,0"
+                     BorderThickness="0" Padding="0" Background="Transparent" Focusable="False"
+                     HorizontalContentAlignment="Stretch" ScrollViewer.CanContentScroll="True"
+                     VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                     VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.CacheLength="1">
+                <ListBox.Resources>
+                    <DataTemplate x:Key="DeferredAppRowTemplate"><local:DeferredPanelRowPresenter/></DataTemplate>
+                </ListBox.Resources>
+                <ListBox.Template>
+                    <ControlTemplate TargetType="ListBox">
+                        <ScrollViewer x:Name="AppListScroll" Background="Transparent" Focusable="False"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      CanContentScroll="True" Style="{StaticResource PanelEdgeScrollViewer}">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ListBox.Template>
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Focusable" Value="False"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Template"><Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem"><ContentPresenter HorizontalAlignment="Stretch"/></ControlTemplate>
+                        </Setter.Value></Setter>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+                <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+            </ListBox>
             <Border Grid.Row="5" Height="1" Background="{DynamicResource Theme.Border}" Margin="0,8,0,10"/>
 
             <!-- 底部操作栏：三按钮一行，永远固定在面板最底部（应用展开/收起不影响） -->

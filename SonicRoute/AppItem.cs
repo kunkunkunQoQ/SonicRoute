@@ -193,5 +193,20 @@ namespace SonicRoute
                 }
             }, cancellation);
         }
+
+        internal static void LoadVisibleIconsAsync(
+            List<(AppItem Item, System.Threading.CancellationToken Token)> items,
+            System.Threading.CancellationToken cancellation)
+        {
+            if (items.Count == 0 || cancellation.IsCancellationRequested) return;
+            _ = System.Threading.Tasks.Task.Run(() =>
+            {
+                foreach (var item in items)
+                {
+                    if (cancellation.IsCancellationRequested) break;
+                    if (!item.Token.IsCancellationRequested) item.Item.LoadIcon(item.Token);
+                }
+            }, cancellation);
+        }
     }
 }

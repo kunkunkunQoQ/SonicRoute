@@ -30,8 +30,15 @@ namespace SonicRoute
     /// </summary>
     public partial class QuickPanelModernWindow : Window
     {
-        private sealed class AppRow
+        private sealed class AppRow : IDeferredPanelRow
         {
+            public QuickPanelModernWindow Owner = null!;
+            public bool Virtualized;
+            public int Volume = -1;
+            public CancellationTokenSource? VisualLifetime;
+            public object ListItem => Virtualized ? this : RootElement!;
+            FrameworkElement IDeferredPanelRow.Realize() => Owner.CreateAppRowVisual(this);
+            void IDeferredPanelRow.ReleaseVisual() => Owner.ReleaseAppRowVisual(this);
             public AudioAppInfo App = null!;
             public AppItem IconItem = null!;
             public Border HeaderBorder = null!;
@@ -63,6 +70,7 @@ namespace SonicRoute
             public bool Expanded;
         }
 
+        private readonly ScrollViewer AppListScroll;
         private readonly Dictionary<int, AppRow> _rows = new();
         private Task? _loadTask;
         private readonly PanelEntranceMotion _entranceMotion;
@@ -71,6 +79,13 @@ namespace SonicRoute
         private int _globalMuteVersion;
         private (int Load, int OutputVersion, bool Muted)? _globalMuteLoadState;
         private Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted, bool MuteKnown)> Apps, bool? AllMuted)> _readPanelState = SessionVolumeService.ReadPanelStateChecked;
+        private Func<int, bool, (string Output, string Input)> _readRowEndpoints = static (pid, mic) =>
+        {
+            var output = ApplicationAudio.GetPersistedEndpoint(pid, EDataFlow.eRender);
+            var input = mic ? ApplicationAudio.GetPersistedEndpoint(pid, EDataFlow.eCapture) : null;
+            return (output == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(output),
+                input == null ? AudioService.SystemDefaultInputDeviceId : AudioPolicyConfig.UnpackDeviceId(input));
+        };
         private int _micMuteVersion;
         private int _systemVolumeRequest;
         private AppRow? _recentDeviceRow;
@@ -107,6 +122,10 @@ namespace SonicRoute
         public QuickPanelModernWindow()
         {
             InitializeComponent();
+            AppListPanel.ApplyTemplate();
+            AppListScroll = (ScrollViewer)AppListPanel.Template.FindName("AppListScroll", AppListPanel);
+            RegisterName("AppListScroll", AppListScroll);
+            AppListPanel.ItemTemplateSelector = new DeferredPanelRowTemplateSelector((DataTemplate)AppListPanel.FindResource("DeferredAppRowTemplate"));
             VolumePresets.Attach(VolumeSlider);
             VolumeSlider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(SystemVolumeDragCompleted), true);
             InitializeOutputVolumes();
@@ -230,19 +249,8 @@ namespace SonicRoute
                 try
                 {
                     if (_isClosed || !row.Expanded) return;
-                    if (row.RootElement == null) return;
-                    double y = 0;
-                    foreach (var item in AppListPanel.Items)
-                    {
-                        if (item is not FrameworkElement fe) continue;
-                        if (fe == row.RootElement)
-                        {
-                            AppListScroll.ScrollToVerticalOffset(Math.Max(0, y));
-                            return;
-                        }
-                        y += fe.ActualHeight;
-                    }
-                    AppListScroll.ScrollToEnd();
+                    AppListPanel.ScrollIntoView(row.ListItem);
+                    row.RootElement?.BringIntoView();
                 }
                 catch { }
             });
@@ -563,7 +571,11 @@ namespace SonicRoute
             if (_isClosed || !_rows.TryGetValue(pid, out var row)) return;
             bool updating = _updatingRowVolumes;
             _updatingRowVolumes = true;
-            try { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+            try
+            {
+                row.Volume = actual;
+                if (row.Slider != null) { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+            }
             finally { _updatingRowVolumes = updating; }
             if (muted.HasValue) ApplyRowMutedVisual(row, muted.Value);
         }
@@ -661,6 +673,7 @@ namespace SonicRoute
                 apps = apps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)
                     && !AudioService.IsInternalApplication(a.ProcessId, a.ProcessName)
                     && hiddenPanel?.Contains(a.ProcessName) != true).ToList();
+                bool virtualize = apps.Count > 20;
                 bool legacyLayout = cfg.QuickPanelUseLegacyAppRows;
                 bool showOutputName = legacyLayout ? cfg.QuickPanelCompactShowOutputName : cfg.QuickPanelShowOutputName;
                 string signature = GetAppRowsSignature(apps, cfg, showOutputName);
@@ -707,7 +720,7 @@ namespace SonicRoute
                     UpdateRowHighlights();
                     return;
                 }
-                string layoutKey = L10n.CurrentLanguage + "|" + legacyLayout + "|" + showOutputName;
+                string layoutKey = L10n.CurrentLanguage + "|" + legacyLayout + "|" + showOutputName + "|" + virtualize;
                 double scrollOffset = AppListScroll.VerticalOffset;
                 if (_appRowsLayoutKey != layoutKey)
                 {
@@ -723,10 +736,8 @@ namespace SonicRoute
                         || !SameRowApp(_rows[pid].App, app)).ToList())
                     {
                         var removed = _rows[stale];
-                        removed.ExpandWrap.FinishImmediately();
-                        removed.ExpandArrow.BeginAnimation(RotateTransform.AngleProperty, null);
-                        ClearDeviceControls(removed); ++removed.DeviceBuildVersion;
-                        AppListPanel.Items.Remove(removed.RootElement);
+                        AppListPanel.Items.Remove(removed.ListItem);
+                        ReleaseAppRowVisual(removed);
                         _rows.Remove(stale); _pendingVolume.Remove(stale);
                         _latestAppWrites[stale] = ++_appWriteSequence;
                     }
@@ -744,173 +755,28 @@ namespace SonicRoute
                         UpdateRowName(retained, value.output);
                         ApplyRowAudioState(retained, value.vol, value.muted, value.known);
                         retained.DeviceSignature = null;
-                        if (retained.Expanded) _ = BuildRowDevicesAsync(retained);
+                        if (retained.Expanded && retained.RootElement != null) _ = BuildRowDevicesAsync(retained);
                         continue;
                     }
                     var item = AppItem.From(app);
                     var row = new AppRow { App = app, IconItem = item, ShowOutputName = showOutputName, LegacyLayout = legacyLayout };
 
                     // 复用原图标静音、滑块与展开交互：中间上方显示名称，下方显示音量条。
-                    var header = new Border
-                    {
-                        Height = row.CollapsedHeight - 2,
-                        CornerRadius = new CornerRadius(8),
-                        Padding = new Thickness(4, legacyLayout ? 0 : 2, 4, legacyLayout ? 0 : 2)
-                    };
-                    var dock = new DockPanel();
-
-                    // 图标按钮（点击静音/取消静音），右上角静音点
-                    var iconGrid = new Grid { Width = 30, Height = 30, Margin = new Thickness(0, 0, 2, 0) };
-                    var appIcon = new System.Windows.Controls.ContentControl
-                    {
-                        Width = 18,
-                        Height = 18,
-                        Focusable = false,
-                        HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
-                        VerticalContentAlignment = System.Windows.VerticalAlignment.Stretch,
-                        Content = item,
-                        ContentTemplate = (DataTemplate)FindResource("AppIconTemplate")
-                    };
-                    // 图标与首字兜底共用模板；AppItem.Icon 的异步通知仍会自动刷新。
-                    var iconBtn = new Button
-                    {
-                        Content = appIcon,
-                        Style = (Style)FindResource("RowIconButton"),
-                        Tag = row,
-                        ToolTip = item.Label,
-                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                        VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                        Padding = new Thickness(2)
-                    };
-                    iconBtn.Click += async (_, _) => await RowIconToggleMuteAsync(row);
-                    row.IconButton = iconBtn;
-                    AppIconDragController.AttachDesktop(iconGrid, item);
-                    System.Windows.Automation.AutomationProperties.SetName(iconBtn, item.Label + " " + L10n.T("Qp.Mute"));
-                    iconGrid.Children.Add(iconBtn);
-                    row.MuteDot = new Border
-                    {
-                        Width = 8,
-                        Height = 8,
-                        CornerRadius = new CornerRadius(4),
-                        Background = ThemeService.GetInvertedAccentBrush(),
-                        HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-                        VerticalAlignment = System.Windows.VerticalAlignment.Top,
-                        Margin = new Thickness(0, 2, 1, 0),
-                        Visibility = Visibility.Collapsed
-                    };
-                    iconGrid.Children.Add(row.MuteDot);
-                    DockPanel.SetDock(iconGrid, Dock.Left);
-
-                    var expand = new ToggleButton
-                    {
-                        Width = legacyLayout && showOutputName ? 80 : 32,
-                        Height = legacyLayout ? (showOutputName ? 24 : 16) : 32,
-                        VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                        Style = (Style)FindResource("RowExpandButton"),
-                        Tag = row,
-                        ToolTip = L10n.T("Qp.ExpandDevices")
-                    };
-                    var glyph = new TextBlock { Text = "▾", RenderTransform = row.ExpandArrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
-                    System.Windows.Automation.AutomationProperties.SetName(expand, item.Label + " " + L10n.T("Qp.ExpandDevices"));
-                    glyph.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
-                    if (legacyLayout && showOutputName)
-                    {
-                        var deviceLabel = new Grid { Width = 72, ClipToBounds = true };
-                        deviceLabel.ColumnDefinitions.Add(new ColumnDefinition());
-                        deviceLabel.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                        row.Name = NewRowName();
-                        row.Name.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding("Foreground") { Source = expand });
-                        glyph.Margin = new Thickness(4, 0, 0, 0);
-                        glyph.VerticalAlignment = VerticalAlignment.Center;
-                        Grid.SetColumn(glyph, 1);
-                        deviceLabel.Children.Add(row.Name);
-                        deviceLabel.Children.Add(glyph);
-                        expand.Content = deviceLabel;
-                    }
-                    else expand.Content = glyph;
-                    expand.Checked += RowExpand_Changed;
-                    expand.Unchecked += RowExpand_Changed;
-                    row.ExpandButton = expand;
-                    DockPanel.SetDock(expand, Dock.Right);
-
-                    row.Slider = legacyLayout ? new Slider() : new AppRowVolumeSlider();
-                    row.Slider.Minimum = 0;
-                    row.Slider.Maximum = 100;
-                    row.Slider.Style = (Style)FindResource("RowSliderStyle");
-                    row.Slider.VerticalAlignment = VerticalAlignment.Center;
-                    row.Slider.Margin = new Thickness(0, 0, 6, 0);
-                    row.Slider.Tag = row;
-                    System.Windows.Automation.AutomationProperties.SetName(row.Slider, item.Label + " " + L10n.T("Ov.VolumeTitle"));
-                    row.Slider.Foreground = (Brush)FindResource("Theme.Accent");
-                    row.Slider.ApplyTemplate();
-                    row.TrackBg = row.Slider.Template.FindName("PART_TrackBg", row.Slider) as Border;
-                    row.TrackFill = row.Slider.Template.FindName("PART_TrackFill", row.Slider) as Border;
-                    row.PeakVisual = row.Slider.Template.FindName("PART_PeakVisual", row.Slider) as Border;
-                    if (row.PeakVisual != null)
-                    {
-                        // 模板内声明的 Freezable 可能被 WPF 共享并冻结；每行创建独立可写实例。
-                        row.PeakTransform = new ScaleTransform(0, 1);
-                        row.PeakVisual.RenderTransform = row.PeakTransform;
-                    }
-                    // 轨道宽度变化和 ValueChanged 才需要重排，避免每次电平渲染触发所有行的布局计算。
-                    if (row.TrackBg != null)
-                        row.TrackBg.SizeChanged += (_, _) => UpdateRowSliderLayout(row);
-                    // 标准 Track 负责点击定位和拖动；透明的 32px 区域也可命中。
-                    row.Slider.ValueChanged += RowSlider_ValueChanged;
-                    VolumePresets.Attach(row.Slider);
-                    row.Slider.MouseWheel += RowSlider_MouseWheel;
-
-                    FrameworkElement volume = row.Slider;
-                    if (!legacyLayout)
-                    {
-                        var labeledVolume = new Grid();
-                        labeledVolume.RowDefinitions.Add(new RowDefinition { Height = new GridLength(16) });
-                        labeledVolume.RowDefinitions.Add(new RowDefinition());
-                        row.Name = NewRowName();
-                        row.Name.Margin = new Thickness(14, 0, 20, 0);
-                        row.Name.IsHitTestVisible = false;
-                        row.Slider.Height = 48;
-                        row.Slider.Padding = new Thickness(0, 16, 0, 0);
-                        ToolTipService.SetShowOnDisabled(row.Slider, true);
-                        Grid.SetRowSpan(row.Slider, 2);
-                        labeledVolume.Children.Add(row.Slider);
-                        labeledVolume.Children.Add(row.Name);
-                        volume = labeledVolume;
-                    }
-                    dock.Children.Add(iconGrid);
-                    dock.Children.Add(expand);
-                    dock.Children.Add(volume);
-                    header.Child = dock;
-
-                    // 子内容始终按自然高度布局，外壳从顶部裁剪，文字和按钮不被压缩。
-                    row.ExpandPanel = new StackPanel
-                    {
-                        Margin = new Thickness(26, 0, 0, 6),
-                        Visibility = Visibility.Collapsed
-                    };
-                    row.ExpandWrap = new AnimatedExpandHost
-                    {
-                        Child = row.ExpandPanel
-                    };
-
-                    var root = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
-                    root.Children.Add(header);
-                    root.Children.Add(row.ExpandWrap);
-                    AppListPanel.Items.Add(root);
-
-                    row.RootElement = root;
-                    row.HeaderBorder = header;
+                    row.Owner = this;
+                    row.Virtualized = virtualize;
                     _rows[pid] = row;
 
                     // 初始音量/静音（无会话 -1 → 显示 —）
                     var v = vols[pid];
                     UpdateRowName(row, v.output);
                     ApplyRowAudioState(row, v.vol, v.muted, v.known);
+                    if (!virtualize) CreateAppRowVisual(row);
+                    AppListPanel.Items.Add(row.ListItem);
                 }
 
                 for (int index = 0; index < apps.Count; index++)
                 {
-                    var root = _rows[(int)apps[index].ProcessId].RootElement!;
+                    var root = _rows[(int)apps[index].ProcessId].ListItem;
                     int targetIndex = index + AndroidRowOffset;
                     if (targetIndex < AppListPanel.Items.Count && ReferenceEquals(AppListPanel.Items[targetIndex], root)) continue;
                     AppListPanel.Items.Remove(root);
@@ -946,14 +812,15 @@ namespace SonicRoute
             {
                 _rowIconsQueued = false;
                 if (_isClosed || !IsVisible) return;
-                var visible = new List<AppItem>();
+                var visible = new List<(AppItem Item, CancellationToken Token)>();
                 foreach (var row in _rows.Values)
                 {
                     if (row.IconItem.Icon != null || row.RootElement?.ActualHeight <= 0 || row.RootElement == null) continue;
                     var bounds = row.RootElement.TransformToAncestor(AppListScroll).TransformBounds(new Rect(row.RootElement.RenderSize));
-                    if (bounds.Bottom > 0 && bounds.Top < AppListScroll.ActualHeight) visible.Add(row.IconItem);
+                    if (bounds.Bottom > 0 && bounds.Top < AppListScroll.ActualHeight)
+                        visible.Add((row.IconItem, row.VisualLifetime?.Token ?? _uiLifetime.Token));
                 }
-                AppItem.LoadIconsAsync(visible, _uiLifetime.Token);
+                AppItem.LoadVisibleIconsAsync(visible, _uiLifetime.Token);
             }, DispatcherPriority.Render);
         }
 
@@ -1014,7 +881,7 @@ namespace SonicRoute
         /// <summary>更新行滑块填充宽度；圆点定位与输入由标准 Track 处理。</summary>
         private void UpdateRowSliderLayout(AppRow row)
         {
-            if (!VolumeTrackLayout.Update(row.Slider, row.TrackBg, row.TrackFill)) return;
+            if (row.Slider == null || !VolumeTrackLayout.Update(row.Slider, row.TrackBg, row.TrackFill)) return;
             UpdatePeakVisual(row);
         }
 
@@ -1022,6 +889,7 @@ namespace SonicRoute
         {
             if (sender is not Slider sl || sl.Tag is not AppRow row) return;
             int pct = (int)Math.Round(e.NewValue);
+            row.Volume = pct;
             UpdateRowSliderLayout(row);
             if (_isClosed || _updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
             _pendingVolume[(int)row.App.ProcessId] = pct;
@@ -1049,6 +917,13 @@ namespace SonicRoute
         /// <summary>行静音视觉：静音后音量条/百分比变强调色 RGB 反色，图标右上显示反色圆点。</summary>
         private void ApplyRowAudioState(AppRow row, int volume, bool muted, bool known)
         {
+            row.Volume = volume;
+            if (row.Slider == null)
+            {
+                if (known) row.IsMuted = muted;
+                row.MuteKnown = known;
+                return;
+            }
             row.Slider.IsEnabled = volume >= 0;
             if (volume >= 0) row.Slider.Value = volume;
             if (known) ApplyRowMutedVisual(row, muted);
@@ -1063,6 +938,12 @@ namespace SonicRoute
         private void ApplyRowMutedVisual(AppRow row, bool muted)
         {
             row.MuteKnown = true;
+            row.IsMuted = muted;
+            if (row.Slider == null)
+            {
+                if (!_updatingRowVolumes) UpdateMeterTargets();
+                return;
+            }
             if (row.IconButton != null) row.IconButton.IsEnabled = row.Slider.IsEnabled && !row.MuteBusy;
             row.Slider.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
             row.MuteDot.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
@@ -1144,7 +1025,8 @@ namespace SonicRoute
             _visibleMeterRows.Clear();
             foreach (var row in _rows.Values)
             {
-                if (row.Slider.ActualHeight <= 0) continue;
+                if (row.Slider == null || !AppListScroll.IsAncestorOf(row.Slider)
+                    || (IsVisible && !row.Slider.IsVisible) || row.Slider.ActualHeight <= 0) continue;
                 var bounds = row.Slider.TransformToAncestor(AppListScroll).TransformBounds(new Rect(row.Slider.RenderSize));
                 if (bounds.Bottom <= 0 || bounds.Top >= AppListScroll.ActualHeight) continue;
                 _visibleMeterRows.Add(row);
@@ -1156,7 +1038,7 @@ namespace SonicRoute
 
         private void ApplyVisiblePeak(AppRow row)
         {
-            if (row.IsMuted || !row.Slider.IsEnabled) return;
+            if (row.Slider == null || row.IsMuted || !row.Slider.IsEnabled) return;
             float next = _displayPeaks != null && _displayPeaks.TryGetValue((int)row.App.ProcessId, out float level) ? level : 0f;
             if (row.PeakLevel == next) return;
             row.PeakLevel = next;
@@ -1168,7 +1050,7 @@ namespace SonicRoute
             UpdateMeterTargetsCore(); }
         private IEnumerable<int> GetMeterTargets(bool visibleOnly) =>
             (visibleOnly ? (IEnumerable<AppRow>)_visibleMeterRows : _rows.Values)
-                .Where(r => r.Slider.IsEnabled && !r.IsMuted).Select(r => (int)r.App.ProcessId)
+                .Where(r => r.Volume >= 0 && !r.IsMuted).Select(r => (int)r.App.ProcessId)
                 .Concat(GetAndroidMeterTargets(visibleOnly));
 
         private void UpdateMeterTargetsCore()
@@ -1222,20 +1104,27 @@ namespace SonicRoute
             if (peakTransform.ScaleX != scale) peakTransform.ScaleX = scale;
         }
 
-        private void UpdatePeakVisual(AppRow row) => UpdatePeakVisual(row.Slider, row.TrackBg, row.PeakVisual, row.PeakTransform, row.PeakLevel, row.IsMuted);
+        private void UpdatePeakVisual(AppRow row)
+        {
+            if (row.Slider != null) UpdatePeakVisual(row.Slider, row.TrackBg, row.PeakVisual, row.PeakTransform, row.PeakLevel, row.IsMuted);
+        }
 
         /// <summary>点击行图标：静音/取消静音该应用。</summary>
         internal void RefreshAppIcons(string processName)
         {
             if (_isClosed) return;
             foreach (var row in _rows.Values)
-                if (string.Equals(row.IconItem.ProcessName, processName, StringComparison.OrdinalIgnoreCase)) row.IconItem.ReloadIcon();
+                if (string.Equals(row.IconItem.ProcessName, processName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (row.RootElement != null) row.IconItem.ReloadIcon();
+                    else row.IconItem = AppItem.From(row.App);
+                }
             RefreshAndroidAppIcons(processName);
         }
 
         private async Task RowIconToggleMuteAsync(AppRow row)
         {
-            if (_isClosed || row.MuteBusy || !row.Slider.IsEnabled || !row.MuteKnown) return;
+            if (_isClosed || row.MuteBusy || row.Slider == null || !row.Slider.IsEnabled || !row.MuteKnown) return;
             var pid = (int)row.App.ProcessId;
             row.MuteBusy = true;
             if (row.IconButton != null) row.IconButton.IsEnabled = false;
@@ -1294,7 +1183,7 @@ namespace SonicRoute
 
         private void StopRowScroll()
         {
-            _scrollingRow?.ExpandWrap.StopProgress();
+            _scrollingRow?.ExpandWrap?.StopProgress();
             _scrollingRow = null;
         }
 
@@ -1302,12 +1191,7 @@ namespace SonicRoute
         private Action<double>? PrepareRowScroll(AppRow row)
         {
             if (row.RootElement == null || AppListScroll.ViewportHeight <= 0) return null;
-            double top = 0;
-            foreach (var item in AppListPanel.Items)
-            {
-                if (item == row.RootElement) break;
-                if (item is FrameworkElement element) top += element.ActualHeight;
-            }
+            double top = row.RootElement.TransformToAncestor(AppListScroll).Transform(new System.Windows.Point(0, 0)).Y + AppListScroll.VerticalOffset;
             double startOffset = AppListScroll.VerticalOffset;
             double oldHeight = row.ExpandWrap.ActualHeight;
             double viewport = AppListScroll.ViewportHeight;
@@ -1346,7 +1230,7 @@ namespace SonicRoute
         private static void ClearDeviceControls(AppRow row)
         {
             ++row.DeviceBuildVersion;
-            row.ExpandPanel.Children.Clear();
+            row.ExpandPanel?.Children.Clear();
             row.DeviceButtons.Clear();
             row.DeviceSignature = null;
         }
@@ -1357,9 +1241,7 @@ namespace SonicRoute
             _recentDeviceRow = null;
             foreach (var row in _rows.Values)
             {
-                row.ExpandWrap.FinishImmediately();
-                row.ExpandArrow.BeginAnimation(RotateTransform.AngleProperty, null);
-                ClearDeviceControls(row);
+                ReleaseAppRowVisual(row);
             }
         }
 
@@ -1382,13 +1264,8 @@ namespace SonicRoute
             foreach (var cached in row.DeviceButtons) cached.Button.IsEnabled = false;
             try
             {
-                var selected = await _uiLifetime.ReadAsync((Pid: pid, MicOn: micOn), static target =>
-                {
-                    var output = ApplicationAudio.GetPersistedEndpoint(target.Pid, EDataFlow.eRender);
-                    var input = target.MicOn ? ApplicationAudio.GetPersistedEndpoint(target.Pid, EDataFlow.eCapture) : null;
-                    return (Output: output == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(output),
-                        Input: input == null ? AudioService.SystemDefaultInputDeviceId : AudioPolicyConfig.UnpackDeviceId(input));
-                });
+                var selected = await _uiLifetime.ReadAsync((Pid: pid, MicOn: micOn, Read: _readRowEndpoints),
+                    static target => target.Read(target.Pid, target.MicOn));
                 if (_isClosed || !row.Expanded || request != row.DeviceBuildVersion
                     || !_rows.TryGetValue(pid, out var current) || current != row) return false;
                 UpdateRowName(row, selected.Output);
@@ -1478,6 +1355,7 @@ namespace SonicRoute
             {
                 int pid = kv.Key;
                 var row = kv.Value;
+                if (row.HeaderBorder == null) continue;
                 bool isCur = cur != null && pid == (int)cur.ProcessId;
                 if (isCur) row.HeaderBorder.SetResourceReference(BackgroundProperty, "Theme.Overlay");
                 else row.HeaderBorder.ClearValue(BackgroundProperty);

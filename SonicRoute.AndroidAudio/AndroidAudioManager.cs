@@ -51,7 +51,9 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     private readonly Func<AndroidDevice, string, bool>? _smartVolume;
     private bool _disposed;
     public event Action? Changed;
+    public event Action? ResourcesRetired;
     public IReadOnlyList<AndroidAudioSource> Sources => Volatile.Read(ref _snapshot).Sources;
+    public bool HasActiveWork { get { lock (_gate) return _sources.Count > 0 || _retiring.Count > 0; } }
     public AndroidAudioSource? FindSource(string id) =>
         Volatile.Read(ref _snapshot).ById.TryGetValue(id, out var source) ? source : null;
     private void PublishSources() => Volatile.Write(ref _snapshot, _sources.Count == 0
@@ -298,7 +300,12 @@ public sealed class AndroidAudioManager : IAsyncDisposable
     {
         try { await ReleaseAsync(source).ConfigureAwait(false); source.Released.TrySetResult(); }
         catch (Exception ex) { source.Released.TrySetException(ex); }
-        finally { lock (_gate) _retiring.Remove(source); }
+        finally
+        {
+            lock (_gate) _retiring.Remove(source);
+            try { ResourcesRetired?.Invoke(); }
+            catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Audio retirement notification: " + ex.Message); }
+        }
     }
 
     private async Task ReleaseAsync(AndroidAudioSource source)

@@ -21,11 +21,13 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
     private bool _disposed;
     public bool EnableLiveStreaming { get; set; } = true;
     public event Action? Changed;
+    public event Action? ResourcesRetired;
     public event Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? OutputsObserved;
     public event Action<int, string, int, string>? RoutedDeviceObserved;
     public event Action<AndroidDevice>? DeviceDisconnected;
 
     public int ActiveCount { get { lock (_gate) return _routes.Count; } }
+    public bool HasActiveWork { get { lock (_gate) return _routes.Count > 0 || _retiring.Count > 0; } }
 
     public (long BytesStreamed, long NonSilentBytesStreamed, string? RoutedKey, int RoutedType, string? RoutedName)? GetDiagnostics(int processId)
     {
@@ -193,8 +195,13 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             task = route.StopAsync(restorePreviousEndpoint);
             _retiring.Add(task);
         }
-        _ = task.ContinueWith(done => { lock (_gate) _retiring.Remove(done); },
-            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        _ = task.ContinueWith(done =>
+        {
+            lock (_gate) _retiring.Remove(done);
+            try { ResourcesRetired?.Invoke(); }
+            catch (Exception ex) { Trace.WriteLine("PC audio retirement notification: " + ex.Message); }
+        },
+            CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         return task;
     }
 

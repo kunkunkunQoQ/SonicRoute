@@ -120,7 +120,7 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Contains("--output-popup-live") || args.Contains("--tray-submenu-live"))
+        if (args.Contains("--output-popup-live") || args.Contains("--tray-submenu-live") || args.Contains("--osd-light-live"))
         {
             AttachOutputTestDesktop();
             Directory.CreateDirectory(args.Last());
@@ -152,6 +152,12 @@ internal static partial class Program
             }
             app.Resources = ProductResources();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            if (args.Contains("--osd-light-live"))
+            {
+                CheckOsdLightLive(args.Last(), args.Contains("--baseline"));
+                Console.WriteLine($"RESULT passed={_checks} OSD_LIGHT=true PRIVATE_DESKTOP=true AUDIO_WRITES=FAKES_ONLY");
+                return 0;
+            }
             if (args.Contains("--memory-retention"))
             {
                 CheckImageMemoryRetention(args.Last(), args.Contains("--baseline"));

@@ -143,3 +143,6 @@ Reported operation counts describe controlled fixtures, not whole-app CPU gains.
 `--ui-memory` exercises the actual application idle entry with product startup disabled. Build/run Full and Lite with their respective `SonicRouteEdition`; use `PanelTestFramework=net48` and the Legacy reference for the Framework variant. Give parallel or cross-framework builds different `ArtifactsPath` directories: their restore assets otherwise share the same project extension directory. The current round builds them sequentially.
 
 The mode verifies startup/UI/menu/exit guards, cancellation and reuse of the single 1500ms timer, compilation of the edition-specific native call, and the 30-second cooldown. Lite/Legacy reuse v1.29's SetProcessWorkingSetSize(-1, -1) only against the isolated check process, never the running product. Their idle callback must not force a full managed collection. Working set and private bytes are logged separately; this is not a full-product or long-term memory benchmark. Phone artwork and pending-dispatch cleanup is covered by AndroidUiChecks `--phone-demand`.
+
+
+2026-11-17定向入口：`Run-OutputPopupChecks.ps1 -OsdLight -AssemblyPath <检查程序集> -OutputDirectory <输出目录>`，在私有桌面检查OSD与大列表容器回收，不启动产品服务；`-Framework net48`使用Legacy检查EXE。`--ui-memory`仅对自身隔离检查进程验证工作集策略，`--memory-retention`验证冻结图片的输入流释放。构建/三版准确命令和结果见父容器68号记录；无需为接手重复运行。

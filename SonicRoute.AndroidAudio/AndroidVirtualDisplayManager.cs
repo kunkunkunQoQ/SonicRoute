@@ -35,6 +35,7 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
     public int Count { get { lock (_gate) return _entries.Count; } }
     public event Action<string>? Failed;
     public event Action<AndroidApp?, Exception>? FailedError;
+    public event Action? ResourcesRetired;
     public AndroidVirtualDisplayManager(Func<IVirtualDisplayClient> factory) => _factory = factory;
 
     public Task<IVirtualDisplayClient> OpenAsync(AndroidDevice device, AndroidApp app, int x, int y)
@@ -135,6 +136,8 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
             lock (_gate) _entries.Remove(id);
             entry.Lifetime.Dispose();
             entry.Closed.TrySetResult();
+            try { ResourcesRetired?.Invoke(); }
+            catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Display retirement notification: " + ex.Message); }
         }
     }
 

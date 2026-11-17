@@ -361,7 +361,6 @@ public partial class App
             if (!_exiting && !HasActiveUiWindows())
             {
                 AppIconService.TrimForIdle();
-                AndroidAudioHost.TrimForIdle();
                 ScheduleUiReclaim();
             }
         };

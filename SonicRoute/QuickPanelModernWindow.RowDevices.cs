@@ -33,8 +33,9 @@ public partial class QuickPanelModernWindow
         bool changed = false;
         foreach (var other in _rows.Values)
         {
-            if (other == except || (!other.Expanded && !other.ExpandWrap.IsAnimating)) continue;
+            if (other == except || (!other.Expanded && other.ExpandWrap?.IsAnimating != true)) continue;
             changed = true; other.Expanded = false; ++other.DeviceBuildVersion;
+            if (other.ExpandWrap == null) continue;
             other.ExpandWrap.SetExpanded(false, false);
             UiMotion.RotateArrow(other.ExpandArrow, false, false);
             if (other.ExpandButton.IsChecked == true) other.ExpandButton.IsChecked = false;

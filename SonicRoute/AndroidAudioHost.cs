@@ -39,6 +39,7 @@ internal static class AndroidAudioHost
     {
         var sources = new AndroidAudioManager(Adb, LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
         sources.Changed += ApplicationAudio.NotifyChanged;
+        sources.ResourcesRetired += OnResourcesRetired;
         return sources;
     });
     private static readonly CancellationTokenSource MediaShutdown = new();
@@ -47,6 +48,7 @@ internal static class AndroidAudioHost
     {
         var manager = new PcToPhoneAudioManager(() => Adb, AcquireLocalSilenceLease);
         manager.Changed += ApplicationAudio.NotifyChanged;
+        manager.ResourcesRetired += OnResourcesRetired;
         manager.OutputsObserved += (device, sinks) =>
         {
             if (IsPhoneCreated) Phone.UpdateOutputs(device, sinks);
@@ -63,7 +65,9 @@ internal static class AndroidAudioHost
     private static readonly Lazy<AndroidVirtualDisplayManager> LazyDisplays = new(() =>
     {
         var runtime = new VirtualDisplayRuntime(Adb);
-        return new AndroidVirtualDisplayManager(() => new InProcessVirtualDisplayClient(Adb, runtime, () => LazySettings.Value));
+        var displays = new AndroidVirtualDisplayManager(() => new InProcessVirtualDisplayClient(Adb, runtime, () => LazySettings.Value));
+        displays.ResourcesRetired += OnResourcesRetired;
+        return displays;
     });
     internal static AndroidAudioManager Sources => LazySources.Value;
     private static readonly Lazy<AndroidPhoneStore> LazyPhone = new(() =>
@@ -413,21 +417,25 @@ internal static class AndroidAudioHost
         {
             lock (MediaWatches) MediaWatches.Remove(done);
             linked.Dispose();
+            OnResourcesRetired();
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         return task;
     }
     internal static bool HasActiveWork()
     {
         if (IsDragging) return true;
-        if (IsCreated && Sources.Sources.Count > 0) return true;
+        if (IsCreated && Sources.HasActiveWork) return true;
         if (AreDisplaysCreated && (Displays.Count > 0 || HasActiveDisplayResources())) return true;
-        if (IsPcToPhoneCreated && PcToPhone.ActiveCount > 0) return true;
+        if (IsPcToPhoneCreated && PcToPhone.HasActiveWork) return true;
         lock (MediaWatches)
         {
             if (MediaWatches.Count > 0) return true;
         }
         return (System.Windows.Application.Current as App)?.HasActivePhoneClipboard == true;
     }
+
+    private static void OnResourcesRetired() =>
+        (System.Windows.Application.Current as App)?.RequestRetiredPhoneReclaim();
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static bool HasActiveDisplayResources() =>

@@ -31,12 +31,25 @@ internal static partial class Program
             string output = Path.GetFullPath(args[0]); Directory.CreateDirectory(output);
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(output, "ui-data-" + Guid.NewGuid().ToString("N")));
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidUiChecks");
-            App app = args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") ? new RoutingFixtureApp() : new App();
+            App app = args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") ? new RoutingFixtureApp() : new App();
             if (app is RoutingFixtureApp)
             { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
+            if (args.Contains("--drop-compat"))
+            {
+                var dropPanel = new QuickPanelModernWindow();
+                try
+                {
+                    ((ItemsControl)dropPanel.FindName("AppListPanel")).Items.Add(new Border { Height = 54 });
+                    Render((FrameworkElement)dropPanel.Content, 372, 450, Path.Combine(output, "drop-before.png"));
+                    CheckDropZones(dropPanel, new AndroidDevice("offline-fixture", "Fixture", "device", false), AndroidApp.DeviceAudio, output);
+                    File.WriteAllText(Path.Combine(output, "drop-compat.json"), JsonSerializer.Serialize(new { Passed = true, Assertions = _checks, PhoneAccess = false }));
+                    return 0;
+                }
+                finally { dropPanel.Close(); }
+            }
             if (args.Contains("--concurrency-fixes")) return ConcurrencyFixesUi(output);
             if (args.Contains("--panel-stream-settings")) return PanelStreamSettingsUi(output);
             if (args.Contains("--device-audio")) return DeviceAudioUi(output);
@@ -574,7 +587,9 @@ internal static partial class Program
             Check(visibilityChanges == 0 && Math.Abs(scroll.ActualHeight - viewportHeight) < 0.1,
                 "crossing upper and lower targets preserves overlay visibility and viewport geometry");
             DrainUi();
-            Check(((SolidColorBrush)overlay.Background).Color.A == 255 && list.Visibility == Visibility.Hidden,
+            var containers = ((ItemsControl)list).Items.Cast<object>().Select(item => ((ItemsControl)list).ItemContainerGenerator.ContainerFromItem(item)).OfType<FrameworkElement>();
+            Check(((SolidColorBrush)overlay.Background).Color.A == 255 && list.Visibility == Visibility.Visible
+                && containers.All(container => container.Visibility == Visibility.Hidden),
                 "drag overlay has an opaque theme backing and suppresses underlying rows throughout target crossings");
         }
         finally

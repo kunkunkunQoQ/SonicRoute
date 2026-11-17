@@ -113,15 +113,16 @@ public partial class QuickPanelModernWindow
         Grid.SetRow(AndroidSharedDropZone, 1); grid.Children.Add(AndroidComputerDropZone); grid.Children.Add(AndroidSharedDropZone);
         var divider = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Bottom };
         divider.SetResourceReference(BackgroundProperty, "Theme.Accent"); grid.Children.Add(divider);
-        var host = (Grid)AppListScroll.Parent;
-        Grid.SetRow(AndroidDropHighlight, Grid.GetRow(AppListScroll));
-        host.Children.Insert(host.Children.IndexOf(AppListScroll) + 1, AndroidDropHighlight);
+        var host = (Grid)AppListPanel.Parent;
+        Grid.SetRow(AndroidDropHighlight, Grid.GetRow(AppListPanel));
+        host.Children.Insert(host.Children.IndexOf(AppListPanel) + 1, AndroidDropHighlight);
         RegisterName(AndroidDropHighlight.Name, AndroidDropHighlight);
         // Preserve the PC viewport during a phone drag without creating phone UI in Lite.
-        var style = new Style(typeof(ItemsControl), AppListPanel.Style);
+        // Keep the scroll/drop surface alive while hiding its row containers.
+        var style = new Style(typeof(ListBoxItem), AppListPanel.ItemContainerStyle);
         var trigger = new DataTrigger { Binding = new System.Windows.Data.Binding(nameof(Visibility)) { Source = AndroidDropHighlight }, Value = Visibility.Visible };
         trigger.Setters.Add(new Setter(VisibilityProperty, Visibility.Hidden)); style.Triggers.Add(trigger);
-        AppListPanel.Style = style;
+        AppListPanel.ItemContainerStyle = style;
     }
     private void StopAndroidPanel()
     {
@@ -422,7 +423,8 @@ public partial class QuickPanelModernWindow
         _visibleAndroidMeterRows.Clear();
         foreach (var row in _androidRows.Values)
         {
-            if (row.Volume.ActualHeight <= 0 || !AppListPanel.Items.Contains(row.Root)) continue;
+            if (!AppListScroll.IsAncestorOf(row.Volume) || (IsVisible && !row.Volume.IsVisible)
+                || row.Volume.ActualHeight <= 0 || !AppListPanel.Items.Contains(row.Root)) continue;
             var bounds = row.Volume.TransformToAncestor(AppListScroll).TransformBounds(new Rect(row.Volume.RenderSize));
             if (bounds.Bottom <= 0 || bounds.Top >= AppListScroll.ActualHeight) continue;
             _visibleAndroidMeterRows.Add(row);

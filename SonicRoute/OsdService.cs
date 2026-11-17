@@ -35,11 +35,12 @@ namespace SonicRoute
         private DispatcherTimer? _idleReleaseTimer;
         private const int IdleReleaseSeconds = 8;
         private const int BarFramesPerSecond = 30;
+        private static bool HardwareAnimation => UiMotion.HardwareRendering && RenderOptions.ProcessRenderMode != RenderMode.SoftwareOnly;
         // RenderingTime 会量化至毫秒；33ms 门限保持 60Hz 屏幕上的约30帧过渡。
         private static readonly TimeSpan BarFrameInterval = TimeSpan.FromMilliseconds(1000 / BarFramesPerSecond);
+        private static readonly QuadraticEase BarEase = CreateBarEase();
 #if NET48
         // Framework 的 WPF 时钟在本机测试中 CPU 更低，保留该运行时的动画路径。
-        private static readonly QuadraticEase BarEase = CreateBarEase();
         private long _barVersion;
 #endif
         private readonly EventHandler _barRenderingHandler;
@@ -54,6 +55,9 @@ namespace SonicRoute
         private ScaleTransform? _fillScale;
         private HwndSource? _source;
         private DispatcherOperation? _placementOperation;
+        private DispatcherOperation? _noticeOperation;
+        private Notice _pendingNotice;
+        private bool _noticePending;
         private Notice _notice;
         private bool _hasNotice, _volumeVisible, _metricsDirty = true, _positionDirty = true;
         private bool _barMuted, _barAnimating, _barUpdatePending;
@@ -73,7 +77,8 @@ namespace SonicRoute
         private bool _fadingOut, _adjusting, _dragging, _micPersistent, _restorePending, _showingMic;
         private volatile bool _disposed;
         private long _messageVersion, _micVersion, _fadeVersion;
-        private Task<bool>? _micQuery;
+        private Task<(bool Muted, bool Known)>? _micQuery;
+        private Func<bool, Task<(bool Muted, bool Known)>> _readMicState = ReadMicStateAsync;
         private TaskCompletionSource<bool>? _temporaryNoticeCompletion;
         private bool _micQueryTrackInput;
         private long _micQueryVersion;
@@ -95,6 +100,7 @@ namespace SonicRoute
         /// <summary>临时命令进程退出前让最后一条 OSD 正常显示/淡出，不维持常驻麦克风横幅。</summary>
         internal Task FinishTemporaryNoticeAsync()
         {
+            FlushPendingNotice();
             if (_disposed || _window?.IsVisible != true) return Task.CompletedTask;
             _micPersistent = false;
             _restorePending = false;
@@ -107,10 +113,45 @@ namespace SonicRoute
         }
 
         internal void ShowVolume(string title, int volume, string text, bool muted = false, string? target = null)
-            => ShowCore(new Notice(title, text, MathEx.Clamp(volume, 0, 100), muted, target));
+        {
+            if (_disposed || _dispatcher.HasShutdownStarted || _adjusting) return;
+            var notice = new Notice(title, text, MathEx.Clamp(volume, 0, 100), muted, target);
+            // The first response and target changes are immediate. A burst for the same
+            // target only needs one UI presentation before the next render; audio writes
+            // remain owned by their existing service and are never dropped here.
+            if (_window?.IsVisible == true && !_fadingOut && _hasNotice && _notice.Volume >= 0 && _notice.Target == notice.Target)
+            {
+                _pendingNotice = notice;
+                _noticePending = true;
+                ++_messageVersion;
+                _hideTimer.Stop();
+                _idleReleaseTimer?.Stop();
+                if (_noticeOperation == null)
+                    _noticeOperation = _dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(FlushPendingNotice));
+                return;
+            }
+            ShowCore(notice);
+        }
+
+        private void FlushPendingNotice()
+        {
+            if (!_noticePending) return;
+            var notice = _pendingNotice;
+            CancelPendingNotice();
+            ShowCore(notice);
+        }
+
+        private void CancelPendingNotice()
+        {
+            _noticePending = false;
+            _pendingNotice = default;
+            _noticeOperation?.Abort();
+            _noticeOperation = null;
+        }
 
         private void ShowCore(Notice notice, bool persistent = false, bool adjustment = false)
         {
+            CancelPendingNotice();
             if (_disposed || _dispatcher.HasShutdownStarted || (_adjusting && !adjustment)) return;
             _idleReleaseTimer?.Stop();
             try
@@ -334,7 +375,7 @@ namespace SonicRoute
 #if NET48
         private void UpdateBar(double target, bool animate)
         {
-            if (!animate || _barOwner != _notice.Target || !UiMotion.AnimationsEnabled || !UiMotion.HardwareRendering)
+            if (!animate || _barOwner != _notice.Target || !UiMotion.AnimationsEnabled || !HardwareAnimation)
             {
                 // 首次显示、目标切换和禁用动画时直接显示最新值，不等待绘制回调。
                 CancelBarUpdate();
@@ -371,7 +412,7 @@ namespace SonicRoute
             double target = _pendingBarTarget;
             CancelBarUpdate();
             if (e is RenderingEventArgs rendered) _barAnimationStartedAt = rendered.RenderingTime;
-            ApplyBar(target, UiMotion.AnimationsEnabled && UiMotion.HardwareRendering);
+            ApplyBar(target, UiMotion.AnimationsEnabled && HardwareAnimation);
         }
 
         private void CancelBarUpdate()
@@ -420,17 +461,10 @@ namespace SonicRoute
             _fillScale.ScaleX = current;
         }
 
-        private static QuadraticEase CreateBarEase()
-        {
-            var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
-            ease.Freeze();
-            return ease;
-        }
-
 #else
         private void UpdateBar(double target, bool animate)
         {
-            if (!animate || _barOwner != _notice.Target || !UiMotion.AnimationsEnabled || !UiMotion.HardwareRendering)
+            if (!animate || _barOwner != _notice.Target || !UiMotion.AnimationsEnabled || !HardwareAnimation)
             {
                 // 首次显示、目标切换和禁用动画时直接显示最新值，不等待绘制回调。
                 CancelBarUpdate();
@@ -493,7 +527,7 @@ namespace SonicRoute
                 double target = _pendingBarTarget;
                 _barUpdatePending = false;
                 _barAnimationStartedAt = now;
-                ApplyBar(target, UiMotion.AnimationsEnabled && UiMotion.HardwareRendering);
+                ApplyBar(target, UiMotion.AnimationsEnabled && HardwareAnimation);
             }
             if (!_barAnimating && !_barUpdatePending) CancelBarUpdate();
         }
@@ -531,8 +565,17 @@ namespace SonicRoute
 
 #endif
 
+        private static QuadraticEase CreateBarEase()
+        {
+            var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+            ease.Freeze();
+            return ease;
+        }
+
         private static void SetText(TextBlock block, string value) { if (block.Text != value) block.Text = value; }
-        private static int FadeIn(AppConfig config) => UiMotion.AnimationsEnabled ? MathEx.Clamp(config.OsdFadeInMs, 0, 500) : 0;
+        private static int FadeDuration(int milliseconds) => !UiMotion.AnimationsEnabled ? 0
+            : HardwareAnimation ? milliseconds : Math.Min(milliseconds, 80);
+        private static int FadeIn(AppConfig config) => FadeDuration(MathEx.Clamp(config.OsdFadeInMs, 0, 500));
 
         private void StopFade()
         {
@@ -557,7 +600,8 @@ namespace SonicRoute
             long version = _fadeVersion;
             _fadingOut = target == 0;
             var animation = new DoubleAnimation(current, target, TimeSpan.FromMilliseconds(milliseconds))
-            { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } };
+            { EasingFunction = BarEase };
+            Timeline.SetDesiredFrameRate(animation, HardwareAnimation ? BarFramesPerSecond : 20);
             animation.Completed += (_, _) =>
             {
                 if (_disposed || version != _fadeVersion) return;
@@ -573,7 +617,7 @@ namespace SonicRoute
             if (_disposed || _adjusting) return;
             if (_window?.IsVisible != true) { _ = RestoreMicAsync(); return; }
             var config = ConfigService.Load();
-            int duration = UiMotion.AnimationsEnabled ? MathEx.Clamp(config.OsdFadeOutMs, 0, 1000) : 0;
+            int duration = FadeDuration(MathEx.Clamp(config.OsdFadeOutMs, 0, 1000));
             AnimateOpacity(0, duration);
         }
 
@@ -618,15 +662,22 @@ namespace SonicRoute
         }
 
         // 仅合并同一监听策略、尚未完成的查询；不跨时刻缓存实际静音状态。
-        internal Task<bool> QueryMicMuteAsync(bool trackInput)
+        private static Task<(bool Muted, bool Known)> ReadMicStateAsync(bool trackInput)
         {
-            if (_disposed) return Task.FromResult(false);
+            var monitor = (System.Windows.Application.Current as App)?.MicMonitor;
+            // Short-lived command mode has no resident monitor. Unknown state must
+            // not revoke a confirmed banner or start another endpoint enumeration.
+            return monitor?.ReadCheckedAsync(trackInput) ?? Task.FromResult((false, false));
+        }
+
+        internal Task<(bool Muted, bool Known)> QueryMicMuteAsync(bool trackInput)
+        {
+            if (_disposed) return Task.FromResult((false, false));
             if (_micQuery != null && !_micQuery.IsCompleted && _micQueryTrackInput == trackInput && _micQueryVersion == _micVersion)
                 return _micQuery;
             _micQueryTrackInput = trackInput;
             _micQueryVersion = _micVersion;
-            return _micQuery = (System.Windows.Application.Current as App)?.MicMonitor?.ReadAsync(trackInput)
-                ?? Task.Run(() => GlobalMicMuteService.IsAnyMuted(trackInput));
+            return _micQuery = _readMicState(trackInput);
         }
 
         internal void ShowMic(string title, bool muted)
@@ -653,10 +704,11 @@ namespace SonicRoute
             try
             {
                 bool track = ConfigService.Load().MicMuteOsdTrackInputMuted;
-                bool muted = await QueryMicMuteAsync(track);
+                var state = await QueryMicMuteAsync(track);
                 var config = ConfigService.Load();
                 if (_disposed || _dispatcher.HasShutdownStarted || micVersion != _micVersion ||
-                    !config.MicMuteOsdPersistent || config.MicMuteOsdTrackInputMuted != track) return;
+                    !config.MicMuteOsdPersistent || config.MicMuteOsdTrackInputMuted != track || !state.Known) return;
+                bool muted = state.Muted;
                 _micPersistent = muted;
                 if (!muted)
                 {
@@ -677,14 +729,20 @@ namespace SonicRoute
             {
                 long message = _messageVersion, mic = _micVersion;
                 bool track = ConfigService.Load().MicMuteOsdTrackInputMuted;
-                bool muted = await QueryMicMuteAsync(track);
+                var state = await QueryMicMuteAsync(track);
                 var config = ConfigService.Load();
                 if (_disposed || _dispatcher.HasShutdownStarted || _adjusting || message != _messageVersion ||
                     mic != _micVersion || _window?.IsVisible == true || !config.MicMuteOsdPersistent ||
                     config.MicMuteOsdTrackInputMuted != track) return;
                 _restorePending = false;
-                if (muted) ShowMic(L10n.T("Ov.MuteMic"), true);
-                else { _micPersistent = false; ++_micVersion; }
+                // An unavailable driver cannot revoke a previously confirmed mute banner.
+                if (!state.Known || state.Muted) ShowMic(L10n.T("Ov.MuteMic"), true);
+                else
+                {
+                    _micPersistent = false;
+                    ++_micVersion;
+                    ScheduleIdleRelease();
+                }
             }
             catch { }
         }
@@ -797,6 +855,7 @@ namespace SonicRoute
             if (!_disposed && (_adjusting || _fadingOut || _micPersistent || _dragging || _window?.IsVisible == true))
                 return;
             _idleReleaseTimer?.Stop();
+            CancelPendingNotice();
             _placementOperation?.Abort(); _placementOperation = null;
             StopFade(); StopBar();
             SystemParameters.StaticPropertyChanged -= SystemParameters_Changed;
@@ -810,6 +869,12 @@ namespace SonicRoute
                 _window.MouseMove -= Window_MouseMove;
                 _window.MouseLeftButtonUp -= Window_MouseUp;
                 _window.LostMouseCapture -= Window_LostCapture;
+                // When starting in the tray this may be WPF's first window. Do not
+                // leave its closed visual tree rooted through Application.MainWindow,
+                // and do not request a whole-process trim for an OSD timeout.
+                if (ReferenceEquals(Application.Current?.MainWindow, _window)) Application.Current.MainWindow = null;
+                _window.DataContext = null;
+                _window.Content = null;
                 try { _window.Close(); } catch (InvalidOperationException) { }
             }
             _window = null; _surface = null; _stack = null; _title = null; _text = null;

@@ -57,14 +57,24 @@ internal static partial class Program
 
         int collections = GC.CollectionCount(GC.MaxGeneration);
         Invoke("ReclaimUiWhenIdle", null, EventArgs.Empty);
-        if (enabled) Check(GC.CollectionCount(GC.MaxGeneration) == collections,
-            "Lite/Legacy idle reclamation does not force a full managed collection");
+        Check(GC.CollectionCount(GC.MaxGeneration) == collections,
+            "idle reclamation does not induce a full managed collection in any edition");
         Check(!timer.IsEnabled && !(bool)Get("_uiWorkingSetDirty")!,
             "idle work stops its timer and consumes the UI dirty request");
         if (enabled) Check(!(bool)Get("_uiWorkingSetTrimRequested")!, "working-set request is consumed without a retry loop");
         Invoke("ReclaimUiWhenIdle", null, EventArgs.Empty);
         Check(!timer.IsEnabled && (!enabled || (long)Get("_lastWorkingSetTrimAt")! == at),
             "clean idle state causes no repeated trim or timer restart");
+        if (phone)
+        {
+            var retired = type.GetMethod("RequestRetiredPhoneReclaim", Instance)!;
+            for (int i = 0; i < 20; i++) retired.Invoke(app, null);
+            Check((int)Get("_retiredPhoneReclaimQueued")! == 1, "retired phone resources coalesce one dispatcher request");
+            DrainUi();
+            Check(timer.IsEnabled && ReferenceEquals(timer, Get("_uiReclaimTimer")),
+                "phone retirement reuses the single idle timer after an active stream finishes");
+            Invoke("CancelUiReclaim");
+        }
         Set("_exiting", true);
         Set("_uiWorkingSetDirty", true);
         Invoke("ScheduleUiReclaim");

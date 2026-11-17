@@ -43,6 +43,7 @@ internal static partial class Program
         Check(wide.PixelWidth == 64 && wide.PixelHeight == 16, "bounded decoding preserves a wide image's aspect ratio");
 
         bool phone = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost") != null;
+        string edition = phone ? "Full" : Environment.Version.Major < 5 ? "Legacy" : "Lite";
         if (!baseline)
         {
             CheckImageInputStreamContract();
@@ -55,13 +56,13 @@ internal static partial class Program
         ImageMemorySample released = SampleImageMemory();
         File.WriteAllText(Path.Combine(output, "image-memory.json"), JsonSerializer.Serialize(new
         {
-            Success = true, Edition = phone ? "Full" : "Lite", Baseline = baseline, Assertions = _checks,
+            Success = true, Edition = edition, Baseline = baseline, Assertions = _checks,
             ImageCount = imageCount, EncodedBytes = encoded, RetainedInputArrays = alive,
             RetainedEncodedBytes = alive * template.Length, Samples = new { Before = before, ImagesRetained = retained, ImagesReleased = released },
             ProductStartup = false, PhoneAccess = false, UserProcessCollected = false,
             Scope = "128 retained frozen icons in an isolated fixture; not whole-product memory or GPU usage."
         }, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine($"MEMORY_INPUTS edition={(phone ? "Full" : "Lite")} baseline={baseline} retained={alive}/{imageCount} bytes={alive * template.Length} encodedBytes={encoded}");
+        Console.WriteLine($"MEMORY_INPUTS edition={edition} baseline={baseline} retained={alive}/{imageCount} bytes={alive * template.Length} encodedBytes={encoded}");
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
