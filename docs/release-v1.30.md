@@ -57,14 +57,12 @@
 
 ## 📦 下载矩阵
 
-| 版本 | 资产 | 说明 |
+| 版本 | 下载 | 说明 |
 |---|---|---|
-| Full x64 | `SonicRoute-v1.30-x64.exe` | .NET 10 单个 EXE；包含可选 Android 集成 |
-| Full ARM64（实验性） | `SonicRoute-v1.30-arm64.exe` | .NET 10 单个 EXE；原生 ARM64 未实测，独立 ADB/视频辅助进程为 x64 |
-| Lite x64 | `SonicRoute-v1.30-Lite-x64.exe` | .NET 10 单个 EXE；不含手机集成 |
-| Lite ARM64（实验性） | `SonicRoute-v1.30-Lite-arm64.exe` | .NET 10 单个 EXE；不含手机集成 |
-| Legacy x64 | `SonicRoute-v1.30-Legacy-x64.zip` | .NET Framework 4.8；13 文件 ZIP 归档 |
-| Microsoft Store | [Store 页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | 由 Full 构建；商店在架版本以 Store 页面为准 |
+| ⭐ **Full**（全功能旗舰版） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-arm64.exe) | .NET 10 单个 EXE；包含可选 Android 集成（ARM64 原生未实测，ADB/辅助为 x64） |
+| 🪶 **Lite**（纯 PC 轻量版） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Lite-arm64.exe) | .NET 10 单个 EXE；纯 PC 音频，不含手机集成 |
+| 🛡️ **Legacy x64**（免装运行库） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.30/SonicRoute-v1.30-Legacy-x64.zip) | 系统 .NET Framework 4.8；13 文件 ZIP 归档，完整解压后运行 |
+| 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 由 Full / Lite 构建；商店在架版本以 Store 页面为准 |
 
 Full 与 Lite 按单 EXE 提供，不做额外程序压缩；Legacy 是 13 文件 ZIP 归档。便携版为框架依赖部署，需要匹配架构的 .NET 10 Desktop Runtime；Legacy 使用 Windows 内置 .NET Framework 4.8。发布附件另含校验文件和更新元数据。NET8 下载链接继续指向 v1.29 历史版本；该兼容版已停止提供新版本。ARM64 资产为实验性，未在原生 ARM64 设备验证；Full 的 ADB 与视频辅助工具仍是独立 x64 进程。
 

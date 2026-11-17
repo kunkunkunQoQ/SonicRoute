@@ -450,7 +450,7 @@ function Get-OrGenerateChangelog {
     [void]$sb.AppendLine("| **SonicRoute x64** | 手机音频面板、独立虚拟屏及完整电脑音频功能 | [单文件 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-x64.exe) | x64 .NET 10 Desktop Runtime |")
     [void]$sb.AppendLine("| **SonicRoute ARM64**（实验） | 含手机功能；外部视频与ADB工具仍为独立x64进程 | [单文件 EXE](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-arm64.exe) | ARM64 .NET 10 Desktop Runtime |")
     [void]$sb.AppendLine("| 🛡️ **Legacy x64**（免装运行库） | 公司办公电脑 / 受限机型 | [完整 ZIP](https://github.com/$TargetRepo/releases/download/v$Version/SonicRoute-v$Version-Legacy-x64.zip) | 系统自带 .NET Framework 4.8（解压即用） |")
-    [void]$sb.AppendLine("| 🔄 **Microsoft Store** | 由商店提供更新，在架版本以商店页面为准 | [商店安装](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64 .NET 10 Desktop Runtime；MSIX 不内置运行时 |")
+    [void]$sb.AppendLine("| 🔄 **Microsoft Store** | 由商店提供更新，在架版本以商店页面为准 | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | x64 .NET 10 Desktop Runtime；MSIX 不内置运行时 |")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("> [!NOTE]")
     [void]$sb.AppendLine("> - 支持 Windows 10 2004+ / Windows 11 系统。")

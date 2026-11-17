@@ -54,15 +54,14 @@
 
 ## 📦 下载矩阵
 
-| 版本 | 文件名 | 大小 | 说明 |
-|---|---|---:|---|
-| **Full (x64)** | `SonicRoute-v1.31-x64.exe` | 27,211,121 字节 | 完整版（含手机音频流转、主屏镜像与剪贴板同步），单文件 EXE |
-| **Lite (x64)** | `SonicRoute-v1.31-Lite-x64.exe` | 6,003,253 字节 | 轻量版（仅保留 Windows 本地音频路由），单文件 EXE |
-| **Legacy (x64)** | `SonicRoute-v1.31-Legacy-x64.zip` | 978,226 字节 | 兼容版（.NET Framework 4.8），多文件绿色免安装 ZIP |
-| **更新清单** | `SonicRoute-update.json` | 6,779 字节 | 客户端自动更新检测清单（Protocol 2） |
-| **校验散列** | `SHA256SUMS.txt` | 374 字节 | SHA-256 完整性校验文件 |
-| **Microsoft Store (Full)** | [Store 页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | - | 完整商店版（基于 Full 构建；MSIX 本地构建版本 1.31.0.0，在架版本以商店页面为准） |
-| **Microsoft Store (Lite)** | [Store 页面](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | - | 轻量商店版（仅保留 PC 音频功能；在架版本以商店页面为准） |
+| 版本 | 下载 | 说明 |
+|---|---|---|
+| ⭐ **Full (x64)** | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-x64.exe) (27.2 MB) | 完整版（含手机音频流转、主屏镜像与剪贴板同步），单文件 EXE |
+| 🪶 **Lite (x64)** | [单个 EXE](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Lite-x64.exe) (6.0 MB) | 轻量版（仅保留 Windows 本地音频路由），单文件 EXE |
+| 🛡️ **Legacy (x64)** | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-v1.31-Legacy-x64.zip) (978 KB) | 兼容版（.NET Framework 4.8），多文件绿色免安装 ZIP |
+| 🔄 **Microsoft Store** | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 商店版（提供 Full / Lite；在架版本以商店页面为准） |
+| 📋 **更新清单** | [`SonicRoute-update.json`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SonicRoute-update.json) | 客户端自动更新检测清单（Protocol 2） |
+| 🔒 **校验散列** | [`SHA256SUMS.txt`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.31/SHA256SUMS.txt) | SHA-256 完整性校验文件 |
 
 > Full 与 Lite 需要匹配架构的 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0)；Legacy 依赖系统内置的 .NET Framework 4.8，免装额外运行库。
 

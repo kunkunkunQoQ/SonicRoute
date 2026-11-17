@@ -56,15 +56,12 @@
 
 > **运行库说明**：**Full** 与 **Lite** 基于 **.NET 10**，需预先安装与下载包架构一致的 Microsoft [.NET 10 Desktop Runtime（桌面运行时）](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0)（Console / ASP.NET Core 运行时不包含 WPF 桌面组件）。**Legacy x64** 基于系统自带 .NET Framework 4.8，无需额外安装运行库；**NET8 兼容版已自 v1.30 起停止提供**。
 
-| 版本 | 适用人群与主要特点 | 文件名 / 获取方式 | 运行库要求 |
+| 版本 | 适用人群与主要特点 | 下载 | 运行库要求 |
 | :--- | :--- | :--- | :--- |
-| ⭐ **Full x64**（推荐主力） | 完整 PC 音频分流、自动化 + Android 手机音画投屏、双向剪贴板与纯 C# 自研后端 | [`SonicRoute-v1.32-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
-| ⭐ **Lite x64** | 专注 PC 本地音频分流、滚轮控音与自动化规则；不含手机模块，单文件更轻巧 | [`SonicRoute-v1.32-Lite-x64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
-| 🛡️ **Legacy x64** | 解压即用、免安装额外运行库，适合办公或受限环境；不含手机模块 | [`SonicRoute-v1.32-Legacy-x64.zip`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | Windows 内置 .NET Framework 4.8 |
-| 🧪 **Full ARM64**（实验性） | 面向 Windows on ARM64 原生单文件全功能包（已无外部 x64 `adb`/`scrcpy` 进程；未在真机验收） | [`SonicRoute-v1.32-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | [.NET 10 Desktop Runtime (ARM64)](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
-| 🧪 **Lite ARM64**（实验性） | 面向 Windows on ARM64 原生纯 PC 音频轻量包（未在真机验收） | [`SonicRoute-v1.32-Lite-arm64.exe`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | [.NET 10 Desktop Runtime (ARM64)](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
-| 🔄 **Microsoft Store (Full)** | 完整商店版与托管自动更新用户（具体在架版本以微软商店审核同步进度为准） | [微软商店页面](https://apps.microsoft.com/detail/9NQZGRTPM1NT) | x64 `.NET 10 Desktop Runtime` |
-| 🔄 **Microsoft Store (Lite)** | 轻量商店版与托管自动更新用户（仅保留 PC 音频；在架版本以商店页面为准） | [微软商店页面](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | x64 `.NET 10 Desktop Runtime` |
+| ⭐ **Full**（推荐主力，含手机集成） | 完整 PC 音频分流、自动化 + Android 手机音画投屏、双向剪贴板与纯 C# 自研后端 | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
+| ⭐ **Lite**（专注 PC 音频） | 专注 PC 本地音频分流、滚轮控音与自动化规则；不含手机模块，单文件更轻巧 | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
+| 🛡️ **Legacy x64**（免装运行库） | 解压即用、免安装额外运行库，适合办公或受限环境；不含手机模块 | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | Windows 内置 .NET Framework 4.8 |
+| 🔄 **Microsoft Store** | 完整与轻量商店版、托管自动更新用户（提供 Full / Lite；具体在架版本以微软商店审核同步进度为准） | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | x64 `.NET 10 Desktop Runtime` |
 | 📋 **校验与更新清单** | 校验发布包完整性与供应用内更新器解析下载 | [`SHA256SUMS.txt`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SHA256SUMS.txt) / [`SonicRoute-update.json`](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-update.json) | — |
 
 ### 升级与数据保留说明
