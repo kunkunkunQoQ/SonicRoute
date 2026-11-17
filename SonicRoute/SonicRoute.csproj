@@ -39,6 +39,7 @@
     <Resource Include="SonicRoute.ico" />
     <EmbeddedResource Include="Resources\Lang\*.json" />
     <EmbeddedResource Include="Resources\RuleCommand.ps1" LogicalName="SonicRoute.Resources.RuleCommand.ps1" />
+    <EmbeddedResource Include="..\LICENSE" LogicalName="SonicRoute.Resources.LICENSE" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(SonicRouteEdition)' == 'Lite'">

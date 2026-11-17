@@ -76,6 +76,7 @@
       <LogicalName>SonicRoute.Resources.Lang.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\SonicRoute\Resources\RuleCommand.ps1" LogicalName="SonicRoute.Resources.RuleCommand.ps1" />
+    <EmbeddedResource Include="..\LICENSE" LogicalName="SonicRoute.Resources.LICENSE" />
   </ItemGroup>
 
   <Import Project="../build/Version.targets" />

@@ -1,4 +1,6 @@
-<!-- Generated via docs/readme/generate.cjs. Release metadata: docs/readme/shared.json. Source version: build/Version.props. Body: renderAI(). Run node docs/readme/generate.cjs to update. -->
+> **Historical snapshot / 历史快照**: This archived README preserves the old MIT-era documentation. For current GPL-3.0-only licensing, see the [current LICENSE](../../../LICENSE) and [snapshot notes](BACKUP_INFO.md).
+
+<!-- ARCHIVED historical snapshot. Do not regenerate with the current README generator; see BACKUP_INFO.md. -->
 # 🎧 SonicRoute (AI / LLM Machine Specification)
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | **🤖 AI**

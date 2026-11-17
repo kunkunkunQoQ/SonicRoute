@@ -906,6 +906,11 @@
                                            Foreground="{DynamicResource Theme.Accent}">
                                     <Run Text="GitHub"/>
                                 </Hyperlink>
+                                <Run Text=" ‖ "/>
+                                <Hyperlink x:Name="LicenseLink" Click="LicenseLink_Click"
+                                           Foreground="{DynamicResource Theme.Accent}">
+                                    <Run Text="GPL-3.0"/>
+                                </Hyperlink>
                             </TextBlock>
                         </StackPanel>
                     </Border>

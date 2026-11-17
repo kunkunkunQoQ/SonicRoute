@@ -1,4 +1,6 @@
-<!-- Generated from docs/readme/shared.json and docs/readme/locales/fr-FR.json. Edit those sources, then run node docs/readme/generate.cjs. -->
+> **Historical snapshot / 历史快照**: This archived README preserves the old MIT-era documentation. For current GPL-3.0-only licensing, see the [current LICENSE](../../../LICENSE) and [snapshot notes](BACKUP_INFO.md).
+
+<!-- ARCHIVED historical snapshot. Do not regenerate with the current README generator; see BACKUP_INFO.md. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 SonicRoute
 

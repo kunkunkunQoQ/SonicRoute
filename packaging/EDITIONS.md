@@ -25,7 +25,7 @@ Full 的原生组件以未压缩资源内嵌于 AndroidAudio 程序集。`Androi
 
 缓存默认位于 `%LocalAppData%/SonicRoute/PhoneRuntime/<工具标识>/`；显式 SONICROUTE_DATA_DIRECTORY 隔离运行时，缓存也位于该数据目录下。运行中的旧工具与新工具不相互覆盖。音频服务仍单独校验固定 UID 隔离服务器，视频服务器不能替代它。修改原生工具后须同步仓库内二进制、VirtualDisplayRuntime.files.json 与 AndroidRuntime.files.json，再进行对应组件检查。
 
-Full 单EXE内嵌手机组件所需的第三方许可，设置页“开源许可”入口在浏览器中打开仓库的完整许可索引；点击不会启动ADB或另写许可文件。Lite 与 Legacy 不引用 AndroidAudio、QRCoder、Concentus，也不包含手机页面的 BAML、内嵌原生工具或该手机许可入口；电脑音频共享实现继续保留。Legacy ZIP仍保留LICENSE，不能把单EXE分发规则套用到Legacy。System.Management 同时用于电脑进程事件，不能当作手机依赖删除。
+自 2026-11-17 GPL 转换起，Full、Lite 与 Legacy 均内嵌完整项目 `LICENSE`，设置页“GPL-3.0”入口按需离线显示全文，不启动 ADB、不联网、不写许可文件或增加后台工作。第三方组件保留各自许可；[第三方许可索引](AndroidLab/THIRD-PARTY-NOTICES.md)中的旧外置手机运行时清单仅描述相应历史版本。Lite 与 Legacy 不引用 AndroidAudio、QRCoder、Concentus，也不包含手机页面的 BAML 或内嵌手机工具；电脑音频共享实现继续保留。Legacy ZIP 和 Store MSIX 另附 `LICENSE`，不能把单EXE分发规则套用到Legacy。System.Management 同时用于电脑进程事件，不能当作手机依赖删除。
 
 Full / Lite / Legacy 的单实例、激活、命令和更新身份各自独立；普通配置位置不改变。仅显式 --android-lab 使用独立 LabData/实例。Full 更新清单仅允许 SonicRoute.exe 一个文件，按完整 EXE 校验、暂存和回滚；Lite 仍走单 EXE，Legacy 仍走其原 ZIP 白名单。Store 固定使用 Full x64 单 EXE，验证时拒绝 Lite，不自动发布。
 

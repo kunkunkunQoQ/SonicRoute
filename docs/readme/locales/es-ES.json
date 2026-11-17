@@ -79,13 +79,13 @@
     "footerTitle": "Un huevo de Pascua: ayer y mañana",
     "guideTitle": "Guía de usuario (en chino)",
     "downloadColumn": "Descargar",
-    "license": "Source Available 1.0",
+    "license": "GPL-3.0",
     "licenseTitle": "Licencia",
     "thirdPartyNotices": "avisos de terceros",
     "licensePoints": [
-        "**Source Available (no es código abierto aprobado por la OSI)**: Según {licenseLink} (SonicRoute Source Available License 1.0), cualquiera puede usar, ver, estudiar y modificar SonicRoute de forma gratuita, incluido el uso interno en empresas.",
-        "**Redistribución pública y restricciones**: La distribución pública de obras derivadas exige conservar los avisos de derechos de autor, atribuir a SonicRoute y al repositorio original de GitHub, señalar las modificaciones y proporcionar el código fuente completo bajo esta misma licencia. Quedan prohibidos la reventa comercial, el empaquetado de pago, la distribución de pago, las versiones de código cerrado y la suplantación oficial sin autorización previa por escrito (consulte {licenseLink} para licencias comerciales).",
-        "**Alcance y derechos MIT conservados**: Desde el 2026-11-14, commit 442dac3, el proyecto completo de la rama principal, incluido el código anterior, se ofrece bajo esta licencia en la medida en que el titular pueda autorizarlo. Incluye v1.32. Las revisiones Source Available deben identificarse por separado con su commit fuente y licencia. En la medida en que el titular pueda autorizarlos, el código fuente y los archivos de distribución de v1.32 que el proyecto oficial vuelve a ofrecer actualmente se proporcionan bajo la nueva licencia. Desde hoy (2026-11-14), el uso, la modificación o la redistribución basados en esta autorización deben cumplirla. Los derechos ya concedidos bajo versiones MIT históricas siguen vigentes y no se revocan ni limitan por esta nueva oferta. El código de terceros y el que no pueda relicenciarse conservan sus licencias originales (véase {noticesLink})."
+        "**Código abierto GPL-3.0**: SonicRoute se distribuye únicamente bajo la versión 3 de la Licencia Pública General de GNU (GPL-3.0-only); véase {licenseLink}. Se permiten el uso comercial, la venta y la distribución de pago conforme a la GPL.",
+        "**Redistribución**: Conserve los avisos necesarios de derechos de autor y licencia, indique los cambios y distribuya las obras modificadas cubiertas bajo GPL versión 3. Al distribuir binarios cubiertos, proporcione el código fuente correspondiente completo según la sección 6 de la GPL; véase {licenseLink}.",
+        "**Alcance y licencias anteriores**: Desde la migración GPL del 2026-11-17, todo el proyecto cubierto en esta revisión, incluido el código anterior, se ofrece bajo GPL-3.0-only en la medida en que el titular pueda autorizarlo. Los permisos MIT y de la anterior licencia personalizada siguen vigentes; no se cambia la licencia indicada en etiquetas ni binarios ya publicados. Los componentes de terceros conservan sus licencias (véase {noticesLink})."
     ],
     "features": [
         "**Enrutamiento bidireccional y separación de audio por app (reproducción + grabación):** asigne dispositivos de salida y entrada específicos a cada aplicación (juegos y voz a auriculares, música a altavoces). La configuración se guarda de forma nativa en Windows incluso al cerrar el programa.",

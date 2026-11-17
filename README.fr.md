@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | **Français** | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Soutenir sur Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Soutenir sur Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **Envoyez le son de chaque application vers l’appareil de votre choix.**
 
@@ -12,7 +12,7 @@
 
 📥 [Télécharger la dernière version](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [Guide d’utilisation](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (en chinois)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d’interface · [Source Available 1.0](LICENSE)
+Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d’interface · [GPL-3.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Démonstration SonicRoute : glisser l'audio d'une application mobile vers le panneau rapide PC et changer la sortie"></a>
@@ -138,9 +138,9 @@ Le Wiki est actuellement en chinois simplifié.
 
 ## 📜 Licence
 
-- **Source Available (non approuvée OSI Open Source)** : Selon [LICENSE](LICENSE) (SonicRoute Source Available License 1.0), chacun peut librement utiliser, consulter, étudier et modifier SonicRoute gratuitement, y compris pour un usage interne en entreprise.
-- **Redistribution publique et restrictions** : Toute distribution publique d’œuvres dérivées exige de conserver les mentions de droit d’auteur, de citer SonicRoute et le dépôt GitHub d’origine, d’indiquer les modifications et de fournir le code source complet sous la même licence. La revente commerciale, la distribution groupée payante, la distribution payante, la diffusion à source fermée et l’usurpation de version officielle sont interdites sans autorisation écrite préalable (voir [LICENSE](LICENSE) pour les demandes commerciales).
-- **Portée et droits MIT préservés** : À partir du 2026-11-14, commit 442dac3, le projet complet de la branche principale, y compris le code antérieur, est proposé sous cette licence dans la mesure des droits du titulaire. Cela inclut v1.32. Les révisions Source Available doivent être identifiées séparément avec leur commit source et leur licence. Dans la mesure des droits du titulaire, le code source et les fichiers de distribution de v1.32 actuellement proposés à nouveau par le projet officiel sont fournis sous la nouvelle licence. À compter d’aujourd’hui (2026-11-14), toute utilisation, modification ou redistribution fondée sur cette autorisation doit respecter cette licence. Les droits déjà accordés sous les versions MIT historiques restent valables et ne sont ni révoqués ni restreints par cette nouvelle offre. Le code tiers et le code ne pouvant pas être placé sous une nouvelle licence conservent leurs licences d’origine (voir [mentions des composants tiers](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
+- **Logiciel libre GPL-3.0** : SonicRoute est distribué uniquement sous la version 3 de la licence publique générale GNU (GPL-3.0-only) ; voir [LICENSE](LICENSE). L’utilisation commerciale, la vente et la distribution payante sont autorisées dans le respect de la GPL.
+- **Redistribution** : Conservez les mentions requises de droit d’auteur et de licence, signalez les modifications et distribuez les œuvres modifiées couvertes sous GPL version 3. Pour les binaires couverts, fournissez le code source correspondant complet conformément à l’article 6 de la GPL ; voir [LICENSE](LICENSE).
+- **Portée et licences antérieures** : Depuis la migration GPL du 2026-11-17, tout le projet couvert dans cette révision, y compris le code antérieur, est proposé sous GPL-3.0-only dans la limite des droits du titulaire. Les autorisations MIT et de l’ancienne licence personnalisée restent valables ; les étiquettes et binaires déjà publiés ne sont pas réétiquetés. Les composants tiers conservent leurs licences (voir [mentions des composants tiers](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
 
 ---
 

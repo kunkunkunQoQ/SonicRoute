@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SonicRoute-Source-Available-1.0
+// SPDX-License-Identifier: GPL-3.0-only
 package org.sonicroute.android.model;
 
 import android.graphics.Rect;

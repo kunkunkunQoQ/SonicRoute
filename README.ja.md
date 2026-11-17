@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | **日本語** | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian で支援](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian で支援](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **アプリごとに、音声の出力先デバイスを選べます。**
 
@@ -12,7 +12,7 @@ SonicRoute は Windows の通知領域に常駐するオーディオツールで
 
 📥 [最新リリースをダウンロード](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [ユーザーガイド](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡体字中国語）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI 言語 · [Source Available 1.0](LICENSE)
+Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI 言語 · [GPL-3.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="SonicRoute ライブデモ：モバイルアプリの音声を PC クイックパネルへドラッグして出力先を切り替え"></a>
@@ -138,9 +138,9 @@ A：検出はシステムイベントを優先し、必要な場合に限り1秒
 
 ## 📜 ライセンス
 
-- **Source Available（OSI 承認のオープンソースではありません）**：[LICENSE](LICENSE)（SonicRoute Source Available License 1.0）に基づき、企業内部での無料利用を含め、誰でも無料で利用・閲覧・学習・改変できます。
-- **公開再配布と制限事項**：派生物を公開配布する場合は、著作権表示・SonicRoute の名称と元の GitHub リポジトリの明記・変更点の記載、および同一ライセンスでの対応ソースコードの無償提供が必須です。書面による事前許諾なく、商用再販・有料バンドル・有償配布・クローズドソース配布・公式なりすましを行うことは禁止されています（商用ライセンスの申請方法は [LICENSE](LICENSE) を参照）。
-- **適用範囲と従来の MIT の権利**：2026-11-14 のコミット 442dac3 から、著作権者が許諾できる範囲で、以前に書かれたコードを含むメインブランチのプロジェクト全体を本ライセンスで提供します。v1.32 系列も対象です。Source Available 改訂版は別途識別し、ソースのコミットとライセンスを明記します。著作権者が許諾できる範囲で、現在公式に再提供する v1.32 のソースコードと配布物は新ライセンスで提供します。本日（2026-11-14）以降、この許諾に基づく使用、変更、再配布には新ライセンスの遵守が必要です。従来の MIT 版で既に付与された権利は引き続き有効であり、今回の再提供によって取り消されたり制限されたりすることはありません。第三者および再許諾できないコードは元のライセンスを維持します（[サードパーティライセンス表記](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)）。
+- **GPL-3.0 オープンソース**：SonicRoute は GNU General Public License 第 3 版のみ（GPL-3.0-only）で提供されます。[LICENSE](LICENSE) を参照してください。GPL の条件に従う商用利用、販売、有償配布が可能です。
+- **再配布**：必要な著作権表示とライセンス表記を保持し、変更を明記し、対象となる改変作品を GPL 第 3 版で配布してください。対象のバイナリを配布する場合は GPL 第 6 条に従い完全な対応ソースを提供してください。詳細は [LICENSE](LICENSE) を参照してください。
+- **適用範囲と従来の許諾**：2026-11-17 の GPL 移行から、著作権者が許諾できる範囲で、本リビジョンの対象プロジェクト全体（以前のコードを含む）を GPL-3.0-only で提供します。既存の MIT および旧独自ライセンスによる許諾は有効で、既存タグや公開済みバイナリの表示は変更しません。第三者コンポーネントは元のライセンスを保持します（[サードパーティライセンス表記](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)）。
 
 ---
 

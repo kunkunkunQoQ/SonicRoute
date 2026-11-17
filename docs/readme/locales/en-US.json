@@ -79,13 +79,13 @@
     "footerTitle": "An Easter egg: yesterday and tomorrow",
     "guideTitle": "User guide (Chinese)",
     "downloadColumn": "Download",
-    "license": "Source Available 1.0",
+    "license": "GPL-3.0",
     "licenseTitle": "License",
     "thirdPartyNotices": "third-party notices",
     "licensePoints": [
-        "**Source Available (not OSI Open Source)**: Under {licenseLink} (SonicRoute Source Available License 1.0), anyone may freely use, view, study, and modify SonicRoute, including free internal enterprise use.",
-        "**Public redistribution & restrictions**: Publicly distributing derivative works requires retaining copyright notices, attributing SonicRoute and the original GitHub repository, marking modifications, and providing complete corresponding source code under this same license. Commercial resale, paid bundling, paid distribution, closed-source distribution, and official impersonation are prohibited without prior written authorization (see {licenseLink} for commercial licensing).",
-        "**Scope & preserved MIT rights**: From 2026-11-14 at commit 442dac3, the complete main-branch project, including previously written code, is offered under this License to the extent the copyright holder has the right to license it. This includes v1.32; Source Available revisions must be separately identified with their source commit and license. To the extent the copyright holder has the right to license them, the v1.32 source code and release artifacts currently re-offered by the official project are provided under the new license; from today (2026-11-14), use, modification or redistribution relying on this grant must comply with it. Rights already granted under historical MIT versions remain valid and are neither revoked nor restricted by this new offering. Third-party and non-relicensable code retain their original licenses (see {noticesLink})."
+        "**GPL-3.0 open source**: SonicRoute is licensed under the GNU General Public License version 3 only (GPL-3.0-only); see {licenseLink}. Commercial use, sale and paid distribution are permitted subject to GPL.",
+        "**Redistribution**: Retain the required copyright and license notices, mark modifications, and license covered modified works under GPL version 3. When conveying covered binaries, provide the complete Corresponding Source as required by GPL section 6; see {licenseLink}.",
+        "**Scope and earlier licenses**: From the GPL migration on 2026-11-17, the complete covered project in this revision, including earlier code, is offered under GPL-3.0-only to the extent the copyright holder may license it. Previously granted MIT and custom-license permissions remain valid; existing tags and released binaries are not relabeled. Third-party components retain their own licenses (see {noticesLink})."
     ],
     "features": [
         "**Independent app audio routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.",

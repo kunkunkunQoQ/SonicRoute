@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | **한국어** | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **앱마다 원하는 오디오 장치를 지정하세요.**
 
@@ -12,7 +12,7 @@ SonicRoute는 Windows 알림 영역에 상주하는 오디오 유틸리티입니
 
 📥 [최신 릴리스 다운로드](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [사용자 가이드](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
-Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개 언어 지원 · [Source Available 1.0](LICENSE)
+Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개 언어 지원 · [GPL-3.0](LICENSE)
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="SonicRoute 실시간 데모: 모바일 앱 오디오를 PC 빠른 패널로 드래그해 출력 장치 전환"></a>
@@ -138,9 +138,9 @@ A: 감지는 시스템 이벤트를 우선 사용하고 필요한 경우에만 1
 
 ## 📜 라이선스
 
-- **Source Available(OSI 승인 오픈 소스가 아님)**: [LICENSE](LICENSE)(SonicRoute Source Available License 1.0)에 따라 기업 내부 무료 사용을 포함해 누구나 무료로 사용, 열람, 학습 및 수정할 수 있습니다.
-- **공개 재배포 및 제한 사항**: 파생 저작물을 공개 배포할 때는 저작권 표시, SonicRoute 프로젝트 이름 및 원본 GitHub 저장소 표기, 수정 내역 명시, 동일 라이선스에 따른 전체 소스 코드 무상 제공이 필수입니다. 사전 서면 허가 없이 상업적 재판매, 유료 번들링, 유료 배포, 비공개 소스 배포 및 공식 사칭은 금지됩니다(상업적 라이선스 신청은 [LICENSE](LICENSE) 참조).
-- **적용 범위와 기존 MIT 권리**: 2026-11-14 커밋 442dac3부터 저작권자가 허가할 권한이 있는 범위에서 이전 코드를 포함한 주 브랜치의 전체 프로젝트를 이 라이선스로 제공합니다. v1.32 시리즈도 포함됩니다. Source Available 수정판은 별도로 식별하고 소스 커밋과 라이선스를 명시해야 합니다. 저작권자가 허가할 권한이 있는 범위에서 현재 공식적으로 다시 제공하는 v1.32 소스 코드와 배포물에는 새 라이선스가 적용됩니다. 오늘(2026-11-14)부터 이 허가에 근거하여 사용, 수정 또는 재배포할 때에는 새 라이선스를 준수해야 합니다. 기존 MIT 버전에서 이미 부여된 권리는 계속 유효하며 이번 재제공으로 취소되거나 제한되지 않습니다. 제삼자 및 재허가할 수 없는 코드는 원래 라이선스를 유지합니다([서드파티 라이선스 고지](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
+- **GPL-3.0 오픈 소스**: SonicRoute는 GNU 일반 공중 사용 허가서 제3판만 적용합니다(GPL-3.0-only). [LICENSE](LICENSE)를 참조하세요. GPL 조건에 따른 상업적 사용, 판매 및 유료 배포가 허용됩니다.
+- **재배포**: 필요한 저작권 및 라이선스 고지를 유지하고, 변경 사항을 명시하며, 적용 대상 수정 저작물을 GPL 제3판으로 배포해야 합니다. 적용 대상 바이너리를 배포할 때는 GPL 제6조에 따라 완전한 대응 소스를 제공해야 합니다. 자세한 내용은 [LICENSE](LICENSE)를 참조하세요.
+- **범위 및 기존 허가**: 2026-11-17 GPL 전환부터 저작권자가 허가할 수 있는 범위에서 이 리비전의 전체 적용 대상 프로젝트(이전 코드 포함)에 GPL-3.0-only가 적용됩니다. 기존 MIT 및 이전 자체 라이선스로 부여된 권한은 유효하며, 기존 태그와 배포된 바이너리의 라이선스 표시는 바꾸지 않습니다. 제삼자 구성 요소는 원래 라이선스를 유지합니다([서드파티 라이선스 고지](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
 
 ---
 

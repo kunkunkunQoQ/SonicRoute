@@ -16,7 +16,7 @@ dotnet publish SonicRoute/SonicRoute.csproj -c Release -f net10.0-windows -r win
 
 需要 .NET SDK 和 Windows SDK 中的 `makepri.exe`、`makeappx.exe`。脚本默认选择已安装的最新 x64 打包工具。可用 `-Edition`（`Full`/`Lite`，默认 `Full`）、`-PublishDirectory`、`-OutputDirectory`、`-PackageVersion`、`-SdkDirectory`、`-ManifestPath`、`-IdentityName`、`-Publisher`、`-DisplayName` 指定参数；包版本最后一段为 `0`。输出目录必须尚不存在，防止覆盖历史包。
 
-商店包只接受对应版型（`Full` 或 `Lite`）的 NET10 x64 单文件输入。若还要构建其他便携架构，按顺序执行发布命令，避免共享生成目录的文件占用；其他架构不作为商店包输入。
+商店包只接受对应版型（`Full` 或 `Lite`）的 NET10 x64 单文件输入。自 GPL 转换起，应用内嵌完整 GPL 第 3 版文本，可在设置页点击“GPL-3.0”离线查看；MSIX 还附带根目录的 `LICENSE` 文件。若还要构建其他便携架构，按顺序执行发布命令，避免共享生成目录的文件占用；其他架构不作为商店包输入。
 
 脚本从 `SonicRoute/SonicRoute.png` 生成透明资产，包含 14 种目标尺寸，以及每种尺寸的普通、`unplated`、`lightunplated` 变体。清单使用透明背景，并通过 MakePri 重新生成 `resources.pri`，避免 Windows 为缺少主题变体的图标添加底板。修改图标后必须重新生成资产与资源索引。参考 [Microsoft 应用图标构造规范](https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-construction) 和 [桌面应用 MSIX 转换说明](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-manual-conversion)。
 

@@ -76,7 +76,7 @@ function render(language, text) {
     '<!-- AI / LLM Context: ' + wiki(pages.ai) + ' -->',
     '# 🎧 ' + text.title, '', navigation, '',
     `[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](${releaseUrl}) ` +
-      '[![License: Source Available 1.0](https://img.shields.io/badge/License-Source%20Available%201.0-4285F4)](LICENSE) ' +
+      '[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) ' +
       `[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](${shared.repository}) ` +
       `[![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](${releaseUrl}) ` +
       `[![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](${releaseUrl}) ` + sponsor, '',
@@ -170,8 +170,8 @@ function renderAI(shared) {
     `  source_status: "${shared.release === 'v' + sourceVersion ? 'Same version number as the published release; source may contain later commits.' : 'Development version; not the current published release.'}"`,
     "  version_scope: \"version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download.\"",
     "  repository: \"https://github.com/kunkunkunQoQ/SonicRoute\"",
-    "  license: \"SonicRoute Source Available License 1.0 (Source Available, NOT OSI Open Source; free for personal & internal enterprise use; commercial resale, paid bundling, paid distribution, closed-source derivatives & official impersonation prohibited without written authorization; see LICENSE)\"",
-    "  license_transition: \"From 2026-11-14 at commit 442dac3, the complete main-branch project, including previously written code, is offered under this License to the extent the copyright holder has the right to license it. This includes v1.32; Source Available revisions must be separately identified with their source commit and license. To the extent the copyright holder has the right to license them, the v1.32 source code and release artifacts currently re-offered by the official project are provided under the new license; from today (2026-11-14), use, modification or redistribution relying on this grant must comply with it. Rights already granted under historical MIT versions remain valid and are neither revoked nor restricted by this new offering. Third-party and non-relicensable code retain their original licenses (see third-party notices).\"",
+    "  license: \"GNU General Public License v3.0 only (SPDX: GPL-3.0-only; commercial use and paid distribution permitted subject to GPL; see LICENSE and docs/LICENSING.md)\"",
+    "  license_transition: \"From the GPL migration on 2026-11-17, the complete covered project in this revision, including previously authored code, is offered under GPL-3.0-only to the extent the copyright holder has the right to license it. Previously granted MIT and custom-license permissions remain valid. Existing tags and released binaries are not relabeled. Separately licensed third-party components retain their own licenses and notices.\"",
     "  wiki_root: \"https://github.com/kunkunkunQoQ/SonicRoute/wiki\"",
     "  download_latest: \"https://github.com/kunkunkunQoQ/SonicRoute/releases/latest\"",
     "  store_url: \"https://apps.microsoft.com/detail/9NQZGRTPM1NT\"",

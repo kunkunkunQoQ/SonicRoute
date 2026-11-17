@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// HISTORICAL MIT-era layout backup only. Use ../generate.cjs and the current root LICENSE for current documentation.
 // Shared layout and links; translations contain only reader-facing text.
 const fs = require('node:fs');
 const path = require('node:path');

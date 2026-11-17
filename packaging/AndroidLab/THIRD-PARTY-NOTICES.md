@@ -1,20 +1,19 @@
 # Third-party licenses and notices for SonicRoute
 
 > [!IMPORTANT]
-> **适用版本说明 / Applicability Notice**:
-> - **仅限 1.30 Full 与 1.31 Full 版本需要**：本第三方开源许可声明清单**仅限 SonicRoute 1.30 Full 与 1.31 Full 版本需要**。
-> - **后续版本及其他版本均不需要**：**后续版本的 Full（包括 1.32 Full 及后续所有版本）均不再需要此清单**；Lite、Legacy 等其他非 Full 发行版本也都不需要。
-> 
-> - **Required ONLY for v1.30 Full & v1.31 Full**: This third-party license and notice inventory is **required strictly and exclusively for SonicRoute v1.30 Full and v1.31 Full**.
-> - **NOT needed for subsequent Full or other versions**: Subsequent Full releases (**including v1.32 Full and all future versions**) no longer require or include this inventory; other editions such as Lite and Legacy do not require it either.
+> **适用范围 / Applicability**:
+> - 本页是项目许可与第三方声明的索引，当前项目许可见下表及根目录 `LICENSE`。第三方组件保留各自许可；分发时须保留实际包含组件所要求的声明。
+> - 外置 ADB、scrcpy、FFmpeg、SDL2 与 zlib 的运行时清单属于 **v1.30 Full / v1.31 Full** 历史构建记录，不能据此认定 v1.32+、Lite 或 Legacy 包含这些组件，也不能据此免除其他依赖的声明义务。
+> - This page indexes project licensing and third-party notices. Retain the notices required by the components actually distributed; their original licenses remain in force.
+> - The external ADB, scrcpy, FFmpeg, SDL2 and zlib runtime inventories describe historical **v1.30 Full / v1.31 Full** builds, not the contents of subsequent editions.
 
-This is the online entry for the third-party notices required exclusively by **SonicRoute 1.30 Full and 1.31 Full**. The application opens this page in your browser without exporting an additional local text file. Subsequent versions of Full (starting from **v1.32 Full and later**) as well as other editions (Lite, Legacy) do not require or reference this notice. Required license copies remain included in the application where applicable. Component-specific source notices and build observations are recorded below; this inventory is not a legal opinion.
+Current project licensing and historical component notices are separated below. The GPL migration does not relicense third-party components. Check each actual distribution against its dependencies and preserve applicable full license texts. This inventory records component-specific source notices and build observations; it is not a legal opinion or a substitute for the notices accompanying a particular package.
 
 ## Complete license texts
 
 | Component | Full text |
 | --- | --- |
-| SonicRoute (complete project offered under the new license from commit `442dac3`) | [SonicRoute Source Available License 1.0](../../LICENSE) |
+| SonicRoute (current covered project, GPL migration 2026-11-17) | [GNU GPL version 3 only](../../LICENSE) · [Scope and transition](../../docs/LICENSING.md) |
 | SonicRoute and its Android helpers (historical MIT versions, regardless of when obtained or used) | [Historical MIT notice](#sonicroute-historical-mit-notice-and-catalog-helper) |
 | Concentus / Opus | [Copyright, redistribution conditions and disclaimer](#concentus-222) |
 | NAudio | [MIT and source-file notices](#naudio-221) |
@@ -30,7 +29,7 @@ This is the online entry for the third-party notices required exclusively by **S
 
 ## SonicRoute Historical MIT Notice and Catalog Helper
 
-From 2026-11-14 at commit 442dac3, the complete main-branch project, including previously written code, is offered under this License to the extent the copyright holder has the right to license it. This includes v1.32 without waiting for v1.33; Source Available revisions must be separately identified with their source commit and license. Original v1.32 (4e3138f / tag v1.32) and its original artifacts remain MIT. Prior MIT versions (including v1.31 and earlier) retain their rights for continued use, modification and redistribution, even for copies obtained today or later. Third-party and non-relicensable code retain their licenses (see LICENSE and the component notices below). The catalog helper in `android-helper/Catalog.java` was originally published under MIT in v1.30/v1.31; its historical MIT notice remains valid and is reproduced below:
+From the GPL migration on 2026-11-17, the current complete covered project is offered under GPL-3.0-only to the extent the copyright holder has the right to license it; see [scope and transition](../../docs/LICENSING.md). Previously granted permissions under MIT and the former custom license remain valid. Existing tags and previously released binaries are not relabeled. The original v1.32 tag (4e3138f) and its original artifacts remain MIT, as do prior MIT versions. Separately licensed third-party components retain their own licenses and notices. The catalog helper in `android-helper/Catalog.java` was originally published under MIT in v1.30/v1.31; its historical MIT notice remains valid and is reproduced below:
 
 Copyright (c) 2026 kunkunkunQoQ
 

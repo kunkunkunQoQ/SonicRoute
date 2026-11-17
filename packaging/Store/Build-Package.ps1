@@ -56,6 +56,7 @@ if(-not (Test-Path -LiteralPath $makepri) -or -not (Test-Path -LiteralPath $make
 $package=Join-Path $output 'package'
 New-Item -ItemType Directory -Path $package -Force|Out-Null
 Copy-Item -LiteralPath $exe -Destination (Join-Path $package 'SonicRoute.exe')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../../LICENSE') -Destination (Join-Path $package 'LICENSE')
 [xml]$manifest=[IO.File]::ReadAllText([IO.Path]::GetFullPath($ManifestPath))
 $manifest.Package.Identity.SetAttribute('Version',$PackageVersion)
 if($IdentityName){$manifest.Package.Identity.SetAttribute('Name',$IdentityName)}
