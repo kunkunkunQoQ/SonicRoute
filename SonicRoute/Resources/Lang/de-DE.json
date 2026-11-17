@@ -1,4 +1,9 @@
 {
+  "Config.CorruptRecovered": "Die Konfiguration ist beschädigt. Original gesichert unter: {0}\nDie vorherige Sicherung wurde geladen.",
+  "Config.CorruptDefaults": "Die Konfiguration ist beschädigt. Original gesichert unter: {0}\nStandardeinstellungen werden verwendet; das Original bleibt zur Wiederherstellung erhalten.",
+  "Config.LoadBlocked": "Die Konfiguration konnte nicht gelesen oder gesichert werden. Speichern wurde zum Schutz der Einstellungen angehalten.\nOriginal: {0}\nDatei oder Zugriffsrechte korrigieren und neu starten.",
+  "App.RestartFailed": "Der neue Prozess konnte nicht starten. Die Anwendung bleibt geöffnet. Bitte erneut versuchen.",
+  "Diagnostics.StartupFailed": "Start fehlgeschlagen. Diagnoseprotokoll: {0}",
   "Lang.Code": "de-DE",
   "Theme.OsdAppearanceSettings": "OSD-Darstellung",
   "Theme.OsdVolumeVisual": "OSD-Lautstärkebalken",

@@ -15,6 +15,8 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--identity-review") { await IdentityReviewAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--display-concurrency") { await DisplayConcurrencyAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--idle-retirement") { await IdleRetirementAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--display-memory") { await DisplayMemoryAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--stream-performance")

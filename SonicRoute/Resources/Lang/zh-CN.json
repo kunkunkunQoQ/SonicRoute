@@ -1,4 +1,9 @@
 {
+  "Config.CorruptRecovered": "配置文件损坏，原文件已保留在：{0}\n已读取上次保存的备份。",
+  "Config.CorruptDefaults": "配置文件损坏，原文件已保留在：{0}\n本次使用默认设置，原文件可用于恢复。",
+  "Config.LoadBlocked": "配置文件无法读取或保留，已暂停保存以保护原设置。\n原文件：{0}\n请修复文件或访问权限后重新启动。",
+  "App.RestartFailed": "无法启动新进程，当前应用已保留，请稍后重试。",
+  "Diagnostics.StartupFailed": "启动失败。诊断日志：{0}",
   "Lang.Code": "zh-CN",
   "Theme.OsdAppearanceSettings": "OSD 外观设置",
   "Theme.OsdVolumeVisual": "OSD 音量进度条",

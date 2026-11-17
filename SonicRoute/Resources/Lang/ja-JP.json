@@ -1,4 +1,9 @@
 {
+  "Config.CorruptRecovered": "設定ファイルが破損しています。元のファイルの保存先：{0}\n前回のバックアップを読み込みました。",
+  "Config.CorruptDefaults": "設定ファイルが破損しています。元のファイルの保存先：{0}\n既定の設定を使用します。元のファイルは復元用に保持されています。",
+  "Config.LoadBlocked": "設定を読み込むか保存することができません。元の設定を保護するため保存を停止しました。\n元のファイル：{0}\nファイルまたはアクセス権を修復してから再起動してください。",
+  "App.RestartFailed": "新しいプロセスを起動できませんでした。このアプリは開いたままです。再試行してください。",
+  "Diagnostics.StartupFailed": "起動に失敗しました。診断ログ：{0}",
   "Lang.Code": "ja-JP",
   "Theme.OsdAppearanceSettings": "OSD の表示設定",
   "Theme.OsdVolumeVisual": "OSD の音量バー",

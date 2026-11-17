@@ -29,6 +29,10 @@ namespace SonicRoute
             System.Windows.Controls.ToolTipService.IsEnabledProperty.OverrideMetadata(typeof(FrameworkElement), new FrameworkPropertyMetadata(false));
             System.Windows.Controls.ToolTipService.IsEnabledProperty.OverrideMetadata(typeof(FrameworkContentElement), new FrameworkPropertyMetadata(false));
         }
+        public App()
+        {
+            DispatcherUnhandledException += (_, e) => ExceptionDiagnostics.Record("Dispatcher.Unhandled", e.Exception);
+        }
         private NotifyIcon? _trayIcon;
         private MainWindow? _mainWindow;
         private QuickPanelModernWindow? _quickPanel;
@@ -75,12 +79,15 @@ namespace SonicRoute
         private static string ActivateSinkTitle => AppRuntimeIdentity.Current.ActivateSinkTitle;
         private static string ActivateMessageName => AppRuntimeIdentity.Current.ActivateMessageName;
 
+        internal string[]? StartupArguments { get; set; }
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+            var startupArgs = StartupArguments ?? e.Args;
+            StartupArguments = null;
 
 
-            var commandMode = RuleCommandLine.Parse(SonicRoute.Updates.UpdateBootstrap.Pending != null ? Array.Empty<string>() : e.Args, out var ruleSelector);
+            var commandMode = RuleCommandLine.Parse(SonicRoute.Updates.UpdateBootstrap.Pending != null ? Array.Empty<string>() : startupArgs, out var ruleSelector);
             if (commandMode == RuleCommandLine.Mode.Help || commandMode == RuleCommandLine.Mode.Invalid)
             {
                 if (commandMode == RuleCommandLine.Mode.Help)
@@ -120,6 +127,13 @@ namespace SonicRoute
             L10n.Instance.SetLanguage(config.Language);
             ThemeService.Apply(config.ThemeMode, config.Accent);
             ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
+            if (commandMode != RuleCommandLine.Mode.Run && ConfigService.LoadWarning is { } warning)
+            {
+                string key = warning.SavesBlocked ? "Config.LoadBlocked"
+                    : warning.UsedBackup ? "Config.CorruptRecovered" : "Config.CorruptDefaults";
+                System.Windows.MessageBox.Show(string.Format(L10n.T(key), warning.PreservedPath ?? ConfigService.ConfigPath),
+                    "SonicRoute", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             bool phoneLab = false;
 #if SONICROUTE_PHONE
             phoneLab = AndroidLabRuntime.StartInLabMode;
@@ -221,15 +235,15 @@ namespace SonicRoute
             StartRuleCommandServer(audioWarmup);
 
             // 启动行为
-                        if (e.Args.Contains("--benchmark-ui", StringComparer.OrdinalIgnoreCase))
+                        if (startupArgs.Contains("--benchmark-ui", StringComparer.OrdinalIgnoreCase))
             {
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; await RunUiBenchmarkAsync(); }));
                 return;
             }
             bool showMain = !config.StartMinimized;
-            if (phoneLab || e.Args.Contains("--panel", StringComparer.OrdinalIgnoreCase))
+            if (phoneLab || startupArgs.Contains("--panel", StringComparer.OrdinalIgnoreCase))
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ToggleQuickPanel(); }));
-            else if (e.Args.Contains("--main", StringComparer.OrdinalIgnoreCase))
+            else if (startupArgs.Contains("--main", StringComparer.OrdinalIgnoreCase))
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ShowMainWindow(); }));
             else if (config.StartPanelOnStart)
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ToggleQuickPanel(); }));

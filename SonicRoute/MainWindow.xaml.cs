@@ -1733,7 +1733,8 @@ namespace SonicRoute
         /// <summary>实验设置 - 一键清理配置文件：删除 config.json 恢复全部默认并自动重启应用。</summary>
         private void ExpClearConfig_Click(object sender, RoutedEventArgs e)
         {
-            SonicRoute.Core.ConfigService.ResetToDefault();
+            var reset = SonicRoute.Core.ConfigService.ResetToDefault();
+            if (!ReferenceEquals(reset, _config)) _configImportCommitted = true;
             RestartApp();
         }
 
@@ -2103,19 +2104,24 @@ namespace SonicRoute
         }
 
         /// <summary>重启应用（供清理配置等需要全量重新初始化的场景使用）。</summary>
-        private void RestartApp()
+        private bool _restartPending;
+        private async void RestartApp()
         {
+            if (_restartPending || _isClosed) return;
+            _restartPending = true;
             try
             {
                 var exe = AppInfo.ExecutablePath ?? "SonicRoute.exe";
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = exe,
-                    UseShellExecute = true,
-                });
+                if (await RestartCoordinator.TryStartAsync(exe))
+                    System.Windows.Application.Current.Shutdown();
+                else if (!_isClosed) ShowToast(L10n.T("App.RestartFailed"));
             }
-            catch { }
-            System.Windows.Application.Current.Shutdown();
+            catch (Exception ex)
+            {
+                ExceptionDiagnostics.Record("Restart.Request", ex);
+                if (!_isClosed) ShowToast(L10n.T("App.RestartFailed"));
+            }
+            finally { _restartPending = false; }
         }
         /// <summary>应用折叠状态：开启后显示折叠按钮并默认收起"保留的设备/设备名称"，关闭则全部展开。</summary>
         private void ApplyCollapseUi()

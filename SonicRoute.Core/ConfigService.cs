@@ -181,6 +181,33 @@ namespace SonicRoute.Core
 
         public double OsdFontScale { get; set; } = 1.0;
 
+        /// <summary>JSON can explicitly assign null despite the declared non-null contracts.</summary>
+        public void NormalizeCollections()
+        {
+            HiddenOutputDevices = NormalizeList(HiddenOutputDevices);
+            HiddenInputDevices = NormalizeList(HiddenInputDevices);
+            DisabledAutoSwitchApps = NormalizeList(DisabledAutoSwitchApps);
+            HiddenPanelApps = NormalizeList(HiddenPanelApps);
+            FavoriteRuleIds = NormalizeList(FavoriteRuleIds);
+            AutomationRuleOrder = NormalizeList(AutomationRuleOrder);
+            Hotkeys = NormalizeMap(Hotkeys);
+            DeviceNames = NormalizeMap(DeviceNames);
+            AppNames = NormalizeMap(AppNames);
+            AppIcons = AppIconFiles.NormalizeMappings(AppIcons);
+        }
+
+        private static List<string> NormalizeList(List<string>? source) =>
+            source == null ? new() : source.FindAll(value => !string.IsNullOrWhiteSpace(value));
+
+        private static Dictionary<string, string> NormalizeMap(Dictionary<string, string>? source)
+        {
+            var result = new Dictionary<string, string>(source?.Comparer ?? StringComparer.Ordinal);
+            if (source != null)
+                foreach (var pair in source)
+                    if (!string.IsNullOrWhiteSpace(pair.Key)) result[pair.Key] = pair.Value ?? "";
+            return result;
+        }
+
         /// <summary>Called by the settings owner before handing work to a worker; mutations must use that same owner.</summary>
         public AppConfig Snapshot()
         {
@@ -204,6 +231,18 @@ namespace SonicRoute.Core
         public static string ConfigPath => Path.Combine(
             AppDataRoot.DirectoryPath,
             "config.json");
+        public static string BackupPath => ConfigPath + ".bak";
+
+        public sealed class LoadWarningInfo
+        {
+            public string? PreservedPath { get; }
+            public bool UsedBackup { get; }
+            public bool SavesBlocked { get; }
+            internal LoadWarningInfo(string? preservedPath, bool usedBackup, bool savesBlocked)
+            { PreservedPath = preservedPath; UsedBackup = usedBackup; SavesBlocked = savesBlocked; }
+        }
+        public static LoadWarningInfo? LoadWarning { get; private set; }
+        private static bool _savesBlocked;
 
         // 内存缓存：单实例进程内唯一写者是本进程，Save 时同步更新缓存；
         // 高频调用（托盘滚轮每格、快捷键每次、设备名称每键）直接读缓存，
@@ -250,7 +289,7 @@ namespace SonicRoute.Core
                         if (current)
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-                            AtomicFile.WriteAllText(ConfigPath, json);
+                            WriteConfig(json);
                             saved = true;
                         }
                     }
@@ -270,33 +309,66 @@ namespace SonicRoute.Core
             {
                 if (_cache != null) return _cache;
             }
-            // v1.17：旧版 config.json 中的 AutoRules 迁移到独立目录（%LocalAppData%\\SonicRoute\\Automation\\）
-            AutoRuleStore.MigrateLegacyIfNeeded();
-            AppConfig cfg;
-            try
+            lock (_writeLock)
             {
-                if (File.Exists(ConfigPath))
+                lock (_lock) if (_cache != null) return _cache;
+                // Serialize the one-time read/quarantine with saves and other first-load callers.
+                AutoRuleStore.MigrateLegacyIfNeeded();
+                AppConfig cfg;
+                try { cfg = File.Exists(ConfigPath) ? ReadConfig(ConfigPath) : new AppConfig(); }
+                catch (Exception ex)
                 {
-                    var json = File.ReadAllText(ConfigPath);
-                    cfg = JsonSerializer.Deserialize<AppConfig>(json, ReadOptions) ?? new AppConfig();
-                }
-                else
-                {
+                    ExceptionDiagnostics.Record("Config.Load", ex);
+                    bool usedBackup = false;
                     cfg = new AppConfig();
+                    try { if (File.Exists(BackupPath)) { cfg = ReadConfig(BackupPath); usedBackup = true; } }
+                    catch (Exception backupError) { ExceptionDiagnostics.Record("Config.BackupRead", backupError); }
+                    string? preserved = null;
+                    _savesBlocked = true;
+                    if (ex is JsonException)
+                    {
+                        try
+                        {
+                            preserved = ConfigPath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N");
+                            File.Move(ConfigPath, preserved);
+                            _savesBlocked = false;
+                        }
+                        catch (Exception preserveError)
+                        { preserved = null; ExceptionDiagnostics.Record("Config.Preserve", preserveError); }
+                    }
+                    LoadWarning = new LoadWarningInfo(preserved, usedBackup, _savesBlocked);
+                }
+                cfg.NormalizeCollections();
+                lock (_lock)
+                {
+                    // A settings owner can publish a queued save while this cold read is in progress.
+                    if (_cache != null) return _cache;
+                    _publishedSnapshot = cfg.Snapshot();
+                    return _cache = cfg;
                 }
             }
-            catch
-            {
-                // 读取失败回退默认
-                cfg = new AppConfig();
-            }
-            lock (_lock)
-            {
-                if (_cache != null) return _cache;
-                cfg.AppIcons = AppIconFiles.NormalizeMappings(cfg.AppIcons);
-                _publishedSnapshot = cfg.Snapshot();
-                return _cache = cfg;
-            }
+        }
+
+        private static AppConfig ReadConfig(string path)
+        {
+            var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), ReadOptions)
+                ?? throw new JsonException("The configuration root must be an object.");
+            return cfg;
+        }
+
+        // Called only while _writeLock is owned. Failure to back up aborts the replacement.
+        private static void BackupBeforeWrite()
+        {
+            if (_savesBlocked) throw new IOException("Configuration saves are paused because the original file could not be preserved.");
+            if (!File.Exists(ConfigPath)) return;
+            using var original = new FileStream(ConfigPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            AtomicFile.Write(BackupPath, stream => original.CopyTo(stream));
+        }
+
+        private static void WriteConfig(string json)
+        {
+            BackupBeforeWrite();
+            AtomicFile.WriteAllText(ConfigPath, json);
         }
 
         public static void Save(AppConfig config)
@@ -320,7 +392,7 @@ namespace SonicRoute.Core
                 {
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
-                    AtomicFile.WriteAllText(ConfigPath, JsonSerializer.Serialize(snapshot, SaveOptions));
+                    WriteConfig(JsonSerializer.Serialize(snapshot, SaveOptions));
                     saved = true;
                 }
                 catch { /* 保存失败保留原文件，不阻断运行。 */ }
@@ -345,11 +417,11 @@ namespace SonicRoute.Core
         public static bool TrySetAppIcon(string processName, string? fileName)
         {
             if (string.IsNullOrWhiteSpace(processName) || (fileName != null && !AppIconFiles.IsFileName(fileName))) return false;
-            AppConfig config;
+            AppConfig config = Load();
             Dictionary<string, string> previous, next;
             lock (_lock)
             {
-                config = Load();
+                config = _cache ?? config;
                 previous = config.AppIcons;
                 if (AppIconFiles.GetFileName(config, processName) == fileName) return true;
                 next = AppIconFiles.NormalizeMappings(previous);
@@ -372,7 +444,11 @@ namespace SonicRoute.Core
             lock (_writeLock)
             {
                 lock (_lock) { ++_saveVersion; _pendingSave = null; }
-                try { if (File.Exists(ConfigPath)) File.Delete(ConfigPath); } catch { }
+                // This explicit reset is allowed to replace defaults, but retain the previous settings.
+                _savesBlocked = false;
+                try { BackupBeforeWrite(); if (File.Exists(ConfigPath)) File.Delete(ConfigPath); }
+                catch (Exception ex) { ExceptionDiagnostics.Record("Config.Reset", ex); return Load(); }
+                LoadWarning = null;
                 var cfg = new AppConfig();
                 lock (_lock) { _cache = cfg; _publishedSnapshot = cfg.Snapshot(); }
                 return cfg;
@@ -396,7 +472,8 @@ namespace SonicRoute.Core
                 if (snapshot == null)
                 {
                     AppConfig published;
-                    lock (_lock) { Load(); published = _publishedSnapshot!; }
+                    Load();
+                    lock (_lock) published = _publishedSnapshot!;
                     // Background callers use the last owner-published snapshot. Never
                     // enumerate or re-save the live dictionaries while the UI edits them.
                     snapshot = JsonSerializer.Serialize(published, SaveOptions);
@@ -429,7 +506,7 @@ namespace SonicRoute.Core
                 if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
                 var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
                 if (config == null || (config.AppIcons?.Count ?? 0) > AppIconFiles.MaxIcons) return null;
-                config.AppIcons = AppIconFiles.NormalizeMappings(config.AppIcons);
+                config.NormalizeCollections();
                 var assets = AppIconFiles.ReadImportAssets(document.RootElement, config);
                 var encoded = new Dictionary<string, string>(StringComparer.Ordinal);
                 foreach (var asset in assets) encoded[asset.Key] = Convert.ToBase64String(asset.Value);
@@ -447,6 +524,7 @@ namespace SonicRoute.Core
                 using var document = JsonDocument.Parse(prepared);
                 var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
                 if (config == null) return false;
+                config.NormalizeCollections();
                 AppIconFiles.ImportAssets(document.RootElement, config);
                 byte[] ordinary = TransferJson(document.RootElement, config, null);
                 lock (_writeLock)
@@ -454,6 +532,7 @@ namespace SonicRoute.Core
                     lock (_lock) { ++_saveVersion; _pendingSave = null; }
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
+                    BackupBeforeWrite();
                     AtomicFile.WriteAllBytes(ConfigPath, ordinary);
                     lock (_lock) { _cache = null; _publishedSnapshot = null; }
                 }
@@ -465,7 +544,12 @@ namespace SonicRoute.Core
         public static AppConfig? ReadPreparedConfig(byte[] prepared)
         {
             if (prepared.Length > AppIconFiles.MaxTransferBytes) return null;
-            try { return JsonSerializer.Deserialize<AppConfig>(prepared, ReadOptions); }
+            try
+            {
+                var config = JsonSerializer.Deserialize<AppConfig>(prepared, ReadOptions);
+                config?.NormalizeCollections();
+                return config;
+            }
             catch { return null; }
         }
 

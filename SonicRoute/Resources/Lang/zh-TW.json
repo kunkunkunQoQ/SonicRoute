@@ -1,4 +1,9 @@
 {
+  "Config.CorruptRecovered": "設定檔損毀，原檔已保留於：{0}\n已讀取上次儲存的備份。",
+  "Config.CorruptDefaults": "設定檔損毀，原檔已保留於：{0}\n此次使用預設值，原檔可供還原。",
+  "Config.LoadBlocked": "無法讀取或保留設定檔，已暫停儲存以保護原設定。\n原檔：{0}\n請修復檔案或存取權限後重新啟動。",
+  "App.RestartFailed": "無法啟動新程序，已保留目前應用程式，請稍後重試。",
+  "Diagnostics.StartupFailed": "啟動失敗。診斷記錄：{0}",
   "Lang.Code": "zh-TW",
   "Theme.OsdAppearanceSettings": "OSD 外觀設定",
   "Theme.OsdVolumeVisual": "OSD 音量進度條",

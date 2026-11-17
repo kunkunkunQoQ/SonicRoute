@@ -1,4 +1,9 @@
 {
+  "Config.CorruptRecovered": "The configuration was damaged. The original is preserved at: {0}\nThe previous backup has been loaded.",
+  "Config.CorruptDefaults": "The configuration was damaged. The original is preserved at: {0}\nDefault settings are in use; the original remains available for recovery.",
+  "Config.LoadBlocked": "The configuration could not be read or preserved. Saving is paused to protect your settings.\nOriginal: {0}\nRepair the file or its permissions, then restart.",
+  "App.RestartFailed": "The replacement process could not start. This app remains open; please try again.",
+  "Diagnostics.StartupFailed": "Startup failed. Diagnostic log: {0}",
   "Lang.Code": "en-US",
   "Theme.OsdAppearanceSettings": "OSD appearance settings",
   "Theme.OsdVolumeVisual": "OSD volume bar",

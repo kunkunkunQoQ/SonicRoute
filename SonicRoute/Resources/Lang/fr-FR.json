@@ -1,4 +1,9 @@
 {
+  "Config.CorruptRecovered": "La configuration est endommagée. Original conservé ici : {0}\nLa sauvegarde précédente a été chargée.",
+  "Config.CorruptDefaults": "La configuration est endommagée. Original conservé ici : {0}\nLes paramètres par défaut sont utilisés ; le fichier original reste disponible pour la restauration.",
+  "Config.LoadBlocked": "Impossible de lire ou de conserver la configuration. Enregistrement suspendu pour protéger vos paramètres.\nOriginal : {0}\nRéparez le fichier ou ses droits, puis redémarrez.",
+  "App.RestartFailed": "Le nouveau processus n’a pas pu démarrer. Cette application reste ouverte ; réessayez.",
+  "Diagnostics.StartupFailed": "Échec du démarrage. Journal de diagnostic : {0}",
   "Lang.Code": "fr-FR",
   "Theme.OsdAppearanceSettings": "Apparence de l’OSD",
   "Theme.OsdVolumeVisual": "Barre de volume OSD",

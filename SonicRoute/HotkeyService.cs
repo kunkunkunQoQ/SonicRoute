@@ -120,7 +120,8 @@ namespace SonicRoute
             if (force || !mouseBindings.SequenceEqual(_compiledMouseBindings) || !_mouseHook.IsInstalled && mouseBindings.Count != 0)
                 _mouseHook.Reload(mouseBindings);
             _compiledMouseBindings = mouseBindings;
-            foreach (var binding in mouseBindings) RegistrationStatus[binding.Value] = _mouseHook.IsInstalled ? binding.Key : "";
+            foreach (var binding in mouseBindings)
+                RegistrationStatus[binding.Value] = _mouseHook.IsRegistered(binding.Key, binding.Value) ? binding.Key : "";
             if (changed) _requestedBindings = next;
         }
 

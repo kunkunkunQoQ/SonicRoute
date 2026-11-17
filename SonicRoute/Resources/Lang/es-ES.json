@@ -1,4 +1,9 @@
 {
+  "Config.CorruptRecovered": "La configuración está dañada. El original se conserva en: {0}\nSe ha cargado la copia anterior.",
+  "Config.CorruptDefaults": "La configuración está dañada. El original se conserva en: {0}\nSe usan los valores predeterminados; el original permite recuperarla.",
+  "Config.LoadBlocked": "No se pudo leer ni conservar la configuración. Se ha pausado el guardado para protegerla.\nOriginal: {0}\nRepara el archivo o sus permisos y reinicia.",
+  "App.RestartFailed": "No se pudo iniciar el nuevo proceso. La aplicación sigue abierta; vuelve a intentarlo.",
+  "Diagnostics.StartupFailed": "Error al iniciar. Registro de diagnóstico: {0}",
   "Lang.Code": "es-ES",
   "Theme.OsdAppearanceSettings": "Apariencia del OSD",
   "Theme.OsdVolumeVisual": "Barra de volumen OSD",

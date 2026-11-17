@@ -229,6 +229,9 @@ internal sealed class StreamAdbPacketLink : IAdbPacketLink
             {
                 if (certificate == null) return false;
                 PeerCertificateSha256 = certificate.GetCertHashString(HashAlgorithmName.SHA256);
+                // AOSP's host transport accepts adbd's generated server certificate.
+                // This fingerprint is diagnostic, not proof of a persistent phone identity.
+                // Pairing's independently generated certificate is not a transport pin.
                 if (serverCertificateValidator == null) return true;
                 if (certificate is X509Certificate2 existingCert2)
                     return serverCertificateValidator(existingCert2);

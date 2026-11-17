@@ -60,7 +60,18 @@ namespace SonicRoute
             if (png == null || png.Length == 0) return null;
             return Volatile.Read(ref ExternalPngIcons).GetValue(png, static bytes => new Lazy<ImageSource?>(() => DecodePngCore(bytes))).Value;
         }
-        private static ImageSource DecodePngCore(byte[] png) => DecodePngSized(png, AppIconFiles.IconSize);
+        private static ImageSource? DecodePngCore(byte[] png)
+        {
+            try { return DecodePngSized(png, AppIconFiles.IconSize); }
+            catch (Exception ex) when (ex is IOException or NotSupportedException or ArgumentException
+                or InvalidOperationException or FormatException or COMException)
+            {
+                // The Lazy completes successfully with null, rather than caching an exception.
+                // Negative caching avoids repeatedly decoding/logging the same immutable bad payload.
+                ExceptionDiagnostics.Record("Icon.Decode", ex);
+                return null;
+            }
+        }
 
         internal static BitmapImage DecodePngSized(byte[] png, int maxDimension)
         {

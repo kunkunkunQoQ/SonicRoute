@@ -29,14 +29,21 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
 
     private readonly object _gate = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    private readonly HashSet<Entry> _retiring = new();
     private readonly Func<IVirtualDisplayClient> _factory;
+    private readonly TimeSpan _closeTimeout;
     private bool _disposed;
 
-    public int Count { get { lock (_gate) return _entries.Count; } }
+    public int Count { get { lock (_gate) return _entries.Count + _retiring.Count; } }
     public event Action<string>? Failed;
     public event Action<AndroidApp?, Exception>? FailedError;
     public event Action? ResourcesRetired;
-    public AndroidVirtualDisplayManager(Func<IVirtualDisplayClient> factory) => _factory = factory;
+    public AndroidVirtualDisplayManager(Func<IVirtualDisplayClient> factory) : this(factory, TimeSpan.FromSeconds(8)) { }
+    internal AndroidVirtualDisplayManager(Func<IVirtualDisplayClient> factory, TimeSpan closeTimeout)
+    {
+        if (closeTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(closeTimeout));
+        _factory = factory; _closeTimeout = closeTimeout;
+    }
 
     public Task<IVirtualDisplayClient> OpenAsync(AndroidDevice device, AndroidApp app, int x, int y)
     {
@@ -109,17 +116,36 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
         Entry[] entries;
         lock (_gate)
         {
-            entries = _entries.Values.Where(matches).ToArray();
-            foreach (var entry in entries) entry.Lifetime.Cancel();
+            entries = _entries.Values.Concat(_retiring).Where(matches).Distinct().ToArray();
+            foreach (var pair in _entries.Where(pair => matches(pair.Value)).ToArray())
+            {
+                _entries.Remove(pair.Key);
+                _retiring.Add(pair.Value);
+            }
         }
-        await Task.WhenAll(entries.Select(e => e.Closed.Task)).ConfigureAwait(false);
+        await Task.WhenAll(CancelEntries(entries), Task.WhenAll(entries.Select(e => e.Closed.Task)))
+            .WaitAsync(_closeTimeout).ConfigureAwait(false);
+    }
+
+    private static Task CancelEntries(Entry[] entries)
+    {
+        foreach (var entry in entries) entry.Ready.TrySetCanceled();
+        return Task.WhenAll(entries.Select(async entry =>
+        {
+            // Cancellation can invoke client callbacks; never do it while owning the registry lock.
+            try { await entry.Lifetime.CancelAsync().ConfigureAwait(false); }
+            catch (ObjectDisposedException) { }
+            catch (AggregateException ex) { System.Diagnostics.Trace.WriteLine("Display cancellation callback: " + ex.Message); }
+        }));
     }
 
     private async Task RunAsync(string id, Entry entry, AndroidDevice device, AndroidApp app, int x, int y)
     {
         try
         {
+            entry.Lifetime.Token.ThrowIfCancellationRequested();
             await entry.Client.StartAsync(device, app, x, y, entry.Lifetime.Token).ConfigureAwait(false);
+            entry.Lifetime.Token.ThrowIfCancellationRequested();
             entry.Ready.TrySetResult(entry.Client);
             await entry.Client.Completion.WaitAsync(entry.Lifetime.Token).ConfigureAwait(false);
         }
@@ -131,9 +157,15 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
         }
         finally
         {
+            lock (_gate)
+            {
+                if (_entries.TryGetValue(id, out var current) && ReferenceEquals(current, entry))
+                    _entries.Remove(id);
+                _retiring.Add(entry);
+            }
             try { await entry.Client.DisposeAsync().ConfigureAwait(false); }
             catch (Exception ex) { try { Failed?.Invoke(ex.Message); FailedError?.Invoke(null, ex); } catch { } }
-            lock (_gate) _entries.Remove(id);
+            lock (_gate) _retiring.Remove(entry);
             entry.Lifetime.Dispose();
             entry.Closed.TrySetResult();
             try { ResourcesRetired?.Invoke(); }
@@ -147,9 +179,11 @@ public sealed class AndroidVirtualDisplayManager : IAsyncDisposable
         lock (_gate)
         {
             _disposed = true;
-            entries = _entries.Values.ToArray();
-            foreach (var entry in entries) entry.Lifetime.Cancel();
+            entries = _entries.Values.Concat(_retiring).Distinct().ToArray();
+            _entries.Clear();
+            foreach (var entry in entries) _retiring.Add(entry);
         }
-        await Task.WhenAll(entries.Select(e => e.Closed.Task)).ConfigureAwait(false);
+        await Task.WhenAll(CancelEntries(entries), Task.WhenAll(entries.Select(e => e.Closed.Task)))
+            .WaitAsync(_closeTimeout).ConfigureAwait(false);
     }
 }

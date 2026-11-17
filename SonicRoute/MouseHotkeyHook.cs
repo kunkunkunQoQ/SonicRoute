@@ -50,10 +50,9 @@ namespace SonicRoute
         public void Reload(IEnumerable<KeyValuePair<string, string>> bindings)
         {
             _actionsByCombo.Clear();
-            foreach (var kv in bindings)
-                _actionsByCombo[kv.Key] = kv.Value;
             _bindings.Clear();
-            foreach (var kv in _actionsByCombo)
+            if (_disposed) return;
+            foreach (var kv in bindings)
             {
                 var parts = SplitCombo(kv.Key);
                 if (parts.Length == 0) continue;
@@ -64,7 +63,16 @@ namespace SonicRoute
                     || key.Equals("WheelUp", StringComparison.OrdinalIgnoreCase)
                     || key.Equals("WheelDown", StringComparison.OrdinalIgnoreCase))) continue;
                 for (uint mods = 0; mods < 16; mods++)
-                    if (ComboMatches(kv.Key, mods, key)) { _bindings.Add((mods, key, kv.Value)); break; }
+                    if (ComboMatches(kv.Key, mods, key))
+                    {
+                        string canonical = mods + ":" + key.ToUpperInvariant();
+                        if (!_actionsByCombo.ContainsKey(canonical))
+                        {
+                            _actionsByCombo.Add(canonical, kv.Value);
+                            _bindings.Add((mods, key, kv.Value));
+                        }
+                        break;
+                    }
             }
             if (_disposed) return;
             if (_bindings.Count == 0)
@@ -75,6 +83,9 @@ namespace SonicRoute
             else if (_hook == IntPtr.Zero)
                 _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
         }
+
+        internal bool IsRegistered(string combo, string action) => IsInstalled && !_disposed
+            && _bindings.Any(binding => binding.Action == action && ComboMatches(combo, binding.Mods, binding.Key));
 
         private IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam)
         {

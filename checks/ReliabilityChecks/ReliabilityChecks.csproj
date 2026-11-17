@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework Condition="'$(ReliabilityFramework)' == ''">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(ReliabilityFramework)' != ''">$(ReliabilityFramework)</TargetFramework>
+    <UseWPF>true</UseWPF><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion><PlatformTarget>x64</PlatformTarget><Prefer32Bit>false</Prefer32Bit>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects><GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../SonicRoute/SonicRoute.csproj" Condition="'$(TargetFramework)' != 'net48'" />
+    <ProjectReference Include="../../SonicRoute.Legacy/SonicRoute.Legacy.csproj" Condition="'$(TargetFramework)' == 'net48'" />
+    <Compile Include="../../packaging/Tests/PanelChecks/ProductResources.cs" Link="ProductResources.cs" />
+    <EmbeddedResource Include="../../SonicRoute/App.xaml" LogicalName="ProductApp.xaml" />
+  </ItemGroup>
+</Project>
