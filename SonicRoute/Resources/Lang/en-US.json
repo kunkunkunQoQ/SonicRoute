@@ -746,6 +746,8 @@
   "Phone.QrPairTitle": "Pair with QR code",
   "Phone.QrPairSteps": "Developer options → Wireless debugging → Pair device with QR code",
   "Phone.ShowQr": "Show QR code",
+  "Phone.QrRefreshHint": "Refreshes automatically · Click QR code to refresh",
+  "Phone.QrRetryHint": "Pairing is unavailable. Retrying shortly; click to retry now.",
   "Phone.CancelPairing": "Cancel pairing",
   "Phone.CodePairTitle": "Pair with code",
   "Phone.CodePairSteps": "Wireless debugging → Pair device with pairing code",

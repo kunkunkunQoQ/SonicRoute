@@ -9,8 +9,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media.Imaging;
-using QRCoder;
 using SonicRoute.AndroidAudio;
 using Button = System.Windows.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
@@ -108,6 +106,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             Interlocked.Decrement(ref _activePageCount);
         }
         _operation?.Cancel();
+        StopQrPairing();
         CancelStreamingWork();
         AndroidAudioHost.Phone.Changed -= ProfileChanged;
         L10n.Instance.PropertyChanged -= OnLanguageChanged;
@@ -132,6 +131,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         ProfileChanged();
         SetBusy(_busy);
+        RefreshQrStatus();
         UpdateOperationStatus();
         UpdateCatalogStatus();
         foreach (PhoneAppChoice choice in RetainedApps.Items) choice.RefreshLanguage();
@@ -186,6 +186,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         RemoveDeviceButton.IsEnabled = profile.LastDevice != null && !_busy;
         if (appsChanged && CatalogPanel.Visibility == Visibility.Visible) ApplyCatalogFilter();
         RefreshClipboard();
+        UpdateQrPairing();
     }
     private async Task LoadClipboardAsync(App application)
     {
@@ -233,15 +234,19 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             _ => ""
         };
     }
-    private async Task RunAsync(Func<CancellationToken, Task> action, string success = "")
+    private async Task RunAsync(Func<CancellationToken, Task> action, string success = "", bool fromQr = false)
     {
         if (_disposed || _busy || !_active) return;
         _busy = true;
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _operation = operation;
         SetBusy(true); SetOperationStatusKey("Phone.ProcessingStatus");
+        StopQrPairing();
         try
         {
+            // Retire the scanner before another pairing method uses the same transport.
+            if (!fromQr && _qrTask != null) await _qrTask;
+            operation.Token.ThrowIfCancellationRequested();
             await action(operation.Token);
             if (!_disposed && !operation.IsCancellationRequested) SetOperationStatusKey(success);
         }
@@ -257,8 +262,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private void SetBusy(bool busy)
     {
         PairButton.IsEnabled = ConnectButton.IsEnabled = !busy;
-        QrButton.Content = busy ? L10n.T("Phone.CancelPairing") : L10n.T("Phone.ShowQr");
-        QrButton.IsEnabled = true;
+        PairAddressBox.IsEnabled = PairCodeBox.IsEnabled = QrButton.IsEnabled = !busy;
     }
     private async Task RefreshDevicesCoreAsync(CancellationToken token)
     {
@@ -314,13 +318,6 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             ApplyDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
         }, "Phone.StatusUnpairRequested");
     }
-    private void PairMethods_SizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        bool wide = e.NewSize.Width >= 540;
-        Grid.SetColumn(CodePairCard,wide ? 1 : 0); Grid.SetRow(CodePairCard,wide ? 0 : 1);
-        Grid.SetColumnSpan(QrPairCard,wide ? 1 : 2); Grid.SetColumnSpan(CodePairCard,wide ? 1 : 2);
-        QrPairCard.Margin = new Thickness(0,0,wide ? 8 : 0,10);
-    }
     private async void Connect_Click(object sender, RoutedEventArgs e)
     {
         string address = ConnectAddressBox.Text.Trim();
@@ -336,27 +333,6 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             SetOperationStatusKey("Phone.StatusPairedConnecting");
             ApplyConnection(await Wireless.FinishPairingAsync(pairing, token), token);
         }, "Phone.ConnectedStatus");
-    }
-    private async void QrPair_Click(object sender, RoutedEventArgs e)
-    {
-        if (_busy) { _operation?.Cancel(); return; }
-        var qr = _createQr();
-        using (var code = QRCodeGenerator.GenerateQrCode(qr.Payload, QRCodeGenerator.ECCLevel.M))
-        using (var renderer = new PngByteQRCode(code))
-        using (var stream = new ImageDataStream(renderer.GetGraphic(6)))
-        {
-            var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze(); PairQrImage.Source = bitmap;
-        }
-        PairQrImage.Visibility = Visibility.Visible;
-        await RunAsync(async token =>
-        {
-            SetOperationStatusKey("Phone.StatusQrScanPrompt");
-            var pairing = await Wireless.PairQrAsync(qr, token);
-            SetOperationStatusKey("Phone.StatusPairedConnecting");
-            ApplyConnection(await Wireless.FinishPairingAsync(pairing, token), token);
-        }, "Phone.ConnectedStatus");
-        PairQrImage.Source = null; PairQrImage.Visibility = Visibility.Collapsed;
     }
     private async void Reconnect_Click(object sender, RoutedEventArgs e) => await RunAsync(async token =>
     {

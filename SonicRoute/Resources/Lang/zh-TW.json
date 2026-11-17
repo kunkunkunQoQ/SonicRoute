@@ -746,6 +746,8 @@
   "Phone.QrPairTitle": "掃碼配對",
   "Phone.QrPairSteps": "開發人員選項 → 無線偵錯 → 使用 QR 圖碼配對",
   "Phone.ShowQr": "顯示 QR 圖碼",
+  "Phone.QrRefreshHint": "自動更新 · 點擊二維碼更新",
+  "Phone.QrRetryHint": "暫時無法配對，稍後自動重試；也可點擊重試。",
   "Phone.CancelPairing": "取消配對",
   "Phone.CodePairTitle": "配對碼連線",
   "Phone.CodePairSteps": "無線偵錯 → 使用配對碼配對裝置",

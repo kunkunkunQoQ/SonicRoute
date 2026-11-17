@@ -18,6 +18,8 @@ internal static partial class Program
         var cache = typeof(App).Assembly.GetType("SonicRoute.PhoneAudioWindowCache")!;
         cache.GetMethod("SetDevices", statics)!.Invoke(null, new object[]{Array.Empty<AndroidDevice>()});
         var page = new PhoneDevicePage();
+        var phoneStore = (AndroidPhoneStore)typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!
+            .GetProperty("Phone", statics)!.GetValue(null)!;
         var window = new Window { Title="SonicRoute · 手机配对验证", Content=page, Width=850, Height=700,
             WindowStartupLocation=WindowStartupLocation.CenterScreen };
         window.SetResourceReference(Window.BackgroundProperty,"Theme.AppBg");
@@ -26,25 +28,27 @@ internal static partial class Program
         var status = (TextBlock)page.FindName("OperationStatus");
         var descriptor = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(Image.SourceProperty, typeof(Image));
         bool started=false, ended=false;
-        EventHandler changed = (_,_) =>
+        EventHandler imageChanged = (_,_) => { if (image.Source != null) started = true; };
+        void ConnectionChanged()
         {
-            if (image.Source!=null) { started=true; return; }
-            if (!started || ended) return; ended=true;
-            var host=typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!;
-            var store=(AndroidPhoneStore)host.GetProperty("Phone",statics)!.GetValue(null)!;
-            File.WriteAllText(Path.Combine(output,"qr-live-result.json"), JsonSerializer.Serialize(new{
-                Status=status.Text, Device=store.Profile.LastDevice,
-                DeviceCardVisible=((FrameworkElement)page.FindName("DeviceCard")).Visibility==Visibility.Visible,
-                RealAdb=true, AudioOrVirtualDisplayStarted=false},new JsonSerializerOptions{WriteIndented=true}));
-            window.Close();
-        };
-        descriptor.AddValueChanged(image,changed);
+            if (!started || ended || (bool)typeof(PhoneDevicePage).GetProperty("IsConnectionPage", Hidden)!.GetValue(page)!) return;
+            page.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (ended) return; ended = true;
+                File.WriteAllText(Path.Combine(output,"qr-live-result.json"), JsonSerializer.Serialize(new{
+                    Status=status.Text, Device=phoneStore.Profile.LastDevice,
+                    DeviceCardVisible=((FrameworkElement)page.FindName("DeviceCard")).Visibility==Visibility.Visible,
+                    RealAdb=true, AudioOrVirtualDisplayStarted=false},new JsonSerializerOptions{WriteIndented=true}));
+                window.Close();
+            }));
+        }
+        descriptor.AddValueChanged(image,imageChanged);
+        phoneStore.Changed += ConnectionChanged;
         var limit=new System.Windows.Threading.DispatcherTimer { Interval=TimeSpan.FromSeconds(130) };
         limit.Tick+=(_,_)=>{limit.Stop();window.Close();};
-        window.Closed+=(_,_)=>{limit.Stop();descriptor.RemoveValueChanged(image,changed);page.Dispose();frame.Continue=false;};
+        window.Closed+=(_,_)=>{limit.Stop();descriptor.RemoveValueChanged(image,imageChanged);phoneStore.Changed-=ConnectionChanged;page.Dispose();frame.Continue=false;};
         window.Show(); typeof(PhoneDevicePage).GetMethod("Activate",Hidden)!.Invoke(page,null);
         typeof(PhoneDevicePage).GetMethod("ShowConnection",Hidden)!.Invoke(page,null);
-        ((Button)page.FindName("QrButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         limit.Start(); Console.WriteLine("QR_WINDOW_READY; scan from Android wireless debugging. No credentials logged.");
         System.Windows.Threading.Dispatcher.PushFrame(frame);
         return ended && status.Text=="已连接" ? 0 : 1;
@@ -104,9 +108,9 @@ internal static partial class Program
                     && ((FrameworkElement)page.FindName("DeviceCard")).Visibility == Visibility.Visible,
                     label + " publishes the authorized phone to the sidebar, device page and reopened quick panel");
             }
-            ShowConnection(); Empty(); Click("QrButton"); AssertConnected("QR pairing");
-            Check(((FrameworkElement)page.FindName("PairQrImage")).Visibility == Visibility.Collapsed,
-                "completed QR pairing clears the transient code image");
+            ShowConnection(); Empty();
+            Check(((Image)page.FindName("PairQrImage")).Source == null && ((Button)page.FindName("PairButton")).IsEnabled,
+                "an unshown Add Device page defers QR work and keeps manual pairing available; automatic QR uses --pairing-combined");
             ShowConnection(); Empty();
             ((TextBox)page.FindName("PairAddressBox")).Text = "192.168.1.10:37000";
             ((TextBox)page.FindName("PairCodeBox")).Text = "123456";

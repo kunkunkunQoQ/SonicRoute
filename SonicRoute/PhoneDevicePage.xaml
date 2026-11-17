@@ -1,7 +1,8 @@
 <UserControl x:Class="SonicRoute.PhoneDevicePage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:SonicRoute">
+             xmlns:local="clr-namespace:SonicRoute"
+             IsVisibleChanged="PairingVisibilityChanged" Loaded="PairingLoaded" Unloaded="PairingUnloaded">
     <UserControl.Resources>
         <Style x:Key="PhoneCard" TargetType="Border" BasedOn="{StaticResource Card}">
             <Setter Property="CornerRadius" Value="12"/>
@@ -172,20 +173,26 @@
                     </Grid>
                 </Border>
             </StackPanel>
-            <StackPanel x:Name="ConnectionPanel" Visibility="Collapsed">
-                <Grid x:Name="PairMethodsGrid" SizeChanged="PairMethods_SizeChanged">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <Border x:Name="QrPairCard" Style="{StaticResource PhoneCard}">
-                    <StackPanel>
+            <StackPanel x:Name="ConnectionPanel" Visibility="Collapsed" IsVisibleChanged="PairingVisibilityChanged">
+                <Border x:Name="PairingCard" Style="{StaticResource PhoneCard}">
+                <Grid x:Name="PairMethodsGrid">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="0.9*" MinWidth="182"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <StackPanel x:Name="QrPairCard" Margin="0,0,16,0">
                         <TextBlock Text="{Binding [Phone.QrPairTitle], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding [Phone.QrPairSteps], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
-                        <Image x:Name="PairQrImage" Width="166" Height="166" Visibility="Collapsed" HorizontalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        <Button x:Name="QrButton" Content="{Binding [Phone.ShowQr], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Click="QrPair_Click" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        <Button x:Name="QrButton" Style="{StaticResource QuickPanelToolButton}" Click="QrPair_Click"
+                                HorizontalAlignment="Center" Width="166" Height="166" Padding="0" Margin="0"
+                                AutomationProperties.Name="{Binding [Phone.QrRefreshHint], Source={x:Static local:L10n.Instance}}"
+                                ToolTip="{Binding [Phone.QrRefreshHint], Source={x:Static local:L10n.Instance}}">
+                            <Grid Width="164" Height="164" Background="White">
+                                <TextBlock Text="{Binding [Phone.ProcessingStatus], Source={x:Static local:L10n.Instance}}"
+                                           Foreground="#687080" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Image x:Name="PairQrImage" Width="164" Height="164" Visibility="Collapsed" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            </Grid>
+                        </Button>
+                        <TextBlock x:Name="QrStatus" Text="{Binding [Phone.QrRefreshHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" TextAlignment="Center" Margin="0,8,0,0"/>
                     </StackPanel>
-                </Border>
-                <Border x:Name="CodePairCard" Style="{StaticResource PhoneCard}" Grid.Column="1">
-                    <StackPanel>
+                    <StackPanel x:Name="CodePairCard" Grid.Column="1">
                         <TextBlock Text="{Binding [Phone.CodePairTitle], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding [Phone.CodePairSteps], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
                         <TextBlock Text="{Binding [Phone.PairingAddressLabel], Source={x:Static local:L10n.Instance}}" Margin="0,0,0,6"/>
@@ -194,8 +201,8 @@
                         <TextBox x:Name="PairCodeBox" MaxLength="6" FontSize="18" FontFamily="Consolas" Style="{StaticResource ModernTextBox}" AutomationProperties.Name="{Binding [Phone.PairingCodeAutomation], Source={x:Static local:L10n.Instance}}"/>
                         <Button x:Name="PairButton" Content="{Binding [Phone.PairAndConnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Margin="0,8,0,0" Click="PairCode_Click"/>
                     </StackPanel>
-                </Border>
                 </Grid>
+                </Border>
                 <Border Style="{StaticResource PhoneCard}">
                     <StackPanel>
                         <TextBlock Text="{Binding [Phone.DirectConnectTitle], Source={x:Static local:L10n.Instance}}" FontWeight="SemiBold"/>

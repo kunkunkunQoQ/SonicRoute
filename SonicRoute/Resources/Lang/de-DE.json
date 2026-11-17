@@ -746,6 +746,8 @@
   "Phone.QrPairTitle": "Per QR-Code koppeln",
   "Phone.QrPairSteps": "Entwickleroptionen → Kabelloses Debugging → Über QR-Code koppeln",
   "Phone.ShowQr": "QR-Code anzeigen",
+  "Phone.QrRefreshHint": "Automatische Aktualisierung · QR-Code zum Aktualisieren anklicken",
+  "Phone.QrRetryHint": "Kopplung nicht verfügbar. Automatischer Wiederholungsversuch; zum sofortigen Wiederholen klicken.",
   "Phone.CancelPairing": "Kopplung abbrechen",
   "Phone.CodePairTitle": "Mit Kopplungscode verbinden",
   "Phone.CodePairSteps": "Kabelloses Debugging → Gerät mit Kopplungscode koppeln",

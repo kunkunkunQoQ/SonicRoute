@@ -746,6 +746,8 @@
   "Phone.QrPairTitle": "QR 코드 페어링",
   "Phone.QrPairSteps": "개발자 옵션 → 무선 디버깅 → QR 코드로 페어링",
   "Phone.ShowQr": "QR 코드 표시",
+  "Phone.QrRefreshHint": "자동 새로 고침 · QR 코드를 눌러 새로 고침",
+  "Phone.QrRetryHint": "페어링할 수 없습니다. 잠시 후 자동으로 재시도합니다. 누르면 바로 재시도합니다.",
   "Phone.CancelPairing": "페어링 취소",
   "Phone.CodePairTitle": "페어링 코드 연결",
   "Phone.CodePairSteps": "무선 디버깅 → 페어링 코드로 기기 페어링",

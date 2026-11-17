@@ -746,6 +746,8 @@
   "Phone.QrPairTitle": "Associer par code QR",
   "Phone.QrPairSteps": "Options pour les développeurs → Débogage sans fil → Associer avec un code QR",
   "Phone.ShowQr": "Afficher le code QR",
+  "Phone.QrRefreshHint": "Actualisation automatique · Cliquez sur le QR pour actualiser",
+  "Phone.QrRetryHint": "Association indisponible. Nouvel essai automatique ; cliquez pour réessayer maintenant.",
   "Phone.CancelPairing": "Annuler l’association",
   "Phone.CodePairTitle": "Connexion par code",
   "Phone.CodePairSteps": "Débogage sans fil → Associer l’appareil avec un code",

@@ -746,6 +746,8 @@
   "Phone.QrPairTitle": "Vincular con código QR",
   "Phone.QrPairSteps": "Opciones para desarrolladores → Depuración inalámbrica → Vincular con código QR",
   "Phone.ShowQr": "Mostrar código QR",
+  "Phone.QrRefreshHint": "Actualización automática · Pulsa el QR para actualizar",
+  "Phone.QrRetryHint": "Vinculación no disponible. Se reintentará; pulsa para reintentar ahora.",
   "Phone.CancelPairing": "Cancelar vinculación",
   "Phone.CodePairTitle": "Conectar con código",
   "Phone.CodePairSteps": "Depuración inalámbrica → Vincular dispositivo con código",

@@ -746,6 +746,8 @@
   "Phone.QrPairTitle": "QR コードでペア設定",
   "Phone.QrPairSteps": "開発者向けオプション → ワイヤレスデバッグ → QR コードでペア設定",
   "Phone.ShowQr": "QR コードを表示",
+  "Phone.QrRefreshHint": "自動更新 · QR コードをクリックして更新",
+  "Phone.QrRetryHint": "ペア設定できません。自動で再試行します。クリックすると今すぐ再試行します。",
   "Phone.CancelPairing": "ペア設定をキャンセル",
   "Phone.CodePairTitle": "ペア設定コードで接続",
   "Phone.CodePairSteps": "ワイヤレスデバッグ → ペア設定コードでデバイスをペア設定",
