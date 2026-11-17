@@ -308,6 +308,22 @@ internal static partial class Program
             if (hardwareFrames + softwareFrames == 0) decoder.Drain(Hardware, Software);
             Check(hardwareFrames + softwareFrames > 0 && renderer.HasPresentedFrame,
                 $"device-bound H.264 decode presents a synthetic frame (hardware={hardwareFrames}, software={softwareFrames})");
+            if (hardwareFrames > 0)
+            {
+                bool Empty(params string[] names) => names.All(name =>
+                    ((ComPtr)typeof(D3D11VideoSurfaceRenderer).GetField(name, StreamPrivate)!.GetValue(renderer)!).IsNull);
+                Check(Empty("_swYTex", "_swUvTex", "_swYSrv", "_swUvSrv"),
+                    "hardware presentation releases the previous software textures and views");
+                renderer.PresentSoftwareNv12(nv12, 64, 64, 0, 0, 64, 64, VideoColorMatrix.Bt601Limited);
+                Check(Empty("_hwNv12Tex", "_hwYSrv", "_hwUvSrv"),
+                    "software fallback releases the previous hardware staging texture and views");
+                // Resume hardware rendering while the decoder remains alive; staging is
+                // recreated on demand and the two modes can alternate without losing frames.
+                int framesBeforeReturn = hardwareFrames;
+                decoder.DecodePacket(idr, 5 * 33333L, Hardware, Software);
+                Check(hardwareFrames > framesBeforeReturn && Empty("_swYTex", "_swUvTex", "_swYSrv", "_swUvSrv"),
+                    "returning to hardware recreates only its active textures and continues presenting");
+            }
         }
         renderer.Dispose(); renderer.RenderLastFrame();
         Check(!IsWindowVisibleForStreamTest(hwnd), "native video checks leave the owned window hidden throughout");
@@ -315,6 +331,20 @@ internal static partial class Program
 
     [DllImport("user32.dll", EntryPoint = "IsWindowVisible")]
     private static extern bool IsWindowVisibleForStreamTest(nint hwnd);
+
+    private static async Task DisplayMemoryAsync(string output)
+    {
+        Directory.CreateDirectory(output);
+        await CheckRendererResizeRecoveryAsync();
+        Check(D3D11VideoSurfaceRenderer.ActiveInstanceCount == 0 && MediaFoundationH264Decoder.ActiveInstanceCount == 0,
+            "display memory checks release every owned decoder and renderer");
+        await File.WriteAllTextAsync(Path.Combine(output, "display-memory.json"), JsonSerializer.Serialize(new
+        {
+            Success = true, Assertions = _checks, WindowsShown = false, PhoneAccess = false,
+            Scope = "Real hidden D3D11/MFT frames, resize recovery and software/hardware texture retirement; GPU bytes not measured."
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"PASS {_checks} display memory assertions; owned hidden window only.");
+    }
 
     private static async Task StreamVideoProbeAsync(string output)
     {

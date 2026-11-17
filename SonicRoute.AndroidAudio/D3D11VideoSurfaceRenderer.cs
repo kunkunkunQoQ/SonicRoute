@@ -325,6 +325,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
             ComVtbl.Get<CopySubresourceRegionFn>(_context.Handle, 46)(
                 _context.Handle, _hwNv12Tex.Handle, 0, 0, 0, 0, srcTexture, arraySlice, 0);
 
+            if (_hasSwFrame) ReleaseSoftwareTextures();
             _hasHwFrame = true;
             _hasSwFrame = false;
             _frameCropX = cropX;
@@ -360,6 +361,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
                 }
             }
 
+            if (_hasHwFrame) ReleaseHardwareTextures();
             _hasSwFrame = true;
             _hasHwFrame = false;
             _frameCropX = cropX;
@@ -400,9 +402,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
     private void EnsureHardwareStagingTexture(int width, int height)
     {
         if (!_hwNv12Tex.IsNull && _hwTexW == width && _hwTexH == height) return;
-        _hwYSrv.Dispose();
-        _hwUvSrv.Dispose();
-        _hwNv12Tex.Dispose();
+        ReleaseHardwareTextures();
 
         // Width/Height for NV12 must be multiples of 2.
         int texW = (width + 1) & ~1;
@@ -455,10 +455,7 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
     private void EnsureSoftwareTextures(int width, int height)
     {
         if (!_swYTex.IsNull && _swTexW == width && _swTexH == height) return;
-        _swYSrv.Dispose();
-        _swUvSrv.Dispose();
-        _swYTex.Dispose();
-        _swUvTex.Dispose();
+        ReleaseSoftwareTextures();
 
         int uvW = Math.Max(1, (width + 1) / 2);
         int uvH = Math.Max(1, (height + 1) / 2);
@@ -497,6 +494,18 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
 
         _swTexW = width;
         _swTexH = height;
+    }
+
+    private void ReleaseHardwareTextures()
+    {
+        _hwYSrv.Dispose(); _hwUvSrv.Dispose(); _hwNv12Tex.Dispose();
+        _hwTexW = _hwTexH = 0;
+    }
+
+    private void ReleaseSoftwareTextures()
+    {
+        _swYSrv.Dispose(); _swUvSrv.Dispose(); _swYTex.Dispose(); _swUvTex.Dispose();
+        _swTexW = _swTexH = 0;
     }
 
     private void RenderLocked()
@@ -743,13 +752,8 @@ public sealed class D3D11VideoSurfaceRenderer : IDisposable
                 ComVtbl.Get<ClearStateFn>(_context.Handle, 110)(_context.Handle);
                 ComVtbl.Get<FlushFn>(_context.Handle, 111)(_context.Handle);
             }
-            _swYSrv.Dispose();
-            _swUvSrv.Dispose();
-            _swYTex.Dispose();
-            _swUvTex.Dispose();
-            _hwYSrv.Dispose();
-            _hwUvSrv.Dispose();
-            _hwNv12Tex.Dispose();
+            ReleaseSoftwareTextures();
+            ReleaseHardwareTextures();
             _constantBuffer.Dispose();
             _sampler.Dispose();
             _ps.Dispose();

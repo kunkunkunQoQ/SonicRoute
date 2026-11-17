@@ -343,7 +343,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         var qr = _createQr();
         using (var code = QRCodeGenerator.GenerateQrCode(qr.Payload, QRCodeGenerator.ECCLevel.M))
         using (var renderer = new PngByteQRCode(code))
-        using (var stream = new MemoryStream(renderer.GetGraphic(6)))
+        using (var stream = new ImageDataStream(renderer.GetGraphic(6)))
         {
             var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.StreamSource = stream; bitmap.EndInit(); bitmap.Freeze(); PairQrImage.Source = bitmap;

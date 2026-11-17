@@ -12,5 +12,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../../SonicRoute/AppIconService.cs" Link="AppIconService.cs" />
+    <Compile Include="../../../SonicRoute/ImageDataStream.cs" Link="ImageDataStream.cs" />
   </ItemGroup>
 </Project>

@@ -969,7 +969,7 @@ public partial class PhoneAudioWindow : Window
     {
         const int MaxArtworkDimensionPx = 112; // 56x56 DIP at 200% DPI
         int srcWidth = 0, srcHeight = 0;
-        using (var probeStream = new MemoryStream(artwork, writable: false))
+        using (var probeStream = new ImageDataStream(artwork))
         {
             var decoder = BitmapDecoder.Create(probeStream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None);
             if (decoder.Frames.Count > 0)
@@ -980,7 +980,7 @@ public partial class PhoneAudioWindow : Window
             }
         }
 
-        using var stream = new MemoryStream(artwork, writable: false);
+        using var stream = new ImageDataStream(artwork);
         var image = new BitmapImage();
         image.BeginInit();
         image.CacheOption = BitmapCacheOption.OnLoad;

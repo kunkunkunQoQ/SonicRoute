@@ -152,6 +152,12 @@ internal static partial class Program
             }
             app.Resources = ProductResources();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            if (args.Contains("--memory-retention"))
+            {
+                CheckImageMemoryRetention(args.Last(), args.Contains("--baseline"));
+                Console.WriteLine($"RESULT passed={_checks} MEMORY_RETENTION=true PHONE_ACCESS=false WINDOWS_SHOWN=false");
+                return 0;
+            }
             if (args.Contains("--tray-submenu-live"))
             {
                 CheckTraySubmenuPlacement(args.Last());

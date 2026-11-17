@@ -64,7 +64,7 @@ namespace SonicRoute
 
         internal static BitmapImage DecodePngSized(byte[] png, int maxDimension)
         {
-            using var stream = new MemoryStream(png, writable: false);
+            using var stream = new ImageDataStream(png);
             var image = new BitmapImage();
             image.BeginInit();
             image.CacheOption = BitmapCacheOption.OnLoad;

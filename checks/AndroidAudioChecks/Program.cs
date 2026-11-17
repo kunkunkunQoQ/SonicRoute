@@ -15,6 +15,7 @@ internal static partial class Program
     {
         try
         {
+            if (args.Length > 0 && args[0] == "--display-memory") { await DisplayMemoryAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--stream-performance")
             {
                 if (args.Contains("--video-probe")) await StreamVideoProbeAsync(args[1]);
