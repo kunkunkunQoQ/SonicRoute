@@ -181,7 +181,7 @@ namespace SonicRoute.Core
 
         public double OsdFontScale { get; set; } = 1.0;
 
-        /// <summary>Copy mutable collections before a background save; scalar additions copy automatically.</summary>
+        /// <summary>Called by the settings owner before handing work to a worker; mutations must use that same owner.</summary>
         public AppConfig Snapshot()
         {
             var copy = (AppConfig)MemberwiseClone();
@@ -209,6 +209,7 @@ namespace SonicRoute.Core
         // 高频调用（托盘滚轮每格、快捷键每次、设备名称每键）直接读缓存，
         // 避免反复读盘 + 反序列化，降低 GC 压力与内存波动。
         private static AppConfig? _cache;
+        private static AppConfig? _publishedSnapshot;
         private static readonly object _lock = new();
         private static readonly object _writeLock = new();
         private static long _saveVersion;
@@ -223,6 +224,7 @@ namespace SonicRoute.Core
             lock (_lock)
             {
                 _cache = config;
+                _publishedSnapshot = snapshot;
                 _pendingSave = (snapshot, ++_saveVersion);
                 if (_saveTask.IsCompleted) _saveTask = Task.Run(DrainSaves);
             }
@@ -290,8 +292,10 @@ namespace SonicRoute.Core
             }
             lock (_lock)
             {
+                if (_cache != null) return _cache;
                 cfg.AppIcons = AppIconFiles.NormalizeMappings(cfg.AppIcons);
-                return _cache ??= cfg;
+                _publishedSnapshot = cfg.Snapshot();
+                return _cache = cfg;
             }
         }
 
@@ -304,13 +308,16 @@ namespace SonicRoute.Core
         /// <summary>保存并报告是否成功落盘；保留原有内存缓存更新行为。</summary>
         public static bool TrySave(AppConfig config)
         {
+            // Capture on the settings owner before entering the I/O serialization lock.
+            AppConfig snapshot;
+            try { snapshot = config.Snapshot(); }
+            catch { return false; }
             lock (_writeLock)
             {
-                lock (_lock) { ++_saveVersion; _pendingSave = null; _cache = config; }
+                lock (_lock) { ++_saveVersion; _pendingSave = null; _cache = config; _publishedSnapshot = snapshot; }
                 bool saved = false;
                 try
                 {
-                    var snapshot = config.Snapshot();
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
                     AtomicFile.WriteAllText(ConfigPath, JsonSerializer.Serialize(snapshot, SaveOptions));
@@ -367,7 +374,7 @@ namespace SonicRoute.Core
                 lock (_lock) { ++_saveVersion; _pendingSave = null; }
                 try { if (File.Exists(ConfigPath)) File.Delete(ConfigPath); } catch { }
                 var cfg = new AppConfig();
-                lock (_lock) _cache = cfg;
+                lock (_lock) { _cache = cfg; _publishedSnapshot = cfg.Snapshot(); }
                 return cfg;
             }
         }
@@ -375,7 +382,8 @@ namespace SonicRoute.Core
         /// <summary>在界面线程捕获普通配置快照；不读取图片或写盘。</summary>
         public static string CaptureExportSnapshot()
         {
-            lock (_lock) return JsonSerializer.Serialize(Load(), SaveOptions);
+            // This explicit capture runs on the same owner as settings edits.
+            return JsonSerializer.Serialize(Load().Snapshot(), SaveOptions);
         }
 
         /// <summary>后台导出稳定配置及图片；不把快照替换成运行中的配置对象。</summary>
@@ -385,8 +393,14 @@ namespace SonicRoute.Core
             {
                 if (string.Equals(Path.GetFullPath(destPath), Path.GetFullPath(ConfigPath), StringComparison.OrdinalIgnoreCase)) return false;
                 FlushPendingSaves();
-                if (!TrySave(Load())) return false;
-                snapshot ??= CaptureExportSnapshot();
+                if (snapshot == null)
+                {
+                    AppConfig published;
+                    lock (_lock) { Load(); published = _publishedSnapshot!; }
+                    // Background callers use the last owner-published snapshot. Never
+                    // enumerate or re-save the live dictionaries while the UI edits them.
+                    snapshot = JsonSerializer.Serialize(published, SaveOptions);
+                }
                 using var document = JsonDocument.Parse(snapshot);
                 var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
                 if (config == null) return false;
@@ -441,7 +455,7 @@ namespace SonicRoute.Core
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
                     AtomicFile.WriteAllBytes(ConfigPath, ordinary);
-                    lock (_lock) _cache = null;
+                    lock (_lock) { _cache = null; _publishedSnapshot = null; }
                 }
                 return true;
             }

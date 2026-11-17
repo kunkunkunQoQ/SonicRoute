@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using SonicRoute.Core.Compat;
 
@@ -56,6 +56,7 @@ namespace SonicRoute.Core.Interop
         private readonly EDataFlow _flow;
         private readonly object _sync = new();
         private IntPtr _factory = IntPtr.Zero;
+        private bool _disposed;
 
         public AudioPolicyConfig(EDataFlow flow)
         {
@@ -71,9 +72,9 @@ namespace SonicRoute.Core.Interop
         /// <summary>取得策略接口指针（QI 后的目标接口，含正确 vtable）。当前实例内复用，由 Dispose 释放。</summary>
         private IntPtr EnsureFactory()
         {
-            if (_factory != IntPtr.Zero) return _factory;
             lock (_sync)
             {
+                if (_disposed) throw new ObjectDisposedException(nameof(AudioPolicyConfig));
                 if (_factory != IntPtr.Zero) return _factory;
 
                 var iid = IsWin11 ? IID_21H2 : IID_DOWNLEVEL;
@@ -86,15 +87,23 @@ namespace SonicRoute.Core.Interop
                 try
                 {
                     int hr = NativeMethods.RoGetActivationFactory(hClass, ref iid, out IntPtr factoryUnk);
-                    if (hr < 0)
-                        throw new InvalidOperationException($"RoGetActivationFactory 失败 HRESULT=0x{hr:X8} ({hr})");
-
-                    hr = Marshal.QueryInterface(factoryUnk, ref iid, out _factory);
-                    Marshal.Release(factoryUnk);
-                    if (hr < 0)
-                        throw new InvalidOperationException($"QueryInterface 失败 HRESULT=0x{hr:X8} ({hr})");
-
-                    return _factory;
+                    IntPtr queried = IntPtr.Zero;
+                    try
+                    {
+                        if (hr < 0)
+                            throw new InvalidOperationException($"RoGetActivationFactory 失败 HRESULT=0x{hr:X8} ({hr})");
+                        hr = Marshal.QueryInterface(factoryUnk, ref iid, out queried);
+                        if (hr < 0)
+                            throw new InvalidOperationException($"QueryInterface 失败 HRESULT=0x{hr:X8} ({hr})");
+                        _factory = queried;
+                        queried = IntPtr.Zero;
+                        return _factory;
+                    }
+                    finally
+                    {
+                        if (queried != IntPtr.Zero) Marshal.Release(queried);
+                        if (factoryUnk != IntPtr.Zero) Marshal.Release(factoryUnk);
+                    }
                 }
                 finally
                 {
@@ -118,27 +127,30 @@ namespace SonicRoute.Core.Interop
         /// </summary>
         public int SetDefaultEndPoint(string fullDeviceId, int processId)
         {
-            IntPtr factory = EnsureFactory();
+            lock (_sync)
+            {
+                IntPtr factory = EnsureFactory();
 
-            IntPtr hstring = IntPtr.Zero;
-            if (!string.IsNullOrWhiteSpace(fullDeviceId))
-            {
-                int hrCreate = NativeMethods.WindowsCreateString(fullDeviceId, (uint)fullDeviceId.Length, out hstring);
-                if (hrCreate < 0)
-                    throw new InvalidOperationException($"WindowsCreateString 失败 HRESULT=0x{hrCreate:X8} ({hrCreate})");
-            }
+                IntPtr hstring = IntPtr.Zero;
+                if (!string.IsNullOrWhiteSpace(fullDeviceId))
+                {
+                    int hrCreate = NativeMethods.WindowsCreateString(fullDeviceId, (uint)fullDeviceId.Length, out hstring);
+                    if (hrCreate < 0)
+                        throw new InvalidOperationException($"WindowsCreateString 失败 HRESULT=0x{hrCreate:X8} ({hrCreate})");
+                }
 
-            try
-            {
-                var fn = GetMethod<SetPersistedDefaultAudioEndpointDelegate>(factory, VTBL_SLOT_SET);
-                int hr1 = fn(factory, (uint)processId, _flow, ERole.eMultimedia, hstring);
-                int hr2 = fn(factory, (uint)processId, _flow, ERole.eConsole, hstring);
-                return hr1 < 0 ? hr1 : hr2;
-            }
-            finally
-            {
-                if (hstring != IntPtr.Zero)
-                    NativeMethods.WindowsDeleteString(hstring);
+                try
+                {
+                    var fn = GetMethod<SetPersistedDefaultAudioEndpointDelegate>(factory, VTBL_SLOT_SET);
+                    int hr1 = fn(factory, (uint)processId, _flow, ERole.eMultimedia, hstring);
+                    int hr2 = fn(factory, (uint)processId, _flow, ERole.eConsole, hstring);
+                    return hr1 < 0 ? hr1 : hr2;
+                }
+                finally
+                {
+                    if (hstring != IntPtr.Zero)
+                        NativeMethods.WindowsDeleteString(hstring);
+                }
             }
         }
 
@@ -147,21 +159,23 @@ namespace SonicRoute.Core.Interop
         /// </summary>
         public string? GetDefaultEndPoint(int processId)
         {
-            IntPtr factory = EnsureFactory();
-            var fn = GetMethod<GetPersistedDefaultAudioEndpointDelegate>(factory, VTBL_SLOT_GET);
-
-            int hr = fn(factory, (uint)processId, _flow, ERole.eMultimedia, out IntPtr hstring);
-            if (hr < 0 || hstring == IntPtr.Zero) return null;
-
-            try
+            lock (_sync)
             {
-                IntPtr raw = NativeMethods.WindowsGetStringRawBuffer(hstring, out uint len);
-                if (raw == IntPtr.Zero) return null;
-                return Marshal.PtrToStringUni(raw, (int)len);
-            }
-            finally
-            {
-                NativeMethods.WindowsDeleteString(hstring);
+                IntPtr factory = EnsureFactory();
+                var fn = GetMethod<GetPersistedDefaultAudioEndpointDelegate>(factory, VTBL_SLOT_GET);
+
+                int hr = fn(factory, (uint)processId, _flow, ERole.eMultimedia, out IntPtr hstring);
+                try
+                {
+                    if (hr < 0 || hstring == IntPtr.Zero) return null;
+                    IntPtr raw = NativeMethods.WindowsGetStringRawBuffer(hstring, out uint len);
+                    if (raw == IntPtr.Zero) return null;
+                    return Marshal.PtrToStringUni(raw, (int)len);
+                }
+                finally
+                {
+                    if (hstring != IntPtr.Zero) NativeMethods.WindowsDeleteString(hstring);
+                }
             }
         }
 
@@ -169,9 +183,12 @@ namespace SonicRoute.Core.Interop
         /// 这不包含音量合成器“重置”按钮的音量/静音重置；支持情况取决于系统实现，调用方处理失败。</summary>
         public int ClearAllPersistedApplicationDefaultEndpoints()
         {
-            IntPtr factory = EnsureFactory();
-            var fn = GetMethod<ClearAllPersistedApplicationDefaultEndpointsDelegate>(factory, VTBL_SLOT_CLEAR_ALL);
-            return fn(factory);
+            lock (_sync)
+            {
+                IntPtr factory = EnsureFactory();
+                var fn = GetMethod<ClearAllPersistedApplicationDefaultEndpointsDelegate>(factory, VTBL_SLOT_CLEAR_ALL);
+                return fn(factory);
+            }
         }
 
         /// <summary>释放持有的 COM 工厂接口引用（内存优化①）：每次切换设备 new 一个实例，
@@ -180,6 +197,8 @@ namespace SonicRoute.Core.Interop
         {
             lock (_sync)
             {
+                if (_disposed) return;
+                _disposed = true;
                 if (_factory != IntPtr.Zero)
                 {
                     Marshal.Release(_factory);
@@ -187,7 +206,9 @@ namespace SonicRoute.Core.Interop
                 }
             }
             GC.SuppressFinalize(this);
-        }        /// <summary>生成完整设备接口路径（把 IMMDevice.GetId() 的短 ID 包装为策略 API 需要的完整路径）。</summary>
+        }
+
+        /// <summary>生成完整设备接口路径（把 IMMDevice.GetId() 的短 ID 包装为策略 API 需要的完整路径）。</summary>
         public static string GenerateDeviceId(string shortDeviceId, EDataFlow flow)
         {
             var suffix = flow == EDataFlow.eRender ? DEVINTERFACE_AUDIO_RENDER : DEVINTERFACE_AUDIO_CAPTURE;

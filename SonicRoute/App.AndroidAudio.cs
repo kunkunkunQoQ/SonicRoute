@@ -367,19 +367,46 @@ public partial class App
         };
         PositionPhone(); phone.Show(); panel.RefreshCompanionPlacement();
     }
-    private void ShutdownAndroidAudio()
+    private Task? _androidShutdown;
+    private bool _androidShutdownWaited;
+    private Task BeginAndroidShutdown()
     {
+        if (_androidShutdown != null) return _androidShutdown;
         DetachUsbClipboardArrivalHook();
+        Task clipboard = Task.CompletedTask;
         if (_phoneClipboard != null)
         {
             _phoneClipboard.Changed -= OnPhoneClipboardChanged;
-            _phoneClipboard.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            // Detach the HWND hook on its owner; the remainder does not need the dispatcher.
+            clipboard = _phoneClipboard.DisposeAsync().AsTask();
         }
-        AndroidAudioHost.StopMedia();
         if (_androidDisplayNotifications) AndroidAudioHost.Displays.FailedError -= AndroidDisplayFailedError;
-        if (AndroidAudioHost.AreDisplaysCreated) AndroidAudioHost.Displays.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        if (AndroidAudioHost.IsCreated) AndroidAudioHost.Sources.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        AndroidAudioHost.FlushSettings();
+        return _androidShutdown = Task.Run(async () =>
+        {
+            var tasks = new List<Task> { clipboard, AndroidAudioHost.StopMediaAsync() };
+            if (AndroidAudioHost.AreDisplaysCreated) tasks.Add(AndroidAudioHost.Displays.DisposeAsync().AsTask());
+            if (AndroidAudioHost.IsCreated) tasks.Add(AndroidAudioHost.Sources.DisposeAsync().AsTask());
+            try { await Task.WhenAll(tasks).ConfigureAwait(false); }
+            finally { AndroidAudioHost.FlushSettings(); }
+        });
+    }
+    private async Task WaitForAndroidShutdownAsync()
+    {
+        _androidShutdownWaited = true;
+        try { await BeginAndroidShutdown().WaitAsync(TimeSpan.FromSeconds(8)); }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone shutdown: " + ex.Message); }
+    }
+    private void ShutdownAndroidAudio()
+    {
+        // Normal Quit awaited cleanup while WPF could still process messages. Direct
+        // OS/session shutdown has a bounded fallback and must not wait indefinitely.
+        if (_androidShutdownWaited) return;
+        try
+        {
+            if (!BeginAndroidShutdown().Wait(TimeSpan.FromSeconds(8)))
+                System.Diagnostics.Trace.WriteLine("Phone shutdown deadline reached; cleanup still pending.");
+        }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone shutdown: " + ex.Message); }
     }
 #else
     private void StartPhoneClipboard() { }
@@ -388,6 +415,7 @@ public partial class App
     internal bool KeepQuickPanelForAndroid => false;
     internal bool IsPhoneAudioVisible => false;
     private void ShutdownAndroidAudio() { }
+    private Task WaitForAndroidShutdownAsync() => Task.CompletedTask;
 #endif
 }
 #if SONICROUTE_PHONE

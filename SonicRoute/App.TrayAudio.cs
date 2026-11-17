@@ -41,7 +41,7 @@ namespace SonicRoute
             if (!parent.Items.OfType<MenuItem>().Any(item => item.Tag is string))
                 TrayPlaceholder(parent, "Tray.Loading");
             else
-                foreach (MenuItem item in parent.Items) item.IsEnabled = false;
+                foreach (var item in parent.Items.OfType<MenuItem>()) item.IsEnabled = false;
         }
 
         private static void UpdateTrayDeviceItems(MenuItem parent, IEnumerable<AudioDeviceInfo> devices,
@@ -61,7 +61,7 @@ namespace SonicRoute
                     item.IsCheckable = true;
                     item.StaysOpenOnClick = true;
                     var entry = item;
-                    item.Click += (_, _) => apply(id, ((TextBlock)entry.Header).Text);
+                    item.Click += (_, _) => apply(id, entry.Header is TextBlock header ? header.Text : entry.Header?.ToString() ?? "");
                 }
                 TrayNamedHeader(item, DeviceDisplayName(config, device));
                 item.IsEnabled = true;

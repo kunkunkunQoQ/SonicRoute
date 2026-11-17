@@ -944,8 +944,9 @@ namespace SonicRoute
             }
         });
 
-        private void Quit()
+        private async void Quit()
         {
+            if (_exiting) return;
             _exiting = true;
             Updates.Dispose();
             _mainWindow?.FlushPendingSettings();
@@ -962,6 +963,7 @@ namespace SonicRoute
             _hotkeys?.Dispose();
             _hotkeys = null;
             DisposeTray();
+            await WaitForAndroidShutdownAsync();
             Shutdown();
         }
 

@@ -17,6 +17,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
 
     private readonly object _gate = new();
     private readonly Dictionary<int, ActiveRoute> _routes = new();
+    private readonly HashSet<Task> _retiring = new();
+    private bool _disposed;
     public bool EnableLiveStreaming { get; set; } = true;
     public event Action? Changed;
     public event Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? OutputsObserved;
@@ -59,6 +61,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
 
         lock (_gate)
         {
+            if (_disposed) return (false, -1, "手机音频服务已停止。");
             if (_routes.TryGetValue(processId, out var existing) && !existing.IsStopped
                 && string.Equals(existing.PhoneKey, phoneKey, StringComparison.OrdinalIgnoreCase))
             {
@@ -81,6 +84,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
                 var lease = carriedLease ?? (canSilence ? SafeAcquireSilenceLease(processId) : null);
                 route = new ActiveRoute(processId, targetDeviceId, phoneKey, sinkKey, device, lease);
                 _routes[processId] = route;
+                if (previous != null) _ = Retire(previous, restorePreviousEndpoint: false);
             }
         }
 
@@ -95,9 +99,6 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             Changed?.Invoke();
             return (true, 0, "成功");
         }
-
-        if (previous != null)
-            _ = previous.StopAsync(restorePreviousEndpoint: false);
 
         if (EnableLiveStreaming
             && !string.Equals(device?.Serial, "offline-fixture", StringComparison.Ordinal))
@@ -116,8 +117,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         {
             if (!_routes.TryGetValue(processId, out removed)) return false;
             _routes.Remove(processId);
+            _ = Retire(removed, restorePreviousEndpoint);
         }
-        _ = removed.StopAsync(restorePreviousEndpoint);
         Changed?.Invoke();
         return true;
     }
@@ -125,12 +126,14 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
     public async Task<bool> StopProcessAsync(int processId, bool restorePreviousEndpoint = true)
     {
         ActiveRoute? removed;
+        Task retiring;
         lock (_gate)
         {
             if (!_routes.TryGetValue(processId, out removed)) return false;
             _routes.Remove(processId);
+            retiring = Retire(removed, restorePreviousEndpoint);
         }
-        await removed.StopAsync(restorePreviousEndpoint).ConfigureAwait(false);
+        await retiring.ConfigureAwait(false);
         Changed?.Invoke();
         return true;
     }
@@ -139,15 +142,17 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
     {
         string phoneKey = AndroidDeviceIdentity.Key(device);
         ActiveRoute[] matching;
+        Task[] retiring;
         lock (_gate)
         {
             matching = _routes.Values.Where(r =>
                 string.Equals(r.PhoneKey, phoneKey, StringComparison.OrdinalIgnoreCase)
                 || (r.Device != null && AndroidDeviceIdentity.Matches(r.Device, device))).ToArray();
             foreach (var r in matching) _routes.Remove(r.ProcessId);
+            retiring = matching.Select(r => Retire(r, restorePreviousEndpoint)).ToArray();
         }
         if (matching.Length == 0) return;
-        await Task.WhenAll(matching.Select(r => r.StopAsync(restorePreviousEndpoint))).ConfigureAwait(false);
+        await Task.WhenAll(retiring).ConfigureAwait(false);
         Changed?.Invoke();
     }
 
@@ -158,9 +163,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         {
             all = _routes.Values.ToArray();
             _routes.Clear();
+            foreach (var route in all) _ = Retire(route, restorePreviousEndpoint);
         }
-        foreach (var route in all)
-            _ = route.StopAsync(restorePreviousEndpoint);
         if (all.Length > 0) Changed?.Invoke();
         return all.Length;
     }
@@ -168,18 +172,48 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
     public async ValueTask DisposeAsync()
     {
         ActiveRoute[] all;
+        Task[] retiring;
         lock (_gate)
         {
+            _disposed = true;
             all = _routes.Values.ToArray();
+            // Register before detaching: another stop cannot escape the shutdown join.
+            foreach (var route in all) Retire(route, restorePreviousEndpoint: true);
             _routes.Clear();
+            retiring = _retiring.ToArray();
         }
-        await Task.WhenAll(all.Select(r => r.StopAsync(restorePreviousEndpoint: true))).ConfigureAwait(false);
+        await Task.WhenAll(retiring).ConfigureAwait(false);
+    }
+
+    private Task Retire(ActiveRoute route, bool restorePreviousEndpoint)
+    {
+        Task task;
+        lock (_gate)
+        {
+            task = route.StopAsync(restorePreviousEndpoint);
+            _retiring.Add(task);
+        }
+        _ = task.ContinueWith(done => { lock (_gate) _retiring.Remove(done); },
+            CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        return task;
     }
 
     private IPcProcessSilenceLease? SafeAcquireSilenceLease(int processId)
     {
         try { return silenceLocalProcess?.Invoke(processId); }
         catch (Exception ex) { Trace.WriteLine("PcToPhone silence lease: " + ex.Message); return null; }
+    }
+
+    private bool StopOwnedRoute(ActiveRoute route)
+    {
+        lock (_gate)
+        {
+            if (!_routes.TryGetValue(route.ProcessId, out var current) || !ReferenceEquals(current, route)) return false;
+            _routes.Remove(route.ProcessId);
+            _ = Retire(route, restorePreviousEndpoint: true);
+        }
+        Changed?.Invoke();
+        return true;
     }
 
     private async Task RunStreamAsync(ActiveRoute route, AndroidDevice? device, CancellationToken token)
@@ -209,7 +243,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
                 await route.AttachOutputAsync(output).ConfigureAwait(false);
                 if (output.Completion.IsCompleted) throw await output.Completion.ConfigureAwait(false);
                 await PcProcessLoopbackCapture.RunMtaCaptureLoopAsync(route.ProcessId, output.Stream, capture.Token,
-                    () => StopProcess(route.ProcessId, restorePreviousEndpoint: true), (bytes, nonSilent) =>
+                    () => StopOwnedRoute(route), (bytes, nonSilent) =>
                     {
                         Interlocked.Add(ref route.BytesStreamed, bytes);
                         if (nonSilent > 0) Interlocked.Add(ref route.NonSilentBytesStreamed, nonSilent);
@@ -230,8 +264,8 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         {
             if (!token.IsCancellationRequested && !route.IsStopped)
             {
-                StopProcess(route.ProcessId, restorePreviousEndpoint: true);
-                if (unexpectedExit && device != null)
+                bool removed = StopOwnedRoute(route);
+                if (removed && unexpectedExit && device != null)
                     try { DeviceDisconnected?.Invoke(device); } catch { }
             }
         }
@@ -250,6 +284,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         private IPcProcessSilenceLease? _silenceLease = silenceLease;
         private AndroidAudioOutputConnection? _output;
         private Task _streamTask = Task.CompletedTask;
+        private Task? _stopTask;
         public int ProcessId { get; } = processId;
         public string TargetDeviceId { get; set; } = targetDeviceId;
         public string PhoneKey { get; } = phoneKey;
@@ -288,6 +323,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         {
             lock (_routeLock)
             {
+                if (IsStopped) return;
                 SinkKey = sinkKey;
                 if (_output != null) _ = SwitchOutputAsync(_output, sinkKey);
             }
@@ -324,22 +360,34 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             }
         }
 
-        public async Task StopAsync(bool restorePreviousEndpoint)
+        public Task StopAsync(bool restorePreviousEndpoint)
         {
             IPcProcessSilenceLease? lease;
             Task stream;
+            TaskCompletionSource stopped;
             lock (_routeLock)
             {
-                if (IsStopped) return;
+                if (_stopTask != null) return _stopTask;
+                stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                _stopTask = stopped.Task;
                 IsStopped = true;
                 lease = _silenceLease;
                 _silenceLease = null;
                 stream = _streamTask;
             }
-            try { _cts.Cancel(); } catch { }
-            try { lease?.Release(restorePreviousEndpoint); } catch { }
-            try { await stream.ConfigureAwait(false); } catch { }
-            _cts.Dispose();
+            _ = CompleteStopAsync();
+            return stopped.Task;
+
+            async Task CompleteStopAsync()
+            {
+                try
+                {
+                    try { _cts.Cancel(); } catch { }
+                    try { lease?.Release(restorePreviousEndpoint); } catch { }
+                    try { await stream.ConfigureAwait(false); } catch { }
+                }
+                finally { _cts.Dispose(); stopped.TrySetResult(); }
+            }
         }
     }
 }

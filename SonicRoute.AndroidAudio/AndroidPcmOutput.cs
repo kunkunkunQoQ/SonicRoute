@@ -256,8 +256,8 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             try { if (!_helper.HasExited) _helper.Kill(); } catch { }
             if (_stdout != null) try { await _stdout.ConfigureAwait(false); } catch { }
             if (_stderr != null) try { await _stderr.ConfigureAwait(false); } catch { }
-            _writer?.Dispose();
-            await _helper.DisposeAsync().ConfigureAwait(false);
+            try { _writer?.Dispose(); } catch (Exception ex) { Trace.WriteLine("Phone output writer cleanup: " + ex.Message); }
+            try { await _helper.DisposeAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("Phone output session cleanup: " + ex.Message); }
         }
         try { await _adb.RunAsync(cleanup.Token, "-s", Device.Serial, "shell", "rm", "-f", Remote).ConfigureAwait(false); } catch { }
         _lifetime.Dispose();
@@ -285,10 +285,24 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     public AndroidPhonePcmPlayer(AdbClient adb, AndroidDevice device, AndroidPcmSource source, string sinkKey, CancellationToken token)
     {
         _source = source;
-        _output = AndroidAudioOutputConnection.OpenAsync(adb, device, sinkKey, token).GetAwaiter().GetResult();
-        _output.Failed += OnFailure;
-        _source.DataAvailable += Wake;
-        _pump = Task.Run(PumpAsync);
+        try
+        {
+            _output = AndroidAudioOutputConnection.OpenAsync(adb, device, sinkKey, token).GetAwaiter().GetResult();
+            _output.Failed += OnFailure;
+            _source.DataAvailable += Wake;
+            _pump = Task.Run(PumpAsync);
+        }
+        catch
+        {
+            _source.DataAvailable -= Wake;
+            if (_output != null)
+            {
+                _output.Failed -= OnFailure;
+                try { _output.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { }
+            }
+            _available.Dispose(); _lifetime.Dispose();
+            throw;
+        }
     }
     public Task SwitchTargetAsync(string key, CancellationToken token) => _output.SwitchTargetAsync(key, token);
     public Task WaitForRoutingAsync(CancellationToken token) => _output.WaitForRoutingAsync(token);
@@ -351,7 +365,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     }
     private void OnFailure(Exception error)
     {
-        Volatile.Write(ref _failure, error);
+        if (Interlocked.CompareExchange(ref _failure, error, null) != null) return;
         _output.Abort(error);
         try { Failed?.Invoke(error); } catch { }
     }
@@ -362,8 +376,11 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
         _source.DataAvailable -= Wake;
         _output.Failed -= OnFailure;
         _lifetime.Cancel();
-        _output.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        _pump.GetAwaiter().GetResult();
-        _available.Dispose(); _lifetime.Dispose();
+        try { _output.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        finally
+        {
+            try { _pump.GetAwaiter().GetResult(); }
+            finally { _available.Dispose(); _lifetime.Dispose(); }
+        }
     }
 }

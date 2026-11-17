@@ -17,6 +17,7 @@ internal static partial class Program
         internal AndroidDevice? Device;
         internal bool Stopped;
         internal int SendsStarted;
+        internal int SendsFinished;
         private long _revision;
         public long Revision => Interlocked.Read(ref _revision);
         public async Task WatchAsync(AndroidDevice device, Action ready, Action<string> changed, CancellationToken token)
@@ -28,8 +29,12 @@ internal static partial class Program
         public async Task SendAsync(string text, long expectedRevision, CancellationToken token)
         {
             Interlocked.Increment(ref SendsStarted);
-            if (SendGate is { } gate) await gate.Task.WaitAsync(token);
-            if (expectedRevision == Revision) Sent.Enqueue(text);
+            try
+            {
+                if (SendGate is { } gate) await gate.Task.WaitAsync(token);
+                if (expectedRevision == Revision) Sent.Enqueue(text);
+            }
+            finally { Interlocked.Increment(ref SendsFinished); }
         }
         internal void Copy(string text) { Interlocked.Increment(ref _revision); Changed!(text); }
     }
@@ -123,6 +128,16 @@ internal static partial class Program
             a.Copy("phone copy while sending"); Until(() => desktop.Text == "phone copy while sending");
             a.SendGate.SetResult(); a.SendGate = null; DrainUi();
             Check(!a.Sent.Contains("stale send in flight"), "the captured phone revision rejects a queued write after a newer phone copy");
+
+            int sentBeforeQueuedEvent = a.SendsFinished;
+            Task.Run(() => a.Copy("phone event waiting on dispatcher")).GetAwaiter().GetResult();
+            // Keep the dispatcher occupied while the send worker runs. The new phone
+            // revision is visible, but its matching text has not reached the coordinator.
+            desktop.Copy("local text before queued phone event");
+            Check(SpinWait.SpinUntil(() => a.SendsFinished > sentBeforeQueuedEvent, 3000)
+                && !a.Sent.Contains("local text before queued phone event"),
+                "an unprocessed phone event cannot lend its new revision to an older computer send");
+            Until(() => desktop.Text == "phone event waiting on dispatcher");
 
             sync.SetEnabled(one, false); Until(() => a.Stopped);
             a.Copy("disabled source"); DrainUi(); desktop.Copy("only second phone"); Until(() => b.Sent.Last() == "only second phone");

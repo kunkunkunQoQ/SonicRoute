@@ -87,10 +87,7 @@ namespace SonicRoute.Updates
             string? notes = null;
             try
             {
-                var config = ConfigService.Load();
-                config.LastUpdateCheckUtc = DateTime.UtcNow;
-                if (manual) config.IgnoredUpdateVersion = "";
-                ConfigService.Save(config);
+                await RecordCheckAsync(manual).ConfigureAwait(false);
                 using var transport = new UpdateTransport(_handlerFactory?.Invoke());
                 var release = await transport.CheckAsync(AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture,
                     App.DisplayVersion, manual ? _lifetime.Token : automaticToken).ConfigureAwait(false);
@@ -125,6 +122,21 @@ namespace SonicRoute.Updates
                 var config = ConfigService.Load(); config.IgnoredUpdateVersion = Release.Tag; ConfigService.Save(config);
             }
             Notify();
+        }
+
+        private Task RecordCheckAsync(bool manual)
+        {
+            void Record()
+            {
+                _lifetime.Token.ThrowIfCancellationRequested();
+                var config = ConfigService.Load();
+                config.LastUpdateCheckUtc = DateTime.UtcNow;
+                if (manual) config.IgnoredUpdateVersion = "";
+                ConfigService.QueueSave(config);
+            }
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess()) { Record(); return Task.CompletedTask; }
+            return dispatcher.InvokeAsync(Record, System.Windows.Threading.DispatcherPriority.Normal, _lifetime.Token).Task;
         }
 
         internal async Task DownloadAsync()

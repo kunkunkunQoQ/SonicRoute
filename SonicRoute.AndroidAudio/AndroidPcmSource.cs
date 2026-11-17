@@ -208,6 +208,7 @@ public sealed class WasapiPcmPlayer : IPcmPlayer
 {
     private readonly WasapiDeviceLease _device;
     private readonly WasapiOut _output;
+    private int _disposed;
     public event Action<Exception>? Failed;
 
     public WasapiPcmPlayer(AndroidPcmSource source, string? endpointId)
@@ -219,9 +220,19 @@ public sealed class WasapiPcmPlayer : IPcmPlayer
             _output.Init(source); // shared-mode conversion adapts to the endpoint's mix format
             _output.PlaybackStopped += (_, e) => { if (e.Exception != null) Failed?.Invoke(e.Exception); };
         }
-        catch { _output?.Dispose(); _device.Dispose(); throw; }
+        catch
+        {
+            try { _output?.Dispose(); } catch { }
+            try { _device.Dispose(); } catch { }
+            throw;
+        }
     }
     public void Play() => _output.Play();
     public void Stop() => _output.Stop();
-    public void Dispose() { _output.Dispose(); _device.Dispose(); }
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        try { _output.Dispose(); }
+        finally { _device.Dispose(); }
+    }
 }

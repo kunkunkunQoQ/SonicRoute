@@ -333,7 +333,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     /// </summary>
     public async Task ReleaseUsbConnectionsAsync()
     {
-        if (_usbDevices.IsEmpty) return;
+        // Join a scan even when it has not published its first slot yet.
         await _usbSyncGate.WaitAsync().ConfigureAwait(false);
         try
         {
@@ -465,6 +465,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         await _usbSyncGate.WaitAsync(token).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             var present = _enumerateUsb();
             var presentMap = new Dictionary<string, WinUsbDeviceDescriptor>(StringComparer.OrdinalIgnoreCase);
             foreach (var d in present)
@@ -732,7 +733,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
                 await tcp.Connection.DisposeAsync().ConfigureAwait(false);
         }
 
-        _usbSyncGate.Dispose();
+        // A queued scan may still resume and release this async-only managed gate.
         if (_ownsKeyStore) _keyStore.Dispose();
     }
 }

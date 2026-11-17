@@ -881,6 +881,7 @@ public sealed class AdbSocketClient : IAdbTransport
                 _writeLock.Wait();
                 try
                 {
+                    ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
                     int pos = 0;
                     byte[] packet = ArrayPool<byte>.Shared.Rent(5 + Math.Min(buffer.Length, 32768));
                     try
@@ -910,6 +911,7 @@ public sealed class AdbSocketClient : IAdbTransport
                 await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
+                    ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
                     int pos = 0;
                     byte[] packet = ArrayPool<byte>.Shared.Rent(5 + Math.Min(buffer.Length, 32768));
                     try
@@ -953,7 +955,8 @@ public sealed class AdbSocketClient : IAdbTransport
                         catch { }
                         finally { _writeLock.Release(); }
                     }
-                    _writeLock.Dispose();
+                    // An in-flight/queued writer still owns or will release this gate.
+                    // No native wait handle is requested; let the managed gate retire with us.
                 }
                 base.Dispose(disposing);
             }
@@ -966,7 +969,7 @@ public sealed class AdbSocketClient : IAdbTransport
                     catch (ObjectDisposedException) { return; }
                     try { await stream.WriteAsync(new byte[] { IdCloseStdin, 0, 0, 0, 0 }).ConfigureAwait(false); }
                     catch { }
-                    finally { _writeLock.Release(); _writeLock.Dispose(); }
+                    finally { _writeLock.Release(); }
                 }
                 await base.DisposeAsync().ConfigureAwait(false);
             }

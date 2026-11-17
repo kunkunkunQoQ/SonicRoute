@@ -45,6 +45,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         internal readonly Channel<(long Version, string Text, long RemoteRevision)> Writes = Channel.CreateBounded<(long, string, long)>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = true });
         internal Task Completion = Task.CompletedTask;
+        internal long RemoteRevision;
         internal bool Ready, Finished;
         internal SessionState State = SessionState.Connecting;
     }
@@ -109,9 +110,10 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         if (_disposed) return;
         if (saved != null) _enabled.AddRange(saved);
         Reconcile(false);
-        if (_enabled.Count > 0 && PhoneAudioWindowCache.Devices == null
+        var enabledAtStartup = _enabled.ToArray();
+        if (enabledAtStartup.Length > 0 && PhoneAudioWindowCache.Devices == null
             && (_shouldScanOnStartup == null
-                || await Task.Run(() => _shouldScanOnStartup(_enabled.ToArray()), _lifetime.Token))
+                || await Task.Run(() => _shouldScanOnStartup(enabledAtStartup), _lifetime.Token))
             && !_disposed && PhoneAudioWindowCache.Devices == null)
             try { await PhoneAudioWindowCache.ReadDevicesAsync(_lifetime.Token); }
             catch (Exception) when (!_disposed) { Changed?.Invoke(); }
@@ -200,12 +202,28 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         try
         {
             session.Stop.Token.ThrowIfCancellationRequested();
-            watch = session.Client.WatchAsync(session.Device, () => Post(() =>
+            watch = session.Client.WatchAsync(session.Device, () =>
             {
-                if (!Current(key, session) || session.Stop.IsCancellationRequested) return;
-                session.Ready = true; session.State = SessionState.Connected;
-                UpdateDesktopListener(); Changed?.Invoke();
-            }), text => Post(() => { if (Current(key, session) && session.Ready && !session.Stop.IsCancellationRequested) AcceptText(text, session); }), session.Stop.Token);
+                long revision = session.Client.Revision;
+                Post(() =>
+                {
+                    if (!Current(key, session) || session.Stop.IsCancellationRequested) return;
+                    session.RemoteRevision = revision;
+                    session.Ready = true; session.State = SessionState.Connected;
+                    UpdateDesktopListener(); Changed?.Invoke();
+                });
+            }, text =>
+            {
+                // Capture with the event, not later on the dispatcher. A local copy must
+                // not borrow the revision of a phone event the coordinator has not seen.
+                long revision = session.Client.Revision;
+                Post(() =>
+                {
+                    if (!Current(key, session) || !session.Ready || session.Stop.IsCancellationRequested) return;
+                    session.RemoteRevision = revision;
+                    AcceptText(text, session);
+                });
+            }, session.Stop.Token);
             send = SendAsync(session);
             await await Task.WhenAny(watch, send).ConfigureAwait(false);
         }
@@ -281,7 +299,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         _lastText = text; long version = Interlocked.Increment(ref _version);
         foreach (var session in _sessions.Values)
             if (session.Ready && !session.Stop.IsCancellationRequested && !ReferenceEquals(session, origin))
-                session.Writes.Writer.TryWrite((version, text, session.Client.Revision));
+                session.Writes.Writer.TryWrite((version, text, session.RemoteRevision));
         if (origin != null)
         {
             _desktopWrite = (text, version, desktop.Revision);

@@ -162,7 +162,11 @@ namespace SonicRoute.Core
                     watcher.Changed += FileChanged;
                     watcher.Created += FileChanged;
                     watcher.Deleted += FileChanged;
-                    watcher.Renamed += (_, e) => { CheckExternalChange(e.OldFullPath); CheckExternalChange(e.FullPath); };
+                    watcher.Renamed += (sender, e) =>
+                    {
+                        lock (_lock)
+                            if (ReferenceEquals(sender, _watcher)) { CheckExternalChange(e.OldFullPath); CheckExternalChange(e.FullPath); }
+                    };
                     watcher.Error += (_, _) =>
                     {
                         lock (_lock)
@@ -170,8 +174,9 @@ namespace SonicRoute.Core
                             if (ReferenceEquals(_watcher, watcher)) { StopWatcher(); _cache = null; NotifyChanged(); }
                         }
                     };
-                    watcher.EnableRaisingEvents = true;
                     _watcher = watcher;
+                    try { watcher.EnableRaisingEvents = true; }
+                    catch { StopWatcher(); }
                     _cache = null;
                 }
                 catch { /* 目录不可监听时仍支持显式 Invalidate。 */ }
@@ -201,7 +206,19 @@ namespace SonicRoute.Core
         {
             var watcher = _watcher;
             _watcher = null;
-            watcher?.Dispose();
+            RetireWatcher(watcher);
+        }
+
+        private static void RetireWatcher(FileSystemWatcher? watcher)
+        {
+            if (watcher == null) return;
+            // Rebuild/error paths run under _lock. Framework disposal may join a callback
+            // waiting for that same lock, so release retired handles on a one-shot worker.
+            // There is no resident cleanup loop; callbacks ignore detached watchers.
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try { watcher.Dispose(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Rule watcher cleanup: " + ex.Message); }
+            });
         }
 
         private static void EnsureDirectoryWatcher()
@@ -251,10 +268,13 @@ namespace SonicRoute.Core
         {
             var watcher = _directoryWatcher;
             _directoryWatcher = null;
-            watcher?.Dispose();
+            RetireWatcher(watcher);
         }
 
-        private static void FileChanged(object sender, FileSystemEventArgs e) => CheckExternalChange(e.FullPath);
+        private static void FileChanged(object sender, FileSystemEventArgs e)
+        {
+            lock (_lock) if (ReferenceEquals(sender, _watcher)) CheckExternalChange(e.FullPath);
+        }
 
         private static void CheckExternalChange(string path)
         {

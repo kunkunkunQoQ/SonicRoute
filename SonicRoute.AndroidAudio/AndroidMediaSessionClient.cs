@@ -73,6 +73,7 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
     private IAdbShellSession? _session;
     private StreamWriter? _writer;
     private readonly SemaphoreSlim _commands = new(1, 1);
+    private CancellationToken _writeLifetime = new(true);
     private readonly object _latencyGate = new();
     private string? _pingId;
     private long _pingStart;
@@ -99,9 +100,15 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
                 "echo SR_MEDIA_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.MediaSessionBridge " + id,
                 redirectInput: true, token).ConfigureAwait(false);
             _session = session;
-            _writer = new StreamWriter(session.InputStream, Utf8NoBom, bufferSize: 4096, leaveOpen: true) { NewLine = "\n" };
+            await _commands.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                _writeLifetime = probes.Token;
+                _writer = new StreamWriter(session.InputStream, Utf8NoBom, bufferSize: 4096, leaveOpen: true) { NewLine = "\n" };
+            }
+            finally { _commands.Release(); }
             errReader = new StreamReader(session.ErrorStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
-            stderr = ReadDiagnosticTailAsync(errReader);
+            stderr = ReadDiagnosticTailAsync(errReader, probes.Token);
             using var stdout = new StreamReader(session.OutputStream, Utf8NoBom, detectEncodingFromByteOrderMarks: false, bufferSize: 4096, leaveOpen: true);
             while (await stdout.ReadLineAsync(token).ConfigureAwait(false) is { } line)
             {
@@ -131,17 +138,20 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
         finally
         {
             probes.Cancel();
-            try { await latency.ConfigureAwait(false); } catch (OperationCanceledException) { }
+            try { await latency.ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("Media probe exit: " + ex.GetType().Name); }
+            StreamWriter? writer;
+            await _commands.WaitAsync().ConfigureAwait(false);
+            try { writer = _writer; _writer = null; }
+            finally { _commands.Release(); }
             var session = _session; _session = null;
-            var writer = _writer; _writer = null;
             if (session != null)
             {
                 using var close = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                try { await session.CloseInputAsync(close.Token).ConfigureAwait(false); } catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException) { }
+                try { await session.CloseInputAsync(close.Token).ConfigureAwait(false); } catch { }
                 try { await session.WaitForExitAsync(close.Token).ConfigureAwait(false); }
                 catch { try { session.Kill(); } catch { } }
             }
-            writer?.Dispose();
+            try { writer?.Dispose(); } catch (Exception ex) { Trace.WriteLine("Media writer cleanup: " + ex.GetType().Name); }
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
             {
@@ -237,8 +247,9 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
         try
         {
             var writer = _writer ?? throw AndroidError.WithCode(new IOException("手机音乐尚未连接。"), AndroidErrorCode.MediaNotConnected);
-            await writer.WriteLineAsync(command.AsMemory(), token).ConfigureAwait(false);
-            await writer.FlushAsync(token).ConfigureAwait(false);
+            using var sending = CancellationTokenSource.CreateLinkedTokenSource(token, _writeLifetime);
+            await writer.WriteLineAsync(command.AsMemory(), sending.Token).ConfigureAwait(false);
+            await writer.FlushAsync(sending.Token).ConfigureAwait(false);
         }
         finally { _commands.Release(); }
     }

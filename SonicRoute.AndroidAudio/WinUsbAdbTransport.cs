@@ -282,6 +282,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
         await _rxOpLock.WaitAsync(token).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             int offset = 0;
             int zlpCount = 0;
             while (offset < totalBytes)
@@ -317,6 +318,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
         await _txOpLock.WaitAsync(token).ConfigureAwait(false);
         try
         {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             int offset = 0;
             while (offset < source.Length)
             {
@@ -478,8 +480,8 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
         {
             _rxOpLock.Release();
             _txOpLock.Release();
-            _rxOpLock.Dispose();
-            _txOpLock.Dispose();
+            // Late waiters still release these managed gates after observing _disposed.
+            // Native USB/events/OVERLAPPED resources above are released while both are held.
         }
     }
 

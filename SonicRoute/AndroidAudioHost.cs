@@ -16,12 +16,12 @@ namespace SonicRoute;
 internal static class AndroidAudioHost
 {
     private static readonly object PhoneOperations = new();
-    private static readonly object SilenceGate = new();
     private static readonly object OutputSnapshotGate = new();
     private static IReadOnlyList<AudioDeviceInfo>? _outputSnapshot;
-    private static string? _silenceEndpointId;
-    private static bool _silenceEndpointWasMuted;
-    private static int _silenceLeaseCount;
+    private static readonly LocalSilenceLeasePool SilenceLeases = new(FindSilenceEndpoint,
+        id => { var state = SystemVolumeService.ReadStateChecked(id); return (state.Muted, state.MuteKnown); },
+        SystemVolumeService.SetMute, pid => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender),
+        (pid, id) => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, id).Success);
     private static readonly Dictionary<string, long> ProbeTimestamps = new(StringComparer.Ordinal);
     static AndroidAudioHost()
     {
@@ -282,65 +282,24 @@ internal static class AndroidAudioHost
     private static IPcProcessSilenceLease? AcquireLocalSilenceLease(int processId)
     {
         if (processId <= 0 || (IsPcToPhoneCreated && !PcToPhone.EnableLiveStreaming)) return null;
-        lock (SilenceGate)
-        {
-            if (_silenceEndpointId == null)
-            {
-                var outputs = AudioService.GetDevices(EDataFlow.eRender);
-                string? defaultId = AudioService.GetDefaultDeviceId(EDataFlow.eRender);
-                var hidden = ConfigService.Load().HiddenOutputDevices;
-                var candidate = outputs
-                    .Where(d => !string.Equals(d.Id, defaultId, StringComparison.OrdinalIgnoreCase)
-                        && !AndroidOutputIdentity.IsPhoneOutput(d.Id)
-                        && d.DisplayName?.Contains("Microphone", StringComparison.OrdinalIgnoreCase) != true
-                        && d.DisplayName?.Contains("麦克风", StringComparison.OrdinalIgnoreCase) != true)
-                    .OrderBy(d => hidden.Contains(d.Id) ? 0 : 1)
-                    .ThenBy(d => d.DisplayName?.Contains("Steam Streaming Speakers", StringComparison.OrdinalIgnoreCase) == true ? 0
-                        : d.DisplayName?.Contains("High Definition Audio", StringComparison.OrdinalIgnoreCase) == true ? 1
-                        : d.DisplayName?.Contains("Sonar", StringComparison.OrdinalIgnoreCase) != true ? 2 : 3)
-                    .FirstOrDefault();
-                if (candidate != null)
-                {
-                    var state = SystemVolumeService.ReadStateChecked(candidate.Id);
-                    _silenceEndpointId = candidate.Id;
-                    _silenceEndpointWasMuted = state.MuteKnown && state.Muted;
-                    SystemVolumeService.SetMute(_silenceEndpointId, true);
-                }
-            }
-            if (_silenceEndpointId == null) return null;
-            string? previousEndpoint = AudioService.GetPersistedEndpoint(processId, EDataFlow.eRender);
-            _silenceLeaseCount++;
-            AudioService.ApplyEndpoint(processId, EDataFlow.eRender, _silenceEndpointId);
-            return new LocalSilenceLease(processId, previousEndpoint);
-        }
+        return SilenceLeases.Acquire(processId);
     }
-    private sealed class LocalSilenceLease(int processId, string? previousEndpoint) : IPcProcessSilenceLease
+    private static string? FindSilenceEndpoint()
     {
-        private int _released;
-        public void Release(bool restorePreviousEndpoint)
-        {
-            if (Interlocked.Exchange(ref _released, 1) != 0) return;
-            lock (SilenceGate)
-            {
-                if (restorePreviousEndpoint)
-                {
-                    string target = string.IsNullOrWhiteSpace(previousEndpoint)
-                        ? AudioService.SystemDefaultDeviceId
-                        : previousEndpoint;
-                    try { AudioService.ApplyEndpoint(processId, EDataFlow.eRender, target); } catch { }
-                }
-                if (--_silenceLeaseCount <= 0)
-                {
-                    _silenceLeaseCount = 0;
-                    if (_silenceEndpointId != null && !_silenceEndpointWasMuted)
-                    {
-                        try { SystemVolumeService.SetMute(_silenceEndpointId, false); } catch { }
-                    }
-                    _silenceEndpointId = null;
-                }
-            }
-        }
-        public void Dispose() => Release(restorePreviousEndpoint: true);
+        var outputs = AudioService.GetDevices(EDataFlow.eRender);
+        string? defaultId = AudioService.GetDefaultDeviceId(EDataFlow.eRender);
+        var hidden = ConfigService.Load().HiddenOutputDevices;
+        var candidate = outputs
+            .Where(d => !string.Equals(d.Id, defaultId, StringComparison.OrdinalIgnoreCase)
+                && !AndroidOutputIdentity.IsPhoneOutput(d.Id)
+                && d.DisplayName?.Contains("Microphone", StringComparison.OrdinalIgnoreCase) != true
+                && d.DisplayName?.Contains("麦克风", StringComparison.OrdinalIgnoreCase) != true)
+            .OrderBy(d => hidden.Contains(d.Id) ? 0 : 1)
+            .ThenBy(d => d.DisplayName?.Contains("Steam Streaming Speakers", StringComparison.OrdinalIgnoreCase) == true ? 0
+                : d.DisplayName?.Contains("High Definition Audio", StringComparison.OrdinalIgnoreCase) == true ? 1
+                : d.DisplayName?.Contains("Sonar", StringComparison.OrdinalIgnoreCase) != true ? 2 : 3)
+            .FirstOrDefault();
+        return candidate?.Id;
     }
     private static readonly Lazy<AndroidAppCatalogCache> LazyCatalog = new(() =>
         new AndroidAppCatalogCache(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-app-catalog.json"),
@@ -490,19 +449,18 @@ internal static class AndroidAudioHost
         }
     }
 
-    internal static void StopMedia()
+    internal static async Task StopMediaAsync()
     {
         MediaShutdown.Cancel();
-        if (LazyPcToPhone.IsValueCreated)
-        {
-            try { PcToPhone.StopAll(restorePreviousEndpoint: true); } catch { }
-        }
-        Task[] pending; lock (MediaWatches) pending = MediaWatches.ToArray();
-        try { Task.WhenAll(pending).GetAwaiter().GetResult(); } catch { }
+        var pending = new List<Task>();
+        if (LazyPcToPhone.IsValueCreated) pending.Add(PcToPhone.DisposeAsync().AsTask());
+        lock (MediaWatches) pending.AddRange(MediaWatches);
         // A cancelled view may have left a small configuration read in flight. Finish
         // that existing read before shutdown flushes settings; never start one here.
-        if (PhoneRead.IsValueCreated) try { PhoneRead.Value.GetAwaiter().GetResult(); } catch { }
-        if (SourcesRead.IsValueCreated) try { SourcesRead.Value.GetAwaiter().GetResult(); } catch { }
+        if (PhoneRead.IsValueCreated) pending.Add(PhoneRead.Value);
+        if (SourcesRead.IsValueCreated) pending.Add(SourcesRead.Value);
+        if (SettingsRead.IsValueCreated) pending.Add(SettingsRead.Value);
+        try { await Task.WhenAll(pending).ConfigureAwait(false); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone media shutdown: " + ex.Message); }
     }
 }
 
