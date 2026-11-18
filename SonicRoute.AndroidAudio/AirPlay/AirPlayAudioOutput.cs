@@ -11,11 +11,13 @@ internal interface IPhoneAudioSession
     Task SetOutputAsync(string? endpoint);
 }
 
-/// <summary>One AirPlay stream on the same PCM/WASAPI path as incoming Android audio.</summary>
-internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IDisposable
+/// <summary>One AirPlay stream using the shared Windows and Android PCM renderers.</summary>
+internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IAsyncDisposable
 {
     private readonly object _gate = new();
-    private readonly Func<AndroidPcmSource, string?, IPcmPlayer> _createPlayer;
+    private readonly SemaphoreSlim _routes = new(1, 1);
+    private readonly Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> _createPlayer;
+    private readonly CancellationToken _lifetime;
     private readonly Func<Action, IDisposable> _watchDefault;
     private readonly Action _changed;
     private readonly Action _failed;
@@ -30,10 +32,12 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IDisposable
     private float[]? _converted;
 
     internal AirPlayAudioOutput(string name, Action changed, Action failed,
-        Func<AndroidPcmSource, string?, IPcmPlayer> createPlayer, Func<Action, IDisposable> watchDefault)
+        Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> createPlayer,
+        Func<Action, IDisposable> watchDefault, CancellationToken lifetime)
     {
         Name = name;
         _changed = changed; _failed = failed; _createPlayer = createPlayer; _watchDefault = watchDefault;
+        _lifetime = lifetime;
     }
 
     internal string Id { get; } = "airplay:" + Guid.NewGuid().ToString("N");
@@ -54,7 +58,10 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IDisposable
                 if (_player == null)
                 {
                     _defaultWatch ??= _watchDefault(DefaultChanged);
-                    ReplacePlayer(null);
+                    var player = _createPlayer(_pcm, null, _lifetime);
+                    try { player.Play(); }
+                    catch { DisposeQuietly(player); throw; }
+                    SetPlayer(player);
                     Volatile.Write(ref _state, _state with { State = CaptureState.Receiving });
                 }
             }
@@ -108,49 +115,109 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IDisposable
         _changed();
     }
 
-    public Task SetOutputAsync(string? endpoint) => Task.Run(() =>
+    public Task SetOutputAsync(string? endpoint) => Task.Run(() => ChangeOutputAsync(endpoint));
+
+    private async Task ChangeOutputAsync(string? endpoint, bool refreshDefault = false, Predicate<AndroidPhonePcmPlayer>? phoneMatch = null)
     {
-        lock (_gate)
+        await _routes.WaitAsync(_lifetime).ConfigureAwait(false);
+        try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_player == null) throw new InvalidOperationException("AirPlay audio has stopped.");
-            if (string.Equals(endpoint, _state.OutputId, StringComparison.OrdinalIgnoreCase)) return;
+            IPcmPlayer previous;
+            lock (_gate)
+            {
+                if (_disposed || _state.State != CaptureState.Receiving || _player == null)
+                {
+                    if (refreshDefault || phoneMatch != null) return;
+                    throw new InvalidOperationException("AirPlay audio has stopped.");
+                }
+                if (refreshDefault ? _state.OutputId != null :
+                    string.Equals(endpoint, _state.OutputId, StringComparison.OrdinalIgnoreCase)) return;
+                if (phoneMatch != null && (_player is not AndroidPhonePcmPlayer phone || !phoneMatch(phone))) return;
+                previous = _player;
+            }
             bool addedWatch = endpoint == null && _defaultWatch == null;
             if (addedWatch) _defaultWatch = _watchDefault(DefaultChanged);
-            try { ReplacePlayer(endpoint); }
+            try { await ReplacePlayerAsync(previous, endpoint).ConfigureAwait(false); }
             catch
             {
                 if (addedWatch) StopWatch();
                 throw;
             }
-            Volatile.Write(ref _state, _state with { OutputId = endpoint });
+            lock (_gate) Volatile.Write(ref _state, _state with { OutputId = endpoint });
             if (endpoint != null) StopWatch();
         }
-        _changed();
-    });
+        finally { _routes.Release(); }
+        if (!refreshDefault) _changed();
+    }
 
-    private void ReplacePlayer(string? endpoint)
+    private async Task ReplacePlayerAsync(IPcmPlayer previous, string? endpoint)
     {
-        var next = _createPlayer(_pcm, endpoint);
-        var old = _player;
+        var next = _createPlayer(_pcm, endpoint, _lifetime);
+        bool switching = false;
         try
         {
-            old?.Stop();
+            if (next is AndroidPhonePcmPlayer phone)
+                await phone.VerifyBeforePlaybackAsync(_lifetime).ConfigureAwait(false);
+            _lifetime.ThrowIfCancellationRequested();
+            switching = true;
+            try { previous.Stop(); }
+            catch (Exception ex) when (previous is AndroidPhonePcmPlayer)
+            { System.Diagnostics.Trace.WriteLine("AirPlay previous phone output: " + ex.GetType().Name); }
             next.Play();
         }
         catch
         {
             DisposeQuietly(next);
-            old?.Play();
+            if (switching && !_lifetime.IsCancellationRequested && previous is not AndroidPhonePcmPlayer { Failure: not null })
+            {
+                try { previous.Play(); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.WriteLine("AirPlay output recovery: " + ex.GetType().Name);
+                    _failed();
+                }
+            }
             throw;
         }
+        SetPlayer(next);
+        DisposeQuietly(previous);
+    }
+
+    private void SetPlayer(IPcmPlayer next)
+    {
         Volatile.Write(ref _player, next);
         if (next is WasapiPcmPlayer wasapi) wasapi.Failed += _ =>
         {
             if (ReferenceEquals(Volatile.Read(ref _player), next)) _failed();
         };
-        DisposeQuietly(old);
+        if (next is AndroidPhonePcmPlayer phone)
+        {
+            phone.Failed += _ => QueuePhoneFallback(phone);
+            if (phone.Failure != null) QueuePhoneFallback(phone);
+        }
     }
+
+    private void QueuePhoneFallback(AndroidPhonePcmPlayer player)
+    {
+        if (ReferenceEquals(Volatile.Read(ref _player), player) && !_lifetime.IsCancellationRequested)
+            _ = ReturnToWindowsAsync(current => ReferenceEquals(current, player));
+    }
+
+    internal Task PhoneRemovedAsync(AndroidDevice device) =>
+        ReturnToWindowsAsync(current => AndroidDeviceIdentity.MatchesSavedDevice(device, current.Device));
+
+    private Task ReturnToWindowsAsync(Predicate<AndroidPhonePcmPlayer> phoneMatch) =>
+        // A phone failure may come from its PCM pump. Retire it on a separate worker.
+        Task.Run(async () =>
+        {
+            try { await ChangeOutputAsync(null, phoneMatch: phoneMatch).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("AirPlay phone output fallback: " + ex.GetType().Name);
+                if (Volatile.Read(ref _player) is AndroidPhonePcmPlayer current && phoneMatch(current)) _failed();
+            }
+        });
 
     private void DefaultChanged()
     {
@@ -161,21 +228,19 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IDisposable
     private void QueueDefaultRefresh()
     {
         if (Interlocked.Exchange(ref _defaultQueued, 1) != 0) return;
-        _ = Task.Run(() =>
+        _ = Task.Run(async () =>
         {
             int version = Volatile.Read(ref _defaultVersion);
             try
             {
-                lock (_gate)
-                {
-                    if (!_disposed && _state.OutputId == null && _player != null) ReplacePlayer(null);
-                }
+                await ChangeOutputAsync(null, refreshDefault: true).ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
             catch (Exception ex) { System.Diagnostics.Trace.WriteLine("AirPlay default output: " + ex.GetType().Name); }
             finally
             {
                 Interlocked.Exchange(ref _defaultQueued, 0);
-                if (version != Volatile.Read(ref _defaultVersion)) QueueDefaultRefresh();
+                if (!_lifetime.IsCancellationRequested && version != Volatile.Read(ref _defaultVersion)) QueueDefaultRefresh();
             }
         });
     }
@@ -187,17 +252,22 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IDisposable
         catch (Exception ex) { System.Diagnostics.Trace.WriteLine("AirPlay audio cleanup: " + ex.GetType().Name); }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        lock (_gate)
+        await _routes.WaitAsync().ConfigureAwait(false);
+        try
         {
-            if (_disposed) return;
-            _disposed = true;
-            Volatile.Write(ref _state, _state with { State = CaptureState.Idle });
+            lock (_gate)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                Volatile.Write(ref _state, _state with { State = CaptureState.Idle });
+            }
             StopWatch();
             DisposeQuietly(Interlocked.Exchange(ref _player, null));
             _pcm.Clear();
             _converted = null;
         }
+        finally { _routes.Release(); }
     }
 }

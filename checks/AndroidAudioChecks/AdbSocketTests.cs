@@ -481,6 +481,12 @@ internal static partial class Program
                 await SendV2PacketAsync(stream, 1,
                     "{\"routed\":{\"target\":\"speaker\",\"preferredApplied\":false,\"bufferFrames\":4096,\"startThresholdFrames\":480,\"id\":9,\"type\":9,\"name\":\"Wrong\",\"key\":\"other\"}}\n"u8.ToArray(),
                     token).ConfigureAwait(false);
+                if (cmd.EndsWith("'bt:unavailable'", StringComparison.Ordinal))
+                {
+                    await SendV2PacketAsync(stream, 1, "{\"error\":\"Fake Bluetooth output rejected\"}\n"u8.ToArray(), token).ConfigureAwait(false);
+                    await SendV2PacketAsync(stream, 3, [1], token).ConfigureAwait(false);
+                    return;
+                }
                 await SendV2PacketAsync(stream, 1,
                     "{\"routed\":{\"target\":\"speaker\",\"preferredApplied\":true,\"bufferFrames\":7688,\"startThresholdFrames\":960,\"id\":3,\"type\":2,\"name\":\"Speaker\",\"key\":\"speaker\"}}\n"u8.ToArray(),
                     token).ConfigureAwait(false);
@@ -606,10 +612,15 @@ internal static partial class Program
             return off;
         }
 
-        public async ValueTask DisposeAsync()
+        public void Disconnect()
         {
             _cts.Cancel();
             _listener.Stop();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            Disconnect();
             try { await _acceptLoop.ConfigureAwait(false); } catch { }
             _cts.Dispose();
             _trackSignal.Dispose();

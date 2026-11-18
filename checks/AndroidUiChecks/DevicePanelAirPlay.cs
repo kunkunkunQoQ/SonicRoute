@@ -4,8 +4,10 @@ using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using SonicRoute;
 using SonicRoute.AndroidAudio;
+using SonicRoute.Core.Models;
 
 internal static partial class Program
 {
@@ -33,10 +35,12 @@ internal static partial class Program
             object choice = selector.Items.Cast<object>().Single(item => item is not AndroidDevice);
             var view = (AirPlayReceiverView)panel.FindName("AirPlayReceiverPane");
             var list = (ListBox)panel.FindName("PhoneApps");
+            var deviceIcon = (System.Windows.Shapes.Path)panel.FindName("DeviceKindIcon");
             Check(panel.Title == "设备面板" && selector.Items.Count == 2 && selector.SelectedItem is AndroidDevice,
                 "Device Panel has the saved Android device and AirPlay together in its dropdown");
             Check(!view.IsVisible && panel.FindName("AirPlayButton") == null && list.Items.Count == 2,
                 "Android shows its original app pane and no separate AirPlay footer button");
+            Check(ReferenceEquals(deviceIcon.Data, AutomationIcons.Phone), "Android has its phone icon in the device selector");
             selector.SelectedItem = choice;
             DrainUi();
             var toggle = (Button)view.FindName("AirPlayToggle");
@@ -44,6 +48,19 @@ internal static partial class Program
             Check(view.IsVisible && !list.IsVisible && !((FrameworkElement)panel.FindName("DeviceMediaCard")).IsVisible
                 && !((FrameworkElement)panel.FindName("RefreshButton")).IsVisible && !panel.AllowDrop && Receiver() == null,
                 "AirPlay selection shows its own idle pane and stops Android-only UI");
+            Check(ReferenceEquals(deviceIcon.Data, AutomationIcons.AirPlay), "AirPlay has its own icon in the device selector");
+            var airPlayRow = AppItem.From(new AudioAppInfo { ProcessId = 0, ExternalSourceId = "airplay:fixture", ProcessName = "airplay:audio" });
+            var androidRow = AppItem.From(new AudioAppInfo
+            {
+                ProcessId = 0, ExternalSourceId = "android:fixture", ProcessName = "android:" + AndroidApp.DeviceAudioPackage
+            });
+            airPlayRow.LoadIcon();
+            androidRow.LoadIcon();
+            Check(airPlayRow.Icon is DrawingImage { IsFrozen: true, Drawing: GeometryDrawing airPlayDrawing }
+                && ReferenceEquals(airPlayDrawing.Geometry, AutomationIcons.AirPlay)
+                && androidRow.Icon is DrawingImage { IsFrozen: true, Drawing: GeometryDrawing androidDrawing }
+                && ReferenceEquals(androidDrawing.Geometry, AutomationIcons.Phone),
+                "the mixer uses two distinct frozen device-source icons");
             Check(toggle.IsEnabled && Equals(toggle.Content, L10n.T("Phone.AirPlayStart")), "AirPlay waits for the explicit receive button");
             bool hevc = MediaFoundationH264Decoder.SupportsHevc;
             if (hevc) Until(() => codecs.Items.Count == 3);
@@ -72,7 +89,8 @@ internal static partial class Program
             Render((FrameworkElement)panel.Content, 235, 450, Path.Combine(output, "device-panel-airplay.png"));
             selector.SelectedItem = selector.Items.OfType<AndroidDevice>().Single();
             DrainUi();
-            Check(list.IsVisible && list.Items.Count == 2 && !view.IsVisible && panel.AllowDrop && store.Profile.LastDevice != null,
+            Check(list.IsVisible && list.Items.Count == 2 && !view.IsVisible && panel.AllowDrop && store.Profile.LastDevice != null
+                && ReferenceEquals(deviceIcon.Data, AutomationIcons.Phone),
                 "switching back restores Android apps and their selected device");
             selector.SelectedItem = choice;
             panel.Close();

@@ -20,6 +20,7 @@ internal static partial class Program
         try
         {
             if (args.Length > 0 && args[0] == "--airplay-listen") { await AirPlayLoopbackAsync(args.Contains("--prefer-hevc")); return 0; }
+            if (args.Length > 0 && args[0] == "--airplay-phone-output") { await AirPlayPhoneOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--decoder-settings") { await DecoderSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-start") { await AndroidHevcStartAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-recovery") { await AndroidHevcStartAsync(args[1], checkResize: true); return 0; }

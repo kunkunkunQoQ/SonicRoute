@@ -87,13 +87,23 @@ internal static class ApplicationAudio
     internal static IEnumerable<AudioDeviceInfo> OutputsForApp(AudioAppInfo? app, IEnumerable<AudioDeviceInfo> outputs)
     {
 #if SONICROUTE_PHONE
-        if (app?.IsExternal == true)
+        if (app is { IsExternal: true } && app.ProcessName != AirPlayHost.AppKey)
         {
             var source = Source(app);
-            var list = outputs.Where(d => !IsPhoneOutputDevice(d.Id)).ToList();
-            // An active incoming source can outlive the device-discovery snapshot; include its speaker and Bluetooth outputs.
-            if (source != null)
-                list.AddRange(AndroidAudioHost.OutputsForDevice(source.Device));
+            if (source == null) return outputs.Where(d => !IsPhoneOutputDevice(d.Id)).ToList();
+            var phoneOutputs = AndroidAudioHost.OutputsForDevice(source.Device);
+            var remaining = new Dictionary<string, AudioDeviceInfo>(StringComparer.OrdinalIgnoreCase);
+            foreach (var phone in phoneOutputs) remaining.TryAdd(phone.Id, phone);
+            var config = ConfigService.Load();
+            var list = new List<AudioDeviceInfo>();
+            foreach (var device in outputs)
+            {
+                if (!IsPhoneOutputDevice(device.Id)) list.Add(device);
+                else if (remaining.Remove(device.Id, out var phone)) list.Add(PanelDevices.WithDeviceName(phone, config));
+            }
+            // A live source can retain access to its own outputs during device-discovery changes.
+            foreach (var phone in phoneOutputs)
+                if (remaining.Remove(phone.Id)) list.Add(PanelDevices.WithDeviceName(phone, config));
             return list;
         }
 #endif
@@ -309,13 +319,19 @@ internal static class ApplicationAudio
     {
         if (flow == EDataFlow.eRender && AirPlayHost.Find(app.ExternalSourceId) is { } airPlay)
         {
-            if (IsPhoneOutputDevice(deviceId)) return (false, -1, L10n.T("Phone.Err.NoAudioRouteOrEnded"));
             try
             {
                 await airPlay.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
                 return (true, 0, "");
             }
-            catch (Exception ex) { return (false, ex.HResult, L10n.T("Phone.AirPlayAudioError")); }
+            catch (Exception ex)
+            {
+                string message = L10n.T("Phone.AirPlayAudioError");
+                if (IsPhoneOutputDevice(deviceId))
+                    message = AndroidError.TryGetCode(ex, out var code) ? AndroidErrorTranslation.Format(code, ex.Message)
+                        : L10n.T("Phone.Err.PhoneAudioOutputFailed");
+                return (false, ex.HResult, message);
+            }
         }
         var source = Source(app);
         if (source != null && flow == EDataFlow.eRender)

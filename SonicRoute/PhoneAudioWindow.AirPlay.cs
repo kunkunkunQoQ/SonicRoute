@@ -35,6 +35,7 @@ public partial class PhoneAudioWindow
             Android_ReturnDragStateChanged();
         }
         DeviceMediaCard.Visibility = DeviceSearchCard.Visibility = airPlay ? Visibility.Collapsed : Visibility.Visible;
+        DeviceKindIcon.Data = airPlay ? AutomationIcons.AirPlay : AutomationIcons.Phone;
         ConnectionText.Margin = new Thickness(airPlay ? 0 : 19, 0, 0, 0);
         ConnectionText.Width = airPlay ? 56 : 37;
         RefreshButton.Visibility = airPlay ? Visibility.Collapsed : Visibility.Visible;

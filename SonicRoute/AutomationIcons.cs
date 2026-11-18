@@ -46,6 +46,9 @@ namespace SonicRoute
         public static Geometry Info { get; } = Frozen("M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M12,7 L12.1,7 M12,11 L12,17");
         public static Geometry Monitor { get; } = Frozen("M2,3 L22,3 L22,17 L2,17 Z M12,17 L12,22 M7,22 L17,22");
         public static Geometry Phone { get; } = Frozen("M7,1 L17,1 Q19,1 19,3 L19,21 Q19,23 17,23 L7,23 Q5,23 5,21 L5,3 Q5,1 7,1 Z M10,3 L14,3 M10,21 L14,21");
+#if SONICROUTE_PHONE
+        public static Geometry AirPlay { get; } = Frozen("M6,18 H4 Q2,18 2,16 V5 Q2,3 4,3 H20 Q22,3 22,5 V16 Q22,18 20,18 H18 M5,22 L12,13 L19,22 Z");
+#endif
         public static Geometry Pin { get; } = Frozen("M8,2 L16,2 L15,8 L19,12 L19,14 L13,14 L12,23 L11,14 L5,14 L5,12 L9,8 Z");
         public static Geometry File { get; } = Frozen("M5,2 L14,2 L20,8 L20,22 L5,22 Z M14,2 L14,8 L20,8");
         public static Geometry Sun { get; } = Frozen("M12,6 A6,6 0 1 0 12,18 A6,6 0 1 0 12,6 M12,0 L12,3 M12,21 L12,24 M0,12 L3,12 M21,12 L24,12 M3,3 L5,5 M19,19 L21,21 M3,21 L5,19 M19,5 L21,3");

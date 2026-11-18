@@ -50,7 +50,7 @@ public partial class QuickPanelModernWindow
         internal ToggleButton Expand = null!;
         internal AnimatedExpandHost Wrap = null!;
         internal RotateTransform Arrow = new(0);
-        internal bool Expanded, Legacy, ShowOutputName, ApplyingState;
+        internal bool Expanded, Legacy, ShowOutputName, ApplyingState, ChangingOutput;
         internal TextBlock? Name;
         internal string? PhoneName;
         internal readonly List<(Button Button, string Id)> Devices = new();
@@ -323,11 +323,9 @@ public partial class QuickPanelModernWindow
             row.Root.ToolTip = source.AirPlay != null ? $"{phoneName} · AirPlay" : !string.IsNullOrEmpty(errText)
                 ? errText : string.Format(L10n.T("Phone.RowFromPhoneTooltip"), row.IconItem.Label, phoneName);
             UpdateAndroidRoute(row);
-            bool phoneOutputsChanged = row.Expanded && source.Android is { } android && !AndroidAudioHost.GetDropZonesForDevice(android.Device)
-                .Select(static z => z.DeviceId)
-                .Where(id => !config.HiddenOutputDevices.Contains(id))
-                .SequenceEqual(row.Devices.Select(static d => d.Id).Where(ApplicationAudio.IsPhoneOutputDevice));
-            if ((outputsChanged || phoneNameChanged || phoneOutputsChanged || _androidLanguageDirty) && row.Expanded) BuildAndroidDevices(row);
+            if (row.Expanded && (outputsChanged || phoneNameChanged || _androidLanguageDirty
+                || source.Android is { } android && PhoneDeviceChoicesChanged(row, android.Device, config)))
+                BuildAndroidDevices(row);
             if (i >= AppListPanel.Items.Count || !ReferenceEquals(AppListPanel.Items[i], row.Root))
             {
                 AppListPanel.Items.Remove(row.Root); AppListPanel.Items.Insert(i, row.Root);
@@ -507,14 +505,6 @@ public partial class QuickPanelModernWindow
     private void BuildAndroidDevices(AndroidRow row)
     {
         row.Details.Children.Clear(); row.Devices.Clear();
-        var cfg = ConfigService.Load();
-        var outputs = ApplicationAudio.OutputsForApp(row.IconItem.Info, _outputDisplay)
-            .Where(d => !cfg.HiddenOutputDevices.Contains(d.Id));
-        var wrap = AddRowDeviceGroup(row.Details, outputs, "Qp.Output", new Thickness(0, 0, 0, 8), (button, device) =>
-        {
-            row.Devices.Add((button, device.Id));
-            button.Click += async (_, _) => await SetAndroidOutputAsync(row, device);
-        });
         var exit = new Button { Content = L10n.T("Tray.Exit"), ToolTip = L10n.T("Phone.StopReceivingApp") };
         exit.SetResourceReference(StyleProperty, "DevButton");
         System.Windows.Automation.AutomationProperties.SetName(exit, string.Format(L10n.T("Phone.RowExitAutomation"), row.Source.Name));
@@ -528,10 +518,31 @@ public partial class QuickPanelModernWindow
             }
             catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
         };
-        wrap.Children.Add(exit); UpdateAndroidRoute(row);
+        AddRowDeviceGroup(row.Details, RowPlaybackDevices(row.IconItem.Info, ConfigService.Load()), EDataFlow.eRender, (button, device) =>
+        {
+            button.IsEnabled = !row.ChangingOutput;
+            row.Devices.Add((button, device.Id));
+            button.Click += async (_, _) => await SetAndroidOutputAsync(row, device);
+        }, trailingAction: exit);
+        UpdateAndroidRoute(row);
     }
+
+    private static bool PhoneDeviceChoicesChanged(AndroidRow row, AndroidDevice device, AppConfig config)
+    {
+        int count = 0;
+        foreach (var (_, id) in AndroidAudioHost.GetDropZonesForDevice(device))
+        {
+            if (config.HiddenOutputDevices.Contains(id)) continue;
+            if (!row.Devices.Any(entry => string.Equals(entry.Id, id, StringComparison.OrdinalIgnoreCase))) return true;
+            count++;
+        }
+        return count != row.Devices.Count(entry => ApplicationAudio.IsPhoneOutputDevice(entry.Id));
+    }
+
     private async Task SetAndroidOutputAsync(AndroidRow row, AudioDeviceInfo device)
     {
+        if (row.ChangingOutput) return;
+        row.ChangingOutput = true;
         foreach (var entry in row.Devices) entry.Button.IsEnabled = false;
         try
         {
@@ -539,14 +550,22 @@ public partial class QuickPanelModernWindow
             if (!result.Success && !_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), result.Message);
         }
         catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
-        finally { if (!_isClosed) { UpdateAndroidRoute(row); foreach (var entry in row.Devices) entry.Button.IsEnabled = true; } }
+        finally
+        {
+            row.ChangingOutput = false;
+            if (!_isClosed)
+            {
+                UpdateAndroidRoute(row);
+                foreach (var entry in row.Devices) entry.Button.IsEnabled = true;
+            }
+        }
     }
     private void UpdateAndroidRoute(AndroidRow row)
     {
         string id = row.Source.Session.State.OutputId ?? AudioService.SystemDefaultDeviceId;
         if (row.Name != null) row.Name.Text = row.ShowOutputName
             ? ShortName(_outputDisplay.FirstOrDefault(d => d.Id == id)?.DisplayName ?? L10n.T("Dev.SystemDefaultOut")) : row.IconItem.Label;
-        foreach (var entry in row.Devices) entry.Button.SetResourceReference(StyleProperty, entry.Id == id ? "DevButtonActive" : "DevButton");
+        foreach (var entry in row.Devices) SetRowDeviceSelection(entry.Button, entry.Id, id);
     }
     private void RefreshAndroidAppIcons(string processName)
     {

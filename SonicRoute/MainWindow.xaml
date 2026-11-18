@@ -969,28 +969,53 @@
                     </Border>
 
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <Border.Resources>
+                            <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
+                                <Setter Property="Height" Value="Auto"/>
+                                <Setter Property="MinHeight" Value="34"/>
+                                <Setter Property="ContentTemplate">
+                                    <Setter.Value>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center" Margin="10,5"/>
+                                        </DataTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </Border.Resources>
                         <StackPanel>
                             <TextBlock Text="{Binding [Exp.ConfigFiles], Source={x:Static local:L10n.Instance}}"
                                        Style="{StaticResource SectionTitle}" TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding [Exp.ConfigTransferHint], Source={x:Static local:L10n.Instance}}"
-                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       Margin="0,-4,0,10" TextWrapping="Wrap"/>
-                            <WrapPanel>
-                                <Button x:Name="ExpExportConfigButton" Content="{Binding [Exp.ExportConfig], Source={x:Static local:L10n.Instance}}"
-                                        Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                        Margin="0,0,10,6" Click="ExpExportConfig_Click"/>
-                                <Button x:Name="ExpImportConfigButton" Content="{Binding [Exp.ImportConfig], Source={x:Static local:L10n.Instance}}"
-                                        Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                        Margin="0,0,0,6" Click="ExpImportConfig_Click"
-                                        AllowDrop="True" DragOver="ExpImportConfigButton_DragOver" Drop="ExpImportConfigButton_Drop"/>
-                            </WrapPanel>
-                            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,6,0,12"/>
-                            <TextBlock Text="{Binding [Exp.ClearConfigHint], Source={x:Static local:L10n.Instance}}"
-                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       Margin="0,0,0,10" TextWrapping="Wrap"/>
-                            <Button x:Name="ExpClearConfigButton" Content="{Binding [Exp.ClearConfig], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                    HorizontalAlignment="Left" Click="ExpClearConfig_Click"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="2*"/>
+                                    <ColumnDefinition Width="1"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="{Binding [Exp.ConfigTransferHint], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource ThemeHint}" Margin="0,0,14,10"/>
+                                <Border Grid.Column="1" Grid.RowSpan="2" Background="{DynamicResource Theme.Border}"/>
+                                <TextBlock Grid.Column="2" Text="{Binding [Exp.ClearConfigHint], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource ThemeHint}" Margin="14,0,0,10"/>
+                                <Grid Grid.Row="1" HorizontalAlignment="Left" Margin="0,0,14,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition/>
+                                        <ColumnDefinition/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="ExpExportConfigButton" Content="{Binding [Exp.ExportConfig], Source={x:Static local:L10n.Instance}}"
+                                            Margin="0,0,8,0" Click="ExpExportConfig_Click"/>
+                                    <Button x:Name="ExpImportConfigButton" Grid.Column="1"
+                                            Content="{Binding [Exp.ImportConfig], Source={x:Static local:L10n.Instance}}"
+                                            Click="ExpImportConfig_Click"
+                                            AllowDrop="True" DragOver="ExpImportConfigButton_DragOver" Drop="ExpImportConfigButton_Drop"/>
+                                </Grid>
+                                <Button x:Name="ExpClearConfigButton" Grid.Row="1" Grid.Column="2"
+                                        Content="{Binding [Exp.ClearConfig], Source={x:Static local:L10n.Instance}}"
+                                        Margin="14,0,0,0" HorizontalAlignment="Left" Click="ExpClearConfig_Click"/>
+                            </Grid>
                         </StackPanel>
                     </Border>
                 </StackPanel>

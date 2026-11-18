@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using SonicRoute.Core;
+using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using Button = System.Windows.Controls.Button;
 using Panel = System.Windows.Controls.Panel;
@@ -10,22 +13,36 @@ namespace SonicRoute;
 
 public partial class QuickPanelModernWindow
 {
-    // The same group, labels, device pills and selected styling serve both source types.
-    private WrapPanel AddRowDeviceGroup(Panel parent, IEnumerable<AudioDeviceInfo> devices, string title,
-        Thickness margin, Action<Button, AudioDeviceInfo> configure)
+    private IEnumerable<AudioDeviceInfo> RowPlaybackDevices(AudioAppInfo app, AppConfig config) =>
+        ApplicationAudio.OutputsForApp(app, _outputDisplay).Where(device => !config.HiddenOutputDevices.Contains(device.Id));
+
+    private void AddRowDeviceGroup(Panel parent, IEnumerable<AudioDeviceInfo> devices, EDataFlow flow,
+        Action<Button, AudioDeviceInfo> configure, Button? trailingAction = null)
     {
-        var label = new TextBlock { Text = L10n.T(title), FontSize = 11, FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 2, 0, 3) };
+        bool playback = flow == EDataFlow.eRender;
+        var label = new TextBlock { Text = L10n.T(playback ? "Qp.Output" : "Qp.Input"), FontSize = 11,
+            FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 0, 3) };
         label.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
-        var wrap = new WrapPanel { Margin = margin };
+
+        var wrap = new WrapPanel { Margin = new Thickness(0, 0, 0, playback ? 8 : 4) };
         foreach (var device in devices)
         {
-            var button = NewDevButton(device, false);
+            var button = new Button { Content = ShortName(device.DisplayName), Tag = device };
+            System.Windows.Automation.AutomationProperties.SetName(button, device.DisplayName);
+            button.ToolTipOpening += (_, e) => e.Handled = true;
+            button.SetResourceReference(StyleProperty, "DevButton");
             configure(button, device);
             wrap.Children.Add(button);
         }
-        parent.Children.Add(label); parent.Children.Add(wrap);
-        return wrap;
+        if (trailingAction != null) wrap.Children.Add(trailingAction);
+        parent.Children.Add(label);
+        parent.Children.Add(wrap);
+    }
+
+    private void SetRowDeviceSelection(Button button, string id, string selected)
+    {
+        string style = string.Equals(id, selected, StringComparison.OrdinalIgnoreCase) ? "DevButtonActive" : "DevButton";
+        if (!ReferenceEquals(button.Style, FindResource(style))) button.SetResourceReference(StyleProperty, style);
     }
 
     private bool CollapseNativeDeviceRows(AppRow? except)

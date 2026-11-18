@@ -13,6 +13,11 @@ namespace SonicRoute
     /// </summary>
     public static class PanelDevices
     {
+        internal static AudioDeviceInfo WithDeviceName(AudioDeviceInfo device, AppConfig config) =>
+            config.DeviceNames.TryGetValue(device.Id, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? new AudioDeviceInfo { Id = device.Id, DisplayName = name, Flow = device.Flow, IsDefault = device.IsDefault }
+                : device;
+
         /// <summary>按可见列表循环；当前项已离线或隐藏时，向后取首项，向前取末项。</summary>
         internal static int CycleIndex(int currentIndex, int count, bool previous, int steps = 1)
         {

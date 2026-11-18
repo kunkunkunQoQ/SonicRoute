@@ -188,8 +188,8 @@
                         BorderThickness="1" CornerRadius="10" Padding="6,2,4,2">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
-                        <Path Data="{x:Static local:AutomationIcons.Phone}"
-                              Width="14" Height="20" Stretch="Uniform" HorizontalAlignment="Left" Margin="1,0,0,0" VerticalAlignment="Center"
+                        <Path x:Name="DeviceKindIcon" Data="{x:Static local:AutomationIcons.Phone}"
+                              Width="18" Height="20" Stretch="Uniform" HorizontalAlignment="Left" Margin="1,0,0,0" VerticalAlignment="Center"
                               Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
                         <ComboBox x:Name="DeviceCombo" Grid.Column="1" Grid.ColumnSpan="3" Height="24" Background="Transparent" BorderThickness="0"
                                   Padding="0,0,64,0" FontSize="11" FontWeight="Bold" Style="{StaticResource RoundedComboBox}"

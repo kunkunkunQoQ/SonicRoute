@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Documents;
 using SonicRoute;
@@ -65,24 +66,41 @@ internal static partial class Program
             try
             {
                 typeof(MainWindow).GetMethod("EnsureExperimentalPage", Hidden)!.Invoke(window, null);
-                var buttons = new[] { "ExpClearConfigButton", "ExpExportConfigButton", "ExpImportConfigButton" }
+                var buttons = new[] { "ExpExportConfigButton", "ExpImportConfigButton", "ExpClearConfigButton" }
                     .Select(name => (Button)typeof(MainWindow).GetField(name, Hidden)!.GetValue(window)!).ToArray();
-                var actions = (StackPanel)buttons[0].Parent;
-                Check(ReferenceEquals(buttons[1].Parent, buttons[2].Parent)
-                    && ReferenceEquals(((WrapPanel)buttons[1].Parent).Parent, actions)
-                    && actions.Parent is Border && buttons[2].AllowDrop,
+                DependencyObject parent = buttons[0];
+                while (parent is not Border)
+                    parent = LogicalTreeHelper.GetParent(parent) ?? throw new InvalidOperationException("Configuration card is missing.");
+                var card = (Border)parent;
+                Check(buttons.All(Descendants<Button>(card).Contains) && buttons[1].AllowDrop,
                     theme + " clear, export, and drag import share one configuration card");
-                var title = actions.Children.OfType<TextBlock>().First();
+                var title = Descendants<TextBlock>(card).First();
                 foreach (string language in L10n.SupportedLanguages.Select(entry => entry.Code))
                 {
                     L10n.Instance.SetLanguage(language);
                     DrainUi();
                     Check(title.Text == L10n.T("Exp.ConfigFiles") && title.Text != "Exp.ConfigFiles"
-                        && Equals(buttons[0].Content, L10n.T("Exp.ClearConfig"))
-                        && Equals(buttons[1].Content, L10n.T("Exp.ExportConfig"))
-                        && Equals(buttons[2].Content, L10n.T("Exp.ImportConfig")),
+                        && Equals(buttons[0].Content, L10n.T("Exp.ExportConfig"))
+                        && Equals(buttons[1].Content, L10n.T("Exp.ImportConfig"))
+                        && Equals(buttons[2].Content, L10n.T("Exp.ClearConfig")),
                         theme + " configuration card translates in " + language);
+                    const int narrowWidth = 470;
+                    card.Measure(new Size(narrowWidth, double.PositiveInfinity));
+                    card.Arrange(new Rect(0, 0, narrowWidth, card.DesiredSize.Height));
+                    card.UpdateLayout();
+                    var bounds = buttons.Select(button => button.TransformToAncestor(card)
+                        .TransformBounds(new Rect(button.RenderSize))).ToArray();
+                    Check(bounds.All(rect => rect.Width > 0 && rect.Right <= narrowWidth && Math.Abs(rect.Top - bounds[0].Top) < 1)
+                        && bounds[0].Right <= bounds[1].Left && bounds[1].Right <= bounds[2].Left
+                        && buttons.All(button => LayoutInformation.GetLayoutClip(Descendants<TextBlock>(button).Single()) == null),
+                        theme + " all configuration actions fit on one row in " + language);
                 }
+
+                L10n.Instance.SetLanguage("zh-CN");
+                DrainUi();
+                const int previewWidth = 650;
+                card.Measure(new Size(previewWidth, double.PositiveInfinity));
+                Render(card, previewWidth, (int)Math.Ceiling(card.DesiredSize.Height), Path.Combine(output, $"config-card-{theme}.png"));
             }
             finally { window.Close(); }
         }

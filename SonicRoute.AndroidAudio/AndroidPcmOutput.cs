@@ -279,16 +279,18 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     private long _bytes, _nonSilentBytes;
     private Exception? _failure;
     public Exception? Failure => Volatile.Read(ref _failure);
+    internal AndroidDevice Device => _output.Device;
     public (long Bytes, long NonSilentBytes, int RoutedType) Diagnostics =>
         (Interlocked.Read(ref _bytes), Interlocked.Read(ref _nonSilentBytes), _output.RoutedType);
     public event Action<Exception>? Failed;
 
-    public AndroidPhonePcmPlayer(AdbClient adb, AndroidDevice device, AndroidPcmSource source, string sinkKey, CancellationToken token)
+    public AndroidPhonePcmPlayer(AdbClient adb, AndroidDevice device, AndroidPcmSource source, string sinkKey, CancellationToken token,
+        Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null)
     {
         _source = source;
         try
         {
-            _output = AndroidAudioOutputConnection.OpenAsync(adb, device, sinkKey, token).GetAwaiter().GetResult();
+            _output = AndroidAudioOutputConnection.OpenAsync(adb, device, sinkKey, token, onOutputs).GetAwaiter().GetResult();
             _output.Failed += OnFailure;
             _source.DataAvailable += Wake;
             _pump = Task.Run(PumpAsync);
@@ -307,6 +309,17 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     }
     public Task SwitchTargetAsync(string key, CancellationToken token) => _output.SwitchTargetAsync(key, token);
     public Task WaitForRoutingAsync(CancellationToken token) => _output.WaitForRoutingAsync(token);
+
+    internal async Task VerifyBeforePlaybackAsync(CancellationToken token)
+    {
+        // AudioTrack needs a first write before Android can report the routed device.
+        // Prime it with 20 ms of silence while the previous renderer still owns the PCM queue.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(5));
+        await _output.Stream.WriteAsync(new byte[960 * 2 * sizeof(short)], deadline.Token).ConfigureAwait(false);
+        await WaitForRoutingAsync(deadline.Token).ConfigureAwait(false);
+    }
+
     public void Play()
     {
         _output.SetPaused(false);

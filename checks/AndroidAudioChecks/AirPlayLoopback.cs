@@ -14,7 +14,7 @@ internal static partial class Program
         Action? defaultChanged = null;
         int detached = 0;
         await using var receiver = new AirPlayReceiver("SonicRoute Simulation", loopback: true,
-            player: (pcm, endpoint) =>
+            player: (pcm, endpoint, _) =>
             {
                 var player = new SimulatedOutput(pcm);
                 created.Enqueue((endpoint, player));
@@ -54,6 +54,86 @@ internal static partial class Program
         bool remains = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties()
             .GetActiveTcpListeners().Any(l => l.Address.Equals(IPAddress.Loopback) && l.Port == port);
         Console.WriteLine(JsonSerializer.Serialize(new { Closed = receiver.Completion.IsCompletedSuccessfully && !remains }));
+    }
+
+    private static async Task AirPlayPhoneOutputAsync(string output)
+    {
+        string runtime = Path.Combine(output, "simulated-runtime");
+        Directory.CreateDirectory(runtime);
+        await File.WriteAllTextAsync(Path.Combine(runtime, "sonicroute-catalog.jar"), "FAKE-JAR-CONTENT");
+        await using var server = new FakeAdbServer();
+        using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var adb = new AdbClient(runtime, new AdbSocketClient(server.EndPoint));
+        var device = (await adb.DevicesAsync(lifetime.Token)).Single();
+        string phoneKey = AndroidDeviceIdentity.Key(device);
+        string speaker = AndroidOutputIdentity.FormatDeviceId(phoneKey, "speaker");
+        string unavailable = AndroidOutputIdentity.FormatDeviceId(phoneKey, "bt:unavailable");
+        var windowsPlayers = new List<SimulatedOutput>();
+        var restored = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        AirPlayAudioOutput? tracked = null;
+        bool expectFallback = false;
+        int defaultWatches = 0, errors = 0;
+        await using var source = new AirPlayAudioOutput("Apple Fixture", () =>
+        {
+            if (Volatile.Read(ref expectFallback) && tracked?.State.OutputId == null) restored.TrySetResult();
+        }, () => Interlocked.Increment(ref errors), (pcm, endpoint, token) =>
+        {
+            if (AndroidOutputIdentity.TryParseDeviceId(endpoint, out _, out string sink))
+                return new AndroidPhonePcmPlayer(adb, device, pcm, sink, token);
+            var player = new SimulatedOutput(pcm);
+            windowsPlayers.Add(player);
+            return player;
+        }, _ =>
+        {
+            Interlocked.Increment(ref defaultWatches);
+            return new AirPlayWatch(() => Interlocked.Decrement(ref defaultWatches));
+        }, lifetime.Token);
+        tracked = source;
+        source.Write([0.25f, -0.25f], AndroidPcmSource.SampleRate);
+        source.Flush();
+        source.SetVolume(37);
+        var pcmSource = source.Pcm;
+
+        bool rejected = false;
+        try { await source.SetOutputAsync(unavailable).WaitAsync(lifetime.Token); }
+        catch (IOException ex) when (AndroidError.TryGetCode(ex, out var code) && code == AndroidErrorCode.PhoneAudioOutputFailed)
+        { rejected = true; }
+        Check(rejected && source.State.OutputId == null && !windowsPlayers.Single().Disposed && defaultWatches == 1,
+            "a rejected Android output leaves the prior playing endpoint and default watch intact");
+
+        await source.SetOutputAsync(speaker).WaitAsync(lifetime.Token);
+        const int silentBytes = 2 * 960 * 2 * sizeof(short); // One priming chunk per attempt.
+        byte[] primed = await server.WaitForLocalAbstractBytesAsync(silentBytes, TimeSpan.FromSeconds(2));
+        Check(primed.All(value => value == 0) && source.State.OutputId == speaker
+            && ReferenceEquals(source.Pcm, pcmSource) && source.State.Volume == 37
+            && windowsPlayers[0].Disposed && defaultWatches == 0,
+            "the speaker route verifies with silence while the sender is paused and keeps the same PCM source and volume");
+        source.Write(Enumerable.Repeat(0.35f, 1920).ToArray(), AndroidPcmSource.SampleRate);
+        byte[] playback = await server.WaitForLocalAbstractBytesAsync(silentBytes + 3840, TimeSpan.FromSeconds(2));
+        Check(playback.Skip(silentBytes).Any(value => value != 0), "AirPlay PCM reaches the selected Android speaker bridge");
+        source.SetMute(true);
+        source.Write(Enumerable.Repeat(0.35f, 1920).ToArray(), AndroidPcmSource.SampleRate);
+        byte[] muted = await server.WaitForLocalAbstractBytesAsync(silentBytes + 7680, TimeSpan.FromSeconds(2));
+        Check(muted.Skip(silentBytes + 3840).All(value => value == 0), "the speaker route honors the AirPlay row's mute");
+
+        await source.SetOutputAsync(null).WaitAsync(lifetime.Token);
+        Check(source.State.OutputId == null && defaultWatches == 1 && source.State.Muted
+            && ReferenceEquals(source.Pcm, pcmSource), "the same AirPlay session can return to the Windows default output");
+        await source.SetOutputAsync(speaker).WaitAsync(lifetime.Token);
+        await source.PhoneRemovedAsync(device).WaitAsync(lifetime.Token);
+        Check(source.State.State == CaptureState.Receiving && source.State.OutputId == null && defaultWatches == 1,
+            "removing the selected Android device releases its renderer and resumes Windows output");
+        await source.SetOutputAsync(speaker).WaitAsync(lifetime.Token);
+        Volatile.Write(ref expectFallback, true);
+        server.Disconnect();
+        await restored.Task.WaitAsync(lifetime.Token);
+        Check(source.State.State == CaptureState.Receiving && source.State.OutputId == null && errors == 0 && defaultWatches == 1,
+            "loss of an active Android speaker falls back to Windows without ending AirPlay");
+        await source.DisposeAsync();
+        Check(source.Pcm == null && windowsPlayers.All(player => player.Disposed) && defaultWatches == 0,
+            "closing the source retires the final player and its default-output subscription");
+        await File.WriteAllTextAsync(Path.Combine(output, "airplay-phone-output.json"),
+            JsonSerializer.Serialize(new { Assertions = _checks, RealDevices = false }));
     }
 
     private sealed class AirPlayWatch(Action dispose) : IDisposable { public void Dispose() => dispose(); }

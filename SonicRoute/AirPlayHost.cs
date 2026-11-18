@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using SonicRoute.AirPlay;
+using SonicRoute.AndroidAudio;
 
 namespace SonicRoute;
 
@@ -46,7 +47,8 @@ internal static class AirPlayHost
             {
                 string host = string.Concat(Environment.MachineName.Where(c => char.IsAsciiLetterOrDigit(c) || c == '-').Take(32));
                 string name = host.Length == 0 ? "SonicRoute" : "SonicRoute - " + host;
-                var receiver = new AirPlayReceiver(name, preferHevc: VideoPreference == AirPlayVideoPreference.PreferHevc);
+                var receiver = new AirPlayReceiver(name, player: CreatePlayer,
+                    preferHevc: VideoPreference == AirPlayVideoPreference.PreferHevc);
                 receiver.Changed += Publish;
                 Volatile.Write(ref _receiver, receiver);
                 _ = ObserveAsync(receiver);
@@ -67,6 +69,10 @@ internal static class AirPlayHost
         }
         finally { Operations.Release(); }
     });
+
+    private static IPcmPlayer CreatePlayer(AndroidPcmSource pcm, string? endpoint, CancellationToken token) =>
+        AndroidOutputIdentity.IsPhoneOutput(endpoint) ? AndroidAudioHost.CreatePhonePcmPlayer(pcm, endpoint!, token)
+            : new WasapiPcmPlayer(pcm, endpoint);
 
     internal static Task StopAsync() => Task.Run(async () =>
     {

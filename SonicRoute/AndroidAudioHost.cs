@@ -126,6 +126,7 @@ internal static class AndroidAudioHost
             cleanup.AddRange(Sources.Sources.Where(s => AndroidDeviceIdentity.MatchesSavedDevice(device, s.Device))
                 .Select(s => Sources.RemoveAsync(s.Id, restorePrevious: false)));
         if (IsPcToPhoneCreated) cleanup.Add(PcToPhone.StopPhoneAsync(device));
+        if (AirPlayHost.Source is { } airPlay) cleanup.Add(airPlay.PhoneRemovedAsync(device));
         await Task.WhenAll(cleanup);
         await Phone.FlushAsync();
     }
@@ -240,6 +241,25 @@ internal static class AndroidAudioHost
         foreach (var sink in sinks)
             result.Add((sink, AndroidOutputIdentity.FormatDeviceId(phoneKey, sink.Key)));
         return result;
+    }
+    internal static AndroidPhonePcmPlayer CreatePhonePcmPlayer(AndroidPcmSource pcm, string endpoint, CancellationToken token)
+    {
+        if (!AndroidOutputIdentity.TryParseDeviceId(endpoint, out string phoneKey, out string sink))
+            throw AndroidError.WithCode(new IOException("无效的设备输出。"), AndroidErrorCode.InvalidPhoneOutputDevice);
+
+        var devices = PhoneAudioWindowCache.Devices;
+        var device = devices != null ? devices.FirstOrDefault(IsTarget)
+            : Phone.Profiles.Select(profile => profile.LastDevice).FirstOrDefault(IsTarget);
+        if (device == null || Phone.IsRemoved(device))
+            throw AndroidError.WithCode(new IOException("设备未连接或离线。"), AndroidErrorCode.PhoneOffline);
+        if (!GetDropZonesForDevice(device).Any(output => string.Equals(output.DeviceId, endpoint, StringComparison.OrdinalIgnoreCase)))
+            throw AndroidError.WithCode(new IOException("所选设备输出已断开。"), AndroidErrorCode.SelectedPhoneOutputDisconnected);
+
+        token.ThrowIfCancellationRequested();
+        return new AndroidPhonePcmPlayer(Adb, device, pcm, sink, token, (connected, outputs) => Phone.UpdateOutputs(connected, outputs));
+
+        bool IsTarget(AndroidDevice? candidate) => candidate is { State: "device" }
+            && string.Equals(AndroidDeviceIdentity.Key(candidate), phoneKey, StringComparison.OrdinalIgnoreCase);
     }
     internal static string? TryGetPcAppPhoneOutput(int processId) =>
         LazyPcToPhone.IsValueCreated ? PcToPhone.GetPersistedEndpoint(processId) : null;

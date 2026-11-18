@@ -25,7 +25,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     private readonly bool _showWindow;
     private readonly bool _hevc;
     private readonly AirPlayDiscovery.Lan[] _lan;
-    private readonly Func<AndroidPcmSource, string?, IPcmPlayer> _player;
+    private readonly Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> _player;
     private readonly Func<Action, IDisposable> _watchDefault;
     private readonly byte[] _info;
     private readonly object _sessionGate = new();
@@ -42,11 +42,11 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
 
     // Only the test harness asks for loopback. Production never changes Windows firewall rules.
     internal AirPlayReceiver(string name, bool loopback = false,
-        Func<AndroidPcmSource, string?, IPcmPlayer>? player = null, Func<Action, IDisposable>? watchDefault = null,
+        Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer>? player = null, Func<Action, IDisposable>? watchDefault = null,
         bool preferHevc = false)
     {
         if (!ChaCha20Poly1305.IsSupported) throw new PlatformNotSupportedException("AirPlay control encryption is unavailable.");
-        _player = player ?? ((pcm, endpoint) => new WasapiPcmPlayer(pcm, endpoint));
+        _player = player ?? ((pcm, endpoint, _) => new WasapiPcmPlayer(pcm, endpoint));
         _watchDefault = watchDefault ?? DefaultOutputNotifications.Subscribe;
         _lan = loopback ? [] : AirPlayDiscovery.ReadInterfaces();
         if (!loopback && _lan.Length == 0) throw new AirPlayNoNetworkException();
@@ -220,7 +220,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     {
                         try
                         {
-                            _output?.Dispose();
+                            if (_output != null) await _output.DisposeAsync().ConfigureAwait(false);
                             _mirrorHandshake?.Dispose();
                             if (_mediaKey != null) CryptographicOperations.ZeroMemory(_mediaKey);
                             if (_mediaIv != null) CryptographicOperations.ZeroMemory(_mediaIv);
@@ -481,7 +481,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     else
                     {
                         _output = new AirPlayAudioOutput(_sender, OutputChanged, () => StreamEnded(true, "Phone.AirPlayAudioError"),
-                            receiver._player, receiver._watchDefault);
+                            receiver._player, receiver._watchDefault, token);
                         _media = new AirPlayMediaStream(audioType, format, audioKey!, local, peer, _output,
                             failed => StreamEnded(failed, "Phone.AirPlayAudioError"), token, audioIv);
                         if (_recording) _media.Record();

@@ -25,11 +25,14 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        var stdout = Console.Out;
+        var stderr = Console.Error;
+        StreamWriter? fileLog = null;
         try
         {
             Trace.Listeners.Add(new TextWriterTraceListener(Console.Error)); Trace.AutoFlush = true;
             string output = Path.GetFullPath(args[0]); Directory.CreateDirectory(output);
-            using var fileLog = args.Contains("--file-log") ? new StreamWriter(Path.Combine(output, "console.log")) { AutoFlush = true } : null;
+            fileLog = args.Contains("--file-log") ? new StreamWriter(Path.Combine(output, "console.log")) { AutoFlush = true } : null;
             if (fileLog != null) { Console.SetOut(fileLog); Console.SetError(fileLog); }
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(output, "ui-data-" + Guid.NewGuid().ToString("N")));
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidUiChecks");
@@ -288,6 +291,15 @@ internal static partial class Program
             return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+        finally
+        {
+            if (fileLog != null)
+            {
+                Console.SetOut(stdout);
+                Console.SetError(stderr);
+                fileLog.Dispose();
+            }
+        }
     }
     private static AndroidAudioSource AddFixture(AndroidAudioManager manager, AndroidDevice device, AndroidApp app)
     {

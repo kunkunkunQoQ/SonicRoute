@@ -409,16 +409,8 @@ namespace SonicRoute
             catch { /* 底部状态读取失败不打断已准备好的面板，下次刷新重试。 */ }
         }
 
-        private static List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs, AppConfig cfg)
-        {
-            return devs.Select(d =>
-            {
-                string? custom = cfg.DeviceNames.TryGetValue(d.Id, out var n) ? n : null;
-                return string.IsNullOrWhiteSpace(custom)
-                    ? d
-                    : new AudioDeviceInfo { Id = d.Id, DisplayName = custom, Flow = d.Flow, IsDefault = d.IsDefault };
-            }).ToList();
-        }
+        private static List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs, AppConfig cfg) =>
+            devs.Select(device => PanelDevices.WithDeviceName(device, cfg)).ToList();
 
         // ------------------------------------------------------------------
         // 顶部：系统音频设备（选择控制对象 + 系统设备音量/静音；不修改系统默认设备）
@@ -1190,8 +1182,9 @@ namespace SonicRoute
         /// <summary>复用展开高度动画的进度，只在必要时作最小距离滚动，无额外 Timer/Rendering 订阅。</summary>
         private Action<double>? PrepareRowScroll(AppRow row)
         {
-            if (row.RootElement == null || AppListScroll.ViewportHeight <= 0) return null;
-            double top = row.RootElement.TransformToAncestor(AppListScroll).Transform(new System.Windows.Point(0, 0)).Y + AppListScroll.VerticalOffset;
+            var root = row.RootElement;
+            if (root == null || AppListScroll.ViewportHeight <= 0 || !AppListScroll.IsAncestorOf(root)) return null;
+            double top = root.TransformToAncestor(AppListScroll).Transform(new System.Windows.Point(0, 0)).Y + AppListScroll.VerticalOffset;
             double startOffset = AppListScroll.VerticalOffset;
             double oldHeight = row.ExpandWrap.ActualHeight;
             double viewport = AppListScroll.ViewportHeight;
@@ -1252,7 +1245,7 @@ namespace SonicRoute
             int pid = (int)row.App.ProcessId;
             var cfg = ConfigService.Load();
             bool micOn = _micUiOn;
-            var outputs = _outputDisplay.Where(d => !cfg.HiddenOutputDevices.Contains(d.Id)).ToList();
+            var outputs = RowPlaybackDevices(row.App, cfg).ToList();
             var inputs = micOn ? _inputDisplay.Where(d => !cfg.HiddenInputDevices.Contains(d.Id)).ToList() : new List<AudioDeviceInfo>();
             var signature = new StringBuilder();
             void Add(string? value) => signature.Append(value?.Length ?? -1).Append(':').Append(value).Append(';');
@@ -1273,24 +1266,23 @@ namespace SonicRoute
                 {
                     row.ExpandPanel.Children.Clear();
                     row.DeviceButtons.Clear();
-                    void AddDevices(List<AudioDeviceInfo> devices, EDataFlow flow, string title, Thickness margin)
+                    void AddDevices(List<AudioDeviceInfo> devices, EDataFlow flow)
                     {
-                        AddRowDeviceGroup(row.ExpandPanel, devices, title, margin, (button, device) =>
+                        AddRowDeviceGroup(row.ExpandPanel, devices, flow, (button, device) =>
                         {
                             button.Click += (_, _) => OnRowDeviceClickAsync(row, device, flow);
                             row.DeviceButtons.Add((button, device.Id, flow));
                         });
                     }
-                    AddDevices(outputs, EDataFlow.eRender, "Qp.Output", new Thickness(0, 0, 0, 8));
-                    if (micOn) AddDevices(inputs, EDataFlow.eCapture, "Qp.Input", new Thickness(0, 0, 0, 4));
+                    AddDevices(outputs, EDataFlow.eRender);
+                    if (micOn) AddDevices(inputs, EDataFlow.eCapture);
                     row.DeviceSignature = structure;
                 }
                 foreach (var item in row.DeviceButtons)
                 {
                     string activeId = (item.Flow == EDataFlow.eRender ? selected.Output : selected.Input)
                         ?? (item.Flow == EDataFlow.eRender ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId);
-                    string key = item.Id == activeId ? "DevButtonActive" : "DevButton";
-                    if (!ReferenceEquals(item.Button.Style, FindResource(key))) item.Button.SetResourceReference(StyleProperty, key);
+                    SetRowDeviceSelection(item.Button, item.Id, activeId);
                     item.Button.IsEnabled = true;
                 }
                 row.ExpandWrap.InvalidateMeasure();
@@ -1302,19 +1294,6 @@ namespace SonicRoute
                     foreach (var item in row.DeviceButtons) item.Button.IsEnabled = true;
                 return false;
             }
-        }
-
-        private Button NewDevButton(AudioDeviceInfo dev, bool active)
-        {
-            var btn = new Button
-            {
-                Content = ShortName(dev.DisplayName),
-                Tag = dev
-            };
-            System.Windows.Automation.AutomationProperties.SetName(btn, dev.DisplayName);
-            btn.ToolTipOpening += (_, e) => e.Handled = true;
-            btn.SetResourceReference(StyleProperty, active ? "DevButtonActive" : "DevButton");
-            return btn;
         }
 
         private async void OnRowDeviceClickAsync(AppRow row, AudioDeviceInfo dev, EDataFlow flow)

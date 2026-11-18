@@ -139,8 +139,10 @@ namespace SonicRoute
             {
 #if SONICROUTE_PHONE
                 ImageSource? icon;
-                if (Info.IsExternal && (ProcessName == AirPlayHost.AppKey || string.Equals(ProcessName,
-                    ApplicationAudio.AndroidKey(SonicRoute.AndroidAudio.AndroidApp.DeviceAudioPackage), StringComparison.Ordinal)))
+                if (Info.IsExternal && ProcessName == AirPlayHost.AppKey)
+                    icon = PhoneSourceIcon.AirPlayImage;
+                else if (Info.IsExternal && string.Equals(ProcessName,
+                    ApplicationAudio.AndroidKey(SonicRoute.AndroidAudio.AndroidApp.DeviceAudioPackage), StringComparison.Ordinal))
                     icon = PhoneSourceIcon.Image;
                 else
                     icon = Info.IsExternal

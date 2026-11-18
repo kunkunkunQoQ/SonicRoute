@@ -413,16 +413,8 @@ namespace SonicRoute
         }
 
         /// <summary>应用自定义设备名称到副本（不改动原始设备）。</summary>
-        private List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs)
-        {
-            return devs.Select(d =>
-            {
-                string? custom = _config.DeviceNames.TryGetValue(d.Id, out var n) ? n : null;
-                return string.IsNullOrWhiteSpace(custom)
-                    ? d
-                    : new AudioDeviceInfo { Id = d.Id, DisplayName = custom, Flow = d.Flow, IsDefault = d.IsDefault };
-            }).ToList();
-        }
+        private List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs) =>
+            devs.Select(device => PanelDevices.WithDeviceName(device, _config)).ToList();
 
 
         private IEnumerable<AudioDeviceInfo> VisibleOutputs =>
