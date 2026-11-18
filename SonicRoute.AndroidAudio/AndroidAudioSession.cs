@@ -6,13 +6,13 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly object _stateGate = new(), _logGate = new();
     private readonly Func<IAudioTransport> _transportFactory;
-    private readonly Func<AndroidPcmSource, string?, IPcmPlayer> _playerFactory;
+    private readonly Func<AndroidDevice, AndroidPcmSource, string?, CancellationToken, IPcmPlayer> _playerFactory;
     private readonly Func<Action, IDisposable>? _watchDefaultOutput;
     private IDisposable? _defaultOutputWatch;
     private int _defaultOutputRevision, _defaultOutputRefreshQueued;
     private readonly Queue<string> _logs = new();
     private AndroidAudioState _state = new(CaptureState.Idle);
-    private CancellationTokenSource? _run;
+    private CancellationTokenSource? _run, _pendingRun;
     private IAudioTransport? _transport;
     private IPcmPlayer? _player;
     private AndroidPcmSource? _pcm;
@@ -37,17 +37,16 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         _streaming = streaming;
         _watchDefaultOutput = DefaultOutputNotifications.Subscribe;
         _transportFactory = () => new ScrcpyAdbTransport(adb, Log, streaming);
-        _playerFactory = (source, id) =>
+        _playerFactory = (device, source, id, token) =>
         {
             if (!AndroidOutputIdentity.IsPhoneOutput(id)) return new WasapiPcmPlayer(source, id);
-            var device = State.Device ?? throw AndroidError.WithCode(new InvalidOperationException("手机音频会话尚未启动。"), AndroidErrorCode.AudioSessionNotStarted);
             string sink = GetSourcePhoneSink(device, id!);
-            return new AndroidPhonePcmPlayer(adb, device, source, sink, _run?.Token ?? default);
+            return new AndroidPhonePcmPlayer(adb, device, source, sink, token);
         };
     }
     public AndroidAudioSession(Func<IAudioTransport> transportFactory, Func<AndroidPcmSource, string?, IPcmPlayer> playerFactory,
         Func<Action, IDisposable>? watchDefaultOutput = null, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
-    { _transportFactory = transportFactory; _playerFactory = playerFactory; _watchDefaultOutput = watchDefaultOutput; _streaming = streaming; }
+    { _transportFactory = transportFactory; _playerFactory = (_, pcm, id, _) => playerFactory(pcm, id); _watchDefaultOutput = watchDefaultOutput; _streaming = streaming; }
 
     public async Task StartAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio = true, CancellationToken token = default)
     {
@@ -62,36 +61,52 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         finally { _operations.Release(); }
     }
 
-    private async Task StartCoreAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token)
+    private async Task StartCoreAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token,
+        string? warmPhoneRoute = null)
     {
         if (State.State is CaptureState.Starting or CaptureState.Receiving
             && State.Device?.Serial == device.Serial && State.App?.Package == app.Package && State.App.Uid == app.Uid
             && _capturePhoneAudio == keepPhoneAudio) return;
-        await StopCoreAsync().ConfigureAwait(false);
-        _capturePhoneAudio = keepPhoneAudio;
-        int generation = ++_generation;
-        _run = CancellationTokenSource.CreateLinkedTokenSource(token);
-        _renderFailure = null;
-        var runToken = _run.Token;
-        Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null, ErrorCode = null });
-        Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}");
+        var nextRun = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var runToken = nextRun.Token;
+        Volatile.Write(ref _pendingRun, nextRun);
         Task<IPcmPlayer>? preparingOutput = null;
+        AndroidPcmSource? warmPcm = null;
         try
         {
+            if (warmPhoneRoute != null)
+            {
+                // Overlap route preparation with releasing the old duplicate capture.
+                // The new PCM queue is empty until the old capture has been retired.
+                warmPcm = new AndroidPcmSource();
+                preparingOutput = Task.Run(() => PreparePhoneOutputAsync(device, warmPcm, warmPhoneRoute, runToken), runToken);
+            }
+            await StopCoreAsync().ConfigureAwait(false);
+            _run = nextRun;
+            Volatile.Write(ref _pendingRun, null);
+            _capturePhoneAudio = keepPhoneAudio;
+            int generation = ++_generation;
+            _renderFailure = null;
+            runToken.ThrowIfCancellationRequested();
+            Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null, ErrorCode = null });
+            Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}");
             string? decoder = _streaming?.Invoke(device).Normalize().AudioDecoder;
             _transport = _transportFactory();
-            _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f, SmartVolume = State.SmartVolume };
+            _pcm = warmPcm ?? new AndroidPcmSource();
+            var state = State;
+            _pcm.Volume = state.Muted ? 0 : state.Volume / 100f;
+            _pcm.SmartVolume = state.SmartVolume;
             if (string.IsNullOrEmpty(State.OutputId)) WatchDefaultOutput();
             Task<Stream> connecting = _transport.ConnectAsync(device, app, keepPhoneAudio, runToken);
-            if (AndroidOutputIdentity.IsPhoneOutput(State.OutputId))
+            if (preparingOutput == null && AndroidOutputIdentity.IsPhoneOutput(State.OutputId))
             {
                 var pcm = _pcm;
                 string outputId = State.OutputId!;
                 // Capture and phone playback need separate helpers, not sequential startup.
-                preparingOutput = Task.Run(() => _playerFactory(pcm, outputId), runToken);
+                preparingOutput = Task.Run(() => _playerFactory(device, pcm, outputId, runToken), runToken);
             }
             Stream stream = await connecting.ConfigureAwait(false);
-            _player = await (preparingOutput ?? Task.Run(() => _playerFactory(_pcm, State.OutputId), runToken)).ConfigureAwait(false);
+            _player = await (preparingOutput ?? Task.Run(() => _playerFactory(device, _pcm, State.OutputId, runToken), runToken)).ConfigureAwait(false);
             AttachOutputFailure(_player, generation);
             _player.Play();
             _receiver = new ScrcpyOpusReceiver(decoder);
@@ -111,18 +126,20 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         }
         catch (Exception ex)
         {
-            _run.Cancel();
+            nextRun.Cancel();
             if (preparingOutput != null && _player == null)
             {
                 // A factory may finish during cancellation. Join it before disposing its PCM
                 // or lifetime so the owned helper/socket cannot escape failed startup.
-                try { _player = await preparingOutput.ConfigureAwait(false); } catch { }
+                try { (await preparingOutput.ConfigureAwait(false)).Dispose(); } catch { }
             }
-            await StopCoreAsync().ConfigureAwait(false);
+            if (ReferenceEquals(_run, nextRun)) await StopCoreAsync().ConfigureAwait(false);
+            else nextRun.Dispose();
             Update(s => s with { State = CaptureState.Failed, Device = device, App = app, Error = ex.Message, ErrorCode = AndroidError.TryGetCode(ex, out var code) ? code : null });
             Log("Start failed: " + ex.Message);
             throw;
         }
+        finally { Volatile.Write(ref _pendingRun, null); }
     }
 
     private async Task ObserveReceiveAsync(Task receive, int generation)
@@ -147,6 +164,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
 
     public async Task StopAsync()
     {
+        try { Volatile.Read(ref _pendingRun)?.Cancel(); } catch (ObjectDisposedException) { }
         try { _run?.Cancel(); } catch (ObjectDisposedException) { }
         await _operations.WaitAsync().ConfigureAwait(false);
         try { await StopCoreAsync().ConfigureAwait(false); }
@@ -203,12 +221,22 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             bool keepPhoneAudio = _requestedPhoneAudio && !phoneOutput;
             if (_pcm != null && _capturePhoneAudio != keepPhoneAudio)
             {
-                // Disable native duplication before rendering back to a phone, otherwise
-                // its default Bluetooth path would play an uncontrolled second copy.
+                // Keep capture exclusive when selecting a phone sink, so there is
+                // no uncontrolled second copy on the phone's default output.
                 var old = State;
+                bool previousMode = _capturePhoneAudio;
                 Update(s => s with { OutputId = endpointId });
-                try { await StartCoreAsync(old.Device!, old.App!, keepPhoneAudio, _sourceLifetime).ConfigureAwait(false); }
-                catch { Update(s => s with { OutputId = old.OutputId }); throw; }
+                try { await StartCoreAsync(old.Device!, old.App!, keepPhoneAudio, _sourceLifetime, sink != null ? endpointId : null).ConfigureAwait(false); }
+                catch (Exception ex)
+                {
+                    Update(s => s with { OutputId = old.OutputId });
+                    if (ex is not OperationCanceledException && !_sourceLifetime.IsCancellationRequested)
+                    {
+                        try { await StartCoreAsync(old.Device!, old.App!, previousMode, _sourceLifetime).ConfigureAwait(false); }
+                        catch (Exception recovery) { Log("Previous capture recovery: " + recovery.Message); }
+                    }
+                    throw;
+                }
                 return;
             }
             if (sink != null && _player is AndroidPhonePcmPlayer phone)
@@ -233,18 +261,41 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         finally { _operations.Release(); }
     }
 
-    private async Task ReplaceOutputAsync(string? endpointId)
+    private async Task<IPcmPlayer> PreparePhoneOutputAsync(AndroidDevice device, AndroidPcmSource pcm, string endpointId, CancellationToken token)
     {
-        IPcmPlayer next = await Task.Run(() => _playerFactory(_pcm!, endpointId)).ConfigureAwait(false);
+        IPcmPlayer player = _playerFactory(device, pcm, endpointId, token);
         try
         {
+            if (player is AndroidPhonePcmPlayer phone) await phone.VerifyBeforePlaybackAsync(token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            return player;
+        }
+        catch
+        {
+            try { player.Dispose(); } catch (Exception ex) { Log("Prepared output cleanup: " + ex.Message); }
+            throw;
+        }
+    }
+
+    private async Task ReplaceOutputAsync(string? endpointId)
+    {
+        var token = _run?.Token ?? default;
+        IPcmPlayer next = await Task.Run(() => _playerFactory(State.Device!, _pcm!, endpointId, token), token).ConfigureAwait(false);
+        bool switching = false;
+        try
+        {
+            if (next is AndroidPhonePcmPlayer phone) await phone.VerifyBeforePlaybackAsync(token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            switching = true;
             _player?.Stop(); next.Play();
-            if (next is AndroidPhonePcmPlayer output) await output.WaitForRoutingAsync(_run?.Token ?? default).ConfigureAwait(false);
         }
         catch
         {
             try { next.Dispose(); } catch (Exception ex) { Log("Replacement output cleanup: " + ex.Message); }
-            _player?.Play();
+            if (switching && !token.IsCancellationRequested)
+            {
+                try { _player?.Play(); } catch (Exception ex) { Log("Previous output recovery: " + ex.Message); }
+            }
             throw;
         }
         var previous = _player;

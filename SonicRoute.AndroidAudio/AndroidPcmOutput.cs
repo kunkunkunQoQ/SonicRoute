@@ -268,6 +268,7 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
 /// <summary>Consumes the same post-gain PCM as WASAPI; no Windows PID, extra decoder or idle timer.</summary>
 internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
 {
+    private static readonly byte[] RouteSilence = new byte[960 * AndroidPcmSource.Channels * sizeof(short)];
     private readonly AndroidPcmSource _source;
     private readonly AndroidAudioOutputConnection _output;
     private readonly CancellationTokenSource _lifetime = new();
@@ -316,7 +317,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
         // Prime it with 20 ms of silence while the previous renderer still owns the PCM queue.
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(5));
-        await _output.Stream.WriteAsync(new byte[960 * 2 * sizeof(short)], deadline.Token).ConfigureAwait(false);
+        await _output.Stream.WriteAsync(RouteSilence, deadline.Token).ConfigureAwait(false);
         await WaitForRoutingAsync(deadline.Token).ConfigureAwait(false);
     }
 
