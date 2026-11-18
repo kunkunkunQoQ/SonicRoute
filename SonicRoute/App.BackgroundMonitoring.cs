@@ -71,21 +71,21 @@ namespace SonicRoute
                 do
                 {
                     _micMuteWatchPending = false;
-                    bool trackInput = ConfigService.Load().MicMuteOsdTrackInputMuted;
+                    var sources = OsdService.MicMuteSources(ConfigService.Load(), includeTemporary: true);
                     long micVersion = _trayWheel?.MicStateVersion ?? 0;
-                    var state = await MicMonitor.ReadCheckedAsync(trackInput);
-                    bool muted = state.Muted;
+                    var state = await MicMonitor.ReadStateAsync();
                     if (_backgroundStopped || Dispatcher.HasShutdownStarted) return;
-                    if (ConfigService.Load().MicMuteOsdTrackInputMuted != trackInput
+                    if (OsdService.MicMuteSources(ConfigService.Load(), includeTemporary: true) != sources
                         || (_trayWheel?.MicStateVersion ?? 0) != micVersion)
                     { _micMuteWatchPending = true; continue; }
                     if (!state.Known) continue; // Preserve the last confirmed state through driver failures.
+                    bool muted = OsdService.MatchesMicMute(sources, state);
                     if (!_micMuteBaselineReady)
                     { _micMuteBaselineReady = true; _lastMicMutedBaseline = muted; continue; }
                     if (muted != _lastMicMutedBaseline)
                     {
                         _lastMicMutedBaseline = muted;
-                        ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted);
+                        _trayWheel?.ShowMicMuteOsd(L10n.T("Ov.MuteMic"), muted);
                     }
                 } while (_micMuteWatchPending && !_backgroundStopped);
             }

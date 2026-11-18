@@ -9,6 +9,12 @@ namespace SonicRoute.AndroidAudio;
 /// <summary>Short-lived DNS-SD queries for an explicit connect operation, independent of the shared ADB cache.</summary>
 public static class AndroidMdnsDiscovery
 {
+    private const string PairingType = "_adb-tls-pairing._tcp";
+    private const string ConnectType = AndroidWirelessConnection.ConnectType;
+    private static readonly string[] AdbTypes = [PairingType, ConnectType];
+    private static readonly IPAddress MulticastV4 = IPAddress.Parse("224.0.0.251");
+    private static readonly byte[] MulticastV6 = IPAddress.Parse("ff02::fb").GetAddressBytes();
+
     public static async Task<AndroidMdnsService?> FindAsync(string type, string? name, string? host, string? guid,
         TimeSpan duration, CancellationToken token)
     {
@@ -32,33 +38,41 @@ public static class AndroidMdnsDiscovery
         return found;
     }
 
-    internal static async Task<IReadOnlyList<AndroidMdnsService>> DiscoverAllAsync(TimeSpan duration, CancellationToken token)
+    internal static Task<IReadOnlyList<AndroidMdnsService>> DiscoverConnectionsAsync(CancellationToken token) =>
+        CollectAsync([ConnectType], TimeSpan.FromMilliseconds(1800), settleOnFirst: false, token);
+
+    internal static Task<IReadOnlyList<AndroidMdnsService>> DiscoverAllAsync(TimeSpan duration, CancellationToken token) =>
+        CollectAsync(AdbTypes, duration, settleOnFirst: true, token);
+
+    private static async Task<IReadOnlyList<AndroidMdnsService>> CollectAsync(string[] types, TimeSpan duration, bool settleOnFirst,
+        CancellationToken token)
     {
         var results = new Dictionary<string, AndroidMdnsService>(StringComparer.OrdinalIgnoreCase);
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
         int settleArmed = 0;
-        await RunQueriesAsync(["_adb-tls-pairing._tcp", "_adb-tls-connect._tcp"], null, null, duration, (service, _) =>
+        await RunQueriesAsync(types, null, null, duration, (service, _) =>
         {
             lock (results)
                 results[$"{service.Type}\0{service.Name}\0{service.Address}"] = service;
-            if (Interlocked.Exchange(ref settleArmed, 1) == 0)
+            if (settleOnFirst && Interlocked.Exchange(ref settleArmed, 1) == 0)
                 stop.CancelAfter(TimeSpan.FromMilliseconds(200));
             return false;
         }, stop.Token, throwOnOuterCancel: token).ConfigureAwait(false);
         lock (results)
-            return results.Values.ToList();
+            return results.Values.OrderBy(s => s.Address.StartsWith('[')).ToArray();
     }
 
     private static async Task RunQueriesAsync(string[] types, string? name, IPAddress? preferredHost, TimeSpan duration,
         Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken queryToken, CancellationToken throwOnOuterCancel)
     {
+        throwOnOuterCancel.ThrowIfCancellationRequested();
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(queryToken);
         lifetime.CancelAfter(duration);
         IPAddress[] addresses = SelectCandidateAddresses(preferredHost);
         if (addresses.Length == 0) return;
 
         byte[][] queries = types.Select(t => BuildQuery(t, name)).ToArray();
-        var work = addresses.Select(a => QueryInterfaceAsync(a, queries, onService, lifetime.Token)).ToList();
+        var work = addresses.Select(a => QueryInterfaceAsync(a, queries, types, onService, lifetime.Token)).ToList();
         try
         {
             await Task.WhenAll(work).ConfigureAwait(false);
@@ -74,22 +88,33 @@ public static class AndroidMdnsDiscovery
             var candidates = new List<(int Rank, IPAddress Address)>();
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
             {
-                if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                if (nic.OperationalStatus != OperationalStatus.Up || !nic.SupportsMulticast
+                    || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)
                     continue;
                 bool isVirtual = IsLikelyVirtualOrTunnel(nic);
                 foreach (var uni in nic.GetIPProperties().UnicastAddresses)
                 {
-                    if (uni.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(uni.Address))
-                        continue;
-                    int rank = preferredHost != null && IsSameSubnet(uni.Address, uni.IPv4Mask, preferredHost) ? 0
+                    var address = uni.Address;
+                    if (address.AddressFamily != AddressFamily.InterNetwork && !address.IsIPv6LinkLocal) continue;
+                    if (IPAddress.IsLoopback(address)) continue;
+                    if (address.IsIPv6LinkLocal && address.ScopeId == 0)
+                    {
+                        int index = nic.GetIPProperties().GetIPv6Properties()?.Index ?? 0;
+                        if (index == 0) continue;
+                        address = new IPAddress(address.GetAddressBytes(), index);
+                    }
+                    int rank = preferredHost != null && (address.AddressFamily == AddressFamily.InterNetwork
+                        ? IsSameSubnet(address, uni.IPv4Mask, preferredHost)
+                        : preferredHost.AddressFamily == AddressFamily.InterNetworkV6 && preferredHost.ScopeId == address.ScopeId) ? 0
                         : isVirtual ? 3
                         : nic.NetworkInterfaceType is NetworkInterfaceType.Wireless80211 or NetworkInterfaceType.Ethernet ? 1
                         : 2;
-                    candidates.Add((rank, uni.Address));
+                    candidates.Add((rank, address));
                 }
             }
             return candidates
                 .OrderBy(c => c.Rank)
+                .ThenBy(c => c.Address.AddressFamily != AddressFamily.InterNetwork)
                 .Select(c => c.Address)
                 .Distinct()
                 .Take(8)
@@ -134,85 +159,184 @@ public static class AndroidMdnsDiscovery
             || text.Contains("WireGuard", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static async Task QueryInterfaceAsync(IPAddress local, byte[][] queries,
+    private static async Task QueryInterfaceAsync(IPAddress local, byte[][] queries, string[] types,
         Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken token)
     {
         try
         {
-            using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            socket.Bind(new IPEndPoint(local, 0)); // Legacy unicast replies; no shared port, firewall change or daemon restart.
-            socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
-            byte[] buffer = new byte[4096];
-            var endpoint = new IPEndPoint(IPAddress.Parse("224.0.0.251"), 5353);
-            Task<SocketReceiveFromResult>? receive = null;
-            int probeDelayMs = 300;
-            while (true)
+            using var socket = new Socket(local.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
+            socket.Bind(new IPEndPoint(local, 0)); // A one-shot query receives a unicast reply on this ephemeral port.
+            bool ipv6 = local.AddressFamily == AddressFamily.InterNetworkV6;
+            if (ipv6)
             {
-                foreach (byte[] query in queries)
-                    await socket.SendToAsync(query, SocketFlags.None, endpoint, token).ConfigureAwait(false);
-                var nextProbe = Task.Delay(TimeSpan.FromMilliseconds(probeDelayMs), token);
-                probeDelayMs = Math.Min(probeDelayMs * 2, 2500);
-                while (!nextProbe.IsCompleted)
-                {
-                    receive ??= socket.ReceiveFromAsync(buffer, SocketFlags.None, new IPEndPoint(IPAddress.Any, 0), token).AsTask();
-                    if (await Task.WhenAny(receive, nextProbe).ConfigureAwait(false) != receive) break;
-                    var packet = await receive.ConfigureAwait(false); receive = null;
-                    var source = ((IPEndPoint)packet.RemoteEndPoint).Address;
-                    foreach (var service in ParseResponse(buffer.AsSpan(0, packet.ReceivedBytes), source))
-                    {
-                        if (onService(service, source)) return;
-                    }
-                }
-                token.ThrowIfCancellationRequested();
+                socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastInterface, (int)local.ScopeId);
+                socket.SetSocketOption(SocketOptionLevel.IPv6, SocketOptionName.MulticastTimeToLive, 255);
             }
+            else
+            {
+                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastInterface, local.GetAddressBytes());
+                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 255);
+            }
+            var endpoint = new IPEndPoint(ipv6 ? new IPAddress(MulticastV6, local.ScopeId) : MulticastV4, 5353);
+            await QueryServicesAsync(socket, endpoint, queries, types, onService, token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
         catch (SocketException) { }
         catch (NetworkInformationException) { }
     }
+
+    internal static async Task QueryServicesAsync(Socket socket, IPEndPoint endpoint, byte[][] queries, string[] types,
+        Func<AndroidMdnsService, IPAddress, bool> onService, CancellationToken token)
+    {
+        bool ipv6 = socket.AddressFamily == AddressFamily.InterNetworkV6;
+        long scope = ipv6 ? ((IPEndPoint)socket.LocalEndPoint!).Address.ScopeId : 0;
+        byte[] buffer = new byte[4096];
+        var remoteTemplate = new IPEndPoint(ipv6 ? IPAddress.IPv6Any : IPAddress.Any, 0);
+        var requestedInstances = new HashSet<ServiceInstance>();
+        Task<SocketReceiveFromResult>? receive = null;
+        int probeDelayMs = 1000;
+        while (true)
+        {
+            foreach (byte[] query in queries)
+                await socket.SendToAsync(query, SocketFlags.None, endpoint, token).ConfigureAwait(false);
+            var nextProbe = Task.Delay(TimeSpan.FromMilliseconds(probeDelayMs), token);
+            probeDelayMs = Math.Min(probeDelayMs * 2, 2500);
+            while (!nextProbe.IsCompleted)
+            {
+                receive ??= socket.ReceiveFromAsync(buffer, SocketFlags.None, remoteTemplate, token).AsTask();
+                if (await Task.WhenAny(receive, nextProbe).ConfigureAwait(false) != receive) break;
+                var packet = await receive.ConfigureAwait(false); receive = null;
+                var source = (IPEndPoint)packet.RemoteEndPoint;
+                // Local mDNS relays can return the one-shot reply from a different UDP port.
+                var response = ReadResponse(buffer.AsSpan(0, packet.ReceivedBytes));
+                if (response == null) continue;
+                foreach (var record in response.Services)
+                {
+                    if (!types.Contains(record.Instance.Type, StringComparer.OrdinalIgnoreCase)) continue;
+                    var address = response.GetAddress(record.Target, source.Address, scope);
+                    if (onService(record.ToService(address), address)) return;
+                }
+                foreach (var instance in response.Instances)
+                {
+                    if (requestedInstances.Count >= 32 || !types.Contains(instance.Type, StringComparer.OrdinalIgnoreCase)
+                        || response.Services.Any(s => s.Instance == instance) || !requestedInstances.Add(instance)) continue;
+                    await socket.SendToAsync(BuildQuery(instance.Type, instance.Name), SocketFlags.None, endpoint, token).ConfigureAwait(false);
+                }
+            }
+            token.ThrowIfCancellationRequested();
+        }
+    }
     public static byte[] BuildQuery(string type, string? name)
     {
         using var stream = new MemoryStream();
         stream.Write(new byte[] { 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 });
-        foreach (string label in ((name == null ? "" : name + ".") + type + ".local").Split('.'))
+        var labels = type.Split('.').Append("local");
+        if (name != null) labels = labels.Prepend(name);
+        foreach (string label in labels)
         {
             var bytes = Encoding.UTF8.GetBytes(label);
             if (bytes.Length is 0 or > 63) throw new ArgumentException("Invalid DNS label.");
             stream.WriteByte((byte)bytes.Length); stream.Write(bytes);
         }
         stream.WriteByte(0); stream.WriteByte(0); stream.WriteByte(name == null ? (byte)12 : (byte)33);
-        stream.WriteByte(0x80); stream.WriteByte(1);
+        // RFC 6762 legacy one-shot queries use class IN; the non-5353 source port requests a unicast response.
+        stream.WriteByte(0); stream.WriteByte(1);
         return stream.ToArray();
     }
     public static IReadOnlyList<AndroidMdnsService> ParseResponse(ReadOnlySpan<byte> packet, IPAddress source)
     {
-        var services = new List<AndroidMdnsService>();
-        if (packet.Length < 12 || (packet[2] & 0x80) == 0) return services;
+        var response = ReadResponse(packet);
+        if (response == null) return [];
+        long scope = source.AddressFamily == AddressFamily.InterNetworkV6 ? source.ScopeId : 0;
+        return response.Services.Select(s => s.ToService(response.GetAddress(s.Target, source, scope))).ToArray();
+    }
+
+    private readonly record struct ServiceInstance(string Name, string Type);
+    private readonly record struct ServiceRecord(ServiceInstance Instance, string Target, int Port)
+    {
+        internal AndroidMdnsService ToService(IPAddress address) => new(Instance.Name, Instance.Type, new IPEndPoint(address, Port).ToString());
+    }
+
+    private sealed class Response
+    {
+        internal readonly List<ServiceInstance> Instances = [];
+        internal readonly List<ServiceRecord> Services = [];
+        internal readonly List<(string Host, IPAddress Address)> Addresses = [];
+
+        internal IPAddress GetAddress(string target, IPAddress source, long scope)
+        {
+            IPAddress? advertised = null;
+            foreach (var (host, address) in Addresses)
+            {
+                if (!host.Equals(target, StringComparison.OrdinalIgnoreCase) || address.AddressFamily != source.AddressFamily) continue;
+                var candidate = address.IsIPv6LinkLocal && scope != 0 ? new IPAddress(address.GetAddressBytes(), scope) : address;
+                if (candidate.Equals(source)) return source;
+                advertised ??= candidate;
+            }
+            return advertised ?? source; // Android also answers from the service host when no address record is attached.
+        }
+    }
+
+    private static Response? ReadResponse(ReadOnlySpan<byte> packet)
+    {
+        if (packet.Length < 12 || (packet[2] & 0x80) == 0 || (packet[3] & 0x0f) != 0) return null;
         int questions = BinaryPrimitives.ReadUInt16BigEndian(packet[4..]);
         int records = BinaryPrimitives.ReadUInt16BigEndian(packet[6..]) + BinaryPrimitives.ReadUInt16BigEndian(packet[8..]) + BinaryPrimitives.ReadUInt16BigEndian(packet[10..]);
-        if (questions > 64 || records > 256) return services;
+        if (questions > 64 || records > 256) return null;
         int offset = 12;
-        for (int i = 0; i < questions; ++i) { if (ReadName(packet, ref offset) == null || offset > packet.Length - 4) return services; offset += 4; }
+        for (int i = 0; i < questions; ++i) { if (ReadName(packet, ref offset) == null || offset > packet.Length - 4) return null; offset += 4; }
+        var response = new Response();
         for (int i = 0; i < records; ++i)
         {
             string? owner = ReadName(packet, ref offset);
-            if (owner == null || offset > packet.Length - 10) return services;
-            int type = BinaryPrimitives.ReadUInt16BigEndian(packet[offset..]), length = BinaryPrimitives.ReadUInt16BigEndian(packet[(offset + 8)..]);
+            if (owner == null || offset > packet.Length - 10) return null;
+            int type = BinaryPrimitives.ReadUInt16BigEndian(packet[offset..]);
+            int recordClass = BinaryPrimitives.ReadUInt16BigEndian(packet[(offset + 2)..]) & 0x7fff;
+            uint ttl = BinaryPrimitives.ReadUInt32BigEndian(packet[(offset + 4)..]);
+            int length = BinaryPrimitives.ReadUInt16BigEndian(packet[(offset + 8)..]);
             offset += 10;
-            if (length > packet.Length - offset) return services;
-            if (type == 33 && length >= 7)
+            if (length > packet.Length - offset) return null;
+            int end = offset + length;
+            if (recordClass == 1 && ttl != 0)
             {
-                int port = BinaryPrimitives.ReadUInt16BigEndian(packet[(offset + 4)..]);
-                foreach (string serviceType in new[] { "_adb-tls-pairing._tcp", "_adb-tls-connect._tcp" })
+                if (type == 12 && IsBrowseName(owner))
                 {
-                    string suffix = "." + serviceType + ".local";
-                    if (port > 0 && owner.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                        services.Add(new(owner[..^suffix.Length], serviceType, $"{source}:{port}"));
+                    int next = offset;
+                    if (ReadName(packet, ref next) is { } instance && next == end
+                        && TryReadInstance(instance) is { } ptr && owner.Equals(ptr.Type + ".local", StringComparison.OrdinalIgnoreCase))
+                        response.Instances.Add(ptr);
+                }
+                else if (type == 33 && length >= 7 && TryReadInstance(owner) is { } service)
+                {
+                    int port = BinaryPrimitives.ReadUInt16BigEndian(packet[(offset + 4)..]);
+                    int next = offset + 6;
+                    if (port > 0 && ReadName(packet, ref next) is { Length: > 0 } target && next == end)
+                        response.Services.Add(new(service, target, port));
+                }
+                else if ((type == 1 && length == 4) || (type == 28 && length == 16))
+                {
+                    var address = new IPAddress(packet.Slice(offset, length));
+                    if (!address.Equals(IPAddress.Any) && !address.Equals(IPAddress.IPv6Any) && !address.IsIPv6Multicast
+                        && (type != 1 || packet[offset] < 224)) response.Addresses.Add((owner, address));
                 }
             }
-            offset += length;
+            offset = end;
         }
-        return services;
+        return response;
+    }
+
+    private static bool IsBrowseName(string owner) => AdbTypes.Any(type => owner.Equals(type + ".local", StringComparison.OrdinalIgnoreCase));
+
+    private static ServiceInstance? TryReadInstance(string owner)
+    {
+        foreach (string type in AdbTypes)
+        {
+            string suffix = "." + type + ".local";
+            if (!owner.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
+            string name = owner[..^suffix.Length];
+            if (Encoding.UTF8.GetByteCount(name) is > 0 and <= 63) return new(name, type);
+        }
+        return null;
     }
     private static string? ReadName(ReadOnlySpan<byte> packet, ref int offset)
     {

@@ -319,17 +319,19 @@ namespace SonicRoute
             // 下次右键时按当前语言/主题创建，关闭后不常驻菜单视觉树。
             CloseTrayMenu();
         }
-        /// <summary>麦克风静音状态 OSD 统一入口（快捷键 / 后台检测器 / 面板共用）：静音且常驻开关开启 → 常驻显示。</summary>
+        /// <summary>立即反馈全局麦克风操作，随后由监控器确认默认设备状态。</summary>
         internal void ShowMicMuteOsd(string app, bool muted)
         {
             _lastMicMutedBaseline = muted;
             _micMuteBaselineReady = true;
             _trayWheel?.ShowMicMuteOsd(app, muted);
+            if (ConfigService.Load().MicMuteOsdDefaultInputPersistent) RefreshMicMonitoringState();
         }
-        /// <summary>设置页「麦克风静音时 OSD 常驻」开关变化：立即生效（开启且已静音 → 常驻；关闭 → 退出常驻）。</summary>
-        internal void NotifyMicMuteOsdSettingChanged(bool on)
+        /// <summary>重新计算常驻条件，并按新的监听范围建立基线。</summary>
+        internal void NotifyMicMuteOsdSettingChanged()
         {
-            _trayWheel?.NotifyMicMuteOsdSettingChanged(on);
+            _micMuteBaselineReady = false;
+            _trayWheel?.NotifyMicMuteOsdSettingChanged();
             RefreshMicMonitoringState();
         }
         /// <summary>进入 OSD 调整模式（实验设置「调整位置」）。</summary>

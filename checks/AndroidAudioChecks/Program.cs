@@ -38,6 +38,7 @@ internal static partial class Program
                 return 0;
             }
             if (args.Length > 0 && args[0] == "--pairing-fixes") { await PairingFixesAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--mdns-discovery") { await MdnsDiscoveryChecksAsync(args.Contains("--lan")); return 0; }
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--stream-settings") { await StreamSettingsAsync(args[1]); return 0; }

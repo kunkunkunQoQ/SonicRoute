@@ -18,7 +18,7 @@
     "featuresTitle": "Qué ofrece SonicRoute",
     "downloadTitle": "Descarga y primeros pasos",
     "releaseNotes": "Notas de la versión (en chino)",
-    "downloadIntro": "Elija **Full x64** para audio Android y pantallas virtuales, **Lite x64** para funciones de audio solo en PC o **Legacy x64** para .NET Framework 4.8. Las ediciones ARM64 son experimentales. La integración opcional con móviles solo está en Full. El paquete Store se basa en Full; la versión disponible se indica en la página de Store. Enlaces directos para {release}.",
+    "downloadIntro": "Elija **Full x64** para integración Android, pantallas virtuales y AirPlay, **Lite x64** para funciones de audio solo en PC o **Legacy x64** para .NET Framework 4.8. Las ediciones ARM64 son experimentales. La integración móvil y AirPlay solo está en Full. Microsoft Store ofrece Full y Lite; la disponibilidad actual se muestra en sus páginas de Store. Enlaces directos para {release}.",
     "edition": "Edición",
     "requirements": "Requisitos",
     "singleExe": "Un solo EXE",
@@ -51,7 +51,7 @@
     "configureAutomation": "Configurar automatización",
     "automationExample": "Convierta los tediosos ajustes manuales en una experiencia automatizada y lista para usar.",
     "currentRelease": "Versión actual",
-    "releaseSummary": "v1.32 integra el backend Android propio en C# en Full eliminando binarios externos (adb/scrcpy/FFmpeg/SDL2) con un EXE mucho más ligero, añade compatibilidad con mandos en pantalla virtual, ajusta el espaciado del panel del teléfono (6 DIP), añade seguimiento del dispositivo de reproducción predeterminado de Windows y seis correcciones; todas las ediciones (Full/Lite/Legacy) corrigen la superposición del submenú de bandeja con nombres largos y optimizan la memoria en reposo. Consulte {history}.",
+    "releaseSummary": "v1.33 añade a Full un receptor AirPlay propio en C# para audio y duplicación de pantalla proporcional (PCM/ALAC/AAC-LC/AAC-ELD, PIN opcional, siempre visible/pantalla completa F11 y enrutamiento por arrastre a salidas de PC o altavoces/Bluetooth Android), H.265 (HEVC) con selectores de decodificador de audio/vídeo y consulta de codificadores solo con la página visible, mandos limitados al primer plano, tarjeta unificada de QR (auto-renovación cada 2 min) y emparejamiento manual, búsqueda LAN y reconexión de dispositivos inalámbricos guardados (verificación de puertos candidatos para filtrar puertos caducados, reconexión a IP/puerto actualizados por identidad guardada y conservación del borrador manual si falla) y restauración de ajustes; todas las ediciones (Full/Lite/Legacy) incorporan dos interruptores OSD de micrófono independientes, tarjeta de gestión de configuración en una fila, virtualización de listas (>20 filas), fusión OSD, liberación de bytes PNG y texturas en desuso, eliminación de solicitudes explícitas de GC al cerrar ventanas en Full (recolección natural del runtime), respaldo config.bak, diagnóstico bajo error, soporte Store Lite independiente y visor GPL-3.0-only sin conexión. Consulte {history}.",
     "docTopic": "Tema",
     "docGuides": "Guías",
     "docTopics": [
@@ -88,9 +88,9 @@
         "**Enrutamiento bidireccional y separación de audio por app (reproducción + grabación):** asigne dispositivos de salida y entrada específicos a cada aplicación (juegos y voz a auriculares, música a altavoces). La configuración se guarda de forma nativa en Windows incluso al cerrar el programa.",
         "**Seguimiento inteligente del primer plano y ajuste ciego con la rueda.** Los eventos del sistema detectan la aplicación activa en milisegundos. Desplace la rueda sobre la bandeja del sistema para ajustar el volumen o use Alt+rueda para cambiar de dispositivo, con avisos OSD y silencio global de micrófono.",
         "**Panel rápido e indicador de nivel de sonido en tiempo real:** el panel de tarjetas ofrece una altura ajustable de 350 a 850 px y guarda su posición; controle el volumen de cada aplicación con medidores de sonido en directo.",
-        "**Integración de teléfono Android y pantalla virtual independiente (Full)**: Transmita audio del móvil al PC con ajuste de volumen individual y medidores de pico, o envíe el audio del PC al teléfono; muestre aplicaciones móviles en ventanas virtuales adaptables, controle los altavoces/Bluetooth del móvil desde el panel rápido y equilibre la sonoridad con SmartVolume.",
+        "**Integración Android y recepción AirPlay propia (Full)**: Envíe audio Android al PC con ventanas virtuales adaptables (con H.265 y mandos en primer plano) o transmita audio del PC al teléfono; reciba audio y duplicación de pantalla proporcional AirPlay en C#, enrútelo desde el panel rápido hacia salidas del PC o altavoces/Bluetooth Android y equilibre el volumen con SmartVolume.",
         "**Motor de automatización y CLI ultrarrápida (6 disparadores × 39 acciones):** active reglas al iniciar, cambiar o cerrar aplicaciones, por temporizador o atajos. Encadene dispositivos, volumen, scripts PowerShell y use el comando sr integrado para enlazar con scripts o consolas.",
-        "**Detección basada primero en eventos:** notificaciones del sistema y comprobación por segundo si hace falta. La integración móvil solo está en Full; Lite y Legacy son solo para PC. Disponible en 9 idiomas."
+        "**Detección basada primero en eventos:** notificaciones del sistema y comprobación por segundo si hace falta. La integración móvil y AirPlay solo está en Full; Lite y Legacy son solo para PC. Disponible en 9 idiomas."
     ],
     "scenario": "Escenario cotidiano",
     "whatYouCanDo": "Cómo le ayuda SonicRoute",
@@ -108,7 +108,7 @@
         "Regla rápida: abrir juego → pasar a auriculares + volumen 40 % + abrir chat; volver a altavoces al salir",
         "Silencie todos los micrófonos con Ctrl+Mayús+N y confirme el estado de inmediato con el aviso OSD en pantalla",
         "Asigne pistas de audio independientes a cada app para que las charlas privadas nunca aparezcan en la grabación",
-        "Envíe música, vídeos o juegos del teléfono a los auriculares del PC con ajuste independiente; interactúe mediante una ventana virtual y cambie salidas de altavoz o Bluetooth desde el panel rápido."
+        "Envíe el audio de Android al PC y use sus aplicaciones en una ventana virtual, o reciba audio y duplicación de pantalla AirPlay desde dispositivos Apple alternando salidas de PC o Android desde el panel rápido."
     ],
     "editionLegacyX64": "Legacy x64 (solo audio de PC, .NET Framework 4.8)",
     "editionStore": "Microsoft Store",
@@ -130,7 +130,7 @@
     "cliTitle": "Línea de comandos y automatización (Avanzado)",
     "releaseHighlightsTitle": "Aspectos destacados de la versión {release}",
     "retiredNet8Title": "Ediciones anteriores compatibles con NET8 (descatalogadas, clic para desplegar)",
-    "fullRequirement": "Edición portable en un solo EXE; requiere .NET 10 Desktop Runtime adecuado, incluye integración de audio y pantalla virtual de Android.",
+    "fullRequirement": "Edición portable en un solo EXE; requiere .NET 10 Desktop Runtime adecuado, incluye integración Android, pantalla virtual y AirPlay.",
     "editionFull": "Full (.NET 10, con integración móvil opcional)",
     "editionLite": "Lite (.NET 10, solo audio de PC)",
     "editionLiteNet8": "Lite NET8 (Descatalogado)",

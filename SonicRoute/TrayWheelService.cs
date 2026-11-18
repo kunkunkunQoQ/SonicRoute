@@ -366,7 +366,7 @@ namespace SonicRoute
         internal void ShowVolumeOsd(string app, int volume, string text, bool muted = false, string? target = null)
             => _osdService.ShowVolume(app, volume, text, muted, target);
         internal void ShowMicMuteOsd(string app, bool muted) => _osdService.ShowMic(app, muted);
-        internal void NotifyMicMuteOsdSettingChanged(bool on) => _ = _osdService.NotifyMicSettingChangedAsync(on);
+        internal void NotifyMicMuteOsdSettingChanged() => _ = _osdService.NotifyMicSettingChangedAsync();
         internal void NotifyOsdVolumeVisualChanged() => _osdService.NotifyVolumeVisualChanged();
         internal void BeginOsdAdjust() => _osdService.BeginAdjust();
         internal void CancelOsdAdjust() => _osdService.CancelAdjust();

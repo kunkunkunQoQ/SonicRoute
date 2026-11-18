@@ -36,9 +36,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Neuf langues d�
 - **Routage audio indépendant et bidirectionnel par application (lecture + enregistrement) :** attribuez des périphériques d'entrée et de sortie dédiés à chaque application (jeux et voix sur le casque, musique sur les haut-parleurs). Les paramètres sont conservés nativement par Windows après fermeture.
 - **Suivi intelligent du premier plan et réglage à l'aveugle via la molette.** Les événements système ciblent l'application active en quelques millisecondes. Faites défiler la molette sur la zone de notification pour régler le volume ou utilisez Alt+molette pour changer de périphérique, avec affichage OSD et coupure micro globale.
 - **Panneau rapide et indicateur de niveau sonore en direct :** le panneau sous forme de cartes offre une hauteur ajustable de 350 à 850 px et mémorise sa position ; contrôlez le volume individuel avec des indicateurs sonores en temps réel.
-- **Intégration smartphone Android & affichage virtuel indépendant (Full)**: Redirigez l'audio mobile vers le PC avec réglage du volume par application et vumètres crête, ou transférez l'audio du PC vers le téléphone ; affichez les applications mobiles dans une fenêtre virtuelle adaptative sur PC, contrôlez les sorties du téléphone depuis le panneau rapide et équilibrez le niveau sonore avec SmartVolume.
+- **Intégration Android & réception AirPlay maison (Full)** : Acheminez l'audio Android vers le PC avec affichage virtuel adaptatif (H.265 et manette au premier plan) ou diffusez le son du PC vers le mobile ; recevez l'audio et la recopie d'écran proportionnelle AirPlay en C#, dirigez le flux vers les sorties PC ou haut-parleurs/Bluetooth Android depuis le panneau rapide et équilibrez le volume avec SmartVolume.
 - **Moteur d'automatisation et CLI ultrarapide (6 déclencheurs × 39 actions) :** déclenchements par lancement, focus ou fermeture d'application, minuterie ou raccourcis. Enchaînez changements d'appareil, volume, scripts PowerShell et commande sr sans processus d'arrière-plan superflu.
-- **Détection prioritairement événementielle :** notifications système et vérification ponctuelle par seconde si nécessaire. L’intégration mobile est réservée à Full ; Lite et Legacy restent dédiés au PC. Disponible en neuf langues.
+- **Détection prioritairement événementielle :** notifications système et vérification ponctuelle par seconde si nécessaire. L’intégration mobile et AirPlay est réservée à Full ; Lite et Legacy restent dédiés au PC. Disponible en neuf langues.
 
 ## 🎮 Pour le quotidien
 
@@ -51,19 +51,19 @@ Transformez les réglages manuels fastidieux en une expérience automatisée pr�
 | ⚡ **Changer de casque et modifier les paramètres Windows à chaque jeu** | Règle auto : lancer le jeu → basculer sur casque + volume à 40 % + lancer Discord ; retour enceintes à la fermeture |
 | 🎙️ **S'éloigner du PC ou passer un appel privé rapidement** | Coupez tous les micros avec Ctrl+Maj+N et confirmez l'état en un coup d'œil grâce à la bannière OSD à l'écran |
 | 📹 **Diffusion en direct sur OBS ou enregistrement de tutoriels** | Attribuez des pistes audio distinctes par application pour ne jamais inclure vos conversations privées en vidéo |
-| 📱 **Écouter l'audio mobile sur PC ou piloter ses applications mobiles sur le bureau** | Acheminez musique, vidéos ou jeux mobiles vers vos écouteurs PC avec mixage indépendant ; affichez l'écran dans une fenêtre virtuelle et basculez les haut-parleurs/Bluetooth depuis le panneau rapide. |
+| 📱 **Écouter l'audio mobile sur PC ou piloter ses applications mobiles sur le bureau** | Acheminez l'audio Android vers le PC et pilotez vos applications en fenêtre virtuelle, ou recevez l'audio et la recopie d'écran AirPlay depuis vos appareils Apple tout en gérant les sorties PC ou Android depuis le panneau rapide. |
 
 ## 🚀 Télécharger et commencer
 
-**Version actuelle : [v1.32](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.32)** · 2026-11-14 · [Notes de version (en chinois)](docs/release-v1.32.md)
+**Version actuelle : [v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026-11-18 · [Notes de version (en chinois)](docs/release-v1.33.md)
 
-Choisissez **Full x64** pour l’audio Android et les écrans virtuels, **Lite x64** pour les fonctions audio PC seules, ou **Legacy x64** pour .NET Framework 4.8. Les éditions ARM64 sont expérimentales. L’intégration du téléphone est facultative et réservée à Full. Le paquet Store est basé sur Full ; la version actuellement disponible est indiquée sur la page Store. Liens directs pour v1.32.
+Choisissez **Full x64** pour l’intégration Android, les écrans virtuels et AirPlay, **Lite x64** pour les fonctions audio PC seules, ou **Legacy x64** pour .NET Framework 4.8. Les éditions ARM64 sont expérimentales. L’intégration mobile et AirPlay est facultative et réservée à Full. Microsoft Store propose Full et Lite ; les versions disponibles sont indiquées sur leurs pages Store. Liens directs pour v1.33.
 
 | Édition | Télécharger | Configuration requise |
 |---|---|---|
-| ⭐ Full (.NET 10, avec intégration smartphone facultative) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | Édition portable mono-EXE ; requiert le .NET 10 Desktop Runtime correspondant, inclut l'intégration Android audio et affichage virtuel. |
-| ⭐ Lite (.NET 10, audio PC uniquement) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | Édition portable en un seul fichier ; requiert le .NET 10 Desktop Runtime correspondant, audio PC uniquement. |
-| 🛡️ Legacy x64 (audio PC uniquement, .NET Framework 4.8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | Aucun runtime externe requis ; repose sur .NET Framework 4.8 intégré, décompressez et lancez. |
+| ⭐ Full (.NET 10, avec intégration smartphone facultative) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | Édition portable mono-EXE ; requiert le .NET 10 Desktop Runtime correspondant, inclut l'intégration Android, affichage virtuel et AirPlay. |
+| ⭐ Lite (.NET 10, audio PC uniquement) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | Édition portable en un seul fichier ; requiert le .NET 10 Desktop Runtime correspondant, audio PC uniquement. |
+| 🛡️ Legacy x64 (audio PC uniquement, .NET Framework 4.8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | Aucun runtime externe requis ; repose sur .NET Framework 4.8 intégré, décompressez et lancez. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Éditions Full / Lite ; requiert .NET 10 Desktop Runtime x64 ; selon le Store. |
 
 <details>
@@ -92,9 +92,9 @@ La commande `sr` dialogue via tube nommé (Named Pipe) en quelques millisecondes
 sr "Nom ou ID de la règle"
 ```
 
-### 🆕 Points forts de la version v1.32
+### 🆕 Points forts de la version v1.33
 
-v1.32 intègre le backend Android pur C# dans Full en supprimant les binaires externes adb/scrcpy/FFmpeg/SDL2 tout en réduisant nettement l'exécutable, et ajoute la prise en charge des manettes sur l'écran virtuel, l'espacement resserré du panneau mobile (6 DIP), le suivi du périphérique de lecture Windows par défaut ainsi que six correctifs ; toutes les éditions (Full/Lite/Legacy) corrigent le chevauchement des sous-menus de la zone de notification et optimisent la mémoire au repos. Détails : [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+v1.33 ajoute à Full un récepteur AirPlay C# maison pour l'audio et la recopie d'écran proportionnelle (PCM/ALAC/AAC-LC/AAC-ELD, code PIN optionnel, premier plan/plein écran F11 et routage par glisser-déposer vers les sorties PC ou Android), H.265 (HEVC) et les sélecteurs de décodeurs audio/vidéo avec requête d'encodeurs uniquement sur page visible, les manettes limitées au premier plan, une carte d'appairage unifiée QR (rafraîchissement auto 2 min) + code, la découverte LAN et reconnexion des appareils sans fil enregistrés (vérification des ports candidats pour écarter les ports expirés, reconnexion sur nouvelle IP/port par identité enregistrée et conservation du brouillon manuel en cas d'échec) et la restauration des réglages ; toutes les éditions (Full/Lite/Legacy) reçoivent deux bascules OSD micro indépendantes, une carte de gestion de configuration sur une ligne, la virtualisation de liste (>20 lignes), la fusion OSD, la libération des octets PNG/textures inutilisées, la suppression des demandes explicites de GC à la fermeture dans Full (collecte naturelle par le runtime), la protection config.bak, le diagnostic à la demande, Store Lite autonome et une visionneuse GPL-3.0-only hors ligne. Détails : [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 ### ❓ Foire aux questions (FAQ)
 

@@ -631,12 +631,12 @@
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding [Theme.MicMuteOsdPersist], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemeSwitchLabel}"/>
-                                <CheckBox x:Name="MicMutePersistCheck" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" VerticalAlignment="Center" AutomationProperties.Name="{Binding [Theme.MicMuteOsdPersist], Source={x:Static local:L10n.Instance}}" Checked="MicMutePersist_Changed" Unchecked="MicMutePersist_Changed"/>
+                                <CheckBox x:Name="MicMutePersistCheck" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" VerticalAlignment="Center" AutomationProperties.Name="{Binding [Theme.MicMuteOsdPersist], Source={x:Static local:L10n.Instance}}" Checked="MicMutePersistence_Changed" Unchecked="MicMutePersistence_Changed"/>
                             </Grid>
-                            <Grid x:Name="MicMuteTrackInputRow" Margin="0,14,0,0" Visibility="Collapsed">
+                            <Grid Margin="0,14,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding [Theme.MicMuteTrackInput], Source={x:Static local:L10n.Instance}}" Style="{StaticResource ThemeSwitchLabel}"/>
-                                <CheckBox x:Name="MicMuteTrackInputCheck" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" VerticalAlignment="Center" AutomationProperties.Name="{Binding [Theme.MicMuteTrackInput], Source={x:Static local:L10n.Instance}}" Checked="MicMuteTrackInput_Changed" Unchecked="MicMuteTrackInput_Changed"/>
+                                <CheckBox x:Name="MicMuteTrackInputCheck" Grid.Column="1" Style="{StaticResource AutomationSwitch}" Width="34" VerticalAlignment="Center" AutomationProperties.Name="{Binding [Theme.MicMuteTrackInput], Source={x:Static local:L10n.Instance}}" Checked="MicMutePersistence_Changed" Unchecked="MicMutePersistence_Changed"/>
                             </Grid>
                             <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,14,0,10"/>
                             <DockPanel>

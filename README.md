@@ -36,9 +36,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · [GPL
 - **应用独立声音分流与双向路由（播放 + 录音）**：为每个应用分别指定输出与输入设备，让游戏与语音走耳机和麦克风，音乐走音箱。配置由 Windows 原生持久化，退出软件依然生效，不破坏系统混音器配置。
 - **前台焦点智能跟随与托盘滚轮盲操**：系统事件驱动秒级锁定当前前台有声应用；支持在任务栏托盘滚动滚轮盲调音量，按住 Alt 滚动即时换轨设备，配合屏幕浮动 OSD 提示与全局麦克风静音，无需切出窗口。
 - **快速面板与实时出声电平指示**：卡片式快速面板支持 350~850px 高度调节与位置保存；直观掌控各应用独立音量，内置实时声音电平指示。
-- **Android 手机互联与独立虚拟屏幕（Full 版）**：支持手机音频接入电脑独立分流与调音，电脑声音送入手机播放；支持手机应用在电脑独立虚拟屏幕窗口自适应显示，快速面板直显源手机扬声器与蓝牙设备并持续接管，搭配默认智能音量（SmartVolume）感知平衡响度。
+- **Android 互联与自研 AirPlay 音画接收（Full 版）**：支持 Android 音频接入电脑分流调音、独立虚拟屏幕窗口操作（含 H.265 与前台手柄支持），以及电脑声音回传手机；新增自研 C# AirPlay 音频与等比屏幕镜像接收，支持在快速面板切换电脑输出或已连接的 Android 扬声器/蓝牙设备，搭配智能音量（SmartVolume）平衡响度。
 - **自动化连招引擎与极速 CLI（6 种触发 × 39 种操作）**：支持应用启停与切换、定时、快捷键等 6 种触发，自由组合设备切换、音量、静音、程序关联启动与 PowerShell；内置 sr 命名管道短命令，无额外常驻开销，轻松联动脚本与硬件控制台。
-- **事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。Full 提供可选 Android 手机音频与虚拟屏幕集成；Lite 与 Legacy 仅含电脑功能。支持九种语言。
+- **事件优先检测**：使用系统通知，并在需要时以每秒一次的快照检查作为兜底；不需要的数据按需清理。Full 提供可选 Android 手机音频、虚拟屏幕与 AirPlay 集成；Lite 与 Legacy 仅含电脑功能。支持九种语言。
 
 ## 🎮 这样使用
 
@@ -51,19 +51,19 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · [GPL
 | ⚡ **每次开游戏都要插拔耳机、改 Windows 设置** | 设定规则：游戏打开时自动「切换耳机 + 音量 40% + 启动语音软件」，退出游戏自动切回音箱 |
 | 🎙️ **临时离开电脑、拿外卖或私密通话** | 一键全局麦克风静音（快捷键 Ctrl+Shift+N），配合屏幕常驻 OSD 浮窗，一眼确认是否闭麦 |
 | 📹 **OBS 游戏直播 / 录屏教程** | 为各应用指定独立物理或虚拟轨道，避免录屏时把私人聊天或系统提示音混入录像 |
-| 📱 **手机声音接入电脑播放，或在电脑上操作手机应用** | 把手机音乐、视频或游戏声音接入电脑耳机或音箱独立调音；手机画面放入电脑独立虚拟窗口中操作，快速面板直接控制源手机扬声器与蓝牙设备，无需频繁看手机 |
+| 📱 **手机声音接入电脑播放，或在电脑上操作手机应用** | 把 Android 手机声音接入电脑独立调音并在虚拟窗口操作手机应用，或通过 AirPlay 接收 Apple 设备音画投屏；快速面板可直接切换电脑输出或源 Android 扬声器/蓝牙设备，无需频繁看手机 |
 
 ## 🚀 下载与开始使用
 
-**当前正式版：[v1.32](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.32)** · 2026-11-14 · [更新说明](docs/release-v1.32.md)
+**当前正式版：[v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026-11-18 · [更新说明](docs/release-v1.33.md)
 
-需要可选 Android 手机音频与虚拟屏幕功能时选择 **Full x64**；只使用电脑音频功能可选 **Lite x64**；受限环境可选依赖系统 .NET Framework 4.8 的 **Legacy x64**。ARM64 版本为实验性。Full 包含可选手机集成，Lite 与 Legacy 不含手机功能。商店包以 Full 为构建来源，当前在架版本以 Store 页面为准。下方直链对应 v1.32。
+需要可选 Android 手机互联、虚拟屏幕与 AirPlay 功能时选择 **Full x64**；只使用电脑音频功能可选 **Lite x64**；受限环境可选依赖系统 .NET Framework 4.8 的 **Legacy x64**。ARM64 版本为实验性。Full 包含可选手机与 AirPlay 集成，Lite 与 Legacy 不含手机功能；Microsoft Store 提供 Full 与 Lite，当前在架版本以 Store 页面为准。下方直链对应 v1.33。
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| ⭐ Full（.NET 10，含可选手机互联） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | 单 EXE 便携版；需要匹配架构的 .NET 10 Desktop Runtime，包含可选 Android 手机音频与虚拟屏幕集成。 |
-| ⭐ Lite（.NET 10，仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | 单文件便携版；需要匹配架构的 .NET 10 Desktop Runtime，仅包含电脑音频功能。 |
-| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用。 |
+| ⭐ Full（.NET 10，含可选手机互联） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | 单 EXE 便携版；需要匹配架构的 .NET 10 Desktop Runtime，包含可选 Android 手机互联、虚拟屏幕与 AirPlay 集成。 |
+| ⭐ Lite（.NET 10，仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64（实验）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | 单文件便携版；需要匹配架构的 .NET 10 Desktop Runtime，仅包含电脑音频功能。 |
+| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | 免装额外运行库，适合受限办公机；依赖系统自带 .NET Framework 4.8，解压即用。 |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | 提供 Full / Lite，需 x64 .NET 10 Desktop Runtime，在架版本以 Store 为准。 |
 
 <details>
@@ -92,9 +92,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验） · 九种语言 · [GPL
 sr "规则名称或ID"
 ```
 
-### 🆕 v1.32 版本亮点速览
+### 🆕 v1.33 版本亮点速览
 
-v1.32 为 Full 合入纯 C# 自研 Android 后端，移除外部 adb/scrcpy/FFmpeg 等第三方二进制并大幅减小单文件体积，新增虚拟屏游戏手柄支持、调整手机面板间距（6 DIP）、手机“系统输出”自动跟随 Windows 默认播放设备与多项管线修复；全版本（Full/Lite/Legacy）同步修复托盘长名称子菜单重叠并优化图标、OSD、主题字典与闲时内存占用。详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.33 为 Full 新增自研 C# AirPlay 音频与等比屏幕镜像（支持 PCM/ALAC/AAC-LC/AAC-ELD、可选投屏码、置顶/F11 全屏及拖拽转发至电脑或 Android 扬声器/蓝牙）、H.265 (HEVC) 与声画解码器选择、可见设备页按需编码器查询、前台手柄门控、合并二维码（2 分钟自动换码）与配对码卡片、已保存无线设备局域网发现重连（校验候选端口以过滤失效旧端口、按身份重连新 IP/端口、无候选或失败时保留手动输入草稿）与设备配置恢复；全版本（Full/Lite/Legacy）新增两项独立麦克风常驻 OSD 开关、单行「配置文件管理」卡片、>20 项应用列表虚拟化、OSD 合并优化、PNG 原始字节释放与退役纹理清理、Full 取消关窗显式主动 GC 请求（交由运行时自然回收）、配置 .bak 保护与按需错误诊断、独立 Store Lite 支持及 GPL-3.0-only 离线查看。详见 [版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ 常见问题速览
 

@@ -127,6 +127,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         }
         _operation?.Cancel();
         StopQrPairing();
+        ResetSavedDeviceSearch();
         CancelStreamingWork();
         AndroidAudioHost.Phone.Changed -= ProfileChanged;
         L10n.Instance.PropertyChanged -= OnLanguageChanged;
@@ -213,6 +214,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         if (appsChanged && CatalogPanel.Visibility == Visibility.Visible) ApplyCatalogFilter();
         RefreshClipboard();
         UpdateQrPairing();
+        UpdateSavedDeviceSearch();
     }
     private async Task LoadClipboardAsync(App application)
     {
@@ -287,8 +289,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private void SetBusy(bool busy)
     {
-        PairButton.IsEnabled = ConnectButton.IsEnabled = !busy;
+        PairButton.IsEnabled = !busy;
         PairAddressBox.IsEnabled = PairCodeBox.IsEnabled = QrButton.IsEnabled = !busy;
+        ConnectAddressBox.IsEnabled = SavedConnectDevices.IsEnabled = !busy;
+        if (busy) StopSavedDeviceSearch();
+        RefreshSavedDeviceSearchStatus();
         RestoreUsbDevices.IsEnabled = !busy;
     }
     private async Task RefreshDevicesCoreAsync(CancellationToken token)
@@ -345,12 +350,6 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             ApplyDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
         }, "Phone.StatusUnpairRequested");
     }
-    private async void Connect_Click(object sender, RoutedEventArgs e)
-    {
-        string address = ConnectAddressBox.Text.Trim();
-        await RunAsync(async token => ApplyConnection(await Wireless.ConnectAsync(address, token), token), "Phone.ConnectedStatus");
-    }
-
     private async void RestoreUsb_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { DataContext: UsbRestoreChoice choice } || !IsConnectionPage) return;

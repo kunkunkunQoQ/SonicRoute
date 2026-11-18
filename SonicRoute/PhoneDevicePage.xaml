@@ -233,15 +233,38 @@
                     </StackPanel>
                 </Grid>
                 </Border>
-                <Border x:Name="DirectConnectCard" Style="{StaticResource PhoneCard}">
+                <Border x:Name="DirectConnectCard" Style="{StaticResource PhoneCard}" IsVisibleChanged="DirectConnect_VisibilityChanged">
                     <StackPanel>
                         <TextBlock Text="{Binding [Phone.DirectConnectTitle], Source={x:Static local:L10n.Instance}}" FontWeight="SemiBold"/>
                         <TextBlock Text="{Binding [Phone.DirectConnectDesc], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,4,0,8"/>
                         <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <TextBox x:Name="ConnectAddressBox" Style="{StaticResource ModernTextBox}" Height="32" AutomationProperties.Name="{Binding [Phone.ConnectAddressAutomation], Source={x:Static local:L10n.Instance}}"/>
-                            <Button x:Name="ConnectButton" Grid.Column="1" Content="{Binding [Phone.ConnectShort], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneCommandButton}" Height="32" Margin="8,0,0,0" Click="Connect_Click"/>
+                            <ComboBox x:Name="SavedConnectDevices" Style="{StaticResource RoundedComboBox}" Height="32" MaxDropDownHeight="230"
+                                      Visibility="Collapsed" IsTextSearchEnabled="False" SelectionChanged="SavedConnectDevice_Changed"
+                                      AutomationProperties.Name="{Binding [Phone.SavedConnectDevices], Source={x:Static local:L10n.Instance}}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="{Binding Label}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Connection}" Value="{x:Null}">
+                                                            <Setter Property="Text" Value="{Binding [Phone.ManualConnectAddress], Source={x:Static local:L10n.Instance}}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button x:Name="SearchSavedDevicesButton" Grid.Column="1" Content="{Binding [Phone.SearchSavedDevices], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource PhoneCommandButton}" Height="32" Margin="8,0,0,0" Click="SearchSavedDevices_Click"/>
+                            <Button x:Name="ConnectButton" Grid.Column="2" Content="{Binding [Phone.ConnectShort], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneCommandButton}" Height="32" Margin="8,0,0,0" Click="Connect_Click"/>
                         </Grid>
+                        <TextBlock x:Name="SavedDeviceSearchStatus" Style="{StaticResource PhoneHint}" Margin="0,6,0,0" Visibility="Collapsed"/>
                         <ItemsControl x:Name="RestoreUsbDevices" Visibility="Collapsed">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

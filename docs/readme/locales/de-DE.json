@@ -18,7 +18,7 @@
     "featuresTitle": "Das bietet SonicRoute",
     "downloadTitle": "Herunterladen und loslegen",
     "releaseNotes": "Versionshinweise (Chinesisch)",
-    "downloadIntro": "Für Android-Audio und virtuelle Displays wählen Sie **Full x64**; für PC-Audio ohne Telefonintegration **Lite x64**; für Systeme mit .NET Framework 4.8 **Legacy x64**. ARM64-Versionen sind experimentell. Die optionale Telefonintegration ist nur in Full enthalten. Das Store-Paket basiert auf Full; maßgeblich ist die aktuell im Store verfügbare Version. Die direkten Links gelten für {release}.",
+    "downloadIntro": "Für optionale Android-Integration, virtuelle Displays und AirPlay wählen Sie **Full x64**; für reine PC-Audiofunktionen **Lite x64**; für Systeme mit .NET Framework 4.8 **Legacy x64**. ARM64-Versionen sind experimentell. Smartphone- und AirPlay-Integration ist nur in Full enthalten. Der Microsoft Store bietet Full und Lite; maßgeblich ist die jeweilige Store-Seite. Die direkten Links gelten für {release}.",
     "edition": "Version",
     "requirements": "Voraussetzungen",
     "singleExe": "Einzelne EXE",
@@ -51,7 +51,7 @@
     "configureAutomation": "Automatisierung einrichten",
     "automationExample": "Verwandeln Sie mühsame manuelle Einstellungen in nahtlose Automatisierungen.",
     "currentRelease": "Aktuelle Version",
-    "releaseSummary": "v1.32 integriert das reine C#-Android-Backend in Full, entfernt externe adb/scrcpy/FFmpeg/SDL2-Binärdateien bei deutlich kleinerer Einzel-EXE und ergänzt Gamepad-Unterstützung für virtuelle Displays, angepassten Handy-Panel-Abstand (6 DIP), automatische Nachführung des Windows-Standardwiedergabegeräts für „Systemausgabe“ sowie sechs Pipeline-Korrekturen; alle Editionen (Full/Lite/Legacy) beheben Überlappungen von Tray-Untermenüs bei langen Namen und optimieren den Leerlauf-Speicherverbrauch. Details unter {history}.",
+    "releaseSummary": "v1.33 ergänzt Full um einen eigenen C#-AirPlay-Empfänger für Audio und seitenverhältnistreue Bildschirmspiegelung (PCM/ALAC/AAC-LC/AAC-ELD, optionale PIN, Immer im Vordergrund/F11-Vollbild sowie Drag-and-Drop-Routing auf PC- oder Android-Lautsprecher/Bluetooth), H.265 (HEVC) samt Audio-/Video-Decoderwahl, bedarfsweise Encoder-Abfrage nur auf sichtbaren Geräteseiten, vordergrundgesteuerte Gamepads, kombinierte QR- (2-Min.-Auto-Aktualisierung) und manuelle Kopplungskarte, LAN-Suche und Wiederverbindung gespeicherter WLAN-Geräte (Portprüfung zum Herausfiltern veralteter Ports, Wiederverbindung auf geänderte IP/Ports per Geräteidentität, Erhalt manueller Eingabeentwürfe bei Misserfolg) sowie Gerätewiederherstellung; alle Editionen (Full/Lite/Legacy) erhalten zwei unabhängige Mikrofon-OSD-Schalter, eine einzeilige Konfigurationskarte, App-Listen-Virtualisierung (>20 Zeilen), gebündeltes OSD, Freigabe von PNG-Rohbytes/Texturresten, Verzicht auf explizite GC-Anforderungen beim Fensterschließen in Full (natürliche Laufzeitbereinigung), config-.bak-Schutz, On-Demand-Fehlerdiagnose, eigenständiges Store-Lite-Paket und einen Offline-GPL-3.0-only-Betrachter. Details unter {history}.",
     "docTopic": "Thema",
     "docGuides": "Anleitungen",
     "docTopics": [
@@ -88,9 +88,9 @@
         "**App-unabhängiges Audio-Routing (Wiedergabe + Aufnahme):** Weisen Sie Apps individuelle Ausgabe- und Eingabegeräte zu – Spiele und Chat auf das Headset, Musik auf die Lautsprecher. Einstellungen bleiben nativ in Windows erhalten, auch wenn SonicRoute beendet wird.",
         "**Intelligenter Vordergrund-Fokus und blinde Tray-Rad-Steuerung.** Systemereignisse erfassen die aktive Audio-App in Millisekunden. Scrollen Sie direkt über dem Infobereich, um die Lautstärke anzupassen oder mit Alt+Mausrad Ausgabegeräte zu wechseln, ergänzt durch OSD-Hinweise und globale Mikrofon-Stummschaltung.",
         "**Schnellpanel und Echtzeit-Pegelanzeige:** Das Karten-Panel bietet eine anpassbare Höhe von 350–850 px und speichert seine Position; steuern Sie individuelle App-Lautstärken mit Pegelanzeigen für aktive Tonausgabe.",
-        "**Android-Smartphone-Integration & unabhängiges virtuelles Display (Full)**: Smartphone-Audio auf den PC leiten mit individueller Lautstärke und Pegelanzeige oder PC-Audio ans Smartphone übertragen; Smartphone-Apps in adaptivem virtuellem Displayfenster auf dem PC anzeigen, Smartphone-Ausgaben über das Schnellpanel steuern und Lautstärke per SmartVolume dynamisch ausgleichen.",
+        "**Android-Integration & eigener AirPlay-Empfang (Full)**: Android-Audio auf den PC leiten, Apps in adaptiven virtuellen Displayfenstern bedienen (inkl. H.265 & Vordergrund-Gamepad) oder PC-Audio ans Smartphone senden; Apple-AirPlay-Audio und seitenverhältnistreue Bildschirmspiegelung direkt in C# empfangen, im Schnellpanel auf PC- oder Android-Lautsprecher/Bluetooth routen und per SmartVolume ausgleichen.",
         "**Automatisierungs-Engine und blitzschnelle CLI (6 Auslöser × 39 Aktionen):** Auslöser durch App-Start, -Fokus, -Beenden, Zeitpläne oder Hotkeys. Kombinieren Sie Audiosteuerung, Programmstarts und PowerShell-Skripte; nutzen Sie den Befehl sr zur nahtlosen Steuerung per Skript oder Hardware-Deck.",
-        "**Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine Momentaufnahme pro Sekunde. Telefonintegration ist nur in Full enthalten; Lite und Legacy bieten PC-Funktionen. In neun Sprachen verfügbar."
+        "**Ereignisorientierte Erkennung:** Nutzt Systembenachrichtigungen und bei Bedarf eine Momentaufnahme pro Sekunde. Smartphone- und AirPlay-Integration ist nur in Full enthalten; Lite und Legacy bieten PC-Funktionen. In neun Sprachen verfügbar."
     ],
     "scenario": "Alltagsszenario",
     "whatYouCanDo": "So hilft SonicRoute",
@@ -108,7 +108,7 @@
         "Regel erstellen: Spielstart → Headset wählen + Lautstärke 40 % + Chat starten; beim Beenden zurück auf Lautsprecher",
         "Alle Mikrofone mit Strg+Umschalt+N stummschalten und den Status sofort per OSD-Banner auf dem Bildschirm ablesen",
         "Apps dedizierten Audiospuren zuweisen, damit private Gespräche und Systemtöne nicht in der Aufnahme landen",
-        "Smartphone-Musik, Videos oder Spiele über PC-Kopfhörer oder Lautsprecher separat regeln; Apps in virtuellem Fenster bedienen und Ausgänge direkt im Schnellpanel umschalten."
+        "Android-Audio separat über PC-Kopfhörer oder Lautsprecher regeln und Apps im virtuellen Fenster bedienen, oder Audio und Bildschirmspiegelung per AirPlay von Apple-Geräten empfangen und Ausgänge direkt im Schnellpanel umschalten."
     ],
     "editionLegacyX64": "Legacy x64 (nur PC-Audio, .NET Framework 4.8)",
     "editionStore": "Microsoft Store",
@@ -130,7 +130,7 @@
     "cliTitle": "CLI & Automationsintegration (Power-User)",
     "releaseHighlightsTitle": "{release} Release-Highlights",
     "retiredNet8Title": "Frühere NET8-kompatible Editionen (eingestellt, zum Aufklappen klicken)",
-    "fullRequirement": "Einzel-EXE Portable Edition; erfordert passende .NET 10 Desktop Runtime, enthält optionale Android-Audio- und Virtual-Display-Integration.",
+    "fullRequirement": "Einzel-EXE Portable Edition; erfordert passende .NET 10 Desktop Runtime, enthält optionale Android-, Virtual-Display- und AirPlay-Integration.",
     "editionFull": "Full (.NET 10, mit optionaler Smartphone-Integration)",
     "editionLite": "Lite (.NET 10, nur PC-Audio)",
     "editionLiteNet8": "Lite NET8 (Eingestellt)",

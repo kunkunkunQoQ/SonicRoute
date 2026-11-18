@@ -77,10 +77,9 @@ namespace SonicRoute
         private bool _fadingOut, _adjusting, _dragging, _micPersistent, _restorePending, _showingMic;
         private volatile bool _disposed;
         private long _messageVersion, _micVersion, _fadeVersion;
-        private Task<(bool Muted, bool Known)>? _micQuery;
-        private Func<bool, Task<(bool Muted, bool Known)>> _readMicState = ReadMicStateAsync;
+        private Task<(bool All, bool Default, bool Known)>? _micQuery;
+        private Func<Task<(bool All, bool Default, bool Known)>> _readMicState = ReadMicStateAsync;
         private TaskCompletionSource<bool>? _temporaryNoticeCompletion;
-        private bool _micQueryTrackInput;
         private long _micQueryVersion;
         private OsdPlacement.NativeRect _dragStart;
         private OsdPlacement.NativePoint _cursorStart;
@@ -661,23 +660,30 @@ namespace SonicRoute
             ReleaseWindow();
         }
 
-        // 仅合并同一监听策略、尚未完成的查询；不跨时刻缓存实际静音状态。
-        private static Task<(bool Muted, bool Known)> ReadMicStateAsync(bool trackInput)
+        internal static (bool All, bool Input) MicMuteSources(AppConfig config, bool includeTemporary = false)
+        {
+            var sources = (config.MicMuteOsdPersistent, config.MicMuteOsdDefaultInputPersistent);
+            return includeTemporary && sources == (false, false) ? (true, config.MicMuteOsdTrackInputMuted) : sources;
+        }
+
+        internal static bool MatchesMicMute((bool All, bool Input) sources, (bool All, bool Default, bool Known) state) =>
+            (sources.All && state.All) || (sources.Input && state.Default);
+
+        // Coalesce only an in-flight read. Both mute states come from the same monitor snapshot.
+        private static Task<(bool All, bool Default, bool Known)> ReadMicStateAsync()
         {
             var monitor = (System.Windows.Application.Current as App)?.MicMonitor;
             // Short-lived command mode has no resident monitor. Unknown state must
             // not revoke a confirmed banner or start another endpoint enumeration.
-            return monitor?.ReadCheckedAsync(trackInput) ?? Task.FromResult((false, false));
+            return monitor?.ReadStateAsync() ?? Task.FromResult((false, false, false));
         }
 
-        internal Task<(bool Muted, bool Known)> QueryMicMuteAsync(bool trackInput)
+        private Task<(bool All, bool Default, bool Known)> QueryMicMuteAsync()
         {
-            if (_disposed) return Task.FromResult((false, false));
-            if (_micQuery != null && !_micQuery.IsCompleted && _micQueryTrackInput == trackInput && _micQueryVersion == _micVersion)
+            if (_micQuery != null && !_micQuery.IsCompleted && _micQueryVersion == _micVersion)
                 return _micQuery;
-            _micQueryTrackInput = trackInput;
             _micQueryVersion = _micVersion;
-            return _micQuery = _readMicState(trackInput);
+            return _micQuery = _readMicState();
         }
 
         internal void ShowMic(string title, bool muted)
@@ -685,17 +691,18 @@ namespace SonicRoute
             if (_disposed) return;
             _idleReleaseTimer?.Stop();
             ++_micVersion;
-            _micPersistent = muted && ConfigService.Load().MicMuteOsdPersistent;
+            _micPersistent = muted && MicMuteSources(ConfigService.Load()) != (false, false);
             _restorePending = _micPersistent && _adjusting;
             if (_adjusting) return;
             ShowCore(new Notice(title, L10n.T(muted ? "Ov.MicMuted" : "Ov.MicUnmuted")), _micPersistent);
         }
 
-        internal async Task NotifyMicSettingChangedAsync(bool on)
+        internal async Task NotifyMicSettingChangedAsync()
         {
             if (_disposed) return;
             long micVersion = ++_micVersion;
-            if (!on)
+            var sources = MicMuteSources(ConfigService.Load());
+            if (sources == (false, false))
             {
                 _micPersistent = false; _restorePending = false;
                 if (_showingMic && !_adjusting) { _showingMic = false; _hideTimer.Stop(); _hideTimer.Start(); }
@@ -703,12 +710,10 @@ namespace SonicRoute
             }
             try
             {
-                bool track = ConfigService.Load().MicMuteOsdTrackInputMuted;
-                var state = await QueryMicMuteAsync(track);
-                var config = ConfigService.Load();
+                var state = await QueryMicMuteAsync();
                 if (_disposed || _dispatcher.HasShutdownStarted || micVersion != _micVersion ||
-                    !config.MicMuteOsdPersistent || config.MicMuteOsdTrackInputMuted != track || !state.Known) return;
-                bool muted = state.Muted;
+                    MicMuteSources(ConfigService.Load()) != sources || !state.Known) return;
+                bool muted = MatchesMicMute(sources, state);
                 _micPersistent = muted;
                 if (!muted)
                 {
@@ -728,15 +733,14 @@ namespace SonicRoute
             try
             {
                 long message = _messageVersion, mic = _micVersion;
-                bool track = ConfigService.Load().MicMuteOsdTrackInputMuted;
-                var state = await QueryMicMuteAsync(track);
-                var config = ConfigService.Load();
+                var sources = MicMuteSources(ConfigService.Load());
+                if (sources == (false, false)) return;
+                var state = await QueryMicMuteAsync();
                 if (_disposed || _dispatcher.HasShutdownStarted || _adjusting || message != _messageVersion ||
-                    mic != _micVersion || _window?.IsVisible == true || !config.MicMuteOsdPersistent ||
-                    config.MicMuteOsdTrackInputMuted != track) return;
+                    mic != _micVersion || _window?.IsVisible == true || MicMuteSources(ConfigService.Load()) != sources) return;
                 _restorePending = false;
                 // An unavailable driver cannot revoke a previously confirmed mute banner.
-                if (!state.Known || state.Muted) ShowMic(L10n.T("Ov.MuteMic"), true);
+                if (!state.Known || MatchesMicMute(sources, state)) ShowMic(L10n.T("Ov.MuteMic"), true);
                 else
                 {
                     _micPersistent = false;

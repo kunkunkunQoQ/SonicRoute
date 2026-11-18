@@ -178,6 +178,21 @@ public static class AndroidDeviceIdentity
         string? savedKey = StableKey(saved), currentKey = StableKey(device);
         return savedKey != null && currentKey != null ? savedKey == currentKey : saved.Serial == device.Serial;
     }
+
+    internal static AndroidDevice? WirelessServiceIdentity(AndroidMdnsService service) =>
+        service.Type.Equals(AndroidWirelessConnection.ConnectType, StringComparison.OrdinalIgnoreCase)
+            ? new AndroidDevice($"{service.Name}.{AndroidWirelessConnection.ConnectType}", "", "offline", true)
+            : null;
+
+    internal static bool MatchesWirelessService(AndroidDevice saved, AndroidMdnsService service)
+    {
+        if (!saved.IsWifi || WirelessServiceIdentity(service) is not { } advertised) return false;
+        string serial = saved.Serial.TrimEnd('.');
+        return serial.Equals(advertised.Serial, StringComparison.OrdinalIgnoreCase)
+            || serial.Equals(advertised.Serial + ".local", StringComparison.OrdinalIgnoreCase)
+            || Key(saved).Equals(Key(advertised), StringComparison.OrdinalIgnoreCase);
+    }
+
     public static IReadOnlyList<AndroidDevice> Distinct(IReadOnlyList<AndroidDevice> devices) => devices
         .GroupBy(Key, StringComparer.Ordinal).Select(group => group.OrderByDescending(d => d.State == "device")
             .ThenByDescending(d => d.Serial.Contains("_adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase)).First()).ToArray();

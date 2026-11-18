@@ -20,14 +20,20 @@ public sealed record AndroidQrPairing(string ServiceName, string Password)
 public sealed class AndroidWirelessConnection
 {
     private readonly AdbClient? _adb;
-    private const string ConnectType = "_adb-tls-connect._tcp";
+    internal const string ConnectType = "_adb-tls-connect._tcp";
     private readonly Func<CancellationToken, string[], Task<string>> _run;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly TimeProvider _timeProvider;
     private readonly Func<CancellationToken, Task<IReadOnlyList<AndroidDevice>>>? _devices;
     private readonly Func<string, string?, string?, string?, TimeSpan, CancellationToken, Task<AndroidMdnsService?>>? _discover;
+    private readonly Func<CancellationToken, Task<IReadOnlyList<AndroidMdnsService>>>? _browseConnections;
     public AndroidWirelessConnection(AdbClient adb) : this((token, args) => adb.RunAsync(token, args))
-    { _adb = adb; _devices = token => adb.DevicesAsync(token, deduplicate: false); _discover = AndroidMdnsDiscovery.FindAsync; }
+    {
+        _adb = adb;
+        _devices = token => adb.DevicesAsync(token, deduplicate: false);
+        _discover = AndroidMdnsDiscovery.FindAsync;
+        _browseConnections = AndroidMdnsDiscovery.DiscoverConnectionsAsync;
+    }
     public AndroidWirelessConnection(Func<CancellationToken, string[], Task<string>> run,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         Func<string, string?, string?, string?, TimeSpan, CancellationToken, Task<AndroidMdnsService?>>? discover = null,
@@ -40,6 +46,18 @@ public sealed class AndroidWirelessConnection
         try { return await _discover(type, name, host, guid, duration, token).ConfigureAwait(false); }
         catch (Exception ex) when (ex is IOException or SocketException or NetworkInformationException)
         { return null; } // Optional network discovery must never disable ADB's own discovery/connection.
+    }
+    private async Task<IReadOnlyList<AndroidMdnsService>> DiscoverConnectionEndpointsAsync(string? host, string? guid,
+        AndroidDevice? saved, CancellationToken token)
+    {
+        if (AndroidDeviceIdentity.StableKey(saved) != null && _browseConnections != null)
+        {
+            try { return await _browseConnections(token).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is IOException or SocketException or NetworkInformationException) { return []; }
+        }
+
+        var service = await DiscoverAsync(ConnectType, null, host, guid, TimeSpan.FromSeconds(12), token).ConfigureAwait(false);
+        return service == null ? [] : [service];
     }
     private Task<string> RunAsync(CancellationToken token, params string[] args)
     { token.ThrowIfCancellationRequested(); return _run(token, args); }
@@ -76,6 +94,37 @@ public sealed class AndroidWirelessConnection
         }
         return services;
     }
+    internal static async Task<IReadOnlyList<AndroidSavedConnection>> VerifySavedConnectionsAsync(
+        IReadOnlyList<AndroidSavedConnection> candidates, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (candidates.Count == 0) return [];
+
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(token);
+        budget.CancelAfter(TimeSpan.FromMilliseconds(550));
+        var groups = candidates.GroupBy(c => AndroidDeviceIdentity.Key(c.Device), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.Take(4).ToArray()).ToArray();
+        var probes = groups.SelectMany(g => g).Select(c => c.Address).Distinct(StringComparer.Ordinal)
+            .ToDictionary(address => address, address => IsEndpointReachableAsync(address, budget.Token), StringComparer.Ordinal);
+        await Task.WhenAll(probes.Values).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        return groups.Select(g => g.FirstOrDefault(c => probes[c.Address].Result)).OfType<AndroidSavedConnection>()
+            .OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase).ThenBy(c => c.Address, StringComparer.Ordinal).ToArray();
+    }
+
+    private static async Task<bool> IsEndpointReachableAsync(string address, CancellationToken token)
+    {
+        if (!IPEndPoint.TryParse(address, out var endpoint) || endpoint.Port == 0) return false;
+        try
+        {
+            // TCP only. The explicit connection still authenticates and checks the device identity.
+            using var socket = new Socket(endpoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            await socket.ConnectAsync(endpoint, token).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is SocketException or OperationCanceledException) { return false; }
+    }
+
     public async Task<AndroidPairingResult> PairCodeAsync(string address, string code, CancellationToken token)
     {
         if (!Regex.IsMatch(code, "\\A[0-9]{6}\\z")) throw AndroidError.WithCode(new ArgumentException("请输入手机显示的 6 位配对码。"), AndroidErrorCode.InvalidPairCode);
@@ -153,26 +202,32 @@ public sealed class AndroidWirelessConnection
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
         using var discoveryLifetime = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
         string host = Host(ValidateAddress(pairing.Address));
-        var discovery = DiscoverAsync(ConnectType, null, host, pairing.Guid,
-            TimeSpan.FromSeconds(12), discoveryLifetime.Token);
+        var discovery = DiscoverConnectionEndpointsAsync(host, pairing.Guid, null, discoveryLifetime.Token);
         try { return await WaitForDeviceAsync(host, null, pairing.Guid, null, deadline.Token, discovery).ConfigureAwait(false); }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
         { throw AndroidError.WithCode(new IOException("配对已成功，但设备尚未连接。请在下方填写无线调试首页的连接地址，无需重新配对。"), AndroidErrorCode.PairedButNotConnected); }
         finally { discoveryLifetime.Cancel(); try { await discovery.ConfigureAwait(false); } catch (OperationCanceledException) { } }
     }
-    public async Task<AndroidConnectionResult> ReconnectAsync(AndroidDevice device, CancellationToken token)
+    public Task<AndroidConnectionResult> ReconnectAsync(AndroidDevice device, CancellationToken token) => ReconnectAsync(device, null, token);
+
+    internal async Task<AndroidConnectionResult> ReconnectAsync(AndroidDevice device, string? discoveredAddress, CancellationToken token)
     {
         if (!device.IsWifi) throw AndroidError.WithCode(new InvalidOperationException("请连接 USB 并在手机确认调试授权，然后刷新设备。"), AndroidErrorCode.UsbReconnectHint);
+        bool hasSavedIdentity = AndroidDeviceIdentity.StableKey(device) != null;
         string? address = null, guid = null;
         try { address = ValidateAddress(device.Serial); }
         catch (ArgumentException)
         {
             string name = ServiceName(device.Serial, ConnectType);
-            if (!device.Serial.Contains("." + ConnectType, StringComparison.OrdinalIgnoreCase) || !name.StartsWith("adb-", StringComparison.OrdinalIgnoreCase))
+            if (device.Serial.Contains("." + ConnectType, StringComparison.OrdinalIgnoreCase) && name.StartsWith("adb-", StringComparison.OrdinalIgnoreCase))
+            {
+                int dash = name.LastIndexOf('-');
+                guid = dash > 3 ? name[..dash] : name;
+            }
+            else if (!hasSavedIdentity && discoveredAddress == null)
                 throw AndroidError.WithCode(new IOException("保存的无线地址已失效，请填写无线调试首页的当前连接地址。"), AndroidErrorCode.SavedWifiAddressExpired);
-            int dash = name.LastIndexOf('-');
-            guid = dash > 3 ? name[..dash] : name;
         }
+        if (discoveredAddress != null) address = ValidateAddress(discoveredAddress);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20), _timeProvider);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token, timeout.Token);
         string? host = address == null ? null : Host(address);
@@ -181,7 +236,7 @@ public sealed class AndroidWirelessConnection
             IReadOnlyList<AndroidDevice> currentDevices;
             try { currentDevices = await DevicesAsync(deadline.Token).ConfigureAwait(false); }
             catch (IOException) { currentDevices = Array.Empty<AndroidDevice>(); }
-            var ready = FindMatchingReadyDevice(currentDevices, host, address, guid, device.Serial, device.HardwareId);
+            var ready = FindMatchingReadyDevice(currentDevices, host, address, guid, device);
             if (ready != null) return new(ready, currentDevices);
 
             bool connected = false;
@@ -190,18 +245,17 @@ public sealed class AndroidWirelessConnection
                 using var connectProbe = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
                 connectProbe.CancelAfter(TimeSpan.FromSeconds(3));
                 try { await SendConnectAsync(address, connectProbe.Token).ConfigureAwait(false); connected = true; }
-                catch (IOException) { /* discover this host's current TLS endpoint below */ }
+                catch (Exception ex) when (ex is IOException or SocketException) { /* look up the current TLS endpoint below */ }
                 catch (OperationCanceledException) when (!deadline.IsCancellationRequested) { }
             }
 
-            if (address == null || !connected)
+            if (!connected || hasSavedIdentity)
             {
                 using var discoveryLifetime = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
-                var discovery = DiscoverAsync(ConnectType, null, host, guid,
-                    TimeSpan.FromSeconds(12), discoveryLifetime.Token);
+                var discovery = DiscoverConnectionEndpointsAsync(host, guid, device, discoveryLifetime.Token);
                 try
                 {
-                    return await WaitForDeviceAsync(host, address, guid, device.Serial, deadline.Token, discovery, device.HardwareId).ConfigureAwait(false);
+                    return await WaitForDeviceAsync(host, address, guid, device.Serial, deadline.Token, discovery, device).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -210,7 +264,7 @@ public sealed class AndroidWirelessConnection
                 }
             }
 
-            return await WaitForDeviceAsync(host, address, guid, device.Serial, deadline.Token, null, device.HardwareId).ConfigureAwait(false);
+            return await WaitForDeviceAsync(host, address, guid, device.Serial, deadline.Token, saved: device).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested)
         { throw AndroidError.WithCode(new IOException("设备未连接，请开启手机无线调试，或填写首页的当前连接地址。"), AndroidErrorCode.DeviceNotConnectedWifiHint); }
@@ -223,17 +277,20 @@ public sealed class AndroidWirelessConnection
         return name.Equals(guid, StringComparison.OrdinalIgnoreCase) || name.StartsWith(guid + "-", StringComparison.OrdinalIgnoreCase);
     }
     private static AndroidDevice? FindMatchingReadyDevice(IReadOnlyList<AndroidDevice> devices, string? host, string? address,
-        string? guid, string? serial, string? hardwareId)
+        string? guid, AndroidDevice saved)
     {
-        if (!string.IsNullOrWhiteSpace(hardwareId))
+        if (!string.IsNullOrWhiteSpace(saved.HardwareId))
             return devices.FirstOrDefault(d => d.State == "device" && d.IsWifi
-                && string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase));
+                && string.Equals(d.HardwareId, saved.HardwareId, StringComparison.OrdinalIgnoreCase));
+        if (AndroidDeviceIdentity.StableKey(saved) is { } identity)
+            return devices.FirstOrDefault(d => d.State == "device" && d.IsWifi
+                && string.Equals(AndroidDeviceIdentity.StableKey(d), identity, StringComparison.OrdinalIgnoreCase));
         if (guid != null)
             return devices.FirstOrDefault(d => d.State == "device" && d.IsWifi && MatchesGuid(d.Serial, guid));
         foreach (var d in devices)
         {
             if (d.State != "device" || !d.IsWifi) continue;
-            if (serial != null && string.Equals(d.Serial.TrimEnd('.'), serial.TrimEnd('.'), StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(d.Serial.TrimEnd('.'), saved.Serial.TrimEnd('.'), StringComparison.OrdinalIgnoreCase))
                 return d;
             if (address != null && string.Equals(d.Serial.TrimEnd('.'), address, StringComparison.OrdinalIgnoreCase))
                 return d;
@@ -254,23 +311,34 @@ public sealed class AndroidWirelessConnection
         _ => TimeSpan.FromMilliseconds(750),
     };
     private async Task<AndroidConnectionResult> WaitForDeviceAsync(string? host, string? address, string? guid, string? serial, CancellationToken token,
-        Task<AndroidMdnsService?>? discovery = null, string? hardwareId = null)
+        Task<IReadOnlyList<AndroidMdnsService>>? discovery = null, AndroidDevice? saved = null)
     {
+        string? hardwareId = saved?.HardwareId;
+        string? savedIdentity = AndroidDeviceIdentity.StableKey(saved);
+        bool hasSavedIdentity = savedIdentity != null;
         var serials = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (serial != null) serials.Add(serial.TrimEnd('.'));
         if (address != null) serials.Add(address);
         var endpoints = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        if (hasSavedIdentity && address != null) endpoints[address] = 0;
         var identityRefreshes = new HashSet<string>(StringComparer.Ordinal);
+        IReadOnlyList<AndroidMdnsService> backendServices = [];
+        bool readBackendServices = false;
         IOException? lastError = null;
         bool Matches(AndroidDevice d)
         {
             if (d.State != "device" || !d.IsWifi) return false;
             if (!string.IsNullOrWhiteSpace(hardwareId))
                 return string.Equals(d.HardwareId, hardwareId, StringComparison.OrdinalIgnoreCase);
+            if (savedIdentity != null)
+                return string.Equals(AndroidDeviceIdentity.StableKey(d), savedIdentity, StringComparison.OrdinalIgnoreCase);
             if (serials.Contains(d.Serial.TrimEnd('.')) || MatchesGuid(d.Serial, guid)) return true;
             try { return guid == null && address == null && host != null && Host(ValidateAddress(d.Serial)) == host; }
             catch (ArgumentException) { return false; }
         }
+        bool MatchesService(AndroidMdnsService service) => service.Type == ConnectType && (hasSavedIdentity
+            ? AndroidDeviceIdentity.MatchesWirelessService(saved!, service)
+            : guid != null ? MatchesGuid(service.Name + "." + ConnectType, guid) : host != null && Host(service.Address) == host);
         for (int attempt = 0; !token.IsCancellationRequested; ++attempt)
         {
             token.ThrowIfCancellationRequested();
@@ -287,32 +355,37 @@ public sealed class AndroidWirelessConnection
             }
             var ready = devices.FirstOrDefault(Matches);
             if (ready != null) return new(ready, devices);
-            if (attempt % 2 == 0)
+            if (attempt % 2 == 0 && (!hasSavedIdentity || discovery is not { IsCompleted: false }))
             {
                 try
                 {
-                    IEnumerable<AndroidMdnsService> services = Array.Empty<AndroidMdnsService>();
-                    try { services = ParseServices(await RunAsync(token, "mdns", "services").ConfigureAwait(false)); }
-                    catch (IOException ex) { lastError = ex; }
-                    if (discovery?.IsCompletedSuccessfully == true && await discovery.ConfigureAwait(false) is { } direct)
-                        services = services.Append(direct).Distinct();
-                    foreach (var service in services.Where(s => s.Type == ConnectType
-                        && (guid != null ? MatchesGuid(s.Name + "." + ConnectType, guid)
-                            : host != null && Host(s.Address) == host)))
+                    var native = discovery?.IsCompletedSuccessfully == true ? await discovery.ConfigureAwait(false) : [];
+                    if (!hasSavedIdentity || (!readBackendServices && !native.Any(s => MatchesService(s) && !endpoints.ContainsKey(s.Address))))
+                    {
+                        readBackendServices = true;
+                        try { backendServices = ParseServices(await RunAsync(token, "mdns", "services").ConfigureAwait(false)); }
+                        catch (Exception ex) when (ex is IOException or SocketException) { lastError = ex as IOException ?? new IOException(ex.Message, ex); }
+                    }
+                    var services = hasSavedIdentity ? native.Concat(backendServices) : backendServices.Concat(native);
+                    foreach (var service in services.Where(MatchesService).DistinctBy(s => s.Address, StringComparer.Ordinal))
                     {
                         serials.Add(service.Name + "." + ConnectType);
                         ready = devices.FirstOrDefault(Matches);
                         if (ready != null) return new(ready, devices);
-                        if (endpoints.TryGetValue(service.Address, out int previous) && attempt - previous < 4) continue;
+                        if (endpoints.TryGetValue(service.Address, out int previous) && (hasSavedIdentity || attempt - previous < 4)) continue;
                         endpoints[service.Address] = attempt;
-                        try { await SendConnectAsync(service.Address, token).ConfigureAwait(false); }
-                        catch (IOException ex) { lastError = ex; }
+                        using var endpointBudget = hasSavedIdentity ? CancellationTokenSource.CreateLinkedTokenSource(token) : null;
+                        endpointBudget?.CancelAfter(TimeSpan.FromSeconds(2));
+                        try { await SendConnectAsync(service.Address, endpointBudget?.Token ?? token).ConfigureAwait(false); }
+                        catch (Exception ex) when (ex is IOException or SocketException) { lastError = ex as IOException ?? new IOException(ex.Message, ex); }
+                        catch (OperationCanceledException) when (!token.IsCancellationRequested) { }
                         address ??= service.Address;
                         serials.Add(service.Address);
+                        if (hasSavedIdentity) break; // Recheck the ADB transport before trying the next address.
                     }
                 }
                 catch (IOException ex) { lastError = ex; }
-                if (address != null)
+                if (address != null && !hasSavedIdentity)
                 {
                     try
                     {

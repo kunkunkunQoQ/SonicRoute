@@ -2337,17 +2337,9 @@ namespace SonicRoute
                 if (OsdFadeInValue != null) OsdFadeInValue.Text = _config.OsdFadeInMs + "ms";
                 if (OsdFadeOutValue != null) OsdFadeOutValue.Text = _config.OsdFadeOutMs + "ms";
                 if (MicMutePersistCheck != null) MicMutePersistCheck.IsChecked = _config.MicMuteOsdPersistent;
-                if (MicMuteTrackInputCheck != null) MicMuteTrackInputCheck.IsChecked = _config.MicMuteOsdTrackInputMuted;
-                if (MicMuteTrackInputCheck != null) ApplyMicMutePersistUi(_config.MicMuteOsdPersistent);
+                if (MicMuteTrackInputCheck != null) MicMuteTrackInputCheck.IsChecked = _config.MicMuteOsdDefaultInputPersistent;
             }
             finally { _syncingOsdSliders = syncing; }
-        }
-
-        /// <summary>常驻开关控制其下方监听行的可见性；OSD 参数独立使用更多选项。</summary>
-        private void ApplyMicMutePersistUi(bool on)
-        {
-            if (MicMuteTrackInputRow != null)
-                MicMuteTrackInputRow.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         }
 
         /// <summary>折叠/展开设置页"保留的设备"卡片（实验设置-折叠开启时可见）。</summary>
@@ -2365,20 +2357,6 @@ namespace SonicRoute
             AnimatePanelExpand(DeviceNamesBody, DeviceNamesMoreToggle.IsChecked == true);
         }
 
-        /// <summary>主题页 - 常驻子选项「同时监听默认输入静音」：保存配置并让 OSD 重新评估常驻状态
-        /// （开启且当前默认输入静音 → 立即常驻显示；关闭且常驻横幅仅由输入静音维持 → 退出常驻）。</summary>
-        private void MicMuteTrackInput_Changed(object sender, RoutedEventArgs e)
-        {
-            if (!IsLoaded || _syncingOsdSliders || _suppressSettings || MicMuteTrackInputCheck == null) return;
-            bool on = MicMuteTrackInputCheck.IsChecked == true;
-            if (_config.MicMuteOsdTrackInputMuted != on)
-            {
-                _config.MicMuteOsdTrackInputMuted = on;
-                SaveSettings(_config);
-            }
-            ((App)Application.Current).NotifyMicMuteOsdSettingChanged(_config.MicMuteOsdPersistent);
-        }
-
         /// <summary>主题页 - OSD 调整项（宽度/字号/淡入/淡出）「更多选项」折叠展开。</summary>
         private void OsdMoreToggle_Click(object sender, RoutedEventArgs e)
         {
@@ -2386,19 +2364,17 @@ namespace SonicRoute
             AnimatePanelExpand(OsdSlidersPanel, OsdMoreToggle.IsChecked == true);
         }
 
-        /// <summary>主题页 - 「麦克风静音时 OSD 常驻」开关：保存配置并立即生效
-        /// （开启且当前已静音 → 立即常驻显示；关闭且正在常驻 → 退出常驻按普通生命周期隐藏）。</summary>
-        private void MicMutePersist_Changed(object sender, RoutedEventArgs e)
+        /// <summary>两个常驻条件分别保存，任一变更后立即重算当前 OSD。</summary>
+        private void MicMutePersistence_Changed(object sender, RoutedEventArgs e)
         {
-            if (!IsLoaded || _syncingOsdSliders || _suppressSettings || MicMutePersistCheck == null) return;
-            bool on = MicMutePersistCheck.IsChecked == true;
-            if (_config.MicMuteOsdPersistent != on)
-            {
-                _config.MicMuteOsdPersistent = on;
-                SaveSettings(_config);
-            }
-            ApplyMicMutePersistUi(on);
-            ((App)Application.Current).NotifyMicMuteOsdSettingChanged(on);
+            if (!IsLoaded || _syncingOsdSliders || _suppressSettings || MicMutePersistCheck == null || MicMuteTrackInputCheck == null) return;
+            bool all = MicMutePersistCheck.IsChecked == true;
+            bool input = MicMuteTrackInputCheck.IsChecked == true;
+            if (_config.MicMuteOsdPersistent == all && _config.MicMuteOsdDefaultInputPersistent == input) return;
+            _config.MicMuteOsdDefaultInputPersistent = input;
+            _config.MicMuteOsdPersistent = all;
+            SaveSettings(_config);
+            ((App)Application.Current).NotifyMicMuteOsdSettingChanged();
         }
 
         private void AppPeakMeter_Changed(object sender, RoutedEventArgs e)

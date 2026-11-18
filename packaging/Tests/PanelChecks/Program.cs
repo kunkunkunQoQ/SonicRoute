@@ -120,7 +120,7 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Contains("--output-popup-live") || args.Contains("--tray-submenu-live") || args.Contains("--osd-light-live"))
+        if (args.Contains("--output-popup-live") || args.Contains("--tray-submenu-live") || args.Contains("--osd-light-live") || args.Contains("--mic-osd-persistence"))
         {
             AttachOutputTestDesktop();
             Directory.CreateDirectory(args.Last());
@@ -152,6 +152,12 @@ internal static partial class Program
             }
             app.Resources = ProductResources();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            if (args.Contains("--mic-osd-persistence"))
+            {
+                CheckMicOsdPersistence();
+                Console.WriteLine($"RESULT passed={_checks} MIC_OSD=true AUDIO_WRITES=NONE");
+                return 0;
+            }
             if (args.Contains("--osd-light-live"))
             {
                 CheckOsdLightLive(args.Last(), args.Contains("--baseline"));

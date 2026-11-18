@@ -36,9 +36,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 - **アプリごとの音声分離と双方向ルーティング（再生＋録音）：** アプリごとに再生・録音デバイスを個別に設定。ゲームや通話はヘッドセットへ、音楽はスピーカーへ振り分けられます。設定は Windows にネイティブ保存され、アプリ終了後も維持されます。
 - **フォアグラウンド追従とトレイホイール直感操作：** システムイベントにより音声アプリを瞬時に特定。タスクバーのトレイ領域でホイール操作による音量調整やAlt+ホイールでの出力先切替が可能。画面OSD表示とマイクミュートも備え、ウィンドウを切替えずに操作できます。
 - **クイックパネルとリアルタイム音声レベル表示：** カード型パネルは350〜850pxの高さ調整と位置の保存に対応。各アプリの音量スライダーとリアルタイム音声メーターで直感的に操作できます。
-- **Android スマホ連携＆独立仮想ディスプレイ (Full 版)**：スマホ音声を PC に取り込んでアプリ別音量調整・出力、PC 音声をスマホへ送信可能。スマホアプリを PC 上の独立した仮想画面ウィンドウで適応表示し、クイックパネルからスマホスピーカーや Bluetooth を操作・スマート音量で均一化。
+- **Android 連携＆独自 AirPlay 受信（Full 版）**：Android の音声を PC に取り込んで個別調整・仮想画面操作（H.265・フォアグラウンド時ゲームパッド対応）でき、PC 音声のスマホ送信も可能。独自 C# 製 AirPlay 音声・等比ミラーリング受信を追加し、クイックパネルから PC 出力や接続済み Android スピーカー／Bluetooth へ切り替え、SmartVolume で音量を均一化できます。
 - **自動化コンボエンジンと高速 CLI（6種のトリガー × 39種のアクション）：** アプリ起動・切り替え・終了、スケジュール、ショートカットなど 6 つのトリガーに対応。デバイス切り替え、音量、ミュート、PowerShell などを自由に組み合わせ可能。名前付きパイプによる sr コマンドで外部連携も容易です。
-- **イベント優先の検出**：システム通知を活用し、必要に応じて1秒ごとのスナップショットで補完。不要データはオンデマンドで解放。スマートフォン連携はFullのみで、LiteとLegacyはPC機能のみです。9言語に対応。
+- **イベント優先の検出**：システム通知を活用し、必要に応じて1秒ごとのスナップショットで補完。不要データはオンデマンドで解放。Android連携・仮想ディスプレイ・AirPlay機能はFullのみで、LiteとLegacyはPC機能のみです。9言語に対応。
 
 ## 🎮 日常での使い方
 
@@ -51,19 +51,19 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（実験的） · 9 種類の UI �
 | ⚡ **ゲーム起動のたびにヘッドセットを繋ぎ直したり設定を変えている** | ゲーム起動時に「ヘッドセットへ切り替え＋音量40%＋通話起動」、終了時にスピーカーへ自動復帰 |
 | 🎙️ **席を外す時やプライベートな通話への切り替え** | Ctrl+Shift+N で全マイクを一括ミュート。画面上の OSD バナーで消音状態を一目で確認 |
 | 📹 **OBS でのゲーム配信や画面録画チュートリアル** | アプリごとに独立した音声トラックを割り当て、プライベートな会話や通知音が録画に入るのを防止 |
-| 📱 **スマホの音声を PC で再生、または PC 上でスマホアプリを操作** | スマホの音楽・動画・ゲーム音声を PC ヘッドホンやスピーカーで個別調整。スマホ画面を独立した仮想ウィンドウで操作し、スマホのスピーカー／Bluetooth もクイックパネルから直接制御可能。 |
+| 📱 **スマホの音声を PC で再生、または PC 上でスマホアプリを操作** | Android の音声を PC で個別調整し仮想ウィンドウでアプリ操作できるほか、Apple 端末の AirPlay 音画ミラーリングも受信可能。クイックパネルから PC 出力や Android スピーカー／Bluetooth も直接切り替えられます。 |
 
 ## 🚀 ダウンロードと使い始め方
 
-**現在のリリース：[v1.32](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.32)** · 2026-11-14 · [リリースノート（簡体字中国語）](docs/release-v1.32.md)
+**現在のリリース：[v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026-11-18 · [リリースノート（簡体字中国語）](docs/release-v1.33.md)
 
-Androidスマートフォンの音声・仮想ディスプレイ機能を使う場合は **Full x64**、PCの音声機能のみなら **Lite x64**、.NET Framework 4.8を利用する環境では **Legacy x64** を選択してください。ARM64版は実験的です。スマートフォン連携はFullのみです。Store版はFullを基に構築されますが、現在配信中の版はStoreページでご確認ください。以下は v1.32 のリンクです。
+Androidスマートフォン連携・仮想ディスプレイ・AirPlay機能を使う場合は **Full x64**、PCの音声機能のみなら **Lite x64**、.NET Framework 4.8環境では **Legacy x64** を選択してください。ARM64版は実験的です。スマートフォン・AirPlay連携はFullのみに含まれます。Microsoft StoreではFullとLiteを提供しており、現在の配信状況はStoreページでご確認ください。以下は v1.33 のリンクです。
 
 | エディション | ダウンロード | 要件 |
 |---|---|---|
-| ⭐ Full (.NET 10、スマホ連携対応) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | 単一 EXE ポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。オプションの Android 音声・仮想ディスプレイ連携を含む。 |
-| ⭐ Lite (.NET 10、PC 音声のみ) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | 単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。 |
-| 🛡️ Legacy x64 (PC 音声のみ、.NET Framework 4.8) | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | 追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。 |
+| ⭐ Full (.NET 10、スマホ連携対応) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | 単一 EXE ポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。オプションの Android 連携・仮想ディスプレイ・AirPlay 機能を含む。 |
+| ⭐ Lite (.NET 10、PC 音声のみ) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64（実験的）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | 単一ファイルポータブル版。アーキテクチャに適合した .NET 10 Desktop Runtime が必要。PC 音声機能のみ。 |
+| 🛡️ Legacy x64 (PC 音声のみ、.NET Framework 4.8) | [完全版 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | 追加ランタイム不要。制限された環境向け。標準の .NET Framework 4.8 で解凍後すぐ利用可能。 |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full / Lite 版を提供。x64 .NET 10 Desktop Runtime 必須。提供状況は Store に準拠。 |
 
 <details>
@@ -92,9 +92,9 @@ Androidスマートフォンの音声・仮想ディスプレイ機能を使う�
 sr "ルール名または ID"
 ```
 
-### 🆕 v1.32 リリースの主な改善点
+### 🆕 v1.33 リリースの主な改善点
 
-v1.32ではFullに純粋C#製Androidバックエンドを統合し、外部adb/scrcpy/FFmpeg/SDL2バイナリを廃止して単一EXEを大幅に軽量化しました。仮想ディスプレイのゲームパッド対応、スマホパネル間隔の調整（6 DIP）、スマホ「システム出力」のWindows既定再生デバイス自動追従や6件の不具合修正を追加し、全エディション（Full/Lite/Legacy）でトレイの長い名前によるサブメニュー重なり修正と待機時メモリ・リソース最適化を実施しています。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+v1.33ではFullに独自C#製AirPlay音声・等比画面ミラーリング受信（PCM/ALAC/AAC-LC/AAC-ELD、任意PIN、最前面/F11全画面、PCやAndroidスピーカー/Bluetoothへのドラッグ転送）、H.265 (HEVC) と音声/映像デコーダー選択、表示中のみ実行するエンコーダー取得、フォアグラウンド限定ゲームパッド制御、QR（2分自動更新）と手動ペアリング統合カード、保存済み無線デバイスのLAN検索・再接続（候補ポート検証による無効ポート除外、保存済み識別子での新IP/ポート再接続、未検出・失敗時の手動入力保持）と設定復元を追加しました。全エディション（Full/Lite/Legacy）で独立した2つのマイク常駐OSDスイッチ、1行構成の設定管理カード、20行超アプリリスト仮想化、OSD統合最適化、PNG元バイト・未使用テクスチャ解放、Fullでのウィンドウ閉鎖時明示的GC要求の廃止（ランタイムの自然回収へ委任）、config .bak保護、エラー時診断ログ、Store Lite対応およびGPL-3.0-onlyオフライン閲覧に対応しています。詳細は [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
 ### ❓ よくある質問（FAQ）
 

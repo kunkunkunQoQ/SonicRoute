@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Text.Json;
 using System.Windows;
@@ -20,6 +22,7 @@ internal static partial class Program
         var discovery = new AndroidDeviceDiscovery(_ => throw new Exception("Unexpected device scan"));
         cache.GetProperty("Discovery", statics)!.SetValue(null, discovery);
         discovery.Publish([]);
+        var store = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
         var clock = new QrDeadlineClock();
         var scans = new ConcurrentQueue<(string Name, TaskCompletionSource<string> Result)>();
         var names = new ConcurrentQueue<string>();
@@ -28,6 +31,18 @@ internal static partial class Program
         bool ready = false, failNextPair = false;
         TaskCompletionSource? retirement = null;
         var target = new AndroidDevice("adb-combined-fixture._adb-tls-connect._tcp", "Fixture", "device", true);
+        using var expired = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        expired.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        using var activeListener = new TcpListener(IPAddress.Loopback, 0);
+        using var restoredListener = new TcpListener(IPAddress.Loopback, 0);
+        activeListener.Start();
+        restoredListener.Start();
+        string expiredAddress = expired.LocalEndPoint!.ToString()!;
+        string activeAddress = activeListener.LocalEndpoint.ToString()!;
+        string currentAddress = restoredListener.LocalEndpoint.ToString()!;
+        var archived = new AndroidDevice(expiredAddress, "Archived", "offline", true, "fixture-archived");
+        AndroidDevice? restoredDevice = null;
+        var connections = new List<string>();
         var wireless = new AndroidWirelessConnection(async (token, args) =>
         {
             token.ThrowIfCancellationRequested();
@@ -51,9 +66,23 @@ internal static partial class Program
                 if (failNextPair) { failNextPair = false; throw new IOException("Synthetic pairing failure"); }
                 ready = true; return "Successfully paired [guid=adb-combined-fixture]";
             }
-            if (args[0] == "devices") return "List of devices attached\n" + (ready ? target.Serial + " device model:Fixture\n" : "");
+            if (args[0] == "connect")
+            {
+                connections.Add(args[1]);
+                if (args[1] != currentAddress) throw new IOException("Unexpected reconnect address");
+                restoredDevice = archived with { Serial = currentAddress, State = "device" };
+                return "connected to " + args[1];
+            }
             throw new Exception("Unexpected wireless fixture command: " + args[0]);
         }, timeProvider: clock);
+        // Pass resolved identity snapshots as the production AdbClient does after reading ro.serialno.
+        Func<CancellationToken, Task<IReadOnlyList<AndroidDevice>>> devices = token =>
+        {
+            token.ThrowIfCancellationRequested();
+            IReadOnlyList<AndroidDevice> snapshot = restoredDevice is { } restored ? [target, restored] : ready ? [target] : [];
+            return Task.FromResult(snapshot);
+        };
+        typeof(AndroidWirelessConnection).GetField("_devices", Hidden)!.SetValue(wireless, devices);
         Func<AndroidQrPairing> create = () =>
         {
             if (System.Windows.Application.Current.Dispatcher.CheckAccess()) Interlocked.Increment(ref encodingsOnUi);
@@ -67,6 +96,19 @@ internal static partial class Program
             return Task.FromResult(new AndroidEncoderCatalog([], []));
         };
         using var page = (PhoneDevicePage)Activator.CreateInstance(typeof(PhoneDevicePage), Hidden, null, [wireless, create, encoders], null)!;
+        var savedSearches = new ConcurrentQueue<TaskCompletionSource<IReadOnlyList<AndroidMdnsService>>>();
+        int holdSavedSearches = 0, activeSavedSearches = 0;
+        Func<CancellationToken, Task<IReadOnlyList<AndroidMdnsService>>> browse = async token =>
+        {
+            token.ThrowIfCancellationRequested();
+            if (Volatile.Read(ref holdSavedSearches) == 0) return [];
+            var pending = new TaskCompletionSource<IReadOnlyList<AndroidMdnsService>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Interlocked.Increment(ref activeSavedSearches);
+            savedSearches.Enqueue(pending);
+            try { return await pending.Task.WaitAsync(token); }
+            finally { Interlocked.Decrement(ref activeSavedSearches); }
+        };
+        typeof(PhoneDevicePage).GetField("_discoverSavedDevices", Hidden)!.SetValue(page, browse);
         object? Call(string method, params object?[] args) => typeof(PhoneDevicePage).GetMethod(method, Hidden)!.Invoke(page, args);
         T Find<T>(string name) => (T)page.FindName(name);
         Task? Watch() => (Task?)typeof(PhoneDevicePage).GetField("_qrTask", Hidden)!.GetValue(page);
@@ -83,6 +125,12 @@ internal static partial class Program
             while (scans.TryDequeue(out var scan))
                 if (!scan.Result.Task.IsCompleted)
                     scan.Result.TrySetResult($"{scan.Name} _adb-tls-pairing._tcp 192.0.2.5:37000");
+        }
+        void AnswerSavedSearch(string services)
+        {
+            Until(() => !savedSearches.IsEmpty);
+            if (!savedSearches.TryDequeue(out var lookup)) throw new InvalidOperationException("Missing saved device scan");
+            lookup.SetResult(AndroidWirelessConnection.ParseServices(services));
         }
         try
         {
@@ -111,6 +159,8 @@ internal static partial class Program
             {
                 L10n.Instance.SetLanguage(locale); Call("ProfileChanged"); DrainUi();
                 Check(!L10n.T("Phone.QrRefreshHint").StartsWith("Phone.") && !L10n.T("Phone.QrRetryHint").StartsWith("Phone."), locale + " has QR refresh/retry text");
+                Check(new[] { "Phone.SearchSavedDevices", "Phone.SavedConnectDevices", "Phone.ManualConnectAddress", "Phone.SavedDevicesNotFound" }
+                    .All(key => L10n.T(key) != key), locale + " has saved wireless discovery text");
             }
             Check(ReferenceEquals(originalImage, image.Source) && generated == originalCount,
                 "language and profile refreshes reuse the existing QR instead of re-encoding it");
@@ -182,10 +232,76 @@ internal static partial class Program
             var buttonRight = start.TranslatePoint(new Point(start.ActualWidth, 0), page).X;
             Check(start.ActualWidth > 40 && buttonRight < page.ActualWidth, "AirPlay start stays visible at a narrow window width");
             Render(page, (int)Math.Ceiling(page.ActualWidth), 260, Path.Combine(output, "airplay-connection.png"));
+            var addressBox = Find<TextBox>("ConnectAddressBox");
+            var savedChoices = Find<ComboBox>("SavedConnectDevices");
+            var search = Find<Button>("SearchSavedDevicesButton");
+            var connect = Find<Button>("ConnectButton");
+            var discoveryStatus = Find<TextBlock>("SavedDeviceSearchStatus");
+            store.RememberDevice(new("192.0.2.20:31999", "Active", "offline", true, "fixture-active"));
+            store.Rename("Active test phone");
+            store.RememberDevice(archived);
+            store.Rename("Archived test phone");
+            const string keptPackage = "org.example.saved";
+            store.Retain(new(keptPackage, "Saved app", 10001, "music"));
+            string restoredId = store.Profile.Id;
+            store.RemoveDevice(restoredId);
+            store.RememberDevice(new("fixture-usb", "USB only", "offline", false));
+            addressBox.Clear();
+            Volatile.Write(ref holdSavedSearches, 1);
             Find<RadioButton>("AndroidConnectionChoice").IsChecked = true;
             AwaitQr();
             Check(!Find<Border>("AirPlayCard").IsVisible && Find<Border>("DirectConnectCard").IsVisible,
                 "returning to Android restores both pairing methods and direct connection");
+            Check(Grid.GetColumn(addressBox) == Grid.GetColumn(savedChoices) && Grid.GetColumn(search) == 1 && Grid.GetColumn(connect) == 2,
+                "the text box and device selector share a slot and Search sits to the left of Connect");
+            string expiredAnnouncement = $"adb-fixture-archived-OLD123 _adb-tls-connect._tcp {expiredAddress}";
+            string activeAnnouncement = $"adb-fixture-active-ABC123 _adb-tls-connect._tcp {activeAddress}";
+            string advertisements = $"{expiredAnnouncement}\n{activeAnnouncement}\n{activeAnnouncement}\n"
+                + $"adb-fixture-archived-ABC123 _adb-tls-connect._tcp {currentAddress}\n"
+                + $"adb-fixture-usb-ABC123 _adb-tls-connect._tcp {activeAddress}\n"
+                + $"adb-fixture-archived-ABC123 _adb-tls-pairing._tcp {expiredAddress}";
+            AnswerSavedSearch(advertisements);
+            Until(() => savedChoices.IsVisible && savedChoices.Items.Count == 3);
+            string Label(object item) => (string)item.GetType().GetProperty("Label")!.GetValue(item)!;
+            Check(!addressBox.IsVisible && connections.Count == 0 && Label(savedChoices.Items[0]) == "Active test phone · " + activeAddress
+                && Label(savedChoices.Items[1]) == "Archived test phone · " + currentAddress,
+                "the dropdown skips an expired advertised port and deduplicates reachable saved and archived phones");
+            Render(page, (int)Math.Ceiling(page.ActualWidth), (int)Math.Ceiling(page.ActualHeight), Path.Combine(output, "saved-pairing-devices.png"));
+            savedChoices.SelectedIndex = 2;
+            Check(addressBox.IsVisible && !savedChoices.IsVisible, "the manual entry returns to the existing text box");
+            addressBox.Text = "203.0.113.5:37000";
+            search.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); AwaitQr();
+            Until(() => Volatile.Read(ref activeSavedSearches) == 1);
+            Check(!search.IsEnabled && activeScans == 1 && image.Source != null, "Search starts a native discovery while the QR lookup is still waiting");
+            AnswerSavedSearch($"adb-unknown-ABC123 _adb-tls-connect._tcp {activeAddress}\n{expiredAnnouncement}");
+            Until(() => search.IsEnabled && discoveryStatus.IsVisible);
+            Check(addressBox.Text == "203.0.113.5:37000" && discoveryStatus.Text == L10n.T("Phone.SavedDevicesNotFound"),
+                "expired ports and unrelated identities leave the typed address intact");
+            search.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); AwaitQr(); AnswerSavedSearch(advertisements);
+            Until(() => search.IsEnabled && savedChoices.IsVisible);
+            savedChoices.SelectedIndex = 1;
+            Check(connections.Count == 0 && addressBox.Text == "203.0.113.5:37000", "choosing a device waits for Connect and keeps the manual draft");
+            int previousPairCalls = pairCalls;
+            connect.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Until(() => Find<FrameworkElement>("DeviceCard").IsVisible && connect.IsEnabled && Watch() == null);
+            Check(connections.SequenceEqual([currentAddress]) && store.Profile.Id == restoredId
+                && store.Profile.LastDevice?.Serial == currentAddress && store.Profile.RetainedApps.Single().Package == keptPackage
+                && pairCalls == previousPairCalls, "Connect uses the new endpoint and restores the original archived profile without pairing again");
+            Call("ShowConnection"); AwaitQr();
+            search.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); AnswerSavedSearch($"{activeAnnouncement}\n{expiredAnnouncement}");
+            Until(() => savedChoices.IsVisible && search.IsEnabled);
+            savedChoices.SelectedIndex = 1;
+            Check(Label(savedChoices.SelectedItem) == "Archived test phone · " + currentAddress,
+                "a reachable live ADB transport overrides the same phone's stale advertisement");
+            connect.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Until(() => Find<FrameworkElement>("DeviceCard").IsVisible && connect.IsEnabled && Watch() == null);
+            Check(connections.Count == 1 && store.Profile.Id == restoredId, "Connect reuses the live transport for an already connected phone");
+            Call("ShowConnection"); AwaitQr(); search.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Until(() => Volatile.Read(ref activeSavedSearches) == 1);
+            Find<RadioButton>("AirPlayConnectionChoice").IsChecked = true;
+            Until(() => Watch() == null && Volatile.Read(ref activeSavedSearches) == 0);
+            Check(!savedChoices.IsVisible && savedChoices.ItemsSource == null && !discoveryStatus.IsVisible && search.IsEnabled,
+                "leaving the Android tab clears discovery and its pending status");
             page.Dispose(); Until(() => Watch() == null);
             Check(activeScans == 0 && clock.QrTimers == 0 && names.Distinct().Count() == names.Count,
                 "disposal retires all deadlines/scans and every QR rotation uses a fresh identity");

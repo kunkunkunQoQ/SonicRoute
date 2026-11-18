@@ -177,11 +177,19 @@ namespace SonicRoute.Core
 
         /// <summary>主题 - OSD 淡出时长（ms，0~1000，默认 200；0 = 禁用淡出直接隐藏）。</summary>
         public int OsdFadeOutMs { get; set; } = 200;
-        /// <summary>主题 - 麦克风静音时 OSD 常驻（静音后持续显示状态，不自动隐藏；默认关闭 = 与旧版一致）。</summary>
+        /// <summary>主题 - 所有录音设备静音时 OSD 常驻（默认关闭）。</summary>
         public bool MicMuteOsdPersistent { get; set; }
 
-        /// <summary>主题 - 常驻子选项「同时监听默认输入静音」：默认输入设备静音时也常驻显示麦克风静音 OSD（默认开启）。</summary>
+        /// <summary>旧版监听偏好，用于迁移常驻设置和保留原有短时提示。</summary>
         public bool MicMuteOsdTrackInputMuted { get; set; } = true;
+
+        private bool? _micMuteOsdDefaultInputPersistent;
+        /// <summary>主题 - 默认录音设备静音时 OSD 常驻。</summary>
+        public bool MicMuteOsdDefaultInputPersistent
+        {
+            get => _micMuteOsdDefaultInputPersistent ?? (MicMuteOsdPersistent && MicMuteOsdTrackInputMuted);
+            set => _micMuteOsdDefaultInputPersistent = value;
+        }
 
         public double OsdFontScale { get; set; } = 1.0;
 

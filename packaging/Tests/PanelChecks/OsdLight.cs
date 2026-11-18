@@ -19,6 +19,42 @@ internal static partial class Program
     private static object? OsdCall(object osd, string method, params object?[] arguments) =>
         osd.GetType().GetMethod(method, Instance)!.Invoke(osd, arguments);
 
+    private static void CheckMicOsdPersistence()
+    {
+        var config = ConfigService.Load();
+        Check(!config.MicMuteOsdDefaultInputPersistent && !config.MicMuteOsdPersistent
+            && JsonSerializer.Deserialize<AppConfig>("{\"MicMuteOsdPersistent\":true}")!.MicMuteOsdDefaultInputPersistent
+            && !JsonSerializer.Deserialize<AppConfig>("{\"MicMuteOsdPersistent\":true,\"MicMuteOsdTrackInputMuted\":false}")!.MicMuteOsdDefaultInputPersistent,
+            "legacy configurations retain their effective persistence defaults");
+        config.MicMuteOsdDefaultInputPersistent = true;
+        var window = new MainWindow();
+        try
+        {
+            Call(window, "EnsureThemePage");
+            Call(window, "SyncOsdSliders");
+            var all = Field<CheckBox>(window, "MicMutePersistCheck");
+            var input = Field<CheckBox>(window, "MicMuteTrackInputCheck");
+            Check(all.IsChecked == false && input.IsChecked == true && input.Parent is Grid { Visibility: Visibility.Visible },
+                "default input switch stays visible and selected with the all-microphone switch off");
+        }
+        finally { window.Close(); }
+
+        using var osd = (IDisposable)Activator.CreateInstance(typeof(App).Assembly.GetType("SonicRoute.OsdService")!, true)!;
+        var state = (All: false, Default: true, Known: true);
+        osd.GetType().GetField("_readMicState", Instance)!.SetValue(osd,
+            (Func<Task<(bool All, bool Default, bool Known)>>)(() => Task.FromResult(state)));
+        void Update() => Finish((Task)OsdCall(osd, "NotifyMicSettingChangedAsync")!);
+        bool Persistent() => Field<bool>(osd, "_micPersistent");
+        Update(); Check(Persistent(), "default-only choice keeps the banner for a muted default input");
+        config.MicMuteOsdPersistent = true;
+        config.MicMuteOsdDefaultInputPersistent = false;
+        Update(); Check(!Persistent(), "all-only choice does not pin a default-only mute");
+        state = (true, true, true);
+        Update(); Check(Persistent(), "all-only choice pins when every microphone is muted");
+        config.MicMuteOsdPersistent = false;
+        Update(); Check(!Persistent(), "turning both choices off restores the temporary notice lifecycle");
+    }
+
     private static void CheckOsdLightLive(string output, bool baseline)
     {
         var config = ConfigService.Load();
@@ -104,7 +140,7 @@ internal static partial class Program
             "one render turn presents the last value and releases the pending operation");
 
         var readField = osd.GetType().GetField("_readMicState", Instance)!;
-        readField.SetValue(osd, (Func<bool, Task<(bool Muted, bool Known)>>)(_ => Task.FromResult((false, true))));
+        readField.SetValue(osd, (Func<Task<(bool All, bool Default, bool Known)>>)(() => Task.FromResult((false, false, true))));
         OsdCall(osd, "ShowMic", "Mic", true);
         OsdCall(osd, "Show", "Temporary", "test");
         OsdCall(osd, "Hide");
@@ -115,7 +151,7 @@ internal static partial class Program
         Check(Field<Window?>(osd, "_window") == null, "idle release closes the native OSD window and drops its visual references");
         Check(Application.Current.MainWindow == null, "a first OSD window is not retained as the application's closed main window");
 
-        readField.SetValue(osd, (Func<bool, Task<(bool Muted, bool Known)>>)(_ => Task.FromResult((false, false))));
+        readField.SetValue(osd, (Func<Task<(bool All, bool Default, bool Known)>>)(() => Task.FromResult((false, false, false))));
         OsdCall(osd, "ShowMic", "Mic", true);
         OsdCall(osd, "Show", "Temporary", "test");
         OsdCall(osd, "Hide");
@@ -123,12 +159,12 @@ internal static partial class Program
         Check(Field<bool>(osd, "_micPersistent") && Field<bool>(osd, "_showingMic") && Field<Window>(osd, "_window").IsVisible,
             "an unknown microphone read preserves the previously confirmed mute banner");
 
-        var delayed = new TaskCompletionSource<(bool Muted, bool Known)>(TaskCreationOptions.RunContinuationsAsynchronously);
-        readField.SetValue(osd, (Func<bool, Task<(bool Muted, bool Known)>>)(_ => delayed.Task));
+        var delayed = new TaskCompletionSource<(bool All, bool Default, bool Known)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        readField.SetValue(osd, (Func<Task<(bool All, bool Default, bool Known)>>)(() => delayed.Task));
         OsdCall(osd, "Show", "Temporary", "test"); OsdCall(osd, "Hide");
         var restore = (Task)OsdCall(osd, "RestoreMicAsync")!;
         OsdCall(osd, "ShowVolume", "Newer", 64, "64%", false, "newer");
-        delayed.SetResult((false, true)); Finish(restore);
+        delayed.SetResult((false, false, true)); Finish(restore);
         Check(Field<TextBlock>(osd, "_title").Text == "Newer", "a late microphone result cannot replace a newer notification");
 
         var previousMode = RenderOptions.ProcessRenderMode;

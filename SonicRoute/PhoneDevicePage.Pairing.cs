@@ -17,7 +17,7 @@ public partial class PhoneDevicePage
     private bool CanShowQr => !_disposed && _active && !_busy && IsLoaded && IsVisible
         && IsConnectionPage && ConnectionPanel.IsVisible && PairingCard.Visibility == Visibility.Visible;
 
-    private void PairingLoaded(object sender, RoutedEventArgs e) { UpdateQrPairing(); UpdateStreamingVisibility(); }
+    private void PairingLoaded(object sender, RoutedEventArgs e) { UpdateQrPairing(); UpdateSavedDeviceSearch(); UpdateStreamingVisibility(); }
     private void PairingUnloaded(object sender, RoutedEventArgs e) { StopQrPairing(); CancelEncoderRead(); }
     private void PairingVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) { UpdateQrPairing(); UpdateStreamingVisibility(); }
     private void QrPair_Click(object sender, RoutedEventArgs e)

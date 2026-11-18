@@ -32,28 +32,25 @@ namespace SonicRoute.Core
             _deviceCallback = new DeviceCallback(() => Signal(true));
         }
 
-        public Task<bool> ReadAsync(bool trackInput)
+        public Task<(bool All, bool Default, bool Known)> ReadStateAsync()
         {
             lock (_requestGate)
             {
-                if (Volatile.Read(ref _disposed) != 0) return Task.FromResult(false);
+                if (Volatile.Read(ref _disposed) != 0) return Task.FromResult((false, false, false));
                 if (_read == null || _read.IsCompleted) _read = Task.Run(ReadCore);
-                return SelectAsync(_read, trackInput);
+                return _read;
             }
         }
-        private static async Task<bool> SelectAsync(Task<(bool All, bool Default, bool Known)> read, bool track)
-        { var state = await read.ConfigureAwait(false); return state.All || (track && state.Default); }
+
+        public async Task<bool> ReadAsync(bool trackInput)
+        {
+            var state = await ReadStateAsync().ConfigureAwait(false);
+            return state.All || (trackInput && state.Default);
+        }
 
         public async Task<(bool Muted, bool Known)> ReadCheckedAsync(bool trackInput)
         {
-            Task<(bool All, bool Default, bool Known)> read;
-            lock (_requestGate)
-            {
-                if (Volatile.Read(ref _disposed) != 0) return (false, false);
-                if (_read == null || _read.IsCompleted) _read = Task.Run(ReadCore);
-                read = _read;
-            }
-            var state = await read.ConfigureAwait(false);
+            var state = await ReadStateAsync().ConfigureAwait(false);
             return (state.All || (trackInput && state.Default), state.Known);
         }
 

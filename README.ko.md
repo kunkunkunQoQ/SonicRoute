@@ -36,9 +36,9 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 - **앱별 개별 사운드 분할 및 양방향 라우팅(재생 + 녹음):** 앱마다 재생 및 녹음 장치를 개별 지정하여 게임과 음성 채팅은 헤드셋으로, 음악은 스피커로 전달합니다. 설정은 Windows에 네이티브로 유지되어 프로그램을 종료해도 유지됩니다.
 - **포그라운드 스마트 추적 및 트레이 휠 간편 제어:** 시스템 이벤트를 통해 소리가 나는 활성 앱을 즉시 감지합니다. 작업 표시줄 트레이에서 휠 스크롤로 볼륨 조절 및 Alt+휠로 장치 전환이 가능하며, OSD 알림과 마이크 음소거로 화면 전환 없이 제어합니다.
 - **빠른 패널 및 실시간 오디오 레벨 표시:** 카드 패널은 350~850px 높이 조절과 위치 저장을 지원합니다. 앱별 볼륨 슬라이더와 실시간 오디오 레벨을 직관적으로 확인하세요.
-- **Android 모바일 연동 및 독립 가상 디스플레이 (Full 버전)**: 스마트폰 오디오를 PC로 받아 앱별 볼륨 조절 및 분류, PC 사운드를 모바일로 전송 가능. 모바일 앱 화면을 독립된 PC 가상 디스플레이 창에서 적응형으로 표시하고, 퀵 패널에서 모바일 스피커/블루투스를 직접 제어하며 스마트 볼륨으로 음량을 자동 균형화.
+- **Android 연동 및 자체 AirPlay 수신 (Full 버전)**: Android 오디오를 PC로 받아 앱별 볼륨 조절과 가상 디스플레이 창 제어(H.265 및 포그라운드 게임패드 지원)를 제공하고 PC 사운드를 휴대폰으로 전송할 수 있습니다. 자체 C# AirPlay 오디오·비율 유지 미러링 수신을 지원해 빠른 패널에서 PC 출력이나 연결된 Android 스피커/블루투스로 라우팅하고 SmartVolume으로 음량을 균형화합니다.
 - **자동화 콤보 엔진 및 초고속 CLI(6가지 트리거 × 39개 작업):** 앱 실행/전환/종료, 예약, 단축키 등 6가지 트리거 지원. 장치 전환, 볼륨, 음소거, PowerShell 등을 조합할 수 있으며, 내장된 sr 명령어로 외부 스크립트 및 하드웨어와 손쉽게 연동됩니다.
-- **이벤트 우선 감지**: 시스템 알림을 우선 사용하고 필요 시 1초 간격 스냅샷으로 보완합니다. 휴대폰 통합은 Full에만 포함되고 Lite와 Legacy는 PC 기능만 제공합니다. 9개 언어를 지원합니다.
+- **이벤트 우선 감지**: 시스템 알림을 우선 사용하고 필요 시 1초 간격 스냅샷으로 보완합니다. 휴대폰 및 AirPlay 통합은 Full에만 포함되고 Lite와 Legacy는 PC 기능만 제공합니다. 9개 언어를 지원합니다.
 
 ## 🎮 일상적인 활용
 
@@ -51,19 +51,19 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험적) · 인터페이스 9개
 | ⚡ **게임을 할 때마다 헤드셋을 다시 연결하거나 설정을 바꿀 때** | 게임 실행 시 '헤드셋 전환 + 볼륨 40% + 음성 앱 실행', 게임 종료 시 스피커로 자동 복귀 규칙 설정 |
 | 🎙️ **잠시 자리를 비우거나 개인적인 통화를 해야 할 때** | Ctrl+Shift+N으로 모든 마이크를 즉시 음소거하고, 화면 OSD 배너로 상태를 한눈에 확인 |
 | 📹 **OBS 게임 방송 또는 화면 녹화 튜토리얼 제작 시** | 앱별로 독립된 오디오 트랙을 지정하여 개인 대화나 알림음이 녹화에 섞여 들어가는 것 방지 |
-| 📱 **모바일 오디오를 PC로 스트리밍하거나 PC에서 모바일 앱 제어** | 스마트폰 음악, 영상, 게임 사운드를 PC 헤드폰이나 스피커로 개별 조절. 모바일 앱 화면을 가상 디스플레이 창으로 확인 및 조작하며 퀵 패널에서 스피커/블루투스 출력을 손쉽게 관리. |
+| 📱 **모바일 오디오를 PC로 스트리밍하거나 PC에서 모바일 앱 제어** | Android 스마트폰 사운드를 PC 헤드폰/스피커로 개별 조절하고 가상 디스플레이 창에서 앱을 조작하거나 Apple 기기의 AirPlay 오디오·화면 미러링을 수신하고, 빠른 패널에서 PC 또는 Android 스피커/블루투스 출력을 바로 전환하세요. |
 
 ## 🚀 다운로드 및 시작하기
 
-**현재 릴리스: [v1.32](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.32)** · 2026-11-14 · [릴리스 노트(중국어 간체)](docs/release-v1.32.md)
+**현재 릴리스: [v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026-11-18 · [릴리스 노트(중국어 간체)](docs/release-v1.33.md)
 
-Android 휴대폰 오디오 및 가상 디스플레이 기능이 필요하면 **Full x64**, PC 오디오 기능만 사용하면 **Lite x64**, .NET Framework 4.8 환경은 **Legacy x64**를 선택하세요. ARM64 버전은 실험용입니다. 휴대폰 통합은 Full에만 포함됩니다. Store 패키지는 Full을 기반으로 빌드되며, 현재 제공 버전은 Store 페이지를 기준으로 합니다. 아래 링크는 v1.32용입니다.
+Android 휴대폰 연동·가상 디스플레이·AirPlay 기능이 필요하면 **Full x64**, PC 오디오 기능만 사용하면 **Lite x64**, .NET Framework 4.8 환경은 **Legacy x64**를 선택하세요. ARM64 버전은 실험용입니다. 휴대폰 및 AirPlay 통합은 Full에만 포함됩니다. Microsoft Store에서는 Full과 Lite를 제공하며, 현재 제공 버전은 Store 페이지를 기준으로 합니다. 아래 링크는 v1.33용입니다.
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| ⭐ Full (.NET 10, 모바일 연동 포함) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-x64.exe) / [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-arm64.exe) | 단일 EXE 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. 선택적 Android 오디오 및 가상 디스플레이 연동 포함. |
-| ⭐ Lite (.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-x64.exe) / [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Lite-arm64.exe) | 단일 파일 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. PC 오디오 기능만 포함. |
-| 🛡️ Legacy x64 (PC 오디오 전용, .NET Framework 4.8) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.32/SonicRoute-v1.32-Legacy-x64.zip) | 추가 런타임 불필요. 제한된 업무용 PC 적합. 시스템 내장 .NET Framework 4.8 기반으로 압축 해제 후 즉시 사용. |
+| ⭐ Full (.NET 10, 모바일 연동 포함) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | 단일 EXE 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. 선택적 Android 오디오, 가상 디스플레이 및 AirPlay 연동 포함. |
+| ⭐ Lite (.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64 (실험적)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | 단일 파일 휴대용 버전. 아키텍처에 맞는 .NET 10 Desktop Runtime 필요. PC 오디오 기능만 포함. |
+| 🛡️ Legacy x64 (PC 오디오 전용, .NET Framework 4.8) | [전체 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | 추가 런타임 불필요. 제한된 업무용 PC 적합. 시스템 내장 .NET Framework 4.8 기반으로 압축 해제 후 즉시 사용. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full / Lite 제공. x64 .NET 10 Desktop Runtime 필요. 제공 버전은 Store 페이지 기준. |
 
 <details>
@@ -92,9 +92,9 @@ Android 휴대폰 오디오 및 가상 디스플레이 기능이 필요하면 **
 sr "규칙 이름 또는 ID"
 ```
 
-### 🆕 v1.32 릴리스 주요 변경사항
+### 🆕 v1.33 릴리스 주요 변경사항
 
-v1.32는 Full에 순수 C# 자체 개발 Android 백엔드를 통합해 외부 adb/scrcpy/FFmpeg/SDL2 바이너리를 제거하고 단일 EXE 크기를 크게 줄였으며, 가상 디스플레이 게임패드 지원, 휴대폰 패널 간격 조정(6 DIP), '시스템 출력'의 Windows 기본 재생 장치 자동 추적 및 6가지 파이프라인 수정을 추가했습니다. 모든 에디션(Full/Lite/Legacy)에서 긴 이름의 트레이 하위 메뉴 겹침을 수정하고 아이콘·OSD·테마 리소스·유휴 메모리 점유율을 최적화했습니다. 자세한 내용은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)를 확인하세요.
+v1.33은 Full에 자체 C# AirPlay 오디오 및 비율 유지 화면 미러링 수신(PCM/ALAC/AAC-LC/AAC-ELD, 선택형 PIN, 항상 위/F11 전체 화면, PC 및 Android 스피커/블루투스 드래그 라우팅), H.265 (HEVC) 및 오디오/비디오 디코더 선택, 보이는 기기 페이지에서만 조회하는 인코더 목록, 포그라운드 전용 게임패드 제어, QR(2분 자동 갱신)·수동 페어링 통합 카드, 저장된 무선 기기 LAN 검색·재연결(후보 포트 검증으로 만료된 포트 필터링, 저장된 기기 식별자 기반 새 IP/포트 재연결, 불가·실패 시 수동 주소 초안 유지) 및 설정 복원을 추가했습니다. 모든 에디션(Full/Lite/Legacy)에 독립 마이크 상시 OSD 토글 2종, 한 줄 구성 관리 카드, 20개 초과 앱 목록 가상화, OSD 병합 최적화, PNG 원본 바이트·유휴 텍스처 해제, Full 창 닫기 시 명시적 GC 요청 제거(런타임 자연 회수), config .bak 보호, 오류 진단 로그, Store Lite 지원 및 GPL-3.0-only 오프라인 뷰어를 제공합니다. 자세한 내용은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)를 확인하세요.
 
 ### ❓ 자주 묻는 질문 (FAQ)
 

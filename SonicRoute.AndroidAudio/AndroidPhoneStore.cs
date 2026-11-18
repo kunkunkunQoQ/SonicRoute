@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Text.Json;
 using SonicRoute.Core;
 
@@ -11,6 +12,8 @@ public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice,
     public IReadOnlyList<AndroidApp> QuickPanelApps { get; init; } = RetainedApps;
     public IReadOnlyList<AndroidOutputSink> OutputSinks { get; init; } = [AndroidOutputSink.DefaultSpeaker];
 }
+
+internal sealed record AndroidSavedConnection(string Name, AndroidDevice Device, string Address);
 
 /// <summary>Independent phone libraries and a persisted selection; no discovery or idle work.</summary>
 public sealed class AndroidPhoneStore
@@ -103,6 +106,48 @@ public sealed class AndroidPhoneStore
     public AndroidPhoneProfile? FindProfile(AndroidDevice device)
     { lock (_gate) return _state.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device)); }
     public string GetDisplayName(AndroidDevice device) => FindProfile(device)?.Name ?? device.Name;
+    internal IReadOnlyList<AndroidSavedConnection> FindWirelessConnectionCandidates(IReadOnlyList<AndroidMdnsService> services,
+        IReadOnlyList<AndroidDevice> connectedDevices)
+    {
+        if (services.Count == 0 && connectedDevices.Count == 0) return [];
+        State state;
+        lock (_gate) state = _state;
+
+        var profiles = state.Profiles.Concat(state.RemovedProfiles ?? [])
+            .Where(p => p.LastDevice is { } device && !string.IsNullOrWhiteSpace(device.Serial)).ToArray();
+        var names = profiles.ToLookup(p => AndroidDeviceIdentity.Key(p.LastDevice!), StringComparer.OrdinalIgnoreCase);
+        var wireless = profiles.Select(p => p.LastDevice!).Concat(state.RemovedDevices ?? []).Where(d => d.IsWifi).ToArray();
+        var savedByIdentity = wireless.ToLookup(AndroidDeviceIdentity.Key, StringComparer.OrdinalIgnoreCase);
+        var savedBySerial = wireless.ToLookup(d => d.Serial.TrimEnd('.'), StringComparer.OrdinalIgnoreCase);
+        var found = new List<AndroidSavedConnection>();
+        var seen = new HashSet<(string Identity, string Address)>();
+        void AddCandidate(AndroidDevice device, string address)
+        {
+            if (!IPEndPoint.TryParse(address, out var endpoint) || endpoint.Port == 0) return;
+            address = endpoint.ToString();
+            string identity = AndroidDeviceIdentity.Key(device);
+            if (!seen.Add((identity, address))) return;
+            string name = names[identity].FirstOrDefault()?.Name ?? device.Name;
+            found.Add(new(string.IsNullOrWhiteSpace(name) ? address : name, device, address));
+        }
+
+        // A ready ADB transport can supply the current address even when mDNS is silent or stale.
+        foreach (var connected in connectedDevices)
+        {
+            if (!connected.IsWifi || connected.State != "device" || AndroidDeviceIdentity.StableKey(connected) is not { } key) continue;
+            if (savedByIdentity[key].FirstOrDefault() is { } saved) AddCandidate(saved, connected.Serial);
+        }
+        foreach (var service in services)
+        {
+            if (AndroidDeviceIdentity.WirelessServiceIdentity(service) is not { } advertised) continue;
+            var device = savedBySerial[advertised.Serial].FirstOrDefault()
+                ?? savedBySerial[advertised.Serial + ".local"].FirstOrDefault()
+                ?? savedByIdentity[AndroidDeviceIdentity.Key(advertised)].FirstOrDefault();
+            if (device != null) AddCandidate(device, service.Address);
+        }
+        return found;
+    }
+
     public bool IsSmartVolumeEnabled(AndroidDevice? device, string package)
     {
         lock (_gate)

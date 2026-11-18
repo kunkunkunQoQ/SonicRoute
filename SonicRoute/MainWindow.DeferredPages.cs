@@ -28,7 +28,6 @@ namespace SonicRoute
         internal Button OsdResetButtonTheme = null!;
         internal CheckBox OsdVolumeVisualCheck = null!;
         internal CheckBox MicMutePersistCheck = null!;
-        internal Grid MicMuteTrackInputRow = null!;
         internal CheckBox MicMuteTrackInputCheck = null!;
         internal ToggleButton OsdMoreToggle = null!;
         internal StackPanel OsdSlidersPanel = null!;
@@ -137,7 +136,6 @@ namespace SonicRoute
                 OsdResetButtonTheme = FindDeferredControl<Button>(content, nameof(OsdResetButtonTheme));
                 OsdVolumeVisualCheck = FindDeferredControl<CheckBox>(content, nameof(OsdVolumeVisualCheck));
                 MicMutePersistCheck = FindDeferredControl<CheckBox>(content, nameof(MicMutePersistCheck));
-                MicMuteTrackInputRow = FindDeferredControl<Grid>(content, nameof(MicMuteTrackInputRow));
                 MicMuteTrackInputCheck = FindDeferredControl<CheckBox>(content, nameof(MicMuteTrackInputCheck));
                 OsdMoreToggle = FindDeferredControl<ToggleButton>(content, nameof(OsdMoreToggle));
                 OsdSlidersPanel = FindDeferredControl<StackPanel>(content, nameof(OsdSlidersPanel));
@@ -311,7 +309,6 @@ namespace SonicRoute
             OsdResetButtonTheme = null!;
             OsdVolumeVisualCheck = null!;
             MicMutePersistCheck = null!;
-            MicMuteTrackInputRow = null!;
             MicMuteTrackInputCheck = null!;
             OsdMoreToggle = null!;
             OsdSlidersPanel = null!;
