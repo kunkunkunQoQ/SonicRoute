@@ -30,7 +30,7 @@ internal sealed class AirPlayMirrorStream : IAsyncDisposable
     private uint _codec;
 
     internal AirPlayMirrorStream(IPAddress local, IPAddress peer, ulong id, byte[] key, string name, bool showWindow, bool allowHevc,
-        Action started, Action<bool> ended, CancellationToken token)
+        Action started, Action<bool, bool> modeChanged, Action<bool> ended, CancellationToken token)
     {
         string label = id.ToString(CultureInfo.InvariantCulture);
         _allowHevc = allowHevc;
@@ -42,7 +42,7 @@ internal sealed class AirPlayMirrorStream : IAsyncDisposable
         {
             _listener.Start(2);
             DataPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
-            _run = RunAsync(peer, name, showWindow, started, ended, token, _stop.Token);
+            _run = RunAsync(peer, name, showWindow, started, modeChanged, ended, token, _stop.Token);
         }
         catch
         {
@@ -56,8 +56,15 @@ internal sealed class AirPlayMirrorStream : IAsyncDisposable
     internal int DataPort { get; }
     internal int PresentedFrames => Volatile.Read(ref _frames);
     internal void Activate() { if (PresentedFrames > 0) Volatile.Read(ref _window)?.Activate(); }
+    internal void SetTopmost(bool value) => Volatile.Read(ref _window)?.SetTopmost(value);
+    internal void SetFullscreen(bool value)
+    {
+        if (Volatile.Read(ref _window) is not { } window) return;
+        window.Activate();
+        window.SetFullscreen(value);
+    }
 
-    private async Task RunAsync(IPAddress peer, string name, bool showWindow, Action started, Action<bool> ended,
+    private async Task RunAsync(IPAddress peer, string name, bool showWindow, Action started, Action<bool, bool> modeChanged, Action<bool> ended,
         CancellationToken sessionToken, CancellationToken token)
     {
         bool failed = false;
@@ -118,7 +125,7 @@ internal sealed class AirPlayMirrorStream : IAsyncDisposable
                         if (_decoder == null)
                         {
                             if (!_merger.HasPendingConfig) continue;
-                            await CreateWindowAsync(name, width, height, token).ConfigureAwait(false);
+                            await CreateWindowAsync(name, width, height, modeChanged, token).ConfigureAwait(false);
                         }
                         ulong ntp = BinaryPrimitives.ReadUInt64LittleEndian(header.AsSpan(8));
                         long ptsUs = ntp == 0 ? (long)Stopwatch.GetElapsedTime(began).TotalMicroseconds
@@ -148,14 +155,15 @@ internal sealed class AirPlayMirrorStream : IAsyncDisposable
         }
     }
 
-    private async Task CreateWindowAsync(string name, int width, int height, CancellationToken token)
+    private async Task CreateWindowAsync(string name, int width, int height, Action<bool, bool> modeChanged, CancellationToken token)
     {
         var (w, h) = MirrorAspectMath.FitAspect(width > 0 ? width : 640, height > 0 ? height : 960, 1120, 800);
         var window = new NativeVideoWindow(name, isMirrorMode: true, preferText: false, iconPng: null,
-            x: 100, y: 80, w, h, acceptsGamepad: false);
+            x: 100, y: 80, w, h, acceptsGamepad: false, windowModes: true);
         Volatile.Write(ref _window, window);
         window.UpdateContentSize(width, height);
         window.CloseRequested += _stop.Cancel;
+        window.WindowModeChanged += modeChanged;
         nint handle = await window.CreateAsync(token).ConfigureAwait(false);
         _renderer = new D3D11VideoSurfaceRenderer(handle, window.ClientWidth, window.ClientHeight, isMirrorMode: true);
         window.ClientSizeChanged += _renderer.Resize;

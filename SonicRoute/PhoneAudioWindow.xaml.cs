@@ -166,6 +166,7 @@ public partial class PhoneAudioWindow : Window
         _enableMedia = loadDevicesOnShow;
         InitializeComponent();
         AirPlayReceiverPane.StatusUpdated += UpdateAirPlayFooter;
+        AppIconDragController.Attach(DeviceKindGrip, DragAirPlayToWindows, CanDragAirPlayToWindows);
         _entranceMotion = new PanelEntranceMotion(PhoneSurface, PhoneSlide);
         L10n.Instance.PropertyChanged += OnLanguageChanged;
         InitializePcDropOverlay();
@@ -265,6 +266,7 @@ public partial class PhoneAudioWindow : Window
         PcDropHighlight.SetResourceReference(BackgroundProperty, "Theme.SurfaceBg");
         var host = (Grid)PhoneApps.Parent;
         Grid.SetRow(PcDropHighlight, Grid.GetRow(PhoneApps));
+        System.Windows.Controls.Panel.SetZIndex(PcDropHighlight, 1);
         host.Children.Insert(host.Children.IndexOf(PhoneEmptyPanel) + 1, PcDropHighlight);
         RegisterName(PcDropHighlight.Name, PcDropHighlight);
         RegisterName(_pcDropGrid.Name, _pcDropGrid);
@@ -297,8 +299,10 @@ public partial class PhoneAudioWindow : Window
             zones = [(AndroidOutputSink.DefaultSpeaker, "")];
 
         var sigBuilder = new StringBuilder();
+        bool airPlayDrag = IsAirPlayDrag(AppIconDragController.DesktopDragSource);
         sigBuilder.Append(device == null ? "" : AndroidDeviceIdentity.Key(device)).Append('|')
             .Append(L10n.CurrentLanguage).Append('|')
+            .Append(airPlayDrag).Append('|')
             .Append(AndroidAudioHost.OutputDisplayName(device, AndroidOutputSink.DefaultSpeaker)).Append('|');
         foreach (var (sink, deviceId) in zones)
             sigBuilder.Append(sink.Key).Append(':').Append(sink.Name).Append(':').Append(deviceId).Append(';');
@@ -325,7 +329,7 @@ public partial class PhoneAudioWindow : Window
                 ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"), targetName)
                 : string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), targetName);
 
-            string description = sink.Kind == AndroidOutputSinkKind.Speaker
+            string description = airPlayDrag ? L10n.T("Phone.AirPlayDropOutput") : sink.Kind == AndroidOutputSinkKind.Speaker
                 ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerDesc"), AndroidAudioHost.OutputDisplayName(device, sink))
                 : L10n.T("Phone.PcDropOnlyOnBtDesc");
             var corners = zones.Count == 1
@@ -394,14 +398,15 @@ public partial class PhoneAudioWindow : Window
         if (AirPlaySelected)
         {
             _pcDropTargetIndex = null;
-            _androidReturnHovered = false;
-            _androidReturnDropZone.Visibility = PcDropHighlight.Visibility = Visibility.Collapsed;
+            bool accepting = index != null || AirPlayHost.Find(AppIconDragController.DesktopDragSource?.ExternalSourceId) != null;
+            SetReturnTarget(index != null, accepting);
             return;
         }
         if (AndroidAudioHost.IsDragging) { SetAndroidReturnTarget(false); return; }
         _androidReturnDropZone.Visibility = Visibility.Collapsed;
         _pcDropGrid.Visibility = Visibility.Visible;
-        bool visible = index != null || AppIconDragController.IsDesktopDragging;
+        bool visible = index != null || AppIconDragController.IsDesktopDragging
+            && (!IsAirPlayDrag(AppIconDragController.DesktopDragSource) || DeviceCombo.SelectedItem is AndroidDevice { State: "device" });
         if (visible) EnsurePcDropZones();
         if (_pcDropTargetIndex == index && (PcDropHighlight.Visibility == Visibility.Visible) == visible) return;
         _pcDropTargetIndex = index;
@@ -426,7 +431,11 @@ public partial class PhoneAudioWindow : Window
 
     private void SetAndroidReturnTarget(bool hovered)
     {
-        bool visible = !AirPlaySelected && (hovered || AndroidAudioHost.IsDragging);
+        SetReturnTarget(hovered, !AirPlaySelected && (hovered || AndroidAudioHost.IsDragging));
+    }
+
+    private void SetReturnTarget(bool hovered, bool visible)
+    {
         if (_androidReturnHovered == hovered && (_androidReturnDropZone.Visibility == Visibility.Visible) == visible) return;
         _androidReturnHovered = hovered;
         _androidReturnDropZone.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
@@ -448,6 +457,7 @@ public partial class PhoneAudioWindow : Window
         if (_closed) return;
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(Pc_DragStateChanged)); return; }
         if (!IsVisible) return;
+        _pcDropZonesDirty = true;
         bool watchingOutputs = _mediaRead is { IsCancellationRequested: false } && !_mediaTask.IsCompleted;
         if (AppIconDragController.IsDesktopDragging && !watchingOutputs
             && DeviceCombo.SelectedItem is AndroidDevice live && live.State == "device")
@@ -705,7 +715,16 @@ public partial class PhoneAudioWindow : Window
     { if (e.EscapePressed) { e.Action = System.Windows.DragAction.Cancel; e.Handled = true; } }
     private void PhoneApp_DragOver(object sender, System.Windows.DragEventArgs e)
     {
-        if (AirPlaySelected) { e.Effects = System.Windows.DragDropEffects.None; e.Handled = true; return; }
+        var playback = AppIconDragController.AppFromDrag(e.Data);
+        bool airPlay = IsAirPlayDrag(playback);
+        bool live = airPlay && AirPlayHost.Find(playback?.ExternalSourceId) != null;
+        if (AirPlaySelected)
+        {
+            SetPcDropTarget(live ? 0 : null);
+            e.Effects = live ? System.Windows.DragDropEffects.Move : System.Windows.DragDropEffects.None;
+            e.Handled = true;
+            return;
+        }
         if (e.Data.GetDataPresent(AndroidAppDrag.Format, false) && e.Data.GetData(AndroidAppDrag.Format, false) is AndroidAppDrag)
         {
             SetAndroidReturnTarget(true);
@@ -713,8 +732,7 @@ public partial class PhoneAudioWindow : Window
             e.Handled = true;
             return;
         }
-        if (e.Data.GetDataPresent(AppIconDragController.DesktopFormat, false)
-            && e.Data.GetData(AppIconDragController.DesktopFormat, false) is AudioAppInfo)
+        if (playback != null && (!airPlay || live && DeviceCombo.SelectedItem is AndroidDevice { State: "device" }))
         {
             EnsurePcDropZones();
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
@@ -730,18 +748,28 @@ public partial class PhoneAudioWindow : Window
     }
     private void PhoneApp_DragLeave(object sender, System.Windows.DragEventArgs e)
     {
-        var point = e.GetPosition(PhoneApps);
+        FrameworkElement target = AirPlaySelected ? AirPlayPane : PhoneApps;
+        var point = e.GetPosition(target);
         if (AppIconDragController.IsDesktopDragging || AndroidAudioHost.IsDragging)
         {
             var cursor = System.Windows.Forms.Cursor.Position;
-            point = PhoneApps.PointFromScreen(new Point(cursor.X, cursor.Y));
+            point = target.PointFromScreen(new Point(cursor.X, cursor.Y));
         }
-        if (!new Rect(0, 0, PhoneApps.ActualWidth, PhoneApps.ActualHeight).Contains(point))
+        if (!new Rect(0, 0, target.ActualWidth, target.ActualHeight).Contains(point))
             ClearPcDropHighlight();
     }
     private async void PhoneApp_Drop(object sender, System.Windows.DragEventArgs e)
     {
-        if (AirPlaySelected) { e.Effects = System.Windows.DragDropEffects.None; e.Handled = true; return; }
+        var playback = AppIconDragController.AppFromDrag(e.Data);
+        var airPlay = IsAirPlayDrag(playback) ? AirPlayHost.Find(playback?.ExternalSourceId) : null;
+        if (AirPlaySelected)
+        {
+            ClearPcDropHighlight();
+            e.Handled = true;
+            e.Effects = airPlay != null ? System.Windows.DragDropEffects.Move : System.Windows.DragDropEffects.None;
+            if (airPlay != null) AirPlayHost.Disconnect(airPlay.Id);
+            return;
+        }
         if (e.Data.GetDataPresent(AndroidAppDrag.Format, false) && e.Data.GetData(AndroidAppDrag.Format, false) is AndroidAppDrag payload)
         {
             ClearPcDropHighlight();
@@ -751,8 +779,7 @@ public partial class PhoneAudioWindow : Window
             catch (Exception ex) { if (!_closed) SetConnectionStatusError("Phone.StatusIncomplete", ex); }
             return;
         }
-        if (e.Data.GetDataPresent(AppIconDragController.DesktopFormat, false)
-            && e.Data.GetData(AppIconDragController.DesktopFormat, false) is AudioAppInfo pcApp)
+        if (playback != null && (!IsAirPlayDrag(playback) || airPlay != null && DeviceCombo.SelectedItem is AndroidDevice { State: "device" }))
         {
             EnsurePcDropZones();
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
@@ -769,11 +796,12 @@ public partial class PhoneAudioWindow : Window
             e.Effects = System.Windows.DragDropEffects.Copy;
             try
             {
-                var result = await Task.Run(() => ApplicationAudio.ApplyEndpoint(pcApp, EDataFlow.eRender, cell.DeviceId));
+                var result = airPlay != null ? await ApplicationAudio.ApplyEndpointAsync(playback, EDataFlow.eRender, cell.DeviceId)
+                    : await Task.Run(() => ApplicationAudio.ApplyEndpoint(playback, EDataFlow.eRender, cell.DeviceId));
                 if (!_closed)
                 {
                     if (result.Success)
-                        ((App)System.Windows.Application.Current).ShowOsd(AppDisplayName.Get(pcApp), "🔊 " + cell.Title);
+                        ((App)System.Windows.Application.Current).ShowOsd(AppDisplayName.Get(playback), "🔊 " + cell.Title);
                     else
                         SetConnectionStatusMessage("Phone.StatusIncomplete", result.Message);
                 }
@@ -985,7 +1013,7 @@ public partial class PhoneAudioWindow : Window
         MediaPlayPauseButton.IsEnabled = state?.CanToggle == true;
         MediaNextButton.IsEnabled = state?.CanNext == true;
     }
-    private static BitmapSource? DecodeBoundedArtwork(byte[] artwork)
+    internal static BitmapSource? DecodeBoundedArtwork(byte[] artwork, int maxSourceDimension = int.MaxValue)
     {
         const int MaxArtworkDimensionPx = 112; // 56x56 DIP at 200% DPI
         int srcWidth = 0, srcHeight = 0;
@@ -1000,6 +1028,7 @@ public partial class PhoneAudioWindow : Window
             }
         }
 
+        if (srcWidth > maxSourceDimension || srcHeight > maxSourceDimension) return null;
         using var stream = new ImageDataStream(artwork);
         var image = new BitmapImage();
         image.BeginInit();
@@ -1128,7 +1157,7 @@ public partial class PhoneAudioWindow : Window
     private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_closed) return;
-        UpdateDropCellText(_androidReturnDropZone, L10n.T("Phone.ReturnToPhoneTitle"), L10n.T("Phone.ReturnToPhoneDesc"));
+        UpdateReturnDropText();
         _pcDropZonesDirty = true;
         if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)
             EnsurePcDropZones(force: true);

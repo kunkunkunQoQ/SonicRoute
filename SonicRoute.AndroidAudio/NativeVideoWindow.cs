@@ -34,6 +34,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private const int WmWindowPosChanging = 0x0046;
     private const int WmSetIcon = 0x0080;
     private const int WmNcDestroy = 0x0082;
+    private const int WmDisplayChange = 0x007E;
     private const int WmKeyDown = 0x0100;
     private const int WmKeyUp = 0x0101;
     private const int WmChar = 0x0102;
@@ -72,6 +73,8 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private const int SwShowNoActivate = 4;
     private const int SwShow = 5;
     private const int SwRestore = 9;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
     private const uint SwpFrameChanged = 0x0020;
@@ -98,6 +101,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private readonly string _title;
     private readonly bool _isMirrorMode;
     private readonly bool _preferText;
+    private readonly bool _windowModes;
     private byte[]? _iconPng;
     private readonly int _initialX;
     private readonly int _initialY;
@@ -118,6 +122,10 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private bool _inSizeMove;
     private bool _suppressProgrammaticSize;
     private bool _closedInvoked;
+    private bool _topmost;
+    private WindowPlacement? _windowedPlacement;
+    private bool _windowedDialogFrame;
+    private int _windowedStyle;
 
     private int _contentW;
     private int _contentH;
@@ -157,12 +165,14 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         int initialClientWidth,
         int initialClientHeight,
         string? appUserModelId = null,
-        bool acceptsGamepad = true)
+        bool acceptsGamepad = true,
+        bool windowModes = false)
     {
         _title = string.IsNullOrWhiteSpace(title) ? "SonicRoute" : title;
         _isMirrorMode = isMirrorMode;
         _preferText = preferText;
         _acceptsGamepad = acceptsGamepad;
+        _windowModes = windowModes;
         _iconPng = iconPng;
         _initialX = x;
         _initialY = y;
@@ -197,6 +207,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     public event Action<int, int>? WindowSizeCommitted;
     public event Action? RestoreRequested;
     public event Action? CloseRequested;
+    internal event Action<bool, bool>? WindowModeChanged;
 
     public event Action<byte, ulong, int, int, int, int, float, int, int>? TouchEvent;
     public event Action<int, int, int, int, float, float, int>? ScrollEvent;
@@ -272,8 +283,20 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         if (hwnd != 0) PostMessage(hwnd, RestoreMessage, 0, 0);
     }
 
+    internal void SetTopmost(bool enabled)
+    {
+        if (_windowModes && WindowHandle is var hwnd && hwnd != 0) PostMessage(hwnd, WmUserTopmost, enabled ? 1 : 0, 0);
+    }
+
+    internal void SetFullscreen(bool enabled)
+    {
+        if (_windowModes && WindowHandle is var hwnd && hwnd != 0) PostMessage(hwnd, WmUserFullscreen, enabled ? 1 : 0, 0);
+    }
+
     private const int WmUserFitContent = 0x0400 + 1;
     private const int WmUserClose = 0x0400 + 2;
+    private const int WmUserTopmost = 0x0400 + 3;
+    private const int WmUserFullscreen = 0x0400 + 4;
 
     private void ThreadMain()
     {
@@ -438,7 +461,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 return 0;
 
             case WmGetMinMaxInfo:
-                HandleGetMinMaxInfo(hwnd, lParam);
+                if (!_windowedPlacement.HasValue) HandleGetMinMaxInfo(hwnd, lParam);
                 return 0;
 
             case WmEnterSizeMove:
@@ -457,7 +480,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 return 0;
 
             case WmWindowPosChanging:
-                if (_isMirrorMode) HandleMirrorWindowPosChanging(hwnd, lParam);
+                if (_isMirrorMode && !_windowedPlacement.HasValue) HandleMirrorWindowPosChanging(hwnd, lParam);
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
             case WmSize:
@@ -494,7 +517,8 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 return 0;
 
             case WmDpiChanged:
-                if (lParam != 0)
+                if (_windowedPlacement.HasValue) FitFullscreenMonitor(hwnd);
+                else if (lParam != 0)
                 {
                     var suggested = Marshal.PtrToStructure<Rect>(lParam);
                     SetWindowPos(hwnd, 0, suggested.Left, suggested.Top,
@@ -503,8 +527,25 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 }
                 return 0;
 
+            case WmDisplayChange:
+                if (_windowedPlacement.HasValue) FitFullscreenMonitor(hwnd);
+                return DefWindowProc(hwnd, msg, wParam, lParam);
+
             case WmUserFitContent:
-                FitWindowToContentAspect(hwnd, (int)wParam, (int)lParam);
+                if (!_windowedPlacement.HasValue) FitWindowToContentAspect(hwnd, (int)wParam, (int)lParam);
+                return 0;
+
+            case WmUserTopmost when _windowModes:
+                bool topmost = wParam != 0;
+                if (_topmost != topmost && SetWindowPos(hwnd, topmost ? -1 : -2, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate))
+                {
+                    _topmost = topmost;
+                    WindowModeChanged?.Invoke(_topmost, _windowedPlacement.HasValue);
+                }
+                return 0;
+
+            case WmUserFullscreen when _windowModes:
+                ChangeFullscreen(hwnd, wParam != 0);
                 return 0;
 
             case RestoreMessage:
@@ -557,6 +598,12 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
             case WmKeyDown:
+                if (_windowModes && (wParam == 0x7a || wParam == 0x1b && _windowedPlacement.HasValue)) // F11 or Escape
+                {
+                    if ((lParam.ToInt64() & (1L << 30)) == 0) ChangeFullscreen(hwnd, !_windowedPlacement.HasValue);
+                    return 0;
+                }
+                goto case WmSysKeyDown;
             case WmSysKeyDown:
                 HandleKeyMessage(isDown: true, isSys: msg == WmSysKeyDown, (uint)wParam.ToInt64(), (uint)lParam.ToInt64());
                 return msg == WmSysKeyDown ? DefWindowProc(hwnd, msg, wParam, lParam) : 0;
@@ -644,6 +691,48 @@ public sealed class NativeVideoWindow : IAsyncDisposable
             default:
                 return DefWindowProc(hwnd, msg, wParam, lParam);
         }
+    }
+
+    private void ChangeFullscreen(nint hwnd, bool enabled)
+    {
+        const int styleIndex = -16;
+        if (enabled == _windowedPlacement.HasValue) return;
+        if (enabled)
+        {
+            var placement = new WindowPlacement { Length = Marshal.SizeOf<WindowPlacement>() };
+            if (!GetWindowPlacement(hwnd, ref placement)) return;
+            // Capture the monitor before restoring a maximized window to its normal coordinates.
+            nint monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+            if (IsZoomed(hwnd) || IsIconic(hwnd)) ShowWindow(hwnd, SwRestore);
+            _windowedStyle = GetWindowLong(hwnd, styleIndex);
+            _windowedPlacement = placement;
+            SetWindowLong(hwnd, styleIndex, _windowedStyle & ~(int)WsOverlappedWindow);
+            int exStyle = GetWindowLong(hwnd, -20);
+            _windowedDialogFrame = (exStyle & WsExDlgModalFrame) != 0;
+            if (_windowedDialogFrame) SetWindowLong(hwnd, -20, exStyle & ~(int)WsExDlgModalFrame);
+            if (!FitFullscreenMonitor(hwnd, monitor)) RestoreWindowed(hwnd, placement);
+        }
+        else if (_windowedPlacement is { } previous) RestoreWindowed(hwnd, previous);
+        WindowModeChanged?.Invoke(_topmost, _windowedPlacement.HasValue);
+    }
+
+    private void RestoreWindowed(nint hwnd, WindowPlacement previous)
+    {
+        SetWindowLong(hwnd, -16, _windowedStyle);
+        if (_windowedDialogFrame) SetWindowLong(hwnd, -20, GetWindowLong(hwnd, -20) | (int)WsExDlgModalFrame);
+        SetWindowPlacement(hwnd, in previous);
+        SetWindowPos(hwnd, 0, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+        _windowedPlacement = null;
+        if (!IsZoomed(hwnd) && !IsIconic(hwnd)) FitWindowToContentAspect(hwnd, _contentW, _contentH);
+    }
+
+    private static bool FitFullscreenMonitor(nint hwnd, nint monitor = 0)
+    {
+        var info = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor == 0 ? MonitorFromWindow(hwnd, MonitorDefaultToNearest) : monitor, ref info)) return false;
+        var rect = info.rcMonitor;
+        return SetWindowPos(hwnd, 0, rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top,
+            SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
     }
 
     private void GetNonClientAndWorkArea(nint hwnd, out int ncW, out int ncH, out Rect workArea)
@@ -1274,6 +1363,14 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private struct Rect { public int Left; public int Top; public int Right; public int Bottom; }
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct WindowPlacement
+    {
+        internal int Length, Flags, ShowCommand;
+        internal Point MinPosition, MaxPosition;
+        internal Rect NormalPosition;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct Msg
     {
         public nint hwnd;
@@ -1341,6 +1438,11 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     [DllImport("user32.dll")] private static extern void PostQuitMessage(int nExitCode);
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hWnd);
     [DllImport("user32.dll")] private static extern bool ShowWindowAsync(nint hWnd, int nCmdShow);
+    [DllImport("user32.dll")] private static extern bool ShowWindow(nint hWnd, int nCmdShow);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(nint hWnd, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] private static extern int SetWindowLong(nint hWnd, int index, int value);
+    [DllImport("user32.dll")] private static extern bool GetWindowPlacement(nint hWnd, ref WindowPlacement placement);
+    [DllImport("user32.dll")] private static extern bool SetWindowPlacement(nint hWnd, in WindowPlacement placement);
     [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hWnd);
     [DllImport("user32.dll")] private static extern bool BringWindowToTop(nint hWnd);

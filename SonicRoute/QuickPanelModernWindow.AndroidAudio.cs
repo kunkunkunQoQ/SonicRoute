@@ -25,7 +25,8 @@ public partial class QuickPanelModernWindow
 {
 #if SONICROUTE_PHONE
     private ToggleButton PhoneAudioButton = null!;
-    private Border AndroidDropHighlight = null!, AndroidComputerDropZone = null!, AndroidSharedDropZone = null!;
+    private Border AndroidDropHighlight = null!, AndroidComputerDropZone = null!, AndroidSharedDropZone = null!, AirPlayWindowsDropZone = null!;
+    private Grid _androidDropZones = null!;
     private readonly record struct IncomingSource(AndroidAudioSource? Android, AirPlayAudioOutput? AirPlay)
     {
         internal string Id => Android?.Id ?? AirPlay!.Id;
@@ -97,10 +98,12 @@ public partial class QuickPanelModernWindow
     }
     private void InitializeAndroidDropOverlay()
     {
-        var grid = new Grid();
+        var grid = _androidDropZones = new Grid();
         grid.RowDefinitions.Add(new RowDefinition()); grid.RowDefinitions.Add(new RowDefinition());
+        var modes = new Grid();
+        modes.Children.Add(grid);
         AndroidDropHighlight = new Border { Name = "AndroidDropHighlight", CornerRadius = new CornerRadius(8),
-            BorderThickness = new Thickness(2), Visibility = Visibility.Collapsed, IsHitTestVisible = false, Child = grid };
+            BorderThickness = new Thickness(2), Visibility = Visibility.Collapsed, IsHitTestVisible = false, Child = modes };
         AndroidDropHighlight.SetResourceReference(Border.BorderBrushProperty, "Theme.Accent");
         AndroidDropHighlight.SetResourceReference(BackgroundProperty, "Theme.SurfaceBg");
         Border Zone(string name, string title, string description, CornerRadius corners)
@@ -120,6 +123,10 @@ public partial class QuickPanelModernWindow
         }
         AndroidComputerDropZone = Zone("AndroidComputerDropZone", L10n.T("Phone.DropComputerOnlyTitle"), L10n.T("Phone.DropComputerOnlyDesc"), new CornerRadius(6,6,0,0));
         AndroidSharedDropZone = Zone("AndroidSharedDropZone", L10n.T("Phone.DropBothPlayTitle"), L10n.T("Phone.DropBothPlayDesc"), new CornerRadius(0,0,6,6));
+        AirPlayWindowsDropZone = Zone("AirPlayWindowsDropZone", L10n.T("Dev.SystemDefaultOut"), L10n.T("Phone.AirPlayDropWindowsDesc"), new CornerRadius(6));
+        AirPlayWindowsDropZone.Visibility = Visibility.Collapsed;
+        AirPlayWindowsDropZone.SetResourceReference(BackgroundProperty, "Theme.Overlay");
+        modes.Children.Add(AirPlayWindowsDropZone);
         Grid.SetRow(AndroidSharedDropZone, 1); grid.Children.Add(AndroidComputerDropZone); grid.Children.Add(AndroidSharedDropZone);
         var divider = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Bottom };
         divider.SetResourceReference(BackgroundProperty, "Theme.Accent"); grid.Children.Add(divider);
@@ -152,6 +159,7 @@ public partial class QuickPanelModernWindow
         if (_isClosed) return;
         UpdateZoneText(AndroidComputerDropZone, L10n.T("Phone.DropComputerOnlyTitle"), L10n.T("Phone.DropComputerOnlyDesc"));
         UpdateZoneText(AndroidSharedDropZone, L10n.T("Phone.DropBothPlayTitle"), L10n.T("Phone.DropBothPlayDesc"));
+        UpdateZoneText(AirPlayWindowsDropZone, L10n.T("Dev.SystemDefaultOut"), L10n.T("Phone.AirPlayDropWindowsDesc"));
         UpdatePhoneAudioButton();
         _androidLanguageDirty = true;
         if (!IsLoaded || IsVisible) RefreshAndroidRow();
@@ -178,6 +186,18 @@ public partial class QuickPanelModernWindow
     private void PhoneAudioButton_Click(object sender, RoutedEventArgs e) => ((App)System.Windows.Application.Current).TogglePhoneAudioWindow(this);
     private void Android_DragOver(object sender, System.Windows.DragEventArgs e)
     {
+        if (AppIconDragController.AppFromDrag(e.Data, AirPlayHost.WindowsDragFormat) is { } airPlay
+            && AirPlayHost.Find(airPlay.ExternalSourceId) != null)
+        {
+            if (AirPlayWindowsDropZone.Visibility != Visibility.Visible)
+            {
+                _androidDropZones.Visibility = Visibility.Collapsed;
+                AirPlayWindowsDropZone.Visibility = AndroidDropHighlight.Visibility = Visibility.Visible;
+            }
+            e.Effects = System.Windows.DragDropEffects.Move;
+            e.Handled = true;
+            return;
+        }
         bool accepted = e.Data.GetDataPresent(AndroidAppDrag.Format, false)
             && e.Data.GetData(AndroidAppDrag.Format, false) is AndroidAppDrag;
         e.Effects = accepted ? System.Windows.DragDropEffects.Copy : System.Windows.DragDropEffects.None;
@@ -198,6 +218,8 @@ public partial class QuickPanelModernWindow
     }
     private void SetAndroidDropTarget(bool? shared)
     {
+        AirPlayWindowsDropZone.Visibility = Visibility.Collapsed;
+        _androidDropZones.Visibility = Visibility.Visible;
         bool visible = shared != null || AndroidAudioHost.IsDragging;
         if (_androidDropShared == shared && (AndroidDropHighlight.Visibility == Visibility.Visible) == visible) return;
         _androidDropShared = shared;
@@ -218,6 +240,14 @@ public partial class QuickPanelModernWindow
     {
         bool keepPhoneAudio = IsSharedAndroidDrop(e.GetPosition(AppListScroll).Y, AppListScroll.ActualHeight);
         ClearAndroidDropHighlight(); e.Handled = true;
+        if (AppIconDragController.AppFromDrag(e.Data, AirPlayHost.WindowsDragFormat) is { } airPlay
+            && AirPlayHost.Find(airPlay.ExternalSourceId) != null)
+        {
+            e.Effects = System.Windows.DragDropEffects.Move;
+            var result = await ApplicationAudio.ApplyEndpointAsync(airPlay, EDataFlow.eRender, AudioService.SystemDefaultDeviceId);
+            if (!result.Success && !_isClosed) ShowOsd(L10n.T("Phone.AirPlayTitle"), result.Message);
+            return;
+        }
         if (!e.Data.GetDataPresent(AndroidAppDrag.Format, false) || e.Data.GetData(AndroidAppDrag.Format, false) is not AndroidAppDrag payload)
         { e.Effects = System.Windows.DragDropEffects.None; return; }
         e.Effects = System.Windows.DragDropEffects.Copy;
@@ -312,7 +342,7 @@ public partial class QuickPanelModernWindow
                 string appName = source.Name;
                 row.IconItem.Info.DisplayName = appName;
                 row.IconItem.RefreshSourceLabel(source.Android != null ? string.Format(L10n.T("Phone.FromDevice"), phoneName) : "AirPlay");
-                row.Icon.ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip" : "Phone.RowIconMuteAutomation"), appName);
+                row.Icon.ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip" : "Phone.AirPlayDragFromMixer"), appName);
                 System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
                 row.Expand.ToolTip = L10n.T("Qp.ExpandDevices");
                 System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), appName));
@@ -344,16 +374,21 @@ public partial class QuickPanelModernWindow
         string appName = source.Name;
         var session = source.Session; var state = session.State;
         row.IconItem = AppItem.From(source.Describe());
-        AppItem.LoadIconsAsync(new List<AppItem> { row.IconItem });
+        if (source.AirPlay != null) row.IconItem.LoadIcon();
+        else AppItem.LoadIconsAsync(new List<AppItem> { row.IconItem });
         row.Root = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
         var header = new Border { Height = legacy ? 36 : 52, Padding = new Thickness(4, 0, 4, 0), CornerRadius = new CornerRadius(8) };
         var dock = new DockPanel();
         row.Icon = new Button { Width = 30, Height = 30, VerticalAlignment = VerticalAlignment.Center,
-            Style = (Style)FindResource("RowIconButton"), ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip" : "Phone.RowIconMuteAutomation"), appName) };
+            Style = (Style)FindResource("RowIconButton"), ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip" : "Phone.AirPlayDragFromMixer"), appName) };
         row.Icon.Content = new ContentControl { Content = row.IconItem, Width = 22, Height = 22,
             ContentTemplate = (DataTemplate)FindResource("AppIconTemplate") };
         row.Icon.Click += (_, _) => session.SetMute(!session.State.Muted);
         if (source.Android is { } android) AndroidAppDragController.Attach(row.Icon, () => new AndroidAppDrag(android.Device, android.App));
+        else AppIconDragController.AttachDesktop(row.Icon, row.IconItem, () =>
+        {
+            if (AirPlayHost.Find(source.Id) != null) AirPlayHost.ShowMirror();
+        });
         System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
         DockPanel.SetDock(row.Icon, Dock.Left); dock.Children.Add(row.Icon);
         row.Expand = new ToggleButton { Width = legacy && showOutputName ? 80 : 32, Height = legacy ? 24 : 32,

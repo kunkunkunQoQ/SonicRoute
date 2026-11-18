@@ -1,12 +1,17 @@
 using System.IO;
+using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using SonicRoute;
 using SonicRoute.AndroidAudio;
+using SonicRoute.Core;
 using SonicRoute.Core.Models;
 
 internal static partial class Program
@@ -45,8 +50,12 @@ internal static partial class Program
             DrainUi();
             var toggle = (Button)view.FindName("AirPlayToggle");
             var codecs = (ComboBox)view.FindName("MirrorDecoder");
+            var receiverName = (TextBox)view.FindName("ReceiverName");
+            var requireCode = (CheckBox)view.FindName("RequireCode");
+            var statusLabel = (TextBlock)view.FindName("ReceiveStatusLabel");
+            var footerStatus = (TextBlock)panel.FindName("ConnectionText");
             Check(view.IsVisible && !list.IsVisible && !((FrameworkElement)panel.FindName("DeviceMediaCard")).IsVisible
-                && !((FrameworkElement)panel.FindName("RefreshButton")).IsVisible && !panel.AllowDrop && Receiver() == null,
+                && !((FrameworkElement)panel.FindName("RefreshButton")).IsVisible && !footerStatus.IsVisible && Receiver() == null,
                 "AirPlay selection shows its own idle pane and stops Android-only UI");
             Check(ReferenceEquals(deviceIcon.Data, AutomationIcons.AirPlay), "AirPlay has its own icon in the device selector");
             var airPlayRow = AppItem.From(new AudioAppInfo { ProcessId = 0, ExternalSourceId = "airplay:fixture", ProcessName = "airplay:audio" });
@@ -66,15 +75,43 @@ internal static partial class Program
             if (hevc) Until(() => codecs.Items.Count == 3);
             Check(codecs.SelectedIndex == 0 && codecs.Items.Count == (hevc ? 3 : 2),
                 "Automatic is selected first and HEVC is shown only when Windows has a decoder");
+            Check(requireCode.IsChecked == false, "Receiver PIN starts off for existing settings");
+            Point Position(FrameworkElement element) => element.TranslatePoint(new Point(0, 0), view);
+            Check(requireCode.Template.FindName("Track", requireCode) is Border && requireCode.Template.FindName("Thumb", requireCode) != null,
+                "the device panel resolves the shared rounded switch template");
+            Check(Math.Abs(Position(receiverName).X - Position(codecs).X) < 1 && receiverName.ActualHeight == codecs.ActualHeight
+                && Position(toggle).Y < Position(receiverName).Y && Position(codecs).X + codecs.ActualWidth <= view.ActualWidth + 1,
+                "the primary action appears first and the two settings fit in aligned columns");
             foreach (var language in L10n.SupportedLanguages)
             {
                 L10n.Instance.SetLanguage(language.Code); DrainUi();
                 Check(panel.Title == L10n.T("Phone.AudioWindowTitle") && !panel.Title.StartsWith("Phone.")
                     && codecs.Items[0].Equals(L10n.T("Phone.StreamDecoderAutomatic"))
-                    && (!hevc || codecs.Items[2].Equals(L10n.T("Phone.AirPlayHevcOption"))),
-                    language.Code + " localizes the panel title and AirPlay decoder choices");
+                    && (!hevc || codecs.Items[2].Equals(L10n.T("Phone.AirPlayHevcOption")))
+                    && statusLabel.Text == L10n.T("Phone.Disconnected")
+                    && !System.Windows.Automation.AutomationProperties.GetName(requireCode).StartsWith("Phone."),
+                    language.Code + " localizes the panel title, receiver preferences and decoder choices");
             }
             L10n.Instance.SetLanguage("zh-CN");
+            receiverName.Text = "  测试.投屏  ";
+            receiverName.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice, 0, receiverName, toggle)
+                { RoutedEvent = Keyboard.LostKeyboardFocusEvent });
+            codecs.SelectedIndex = hevc ? 2 : 1;
+            requireCode.IsChecked = true;
+            requireCode.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Pump(ConfigService.PendingSaves);
+            using (var saved = JsonDocument.Parse(File.ReadAllBytes(ConfigService.ConfigPath)))
+                Check(saved.RootElement.GetProperty("AirPlayReceiverName").GetString() == "测试.投屏"
+                    && saved.RootElement.GetProperty("AirPlayVideoDecoder").GetInt32() == codecs.SelectedIndex
+                    && saved.RootElement.GetProperty("AirPlayRequireCode").GetBoolean(), "AirPlay preferences persist to the application configuration");
+            Render((FrameworkElement)panel.Content, 235, 450, Path.Combine(output, "device-panel-airplay.png"));
+            ThemeService.Apply("dark", "#00CBE9");
+            try
+            {
+                DrainUi();
+                Render((FrameworkElement)panel.Content, 235, 450, Path.Combine(output, "device-panel-airplay-dark.png"));
+            }
+            finally { ThemeService.Apply("light", "#00CBE9"); }
             int port = 0;
             if (testLan)
             {
@@ -85,11 +122,14 @@ internal static partial class Program
                 port = (int)receiver.GetType().GetProperty("Port", Hidden)!.GetValue(receiver)!;
                 Check(port > 0 && !codecs.IsEnabled && IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(p => p.Port == port),
                     "the actual Windows LAN receiver starts and keeps the decoder fixed during reception");
+                Check(((TextBlock)view.FindName("ReceiveCode")).Text.Length == 4
+                    && statusLabel.Text == L10n.T("Phone.AirPlayWaitingShort")
+                    && ((TextBlock)view.FindName("AirPlayStatusText")).Text == "测试.投屏", "protected reception displays the temporary code and the configured name");
+                Render((FrameworkElement)panel.Content, 235, 450, Path.Combine(output, "device-panel-airplay-waiting.png"));
             }
-            Render((FrameworkElement)panel.Content, 235, 450, Path.Combine(output, "device-panel-airplay.png"));
             selector.SelectedItem = selector.Items.OfType<AndroidDevice>().Single();
             DrainUi();
-            Check(list.IsVisible && list.Items.Count == 2 && !view.IsVisible && panel.AllowDrop && store.Profile.LastDevice != null
+            Check(list.IsVisible && list.Items.Count == 2 && !view.IsVisible && footerStatus.IsVisible && panel.AllowDrop && store.Profile.LastDevice != null
                 && ReferenceEquals(deviceIcon.Data, AutomationIcons.Phone),
                 "switching back restores Android apps and their selected device");
             selector.SelectedItem = choice;
@@ -107,6 +147,10 @@ internal static partial class Program
                 Check(Receiver() == null && !IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(p => p.Port == port),
                     "Stop receiving closes the real TCP listener");
             }
+            Until(() => ((ComboBox)view.FindName("MirrorDecoder")).SelectedIndex == (hevc ? 2 : 1));
+            Check(((TextBox)view.FindName("ReceiverName")).Text == "测试.投屏" && ((CheckBox)view.FindName("RequireCode")).IsChecked == true,
+                "reopening the view restores the name, PIN preference, and decoder choice");
+            CheckAirPlayDropsAndTrack(panel, view, choice, discovery, store, airPlay, output);
             Check(scans == 0 && !(bool)android.GetProperty("IsAdbCreated", statics)!.GetValue(null)!,
                 "AirPlay and the saved Android view need no device scan or ADB instance");
             File.WriteAllText(Path.Combine(output, "device-panel-airplay.json"), JsonSerializer.Serialize(new
@@ -125,6 +169,118 @@ internal static partial class Program
             window.Show();
             DrainUi();
             return window;
+        }
+    }
+
+    private delegate void WriteAirPlaySamples(ReadOnlySpan<float> samples, int sampleRate);
+    private sealed class AirPlayFixtureOutput : IPcmPlayer
+    {
+        public void Play() { }
+        public void Stop() { }
+        public void Dispose() { }
+    }
+
+    private static void CheckAirPlayDropsAndTrack(PhoneAudioWindow panel, AirPlayReceiverView view, object choice,
+        AndroidDeviceDiscovery discovery, AndroidPhoneStore store, Type host, string output)
+    {
+        const BindingFlags instance = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+        const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
+        var library = typeof(AndroidDevice).Assembly;
+        var receiverType = library.GetType("SonicRoute.AirPlay.AirPlayReceiver")!;
+        var sessionType = receiverType.GetNestedType("Session", BindingFlags.NonPublic)!;
+        var sourceType = library.GetType("SonicRoute.AirPlay.AirPlayAudioOutput")!;
+        var statusType = library.GetType("SonicRoute.AirPlay.AirPlayStatus")!;
+        var metadataType = library.GetType("SonicRoute.AirPlay.AirPlayMetadata")!;
+        Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> player = (_, _, _) => new AirPlayFixtureOutput();
+        Func<Action, IDisposable> watch = _ => new AirPlayFixtureOutput();
+        using var transport = new TcpClient();
+        using var lifetime = new CancellationTokenSource();
+        var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null, ["Fixture", true, player, watch, false, false], null)!;
+        var source = (IAsyncDisposable)Activator.CreateInstance(sourceType, instance, null,
+            ["Simulated Apple device", (Action)(() => { }), (Action)(() => { }), player, watch, CancellationToken.None], null)!;
+        var session = Activator.CreateInstance(sessionType, instance, null, [receiver, transport, IPAddress.Loopback, IPAddress.Loopback], null)!;
+        sessionType.GetField("_stop", instance)!.SetValue(session, lifetime);
+        sessionType.GetField("_output", instance)!.SetValue(session, source);
+        var active = receiverType.GetField("_active", instance)!;
+        active.SetValue(receiver, session);
+        var receiverField = host.GetField("_receiver", statics)!;
+        var quick = new QuickPanelModernWindow();
+        try
+        {
+            receiverField.SetValue(null, receiver);
+            sourceType.GetMethod("Write", instance)!.CreateDelegate<WriteAirPlaySamples>(source)([0.25f, -0.25f], AndroidPcmSource.SampleRate);
+            string id = (string)sourceType.GetProperty("Id", instance)!.GetValue(source)!;
+            var info = new AudioAppInfo { ProcessId = 0, ProcessName = "airplay:audio", ExternalSourceId = id };
+            var data = new DataObject("SonicRoute.PcApp.v1", info);
+            var playbackOutput = sourceType.GetProperty("State", instance)!;
+            string? SelectedOutput() => ((AndroidAudioState)playbackOutput.GetValue(source)!).OutputId;
+            var statusField = receiverType.GetField("_status", instance)!;
+            var selector = (ComboBox)panel.FindName("DeviceCombo");
+            void Connected(byte[] cover)
+            {
+                var track = Activator.CreateInstance(metadataType, instance, null, ["测试歌曲", "测试歌手", cover], null);
+                var stage = Enum.Parse(library.GetType("SonicRoute.AirPlay.AirPlayStage")!, "Connected");
+                statusField.SetValue(receiver, Activator.CreateInstance(statusType, instance, null,
+                    [stage, "Fixture", "Simulated Apple device", null, null, true, false, false, false, null, track], null));
+                host.GetMethod("PublishDisplay", statics)!.Invoke(null, null);
+            }
+            using var png = new MemoryStream();
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(8, 8, 96, 96, PixelFormats.Bgra32, null, new byte[256], 32)));
+            encoder.Save(png);
+            Connected(png.ToArray());
+            var image = (Image)view.FindName("ArtworkImage");
+            Until(() => image.Source is BitmapSource { IsFrozen: true });
+            Check(((TextBlock)view.FindName("TrackTitle")).Text == "测试歌曲" && ((TextBlock)view.FindName("TrackArtist")).Text == "测试歌手"
+                && ((FrameworkElement)view.FindName("MirrorControls")).IsVisible, "connected pane shows sender artwork, track text and window controls");
+            Render((FrameworkElement)panel.Content, 235, 450, Path.Combine(output, "device-panel-airplay-connected.png"));
+
+            var overlay = (Border)panel.FindName("PcDropHighlight");
+            var unrelated = new DataObject("SonicRoute.PcApp.v1", new AudioAppInfo { ProcessName = "fixture", ProcessId = 42 });
+            Check(Drag(panel, overlay, unrelated, drop: true) == DragDropEffects.None && !lifetime.IsCancellationRequested,
+                "ordinary desktop drags cannot disconnect AirPlay");
+            var device = new AndroidDevice("offline-fixture", "Android", "device", false, "device-panel-fixture");
+            store.RememberDevice(device);
+            store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
+            discovery.Publish([device]);
+            DrainUi();
+            selector.SelectedItem = selector.Items.OfType<AndroidDevice>().Single();
+            DrainUi();
+            Check(image.Source == null, "leaving AirPlay releases the decoded cover");
+            Check(Drag(panel, overlay, data, drop: false) == DragDropEffects.Copy
+                && Drag(panel, overlay, data, drop: true) == DragDropEffects.Copy, "AirPlay drag accepts the selected Android speaker zone");
+            var speaker = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker");
+            Until(() => SelectedOutput() == speaker);
+            Check(!lifetime.IsCancellationRequested, "dropping on the Android speaker routes the same source without ending it");
+
+            var mixer = (FrameworkElement)quick.FindName("AppListScroll");
+            var back = new DataObject("SonicRoute.AirPlayToWindows.v1", info);
+            Check(Drag(mixer, mixer, back, drop: false) == DragDropEffects.Move
+                && Drag(mixer, mixer, back, drop: true) == DragDropEffects.Move, "dragging back to the mixer accepts the system output zone");
+            Until(() => SelectedOutput() == null);
+            selector.SelectedItem = choice;
+            DrainUi();
+            Check(Drag(panel, overlay, data, drop: false) == DragDropEffects.Move
+                && Drag(panel, overlay, data, drop: true) == DragDropEffects.Move && lifetime.IsCancellationRequested,
+                "dropping onto the Apple interface ends the foreground AirPlay session");
+        }
+        finally
+        {
+            quick.Close();
+            receiverField.SetValue(null, null);
+            active.SetValue(receiver, null);
+            Pump(source.DisposeAsync().AsTask());
+            Pump(receiver.DisposeAsync().AsTask());
+        }
+
+        static DragDropEffects Drag(FrameworkElement target, FrameworkElement coordinates, DataObject data, bool drop)
+        {
+            var routed = drop ? System.Windows.DragDrop.PreviewDropEvent : System.Windows.DragDrop.PreviewDragOverEvent;
+            var args = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs), instance, null,
+                [data, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy | DragDropEffects.Move, coordinates, new Point(20, 20)], null)!;
+            args.RoutedEvent = routed;
+            target.RaiseEvent(args);
+            return args.Effects;
         }
     }
 }

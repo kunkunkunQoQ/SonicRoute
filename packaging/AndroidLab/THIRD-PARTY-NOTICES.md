@@ -110,3 +110,7 @@ Keep the complete license texts under `packaging/AndroidLab/video-licenses/` (`F
 ## QRCoder 1.7.0
 
 Used for local AOSP ADB pairing QR generation. NuGet metadata pins source commit 2dc55ee03cb9abf66ffed7d683cbcce0a141b124. The complete MIT notice is shipped in QRCoder-LICENSE.txt, downloaded from https://raw.githubusercontent.com/Shane32/QRCoder/2dc55ee03cb9abf66ffed7d683cbcce0a141b124/LICENSE.txt. QR passwords are ephemeral and are not configuration inputs.
+
+## AirPlay AAC-ELD tables and synthesis
+
+Full uses C# tables and filterbank equations adapted from FFmpeg n8.0's AAC decoder. See the [AirPlay AAC-ELD notice](../../SonicRoute.AndroidAudio/AirPlay/AacEld.NOTICE.md) for upstream authors and the GPL conversion. The managed decoder requires no additional codec DLL or runtime package.

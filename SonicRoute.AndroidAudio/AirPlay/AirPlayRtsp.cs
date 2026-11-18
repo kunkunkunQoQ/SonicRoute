@@ -8,12 +8,12 @@ internal sealed class AirPlayRtsp(Stream stream) : IDisposable
     internal const string Plist = "application/x-apple-binary-plist";
     internal const string Octets = "application/octet-stream";
     internal const string Pairing = "application/pairing+tlv8";
-    private const int MaxHeader = 8192, MaxBody = 128 * 1024;
+    private const int MaxHeader = 8192, MaxBody = 128 * 1024, MaxArtworkBody = 4 * 1024 * 1024;
     private readonly byte[] _input = new byte[MaxHeader];
     private int _start, _end;
     private AirPlayControlCipher? _cipher;
 
-    internal sealed record Request(string Method, string Path, string Protocol, Dictionary<string, string> Headers, byte[] Body)
+    internal sealed record Request(string Method, string Path, string Protocol, Dictionary<string, string> Headers, byte[] Body, bool BodySkipped)
     {
         internal string? Header(string name) => Headers.GetValueOrDefault(name);
     }
@@ -24,7 +24,7 @@ internal sealed class AirPlayRtsp(Stream stream) : IDisposable
         _cipher = new AirPlayControlCipher(key);
     }
 
-    internal async Task<Request?> ReadAsync(CancellationToken token)
+    internal async Task<Request?> ReadAsync(CancellationToken token, bool allowArtwork = false)
     {
         int endOfHeader;
         while ((endOfHeader = _input.AsSpan(_start, _end - _start).IndexOf("\r\n\r\n"u8)) < 0)
@@ -59,10 +59,15 @@ internal sealed class AirPlayRtsp(Stream stream) : IDisposable
         }
         if (headers.ContainsKey("Transfer-Encoding")) throw new InvalidDataException("Unexpected transfer encoding.");
         int contentLength = 0;
+        bool isArtwork = allowArtwork && first[0] == "SET_PARAMETER" && headers.TryGetValue("Content-Type", out var kind)
+            && AirPlayMetadataReader.IsArtworkType(kind.Split(';', 2)[0].Trim());
+        int bodyLimit = isArtwork ? MaxArtworkBody : MaxBody;
         if (headers.TryGetValue("Content-Length", out string? value)
-            && (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out contentLength) || contentLength > MaxBody))
+            && (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out contentLength) || contentLength > bodyLimit))
             throw new InvalidDataException("AirPlay body exceeds limit.");
-        byte[] content = contentLength == 0 ? [] : new byte[contentLength];
+        // Drain large covers with the existing read buffer so a cover cannot interrupt playback.
+        bool skipArtwork = isArtwork && contentLength > AirPlayMetadataReader.ArtworkLimit;
+        byte[] content = contentLength == 0 || skipArtwork ? [] : new byte[contentLength];
         int copied = 0;
         while (copied < contentLength)
         {
@@ -73,11 +78,11 @@ internal sealed class AirPlayRtsp(Stream stream) : IDisposable
                 if (_end == 0) throw new EndOfStreamException();
             }
             int count = Math.Min(contentLength - copied, _end - _start);
-            _input.AsSpan(_start, count).CopyTo(content.AsSpan(copied));
+            if (!skipArtwork) _input.AsSpan(_start, count).CopyTo(content.AsSpan(copied));
             _start += count;
             copied += count;
         }
-        return new(first[0], path, first[2], headers, content);
+        return new(first[0], path, first[2], headers, content, skipArtwork);
     }
 
     private ValueTask<int> FillAsync(Memory<byte> target, CancellationToken token) =>
@@ -89,7 +94,8 @@ internal sealed class AirPlayRtsp(Stream stream) : IDisposable
         string reason = code switch
         {
             200 => "OK", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found",
-            415 => "Unsupported Media Type", 453 => "Not Enough Bandwidth", 455 => "Method Not Valid in This State", _ => "Not Implemented"
+            415 => "Unsupported Media Type", 453 => "Not Enough Bandwidth", 455 => "Method Not Valid in This State",
+            470 => "Client Authentication Failure", _ => "Not Implemented"
         };
         using var response = new MemoryStream();
         var header = new StringBuilder(FormattableString.Invariant($"{request.Protocol} {code} {reason}\r\nServer: AirTunes/366.0\r\n"));

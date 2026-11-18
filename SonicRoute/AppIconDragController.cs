@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using SonicRoute.Core.Models;
 using Application = System.Windows.Application;
 using Point = System.Windows.Point;
 using DataObject = System.Windows.DataObject;
@@ -23,6 +24,7 @@ internal static class AppIconDragController
     internal const string DesktopFormat = "SonicRoute.PcApp.v1";
     internal static bool IsDragging { get; private set; }
     internal static bool IsDesktopDragging { get; private set; }
+    internal static AudioAppInfo? DesktopDragSource { get; private set; }
     internal static event Action? DesktopDragStateChanged;
     internal static void SetDesktopDraggingForTest(bool dragging)
     {
@@ -30,10 +32,10 @@ internal static class AppIconDragController
         IsDesktopDragging = dragging;
         DesktopDragStateChanged?.Invoke();
     }
-    internal static void Attach(FrameworkElement element, Action drag)
+    internal static void Attach(FrameworkElement element, Action drag, Func<bool>? canDrag = null)
     {
         Point? origin = null;
-        element.PreviewMouseLeftButtonDown += (_, e) => origin = e.GetPosition(element);
+        element.PreviewMouseLeftButtonDown += (_, e) => origin = canDrag?.Invoke() == false ? null : e.GetPosition(element);
         element.PreviewMouseLeftButtonUp += (_, _) => origin = null;
         element.PreviewMouseMove += (_, e) =>
         {
@@ -44,16 +46,21 @@ internal static class AppIconDragController
             origin = null; Mouse.Capture(null); e.Handled = true; drag();
         };
     }
-    internal static void AttachDesktop(FrameworkElement element, AppItem app) => Attach(element, () =>
+    internal static void AttachDesktop(FrameworkElement element, AppItem app, Action? droppedOutside = null) => Attach(element, () =>
     {
-        Run(element, new DataObject(DesktopFormat, app.Info), app.Icon, app.Label, dragging =>
+        var result = Run(element, new DataObject(DesktopFormat, app.Info), app.Icon, app.Label, dragging =>
         {
+            DesktopDragSource = dragging ? app.Info : null;
             if (IsDesktopDragging == dragging) return;
             IsDesktopDragging = dragging;
             DesktopDragStateChanged?.Invoke();
         });
+        if (result.Outside) droppedOutside?.Invoke();
         ((App)Application.Current).QuickPanelInstance?.CloseAfterFocusLeaves();
     });
+
+    internal static AudioAppInfo? AppFromDrag(System.Windows.IDataObject data, string format = DesktopFormat) =>
+        data.GetDataPresent(format, false) ? data.GetData(format, false) as AudioAppInfo : null;
     internal static DragResult Run(FrameworkElement source, System.Windows.IDataObject data, ImageSource? icon, string label, Action<bool>? changed = null)
     {
         bool released = false, cancelled = false; ScreenPoint drop = default;

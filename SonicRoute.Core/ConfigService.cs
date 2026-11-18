@@ -78,6 +78,10 @@ namespace SonicRoute.Core
         /// <summary>手机音频伴随面板开关；关闭快速面板时保留，下次打开恢复。</summary>
         public bool QuickPanelShowPhoneAudio { get; set; } = true;
 
+        public string AirPlayReceiverName { get; set; } = "";
+        public int AirPlayVideoDecoder { get; set; }
+        public bool AirPlayRequireCode { get; set; }
+
         /// <summary>额外音量面板仅显示保留的输出设备；独立于顶部切换系统默认设备开关。</summary>
         public bool PanelOutputVolumesRetainedOnly { get; set; } = false;
 

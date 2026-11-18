@@ -7,21 +7,39 @@ using System.Text;
 
 namespace SonicRoute.AirPlay;
 
-internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, bool hevc = false)
+internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, bool hevc = false, bool requireCode = false)
 {
-    private const long AudioFeatures = (1L << 9) | (7L << 18) | (1L << 30) | (1L << 38)
+    // A single DNS-SD label also has to fit the 12 hex digits and '@' in the RAOP instance name.
+    private const int NameByteLimit = 50;
+    private const long AudioFeatures = (1L << 9) | (1L << 15) | (1L << 17) | (7L << 18) | (1L << 30) | (1L << 38)
         | (1L << 40) | (1L << 41) | (1L << 47) | (1L << 48);
     private const long ScreenFeatures = (1L << 7) | (1L << 14) | (1L << 27);
     internal const string AirPlayService = "_airplay._tcp.local";
     internal const string RaopService = "_raop._tcp.local";
     internal const string Version = "366.0";
-    internal string Name { get; } = name;
+    internal string Name { get; } = NormalizeName(name) is { Length: > 0 } normalized ? normalized : "SonicRoute";
     internal string Id { get; } = CreateId();
     private string DisplayId { get; } = Guid.NewGuid().ToString();
     internal string DeviceId => string.Join(':', Enumerable.Range(0, 6).Select(i => Id.Substring(i * 2, 2)));
     internal string Host => $"sonicroute-{Id.ToLowerInvariant()}.local";
     private long Features => AudioFeatures | (screenKey == null ? 0 : ScreenFeatures | (hevc ? 1L << 42 : 0));
     private string FeatureText => $"0x{Features & uint.MaxValue:X},0x{Features >> 32:X}";
+    private string PasswordFlag => requireCode ? "pw=true" : "pw=false";
+
+    internal static string NormalizeName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        var result = new StringBuilder(NameByteLimit);
+        int bytes = 0;
+        foreach (Rune rune in name.AsSpan().Trim().EnumerateRunes())
+        {
+            if (Rune.IsControl(rune)) continue;
+            bytes += rune.Utf8SequenceLength;
+            if (bytes > NameByteLimit) break;
+            result.Append(rune.ToString());
+        }
+        return result.ToString().Trim();
+    }
 
     private static string CreateId()
     {
@@ -30,12 +48,12 @@ internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, boo
         return Convert.ToHexString(bytes);
     }
 
-    internal string[] AirPlayTxt => [$"deviceid={DeviceId}", $"features={FeatureText}", "flags=0x4",
+    internal string[] AirPlayTxt => [$"deviceid={DeviceId}", $"features={FeatureText}", "flags=0x4", PasswordFlag,
         "acl=0", "model=SonicRoute", $"srcvers={Version}", "vv=2", "protovers=1.1",
         .. (screenKey == null ? Array.Empty<string>() : new[] { $"pk={Convert.ToHexStringLower(screenKey)}", $"pi={DisplayId}" })];
-    internal string[] RaopTxt => [$"ft={FeatureText}", "sf=0x4", $"vs={Version}", "am=SonicRoute",
-        "cn=0,1,2", "ch=2", "sr=44100", "ss=16", "tp=UDP,TCP", screenKey == null ? "et=4" : "et=3,4,5",
-        "pw=false", "txtvers=1", "vn=3"];
+    internal string[] RaopTxt => [$"ft={FeatureText}", requireCode ? "sf=0x8c" : "sf=0x4", $"vs={Version}", "am=SonicRoute",
+        "cn=0,1,2,3", "md=0,1", "ch=2", "sr=44100", "ss=16", "tp=UDP,TCP", screenKey == null ? "et=4" : "et=3,4,5",
+        PasswordFlag, "txtvers=1", "vn=3"];
 
     internal byte[] Info()
     {
@@ -47,7 +65,7 @@ internal sealed class AirPlayIdentity(string name, byte[]? screenKey = null, boo
             ["txtAirPlay"] = AirPlayDiscovery.Txt(AirPlayTxt), ["txtRAOP"] = AirPlayDiscovery.Txt(RaopTxt),
             ["audioFormats"] = new object[]
             {
-                new Dictionary<string, object?> { ["type"] = 96, ["audioInputFormats"] = 0, ["audioOutputFormats"] = AirPlayFormat.OutputFormats | AirPlayFormat.AacFormats },
+                new Dictionary<string, object?> { ["type"] = 96, ["audioInputFormats"] = 0, ["audioOutputFormats"] = AirPlayFormat.OutputFormats | AirPlayFormat.AacFormats | AirPlayFormat.EldFormats },
                 new Dictionary<string, object?> { ["type"] = 103, ["audioInputFormats"] = 0, ["audioOutputFormats"] = AirPlayFormat.AacFormats | AirPlayFormat.OutputFormats }
             }
         };
@@ -238,32 +256,34 @@ internal sealed class AirPlayDiscovery : IAsyncDisposable
     {
         using var output = new MemoryStream();
         output.Write(new byte[] { 0, 0, 0x84, 0, 0, 0, 0, 9, 0, 0, 0, 0 });
-        WriteRecord(output, Browse, 12, ttl, Labels(AirPlayIdentity.AirPlayService));
-        WriteRecord(output, Browse, 12, ttl, Labels(AirPlayIdentity.RaopService));
+        byte[] browse = Labels(Browse), host = Labels(identity.Host);
+        WriteRecord(output, browse, 12, ttl, Labels(AirPlayIdentity.AirPlayService));
+        WriteRecord(output, browse, 12, ttl, Labels(AirPlayIdentity.RaopService));
         foreach (var (service, instance, txt) in new[]
         {
             (AirPlayIdentity.AirPlayService, identity.Name, identity.AirPlayTxt),
             (AirPlayIdentity.RaopService, $"{identity.Id}@{identity.Name}", identity.RaopTxt)
         })
         {
-            string name = $"{instance}.{service}";
-            WriteRecord(output, service, 12, ttl, Labels(name));
-            byte[] srv = [0, 0, 0, 0, (byte)(port >> 8), (byte)port, .. Labels(identity.Host)];
+            byte[] serviceName = Labels(service);
+            byte[] name = [.. Txt([instance]), .. serviceName];
+            WriteRecord(output, serviceName, 12, ttl, name);
+            byte[] srv = [0, 0, 0, 0, (byte)(port >> 8), (byte)port, .. host];
             WriteRecord(output, name, 33, ttl, srv);
             WriteRecord(output, name, 16, ttl, Txt(txt));
         }
-        WriteRecord(output, identity.Host, 1, ttl, address.GetAddressBytes());
+        WriteRecord(output, host, 1, ttl, address.GetAddressBytes());
         return output.ToArray();
     }
 
-    private static void WriteRecord(Stream to, string name, ushort type, uint ttl, byte[] payload)
+    private static void WriteRecord(Stream to, byte[] name, ushort type, uint ttl, byte[] payload)
     {
         Span<byte> header = stackalloc byte[10];
         BinaryPrimitives.WriteUInt16BigEndian(header, type);
         BinaryPrimitives.WriteUInt16BigEndian(header[2..], type == 12 ? (ushort)1 : (ushort)0x8001);
         BinaryPrimitives.WriteUInt32BigEndian(header[4..], ttl);
         BinaryPrimitives.WriteUInt16BigEndian(header[8..], (ushort)payload.Length);
-        to.Write(Labels(name)); to.Write(header); to.Write(payload);
+        to.Write(name); to.Write(header); to.Write(payload);
     }
 
     private static byte[] Labels(string name) => [.. Txt(name.Split('.')), 0];

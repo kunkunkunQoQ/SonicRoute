@@ -14,6 +14,8 @@
     <EmbeddedResource Include="../AndroidRuntime/VirtualDisplay/phone-icon.png" LogicalName="SonicRoute.AndroidRuntime.VirtualDisplay.phone-icon.png" />
     <EmbeddedResource Include="AirPlay/Compatibility/playfair-tables.dat" LogicalName="SonicRoute.AirPlay.PlayFair.Tables" />
     <EmbeddedResource Include="AirPlay/Compatibility/LICENSE-MIT.txt" LogicalName="SonicRoute.AirPlay.PlayFair.LICENSE-MIT.txt" />
+    <EmbeddedResource Include="AirPlay/AacEld.NOTICE.md" LogicalName="SonicRoute.AirPlay.AacEld.NOTICE.md" />
+    <EmbeddedResource Include="AirPlay/FFmpeg-LGPL-2.1.txt" LogicalName="SonicRoute.AirPlay.AacEld.FFmpeg-LGPL-2.1.txt" />
     <Compile Include="../SonicRoute.Core/AtomicFile.cs" Link="Shared/AtomicFile.cs" />
     <InternalsVisibleTo Include="AndroidAudioChecks" />
     <InternalsVisibleTo Include="SonicRoute" />

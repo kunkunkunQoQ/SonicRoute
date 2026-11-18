@@ -59,6 +59,7 @@
     <ApplicationDefinition Include="..\SonicRoute\App.xaml" Link="App.xaml" />
     <Page Include="..\SonicRoute\MainWindow.xaml" Link="MainWindow.xaml" />
     <Page Include="..\SonicRoute\ThemeControls.xaml" Link="ThemeControls.xaml" />
+    <Page Include="..\SonicRoute\ToggleControls.xaml" Link="ToggleControls.xaml" />
     <Page Include="..\SonicRoute\SettingsControls.xaml" Link="SettingsControls.xaml" />
     <Page Include="..\SonicRoute\ScrollControls.xaml" Link="ScrollControls.xaml" />
     <Page Include="..\SonicRoute\QuickPanelModernWindow.xaml" Link="QuickPanelModernWindow.xaml" />

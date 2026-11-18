@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
+using SonicRoute.Core;
 
 namespace SonicRoute;
 
@@ -15,60 +16,90 @@ internal enum AirPlayVideoPreference { Automatic, H264, PreferHevc }
 internal static class AirPlayHost
 {
     internal const string AppKey = "airplay:audio";
+    internal const string WindowsDragFormat = "SonicRoute.AirPlayToWindows.v1";
     private static readonly SemaphoreSlim Operations = new(1, 1);
     private static AirPlayReceiver? _receiver;
     private static AirPlayStatus _inactive = new(AirPlayStage.Off);
-    private static int _videoPreference;
     private static int _exiting;
     internal static event Action? Changed;
-    internal static event Action? VideoPreferenceChanged;
+    internal static event Action? PreferencesChanged;
     internal static AirPlayStatus Status => Volatile.Read(ref _receiver)?.Status ?? Volatile.Read(ref _inactive);
     internal static AirPlayAudioOutput? Source => Volatile.Read(ref _receiver)?.Source;
 
     internal static AirPlayAudioOutput? Find(string? id) => id != null && Source is { } source && source.Id == id ? source : null;
     internal static void Disconnect(string id) => Volatile.Read(ref _receiver)?.Disconnect(id);
     internal static void ShowMirror() => Volatile.Read(ref _receiver)?.ShowMirror();
+    internal static void SetMirrorTopmost(bool value) => Volatile.Read(ref _receiver)?.SetMirrorTopmost(value);
+    internal static void SetMirrorFullscreen(bool value) => Volatile.Read(ref _receiver)?.SetMirrorFullscreen(value);
 
-    internal static AirPlayVideoPreference VideoPreference
+    internal static string DefaultName { get; } = GetDefaultName();
+    internal static (string Name, AirPlayVideoPreference Video, bool RequireCode) Preferences
     {
-        get => (AirPlayVideoPreference)Volatile.Read(ref _videoPreference);
-        set { if (Interlocked.Exchange(ref _videoPreference, (int)value) != (int)value) VideoPreferenceChanged?.Invoke(); }
+        get
+        {
+            var config = ConfigService.Load();
+            var video = config.AirPlayVideoDecoder is >= 0 and <= (int)AirPlayVideoPreference.PreferHevc
+                ? (AirPlayVideoPreference)config.AirPlayVideoDecoder : AirPlayVideoPreference.Automatic;
+            return (AirPlayIdentity.NormalizeName(config.AirPlayReceiverName), video, config.AirPlayRequireCode);
+        }
     }
 
-    internal static Task StartAsync() => Task.Run(async () =>
+    internal static void SavePreferences(string name, AirPlayVideoPreference video, bool requireCode)
     {
-        await Operations.WaitAsync().ConfigureAwait(false);
-        try
+        var config = ConfigService.Load();
+        name = AirPlayIdentity.NormalizeName(name);
+        if (config.AirPlayReceiverName == name && config.AirPlayVideoDecoder == (int)video && config.AirPlayRequireCode == requireCode) return;
+        config.AirPlayReceiverName = name;
+        config.AirPlayVideoDecoder = (int)video;
+        config.AirPlayRequireCode = requireCode;
+        ConfigService.QueueSave(config);
+        PreferencesChanged?.Invoke();
+    }
+
+    private static string GetDefaultName()
+    {
+        string host = string.Concat(Environment.MachineName.Where(c => char.IsAsciiLetterOrDigit(c) || c == '-').Take(32));
+        return host.Length == 0 ? "SonicRoute" : "SonicRoute - " + host;
+    }
+
+    internal static Task StartAsync()
+    {
+        var (configuredName, video, requireCode) = Preferences;
+        return Task.Run(async () =>
         {
-            if (Volatile.Read(ref _exiting) != 0 || _receiver != null) return;
-            Volatile.Write(ref _inactive, new(AirPlayStage.Starting));
-            Publish();
+            await Operations.WaitAsync().ConfigureAwait(false);
             try
             {
-                string host = string.Concat(Environment.MachineName.Where(c => char.IsAsciiLetterOrDigit(c) || c == '-').Take(32));
-                string name = host.Length == 0 ? "SonicRoute" : "SonicRoute - " + host;
-                var receiver = new AirPlayReceiver(name, player: CreatePlayer,
-                    preferHevc: VideoPreference == AirPlayVideoPreference.PreferHevc);
-                receiver.Changed += Publish;
-                Volatile.Write(ref _receiver, receiver);
-                _ = ObserveAsync(receiver);
-            }
-            catch (Exception ex)
-            {
-                int? networkError = ex switch
+                if (Volatile.Read(ref _exiting) != 0 || _receiver != null) return;
+                Volatile.Write(ref _inactive, new(AirPlayStage.Starting));
+                Publish();
+                try
                 {
-                    SocketException socket => socket.NativeErrorCode,
-                    NetworkInformationException network => network.NativeErrorCode,
-                    _ => null
-                };
-                System.Diagnostics.Trace.WriteLine($"AirPlay start: {ex.GetType().Name} ({networkError}).");
-                Volatile.Write(ref _inactive, new(AirPlayStage.Failed,
-                    ErrorKey: ex is AirPlayNoNetworkException ? "Phone.AirPlayNoIpv4" : "Phone.AirPlayStartError", NetworkError: networkError));
+                    string name = configuredName.Length == 0 ? DefaultName : configuredName;
+                    var receiver = new AirPlayReceiver(name, player: CreatePlayer,
+                        preferHevc: video == AirPlayVideoPreference.PreferHevc, requireCode: requireCode);
+                    receiver.Changed += Publish;
+                    receiver.DisplayChanged += PublishDisplay;
+                    Volatile.Write(ref _receiver, receiver);
+                    _ = ObserveAsync(receiver);
+                }
+                catch (Exception ex)
+                {
+                    int? networkError = ex switch
+                    {
+                        SocketException socket => socket.NativeErrorCode,
+                        NetworkInformationException network => network.NativeErrorCode,
+                        _ => null
+                    };
+                    System.Diagnostics.Trace.WriteLine($"AirPlay start: {ex.GetType().Name} ({networkError}).");
+                    Volatile.Write(ref _inactive, new(AirPlayStage.Failed,
+                        ErrorKey: ex is AirPlayNoNetworkException ? "Phone.AirPlayNoIpv4" : "Phone.AirPlayStartError", NetworkError: networkError));
+                }
+                Publish();
             }
-            Publish();
-        }
-        finally { Operations.Release(); }
-    });
+            finally { Operations.Release(); }
+        });
+    }
 
     private static IPcmPlayer CreatePlayer(AndroidPcmSource pcm, string? endpoint, CancellationToken token) =>
         AndroidOutputIdentity.IsPhoneOutput(endpoint) ? AndroidAudioHost.CreatePhonePcmPlayer(pcm, endpoint!, token)
@@ -106,16 +137,22 @@ internal static class AirPlayHost
     private static async Task CloseAsync(AirPlayReceiver receiver)
     {
         receiver.Changed -= Publish;
+        receiver.DisplayChanged -= PublishDisplay;
         try { await receiver.DisposeAsync().ConfigureAwait(false); }
         catch (Exception ex) { System.Diagnostics.Trace.WriteLine("AirPlay stop: " + ex.GetType().Name); }
     }
 
     private static void Publish()
     {
+        PublishDisplay();
+        ApplicationAudio.NotifyChanged();
+    }
+
+    private static void PublishDisplay()
+    {
         if (Changed is { } handlers)
             foreach (Action handler in handlers.GetInvocationList())
                 try { handler(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.GetType().Name); }
-        ApplicationAudio.NotifyChanged();
     }
 
     internal static void Shutdown()

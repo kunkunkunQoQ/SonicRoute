@@ -13,14 +13,16 @@ internal static partial class Program
     private static void Check(bool condition, string name) { if (!condition) throw new Exception("FAIL " + name); _checks++; Console.WriteLine("PASS " + name); }
     public static async Task<int> Main(string[] args)
     {
-        string? logRoot = args.Length >= 2 && args[0] is ("--decoder-settings" or "--android-hevc-start" or "--android-hevc-recovery" or "--gamepad-window") && args.Contains("--file-log") ? args[1] : null;
+        string? logRoot = args.Length >= 2 && args[0] is ("--decoder-settings" or "--android-hevc-start" or "--android-hevc-recovery" or "--gamepad-window" or "--airplay-window-modes") && args.Contains("--file-log") ? args[1] : null;
         if (logRoot != null) Directory.CreateDirectory(logRoot);
         using var fileLog = logRoot == null ? null : new StreamWriter(Path.Combine(logRoot, "console.log")) { AutoFlush = true };
         if (fileLog != null) { Console.SetOut(fileLog); Console.SetError(fileLog); }
         try
         {
-            if (args.Length > 0 && args[0] == "--airplay-listen") { await AirPlayLoopbackAsync(args.Contains("--prefer-hevc")); return 0; }
+            if (args.Length > 0 && args[0] == "--airplay-listen") { await AirPlayLoopbackAsync(args.Contains("--prefer-hevc"), args.Contains("--require-code")); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-phone-output") { await AirPlayPhoneOutputAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--airplay-eld-decode") { AirPlayEldFixture(args[1], args[2]); return 0; }
+            if (args.Length > 0 && args[0] == "--airplay-window-modes") { await AirPlayWindowModesAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--decoder-settings") { await DecoderSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-start") { await AndroidHevcStartAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-recovery") { await AndroidHevcStartAsync(args[1], checkResize: true); return 0; }

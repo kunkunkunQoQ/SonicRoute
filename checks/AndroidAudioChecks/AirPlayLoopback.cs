@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Net;
 using System.Text.Json;
 using SonicRoute.AirPlay;
@@ -6,14 +8,44 @@ using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
-    private static async Task AirPlayLoopbackAsync(bool preferHevc)
+    private static void AirPlayEldFixture(string input, string output)
+    {
+        byte[] fixture = File.ReadAllBytes(input);
+        var asc = fixture.AsSpan(1, fixture[0]);
+        int frames = asc[2] == 0x50 ? 480 : 512;
+        var format = AirPlayFormat.Parse(new()
+        {
+            ["ct"] = 8L, ["audioFormat"] = 1L << (asc[1] == 0xe8 ? 24 : 25), ["spf"] = (long)frames,
+            ["audioConfig"] = asc.ToArray()
+        });
+        using var decoder = new AirPlayDecoder(format);
+        using var file = File.Create(output);
+        var pcm = new float[frames * 2];
+        int position = 1 + asc.Length, count = 0;
+        bool complete = true;
+        while (position < fixture.Length)
+        {
+            int length = BinaryPrimitives.ReadUInt16LittleEndian(fixture.AsSpan(position));
+            position += 2;
+            complete &= decoder.Decode(fixture.AsSpan(position, length), pcm) == pcm.Length;
+            file.Write(MemoryMarshal.AsBytes(pcm.AsSpan()));
+            position += length;
+            ++count;
+        }
+        Check(count >= 12 && complete && pcm.Any(value => Math.Abs(value) > 0.02f), "all AAC-ELD access units decode to stereo PCM");
+        Check(decoder.Decode([0xff], pcm) == 0 && decoder.Decode([0, 0, 0, 0], pcm) == pcm.Length
+              && pcm.All(value => value == 0), "a malformed ELD frame clears overlap and the next packet can play");
+    }
+
+    private static async Task AirPlayLoopbackAsync(bool preferHevc, bool requireCode)
     {
         System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(Console.Error));
         System.Diagnostics.Trace.AutoFlush = true;
         var created = new ConcurrentQueue<(string? Endpoint, SimulatedOutput Player)>();
         Action? defaultChanged = null;
         int detached = 0;
-        await using var receiver = new AirPlayReceiver("SonicRoute Simulation", loopback: true,
+        string name = requireCode ? "投屏.测试 🎵" : "SonicRoute Simulation";
+        await using var receiver = new AirPlayReceiver(name, loopback: true,
             player: (pcm, endpoint, _) =>
             {
                 var player = new SimulatedOutput(pcm);
@@ -23,9 +55,9 @@ internal static partial class Program
             {
                 defaultChanged = action;
                 return new AirPlayWatch(() => Interlocked.Increment(ref detached));
-            }, preferHevc: preferHevc);
+            }, preferHevc: preferHevc, requireCode: requireCode);
         int port = receiver.Port;
-        byte[] mdns = AirPlayDiscovery.WriteResponse(new AirPlayIdentity("SonicRoute Simulation"), IPAddress.Loopback, port, 120);
+        byte[] mdns = AirPlayDiscovery.WriteResponse(new AirPlayIdentity(name, requireCode: requireCode), IPAddress.Loopback, port, 120);
         Console.WriteLine(JsonSerializer.Serialize(new { Port = port, Mdns = Convert.ToBase64String(mdns) }));
         while (await Console.In.ReadLineAsync() is { } command && command != "stop")
         {
@@ -40,10 +72,12 @@ internal static partial class Program
             if (command == "default") defaultChanged?.Invoke();
             if (command == "disconnect" && source != null) receiver.Disconnect(source.Id);
             var outputs = created.ToArray();
+            var status = receiver.Status;
             Console.WriteLine(JsonSerializer.Serialize(new
             {
-                Stage = receiver.Status.Stage.ToString(), receiver.Status.Sender, receiver.Status.Mirroring,
-                receiver.MirrorFrames, receiver.Status.ErrorKey, receiver.Status.MirrorAudioUnavailable,
+                Stage = status.Stage.ToString(), status.Sender, status.Mirroring, status.Code,
+                receiver.MirrorFrames, status.ErrorKey, status.MirrorAudioUnavailable,
+                Track = status.Metadata is { } track ? new { track.Title, track.Artist, ArtworkBytes = track.Artwork?.Length } : null,
                 source?.Id, Volume = source?.State.Volume, Muted = source?.State.Muted,
                 Endpoint = source?.State.OutputId, SourceSamples = source?.Pcm?.SamplesWritten,
                 NonSilent = source?.Pcm?.NonSilentSamplesWritten, Pending = source?.Pcm?.BufferedSamples,

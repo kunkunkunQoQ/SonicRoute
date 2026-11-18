@@ -9,13 +9,16 @@ namespace SonicRoute.AirPlay;
 
 internal enum AirPlayStage { Off, Starting, Waiting, Connected, Failed }
 internal sealed record AirPlayStatus(AirPlayStage Stage, string? Name = null, string? Sender = null, string? ErrorKey = null,
-    int? NetworkError = null, bool Mirroring = false, bool MirrorAudioUnavailable = false);
+    int? NetworkError = null, bool Mirroring = false, bool MirrorAudioUnavailable = false,
+    bool Topmost = false, bool Fullscreen = false, string? Code = null, AirPlayMetadata? Metadata = null);
 internal sealed class AirPlayNoNetworkException() : InvalidOperationException("No active IPv4 LAN interface.");
 
 /// <summary>An on-demand AirPlay receiver for audio and screen mirroring.</summary>
 internal sealed class AirPlayReceiver : IAsyncDisposable
 {
     private static readonly TimeSpan WaitLimit = TimeSpan.FromMinutes(2);
+    private const int CodeAttemptLimit = 6;
+    private sealed record PairingCode(string Value);
     private readonly TcpListener _listener;
     private readonly AirPlayDiscovery? _discovery;
     private readonly CancellationTokenSource _stop;
@@ -24,16 +27,21 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     private readonly AirPlaySigningKey _signingKey;
     private readonly bool _showWindow;
     private readonly bool _hevc;
+    private readonly bool _requireCode;
     private readonly AirPlayDiscovery.Lan[] _lan;
     private readonly Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer> _player;
     private readonly Func<Action, IDisposable> _watchDefault;
     private readonly byte[] _info;
     private readonly object _sessionGate = new();
     private Session? _active;
+    private PairingCode? _code;
+    private int _codeAttempts;
+    private int _lastCode = 3939;
     private AirPlayStatus _status;
     private int _disposed;
 
     internal event Action? Changed;
+    internal event Action? DisplayChanged;
     internal AirPlayStatus Status => Volatile.Read(ref _status);
     internal AirPlayAudioOutput? Source => Volatile.Read(ref _active)?.Receiving;
     internal int MirrorFrames => Volatile.Read(ref _active)?.MirrorFrames ?? 0;
@@ -43,7 +51,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     // Only the test harness asks for loopback. Production never changes Windows firewall rules.
     internal AirPlayReceiver(string name, bool loopback = false,
         Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer>? player = null, Func<Action, IDisposable>? watchDefault = null,
-        bool preferHevc = false)
+        bool preferHevc = false, bool requireCode = false)
     {
         if (!ChaCha20Poly1305.IsSupported) throw new PlatformNotSupportedException("AirPlay control encryption is unavailable.");
         _player = player ?? ((pcm, endpoint, _) => new WasapiPcmPlayer(pcm, endpoint));
@@ -52,14 +60,15 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         if (!loopback && _lan.Length == 0) throw new AirPlayNoNetworkException();
         _showWindow = !loopback;
         _hevc = preferHevc && MediaFoundationH264Decoder.SupportsHevc;
+        _requireCode = requireCode;
         _signingKey = new AirPlaySigningKey();
         _stop = new CancellationTokenSource();
         _listener = new TcpListener(loopback ? IPAddress.Loopback : IPAddress.Any, 0);
         try
         {
-            _identity = new AirPlayIdentity(name, _signingKey.PublicKey, _hevc);
+            _identity = new AirPlayIdentity(name, _signingKey.PublicKey, _hevc, requireCode);
             _info = _identity.Info();
-            _status = new(AirPlayStage.Waiting, _identity.Name);
+            _status = WaitingStatus(null);
             _listener.Start(8);
             if (!loopback) _discovery = new AirPlayDiscovery(_identity, Port, _lan);
             _stop.CancelAfter(WaitLimit);
@@ -99,14 +108,53 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         }
     }
 
-    private bool Claim(Session session)
+    private AirPlayStatus WaitingStatus(string? errorKey)
+    {
+        if (_requireCode)
+        {
+            // Exclude the public default PIN so protection can never silently use it.
+            int value;
+            do { value = RandomNumberGenerator.GetInt32(10000); } while (value == 3939 || value == _lastCode);
+            _lastCode = value;
+            _code = new(value.ToString("D4", CultureInfo.InvariantCulture));
+            _codeAttempts = 0;
+        }
+        return new(AirPlayStage.Waiting, _identity.Name, ErrorKey: errorKey, Code: _code?.Value);
+    }
+
+    private bool TryBeginPairing(out PairingCode? code)
+    {
+        code = null;
+        if (!_requireCode) return true;
+        lock (_sessionGate)
+        {
+            if (_active != null || _code == null || _stop.IsCancellationRequested) return false;
+            if (_codeAttempts < CodeAttemptLimit)
+            {
+                ++_codeAttempts;
+                code = _code;
+                return true;
+            }
+            if (_status.Code == null) return false;
+            Volatile.Write(ref _status, _status with { Code = null, ErrorKey = "Phone.AirPlayPinAttempts" });
+        }
+        Notify(DisplayChanged);
+        return false;
+    }
+
+    private bool Claim(Session session, PairingCode? code)
     {
         lock (_sessionGate)
         {
             if (_active != null || _stop.IsCancellationRequested) return false;
+            if (_requireCode && (code == null || !ReferenceEquals(_code, code))) return false;
+            _code = null;
             Volatile.Write(ref _active, session);
-            return true;
+            if (_status.Code != null || _status.ErrorKey != null)
+                Volatile.Write(ref _status, _status with { Code = null, ErrorKey = null });
         }
+        if (_requireCode) Notify(DisplayChanged);
+        return true;
     }
     private void Connected(Session session, string name, bool mirroring)
     {
@@ -117,7 +165,8 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             var status = _status;
             bool audioUnavailable = mirroring && session.MirrorAudioUnavailable;
             if (status.Stage == AirPlayStage.Connected && (!mirroring || status.Mirroring && status.MirrorAudioUnavailable == audioUnavailable)) return;
-            Volatile.Write(ref _status, new(AirPlayStage.Connected, _identity.Name, name, Mirroring: mirroring, MirrorAudioUnavailable: audioUnavailable));
+            Volatile.Write(ref _status, status with { Stage = AirPlayStage.Connected, Sender = name, ErrorKey = null,
+                Mirroring = mirroring, MirrorAudioUnavailable = audioUnavailable });
         }
         NotifyChanged();
     }
@@ -129,7 +178,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             Volatile.Write(ref _active, null);
             if (_stop.IsCancellationRequested) return;
             _stop.CancelAfter(WaitLimit);
-            Volatile.Write(ref _status, new(AirPlayStage.Waiting, _identity.Name, ErrorKey: errorKey));
+            Volatile.Write(ref _status, WaitingStatus(errorKey));
         }
         NotifyChanged();
     }
@@ -138,11 +187,34 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         Volatile.Write(ref _status, status);
         NotifyChanged();
     }
-    private void NotifyChanged()
+    private void NotifyChanged() => Notify(Changed);
+
+    private static void Notify(Action? handlers)
     {
-        if (Changed is { } handlers)
+        if (handlers != null)
             foreach (Action handler in handlers.GetInvocationList())
                 try { handler(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.GetType().Name); }
+    }
+
+    private void SetMetadata(Session session, AirPlayMetadata metadata)
+    {
+        lock (_sessionGate)
+        {
+            if (!ReferenceEquals(_active, session) || _stop.IsCancellationRequested) return;
+            Volatile.Write(ref _status, _status with { Metadata = metadata });
+        }
+        Notify(DisplayChanged);
+    }
+
+    private void MirrorModeChanged(Session session, bool topmost, bool fullscreen)
+    {
+        lock (_sessionGate)
+        {
+            if (!ReferenceEquals(_active, session) || _stop.IsCancellationRequested) return;
+            if (_status.Topmost == topmost && _status.Fullscreen == fullscreen) return;
+            Volatile.Write(ref _status, _status with { Topmost = topmost, Fullscreen = fullscreen });
+        }
+        Notify(DisplayChanged);
     }
 
     internal void Disconnect(string sourceId)
@@ -152,6 +224,8 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     }
 
     internal void ShowMirror() => Volatile.Read(ref _active)?.ShowMirror();
+    internal void SetMirrorTopmost(bool value) => Volatile.Read(ref _active)?.SetMirrorTopmost(value);
+    internal void SetMirrorFullscreen(bool value) => Volatile.Read(ref _active)?.SetMirrorFullscreen(value);
 
     public async ValueTask DisposeAsync()
     {
@@ -165,7 +239,12 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     {
         private CancellationTokenSource? _stop;
         private AirPlayPairing? _pairing;
+        private AirPlayPairing? _legacyPin;
+        private PairingCode? _pairingCode;
+        private byte[]? _legacySessionKey, _pinClientKey;
+        private bool _waitingForCode;
         private AirPlayMirrorHandshake? _mirrorHandshake;
+        private AirPlayMetadataReader? _metadata;
         private byte[]? _mediaKey, _mediaIv;
         private TcpListener? _eventListener;
         private Task? _eventTask;
@@ -183,6 +262,8 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         internal bool MirrorAudioUnavailable => Volatile.Read(ref _unplayedAudio) != null;
         internal void Stop() { try { _stop?.Cancel(); } catch (ObjectDisposedException) { } }
         internal void ShowMirror() => Volatile.Read(ref _mirror)?.Activate();
+        internal void SetMirrorTopmost(bool value) => Volatile.Read(ref _mirror)?.SetTopmost(value);
+        internal void SetMirrorFullscreen(bool value) => Volatile.Read(ref _mirror)?.SetFullscreen(value);
 
         internal async Task RunAsync(CancellationToken token)
         {
@@ -196,8 +277,8 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     client.NoDelay = true;
                     while (!lifetime.IsCancellationRequested)
                     {
-                        lifetime.CancelAfter(TimeSpan.FromSeconds(_claimed ? 75 : 12));
-                        var request = await rtsp.ReadAsync(lifetime.Token).ConfigureAwait(false);
+                        lifetime.CancelAfter(TimeSpan.FromSeconds(_claimed ? 75 : _waitingForCode && !_paired ? 50 : 12));
+                        var request = await rtsp.ReadAsync(lifetime.Token, allowArtwork: _claimed).ConfigureAwait(false);
                         if (request == null || !await HandleAsync(rtsp, request, lifetime.Token).ConfigureAwait(false)) break;
                     }
                 }
@@ -222,6 +303,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                         {
                             if (_output != null) await _output.DisposeAsync().ConfigureAwait(false);
                             _mirrorHandshake?.Dispose();
+                            if (_legacySessionKey != null) CryptographicOperations.ZeroMemory(_legacySessionKey);
                             if (_mediaKey != null) CryptographicOperations.ZeroMemory(_mediaKey);
                             if (_mediaIv != null) CryptographicOperations.ZeroMemory(_mediaIv);
                         }
@@ -245,20 +327,37 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             }
             if (!_paired)
             {
+                if (receiver._requireCode && request.Method == "POST")
+                {
+                    if (request.Path == "/pair-pin-start")
+                    {
+                        _waitingForCode = true;
+                        await rtsp.RespondAsync(request, token).ConfigureAwait(false);
+                        return true;
+                    }
+                    if (request.Path == "/pair-setup-pin") return await PairLegacyPinAsync(rtsp, request, token).ConfigureAwait(false);
+                }
                 if (request.Method == "POST" && request.Path == "/pair-setup")
                 {
-                    if (request.Body.Length == 32 && _pairing == null && _mirrorHandshake == null
+                    if (request.Body.Length == 32 && _pairing == null
                         && request.Header("Content-Type")?.StartsWith("application/pairing+", StringComparison.OrdinalIgnoreCase) != true)
                     {
-                        _mirrorHandshake = new AirPlayMirrorHandshake();
+                        if (receiver._requireCode && !request.Body.AsSpan().SequenceEqual(_pinClientKey))
+                        {
+                            await rtsp.RespondAsync(request, token, code: 470).ConfigureAwait(false);
+                            return false;
+                        }
+                        _mirrorHandshake ??= new AirPlayMirrorHandshake();
                         await rtsp.RespondAsync(request, token, body: receiver._signingKey.PublicKey, contentType: AirPlayRtsp.Octets).ConfigureAwait(false);
                         return true;
                     }
-                    if (_mirrorHandshake == null) return await PairAsync(rtsp, request, token).ConfigureAwait(false);
+                    if (_mirrorHandshake == null && _legacyPin == null && _legacySessionKey == null)
+                        return await PairAsync(rtsp, request, token).ConfigureAwait(false);
                 }
                 if (request.Method == "POST" && request.Path == "/pair-verify" && _mirrorHandshake is { } handshake)
                 {
-                    if (handshake.BeginVerify(request.Body, receiver._signingKey) is { } reply)
+                    bool validKey = !receiver._requireCode || request.Body.Length == 68 && request.Body.AsSpan(36).SequenceEqual(_pinClientKey);
+                    if (validKey && handshake.BeginVerify(request.Body, receiver._signingKey) is { } reply)
                     {
                         await rtsp.RespondAsync(request, token, body: reply, contentType: AirPlayRtsp.Octets).ConfigureAwait(false);
                         return true;
@@ -269,7 +368,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                         await rtsp.RespondAsync(request, token, contentType: AirPlayRtsp.Octets).ConfigureAwait(false);
                         return true;
                     }
-                    await rtsp.RespondAsync(request, token, code: 403).ConfigureAwait(false);
+                    await rtsp.RespondAsync(request, token, code: receiver._requireCode ? 470 : 403).ConfigureAwait(false);
                     return false;
                 }
                 await rtsp.RespondAsync(request, token, code: 403).ConfigureAwait(false);
@@ -308,8 +407,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     _media?.Flush(Timestamp(AirPlayPlist.Int(flush, "flushUntilTS", -1)));
                     break;
                 case "SET_PARAMETER":
-                    if (_output != null && request.Header("Content-Type")?.StartsWith("text/parameters", StringComparison.OrdinalIgnoreCase) == true)
-                        ReadVolume(request.Body);
+                    ReadParameter(request);
                     break;
                 case "GET_PARAMETER":
                     if (request.Body.AsSpan().StartsWith("volume"u8))
@@ -349,18 +447,20 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         {
             var values = AirPlayPairing.ReadTlv(request.Body);
             bool first = AirPlayPairing.IsState(values, 1);
-            if (first && _pairing == null && AirPlayPairing.IsTransient(values))
+            if (first && _pairing == null && AirPlayPairing.IsTransient(values) && receiver.TryBeginPairing(out _pairingCode))
             {
-                _pairing = new AirPlayPairing();
+                _waitingForCode = receiver._requireCode;
+                _pairing = new AirPlayPairing(_pairingCode?.Value ?? "3939");
                 await rtsp.RespondAsync(request, token, body: _pairing.Challenge, contentType: AirPlayRtsp.Pairing).ConfigureAwait(false);
                 return true;
             }
-            if (AirPlayPairing.IsState(values, 3) && _pairing?.Verify(values) is { } pairing)
+            if (AirPlayPairing.IsState(values, 3) && values.TryGetValue(3, out var publicKey) && values.TryGetValue(4, out var proof)
+                && _pairing?.Verify(publicKey, proof) is { } pairing)
             {
                 _pairing = null;
                 try
                 {
-                    await rtsp.RespondAsync(request, token, body: pairing.Proof, contentType: AirPlayRtsp.Pairing).ConfigureAwait(false);
+                    await rtsp.RespondAsync(request, token, body: AirPlayPairing.Tlv((6, [4]), (4, pairing.Proof)), contentType: AirPlayRtsp.Pairing).ConfigureAwait(false);
                     rtsp.Secure(pairing.Key);
                     _paired = true;
                 }
@@ -370,6 +470,52 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             await rtsp.RespondAsync(request, token, body: AirPlayPairing.Tlv((6, [first ? (byte)2 : (byte)4]), (7, [2])),
                 contentType: AirPlayRtsp.Pairing).ConfigureAwait(false);
             return false;
+        }
+
+        private async Task<bool> PairLegacyPinAsync(AirPlayRtsp rtsp, AirPlayRtsp.Request request, CancellationToken token)
+        {
+            byte[]? reply = null;
+            if (request.Body.Length <= 4096 && request.Header("Content-Type")?.StartsWith(AirPlayRtsp.Plist, StringComparison.OrdinalIgnoreCase) == true)
+            {
+                try { reply = ReadLegacyPin(AirPlayPlist.Read(request.Body)); }
+                catch (CryptographicException ex) { System.Diagnostics.Trace.WriteLine("AirPlay PIN: " + ex.GetType().Name); }
+                catch (InvalidDataException) { }
+            }
+            await rtsp.RespondAsync(request, token, code: reply == null ? 470 : 200, body: reply,
+                contentType: reply == null ? null : AirPlayRtsp.Plist).ConfigureAwait(false);
+            return reply != null;
+        }
+
+        private byte[]? ReadLegacyPin(Dictionary<string, object?> values)
+        {
+            if (_pairing != null || _mirrorHandshake != null) return null;
+            if (_legacyPin == null && _legacySessionKey == null && values.GetValueOrDefault("method") is "pin"
+                && values.GetValueOrDefault("user") is string { Length: > 0 and <= 128 } user
+                && receiver.TryBeginPairing(out _pairingCode))
+            {
+                _waitingForCode = true;
+                _legacyPin = new AirPlayPairing(_pairingCode!.Value, user);
+                return AirPlayPlist.Write(new() { ["pk"] = _legacyPin.PublicKey, ["salt"] = _legacyPin.Salt });
+            }
+            if (_legacyPin is { } legacy && values.GetValueOrDefault("pk") is byte[] pk && values.GetValueOrDefault("proof") is byte[] proof)
+            {
+                _legacyPin = null;
+                if (legacy.Verify(pk, proof) is not { } verified) return null;
+                _legacySessionKey = verified.Key;
+                return AirPlayPlist.Write(new() { ["proof"] = verified.Proof });
+            }
+            if (_legacySessionKey is not { } key || values.GetValueOrDefault("epk") is not byte[] { Length: 32 } epk
+                || values.GetValueOrDefault("authTag") is not byte[] { Length: 16 } tag) return null;
+            _legacySessionKey = null;
+            byte[] clientKey = new byte[32], ciphertext = new byte[32], serverTag = new byte[16];
+            try
+            {
+                if (!AirPlayPinExchange.Confirm(key, epk, tag, receiver._signingKey.PublicKey, clientKey, ciphertext, serverTag)) return null;
+                _pinClientKey = clientKey;
+                _mirrorHandshake = new AirPlayMirrorHandshake();
+                return AirPlayPlist.Write(new() { ["epk"] = ciphertext, ["authTag"] = serverTag });
+            }
+            finally { CryptographicOperations.ZeroMemory(key); }
         }
 
         private (int Code, byte[]? Data) Setup(Dictionary<string, object?> setup, CancellationToken token)
@@ -389,7 +535,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     protocol ??= "NTP";
                 }
                 if (protocol is not ("PTP" or "NTP")) return (415, null);
-                if (!receiver.Claim(this)) return (453, null);
+                if (!receiver.Claim(this, _pairingCode)) return (453, null);
                 _claimed = true;
                 _sender = GetSenderName(setup);
                 _eventListener = new TcpListener(local, 0);
@@ -446,17 +592,24 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                 }
                 else return (415, null);
             }
-            // Apple can attach AAC-ELD to a mirror stream. Windows' built-in AAC transform
-            // handles LC, so keep the picture working and report that this audio is unavailable.
-            bool pictureOnly = audioType == 96 && audio != null && AirPlayPlist.Int(audio, "ct") == 8
-                && (mirrorId != null || _mirror != null || audio.GetValueOrDefault("usingScreen") is true);
-            if (audio != null && !pictureOnly) format = AirPlayFormat.Parse(audio, legacy: audioIv != null);
+            bool pictureOnly = false;
+            if (audio != null)
+            {
+                try { format = AirPlayFormat.Parse(audio, legacy: audioIv != null); }
+                catch (NotSupportedException) when (audioType == 96 && AirPlayPlist.Int(audio, "ct") == AirPlayFormat.Eld
+                    && (mirrorId != null || _mirror != null || audio.GetValueOrDefault("usingScreen") is true))
+                {
+                    // Keep the mirror usable with other ELD profiles, such as low-delay SBR.
+                    pictureOnly = true;
+                }
+            }
             if (mirrorId is ulong streamId)
             {
                 try
                 {
                     Volatile.Write(ref _mirror, new AirPlayMirrorStream(local, peer, streamId, _mediaKey!, _sender, receiver._showWindow, receiver._hevc,
                         () => receiver.Connected(this, _sender, mirroring: true),
+                        (topmost, fullscreen) => receiver.MirrorModeChanged(this, topmost, fullscreen),
                         failed => StreamEnded(failed, "Phone.AirPlayMirrorError"), token));
                     answers[configured++] = new Dictionary<string, object?> { ["type"] = 110, ["dataPort"] = _mirror!.DataPort };
                 }
@@ -520,6 +673,25 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                 while (await stream.ReadAsync(buffer, token).ConfigureAwait(false) != 0) { }
             }
             catch (Exception ex) when (ex is OperationCanceledException or SocketException or ObjectDisposedException or IOException) { }
+        }
+
+        private void ReadParameter(AirPlayRtsp.Request request)
+        {
+            if (!_claimed || request.BodySkipped || request.Header("Content-Type") is not string contentType) return;
+            var type = contentType.Split(';', 2)[0].Trim();
+            if (type.Equals("text/parameters", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_output != null) ReadVolume(request.Body);
+                return;
+            }
+            if (!type.Equals("application/x-dmap-tagged", StringComparison.OrdinalIgnoreCase) && !AirPlayMetadataReader.IsArtworkType(type)) return;
+            var metadata = _metadata ??= new();
+            uint? time = null;
+            if (request.Header("RTP-Info") is { } rtpInfo)
+                foreach (string part in rtpInfo.Split(';', StringSplitOptions.TrimEntries))
+                    if (part.StartsWith("rtptime=", StringComparison.OrdinalIgnoreCase)
+                        && uint.TryParse(part.AsSpan(8), NumberStyles.None, CultureInfo.InvariantCulture, out uint value)) time = value;
+            if (metadata.Update(type, request.Body, time)) receiver.SetMetadata(this, metadata.Value);
         }
 
         private void ReadVolume(byte[] content)

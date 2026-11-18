@@ -179,7 +179,9 @@
             <Border x:Name="AirPlayPane" Grid.Row="2" VerticalAlignment="Top" Visibility="Collapsed"
                     Padding="10" CornerRadius="10" Background="{DynamicResource Theme.SurfaceBgAlpha}"
                     BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1">
-                <local:AirPlayReceiverView x:Name="AirPlayReceiverPane"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <local:AirPlayReceiverView x:Name="AirPlayReceiverPane"/>
+                </ScrollViewer>
             </Border>
             <Grid Grid.Row="3" Margin="0,6,0,0">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="RefreshGap" Width="4"/><ColumnDefinition x:Name="RefreshColumn" Width="36"/></Grid.ColumnDefinitions>
@@ -188,9 +190,11 @@
                         BorderThickness="1" CornerRadius="10" Padding="6,2,4,2">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
-                        <Path x:Name="DeviceKindIcon" Data="{x:Static local:AutomationIcons.Phone}"
-                              Width="18" Height="20" Stretch="Uniform" HorizontalAlignment="Left" Margin="1,0,0,0" VerticalAlignment="Center"
-                              Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
+                        <Border x:Name="DeviceKindGrip" Background="Transparent">
+                            <Path x:Name="DeviceKindIcon" Data="{x:Static local:AutomationIcons.Phone}"
+                                  Width="18" Height="20" Stretch="Uniform" HorizontalAlignment="Left" Margin="1,0,0,0" VerticalAlignment="Center"
+                                  Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
+                        </Border>
                         <ComboBox x:Name="DeviceCombo" Grid.Column="1" Grid.ColumnSpan="3" Height="24" Background="Transparent" BorderThickness="0"
                                   Padding="0,0,64,0" FontSize="11" FontWeight="Bold" Style="{StaticResource RoundedComboBox}"
                                   SelectionChanged="Device_Changed" AutomationProperties.Name="{Binding [Phone.DeviceSelector], Source={x:Static local:L10n.Instance}}">
