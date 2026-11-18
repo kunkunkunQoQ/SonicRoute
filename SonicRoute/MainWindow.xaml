@@ -968,35 +968,29 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 一键清理配置文件 -->
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14">
                         <StackPanel>
-                            <TextBlock Text="{Binding [Exp.ClearConfig], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
-                            <TextBlock Text="{Binding [Exp.ClearConfigHint], Source={x:Static local:L10n.Instance}}"
-                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
-                                       Margin="0,-4,0,10" TextWrapping="Wrap"/>
-                            <Button x:Name="ExpClearConfigButton" Content="{Binding [Exp.ClearConfig], Source={x:Static local:L10n.Instance}}"
-                                    Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                    HorizontalAlignment="Left" Click="ExpClearConfig_Click"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- 配置文件备份：导出 / 导入 -->
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
-                        <StackPanel>
-                            <TextBlock Text="{Binding [Exp.ConfigBackup], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}"/>
+                            <TextBlock Text="{Binding [Exp.ConfigFiles], Source={x:Static local:L10n.Instance}}"
+                                       Style="{StaticResource SectionTitle}" TextWrapping="Wrap"/>
                             <TextBlock Text="{Binding [Exp.ConfigTransferHint], Source={x:Static local:L10n.Instance}}"
                                        FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
                                        Margin="0,-4,0,10" TextWrapping="Wrap"/>
-                            <StackPanel Orientation="Horizontal">
+                            <WrapPanel>
                                 <Button x:Name="ExpExportConfigButton" Content="{Binding [Exp.ExportConfig], Source={x:Static local:L10n.Instance}}"
                                         Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                        Margin="0,0,10,0" HorizontalAlignment="Left" Click="ExpExportConfig_Click"/>
+                                        Margin="0,0,10,6" Click="ExpExportConfig_Click"/>
                                 <Button x:Name="ExpImportConfigButton" Content="{Binding [Exp.ImportConfig], Source={x:Static local:L10n.Instance}}"
                                         Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
-                                        HorizontalAlignment="Left" Click="ExpImportConfig_Click"
+                                        Margin="0,0,0,6" Click="ExpImportConfig_Click"
                                         AllowDrop="True" DragOver="ExpImportConfigButton_DragOver" Drop="ExpImportConfigButton_Drop"/>
-                            </StackPanel>
+                            </WrapPanel>
+                            <Border Height="1" Background="{DynamicResource Theme.Border}" Margin="0,6,0,12"/>
+                            <TextBlock Text="{Binding [Exp.ClearConfigHint], Source={x:Static local:L10n.Instance}}"
+                                       FontSize="11.5" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       Margin="0,0,0,10" TextWrapping="Wrap"/>
+                            <Button x:Name="ExpClearConfigButton" Content="{Binding [Exp.ClearConfig], Source={x:Static local:L10n.Instance}}"
+                                    Style="{StaticResource GhostButton}" Height="34" Padding="16,0"
+                                    HorizontalAlignment="Left" Click="ExpClearConfig_Click"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>

@@ -1,7 +1,7 @@
 namespace SonicRoute.AndroidAudio;
 
 /// <summary>A distinct external source, never a fabricated Windows process/session ID.</summary>
-public sealed class AndroidAudioSession : IAsyncDisposable
+public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.IPhoneAudioSession
 {
     private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly object _stateGate = new(), _logGate = new();
@@ -30,9 +30,11 @@ public sealed class AndroidAudioSession : IAsyncDisposable
     public (long Bytes, long NonSilentBytes, int RoutedType)? PhoneOutputDiagnostics =>
         _player is AndroidPhonePcmPlayer phone ? phone.Diagnostics : null;
     private ScrcpyOpusReceiver? _receiver;
+    private readonly Func<AndroidDevice, AndroidStreamSettings>? _streaming;
 
     public AndroidAudioSession(AdbClient adb, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
     {
+        _streaming = streaming;
         _watchDefaultOutput = DefaultOutputNotifications.Subscribe;
         _transportFactory = () => new ScrcpyAdbTransport(adb, Log, streaming);
         _playerFactory = (source, id) =>
@@ -44,8 +46,8 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         };
     }
     public AndroidAudioSession(Func<IAudioTransport> transportFactory, Func<AndroidPcmSource, string?, IPcmPlayer> playerFactory,
-        Func<Action, IDisposable>? watchDefaultOutput = null)
-    { _transportFactory = transportFactory; _playerFactory = playerFactory; _watchDefaultOutput = watchDefaultOutput; }
+        Func<Action, IDisposable>? watchDefaultOutput = null, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
+    { _transportFactory = transportFactory; _playerFactory = playerFactory; _watchDefaultOutput = watchDefaultOutput; _streaming = streaming; }
 
     public async Task StartAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio = true, CancellationToken token = default)
     {
@@ -76,6 +78,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
         Task<IPcmPlayer>? preparingOutput = null;
         try
         {
+            string? decoder = _streaming?.Invoke(device).Normalize().AudioDecoder;
             _transport = _transportFactory();
             _pcm = new AndroidPcmSource { Volume = State.Muted ? 0 : State.Volume / 100f, SmartVolume = State.SmartVolume };
             if (string.IsNullOrEmpty(State.OutputId)) WatchDefaultOutput();
@@ -91,7 +94,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable
             _player = await (preparingOutput ?? Task.Run(() => _playerFactory(_pcm, State.OutputId), runToken)).ConfigureAwait(false);
             AttachOutputFailure(_player, generation);
             _player.Play();
-            _receiver = new ScrcpyOpusReceiver();
+            _receiver = new ScrcpyOpusReceiver(decoder);
             var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _receiveTask = _receiver.ReceiveAsync(stream, _pcm, () =>
             {

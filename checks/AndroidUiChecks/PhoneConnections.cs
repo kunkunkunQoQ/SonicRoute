@@ -144,7 +144,7 @@ internal static partial class Program
             Until(() => !(bool)typeof(PhoneDevicePage).GetField("_busy", Hidden)!.GetValue(page)!);
             Pump((Task)typeof(PhoneAudioWindow).GetMethod("InitializeDevicesAsync", Hidden)!.Invoke(phone, null)!);
             var combo = (ComboBox)phone.FindName("DeviceCombo");
-            Check(phoneStore.Profile.Id == selectedProfile && combo.Items.Cast<AndroidDevice>().Any(d => d.Serial == usb.Serial)
+            Check(phoneStore.Profile.Id == selectedProfile && combo.Items.OfType<AndroidDevice>().Any(d => d.Serial == usb.Serial)
                 && phoneStore.FindProfile(usb) != null,
                 "USB refresh adds a separate phone without switching or overwriting the selected phone");
             var input = (FrameworkElement)page.FindName("ConnectAddressBox");
@@ -152,7 +152,7 @@ internal static partial class Program
             Check(input.Parent == connect.Parent && Grid.GetColumn(input) == 0 && Grid.GetColumn(connect) == 1
                 && page.FindName("RefreshDevicesButton") == null && page.FindName("CatalogRefreshButton") == null,
                 "Direct Connect places its button beside the address and removes local refresh buttons");
-            combo.SelectedItem = combo.Items.Cast<AndroidDevice>().Single(d => d.Serial == usb.Serial);
+            combo.SelectedItem = combo.Items.OfType<AndroidDevice>().Single(d => d.Serial == usb.Serial);
             Check(combo.SelectedItem is AndroidDevice selectedUsb && !selectedUsb.IsWifi
                 && phoneStore.Profile.LastDevice?.Serial == usb.Serial,
                 "explicit USB selection activates its own profile without loading an application catalog");

@@ -61,7 +61,12 @@ internal static partial class Program
             currentName = qr.ServiceName; names.Enqueue(currentName); Interlocked.Increment(ref generated);
             return qr;
         };
-        using var page = (PhoneDevicePage)Activator.CreateInstance(typeof(PhoneDevicePage), Hidden, null, [wireless, create], null)!;
+        Func<AndroidDevice, CancellationToken, Task<AndroidEncoderCatalog>> encoders = (_, token) =>
+        {
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(new AndroidEncoderCatalog([], []));
+        };
+        using var page = (PhoneDevicePage)Activator.CreateInstance(typeof(PhoneDevicePage), Hidden, null, [wireless, create, encoders], null)!;
         object? Call(string method, params object?[] args) => typeof(PhoneDevicePage).GetMethod(method, Hidden)!.Invoke(page, args);
         T Find<T>(string name) => (T)page.FindName(name);
         Task? Watch() => (Task?)typeof(PhoneDevicePage).GetField("_qrTask", Hidden)!.GetValue(page);
@@ -163,6 +168,24 @@ internal static partial class Program
             Find<Button>("QrButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); AwaitQr();
             Check(generated == errorCount + 1 && Find<TextBlock>("QrStatus").Text == L10n.T("Phone.QrRefreshHint"),
                 "clicking QR bypasses retry delay and restores the normal hint");
+            Find<RadioButton>("AirPlayConnectionChoice").IsChecked = true;
+            Until(() => Watch() == null);
+            var airPlayHost = typeof(App).Assembly.GetType("SonicRoute.AirPlayHost")!;
+            Check(Find<Border>("AirPlayCard").IsVisible && !Find<Border>("PairingCard").IsVisible
+                && !Find<TextBlock>("OperationStatus").IsVisible
+                && airPlayHost.GetField("_receiver", statics)!.GetValue(null) == null && activeScans == 0,
+                "AirPlay tab shows only its own status, stops QR and waits for an explicit start");
+            var start = (Button)Find<AirPlayReceiverView>("AirPlayConnectionView").FindName("AirPlayToggle");
+            Check(start.IsEnabled && Equals(start.Content, L10n.T("Phone.AirPlayStart")),
+                "AirPlay is ready to start without an Android phone");
+            window.Width = 456; window.UpdateLayout(); DrainUi();
+            var buttonRight = start.TranslatePoint(new Point(start.ActualWidth, 0), page).X;
+            Check(start.ActualWidth > 40 && buttonRight < page.ActualWidth, "AirPlay start stays visible at a narrow window width");
+            Render(page, (int)Math.Ceiling(page.ActualWidth), 260, Path.Combine(output, "airplay-connection.png"));
+            Find<RadioButton>("AndroidConnectionChoice").IsChecked = true;
+            AwaitQr();
+            Check(!Find<Border>("AirPlayCard").IsVisible && Find<Border>("DirectConnectCard").IsVisible,
+                "returning to Android restores both pairing methods and direct connection");
             page.Dispose(); Until(() => Watch() == null);
             Check(activeScans == 0 && clock.QrTimers == 0 && names.Distinct().Count() == names.Count,
                 "disposal retires all deadlines/scans and every QR rotation uses a fresh identity");

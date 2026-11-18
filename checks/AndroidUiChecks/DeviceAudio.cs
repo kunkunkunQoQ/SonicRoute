@@ -33,7 +33,7 @@ internal static partial class Program
             var list = (ListBox)phone.FindName("PhoneApps");
             var search = (TextBox)phone.FindName("SearchBox");
             Check(list.Items.Count == 0, "no device means no unbound whole-phone action");
-            typeof(PhoneAudioWindow).GetMethod("BindDevices", Hidden)!.Invoke(phone, [new[] { device }, device.Serial]);
+            typeof(PhoneAudioWindow).GetMethod("BindDevices", Hidden)!.Invoke(phone, [new[] { device }]);
             typeof(PhoneAudioWindow).GetMethod("RetainedAppsChanged", Hidden)!.Invoke(phone, null);
             Check(list.Items.Count == 2 && list.Items[0] is PhoneAppItem { App.IsDeviceAudio: true, Name: "小米" },
                 "device action appears first in the same app list and uses its existing item template");
@@ -107,7 +107,7 @@ internal static partial class Program
             Check(manager.FindSource(source.Id) == null, "existing return operation releases the device source by its own identity");
             var other = device with { Serial = "offline-fixture-two", HardwareId = "device-audio-second" };
             store.RememberDevice(other); store.Rename("备用手机");
-            typeof(PhoneAudioWindow).GetMethod("BindDevices", Hidden)!.Invoke(phone, [new[] { device, other }, other.Serial]);
+            typeof(PhoneAudioWindow).GetMethod("BindDevices", Hidden)!.Invoke(phone, [new[] { device, other }]);
             typeof(PhoneAudioWindow).GetMethod("RetainedAppsChanged", Hidden)!.Invoke(phone, null);
             Check(list.Items.Count == 1 && wholeItem.Name == "备用手机" && ReferenceEquals(list.Items[0], wholeItem),
                 "switching phones reuses the top entry and reads the selected phone's own saved name");

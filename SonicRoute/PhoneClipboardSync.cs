@@ -36,7 +36,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         _shouldScanOnStartup = shouldScanOnStartup;
     }
     internal static string SettingsPath => Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-clipboard.json");
-    private sealed record Saved(int Version, AndroidDevice[] EnabledDevices);
+    private sealed record Saved(int Version, AndroidDevice[] EnabledDevices, AndroidDevice[]? ArchivedDevices = null);
     private sealed class Session(AndroidDevice device, IAndroidClipboardClient client, CancellationToken lifetime)
     {
         internal readonly AndroidDevice Device = device;
@@ -59,6 +59,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     };
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<AndroidDevice> _enabled = new();
+    private readonly List<AndroidDevice> _archived = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
     private readonly List<Task> _pending = new();
     private readonly object _saveGate = new();
@@ -81,7 +82,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         foreach (var saved in _enabled)
         {
             if (saved.IsWifi) continue;
-            var live = devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, saved));
+            var live = devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(saved, d));
             if (live == null) return true;
             string key = AndroidDeviceIdentity.Key(live);
             if (!_sessions.TryGetValue(key, out var session) || session.Finished || session.Stop.IsCancellationRequested)
@@ -89,7 +90,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         }
         return false;
     }
-    public bool IsEnabled(AndroidDevice? device) => device != null && _enabled.Any(d => AndroidDeviceIdentity.Matches(d, device));
+    public bool IsEnabled(AndroidDevice? device) => device != null && _enabled.Any(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
     public string Status(AndroidDevice? device) => _saveError ? L10n.T("Phone.ClipboardSaveError") : device == null || !IsEnabled(device) ? L10n.T("Phone.ClipboardDefaultHint")
         : _sessions.TryGetValue(AndroidDeviceIdentity.Key(device), out var session) ? SessionStatusText(session.State) : L10n.T("Phone.ClipboardWaitingPhone");
 
@@ -102,13 +103,21 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
                 if (!File.Exists(filePath) || new FileInfo(filePath).Length > 64 * 1024) return null;
                 var value = JsonSerializer.Deserialize<Saved>(File.ReadAllText(filePath));
                 if (value?.Version != 1 || value.EnabledDevices == null || value.EnabledDevices.Length > 32) return null;
-                return value.EnabledDevices.Where(d => d != null && !string.IsNullOrWhiteSpace(d.Serial) && d.Serial.Length <= 512
-                    && (d.HardwareId?.Length ?? 0) <= 128).DistinctBy(AndroidDeviceIdentity.Key).ToArray();
+                static AndroidDevice[] ValidDevices(AndroidDevice[] devices) => devices.Where(d => d != null && !string.IsNullOrWhiteSpace(d.Serial)
+                    && d.Serial.Length <= 512 && (d.HardwareId?.Length ?? 0) <= 128).DistinctBy(AndroidDeviceIdentity.Key).ToArray();
+                return value with { EnabledDevices = ValidDevices(value.EnabledDevices), ArchivedDevices = ValidDevices(value.ArchivedDevices ?? []) };
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return null; }
         });
         if (_disposed) return;
-        if (saved != null) _enabled.AddRange(saved);
+        if (saved != null && (saved.EnabledDevices.Length > 0 || saved.ArchivedDevices is { Length: > 0 }))
+        {
+            await AndroidAudioHost.PreparePhoneAsync(_lifetime.Token);
+            if (_disposed) return;
+            _enabled.AddRange(saved.EnabledDevices);
+            _archived.AddRange((saved.ArchivedDevices ?? []).Where(d => AndroidDeviceIdentity.StableKey(d) != null));
+            if (UpdateProfilePreferences()) QueueSave();
+        }
         Reconcile(false);
         var enabledAtStartup = _enabled.ToArray();
         if (enabledAtStartup.Length > 0 && PhoneAudioWindowCache.Devices == null
@@ -121,28 +130,54 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     public void SetEnabled(AndroidDevice device, bool enabled)
     {
         dispatcher.VerifyAccess();
-        if (_disposed || enabled == IsEnabled(device)) return;
+        if (_disposed || enabled == IsEnabled(device) || enabled && AndroidAudioHost.IsPhoneCreated && AndroidAudioHost.Phone.IsRemoved(device)) return;
         if (enabled)
         {
             if (_enabled.Count >= 32) throw AndroidError.WithCode(new InvalidOperationException("最多同步32台手机。"), AndroidErrorCode.MaxClipboardPhones);
             _enabled.Add(device);
         }
-        else _enabled.RemoveAll(d => AndroidDeviceIdentity.Matches(d, device));
+        else _enabled.RemoveAll(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
         QueueSave(); Reconcile(true);
     }
     internal void ProfilesChanged()
     {
         if (!dispatcher.CheckAccess()) { Post(ProfilesChanged); return; }
-        if (_disposed || !AndroidAudioHost.IsPhoneCreated || _enabled.Count == 0) return;
+        if (!_disposed && UpdateProfilePreferences()) { QueueSave(); Reconcile(false); }
+    }
+
+    private bool UpdateProfilePreferences()
+    {
+        if (!AndroidAudioHost.IsPhoneCreated || (_enabled.Count == 0 && _archived.Count == 0)) return false;
+        var phone = AndroidAudioHost.Phone;
         bool changed = false;
         for (int i = _enabled.Count - 1; i >= 0; --i)
         {
             var saved = _enabled[i];
-            if (AndroidAudioHost.Phone.IsRemoved(saved)) { _enabled.RemoveAt(i); changed = true; continue; }
-            if (AndroidAudioHost.Phone.FindProfile(saved)?.LastDevice is { } current && !SameTransport(saved, current))
+            if (phone.IsRemoved(saved))
+            {
+                _enabled.RemoveAt(i);
+                if (AndroidDeviceIdentity.StableKey(saved) != null
+                    && !_archived.Any(d => AndroidDeviceIdentity.SamePhysicalDevice(saved, d))) _archived.Add(saved);
+                changed = true;
+                continue;
+            }
+            if (phone.FindProfile(saved)?.LastDevice is { } current && !SameTransport(saved, current))
             { _enabled[i] = current; changed = true; }
         }
-        if (changed) { QueueSave(); Reconcile(false); }
+        for (int i = _archived.Count - 1; i >= 0; --i)
+        {
+            var saved = _archived[i];
+            if (phone.FindProfile(saved)?.LastDevice is not { } current || !AndroidDeviceIdentity.SamePhysicalDevice(saved, current)
+                || phone.IsRemoved(current)) continue;
+            if (!IsEnabled(current))
+            {
+                if (_enabled.Count >= 32) continue;
+                _enabled.Add(current);
+            }
+            _archived.RemoveAt(i);
+            changed = true;
+        }
+        return changed;
     }
     private static bool SameTransport(AndroidDevice left, AndroidDevice right) => left.Serial == right.Serial
         && AndroidDeviceIdentity.Key(left) == AndroidDeviceIdentity.Key(right);
@@ -162,7 +197,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             _watching = watch;
         }
         var devices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
-        var targets = _enabled.Select(saved => devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, saved)))
+        var targets = _enabled.Select(saved => devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(saved, d)))
             .Where(d => d != null).Cast<AndroidDevice>().DistinctBy(AndroidDeviceIdentity.Key).ToArray();
         foreach (var pair in _sessions.ToArray())
             if (!targets.Any(d => SameTransport(d, pair.Value.Device)))
@@ -335,7 +370,8 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     {
         lock (_saveGate)
         {
-            _pendingSave = new(1, _enabled.Select(d => d with { Name = "", State = "offline", TransportId = null }).ToArray());
+            static AndroidDevice[] Snapshot(List<AndroidDevice> devices) => devices.Select(d => d with { Name = "", State = "offline", TransportId = null }).ToArray();
+            _pendingSave = new(1, Snapshot(_enabled), _archived.Count == 0 ? null : Snapshot(_archived));
             if (_saving) return;
             _saving = true;
             _save = Task.Run(async () =>
@@ -373,7 +409,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         _lastText = null; _desktopWrite = null;
         foreach (var session in _sessions.Values) session.Writes.Writer.TryComplete();
         try { await Task.WhenAll(_pending.Append(FlushAsync())).ConfigureAwait(false); } catch { }
-        _sessions.Clear(); _enabled.Clear(); _pending.Clear(); _lifetime.Dispose();
+        _sessions.Clear(); _enabled.Clear(); _archived.Clear(); _pending.Clear(); _lifetime.Dispose();
     }
 }
 

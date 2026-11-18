@@ -9,11 +9,13 @@ namespace SonicRoute.AndroidAudio;
 
 /// <summary>
 /// Stage 2+ in-process Android virtual display &amp; mirror video client.
-/// Replaces external <c>scrcpy.exe</c> + FFmpeg + SDL2 with Media Foundation H.264, D3D11 NV12 rendering,
+/// Uses Media Foundation video decoding, D3D11 NV12 rendering,
 /// WIC icon decoding, a dedicated native Win32 HWND, and an abstract <see cref="IVideoStreamTransport"/>.
 /// </summary>
 public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 {
+    private readonly record struct ControlPacket(byte[] Data, int GamepadFocusVersion = 0);
+
     private readonly AdbClient _adb;
     private readonly IVideoStreamTransport _transport;
     private readonly Func<AndroidAudioSettingsStore>? _settingsProvider;
@@ -25,7 +27,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
     private NativeVideoWindow? _window;
     private D3D11VideoSurfaceRenderer? _renderer;
     private MediaFoundationH264Decoder? _decoder;
-    private Channel<byte[]>? _controlOutbound;
+    private Channel<ControlPacket>? _controlOutbound;
     private Task _completion = Task.CompletedTask;
 
     private AndroidAudioSettingsStore? _settings;
@@ -103,14 +105,16 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
             }
         }
 
+        bool useHevc = streaming.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder
+            && !_adb.IsHevcEncoderUnavailable(device) && MediaFoundationH264Decoder.SupportsHevc;
         var serverOpts = new VideoServerOptions(
             NewDisplay: !app.IsDeviceAudio,
             MirrorDeviceDisplay: app.IsDeviceAudio,
             InitialDisplaySize: displaySize is { } ds && ds.IsValid() ? ds : null,
-            VideoCodec: "h264",
+            VideoCodec: useHevc ? "h265" : "h264",
             MaxFps: streaming.MaxFps,
             VideoBitRate: streaming.VideoBitRate,
-            VideoEncoder: streaming.VideoEncoder,
+            VideoEncoder: useHevc ? streaming.HevcEncoder : streaming.VideoEncoder,
             Control: true,
             RawKeyEvents: app.Category == "games",
             SendDeviceMeta: true,
@@ -133,8 +137,12 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
                 throw AndroidError.WithCode(new IOException("手机端视频流未启用。"), AndroidErrorCode.DisplayOpenFailed);
             if (streamHeader.CodecId == 1)
                 throw AndroidError.WithCode(new IOException("手机端视频配置失败；请检查编码器设置。"), AndroidErrorCode.DisplayOpenFailed);
-            if (streamHeader.CodecId != ScrcpyVideoStreamHeader.CodecH264)
+            if (streamHeader.CodecId != ScrcpyVideoStreamHeader.CodecH264 && !(useHevc && streamHeader.CodecId == ScrcpyVideoStreamHeader.CodecH265))
                 throw AndroidError.WithCode(new IOException($"不支持的视频编码器标识: 0x{streamHeader.CodecId:X8}。"), AndroidErrorCode.DisplayOpenFailed);
+            string? decoder = streamHeader.CodecId == ScrcpyVideoStreamHeader.CodecH264
+                && streaming.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder ? null : streaming.VideoDecoder;
+            if (streaming.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder && streamHeader.CodecId == ScrcpyVideoStreamHeader.CodecH264)
+                Trace.WriteLine("Android video: using H.264 for the saved HEVC preference.");
 
             int initW = windowSize is { } ws && ws.IsValid() ? ws.Width : Math.Max(240, streamHeader.Width);
             int initH = windowSize is { } ws2 && ws2.IsValid() ? ws2.Height : Math.Max(240, streamHeader.Height);
@@ -152,11 +160,14 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 
             nint hwnd = await _window.CreateAsync(token).ConfigureAwait(false);
             _renderer = new D3D11VideoSurfaceRenderer(hwnd, _window.ClientWidth, _window.ClientHeight, isMirrorMode: app.IsDeviceAudio);
-            _decoder = new MediaFoundationH264Decoder(_renderer.DeviceHandle, streamHeader.Width, streamHeader.Height);
+            _decoder = new MediaFoundationH264Decoder(_renderer.DeviceHandle, streamHeader.Width, streamHeader.Height, decoder, streamHeader.CodecId)
+            {
+                SkipCorruptFrames = streamHeader.CodecId == ScrcpyVideoStreamHeader.CodecH265
+            };
 
             WireWindowAndControlEvents(streamHeader.Width, streamHeader.Height);
 
-            _completion = RunSessionLoopsAsync(_session, _sessionCts.Token);
+            _completion = RunSessionLoopsAsync(_session, streamHeader.CodecId, _sessionCts.Token);
 
             using var readyTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             readyTimeout.CancelAfter(TimeSpan.FromSeconds(25));
@@ -180,7 +191,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         var window = _window!;
         var renderer = _renderer!;
 
-        _controlOutbound = Channel.CreateUnbounded<byte[]>(new UnboundedChannelOptions { SingleReader = true });
+        _controlOutbound = Channel.CreateUnbounded<ControlPacket>(new UnboundedChannelOptions { SingleReader = true });
 
         window.PaintRequested += renderer.RenderLastFrame;
         window.ClientSizeChanged += renderer.Resize;
@@ -260,11 +271,12 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         {
             byte[] packet = new byte[14];
             ScrcpyControlMessageWriter.WriteInjectGamepadState(packet, state);
-            EnqueueControl(packet);
+            EnqueueControl(packet, state.IsNeutral ? 0 : window.GamepadFocusVersion);
         };
     }
 
-    private void EnqueueControl(byte[] packet) => _controlOutbound?.Writer.TryWrite(packet);
+    private void EnqueueControl(byte[] packet, int gamepadFocusVersion = 0) =>
+        _controlOutbound?.Writer.TryWrite(new ControlPacket(packet, gamepadFocusVersion));
 
     private void SendRestoreStartApp()
     {
@@ -280,9 +292,9 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         }
     }
 
-    private async Task RunSessionLoopsAsync(VideoStreamSession session, CancellationToken ct)
+    private async Task RunSessionLoopsAsync(VideoStreamSession session, uint codecId, CancellationToken ct)
     {
-        Task videoTask = RunVideoLoopAsync(session.VideoStream, ct);
+        Task videoTask = RunVideoLoopAsync(session.VideoStream, codecId, ct);
         Task controlSendTask = session.ControlStream != null
             ? RunControlSendLoopAsync(session.ControlStream, ct)
             : Task.CompletedTask;
@@ -315,10 +327,12 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         }
     }
 
-    private async Task RunVideoLoopAsync(Stream videoStream, CancellationToken ct)
+    private async Task RunVideoLoopAsync(Stream videoStream, uint codecId, CancellationToken ct)
     {
         const int BasePacketBufferSize = 64 * 1024;
         var merger = new ScrcpyPacketMerger();
+        bool hevc = codecId == ScrcpyVideoStreamHeader.CodecH265;
+        bool hasVideoInput = false;
         byte[] header12 = new byte[12];
         byte[] packetBuf = new byte[BasePacketBufferSize];
         int lastWidth = 0;
@@ -374,10 +388,18 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
                 {
                     await videoStream.ReadExactlyAsync(targetBuf.AsMemory(0, hdr.PayloadLength), ct).ConfigureAwait(false);
 
-                    var merged = merger.Process(targetBuf.AsSpan(0, hdr.PayloadLength), hdr.IsConfig);
+                    var payload = targetBuf.AsSpan(0, hdr.PayloadLength);
+                    // MediaCodec emits configuration before a restarted encoder's frames.
+                    bool newSequence = hevc && !hdr.IsConfig && merger.HasPendingConfig;
+                    if (newSequence && !hdr.IsKeyFrame && !ContainsHevcRandomAccessPicture(payload))
+                        continue;
+
+                    var merged = merger.Process(payload, hdr.IsConfig);
                     if (merged.IsEmpty) continue;
 
-                    _decoder!.DecodePacket(merged, hdr.PtsUs, onHardwareFrame, onSoftwareFrame);
+                    _decoder!.DecodePacket(merged, hdr.PtsUs, onHardwareFrame, onSoftwareFrame,
+                        discontinuity: newSequence && hasVideoInput);
+                    hasVideoInput = true;
                 }
                 finally
                 {
@@ -395,12 +417,28 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         }
     }
 
+    internal static bool ContainsHevcRandomAccessPicture(ReadOnlySpan<byte> payload)
+    {
+        ReadOnlySpan<byte> startCode = [0, 0, 1];
+        while (true)
+        {
+            int index = payload.IndexOf(startCode);
+            if (index < 0 || index + 4 >= payload.Length) return false;
+            payload = payload[(index + 3)..];
+            int nalType = (payload[0] >> 1) & 0x3F;
+            if (nalType is >= 16 and <= 21) return true;
+        }
+    }
+
     private void RememberDisplaySize(int width, int height)
     {
-        if (!_isDeviceAudio && _device != null && _package != null
+        if (!_isDeviceAudio && _settings != null && _device != null && _package != null
             && _window is { WindowHandle: not 0, IsMaximized: false }
             && _sessionCts?.IsCancellationRequested != true)
-            _settings?.RememberDisplay(_device, _package, new AndroidVirtualDisplaySize(width, height));
+        {
+            var size = new AndroidVirtualDisplaySize(width, height);
+            if (size.IsValid()) _settings.RememberDisplay(_device, _package, size);
+        }
     }
 
     private async Task RunControlSendLoopAsync(Stream controlStream, CancellationToken ct)
@@ -408,9 +446,12 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         var reader = _controlOutbound!.Reader;
         try
         {
-            await foreach (byte[] packet in reader.ReadAllAsync(ct).ConfigureAwait(false))
+            await foreach (var packet in reader.ReadAllAsync(ct).ConfigureAwait(false))
             {
-                await controlStream.WriteAsync(packet, ct).ConfigureAwait(false);
+                if (packet.GamepadFocusVersion != 0 && _window?.CanSendGamepadInput(packet.GamepadFocusVersion) != true)
+                    continue;
+
+                await controlStream.WriteAsync(packet.Data, ct).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) { }

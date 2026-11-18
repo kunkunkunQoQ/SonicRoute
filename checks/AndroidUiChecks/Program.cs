@@ -29,15 +29,18 @@ internal static partial class Program
         {
             Trace.Listeners.Add(new TextWriterTraceListener(Console.Error)); Trace.AutoFlush = true;
             string output = Path.GetFullPath(args[0]); Directory.CreateDirectory(output);
+            using var fileLog = args.Contains("--file-log") ? new StreamWriter(Path.Combine(output, "console.log")) { AutoFlush = true } : null;
+            if (fileLog != null) { Console.SetOut(fileLog); Console.SetError(fileLog); }
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(output, "ui-data-" + Guid.NewGuid().ToString("N")));
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidUiChecks");
-            App app = args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") ? new RoutingFixtureApp() : new App();
+            App app = args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") ? new RoutingFixtureApp() : new App();
             if (app is RoutingFixtureApp)
             { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
             if (args.Contains("--pairing-combined")) return PairingCombinedUi(output);
+            if (args.Contains("--device-panel-airplay")) return DevicePanelAirPlayUi(output, args.Contains("--airplay-lan-start"));
             if (args.Contains("--drop-compat"))
             {
                 var dropPanel = new QuickPanelModernWindow();
@@ -55,6 +58,7 @@ internal static partial class Program
             if (args.Contains("--panel-stream-settings")) return PanelStreamSettingsUi(output);
             if (args.Contains("--device-audio")) return DeviceAudioUi(output);
             if (args.Contains("--settings-localization")) return SettingsLocalizationChecks(output);
+            if (args.Contains("--experimental-config-card")) return ExperimentalConfigCardChecks(output);
             if (args.Contains("--interaction-audit")) return InteractionAuditUi(output);
             if (args.Contains("--device-actions")) return DeviceActionsUi(output);
             if (args.Contains("--restore-live")) return RestoreDisplayLive(output, args[2]);

@@ -20,7 +20,7 @@ import org.sonicroute.android.io.StreamSession;
 import org.sonicroute.android.platform.AndroidDisplayPlatform;
 import org.sonicroute.android.platform.AndroidSystemPlatform;
 import org.sonicroute.android.util.ServerLog;
-import org.sonicroute.android.video.H264VideoRunner;
+import org.sonicroute.android.video.VideoEncoderRunner;
 import org.sonicroute.android.video.OwnedAppMonitor;
 import org.sonicroute.android.video.PhysicalScreenSource;
 import org.sonicroute.android.video.VideoCaptureSource;
@@ -90,7 +90,7 @@ public final class SonicRouteServer {
         CleanupProcess cleanup = null;
         StreamSession session = null;
         VideoCaptureSource videoSource = null;
-        H264VideoRunner videoRunner = null;
+        VideoEncoderRunner videoRunner = null;
         OpusAudioRunner audioRunner = null;
         InputController controller = null;
 
@@ -124,7 +124,7 @@ public final class SonicRouteServer {
 
             final CleanupProcess cleanupRef = cleanup;
             final StreamSession sessionRef = session;
-            final H264VideoRunner[] videoRef = new H264VideoRunner[1];
+            final VideoEncoderRunner[] videoRef = new VideoEncoderRunner[1];
             final OpusAudioRunner[] audioRef = new OpusAudioRunner[1];
             final InputController[] controlRef = new InputController[1];
 
@@ -188,14 +188,16 @@ public final class SonicRouteServer {
                 if (controller != null) {
                     controller.setCaptureSource(videoSource);
                 }
+                int videoCodec = PacketWriter.codecIdForName(options.getVideoCodec());
                 PacketWriter videoWriter = new PacketWriter(
                         session.getVideoFd(),
-                        PacketWriter.codecIdForName(options.getVideoCodec()),
+                        videoCodec,
                         options.isSendCodecMeta(),
                         options.isSendFrameMeta());
-                videoRunner = new H264VideoRunner(
+                videoRunner = new VideoEncoderRunner(
                         videoSource,
                         videoWriter,
+                        videoCodec,
                         options.getVideoBitRate(),
                         options.getMaxFps(),
                         options.getVideoEncoder(),
@@ -279,7 +281,7 @@ public final class SonicRouteServer {
         return capture;
     }
 
-    private static void joinQuietly(InputController controller, H264VideoRunner videoRunner, OpusAudioRunner audioRunner) {
+    private static void joinQuietly(InputController controller, VideoEncoderRunner videoRunner, OpusAudioRunner audioRunner) {
         boolean interrupted = false;
         if (controller != null) {
             try {

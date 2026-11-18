@@ -24,10 +24,10 @@ internal static partial class Program
                 var links = (TextBlock)github.Parent;
                 links.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, links));
                 DrainUi();
+                string[] expectedLinks = ["BiliLink", "IfdianLink", "GithubLink", "LicenseLink"];
                 var hyperlinks = links.Inlines.OfType<Hyperlink>().Select(link => link.Name).ToArray();
-                Check(hyperlinks.SequenceEqual(["BiliLink", "IfdianLink", "GithubLink"])
-                    && !hyperlinks.Contains("OpenSourceLicensesLink"),
-                    theme + " settings about links contain only BiliLink, IfdianLink, and GithubLink without OpenSourceLicensesLink");
+                Check(hyperlinks.SequenceEqual(expectedLinks),
+                    theme + " settings about links include the author links and GPL license");
                 var label = links.Inlines.OfType<Run>().First();
                 Check(BindingOperations.GetBinding(label, Run.TextProperty)?.Mode == BindingMode.OneWay,
                     theme + " settings author home label uses a read-only localization binding");
@@ -39,9 +39,8 @@ internal static partial class Program
                         theme + " open settings about links refresh in " + language);
                 }
                 links.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, links));
-                Check(links.Inlines.OfType<Hyperlink>().Select(link => link.Name).SequenceEqual(["BiliLink", "IfdianLink", "GithubLink"])
-                    && links.Inlines.OfType<Hyperlink>().All(link => link.Name != "OpenSourceLicensesLink"),
-                    theme + " loading settings again retains only BiliLink, IfdianLink, and GithubLink");
+                Check(links.Inlines.OfType<Hyperlink>().Select(link => link.Name).SequenceEqual(expectedLinks),
+                    theme + " loading settings again preserves the author links and GPL license");
             }
             finally { window.Close(); }
         }
@@ -54,6 +53,41 @@ internal static partial class Program
             ProductStarted = false, WindowsShown = false, PhoneAccess = false, BrowserOpened = false
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"PASS {_checks} settings localization assertions; no phone or product startup.");
+        return 0;
+    }
+
+    private static int ExperimentalConfigCardChecks(string output)
+    {
+        foreach (string theme in new[] { "light", "dark" })
+        {
+            ThemeService.Apply(theme, "#00CBE9");
+            var window = new MainWindow();
+            try
+            {
+                typeof(MainWindow).GetMethod("EnsureExperimentalPage", Hidden)!.Invoke(window, null);
+                var buttons = new[] { "ExpClearConfigButton", "ExpExportConfigButton", "ExpImportConfigButton" }
+                    .Select(name => (Button)typeof(MainWindow).GetField(name, Hidden)!.GetValue(window)!).ToArray();
+                var actions = (StackPanel)buttons[0].Parent;
+                Check(ReferenceEquals(buttons[1].Parent, buttons[2].Parent)
+                    && ReferenceEquals(((WrapPanel)buttons[1].Parent).Parent, actions)
+                    && actions.Parent is Border && buttons[2].AllowDrop,
+                    theme + " clear, export, and drag import share one configuration card");
+                var title = actions.Children.OfType<TextBlock>().First();
+                foreach (string language in L10n.SupportedLanguages.Select(entry => entry.Code))
+                {
+                    L10n.Instance.SetLanguage(language);
+                    DrainUi();
+                    Check(title.Text == L10n.T("Exp.ConfigFiles") && title.Text != "Exp.ConfigFiles"
+                        && Equals(buttons[0].Content, L10n.T("Exp.ClearConfig"))
+                        && Equals(buttons[1].Content, L10n.T("Exp.ExportConfig"))
+                        && Equals(buttons[2].Content, L10n.T("Exp.ImportConfig")),
+                        theme + " configuration card translates in " + language);
+                }
+            }
+            finally { window.Close(); }
+        }
+        File.WriteAllText(Path.Combine(output, "experimental-config-card-summary.json"), JsonSerializer.Serialize(new
+        { Assertions = _checks, Themes = new[] { "light", "dark" }, ActionInvoked = false }));
         return 0;
     }
 

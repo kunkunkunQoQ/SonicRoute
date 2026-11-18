@@ -4,12 +4,21 @@ namespace SonicRoute.AndroidAudio;
 
 /// <summary>Per-phone streaming choices. Applied only when opening a new audio or video connection.</summary>
 public sealed record AndroidStreamSettings(string? AudioEncoder = null, int AudioBitRate = 128000,
-    string? VideoEncoder = null, int VideoBitRate = 4000000, int MaxFps = 30)
+    string? VideoEncoder = null, int VideoBitRate = 4000000, int MaxFps = 30,
+    string? AudioDecoder = null, string? VideoDecoder = null, string? HevcEncoder = null)
 {
+    public const string ConcentusDecoder = "concentus-opus";
+    public const string WindowsVideoDecoder = "windows-h264-d3d11";
+    public const string SoftwareVideoDecoder = "windows-h264-software";
+    public const string WindowsHevcDecoder = "windows-h265";
+
     public AndroidStreamSettings Normalize() => this with
     {
         AudioEncoder = IsEncoderName(AudioEncoder) ? AudioEncoder : null,
         VideoEncoder = IsEncoderName(VideoEncoder) ? VideoEncoder : null,
+        HevcEncoder = IsEncoderName(HevcEncoder) ? HevcEncoder : null,
+        AudioDecoder = AudioDecoder == ConcentusDecoder ? AudioDecoder : null,
+        VideoDecoder = VideoDecoder is WindowsVideoDecoder or SoftwareVideoDecoder or WindowsHevcDecoder ? VideoDecoder : null,
         AudioBitRate = AudioBitRate is >= 16000 and <= 512000 ? AudioBitRate : 128000,
         VideoBitRate = VideoBitRate is >= 100000 and <= 50000000 ? VideoBitRate : 4000000,
         MaxFps = MaxFps is >= 1 and <= 120 ? MaxFps : 30
@@ -33,4 +42,5 @@ public enum AndroidEncoderKind { Unknown, Hardware, Software }
 public sealed record AndroidEncoderCatalog(
     IReadOnlyList<string> Audio,
     IReadOnlyList<string> Video,
-    IReadOnlyDictionary<string, AndroidEncoderKind>? Kinds = null);
+    IReadOnlyDictionary<string, AndroidEncoderKind>? Kinds = null,
+    IReadOnlyList<string>? Hevc = null);

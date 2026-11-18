@@ -39,8 +39,11 @@ internal static partial class Program
             && !parsedDetails.Kinds.ContainsKey("bad;name"),
             "encoder catalog parses safe hardware and software capabilities");
         var parsedLegacy = AdbClient.ParseEncoders("{\"audio\":[\"c2.android.opus.encoder\"],\"video\":[\"c2.android.avc.encoder\"]}");
-        Check(parsedLegacy.Kinds == null && parsedLegacy.Video.SequenceEqual(["c2.android.avc.encoder"]),
+        Check(parsedLegacy.Kinds == null && parsedLegacy.Hevc is { Count: 0 } && parsedLegacy.Video.SequenceEqual(["c2.android.avc.encoder"]),
             "legacy catalog JSON without details remains backward-compatible");
+        var hevcCatalog = AdbClient.ParseEncoders("""{"audio":[],"video":["c2.android.avc.encoder"],"hevc":["c2.qti.hevc.encoder","bad;codec","c2.qti.hevc.encoder"]}""");
+        Check(hevcCatalog.Hevc!.SequenceEqual(["c2.qti.hevc.encoder"]) && hevcCatalog.Video.SequenceEqual(["c2.android.avc.encoder"]),
+            "HEVC encoder IDs remain distinct from AVC and are validated by the same rules");
         string path = Path.Combine(output, "preferences-" + Guid.NewGuid().ToString("N") + ".json");
         await File.WriteAllTextAsync(path, "{\"Version\":2,\"Apps\":{\"cn.test.music\":{\"Volume\":37,\"OutputId\":\"speakers\"}}}");
         var store = new AndroidAudioSettingsStore(path);
@@ -80,6 +83,11 @@ internal static partial class Program
         Check(!safeCmd.Contains("video_encoder=")
             && safeCmd.Contains(" max_fps=30 ") && safeCmd.Contains(" video_bit_rate=4000000 "),
             "invalid persisted video values never reach the server command line");
+        var hevc = selected with { VideoDecoder = AndroidStreamSettings.WindowsHevcDecoder, HevcEncoder = "c2.qti.hevc.encoder" };
+        restored.RememberStreaming(phone, hevc);
+        await restored.FlushAsync();
+        Check(new AndroidAudioSettingsStore(path).GetStreaming(wifi) == hevc,
+            "per-device HEVC preference reloads without dropping the saved AVC encoder");
         await File.WriteAllTextAsync(Path.Combine(output, "stream-settings-summary.json"), JsonSerializer.Serialize(new
         { Assertions = _checks, RealAdb = false, ProductStarted = false, Scope = "preferences migration, isolation, capability parsing, 24/32/50 Mbps, 120 fps, and both video paths" },
             new JsonSerializerOptions { WriteIndented = true }));

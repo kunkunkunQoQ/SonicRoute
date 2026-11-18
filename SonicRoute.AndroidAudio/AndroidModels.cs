@@ -161,6 +161,23 @@ public static class AndroidDeviceIdentity
     }
     public static bool Matches(AndroidDevice? left, AndroidDevice? right) => left != null && right != null
         && (StringComparer.Ordinal.Equals(left.Serial, right.Serial) || StringComparer.Ordinal.Equals(Key(left), Key(right)));
+
+    internal static string? StableKey(AndroidDevice? device)
+    {
+        if (device == null) return null;
+        string key = Key(device);
+        return key.StartsWith("device:", StringComparison.Ordinal) && key.Length > "device:".Length ? key : null;
+    }
+
+    internal static bool SamePhysicalDevice(AndroidDevice? left, AndroidDevice? right) =>
+        StableKey(left) is { } key && string.Equals(key, StableKey(right), StringComparison.Ordinal);
+
+    internal static bool MatchesSavedDevice(AndroidDevice? saved, AndroidDevice device)
+    {
+        if (saved == null) return false;
+        string? savedKey = StableKey(saved), currentKey = StableKey(device);
+        return savedKey != null && currentKey != null ? savedKey == currentKey : saved.Serial == device.Serial;
+    }
     public static IReadOnlyList<AndroidDevice> Distinct(IReadOnlyList<AndroidDevice> devices) => devices
         .GroupBy(Key, StringComparer.Ordinal).Select(group => group.OrderByDescending(d => d.State == "device")
             .ThenByDescending(d => d.Serial.Contains("_adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase)).First()).ToArray();

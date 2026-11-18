@@ -15,11 +15,11 @@ public partial class PhoneDevicePage
     private Task? _qrTask;
     private bool _qrRetry;
     private bool CanShowQr => !_disposed && _active && !_busy && IsLoaded && IsVisible
-        && IsConnectionPage && ConnectionPanel.IsVisible;
+        && IsConnectionPage && ConnectionPanel.IsVisible && PairingCard.Visibility == Visibility.Visible;
 
-    private void PairingLoaded(object sender, RoutedEventArgs e) => UpdateQrPairing();
-    private void PairingUnloaded(object sender, RoutedEventArgs e) => StopQrPairing();
-    private void PairingVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateQrPairing();
+    private void PairingLoaded(object sender, RoutedEventArgs e) { UpdateQrPairing(); UpdateStreamingVisibility(); }
+    private void PairingUnloaded(object sender, RoutedEventArgs e) { StopQrPairing(); CancelEncoderRead(); }
+    private void PairingVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) { UpdateQrPairing(); UpdateStreamingVisibility(); }
     private void QrPair_Click(object sender, RoutedEventArgs e)
     {
         if (!CanShowQr) return;

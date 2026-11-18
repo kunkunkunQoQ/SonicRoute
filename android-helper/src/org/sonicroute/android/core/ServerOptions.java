@@ -184,10 +184,11 @@ public final class ServerOptions {
                 opts.control = Boolean.parseBoolean(value);
                 break;
             case "video_codec":
-                if (!"h264".equalsIgnoreCase(value)) {
-                    throw new IllegalArgumentException("Only h264 video_codec is supported, got: " + value);
+                String lowerVideoCodec = value.toLowerCase(Locale.ENGLISH);
+                if (!"h264".equals(lowerVideoCodec) && !"h265".equals(lowerVideoCodec)) {
+                    throw new IllegalArgumentException("Unsupported video_codec: " + value);
                 }
-                opts.videoCodec = "h264";
+                opts.videoCodec = lowerVideoCodec;
                 break;
             case "audio_codec":
                 String lowerAudioCodec = value.toLowerCase(Locale.ENGLISH);

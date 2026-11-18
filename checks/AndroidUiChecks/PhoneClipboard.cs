@@ -174,6 +174,26 @@ internal static partial class Program
                 && !AndroidClipboardClient.IsOwnedCommand("app_process other.service " + new string('a', 32), new string('a', 32)),
                 "helper cleanup accepts only this clipboard class and its exact session ownership token");
             var host = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!;
+            var store = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
+            store.RememberDevice(two);
+            var profilesChanged = typeof(PhoneClipboardSync).GetMethod("ProfilesChanged", Hidden)!;
+            store.RemoveDevice(store.Profile.Id);
+            profilesChanged.Invoke(sync, null);
+            var beforeRemoval = clients.Last();
+            Until(() => beforeRemoval.Stopped);
+            Pump(sync.FlushAsync());
+            int removedCount = clients.Count;
+            Pump(sync.DisposeAsync().AsTask());
+            desktop = new ClipboardDesktop(); sync = New(desktop); Pump(sync.InitializeAsync());
+            Check(!sync.IsEnabled(two) && !desktop.Listening && clients.Count == removedCount && scans == 0,
+                "removed-device clipboard preferences are inert even after restarting with its old transport still visible");
+            var newTransport = two with { Serial = "clipboard-fixture-two-readded" };
+            discovery.Publish([newTransport]);
+            store.RememberDevice(newTransport);
+            profilesChanged.Invoke(sync, null);
+            Ready(newTransport);
+            Check(sync.IsEnabled(newTransport) && clients.Count == removedCount + 1 && desktop.Reads == 0,
+                "re-adding the same device restores its clipboard switch without sending old clipboard text");
             Check(!(bool)host.GetProperty("IsAdbCreated", statics)!.GetValue(null)!, "clipboard fixtures touch no real ADB service or system clipboard");
             File.WriteAllText(Path.Combine(output, "clipboard-summary.json"), JsonSerializer.Serialize(new
                 { Assertions = _checks, RealAdb = false, RealClipboard = false, Cases = "per-device settings, Unicode, echo suppression, coalescing, races, restore, disconnect and disposal" }));

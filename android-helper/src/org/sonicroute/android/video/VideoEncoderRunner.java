@@ -16,11 +16,10 @@ import org.sonicroute.android.util.ServerLog;
 import org.sonicroute.android.video.VideoCaptureSource.ResetCoordinator;
 
 /**
- * Hardware-surface H.264 encoder loop supporting dynamic resize resets and downsize-on-error fallback.
+ * Surface encoder loop for H.264 and HEVC with dynamic resize and downsize-on-error fallback.
  * Reads encoded NALUs via blocking {@code MediaCodec.dequeueOutputBuffer(-1)}.
  */
-public final class H264VideoRunner {
-    private static final String MIME_AVC = MediaFormat.MIMETYPE_VIDEO_AVC;
+public final class VideoEncoderRunner {
     private static final String KEY_MAX_FPS_TO_ENCODER = "max-fps-to-encoder";
     private static final int DEFAULT_I_FRAME_INTERVAL_SEC = 10;
     private static final long REPEAT_PREVIOUS_FRAME_AFTER_US = 100_000L;
@@ -30,17 +29,20 @@ public final class H264VideoRunner {
     private final PacketWriter writer;
     private final int bitRate;
     private final float maxFps;
-    private final String explicitEncoder;
     private final List<MediaCodecParams.Entry> codecOptions;
     private final boolean downsizeOnError;
     private final Runnable onFinish;
 
     private volatile boolean stopped;
+    private int codecId;
+    private String encoderName;
+    private boolean headerSent;
     private Thread thread;
 
-    public H264VideoRunner(
+    public VideoEncoderRunner(
             VideoCaptureSource capture,
             PacketWriter writer,
+            int codecId,
             int bitRate,
             float maxFps,
             String explicitEncoder,
@@ -49,9 +51,10 @@ public final class H264VideoRunner {
             Runnable onFinish) {
         this.capture = capture;
         this.writer = writer;
+        this.codecId = codecId;
         this.bitRate = bitRate;
         this.maxFps = maxFps;
-        this.explicitEncoder = explicitEncoder;
+        this.encoderName = explicitEncoder;
         this.codecOptions = codecOptions;
         this.downsizeOnError = downsizeOnError;
         this.onFinish = onFinish;
@@ -91,7 +94,6 @@ public final class H264VideoRunner {
 
     private void streamLoop() throws IOException {
         capture.init();
-        boolean headerSent = false;
         ResetCoordinator reset = capture.getResetCoordinator();
         try {
             boolean alive;
@@ -105,12 +107,6 @@ public final class H264VideoRunner {
                 if (videoSize == null) {
                     throw new IOException("Capture size unavailable");
                 }
-                if (!headerSent) {
-                    writer.writeVideoHeader(videoSize.getWidth(), videoSize.getHeight());
-                    headerSent = true;
-                    ServerLog.i("Texture: " + videoSize.getWidth() + "x" + videoSize.getHeight());
-                }
-
                 alive = encodeSingleSession(videoSize, reset);
             } while (alive && !stopped);
         } finally {
@@ -119,36 +115,58 @@ public final class H264VideoRunner {
     }
 
     private boolean encodeSingleSession(Size videoSize, ResetCoordinator reset) throws IOException {
-        MediaFormat format = buildVideoFormat();
+        String mime = codecId == PacketWriter.CODEC_ID_H265 ? MediaFormat.MIMETYPE_VIDEO_HEVC : MediaFormat.MIMETYPE_VIDEO_AVC;
+        MediaFormat format = buildVideoFormat(mime);
         int currentMaxSide = videoSize.getMaxSide();
         int fallbackIdx = 0;
 
         while (!stopped) {
-            MediaCodec codec = MediaCodecParams.createEncoder(MIME_AVC, explicitEncoder);
+            MediaCodec codec = null;
             Surface surface = null;
             boolean codecStarted = false;
             boolean captureStarted = false;
             Size activeSize = capture.getVideoSize();
             try {
+                codec = MediaCodecParams.createEncoder(mime, encoderName);
                 format.setInteger(MediaFormat.KEY_WIDTH, activeSize.getWidth());
                 format.setInteger(MediaFormat.KEY_HEIGHT, activeSize.getHeight());
 
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
                 surface = codec.createInputSurface();
-                capture.start(surface);
-                captureStarted = true;
                 codec.start();
                 codecStarted = true;
-                reset.setActiveCodec(codec);
                 if (stopped) {
                     return false;
+                }
+                capture.start(surface);
+                captureStarted = true;
+                reset.setActiveCodec(codec);
+                if (!headerSent) {
+                    // Report the negotiated codec and size only once the encoder can drive the capture surface.
+                    writer.writeVideoHeader(codecId, activeSize.getWidth(), activeSize.getHeight());
+                    headerSent = true;
+                    ServerLog.i("Texture: " + activeSize.getWidth() + "x" + activeSize.getHeight());
                 }
 
                 boolean eof = drainOutputs(codec);
                 return eof && reset.consumeReset() && !capture.isClosed() && !stopped;
-            } catch (IllegalStateException | IllegalArgumentException error) {
+            } catch (IllegalStateException | IllegalArgumentException | IOException error) {
                 if (stopped) {
                     return false;
+                }
+                if (!codecStarted && !headerSent && codecId == PacketWriter.CODEC_ID_H265) {
+                    ServerLog.w("HEVC encoder unavailable at " + activeSize + ", switching to H.264: " + error.getMessage());
+                    codecId = PacketWriter.CODEC_ID_H264;
+                    encoderName = null;
+                    mime = MediaFormat.MIMETYPE_VIDEO_AVC;
+                    format = buildVideoFormat(mime);
+                    continue;
+                }
+                if (error instanceof IOException) {
+                    throw (IOException) error;
+                }
+                if (codec == null) {
+                    throw error;
                 }
                 if (!downsizeOnError) {
                     throw new IOException("Video encoder configuration failed: " + error.getMessage(), error);
@@ -171,9 +189,11 @@ public final class H264VideoRunner {
                     } catch (Throwable ignored) {
                     }
                 }
-                try {
-                    codec.release();
-                } catch (Throwable ignored) {
+                if (codec != null) {
+                    try {
+                        codec.release();
+                    } catch (Throwable ignored) {
+                    }
                 }
                 if (surface != null) {
                     surface.release();
@@ -210,9 +230,12 @@ public final class H264VideoRunner {
         return false;
     }
 
-    private MediaFormat buildVideoFormat() {
+    private MediaFormat buildVideoFormat(String mime) {
         MediaFormat format = new MediaFormat();
-        format.setString(MediaFormat.KEY_MIME, MIME_AVC);
+        format.setString(MediaFormat.KEY_MIME, mime);
+        if (MediaFormat.MIMETYPE_VIDEO_HEVC.equals(mime)) {
+            format.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.HEVCProfileMain);
+        }
         format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
         format.setInteger(MediaFormat.KEY_FRAME_RATE, 60);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);

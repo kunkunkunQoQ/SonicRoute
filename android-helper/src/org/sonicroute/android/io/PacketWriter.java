@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
  */
 public final class PacketWriter {
     public static final int CODEC_ID_H264 = 0x68323634; // "h264"
+    public static final int CODEC_ID_H265 = 0x68323635; // "h265"
     public static final int CODEC_ID_OPUS = 0x6f707573; // "opus"
     public static final int CODEC_ID_RAW = 0x72617720;  // "raw "
 
@@ -41,6 +42,9 @@ public final class PacketWriter {
         if ("h264".equalsIgnoreCase(name)) {
             return CODEC_ID_H264;
         }
+        if ("h265".equalsIgnoreCase(name)) {
+            return CODEC_ID_H265;
+        }
         if ("opus".equalsIgnoreCase(name)) {
             return CODEC_ID_OPUS;
         }
@@ -50,12 +54,12 @@ public final class PacketWriter {
         throw new IllegalArgumentException("Unsupported codec name: " + name);
     }
 
-    public void writeVideoHeader(int width, int height) throws IOException {
+    public void writeVideoHeader(int activeCodecId, int width, int height) throws IOException {
         if (!sendCodecMeta) {
             return;
         }
         ByteBuffer buf = ByteBuffer.allocate(12);
-        buf.putInt(codecId);
+        buf.putInt(activeCodecId);
         buf.putInt(width);
         buf.putInt(height);
         buf.flip();

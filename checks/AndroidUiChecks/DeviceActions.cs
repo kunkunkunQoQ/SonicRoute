@@ -57,22 +57,25 @@ internal static partial class Program
             discovery.Publish([one, two]);
             phone.Show(); Pump((Task)Call(phone, "InitializeDevicesAsync")!);
             CheckSharedDragPreview(phone);
+            string[] pinnedPackages = store.Profile.RetainedApps.Select(a => a.Package).ToArray();
             remove.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Pump(WaitUntilAsync(() => !(bool)typeof(PhoneDevicePage).GetField("_busy", Hidden)!.GetValue(page)!, TimeSpan.FromSeconds(5)));
             DrainUi();
             var combo = (ComboBox)phone.FindName("DeviceCombo");
             var sidebar = (StackPanel)main.FindName("PhoneDevicesHost");
-            Check(store.Profiles.Count == 1 && store.Profile.Name == "Second" && combo.Items.Count == 1
+            Check(store.Profiles.Count == 1 && store.Profile.Name == "Second" && combo.Items.OfType<AndroidDevice>().Count() == 1
                 && combo.SelectedItem is AndroidDevice selected && selected.HardwareId == two.HardwareId
                 && ((ListBox)main.FindName("PhoneDevicesList")).Items.Count == 1,
                 "offline removal immediately updates the sidebar and quick phone selection");
             Check(!LazyCreated("LazyAdb") && !LazyCreated("LazySources") && !LazyCreated("LazyDisplays") && scans == 0,
                 "unused phone removal starts no tools, audio, video or discovery");
             discovery.Publish([one with { State = "device" }, two]); DrainUi();
-            Check(combo.Items.Count == 1 && store.Profiles.Count == 1 && store.IsRemoved(one),
+            Check(combo.Items.OfType<AndroidDevice>().Count() == 1 && store.Profiles.Count == 1 && store.IsRemoved(one),
                 "a late device snapshot cannot restore a locally removed phone in either UI");
 
-            store.RememberDevice(one with { State = "device" }); store.Retain(app); DrainUi();
+            store.RememberDevice(one with { State = "device" }); DrainUi();
+            Check(store.Profile.Id == first && store.Profile.Name == "First" && store.Profile.RetainedApps.Select(a => a.Package).SequenceEqual(pinnedPackages),
+                "explicitly re-adding the removed device restores its original settings and application list");
             var sources = (AndroidAudioManager)host.GetProperty("Sources", statics)!.GetValue(null)!;
             var owned = AddFixture(sources, one, app); var other = AddFixture(sources, two, app);
             var extra = AddFixture(sources, one, app with { Package = "cn.test.keepplaying" });
@@ -93,7 +96,7 @@ internal static partial class Program
                     DrainUi();
                     Check(returnOverlay.Visibility == Visibility.Visible && returnCell.Visibility == Visibility.Visible
                         && ((ListBox)phone.FindName("PhoneApps")).Visibility == Visibility.Hidden
-                        && Descendants<TextBlock>(returnCell).Any(t => t.Text == "返回手机播放"
+                        && Descendants<TextBlock>(returnCell).Any(t => t.Text == L10n.T("Phone.ReturnToPhoneTitle")
                             && ReferenceEquals(t.Foreground, phone.FindResource("Theme.TextPrimary"))),
                         theme + " phone drag immediately shows the themed return card before entering the panel");
                 }
@@ -132,16 +135,22 @@ internal static partial class Program
             remove.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Pump(WaitUntilAsync(() => !(bool)typeof(PhoneDevicePage).GetField("_busy", Hidden)!.GetValue(page)!, TimeSpan.FromSeconds(5)));
             DrainUi();
-            Check(store.Profile.LastDevice == null && combo.Items.Count == 0 && sources.Sources.Count == 0
+            Check(store.Profile.LastDevice == null && combo.Items.Count == 1 && !combo.Items.OfType<AndroidDevice>().Any() && sources.Sources.Count == 0
                 && sidebar.Children.OfType<Button>().Count() == 1
                 && ((FrameworkElement)page.FindName("ConnectionPanel")).Visibility == Visibility.Visible,
                 "last removal leaves Add Device and clears quick phone apps and playback");
+            var overUsb = two with { Serial = "fixture-two", IsWifi = false };
+            discovery.Publish([overUsb]); Call(page, "ApplyDevices", (object)new[] { overUsb }); DrainUi();
+            var usbChoices = (ItemsControl)page.FindName("RestoreUsbDevices");
+            Check(usbChoices.Visibility == Visibility.Visible && usbChoices.Items.Count == 1 && store.Profile.LastDevice == null,
+                "a connected removed USB device offers explicit restoration without re-adding on discovery");
             Pump(store.FlushAsync());
             File.WriteAllText(Path.Combine(output, "result.json"), JsonSerializer.Serialize(new
             { Passed = true, Assertions = _checks, RealDeviceAccess = false, Scans = scans,
                 Scope = "Offline UI removal, stale discovery, isolated source cleanup, lazy startup, themes, phone output device pool and PC-to-phone dynamic drop grid" }, new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine($"PASS {_checks} device action UI assertions"); return 0;
         }
+        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         finally { phone.Close(); main.Close(); }
     }
 
@@ -155,10 +164,12 @@ internal static partial class Program
         pcToPhone.EnableLiveStreaming = false;
 
         var combo = (ComboBox)phone.FindName("DeviceCombo");
-        combo.SelectedItem = combo.Items.Cast<AndroidDevice>().First(d => AndroidDeviceIdentity.Matches(d, device));
+        combo.SelectedItem = combo.Items.OfType<AndroidDevice>().First(d => AndroidDeviceIdentity.Matches(d, device));
         var overlay = (Border)phone.FindName("PcDropHighlight");
         var grid = (Grid)phone.FindName("PcDropZonesGrid");
         string phoneKey = AndroidDeviceIdentity.Key(device);
+        string speakerTitle = string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"),
+            string.Format(L10n.T("Phone.PcDropSpeakerTitle"), store.GetDisplayName(device)));
         string spkId = AndroidOutputIdentity.FormatDeviceId(phoneKey, "speaker");
         string btKey = "bt:8:AA:BB:CC:DD:EE:FF";
         string btId = AndroidOutputIdentity.FormatDeviceId(phoneKey, btKey);
@@ -171,7 +182,7 @@ internal static partial class Program
             DrainUi();
             Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 1
                 && phone.FindName("PcSpeakerDropZone") is Border && phone.FindName("PcBluetoothDropZone_1") == null
-                && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在我的手机 扬声器播放"),
+                && Descendants<TextBlock>(grid).Any(t => t.Text == speakerTitle),
                 "phone panel shows a single speaker-only drop cell when no Bluetooth output is connected");
 
             var btScoDup = new AndroidOutputSink("bt:Xiaomi_Buds_4_Pro", AndroidOutputSinkKind.Bluetooth, 16, 7, "Xiaomi Buds 4 Pro", "00:00:00:00:00:00");
@@ -182,7 +193,7 @@ internal static partial class Program
             Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 2
                 && phone.FindName("PcSpeakerDropZone") is Border && phone.FindName("PcBluetoothDropZone_1") is Border
                 && phone.FindName("PcBluetoothDropZone_2") == null
-                && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在我的手机 扬声器播放")
+                && Descendants<TextBlock>(grid).Any(t => t.Text == speakerTitle)
                 && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在 Xiaomi Buds 4 Pro 播放"),
                 "connecting a playable Bluetooth device deduplicates SCO + A2DP and dynamically splits the phone drop overlay into speaker and Bluetooth cells");
 

@@ -18,6 +18,9 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
     private readonly IAdbTransport? _explicitTransport;
     private IAdbTransport? _resolvedTransport;
     private bool _catalogVerified;
+    private readonly object _encoderGate = new();
+    private readonly Dictionary<string, AndroidEncoderCatalog> _encoderCatalogs = new(StringComparer.Ordinal);
+    private int _encoderRevision;
 
     public string RuntimeDirectory => _bundle?.DirectoryPath ?? _runtimeDirectory!;
     public string CatalogFile => Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
@@ -346,6 +349,14 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
 
     public async Task<AndroidEncoderCatalog> EncodersAsync(AndroidDevice device, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+        string key = AndroidDeviceIdentity.Key(device);
+        int revision;
+        lock (_encoderGate)
+        {
+            if (_encoderCatalogs.TryGetValue(key, out var cached)) return cached;
+            revision = _encoderRevision;
+        }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(12));
         await PrepareRuntimeAsync("audio", deadline.Token).ConfigureAwait(false);
@@ -356,13 +367,41 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
             await RunAsync(deadline.Token, "-s", device.Serial, "push", CatalogFile, remote).ConfigureAwait(false);
             string output = await RunAsync(deadline.Token, "-s", device.Serial, "shell", "CLASSPATH=" + remote,
                 "app_process", "/", "org.sonicroute.android.EncoderCatalog").ConfigureAwait(false);
-            return ParseEncoders(output);
+            var catalog = ParseEncoders(output);
+            deadline.Token.ThrowIfCancellationRequested();
+            lock (_encoderGate)
+            {
+                // Small process-local capability cache; no disk work, expiry timer or idle scan.
+                if (revision == _encoderRevision)
+                {
+                    if (_encoderCatalogs.Count >= 4 && !_encoderCatalogs.ContainsKey(key))
+                        _encoderCatalogs.Remove(_encoderCatalogs.Keys.First());
+                    _encoderCatalogs[key] = catalog;
+                }
+            }
+            return catalog;
         }
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch (Exception ex) when (ex is IOException or OperationCanceledException) { Trace.WriteLine("Encoder query cleanup: " + ex.Message); }
+        }
+    }
+
+    internal bool IsHevcEncoderUnavailable(AndroidDevice device)
+    {
+        string key = AndroidDeviceIdentity.Key(device);
+        lock (_encoderGate)
+            return _encoderCatalogs.TryGetValue(key, out var catalog) && catalog.Hevc is { Count: 0 };
+    }
+
+    public void InvalidateEncoders(AndroidDevice device)
+    {
+        lock (_encoderGate)
+        {
+            ++_encoderRevision; // An older in-flight query cannot undo an explicit refresh.
+            _encoderCatalogs.Remove(AndroidDeviceIdentity.Key(device));
         }
     }
 
@@ -393,7 +432,9 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
                     else if (sw) kinds[entry.Name] = AndroidEncoderKind.Software;
                 }
             }
-            return new(Names(audio), Names(video), kinds);
+            var hevc = json.RootElement.TryGetProperty("hevc", out var hevcNames) && hevcNames.ValueKind == JsonValueKind.Array
+                ? Names(hevcNames) : Array.Empty<string>();
+            return new(Names(audio), Names(video), kinds, hevc);
         }
         throw new InvalidDataException("The phone did not return an encoder catalogue.");
     }

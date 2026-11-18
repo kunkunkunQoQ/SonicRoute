@@ -83,7 +83,7 @@ public partial class MainWindow
         BindingOperations.SetBinding(add, ContentControl.ContentProperty, new Binding("[Phone.AddDeviceButton]") { Source = L10n.Instance });
         add.SetResourceReference(StyleProperty,"QuickPanelToolButton");
         add.SetResourceReference(ForegroundProperty,"Theme.TextPrimary");
-        add.Click += (_,_) => { SelectPhoneManagement(); _phoneDevicePage?.ShowConnection(); UpdatePhoneSidebarSelection(); };
+        add.Click += (_, _) => OpenPhoneManagement(addDevice: true);
         PhoneDevicesHost.Children.Add(add);
         var line = new Border { Height = 1, Margin = new Thickness(2,0,2,8) }; line.SetResourceReference(Border.BackgroundProperty,"Theme.Border"); PhoneDevicesHost.Children.Add(line);
         AndroidAudioHost.Phone.Changed += PhoneLibraryChanged;
@@ -176,12 +176,14 @@ public partial class MainWindow
         if (count == null) { count = new TextBlock { FontSize = 11 }; count.SetResourceReference(TextBlock.ForegroundProperty,"Theme.TextSecondary"); _phoneSidebarCount.Child = count; }
         count.Text = profiles.Length.ToString();
     }
-    internal async void SelectPhoneManagement()
+    internal void SelectPhoneManagement() => OpenPhoneManagement(addDevice: false);
+    private async void OpenPhoneManagement(bool addDevice)
     {
         await InitializePhoneManagementAsync();
         if (_isClosed) return;
         NavApps.IsChecked = true;
         _phoneDevicePage ??= new PhoneDevicePage();
+        if (addDevice) _phoneDevicePage.ShowConnection();
         PhoneDetailsHost.Child = _phoneDevicePage;
         ShowPhoneDeviceDetails(true);
         AppsListBox.SelectedItem = null;

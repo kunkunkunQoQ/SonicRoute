@@ -24,6 +24,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private const int WmDestroy = 0x0002;
     private const int WmSize = 0x0005;
+    private const int WmActivate = 0x0006;
     private const int WmSetFocus = 0x0007;
     private const int WmKillFocus = 0x0008;
     private const int WmPaint = 0x000F;
@@ -76,6 +77,8 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private const uint SwpFrameChanged = 0x0020;
 
     private const int SizeMinimized = 1;
+    private const uint FirstGamepadKey = 0xC3;
+    private const uint LastGamepadKey = 0xDA;
     private const int GidcRemoval = 2;
     private const int IconSmall = 0;
     private const int IconBig = 1;
@@ -134,9 +137,12 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private char _pendingHighSurrogate;
 
     private readonly NativeGamepadReader _gamepadReader = new();
+    private readonly bool _acceptsGamepad;
     private readonly GamepadInputState[] _lastGamepadStates = new GamepadInputState[NativeGamepadReader.MaxSlots];
     private readonly bool[] _slotActiveNonNeutral = new bool[NativeGamepadReader.MaxSlots];
     private bool _hasFocus;
+    private int _gamepadFocusVersion;
+    private uint _pressedGamepadKeys;
     private bool _gamepadTimerActive;
     private int _xinputConnectedMask;
     private Func<int, XInputSample>? _xinputProbeOverride;
@@ -150,11 +156,13 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         int y,
         int initialClientWidth,
         int initialClientHeight,
-        string? appUserModelId = null)
+        string? appUserModelId = null,
+        bool acceptsGamepad = true)
     {
         _title = string.IsNullOrWhiteSpace(title) ? "SonicRoute" : title;
         _isMirrorMode = isMirrorMode;
         _preferText = preferText;
+        _acceptsGamepad = acceptsGamepad;
         _iconPng = iconPng;
         _initialX = x;
         _initialY = y;
@@ -198,7 +206,9 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     public event Action<GamepadInputState>? GamepadStateChanged;
 
     internal bool HasGamepadFocus => Volatile.Read(ref _hasFocus);
+    internal int GamepadFocusVersion => Volatile.Read(ref _gamepadFocusVersion);
     internal bool IsGamepadTimerActive => Volatile.Read(ref _gamepadTimerActive);
+    internal Func<nint>? ForegroundWindowProbeOverride { get; set; }
     internal Func<int, XInputSample>? XInputProbeOverride
     {
         get => Volatile.Read(ref _xinputProbeOverride);
@@ -304,15 +314,9 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
             ApplyWindowAppUserModelId(hwnd, _appUserModelId);
             ApplyWindowIcon(hwnd);
-            if (GetForegroundWindow() == hwnd || !AnyOtherWindowHasGamepadFocus(hwnd))
-                NativeGamepadReader.RegisterWindow(hwnd);
             if (!_created.TrySetResult(hwnd)) return;
 
-            if (GetForegroundWindow() == hwnd && !IsIconic(hwnd))
-            {
-                Volatile.Write(ref _hasFocus, true);
-                RefreshXInputPolling(hwnd);
-            }
+            TryEnableGamepadInput(hwnd);
 
             while (GetMessage(out var msg, 0, 0, 0) > 0)
             {
@@ -473,11 +477,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                         if (!_inSizeMove && !_suppressProgrammaticSize && !_isMirrorMode)
                             EmitFlexResizeAndCommit(cw, ch, bypassThrottle: true, commitWindowSize: true);
                     }
-                    if (!HasGamepadFocus && GetForegroundWindow() == hwnd)
-                    {
-                        Volatile.Write(ref _hasFocus, true);
-                        RefreshXInputPolling(hwnd);
-                    }
+                    if (!HasGamepadFocus) TryEnableGamepadInput(hwnd);
                 }
                 return 0;
 
@@ -520,13 +520,12 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 _imeRouter.OnEndComposition();
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
+            case WmActivate:
+                if ((wParam.ToInt64() & 0xFFFF) == 0) OnGamepadFocusLostOrMinimized(hwnd);
+                return DefWindowProc(hwnd, msg, wParam, lParam);
+
             case WmSetFocus:
-                NativeGamepadReader.RegisterWindow(hwnd);
-                if (!IsIconic(hwnd))
-                {
-                    Volatile.Write(ref _hasFocus, true);
-                    RefreshXInputPolling(hwnd);
-                }
+                TryEnableGamepadInput(hwnd);
                 return 0;
 
             case WmKillFocus:
@@ -537,7 +536,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 return 0;
 
             case WmInput:
-                if (HasGamepadFocus && !IsIconic(hwnd) &&
+                if (HasGamepadFocus && IsForegroundGamepadWindow(hwnd) &&
                     _gamepadReader.TryProcessRawInput(lParam, _xinputConnectedMask, out var hidState))
                 {
                     PublishGamepadState(hidState);
@@ -550,13 +549,11 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                     int removedSlot = _gamepadReader.RemoveHidDevice(lParam);
                     if (removedSlot >= 0) EmitNeutralForSlotIfActive(removedSlot);
                 }
-                if (HasGamepadFocus && !IsIconic(hwnd))
-                    RefreshXInputPolling(hwnd);
+                if (HasGamepadFocus) RefreshXInputPolling(hwnd);
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
             case WmDeviceChange:
-                if (HasGamepadFocus && !IsIconic(hwnd))
-                    RefreshXInputPolling(hwnd);
+                if (HasGamepadFocus) RefreshXInputPolling(hwnd);
                 return DefWindowProc(hwnd, msg, wParam, lParam);
 
             case WmKeyDown:
@@ -635,20 +632,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
                 OnGamepadFocusLostOrMinimized(hwnd);
                 ActiveWindows.TryRemove(hwnd, out _);
                 if (ActiveWindows.IsEmpty)
-                {
                     NativeGamepadReader.UnregisterIfNoWindowsRemain();
-                }
-                else
-                {
-                    foreach (var other in ActiveWindows.Values)
-                    {
-                        if (other.HasGamepadFocus && other.WindowHandle is var otherHwnd && otherHwnd != 0)
-                        {
-                            NativeGamepadReader.RegisterWindow(otherHwnd);
-                            break;
-                        }
-                    }
-                }
                 _gamepadReader.Dispose();
                 Volatile.Write(ref _hwnd, 0);
                 WicIconLoader.DestroyIconSafe(ref _bigIcon);
@@ -980,6 +964,14 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         if (!AndroidKeycodeMapper.TryMapVirtualKey(vk, extended, out int androidKey))
             return;
 
+        if (vk is >= FirstGamepadKey and <= LastGamepadKey)
+        {
+            if (!HasGamepadFocus || !IsForegroundGamepadWindow(WindowHandle)) return;
+            uint keyBit = 1u << (int)(vk - FirstGamepadKey);
+            if (isDown) _pressedGamepadKeys |= keyBit;
+            else _pressedGamepadKeys &= ~keyBit;
+        }
+
         int meta = ReadCurrentMetaState();
         byte action = isDown ? ScrcpyControlMessageWriter.KeyActionDown : ScrcpyControlMessageWriter.KeyActionUp;
         KeyEvent?.Invoke(action, androidKey, repeat, meta);
@@ -1058,21 +1050,31 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         if (GetCapture() == hwnd) ReleaseCapture();
     }
 
-    private static bool AnyOtherWindowHasGamepadFocus(nint excludeHwnd)
+    private bool IsForegroundGamepadWindow(nint hwnd)
     {
-        foreach (var pair in ActiveWindows)
-        {
-            if (pair.Key != excludeHwnd && pair.Value.HasGamepadFocus)
-                return true;
-        }
-        return false;
+        return hwnd != 0 && (ForegroundWindowProbeOverride?.Invoke() ?? GetForegroundWindow()) == hwnd && !IsIconic(hwnd);
+    }
+
+    internal bool CanSendGamepadInput(int focusVersion)
+    {
+        return HasGamepadFocus && GamepadFocusVersion == focusVersion && IsForegroundGamepadWindow(WindowHandle);
+    }
+
+    private void TryEnableGamepadInput(nint hwnd)
+    {
+        if (!_acceptsGamepad || HasGamepadFocus || !IsForegroundGamepadWindow(hwnd)) return;
+
+        NativeGamepadReader.RegisterWindow(hwnd);
+        Interlocked.Increment(ref _gamepadFocusVersion);
+        Volatile.Write(ref _hasFocus, true);
+        RefreshXInputPolling(hwnd);
     }
 
     private void RefreshXInputPolling(nint hwnd)
     {
-        if (!HasGamepadFocus || IsIconic(hwnd))
+        if (!HasGamepadFocus || !IsForegroundGamepadWindow(hwnd))
         {
-            StopGamepadTimerIfNeeded(hwnd);
+            OnGamepadFocusLostOrMinimized(hwnd);
             return;
         }
 
@@ -1211,6 +1213,15 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         StopGamepadTimerIfNeeded(hwnd);
         _xinputConnectedMask = 0;
         EmitNeutralForAllActiveSlots();
+        uint pressedKeys = _pressedGamepadKeys;
+        _pressedGamepadKeys = 0;
+        while (pressedKeys != 0)
+        {
+            int bit = System.Numerics.BitOperations.TrailingZeroCount(pressedKeys);
+            pressedKeys &= pressedKeys - 1;
+            if (AndroidKeycodeMapper.TryMapVirtualKey(FirstGamepadKey + (uint)bit, false, out int androidKey))
+                KeyEvent?.Invoke(ScrcpyControlMessageWriter.KeyActionUp, androidKey, 0, 0);
+        }
     }
 
     private void RequestClose()

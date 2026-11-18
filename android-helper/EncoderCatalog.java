@@ -7,11 +7,11 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.TreeSet;
 
-/** A one-shot query, run only when the user opens an encoder picker. */
+/** A one-shot query for the visible device settings page. */
 public final class EncoderCatalog {
     public static void main(String[] args) throws Exception {
         JSONObject result = new JSONObject();
-        TreeSet<String> audio = new TreeSet<>(), video = new TreeSet<>();
+        TreeSet<String> audio = new TreeSet<>(), video = new TreeSet<>(), hevc = new TreeSet<>();
         JSONObject details = new JSONObject();
         for (MediaCodecInfo codec : new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
             if (!codec.isEncoder() || codec.isAlias()) continue;
@@ -19,6 +19,7 @@ public final class EncoderCatalog {
             for (String type : codec.getSupportedTypes()) {
                 if ("audio/opus".equalsIgnoreCase(type)) { audio.add(codec.getName()); matched = true; }
                 if ("video/avc".equalsIgnoreCase(type)) { video.add(codec.getName()); matched = true; }
+                if ("video/hevc".equalsIgnoreCase(type)) { hevc.add(codec.getName()); matched = true; }
             }
             if (matched && Build.VERSION.SDK_INT >= 29) {
                 JSONObject meta = new JSONObject();
@@ -29,6 +30,7 @@ public final class EncoderCatalog {
         }
         result.put("audio", new JSONArray(audio));
         result.put("video", new JSONArray(video));
+        result.put("hevc", new JSONArray(hevc));
         result.put("details", details);
         System.out.println(result.toString());
     }

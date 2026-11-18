@@ -52,10 +52,12 @@ public sealed class PhoneAppChoice : INotifyPropertyChanged
 
 public partial class PhoneDevicePage : UserControl, IDisposable
 {
+    private sealed record UsbRestoreChoice(AndroidDevice Device, string Label);
     private readonly CancellationTokenSource _lifetime = new();
     private AndroidWirelessConnection? _wireless;
     private AndroidWirelessConnection Wireless => _wireless ??= new AndroidWirelessConnection(AndroidAudioHost.Adb);
     private readonly Func<AndroidQrPairing> _createQr;
+    private readonly Func<AndroidDevice, CancellationToken, Task<AndroidEncoderCatalog>> _readStreamEncoders;
     private CancellationTokenSource? _operation;
     private IReadOnlyList<PhoneAppItem> _catalog = Array.Empty<PhoneAppItem>();
     private IReadOnlyList<PhoneAppChoice> _catalogChoices = Array.Empty<PhoneAppChoice>();
@@ -75,10 +77,12 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private Exception? _opStatusError;
     internal bool IsConnectionPage => _showConnection || AndroidAudioHost.Phone.Profile.LastDevice == null;
     public PhoneDevicePage() : this(null) { }
-    internal PhoneDevicePage(AndroidWirelessConnection? wireless, Func<AndroidQrPairing>? createQr = null)
+    internal PhoneDevicePage(AndroidWirelessConnection? wireless, Func<AndroidQrPairing>? createQr = null,
+        Func<AndroidDevice, CancellationToken, Task<AndroidEncoderCatalog>>? readStreamEncoders = null)
     {
         _wireless = wireless;
         _createQr = createQr ?? AndroidQrPairing.Create;
+        _readStreamEncoders = readStreamEncoders ?? ((device, token) => AndroidAudioHost.Adb.EncodersAsync(device, token));
         InitializeComponent();
         ApplyDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
         ProfileChanged();
@@ -93,11 +97,27 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         if (System.Windows.Application.Current is App application)
         { application.PhoneClipboardChanged += RefreshClipboard; _ = LoadClipboardAsync(application); }
         RefreshLocalizedUi();
-        if (PhoneAudioWindowCache.Devices == null) _ = RunAsync(RefreshDevicesCoreAsync);
+        if (PhoneAudioWindowCache.Devices == null && AirPlayConnectionChoice.IsChecked != true) _ = RunAsync(RefreshDevicesCoreAsync);
     }
-    internal void ShowConnection() { _showConnection = true; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop(); }
+    internal void ShowConnection()
+    {
+        _showConnection = true;
+        ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop();
+    }
     internal void ShowDevice() { _showConnection = false; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop(); }
-    internal Task RefreshAsync() => CatalogPanel.Visibility == Visibility.Visible ? LoadCatalogAsync(true) : RunAsync(RefreshDevicesCoreAsync);
+    internal Task RefreshAsync()
+    {
+        if (AirPlayCard.IsVisible) return Task.CompletedTask;
+        if (CatalogPanel.Visibility == Visibility.Visible) return LoadCatalogAsync(true);
+        if (_device is { } device && !_busy)
+        {
+            CancelEncoderRead();
+            if (AndroidAudioHost.IsAdbCreated) AndroidAudioHost.Adb.InvalidateEncoders(device);
+            _streamEncoders = null;
+            _encoderFailed = false;
+        }
+        return RunAsync(RefreshDevicesCoreAsync);
+    }
     internal void Suspend()
     {
         if (_active)
@@ -177,6 +197,12 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         RetainedPanel.Visibility = DeviceCard.Visibility = StreamingCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
         RefreshStreamingSettings(connection ? null : display);
         ConnectionPanel.Visibility = connection ? Visibility.Visible : Visibility.Collapsed;
+        var usbChoices = connection && PhoneAudioWindowCache.Devices is { } cached
+            ? cached.Where(d => d.State == "device" && !d.IsWifi && AndroidAudioHost.Phone.IsRemoved(d))
+                .Select(d => new UsbRestoreChoice(d, string.Format(L10n.T("Phone.RestoreUsbDevice"), d.Name))).ToArray()
+            : Array.Empty<UsbRestoreChoice>();
+        RestoreUsbDevices.ItemsSource = usbChoices.Length == 0 ? null : usbChoices;
+        RestoreUsbDevices.Visibility = usbChoices.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         RenameButton.Visibility = RetainedPanel.Visibility;
         AddAppsButton.IsEnabled = _device != null && !_busy;
         DisconnectButton.IsEnabled = _device != null && !_busy;
@@ -263,6 +289,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         PairButton.IsEnabled = ConnectButton.IsEnabled = !busy;
         PairAddressBox.IsEnabled = PairCodeBox.IsEnabled = QrButton.IsEnabled = !busy;
+        RestoreUsbDevices.IsEnabled = !busy;
     }
     private async Task RefreshDevicesCoreAsync(CancellationToken token)
     {
@@ -322,6 +349,19 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         string address = ConnectAddressBox.Text.Trim();
         await RunAsync(async token => ApplyConnection(await Wireless.ConnectAsync(address, token), token), "Phone.ConnectedStatus");
+    }
+
+    private async void RestoreUsb_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: UsbRestoreChoice choice } || !IsConnectionPage) return;
+        await RunAsync(async token =>
+        {
+            var devices = await PhoneAudioWindowCache.ReadDevicesAsync(token);
+            var live = (PhoneAudioWindowCache.Devices ?? devices).FirstOrDefault(d => !d.IsWifi && d.State == "device"
+                && AndroidDeviceIdentity.SamePhysicalDevice(choice.Device, d) && AndroidAudioHost.Phone.IsRemoved(d));
+            if (live == null) throw AndroidError.WithCode(new IOException("设备尚未连接。"), AndroidErrorCode.UsbReconnectHint);
+            ApplyConnection(new(live, PhoneAudioWindowCache.Devices ?? devices), token);
+        }, "Phone.ConnectedStatus");
     }
     private async void PairCode_Click(object sender, RoutedEventArgs e)
     {

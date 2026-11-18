@@ -12,7 +12,10 @@
     <EmbeddedResource Include="AndroidRuntime.files.json" />
     <EmbeddedResource Include="../AndroidRuntime/*" Exclude="../AndroidRuntime/*.txt" LogicalName="SonicRoute.AndroidRuntime.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../AndroidRuntime/VirtualDisplay/phone-icon.png" LogicalName="SonicRoute.AndroidRuntime.VirtualDisplay.phone-icon.png" />
+    <EmbeddedResource Include="AirPlay/Compatibility/playfair-tables.dat" LogicalName="SonicRoute.AirPlay.PlayFair.Tables" />
+    <EmbeddedResource Include="AirPlay/Compatibility/LICENSE-MIT.txt" LogicalName="SonicRoute.AirPlay.PlayFair.LICENSE-MIT.txt" />
     <Compile Include="../SonicRoute.Core/AtomicFile.cs" Link="Shared/AtomicFile.cs" />
     <InternalsVisibleTo Include="AndroidAudioChecks" />
+    <InternalsVisibleTo Include="SonicRoute" />
   </ItemGroup>
 </Project>

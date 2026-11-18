@@ -298,6 +298,8 @@ internal static partial class Program
         win.GamepadStateChanged += s => events.Add(s);
 
         XInputSample slot0Sample = default;
+        nint foreground = 0;
+        win.ForegroundWindowProbeOverride = () => Volatile.Read(ref foreground);
         win.XInputProbeOverride = slot => slot == 0 ? slot0Sample : default;
         nint hwnd = await win.CreateAsync(default);
 
@@ -305,6 +307,7 @@ internal static partial class Program
             "NativeVideoWindow starts with gamepad polling off (0 Hz) when unfocused");
 
         // Focus with 0 controllers connected -> must stay 0 Hz
+        Volatile.Write(ref foreground, hwnd);
         SendTestMessageW(hwnd, 0x0007 /* WM_SETFOCUS */, 0, 0);
         Check(win.HasGamepadFocus && !win.IsGamepadTimerActive && events.Count == 0,
             "NativeVideoWindow keeps 0 Hz gamepad timer when focused with zero controllers connected");
@@ -343,6 +346,43 @@ internal static partial class Program
         SendTestMessageW(hwnd, 0x0219 /* WM_DEVICECHANGE */, 0x0007, 0);
         Check(!win.IsGamepadTimerActive && events.Count == 6 && events[5].IsNeutral,
             "controller unplug while focused stops timer immediately and emits neutral reset");
+
+        await using var other = new NativeVideoWindow("Second gamepad target", false, true, null, 100, 100, 480, 320);
+        other.ForegroundWindowProbeOverride = () => Volatile.Read(ref foreground);
+        other.XInputProbeOverride = slot => slot == 0 ? slot0Sample : default;
+        var otherEvents = new List<GamepadInputState>();
+        other.GamepadStateChanged += otherEvents.Add;
+        nint otherHwnd = await other.CreateAsync(default);
+        slot0Sample = new XInputSample(true, GamepadButtonMask.B, 0, 0, 0, 0, 0, 0);
+        SendTestMessageW(hwnd, 0x0219 /* WM_DEVICECHANGE */, 0x0007, 0);
+        int previousVersion = win.GamepadFocusVersion;
+        SendTestMessageW(otherHwnd, 0x0007 /* delayed WM_SETFOCUS */, 0, 0);
+        Check(win.CanSendGamepadInput(previousVersion) && !other.IsGamepadTimerActive && otherEvents.Count == 0,
+            "a background focus message cannot claim the controller");
+
+        Volatile.Write(ref foreground, otherHwnd);
+        SendTestMessageW(otherHwnd, 0x0007 /* WM_SETFOCUS */, 0, 0);
+        SendTestMessageW(hwnd, 0x0113 /* queued WM_TIMER */, 2, 0);
+        Check(!win.CanSendGamepadInput(previousVersion) && !win.IsGamepadTimerActive
+            && events.Count == 8 && events[7].IsNeutral
+            && otherEvents.Count == 1 && otherEvents[0].Buttons == GamepadButtonMask.B,
+            "switching foreground stops the old window and delivers held state only to the new window");
+
+        Volatile.Write(ref foreground, hwnd);
+        SendTestMessageW(hwnd, 0x0007 /* WM_SETFOCUS */, 0, 0);
+        SendTestMessageW(otherHwnd, 0x0113 /* queued WM_TIMER */, 2, 0);
+        Check(win.CanSendGamepadInput(win.GamepadFocusVersion) && !win.CanSendGamepadInput(previousVersion)
+            && !other.IsGamepadTimerActive && otherEvents.Count == 2 && otherEvents[1].IsNeutral,
+            "switching back discards queued press states from the prior activation");
+
+        var fallbackActions = new List<byte>();
+        win.KeyEvent += (action, key, _, _) => { if (key == AndroidKeycodeMapper.AKeycodeButtonA) fallbackActions.Add(action); };
+        SendTestMessageW(hwnd, 0x0100 /* WM_KEYDOWN */, 0xC3 /* VK_GAMEPAD_A */, 0);
+        Volatile.Write(ref foreground, 0);
+        SendTestMessageW(hwnd, 0x0006 /* WM_ACTIVATE WA_INACTIVE */, 0, 0);
+        SendTestMessageW(hwnd, 0x0100 /* stale WM_KEYDOWN */, 0xC3, 0);
+        Check(fallbackActions.SequenceEqual([ScrcpyControlMessageWriter.KeyActionDown, ScrcpyControlMessageWriter.KeyActionUp])
+            && !win.IsGamepadTimerActive, "leaving the Android windows releases Windows gamepad fallback keys");
     }
 
     private static void CheckWicPhoneIcon()

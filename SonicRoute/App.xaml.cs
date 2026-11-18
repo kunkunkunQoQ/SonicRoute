@@ -987,6 +987,9 @@ namespace SonicRoute
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();
             ShutdownAndroidAudio();
+#if SONICROUTE_PHONE
+            AirPlayHost.Shutdown();
+#endif
             Updates.Dispose();
             _mainWindow?.FlushPendingSettings();
             ConfigService.FlushPendingSaves();

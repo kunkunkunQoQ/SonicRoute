@@ -12,7 +12,8 @@ internal static partial class Program
         var two = one with { Serial = "10.0.0.1:5000", HardwareId = "fixture-two", State = "device" };
         var app = new AndroidApp("cn.test.music", "Music", 1001, "media");
         var store = new AndroidPhoneStore(Path.Combine(output, "phones.json"));
-        store.RememberDevice(one); store.Rename("First"); store.Retain(app); string first = store.Profile.Id;
+        store.RememberDevice(one); store.Rename("First"); store.Retain(app with { IconPng = [1, 2, 3] });
+        store.SetSmartVolume(app.Package, false); string first = store.Profile.Id;
         store.RememberDevice(two); store.Rename("Second"); store.Retain(app with { Package = "cn.test.second" });
         string second = store.Profile.Id; store.SelectProfile(first);
         Check(store.RemoveDevice(first, [alias, usb, two]) && store.Profiles.Count == 1 && store.Profile.Id == second
@@ -28,10 +29,16 @@ internal static partial class Program
         Check(store.Profiles.Count == 1 && store.IsRemoved(alias), "removal suppression survives restart and changing mDNS suffix");
         int changed = 0; store.Changed += () => changed++;
         Check(!store.RemoveDevice(first) && changed == 0, "repeated removal is a no-op without persistence notifications");
+        var reusedEndpoint = one with { HardwareId = "other-device-same-endpoint", State = "device" };
+        store.RememberDevice(reusedEndpoint);
+        Check(store.Profile.RetainedApps.Count == 0 && store.Profile.Name != "First" && store.IsRemoved(one),
+            "a different Android at the same address receives no saved profile and cannot clear the original removal");
+        store.RemoveDevice(store.Profile.Id);
         store.RememberDevice(alias);
         Check(store.Profiles.Count == 2 && !store.IsRemoved(one) && !store.IsRemoved(usb)
-            && store.Profile.RetainedApps.Count == 0 && store.Profile.Name == "我的手机",
-            "explicit adding restores a fresh device profile and clears its removed aliases");
+            && store.Profile.Id == first && store.Profile.RetainedApps.Single() == app && store.Profile.Name == "First"
+            && !store.IsSmartVolumeEnabled(alias, app.Package),
+            "explicit adding after restart restores the same profile, apps and smart-volume preferences without stale artwork");
         string added = store.Profile.Id; store.SelectProfile(second); store.RemoveDevice(added);
         Check(store.Profile.Id == second, "removing another phone retains the selected phone");
         Check(store.RemoveDevice(second) && store.Profiles.Count == 1 && store.Profile.LastDevice == null

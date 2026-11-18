@@ -8,6 +8,7 @@ using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 #if SONICROUTE_PHONE
+using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
 #endif
 
@@ -22,6 +23,7 @@ internal static class ApplicationAudio
 
     private static string? ResolveExternalDisplayName(string identifier)
     {
+        if (string.Equals(identifier, AirPlayHost.AppKey, StringComparison.OrdinalIgnoreCase)) return "AirPlay";
         const string prefix = "android:";
         if (string.IsNullOrWhiteSpace(identifier) || !identifier.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             return null;
@@ -100,7 +102,7 @@ internal static class ApplicationAudio
     internal static List<AudioAppInfo> GetApps(bool refresh = false) => MergeExternal(AudioService.GetApps(refresh));
     internal static bool HasExternal =>
 #if SONICROUTE_PHONE
-        AndroidAudioHost.IsCreated && AndroidAudioHost.Sources.Sources.Count > 0;
+        AirPlayHost.Source != null || (AndroidAudioHost.IsCreated && AndroidAudioHost.Sources.Sources.Count > 0);
 #else
         false;
 #endif
@@ -151,6 +153,7 @@ internal static class ApplicationAudio
         var result = apps.Where(a => !a.IsExternal).ToList();
 #if SONICROUTE_PHONE
         if (AndroidAudioHost.IsCreated) result.AddRange(AndroidAudioHost.Sources.Sources.Select(Describe));
+        if (AirPlayHost.Source is { } airPlay) result.Add(Describe(airPlay));
 #endif
         return result;
     }
@@ -164,8 +167,15 @@ internal static class ApplicationAudio
         DisplayName = AndroidName(source.App, source.Device), SourceLabel = string.Format(L10n.T("Phone.FromDevice"), AndroidAudioHost.Phone.GetDisplayName(source.Device)), ExternalIconPng = source.App.IconPng,
         HasActiveSession = source.Session.State.State == CaptureState.Receiving
     };
+    internal static AudioAppInfo Describe(AirPlayAudioOutput source) => new()
+    {
+        ProcessId = 0, ExternalSourceId = source.Id, ProcessName = AirPlayHost.AppKey,
+        DisplayName = source.Name, SourceLabel = "AirPlay", HasActiveSession = source.Pcm != null
+    };
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null
         : AndroidAudioHost.Sources.FindSource(app.ExternalSourceId!);
+    private static IPhoneAudioSession? ExternalSession(AudioAppInfo app) => Source(app)?.Session
+        ?? (IPhoneAudioSession?)AirPlayHost.Find(app.ExternalSourceId);
     private static bool IsSourcePhoneOutput(AndroidAudioSource source, string deviceId) =>
         AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out _)
         && string.Equals(phoneKey, AndroidDeviceIdentity.Key(source.Device), StringComparison.OrdinalIgnoreCase);
@@ -174,7 +184,7 @@ internal static class ApplicationAudio
     {
         if (!app.IsExternal) return SessionVolumeService.ReadStateChecked((int)app.ProcessId);
 #if SONICROUTE_PHONE
-        var state = Source(app)?.Session.State;
+        var state = ExternalSession(app)?.State;
         if (state != null && state.State == CaptureState.Receiving) return (state.Volume, state.Muted, true);
 #endif
         return (-1, false, false);
@@ -187,9 +197,9 @@ internal static class ApplicationAudio
     {
         if (!app.IsExternal) return SessionVolumeService.SetVolumePercentChecked((int)app.ProcessId, percent);
 #if SONICROUTE_PHONE
-        var source = Source(app);
-        if (source?.Session.State.State == CaptureState.Receiving)
-        { source.Session.SetVolume(percent); return (source.Session.State.Volume == MathEx.Clamp(percent, 0, 100), source.Session.State.Volume); }
+        var session = ExternalSession(app);
+        if (session?.State.State == CaptureState.Receiving)
+        { session.SetVolume(percent); return (session.State.Volume == MathEx.Clamp(percent, 0, 100), session.State.Volume); }
 #endif
         return (false, -1);
     }
@@ -197,16 +207,16 @@ internal static class ApplicationAudio
     {
         if (!app.IsExternal) return SessionVolumeService.AdjustVolumePercent((int)app.ProcessId, delta);
 #if SONICROUTE_PHONE
-        var source = Source(app);
-        if (source == null) return (-1, -1, -1, false);
-        lock (source.Session)
+        var session = ExternalSession(app);
+        if (session == null) return (-1, -1, -1, false);
+        lock (session)
         {
-            var state = source.Session.State;
+            var state = session.State;
             int current = state.State == CaptureState.Receiving ? state.Volume : -1;
             int requested = MathEx.Clamp(current + delta, 0, 100);
             if (current < 0) return (current, requested, -1, false);
-            source.Session.SetVolume(requested);
-            int actual = source.Session.State.Volume;
+            session.SetVolume(requested);
+            int actual = session.State.Volume;
             return (state.Volume, requested, actual, actual == requested);
         }
 #else
@@ -217,9 +227,9 @@ internal static class ApplicationAudio
     {
         if (!app.IsExternal) return SessionVolumeService.SetMute((int)app.ProcessId, muted);
 #if SONICROUTE_PHONE
-        var source = Source(app);
-        if (source?.Session.State.State == CaptureState.Receiving)
-        { source.Session.SetMute(muted); return source.Session.State.Muted == muted; }
+        var session = ExternalSession(app);
+        if (session?.State.State == CaptureState.Receiving)
+        { session.SetMute(muted); return session.State.State == CaptureState.Receiving && session.State.Muted == muted; }
 #endif
         return false;
     }
@@ -227,14 +237,14 @@ internal static class ApplicationAudio
     {
         if (!app.IsExternal) return SessionVolumeService.ToggleMuteChecked((int)app.ProcessId);
 #if SONICROUTE_PHONE
-        var source = Source(app);
-        if (source == null) return (false, false);
-        lock (source.Session)
+        var session = ExternalSession(app);
+        if (session == null) return (false, false);
+        lock (session)
         {
-            var state = source.Session.State; bool target = !state.Muted;
+            var state = session.State; bool target = !state.Muted;
             if (state.State != CaptureState.Receiving) return (true, false);
-            source.Session.SetMute(target);
-            return (target, source.Session.State.Muted == target);
+            session.SetMute(target);
+            return (target, session.State.State == CaptureState.Receiving && session.State.Muted == target);
         }
 #else
         return (false, false);
@@ -261,7 +271,7 @@ internal static class ApplicationAudio
     private static string? GetExternalEndpoint(AudioAppInfo app, EDataFlow flow)
     {
 #if SONICROUTE_PHONE
-        if (flow == EDataFlow.eRender) return Source(app)?.Session.State.OutputId;
+        if (flow == EDataFlow.eRender) return ExternalSession(app)?.State.OutputId;
 #endif
         return null;
     }
@@ -297,6 +307,16 @@ internal static class ApplicationAudio
 #if SONICROUTE_PHONE
     private static async Task<(bool Success, int HResult, string Message)> ApplyExternalEndpointAsync(AudioAppInfo app, EDataFlow flow, string deviceId)
     {
+        if (flow == EDataFlow.eRender && AirPlayHost.Find(app.ExternalSourceId) is { } airPlay)
+        {
+            if (IsPhoneOutputDevice(deviceId)) return (false, -1, L10n.T("Phone.Err.NoAudioRouteOrEnded"));
+            try
+            {
+                await airPlay.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
+                return (true, 0, "");
+            }
+            catch (Exception ex) { return (false, ex.HResult, L10n.T("Phone.AirPlayAudioError")); }
+        }
         var source = Source(app);
         if (source != null && flow == EDataFlow.eRender)
         {

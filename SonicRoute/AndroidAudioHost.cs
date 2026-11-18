@@ -123,7 +123,7 @@ internal static class AndroidAudioHost
         var cleanup = new List<Task>();
         if (AreDisplaysCreated) cleanup.Add(Displays.CloseDeviceAsync(device));
         if (IsCreated)
-            cleanup.AddRange(Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device))
+            cleanup.AddRange(Sources.Sources.Where(s => AndroidDeviceIdentity.MatchesSavedDevice(device, s.Device))
                 .Select(s => Sources.RemoveAsync(s.Id, restorePrevious: false)));
         if (IsPcToPhoneCreated) cleanup.Add(PcToPhone.StopPhoneAsync(device));
         await Task.WhenAll(cleanup);

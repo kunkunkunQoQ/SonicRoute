@@ -23,13 +23,25 @@ internal static partial class Program
         var discovery = new AndroidDeviceDiscovery(_ => { scans++; throw new Exception("No device access in this fixture"); });
         cache.GetProperty("Discovery", statics)!.SetValue(null, discovery);
         var device = new AndroidDevice("offline-fixture", "Fixture", "device", false, "panel-stream-fixture");
-        discovery.Publish([device]);
+        discovery.Publish([]);
         var phoneStore = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
         phoneStore.RememberDevice(device); phoneStore.Rename("小米");
         phoneStore.Retain(new AndroidApp("cn.test.music", "波点音乐", 1001, "media"));
         object Get(object obj, string name) => obj.GetType().GetField(name, Hidden)!.GetValue(obj)!;
         object? Call(object obj, string name, params object[] args) => obj.GetType().GetMethod(name, Hidden)!.Invoke(obj, args);
-        using var page = new PhoneDevicePage();
+        int encoderQueries = 0, queryThread = 0;
+        string? querySerial = null;
+        var queryTokens = new System.Collections.Concurrent.ConcurrentQueue<CancellationToken>();
+        var firstCatalog = new TaskCompletionSource<AndroidEncoderCatalog>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var nextCatalog = new TaskCompletionSource<AndroidEncoderCatalog>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Func<AndroidDevice, CancellationToken, Task<AndroidEncoderCatalog>> readEncoders = (phone, token) =>
+        {
+            queryThread = Environment.CurrentManagedThreadId; querySerial = phone.Serial; queryTokens.Enqueue(token);
+            return Interlocked.Increment(ref encoderQueries) == 1 ? firstCatalog.Task : nextCatalog.Task;
+        };
+        using var page = (PhoneDevicePage)typeof(PhoneDevicePage).GetConstructors(Hidden).Single()
+            .Invoke([null, null, readEncoders]);
+        Check(encoderQueries == 0, "constructing a phone settings page does not query encoders");
         var canvas = new Grid();
         canvas.SetResourceReference(System.Windows.Controls.Panel.BackgroundProperty, "Theme.WindowBg");
         canvas.Children.Add(page);
@@ -40,6 +52,8 @@ internal static partial class Program
         try
         {
             Call(page, "Activate");
+            DrainUi();
+            Check(encoderQueries == 0, "activating an unloaded phone settings page starts no encoder query");
             pageHost.Show();
             var settingsRead = (Task<AndroidAudioSettingsStore>)host.GetMethod("PrepareStreamingAsync", statics)!.Invoke(null, [CancellationToken.None])!;
             Pump(settingsRead); DrainUi();
@@ -47,8 +61,42 @@ internal static partial class Program
             var fpsCombo = (ComboBox)page.FindName("VideoFpsCombo");
             var audio = (ComboBox)page.FindName("AudioEncoderCombo");
             var video = (ComboBox)page.FindName("VideoEncoderCombo");
+            var audioDecoder = (ComboBox)page.FindName("AudioDecoderCombo");
+            var videoDecoder = (ComboBox)page.FindName("VideoDecoderCombo");
+            Until(() => Get(page, "_windowsHevcRead") is Task { IsCompletedSuccessfully: true });
+            bool windowsHevc = MediaFoundationH264Decoder.SupportsHevc;
+            var hevcOption = videoDecoder.Items.Cast<object>().Single(x => x.ToString()!.StartsWith("H.265 (HEVC)"));
+            Check(encoderQueries == 0 && (bool)hevcOption.GetType().GetProperty("IsEnabled")!.GetValue(hevcOption)! == windowsHevc,
+                "offline settings list H.265 with Windows availability and no Android encoder request");
+            videoDecoder.SelectedValue = AndroidStreamSettings.WindowsHevcDecoder;
+            Pump(settingsRead.Result.FlushAsync());
+            Check(settingsRead.Result.GetStreaming(device).VideoDecoder == (windowsHevc ? AndroidStreamSettings.WindowsHevcDecoder : null),
+                "offline decoder selection is saved only when Windows supports it");
+            videoDecoder.SelectedValue = "";
+            discovery.Publish([device]);
+            Call(page, "ApplyDevices", (object)new[] { device });
+            Until(() => Volatile.Read(ref encoderQueries) == 1);
             Check((string)bitrate.SelectedValue == "4000000" && (string)audio.SelectedValue == "" && Get(page, "_streamEncoders") == null,
-                "streaming controls load current defaults without querying device encoders");
+                "streaming controls show usable saved defaults while the visible page preloads encoders");
+            Check(querySerial == device.Serial && queryThread != Environment.CurrentManagedThreadId,
+                "entering the visible device page queries only that phone on a worker");
+            Check(videoDecoder.Items.Count == 4, "a pending Android query keeps the local decoder choice visible");
+            audio.IsDropDownOpen = true; DrainUi();
+            var loadingItem = audio.Items.Cast<object>().Single(x => x.GetType().GetProperty("Value")!.GetValue(x)?.ToString() == "#status");
+            Check(audio.ItemContainerGenerator.ContainerFromItem(loadingItem) is ComboBoxItem { IsEnabled: false },
+                "the cold encoder list immediately displays a disabled translated loading row");
+            audio.IsDropDownOpen = false; video.IsDropDownOpen = true; DrainUi(); video.IsDropDownOpen = false;
+            Check(encoderQueries == 1, "opening both encoder dropdowns reuses the page preload");
+            var oldRead = (Task)Get(page, "_encoderRead");
+            pageHost.Hide(); DrainUi();
+            Check(queryTokens.First().IsCancellationRequested && Get(page, "_encoderOperation") == null,
+                "hiding phone settings cancels its encoder work without starting idle retries");
+            pageHost.Show(); DrainUi(); Until(() => Volatile.Read(ref encoderQueries) == 2);
+            var currentRead = (Task)Get(page, "_encoderRead");
+            firstCatalog.SetResult(new(["c2.old.opus.encoder"], ["c2.old.avc.encoder"]));
+            Pump(oldRead); DrainUi();
+            Check(Get(page, "_streamEncoders") == null && ReferenceEquals(currentRead, Get(page, "_encoderRead")),
+                "a canceled late query cannot publish old encoders or clear the replacement query");
             Check(audio.SelectionBoxItem.ToString() == L10n.T("Phone.StreamAutomatic") && bitrate.SelectionBoxItem.ToString() == "4 Mbps",
                 "the existing compact combo template displays readable option labels");
 
@@ -69,11 +117,14 @@ internal static partial class Program
                     ["c2.android.avc.encoder"] = AndroidEncoderKind.Software,
                     ["c2.qti.avc.encoder"] = AndroidEncoderKind.Hardware,
                     ["c2.mtk.avc.encoder"] = AndroidEncoderKind.Hardware,
-                    ["c2.custom.oem.avc"] = AndroidEncoderKind.Hardware
-                });
-            typeof(PhoneDevicePage).GetField("_streamEncoders", Hidden)!.SetValue(page, simulatedCatalog);
-            Call(page, "ApplyStreamingSettings");
+                    ["c2.custom.oem.avc"] = AndroidEncoderKind.Hardware,
+                    ["c2.qti.hevc.encoder"] = AndroidEncoderKind.Hardware
+                }, ["c2.qti.hevc.encoder", "c2.qti.hevc.encoder.cq", "c2.qti.hevc.encoder.hdr"]);
+            nextCatalog.SetResult(simulatedCatalog);
+            Pump(currentRead);
             DrainUi();
+            pageHost.Hide(); DrainUi(); pageHost.Show(); DrainUi();
+            Check(encoderQueries == 2, "revisiting a device page reuses its completed encoder list");
 
             var videoOptions = video.ItemsSource.Cast<object>().Select(x => (
                 Label: x.GetType().GetProperty("Label")!.GetValue(x)!.ToString()!,
@@ -96,6 +147,12 @@ internal static partial class Program
                     && oem.Label.Contains(L10n.T("Phone.StreamEncoderHardware")) && oem.Label.Contains("c2.custom.oem.avc")
                     && localizedOptions[0].Label == L10n.T("Phone.StreamAutomatic"),
                     entry.Code + " localizes encoder vendor, hardware/software type, and preserves codec IDs live");
+                var decoderOptions = videoDecoder.Items.Cast<object>().Select(x => x.GetType().GetProperty("Label")!.GetValue(x)!.ToString()!).ToArray();
+                Check(decoderOptions[0] == L10n.T("Phone.StreamDecoderAutomatic")
+                    && decoderOptions[1] == string.Format(L10n.T("Phone.StreamDecoderAccelerated"), "Microsoft H.264 Video Decoder MFT / D3D11")
+                    && decoderOptions[2] == string.Format(L10n.T("Phone.StreamDecoderSoftware"), "Microsoft H.264 Video Decoder MFT / CPU")
+                    && audioDecoder.Items.Cast<object>().Any(x => x.ToString() == string.Format(L10n.T("Phone.StreamDecoderManaged"), "Concentus Opus")),
+                    entry.Code + " localizes available decoder modes and preserves their original backend names");
             }
             L10n.Instance.SetLanguage("zh-CN");
             DrainUi();
@@ -103,11 +160,36 @@ internal static partial class Program
             video.SelectedValue = "c2.qti.avc.encoder";
             bitrate.SelectedValue = "50000000";
             fpsCombo.SelectedValue = "120";
+            audioDecoder.SelectedValue = AndroidStreamSettings.ConcentusDecoder;
+            videoDecoder.SelectedValue = AndroidStreamSettings.SoftwareVideoDecoder;
             Pump(settingsRead.Result.FlushAsync());
-            Check(settingsRead.Result.GetStreaming(device) is { VideoEncoder: "c2.qti.avc.encoder", VideoBitRate: 50000000, MaxFps: 120, AudioBitRate: 128000 },
-                "streaming edits save friendly-labeled encoder ID, 50 Mbps, and 120 fps");
+            Check(settingsRead.Result.GetStreaming(device) is { VideoEncoder: "c2.qti.avc.encoder", VideoBitRate: 50000000, MaxFps: 120, AudioBitRate: 128000,
+                AudioDecoder: AndroidStreamSettings.ConcentusDecoder, VideoDecoder: AndroidStreamSettings.SoftwareVideoDecoder },
+                "streaming edits persist exact encoder and decoder IDs, 50 Mbps, and 120 fps together");
+            Check((videoDecoder.ToolTip as string)?.Contains("Microsoft H.264 Video Decoder MFT / CPU") == true
+                && videoDecoder.SelectionBoxItem.ToString()!.Contains("软件解码"),
+                "decoder selection and tooltip show translated mode and complete original name");
             Check((video.ToolTip as string)?.Contains("c2.qti.avc.encoder") == true && (video.ToolTip as string)?.Contains("高通") == true,
                 "encoder combo tooltip shows full localized description");
+            if (windowsHevc)
+            {
+                videoDecoder.SelectedValue = AndroidStreamSettings.WindowsHevcDecoder;
+                Check(videoDecoder.SelectedItem.ToString()!.StartsWith("H.265 (HEVC)") && videoDecoder.SelectedItem.ToString()!.Contains("Microsoft HEVC Video Decoder MFT")
+                    && video.Items.Count == 4 && (string)video.SelectedValue == "", "available Android H.265 uses its own translated decoder and encoder list");
+                Check(video.Items.Cast<object>().Any(x => x.ToString()!.Contains("恒定质量版 (CQ)") && x.ToString()!.Contains("c2.qti.hevc.encoder.cq"))
+                    && video.Items.Cast<object>().Any(x => x.ToString()!.Contains("高动态范围版 (HDR)") && x.ToString()!.Contains("c2.qti.hevc.encoder.hdr")),
+                    "HEVC encoder variants have distinct translated labels and unchanged codec IDs");
+                video.SelectedValue = "c2.qti.hevc.encoder";
+                Pump(settingsRead.Result.FlushAsync());
+                Check(settingsRead.Result.GetStreaming(device) is { VideoDecoder: AndroidStreamSettings.WindowsHevcDecoder,
+                    VideoEncoder: "c2.qti.avc.encoder", HevcEncoder: "c2.qti.hevc.encoder" }, "Android stores H.264 and H.265 encoder selections separately");
+                videoDecoder.SelectedValue = AndroidStreamSettings.SoftwareVideoDecoder;
+                Check((string)video.SelectedValue == "c2.qti.avc.encoder", "switching back to H.264 restores its previous encoder");
+                videoDecoder.SelectedValue = AndroidStreamSettings.WindowsHevcDecoder;
+                Check((string)video.SelectedValue == "c2.qti.hevc.encoder", "switching back to H.265 restores its previous encoder");
+                videoDecoder.SelectedValue = AndroidStreamSettings.SoftwareVideoDecoder;
+            }
+            else Check(videoDecoder.Items[3].ToString() == L10n.T("Phone.StreamDecoderHevcWindowsUnavailable"), "the unsupported Windows decoder explains why it is disabled");
             Check((string)typeof(PhoneDevicePage).GetMethod("FormatEncoderLabel", BindingFlags.Static | BindingFlags.NonPublic)!
                 .Invoke(null, ["c2.qti.avc.encoder", AndroidEncoderKind.Unknown])! is string offlineQti
                 && offlineQti.Contains("高通") && offlineQti.Contains("硬件编码"),
@@ -127,8 +209,9 @@ internal static partial class Program
                 var card = (Border)page.FindName("StreamingCard");
                 var right = fpsCombo.TranslatePoint(new Point(fpsCombo.ActualWidth, 0), card).X;
                 Check(((Grid)card.Child).RowDefinitions.Count == 2 && right <= card.ActualWidth - 8
-                    && audio.ActualWidth >= 80 && fpsCombo.ActualWidth >= 80,
-                    mode + " streaming options including 50 Mbps and 120 fps fit two rows cleanly in 520 DIP");
+                    && audio.ActualWidth >= 72 && videoDecoder.ActualWidth >= 72 && fpsCombo.ActualWidth >= 70
+                    && Grid.GetColumn(videoDecoder) == Grid.GetColumn(audioDecoder) && Grid.GetRow(videoDecoder) == Grid.GetRow(video),
+                    mode + " encoders, decoders, 50 Mbps and 120 fps fit two rows cleanly in 520 DIP");
                 var apps = (ItemsControl)page.FindName("RetainedApps");
                 var title = Descendants<TextBlock>(page).First(x => x.Text == L10n.T("Phone.QuickPanelAppsTitle"));
                 Border? ContainingCard(DependencyObject item)
@@ -163,10 +246,23 @@ internal static partial class Program
             Check(surface.Opacity == 1 && ((TranslateTransform)surface.RenderTransform).Y == 0,
                 "hiding the phone panel stops and resets its entrance animation");
             Check(scans == 0, "opening settings and panels starts no device scan");
+            Check(encoderQueries == 2, "language changes, saving, theme changes and dropdowns do not requery encoders");
+            if (windowsHevc)
+            {
+                typeof(PhoneDevicePage).GetField("_streamEncoders", Hidden)!.SetValue(page, simulatedCatalog with { Hevc = [] });
+                Call(page, "RefreshEncoderOptions");
+                var unsupported = videoDecoder.Items.Cast<object>().Single(x => x.ToString() == L10n.T("Phone.StreamDecoderHevcAndroidUnavailable"));
+                videoDecoder.SelectedItem = unsupported;
+                Check(!(bool)unsupported.GetType().GetProperty("IsEnabled")!.GetValue(unsupported)!
+                    && (string)videoDecoder.SelectedValue == AndroidStreamSettings.SoftwareVideoDecoder
+                    && settingsRead.Result.GetStreaming(device).VideoDecoder == AndroidStreamSettings.SoftwareVideoDecoder,
+                    "confirmed lack of a phone HEVC encoder disables the option and cannot save an invalid new selection");
+            }
             Call(page, "Suspend");
             Check(Get(page, "_streamOperation") == null, "leaving settings cancels work used only by the streaming UI");
             File.WriteAllText(Path.Combine(output, "panel-stream-settings-summary.json"), JsonSerializer.Serialize(new
-            { Assertions = _checks, RealAdb = false, ProductStarted = false, Scope = "encoder friendly labels across 9 languages, 24/32/50 Mbps, 120 fps, narrow layout, card backgrounds, initialization volume and animation lifecycle" },
+            { Assertions = _checks, RealAdb = false, ProductStarted = false, EncoderQueries = encoderQueries,
+                Scope = "visible-only encoder preload, cancellation and late results, encoder/decoder labels across 9 languages, persistence and narrow two-row layout" },
                 new JsonSerializerOptions { WriteIndented = true }));
             return 0;
         }

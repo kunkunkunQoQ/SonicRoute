@@ -9,6 +9,15 @@ namespace SonicRoute.AndroidAudio;
 /// <summary>scrcpy 3.3.4 audio protocol, matching demuxer.c and device/Streamer.java.</summary>
 public sealed class ScrcpyOpusReceiver
 {
+    private readonly string? _decoder;
+    public ScrcpyOpusReceiver(string? decoder = null)
+    {
+        if (decoder is not (null or AndroidStreamSettings.ConcentusDecoder))
+            throw new ArgumentException("Unsupported Opus decoder.", nameof(decoder));
+        _decoder = decoder;
+    }
+
+    public string DecoderId => _decoder ?? AndroidStreamSettings.ConcentusDecoder;
     public long PacketsDecoded { get; private set; }
     public long LastTimestampUs { get; private set; } = -1;
     public long TimestampDiscontinuities { get; private set; }

@@ -248,7 +248,7 @@ internal static partial class Program
     {
         var phone = new PhoneAudioWindow(false)
             { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
-        typeof(PhoneAudioWindow).GetMethod("BindDevices", Hidden)!.Invoke(phone, [new[] { device }, null]);
+        typeof(PhoneAudioWindow).GetMethod("BindDevices", Hidden)!.Invoke(phone, [new[] { device }]);
         typeof(PhoneAudioWindow).GetMethod("RetainedAppsChanged", Hidden)!.Invoke(phone, null);
         var root = (FrameworkElement)phone.Content;
         root.Measure(new Size(235, 450)); root.Arrange(new Rect(0, 0, 235, 450)); root.UpdateLayout();

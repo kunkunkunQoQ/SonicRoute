@@ -8,6 +8,7 @@ namespace SonicRoute.AndroidAudio;
 public readonly record struct ScrcpyVideoStreamHeader(uint CodecId, int Width, int Height, string DeviceName)
 {
     public const uint CodecH264 = 0x68323634; // "h264"
+    public const uint CodecH265 = 0x68323635; // "h265"
 
     public static async Task<ScrcpyVideoStreamHeader> ReadAsync(
         Stream stream, bool expectDeviceMeta, CancellationToken cancellationToken)
@@ -48,7 +49,7 @@ public readonly record struct ScrcpyVideoPacketHeader(
         ulong ptsFlags = BinaryPrimitives.ReadUInt64BigEndian(header12[..8]);
         uint size = BinaryPrimitives.ReadUInt32BigEndian(header12.Slice(8, 4));
         if (size == 0 || size > MaxPacketBytes)
-            throw new InvalidDataException($"Invalid H.264 packet size: {size}.");
+            throw new InvalidDataException($"Invalid video packet size: {size}.");
         bool isConfig = (ptsFlags & ConfigFlag) != 0;
         bool isKey = (ptsFlags & KeyFrameFlag) != 0;
         long pts = (long)(ptsFlags & PtsMask);

@@ -24,8 +24,7 @@ public delegate void DecodedSoftwareFrameHandler(
     VideoColorMatrix colorMatrix);
 
 /// <summary>
-/// Zero-FFmpeg H.264 Annex-B low-latency video decoder built on Windows Media Foundation
-/// (<c>CLSID_CMSH264DecoderMFT</c> with <c>MF_LOW_LATENCY = 1</c> / <c>CODECAPI_AVLowLatencyMode = 1</c>).
+/// Low-latency Annex B decoder built on the Windows H.264 and optional HEVC Media Foundation transforms.
 /// Outputs D3D11 hardware <c>DXGI_FORMAT_NV12</c> texture slices via <c>IMFDXGIDeviceManager</c> when bound to
 /// a D3D11 device, or falls back transparently to CPU NV12 planes when running headless / software-only.
 /// </summary>
@@ -41,6 +40,8 @@ public sealed class MediaFoundationH264Decoder : IDisposable
 
     private const uint MftOutputStreamProvidesSamples = 0x100;
     private const uint MftOutputStreamCanProvideSamples = 0x200;
+    private const uint MftOutputDataBufferFormatChange = 0x100;
+    private const uint MftOutputDataBufferNoSample = 0x300;
     private const uint MftMessageCommandFlush = 0x0;
     private const uint MftMessageSetD3DManager = 0x2;
     private const uint MftMessageNotifyBeginStreaming = 0x10000000;
@@ -55,6 +56,8 @@ public sealed class MediaFoundationH264Decoder : IDisposable
 
     private static readonly Guid MfMediaTypeVideo = new("73646976-0000-0010-8000-00aa00389b71");
     private static readonly Guid MfVideoFormatH264 = new("34363248-0000-0010-8000-00aa00389b71");
+    private static readonly Guid MfVideoFormatHevc = new("43564548-0000-0010-8000-00aa00389b71");
+    private static readonly Guid MftCategoryVideoDecoder = new("d6c02d4b-6833-45b4-971a-05a4b04bab91");
     private static readonly Guid MfVideoFormatNv12 = new("3231564e-0000-0010-8000-00aa00389b71");
 
     private static readonly Guid MfMtMajorType = new("48eba18e-f8c9-4687-bf11-0a74c9f96a8f");
@@ -66,6 +69,8 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     private static readonly Guid MfMtYuvMatrix = new("3e23d450-2c75-4d25-a00e-b91670d12327");
     private static readonly Guid MfLowLatency = new("9c27891a-ed7a-40e1-88e8-b22727a024ee"); // same as CODECAPI_AVLowLatencyMode
     private static readonly Guid MfSaD3D11Aware = new("206b4fc8-fcf9-4c51-afe3-9764369e33a0");
+    private static readonly Guid MfSampleExtensionDiscontinuity = new("9cdf01d9-a0f0-43ba-b077-eaa06cbd728a");
+    private static readonly Guid MfSampleExtensionFrameCorruption = new("b4dd4a8c-0beb-44c4-8b75-b02b913b04f0");
 
     private static int _activeInstanceCount;
 
@@ -92,8 +97,15 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     private VideoColorMatrix _colorMatrix = VideoColorMatrix.Bt601Limited;
     private byte[] _swCopyBuffer = Array.Empty<byte>();
 
-    public MediaFoundationH264Decoder(nint d3d11Device, int initialWidth = 0, int initialHeight = 0)
+    internal bool SkipCorruptFrames { get; init; }
+
+    public MediaFoundationH264Decoder(nint d3d11Device, int initialWidth = 0, int initialHeight = 0, string? decoder = null,
+        uint codec = ScrcpyVideoStreamHeader.CodecH264)
     {
+        bool hevc = codec == ScrcpyVideoStreamHeader.CodecH265;
+        if (hevc ? decoder is not (null or AndroidStreamSettings.WindowsHevcDecoder)
+            : codec != ScrcpyVideoStreamHeader.CodecH264 || decoder is not (null or AndroidStreamSettings.WindowsVideoDecoder or AndroidStreamSettings.SoftwareVideoDecoder))
+            throw new ArgumentException("Unsupported video decoder or format.", nameof(decoder));
         Interlocked.Increment(ref _activeInstanceCount);
         _counted = true;
 
@@ -106,20 +118,19 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             ComVtbl.ThrowIfFailed(mfHr, "MFStartup");
             _mfStarted = true;
 
-            Guid clsid = ClsidMsH264DecoderMft;
-            Guid iidMft = IidImfTransform;
-            int hr = Win32Native.CoCreateInstance(in clsid, 0, Win32Native.CLSCTX_INPROC_SERVER, in iidMft, out nint mftPtr);
-            if (hr == Win32Native.REGDB_E_CLASSNOTREG || hr < 0 || mftPtr == 0)
+            if (hevc) _mft = OpenHevcTransform();
+            else
             {
-                throw AndroidError.WithCode(
-                    new InvalidOperationException(
-                        $"系统未安装 H.264 Media Foundation 解码器组件 (0x{hr:X8})。若使用 Windows N/KN 版本，请安装“媒体功能包 / Media Feature Pack”。"),
-                    AndroidErrorCode.DisplayOpenFailed);
+                int hr = Win32Native.CoCreateInstance(in ClsidMsH264DecoderMft, 0, Win32Native.CLSCTX_INPROC_SERVER, in IidImfTransform, out nint mftPtr);
+                if (hr < 0 || mftPtr == 0)
+                    throw AndroidError.WithCode(new InvalidOperationException($"H.264 Media Foundation decoder unavailable (0x{hr:X8})."), AndroidErrorCode.DisplayOpenFailed);
+                _mft = new ComPtr(mftPtr);
             }
-            _mft = new ComPtr(mftPtr);
 
-            ConfigureAttributesAndD3D(d3d11Device);
-            ConfigureInputType(initialWidth, initialHeight);
+            // No DXGI manager in software mode, even when the renderer owns a GPU device.
+            // Automatic and explicit Windows acceleration retain the existing DXVA fallback.
+            ConfigureAttributesAndD3D(decoder == AndroidStreamSettings.SoftwareVideoDecoder ? 0 : d3d11Device);
+            ConfigureInputType(initialWidth, initialHeight, hevc ? MfVideoFormatHevc : MfVideoFormatH264);
             ConfigureOutputType();
 
             ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23)(_mft.Handle, MftMessageNotifyBeginStreaming, 0);
@@ -131,6 +142,44 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             Dispose();
             throw;
         }
+    }
+
+    private static readonly Lazy<bool> HevcAvailable = new(() =>
+    {
+        try
+        {
+            using var probe = new MediaFoundationH264Decoder(0, 640, 480, codec: ScrcpyVideoStreamHeader.CodecH265);
+            return true;
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or NotSupportedException or DllNotFoundException)
+        { return false; }
+    });
+
+    public static bool SupportsHevc => HevcAvailable.Value;
+
+    private static ComPtr OpenHevcTransform()
+    {
+        // Ask Media Foundation for a synchronous transform. Windows can supply HEVC through
+        // a media extension as well as a system codec. The decode loop uses synchronous MFT calls.
+        var input = new MftType { Major = MfMediaTypeVideo, Subtype = MfVideoFormatHevc };
+        const uint flags = 0x01 | 0x10 | 0x40; // SYNCMFT, LOCALMFT, SORTANDFILTER
+        int hr = MFTEnumEx(MftCategoryVideoDecoder, flags, in input, 0, out nint list, out uint count);
+        ComVtbl.ThrowIfFailed(hr, "MFTEnumEx(HEVC)");
+        try
+        {
+            for (int i = 0; i < count; i++)
+            {
+                nint activate = Marshal.ReadIntPtr(list, i * nint.Size);
+                if (ComVtbl.Get<ActivateObjectFn>(activate, 33)(activate, in IidImfTransform, out nint transform) >= 0 && transform != 0)
+                    return new ComPtr(transform);
+            }
+        }
+        finally
+        {
+            for (int i = 0; i < count; i++) Marshal.Release(Marshal.ReadIntPtr(list, i * nint.Size));
+            Marshal.FreeCoTaskMem(list);
+        }
+        throw new NotSupportedException("A compatible Windows HEVC Media Foundation decoder is unavailable.");
     }
 
     public static int ActiveInstanceCount => Volatile.Read(ref _activeInstanceCount);
@@ -171,14 +220,14 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         }
     }
 
-    private void ConfigureInputType(int width, int height)
+    private void ConfigureInputType(int width, int height, Guid format)
     {
         int hr = MFCreateMediaType(out nint mtPtr);
         ComVtbl.ThrowIfFailed(hr, "MFCreateMediaType(Input)");
         using var mt = new ComPtr(mtPtr);
 
         Guid majorKey = MfMtMajorType, majorVal = MfMediaTypeVideo;
-        Guid subKey = MfMtSubtype, subVal = MfVideoFormatH264;
+        Guid subKey = MfMtSubtype, subVal = format;
         Guid interlaceKey = MfMtInterlaceMode;
 
         ComVtbl.ThrowIfFailed(ComVtbl.Get<AttrSetGuidFn>(mt.Handle, 24)(mt.Handle, in majorKey, in majorVal), "SetInputMajor");
@@ -202,7 +251,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         {
             int hr = ComVtbl.Get<GetOutputAvailableTypeFn>(_mft.Handle, 14)(_mft.Handle, 0, index, out nint outMtPtr);
             if (hr == MfENoMoreTypes || hr < 0)
-                throw new InvalidOperationException($"CMSH264DecoderMFT did not expose MFVideoFormat_NV12 output type (0x{hr:X8}).");
+                throw new InvalidOperationException($"The video decoder did not expose MFVideoFormat_NV12 output type (0x{hr:X8}).");
 
             using var outMt = new ComPtr(outMtPtr);
             Guid subKey = MfMtSubtype;
@@ -284,7 +333,8 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         ReadOnlySpan<byte> annexBData,
         long ptsUs,
         DecodedHardwareFrameHandler? onHardwareFrame,
-        DecodedSoftwareFrameHandler? onSoftwareFrame)
+        DecodedSoftwareFrameHandler? onSoftwareFrame,
+        bool discontinuity = false)
     {
         if (annexBData.IsEmpty) return 0;
 
@@ -292,7 +342,14 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            using var sample = CreateInputSample(annexBData, ptsUs);
+            if (discontinuity)
+            {
+                var processMessage = ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23);
+                ComVtbl.ThrowIfFailed(processMessage(_mft.Handle, MftMessageCommandFlush, 0), "Flush video decoder");
+                ComVtbl.ThrowIfFailed(processMessage(_mft.Handle, MftMessageNotifyStartOfStream, 0), "Restart video decoder");
+            }
+
+            using var sample = CreateInputSample(annexBData, ptsUs, discontinuity);
             int hr = ComVtbl.Get<ProcessInputFn>(_mft.Handle, 24)(_mft.Handle, 0, sample.Handle, 0);
             int frames = 0;
 
@@ -319,7 +376,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         }
     }
 
-    private ComPtr CreateInputSample(ReadOnlySpan<byte> data, long ptsUs)
+    private ComPtr CreateInputSample(ReadOnlySpan<byte> data, long ptsUs, bool discontinuity)
     {
         ComVtbl.ThrowIfFailed(MFCreateMemoryBuffer((uint)data.Length, out nint bufPtr), "MFCreateMemoryBuffer");
         using var buf = new ComPtr(bufPtr);
@@ -344,6 +401,9 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         {
             ComVtbl.ThrowIfFailed(ComVtbl.Get<SampleAddBufferFn>(sample.Handle, 42)(sample.Handle, buf.Handle), "AddBuffer");
             ComVtbl.Get<SampleSetTimeFn>(sample.Handle, 36)(sample.Handle, ptsUs * 10);
+            if (discontinuity)
+                ComVtbl.ThrowIfFailed(ComVtbl.Get<AttrSetUint32Fn>(sample.Handle, 21)(sample.Handle, in MfSampleExtensionDiscontinuity, 1),
+                    "Mark video discontinuity");
             return sample;
         }
         catch
@@ -381,16 +441,16 @@ public sealed class MediaFoundationH264Decoder : IDisposable
                 pEvents = 0
             };
 
-            int hr = ComVtbl.Get<ProcessOutputFn>(_mft.Handle, 25)(_mft.Handle, 0, 1, ref outputBuf, out uint status);
+            int hr = ComVtbl.Get<ProcessOutputFn>(_mft.Handle, 25)(_mft.Handle, 0, 1, ref outputBuf, out _);
             if (outputBuf.pEvents != 0) Marshal.Release(outputBuf.pEvents);
 
-            if (hr == MfETransformNeedMoreInput)
+            if (hr == MfETransformNeedMoreInput || (hr >= 0 && outputBuf.dwStatus == MftOutputDataBufferNoSample))
             {
                 if (_mftProvidesOutputSamples && outputBuf.pSample != 0) Marshal.Release(outputBuf.pSample);
                 break;
             }
 
-            if (hr == MfETransformStreamChange || (outputBuf.dwStatus & 0x100) != 0 || (status & 0x100) != 0)
+            if (hr == MfETransformStreamChange || outputBuf.dwStatus == MftOutputDataBufferFormatChange)
             {
                 if (_mftProvidesOutputSamples && outputBuf.pSample != 0) Marshal.Release(outputBuf.pSample);
                 ConfigureOutputType();
@@ -408,6 +468,16 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             {
                 try
                 {
+                    if (SkipCorruptFrames
+                        && ComVtbl.Get<AttrGetUint32Fn>(outSamplePtr, 7)(outSamplePtr, in MfSampleExtensionFrameCorruption, out uint corrupt) >= 0
+                        && corrupt == 1)
+                    {
+                        // Caller-supplied software samples can be reused for the next picture.
+                        if (outSamplePtr == providedSample)
+                            ComVtbl.Get<AttrDeleteItemFn>(outSamplePtr, 19)(outSamplePtr, in MfSampleExtensionFrameCorruption);
+                        continue;
+                    }
+
                     if (_codedWidth <= 0 || _codedHeight <= 0) RefreshOutputDimensions();
                     EmitSample(outSamplePtr, onHardwareFrame, onSoftwareFrame);
                     count++;
@@ -607,6 +677,10 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     [DllImport("mfplat.dll")] private static extern int MFCreateSample(out nint ppIMFSample);
     [DllImport("mfplat.dll")] private static extern int MFCreateMemoryBuffer(uint cbMaxLength, out nint ppBuffer);
     [DllImport("mfplat.dll")] private static extern int MFCreateDXGIDeviceManager(out uint resetToken, out nint ppDeviceManager);
+    [DllImport("mfplat.dll")] private static extern int MFTEnumEx(Guid category, uint flags, in MftType input, nint output, out nint activate, out uint count);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MftType { public Guid Major, Subtype; }
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MftOutputStreamInfo
@@ -641,6 +715,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         public uint MiscFlags;
     }
 
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int ActivateObjectFn(nint self, in Guid iid, out nint ptr);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int GetOutputStreamInfoFn(nint self, uint streamId, out MftOutputStreamInfo info);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int GetAttributesFn(nint self, out nint ppAttributes);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int GetOutputAvailableTypeFn(nint self, uint streamId, uint typeIndex, out nint ppType);
@@ -655,6 +730,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int AttrGetUint64Fn(nint self, in Guid key, out ulong val);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int AttrGetGuidFn(nint self, in Guid key, out Guid val);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int AttrGetBlobFn(nint self, in Guid key, nint buf, uint cbSize, out uint cbLength);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int AttrDeleteItemFn(nint self, in Guid key);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int AttrSetUint32Fn(nint self, in Guid key, uint val);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int AttrSetUint64Fn(nint self, in Guid key, ulong val);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int AttrSetGuidFn(nint self, in Guid key, in Guid val);
