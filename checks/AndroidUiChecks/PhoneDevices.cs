@@ -38,7 +38,7 @@ internal static partial class Program
             Check(main.FindName("OverviewPage") == null && main.FindName("NavOverview") == null
                 && ((RadioButton)main.FindName("NavApps")).IsChecked == true && typeof(MainWindow).GetMethod("RefreshOverviewAsync", Hidden) == null,
                 "overview navigation, visual tree and controller are removed and Apps is the default page");
-            typeof(MainWindow).GetMethod("InitializePhoneManagement", Hidden)!.Invoke(main, new object[] { false });
+            typeof(MainWindow).GetMethod("InitializePhoneManagement", Hidden)!.Invoke(main, null);
             typeof(MainWindow).GetMethod("SelectPhoneManagement", Hidden)!.Invoke(main, null);
             DrainUi();
             var page = (PhoneDevicePage)((Border)main.FindName("PhoneDetailsHost")).Child;

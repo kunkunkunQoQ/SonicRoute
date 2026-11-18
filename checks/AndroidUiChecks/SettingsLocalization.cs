@@ -131,7 +131,7 @@ internal static partial class Program
         var views = new List<object> { main, phone, panel, status };
         try
         {
-            typeof(MainWindow).GetMethod("InitializePhoneManagement", Hidden)!.Invoke(main, [false]);
+            typeof(MainWindow).GetMethod("InitializePhoneManagement", Hidden)!.Invoke(main, null);
             typeof(MainWindow).GetMethod("SelectPhoneManagement", Hidden)!.Invoke(main, null);
             DrainUi();
             var page = (PhoneDevicePage)((Border)main.FindName("PhoneDetailsHost")).Child;

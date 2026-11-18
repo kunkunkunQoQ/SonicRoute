@@ -90,7 +90,7 @@ internal static partial class Program
         var main = new MainWindow(); var phone = new PhoneAudioWindow(false);
         try
         {
-            typeof(MainWindow).GetMethod("InitializePhoneManagement", Hidden)!.Invoke(main, new object[] { false });
+            typeof(MainWindow).GetMethod("InitializePhoneManagement", Hidden)!.Invoke(main, null);
             typeof(MainWindow).GetField("_phoneDevicePage", Hidden)!.SetValue(main, page);
             typeof(MainWindow).GetMethod("SelectPhoneManagement", Hidden)!.Invoke(main, null);
             var sidebar = (StackPanel)main.FindName("PhoneDevicesHost");

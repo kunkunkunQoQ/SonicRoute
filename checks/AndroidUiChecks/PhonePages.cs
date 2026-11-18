@@ -29,7 +29,7 @@ internal static partial class Program
         void Set(PhoneDevicePage page, string field, object value) => typeof(PhoneDevicePage).GetField(field, Hidden)!.SetValue(page, value);
         try
         {
-            Call(main, "InitializePhoneManagement", false); Call(main, "SelectPhoneManagement");
+            Call(main, "InitializePhoneManagement"); Call(main, "SelectPhoneManagement");
             var page = (PhoneDevicePage)((Border)main.FindName("PhoneDetailsHost")).Child;
             var deviceScroll = (ScrollViewer)page.FindName("DeviceScroll");
             var list = (ListBox)page.FindName("CatalogApps");

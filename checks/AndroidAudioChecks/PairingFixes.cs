@@ -74,21 +74,24 @@ internal static partial class Program
 
         var runtime = Path.Combine(output, "runtime"); Directory.CreateDirectory(runtime);
         await File.WriteAllBytesAsync(Path.Combine(runtime, "sonicroute-catalog.jar"), [1]);
+        using var liveExpected = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        liveExpected.Start();
+        string expectedAddress = liveExpected.LocalEndpoint.ToString()!;
         var transport = new PairingFixtureTransport
         {
-            Devices = [new("192.0.2.10:38000", "Wrong", "device", true), new("192.0.2.11:38000", "Expected", "device", true)]
+            Devices = [new("192.0.2.10:38000", "Wrong", "device", true), new(expectedAddress, "Expected", "device", true)]
         };
         transport.HardwareIds["192.0.2.10:38000"] = "hardware-wrong";
-        transport.HardwareIds["192.0.2.11:38000"] = "hardware-expected";
+        transport.HardwareIds[expectedAddress] = "hardware-expected";
         wireless = new AndroidWirelessConnection(new AdbClient(runtime, transport));
         result = await wireless.ReconnectAsync(new("192.0.2.10:38000", "Saved", "offline", true, HardwareId: "hardware-expected"), default);
-        Check(result.Device.Serial == "192.0.2.11:38000",
+        Check(result.Device.Serial == expectedAddress,
             "reconnect gives saved hardware identity precedence over a reused old address");
-        transport.FirstIdentityReadFailures.Add("192.0.2.11:38000");
+        transport.FirstIdentityReadFailures.Add(expectedAddress);
         transport.IdentityReads.Clear();
         wireless = new AndroidWirelessConnection(new AdbClient(runtime, transport));
         result = await wireless.ReconnectAsync(new("192.0.2.10:38000", "Saved", "offline", true, HardwareId: "hardware-expected"), default);
-        Check(result.Device.Serial == "192.0.2.11:38000" && transport.IdentityReads["192.0.2.11:38000"] == 2,
+        Check(result.Device.Serial == expectedAddress && transport.IdentityReads[expectedAddress] == 2,
             "strong reconnect retries a cached missing identity once instead of accepting a different phone or polling");
 
         string keyDirectory = Path.Combine(output, "synthetic-keys"); Directory.CreateDirectory(keyDirectory);

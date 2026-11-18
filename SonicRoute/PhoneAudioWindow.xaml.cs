@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -98,7 +99,9 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
 
 internal static class PhoneAudioWindowCache
 {
+    private static readonly SemaphoreSlim RefreshGate = new(1, 1);
     internal static AndroidDeviceDiscovery Discovery { get; set; } = new(token => AndroidAudioHost.Adb.DevicesAsync(token, deduplicate: false));
+    internal static Func<AndroidWirelessConnection> CreateWirelessConnection { get; set; } = () => new(AndroidAudioHost.Adb);
     internal static IReadOnlyList<AndroidDevice>? Devices => Discovery.Devices;
     internal static string? SelectedSerial;
     internal static bool AirPlaySelected;
@@ -106,6 +109,36 @@ internal static class PhoneAudioWindowCache
     internal static void InvalidateDevices() => Discovery.Invalidate();
     internal static event Action? DevicesChanged { add => Discovery.Changed += value; remove => Discovery.Changed -= value; }
     internal static void SetDevices(IReadOnlyList<AndroidDevice> devices) => Discovery.Publish(devices);
+
+    internal static async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken token,
+        AndroidWirelessConnection? wireless = null)
+    {
+        var store = AndroidAudioHost.Phone;
+        var selected = store.Profile;
+        if (selected.LastDevice is not { IsWifi: true } saved)
+            return await ReadDevicesAsync(token).ConfigureAwait(false);
+
+        bool StillSelected() => store.Profile.Id == selected.Id && !store.IsRemoved(saved);
+        await RefreshGate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            if (!StillSelected()) return Devices ?? [];
+            IReadOnlyList<AndroidDevice> devices;
+            try { devices = await ReadDevicesAsync(token).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is IOException or SocketException) { devices = []; }
+            token.ThrowIfCancellationRequested();
+            if (!StillSelected()) return devices;
+
+            var result = await (wireless ?? CreateWirelessConnection()).ReconnectAsync(saved, null, token, devices).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            if (!StillSelected()) return Devices ?? devices;
+
+            store.ObserveDevices([result.Device]);
+            SetDevices(result.Devices);
+            return result.Devices;
+        }
+        finally { RefreshGate.Release(); }
+    }
 }
 
 public partial class PhoneAudioWindow : Window
@@ -115,6 +148,7 @@ public partial class PhoneAudioWindow : Window
     private readonly PanelEntranceMotion _entranceMotion;
     private bool _entrancePrepared;
     private CancellationTokenSource? _visibleRead;
+    private CancellationTokenSource? _userRefresh;
     private CancellationTokenSource? _catalogRead;
     private CancellationTokenSource? _mediaRead;
     private AndroidMediaSessionClient? _mediaClient;
@@ -490,14 +524,21 @@ public partial class PhoneAudioWindow : Window
         }
         if (await RefreshDevicesAsync()) await ShowSelectedDeviceAsync(forceRefresh: false);
     }
-    private async Task<bool> RefreshDevicesAsync()
+    private Task<bool> RefreshDevicesAsync() => RefreshDevicesCoreAsync(recoverWireless: false);
+
+    private async Task<bool> RefreshDevicesCoreAsync(bool recoverWireless)
     {
         if (_closed || _refreshing || AirPlaySelected) return false;
         _refreshing = true; RefreshButton.IsEnabled = false;
         SetConnectionStatusKey("Phone.StatusLoading");
+        var token = _visibleRead?.Token ?? _lifetime.Token;
+        using var userRefresh = recoverWireless ? CancellationTokenSource.CreateLinkedTokenSource(token) : null;
+        _userRefresh = userRefresh;
         try
         {
-            var devices = await PhoneAudioWindowCache.ReadDevicesAsync(_visibleRead?.Token ?? _lifetime.Token);
+            var devices = userRefresh != null
+                ? await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(userRefresh.Token)
+                : await PhoneAudioWindowCache.ReadDevicesAsync(token);
             if (_closed || AirPlaySelected) return false;
             BindDevices(PhoneAudioWindowCache.Devices ?? devices);
             if (DeviceCombo.SelectedItem == null) SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailNoAuthorizedPhone");
@@ -505,7 +546,7 @@ public partial class PhoneAudioWindow : Window
         }
         catch (OperationCanceledException) { return false; }
         catch (Exception ex) { if (!_closed && !AirPlaySelected) SetConnectionStatusError("Phone.Disconnected", ex); return false; }
-        finally { _refreshing = false; if (!_closed) RefreshButton.IsEnabled = true; }
+        finally { _userRefresh = null; _refreshing = false; if (!_closed) RefreshButton.IsEnabled = true; }
     }
     private void BindDevices(IReadOnlyList<AndroidDevice> devices)
     {
@@ -535,6 +576,7 @@ public partial class PhoneAudioWindow : Window
     private async void Device_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressDeviceChanged || AirPlayPane == null) return;
+        _userRefresh?.Cancel();
         _pcDropZonesDirty = true;
         PhoneAudioWindowCache.AirPlaySelected = AirPlaySelected;
         UpdateDevicePane();
@@ -692,7 +734,7 @@ public partial class PhoneAudioWindow : Window
     private async void Refresh_Click(object sender, RoutedEventArgs e)
     {
         _catalogRead?.Cancel();
-        if (!await RefreshDevicesAsync()) return;
+        if (!await RefreshDevicesCoreAsync(recoverWireless: true)) return;
         await ShowSelectedDeviceAsync(forceRefresh: true);
     }
     private void Apps_MouseDown(object sender, MouseButtonEventArgs e)

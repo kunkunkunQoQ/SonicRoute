@@ -68,20 +68,22 @@ internal static partial class Program
         available = await AndroidWirelessConnection.VerifySavedConnectionsAsync([oldCandidate], deadline.Token);
         Check(available.Count == 0, "a stale announcement alone cannot appear as an available phone");
 
-        const string reusedAddress = "192.0.2.31:41005";
-        const string movedAddress = "192.0.2.32:41006";
+        using var movedListener = new TcpListener(IPAddress.Parse("127.0.0.2"), 0);
+        movedListener.Start();
+        string reusedAddress = newAddress;
+        string movedAddress = movedListener.LocalEndpoint.ToString()!;
         var attempts = new List<string>();
-        IReadOnlyList<AndroidDevice> transports = [];
+        var staleTransport = savedPhone with { State = "device", TransportId = "stale" };
+        IReadOnlyList<AndroidDevice> transports = [staleTransport];
         var wireless = new AndroidWirelessConnection((token, args) =>
         {
             token.ThrowIfCancellationRequested();
             if (args[0] != "connect") throw new InvalidOperationException("Unexpected command: " + args[0]);
             string endpoint = args[1];
             attempts.Add(endpoint);
-            if (endpoint == oldAddress) throw new SocketException((int)SocketError.ConnectionRefused);
             transports = endpoint == movedAddress
-                ? [savedPhone with { Serial = movedAddress, State = "device" }]
-                : [new(endpoint, "Other phone", "device", true, "other-phone")];
+                ? [staleTransport, savedPhone with { Serial = movedAddress, State = "device" }]
+                : [staleTransport, new(endpoint, "Other phone", "device", true, "other-phone")];
             return Task.FromResult("connected to " + endpoint);
         }, NoConnectionDelay);
         const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -96,8 +98,12 @@ internal static partial class Program
         typeof(AndroidWirelessConnection).GetField("_browseConnections", fields)!.SetValue(wireless, discover);
         var reconnected = await wireless.ReconnectAsync(savedPhone, deadline.Token);
         Check(reconnected.Device.Serial == movedAddress && reconnected.Device.HardwareId == savedPhone.HardwareId
-            && attempts.SequenceEqual([oldAddress, reusedAddress, movedAddress]),
-            "reconnect finds the same device at a different IP and refuses a reused endpoint with the wrong hardware identity");
+            && attempts.SequenceEqual([reusedAddress, movedAddress]) && !reconnected.Devices.Contains(staleTransport),
+            "reconnect filters both an expired port and its stale ready transport before adopting the correct new IP");
+        attempts.Clear();
+        var reused = await wireless.ReconnectAsync(savedPhone, deadline.Token);
+        Check(reused.Device.Serial == movedAddress && attempts.Count == 0,
+            "a verified live connection takes precedence over the saved port and does not open another ADB connection");
 
         if (lan)
         {

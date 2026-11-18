@@ -19,7 +19,8 @@ internal static partial class Program
         const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
         var cache = typeof(App).Assembly.GetType("SonicRoute.PhoneAudioWindowCache")!;
         var host = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!;
-        var discovery = new AndroidDeviceDiscovery(_ => throw new Exception("Unexpected device scan"));
+        Func<CancellationToken, Task<IReadOnlyList<AndroidDevice>>>? refreshSnapshot = null;
+        var discovery = new AndroidDeviceDiscovery(token => refreshSnapshot?.Invoke(token) ?? throw new Exception("Unexpected device scan"));
         cache.GetProperty("Discovery", statics)!.SetValue(null, discovery);
         discovery.Publish([]);
         var store = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
@@ -28,7 +29,7 @@ internal static partial class Program
         var names = new ConcurrentQueue<string>();
         string currentName = "";
         int generated = 0, activeScans = 0, maxScans = 0, pairCalls = 0, encodingsOnUi = 0, retirementFailure = 0;
-        bool ready = false, failNextPair = false;
+        bool ready = false, failNextPair = false, emptyBackendMdns = false;
         TaskCompletionSource? retirement = null;
         var target = new AndroidDevice("adb-combined-fixture._adb-tls-connect._tcp", "Fixture", "device", true);
         using var expired = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -48,6 +49,7 @@ internal static partial class Program
             token.ThrowIfCancellationRequested();
             if (args[0] == "mdns")
             {
+                if (emptyBackendMdns) return "";
                 int active = Interlocked.Increment(ref activeScans);
                 maxScans = Math.Max(maxScans, active);
                 var pending = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -302,6 +304,66 @@ internal static partial class Program
             Until(() => Watch() == null && Volatile.Read(ref activeSavedSearches) == 0);
             Check(!savedChoices.IsVisible && savedChoices.ItemsSource == null && !discoveryStatus.IsVisible && search.IsEnabled,
                 "leaving the Android tab clears discovery and its pending status");
+
+            refreshSnapshot = devices;
+            int reconnectLookups = 0;
+            bool announceCurrent = true;
+            Func<CancellationToken, Task<IReadOnlyList<AndroidMdnsService>>> reconnectDiscovery = token =>
+            {
+                token.ThrowIfCancellationRequested();
+                reconnectLookups++;
+                return Task.FromResult(AndroidWirelessConnection.ParseServices(announceCurrent
+                    ? expiredAnnouncement + "\nadb-fixture-archived-ABC123 _adb-tls-connect._tcp " + currentAddress : expiredAnnouncement));
+            };
+            typeof(AndroidWirelessConnection).GetField("_browseConnections", Hidden)!.SetValue(wireless, reconnectDiscovery);
+            cache.GetProperty("CreateWirelessConnection", statics)!.SetValue(null, (Func<AndroidWirelessConnection>)(() => wireless));
+            var stale = archived with { State = "device", TransportId = "expired" };
+            void ExpireAddress()
+            {
+                restoredDevice = stale;
+                store.ObserveDevices([stale]);
+                discovery.Publish([stale]);
+            }
+            Call("ShowDevice");
+            Until(() => Watch() == null);
+            ExpireAddress();
+            Find<Button>("ReconnectButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Until(() => store.Profile.LastDevice?.Serial == currentAddress && Find<Button>("ReconnectButton").IsEnabled);
+            Check(reconnectLookups == 1 && connections.SequenceEqual([currentAddress, currentAddress])
+                && store.Profile.Id == restoredId && discovery.Devices?.Contains(stale) == false,
+                "the settings reconnect button replaces a stale ready connection and saves the current address");
+
+            var main = new MainWindow();
+            try
+            {
+                ((FrameworkElement)main.FindName("AppsPage")).Visibility = Visibility.Visible;
+                Pump((Task)typeof(MainWindow).GetMethod("InitializePhoneManagementAsync", Hidden)!.Invoke(main, null)!);
+                Check(((FrameworkElement)main.FindName("PhoneDetailsHost")).Visibility == Visibility.Collapsed,
+                    "the apps sidebar fixture has no active device details page");
+                ExpireAddress();
+                refreshSnapshot = _ => throw new IOException("Temporary device listing error");
+                ((Button)main.FindName("AppsRefreshButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Until(() => store.Profile.LastDevice?.Serial == currentAddress && reconnectLookups == 2);
+                Check(connections.Count == 3 && store.Profile.Id == restoredId,
+                    "the apps sidebar refresh repairs the selected phone after a device listing error with details closed");
+                refreshSnapshot = devices;
+            }
+            finally { main.Close(); }
+
+            ExpireAddress();
+            announceCurrent = false;
+            emptyBackendMdns = true;
+            var quick = new PhoneAudioWindow(false) { ShowActivated = false, ShowInTaskbar = false };
+            try
+            {
+                quick.Show();
+                var refresh = (Button)quick.FindName("RefreshButton");
+                refresh.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Until(() => reconnectLookups == 3 && refresh.IsEnabled
+                    && typeof(PhoneAudioWindow).GetField("_connError", Hidden)!.GetValue(quick) is IOException);
+                Check(connections.Count == 3, "the quick device refresh filters the expired port and offers the existing connection hint");
+            }
+            finally { quick.Close(); }
             page.Dispose(); Until(() => Watch() == null);
             Check(activeScans == 0 && clock.QrTimers == 0 && names.Distinct().Count() == names.Count,
                 "disposal retires all deadlines/scans and every QR rotation uses a fresh identity");

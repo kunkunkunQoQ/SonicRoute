@@ -73,7 +73,7 @@ internal static partial class Program
             var main = new MainWindow();
             try
             {
-                if (phone) typeof(MainWindow).GetMethod("InitializePhoneManagement", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(main,new object[]{false});
+                if (phone) typeof(MainWindow).GetMethod("InitializePhoneManagement", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(main, null);
                 Check((main.FindName("PhoneDevicesHost") != null) == phone && (main.FindName("PhoneDetailsHost") != null) == phone,
                     "Lite constructs no device sidebar or phone details host");
                 Check(main.Title.StartsWith(name + " ") && main.FindName("AppsListBox") != null,

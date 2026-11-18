@@ -51,7 +51,7 @@
     "configureAutomation": "設定自動化",
     "automationExample": "把繁瑣的手動改設定，變成一次配置、隨開隨用的自動化體驗。",
     "currentRelease": "目前版本",
-    "releaseSummary": "v1.33 為 Full 新增自研 C# AirPlay 音訊與等比螢幕鏡像（支援 PCM/ALAC/AAC-LC/AAC-ELD、可選連線碼、置頂/F11 全螢幕及拖曳轉發至電腦或 Android 揚聲器/藍牙）、H.265 (HEVC) 與聲畫解碼器選擇、可見裝置頁按需編碼器查詢、前景手把門控、整合 QR Code（2 分鐘自動更新）與配對碼卡片、已儲存無線裝置區網搜尋重連（驗證候選連接埠以過濾失效舊連接埠、依裝置身分重連新 IP/連接埠、無候選或失敗時保留手動輸入草稿）與裝置設定還原；全版本（Full/Lite/Legacy）新增兩項獨立麥克風常駐 OSD 開關、單行「設定檔管理」卡片、>20 項應用清單虛擬化、OSD 合併最佳化、PNG 原始位元組釋放與退役紋理清理、Full 取消關窗顯式主動 GC 請求（交由執行階段自然回收）、設定 .bak 保護與按需錯誤診斷、獨立 Store Lite 支援及 GPL-3.0-only 離線檢視。詳見 {history}。",
+    "releaseSummary": "v1.33 為 Full 新增自研 C# AirPlay 音訊與等比螢幕鏡像（支援 PCM/ALAC/AAC-LC/AAC-ELD、可選連線碼、置頂/F11 全螢幕及拖曳轉發至電腦或 Android 揚聲器/藍牙）、H.265 (HEVC) 與聲畫解碼器選擇、可見裝置頁按需編碼器查詢、前景手把門控、整合 QR Code（2 分鐘自動更新）與配對碼卡片、已儲存無線裝置區網搜尋與統一重連重新整理（裝置設定重連、快捷裝置面板與側欄重新整理統一驗證連線、篩除過期連接埠並依身分找回新 IP/連接埠，無候選或失敗時保留手動輸入草稿）與裝置設定還原；全版本（Full/Lite/Legacy）新增兩項獨立麥克風常駐 OSD 開關、單行「設定檔管理」卡片、>20 項應用清單虛擬化、OSD 合併最佳化、PNG 原始位元組釋放與退役紋理清理、Full 取消關窗顯式主動 GC 請求（交由執行階段自然回收）、設定 .bak 保護與按需錯誤診斷、獨立 Store Lite 支援及 GPL-3.0-only 離線檢視。詳見 {history}。",
     "docTopic": "主題",
     "docGuides": "指南",
     "docTopics": [

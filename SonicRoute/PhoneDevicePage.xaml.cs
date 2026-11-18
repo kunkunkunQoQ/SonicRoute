@@ -116,7 +116,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             _streamEncoders = null;
             _encoderFailed = false;
         }
-        return RunAsync(RefreshDevicesCoreAsync);
+        return RunAsync(IsConnectionPage ? RefreshDevicesCoreAsync : RefreshSelectedDeviceCoreAsync);
     }
     internal void Suspend()
     {
@@ -296,9 +296,14 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         RefreshSavedDeviceSearchStatus();
         RestoreUsbDevices.IsEnabled = !busy;
     }
-    private async Task RefreshDevicesCoreAsync(CancellationToken token)
+    private async Task RefreshDevicesCoreAsync(CancellationToken token) =>
+        ApplyRefreshedDevices(await PhoneAudioWindowCache.ReadDevicesAsync(token), token);
+
+    private async Task RefreshSelectedDeviceCoreAsync(CancellationToken token) =>
+        ApplyRefreshedDevices(await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(token, _wireless), token);
+
+    private void ApplyRefreshedDevices(IReadOnlyList<AndroidDevice> devices, CancellationToken token)
     {
-        var devices = await PhoneAudioWindowCache.ReadDevicesAsync(token);
         token.ThrowIfCancellationRequested();
         ApplyDevices(PhoneAudioWindowCache.Devices ?? devices);
         _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(devices, force: true, _lifetime.Token);
@@ -375,10 +380,8 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private async void Reconnect_Click(object sender, RoutedEventArgs e) => await RunAsync(async token =>
     {
-        var last = AndroidAudioHost.Phone.Profile.LastDevice;
-        if (last == null) return;
-        if (last.IsWifi) ApplyConnection(await Wireless.ReconnectAsync(last, token), token);
-        else await RefreshDevicesCoreAsync(token);
+        if (AndroidAudioHost.Phone.Profile.LastDevice == null) return;
+        await RefreshSelectedDeviceCoreAsync(token);
         if (_device == null) throw AndroidError.WithCode(new IOException("未发现设备，请开启无线调试或更新连接地址。"), AndroidErrorCode.ReconnectNoDeviceFound);
     });
     private async void Disconnect_Click(object sender, RoutedEventArgs e)

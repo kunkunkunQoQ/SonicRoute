@@ -45,7 +45,7 @@ public partial class MainWindow
         }
         catch (OperationCanceledException) { }
     }
-    private void InitializePhoneManagement(bool discover = false)
+    private void InitializePhoneManagement()
     {
         if (_phoneInitialized || _isClosed) return;
         _phoneInitialized = true;
@@ -95,7 +95,6 @@ public partial class MainWindow
         AndroidAudioHost.Phone.ObserveDevices(cachedDevices);
         _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(cachedDevices, force: false, _uiLifetime.Token);
         PhoneLibraryChanged();
-        if (discover) _ = RefreshPhoneDevicesAsync();
     }
     private sealed class PhoneSidebarItem(string id, System.Windows.Media.ImageSource icon) : INotifyPropertyChanged
     {
@@ -222,10 +221,13 @@ public partial class MainWindow
     }
     private async Task RefreshPhoneDevicesAsync()
     {
-        if (_isClosed || !_phoneInitialized || PhoneDetailsHost.Visibility != Visibility.Visible) return;
+        if (_isClosed || !_phoneInitialized || AppsPage.Visibility != Visibility.Visible) return;
         try
         {
-            if (_phoneDevicePage != null) await _phoneDevicePage.RefreshAsync();
+            if (PhoneDetailsHost.Visibility == Visibility.Visible && _phoneDevicePage != null)
+                await _phoneDevicePage.RefreshAsync();
+            else if (AndroidAudioHost.Phone.Profile.LastDevice != null)
+                await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(_uiLifetime.Token);
             _phoneRefreshError = null; PhoneDevicesHost.ToolTip = null;
             if (!_isClosed) PhoneLibraryChanged();
         }
