@@ -20,8 +20,7 @@ internal static class AndroidAudioHost
     private static IReadOnlyList<AudioDeviceInfo>? _outputSnapshot;
     private static readonly LocalSilenceLeasePool SilenceLeases = new(FindSilenceEndpoint,
         id => { var state = SystemVolumeService.ReadStateChecked(id); return (state.Muted, state.MuteKnown); },
-        SystemVolumeService.SetMute, pid => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender),
-        (pid, id) => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, id).Success);
+        SystemVolumeService.SetMute, ReadSilenceRoles, WriteSilenceRoles);
     private static readonly Dictionary<string, long> ProbeTimestamps = new(StringComparer.Ordinal);
     static AndroidAudioHost()
     {
@@ -308,6 +307,26 @@ internal static class AndroidAudioHost
         if (processId <= 0 || (IsPcToPhoneCreated && !PcToPhone.EnableLiveStreaming)) return null;
         return SilenceLeases.Acquire(processId);
     }
+    internal static IPcProcessSilenceLease? AcquireWindowsLinkSilenceLease(int processId) =>
+        processId > 0 && TryGetPcAppPhoneOutput(processId) == null ? SilenceLeases.Acquire(processId) : null;
+
+    private static (string? Multimedia, string? Console) ReadSilenceRoles(int pid)
+    {
+        using var policy = new AudioPolicyConfig(EDataFlow.eRender);
+        return (Unpack(policy.GetDefaultEndPoint(pid, ERole.eMultimedia)), Unpack(policy.GetDefaultEndPoint(pid, ERole.eConsole)));
+
+        static string? Unpack(string? value) => string.IsNullOrWhiteSpace(value) ? null : AudioPolicyConfig.UnpackDeviceId(value);
+    }
+
+    private static bool WriteSilenceRoles(int pid, (string? Multimedia, string? Console) ids)
+    {
+        using var policy = new AudioPolicyConfig(EDataFlow.eRender);
+        int multimedia = policy.SetDefaultEndPoint(Pack(ids.Multimedia), pid, ERole.eMultimedia);
+        int console = policy.SetDefaultEndPoint(Pack(ids.Console), pid, ERole.eConsole);
+        return multimedia >= 0 && console >= 0;
+
+        static string? Pack(string? value) => value == null ? null : AudioPolicyConfig.EnsureFullDeviceId(value, EDataFlow.eRender);
+    }
     private static string? FindSilenceEndpoint()
     {
         var outputs = AudioService.GetDevices(EDataFlow.eRender);
@@ -443,7 +462,8 @@ internal static class AndroidAudioHost
     }
     internal static bool HasActiveWork()
     {
-        if (IsDragging) return true;
+        if (IsDragging || WindowsLinkHub.IsDragging) return true;
+        if (WindowsLinkHub.Service?.HasActiveWork == true) return true;
         if (IsCreated && Sources.HasActiveWork) return true;
         if (AreDisplaysCreated && (Displays.Count > 0 || HasActiveDisplayResources())) return true;
         if (IsPcToPhoneCreated && PcToPhone.HasActiveWork) return true;
@@ -465,6 +485,7 @@ internal static class AndroidAudioHost
     {
         bool phoneUiOpen = (System.Windows.Application.Current is App app && app.IsPhoneWindowOpen)
             || PhoneDevicePage.HasActivePage;
+        if (!phoneUiOpen) WindowsLinkHub.TrimForIdle();
         if (!phoneUiOpen && IsCatalogCreated)
             Catalog.TrimForIdle();
         if (!phoneUiOpen && !HasActiveWork())

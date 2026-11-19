@@ -213,6 +213,8 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     public event Action<int, int, int, int, float, float, int>? ScrollEvent;
     public event Action<byte, int, int, int>? KeyEvent;
     public event Action<string>? TextInput;
+    internal event Action<bool, uint>? WindowsKeyEvent;
+    internal event Action? WindowsInputFocusLost;
     public event Action<NativeWindowMouseBinding, byte>? MouseShortcut;
     public event Action<GamepadInputState>? GamepadStateChanged;
 
@@ -1050,6 +1052,12 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         if (!ctrl && !alt && !win && _preferText && IsPrintableVirtualKey(vk))
             return;
 
+        if (WindowsKeyEvent is { } windowsKey)
+        {
+            if (!isSys && !alt && !win) windowsKey(isDown, vk);
+            return;
+        }
+
         if (!AndroidKeycodeMapper.TryMapVirtualKey(vk, extended, out int androidKey))
             return;
 
@@ -1298,6 +1306,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private void OnGamepadFocusLostOrMinimized(nint hwnd)
     {
+        WindowsInputFocusLost?.Invoke();
         Volatile.Write(ref _hasFocus, false);
         StopGamepadTimerIfNeeded(hwnd);
         _xinputConnectedMask = 0;

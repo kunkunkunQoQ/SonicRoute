@@ -403,6 +403,7 @@ internal static class PcProcessLoopbackCapture
 {
     private const string VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK = "VAD\\Process_Loopback";
     private const int PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0;
+    private const int PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE = 1;
     private const int AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1;
     private const uint AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000;
     private const uint AUDCLNT_STREAMFLAGS_EVENTCALLBACK = 0x00040000;
@@ -520,14 +521,15 @@ internal static class PcProcessLoopbackCapture
         }
     }
 
-    public static Task RunMtaCaptureLoopAsync(int processId, Stream destination, CancellationToken token, Action onProcessExited, Action<int, int>? onPacketStreamed = null)
+    public static Task RunMtaCaptureLoopAsync(int processId, Stream destination, CancellationToken token, Action onProcessExited,
+        Action<int, int>? onPacketStreamed = null, bool excludeProcess = false, Action? onStarted = null)
     {
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
             try
             {
-                CaptureLoopMta(processId, destination, token, onProcessExited, onPacketStreamed);
+                CaptureLoopMta(processId, destination, token, onProcessExited, onPacketStreamed, excludeProcess, onStarted);
                 tcs.TrySetResult();
             }
             catch (OperationCanceledException) { tcs.TrySetCanceled(token); }
@@ -542,7 +544,7 @@ internal static class PcProcessLoopbackCapture
         return tcs.Task;
     }
 
-    private static IAudioClient ActivateProcessLoopbackClient(int processId, CancellationToken token)
+    private static IAudioClient ActivateProcessLoopbackClient(int processId, CancellationToken token, bool excludeProcess)
     {
         var actParams = new AUDIOCLIENT_ACTIVATION_PARAMS
         {
@@ -550,7 +552,9 @@ internal static class PcProcessLoopbackCapture
             ProcessLoopbackParams = new AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS
             {
                 TargetProcessId = (uint)processId,
-                ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
+                ProcessLoopbackMode = excludeProcess
+                    ? PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
+                    : PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
             }
         };
         int paramSize = Marshal.SizeOf<AUDIOCLIENT_ACTIVATION_PARAMS>();
@@ -590,7 +594,8 @@ internal static class PcProcessLoopbackCapture
         }
     }
 
-    private static void CaptureLoopMta(int processId, Stream destination, CancellationToken token, Action onProcessExited, Action<int, int>? onPacketStreamed)
+    private static void CaptureLoopMta(int processId, Stream destination, CancellationToken token, Action onProcessExited,
+        Action<int, int>? onPacketStreamed, bool excludeProcess, Action? onStarted)
     {
         var wfx = new WAVEFORMATEX
         {
@@ -610,7 +615,7 @@ internal static class PcProcessLoopbackCapture
 
         try
         {
-            client = ActivateProcessLoopbackClient(processId, token);
+            client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
             uint eventFlags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
                 | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY | AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
             int hrInit = client.Initialize(0, eventFlags, 200_000, 0, ref wfx, IntPtr.Zero);
@@ -622,7 +627,7 @@ internal static class PcProcessLoopbackCapture
             else
             {
                 Marshal.ReleaseComObject(client);
-                client = ActivateProcessLoopbackClient(processId, token);
+                client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
                 useEventCallback = false;
                 uint pollFlags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
                     | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
@@ -637,6 +642,7 @@ internal static class PcProcessLoopbackCapture
 
             int hrStart = client.Start();
             if (hrStart < 0) Marshal.ThrowExceptionForHR(hrStart);
+            onStarted?.Invoke();
 
             byte[] pcmBuffer = ArrayPool<byte>.Shared.Rent(16 * 1024);
             try

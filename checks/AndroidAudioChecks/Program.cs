@@ -38,6 +38,10 @@ internal static partial class Program
                 return 0;
             }
             if (args.Length > 0 && args[0] == "--pairing-fixes") { await PairingFixesAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--windows-link") { await WindowsLinkChecksAsync(); return 0; }
+            if (args.Length > 0 && args[0] == "--windows-link-codecs") { await Task.Run(WindowsLinkCodecChecks); return 0; }
+            if (args.Length == 2 && args[0] == "--windows-link-native") { await WindowsLinkNativeChecksAsync(args[1]); return 0; }
+            if (args.Length == 2 && args[0] == "--windows-link-window-fixture") { await WindowsLinkWindowFixtureAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--mdns-discovery") { await MdnsDiscoveryChecksAsync(args.Contains("--lan")); return 0; }
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }

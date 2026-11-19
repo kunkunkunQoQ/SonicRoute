@@ -10,6 +10,7 @@ using SonicRoute.Core.Models;
 #if SONICROUTE_PHONE
 using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
+using SonicRoute.WindowsLink;
 #endif
 
 namespace SonicRoute;
@@ -24,6 +25,16 @@ internal static class ApplicationAudio
     private static string? ResolveExternalDisplayName(string identifier)
     {
         if (string.Equals(identifier, AirPlayHost.AppKey, StringComparison.OrdinalIgnoreCase)) return "AirPlay";
+        const string winPrefix = "winlink:";
+        if (!string.IsNullOrWhiteSpace(identifier) && identifier.StartsWith(winPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            string key = identifier.Substring(winPrefix.Length).Trim();
+            if (WindowsLinkHub.IncomingAudioSources.FirstOrDefault(s => string.Equals(s.AppKey, key, StringComparison.OrdinalIgnoreCase)) is { } live)
+                return string.Equals(key, LinkRemoteApp.SystemAudioKey, StringComparison.OrdinalIgnoreCase)
+                    ? (WindowsLinkHub.Service?.Peers.FirstOrDefault(p => string.Equals(p.Id, live.PeerId, StringComparison.OrdinalIgnoreCase))?.DisplayName ?? live.Name)
+                    : live.Name;
+            return string.Equals(key, LinkRemoteApp.SystemAudioKey, StringComparison.OrdinalIgnoreCase) ? "Windows Link" : key;
+        }
         const string prefix = "android:";
         if (string.IsNullOrWhiteSpace(identifier) || !identifier.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             return null;
@@ -70,16 +81,30 @@ internal static class ApplicationAudio
 #else
         false;
 #endif
+    internal static bool IsWindowsLinkOutputDevice(string? deviceId) =>
+#if SONICROUTE_PHONE
+        WindowsLinkOutputIdentity.IsWindowsLinkOutput(deviceId);
+#else
+        false;
+#endif
+    internal static bool IsExternalOutputDevice(string? deviceId) =>
+        IsPhoneOutputDevice(deviceId) || IsWindowsLinkOutputDevice(deviceId);
+
     internal static List<AudioDeviceInfo> GetOutputDevices() =>
         MergeExternalOutputs(AudioService.GetDevices(EDataFlow.eRender));
     internal static List<AudioDeviceInfo> MergeExternalOutputs(IEnumerable<AudioDeviceInfo> windowsOutputs)
     {
-        var list = windowsOutputs.Where(d => !IsPhoneOutputDevice(d.Id)).ToList();
+        var list = windowsOutputs.Where(d => !IsExternalOutputDevice(d.Id)).ToList();
 #if SONICROUTE_PHONE
         foreach (var phoneOut in AndroidAudioHost.GetOutputDevices())
         {
             if (!list.Any(d => string.Equals(d.Id, phoneOut.Id, StringComparison.OrdinalIgnoreCase)))
                 list.Add(phoneOut);
+        }
+        foreach (var winOut in WindowsLinkHub.GetOutputDevices())
+        {
+            if (!list.Any(d => string.Equals(d.Id, winOut.Id, StringComparison.OrdinalIgnoreCase)))
+                list.Add(winOut);
         }
 #endif
         return list;
@@ -87,10 +112,13 @@ internal static class ApplicationAudio
     internal static IEnumerable<AudioDeviceInfo> OutputsForApp(AudioAppInfo? app, IEnumerable<AudioDeviceInfo> outputs)
     {
 #if SONICROUTE_PHONE
-        if (app is { IsExternal: true } && app.ProcessName != AirPlayHost.AppKey)
+        if (app is { IsExternal: true })
         {
+            outputs = outputs.Where(d => !IsWindowsLinkOutputDevice(d.Id));
+            if (app.ProcessName == AirPlayHost.AppKey || WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) != null)
+                return outputs;
             var source = Source(app);
-            if (source == null) return outputs.Where(d => !IsPhoneOutputDevice(d.Id)).ToList();
+            if (source == null) return outputs.Where(d => !IsExternalOutputDevice(d.Id)).ToList();
             var phoneOutputs = AndroidAudioHost.OutputsForDevice(source.Device);
             var remaining = new Dictionary<string, AudioDeviceInfo>(StringComparer.OrdinalIgnoreCase);
             foreach (var phone in phoneOutputs) remaining.TryAdd(phone.Id, phone);
@@ -112,7 +140,7 @@ internal static class ApplicationAudio
     internal static List<AudioAppInfo> GetApps(bool refresh = false) => MergeExternal(AudioService.GetApps(refresh));
     internal static bool HasExternal =>
 #if SONICROUTE_PHONE
-        AirPlayHost.Source != null || (AndroidAudioHost.IsCreated && AndroidAudioHost.Sources.Sources.Count > 0);
+        AirPlayHost.Source != null || WindowsLinkHub.HasIncomingAudio || (AndroidAudioHost.IsCreated && AndroidAudioHost.Sources.Sources.Count > 0);
 #else
         false;
 #endif
@@ -164,6 +192,7 @@ internal static class ApplicationAudio
 #if SONICROUTE_PHONE
         if (AndroidAudioHost.IsCreated) result.AddRange(AndroidAudioHost.Sources.Sources.Select(Describe));
         if (AirPlayHost.Source is { } airPlay) result.Add(Describe(airPlay));
+        foreach (var winLink in WindowsLinkHub.IncomingAudioSources) result.Add(Describe(winLink));
 #endif
         return result;
     }
@@ -182,10 +211,28 @@ internal static class ApplicationAudio
         ProcessId = 0, ExternalSourceId = source.Id, ProcessName = AirPlayHost.AppKey,
         DisplayName = source.Name, SourceLabel = "AirPlay", HasActiveSession = source.Pcm != null
     };
+    internal static AudioAppInfo Describe(WindowsLinkAudioSource source)
+    {
+        string peerName = WindowsLinkHub.Service?.Peers
+            .FirstOrDefault(p => string.Equals(p.Id, source.PeerId, StringComparison.OrdinalIgnoreCase))?.DisplayName
+            ?? source.Name;
+        bool isSystem = string.Equals(source.AppKey, LinkRemoteApp.SystemAudioKey, StringComparison.OrdinalIgnoreCase);
+        return new()
+        {
+            ProcessId = 0,
+            ExternalSourceId = source.Id,
+            ProcessName = "winlink:" + source.AppKey,
+            DisplayName = isSystem ? peerName : source.Name,
+            SourceLabel = string.Format(L10n.T("Phone.FromDevice"), peerName),
+            ExternalIconPng = source.IconPng,
+            HasActiveSession = source.Session.State.State == CaptureState.Receiving
+        };
+    }
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null
         : AndroidAudioHost.Sources.FindSource(app.ExternalSourceId!);
     private static IPhoneAudioSession? ExternalSession(AudioAppInfo app) => Source(app)?.Session
-        ?? (IPhoneAudioSession?)AirPlayHost.Find(app.ExternalSourceId);
+        ?? (IPhoneAudioSession?)AirPlayHost.Find(app.ExternalSourceId)
+        ?? WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId)?.Session;
     private static bool IsSourcePhoneOutput(AndroidAudioSource source, string deviceId) =>
         AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out _)
         && string.Equals(phoneKey, AndroidDeviceIdentity.Key(source.Device), StringComparison.OrdinalIgnoreCase);
@@ -272,8 +319,10 @@ internal static class ApplicationAudio
     internal static string? GetPersistedEndpoint(int processId, EDataFlow flow)
     {
 #if SONICROUTE_PHONE
-        if (flow == EDataFlow.eRender && AndroidAudioHost.TryGetPcAppPhoneOutput(processId) is { } phoneOut)
-            return phoneOut;
+        if (flow == EDataFlow.eRender)
+        {
+            if (AndroidAudioHost.TryGetPcAppPhoneOutput(processId) is { } phoneOut) return phoneOut;
+        }
 #endif
         return AudioService.GetPersistedEndpoint(processId, flow);
     }
@@ -294,8 +343,14 @@ internal static class ApplicationAudio
             if (flow == EDataFlow.eRender)
             {
                 if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
+                {
+                    WindowsLinkHub.Service?.StopOutgoingAudioForProcessAsync((int)app.ProcessId, onlyExclusive: true).GetAwaiter().GetResult();
                     return AndroidAudioHost.RoutePcAppToPhone((int)app.ProcessId, deviceId);
+                }
+                if (WindowsLinkOutputIdentity.IsWindowsLinkOutput(deviceId))
+                    return WindowsLinkHub.RoutePcAppToPeerAsync((int)app.ProcessId, deviceId).GetAwaiter().GetResult();
                 AndroidAudioHost.StopPcAppToPhone((int)app.ProcessId, restorePreviousEndpoint: false);
+                WindowsLinkHub.Service?.StopOutgoingAudioForProcessAsync((int)app.ProcessId, onlyExclusive: true).GetAwaiter().GetResult();
             }
 #endif
             return AudioService.ApplyEndpoint((int)app.ProcessId, flow, deviceId);
@@ -311,12 +366,16 @@ internal static class ApplicationAudio
     {
 #if SONICROUTE_PHONE
         if (app.IsExternal) return ApplyExternalEndpointAsync(app, flow, deviceId);
+        if (flow == EDataFlow.eRender && WindowsLinkOutputIdentity.IsWindowsLinkOutput(deviceId))
+            return WindowsLinkHub.RoutePcAppToPeerAsync((int)app.ProcessId, deviceId);
 #endif
         return Task.FromResult(ApplyEndpoint(app, flow, deviceId));
     }
 #if SONICROUTE_PHONE
     private static async Task<(bool Success, int HResult, string Message)> ApplyExternalEndpointAsync(AudioAppInfo app, EDataFlow flow, string deviceId)
     {
+        if (IsWindowsLinkOutputDevice(deviceId))
+            return (false, -1, L10n.T("Phone.WindowsLinkLocalAppsOnly"));
         if (flow == EDataFlow.eRender && AirPlayHost.Find(app.ExternalSourceId) is { } airPlay)
         {
             try
@@ -330,6 +389,22 @@ internal static class ApplicationAudio
                 if (IsPhoneOutputDevice(deviceId))
                     message = AndroidError.TryGetCode(ex, out var code) ? AndroidErrorTranslation.Format(code, ex.Message)
                         : L10n.T("Phone.Err.PhoneAudioOutputFailed");
+                return (false, ex.HResult, message);
+            }
+        }
+        if (flow == EDataFlow.eRender && WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) is { } wlSource)
+        {
+            try
+            {
+                await wlSource.Session.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
+                return (true, 0, "");
+            }
+            catch (Exception ex)
+            {
+                string message = IsPhoneOutputDevice(deviceId)
+                    ? (AndroidError.TryGetCode(ex, out var code) ? AndroidErrorTranslation.Format(code, ex.Message)
+                        : L10n.T("Phone.Err.PhoneAudioOutputFailed"))
+                    : ex.Message;
                 return (false, ex.HResult, message);
             }
         }
@@ -407,6 +482,7 @@ internal static class ApplicationAudio
     {
 #if SONICROUTE_PHONE
         int phoneStopped = AndroidAudioHost.StopAllPcAppsToPhone(restorePreviousEndpoint: true);
+        WindowsLinkHub.StopAllPcAppsToPeers();
 #else
         const int phoneStopped = 0;
 #endif

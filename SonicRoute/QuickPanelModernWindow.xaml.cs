@@ -60,6 +60,9 @@ namespace SonicRoute
             public double CollapsedHeight => LegacyLayout ? 38 : 54;
             public bool ShowOutputName;
             public string? OutputId;
+#if SONICROUTE_PHONE
+            public bool WindowsLinkExclusive;
+#endif
             public StackPanel ExpandPanel = null!;
             public AnimatedExpandHost ExpandWrap = null!;
             public RotateTransform ExpandArrow = new();
@@ -184,6 +187,10 @@ namespace SonicRoute
             SystemParameters.StaticPropertyChanged += OnSystemParamChanged;
             // 共享"当前应用"变化（前台自动跟随切换）时同步面板高亮
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
+#if SONICROUTE_PHONE
+            WindowsLinkHub.Changed += OnWindowsLinkChanged;
+            Closed += (_, _) => WindowsLinkHub.Changed -= OnWindowsLinkChanged;
+#endif
             Closed += (_, _) => CleanupClosedWindow();
         }
 
@@ -295,6 +302,10 @@ namespace SonicRoute
             }
             catch { }
         }
+
+#if SONICROUTE_PHONE
+        private void OnWindowsLinkChanged() => Android_StateChanged();
+#endif
 
         /// <summary>刷新数据并显示面板（定位到任务栏右下角）。</summary>
         private bool _entrancePlayed;
@@ -1282,6 +1293,10 @@ namespace SonicRoute
                 {
                     string activeId = (item.Flow == EDataFlow.eRender ? selected.Output : selected.Input)
                         ?? (item.Flow == EDataFlow.eRender ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId);
+#if SONICROUTE_PHONE
+                    if (ApplicationAudio.IsWindowsLinkOutputDevice(item.Id))
+                        activeId = WindowsLinkHub.TryGetPcAppOutput(pid) ?? "";
+#endif
                     SetRowDeviceSelection(item.Button, item.Id, activeId);
                     item.Button.IsEnabled = true;
                 }
@@ -1291,7 +1306,9 @@ namespace SonicRoute
             catch
             {
                 if (!_isClosed && request == row.DeviceBuildVersion)
+                {
                     foreach (var item in row.DeviceButtons) item.Button.IsEnabled = true;
+                }
                 return false;
             }
         }
@@ -1303,8 +1320,10 @@ namespace SonicRoute
             var (ok, _, msg) = await Task.Run(() => ApplicationAudio.ApplyEndpoint(row.App, flow, dev.Id));
             if (ok)
             {
-                ShowOsd(AppDisplayName.Get(row.App), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName);
-                if (flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
+                bool windowsLink = ApplicationAudio.IsWindowsLinkOutputDevice(dev.Id);
+                ShowOsd(AppDisplayName.Get(row.App), windowsLink ? $"{dev.DisplayName} · {msg}"
+                    : (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName);
+                if (!windowsLink && flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
                     UpdateRowName(current, dev.Id);
             }
             else

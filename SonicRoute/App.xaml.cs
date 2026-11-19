@@ -892,7 +892,7 @@ namespace SonicRoute
                 var config = ConfigService.Load();
                 var devs = flow == EDataFlow.eRender ? ApplicationAudio.GetOutputDevices() : AudioService.GetDevices(flow);
                 var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
-                var visible = devs.Where(d => !hidden.Contains(d.Id) && !ApplicationAudio.IsPhoneOutputDevice(d.Id)).ToList();
+                var visible = devs.Where(d => !hidden.Contains(d.Id) && !ApplicationAudio.IsExternalOutputDevice(d.Id)).ToList();
                 if (visible.Count == 0) return null;
 
                 // GetDefaultDeviceId 返回完整 ID（"{0.0.0.00000000}.{...}"），需解包为短 ID 才能与设备列表比较，
@@ -991,6 +991,7 @@ namespace SonicRoute
             ShutdownAndroidAudio();
 #if SONICROUTE_PHONE
             AirPlayHost.Shutdown();
+            WindowsLinkHub.ShutdownAsync().GetAwaiter().GetResult();
 #endif
             Updates.Dispose();
             _mainWindow?.FlushPendingSettings();

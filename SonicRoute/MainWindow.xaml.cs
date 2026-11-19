@@ -703,6 +703,9 @@ namespace SonicRoute
             if (isHidden) hidden.RemoveAll(h => string.Equals(h, name, StringComparison.OrdinalIgnoreCase));
             else hidden.Add(name);
             SaveSettings(cfg);
+#if SONICROUTE_PHONE
+            if (!_appsSelected.IsExternal) WindowsLinkHub.Service?.NotifyLocalCatalogChanged();
+#endif
             if (_appsSelected.IsExternal) ApplicationAudio.NotifyChanged();
             foreach (var item in _appItems)
                 if (string.Equals(item.ProcessName, name, StringComparison.OrdinalIgnoreCase))
@@ -782,6 +785,7 @@ namespace SonicRoute
             if (_isClosed || _appsSelected?.Identity != app.Identity) return;
             if (ok)
             {
+                if (ApplicationAudio.IsWindowsLinkOutputDevice(dev.Id)) ShowToast($"{dev.DisplayName} · {msg}");
                 await RefreshAppsSelectionAsync();
             }
             else

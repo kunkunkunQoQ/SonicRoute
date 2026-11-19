@@ -144,6 +144,9 @@ namespace SonicRoute
                 else if (Info.IsExternal && string.Equals(ProcessName,
                     ApplicationAudio.AndroidKey(SonicRoute.AndroidAudio.AndroidApp.DeviceAudioPackage), StringComparison.Ordinal))
                     icon = PhoneSourceIcon.Image;
+                else if (Info.IsExternal && string.Equals(ProcessName,
+                    "winlink:" + SonicRoute.WindowsLink.LinkRemoteApp.SystemAudioKey, StringComparison.OrdinalIgnoreCase))
+                    icon = PhoneSourceIcon.MonitorImage;
                 else
                     icon = Info.IsExternal
                     ? AppIconService.GetCustomIcon(ProcessName) ?? AppIconService.DecodePng(Info.ExternalIconPng)

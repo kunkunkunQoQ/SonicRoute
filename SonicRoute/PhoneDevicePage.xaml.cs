@@ -75,7 +75,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private CatalogStatusKind _catalogStatusKind;
     private string _opStatusKey = "";
     private Exception? _opStatusError;
-    internal bool IsConnectionPage => _showConnection || AndroidAudioHost.Phone.Profile.LastDevice == null;
+    internal bool IsConnectionPage => SelectedWindowsLinkPeer == null && (_showConnection || AndroidAudioHost.Phone.Profile.LastDevice == null);
     public PhoneDevicePage() : this(null) { }
     internal PhoneDevicePage(AndroidWirelessConnection? wireless, Func<AndroidQrPairing>? createQr = null,
         Func<AndroidDevice, CancellationToken, Task<AndroidEncoderCatalog>>? readStreamEncoders = null)
@@ -93,21 +93,34 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         _active = true;
         Interlocked.Increment(ref _activePageCount);
         AndroidAudioHost.Phone.Changed += ProfileChanged;
+        WindowsLinkHub.Changed += WindowsLinkPageChanged;
         L10n.Instance.PropertyChanged += OnLanguageChanged;
         if (System.Windows.Application.Current is App application)
         { application.PhoneClipboardChanged += RefreshClipboard; _ = LoadClipboardAsync(application); }
         RefreshLocalizedUi();
-        if (PhoneAudioWindowCache.Devices == null && AirPlayConnectionChoice.IsChecked != true) _ = RunAsync(RefreshDevicesCoreAsync);
+        if (PhoneAudioWindowCache.Devices == null && (!IsConnectionPage || AndroidConnectionChoice.IsChecked == true))
+            _ = RunAsync(RefreshDevicesCoreAsync);
     }
     internal void ShowConnection()
     {
+        SelectedWindowsLinkPeer = null;
         _showConnection = true;
         ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop();
+        UpdateConnectionChoice();
     }
-    internal void ShowDevice() { _showConnection = false; ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop(); }
+    internal void ShowDevice()
+    {
+        SelectedWindowsLinkPeer = null;
+        _showConnection = false;
+        if (AndroidAudioHost.Phone.Profile.LastDevice == null) AndroidConnectionChoice.IsChecked = true;
+        ReleaseCatalog(); _operation?.Cancel(); ProfileChanged(); DeviceScroll.ScrollToTop();
+    }
     internal Task RefreshAsync()
     {
+        if (SelectedWindowsLinkPeer != null)
+            return CatalogPanel.Visibility == Visibility.Visible ? LoadWindowsLinkCatalogAsync(true) : RefreshWindowsLinkAsync();
         if (AirPlayCard.IsVisible) return Task.CompletedTask;
+        if (WindowsLinkCard.IsVisible) return RefreshWindowsLinkAsync();
         if (CatalogPanel.Visibility == Visibility.Visible) return LoadCatalogAsync(true);
         if (_device is { } device && !_busy)
         {
@@ -130,6 +143,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         ResetSavedDeviceSearch();
         CancelStreamingWork();
         AndroidAudioHost.Phone.Changed -= ProfileChanged;
+        WindowsLinkHub.Changed -= WindowsLinkPageChanged;
         L10n.Instance.PropertyChanged -= OnLanguageChanged;
         if (System.Windows.Application.Current is App application) application.PhoneClipboardChanged -= RefreshClipboard;
         ReleaseCatalog();
@@ -155,11 +169,18 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         RefreshQrStatus();
         UpdateOperationStatus();
         UpdateCatalogStatus();
-        foreach (PhoneAppChoice choice in RetainedApps.Items) choice.RefreshLanguage();
+        foreach (var item in RetainedApps.Items)
+        {
+            if (item is PhoneAppChoice phoneChoice) phoneChoice.RefreshLanguage();
+            else if (item is WindowsLinkAppChoice winChoice) winChoice.RefreshLanguage();
+        }
         foreach (var choice in _catalogChoices) choice.RefreshLanguage();
+        foreach (var choice in _windowsCatalogChoices) choice.RefreshLanguage();
         if (CatalogPanel.Visibility == Visibility.Visible)
         {
-            int count = CatalogApps.SelectedItems.Cast<PhoneAppChoice>().Count(choice => !choice.Retained);
+            int count = SelectedWindowsLinkPeer != null
+                ? CatalogApps.SelectedItems.OfType<WindowsLinkAppChoice>().Count(choice => !choice.Retained)
+                : CatalogApps.SelectedItems.OfType<PhoneAppChoice>().Count(choice => !choice.Retained);
             AddSelectedAppsMenu.Header = count == 0 ? L10n.T("Phone.AddSelectedApps") : string.Format(L10n.T("Phone.AddSelectedAppsCount"), count);
         }
     }
@@ -167,6 +188,34 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(ProfileChanged)); return; }
         if (_disposed || IsLoaded && !_active) return;
+        if (SelectedWindowsLinkPeer != null)
+        {
+            _operation?.Cancel();
+            CancelStreamingWork();
+            _streamDevice = null;
+            _streamKey = null;
+            _retainedSnapshot = null;
+            _smartVolumeSnapshot = null;
+            _device = null;
+            DeviceCard.Visibility = Visibility.Visible;
+            StreamingCard.Visibility = Visibility.Visible;
+            RetainedPanel.Visibility = Visibility.Visible;
+            PhoneDeviceCommands.Visibility = Visibility.Visible;
+            RenameButton.Visibility = Visibility.Visible;
+            UnpairButton.Visibility = Visibility.Collapsed;
+            ClipboardCard.Visibility = Visibility.Collapsed;
+            WindowsLinkInputCard.Visibility = Visibility.Visible;
+            ConnectionPanel.Visibility = Visibility.Collapsed;
+            RestoreUsbDevices.ItemsSource = null;
+            RestoreUsbDevices.Visibility = Visibility.Collapsed;
+            AudioFixedHint.Visibility = Visibility.Visible;
+            AudioEncoderCombo.Visibility = AudioDecoderCombo.Visibility = AudioBitRateCombo.Visibility = Visibility.Collapsed;
+            DeviceIdentityIcon.Data = AutomationIcons.Monitor;
+            RefreshWindowsLinkDevicePage();
+            UpdateQrPairing();
+            UpdateSavedDeviceSearch();
+            return;
+        }
         var profile = AndroidAudioHost.Phone.Profile;
         if (_profileId != profile.Id)
         {
@@ -195,7 +244,15 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         _smartVolumeSnapshot = profile.DisabledSmartVolumeApps;
         RetainedCount.Text = string.Format(L10n.T("Phone.RetainedCountFormat"), profile.RetainedApps.Count);
         RetainedEmpty.Visibility = profile.RetainedApps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        RetainedPanel.Visibility = DeviceCard.Visibility = StreamingCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
+        RetainedPanel.Visibility = StreamingCard.Visibility = connection ? Visibility.Collapsed : Visibility.Visible;
+        DeviceCard.Visibility = !connection ? Visibility.Visible : Visibility.Collapsed;
+        PhoneDeviceCommands.Visibility = Visibility.Visible;
+        UnpairButton.Visibility = Visibility.Visible;
+        ClipboardCard.Visibility = Visibility.Visible;
+        WindowsLinkInputCard.Visibility = Visibility.Collapsed;
+        AudioFixedHint.Visibility = Visibility.Collapsed;
+        AudioEncoderCombo.Visibility = AudioDecoderCombo.Visibility = AudioBitRateCombo.Visibility = Visibility.Visible;
+        DeviceIdentityIcon.Data = AutomationIcons.Phone;
         RefreshStreamingSettings(connection ? null : display);
         ConnectionPanel.Visibility = connection ? Visibility.Visible : Visibility.Collapsed;
         var usbChoices = connection && PhoneAudioWindowCache.Devices is { } cached
@@ -209,6 +266,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         DisconnectButton.IsEnabled = _device != null && !_busy;
         DisconnectButton.Content = _device?.IsWifi == false ? L10n.T("Phone.StopReceiving") : L10n.T("Phone.Disconnect");
         ReconnectButton.IsEnabled = display != null && !_busy;
+        ReconnectButton.Visibility = Visibility.Visible;
         UnpairButton.IsEnabled = display != null && !_busy;
         RemoveDeviceButton.IsEnabled = profile.LastDevice != null && !_busy;
         if (appsChanged && CatalogPanel.Visibility == Visibility.Visible) ApplyCatalogFilter();
@@ -257,7 +315,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         CatalogStatus.Text = _catalogStatusKind switch
         {
             CatalogStatusKind.Loading => L10n.T("Phone.LoadingPhoneApps"),
-            CatalogStatusKind.Empty => L10n.T("Phone.CatalogEmpty"),
+            CatalogStatusKind.Empty => L10n.T(SelectedWindowsLinkPeer != null ? "Phone.WindowsLinkCatalogEmpty" : "Phone.CatalogEmpty"),
             CatalogStatusKind.Loaded => L10n.T("Phone.CatalogSelectionHint"),
             _ => ""
         };
@@ -324,6 +382,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private async void RemoveDevice_Click(object sender, RoutedEventArgs e)
     {
+        if (SelectedWindowsLinkPeer != null)
+        {
+            RemoveWindowsLinkPeer();
+            return;
+        }
         var profile = AndroidAudioHost.Phone.Profile;
         if (profile.LastDevice is not { } device) return;
         await RunAsync(async _ =>
@@ -378,14 +441,27 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             ApplyConnection(await Wireless.FinishPairingAsync(pairing, token), token);
         }, "Phone.ConnectedStatus");
     }
-    private async void Reconnect_Click(object sender, RoutedEventArgs e) => await RunAsync(async token =>
+    private async void Reconnect_Click(object sender, RoutedEventArgs e)
     {
-        if (AndroidAudioHost.Phone.Profile.LastDevice == null) return;
-        await RefreshSelectedDeviceCoreAsync(token);
-        if (_device == null) throw AndroidError.WithCode(new IOException("未发现设备，请开启无线调试或更新连接地址。"), AndroidErrorCode.ReconnectNoDeviceFound);
-    });
+        if (SelectedWindowsLinkPeer != null)
+        {
+            await RefreshWindowsLinkAsync();
+            return;
+        }
+        await RunAsync(async token =>
+        {
+            if (AndroidAudioHost.Phone.Profile.LastDevice == null) return;
+            await RefreshSelectedDeviceCoreAsync(token);
+            if (_device == null) throw AndroidError.WithCode(new IOException("未发现设备，请开启无线调试或更新连接地址。"), AndroidErrorCode.ReconnectNoDeviceFound);
+        });
+    }
     private async void Disconnect_Click(object sender, RoutedEventArgs e)
     {
+        if (SelectedWindowsLinkPeer != null)
+        {
+            await DisconnectWindowsLinkPeerAsync();
+            return;
+        }
         var device = _device; if (device == null) return;
         await RunAsync(async token =>
         {
@@ -408,16 +484,41 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private void Rename_Click(object sender, RoutedEventArgs e)
     {
+        _windowsOriginalName = DeviceName.Text;
         _suppressName = true;
         try { InlineNameEdit.Begin(DeviceName, PhoneNameBox); }
         finally { _suppressName = false; }
     }
     private void Name_TextChanged(object sender, TextChangedEventArgs e)
-    { if (!_suppressName && !_disposed && PhoneNameBox.Visibility == Visibility.Visible) AndroidAudioHost.Phone.Rename(PhoneNameBox.Text); }
-    private void Name_KeyDown(object sender, KeyEventArgs e) => InlineNameEdit.KeyDown(PhoneNameBox, e);
+    {
+        if (_suppressName || _disposed || PhoneNameBox.Visibility != Visibility.Visible) return;
+        if (SelectedWindowsLinkPeer != null) { CommitWindowsLinkRename(); return; }
+        AndroidAudioHost.Phone.Rename(PhoneNameBox.Text);
+    }
+    private void Name_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (SelectedWindowsLinkPeer != null && e.Key == Key.Escape)
+        {
+            _suppressName = true;
+            try
+            {
+                if (SelectedWindowsLinkPeer is { } peerId) WindowsLinkHub.Service?.Rename(peerId, _windowsOriginalName);
+                PhoneNameBox.Visibility = Visibility.Collapsed;
+            }
+            finally { _suppressName = false; }
+            e.Handled = true;
+            return;
+        }
+        InlineNameEdit.KeyDown(PhoneNameBox, e);
+    }
     private void Name_LostFocus(object sender, KeyboardFocusChangedEventArgs e) => PhoneNameBox.Visibility = Visibility.Collapsed;
     private async void AddApps_Click(object sender, RoutedEventArgs e)
     {
+        if (SelectedWindowsLinkPeer != null)
+        {
+            AddWindowsLinkAppsAsync();
+            return;
+        }
         if (_disposed || !_active || _busy || _device == null) return;
         SetCatalogVisible(true);
         CatalogSearch.Focus();
@@ -439,6 +540,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private void ReleaseCatalog()
     {
+        CancelWindowsLinkCatalog();
         CatalogApps.ContextMenu.IsOpen = false;
         SetCatalogVisible(false);
         CatalogApps.ItemsSource = null;
@@ -446,6 +548,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     }
     private async Task LoadCatalogAsync(bool refresh)
     {
+        if (SelectedWindowsLinkPeer != null)
+        {
+            await LoadWindowsLinkCatalogAsync(refresh);
+            return;
+        }
         var device = _device; if (device == null) return;
         if (!refresh && _catalogSerial == device.Serial) { ApplyCatalogFilter(); return; }
         await RunAsync(async token =>
@@ -463,6 +570,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private void CatalogSearch_Changed(object sender, TextChangedEventArgs e) => ApplyCatalogFilter();
     private void ApplyCatalogFilter()
     {
+        if (SelectedWindowsLinkPeer != null)
+        {
+            ApplyWindowsLinkCatalogFilter();
+            return;
+        }
         if (CatalogApps == null || CatalogPanel.Visibility != Visibility.Visible) return;
         string query = CatalogSearch.Text.Trim();
         var retained = AndroidAudioHost.Phone.Profile.RetainedApps.Select(a => a.Package).ToHashSet(StringComparer.Ordinal);
@@ -485,24 +597,48 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private void CatalogMenu_Opening(object sender, ContextMenuEventArgs e)
     {
         if (_disposed || !_active || CatalogPanel.Visibility != Visibility.Visible) { e.Handled = true; return; }
-        int count = CatalogApps.SelectedItems.Cast<PhoneAppChoice>().Count(choice => !choice.Retained);
+        int count = SelectedWindowsLinkPeer != null
+            ? CatalogApps.SelectedItems.OfType<WindowsLinkAppChoice>().Count(choice => !choice.Retained)
+            : CatalogApps.SelectedItems.OfType<PhoneAppChoice>().Count(choice => !choice.Retained);
         AddSelectedAppsMenu.Header = count == 0 ? L10n.T("Phone.AddSelectedApps") : string.Format(L10n.T("Phone.AddSelectedAppsCount"), count);
         AddSelectedAppsMenu.IsEnabled = !_busy && count > 0;
     }
     private void AddSelectedApps_Click(object sender, RoutedEventArgs e)
     {
         if (_disposed || !_active || _busy || CatalogPanel.Visibility != Visibility.Visible) return;
-        var apps = CatalogApps.SelectedItems.Cast<PhoneAppChoice>().Where(choice => !choice.Retained).Select(choice => choice.Item.App).ToArray();
+        if (SelectedWindowsLinkPeer is { } peerId && WindowsLinkHub.Service is { } service)
+        {
+            var winApps = CatalogApps.SelectedItems.OfType<WindowsLinkAppChoice>().Where(choice => !choice.Retained).Select(choice => choice.Item.App).ToArray();
+            if (winApps.Length > 0) service.PinManyApps(peerId, winApps);
+            return;
+        }
+        var apps = CatalogApps.SelectedItems.OfType<PhoneAppChoice>().Where(choice => !choice.Retained).Select(choice => choice.Item.App).ToArray();
         AndroidAudioHost.Phone.RetainMany(apps);
     }
     private void SmartVolume_Changed(object sender, RoutedEventArgs e)
     {
+        if (sender is CheckBox { DataContext: WindowsLinkAppChoice winChoice } winToggle && RetainedApps.Items.Contains(winChoice)
+            && winChoice.SmartVolume != (winToggle.IsChecked == true)
+            && SelectedWindowsLinkPeer is { } peerId && WindowsLinkHub.Service is { } service)
+        {
+            service.SetAppSmartVolume(peerId, winChoice.Item.Key, winToggle.IsChecked == true);
+            return;
+        }
         if (sender is CheckBox { DataContext: PhoneAppChoice choice } toggle && RetainedApps.Items.Contains(choice)
             && choice.SmartVolume != (toggle.IsChecked == true))
             AndroidAudioHost.Phone.SetSmartVolume(choice.Item.Package, toggle.IsChecked == true);
     }
     private void RetainApp_Click(object sender, RoutedEventArgs e)
     {
+        if ((sender as Button)?.Tag is SonicRoute.WindowsLink.LinkRemoteApp winApp
+            && SelectedWindowsLinkPeer is { } peerId && WindowsLinkHub.Service is { } service)
+        {
+            if (service.GetPinnedApps(peerId).Any(a => string.Equals(a.Key, winApp.Key, StringComparison.OrdinalIgnoreCase)))
+                service.UnpinApp(peerId, winApp.Key);
+            else
+                service.PinApp(peerId, winApp);
+            return;
+        }
         if ((sender as Button)?.Tag is not AndroidApp app) return;
         if (AndroidAudioHost.Phone.Profile.RetainedApps.Any(a => a.Package == app.Package)) AndroidAudioHost.Phone.Remove(app.Package);
         else AndroidAudioHost.Phone.Retain(app);
@@ -510,7 +646,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        Suspend(); _disposed = true; _lifetime.Cancel(); AndroidAudioHost.Phone.Changed -= ProfileChanged;
+        Suspend(); _disposed = true; _lifetime.Cancel(); AndroidAudioHost.Phone.Changed -= ProfileChanged; WindowsLinkHub.Changed -= WindowsLinkPageChanged;
         RetainedApps.ItemsSource = CatalogApps.ItemsSource = null;
         _catalog = Array.Empty<PhoneAppItem>();
         _catalogChoices = Array.Empty<PhoneAppChoice>();

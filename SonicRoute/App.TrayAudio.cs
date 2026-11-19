@@ -104,7 +104,7 @@ namespace SonicRoute
                     var active = state.Devices.FirstOrDefault(d => SameTrayDevice(d.Id, state.Default));
                     TrayNamedHeader(output, active == null ? L10n.T("Dev.SystemDefaultOut")
                         : string.Format(L10n.T("Tray.SystemOutput"), DeviceDisplayName(config, active)));
-                    UpdateTrayDeviceItems(output, state.Devices.Where(d => !config.HiddenOutputDevices.Contains(d.Id) && !ApplicationAudio.IsPhoneOutputDevice(d.Id)), config, state.Default,
+                    UpdateTrayDeviceItems(output, state.Devices.Where(d => !config.HiddenOutputDevices.Contains(d.Id) && !ApplicationAudio.IsExternalOutputDevice(d.Id)), config, state.Default,
                         (id, name) => _ = RunTrayAudioActionAsync(owner, L10n.T("Dev.SystemDefaultOut"), async () =>
                         {
                             var result = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, id));

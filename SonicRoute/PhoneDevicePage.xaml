@@ -77,7 +77,7 @@
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <Border Background="{DynamicResource Theme.Overlay}" CornerRadius="10" Width="38" Height="48" HorizontalAlignment="Left">
-                            <Viewbox Width="22" Height="32"><Path Data="{x:Static local:AutomationIcons.Phone}" Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/></Viewbox>
+                            <Viewbox Width="22" Height="32"><Path x:Name="DeviceIdentityIcon" Data="{x:Static local:AutomationIcons.Phone}" Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/></Viewbox>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <Grid>
@@ -104,9 +104,11 @@
                         </StackPanel>
                         <StackPanel x:Name="DeviceCommands" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0">
                             <Button x:Name="ReconnectButton" Content="{Binding [Phone.Reconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Reconnect_Click"/>
-                            <Button x:Name="DisconnectButton" Content="{Binding [Phone.Disconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Disconnect_Click"/>
-                            <Button x:Name="UnpairButton" Content="{Binding [Phone.Unpair], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Unpair_Click"/>
-                            <Button x:Name="RemoveDeviceButton" Content="{Binding [Phone.DeleteDevice], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Margin="0" Click="RemoveDevice_Click"/>
+                            <StackPanel x:Name="PhoneDeviceCommands" Orientation="Horizontal">
+                                <Button x:Name="DisconnectButton" Content="{Binding [Phone.Disconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Disconnect_Click"/>
+                                <Button x:Name="UnpairButton" Content="{Binding [Phone.Unpair], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Unpair_Click"/>
+                                <Button x:Name="RemoveDeviceButton" Content="{Binding [Phone.DeleteDevice], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Margin="0" Click="RemoveDevice_Click"/>
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -127,6 +129,12 @@
                     </Grid.RowDefinitions>
                     <TextBlock Text="{Binding [Phone.StreamAudioLabel], Source={x:Static local:L10n.Instance}}"
                                VerticalAlignment="Center" Margin="0,0,8,6"/>
+                    <TextBlock x:Name="AudioFixedHint" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="4"
+                               Text="{Binding [Phone.WindowsLinkAudioFixed], Source={x:Static local:L10n.Instance}}"
+                               ToolTip="{Binding [Phone.WindowsLinkAudioFixed], Source={x:Static local:L10n.Instance}}"
+                               Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12"
+                               VerticalAlignment="Center" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
+                               Visibility="Collapsed"/>
                     <ComboBox x:Name="AudioEncoderCombo" Grid.Column="1" Style="{StaticResource RoundedComboBox}"
                               ItemTemplate="{StaticResource EncoderOptionTemplate}"
                               ItemContainerStyle="{StaticResource StreamOptionItem}"
@@ -182,6 +190,23 @@
                     </StackPanel>
                 </Border>
                 <Button x:Name="AddAppsButton" Content="{Binding [Phone.AddQuickPanelAppButton], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Height="38" Margin="0,0,0,12" Click="AddApps_Click"/>
+                <Border x:Name="WindowsLinkInputCard" Style="{StaticResource PhoneCard}" Margin="0,0,0,12" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="{Binding [Phone.WindowsLinkAllowInputTitle], Source={x:Static local:L10n.Instance}}"
+                                       FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                            <TextBlock Text="{Binding [Phone.WindowsLinkAllowInputHint], Source={x:Static local:L10n.Instance}}"
+                                       FontSize="12" Foreground="{DynamicResource Theme.TextSecondary}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <CheckBox x:Name="WindowsLinkAllowInputSwitch" Grid.Column="1" Style="{DynamicResource AutomationSwitch}" Width="34"
+                                  VerticalAlignment="Center" Click="WindowsLinkAllowInput_Click"
+                                  AutomationProperties.Name="{Binding [Phone.WindowsLinkAllowInputTitle], Source={x:Static local:L10n.Instance}}"/>
+                    </Grid>
+                </Border>
                 <Border x:Name="ClipboardCard" Style="{StaticResource PhoneCard}" Margin="0">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -195,15 +220,18 @@
                 </Border>
             </StackPanel>
             <StackPanel x:Name="ConnectionPanel" Visibility="Collapsed" IsVisibleChanged="PairingVisibilityChanged">
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <StackPanel x:Name="ConnectionChoices" Orientation="Horizontal" Margin="0,0,0,8">
                     <RadioButton x:Name="AndroidConnectionChoice" GroupName="PhoneConnection" Content="Android"
                                  IsChecked="True" Checked="ConnectionChoice_Changed"/>
                     <RadioButton x:Name="AirPlayConnectionChoice" GroupName="PhoneConnection" Content="AirPlay"
+                                 Checked="ConnectionChoice_Changed"/>
+                    <RadioButton x:Name="WindowsLinkConnectionChoice" GroupName="PhoneConnection" Content="Windows Link"
                                  Checked="ConnectionChoice_Changed"/>
                 </StackPanel>
                 <Border x:Name="AirPlayCard" Style="{StaticResource PhoneCard}" Visibility="Collapsed">
                     <local:AirPlayReceiverView x:Name="AirPlayConnectionView"/>
                 </Border>
+                <ContentControl x:Name="WindowsLinkCard" Visibility="Collapsed" HorizontalContentAlignment="Stretch"/>
                 <Border x:Name="PairingCard" Style="{StaticResource PhoneCard}">
                 <Grid x:Name="PairMethodsGrid">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="0.9*" MinWidth="182"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -320,6 +348,9 @@
                 <Style.Triggers>
                     <Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger>
                     <DataTrigger Binding="{Binding IsVisible, ElementName=AirPlayCard}" Value="True">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsVisible, ElementName=WindowsLinkCard}" Value="True">
                         <Setter Property="Visibility" Value="Collapsed"/>
                     </DataTrigger>
                 </Style.Triggers>

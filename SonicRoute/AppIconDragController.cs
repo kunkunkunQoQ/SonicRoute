@@ -61,6 +61,10 @@ internal static class AppIconDragController
 
     internal static AudioAppInfo? AppFromDrag(System.Windows.IDataObject data, string format = DesktopFormat) =>
         data.GetDataPresent(format, false) ? data.GetData(format, false) as AudioAppInfo : null;
+#if SONICROUTE_PHONE
+    internal static WindowsLinkAppDrag? WindowsLinkFromDrag(System.Windows.IDataObject data) =>
+        data.GetDataPresent(WindowsLinkAppDrag.Format, false) ? data.GetData(WindowsLinkAppDrag.Format, false) as WindowsLinkAppDrag : null;
+#endif
     internal static DragResult Run(FrameworkElement source, System.Windows.IDataObject data, ImageSource? icon, string label, Action<bool>? changed = null)
     {
         bool released = false, cancelled = false; ScreenPoint drop = default;
@@ -148,8 +152,7 @@ internal static class AppIconDragController
             Width = Height = 36; AllowsTransparency = true; Background = Brushes.Transparent;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowActivated = false; ShowInTaskbar = false;
             Topmost = true; IsHitTestVisible = false; Focusable = false;
-            var body = new Border { CornerRadius = new CornerRadius(7), Padding = new Thickness(3), Opacity = .92 };
-            body.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceBg");
+            var body = new Border { Padding = new Thickness(3), Background = Brushes.Transparent };
             if (icon != null) body.Child = new Image { Source = icon, Stretch = Stretch.Uniform };
             else
             {

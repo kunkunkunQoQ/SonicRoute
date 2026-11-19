@@ -36,7 +36,7 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <StackPanel>
-        <Grid Margin="0,0,0,8">
+        <Grid x:Name="ReceiverHeader" Margin="0,0,0,8">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
                 <Border Width="26" Height="26" CornerRadius="7" Background="{DynamicResource Theme.NavSelected}" Margin="0,0,7,0">

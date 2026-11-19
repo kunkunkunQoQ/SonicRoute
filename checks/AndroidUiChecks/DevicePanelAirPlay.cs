@@ -37,11 +37,13 @@ internal static partial class Program
         try
         {
             var selector = (ComboBox)panel.FindName("DeviceCombo");
-            object choice = selector.Items.Cast<object>().Single(item => item is not AndroidDevice);
+            object choice = typeof(PhoneAudioWindow).GetField("AirPlayChoice",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!.GetValue(null)!;
             var view = (AirPlayReceiverView)panel.FindName("AirPlayReceiverPane");
             var list = (ListBox)panel.FindName("PhoneApps");
             var deviceIcon = (System.Windows.Shapes.Path)panel.FindName("DeviceKindIcon");
-            Check(panel.Title == "设备面板" && selector.Items.Count == 2 && selector.SelectedItem is AndroidDevice,
+            Check(panel.Title == "设备面板" && selector.Items.OfType<AndroidDevice>().Count() == 1
+                && selector.Items.Contains(choice) && selector.SelectedItem is AndroidDevice,
                 "Device Panel has the saved Android device and AirPlay together in its dropdown");
             Check(!view.IsVisible && panel.FindName("AirPlayButton") == null && list.Items.Count == 2,
                 "Android shows its original app pane and no separate AirPlay footer button");
@@ -55,8 +57,10 @@ internal static partial class Program
             var statusLabel = (TextBlock)view.FindName("ReceiveStatusLabel");
             var footerStatus = (TextBlock)panel.FindName("ConnectionText");
             Check(view.IsVisible && !list.IsVisible && !((FrameworkElement)panel.FindName("DeviceMediaCard")).IsVisible
-                && !((FrameworkElement)panel.FindName("RefreshButton")).IsVisible && !footerStatus.IsVisible && Receiver() == null,
-                "AirPlay selection shows its own idle pane and stops Android-only UI");
+                && !((FrameworkElement)panel.FindName("RefreshButton")).IsVisible
+                && footerStatus.IsVisible && footerStatus.Text == statusLabel.Text
+                && !((FrameworkElement)view.FindName("ReceiverHeader")).IsVisible && Receiver() == null,
+                "AirPlay reuses the device footer for status and stops Android-only UI");
             Check(ReferenceEquals(deviceIcon.Data, AutomationIcons.AirPlay), "AirPlay has its own icon in the device selector");
             var airPlayRow = AppItem.From(new AudioAppInfo { ProcessId = 0, ExternalSourceId = "airplay:fixture", ProcessName = "airplay:audio" });
             var androidRow = AppItem.From(new AudioAppInfo
@@ -88,7 +92,7 @@ internal static partial class Program
                 Check(panel.Title == L10n.T("Phone.AudioWindowTitle") && !panel.Title.StartsWith("Phone.")
                     && codecs.Items[0].Equals(L10n.T("Phone.StreamDecoderAutomatic"))
                     && (!hevc || codecs.Items[2].Equals(L10n.T("Phone.AirPlayHevcOption")))
-                    && statusLabel.Text == L10n.T("Phone.Disconnected")
+                    && footerStatus.Text == L10n.T("Phone.Disconnected")
                     && !System.Windows.Automation.AutomationProperties.GetName(requireCode).StartsWith("Phone."),
                     language.Code + " localizes the panel title, receiver preferences and decoder choices");
             }

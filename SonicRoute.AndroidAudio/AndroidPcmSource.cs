@@ -24,6 +24,7 @@ public sealed class AndroidPcmSource : IWaveProvider
     public static event Action? PeakActivity;
     // Only a phone renderer subscribes; silence still carries timing without polling.
     internal event Action? DataAvailable;
+    internal event Action? PlaybackConsumed;
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
     public int BufferedSamples { get { lock (_gate) return _count; } }
     public long DroppedSamples => Interlocked.Read(ref _dropped);
@@ -142,9 +143,10 @@ public sealed class AndroidPcmSource : IWaveProvider
         if (count % WaveFormat.BlockAlign != 0) throw new ArgumentException("Unaligned PCM read.");
         Span<float> destination = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(offset, count));
         float gain = ComputeEffectiveGain();
+        int take;
         lock (_gate)
         {
-            int take = Math.Min(destination.Length, _count);
+            take = Math.Min(destination.Length, _count);
             int first = Math.Min(take, _samples.Length - _start);
             ApplyGain(_samples.AsSpan(_start, first), destination, gain);
             ApplyGain(_samples.AsSpan(0, take - first), destination[first..], gain);
@@ -153,6 +155,7 @@ public sealed class AndroidPcmSource : IWaveProvider
             Interlocked.Add(ref _read, take);
             Interlocked.Add(ref _underflow, destination.Length - take);
         }
+        if (take > 0) PlaybackConsumed?.Invoke();
         return count; // live source: an underrun is silence, not EOF
     }
 
@@ -208,11 +211,13 @@ public sealed class WasapiPcmPlayer : IPcmPlayer
 {
     private readonly WasapiDeviceLease _device;
     private readonly WasapiOut _output;
+    private readonly AndroidPcmSource _source;
     private int _disposed;
     public event Action<Exception>? Failed;
 
     public WasapiPcmPlayer(AndroidPcmSource source, string? endpointId)
     {
+        _source = source;
         _device = WasapiDeviceLease.Open(endpointId);
         try
         {
@@ -228,6 +233,30 @@ public sealed class WasapiPcmPlayer : IPcmPlayer
         }
     }
     public void Play() => _output.Play();
+    internal async Task PlayAndConfirmAsync(CancellationToken token)
+    {
+        var playing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int reads = 0;
+        // WASAPI primes its first buffer before starting. Wait for a subsequent buffer with input.
+        void Consumed()
+        {
+            if (++reads == 2) playing.TrySetResult();
+        }
+        void PlaybackFailed(Exception error) => playing.TrySetException(error);
+        _source.PlaybackConsumed += Consumed;
+        Failed += PlaybackFailed;
+        try
+        {
+            Play();
+            try { await playing.Task.WaitAsync(TimeSpan.FromSeconds(4), token).ConfigureAwait(false); }
+            catch (TimeoutException ex) { throw new IOException("WASAPI did not consume the incoming audio.", ex); }
+        }
+        finally
+        {
+            Failed -= PlaybackFailed;
+            _source.PlaybackConsumed -= Consumed;
+        }
+    }
     public void Stop() => _output.Stop();
     public void Dispose()
     {

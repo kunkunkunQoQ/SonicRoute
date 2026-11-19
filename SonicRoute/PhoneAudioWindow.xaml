@@ -93,6 +93,13 @@
                     </Grid>
                 </Grid>
             </Border>
+            <UniformGrid x:Name="WindowsLinkViewChoices" Grid.Row="0" Columns="2"
+                         Visibility="Collapsed" Margin="0,0,0,6">
+                <RadioButton x:Name="WindowsLinkAudioChoice" GroupName="WindowsLinkView" IsChecked="True"
+                             Content="{Binding [Apps.Volume], Source={x:Static local:L10n.Instance}}" Checked="WindowsLinkView_Changed"/>
+                <RadioButton x:Name="WindowsLinkWindowChoice" GroupName="WindowsLinkView"
+                             Content="{Binding [Phone.WindowsLinkWindowBadge], Source={x:Static local:L10n.Instance}}" Checked="WindowsLinkView_Changed"/>
+            </UniformGrid>
             <Grid x:Name="DeviceSearchCard" Grid.Row="1" Margin="0,0,0,6">
                 <TextBox x:Name="SearchBox" Height="28" Style="{StaticResource ModernTextBox}"
                          local:InputAppearance.HasSearchIcon="True" VerticalContentAlignment="Center" Padding="8,0"
@@ -105,7 +112,8 @@
                      Margin="0,0,-6,0" Padding="2,2,0,2" ScrollViewer.CanContentScroll="True"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch"
                      PreviewMouseLeftButtonDown="Apps_MouseDown" PreviewMouseMove="Apps_MouseMove"
-                     PreviewKeyDown="Apps_KeyDown" QueryContinueDrag="Apps_QueryContinueDrag">
+                     PreviewKeyDown="Apps_KeyDown" QueryContinueDrag="Apps_QueryContinueDrag"
+                     MouseDoubleClick="WindowsLinkItem_DoubleClick">
                 <ListBox.Template>
                     <ControlTemplate TargetType="ListBox">
                         <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
@@ -147,9 +155,9 @@
                     <DataTemplate>
                         <DockPanel Height="42">
                             <Grid Width="28" Height="28" Margin="2,0,6,0">
-                                <Border x:Name="AppIconAccent" Background="{DynamicResource Theme.Accent}" CornerRadius="7"/>
-                                <TextBlock x:Name="AppIconInitial" Text="{Binding Initial}" Foreground="White" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                                <TextBlock x:Name="AppIconInitial" Text="{Binding Initial}" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                <Image x:Name="AppIconImage" Source="{Binding Icon}" Stretch="Uniform"/>
                             </Grid>
                             <Border DockPanel.Dock="Right" Background="{DynamicResource Theme.SurfaceBg}"
                                     CornerRadius="6" Padding="5,2" Margin="6,0,0,0" VerticalAlignment="Center"
@@ -164,14 +172,16 @@
                             </StackPanel>
                         </DockPanel>
                         <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding App.IsDeviceAudio}" Value="True">
-                                <Setter TargetName="AppIconAccent" Property="Visibility" Value="Collapsed"/>
-                                <Setter TargetName="AppIconInitial" Property="Visibility" Value="Collapsed"/>
+                            <DataTrigger Binding="{Binding Source, ElementName=AppIconImage}" Value="{x:Null}">
+                                <Setter TargetName="AppIconInitial" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+            <TextBlock x:Name="WindowsLinkAudioEmpty" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center"
+                       HorizontalAlignment="Center" Foreground="{DynamicResource Theme.TextSecondary}"
+                       Text="{Binding [Phone.NoDisplayedApps], Source={x:Static local:L10n.Instance}}"/>
             <StackPanel x:Name="PhoneEmptyPanel" Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
                 <TextBlock Text="{Binding [Phone.NoDisplayedApps], Source={x:Static local:L10n.Instance}}" Foreground="{DynamicResource Theme.TextSecondary}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                 <Button Content="{Binding [Phone.ManagePhoneApps], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Click="ManageApps_Click"/>
@@ -179,13 +189,22 @@
             <Border x:Name="AirPlayPane" Grid.Row="2" VerticalAlignment="Top" Visibility="Collapsed"
                     Padding="10" CornerRadius="10" Background="{DynamicResource Theme.SurfaceBgAlpha}"
                     BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <ScrollViewer Style="{StaticResource PanelEdgeScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                     <local:AirPlayReceiverView x:Name="AirPlayReceiverPane"/>
                 </ScrollViewer>
             </Border>
+            <ScrollViewer x:Name="WindowsLinkPane" Grid.Row="2" Visibility="Collapsed" Style="{StaticResource PanelEdgeScrollViewer}"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"/>
             <Grid Grid.Row="3" Margin="0,6,0,0">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="RefreshGap" Width="4"/><ColumnDefinition x:Name="RefreshColumn" Width="36"/></Grid.ColumnDefinitions>
-                <Border x:Name="PhoneDeviceCard" Grid.Column="0" Height="36"
+                <Button x:Name="WindowsLinkSystemAudioButton" Grid.ColumnSpan="3" Visibility="Collapsed" Margin="0,0,0,5"
+                        Style="{StaticResource QuickPanelToolButton}" Click="WindowsLinkSystemAudio_Click"
+                        ToolTip="{Binding [Phone.WindowsLinkDeviceAudioDesc], Source={x:Static local:L10n.Instance}}">
+                    <TextBlock Text="{Binding [Phone.WindowsLinkDeviceAudioDesc], Source={x:Static local:L10n.Instance}}"
+                               TextTrimming="CharacterEllipsis"/>
+                </Button>
+                <Border x:Name="PhoneDeviceCard" Grid.Row="1" Grid.Column="0" Height="36"
                         Background="{DynamicResource Theme.SurfaceBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
                         BorderThickness="1" CornerRadius="10" Padding="6,2,4,2">
                     <Grid>
@@ -251,7 +270,7 @@
                                    FontSize="10" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
-                <Button x:Name="RefreshButton" Grid.Column="2" Width="36" Height="36"
+                <Button x:Name="RefreshButton" Grid.Row="1" Grid.Column="2" Width="36" Height="36"
                         Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.SurfaceBg}"
                         Margin="0" Padding="0" Click="Refresh_Click" ToolTip="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}" AutomationProperties.Name="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}">
                     <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="15"/>

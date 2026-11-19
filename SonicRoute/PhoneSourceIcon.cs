@@ -8,6 +8,9 @@ internal static class PhoneSourceIcon
 {
     internal static ImageSource Image { get; } = Create(AutomationIcons.Phone);
     internal static ImageSource AirPlayImage { get; } = Create(AutomationIcons.AirPlay);
+    internal static ImageSource MonitorImage { get; } = Create(AutomationIcons.Monitor);
+    internal static ImageSource WindowImage { get; } = Create(AutomationIcons.Application);
+    internal static ImageSource SpeakerImage { get; } = Create(AutomationIcons.Speaker);
 
     private static ImageSource Create(Geometry geometry)
     {

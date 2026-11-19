@@ -43,23 +43,23 @@ internal static partial class Program
         var type = typeof(App).Assembly.GetType("SonicRoute.LocalSilenceLeasePool")!;
         bool known = true, muted = false, setSucceeds = true, routeSucceeds = true, throwRoute = false;
         int muteWrites = 0, routeWrites = 0;
-        var routes = new Dictionary<int, string>();
+        var routes = new Dictionary<int, (string? Multimedia, string? Console)>();
         object NewPool() => Activator.CreateInstance(type, ConcurrencyHidden, null, new object[]
         {
             (Func<string?>)(() => "silent-output"),
             (Func<string, (bool, bool)>)(_ => (muted, known)),
             (Func<string, bool, bool>)((_, value) => { muteWrites++; if (setSucceeds) muted = value; return setSucceeds; }),
-            (Func<int, string?>)(_ => "original-output"),
-            (Func<int, string, bool>)((pid, id) =>
+            (Func<int, (string?, string?)>)(pid => routes.GetValueOrDefault(pid, ("original-output", "original-console"))),
+            (Func<int, (string?, string?), bool>)((pid, ids) =>
             {
                 routeWrites++;
-                if (id == "silent-output")
+                if (ids == ("silent-output", "silent-output"))
                 {
-                    routes[pid] = id; // Simulate one Windows role changing even when the other fails.
+                    routes[pid] = routeSucceeds ? ids : ("silent-output", "original-console");
                     if (throwRoute) throw new IOException("route fixture failure");
                     return routeSucceeds;
                 }
-                routes[pid] = id; return true;
+                routes[pid] = ids; return true;
             })
         }, null)!;
         IPcProcessSilenceLease? Acquire(object pool, int pid) =>
@@ -72,21 +72,22 @@ internal static partial class Program
         Check(Acquire(NewPool(), 1) == null && routeWrites == 0 && !muted,
             "failed endpoint mute cannot be counted as a successful silence lease");
         setSucceeds = true; routeSucceeds = false;
-        Check(Acquire(NewPool(), 1) == null && !muted && routes[1] == "original-output",
+        Check(Acquire(NewPool(), 1) == null && !muted && routes[1] == ("original-output", "original-console"),
             "failed route rolls back partial role changes and the temporary endpoint mute");
         routeSucceeds = true; throwRoute = true;
         bool failed = false;
         try { Acquire(NewPool(), 2); } catch (TargetInvocationException ex) when (ex.InnerException is IOException) { failed = true; }
-        Check(failed && !muted && routes[2] == "original-output", "throwing route performs the same rollback without leaking a lease");
+        Check(failed && !muted && routes[2] == ("original-output", "original-console"), "throwing route performs the same rollback without leaking a lease");
         throwRoute = false;
         var pool = NewPool();
         var first = Acquire(pool, 3)!; var second = Acquire(pool, 4)!;
         routeSucceeds = false;
-        Check(Acquire(pool, 5) == null && muted && routes[5] == "original-output", "a failed additional lease preserves existing successful leases");
+        Check(Acquire(pool, 5) == null && muted && routes[5] == ("original-output", "original-console"), "a failed additional lease preserves existing successful leases");
+        routes[3] = ("user-selected-output", "silent-output");
         first.Dispose(); first.Dispose();
-        Check(muted && routes[3] == "original-output", "idempotent first release preserves the shared mute");
+        Check(muted && routes[3] == ("user-selected-output", "original-console"), "release restores its console route and preserves a new multimedia route");
         second.Release(false);
-        Check(!muted && routes[4] == "silent-output", "last release restores only owned mute and honors route restoration choice");
+        Check(!muted && routes[4] == ("silent-output", "silent-output"), "last release restores only owned mute and honors route restoration choice");
         routeSucceeds = true; muted = true;
         Acquire(NewPool(), 6)!.Dispose();
         Check(muted, "an endpoint already muted before the lease stays muted after release");

@@ -268,6 +268,13 @@ namespace SonicRoute.Core
         private static Task _saveTask = Task.CompletedTask;
         public static event Action<bool>? SaveCompleted;
 
+        public static HashSet<string> GetHiddenPanelAppsSnapshot()
+        {
+            Load();
+            lock (_lock)
+                return new HashSet<string>(_publishedSnapshot?.HiddenPanelApps ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        }
+
         /// <summary>Called by the settings owner: capture now, coalesce only not-yet-committed saves.</summary>
         public static void QueueSave(AppConfig config)
         {

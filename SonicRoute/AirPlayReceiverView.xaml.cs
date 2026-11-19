@@ -19,6 +19,8 @@ public partial class AirPlayReceiverView : System.Windows.Controls.UserControl
     private byte[]? _artworkTarget;
     private int _refreshQueued, _hasAudioSource;
     internal event Action? StatusUpdated;
+    internal string FooterStatus => ReceiveStatusLabel.Text;
+    internal void UseDeviceFooter() => ReceiverHeader.Visibility = Visibility.Collapsed;
 
     public AirPlayReceiverView()
     {

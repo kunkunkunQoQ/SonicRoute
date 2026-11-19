@@ -232,7 +232,8 @@ public partial class App
     private QuickPanelModernWindow? _openingPhonePanel;
     private bool _androidDisplayNotifications;
     private readonly Dictionary<SonicRoute.AndroidAudio.IVirtualDisplayClient, VirtualDisplayPresentation> _displayAudioWatches = new();
-    internal bool KeepQuickPanelForAndroid => AndroidAudioHost.IsDragging || AppIconDragController.IsDesktopDragging || _phoneAudioWindow?.IsActive == true
+    internal bool KeepQuickPanelForAndroid => AndroidAudioHost.IsDragging || WindowsLinkHub.IsDragging
+        || AppIconDragController.IsDesktopDragging || _phoneAudioWindow?.IsActive == true
         || _phoneAudioWindow?.IsKeyboardFocusWithin == true;
     internal bool IsPhoneAudioVisible => _phoneAudioWindow?.IsVisible == true;
     internal bool IsPhoneWindowOpen => _phoneAudioWindow != null || _openingPhonePanel != null;
@@ -289,6 +290,27 @@ public partial class App
             await AndroidAudioHost.Sources.RemoveApplicationAsync(payload.Device, payload.App.Package);
         }
     }
+
+    internal async Task OpenWindowsLinkDisplayAsync(WindowsLinkAppDrag payload, int screenX, int screenY)
+    {
+        if (_exiting) return;
+        try
+        {
+            var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(screenX, screenY)).WorkingArea;
+            int x = Math.Max(area.Left, Math.Min(screenX - 210, area.Right - 820));
+            int y = Math.Max(area.Top, Math.Min(screenY - 30, area.Bottom - 500));
+            await WindowsLinkHub.OpenDisplayAsync(payload, x, y);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.WriteLine("Windows Link shared window: " + ex);
+            if (!_exiting) _trayIcon?.ShowBalloonTip(5000, payload.App.Name, ex.Message, System.Windows.Forms.ToolTipIcon.Info);
+        }
+    }
+
+    internal Task ReturnWindowsLinkToPeerAsync(string peerId, string appKey) =>
+        WindowsLinkHub.ReturnToPeerAsync(peerId, appKey);
     private void AndroidDisplayFailedError(SonicRoute.AndroidAudio.AndroidApp? app, Exception ex)
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => AndroidDisplayFailedError(app, ex))); return; }
