@@ -24,6 +24,7 @@ namespace SonicRoute
             internal Border Parameters = null!;
             internal Path Icon = null!;
             internal ComboBox ActionCombo = null!;
+            internal TextBox DelayInput = null!;
         }
 
         private readonly Dictionary<AutoRuleStep, AutoStepView> _autoStepViews = new();
@@ -139,15 +140,15 @@ namespace SonicRoute
 
             var parameters = new Border { CornerRadius = new CornerRadius(9), Padding = new Thickness(12), Margin = new Thickness(0, 9, 0, 0) };
             parameters.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceBgAlpha");
-            parameters.Child = BuildAutomationStepParameters(step);
+            parameters.Child = BuildAutomationStepParameters(step, out var delayInput);
             body.Children.Add(parameters);
             block.Child = body;
-            _autoStepViews[step] = new AutoStepView { Card = block, Badge = badge, Parameters = parameters, Icon = glyphPath, ActionCombo = combo };
+            _autoStepViews[step] = new AutoStepView { Card = block, Badge = badge, Parameters = parameters, Icon = glyphPath, ActionCombo = combo, DelayInput = delayInput };
             combo.SelectionChanged += AutoStepAction_SelectionChanged;
             return block;
         }
 
-        private UIElement BuildAutomationStepParameters(AutoRuleStep step)
+        private UIElement BuildAutomationStepParameters(AutoRuleStep step, out TextBox delayInput)
         {
             var parameters = (StackPanel)BuildStepParams(step);
             var row = new Grid { Margin = new Thickness(0, 6, 0, 8) };
@@ -166,6 +167,7 @@ namespace SonicRoute
                 HorizontalAlignment = HorizontalAlignment.Left, TextAlignment = TextAlignment.Left
             };
             AutomationProperties.SetName(delay, L10n.T("Auto.Delay"));
+            delayInput = delay;
             delay.TextChanged += AutoStepDelay_TextChanged;
             inputs.Children.Add(delay);
             foreach (string key in new[] { "Auto.DelayUnit", "Auto.DelayRange" })
@@ -187,7 +189,29 @@ namespace SonicRoute
             foreach (var combo in _autoStepDeviceCombos.Keys.Where(combo => view.Parameters.IsAncestorOf(combo)).ToArray())
                 _autoStepDeviceCombos.Remove(combo);
             UpdateAutomationStepPalette(step, view);
-            view.Parameters.Child = BuildAutomationStepParameters(step);
+            view.Parameters.Child = BuildAutomationStepParameters(step, out view.DelayInput);
+        }
+
+        private void RefreshAutomationLanguage()
+        {
+            if (AutomationPageHost.Child == null) return;
+            _actionChoicesLanguage = null;
+            _autoRuleListSignature = null;
+            foreach (var row in _autoRows.Values) row.Fingerprint = "";
+            if (AutomationPageHost.Visibility == Visibility.Visible) _ = RefreshAutoRulesAsync();
+            if (AutoEditCard.Visibility != Visibility.Visible) return;
+
+            AutoEditTitle.Text = L10n.T(_autoEditingId == null ? "Auto.EditorNew" : "Auto.EditorEdit");
+            UpdateAutoHotkeyHint();
+            UpdateAutoScheduleModePanels();
+            foreach (var day in AutoWeekdayPanel.Children.OfType<System.Windows.Controls.CheckBox>())
+                day.Content = L10n.T("Auto.Wd" + day.Tag);
+            RefreshAutomationTemplateHint();
+
+            // A partially typed delay (including an empty field) is not yet in the step model.
+            var delayText = _autoStepViews.ToDictionary(pair => pair.Key, pair => pair.Value.DelayInput.Text);
+            RenderAutoSteps();
+            foreach (var pair in delayText) _autoStepViews[pair.Key].DelayInput.Text = pair.Value;
         }
 
         private void RefreshAutomationEditorPalette()

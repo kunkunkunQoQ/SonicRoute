@@ -15,20 +15,21 @@ namespace SonicRoute
     public partial class MainWindow
     {
         private int _autoExecutionRefreshPending;
+        private static ComboBoxItem LocalizedAutoItem(string key, object tag)
+        {
+            var item = new ComboBoxItem { Tag = tag };
+            item.SetBinding(ContentControl.ContentProperty, new Binding("[" + key + "]") { Source = L10n.Instance });
+            return item;
+        }
+
         private void InitializeAutoExtras()
         {
-            ComboBoxItem Item(string key, object tag)
-            {
-                var item = new ComboBoxItem { Tag = tag };
-                item.SetBinding(ContentControl.ContentProperty, new Binding("[" + key + "]") { Source = L10n.Instance });
-                return item;
-            }
-            AutoStateFilter.Items.Add(Item("Auto.FilterAllStates", 0));
-            AutoStateFilter.Items.Add(Item("Auto.Enabled", 1));
-            AutoStateFilter.Items.Add(Item("Auto.Disabled", 2));
-            AutoTriggerFilter.Items.Add(Item("Auto.FilterAllTriggers", -1));
+            AutoStateFilter.Items.Add(LocalizedAutoItem("Auto.FilterAllStates", 0));
+            AutoStateFilter.Items.Add(LocalizedAutoItem("Auto.Enabled", 1));
+            AutoStateFilter.Items.Add(LocalizedAutoItem("Auto.Disabled", 2));
+            AutoTriggerFilter.Items.Add(LocalizedAutoItem("Auto.FilterAllTriggers", -1));
             string[] keys = { "Auto.TriggerHotkey", "Auto.TriggerAppStart", "Auto.TriggerAppSwitch", "Auto.TriggerAppExit", "Auto.TriggerSchedule", "Auto.TriggerStartup" };
-            for (int index = 0; index < keys.Length; index++) AutoTriggerFilter.Items.Add(Item(keys[index], index));
+            for (int index = 0; index < keys.Length; index++) AutoTriggerFilter.Items.Add(LocalizedAutoItem(keys[index], index));
             AutoStateFilter.SelectedIndex = AutoTriggerFilter.SelectedIndex = 0;
             AutoRuleService.ExecutionStateChanged += AutoExecutionStateChanged;
         }
