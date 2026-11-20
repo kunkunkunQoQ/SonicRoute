@@ -1067,5 +1067,16 @@
   "Phone.WindowsLinkFailPairingRejected": "Другой ПК отклонил сопряжение или удалил данные доверия. Подключитесь и выполните сопряжение заново.",
   "Phone.WindowsLinkFailIdentityMismatch": "Сертификат другого ПК не совпадает с сохранённым. Выполните сопряжение заново.",
   "Phone.WindowsLinkFailSavedAddressUnavailable": "Сохранённый адрес недоступен, новый адрес не найден.",
-  "Phone.WindowsLinkFailIncompatible": "Версии протокола или возможности Windows Link на двух ПК несовместимы."
+  "Phone.WindowsLinkFailIncompatible": "Версии протокола или возможности Windows Link на двух ПК несовместимы.",
+  "Phone.AppKeptOutput": "Приложение продолжает использовать прежний выход. Выберите в нём системное устройство по умолчанию и повторите попытку.",
+  "Phone.FileOfflineHint": "Подключитесь, чтобы перетащить или выбрать файлы",
+  "Phone.FileDropHint": "Перетащите сюда файлы или нажмите для выбора",
+  "Phone.FileOnlyFiles": "Выберите файлы. Отправка папок напрямую не поддерживается.",
+  "Phone.FileBatchProgress": "{0} из {1} · {2}",
+  "Phone.FileReceiveFolder": "Папка приёма на этом ПК",
+  "Phone.FileChangeFolder": "Изменить папку",
+  "Phone.Files": "Передача файлов",
+  "Phone.FileSend": "Отправить файл…",
+  "Phone.FileSaved": "Сохранено в {0}",
+  "Phone.FileClose": "Закрыть"
 }

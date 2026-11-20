@@ -1067,5 +1067,16 @@
   "Phone.WindowsLinkFailPairingRejected": "對方已拒絕配對，或已移除原有的信任設定。請重新連線並配對。",
   "Phone.WindowsLinkFailIdentityMismatch": "裝置憑證身分不符，請重新配對。",
   "Phone.WindowsLinkFailSavedAddressUnavailable": "已儲存位址無法連線，且未發現裝置新位址。",
-  "Phone.WindowsLinkFailIncompatible": "雙方 Windows Link 通訊協定版本或功能不相容。"
+  "Phone.WindowsLinkFailIncompatible": "雙方 Windows Link 通訊協定版本或功能不相容。",
+  "Phone.AppKeptOutput": "應用程式仍在使用原輸出裝置。請在應用程式中將輸出設為「系統預設」後重試。",
+  "Phone.FileOfflineHint": "Android 裝置連線後，即可拖入或選取要傳送的檔案",
+  "Phone.FileDropHint": "將檔案拖到此處，或按一下選取檔案",
+  "Phone.FileOnlyFiles": "請選取檔案，無法直接傳送資料夾。",
+  "Phone.FileBatchProgress": "第 {0} / {1} 個 · {2}",
+  "Phone.FileReceiveFolder": "本機接收資料夾",
+  "Phone.FileChangeFolder": "變更資料夾",
+  "Phone.Files": "檔案傳輸",
+  "Phone.FileSend": "傳送檔案…",
+  "Phone.FileSaved": "已儲存至 {0}",
+  "Phone.FileClose": "關閉"
 }

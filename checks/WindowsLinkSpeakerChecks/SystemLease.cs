@@ -19,7 +19,7 @@ internal static partial class Program
         var groupType = assembly.GetType("SonicRoute.SystemSpeakerLeases", true)!;
         const BindingFlags hidden = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance;
         var source = Activator.CreateInstance(sourceType, hidden, null, [
-            (Func<int, string?>)(pid => pid == 18 ? "headset" : null),
+            (Func<int, (string?, bool)>)(pid => pid == 18 ? ("headset", true) : (null, false)),
             (Func<string, (bool, bool)>)(id => (state[id], !string.Equals(id, disconnected, StringComparison.OrdinalIgnoreCase))),
             (Func<string, bool, bool>)((id, mute) =>
             {

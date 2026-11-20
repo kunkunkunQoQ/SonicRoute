@@ -81,4 +81,10 @@
   </ItemGroup>
 
   <Import Project="../build/Version.targets" />
+  <Import Project="../shared/WindowsAudio/WindowsAudio.props" />
+  <!-- Keep existing portable updates compatible: the audio libraries travel inside the application. -->
+  <ItemGroup>
+    <EmbeddedResource Include="$(PkgNAudio_Core)/lib/netstandard2.0/NAudio.Core.dll" LogicalName="SonicRoute.AudioLibraries.NAudio.Core.dll" />
+    <EmbeddedResource Include="$(PkgNAudio_Wasapi)/lib/netstandard2.0/NAudio.Wasapi.dll" LogicalName="SonicRoute.AudioLibraries.NAudio.Wasapi.dll" />
+  </ItemGroup>
 </Project>

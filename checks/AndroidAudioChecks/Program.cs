@@ -13,6 +13,11 @@ internal static partial class Program
     private static void Check(bool condition, string name) { if (!condition) throw new Exception("FAIL " + name); _checks++; Console.WriteLine("PASS " + name); }
     public static async Task<int> Main(string[] args)
     {
+        if (args is ["--live-current-output", var directory, var serial, var serverPort, var report])
+        {
+            await LiveCurrentOutputAsync(directory, serial, int.Parse(serverPort), report);
+            return 0;
+        }
         string? logRoot = args.Length >= 2 && args[0] is ("--decoder-settings" or "--android-hevc-start" or "--android-hevc-recovery" or "--gamepad-window" or "--airplay-window-modes" or "--windows-link-input" or "--windows-link-window-audio-native" or "--windows-link-native-resolution") && args.Contains("--file-log") ? args[1] : null;
         if (logRoot != null) Directory.CreateDirectory(logRoot);
         using var fileLog = logRoot == null ? null : new StreamWriter(Path.Combine(logRoot, "console.log")) { AutoFlush = true };

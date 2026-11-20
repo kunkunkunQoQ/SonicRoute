@@ -1,12 +1,11 @@
 using NAudio.Wave;
-using NAudio.CoreAudioApi;
 using System.Runtime.InteropServices;
 using System.Numerics;
 
 namespace SonicRoute.AndroidAudio;
 
 /// <summary>One producer and one WASAPI consumer; bounded float PCM, 48 kHz stereo.</summary>
-public sealed class AndroidPcmSource : IWaveProvider
+public sealed class AndroidPcmSource : IWasapiPlaybackSource
 {
     public const int SampleRate = 48000, Channels = 2;
     // The phone profile includes headroom. PC-to-PC playback already includes the source mixer level.
@@ -29,7 +28,12 @@ public sealed class AndroidPcmSource : IWaveProvider
     public static event Action? PeakActivity;
     // Only a phone renderer subscribes; silence still carries timing without polling.
     internal event Action? DataAvailable;
-    internal event Action? PlaybackBufferRequested;
+    private event Action? PlaybackBufferRequested;
+    event Action? IWasapiPlaybackSource.PlaybackBufferRequested
+    {
+        add => PlaybackBufferRequested += value;
+        remove => PlaybackBufferRequested -= value;
+    }
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
     public int BufferedSamples { get { lock (_gate) return _count; } }
     public long DroppedSamples => Interlocked.Read(ref _dropped);
@@ -244,63 +248,7 @@ public sealed class AndroidPcmSource : IWaveProvider
     }
 }
 
-public sealed class WasapiPcmPlayer : IPcmPlayer
+public sealed partial class WasapiPcmPlayer
 {
-    private readonly WasapiDeviceLease _device;
-    private readonly WasapiOut _output;
-    private readonly AndroidPcmSource _source;
-    private int _disposed;
-    public event Action<Exception>? Failed;
-
-    internal string EndpointId => _device.Device.ID;
-
-    public WasapiPcmPlayer(AndroidPcmSource source, string? endpointId)
-    {
-        _source = source;
-        _device = WasapiDeviceLease.Open(endpointId);
-        try
-        {
-            _output = new WasapiOut(_device.Device, AudioClientShareMode.Shared, true, 100);
-            _output.Init(source); // shared-mode conversion adapts to the endpoint's mix format
-            _output.PlaybackStopped += (_, e) => { if (e.Exception != null) Failed?.Invoke(e.Exception); };
-        }
-        catch
-        {
-            try { _output?.Dispose(); } catch { }
-            try { _device.Dispose(); } catch { }
-            throw;
-        }
-    }
-    public void Play() => _output.Play();
-    internal async Task PlayAndConfirmAsync(CancellationToken token)
-    {
-        var playing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        int reads = 0;
-        // WASAPI primes its first buffer before starting. A second request confirms the output runs even while the source app is paused.
-        void Consumed()
-        {
-            if (++reads == 2) playing.TrySetResult();
-        }
-        void PlaybackFailed(Exception error) => playing.TrySetException(error);
-        _source.PlaybackBufferRequested += Consumed;
-        Failed += PlaybackFailed;
-        try
-        {
-            Play();
-            try { await playing.Task.WaitAsync(TimeSpan.FromSeconds(4), token).ConfigureAwait(false); }
-            catch (TimeoutException ex) { throw new IOException("WASAPI did not start reading playback buffers.", ex); }
-        }
-        finally
-        {
-            Failed -= PlaybackFailed;
-            _source.PlaybackBufferRequested -= Consumed;
-        }
-    }
-    public void Stop() => _output.Stop();
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        try { _output.Dispose(); }
-        finally { _device.Dispose(); }
-    }
+    public WasapiPcmPlayer(AndroidPcmSource source, string? endpointId) : this((IWasapiPlaybackSource)source, endpointId) { }
 }

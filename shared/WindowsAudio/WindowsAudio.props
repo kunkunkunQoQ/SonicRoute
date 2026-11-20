@@ -1,0 +1,8 @@
+<Project>
+  <ItemGroup>
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" GeneratePathProperty="true" />
+    <PackageReference Include="NAudio.Core" Version="2.2.1" GeneratePathProperty="true" Condition="'$(TargetFramework)' == 'net48'" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../../packaging/AndroidLab/THIRD-PARTY-NOTICES.md" LogicalName="SonicRoute.WindowsAudio.ThirdPartyNotices.md" />
+    <Compile Include="$(MSBuildThisFileDirectory)*.cs" Link="WindowsAudio/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

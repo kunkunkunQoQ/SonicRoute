@@ -82,7 +82,7 @@ public partial class QuickPanelModernWindow
     private readonly List<AndroidRow> _visibleAndroidMeterRows = new();
     private readonly ConcurrentDictionary<int, IPhoneAudioSession> _androidMeterSources = new();
     private int _nextAndroidMeterId;
-    private int _androidRefreshQueued;
+    private readonly PendingAudioUiChange _pendingAudioUi = new();
     private bool _androidLanguageDirty;
     private bool? _androidDropShared;
     private WindowsLinkAppDrag? _windowsLinkDropSource;
@@ -111,7 +111,7 @@ public partial class QuickPanelModernWindow
         AppListScroll.PreviewDragOver += Android_DragOver;
         AppListScroll.PreviewDrop += Android_Drop;
         AppListScroll.DragLeave += Android_DragLeave;
-        ApplicationAudio.Changed += Android_StateChanged;
+        ApplicationAudio.UiChanged += QueueAudioChange;
         AndroidAudioHost.DragStateChanged += Android_DragStateChanged;
         WindowsLinkHub.DragStateChanged += Android_DragStateChanged;
         L10n.Instance.PropertyChanged += AndroidLanguageChanged;
@@ -176,7 +176,7 @@ public partial class QuickPanelModernWindow
     {
         SubscribeAndroidMeter(false);
         ClearAndroidDropHighlight();
-        ApplicationAudio.Changed -= Android_StateChanged;
+        ApplicationAudio.UiChanged -= QueueAudioChange;
         AndroidAudioHost.DragStateChanged -= Android_DragStateChanged;
         WindowsLinkHub.DragStateChanged -= Android_DragStateChanged;
         L10n.Instance.PropertyChanged -= AndroidLanguageChanged;
@@ -378,13 +378,14 @@ public partial class QuickPanelModernWindow
         }
         catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
     }
-    private void Android_StateChanged()
+    private void Android_StateChanged() => QueueAudioChange(AudioUiChange.All);
+    private void QueueAudioChange(AudioUiChange change)
     {
-        if (_isClosed || Interlocked.Exchange(ref _androidRefreshQueued, 1) != 0) return;
+        if (_isClosed || !_pendingAudioUi.Add(change)) return;
         _uiLifetime.Post(Dispatcher, () =>
         {
-            Interlocked.Exchange(ref _androidRefreshQueued, 0);
-            if (!_isClosed && (!IsLoaded || IsVisible)) RefreshAndroidRow();
+            var pending = _pendingAudioUi.Take();
+            if (!_isClosed && (!IsLoaded || IsVisible)) RefreshAudioRows(pending, false);
         });
     }
     private void AndroidPanelVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -392,14 +393,16 @@ public partial class QuickPanelModernWindow
         if (IsVisible) Android_StateChanged();
         else StopMeter();
     }
-    private void RefreshAndroidRow(bool fromBuildAppRows = false)
+    private void RefreshAndroidRow(bool fromBuildAppRows = false) => RefreshAudioRows(AudioUiChange.All, fromBuildAppRows);
+
+    private void RefreshAudioRows(AudioUiChange change, bool fromBuildAppRows)
     {
         if (_isClosed) return;
         bool outputsChanged = false;
-        if (!fromBuildAppRows)
+        if (!fromBuildAppRows && change.Has(AudioUiScope.Outputs | AudioUiScope.Routes))
         {
             var cfg = ConfigService.Load();
-            if (SystemDevCombo?.ItemsSource is IList<AudioDeviceInfo> sysOutputs)
+            if (change.Has(AudioUiScope.Outputs) && SystemDevCombo?.ItemsSource is IList<AudioDeviceInfo> sysOutputs)
             {
                 var outputs = PanelDevices.WithSystemDefault(
                     DisplayDevices(ApplicationAudio.MergeExternalOutputs(sysOutputs), cfg), EDataFlow.eRender, cfg);
@@ -413,6 +416,7 @@ public partial class QuickPanelModernWindow
             foreach (var pcRow in _rows.Values)
             {
                 int pid = (int)pcRow.App.ProcessId;
+                if (!outputsChanged && (!change.Has(AudioUiScope.Routes) || change.Pid != 0 && change.Pid != pid)) continue;
                 bool exclusive = exclusiveRoutes?.Contains(pid) == true;
                 bool exclusiveChanged = pcRow.WindowsLinkExclusive != exclusive;
                 pcRow.WindowsLinkExclusive = exclusive;
@@ -426,6 +430,21 @@ public partial class QuickPanelModernWindow
                 if (pcRow.Expanded) _ = BuildRowDevicesAsync(pcRow);
                 else if (pcRow.ShowOutputName && exclusiveChanged) _ = RefreshWindowsLinkEndpointAsync(pcRow, pid, exclusive);
             }
+        }
+        if (!change.Has(AudioUiScope.SourceList | AudioUiScope.Outputs))
+        {
+            if (change.Has(AudioUiScope.SourceState))
+            {
+                bool meterChanged = false;
+                if (change.SourceId == null)
+                {
+                    foreach (var row in _androidRows.Values) meterChanged |= RefreshSourceState(row, false);
+                }
+                else if (_androidRows.TryGetValue(change.SourceId, out var row))
+                    meterChanged = RefreshSourceState(row, false);
+                if (meterChanged) { UpdateMeterTargets(); QueueMeterViewport(); }
+            }
+            return;
         }
         var airPlay = AirPlayHost.Source;
         var winLinks = WindowsLinkHub.IncomingAudioSources;
@@ -451,42 +470,11 @@ public partial class QuickPanelModernWindow
             var source = sources[i];
             if (!_androidRows.TryGetValue(source.Id, out var row)) _androidRows[source.Id] = row = CreateAndroidRow(source, legacy, outputName);
             _androidMeterSources[row.MeterId] = source.Session;
-            var state = source.Session.State;
-            if ((int)row.Volume.Value != state.Volume)
-            {
-                row.ApplyingState = true;
-                try { row.Volume.Value = state.Volume; }
-                finally { row.ApplyingState = false; }
-            }
-            row.Volume.IsEnabled = state.State == CaptureState.Receiving;
-            row.Muted = state.Muted;
-            if (state.Muted || !row.Volume.IsEnabled) row.PeakLevel = 0f;
-            row.Volume.Foreground = state.Muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
-            row.Icon.Opacity = state.Muted ? 0.45 : 1;
-            UpdateAndroidPeakVisual(row);
-            string phoneName = source.PhoneName;
-            bool phoneNameChanged = row.PhoneName != phoneName;
-            row.PhoneName = phoneName;
-            if (phoneNameChanged || _androidLanguageDirty)
-            {
-                string appName = source.Name;
-                row.IconItem.Info.DisplayName = appName;
-                row.IconItem.RefreshSourceLabel(source.AirPlay != null ? "AirPlay" : string.Format(L10n.T("Phone.FromDevice"), phoneName));
-                row.Icon.ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip"
-                    : source.WindowsLink != null ? "Phone.WindowsLinkRowIconDragTooltip" : "Phone.AirPlayDragFromMixer"), appName);
-                System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
-                row.Expand.ToolTip = L10n.T("Qp.ExpandDevices");
-                System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), appName));
-                System.Windows.Automation.AutomationProperties.SetName(row.Volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), appName));
-            }
-            row.IconItem.RefreshName();
-            string errText = AndroidErrorTranslation.Format(state);
-            row.Root.ToolTip = source.AirPlay != null ? $"{phoneName} · AirPlay"
-                : source.WindowsLink != null ? string.Format(L10n.T("Phone.RowFromPhoneTooltip"), row.IconItem.Label, phoneName)
-                : !string.IsNullOrEmpty(errText) ? errText : string.Format(L10n.T("Phone.RowFromPhoneTooltip"), row.IconItem.Label, phoneName);
-            UpdateAndroidRoute(row);
+            string? previousName = row.PhoneName;
+            RefreshSourceState(row, true);
+            bool phoneNameChanged = previousName != row.PhoneName;
             if (row.Expanded && (outputsChanged || phoneNameChanged || _androidLanguageDirty
-                || source.Android is { } android && PhoneDeviceChoicesChanged(row, android.Device, config)))
+                || source.Android != null && PhoneDeviceChoicesChanged(row, config)))
                 BuildAndroidDevices(row);
             if (i >= AppListPanel.Items.Count || !ReferenceEquals(AppListPanel.Items[i], row.Root))
             {
@@ -512,6 +500,53 @@ public partial class QuickPanelModernWindow
         }
         catch (OperationCanceledException) { }
     }
+
+    private bool RefreshSourceState(AndroidRow row, bool refreshLabels)
+    {
+        var source = row.Source;
+        bool wasMetered = row.Volume.IsEnabled && !row.Muted;
+        var state = source.Session.State;
+        if ((int)row.Volume.Value != state.Volume)
+        {
+            row.ApplyingState = true;
+            try { row.Volume.Value = state.Volume; }
+            finally { row.ApplyingState = false; }
+        }
+        row.Volume.IsEnabled = state.State == CaptureState.Receiving;
+        row.Muted = state.Muted;
+        if (state.Muted || !row.Volume.IsEnabled) row.PeakLevel = 0f;
+        row.Volume.Foreground = state.Muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
+        row.Icon.Opacity = state.Muted ? 0.45 : 1;
+        UpdateAndroidPeakVisual(row);
+        if (!refreshLabels)
+        {
+            UpdateAndroidRoute(row);
+            return wasMetered != (row.Volume.IsEnabled && !row.Muted);
+        }
+        string phoneName = source.PhoneName;
+        bool phoneNameChanged = row.PhoneName != phoneName;
+        row.PhoneName = phoneName;
+        if (phoneNameChanged || _androidLanguageDirty)
+        {
+            string appName = source.Name;
+            row.IconItem.Info.DisplayName = appName;
+            row.IconItem.RefreshSourceLabel(source.AirPlay != null ? "AirPlay" : string.Format(L10n.T("Phone.FromDevice"), phoneName));
+            row.Icon.ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip"
+                : source.WindowsLink != null ? "Phone.WindowsLinkRowIconDragTooltip" : "Phone.AirPlayDragFromMixer"), appName);
+            System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
+            row.Expand.ToolTip = L10n.T("Qp.ExpandDevices");
+            System.Windows.Automation.AutomationProperties.SetName(row.Expand, string.Format(L10n.T("Phone.RowExpandAutomation"), appName));
+            System.Windows.Automation.AutomationProperties.SetName(row.Volume, string.Format(L10n.T("Phone.RowVolumeAutomation"), appName));
+        }
+        row.IconItem.RefreshName();
+        string errText = AndroidErrorTranslation.Format(state);
+        row.Root.ToolTip = source.AirPlay != null ? $"{phoneName} · AirPlay"
+            : source.WindowsLink != null ? string.Format(L10n.T("Phone.RowFromPhoneTooltip"), row.IconItem.Label, phoneName)
+            : !string.IsNullOrEmpty(errText) ? errText : string.Format(L10n.T("Phone.RowFromPhoneTooltip"), row.IconItem.Label, phoneName);
+        UpdateAndroidRoute(row);
+        return wasMetered != (row.Volume.IsEnabled && !row.Muted);
+    }
+
     private AndroidRow CreateAndroidRow(IncomingSource source, bool legacy, bool showOutputName)
     {
         var row = new AndroidRow { Source = source, MeterId = NextAndroidMeterId(), Legacy = legacy, ShowOutputName = showOutputName };
@@ -728,16 +763,12 @@ public partial class QuickPanelModernWindow
         UpdateAndroidRoute(row);
     }
 
-    private static bool PhoneDeviceChoicesChanged(AndroidRow row, AndroidDevice device, AppConfig config)
+    private static bool PhoneDeviceChoicesChanged(AndroidRow row, AppConfig config)
     {
-        int count = 0;
-        foreach (var (_, id) in AndroidAudioHost.GetDropZonesForDevice(device))
-        {
-            if (config.HiddenOutputDevices.Contains(id)) continue;
-            if (!row.Devices.Any(entry => string.Equals(entry.Id, id, StringComparison.OrdinalIgnoreCase))) return true;
-            count++;
-        }
-        return count != row.Devices.Count(entry => ApplicationAudio.IsPhoneOutputDevice(entry.Id));
+        var choices = ApplicationAudio.OutputsForApp(row.IconItem.Info, AndroidAudioHost.GetOutputDevices());
+        var expected = choices.Where(d => ApplicationAudio.IsPhoneOutputDevice(d.Id) && !config.HiddenOutputDevices.Contains(d.Id))
+            .Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return !expected.SetEquals(row.Devices.Where(d => ApplicationAudio.IsPhoneOutputDevice(d.Id)).Select(d => d.Id));
     }
 
     private static HashSet<string> IncomingOutputs(IncomingSource source)
@@ -766,8 +797,11 @@ public partial class QuickPanelModernWindow
             var selected = IncomingOutputs(source);
             var next = SelectPlaybackRange(order, selected, clicked, row.PlaybackAnchor, modifiers);
             if (next.Length == 0) next = [AudioService.SystemDefaultDeviceId];
-            if (source.Android != null && next.Contains(AndroidAudioSession.SourcePhoneOutputId) && next.Any(AndroidOutputIdentity.IsPhoneOutput))
-                next = clicked == AndroidAudioSession.SourcePhoneOutputId ? next.Where(id => !AndroidOutputIdentity.IsPhoneOutput(id)).ToArray()
+            bool OwnForcedOutput(string id) => source.Android is { } android
+                && AndroidOutputIdentity.TryParseDeviceId(id, out var key, out _)
+                && string.Equals(key, AndroidDeviceIdentity.Key(android.Device), StringComparison.OrdinalIgnoreCase);
+            if (next.Contains(AndroidAudioSession.SourcePhoneOutputId) && next.Any(OwnForcedOutput))
+                next = clicked == AndroidAudioSession.SourcePhoneOutputId ? next.Where(id => !OwnForcedOutput(id)).ToArray()
                     : next.Where(id => id != AndroidAudioSession.SourcePhoneOutputId).ToArray();
             await CommitAsync(next, false);
         }

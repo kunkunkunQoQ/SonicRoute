@@ -86,6 +86,7 @@ namespace SonicRoute
         private readonly LowLevelMouseProc _proc;
         private IntPtr _hook;
         private volatile bool _disposed;
+        private int _wheelGeneration;
 
         // 滚轮合并派发（钩子只做检测；单个后台任务操作音频，结果返回 UI 显示 OSD）
         private int _pendingDelta;
@@ -112,10 +113,32 @@ namespace SonicRoute
         }
 
         /// <summary>必须在 UI 线程调用（钩子回调将运行在安装线程的消息循环上）。</summary>
-        public void Start()
+        public void Start() => TrySetPaused(ConfigService.Load().TrayWheelPaused);
+
+        internal bool TrySetPaused(bool paused)
         {
-            if (_hook != IntPtr.Zero) return;
+            if (_disposed) return false;
+            if (paused)
+            {
+                if (_hook != IntPtr.Zero && !UnhookWindowsHookEx(_hook))
+                {
+                    int error = Marshal.GetLastWin32Error();
+                    // Windows can already have removed a timed-out low-level hook.
+                    if (error != 1404) return HookError(error);
+                }
+                _hook = IntPtr.Zero;
+                DiscardPendingWheel();
+                return true;
+            }
+            if (_hook != IntPtr.Zero) return true;
             _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
+            return _hook != IntPtr.Zero || HookError(Marshal.GetLastWin32Error());
+        }
+
+        private static bool HookError(int error)
+        {
+            ExceptionDiagnostics.Record("TrayWheel.Hook", new System.ComponentModel.Win32Exception(error));
+            return false;
         }
 
         private IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam)
@@ -155,11 +178,15 @@ namespace SonicRoute
 
         internal void DiscardPendingWheel()
         {
+            System.Threading.Interlocked.Increment(ref _wheelGeneration);
             System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
             System.Threading.Interlocked.Exchange(ref _pendingDeviceDelta, 0);
             System.Threading.Interlocked.Exchange(ref _pendingSystemDeviceDelta, 0);
             System.Threading.Interlocked.Exchange(ref _pendingSystemVolumeDelta, 0);
         }
+
+        private bool CanApplyWheel(int generation) =>
+            !_disposed && System.Threading.Volatile.Read(ref _wheelGeneration) == generation;
 
         private async void ProcessPendingWheel()
         {
@@ -168,6 +195,7 @@ namespace SonicRoute
                 while (!_disposed)
                 {
                     if (ConfigService.Load().TrayWheelPaused) { DiscardPendingWheel(); break; }
+                    int generation = System.Threading.Volatile.Read(ref _wheelGeneration);
                     int delta = System.Threading.Interlocked.Exchange(ref _pendingDelta, 0);
                     int deviceDelta = System.Threading.Interlocked.Exchange(ref _pendingDeviceDelta, 0);
                     int systemDeviceDelta = System.Threading.Interlocked.Exchange(ref _pendingSystemDeviceDelta, 0);
@@ -175,17 +203,15 @@ namespace SonicRoute
                     if (delta == 0 && deviceDelta == 0 && systemDeviceDelta == 0 && systemVolumeDelta == 0) break;
                     // 记录此次输入时的前台，后台查询期间焦点变化不改本轮目标。
                     int foregroundPid = delta != 0 || deviceDelta != 0 ? ForegroundAppService.GetForegroundProcessId() : 0;
-                    if (deviceDelta != 0) await SwitchOutputDeviceAsync(deviceDelta, foregroundPid, systemDefault: false);
-                    if (_disposed) return;
-                    if (systemDeviceDelta != 0) await SwitchOutputDeviceAsync(systemDeviceDelta, foregroundPid, systemDefault: true);
-                    if (_disposed) return;
-                    if (systemVolumeDelta != 0 && !ConfigService.Load().TrayWheelPaused)
+                    if (deviceDelta != 0) await SwitchOutputDeviceAsync(deviceDelta, foregroundPid, false, generation);
+                    if (!CanApplyWheel(generation)) continue;
+                    if (systemDeviceDelta != 0) await SwitchOutputDeviceAsync(systemDeviceDelta, foregroundPid, true, generation);
+                    if (!CanApplyWheel(generation)) continue;
+                    if (systemVolumeDelta != 0)
                         await ((App)System.Windows.Application.Current).AdjustDefaultOutputVolumeAsync(systemVolumeDelta > 0);
-                    if (_disposed) return;
-                    if (delta == 0) continue;
-                    if (ConfigService.Load().TrayWheelPaused) { DiscardPendingWheel(); break; }
-                    var result = await Task.Run(() => AdjustVolume(delta, foregroundPid));
-                    if (_disposed) return;
+                    if (delta == 0 || !CanApplyWheel(generation)) continue;
+                    var result = await Task.Run(() => AdjustVolume(delta, foregroundPid, generation));
+                    if (!CanApplyWheel(generation)) continue;
                     if (result.App == null)
                     {
                         ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession"));
@@ -313,35 +339,36 @@ namespace SonicRoute
             return true;
         }
 
-        private async Task SwitchOutputDeviceAsync(int delta, int foregroundPid, bool systemDefault)
+        private async Task SwitchOutputDeviceAsync(int delta, int foregroundPid, bool systemDefault, int generation)
         {
-            var switched = await Task.Run(() => SwitchOutputDevice(delta, foregroundPid, systemDefault));
-            if (_disposed || ConfigService.Load().TrayWheelPaused) return;
+            var switched = await Task.Run(() => SwitchOutputDevice(delta, foregroundPid, systemDefault, generation));
+            if (!CanApplyWheel(generation)) return;
             if (!systemDefault && switched.App == null) ShowOsd(L10n.T("Ov.VolumeTitle"), L10n.T("Ov.NoSession"));
             else ShowOsd(systemDefault ? L10n.T("Act.SetDefaultOutput") : AppDisplayName.Get(switched.App!), string.IsNullOrEmpty(switched.DeviceName)
                 ? L10n.T("Ov.NoDevice") : $"🔊 {switched.DeviceName}");
         }
 
-        private (AudioAppInfo? App, string? DeviceName) SwitchOutputDevice(int delta, int foregroundPid, bool systemDefault)
+        private (AudioAppInfo? App, string? DeviceName) SwitchOutputDevice(int delta, int foregroundPid, bool systemDefault, int generation)
         {
-            if (_disposed || ConfigService.Load().TrayWheelPaused) return (null, null);
+            if (!CanApplyWheel(generation)) return (null, null);
             int steps = Math.Max(1, (int)(Math.Abs((long)delta) / 120));
             if (systemDefault)
                 return (null, App.CycleSystemDefaultDevice(Core.Interop.EDataFlow.eRender, delta > 0, steps));
             var target = ResolveTargetApp(foregroundPid);
-            if (target == null) return (null, null);
+            if (target == null || !CanApplyWheel(generation)) return (null, null);
             return (target, App.CycleDevice(target, Core.Interop.EDataFlow.eRender, delta > 0, steps));
         }
 
-        private (AudioAppInfo? App, string ProcessName, int Current, int Actual, bool Muted) AdjustVolume(int delta, int foregroundPid)
+        private (AudioAppInfo? App, string ProcessName, int Current, int Actual, bool Muted) AdjustVolume(int delta, int foregroundPid, int generation)
         {
-            if (_disposed) return (null, "", -1, -1, false);
+            if (!CanApplyWheel(generation)) return (null, "", -1, -1, false);
             var target = ResolveTargetApp(foregroundPid);
             if (target == null) return (null, "", -1, -1, false);
             int pid = (int)target.ProcessId;
             // 已枚举出的进程名直接复用，缺失时才查询；标题仍按自定义名/进程名显示。
             string proc = target.ProcessName ?? ForegroundAppService.GetProcessNameSafe(pid) ?? "";
             int step = MathEx.Clamp(ConfigService.Load().VolumeStep, 1, 20);
+            if (!CanApplyWheel(generation)) return (null, "", -1, -1, false);
             var result = ApplicationAudio.AdjustVolumePercent(target, delta > 0 ? step : -step);
             if (result.Current < 0) return (target, proc, -1, -1, false);
             int actual = result.Actual < 0 ? result.Requested : result.Actual;

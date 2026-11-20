@@ -218,6 +218,7 @@ internal sealed partial class WindowsLinkService(
     internal Func<bool>? ProbeExclusiveCapture { get; init; }
     internal Func<bool>? ProbeSpeakerFallback { get; init; }
     internal Func<int, bool>? ProbeAppSpeaker { get; init; }
+    internal Func<int, bool, CancellationToken, (IPcProcessSilenceLease? Lease, bool MutedSpeaker)>? AcquireAppSilence { get; init; }
     internal Func<int, IPcProcessSilenceLease?>? AcquireSpeakerFallback { get; init; }
     internal Func<IPcProcessSilenceLease?>? AcquireSystemSpeakerSilence { get; init; }
     private readonly object _exclusiveProbeGate = new();

@@ -93,6 +93,13 @@ internal static partial class Program
         if (args is ["--tone", var endpoint]) { await EmitTone(endpoint); return 0; }
         if (args is ["--mirror-tone", var toneOutput]) { await MovableToneAsync(toneOutput); return 0; }
         if (args is ["--local-mirrors", var directory]) return await CheckLocalMirrorsAsync(directory);
+        if (args.Length is 1 or 2 && args[0] == "--panel-tone-probe") { await PanelToneProbeAsync(args.ElementAtOrDefault(1)); return 0; }
+        if (args is ["--live-current-mirror", var reportDirectory, var serial, var port])
+        {
+            Directory.CreateDirectory(reportDirectory);
+            Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(reportDirectory, Guid.NewGuid().ToString("N")));
+            return await CheckPcCurrentOutputAsync(reportDirectory, serial, int.Parse(port));
+        }
         if (args is ["--system-lease"]) { CheckSystemLease(); return 0; }
         if (args.Length != 1) throw new ArgumentException("Supply the isolated results directory.");
         string root = Directory.CreateDirectory(Path.Combine(Path.GetFullPath(args[0]), Guid.NewGuid().ToString("N"))).FullName;

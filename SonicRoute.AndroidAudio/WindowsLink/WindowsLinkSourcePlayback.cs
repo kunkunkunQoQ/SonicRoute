@@ -166,6 +166,12 @@ internal sealed partial class WindowsLinkService
         }
         lock (_gate)
             if (FindSilenceLocked(pid, track.Info.InstanceId) is { } existing) return existing.Retain();
+        if (AcquireAppSilence != null)
+        {
+            var result = AcquireAppSilence(pid, allowSpeakerMute && CanUseSpeakerFallback, token);
+            return result.Lease == null ? throw new IOException("The source computer could not isolate this application's audio.")
+                : new ProcessSilence(result.Lease, result.MutedSpeaker);
+        }
         IPcProcessSilenceLease? acquired = null;
         bool trySpeaker = allowSpeakerMute && CanUseSpeakerFallback;
         if (CanSendExclusively)

@@ -1067,5 +1067,16 @@
   "Phone.WindowsLinkFailPairingRejected": "L’autre PC a refusé l’association ou sa relation de confiance a été supprimée. Reconnectez-vous pour associer à nouveau les deux PC.",
   "Phone.WindowsLinkFailIdentityMismatch": "Le certificat de l’autre PC ne correspond pas à celui attendu. Associez à nouveau les deux PC.",
   "Phone.WindowsLinkFailSavedAddressUnavailable": "L’adresse enregistrée est inaccessible et aucune nouvelle adresse n’a été trouvée.",
-  "Phone.WindowsLinkFailIncompatible": "Le protocole ou les fonctionnalités de Windows Link ne sont pas compatibles entre les deux PC."
+  "Phone.WindowsLinkFailIncompatible": "Le protocole ou les fonctionnalités de Windows Link ne sont pas compatibles entre les deux PC.",
+  "Phone.AppKeptOutput": "L’application utilise encore sa sortie d’origine. Sélectionnez la sortie système par défaut dans l’application, puis réessayez.",
+  "Phone.FileOfflineHint": "Connectez l’appareil pour déposer ou sélectionner des fichiers",
+  "Phone.FileDropHint": "Déposez des fichiers ici ou cliquez pour les choisir",
+  "Phone.FileOnlyFiles": "Sélectionnez des fichiers. Les dossiers ne peuvent pas être envoyés directement.",
+  "Phone.FileBatchProgress": "{0} sur {1} · {2}",
+  "Phone.FileReceiveFolder": "Dossier de réception sur ce PC",
+  "Phone.FileChangeFolder": "Changer de dossier",
+  "Phone.Files": "Transfert de fichiers",
+  "Phone.FileSend": "Envoyer un fichier…",
+  "Phone.FileSaved": "Enregistré dans {0}",
+  "Phone.FileClose": "Fermer"
 }

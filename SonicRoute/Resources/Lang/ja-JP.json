@@ -1067,5 +1067,16 @@
   "Phone.WindowsLinkFailPairingRejected": "相手の PC でペアリングが拒否されたか、信頼設定が削除されています。もう一度接続してペアリングしてください。",
   "Phone.WindowsLinkFailIdentityMismatch": "接続先の PC の証明書が一致しません。もう一度ペアリングしてください。",
   "Phone.WindowsLinkFailSavedAddressUnavailable": "保存されたアドレスに接続できず、新しいアドレスも見つかりませんでした。",
-  "Phone.WindowsLinkFailIncompatible": "この PC と相手の PC では、Windows Link のプロトコルのバージョンまたは対応機能に互換性がありません。"
+  "Phone.WindowsLinkFailIncompatible": "この PC と相手の PC では、Windows Link のプロトコルのバージョンまたは対応機能に互換性がありません。",
+  "Phone.AppKeptOutput": "アプリの音声は元の出力デバイスで再生されています。アプリ内で出力先をシステムの既定のデバイスに設定してから、もう一度お試しください。",
+  "Phone.FileOfflineHint": "接続後にファイルをドロップまたは選択できます",
+  "Phone.FileDropHint": "ファイルをここにドロップするか、クリックして選択",
+  "Phone.FileOnlyFiles": "ファイルを選択してください。フォルダーは直接送信できません。",
+  "Phone.FileBatchProgress": "{1} 件中 {0} 件目 · {2}",
+  "Phone.FileReceiveFolder": "この PC の受信フォルダー",
+  "Phone.FileChangeFolder": "フォルダーを変更",
+  "Phone.Files": "ファイル転送",
+  "Phone.FileSend": "ファイルを送信…",
+  "Phone.FileSaved": "保存先：{0}",
+  "Phone.FileClose": "閉じる"
 }

@@ -55,7 +55,12 @@ internal static partial class Program
             Call("EnsurePcDropZones", true);
             var zones = (Grid)phone.FindName("PcDropZonesGrid");
             var originalCells = zones.Children.Cast<UIElement>().ToArray();
-            Check(zones.RowDefinitions.Count == 2, "cached drag zones include speaker and connected Bluetooth");
+            var phoneKey = AndroidDeviceIdentity.Key(device);
+            string Endpoint(string sink) => AndroidOutputIdentity.FormatDeviceId(phoneKey, sink);
+            bool HasZones(params string[] sinks) => zones.RowDefinitions.Count == sinks.Length &&
+                zones.Children.OfType<Border>().Where(b => b.Tag is string).OrderBy(Grid.GetRow)
+                    .Select(b => (string)b.Tag).SequenceEqual(sinks.Select(Endpoint));
+            Check(HasZones("current", "speaker", bluetooth.Key), "cached drag zones put current before the speaker and connected Bluetooth");
             var drag = typeof(PhoneAudioWindow).GetMethod("PhoneApp_DragOver", Hidden)!.CreateDelegate<Action<object, DragEventArgs>>(phone);
             var data = new System.Windows.DataObject("SonicRoute.PcApp.v1", new AudioAppInfo
                 { ProcessId = 42424, ProcessName = "fixture", DisplayName = "Fixture" });
@@ -71,19 +76,30 @@ internal static partial class Program
             Call("EnsurePcDropZones", true);
             Check(originalCells.SequenceEqual(zones.Children.Cast<UIElement>()), "refreshing unchanged outputs keeps existing themed cells");
             store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]); DrainUi();
-            Check(zones.RowDefinitions.Count == 1, "Bluetooth disconnect invalidates the active drag snapshot");
+            Check(HasZones("current", "speaker"), "Bluetooth disconnect invalidates the active drag snapshot");
             store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker, bluetooth]); DrainUi();
-            Check(zones.RowDefinitions.Count == 2, "Bluetooth reconnect rebuilds the drag snapshot");
+            Check(HasZones("current", "speaker", bluetooth.Key), "Bluetooth reconnect rebuilds the drag snapshot");
 
             var initialOutputs = outputs();
             Check(ReferenceEquals(initialOutputs, outputs()), "unchanged output reads reuse their cached snapshot");
             store.Rename("Renamed phone"); DrainUi();
-            Check(!ReferenceEquals(initialOutputs, outputs()) && outputs().All(d => d.DisplayName!.Contains("Renamed phone")),
-                "phone rename invalidates cached output labels");
+            var renamed = outputs();
+            Check(!ReferenceEquals(initialOutputs, renamed)
+                && renamed.Single(d => d.Id == Endpoint("current")).DisplayName == L10n.T("Phone.NativeAudioOutput")
+                && renamed.Where(d => d.Id != Endpoint("current")).All(d => d.DisplayName!.Contains("Renamed phone")),
+                "phone rename updates hardware output labels and preserves the single handset's current-output label");
             discovery.Publish([device with { State = "offline" }]); DrainUi();
             Check(outputs().Count == 0, "offline discovery immediately removes cached phone outputs");
+            drag(phone, args);
+            Check(args.Handled && args.Effects == DragDropEffects.None,
+                "an offline phone stops advertising a valid PC drag target");
+            args.RoutedEvent = System.Windows.DragDrop.PreviewDropEvent;
+            Call("PhoneApp_Drop", phone, args);
+            Check(args.Handled && args.Effects == DragDropEffects.None,
+                "dropping the PC app after disconnection rejects its stale phone target");
             discovery.Publish([device]); store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker, bluetooth]); DrainUi();
-            Check(outputs().Count == 2, "online discovery restores current outputs without a scan");
+            Check(outputs().Select(d => d.Id).SequenceEqual(new[] { "current", "speaker", bluetooth.Key }.Select(Endpoint)),
+                "online discovery restores all three phone outputs in order without a scan");
 
             var apply = typeof(PhoneAudioWindow).GetMethod("ApplyMediaState", Hidden)!.CreateDelegate<Action<AndroidMediaState?>>(phone);
             var state = new AndroidMediaState(music.Package, "Track", "Artist", true, 822, DurationMs: 180000)

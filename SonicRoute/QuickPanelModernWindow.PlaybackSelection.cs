@@ -1,21 +1,36 @@
-#if SONICROUTE_PHONE
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
+#if SONICROUTE_PHONE
+using System.Windows.Controls.Primitives;
 using SonicRoute.WindowsLink;
-using Button = System.Windows.Controls.Button;
+#endif
 
 namespace SonicRoute;
 
 public partial class QuickPanelModernWindow
 {
-    private Task QueuePlaybackClickAsync(AppRow row, AudioDeviceInfo device, Button button, ModifierKeys modifiers)
+#if !SONICROUTE_PHONE
+    // Full already refreshes expanded rows from its combined local/external playback subscription.
+    private int _localPlaybackRefreshQueued;
+    private void OnLocalPlaybackChanged()
+    {
+        if (_isClosed || Interlocked.Exchange(ref _localPlaybackRefreshQueued, 1) != 0) return;
+        _uiLifetime.Post(Dispatcher, () =>
+        {
+            Interlocked.Exchange(ref _localPlaybackRefreshQueued, 0);
+            if (_isClosed || !IsVisible) return;
+            foreach (var row in _rows.Values)
+                if (row.Expanded && row.PlaybackChange.IsCompleted) _ = BuildRowDevicesAsync(row);
+        });
+    }
+#endif
+    private Task QueuePlaybackClickAsync(AppRow row, AudioDeviceInfo device, ModifierKeys modifiers)
     {
         var previous = row.PlaybackChange;
         return row.PlaybackChange = ApplyClickAsync();
@@ -36,13 +51,16 @@ public partial class QuickPanelModernWindow
                 string preferred = next.Contains(primary, StringComparer.OrdinalIgnoreCase) ? primary : next[0];
 
                 MarkLastUsed(row.App);
-                var result = await AppPlaybackOutputs.SetAsync(row.App, next, preferred, allowSpeakerMute: false);
+                var result = await AppPlaybackOutputs.SetAsync(row.App, next, preferred,
+                    allowSpeakerMute: !next.Any(ApplicationAudio.IsWindowsLinkOutputDevice));
                 if (_isClosed) return;
                 if (result.Success) SetAnchor();
                 else
                 {
                     ShowOsd(AppDisplayName.Get(row.App), result.Message);
-                    if (result.HResult == SourceSpeakerConsentRequiredException.ErrorCode && button.IsVisible && !selected.SetEquals(next))
+#if SONICROUTE_PHONE
+                    if (result.HResult == SourceSpeakerConsentRequiredException.ErrorCode && !selected.SetEquals(next)
+                        && row.DeviceButtons.FirstOrDefault(item => item.Id == device.Id && item.Flow == EDataFlow.eRender).Button is { IsVisible: true } button)
                     {
                         var menu = ConvenienceMenus.Create();
                         var names = row.DeviceButtons.Where(b => b.Flow == EDataFlow.eRender && next.Contains(b.Id, StringComparer.OrdinalIgnoreCase))
@@ -64,6 +82,7 @@ public partial class QuickPanelModernWindow
                         menu.Placement = PlacementMode.Bottom;
                         menu.IsOpen = true;
                     }
+#endif
                 }
                 if (row.Expanded) await BuildRowDevicesAsync(row);
 
@@ -72,12 +91,14 @@ public partial class QuickPanelModernWindow
                     if (!modifiers.HasFlag(ModifierKeys.Shift) || row.PlaybackAnchor == null)
                         row.PlaybackAnchor = device.Id;
                 }
+
             }
             catch (OperationCanceledException) when (_isClosed) { }
             catch (Exception ex) { if (!_isClosed) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
         }
     }
 
+#if SONICROUTE_PHONE
     private static async Task<(bool Success, int HResult, string Message)> ApplyPeerMenuAsync(
         AudioAppInfo app, string peer, bool destinationOnly, bool allowSpeakerMute)
     {
@@ -96,6 +117,7 @@ public partial class QuickPanelModernWindow
         return await AppPlaybackOutputs.SetAsync(app, [local, peer], local, allowSpeakerMute: false);
     }
 
+#endif
     internal static string[] SelectPlaybackRange(string[] order, HashSet<string> selected, string clicked, string? anchor, ModifierKeys modifiers)
     {
         bool extend = modifiers.HasFlag(ModifierKeys.Shift);
@@ -118,4 +140,3 @@ public partial class QuickPanelModernWindow
             : visible.ToArray();
     }
 }
-#endif

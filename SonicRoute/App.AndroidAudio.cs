@@ -422,11 +422,10 @@ public partial class App
         };
         PositionPhone(); phone.Show(); panel.RefreshCompanionPlacement();
     }
-    private Task? _androidShutdown;
-    private bool _androidShutdownWaited;
-    private Task BeginAndroidShutdown()
+    private Task BeginAudioShutdown()
     {
-        if (_androidShutdown != null) return _androidShutdown;
+        if (_audioShutdown != null) return _audioShutdown;
+        if (AndroidAudioHost.IsCreated) AndroidAudioHost.Sources.BeginShutdown();
         DetachUsbClipboardArrivalHook();
         Task clipboard = Task.CompletedTask;
         if (_phoneClipboard != null)
@@ -436,8 +435,9 @@ public partial class App
             clipboard = _phoneClipboard.DisposeAsync().AsTask();
         }
         if (_androidDisplayNotifications) AndroidAudioHost.Displays.FailedError -= AndroidDisplayFailedError;
-        return _androidShutdown = Task.Run(async () =>
+        return _audioShutdown = Task.Run(async () =>
         {
+            await AppPlaybackRestore.StopAsync().ConfigureAwait(false);
             var tasks = new List<Task> { clipboard, AndroidAudioHost.StopMediaAsync(), LocalAppOutputMirrors.ShutdownAsync() };
             if (AndroidAudioHost.AreDisplaysCreated) tasks.Add(AndroidAudioHost.Displays.DisposeAsync().AsTask());
             if (AndroidAudioHost.IsCreated) tasks.Add(AndroidAudioHost.Sources.DisposeAsync().AsTask());
@@ -445,33 +445,53 @@ public partial class App
             finally { AndroidAudioHost.FlushSettings(); }
         });
     }
-    private async Task WaitForAndroidShutdownAsync()
-    {
-        _androidShutdownWaited = true;
-        try { await BeginAndroidShutdown().WaitAsync(TimeSpan.FromSeconds(8)); }
-        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone shutdown: " + ex.Message); }
-    }
-    private void ShutdownAndroidAudio()
-    {
-        // Normal Quit awaited cleanup while WPF could still process messages. Direct
-        // OS/session shutdown has a bounded fallback and must not wait indefinitely.
-        if (_androidShutdownWaited) return;
-        try
-        {
-            if (!BeginAndroidShutdown().Wait(TimeSpan.FromSeconds(8)))
-                System.Diagnostics.Trace.WriteLine("Phone shutdown deadline reached; cleanup still pending.");
-        }
-        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone shutdown: " + ex.Message); }
-    }
 #else
     private void StartPhoneClipboard() { }
     internal bool HasActivePhoneClipboard => false;
     internal bool IsPhoneWindowOpen => false;
     internal bool KeepQuickPanelForAndroid => false;
     internal bool IsPhoneAudioVisible => false;
-    private void ShutdownAndroidAudio() { }
-    private Task WaitForAndroidShutdownAsync() => Task.CompletedTask;
+    private Task BeginAudioShutdown() => _audioShutdown ??= StopLocalAudioAsync();
+    private static async Task StopLocalAudioAsync()
+    {
+        await AppPlaybackRestore.StopAsync().ConfigureAwait(false);
+        await LocalAppOutputMirrors.ShutdownAsync().ConfigureAwait(false);
+    }
 #endif
+    private Task? _audioShutdown;
+    private bool _audioShutdownWaited;
+    private async Task WaitForAudioShutdownAsync()
+    {
+        _audioShutdownWaited = true;
+        try
+        {
+            var shutdown = BeginAudioShutdown();
+            if (!shutdown.IsCompleted)
+            {
+                using var timeout = new CancellationTokenSource();
+                if (await Task.WhenAny(shutdown, Task.Delay(TimeSpan.FromSeconds(8), timeout.Token)) != shutdown)
+                {
+                    System.Diagnostics.Trace.WriteLine("Audio shutdown deadline reached.");
+                    return;
+                }
+                timeout.Cancel();
+            }
+            await shutdown;
+        }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Audio shutdown: " + ex.Message); }
+    }
+    private void FinishAudioShutdown()
+    {
+        // Normal Quit awaited cleanup while WPF could still process messages. Direct
+        // OS/session shutdown has a bounded fallback and must not wait indefinitely.
+        if (_audioShutdownWaited) return;
+        try
+        {
+            if (!BeginAudioShutdown().Wait(TimeSpan.FromSeconds(8)))
+                System.Diagnostics.Trace.WriteLine("Audio shutdown deadline reached; cleanup still pending.");
+        }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Audio shutdown: " + ex.Message); }
+    }
 }
 #if SONICROUTE_PHONE
 internal static class PhoneCompanionLayout

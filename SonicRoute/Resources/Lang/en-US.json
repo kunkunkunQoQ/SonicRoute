@@ -1067,5 +1067,16 @@
   "Phone.WindowsLinkFailPairingRejected": "Pairing was declined or trust was removed on the remote PC. Connect again to re-pair.",
   "Phone.WindowsLinkFailIdentityMismatch": "The other PC’s certificate doesn’t match the expected identity.",
   "Phone.WindowsLinkFailSavedAddressUnavailable": "The saved address is unreachable and no new LAN address was discovered.",
-  "Phone.WindowsLinkFailIncompatible": "Incompatible Windows Link protocol or capabilities."
+  "Phone.WindowsLinkFailIncompatible": "Incompatible Windows Link protocol or capabilities.",
+  "Phone.AppKeptOutput": "The app is still playing through its original device. In the app’s audio settings, choose the system default output and try again.",
+  "Phone.FileOfflineHint": "Connect to drop or select files",
+  "Phone.FileDropHint": "Drop files here or click to browse",
+  "Phone.FileOnlyFiles": "Select files. Folders cannot be sent directly.",
+  "Phone.FileBatchProgress": "{0} of {1} · {2}",
+  "Phone.FileReceiveFolder": "Folder for incoming files on this PC",
+  "Phone.FileChangeFolder": "Change folder",
+  "Phone.Files": "File transfer",
+  "Phone.FileSend": "Send file…",
+  "Phone.FileSaved": "Saved to {0}",
+  "Phone.FileClose": "Close"
 }

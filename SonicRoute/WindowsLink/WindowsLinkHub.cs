@@ -100,6 +100,13 @@ internal static class WindowsLinkHub
             });
     }
 
+    internal static bool IsOutputAvailable(string id, bool fromPhone) =>
+        WindowsLinkOutputIdentity.TryParsePeerId(id, out var peerId)
+        && Service is { IsEnabled: true } service
+        && service.Peers.Any(p => string.Equals(p.Id, peerId, StringComparison.OrdinalIgnoreCase)
+            && (fromPhone ? WindowsLinkService.CanReceiveExternalAudio(p)
+                : service.CanSendAudio && p.Connected && p.Capabilities.HasFlag(LinkCapabilities.AudioReceive)));
+
     internal static WindowsLinkExclusiveMode LocalExclusiveMode(LinkPeer peer)
     {
         if (!peer.Connected || !peer.Capabilities.HasFlag(LinkCapabilities.AudioReady)
@@ -234,6 +241,7 @@ internal static class WindowsLinkHub
             ProbeExclusiveCapture = AndroidAudioHost.HasWindowsLinkSilenceEndpoint,
             ProbeSpeakerFallback = AndroidAudioHost.HasWindowsLinkSpeakerFallback,
             ProbeAppSpeaker = AndroidAudioHost.CanMuteAppSpeaker,
+            AcquireAppSilence = AndroidAudioHost.AcquireAppSilence,
             AcquireSpeakerFallback = AndroidAudioHost.AcquireWindowsLinkSpeakerFallback,
             AcquireSystemSpeakerSilence = AndroidAudioHost.AcquireSystemSpeakerSilence,
             CanShareWindow = window => ConfigService.IsPanelAppVisible(window.ProcessName)

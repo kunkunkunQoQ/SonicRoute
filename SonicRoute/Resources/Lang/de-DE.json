@@ -1067,5 +1067,16 @@
   "Phone.WindowsLinkFailPairingRejected": "Der andere PC hat die Kopplung abgelehnt oder die Vertrauenseinstellung wurde entfernt. Stellen Sie die Verbindung erneut her, um die PCs neu zu koppeln.",
   "Phone.WindowsLinkFailIdentityMismatch": "Das Zertifikat des anderen PCs stimmt nicht mit der erwarteten Identität überein.",
   "Phone.WindowsLinkFailSavedAddressUnavailable": "Die gespeicherte Adresse ist nicht erreichbar. Im lokalen Netzwerk wurde keine neue Adresse gefunden.",
-  "Phone.WindowsLinkFailIncompatible": "Die beiden PCs verwenden inkompatible Versionen des Windows Link-Protokolls oder unterstützen unterschiedliche Funktionen."
+  "Phone.WindowsLinkFailIncompatible": "Die beiden PCs verwenden inkompatible Versionen des Windows Link-Protokolls oder unterstützen unterschiedliche Funktionen.",
+  "Phone.AppKeptOutput": "Die App spielt weiterhin über das ursprüngliche Gerät ab. Wählen Sie in den Audioeinstellungen der App das Standardausgabegerät des Systems und versuchen Sie es erneut.",
+  "Phone.FileOfflineHint": "Zum Ablegen oder Auswählen von Dateien verbinden",
+  "Phone.FileDropHint": "Dateien hierher ziehen oder zum Auswählen klicken",
+  "Phone.FileOnlyFiles": "Bitte Dateien auswählen. Ordner lassen sich nicht direkt senden.",
+  "Phone.FileBatchProgress": "{0} von {1} · {2}",
+  "Phone.FileReceiveFolder": "Empfangsordner auf diesem PC",
+  "Phone.FileChangeFolder": "Ordner ändern",
+  "Phone.Files": "Dateiübertragung",
+  "Phone.FileSend": "Datei senden…",
+  "Phone.FileSaved": "Gespeichert unter {0}",
+  "Phone.FileClose": "Schließen"
 }

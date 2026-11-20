@@ -14,7 +14,7 @@ public partial class MainWindow
 {
 #if SONICROUTE_PHONE
     private bool _externalAudioSubscribed;
-    private int _externalAudioQueued;
+    private readonly PendingAudioUiChange _externalAudioQueued = new();
     private void InitializeExternalAudio()
     {
         IsVisibleChanged += ExternalAudioVisibilityChanged;
@@ -26,23 +26,41 @@ public partial class MainWindow
         bool active = IsVisible && !_isClosed;
         if (active == _externalAudioSubscribed) return;
         _externalAudioSubscribed = active;
-        if (active) { ApplicationAudio.Changed += ExternalAudioChanged; L10n.Instance.PropertyChanged += ExternalAudioLanguageChanged; RefreshExternalAudioLists(); }
-        else { ApplicationAudio.Changed -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
+        if (active) { ApplicationAudio.UiChanged += ExternalAudioChanged; L10n.Instance.PropertyChanged += ExternalAudioLanguageChanged; RefreshExternalAudioLists(); }
+        else { ApplicationAudio.UiChanged -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
     }
     private void ReleaseExternalAudio()
     {
         IsVisibleChanged -= ExternalAudioVisibilityChanged;
-        if (_externalAudioSubscribed) { ApplicationAudio.Changed -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
+        if (_externalAudioSubscribed) { ApplicationAudio.UiChanged -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
         _externalAudioSubscribed = false;
     }
-    private void ExternalAudioLanguageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => ExternalAudioChanged();
-    private void ExternalAudioChanged()
+    private void ExternalAudioLanguageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => ExternalAudioChanged(AudioUiChange.All);
+    private void ExternalAudioChanged(AudioUiChange change)
     {
-        if (_isClosed || Interlocked.Exchange(ref _externalAudioQueued, 1) != 0) return;
+        if (_isClosed || !_externalAudioQueued.Add(change)) return;
         _uiLifetime.Post(Dispatcher, () =>
         {
-            Interlocked.Exchange(ref _externalAudioQueued, 0);
-            if (!_isClosed && IsVisible) RefreshExternalAudioLists();
+            var pending = _externalAudioQueued.Take();
+            if (_isClosed || !IsVisible) return;
+            // The apps/settings/automation navigation paths load current candidates on entry.
+            if (pending.Has(AudioUiScope.SourceList | AudioUiScope.Outputs)
+                && (AppsPage.IsVisible || SettingsPageHost.IsVisible || AutomationPageHost.IsVisible))
+            {
+                RefreshExternalPages(AppsPage.IsVisible, SettingsPageHost.IsVisible, AutomationPageHost.IsVisible);
+                return;
+            }
+            if (pending.Has(AudioUiScope.Outputs)) SyncExternalOutputDevices();
+            if (!AppsPage.IsVisible) return;
+            if (pending.Has(AudioUiScope.SourceState))
+                foreach (var item in _appItems)
+                    if (item.Info.IsExternal && (pending.SourceId == null || pending.SourceId == item.Info.ExternalSourceId))
+                        item.IsMuted = ApplicationAudio.IsMuted(item.Info);
+            if (_appsSelected is not { } selected) return;
+            bool selectedChanged = selected.IsExternal
+                ? pending.Has(AudioUiScope.SourceState) && (pending.SourceId == null || pending.SourceId == selected.ExternalSourceId)
+                : pending.Has(AudioUiScope.Routes) && (pending.Pid == 0 || pending.Pid == (int)selected.ProcessId);
+            if (selectedChanged) _ = RefreshAppsSelectionAsync();
         });
     }
     private void SyncExternalOutputDevices()
@@ -76,29 +94,33 @@ public partial class MainWindow
         }
         return item;
     }
-    private void RefreshExternalAudioLists()
+    private void RefreshExternalAudioLists() => RefreshExternalPages(true, true, true);
+    private void RefreshExternalPages(bool apps, bool settings, bool automation)
     {
         // Merge into existing Windows snapshots. A phone event never re-enumerates Windows sessions.
         if (_isClosed) return;
         SyncExternalOutputDevices();
         var selected = (AppsListBox.SelectedItem as AppItem)?.Identity;
         var previousApps = _appItems;
-        var merged = MergeExternalItems(_appItems);
+        var merged = apps ? MergeExternalItems(_appItems) : _appItems;
         // Controls sharing one prior candidate list also share its refreshed result.
-        var candidates = new Dictionary<IEnumerable<AppItem>, List<AppItem>> { [previousApps] = merged };
+        var candidates = new Dictionary<IEnumerable<AppItem>, List<AppItem>>();
+        if (apps) candidates[previousApps] = merged;
         if (!_appItems.SequenceEqual(merged))
         {
             _appItems = merged; AppsListBox.ItemsSource = merged;
             AppsListBox.SelectedItem = merged.FirstOrDefault(item => item.Identity == selected);
         }
         else _appItems = merged;
-        _settingsApps = ApplicationAudio.MergeExternal(_settingsApps);
-        _autoApps = ApplicationAudio.MergeExternal(_autoApps);
+        if (settings) _settingsApps = ApplicationAudio.MergeExternal(_settingsApps);
+        if (automation) _autoApps = ApplicationAudio.MergeExternal(_autoApps);
         bool appsSuppressed = _suppressAppCombo, autoSuppressed = _suppressAutoUi;
         _suppressAppCombo = _suppressAutoUi = true;
         try
         {
-            foreach (var combo in new[] { FixedAppCombo, AutoTriggerAppCombo }.Concat(_autoStepAppCombos))
+            IEnumerable<ComboBox?> controls = automation ? _autoStepAppCombos.Prepend(AutoTriggerAppCombo) : Array.Empty<ComboBox>();
+            if (settings) controls = controls.Prepend(FixedAppCombo);
+            foreach (var combo in controls)
             {
                 if (combo?.ItemsSource is not IEnumerable<AppItem> previous) continue;
                 if (!candidates.TryGetValue(previous, out var items))

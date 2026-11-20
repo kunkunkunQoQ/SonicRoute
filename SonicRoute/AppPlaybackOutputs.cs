@@ -1,9 +1,10 @@
 #if SONICROUTE_PHONE
 using SonicRoute.AndroidAudio;
+using SonicRoute.WindowsLink;
+#endif
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
-using SonicRoute.WindowsLink;
 
 namespace SonicRoute;
 
@@ -13,18 +14,23 @@ internal static partial class AppPlaybackOutputs
     private static readonly Dictionary<int, ProcessGate> Gates = [];
     private sealed class ProcessGate { internal readonly SemaphoreSlim Changes = new(1, 1); internal int Users; }
 
+#if SONICROUTE_PHONE
     private static LinkMedia[] Streams(int pid) => WindowsLinkHub.Service?.GetOutgoingAppStreams(pid) ?? [];
+#endif
 
     private static string Endpoint(string? id) => string.IsNullOrWhiteSpace(id) || AudioService.IsSystemDefault(id)
-        ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(id);
+        ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(id!);
 
     internal static HashSet<string> GetSelected(int pid, string? persistedEndpoint)
     {
-        var streams = Streams(pid);
         var outputs = LocalAppOutputMirrors.GetExtraOutputs(pid).ToHashSet(Ids);
-        if (!streams.Any(s => s.DestinationOnly) && LocalAppOutputMirrors.GetExclusivePhone(pid, out _) == null)
-            outputs.Add(Endpoint(AndroidAudioHost.TryGetPcAppPhoneOutput(pid) ?? persistedEndpoint));
+#if SONICROUTE_PHONE
+        var streams = Streams(pid);
         foreach (var stream in streams) outputs.Add(WindowsLinkOutputIdentity.FormatDeviceId(stream.PeerId));
+        if (streams.Any(s => s.DestinationOnly) || LocalAppOutputMirrors.GetExclusivePhone(pid, out _) != null) return outputs;
+        persistedEndpoint = AndroidAudioHost.TryGetPcAppPhoneOutput(pid) ?? persistedEndpoint;
+#endif
+        outputs.Add(Endpoint(persistedEndpoint));
         return outputs;
     }
 
@@ -35,6 +41,7 @@ internal static partial class AppPlaybackOutputs
         if (outputs.Length == 0) outputs = [AudioService.SystemDefaultDeviceId];
         if (app.IsExternal)
         {
+#if SONICROUTE_PHONE
             if (WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) is { } incoming)
             {
                 try
@@ -53,26 +60,50 @@ internal static partial class AppPlaybackOutputs
                 }
                 catch (Exception ex) { return RouteError(ex); }
             }
+#endif
             return outputs.Length == 1 ? await ApplicationAudio.ApplyEndpointAsync(app, EDataFlow.eRender, outputs[0])
                 : (false, -1, L10n.T("Phone.StatusOperationFailed"));
         }
         if (app.ProcessId == 0 || app.ProcessId > int.MaxValue)
             return (false, -1, L10n.T("Phone.Err.InvalidProcessId"));
         int pid = (int)app.ProcessId;
-        bool reset = selected.Length == 0;
         return await SerializeAsync(pid, async () =>
         {
-            var processHistory = HistoryFor(pid);
-            if (reset) Forget(pid, processHistory);
+#if SONICROUTE_PHONE
+            bool reset = selected.Length == 0;
+            var history = HistoryFor(pid);
+            if (reset) Forget(pid, history);
             long epoch = Volatile.Read(ref _historyEpoch);
             string? saved = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
             var before = GetSelected(pid, saved);
-            var result = await ApplyAsync(pid, outputs, Endpoint(preferredPrimary), allowSpeakerMute).ConfigureAwait(false);
+#endif
+            var identity = outputs.Length > 1 || SavedPlaybackStore.ReadAll().Count != 0 ? PlaybackAppIdentity.Read(pid) : null;
+            string preferred = Endpoint(preferredPrimary);
+            var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute).ConfigureAwait(false);
+#if SONICROUTE_PHONE
             if (result.Success && !reset && Volatile.Read(ref _historyEpoch) == epoch)
-                Remember(pid, before.ToArray(), outputs, Endpoint(preferredPrimary), allowSpeakerMute);
+                Remember(pid, before.ToArray(), outputs, preferred, allowSpeakerMute);
+#endif
+            if (result.Success && !AppPlaybackRestore.Save(pid, identity, outputs, preferred))
+                return (false, unchecked((int)0x80004005), L10n.T("St.SaveFailed"));
             return result;
         }).ConfigureAwait(false);
     }
+
+    internal static Task<bool> RestoreAsync(int pid, PlaybackAppIdentity app, string[] outputs, string preferred, Func<bool> stillWanted) =>
+        SerializeAsync(pid, async () =>
+        {
+            if (!stillWanted() || PlaybackAppIdentity.Read(pid) != app) return false;
+            var before = GetSelected(pid, AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
+            if (before.SetEquals(outputs)) return true;
+            bool allowSpeakerMute = !outputs.Any(ApplicationAudio.IsWindowsLinkOutputDevice);
+            var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute).ConfigureAwait(false);
+#if SONICROUTE_PHONE
+            if (result.Success) Remember(pid, before.ToArray(), outputs, preferred, allowSpeakerMute);
+#endif
+            if (!result.Success) System.Diagnostics.Trace.WriteLine("Playback restore: " + result.Message);
+            return result.Success;
+        });
 
     private static async Task<T> SerializeAsync<T>(int pid, Func<Task<T>> action)
     {
@@ -99,20 +130,24 @@ internal static partial class AppPlaybackOutputs
         int pid, string[] outputs, string preferred, bool allowSpeakerMute)
     {
         var undo = new Stack<Func<Task>>();
-        var service = WindowsLinkHub.Service;
-        var peers = outputs.Where(WindowsLinkOutputIdentity.IsWindowsLinkOutput).ToArray();
-        var physical = outputs.Where(id => !WindowsLinkOutputIdentity.IsWindowsLinkOutput(id) && !AndroidOutputIdentity.IsPhoneOutput(id)).ToArray();
-        var phones = outputs.Where(AndroidOutputIdentity.IsPhoneOutput).ToArray();
-        var previous = Streams(pid);
-        string? previousPhone = AndroidAudioHost.TryGetPcAppPhoneOutput(pid);
-        bool previousPhoneOnly = LocalAppOutputMirrors.GetExclusivePhone(pid, out bool previousSpeakerMute) != null;
-        string[] oldExtras = LocalAppOutputMirrors.GetExtraOutputs(pid);
-        string? oldPrimary = previousPhoneOnly || previous.Any(s => s.DestinationOnly) ? null
-            : previousPhone ?? Endpoint(AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
+#if SONICROUTE_PHONE
+        var physical = outputs.Where(id => !ApplicationAudio.IsExternalOutputDevice(id)).ToArray();
+#else
+        var physical = outputs;
+#endif
         string? primary = physical.FirstOrDefault(AudioService.IsSystemDefault)
             ?? physical.FirstOrDefault(id => Ids.Equals(id, preferred)) ?? physical.FirstOrDefault();
+        string[] oldExtras = LocalAppOutputMirrors.GetExtraOutputs(pid);
+#if SONICROUTE_PHONE
+        var service = WindowsLinkHub.Service;
+        var peers = outputs.Where(WindowsLinkOutputIdentity.IsWindowsLinkOutput).ToArray();
+        var previous = Streams(pid);
+        var extras = outputs.Where(id => !Ids.Equals(id, primary) && !WindowsLinkOutputIdentity.IsWindowsLinkOutput(id)).ToArray();
         bool phoneOnly = primary == null && peers.Length == 0;
-        var extras = physical.Concat(phones).Where(id => !Ids.Equals(id, primary)).ToArray();
+        string? previousPhone = AndroidAudioHost.TryGetPcAppPhoneOutput(pid);
+        bool previousPhoneOnly = LocalAppOutputMirrors.GetExclusivePhone(pid, out bool previousSpeakerMute) != null;
+        string? oldPrimary = previousPhoneOnly || previous.Any(s => s.DestinationOnly) ? null
+            : previousPhone ?? Endpoint(AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
 
         // Retain the current mute owner if possible. An older receiver can remain a shared output.
         string? owner = null;
@@ -125,10 +160,13 @@ internal static partial class AppPlaybackOutputs
                 && service?.Peers.Any(p => Ids.Equals(p.Id, peerId) && p.Connected && p.Capabilities.HasFlag(LinkCapabilities.AudioReady)) == true);
             if (owner == null) return (false, -1, L10n.T("Phone.WindowsLinkExclusiveUnavailable"));
         }
+#else
+        var extras = outputs.Where(id => !Ids.Equals(id, primary)).ToArray();
+#endif
         try
         {
-            // Android's original per-process route can own a dedicated mute endpoint. Release it
-            // before requesting exclusive Windows playback, preserving its original policy on failure.
+            using var reservation = outputs.Length > 1 ? LocalAppOutputMirrors.Reserve(pid) : null;
+#if SONICROUTE_PHONE
             if (previousPhone != null) StopPhone();
             if (previousPhoneOnly && !phoneOnly)
             {
@@ -159,48 +197,58 @@ internal static partial class AppPlaybackOutputs
                 // An exclusive lease may temporarily own both Windows render roles. Let it restore
                 // them before reading or editing the user's actual per-app output.
                 foreach (var stream in removed.Where(s => s.DestinationOnly)) await StopPeer(stream).ConfigureAwait(false);
-                if (primary != null)
+            }
+#endif
+            if (primary != null)
+            {
+                using var policy = new AudioPolicyConfig(EDataFlow.eRender);
+                var baseline = (Media: policy.GetDefaultEndPoint(pid, ERole.eMultimedia),
+                    Console: policy.GetDefaultEndPoint(pid, ERole.eConsole));
+                if (!Ids.Equals(primary, Endpoint(baseline.Media)) || !Ids.Equals(primary, Endpoint(baseline.Console)))
                 {
-                    using var policy = new AudioPolicyConfig(EDataFlow.eRender);
-                    var baseline = (Media: policy.GetDefaultEndPoint(pid, ERole.eMultimedia),
-                        Console: policy.GetDefaultEndPoint(pid, ERole.eConsole));
-                    if (!Ids.Equals(primary, Endpoint(baseline.Media)) || !Ids.Equals(primary, Endpoint(baseline.Console)))
+                    // The OS may change one render role before returning a failure for the other.
+                    undo.Push(() =>
                     {
-                        // The OS may change one render role before returning a failure for the other.
-                        undo.Push(() =>
-                        {
-                            using var restore = new AudioPolicyConfig(EDataFlow.eRender);
-                            int media = restore.SetDefaultEndPoint(baseline.Media, pid, ERole.eMultimedia);
-                            int console = restore.SetDefaultEndPoint(baseline.Console, pid, ERole.eConsole);
-                            System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(media < 0 ? media : console);
-                            return Task.CompletedTask;
-                        });
-                        Require(AudioService.ApplyEndpoint(pid, EDataFlow.eRender, primary));
-                    }
+                        using var restore = new AudioPolicyConfig(EDataFlow.eRender);
+                        int media = restore.SetDefaultEndPoint(baseline.Media, pid, ERole.eMultimedia);
+                        int console = restore.SetDefaultEndPoint(baseline.Console, pid, ERole.eConsole);
+                        System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(media < 0 ? media : console);
+                        return Task.CompletedTask;
+                    });
+                    Require(AudioService.ApplyEndpoint(pid, EDataFlow.eRender, primary));
                 }
             }
 
             if (extras.Length != 0 || oldExtras.Length != 0)
             {
+#if SONICROUTE_PHONE
                 if (phoneOnly) await LocalAppOutputMirrors.SetExclusivePhoneOutputsAsync(pid, extras, allowSpeakerMute).ConfigureAwait(false);
-                else await LocalAppOutputMirrors.SetExtraOutputsAsync(pid, primary, extras).ConfigureAwait(false);
+                else
+#endif
+                    await LocalAppOutputMirrors.SetExtraOutputsAsync(pid, primary, extras).ConfigureAwait(false);
+#if SONICROUTE_PHONE
                 undo.Push(RestoreMirrors);
+#endif
             }
+#if SONICROUTE_PHONE
             foreach (var stream in removed.Where(s => owner != null || !s.DestinationOnly))
                 await StopPeer(stream).ConfigureAwait(false);
+#endif
             return (true, 0, L10n.T("History.Status.success"));
         }
         catch (Exception ex)
         {
-            while (undo.TryPop(out var restore))
+            while (undo.Count > 0)
             {
+                var restore = undo.Pop();
                 try { await restore().ConfigureAwait(false); }
                 catch (Exception rollback) { ExceptionDiagnostics.Record("AppPlaybackOutputs.Restore", rollback); }
             }
             return RouteError(ex);
         }
-        finally { ApplicationAudio.NotifyChanged(); }
+        finally { ApplicationAudio.NotifyRouteChanged(pid); }
 
+#if SONICROUTE_PHONE
         async Task StartPeer(string output, bool only, bool speaker) =>
             Require(await WindowsLinkHub.RoutePcAppToPeerAsync(pid, output, only, speaker, keepOtherPeers: true).ConfigureAwait(false));
 
@@ -220,13 +268,18 @@ internal static partial class AppPlaybackOutputs
             if (AndroidAudioHost.StopPcAppToPhone(pid, restorePreviousEndpoint: true))
                 undo.Push(() => { Require(AndroidAudioHost.RoutePcAppToPhone(pid, previousPhone!)); return Task.CompletedTask; });
         }
+#endif
     }
 
     private static (bool Success, int HResult, string Message) RouteError(Exception error)
     {
+#if SONICROUTE_PHONE
         string detail = AndroidErrorTranslation.Format(error);
         if (error is WindowsLinkIncomingOutputs.SpeakerConsent || error.HResult == SourceSpeakerConsentRequiredException.ErrorCode)
             return (false, error.HResult, detail);
+#else
+        string detail = error.Message;
+#endif
         return (false, error.HResult, string.Format(L10n.T("Dev.RouteFailed"), detail));
     }
 
@@ -240,4 +293,3 @@ internal static partial class AppPlaybackOutputs
         if (!result.Success) throw new RouteFailure(result.Message, result.HResult);
     }
 }
-#endif

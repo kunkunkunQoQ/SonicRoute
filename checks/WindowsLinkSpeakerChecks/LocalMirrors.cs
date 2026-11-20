@@ -21,10 +21,7 @@ internal static partial class Program
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(28));
         var token = deadline.Token;
         var before = Snapshot();
-        var free = before.Where(o => !o.Default && !o.Muted && !HasActivePlayback(o.Id))
-            .OrderBy(o => o.Occupied)
-            .ThenByDescending(o => o.Name.Contains("Virtual", StringComparison.OrdinalIgnoreCase) || o.Name.Contains("SteelSeries Sonar", StringComparison.OrdinalIgnoreCase))
-            .Take(3).ToArray();
+        var free = IdleTestOutputs(before);
         foreach (var o in before) Console.WriteLine($"Endpoint {o.Name}: default={o.Default} muted={o.Muted} active={HasActivePlayback(o.Id)}");
         Require(free.Length >= 2, "the test can use idle non-default local endpoints");
         var source = free[0];
@@ -90,6 +87,60 @@ internal static partial class Program
         return false;
     }
 
+    private static Output[] IdleTestOutputs(Output[] endpoints) =>
+        endpoints.Where(o => !o.Default && !o.Muted && !HasActivePlayback(o.Id))
+            .OrderBy(o => o.Occupied)
+            .ThenByDescending(o => o.Name.Contains("Virtual", StringComparison.OrdinalIgnoreCase) || o.Name.Contains("SteelSeries Sonar", StringComparison.OrdinalIgnoreCase))
+            .Take(3).ToArray();
+
+    // The edition-specific UI runs in its own process. This source supplies the same
+    // tone and hardware measurements to both .NET 10 and .NET Framework checks.
+    private static async Task PanelToneProbeAsync(string? outputSet)
+    {
+        string[]? fixedIds = outputSet != null && File.Exists(outputSet)
+            ? System.Text.Json.JsonSerializer.Deserialize<string[]>(File.ReadAllText(outputSet)) ?? throw new InvalidDataException("Empty output set.") : null;
+        if (fixedIds != null && (fixedIds.Length != 3 || fixedIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != 3))
+            throw new InvalidDataException("The shared output set must contain three distinct endpoints.");
+        var deadline = Stopwatch.StartNew();
+        Output[] outputs;
+        while (true)
+        {
+            var inventory = Snapshot();
+            outputs = fixedIds == null ? IdleTestOutputs(inventory) : fixedIds.Select(id =>
+                inventory.SingleOrDefault(o => o.Id == id && !o.Default && !o.Muted)
+                ?? throw new IOException("A fixed endpoint is missing, muted, or has become the default.")).ToArray();
+            if (outputs.Length >= (outputSet == null ? 2 : 3) && outputs.All(o => !HasActivePlayback(o.Id))) break;
+            if (deadline.Elapsed.TotalSeconds >= 30) throw new IOException("The requested group of idle playback endpoints is unavailable.");
+            await Task.Delay(500);
+        }
+        if (outputSet != null && fixedIds == null)
+        {
+            using var file = new FileStream(outputSet, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            System.Text.Json.JsonSerializer.Serialize(file, outputs.Select(o => o.Id));
+        }
+        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(outputs.Select(o => o.Id)));
+        while (await Console.In.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(60)) is { Length: > 0 } command)
+        {
+            if (command == "only-primary")
+            {
+                await Observe713HzAsync(outputs[0].Id, CancellationToken.None);
+                async Task<bool> HasTone(string endpoint)
+                {
+                    try { await Observe713HzAsync(endpoint, CancellationToken.None, TimeSpan.FromSeconds(2)); return true; }
+                    catch (TimeoutException) { return false; }
+                }
+                var extras = await Task.WhenAll(outputs.Skip(1).Select(o => HasTone(o.Id)));
+                Console.WriteLine(extras.All(present => !present) ? "713 Hz only on primary" : "Unexpected mirrored tone");
+                continue;
+            }
+            if (command != "measure") throw new InvalidDataException("Unknown tone probe request.");
+            await Task.WhenAll(outputs.Select(o => Observe713HzAsync(o.Id, CancellationToken.None)));
+            int[] gaps = await Task.WhenAll(outputs.Select(o => MeasureToneGapsAsync(o.Id, CancellationToken.None)));
+            string report = string.Join(", ", outputs.Select((o, index) => $"{o.Name} ({gaps[index]} quiet 10 ms intervals/2 s)"));
+            Console.WriteLine(gaps.Skip(1).All(g => g <= gaps[0] + 1) ? "713 Hz on " + report : "Playback gaps on " + report);
+        }
+    }
+
     private static async Task MovableToneAsync(string? id)
     {
         while (!string.IsNullOrEmpty(id))
@@ -99,11 +150,11 @@ internal static partial class Program
             player.Init(new SignalGenerator(48000, 2) { Gain = 0.013, Frequency = 713, Type = SignalGeneratorType.Sin }.ToWaveProvider());
             player.Play();
             Console.WriteLine("ready");
-            id = await Console.In.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(35));
+            id = await Console.In.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(75));
         }
     }
 
-    private static async Task Observe713HzAsync(string endpoint, CancellationToken token)
+    private static async Task Observe713HzAsync(string endpoint, CancellationToken token, TimeSpan? timeout = null)
     {
         using var device = WasapiDeviceLease.Open(endpoint);
         using var recorder = new WasapiLoopbackCapture(device.Device);
@@ -124,7 +175,7 @@ internal static partial class Program
             if (power > count * 1e-10 && (sin * sin + cos * cos) / (power * count) > 0.38) detected.TrySetResult();
         };
         recorder.StartRecording();
-        try { await detected.Task.WaitAsync(TimeSpan.FromSeconds(5), token); }
+        try { await detected.Task.WaitAsync(timeout ?? TimeSpan.FromSeconds(5), token); }
         finally { recorder.StopRecording(); }
     }
 

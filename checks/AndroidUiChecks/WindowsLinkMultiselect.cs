@@ -79,6 +79,29 @@ internal static partial class Program
                 "a failed replacement keeps A's confirmed stream and mute lease");
             Check((await Set()).Success && Selected().SetEquals([local]) && released == acquired && captures.Count == 0,
                 "empty selection restores System, releases the mute and closes the capture");
+            Check((await Set(local, aOut, bOut)).Success && SavedPlaybackStore.ReadAll().Values.Any(choice =>
+                choice.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([local, aOut, bOut])),
+                "a saved PC group contains the paired identities of both Windows receivers");
+            foreach (var stream in sender.GetOutgoingAppStreams(child.Id)) await sender.StopStreamAsync(stream.Id);
+            await sender.DisconnectAsync(bId);
+            await WaitAsync(() => !sender.Peers.Single(p => p.Id == bId).Connected);
+            var restorer = assembly.GetType("SonicRoute.AppPlaybackRestore", true)!;
+            var stopRestore = restorer.GetMethod("StopAsync", bindings)!.CreateDelegate<Func<Task>>();
+            await stopRestore(); // Discard the previous instance's in-memory record of applied groups.
+            restorer.GetMethod("Start", bindings)!.Invoke(null, null);
+            var session = restorer.GetMethod("SessionCreated", bindings)!.CreateDelegate<Action<int>>();
+            try
+            {
+                session(child.Id);
+                await WaitAsync(() => Selected().SetEquals([local, aOut]));
+                Check(true, "restart restores the available PC and connected peer while another saved peer is offline");
+                await ReconnectB();
+                session(child.Id); // The silent child has no real WASAPI playback session in this fixture.
+                await WaitAsync(() => Selected().SetEquals([local, aOut, bOut]));
+                Check(true, "a returning paired receiver rejoins the saved group with its stable device identity");
+            }
+            finally { await stopRestore(); }
+            Check((await Set()).Success, "single local playback clears the restored peer group");
             grant = false;
             Check(!(await Set(aOut)).Success && Selected().SetEquals([local]) && sender.Streams.Length == 0,
                 "a single receiver never silently becomes a shared output when isolation fails");

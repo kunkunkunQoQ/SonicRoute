@@ -7,9 +7,68 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using SonicRoute;
+using SonicRoute.Core;
 
 internal static partial class Program
 {
+    private static void CheckTrayWheelPause()
+    {
+        // The launcher has already attached this process to a private desktop and config directory.
+        var app = (App)Application.Current;
+        var wheelField = typeof(App).GetField("_trayWheel", Instance)!;
+        var menuField = typeof(App).GetField("_trayMenu", Instance)!;
+        var buildPause = typeof(App).GetMethod("AddTrayWheelPause", Instance)!;
+        var wheelType = wheelField.FieldType;
+        var handle = wheelType.GetField("_hook", Instance)!;
+        using var wheel = (IDisposable)Activator.CreateInstance(wheelType, Instance, null, new object?[] { null }, null)!;
+        using var shortcut = new MouseHotkeyHook();
+        shortcut.Reload(new Dictionary<string, string> { ["WheelUp"] = "check" });
+        Check(shortcut.IsInstalled, "private desktop registers the independent wheel shortcut");
+        var config = ConfigService.Load();
+        bool original = config.TrayWheelPaused;
+        bool Hooked() => (IntPtr)handle.GetValue(wheel)! != IntPtr.Zero;
+        void Click()
+        {
+            var menu = new ContextMenu();
+            menuField.SetValue(app, menu);
+            buildPause.Invoke(app, new object[] { menu });
+            menu.IsOpen = true;
+            ((MenuItem)menu.Items[0]).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Check(!menu.IsOpen, "product tray menu accepted the click");
+        }
+        bool Saved()
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(ConfigService.ConfigPath));
+            return json.RootElement.GetProperty("TrayWheelPaused").GetBoolean();
+        }
+        var previousWheel = wheelField.GetValue(app);
+        var previousMenu = menuField.GetValue(app);
+        try
+        {
+            wheelField.SetValue(app, wheel);
+            config.TrayWheelPaused = true;
+            Check(ConfigService.TrySave(config), "test profile saved paused state");
+            Call(wheel, "Start");
+            Check(!Hooked(), "persisted pause skips native hook installation");
+            Click();
+            Check(Hooked() && !Saved(), "resume installs the native hook and saves the setting");
+            using (File.Open(ConfigService.ConfigPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) Click();
+            Check(Hooked() && !config.TrayWheelPaused && !Saved(), "a failed save restores the prior hook and setting");
+            var pending = wheelType.GetField("_pendingDelta", Instance)!;
+            pending.SetValue(wheel, 120);
+            Click();
+            Check(!Hooked() && Saved() && (int)pending.GetValue(wheel)! == 0, "pause unregisters, clears queued input and persists");
+            Check(shortcut.IsInstalled, "pausing the tray wheel leaves its independent shortcut installed");
+        }
+        finally
+        {
+            wheelField.SetValue(app, previousWheel);
+            menuField.SetValue(app, previousMenu);
+            config.TrayWheelPaused = original;
+            ConfigService.TrySave(config);
+        }
+    }
+
     private static void CheckTraySubmenuPlacement(string directory)
     {
         var menus = typeof(App).Assembly.GetType("SonicRoute.ConvenienceMenus", true)!;
@@ -18,6 +77,8 @@ internal static partial class Program
         var named = typeof(App).GetMethod("TrayNamedHeader", BindingFlags.Static | BindingFlags.NonPublic)!;
         var theme = typeof(App).Assembly.GetType("SonicRoute.ThemeService")!.GetMethod("Apply", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
             null, new[] { typeof(string), typeof(string) }, null)!;
+        theme.Invoke(null, new object[] { "light", "blue" });
+        CheckTrayWheelPause();
         MenuItem Item(string text) => (MenuItem)item.Invoke(null, new object[] { text })!;
         void Name(MenuItem entry, string text) => named.Invoke(null, new object[] { entry, text });
         var names = new[]

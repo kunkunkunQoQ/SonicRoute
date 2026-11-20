@@ -39,7 +39,22 @@ internal static partial class Program
         string speakerId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker");
         string bluetoothId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), bluetooth.Key);
         string otherId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(other), "speaker");
+        string currentId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "current");
+        string otherCurrent = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(other), "current");
         var initial = readOutputs();
+        static bool ImmediatelyBefore(IEnumerable<string> values, string current, string speaker)
+        {
+            var ids = values.ToArray();
+            int index = Array.IndexOf(ids, speaker);
+            return index > 0 && ids[index - 1] == current;
+        }
+        Check(ImmediatelyBefore(initial.Select(d => d.Id), currentId, speakerId)
+            && ImmediatelyBefore(initial.Select(d => d.Id), otherCurrent, otherId)
+            && ImmediatelyBefore(initial.Select(d => d.Id), speakerId, bluetoothId),
+            "each handset groups its current output immediately before its own speaker and Bluetooth devices");
+        Check(initial.Count(d => d.Id == currentId) == 1 && initial.Count(d => d.Id == otherCurrent) == 1
+            && initial.Single(d => d.Id == currentId).DisplayName != initial.Single(d => d.Id == otherCurrent).DisplayName,
+            "each connected phone has one distinguishable current media output");
         Check(initial.Single(d => d.Id == speakerId).DisplayName == "小米13 扬声器"
             && initial.Single(d => d.Id == bluetoothId).DisplayName == "耳机 (小米13 · 蓝牙)"
             && initial.Single(d => d.Id == otherId).DisplayName == "备用手机 扬声器",
@@ -52,7 +67,7 @@ internal static partial class Program
             "renaming refreshes speaker and Bluetooth labels without changing endpoint identities");
 
         var manager = (AndroidAudioManager)host.GetProperty("Sources", statics)!.GetValue(null)!;
-        var first = AddFixture(manager, device, music);
+        var first = AddFixture(manager, device, music, key => new[] { device, other }.FirstOrDefault(d => AndroidDeviceIdentity.Key(d) == key));
         var second = AddFixture(manager, device, music with { Package = "cn.test.video", Name = "Video", Uid = 1002 });
         var neighbour = AddFixture(manager, other, music);
         var firstInfo = ExternalApps().Single(a => a.ExternalSourceId == first.Id);
@@ -87,8 +102,9 @@ internal static partial class Program
             merged.Single(d => d.Id == otherId), merged.Single(d => d.Id == bluetoothId) };
         config.DeviceNames[speakerId] = "桌面扬声器";
         var androidChoices = ((IEnumerable<AudioDeviceInfo>)outputsForApp.Invoke(null, [firstInfo, reordered])!).ToArray();
-        Check(androidChoices.Select(endpoint => endpoint.Id).SequenceEqual(reordered.Where(d => d.Id != otherId).Select(d => d.Id))
-            && androidChoices[1].DisplayName == "桌面扬声器",
+        Check(androidChoices.Select(endpoint => endpoint.Id).SequenceEqual(new[] { windows[0].Id, AndroidAudioSession.SourcePhoneOutputId,
+                speakerId, windows[1].Id, bluetoothId })
+            && androidChoices[2].DisplayName == "桌面扬声器",
             "Android uses the shared order and device aliases for the endpoints it can reach");
         config.DeviceNames.Remove(speakerId);
         var panel = new QuickPanelModernWindow();
@@ -102,19 +118,32 @@ internal static partial class Program
             config.HiddenOutputDevices.Add(otherId);
             IEnumerable<string> Choices(AudioAppInfo info) => ((IEnumerable<AudioDeviceInfo>)rowPlaybackDevices.Invoke(panel, [info, config])!)
                 .Select(endpoint => endpoint.Id);
-            Check(Choices(pcInfo).SequenceEqual(Choices(airPlayInfo)) && !Choices(airPlayInfo).Contains(otherId),
+            Check(Choices(pcInfo).SequenceEqual(Choices(airPlayInfo)) && !Choices(airPlayInfo).Contains(otherId)
+                && Choices(pcInfo).Count(id => id == currentId) == 1 && Choices(airPlayInfo).Count(id => id == otherCurrent) == 1,
                 "PC apps and AirPlay use identical visible playback choices with hidden outputs respected");
+            Check(ImmediatelyBefore(Choices(pcInfo), currentId, speakerId)
+                && ImmediatelyBefore(Choices(airPlayInfo), currentId, speakerId)
+                && Choices(pcInfo).Where(id => windows.Any(w => w.Id == id)).SequenceEqual(windows.Select(w => w.Id)),
+                "quick-panel PC and AirPlay share current-before-speaker ordering while Windows devices retain their order");
+            var shift = typeof(QuickPanelModernWindow).GetMethod("SelectPlaybackRange", statics)!;
+            var selectedRange = (string[])shift.Invoke(null, [Choices(pcInfo).ToArray(), new HashSet<string> { currentId },
+                bluetoothId, currentId, System.Windows.Input.ModifierKeys.Shift])!;
+            Check(selectedRange.SequenceEqual(new[] { currentId, speakerId, bluetoothId }),
+                "Shift from phone current output to Bluetooth includes exactly that handset's three displayed targets");
             config.HiddenOutputDevices.Remove(otherId);
             typeof(QuickPanelModernWindow).GetMethod("RefreshAndroidRow", Hidden)!.Invoke(panel, [false]);
             var root = (FrameworkElement)((ItemsControl)panel.FindName("AppListPanel")).Items[0];
             Descendants<ToggleButton>(root).Single().IsChecked = true;
             var pills = Descendants<Button>(root).Where(b => b.Tag is AudioDeviceInfo).ToArray();
-            Check(pills.Length == 4
+            Check(pills.Count(b => ((AudioDeviceInfo)b.Tag).Id == AndroidAudioSession.SourcePhoneOutputId) == 1
+                && pills.All(b => ((AudioDeviceInfo)b.Tag).Id != currentId)
+                && pills.Count(b => ((AudioDeviceInfo)b.Tag).Id == otherCurrent) == 1
                 && pills.Count(b => ((AudioDeviceInfo)b.Tag).Id == speakerId) == 1
                 && pills.Count(b => ((AudioDeviceInfo)b.Tag).Id == bluetoothId) == 1
                 && pills.All(b => !AndroidOutputIdentity.IsPhoneOutput(((AudioDeviceInfo)b.Tag).Id)
-                    || ((AudioDeviceInfo)b.Tag).Id == speakerId || ((AudioDeviceInfo)b.Tag).Id == bluetoothId),
-                "incoming quick-panel choices include PC endpoints plus this source phone's speaker and Bluetooth devices");
+                    || ((AudioDeviceInfo)b.Tag).Id == speakerId || ((AudioDeviceInfo)b.Tag).Id == bluetoothId
+                    || ((AudioDeviceInfo)b.Tag).Id == otherCurrent),
+                "incoming quick panel exposes native playback once, the source's physical outputs, and the other phone's current output");
             var speakerPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId);
             var btPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == bluetoothId);
             Check(speakerPill.Content?.ToString() == "我的小米13 扬声器"
@@ -132,7 +161,13 @@ internal static partial class Program
             CheckAndroidPeakMeter(panel, first, second, store, device, music);
 
             typeof(PhoneAudioWindow).GetMethod("EnsurePcDropZones", Hidden)!.Invoke(phone, [true]);
-            Check(Descendants<TextBlock>((Grid)phone.FindName("PcDropZonesGrid")).Any(t => t.Text == "仅在小米13 扬声器播放"),
+            var currentZone = (Border)phone.FindName("PcCurrentOutputDropZone");
+            var speakerZone = (Border)phone.FindName("PcSpeakerDropZone");
+            var btZone = (Border)phone.FindName("PcBluetoothDropZone_1");
+            Check(Grid.GetRow(currentZone) == 0 && Grid.GetRow(speakerZone) == 1 && Grid.GetRow(btZone) == 2
+                && Equals(currentZone.Tag, currentId) && Equals(speakerZone.Tag, speakerId) && Equals(btZone.Tag, bluetoothId),
+                "drop cells retain endpoint identities and stable names while putting current output at the top");
+            Check(Descendants<TextBlock>((Grid)phone.FindName("PcDropZonesGrid")).Any(t => t.Text == string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"), "小米13 扬声器")),
                 "phone drop feedback uses the same friendly speaker name");
 
             typeof(MainWindow).GetField("_outputs", Hidden)!.SetValue(main, windows.Concat(readOutputs()).ToList());
@@ -143,16 +178,29 @@ internal static partial class Program
             var apps = (ListBox)main.FindName("AppsListBox"); apps.ItemsSource = items; apps.SelectedIndex = 0;
             Pump((Task)typeof(MainWindow).GetMethod("RefreshAppsSelectionAsync", Hidden)!.Invoke(main, null)!);
             var combo = (ComboBox)main.FindName("AppsOutputCombo");
-            Check(combo.Items.OfType<AudioDeviceInfo>().Count(d => AndroidOutputIdentity.IsPhoneOutput(d.Id)) == 2
+            var mainOrder = combo.Items.OfType<AudioDeviceInfo>().Select(d => d.Id).ToArray();
+            Check(ImmediatelyBefore(mainOrder, AndroidAudioSession.SourcePhoneOutputId, speakerId)
+                && ImmediatelyBefore(mainOrder, speakerId, bluetoothId)
+                && mainOrder.Contains(otherCurrent) && !mainOrder.Contains(currentId),
+                "main-window Android list uses the native current identity once in the source handset group");
+            Check(combo.Items.OfType<AudioDeviceInfo>().Count(d => AndroidOutputIdentity.IsPhoneOutput(d.Id)) == 3
                 && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId).DisplayName == "小米13 扬声器"
                 && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == bluetoothId).DisplayName == "耳机 (小米13 · 蓝牙)",
-                "full app details expose the source phone speaker and Bluetooth devices without foreign phone routes");
+                "full app details expose the source's speaker and Bluetooth devices plus the other phone's current media route");
             Check(((ItemsControl)main.FindName("AppsOutputQuickPanel")).Items.OfType<Button>()
                 .Count(b => b.Tag is AudioDeviceInfo d && (d.Id == speakerId || d.Id == bluetoothId)) == 2,
                 "full app quick device buttons include both the source phone speaker and Bluetooth device");
 
             var apply = UnifiedAudio.GetMethod("ApplyEndpointAsync", statics)!;
             var app = ExternalApps().Single(a => a.ExternalSourceId == first.Id);
+            foreach (string target in new[] { otherCurrent, currentId })
+            {
+                var change = (Task<(bool Success, int HResult, string Message)>)apply.Invoke(null, [app, EDataFlow.eRender, target])!;
+                Pump(change);
+                Check(change.Result.Success && ((IMultiOutputAudioSession)first.Session).GetOutputs()
+                    .SequenceEqual([target == currentId ? AndroidAudioSession.SourcePhoneOutputId : otherCurrent]),
+                    "incoming selection routes to " + (target == currentId ? "the source handset natively" : "the second handset's current output"));
+            }
             var rejected = (Task<(bool Success, int HResult, string Message)>)apply.Invoke(null, [app, EDataFlow.eRender, otherId])!;
             Pump(rejected);
             Check(!rejected.Result.Success && manager.Sources.Count == 3,
@@ -208,8 +256,13 @@ internal static partial class Program
             panelType.GetField("_readPanelState", Hidden)!.SetValue(panel,
                 (Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted, bool MuteKnown)> Apps, bool? AllMuted)>)
                 (ids => (ids.ToDictionary(id => id, _ => (50, false, true)), false)));
+            int pcReads = 0;
             panelType.GetField("_readRowEndpoints", Hidden)!.SetValue(panel,
-                (Func<int, bool, (string Output, string Input)>)((_, _) => (speakerId, AudioService.SystemDefaultInputDeviceId)));
+                (Func<int, bool, (string Output, string Input)>)((_, _) =>
+                {
+                    Interlocked.Increment(ref pcReads);
+                    return (speakerId, AudioService.SystemDefaultInputDeviceId);
+                }));
             panelType.GetField("_micUiOn", Hidden)!.SetValue(panel, true);
             panelType.GetField("_inputDisplay", Hidden)!.SetValue(panel, new List<AudioDeviceInfo>
             {
@@ -227,6 +280,30 @@ internal static partial class Program
                 && desktopButtons.Where(button => button.Style == panel.FindResource("DevButtonActive"))
                     .Select(button => ((AudioDeviceInfo)button.Tag).Id).SequenceEqual([speakerId, AudioService.SystemDefaultInputDeviceId]),
                 "native expansion preserves normal playback order, the selected phone output, and an independent microphone choice");
+            Check(desktopButtons.Count(button => ((AudioDeviceInfo)button.Tag).Id == currentId && button.IsEnabled) == 1,
+                "a native Windows application exposes one enabled current-output button for the selected phone");
+            int before = Volatile.Read(ref pcReads);
+            second.Session.SetVolume(31);
+            neighbour.Session.SetVolume(59);
+            DrainUi();
+            Check(Volatile.Read(ref pcReads) == before && desktopButtons.All(button => button.IsEnabled),
+                "coalesced volume changes keep the unrelated native output choices ready without endpoint reads");
+            var reportRoute = UnifiedAudio.GetMethod("NotifyRouteChanged", statics)!;
+            reportRoute.Invoke(null, [(int)pcInfo.ProcessId - 1]); DrainUi();
+            Check(Volatile.Read(ref pcReads) == before, "a different native app's route leaves the expanded row alone");
+            reportRoute.Invoke(null, [(int)pcInfo.ProcessId]); DrainUi();
+            Until(() => Volatile.Read(ref pcReads) > before && desktopButtons.All(button => button.IsEnabled));
+            var combine = UnifiedAudio.GetMethod("CombineExternalMute", statics)!;
+            second.Session.SetMute(true); neighbour.Session.SetMute(true);
+            Check((bool)combine.Invoke(null, [true])! && !(bool)combine.Invoke(null, [false])!,
+                "confirmed native batch mute includes both remote sources");
+            neighbour.Session.SetMute(false);
+            Check(!(bool)combine.Invoke(null, [true])!, "an unmuted remote overrides a muted native batch");
+            discovery.Publish([device, other with { State = "offline" }]); DrainUi();
+            var onlineOnly = windows.Concat(readOutputs()).ToList();
+            foreach (var info in new[] { pcInfo, airPlayInfo, firstInfo })
+                Check(!((IEnumerable<AudioDeviceInfo>)outputsForApp.Invoke(null, [info, onlineOnly])!).Any(d => d.Id == otherCurrent),
+                    "disconnect removes the destination handset's current output from " + info.ProcessName);
             Pump(store.FlushAsync());
             File.WriteAllText(Path.Combine(output, "speaker-routing.json"), JsonSerializer.Serialize(new
             { Passed = true, Assertions = _checks, Scans = scans, RealPhoneAccess = false,

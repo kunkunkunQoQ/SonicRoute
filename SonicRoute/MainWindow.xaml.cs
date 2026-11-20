@@ -98,6 +98,7 @@ namespace SonicRoute
 
         public MainWindow()
         {
+            App.EnsureWindowResources();
             var swInit = System.Diagnostics.Stopwatch.StartNew();
             InitializeComponent();
             swInit.Stop();

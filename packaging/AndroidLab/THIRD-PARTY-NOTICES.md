@@ -41,7 +41,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ### Current .NET Dependencies and Historical Apache-2.0 Lab Files
 
-- **Current `.NET` NuGet dependencies** (`SonicRoute`, `SonicRoute.Core`, `SonicRoute.AndroidAudio`, `StoreInterop`): `System.Management 8.0.0` (MIT), `System.Text.Json 8.0.5` (MIT, `net48` target), `Microsoft.Windows.CsWinRT 2.3.1` (MIT), `QRCoder 1.7.0` (MIT, Full only), `NAudio.Wasapi 2.2.1` / `NAudio.Core 2.2.1` (MIT + Ray Molenkamp zlib source notice, Full only), and `Concentus 2.2.2` (BSD-style / Opus license, Full only). All retain their original permissive licenses.
+- **Current `.NET` NuGet dependencies** (`SonicRoute`, `SonicRoute.Core`, `SonicRoute.AndroidAudio`, `StoreInterop`): `System.Management 8.0.0` (MIT), `System.Text.Json 8.0.5` (MIT, `net48` target), `Microsoft.Windows.CsWinRT 2.3.1` (MIT), `QRCoder 1.7.0` (MIT, Full only), `NAudio.Wasapi 2.2.1` / `NAudio.Core 2.2.1` (MIT + Ray Molenkamp zlib source notice, Full / Lite / Legacy), and `Concentus 2.2.2` (BSD-style / Opus license, Full only). All retain their original permissive licenses.
 - **Historical `packaging/AndroidLab/native/` integration patches and helpers**: Files carrying `SPDX-License-Identifier: Apache-2.0` (including `virtual_resize.patch`, `OwnedAppMonitor.java`, `OwnedDisplayPolicy.java`, `PairingControl.java`, `PhoneDisplaySizing.java`, `UnicodeInputBridge.java`, `flex_resize.h`, `ime_routing.h`, `mirror_resize.h`, and `resize_packet.h`) remain under **Apache-2.0** and are not relicensed.
 
 ## Concentus 2.2.2

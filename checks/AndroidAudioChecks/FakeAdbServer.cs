@@ -338,6 +338,7 @@ internal sealed class FakeAdbServer : IAsyncDisposable
                 if (BeforeRouteReport != null) await BeforeRouteReport(target).WaitAsync(token).ConfigureAwait(false);
                 await SendV2PacketAsync(stream, 1, target == "bt:aa"
                     ? "{\"routed\":{\"target\":\"bt:aa\",\"preferredApplied\":true,\"id\":5,\"type\":8,\"name\":\"Headphones\",\"key\":\"bt:aa\"}}\n"u8.ToArray()
+                    : target == "current" ? "{\"routed\":{\"target\":\"current\",\"preferredApplied\":true,\"id\":5,\"type\":8,\"name\":\"Headphones\",\"key\":\"current\"}}\n"u8.ToArray()
                     : "{\"routed\":{\"target\":\"speaker\",\"preferredApplied\":true,\"bufferFrames\":7688,\"startThresholdFrames\":960,\"id\":3,\"type\":2,\"name\":\"Speaker\",\"key\":\"speaker\"}}\n"u8.ToArray(),
                     token).ConfigureAwait(false);
                 await PumpStdinPacketsAsync(stream, token, async line =>

@@ -370,7 +370,8 @@ namespace SonicRoute.Core
                     var global = ReadAllMutedCore();
                     allMuted = global.Known ? global.Muted : null;
                     failed |= !global.Known && _renderVolumes.Count != 0;
-                    failed |= !_snapshotComplete || _snapshotGeneration != Volatile.Read(ref _cacheGeneration);
+                    if (!_snapshotComplete || _snapshotGeneration != Volatile.Read(ref _cacheGeneration))
+                    { allMuted = null; failed = true; }
                 }
                 if (!failed || attempt != 0) return (states, allMuted);
             }

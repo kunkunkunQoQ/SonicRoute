@@ -300,11 +300,15 @@ internal static partial class Program
             selector.SelectedItem = selector.Items.OfType<AndroidDevice>().Single();
             DrainUi();
             Check(image.Source == null, "leaving AirPlay releases the decoded cover");
-            Check(Drag(panel, overlay, data, drop: false) == DragDropEffects.Copy
-                && Drag(panel, overlay, data, drop: true) == DragDropEffects.Copy, "AirPlay drag accepts the selected Android speaker zone");
-            var speaker = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker");
-            Until(() => SelectedOutput() == speaker);
-            Check(!lifetime.IsCancellationRequested, "dropping on the Android speaker routes the same source without ending it");
+            foreach (string sink in new[] { "current", "speaker" })
+            {
+                string endpoint = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), sink);
+                Check(Drag(panel, overlay, data, drop: false) == DragDropEffects.Copy, "AirPlay drag opens Android drop targets for " + sink);
+                Point center = PhoneDropCellCenter(panel, endpoint);
+                Check(Drag(panel, overlay, data, drop: true, center) == DragDropEffects.Copy, "AirPlay accepts the " + sink + " drop");
+                Until(() => SelectedOutput() == endpoint);
+                Check(!lifetime.IsCancellationRequested, "the same AirPlay session routes to the exact " + sink + " endpoint");
+            }
 
             var mixer = (FrameworkElement)quick.FindName("AppListScroll");
             var back = new DataObject("SonicRoute.AirPlayToWindows.v1", info);
@@ -326,11 +330,11 @@ internal static partial class Program
             Pump(receiver.DisposeAsync().AsTask());
         }
 
-        static DragDropEffects Drag(FrameworkElement target, FrameworkElement coordinates, DataObject data, bool drop)
+        static DragDropEffects Drag(FrameworkElement target, FrameworkElement coordinates, DataObject data, bool drop, Point? position = null)
         {
             var routed = drop ? System.Windows.DragDrop.PreviewDropEvent : System.Windows.DragDrop.PreviewDragOverEvent;
             var args = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs), instance, null,
-                [data, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy | DragDropEffects.Move, coordinates, new Point(20, 20)], null)!;
+                [data, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy | DragDropEffects.Move, coordinates, position ?? new Point(20, 20)], null)!;
             args.RoutedEvent = routed;
             target.RaiseEvent(args);
             return args.Effects;

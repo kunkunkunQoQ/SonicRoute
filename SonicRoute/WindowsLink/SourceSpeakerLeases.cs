@@ -10,7 +10,7 @@ using SonicRoute.AndroidAudio;
 namespace SonicRoute;
 
 // Fallback for a shared speaker. Own only the endpoint mute, never the application's route or session volume.
-internal sealed class SourceSpeakerLeases(Func<int, string?> findSpeaker,
+internal sealed class SourceSpeakerLeases(Func<int, (string? Endpoint, bool Active)> findSpeaker,
     Func<string, (bool Muted, bool Known)> readMute, Func<string, bool, bool> setMute)
 {
     private readonly ConcurrentDictionary<string, Speaker> _speakers = new(StringComparer.OrdinalIgnoreCase);
@@ -24,16 +24,19 @@ internal sealed class SourceSpeakerLeases(Func<int, string?> findSpeaker,
         if (_speakers.TryGetValue(endpoint, out var speaker)) Volatile.Write(ref speaker.UserUnmuted, true);
     }
 
-    internal IPcProcessSilenceLease? Acquire(int pid)
+    internal IPcProcessSilenceLease? Acquire(int pid, string? expected, bool requirePlayback)
     {
         lock (LocalSilenceLeasePool.Gate)
         {
-            string? endpoint = findSpeaker(pid);
-            return endpoint == null ? null : AcquireEndpoint(endpoint, pid);
+            var (endpoint, active) = findSpeaker(pid);
+            if (endpoint == null || !string.Equals(endpoint, expected, StringComparison.OrdinalIgnoreCase) || (requirePlayback && !active)) return null;
+            return AcquireEndpointCore(endpoint, pid, requirePlayback);
         }
     }
 
-    internal IPcProcessSilenceLease? AcquireEndpoint(string endpoint, int pid = 0)
+    internal IPcProcessSilenceLease? AcquireEndpoint(string endpoint, int pid = 0) => AcquireEndpointCore(endpoint, pid, false);
+
+    private IPcProcessSilenceLease? AcquireEndpointCore(string endpoint, int pid, bool requirePlayback)
     {
         lock (LocalSilenceLeasePool.Gate)
         {
@@ -54,7 +57,7 @@ internal sealed class SourceSpeakerLeases(Func<int, string?> findSpeaker,
                 {
                     if (!before.Muted) speaker.ChangedMute = true;
                     if (pid != 0) lease.Watch = ObservePlayback?.Invoke(pid, endpoint, lease.Invalidate);
-                    if (IsMuted(speaker) && IsStillOnSpeaker(lease))
+                    if (IsMuted(speaker) && IsStillOnSpeaker(lease, requirePlayback))
                     {
                         lease.Watch?.Refresh();
                         if (!lease.Invalidated.IsCancellationRequested && !UserChanged(speaker)) return lease;
@@ -73,8 +76,12 @@ internal sealed class SourceSpeakerLeases(Func<int, string?> findSpeaker,
 
     private static bool UserChanged(Speaker speaker) => Volatile.Read(ref speaker.UserUnmuted);
     private bool IsMuted(Speaker speaker) => !UserChanged(speaker) && readMute(speaker.Id) is (true, true);
-    private bool IsStillOnSpeaker(Lease lease) =>
-        lease.Pid == 0 || string.Equals(findSpeaker(lease.Pid), lease.Speaker.Id, StringComparison.OrdinalIgnoreCase);
+    private bool IsStillOnSpeaker(Lease lease, bool requirePlayback = false)
+    {
+        if (lease.Pid == 0) return true;
+        var (endpoint, active) = findSpeaker(lease.Pid);
+        return (!requirePlayback || active) && string.Equals(endpoint, lease.Speaker.Id, StringComparison.OrdinalIgnoreCase);
+    }
 
     internal void Revalidate()
     {

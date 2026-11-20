@@ -117,7 +117,8 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             {
                 ThrowIfEnded();
                 if (string.Equals(_target, target, StringComparison.OrdinalIgnoreCase)) return;
-                if (!_outputs.Any(s => string.Equals(s.Key, target, StringComparison.OrdinalIgnoreCase)))
+                if (!string.Equals(target, AndroidOutputSink.Current.Key, StringComparison.OrdinalIgnoreCase)
+                    && !_outputs.Any(s => string.Equals(s.Key, target, StringComparison.OrdinalIgnoreCase)))
                     throw AndroidError.WithCode(new IOException("所选手机输出设备未连接。"), AndroidErrorCode.SelectedPhoneOutputDisconnected);
                 _target = target;
                 verified = (_verified = new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;

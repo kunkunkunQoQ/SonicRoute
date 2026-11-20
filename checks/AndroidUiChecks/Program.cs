@@ -58,21 +58,22 @@ internal static partial class Program
                 Pump(WindowsLinkClipboardChecksAsync());
                 return 0;
             }
-            int privateStation = Array.IndexOf(args, "--windows-link-clipboard-native");
+            if (args.Contains("--playback-selection")) { CheckPlaybackRange(); return 0; }
+            int privateStation = Array.FindIndex(args, arg => arg is "--windows-link-clipboard-native" or "--desktop-clipboard-native");
             if (privateStation >= 0)
             {
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
                 Pump(NativeClipboardFixture.Run(args[privateStation + 1]));
                 return 0;
             }
-            if (args.Contains("--windows-link-silence"))
+            if (args.Contains("--windows-link-silence") || args.Contains("--playback-silence"))
             {
                 CheckSilenceLeaseFailures();
                 Task.Run(CheckDormantPlaybackWatch).GetAwaiter().GetResult();
                 return 0;
             }
             bool linkOutputs = args.Contains("--windows-link-push-ui") || args.Contains("--windows-link-incoming-outputs") || args.Contains("--kun-app-to-phone");
-            App app = args.Contains("--windows-connect-ui") || args.Contains("--windows-touch") || args.Contains("--android-files-ui") || args.Contains("--windows-link-ui") || linkOutputs || args.Contains("--windows-link-trust-live") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") ? new RoutingFixtureApp() : new App();
+            App app = args.Contains("--windows-connect-ui") || args.Contains("--windows-touch") || args.Contains("--android-files-ui") || args.Contains("--windows-link-ui") || linkOutputs || args.Contains("--windows-link-trust-live") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") || args.Contains("--interaction-audit") || args.Contains("--device-actions") ? new RoutingFixtureApp() : new App();
             if (app is RoutingFixtureApp)
             { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
@@ -344,14 +345,23 @@ internal static partial class Program
             }
         }
     }
-    private static AndroidAudioSource AddFixture(AndroidAudioManager manager, AndroidDevice device, AndroidApp app)
+    private static AndroidAudioSource AddFixture(AndroidAudioManager manager, AndroidDevice device, AndroidApp app,
+        Func<string, AndroidDevice?>? resolvePhone = null)
     {
-        var session = new AndroidAudioSession(() => throw new InvalidOperationException("Offline UI fixture"), (_, _) => throw new InvalidOperationException("Offline UI fixture"));
+        var session = new AndroidAudioSession(() => throw new InvalidOperationException("Offline UI fixture"),
+            (_, _) => throw new InvalidOperationException("Offline UI fixture"), resolvePhone: resolvePhone);
         typeof(AndroidAudioSession).GetField("_state", Hidden)!.SetValue(session, new AndroidAudioState(CaptureState.Receiving, device, app));
         var source = (AndroidAudioSource)Activator.CreateInstance(typeof(AndroidAudioSource), BindingFlags.NonPublic | BindingFlags.Instance, null, new object[] { device, app, session, true }, null)!;
         var started = (TaskCompletionSource<AndroidAudioSource>)typeof(AndroidAudioSource).GetField("Started", Hidden)!.GetValue(source)!;
         started.TrySetResult(source);
-        Action<AndroidAudioState> handler = _ => Notify(manager);
+        var stage = session.State.State;
+        var notify = typeof(AndroidAudioManager).GetMethod("NotifySource", Hidden)!.CreateDelegate<Action<string?>>(manager);
+        Action<AndroidAudioState> handler = state =>
+        {
+            bool stageChanged = stage != state.State;
+            stage = state.State;
+            notify(stageChanged ? null : source.Id);
+        };
         typeof(AndroidAudioSource).GetField("Handler", Hidden)!.SetValue(source, handler); session.Changed += handler;
         ((List<AndroidAudioSource>)typeof(AndroidAudioManager).GetField("_sources", Hidden)!.GetValue(manager)!).Add(source);
         typeof(AndroidAudioManager).GetMethod("PublishSources", Hidden)!.Invoke(manager, null);

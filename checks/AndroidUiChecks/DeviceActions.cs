@@ -38,8 +38,8 @@ internal static partial class Program
             Pump((Task)Call(main, "InitializePhoneManagementAsync")!); Call(main, "SelectPhoneManagement");
             var page = (PhoneDevicePage)((Border)main.FindName("PhoneDetailsHost")).Child;
             var remove = (Button)page.FindName("RemoveDeviceButton");
-            Check(remove.IsEnabled && ((Button)page.FindName("UnpairButton")).Content?.ToString() == "取消配对"
-                && remove.Content?.ToString() == "移除设备" && !((Button)page.FindName("DisconnectButton")).IsEnabled,
+            Check(remove.IsEnabled && ((Button)page.FindName("UnpairButton")).Content?.ToString() == L10n.T("Phone.Unpair")
+                && remove.Content?.ToString() == L10n.T("Phone.DeleteDevice") && !((Button)page.FindName("DisconnectButton")).IsEnabled,
                 "offline phone exposes distinct local removal and remote unpair actions");
             foreach (string theme in new[] { "light", "dark" })
             {
@@ -154,12 +154,20 @@ internal static partial class Program
         finally { phone.Close(); main.Close(); }
     }
 
+    private static Point PhoneDropCellCenter(PhoneAudioWindow phone, string endpoint)
+    {
+        phone.UpdateLayout();
+        var grid = (Grid)phone.FindName("PcDropZonesGrid");
+        var cell = grid.Children.OfType<Border>().Single(b => Equals(b.Tag, endpoint));
+        if (cell.ActualWidth <= 0 || cell.ActualHeight <= 0) throw new InvalidOperationException("Drop cell has no layout for " + endpoint);
+        return cell.TranslatePoint(new Point(cell.ActualWidth / 2, cell.ActualHeight / 2), (Border)phone.FindName("PcDropHighlight"));
+    }
+
     private static void CheckPcToPhoneOutputsAndDropGrid(MainWindow main, PhoneAudioWindow phone, AndroidPhoneStore store, AndroidDevice device, string output)
     {
         const BindingFlags statics = BindingFlags.NonPublic | BindingFlags.Static;
         var host = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!;
         var controller = typeof(App).Assembly.GetType("SonicRoute.AppIconDragController")!;
-        var applicationAudio = typeof(App).Assembly.GetType("SonicRoute.ApplicationAudio")!;
         var pcToPhone = (PcToPhoneAudioManager)host.GetProperty("PcToPhone", statics)!.GetValue(null)!;
         pcToPhone.EnableLiveStreaming = false;
 
@@ -171,6 +179,7 @@ internal static partial class Program
         string speakerTitle = string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"),
             string.Format(L10n.T("Phone.PcDropSpeakerTitle"), store.GetDisplayName(device)));
         string spkId = AndroidOutputIdentity.FormatDeviceId(phoneKey, "speaker");
+        string currentId = AndroidOutputIdentity.FormatDeviceId(phoneKey, "current");
         string btKey = "bt:8:AA:BB:CC:DD:EE:FF";
         string btId = AndroidOutputIdentity.FormatDeviceId(phoneKey, btKey);
 
@@ -178,24 +187,25 @@ internal static partial class Program
         {
             store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
             controller.GetMethod("SetDesktopDraggingForTest", statics)!.Invoke(null, [true]);
-            Render((FrameworkElement)phone.Content, 235, 450, Path.Combine(output, "phone-pc-drop-1cell.png"));
+            Render((FrameworkElement)phone.Content, 235, 450, Path.Combine(output, "phone-pc-drop-current-speaker.png"));
             DrainUi();
-            Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 1
-                && phone.FindName("PcSpeakerDropZone") is Border && phone.FindName("PcBluetoothDropZone_1") == null
+            Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 2
+                && phone.FindName("PcCurrentOutputDropZone") is Border && phone.FindName("PcSpeakerDropZone") is Border
+                && phone.FindName("PcBluetoothDropZone_1") == null
                 && Descendants<TextBlock>(grid).Any(t => t.Text == speakerTitle),
-                "phone panel shows a single speaker-only drop cell when no Bluetooth output is connected");
+                "online phone shows current and speaker drop targets without Bluetooth");
 
             var btScoDup = new AndroidOutputSink("bt:Xiaomi_Buds_4_Pro", AndroidOutputSinkKind.Bluetooth, 16, 7, "Xiaomi Buds 4 Pro", "00:00:00:00:00:00");
             var btSink = new AndroidOutputSink(btKey, AndroidOutputSinkKind.Bluetooth, 15, 8, "Xiaomi Buds 4 Pro", "AA:BB:CC:DD:EE:FF");
             store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker, btScoDup, btSink]);
-            Render((FrameworkElement)phone.Content, 235, 450, Path.Combine(output, "phone-pc-drop-2cells.png"));
+            Render((FrameworkElement)phone.Content, 235, 450, Path.Combine(output, "phone-pc-drop-with-bluetooth.png"));
             DrainUi();
-            Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 2
+            Check(overlay.Visibility == Visibility.Visible && grid.RowDefinitions.Count == 3
                 && phone.FindName("PcSpeakerDropZone") is Border && phone.FindName("PcBluetoothDropZone_1") is Border
                 && phone.FindName("PcBluetoothDropZone_2") == null
                 && Descendants<TextBlock>(grid).Any(t => t.Text == speakerTitle)
                 && Descendants<TextBlock>(grid).Any(t => t.Text == "仅在 Xiaomi Buds 4 Pro 播放"),
-                "connecting a playable Bluetooth device deduplicates SCO + A2DP and dynamically splits the phone drop overlay into speaker and Bluetooth cells");
+                "connecting a Bluetooth device deduplicates SCO + A2DP and adds one target below current and speaker");
 
             typeof(MainWindow).GetMethod("EnsureSettingsPage", Hidden)!.Invoke(main, null);
             typeof(MainWindow).GetMethod("SyncExternalOutputDevices", Hidden)!.Invoke(main, null);
@@ -219,27 +229,25 @@ internal static partial class Program
 
             var pcApp = new SonicRoute.Core.Models.AudioAppInfo { ProcessId = 42424, ProcessName = "cloudmusic", DisplayName = "网易云音乐" };
             var pcData = new DataObject("SonicRoute.PcApp.v1", pcApp);
-            double overlayHeight = overlay.ActualHeight > 0 ? overlay.ActualHeight : 260;
-
-            var overSpeaker = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs), BindingFlags.Instance | BindingFlags.NonPublic,
-                null, [pcData, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy | DragDropEffects.Move, overlay, new Point(20, overlayHeight * 0.25)], null)!;
-            overSpeaker.RoutedEvent = System.Windows.DragDrop.PreviewDragOverEvent;
-            typeof(PhoneAudioWindow).GetMethod("PhoneApp_DragOver", Hidden)!.Invoke(phone, [phone, overSpeaker]);
-            var cell0 = (Border)phone.FindName("PcSpeakerDropZone")!;
-            var cell1 = (Border)phone.FindName("PcBluetoothDropZone_1")!;
-            Check(overSpeaker.Handled && overSpeaker.Effects == DragDropEffects.Copy
-                && ReferenceEquals(cell0.Background, phone.FindResource("Theme.Overlay"))
-                && !ReferenceEquals(cell1.Background, phone.FindResource("Theme.Overlay")),
-                "dragging a PC app over the upper cell highlights only the phone speaker cell");
-
-            var dropBluetooth = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs), BindingFlags.Instance | BindingFlags.NonPublic,
-                null, [pcData, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy | DragDropEffects.Move, overlay, new Point(20, overlayHeight * 0.75)], null)!;
-            dropBluetooth.RoutedEvent = System.Windows.DragDrop.PreviewDropEvent;
-            typeof(PhoneAudioWindow).GetMethod("PhoneApp_Drop", Hidden)!.Invoke(phone, [phone, dropBluetooth]);
-            Pump(WaitUntilAsync(() => pcToPhone.GetPersistedEndpoint(42424) == btId, TimeSpan.FromSeconds(5)));
-            Check(dropBluetooth.Handled && dropBluetooth.Effects == DragDropEffects.Copy
-                && pcToPhone.GetPersistedEndpoint(42424) == btId,
-                "dropping a PC app onto a Bluetooth cell routes that PC app to the corresponding phone Bluetooth output device");
+            var targets = grid.Children.OfType<Border>().Where(cell => cell.Tag is string).OrderBy(Grid.GetRow).ToArray();
+            Check(targets.Select(cell => (string)cell.Tag).SequenceEqual([currentId, spkId, btId]),
+                "online phone orders the system media route, fixed speaker and Bluetooth as distinct IDs");
+            var dragOver = typeof(PhoneAudioWindow).GetMethod("PhoneApp_DragOver", Hidden)!;
+            foreach (var cell in targets)
+            {
+                var point = PhoneDropCellCenter(phone, (string)cell.Tag);
+                var over = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs), Hidden, null,
+                    [pcData, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy | DragDropEffects.Move, overlay, point], null)!;
+                over.RoutedEvent = System.Windows.DragDrop.PreviewDragOverEvent;
+                dragOver.Invoke(phone, [phone, over]);
+                Check(over.Handled && over.Effects == DragDropEffects.Copy
+                    && targets.Where(t => ReferenceEquals(t.Background, phone.FindResource("Theme.Overlay"))).SequenceEqual([cell]),
+                    "a PC drag over " + cell.Name + " highlights only its actual endpoint");
+            }
+            // The routed PC input is exercised with a real process in the native audio check.
+            // A stopped transport suffices here to verify that device loss retires an existing route.
+            Check(pcToPhone.RouteProcess(42424, spkId, device).Success && pcToPhone.GetPersistedEndpoint(42424) == spkId,
+                "an isolated route is present before the phone disconnects");
 
             store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
             DrainUi();
@@ -248,8 +256,8 @@ internal static partial class Program
             outputs = (IList<SonicRoute.Core.Models.AudioDeviceInfo>)typeof(MainWindow).GetField("_outputs", Hidden)!.GetValue(main)!;
             Check(outputs.Any(d => d.Id == spkId) && !outputs.Any(d => d.Id == btId)
                 && !filterList.Items.OfType<CheckBox>().Any(c => c.Tag is SonicRoute.Core.Models.AudioDeviceInfo d && d.Id == btId)
-                && grid.RowDefinitions.Count == 1 && phone.FindName("PcBluetoothDropZone_1") == null,
-                "disconnecting Bluetooth from the phone automatically removes the Bluetooth output device and collapses the drop cell back to 1");
+                && grid.RowDefinitions.Count == 2 && phone.FindName("PcBluetoothDropZone_1") == null,
+                "disconnecting Bluetooth leaves current and speaker drop targets");
 
             var cache = typeof(App).Assembly.GetType("SonicRoute.PhoneAudioWindowCache")!;
             var currentDevices = ((IReadOnlyList<AndroidDevice>)cache.GetProperty("Devices", statics)!.GetValue(null)!).ToArray();
@@ -259,7 +267,7 @@ internal static partial class Program
             typeof(MainWindow).GetMethod("SyncExternalOutputDevices", Hidden)!.Invoke(main, null);
             typeof(MainWindow).GetMethod("BuildDeviceFilter", Hidden)!.Invoke(main, null);
             outputs = (IList<SonicRoute.Core.Models.AudioDeviceInfo>)typeof(MainWindow).GetField("_outputs", Hidden)!.GetValue(main)!;
-            Check(!outputs.Any(d => d.Id == spkId)
+            Check(!outputs.Any(d => d.Id == spkId || d.Id == currentId || d.Id == btId)
                 && !filterList.Items.OfType<CheckBox>().Any(c => c.Tag is SonicRoute.Core.Models.AudioDeviceInfo d && d.Id == spkId)
                 && pcToPhone.GetPersistedEndpoint(42424) == null,
                 "disconnecting the phone automatically removes its output devices from the device pool and stops active PC-to-phone routes");

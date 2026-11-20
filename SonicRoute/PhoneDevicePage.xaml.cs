@@ -450,11 +450,10 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             await Wireless.UnpairAsync(device, token, async () =>
             {
                 PhoneAudioWindowCache.SetAutomaticRecovery(device, false);
+                (await AndroidAudioHost.PrepareStreamingAsync(token)).ForgetSourceRoutes(device);
                 await LocalAppOutputMirrors.PhoneRemovedAsync(device, recover: true);
                 if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
-                if (AndroidAudioHost.IsCreated)
-                    foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)).ToArray())
-                        await AndroidAudioHost.Sources.RemoveAsync(source.Id, restorePrevious: false);
+                await AndroidAudioHost.DisconnectAndroidSourcesAsync(device);
                 if (AndroidAudioHost.IsPcToPhoneCreated) await AndroidAudioHost.PcToPhone.StopPhoneAsync(device);
                 AndroidAudioHost.Phone.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
             });
@@ -511,12 +510,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         var device = _device; if (device == null) return;
         await RunAsync(async token =>
         {
+            (await AndroidAudioHost.PrepareStreamingAsync(token)).ForgetSourceRoutes(device);
             PhoneAudioWindowCache.SetAutomaticRecovery(device, false);
             PhoneAudioWindowCache.InvalidateDevices();
             await LocalAppOutputMirrors.PhoneRemovedAsync(device, recover: true);
-            if (AndroidAudioHost.IsCreated)
-                foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)))
-                    await AndroidAudioHost.Sources.RemoveAsync(source.Id, restorePrevious: false);
+            await AndroidAudioHost.DisconnectAndroidSourcesAsync(device);
             if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
             if (AndroidAudioHost.IsPcToPhoneCreated) await AndroidAudioHost.PcToPhone.StopPhoneAsync(device);
             AndroidAudioHost.Phone.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);

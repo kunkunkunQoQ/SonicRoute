@@ -20,6 +20,7 @@ internal sealed partial class TrayWheelService : IDisposable
     private static readonly int TrayIdentifierSize = Marshal.SizeOf<NOTIFYICONIDENTIFIER>();
     private IntPtr _hook = IntPtr.Zero;
     private bool _disposed, _dispatchScheduled;
+    private int _wheelGeneration;
     private int _pendingDelta, _pendingDeviceDelta, _pendingSystemDeviceDelta, _pendingSystemVolumeDelta;
     private readonly object _appsLock = new();
     private List<AudioAppInfo>? _cachedApps;

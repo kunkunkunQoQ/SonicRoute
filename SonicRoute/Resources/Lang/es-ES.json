@@ -1067,5 +1067,16 @@
   "Phone.WindowsLinkFailPairingRejected": "El otro equipo ha rechazado la vinculación o se ha eliminado la relación de confianza. Vuelve a conectarte para vincular los equipos de nuevo.",
   "Phone.WindowsLinkFailIdentityMismatch": "El certificado del otro equipo no coincide con el esperado. Vuelve a vincular los equipos.",
   "Phone.WindowsLinkFailSavedAddressUnavailable": "La dirección guardada no responde y no se encontró ninguna dirección nueva.",
-  "Phone.WindowsLinkFailIncompatible": "Los dos equipos no tienen protocolos o funciones de Windows Link compatibles entre sí."
+  "Phone.WindowsLinkFailIncompatible": "Los dos equipos no tienen protocolos o funciones de Windows Link compatibles entre sí.",
+  "Phone.AppKeptOutput": "La aplicación sigue usando su salida original. Selecciona la salida predeterminada del sistema en la aplicación y vuelve a intentarlo.",
+  "Phone.FileOfflineHint": "Conecta el dispositivo para poder soltar o seleccionar archivos",
+  "Phone.FileDropHint": "Arrastra archivos aquí o haz clic para seleccionarlos",
+  "Phone.FileOnlyFiles": "Selecciona archivos. Las carpetas no se pueden enviar directamente.",
+  "Phone.FileBatchProgress": "{0} de {1} · {2}",
+  "Phone.FileReceiveFolder": "Carpeta de recepción en este equipo",
+  "Phone.FileChangeFolder": "Cambiar carpeta",
+  "Phone.Files": "Transferencia de archivos",
+  "Phone.FileSend": "Enviar archivo…",
+  "Phone.FileSaved": "Guardado en {0}",
+  "Phone.FileClose": "Cerrar"
 }

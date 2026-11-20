@@ -22,8 +22,8 @@ namespace SonicRoute
     {
         static App()
         {
-            WindowsTouch.Initialize();
 #if SONICROUTE_PHONE
+            WindowsTouch.Initialize();
             ApplicationAudio.EnsureNameResolver();
 #endif
             // No hover bubbles anywhere in the product, including disabled controls and text runs.
@@ -80,6 +80,36 @@ namespace SonicRoute
         private static string ActivateSinkTitle => AppRuntimeIdentity.Current.ActivateSinkTitle;
         private static string ActivateMessageName => AppRuntimeIdentity.Current.ActivateMessageName;
 
+        private bool _windowResourcesDeferred;
+
+        internal void PrepareStartupResources()
+        {
+#if SONICROUTE_PHONE
+            InitializeComponent();
+#else
+            // A tray-only process can handle hotkeys, audio and rule commands before its first WPF surface.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            _windowResourcesDeferred = true;
+#endif
+        }
+
+        internal static void EnsureWindowResources()
+        {
+#if !SONICROUTE_PHONE
+            WindowsTouch.Initialize();
+#endif
+            if (Current is not App app || !app._windowResourcesDeferred) return;
+            app.InitializeComponent();
+            ApplyConfiguredTheme(ConfigService.Load());
+            app._windowResourcesDeferred = false;
+        }
+
+        private static void ApplyConfiguredTheme(AppConfig config)
+        {
+            ThemeService.Apply(config.ThemeMode, config.Accent);
+            ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
+        }
+
         internal string[]? StartupArguments { get; set; }
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -126,8 +156,7 @@ namespace SonicRoute
                 ConfigService.Save(config);
             }
             L10n.Instance.SetLanguage(config.Language);
-            ThemeService.Apply(config.ThemeMode, config.Accent);
-            ThemeService.ApplyBackgroundOpacity(config.BackgroundOpacity);
+            if (!_windowResourcesDeferred) ApplyConfiguredTheme(config);
             if (commandMode != RuleCommandLine.Mode.Run && ConfigService.LoadWarning is { } warning)
             {
                 string key = warning.SavesBlocked ? "Config.LoadBlocked"
@@ -210,6 +239,10 @@ namespace SonicRoute
             _trayWheel.Start();
 
             StartBackgroundMonitoring();
+            AppPlaybackRestore.Start();
+#if SONICROUTE_PHONE
+            AndroidAudioHost.StartSavedSourcePlayback();
+#endif
 
             // single-instance activate sink (invisible): opens full UI on message
             _activateSink = new System.Windows.Interop.HwndSource(new System.Windows.Interop.HwndSourceParameters(ActivateSinkTitle)
@@ -232,7 +265,13 @@ namespace SonicRoute
             var foregroundWarmup = CurrentAppService.StartForegroundWatcher();
 
             // 后台预热音频会话/应用缓存，避免首次滚轮/切语言时在 UI 线程做重量级 COM 枚举
-            var audioWarmup = WarmupAudioAsync();
+            var startupRuleIds = AutoRuleStore.LoadAll()
+                .Where(rule => rule.Enabled && rule.Trigger == AutoRuleTrigger.Startup)
+                .Select(rule => rule.Id).ToList();
+            bool trayOnly = config.StartMinimized && !config.StartPanelOnStart && startupArgs.Length == 0;
+            // Foreground tracking already warms the app list. Volume reads also populate their own cache on demand.
+            var audioWarmup = _windowResourcesDeferred && trayOnly && startupRuleIds.Count == 0
+                ? Task.CompletedTask : WarmupAudioAsync();
             var startupWarmup = Task.WhenAll(foregroundWarmup, audioWarmup);
             if (!phoneLab) StartUpdates(startupWarmup);
             _ = ReclaimAfterWarmupAsync(startupWarmup);
@@ -255,10 +294,6 @@ namespace SonicRoute
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ShowMainWindow(); }));
 
             // 一次性启动规则等待原有后台预热完成，服务/OSD 已初始化，不阻塞启动界面。
-            // 在 UI 进入交互前捕获身份，新建的 Startup 规则留到下次启动。
-            var startupRuleIds = AutoRuleStore.LoadAll()
-                .Where(rule => rule.Enabled && rule.Trigger == AutoRuleTrigger.Startup)
-                .Select(rule => rule.Id).ToList();
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
                 new Action(() => _ = RunStartupRulesAsync(audioWarmup, startupRuleIds)));
         }
@@ -983,7 +1018,7 @@ namespace SonicRoute
             _hotkeys?.Dispose();
             _hotkeys = null;
             DisposeTray();
-            await WaitForAndroidShutdownAsync();
+            await WaitForAudioShutdownAsync();
             Shutdown();
         }
 
@@ -992,7 +1027,7 @@ namespace SonicRoute
             _exiting = true;
             AutoRuleScheduler.Shutdown();
             AutoRuleService.Shutdown();
-            ShutdownAndroidAudio();
+            FinishAudioShutdown();
 #if SONICROUTE_PHONE
             AirPlayHost.Shutdown();
             WindowsLinkHub.ShutdownAsync().GetAwaiter().GetResult();

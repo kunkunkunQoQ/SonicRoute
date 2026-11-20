@@ -36,6 +36,7 @@ public final class AudioOutputBridge {
     private static final int SAMPLE_RATE = 48000;
     private static final int BYTES_PER_FRAME = 4; // 16-bit stereo
     private static final int FRAMES_PER_CHUNK = SAMPLE_RATE / 50;
+    private static final String CURRENT = "current";
 
     static AudioManager getAudioManager(Context context) {
         try {
@@ -231,9 +232,8 @@ public final class AudioOutputBridge {
         System.out.flush();
     }
 
-    private static void emitRouted(AudioTrack track, String targetKey, boolean preferredApplied) {
+    private static void emitRouted(AudioTrack track, String targetKey, AudioDeviceInfo routed, boolean preferredApplied) {
         try {
-            AudioDeviceInfo routed = track.getRoutedDevice();
             JSONObject info = new JSONObject();
             info.put("target", targetKey);
             info.put("preferredApplied", preferredApplied);
@@ -243,10 +243,12 @@ public final class AudioOutputBridge {
                 String address = safeAddress(routed);
                 info.put("id", routed.getId());
                 info.put("type", routed.getType());
-                info.put("name", routed.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-                    ? "手机扬声器" : safeProductName(routed, address));
-                info.put("key", routed.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-                    ? "speaker" : bluetoothSinkKey(routed));
+                int type = routed.getType();
+                boolean bluetooth = isPrimaryBluetoothSinkType(type) || isFallbackBluetoothSinkType(type);
+                info.put("name", type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ? "手机扬声器"
+                    : bluetooth ? safeProductName(routed, address) : String.valueOf(routed.getProductName()));
+                info.put("key", CURRENT.equalsIgnoreCase(targetKey) ? CURRENT
+                    : type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ? "speaker" : bluetoothSinkKey(routed));
             } else {
                 info.put("id", 0);
                 info.put("type", 0);
@@ -258,8 +260,9 @@ public final class AudioOutputBridge {
     }
 
     private static boolean applyPreferred(AudioTrack track, AudioManager manager, String targetKey) {
-        AudioDeviceInfo target = findTargetDevice(manager, targetKey);
-        if (target == null) return false;
+        boolean followCurrent = CURRENT.equalsIgnoreCase(targetKey);
+        AudioDeviceInfo target = followCurrent ? null : findTargetDevice(manager, targetKey);
+        if (target == null && !followCurrent) return false;
         try {
             return track.setPreferredDevice(target);
         } catch (Throwable ignored) {
@@ -275,12 +278,12 @@ public final class AudioOutputBridge {
     }
 
     private static AudioTrack createTrack(int sessionId, int bufferBytes, AudioManager manager, String target) {
-        AudioDeviceInfo expected = findTargetDevice(manager, target);
-        if (expected == null) throw new IllegalStateException("所选手机输出设备未连接或不可播放。");
+        boolean followsSystem = CURRENT.equalsIgnoreCase(target);
+        AudioDeviceInfo expected = followsSystem ? null : findTargetDevice(manager, target);
+        if (expected == null && !followsSystem) throw new IllegalStateException("所选手机输出设备未连接或不可播放。");
         AudioAttributes attributes = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE).build();
-        boolean followsSystem = false;
-        if (Build.VERSION.SDK_INT >= 33) {
+        if (!followsSystem && Build.VERSION.SDK_INT >= 33) {
             try {
                 for (AudioDeviceInfo device : manager.getAudioDevicesForAttributes(attributes))
                     if (device.getId() == expected.getId()) followsSystem = true;
@@ -377,6 +380,7 @@ public final class AudioOutputBridge {
             final float[] volumeHolder = new float[] { 1.0f };
             final boolean[] mutedHolder = new boolean[] { false };
             final boolean[] routeVerified = new boolean[] { false };
+            final boolean[] currentStarted = { false };
             final boolean[] quitting = new boolean[] { false };
             final DeviceRoute[] routeHolder = new DeviceRoute[1];
 
@@ -415,10 +419,11 @@ public final class AudioOutputBridge {
                 };
                 final Runnable verifyRouting = () -> {
                     synchronized (targetHolder) {
-                        AudioDeviceInfo expected = findTargetDevice(audioManager, targetHolder[0]);
+                        boolean followCurrent = CURRENT.equalsIgnoreCase(targetHolder[0]);
+                        AudioDeviceInfo expected = followCurrent ? null : findTargetDevice(audioManager, targetHolder[0]);
                         AudioTrack track = currentTrack.get();
                         AudioDeviceInfo actual = track.getRoutedDevice();
-                        boolean matches = expected != null && actual != null && expected.getId() == actual.getId();
+                        boolean matches = actual != null && (followCurrent || (expected != null && expected.getId() == actual.getId()));
                         // Most devices honor the track preference. Register a session policy only
                         // when the playing track was actually routed to a different device.
                         if (!matches && expected != null && actual != null && !triedPolicy[0]
@@ -431,10 +436,12 @@ public final class AudioOutputBridge {
                             } catch (Exception unsupported) { /* Actual routing is still verified below. */ }
                         }
                         routeVerified[0] = matches;
+                        if (followCurrent && matches) currentStarted[0] = true;
                         track.setVolume(matches && !mutedHolder[0] ? volumeHolder[0] : 0f);
-                        if (matches) callbackHandler.removeCallbacks(routingDeadline);
+                        // A media device change may briefly leave the track without a route.
+                        if (matches || (followCurrent && currentStarted[0])) callbackHandler.removeCallbacks(routingDeadline);
                         else if (!callbackHandler.hasCallbacks(routingDeadline)) callbackHandler.postDelayed(routingDeadline, 2000);
-                        emitRouted(track, targetHolder[0], matches);
+                        emitRouted(track, targetHolder[0], actual, matches);
                     }
                 };
                 final Runnable checkOutputsAction = new Runnable() {
@@ -452,7 +459,7 @@ public final class AudioOutputBridge {
                             }
                             String currentTarget;
                             synchronized (targetHolder) { currentTarget = targetHolder[0]; }
-                            if (findTargetDevice(audioManager, currentTarget) == null) {
+                            if (!CURRENT.equalsIgnoreCase(currentTarget) && findTargetDevice(audioManager, currentTarget) == null) {
                                 emitJson(new JSONObject().put("outputs", currentOutputs));
                                 emitJson(new JSONObject().put("error", "所选手机音频设备已断开连接。"));
                                 try { client.close(); } catch (Throwable ignored) { }
@@ -517,6 +524,20 @@ public final class AudioOutputBridge {
                                 if (!nextTarget.isEmpty()) {
                                     synchronized (targetHolder) {
                                         AudioTrack track = currentTrack.get();
+                                        // A switch between "current" and the same physical default
+                                        // needs no flush or policy change on a freely routed track.
+                                        if (routeHolder[0] == null && track.getPreferredDevice() == null && routeVerified[0]) {
+                                            AudioDeviceInfo actual = track.getRoutedDevice();
+                                            AudioDeviceInfo next = CURRENT.equalsIgnoreCase(nextTarget) ? actual
+                                                : findTargetDevice(audioManager, nextTarget);
+                                            if (actual != null && next != null && actual.getId() == next.getId()) {
+                                                targetHolder[0] = nextTarget;
+                                                currentStarted[0] = false;
+                                                triedPolicy[0] = false;
+                                                verifyRouting.run();
+                                                continue;
+                                            }
+                                        }
                                         track.setVolume(0f); routeVerified[0] = false;
                                         long started = System.nanoTime();
                                         boolean wasPlaying = track.getPlayState() == AudioTrack.PLAYSTATE_PLAYING;
@@ -525,10 +546,12 @@ public final class AudioOutputBridge {
                                         if (wasPlaying) track.pause();
                                         track.flush();
                                         DeviceRoute nextRoute = null;
-                                        try {
-                                            nextRoute = new DeviceRoute(context, audioManager, "RULE_MATCH_AUDIO_SESSION_ID", sessionId,
-                                                findTargetDevice(audioManager, nextTarget), callbackThread.getLooper());
-                                        } catch (NoSuchFieldException unsupportedSessionRule) { }
+                                        if (!CURRENT.equalsIgnoreCase(nextTarget)) {
+                                            try {
+                                                nextRoute = new DeviceRoute(context, audioManager, "RULE_MATCH_AUDIO_SESSION_ID", sessionId,
+                                                    findTargetDevice(audioManager, nextTarget), callbackThread.getLooper());
+                                            } catch (NoSuchFieldException unsupportedSessionRule) { }
+                                        }
                                         long registered = System.nanoTime();
                                         DeviceRoute previousRoute = routeHolder[0];
                                         if (previousRoute != null) previousRoute.close();
@@ -539,6 +562,7 @@ public final class AudioOutputBridge {
                                         }
                                         long preferred = System.nanoTime();
                                         routeHolder[0] = nextRoute; targetHolder[0] = nextTarget;
+                                        currentStarted[0] = false;
                                         triedPolicy[0] = true;
                                         prepareStartThreshold(track);
                                         if (wasPlaying) track.play();

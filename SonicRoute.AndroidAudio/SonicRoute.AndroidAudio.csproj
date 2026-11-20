@@ -6,9 +6,9 @@
     <PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <Import Project="../shared/WindowsAudio/WindowsAudio.props" />
   <ItemGroup>
     <PackageReference Include="Concentus" Version="2.2.2" />
-    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
     <EmbeddedResource Include="AndroidRuntime.files.json" />
     <EmbeddedResource Include="../AndroidRuntime/*" Exclude="../AndroidRuntime/*.txt" LogicalName="SonicRoute.AndroidRuntime.%(Filename)%(Extension)" />
     <EmbeddedResource Include="../AndroidRuntime/VirtualDisplay/phone-icon.png" LogicalName="SonicRoute.AndroidRuntime.VirtualDisplay.phone-icon.png" />

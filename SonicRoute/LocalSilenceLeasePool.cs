@@ -1,7 +1,9 @@
 #if SONICROUTE_PHONE
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using SonicRoute.AndroidAudio;
 
@@ -10,25 +12,24 @@ namespace SonicRoute;
 /// <summary>Own only successful routes and mute changes whose previous state is known.</summary>
 internal sealed class LocalSilenceLeasePool
 {
-    private readonly Func<IReadOnlySet<int>, string?, string?> _find;
+    private readonly Func<IReadOnlySet<int>, string?, IReadOnlyList<string>> _find;
     private readonly Func<string, (bool Muted, bool Known)> _readMute;
     private readonly Func<string, bool, bool> _setMute;
     private readonly Func<int, (string? Multimedia, string? Console)> _readRoute;
     private readonly Func<int, (string? Multimedia, string? Console), bool> _applyRoute;
-    // The phone and Windows Link pools must not reserve the same output concurrently.
+    // The two routing paths must not reserve the same output concurrently.
     internal static readonly object Gate = new();
-    private Reservation? _reservation;
-    private readonly Dictionary<int, Lease> _leases = new();
-    internal Func<int, string, bool>? VerifyPlaybackRoute { get; init; }
+    private readonly ConcurrentDictionary<string, Reservation> _reservations = new(StringComparer.OrdinalIgnoreCase);
+    internal Func<int, string, bool, IReadOnlySet<int>, bool>? VerifyPlaybackRoute { get; init; }
     internal Func<int, string, Action, ILocalPlaybackWatch>? ObservePlayback { get; init; }
 
     internal LocalSilenceLeasePool(Func<string?> findEndpoint, Func<string, (bool Muted, bool Known)> readMute,
         Func<string, bool, bool> setMute, Func<int, (string? Multimedia, string? Console)> readRoute,
         Func<int, (string? Multimedia, string? Console), bool> applyRoute)
-        : this((_, current) => current ?? findEndpoint(), readMute, setMute, readRoute, applyRoute)
+        : this((_, current) => (current ?? findEndpoint()) is string id ? [id] : [], readMute, setMute, readRoute, applyRoute)
     { }
 
-    internal LocalSilenceLeasePool(Func<IReadOnlySet<int>, string?, string?> find,
+    internal LocalSilenceLeasePool(Func<IReadOnlySet<int>, string?, IReadOnlyList<string>> find,
         Func<string, (bool Muted, bool Known)> readMute, Func<string, bool, bool> setMute,
         Func<int, (string? Multimedia, string? Console)> readRoute,
         Func<int, (string? Multimedia, string? Console), bool> applyRoute)
@@ -42,92 +43,146 @@ internal sealed class LocalSilenceLeasePool
 
     internal bool HasUsableEndpoint()
     {
-        lock (Gate) return _reservation?.Invalid != true && _find(_leases.Keys.ToHashSet(), _reservation?.Endpoint) != null;
+        lock (Gate)
+        {
+            foreach (var reservation in _reservations.Values)
+                if (reservation.Leases.Count != 0 && !reservation.Invalid && !Volatile.Read(ref reservation.UserUnmuted)
+                    && Eligible(reservation.Leases.Keys.ToHashSet(), reservation.Endpoint)) return true;
+            return _find(new HashSet<int>(), null).Any(id => !_reservations.ContainsKey(id));
+        }
     }
 
-    internal bool OwnsEndpoint(string endpoint)
-    {
-        lock (Gate) return string.Equals(_reservation?.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase);
-    }
+    internal bool OwnsEndpoint(string endpoint) => _reservations.ContainsKey(endpoint);
 
     internal void NoteUnmuted(string endpoint)
     {
-        var reservation = Volatile.Read(ref _reservation);
-        if (reservation != null && string.Equals(reservation.Endpoint, endpoint, StringComparison.OrdinalIgnoreCase))
+        if (_reservations.TryGetValue(endpoint, out var reservation))
             Volatile.Write(ref reservation.UserUnmuted, true);
     }
 
     internal void Revalidate()
     {
+        if (_reservations.IsEmpty) return;
         lock (Gate)
         {
-            if (_reservation is not { } reservation || reservation.Invalid) return;
-            bool valid = false;
-            try
+            foreach (var reservation in _reservations.Values)
             {
-                valid = !Volatile.Read(ref reservation.UserUnmuted) && _find(_leases.Keys.ToHashSet(), reservation.Endpoint) != null
-                    && _readMute(reservation.Endpoint) is (true, true);
-                if (valid)
-                    foreach (var (pid, lease) in _leases)
-                    {
-                        if (!OwnsBothRoutes(pid, reservation.Endpoint)) lease.Invalidate();
-                        else lease.Watch?.Refresh();
-                    }
-            }
-            catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidOperationException)
-            { valid = false; System.Diagnostics.Trace.WriteLine(ex); }
-            finally
-            {
-                if (!valid)
+                if (reservation.Leases.Count == 0) { RestoreMute(reservation); continue; }
+                if (reservation.Invalid) continue;
+                try
                 {
-                    reservation.Invalid = true;
-                    foreach (var lease in _leases.Values) lease.Invalidate();
+                    if (!Volatile.Read(ref reservation.UserUnmuted) && Eligible(reservation.Leases.Keys.ToHashSet(), reservation.Endpoint)
+                        && _readMute(reservation.Endpoint) is (true, true))
+                    {
+                        foreach (var (pid, lease) in reservation.Leases)
+                        {
+                            if (!OwnsBothRoutes(pid, reservation.Endpoint)) lease.Invalidate();
+                            else lease.Watch?.Refresh();
+                        }
+                        continue;
+                    }
                 }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException) { System.Diagnostics.Trace.WriteLine(ex); }
+                reservation.Invalid = true;
+                foreach (var lease in reservation.Leases.Values) lease.Invalidate();
             }
         }
     }
 
-    internal IPcProcessSilenceLease? Acquire(int processId)
+    internal IPcProcessSilenceLease? Acquire(int processId) => AcquireForPlayback(processId, wasActive: false);
+
+    internal IPcProcessSilenceLease? AcquireForPlayback(int processId, bool wasActive)
     {
         lock (Gate)
         {
-            if (_leases.ContainsKey(processId) || _reservation?.Invalid == true) return null;
+            var existing = _reservations.Values;
+            if (existing.Any(r => r.Leases.ContainsKey(processId))) return null;
+            // Share an already muted endpoint first. One app refusing that endpoint
+            // must not invalidate another app there, or prevent trying a different one.
+            foreach (var reservation in existing)
+            {
+                if (reservation.Leases.Count == 0) { RestoreMute(reservation); continue; }
+                if (reservation.Invalid || Volatile.Read(ref reservation.UserUnmuted)) continue;
+                var owners = reservation.Leases.Keys.Append(processId).ToHashSet();
+                if (Eligible(owners, reservation.Endpoint) && TryCandidate(processId, reservation.Endpoint, wasActive, owners, reservation) is { } shared)
+                    return shared;
+            }
+
+            var process = new HashSet<int> { processId };
+            var candidates = _find(process, null);
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                string id = candidates[i];
+                // Previous attempts may take time while Windows migrates a session.
+                if (_reservations.ContainsKey(id) || (i != 0 && !Eligible(process, id))) continue;
+                if (TryCandidate(processId, id, wasActive, process, null) is { } lease) return lease;
+            }
+            return null;
+        }
+    }
+
+    private bool Eligible(IReadOnlySet<int> owners, string endpoint)
+    {
+        try { return _find(owners, endpoint).Contains(endpoint, StringComparer.OrdinalIgnoreCase); }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        { System.Diagnostics.Trace.WriteLine(ex); return false; }
+    }
+
+    private Lease? TryCandidate(int processId, string endpoint, bool wasActive, IReadOnlySet<int> owners, Reservation? reservation)
+    {
+        try
+        {
             var previous = _readRoute(processId);
-            string? endpoint = _find(_leases.Keys.Append(processId).ToHashSet(), _reservation?.Endpoint);
-            if (endpoint == null) return null;
-            if (_reservation == null)
+            bool needsMute = false;
+            if (reservation == null)
             {
                 var state = _readMute(endpoint);
-                if (!state.Known || (!state.Muted && !_setMute(endpoint, true))) return null;
-                _reservation = new Reservation(endpoint, !state.Muted);
+                if (!state.Known) return null;
+                needsMute = !state.Muted;
+                reservation = new Reservation(endpoint);
+                _reservations[endpoint] = reservation;
             }
+
+            Lease? lease = null;
+            bool wrotePolicy = false, success = false;
             try
             {
-                if (_readMute(endpoint) is (true, true) && _applyRoute(processId, (endpoint, endpoint)) && OwnsBothRoutes(processId, endpoint)
-                    && (VerifyPlaybackRoute?.Invoke(processId, endpoint) ?? true))
+                if (needsMute)
                 {
-                    var lease = new Lease(this, processId, previous, endpoint);
-                    _leases.Add(processId, lease);
-                    try
-                    {
-                        lease.Watch = ObservePlayback?.Invoke(processId, endpoint, lease.Invalidate);
-                        lease.Watch?.Refresh();
-                        if (lease.Watch != null && (_find(_leases.Keys.ToHashSet(), endpoint) == null || lease.Invalidated.IsCancellationRequested))
-                        {
-                            lease.Dispose();
-                            return null;
-                        }
-                    }
-                    catch { lease.Dispose(); throw; }
+                    if (!_setMute(endpoint, true)) return null;
+                    reservation.ChangedMute = true;
+                }
+                if (_readMute(endpoint) is not (true, true)) return null;
+                wrotePolicy = true; // A failed policy call may already have changed one role.
+                if (!_applyRoute(processId, (endpoint, endpoint)) || !OwnsBothRoutes(processId, endpoint)
+                    || !(VerifyPlaybackRoute?.Invoke(processId, endpoint, wasActive, owners) ?? true)) return null;
+                lease = new Lease(this, processId, previous, reservation);
+                reservation.Leases.Add(processId, lease);
+                lease.Watch = ObservePlayback?.Invoke(processId, endpoint, lease.Invalidate);
+                lease.Watch?.Refresh();
+                if (!Volatile.Read(ref reservation.UserUnmuted) && !lease.Invalidated.IsCancellationRequested
+                    && (lease.Watch == null || Eligible(owners, endpoint)))
+                {
+                    success = true;
                     return lease;
                 }
-                // Windows sets two roles; a failed result may already have changed one.
-                RestoreOwnedRoles(processId, previous, endpoint);
                 return null;
             }
-            catch { RestoreOwnedRoles(processId, previous, endpoint); throw; }
-            finally { if (_leases.Count == 0) RestoreMute(); }
+            finally
+            {
+                if (!success)
+                {
+                    try { if (wrotePolicy) RestoreOwnedRoles(processId, previous, endpoint); }
+                    finally
+                    {
+                        if (lease != null) lease.Release(restorePreviousEndpoint: false);
+                        else if (reservation.Leases.Count == 0) RestoreMute(reservation);
+                    }
+                }
+            }
         }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        { System.Diagnostics.Trace.WriteLine(ex); return null; }
     }
 
     private bool OwnsBothRoutes(int processId, string endpoint)
@@ -139,32 +194,45 @@ internal sealed class LocalSilenceLeasePool
 
     private void RestoreOwnedRoles(int processId, (string? Multimedia, string? Console) previous, string endpoint)
     {
+        bool NeedsRestore(string? role, string? original) =>
+            string.Equals(role, endpoint, StringComparison.OrdinalIgnoreCase) && !string.Equals(original, endpoint, StringComparison.OrdinalIgnoreCase);
         try
         {
             var current = _readRoute(processId);
-            var next = (string.Equals(current.Multimedia, endpoint, StringComparison.OrdinalIgnoreCase) ? previous.Multimedia : current.Multimedia,
-                string.Equals(current.Console, endpoint, StringComparison.OrdinalIgnoreCase) ? previous.Console : current.Console);
-            if (next != current) _applyRoute(processId, next);
+            var next = (NeedsRestore(current.Multimedia, previous.Multimedia) ? previous.Multimedia : current.Multimedia,
+                NeedsRestore(current.Console, previous.Console) ? previous.Console : current.Console);
+            if (next == current) return;
+            _applyRoute(processId, next);
+            var restored = _readRoute(processId);
+            if (NeedsRestore(restored.Multimedia, previous.Multimedia) || NeedsRestore(restored.Console, previous.Console))
+                throw new System.IO.IOException(L10n.T("Exp.LangRestoreFail"));
         }
-        catch { }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            // Do not treat a failed rollback as an ordinary candidate failure: a retry
+            // would save the temporary endpoint as this application's original policy.
+            throw new System.IO.IOException(L10n.T("Exp.LangRestoreFail"), ex);
+        }
     }
-    private void RestoreMute()
+    private void RestoreMute(Reservation reservation)
     {
-        var reservation = _reservation;
-        _reservation = null;
-        if (reservation == null) return;
-        if (reservation.ChangedMute && !Volatile.Read(ref reservation.UserUnmuted)
-            && _readMute(reservation.Endpoint) is (true, true)) _setMute(reservation.Endpoint, false);
+        if (reservation.ChangedMute && !Volatile.Read(ref reservation.UserUnmuted))
+        {
+            var state = _readMute(reservation.Endpoint);
+            if (!state.Known || (state.Muted && !_setMute(reservation.Endpoint, false))) return;
+        }
+        _reservations.TryRemove(reservation.Endpoint, out _);
     }
-    private sealed class Reservation(string endpoint, bool changedMute)
+    private sealed class Reservation(string endpoint)
     {
         internal string Endpoint { get; } = endpoint;
-        internal bool ChangedMute { get; } = changedMute;
+        internal Dictionary<int, Lease> Leases { get; } = new();
+        internal bool ChangedMute;
         internal bool UserUnmuted;
         internal bool Invalid;
     }
     private sealed class Lease(LocalSilenceLeasePool owner, int processId,
-        (string? Multimedia, string? Console) previous, string endpoint) : IPcProcessSilenceLease
+        (string? Multimedia, string? Console) previous, Reservation reservation) : IPcProcessSilenceLease
     {
         private int _released;
         private readonly CancellationTokenSource _invalidation = new();
@@ -182,15 +250,18 @@ internal sealed class LocalSilenceLeasePool
                 try
                 {
                     if (restorePreviousEndpoint)
-                        owner.RestoreOwnedRoles(processId, previous, endpoint);
+                        owner.RestoreOwnedRoles(processId, previous, reservation.Endpoint);
                 }
                 catch { /* The process may have exited before its routes could be restored. */ }
                 finally
                 {
-                    owner._leases.Remove(processId);
-                    Watch?.Dispose();
-                    _invalidation.Dispose();
-                    if (owner._leases.Count == 0) owner.RestoreMute();
+                    reservation.Leases.Remove(processId);
+                    try { Watch?.Dispose(); }
+                    finally
+                    {
+                        _invalidation.Dispose();
+                        if (reservation.Leases.Count == 0) owner.RestoreMute(reservation);
+                    }
                 }
             }
         }
@@ -212,7 +283,6 @@ internal sealed class AlreadyMutedOutputLeases(Func<bool> allMuted)
     private long _unmuteRevision;
     private Group? _active;
 
-    internal bool Available() => allMuted();
     internal void NoteUnmuted() => Interlocked.Increment(ref _unmuteRevision);
 
     internal IPcProcessSilenceLease? Acquire(int processId)

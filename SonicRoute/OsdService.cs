@@ -195,6 +195,7 @@ namespace SonicRoute
         private void EnsureWindow()
         {
             if (_window != null) return;
+            App.EnsureWindowResources();
             // 主标题使用随深浅模式调整的强调色，其余文字直接跟随用户强调色。
             _title = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
             _title.SetResourceReference(TextBlock.ForegroundProperty, "Theme.OsdTitleText");
