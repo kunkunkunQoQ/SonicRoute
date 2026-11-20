@@ -17,7 +17,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
 
     private readonly object _gate = new();
     private readonly Dictionary<int, ActiveRoute> _routes = new();
-    private readonly HashSet<Task> _retiring = new();
+    private readonly Dictionary<Task, ActiveRoute> _retiring = new();
     private bool _disposed;
     public bool EnableLiveStreaming { get; set; } = true;
     public event Action? Changed;
@@ -153,15 +153,15 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         Task[] retiring;
         lock (_gate)
         {
-            matching = _routes.Values.Where(r =>
-                string.Equals(r.PhoneKey, phoneKey, StringComparison.OrdinalIgnoreCase)
-                || (r.Device != null && AndroidDeviceIdentity.Matches(r.Device, device))).ToArray();
+            bool Matches(ActiveRoute r) => r.Device != null ? AndroidDeviceIdentity.Matches(r.Device, device)
+                : string.Equals(r.PhoneKey, phoneKey, StringComparison.OrdinalIgnoreCase);
+            matching = _routes.Values.Where(Matches).ToArray();
+            var previous = _retiring.Where(pair => Matches(pair.Value)).Select(pair => pair.Key).ToArray();
             foreach (var r in matching) _routes.Remove(r.ProcessId);
-            retiring = matching.Select(r => Retire(r, restorePreviousEndpoint)).ToArray();
+            retiring = previous.Concat(matching.Select(r => Retire(r, restorePreviousEndpoint))).ToArray();
         }
-        if (matching.Length == 0) return;
         await Task.WhenAll(retiring).ConfigureAwait(false);
-        NotifyRoute(matching.Length == 1 ? matching[0].ProcessId : 0);
+        if (matching.Length > 0) NotifyRoute(matching.Length == 1 ? matching[0].ProcessId : 0);
     }
 
     public int StopAll(bool restorePreviousEndpoint = true)
@@ -188,7 +188,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
             // Register before detaching: another stop cannot escape the shutdown join.
             foreach (var route in all) Retire(route, restorePreviousEndpoint: true);
             _routes.Clear();
-            retiring = _retiring.ToArray();
+            retiring = _retiring.Keys.ToArray();
         }
         await Task.WhenAll(retiring).ConfigureAwait(false);
     }
@@ -199,7 +199,7 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         lock (_gate)
         {
             task = route.StopAsync(restorePreviousEndpoint);
-            _retiring.Add(task);
+            _retiring[task] = route;
         }
         _ = task.ContinueWith(done =>
         {

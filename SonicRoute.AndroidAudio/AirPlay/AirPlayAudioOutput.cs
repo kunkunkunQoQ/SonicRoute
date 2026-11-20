@@ -204,7 +204,7 @@ internal sealed class AirPlayAudioOutput : IPhoneAudioSession, IAsyncDisposable
     }
 
     internal Task PhoneRemovedAsync(AndroidDevice device) =>
-        ReturnToWindowsAsync(current => AndroidDeviceIdentity.MatchesSavedDevice(device, current.Device));
+        ReturnToWindowsAsync(current => AndroidDeviceIdentity.Matches(device, current.Device));
 
     private Task ReturnToWindowsAsync(Predicate<AndroidPhonePcmPlayer> phoneMatch) =>
         // A phone failure may come from its PCM pump. Retire it on a separate worker.

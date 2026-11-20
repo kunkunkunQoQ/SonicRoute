@@ -372,7 +372,16 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         await _operations.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (_disposed || _pcm == null || !CurrentSelection().Contains(lost, StringComparer.OrdinalIgnoreCase)) return;
+            if (_disposed) return;
+            for (int i = _outputHistory.Count - 1; i >= 0; --i)
+            {
+                var choice = _outputHistory[i];
+                if (!choice.Contains(lost, StringComparer.OrdinalIgnoreCase)) continue;
+                var remainingChoice = choice.Where(id => !string.Equals(id, lost, StringComparison.OrdinalIgnoreCase)).ToArray();
+                if (remainingChoice.Length == 0) _outputHistory.RemoveAt(i);
+                else _outputHistory[i] = remainingChoice;
+            }
+            if (!CurrentSelection().Contains(lost, StringComparer.OrdinalIgnoreCase)) return;
             await RecoverOutputLockedAsync(lost, new IOException("目标手机已移除。"), fallbackToDefault: true).ConfigureAwait(false);
             var remaining = CurrentSelection();
             OutputSelectionCommitted?.Invoke(remaining.Length > 1 && !remaining.Contains(lost, StringComparer.OrdinalIgnoreCase) ? remaining : null);
@@ -591,7 +600,12 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         if (AndroidOutputIdentity.TryParseDeviceId(endpointId, out string phone, out string sink))
         {
             if (string.Equals(phone, AndroidDeviceIdentity.Key(source), StringComparison.OrdinalIgnoreCase)
-                && (sink == "speaker" || sink.StartsWith("bt:", StringComparison.OrdinalIgnoreCase))) return (source, sink);
+                && (sink == "speaker" || sink.StartsWith("bt:", StringComparison.OrdinalIgnoreCase)))
+            {
+                var target = _resolvePhone == null ? source : _resolvePhone(phone);
+                if (target is { State: "device" }) return (target, sink);
+                throw AndroidError.WithCode(new IOException("目标手机未连接。"), AndroidErrorCode.PhoneOffline);
+            }
             if (string.Equals(sink, AndroidOutputSink.Current.Key, StringComparison.OrdinalIgnoreCase))
             {
                 var target = _resolvePhone?.Invoke(phone);

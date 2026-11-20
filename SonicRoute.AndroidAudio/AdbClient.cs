@@ -12,7 +12,7 @@ namespace SonicRoute.AndroidAudio;
 public sealed class AdbClient : IDisposable, IAsyncDisposable
 {
     private readonly object _identityGate = new();
-    private readonly Dictionary<string, string?> _identities = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string? HardwareId, string? Fingerprint)> _identities = new(StringComparer.Ordinal);
     private readonly AndroidRuntimeBundle? _bundle;
     private readonly string? _runtimeDirectory;
     private readonly IAdbTransport? _explicitTransport;
@@ -98,6 +98,25 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         await transport.TrackDevicesAsync(onChanged, token).ConfigureAwait(false);
     }
 
+    internal async Task WatchPanelWirelessAsync(Action<string> lost, Action changed, CancellationToken token)
+    {
+        var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
+        switch (transport)
+        {
+            case ArbitratedAdbTransport arbiter:
+                await arbiter.WatchPanelWirelessAsync(lost, changed, token).ConfigureAwait(false);
+                break;
+            case AdbSocketClient socket:
+                await socket.WatchPanelWirelessAsync(lost, changed, token).ConfigureAwait(false);
+                break;
+            case DirectAdbTransport direct:
+                direct.WifiTransportLost += lost;
+                try { await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false); }
+                finally { direct.WifiTransportLost -= lost; }
+                break;
+        }
+    }
+
     public Task<string> RunAsync(CancellationToken token, params string[] arguments)
     {
         token.ThrowIfCancellationRequested();
@@ -107,11 +126,12 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         return ExecuteWithTransportAsync(token, transport => DispatchTransportCommandAsync(transport, arguments, token));
     }
 
-    internal async Task<(AdbClient Client, string Fingerprint)> BindPairingIdentityAsync(CancellationToken token)
+    internal async Task<(AdbClient Client, string Fingerprint)> BindPairingIdentityAsync(CancellationToken token, AndroidDevice? device = null)
     {
         var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
         if (transport is ArbitratedAdbTransport arbitrated)
-            transport = await arbitrated.SelectAsync(token).ConfigureAwait(false);
+            transport = device == null ? await arbitrated.SelectAsync(token).ConfigureAwait(false)
+                : await arbitrated.SelectDeviceAsync(device.CommandTarget, token).ConfigureAwait(false);
         string? fingerprint = transport is IAdbPairingIdentityProvider identity
             ? await identity.GetPairingFingerprintAsync(token).ConfigureAwait(false) : null;
         if (string.IsNullOrWhiteSpace(fingerprint))
@@ -223,42 +243,84 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
 
     public async Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token, bool deduplicate = true)
     {
-        var devices = await ExecuteWithTransportAsync(token, t => t.DevicesAsync(token)).ConfigureAwait(false);
-        var resolved = await Task.WhenAll(devices.Select(device => ResolveIdentityAsync(device, token))).ConfigureAwait(false);
+        var transport = await ResolveTransportAsync(token).ConfigureAwait(false);
+        var devices = await transport.DevicesAsync(token).ConfigureAwait(false);
+        var resolved = await Task.WhenAll(devices.Select(device =>
+        {
+            string? target = AdbTransportTarget.Create(device, transport);
+            if (device.State == "device" && target == null && transport is DirectAdbTransport or ArbitratedAdbTransport or AdbSocketClient)
+                return Task.FromResult(device with { State = "offline" });
+            return ResolveIdentityAsync(device with { ConnectionTarget = target }, token);
+        })).ConfigureAwait(false);
         return deduplicate ? AndroidDeviceIdentity.Distinct(resolved) : resolved;
     }
 
-    private async Task<AndroidDevice> ResolveIdentityAsync(AndroidDevice device, CancellationToken token)
+    private async Task<AndroidDevice> ResolveIdentityAsync(AndroidDevice device, CancellationToken token, bool retryMissing = false)
     {
         if (device.State != "device") return device;
-        string key = device.Serial + "\0" + device.TransportId;
-        lock (_identityGate) if (_identities.TryGetValue(key, out var cached)) return device with { HardwareId = cached };
-        string? identity = null;
+        string key = device.Serial + "\0" + (device.ConnectionTarget ?? device.TransportId);
+        string? identity = retryMissing && device.ConnectionTarget != null ? device.HardwareId : null;
+        string? fingerprint = null;
+        lock (_identityGate) if (device.TransportId != null && _identities.TryGetValue(key, out var cached))
+        {
+            if (!retryMissing || cached.HardwareId != null && cached.Fingerprint != null)
+                return device with { HardwareId = cached.HardwareId, IdentityFingerprint = cached.Fingerprint };
+            identity ??= cached.HardwareId;
+        }
         using var identityDeadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         identityDeadline.CancelAfter(TimeSpan.FromSeconds(2));
         try
         {
-            string result = (await RunAsync(identityDeadline.Token, "-s", device.Serial, "shell", "getprop", "ro.serialno").ConfigureAwait(false)).Trim();
-            if (result.Length is > 0 and <= 128 && Regex.IsMatch(result, @"\A[A-Za-z0-9_.-]+\z") && result != "unknown") identity = result;
+            if (identity == null)
+            {
+                try
+                {
+                    string result = (await RunAsync(identityDeadline.Token, "-s", device.CommandTarget, "shell", "getprop", "ro.serialno").ConfigureAwait(false)).Trim();
+                    if (IsHardwareIdentity(result, device)) identity = result;
+                }
+                catch (Exception ex) when (ex is IOException or SocketException) { /* Try transport metadata below. */ }
+            }
+            // The direct connection may already know the hardware serial from its
+            // authorized handshake even if the shell property is unavailable.
+            if (identity == null)
+            {
+                try
+                {
+                    string result = (await RunAsync(identityDeadline.Token, "-s", device.CommandTarget, "get-serialno").ConfigureAwait(false)).Trim();
+                    if (IsHardwareIdentity(result, device)) identity = result;
+                }
+                catch (NotSupportedException) { /* Optional transport metadata fallback. */ }
+            }
+            // A serial alone can be duplicated on vendor ROMs. Compare the hashed
+            // device-local Android ID when deciding whether USB/Wi-Fi are aliases.
+            if (identity != null)
+            {
+                string androidId = (await RunAsync(identityDeadline.Token, "-s", device.CommandTarget,
+                    "shell", "settings", "get", "secure", "android_id").ConfigureAwait(false)).Trim();
+                if (Regex.IsMatch(androidId, @"\A[0-9a-fA-F]{16}\z") && androidId.Any(c => c != '0'))
+                    fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(androidId.ToLowerInvariant())));
+            }
         }
-        catch (IOException) { /* The scan still reports unauthorized/disconnected endpoints normally. */ }
+        catch (Exception ex) when (ex is IOException or SocketException) { /* Identity enrichment must not fail the device scan. */ }
         catch (OperationCanceledException) when (!token.IsCancellationRequested) { /* Identity enrichment must not hold up device discovery. */ }
         token.ThrowIfCancellationRequested();
         lock (_identityGate)
         {
+            if (device.TransportId != null && _identities.TryGetValue(key, out var resolved))
+            { identity ??= resolved.HardwareId; fingerprint ??= resolved.Fingerprint; }
             if (_identities.Count >= 128) _identities.Clear();
-            _identities[key] = identity; // one read per ADB transport, never an idle identity poll
+            if (device.TransportId != null) _identities[key] = (identity, fingerprint); // once per transport
         }
-        return device with { HardwareId = identity };
+        return device with { HardwareId = identity, IdentityFingerprint = fingerprint };
     }
 
-    internal Task<AndroidDevice> RefreshMissingIdentityAsync(AndroidDevice device, CancellationToken token)
-    {
-        string key = device.Serial + "\0" + device.TransportId;
-        lock (_identityGate)
-            if (_identities.TryGetValue(key, out var identity) && identity == null) _identities.Remove(key);
-        return ResolveIdentityAsync(device, token);
-    }
+    private static bool IsHardwareIdentity(string value, AndroidDevice device) => value.Length is > 0 and <= 128
+        && Regex.IsMatch(value, @"\A[A-Za-z0-9_.-]+\z") && !value.Equals("unknown", StringComparison.OrdinalIgnoreCase)
+        && !value.Contains("_adb-tls-connect", StringComparison.OrdinalIgnoreCase)
+        && (!device.IsWifi || !value.Equals(device.Serial, StringComparison.OrdinalIgnoreCase));
+
+    internal Task<AndroidDevice> RefreshMissingIdentityAsync(AndroidDevice device, CancellationToken token) =>
+        ResolveIdentityAsync(device, token, retryMissing: true);
 
     private static readonly Regex KnownDeviceStateRegex = new(
         @"\s+(?<state>no permissions(?:\s*\([^)]*\))?(?:;\s*see\s+\S+)?|device|offline|unauthorized|authorizing|connecting|bootloader|recovery|sideload|rescue|host|unknown)(?=\s|$)",
@@ -364,8 +426,8 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         string remote = "/data/local/tmp/sonicroute_encoders_" + Guid.NewGuid().ToString("N") + ".jar";
         try
         {
-            await RunAsync(deadline.Token, "-s", device.Serial, "push", CatalogFile, remote).ConfigureAwait(false);
-            string output = await RunAsync(deadline.Token, "-s", device.Serial, "shell", "CLASSPATH=" + remote,
+            await RunAsync(deadline.Token, "-s", device.CommandTarget, "push", CatalogFile, remote).ConfigureAwait(false);
+            string output = await RunAsync(deadline.Token, "-s", device.CommandTarget, "shell", "CLASSPATH=" + remote,
                 "app_process", "/", "org.sonicroute.android.EncoderCatalog").ConfigureAwait(false);
             var catalog = ParseEncoders(output);
             deadline.Token.ThrowIfCancellationRequested();
@@ -384,7 +446,7 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
+            try { await RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch (Exception ex) when (ex is IOException or OperationCanceledException) { Trace.WriteLine("Encoder query cleanup: " + ex.Message); }
         }
     }
@@ -454,8 +516,8 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         string remote = "/data/local/tmp/sonicroute_catalog_" + Guid.NewGuid().ToString("N") + ".jar";
         try
         {
-            await RunAsync(token, "-s", device.Serial, "push", CatalogFile, remote).ConfigureAwait(false);
-            var arguments = new List<string> { "-s", device.Serial, "shell", "CLASSPATH=" + remote,
+            await RunAsync(token, "-s", device.CommandTarget, "push", CatalogFile, remote).ConfigureAwait(false);
+            var arguments = new List<string> { "-s", device.CommandTarget, "shell", "CLASSPATH=" + remote,
                 "app_process", "/", "org.sonicroute.android.Catalog" };
             if (packages != null) { arguments.Add("--packages"); arguments.AddRange(packages.Distinct(StringComparer.Ordinal)); }
             string result = await RunAsync(token, arguments.ToArray()).ConfigureAwait(false);
@@ -480,7 +542,7 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
+            try { await RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch { /* device disconnection is surfaced by the original operation */ }
         }
     }
@@ -494,8 +556,8 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         string remote = "/data/local/tmp/sonicroute_outputs_" + Guid.NewGuid().ToString("N") + ".jar";
         try
         {
-            await RunAsync(token, "-s", device.Serial, "push", CatalogFile, remote).ConfigureAwait(false);
-            string result = await RunAsync(token, "-s", device.Serial, "shell",
+            await RunAsync(token, "-s", device.CommandTarget, "push", CatalogFile, remote).ConfigureAwait(false);
+            string result = await RunAsync(token, "-s", device.CommandTarget, "shell",
                 "CLASSPATH=" + remote, "app_process", "/", "org.sonicroute.android.AudioOutputBridge", "list").ConfigureAwait(false);
             foreach (string line in result.Split('\n'))
             {
@@ -511,7 +573,7 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
+            try { await RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch { }
         }
     }
@@ -519,7 +581,7 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
     public async Task<int> ResolveUidAsync(AndroidDevice device, string package, CancellationToken token)
     {
         ValidatePackage(package);
-        string text = await RunAsync(token, "-s", device.Serial, "shell", "pm", "list", "packages", "-U").ConfigureAwait(false);
+        string text = await RunAsync(token, "-s", device.CommandTarget, "shell", "pm", "list", "packages", "-U").ConfigureAwait(false);
         var match = Regex.Match(text, @"(?m)^package:" + Regex.Escape(package) + @"\s+uid:(\d+)\s*$");
         if (!match.Success || !int.TryParse(match.Groups[1].Value, out int uid) || uid <= 0)
             throw AndroidError.WithCode(new IOException("目标应用或 UID 已不可用，请刷新手机应用列表。"), AndroidErrorCode.AppOrUidUnavailable);

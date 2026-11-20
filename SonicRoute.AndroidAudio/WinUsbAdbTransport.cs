@@ -22,9 +22,8 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
     private const uint FileFlagOverlapped = 0x40000000;
 
     private const int ErrorFileNotFound = 2;
-    private const int ErrorAccessDenied = 5;
     private const int ErrorInsufficientBuffer = 122;
-    private const int ErrorNoMoreItems = 259;
+    internal const int ErrorNoMoreItems = 259;
     private const int ErrorOperationAborted = 995;
     private const int ErrorIoPending = 997;
 
@@ -91,7 +90,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
         Guid interfaceGuid = AndroidAdbInterfaceGuid;
         IntPtr devInfoSet = SetupDiGetClassDevsW(ref interfaceGuid, IntPtr.Zero, IntPtr.Zero, DigcfPresent | DigcfDeviceInterface);
         if (devInfoSet == IntPtr.Zero || devInfoSet == new IntPtr(-1))
-            return [];
+            throw UsbEnumerationError(Marshal.GetLastWin32Error());
 
         var list = new List<WinUsbDeviceDescriptor>();
         try
@@ -102,17 +101,22 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
                 var ifaceData = new SpDeviceInterfaceData { cbSize = (uint)(IntPtr.Size == 8 ? 32 : 28) };
                 if (!SetupDiEnumDeviceInterfaces(devInfoSet, IntPtr.Zero, ref interfaceGuid, index, ref ifaceData))
                 {
-                    if (Marshal.GetLastWin32Error() == ErrorNoMoreItems) break;
-                    break;
+                    int error = Marshal.GetLastWin32Error();
+                    if (error == ErrorNoMoreItems) break;
+                    throw UsbEnumerationError(error);
                 }
                 index++;
 
                 var devInfoData = new SpDevinfoData { cbSize = (uint)Marshal.SizeOf<SpDevinfoData>() };
                 _ = SetupDiGetDeviceInterfaceDetailW(devInfoSet, ref ifaceData, IntPtr.Zero, 0, out uint requiredSize, ref devInfoData);
-                if (requiredSize == 0 && Marshal.GetLastWin32Error() != ErrorInsufficientBuffer)
-                    continue;
+                int detailError = Marshal.GetLastWin32Error();
+                if (detailError != ErrorInsufficientBuffer)
+                {
+                    if (DeviceWasRemoved(detailError)) continue;
+                    throw UsbEnumerationError(detailError);
+                }
                 if (requiredSize < 8 || requiredSize > 32768)
-                    continue;
+                    throw new IOException("Invalid Android USB interface detail size.");
 
                 IntPtr detailBuf = Marshal.AllocHGlobal((int)requiredSize);
                 try
@@ -120,9 +124,13 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
                     Marshal.WriteInt32(detailBuf, 0, IntPtr.Size == 8 ? 8 : 6);
                     devInfoData = new SpDevinfoData { cbSize = (uint)Marshal.SizeOf<SpDevinfoData>() };
                     if (!SetupDiGetDeviceInterfaceDetailW(devInfoSet, ref ifaceData, detailBuf, requiredSize, out _, ref devInfoData))
-                        continue;
+                    {
+                        int error = Marshal.GetLastWin32Error();
+                        if (DeviceWasRemoved(error)) continue;
+                        throw UsbEnumerationError(error);
+                    }
                     string? path = Marshal.PtrToStringUni(IntPtr.Add(detailBuf, 4));
-                    if (string.IsNullOrWhiteSpace(path)) continue;
+                    if (string.IsNullOrWhiteSpace(path)) throw new IOException("Missing Android USB interface path.");
 
                     string? instanceId = TryReadDeviceInstanceId(devInfoSet, ref devInfoData);
                     list.Add(new WinUsbDeviceDescriptor(path, instanceId));
@@ -156,7 +164,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
         {
             int err = Marshal.GetLastWin32Error();
             fileHandle.Dispose();
-            if (err is ErrorFileNotFound or ErrorAccessDenied or 32 /* ERROR_SHARING_VIOLATION */)
+            if (DeviceWasRemoved(err))
                 return null;
             throw new IOException($"Failed to open Android WinUSB interface '{devicePath}' (Win32 {err}).", new Win32Exception(err));
         }
@@ -167,7 +175,7 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
             if (!WinUsb_Initialize(fileHandle, out winUsbHandle))
             {
                 int err = Marshal.GetLastWin32Error();
-                if (err is ErrorAccessDenied or 31 /* ERROR_GEN_FAILURE */ or ErrorFileNotFound)
+                if (DeviceWasRemoved(err))
                     return null;
                 throw new IOException($"WinUsb_Initialize failed for '{devicePath}' (Win32 {err}).", new Win32Exception(err));
             }
@@ -213,6 +221,12 @@ internal sealed class WinUsbAdbLink : IAdbPacketLink
             fileHandle?.Dispose();
         }
     }
+
+    private static bool DeviceWasRemoved(int error) =>
+        error is ErrorFileNotFound or 3 /* ERROR_PATH_NOT_FOUND */ or 433 /* ERROR_NO_SUCH_DEVICE */ or 1167 /* ERROR_DEVICE_NOT_CONNECTED */;
+
+    private static IOException UsbEnumerationError(int error) =>
+        new($"Failed to enumerate Android USB interfaces (Win32 {error}).", new Win32Exception(error));
 
     public async ValueTask<(AdbPacketHeader Header, int PayloadLength)> ReadPacketAsync(byte[] payloadBuffer, CancellationToken token)
     {
@@ -669,6 +683,39 @@ internal sealed class WinUsbDeviceWatcher : IDisposable
         _ready.Wait();
     }
 
+    // The Full application's existing WPF window can receive the same filtered
+    // notifications as this transport's private message window.
+    internal static IntPtr RegisterAdbInterface(IntPtr hwnd)
+    {
+        var filter = new DevBroadcastDeviceInterface
+        {
+            dbcc_size = (uint)Marshal.SizeOf<DevBroadcastDeviceInterface>(),
+            dbcc_devicetype = DbtDevTypDeviceInterface,
+            dbcc_classguid = WinUsbAdbLink.AndroidAdbInterfaceGuid
+        };
+        return RegisterDeviceNotificationW(hwnd, ref filter, DeviceNotifyWindowHandle);
+    }
+
+    internal static bool IsAdbInterfaceChange(int message, IntPtr wParam, IntPtr lParam)
+    {
+        if (message != WmDeviceChange || unchecked((int)wParam.ToInt64()) is not (DbtDeviceArrival or DbtDeviceRemoveComplete)
+            || lParam == IntPtr.Zero || Marshal.ReadInt32(lParam) < Marshal.SizeOf<DevBroadcastDeviceInterface>()
+            || Marshal.ReadInt32(lParam, sizeof(int)) != DbtDevTypDeviceInterface) return false;
+        return Marshal.PtrToStructure<DevBroadcastDeviceInterface>(lParam).dbcc_classguid == WinUsbAdbLink.AndroidAdbInterfaceGuid;
+    }
+
+    // The notification owns dbcc_name only for the duration of the window message.
+    internal static string? ReadChangedInterfacePath(IntPtr lParam)
+    {
+        int offset = Marshal.OffsetOf<DevBroadcastDeviceInterface>(nameof(DevBroadcastDeviceInterface.dbcc_name)).ToInt32();
+        int bytes = Marshal.ReadInt32(lParam) - offset;
+        if (bytes < sizeof(char) || bytes > 65536) return null;
+        string? path = Marshal.PtrToStringUni(lParam + offset, bytes / sizeof(char));
+        if (path == null) return null;
+        int end = path.IndexOf('\0');
+        return end <= 0 ? null : path[..end];
+    }
+
     private void MessageLoop()
     {
         try
@@ -689,24 +736,7 @@ internal sealed class WinUsbDeviceWatcher : IDisposable
             {
                 _hwnd = CreateWindowExW(0, className, "", 0, 0, 0, 0, 0, HwndMessage, IntPtr.Zero, hInstance, IntPtr.Zero);
                 if (_hwnd != IntPtr.Zero)
-                {
-                    var filter = new DevBroadcastDeviceInterface
-                    {
-                        dbcc_size = (uint)Marshal.SizeOf<DevBroadcastDeviceInterface>(),
-                        dbcc_devicetype = DbtDevTypDeviceInterface,
-                        dbcc_classguid = WinUsbAdbLink.AndroidAdbInterfaceGuid
-                    };
-                    IntPtr ptr = Marshal.AllocHGlobal(Marshal.SizeOf<DevBroadcastDeviceInterface>());
-                    try
-                    {
-                        Marshal.StructureToPtr(filter, ptr, false);
-                        _notifyHandle = RegisterDeviceNotificationW(_hwnd, ptr, DeviceNotifyWindowHandle);
-                    }
-                    finally
-                    {
-                        Marshal.FreeHGlobal(ptr);
-                    }
-                }
+                    _notifyHandle = RegisterAdbInterface(_hwnd);
             }
             finally
             {
@@ -743,8 +773,7 @@ internal sealed class WinUsbDeviceWatcher : IDisposable
     {
         if (msg == WmDeviceChange)
         {
-            int evt = unchecked((int)wParam.ToInt64());
-            if (evt is DbtDeviceArrival or DbtDeviceRemoveComplete)
+            if (IsAdbInterfaceChange((int)msg, wParam, lParam))
             {
                 try { _onChanged(); } catch { }
             }
@@ -851,11 +880,11 @@ internal sealed class WinUsbDeviceWatcher : IDisposable
     private static extern void PostQuitMessage(int nExitCode);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr RegisterDeviceNotificationW(IntPtr hRecipient, IntPtr notificationFilter, uint flags);
+    private static extern IntPtr RegisterDeviceNotificationW(IntPtr hRecipient, ref DevBroadcastDeviceInterface notificationFilter, uint flags);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterDeviceNotification(IntPtr handle);
+    internal static extern bool UnregisterDeviceNotification(IntPtr handle);
 }
 
 /// <summary>
@@ -866,12 +895,24 @@ public static class AdbDevicePresence
     private const uint DigcfPresent = 0x00000002;
     private const uint DigcfDeviceInterface = 0x00000010;
 
-    public static bool HasPresentUsbDevices()
+    public static bool HasPresentUsbDevices() => QueryUsbPresence() == true;
+
+    internal static IReadOnlySet<string>? QueryUsbInterfacePaths()
+    {
+        try
+        {
+            return WinUsbAdbLink.EnumeratePresentDevices().Select(device => device.DevicePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (IOException) { return null; }
+    }
+
+    internal static bool? QueryUsbPresence()
     {
         Guid guid = WinUsbAdbLink.AndroidAdbInterfaceGuid;
         IntPtr devInfo = WinUsbAdbLink.SetupDiGetClassDevsW(ref guid, IntPtr.Zero, IntPtr.Zero, DigcfPresent | DigcfDeviceInterface);
         if (devInfo == IntPtr.Zero || devInfo == new IntPtr(-1))
-            return false;
+            return null;
 
         try
         {
@@ -879,7 +920,8 @@ public static class AdbDevicePresence
             {
                 cbSize = (uint)Marshal.SizeOf<WinUsbAdbLink.SpDeviceInterfaceData>()
             };
-            return WinUsbAdbLink.SetupDiEnumDeviceInterfaces(devInfo, IntPtr.Zero, ref guid, 0, ref data);
+            if (WinUsbAdbLink.SetupDiEnumDeviceInterfaces(devInfo, IntPtr.Zero, ref guid, 0, ref data)) return true;
+            return Marshal.GetLastWin32Error() == WinUsbAdbLink.ErrorNoMoreItems ? false : null;
         }
         finally
         {

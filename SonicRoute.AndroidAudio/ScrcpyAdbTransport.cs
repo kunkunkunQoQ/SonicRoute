@@ -23,7 +23,7 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
 
     public async Task<Stream> ConnectAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token)
     {
-        _serial = device.Serial;
+        _serial = device.CommandTarget;
         var streaming = (_streaming?.Invoke(device) ?? new()).Normalize();
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         _adb.ValidateCatalog();

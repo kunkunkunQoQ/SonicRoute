@@ -140,6 +140,28 @@ internal static class TrayWheelChecks
             AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
             wheel.Feed(120); await Drain(wheel);
             Check(SessionVolumeService.AdjustTargets.Count == 1 && AudioService.EndpointWrites.Count == 0, "ordinary wheel retains volume behavior only");
+            int priorStep = config.VolumeStep;
+            config.VolumeStep = 7;
+            foreach (var batch in new[]
+            {
+                (Input: new[] { 120, 120, 120, 120 }, Expected: 7),
+                (Input: new[] { -120, -120, -120, -120 }, Expected: -7),
+                (Input: new[] { 30, 30 }, Expected: 7),
+                (Input: new[] { 120, -120 }, Expected: 0),
+                (Input: new[] { 30, -90 }, Expected: -7)
+            })
+            {
+                SessionVolumeService.AdjustTargets.Clear();
+                int beforeOsd = wheel.VolumeNotices;
+                foreach (int delta in batch.Input) wheel.Feed(delta);
+                await Drain(wheel);
+                int expectedWrites = batch.Expected == 0 ? 0 : 1;
+                Check(SessionVolumeService.AdjustTargets.Count == expectedWrites
+                    && (expectedWrites == 0 || SessionVolumeService.AdjustTargets[0].Delta == batch.Expected)
+                    && wheel.VolumeNotices == beforeOsd + expectedWrites,
+                    "coalesced app volume and OSD: deltas " + string.Join(",", batch.Input) + " -> " + batch.Expected);
+            }
+            config.VolumeStep = priorStep;
             AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
             KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); wheel.Feed(120); await Drain(wheel);
             Check(AudioService.EndpointWrites.Count == 1 && SessionVolumeService.AdjustTargets.Count == 1, "mixed pending input preserves distinct device and volume operations");

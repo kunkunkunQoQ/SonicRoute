@@ -214,7 +214,8 @@ public partial class PhoneDevicePage
         _windowsHevcRead ??= LoadWindowsHevcAsync();
         if (_device == null) { CancelEncoderRead(); return; }
         if (_streamEncoders != null || _encoderOperation != null || _encoderFailed) return;
-        var operation = CancellationTokenSource.CreateLinkedTokenSource(_streamOperation.Token);
+        var operation = CancellationTokenSource.CreateLinkedTokenSource(_streamOperation.Token,
+            PhoneAudioWindowCache.Manager.OperationToken(_device));
         _encoderOperation = operation;
         RefreshEncoderOptions();
         _encoderRead = LoadStreamEncodersAsync(_device, operation);
@@ -251,7 +252,7 @@ public partial class PhoneDevicePage
             // Runtime extraction, verification and initial transport work never block the UI.
             var encoders = await Task.Run(() => _readStreamEncoders(device, token), token);
             if (_disposed || token.IsCancellationRequested || !ReferenceEquals(_encoderOperation, operation)
-                || _streamKey != AndroidDeviceIdentity.Key(device)) return;
+                || _streamKey != AndroidDeviceIdentity.Key(device) || !PhoneAudioWindowCache.Manager.IsCurrent(device)) return;
             _streamEncoders = encoders;
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }

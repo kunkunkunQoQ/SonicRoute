@@ -252,7 +252,7 @@ internal static partial class Program
         using var lifetime = new CancellationTokenSource();
         var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null, ["Fixture", true, player, watch, false, false], null)!;
         var source = (IAsyncDisposable)Activator.CreateInstance(sourceType, instance, null,
-            ["Simulated Apple device", (Action)(() => { }), (Action)(() => { }), player, watch, CancellationToken.None], null)!;
+            ["Simulated Apple device", host.GetMethod("Publish", statics)!.CreateDelegate<Action>(), (Action)(() => { }), player, watch, CancellationToken.None], null)!;
         var session = Activator.CreateInstance(sessionType, instance, null, [receiver, transport, IPAddress.Loopback, IPAddress.Loopback], null)!;
         sessionType.GetField("_stop", instance)!.SetValue(session, lifetime);
         sessionType.GetField("_output", instance)!.SetValue(session, source);
@@ -262,6 +262,7 @@ internal static partial class Program
         var quick = new QuickPanelModernWindow();
         try
         {
+            ConfigService.Load().QuickPanelUseLegacyAppRows = false;
             receiverField.SetValue(null, receiver);
             sourceType.GetMethod("Write", instance)!.CreateDelegate<WriteAirPlaySamples>(source)([0.25f, -0.25f], AndroidPcmSource.SampleRate);
             string id = (string)sourceType.GetProperty("Id", instance)!.GetValue(source)!;
@@ -269,6 +270,21 @@ internal static partial class Program
             var data = new DataObject("SonicRoute.PcApp.v1", info);
             var playbackOutput = sourceType.GetProperty("State", instance)!;
             string? SelectedOutput() => ((AndroidAudioState)playbackOutput.GetValue(source)!).OutputId;
+            DrainUi();
+            var mixerRows = (System.Collections.IDictionary)typeof(QuickPanelModernWindow).GetField("_androidRows", Hidden)!.GetValue(quick)!;
+            var row = mixerRows[id]!;
+            var muteButton = (Button)row.GetType().GetField("Icon", instance)!.GetValue(row)!;
+            var muteDot = (Border)row.GetType().GetField("MuteDot", instance)!.GetValue(row)!;
+            var volume = (Slider)row.GetType().GetField("Volume", instance)!.GetValue(row)!;
+            foreach (bool muted in new[] { true, false })
+            {
+                muteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                DrainUi();
+                Check(((AndroidAudioState)playbackOutput.GetValue(source)!).Muted == muted && muteButton.Opacity == 1
+                    && muteDot.Visibility == (muted ? Visibility.Visible : Visibility.Collapsed)
+                    && volume.Foreground == quick.FindResource(muted ? "Theme.AccentInverse" : "Theme.Accent"),
+                    "AirPlay mute feedback follows icon clicks in the standard app layout: " + muted);
+            }
             var statusField = receiverType.GetField("_status", instance)!;
             var selector = (ComboBox)panel.FindName("DeviceCombo");
             void Connected(byte[] cover)

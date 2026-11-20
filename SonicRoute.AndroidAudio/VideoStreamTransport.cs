@@ -139,9 +139,9 @@ public sealed class AdbVideoStreamTransport : IVideoStreamTransport
             AdbClient.ValidatePackage(request.App.Package);
 
         string localServerPath = await _localServerPathProvider(cancellationToken).ConfigureAwait(false);
-        await EnsureRemoteServerAsync(request.Device.Serial, localServerPath, cancellationToken).ConfigureAwait(false);
+        await EnsureRemoteServerAsync(request.Device.CommandTarget, localServerPath, cancellationToken).ConfigureAwait(false);
 
-        string serial = request.Device.Serial;
+        string serial = request.Device.CommandTarget;
         string scid = request.Scid;
         string socketPrefix = string.IsNullOrWhiteSpace(request.Options.SocketPrefix) ? "sonicroute_" : request.Options.SocketPrefix;
         string socketName = socketPrefix + scid;

@@ -8,6 +8,11 @@ using System.Text;
 
 internal sealed class FakeAdbServer : IAsyncDisposable
 {
+    private const string DeviceSerial = "fake-usb-1";
+    private const string TransportId = "7";
+    private const string DeviceList = DeviceSerial + "\tdevice model:Fake_Phone transport_id:" + TransportId + "\n";
+    private const string SelectedHost = "host-serial:" + DeviceSerial + ":";
+    private const string SelectedHostById = "host-transport-id:" + TransportId + ":";
     private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _acceptLoop;
@@ -98,6 +103,10 @@ internal sealed class FakeAdbServer : IAsyncDisposable
         {
             string req = await ReadSmartRequestAsync(stream, token).ConfigureAwait(false);
             Requests.Enqueue(req);
+            if (req == "host:transport-id:" + TransportId)
+                req = "host:transport:" + DeviceSerial;
+            else if (req.StartsWith(SelectedHostById, StringComparison.Ordinal))
+                req = SelectedHost + req[SelectedHostById.Length..];
 
             if (req == "host:version")
             {
@@ -106,13 +115,13 @@ internal sealed class FakeAdbServer : IAsyncDisposable
             }
             if (req == "host:devices-l")
             {
-                await SendOkayPayloadAsync(stream, "fake-usb-1\tdevice model:Fake_Phone transport_id:7\n", token).ConfigureAwait(false);
+                await SendOkayPayloadAsync(stream, DeviceList, token).ConfigureAwait(false);
                 return;
             }
             if (req == "host:track-devices-l")
             {
                 await stream.WriteAsync("OKAY"u8.ToArray(), token).ConfigureAwait(false);
-                await SendLengthPayloadAsync(stream, "fake-usb-1\tdevice model:Fake_Phone transport_id:7\n", token).ConfigureAwait(false);
+                await SendLengthPayloadAsync(stream, DeviceList, token).ConfigureAwait(false);
                 while (!token.IsCancellationRequested)
                 {
                     await _trackSignal.WaitAsync(token).ConfigureAwait(false);
@@ -152,12 +161,17 @@ internal sealed class FakeAdbServer : IAsyncDisposable
                 await SendOkayPayloadAsync(stream, "adb-abc-123\t_adb-tls-connect._tcp\t192.168.1.20:41234\n", token).ConfigureAwait(false);
                 return;
             }
-            if (req == "host-serial:fake-usb-1:get-serialno")
+            if (req == SelectedHost + "features")
+            {
+                await SendOkayPayloadAsync(stream, "shell_v2", token).ConfigureAwait(false);
+                return;
+            }
+            if (req == SelectedHost + "get-serialno")
             {
                 await SendOkayPayloadAsync(stream, "HW-FAKE-01\n", token).ConfigureAwait(false);
                 return;
             }
-            if (req.StartsWith("host-serial:fake-usb-1:forward:", StringComparison.Ordinal))
+            if (req.StartsWith(SelectedHost + "forward:", StringComparison.Ordinal))
             {
                 await stream.WriteAsync("OKAYOKAY"u8.ToArray(), token).ConfigureAwait(false);
                 await SendLengthPayloadAsync(stream, "44123", token).ConfigureAwait(false);
@@ -165,10 +179,10 @@ internal sealed class FakeAdbServer : IAsyncDisposable
             }
             if (req == "host:list-forward")
             {
-                await SendOkayPayloadAsync(stream, "fake-usb-1 tcp:44123 localabstract:test_sock\n", token).ConfigureAwait(false);
+                await SendOkayPayloadAsync(stream, DeviceSerial + " tcp:44123 localabstract:test_sock\n", token).ConfigureAwait(false);
                 return;
             }
-            if (req.StartsWith("host-serial:fake-usb-1:killforward:", StringComparison.Ordinal))
+            if (req.StartsWith(SelectedHost + "killforward:", StringComparison.Ordinal))
             {
                 await stream.WriteAsync("OKAYOKAY"u8.ToArray(), token).ConfigureAwait(false);
                 return;

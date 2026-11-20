@@ -33,6 +33,7 @@ public sealed class AndroidAudioSettingsStore
     private Task _save = Task.CompletedTask;
     private bool _writing;
     private long _revision;
+    private bool _loadedSafely = true;
     public string FilePath { get; }
 
     public AndroidAudioSettingsStore(string filePath)
@@ -41,6 +42,7 @@ public sealed class AndroidAudioSettingsStore
         try
         {
             if (!File.Exists(FilePath)) return;
+            _loadedSafely = false;
             using var file = File.OpenRead(FilePath);
             var saved = JsonSerializer.Deserialize<SettingsFile>(file);
             if (saved?.Version is not (1 or 2 or 3) || saved.Apps == null) return;
@@ -57,6 +59,7 @@ public sealed class AndroidAudioSettingsStore
             if (saved.Streams != null)
                 foreach (var entry in saved.Streams)
                     if (!string.IsNullOrEmpty(entry.Key) && entry.Value != null) _streams[entry.Key] = entry.Value.Normalize();
+            _loadedSafely = true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         { Trace.WriteLine("Phone audio settings: " + ex.Message); }
@@ -87,6 +90,97 @@ public sealed class AndroidAudioSettingsStore
     {
         lock (_gate) return _apps.TryGetValue(AndroidDeviceIdentity.Key(device) + "\n" + package, out var value)
             ? value : _apps.GetValueOrDefault(package) ?? new(); // old single-phone preferences remain a migration fallback
+    }
+
+    // The same currently connected wireless transport has just supplied its missing
+    // identity. Copy preferences to the verified key without overwriting existing
+    // settings or turning endpoint-only selections into automatic resume intents.
+    internal void PromoteEndpointPreferences(AndroidDevice previous, AndroidDevice verified)
+    {
+        if (!previous.IsWifi || !verified.IsWifi || verified.State != "device" || previous.State != "device"
+            || previous.Serial != verified.Serial || previous.TransportId == null || previous.TransportId != verified.TransportId
+            || AndroidDeviceIdentity.StableKey(previous) != null || AndroidDeviceIdentity.StableKey(verified) is not { } stable) return;
+        string oldKey = AndroidDeviceIdentity.Key(previous);
+        lock (_gate)
+        {
+            bool changed = false;
+            if (_streams.TryGetValue(oldKey, out var stream) && _streams.TryAdd(stable, stream)) changed = true;
+            foreach (var (key, value) in _apps.Where(e => e.Key.StartsWith(oldKey + "\n", StringComparison.Ordinal)).ToArray())
+            {
+                string? output = value.OutputId;
+                if (AndroidOutputIdentity.TryParseDeviceId(output, out string phone, out string sink) && phone == oldKey)
+                    output = AndroidOutputIdentity.FormatDeviceId(stable, sink);
+                if (_apps.TryAdd(stable + key[oldKey.Length..], value with { OutputId = output, ResumeOutputs = null })) changed = true;
+            }
+            if (!changed) return;
+            ++_revision;
+            if (!_writing) { _writing = true; _save = Task.Run(SaveAsync); }
+        }
+    }
+
+    // Explicitly verified rebind. Keep the original keys (and a durable recovery
+    // copy), so failure in either configuration file never destroys preferences.
+    internal Action? MigrateConnectionPreferences(AndroidDevice previous, AndroidDevice verified)
+    {
+        string oldKey = AndroidDeviceIdentity.Key(previous), newKey = AndroidDeviceIdentity.Key(verified);
+        if (oldKey == newKey) return null;
+        lock (_gate)
+        {
+            if (!_loadedSafely) throw new IOException("Phone audio preferences could not be loaded; the original file has been preserved.");
+            var apps = new Dictionary<string, AndroidAppAudioSettings>(_apps, StringComparer.Ordinal);
+            var streams = new Dictionary<string, AndroidStreamSettings>(_streams, StringComparer.Ordinal);
+            bool changed = false;
+            if (streams.TryGetValue(oldKey, out var stream) && !Equals(streams.GetValueOrDefault(newKey), stream))
+            { streams[newKey] = stream; changed = true; }
+            foreach (var (key, value) in _apps.Where(e => e.Key.StartsWith(oldKey + "\n", StringComparison.Ordinal)))
+            {
+                string nextKey = newKey + key[oldKey.Length..];
+                var archived = apps.GetValueOrDefault(nextKey);
+                string? output = value.OutputId;
+                if (AndroidOutputIdentity.TryParseDeviceId(output, out string phone, out string sink) && phone == oldKey)
+                    output = AndroidOutputIdentity.FormatDeviceId(newKey, sink);
+                var migrated = value with { OutputId = output, DisplaySize = value.DisplaySize ?? archived?.DisplaySize,
+                    WindowSize = value.WindowSize ?? archived?.WindowSize, ResumeOutputs = null };
+                if (archived == migrated) continue;
+                apps[nextKey] = migrated; changed = true;
+            }
+            if (!changed) return null;
+            var beforeApps = new Dictionary<string, AndroidAppAudioSettings>(_apps, StringComparer.Ordinal);
+            var beforeStreams = new Dictionary<string, AndroidStreamSettings>(_streams, StringComparer.Ordinal);
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            string backup = FilePath + ".pre-rebind-" + Guid.NewGuid().ToString("N") + ".bak";
+            AtomicFile.Write(backup, s => JsonSerializer.Serialize(s, new SettingsFile(3, _apps, _streams), JsonOptions));
+            AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, apps, streams), JsonOptions));
+            foreach (var entry in apps) _apps[entry.Key] = entry.Value;
+            foreach (var entry in streams) _streams[entry.Key] = entry.Value;
+            ++_revision;
+            return () =>
+            {
+                lock (_gate)
+                {
+                    // Restore only keys actually changed by this transaction, and
+                    // do not overwrite a newer UI preference written meanwhile.
+                    var restoredApps = new Dictionary<string, AndroidAppAudioSettings>(_apps, StringComparer.Ordinal);
+                    var restoredStreams = new Dictionary<string, AndroidStreamSettings>(_streams, StringComparer.Ordinal);
+                    foreach (var (key, value) in apps.Where(e => e.Key.StartsWith(newKey + "\n", StringComparison.Ordinal)))
+                        if (beforeApps.GetValueOrDefault(key) != value && restoredApps.GetValueOrDefault(key) == value)
+                        {
+                            if (beforeApps.TryGetValue(key, out var original)) restoredApps[key] = original;
+                            else restoredApps.Remove(key);
+                        }
+                    if (streams.TryGetValue(newKey, out var migrated) && beforeStreams.GetValueOrDefault(newKey) != migrated
+                        && restoredStreams.GetValueOrDefault(newKey) == migrated)
+                    {
+                        if (beforeStreams.TryGetValue(newKey, out var original)) restoredStreams[newKey] = original;
+                        else restoredStreams.Remove(newKey);
+                    }
+                    AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, restoredApps, restoredStreams), JsonOptions));
+                    _apps.Clear(); foreach (var entry in restoredApps) _apps[entry.Key] = entry.Value;
+                    _streams.Clear(); foreach (var entry in restoredStreams) _streams[entry.Key] = entry.Value;
+                    ++_revision;
+                }
+            };
+        }
     }
     public void Remember(AndroidDevice device, string package, int volume, string? outputId)
     {
@@ -149,15 +243,32 @@ public sealed class AndroidAudioSettingsStore
     }
 
     internal void ForgetSourceRoutes(AndroidDevice device, Func<string, bool>? matches = null)
+        => ForgetRoutes(device, matches, forgetDestination: false);
+
+    internal void ForgetPhoneRoutes(AndroidDevice device)
+        => ForgetRoutes(device, null, forgetDestination: true);
+
+    private void ForgetRoutes(AndroidDevice device, Func<string, bool>? matches, bool forgetDestination)
     {
         if (AndroidDeviceIdentity.StableKey(device) is not { } stable) return;
         string prefix = stable + "\n";
         lock (_gate)
         {
-            string[] keys = _apps.Where(e => e.Value.ResumeOutputs != null && e.Key.StartsWith(prefix, StringComparison.Ordinal)
-                && (matches == null || matches(e.Key[prefix.Length..]))).Select(e => e.Key).ToArray();
-            if (keys.Length == 0) return;
-            foreach (string key in keys) _apps[key] = _apps[key] with { ResumeOutputs = null };
+            bool changed = false;
+            foreach (var (key, settings) in _apps)
+            {
+                if (settings.ResumeOutputs is not { } outputs) continue;
+                string?[]? keep = null;
+                if (!key.StartsWith(prefix, StringComparison.Ordinal) || matches != null && !matches(key[prefix.Length..]))
+                {
+                    if (!forgetDestination) continue;
+                    keep = outputs.Where(id => !AndroidOutputIdentity.TryParseDeviceId(id, out string target, out _) || target != stable).ToArray();
+                    if (keep.Length == outputs.Length) continue;
+                }
+                _apps[key] = settings with { ResumeOutputs = keep is { Length: > 1 } ? keep : null };
+                changed = true;
+            }
+            if (!changed) return;
             ++_revision;
             if (!_writing) { _writing = true; _save = Task.Run(SaveAsync); }
         }
@@ -201,13 +312,12 @@ public sealed class AndroidAudioSettingsStore
             while (true)
             {
                 await Task.Delay(200).ConfigureAwait(false);
-                SettingsFile snapshot; long revision;
-                lock (_gate) { revision = _revision; snapshot = new(3, new(_apps, StringComparer.Ordinal), new(_streams, StringComparer.Ordinal)); }
-                Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-                AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, snapshot, JsonOptions));
                 lock (_gate)
                 {
-                    if (revision == _revision) { _writing = false; return; }
+                    if (!_loadedSafely) { _writing = false; return; }
+                    Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+                    AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, new SettingsFile(3, _apps, _streams), JsonOptions));
+                    _writing = false; return;
                 }
             }
         }

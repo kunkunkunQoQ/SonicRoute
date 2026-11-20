@@ -95,11 +95,17 @@ internal static partial class Program
     {
         const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
         var cache = typeof(App).Assembly.GetType("SonicRoute.PhoneAudioWindowCache")!;
+        var host = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!;
+        var store = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
         var discoveryProperty = cache.GetProperty("Discovery", statics)!;
         var previous = discoveryProperty.GetValue(null);
         int scans = 0;
-        var one = new AndroidDevice("clipboard-fixture-one", "One", "device", true, "clipboard-hardware-one");
-        var two = new AndroidDevice("clipboard-fixture-two", "Two", "device", false, "clipboard-hardware-two");
+        var one = new AndroidDevice("clipboard-fixture-one", "One", "device", true, "clipboard-hardware-one")
+            { IdentityFingerprint = "clipboard-proof-one", ConnectionTarget = "fixture-wifi-1" };
+        var two = new AndroidDevice("clipboard-fixture-two", "Two", "device", false, "clipboard-hardware-two")
+            { IdentityFingerprint = "clipboard-proof-two", ConnectionTarget = "fixture-usb-2" };
+        store.RememberDevice(one);
+        store.RememberDevice(two);
         var discovery = new AndroidDeviceDiscovery(_ => { scans++; return Task.FromResult<IReadOnlyList<AndroidDevice>>([one, two]); });
         discovery.Publish([one, two]); discoveryProperty.SetValue(null, discovery);
         var clients = new List<ClipboardPhone>(); var desktop = new ClipboardDesktop();
@@ -188,7 +194,7 @@ internal static partial class Program
             Check(!sync.IsEnabled(one) && sync.IsEnabled(two) && desktop.Reads == 0 && scans == 0,
                 "restarting restores independent device switches from the small file without scanning cached devices or sending old text");
             var last = clients.Last(); int count = clients.Count;
-            var alias = two with { Serial = "clipboard-fixture-second-address" };
+            var alias = two with { Serial = "clipboard-fixture-second-address", IsWifi = true, ConnectionTarget = "fixture-wifi-3" };
             discovery.Publish([alias, two, one]); DrainUi();
             Check(clients.Count == count && !last.Stopped, "reordering two addresses for the same phone keeps the working clipboard helper");
             last.End.TrySetException(new IOException("fixture disconnection")); Until(() => !desktop.Listening);
@@ -205,18 +211,15 @@ internal static partial class Program
             sync.SetEnabled(two, true); Ready(two);
             var restored = clients.Last(); discovery.Publish(Array.Empty<AndroidDevice>()); Until(() => restored.Stopped);
             Check(!desktop.Listening && sync.IsEnabled(two), "disconnect suspends live work while retaining the saved device preference");
-            discovery.Publish([one, two with { Serial = "clipboard-fixture-two-new-transport" }]); Ready(two);
+            discovery.Publish([one, alias with { Serial = "clipboard-fixture-two-new-transport", ConnectionTarget = "fixture-wifi-4" }]); Ready(two);
             Check(clients.Last().Device?.Serial == "clipboard-fixture-two-new-transport", "hardware identity restores only the selected phone after its transport address changes");
             Check(!AndroidClipboardClient.IsSupported(new string('中', 30000)) && AndroidClipboardClient.IsSupported("中文🙂\ntext"),
                 "text is bounded by UTF-8 bytes while preserving supported Unicode");
             Check(AndroidClipboardClient.IsOwnedCommand("app_process org.sonicroute.android.ClipboardBridge " + new string('a', 32), new string('a', 32))
                 && !AndroidClipboardClient.IsOwnedCommand("app_process other.service " + new string('a', 32), new string('a', 32)),
                 "helper cleanup accepts only this clipboard class and its exact session ownership token");
-            var host = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost")!;
-            var store = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
-            store.RememberDevice(two);
             var profilesChanged = typeof(PhoneClipboardSync).GetMethod("ProfilesChanged", Hidden)!;
-            store.RemoveDevice(store.Profile.Id);
+            store.RemoveDevice(store.FindProfile(two)!.Id);
             profilesChanged.Invoke(sync, null);
             var beforeRemoval = clients.Last();
             Until(() => beforeRemoval.Stopped);
@@ -226,7 +229,7 @@ internal static partial class Program
             desktop = new ClipboardDesktop(); sync = New(desktop); Pump(sync.InitializeAsync());
             Check(!sync.IsEnabled(two) && !desktop.Listening && clients.Count == removedCount && scans == 0,
                 "removed-device clipboard preferences are inert even after restarting with its old transport still visible");
-            var newTransport = two with { Serial = "clipboard-fixture-two-readded" };
+            var newTransport = alias with { Serial = "clipboard-fixture-two-readded", ConnectionTarget = "fixture-wifi-5" };
             discovery.Publish([newTransport]);
             store.RememberDevice(newTransport);
             profilesChanged.Invoke(sync, null);

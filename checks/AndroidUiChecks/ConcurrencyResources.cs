@@ -63,14 +63,14 @@ internal static partial class Program
         }
     }
 
-    private sealed class CleanupTransport(CleanupShell shell) : IAdbTransport
+    private sealed class CleanupTransport(CleanupShell shell, Func<string, Task>? push = null) : IAdbTransport
     {
         internal int Removed;
         public Task<AdbShellResult> RunShellAsync(string serial, string command, CancellationToken token)
         { if (command.StartsWith("rm -f ")) Interlocked.Increment(ref Removed); return Task.FromResult(new AdbShellResult("", 0)); }
         public Task<IAdbShellSession> OpenShellAsync(string serial, string command, bool redirectInput, CancellationToken token)
             => Task.FromResult<IAdbShellSession>(shell);
-        public Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token) => Task.CompletedTask;
+        public Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token) => push?.Invoke(remotePath) ?? Task.CompletedTask;
         public Task<string> VersionAsync(CancellationToken token) => throw new NotSupportedException();
         public Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token) => throw new NotSupportedException();
         public Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> changed, CancellationToken token) => throw new NotSupportedException();

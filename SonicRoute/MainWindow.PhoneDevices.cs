@@ -29,6 +29,7 @@ public partial class MainWindow
     private bool _suppressPhoneSelection;
     private Border? _phoneSidebarCount;
     private bool _phoneInitialized;
+    private bool _watchingPhoneUsb;
     private Task? _phoneInitialization;
     private Task InitializePhoneManagementAsync()
     {
@@ -91,8 +92,9 @@ public partial class MainWindow
         L10n.Instance.PropertyChanged += PhoneLanguageChanged;
         PhoneAudioWindowCache.DevicesChanged += PhoneDevicesChanged;
         IsVisibleChanged += PhoneManagementVisibilityChanged; StateChanged += PhoneManagementStateChanged;
+        PhoneDevicesHost.IsVisibleChanged += PhoneSidebarVisibilityChanged;
+        UpdatePhoneUsbVisibility();
         var cachedDevices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
-        AndroidAudioHost.Phone.ObserveDevices(cachedDevices);
         _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(cachedDevices, force: false, _uiLifetime.Token);
         PhoneLibraryChanged();
     }
@@ -133,12 +135,14 @@ public partial class MainWindow
     { if (!IsVisible) SuspendPhoneManagement(); else ActivatePhoneManagement(); }
     private void PhoneManagementStateChanged(object? sender, EventArgs e)
     { if (WindowState == WindowState.Minimized) SuspendPhoneManagement(); else ActivatePhoneManagement(); }
+    private void PhoneSidebarVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdatePhoneUsbVisibility();
+    private void UpdatePhoneUsbVisibility() => PhoneAudioWindowCache.SetUsbPanelVisible(ref _watchingPhoneUsb,
+        !_isClosed && _phoneInitialized && PhoneDevicesHost.IsVisible && WindowState != WindowState.Minimized);
     private void PhoneDevicesChanged()
     {
         if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(PhoneDevicesChanged)); return; }
         if (_isClosed) return;
         var devices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
-        AndroidAudioHost.Phone.ObserveDevices(devices);
         _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(devices, force: false, _uiLifetime.Token);
         PhoneLibraryChanged(); _phoneDevicePage?.ApplyDevices(devices);
     }
@@ -165,7 +169,7 @@ public partial class MainWindow
                     entry = new PhoneSidebarItem(profile.Id, _phoneSidebarIcon);
                     _phoneSidebarDevices.Add(profile.Id, entry); _phoneDevicesList.Items.Add(entry);
                 }
-                var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
+                var device = PhoneAudioWindowCache.GetOnlineDevice(profile.LastDevice);
                 entry.Update(store.GetProfileDisplayName(profile), device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
             }
         }
@@ -200,10 +204,15 @@ public partial class MainWindow
     private void ActivatePhoneManagement()
     {
         if (!_phoneInitialized || !IsVisible || WindowState == WindowState.Minimized || AppsPage.Visibility != Visibility.Visible) return;
+        UpdatePhoneUsbVisibility();
         PhoneLibraryChanged();
         if (PhoneDetailsHost.Visibility == Visibility.Visible) _phoneDevicePage?.Activate();
     }
-    private void SuspendPhoneManagement() => _phoneDevicePage?.Suspend();
+    private void SuspendPhoneManagement()
+    {
+        PhoneAudioWindowCache.SetUsbPanelVisible(ref _watchingPhoneUsb, false);
+        _phoneDevicePage?.Suspend();
+    }
     private Exception? _phoneRefreshError;
     private void PhoneLanguageChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -214,7 +223,7 @@ public partial class MainWindow
         {
             if (_phoneSidebarDevices.TryGetValue(profile.Id, out var entry))
             {
-                var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
+                var device = PhoneAudioWindowCache.GetOnlineDevice(profile.LastDevice);
                 entry.Update(store.GetProfileDisplayName(profile), device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
             }
         }
@@ -239,6 +248,8 @@ public partial class MainWindow
     {
         if (!_phoneInitialized) return;
         _phoneInitialized = false;
+        PhoneDevicesHost.IsVisibleChanged -= PhoneSidebarVisibilityChanged;
+        PhoneAudioWindowCache.SetUsbPanelVisible(ref _watchingPhoneUsb, false);
         AndroidAudioHost.Phone.Changed -= PhoneLibraryChanged;
         AndroidAudioHost.Phone.OutputsChanged -= PhoneLibraryChanged;
         L10n.Instance.PropertyChanged -= PhoneLanguageChanged;

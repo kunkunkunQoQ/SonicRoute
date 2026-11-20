@@ -120,6 +120,7 @@
 <!-- 应用行音量条：简化模板（进度/圆点用 Foreground 着色，静音时反色） -->
         <Style x:Key="RowSliderStyle" TargetType="Slider">
             <Setter Property="Height" Value="32"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}"/>
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
             <Setter Property="Minimum" Value="0"/>
             <Setter Property="Maximum" Value="100"/>
@@ -174,9 +175,12 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6">
-                            <ContentPresenter Margin="{TemplateBinding Padding}"/>
-                        </Border>
+                        <Grid Background="Transparent">
+                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                            </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True">
                                 <Setter TargetName="bd" Property="Background" Value="{DynamicResource Theme.Overlay}"/>

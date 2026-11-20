@@ -12,6 +12,29 @@ public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice,
     public IReadOnlyList<string> DisabledSmartVolumeApps { get; init; } = Array.Empty<string>();
     public IReadOnlyList<AndroidApp> QuickPanelApps { get; init; } = RetainedApps;
     public IReadOnlyList<AndroidOutputSink> OutputSinks { get; init; } = [AndroidOutputSink.DefaultSpeaker];
+    public bool ManuallyDisconnected { get; init; }
+    public string? LastWirelessAddress { get; init; }
+
+    internal static string? WirelessAddress(string? serial) =>
+        serial != null && IPEndPoint.TryParse(serial, out var endpoint) && endpoint.Port > 0 ? endpoint.ToString() : null;
+
+    internal AndroidPhoneProfile WithDevice(AndroidDevice device, string? wirelessAddress = null) => this with
+    {
+        LastDevice = device,
+        LastWirelessAddress = (device.IsWifi ? WirelessAddress(device.Serial) ?? WirelessAddress(wirelessAddress) : null)
+            ?? LastWirelessAddress ?? (LastDevice is { IsWifi: true } prior ? WirelessAddress(prior.Serial) : null)
+    };
+
+    // An address is only a hint. Keep the selected phone's identity for the
+    // handshake, including when an old USB-only record must rely on mDNS.
+    internal AndroidDevice? WirelessReconnectTarget(bool discoverFromUsb)
+    {
+        if (LastDevice is not { } saved || saved.IsWifi) return LastDevice;
+        if ((!discoverFromUsb && LastWirelessAddress == null) || AndroidDeviceIdentity.StableKey(saved) == null) return null;
+        return saved with { IsWifi = true, Serial = LastWirelessAddress ?? "",
+            HardwareId = string.IsNullOrWhiteSpace(saved.HardwareId) ? saved.Serial : saved.HardwareId,
+            State = "offline", TransportId = null, ConnectionTarget = null };
+    }
 }
 
 internal sealed record AndroidSavedConnection(string Name, AndroidDevice Device, string Address);
@@ -28,6 +51,11 @@ public sealed class AndroidPhoneStore
     private Task _save = Task.CompletedTask;
     private bool _writing;
     private long _revision;
+    private long _managementRevision;
+    private bool _loadedSafely = true;
+    private bool _legacyFormat;
+    internal long ManagementRevision { get { lock (_gate) return _managementRevision; } }
+    internal bool HasUnresolvedRemovals { get { lock (_gate) return _state.RemovedDevices?.Any(d => AndroidDeviceIdentity.StableKey(d) == null) == true; } }
     public string FilePath { get; }
     public event Action? Changed;
     public event Action? DisplayNamesChanged;
@@ -45,7 +73,9 @@ public sealed class AndroidPhoneStore
         _state = new(Array.AsReadOnly(new[] { draft }), draft.Id);
         try
         {
-            if (!File.Exists(FilePath) || new FileInfo(FilePath).Length > 32 * 1024 * 1024) return;
+            if (!File.Exists(FilePath)) return;
+            _loadedSafely = false;
+            if (new FileInfo(FilePath).Length > 32 * 1024 * 1024) return;
             using var file = File.OpenRead(FilePath);
             using var json = JsonDocument.Parse(file);
             int version = json.RootElement.GetProperty("Version").GetInt32();
@@ -59,7 +89,7 @@ public sealed class AndroidPhoneStore
                 profiles = [LoadProfile(new(Guid.NewGuid().ToString("N"), saved.Name, saved.Device, saved.Apps, saved.DisabledSmartVolumePackages))];
                 selected = profiles[0].Id;
             }
-            else if (version == 2)
+            else if (version is 2 or 3)
             {
                 var saved = json.RootElement.Deserialize<PhoneFile>();
                 if (saved?.Phones == null || saved.Phones.Length is < 1 or > 32) return;
@@ -73,6 +103,8 @@ public sealed class AndroidPhoneStore
             }
             else return;
             _state = new(Array.AsReadOnly(profiles), profiles.FirstOrDefault(p => p.Id == selected)?.Id ?? profiles[0].Id, removed, removedProfiles);
+            _loadedSafely = true;
+            _legacyFormat = version < 3;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidOperationException or KeyNotFoundException)
         { Trace.WriteLine("Phone library: " + ex.Message); }
@@ -84,8 +116,8 @@ public sealed class AndroidPhoneStore
         foreach (var item in saved)
         {
             if (item?.Device is not { } device || string.IsNullOrWhiteSpace(device.Serial) || device.Serial.Length > 512
-                || (device.HardwareId?.Length ?? 0) > 128 || AndroidDeviceIdentity.StableKey(device) is not { } key) continue;
-            try { profiles[key] = LoadProfile(item); }
+                || (device.HardwareId?.Length ?? 0) > 128) continue;
+            try { var profile = LoadProfile(item); profiles[profile.Id] = profile; }
             catch (ArgumentException ex) { Trace.WriteLine("Removed phone preferences: " + ex.Message); }
         }
         return Array.AsReadOnly(profiles.Values.ToArray());
@@ -99,6 +131,9 @@ public sealed class AndroidPhoneStore
         return WithQuickPanelApps(new(CleanName(saved.Name), saved.Device, Array.AsReadOnly(apps))
         {
             Id = saved.Id,
+            ManuallyDisconnected = saved.ManuallyDisconnected,
+            LastWirelessAddress = AndroidPhoneProfile.WirelessAddress(saved.LastWirelessAddress)
+                ?? (saved.Device is { IsWifi: true } wifi ? AndroidPhoneProfile.WirelessAddress(wifi.Serial) : null),
             ReceiveFolder = AndroidFileTransfer.IsSharedPath(saved.ReceiveFolder) ? saved.ReceiveFolder! : AndroidFileTransfer.Downloads,
             DisabledSmartVolumeApps = Array.AsReadOnly((saved.DisabledSmartVolumePackages ?? []).Take(1000).Where(packages.Contains).Distinct(StringComparer.Ordinal).ToArray())
         });
@@ -173,27 +208,116 @@ public sealed class AndroidPhoneStore
         return found;
     }
     public void Rename(string name) => ChangeProfile(null, p => p with { Name = CleanName(name) });
+    internal bool RememberRecoveredAddress(string id, string address, Func<bool> stillCurrent)
+    {
+        bool accepted = false;
+        ChangeProfile(id, profile =>
+        {
+            if (profile.ManuallyDisconnected || !stillCurrent()) return profile;
+            accepted = true;
+            return profile.LastWirelessAddress == address ? profile : profile with { LastWirelessAddress = address };
+        });
+        return accepted;
+    }
     private static bool IsRemoved(State state, AndroidDevice device) =>
         state.RemovedDevices?.Any(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device)) == true;
     public bool IsRemoved(AndroidDevice device) { lock (_gate) return IsRemoved(_state, device); }
-    // Only an explicit connection/add can restore a removed device. Discovery never does.
-    public void RememberDevice(AndroidDevice device) => Change(state =>
+    internal bool HasConflictingIdentity(AndroidDevice device)
     {
-        if (IsRemoved(state, device))
-            state = state with { RemovedDevices = Array.AsReadOnly(state.RemovedDevices!.Where(d => !AndroidDeviceIdentity.MatchesSavedDevice(d, device)).ToArray()) };
-        var preserved = state.RemovedProfiles?.FirstOrDefault(p => AndroidDeviceIdentity.SamePhysicalDevice(p.LastDevice, device));
-        if (preserved == null) return Upsert(state, [device], select: true);
+        lock (_gate) return _state.Profiles.Concat(_state.RemovedProfiles ?? []).Any(p => p.LastDevice is { } saved
+            && AndroidDeviceIdentity.Key(saved) == AndroidDeviceIdentity.Key(device)
+            && (AndroidDeviceIdentity.ConflictingEvidence(saved, device)
+                || saved.IdentityFingerprint != null && device.IdentityFingerprint == null));
+    }
+    // Only an explicit connection/add can restore a removed device. Discovery never does.
+    public void RememberDevice(AndroidDevice device) => BindExplicit(device, null, null);
 
-        var active = state.Profiles.Where(p => p.LastDevice != null).ToArray();
-        var current = active.FirstOrDefault(p => AndroidDeviceIdentity.SamePhysicalDevice(p.LastDevice, device));
-        state = state with { RemovedProfiles = Array.AsReadOnly(state.RemovedProfiles!.Where(p => p.Id != preserved.Id).ToArray()) };
-        if (current != null) return Upsert(state, [device], select: true);
-        if (active.Length >= 32) throw AndroidError.WithCode(new InvalidOperationException("最多可保存 32 台手机。"), AndroidErrorCode.MaxSavedPhones);
-        var restored = preserved with { LastDevice = device };
-        return state with { Profiles = Array.AsReadOnly(active.Append(restored).ToArray()), SelectedId = restored.Id };
-    });
+    // Admission is a single durable library transaction. The active profile wins over an
+    // archived one; old preferences are copied before committing, never moved/deleted.
+    internal bool BindExplicit(AndroidDevice device, string? expectedProfileId, long? expectedRevision,
+        Func<AndroidDevice, AndroidDevice, Action?>? migrate = null, AndroidDevice? verifiedAlias = null,
+        Func<bool>? stillCurrent = null, string? wirelessAddress = null)
+    {
+        bool accepted = false;
+        var rollback = new List<Action>();
+        void Migrate(AndroidDevice prior)
+        {
+            if (migrate?.Invoke(prior, device) is { } undo) rollback.Add(undo);
+        }
+        try { Change(state =>
+        {
+            if (expectedRevision is { } revision && revision != _managementRevision || stillCurrent?.Invoke() == false) return state;
+            var active = state.Profiles.Where(p => p.LastDevice != null).ToArray();
+            var current = expectedProfileId == null
+                ? active.FirstOrDefault(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device))
+                : active.FirstOrDefault(p => p.Id == expectedProfileId && (AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device)
+                    || verifiedAlias != null && AndroidDeviceIdentity.SamePhysicalDevice(device, verifiedAlias)
+                        && AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, verifiedAlias)));
+            if (expectedProfileId != null && current == null) return state;
+            if (current?.LastDevice?.IdentityFingerprint != null && device.IdentityFingerprint != current.LastDevice.IdentityFingerprint)
+                return state;
+            // A repeated hardware serial with contradictory evidence must never overwrite a library.
+            if (HasConflictingIdentity(device)) return state;
+            var preserved = (state.RemovedProfiles ?? []).Where(p => AndroidDeviceIdentity.SamePhysicalDevice(p.LastDevice, device)
+                || AndroidDeviceIdentity.StableKey(p.LastDevice) == null && p.LastDevice?.Serial == device.Serial).ToArray();
+            var matching = active.Where(p => p.Id == current?.Id || AndroidDeviceIdentity.SamePhysicalDevice(p.LastDevice, device)).ToArray();
+            if (matching.Concat(preserved).Any(p => p.LastDevice?.IdentityFingerprint is { } proof && proof != device.IdentityFingerprint))
+                return state;
+            if (current != null && matching.Length == 1 && preserved.Length == 0 && !IsRemoved(state, device)
+                && !current.ManuallyDisconnected && current.WithDevice(device, wirelessAddress) == current && state.SelectedId == current.Id)
+            { accepted = true; return state; }
+            var primary = current ?? matching.FirstOrDefault(p => p.Id == state.SelectedId) ?? matching.FirstOrDefault()
+                ?? preserved.FirstOrDefault() ?? state.Profiles.FirstOrDefault(p => p.LastDevice == null)
+                ?? new AndroidPhoneProfile("", null, []);
+            if (active.Length >= 32 && matching.Length == 0) throw AndroidError.WithCode(new InvalidOperationException("最多可保存 32 台手机。"), AndroidErrorCode.MaxSavedPhones);
+            if (primary.LastDevice is { } prior && AndroidDeviceIdentity.Key(prior) != AndroidDeviceIdentity.Key(device))
+                Migrate(prior);
+            foreach (var secondary in matching.Concat(preserved).Where(p => p.Id != primary.Id))
+                if (secondary.LastDevice is { } alternate && AndroidDeviceIdentity.Key(alternate) != AndroidDeviceIdentity.Key(device)) Migrate(alternate);
+            var combined = new[] { primary }.Concat(matching).Concat(preserved).DistinctBy(p => p.Id).ToArray();
+            var connected = primary.WithDevice(device, wirelessAddress);
+            var merged = WithQuickPanelApps(connected with {
+                Name = primary.Name.Length != 0 ? primary.Name : combined.FirstOrDefault(p => p.Name.Length != 0)?.Name ?? "",
+                LastWirelessAddress = connected.LastWirelessAddress ?? combined.Select(p => p.LastWirelessAddress).FirstOrDefault(a => a != null),
+                ManuallyDisconnected = false,
+                RetainedApps = Array.AsReadOnly(combined.SelectMany(p => p.RetainedApps).DistinctBy(a => a.Package).ToArray()),
+                DisabledSmartVolumeApps = Array.AsReadOnly(combined.SelectMany(p => p.DisabledSmartVolumeApps).Distinct(StringComparer.Ordinal).ToArray()),
+                ReceiveFolder = primary.ReceiveFolder != AndroidFileTransfer.Downloads ? primary.ReceiveFolder
+                    : combined.FirstOrDefault(p => p.ReceiveFolder != AndroidFileTransfer.Downloads)?.ReceiveFolder ?? primary.ReceiveFolder
+            });
+            var profiles = active.Where(p => !matching.Any(m => m.Id == p.Id) || p.Id == merged.Id)
+                .Select(p => p.Id == merged.Id ? merged : p).ToList();
+            if (!profiles.Any(p => p.Id == merged.Id)) profiles.Add(merged);
+            var removed = (state.RemovedDevices ?? []).Where(d => !AndroidDeviceIdentity.MatchesSavedDevice(d, device)).ToArray();
+            var archived = (state.RemovedProfiles ?? []).Where(p => !preserved.Any(m => m.Id == p.Id)).ToArray();
+            accepted = true;
+            return state with { Profiles = Array.AsReadOnly(profiles.ToArray()), SelectedId = merged.Id,
+                RemovedDevices = Array.AsReadOnly(removed), RemovedProfiles = Array.AsReadOnly(archived) };
+        }, durable: true, management: true); }
+        catch
+        {
+            for (int i = rollback.Count - 1; i >= 0; --i)
+                try { rollback[i](); } catch (Exception ex) { Trace.WriteLine("Phone preference rollback (backup retained): " + ex.Message); }
+            throw;
+        }
+        return accepted;
+    }
+
+    internal void SetDisconnected(AndroidDevice device, bool disconnected) => Change(state =>
+    {
+        var profiles = state.Profiles.Select(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device)
+            && p.ManuallyDisconnected != disconnected ? p with { ManuallyDisconnected = disconnected } : p).ToArray();
+        return profiles.SequenceEqual(state.Profiles) ? state : state with { Profiles = Array.AsReadOnly(profiles) };
+    }, durable: true, management: true);
     public void ObserveDevices(IReadOnlyList<AndroidDevice> devices) => Change(state => Upsert(state,
-        devices.Where(d => d.State == "device" && !IsRemoved(state, d)), select: false));
+        devices.Where(d => d.State == "device" && !IsRemoved(state, d)
+            && !state.Profiles.Any(p => AndroidDeviceIdentity.Key(p.LastDevice ?? d) == AndroidDeviceIdentity.Key(d)
+                && AndroidDeviceIdentity.ConflictingEvidence(p.LastDevice, d))), select: false));
+    internal void ObserveManagedDevices(IReadOnlyList<AndroidDevice> devices, long revision, Func<bool> stillCurrent) => Change(state =>
+    {
+        if (revision != _managementRevision || !stillCurrent()) return state;
+        return Upsert(state, devices.Where(d => !IsRemoved(state, d)), select: false);
+    });
     public bool RemoveDevice(string profileId, IReadOnlyList<AndroidDevice>? aliases = null)
     {
         bool removed = false;
@@ -207,21 +331,21 @@ public sealed class AndroidPhoneStore
             var archived = state.RemovedProfiles;
             var identity = AndroidDeviceIdentity.StableKey(device) != null ? known[^1]
                 : known.FirstOrDefault(d => AndroidDeviceIdentity.StableKey(d) != null);
-            if (identity != null)
+            if (device != null)
             {
                 // Keep preferences without keeping per-device app artwork or live output endpoints.
                 var saved = WithQuickPanelApps(profile with {
-                    LastDevice = identity, OutputSinks = [AndroidOutputSink.DefaultSpeaker],
+                    LastDevice = identity ?? device, OutputSinks = [AndroidOutputSink.DefaultSpeaker],
                     RetainedApps = Array.AsReadOnly(profile.RetainedApps.Select(a => a.IconPng == null ? a : a with { IconPng = null }).ToArray())
                 });
-                archived = Array.AsReadOnly((archived ?? []).Where(p => !AndroidDeviceIdentity.SamePhysicalDevice(p.LastDevice, identity)).Append(saved).ToArray());
+                archived = Array.AsReadOnly((archived ?? []).Where(p => !AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, identity ?? device)).Append(saved).ToArray());
             }
             var remaining = state.Profiles.Where(p => p.Id != profileId).ToArray();
             if (remaining.Length == 0) remaining = [new("", null, Array.Empty<AndroidApp>())];
             removed = true;
             return state with { Profiles = Array.AsReadOnly(remaining),
                 SelectedId = state.SelectedId == profileId ? remaining[0].Id : state.SelectedId, RemovedDevices = ignored, RemovedProfiles = archived };
-        });
+        }, durable: true, management: true);
         return removed;
     }
     private static State Upsert(State state, IEnumerable<AndroidDevice> devices, bool select)
@@ -235,7 +359,7 @@ public sealed class AndroidPhoneStore
             var previous = profiles[i].LastDevice;
             var alias = observed.FirstOrDefault(d => d.Serial == previous?.Serial && d.HardwareId != null
                 && AndroidDeviceIdentity.MatchesSavedDevice(previous, d));
-            if (alias != null && profiles[i].LastDevice != alias) { profiles[i] = profiles[i] with { LastDevice = alias }; changed = true; }
+            if (alias != null && profiles[i].LastDevice != alias) { profiles[i] = profiles[i].WithDevice(alias); changed = true; }
         }
         foreach (var device in AndroidDeviceIdentity.Distinct(observed))
         {
@@ -245,22 +369,24 @@ public sealed class AndroidPhoneStore
             if (index < 0)
             {
                 if (profiles.Count >= 32) throw AndroidError.WithCode(new InvalidOperationException("最多可保存 32 台手机。"), AndroidErrorCode.MaxSavedPhones);
-                next = new("", device, Array.Empty<AndroidApp>());
+                next = new AndroidPhoneProfile("", null, Array.Empty<AndroidApp>()).WithDevice(device);
                 profiles.Add(next); changed = true;
             }
             else
             {
-                next = profiles[index] with { LastDevice = device };
+                next = profiles[index].WithDevice(device);
                 if (next != profiles[index]) { profiles[index] = next; changed = true; }
             }
             if (select && selected != next.Id) { selected = next.Id; changed = true; }
         }
-        foreach (var group in profiles.Where(p => p.LastDevice != null).GroupBy(p => AndroidDeviceIdentity.Key(p.LastDevice!), StringComparer.Ordinal).Where(g => g.Count() > 1).ToArray())
+        foreach (var group in profiles.Where(p => p.LastDevice != null).GroupBy(p => AndroidDeviceIdentity.Key(p.LastDevice!), StringComparer.Ordinal)
+            .Where(g => g.Count() > 1 && !g.Any(a => g.Any(b => AndroidDeviceIdentity.ConflictingEvidence(a.LastDevice, b.LastDevice)))).ToArray())
         {
             var primary = group.FirstOrDefault(p => p.Id == selected) ?? group.First();
             var apps = group.OrderByDescending(p => p.Id == primary.Id).SelectMany(p => p.RetainedApps).DistinctBy(a => a.Package).ToArray();
             var disabledSmart = group.SelectMany(p => p.DisabledSmartVolumeApps).Distinct(StringComparer.Ordinal).ToArray();
             var merged = WithQuickPanelApps(primary with { Name = primary.Name.Length == 0 ? group.FirstOrDefault(p => p.Name.Length != 0)?.Name ?? "" : primary.Name,
+                LastWirelessAddress = primary.LastWirelessAddress ?? group.Select(p => p.LastWirelessAddress).FirstOrDefault(a => a != null),
                 RetainedApps = Array.AsReadOnly(apps), DisabledSmartVolumeApps = Array.AsReadOnly(disabledSmart) });
             profiles[profiles.FindIndex(p => p.Id == primary.Id)] = merged;
             profiles.RemoveAll(p => p.Id != primary.Id && group.Any(member => member.Id == p.Id));
@@ -364,13 +490,19 @@ public sealed class AndroidPhoneStore
         var profiles = state.Profiles.ToArray(); profiles[index] = next;
         return state with { Profiles = Array.AsReadOnly(profiles) };
     });
-    private void Change(Func<State, State> change)
+    private void Change(Func<State, State> change, bool durable = false, bool management = false)
     {
         bool namesChanged;
         bool outputsChanged;
         lock (_gate)
         {
+            if (!_loadedSafely) throw new IOException("Phone library could not be loaded; the original file has been preserved.");
             var next = change(_state); if (next == _state) return;
+            if (durable)
+            {
+                BackupBeforeMigration();
+                WriteState(next);
+            }
             namesChanged = !ReferenceEquals(next.Profiles, _state.Profiles)
                 && (next.Profiles.Count != _state.Profiles.Count
                     || next.Profiles.Any(p => _state.Profiles.FirstOrDefault(previous => previous.Id == p.Id)?.Name != p.Name));
@@ -382,11 +514,18 @@ public sealed class AndroidPhoneStore
                         || !prev.OutputSinks.SequenceEqual(p.OutputSinks);
                 }));
             _state = next; ++_revision;
-            if (!_writing) { _writing = true; _save = Task.Run(SaveAsync); }
+            if (management) ++_managementRevision;
+            if (!durable && !_writing) { _writing = true; _save = Task.Run(SaveAsync); }
         }
-        Changed?.Invoke();
-        if (namesChanged) DisplayNamesChanged?.Invoke();
-        if (outputsChanged) OutputsChanged?.Invoke();
+        Notify(Changed);
+        if (namesChanged) Notify(DisplayNamesChanged);
+        if (outputsChanged) Notify(OutputsChanged);
+    }
+    private static void Notify(Action? listeners)
+    {
+        if (listeners == null) return;
+        foreach (Action listener in listeners.GetInvocationList())
+            try { listener(); } catch (Exception ex) { Trace.WriteLine("Phone library notification: " + ex.Message); }
     }
     private async Task SaveAsync()
     {
@@ -395,22 +534,32 @@ public sealed class AndroidPhoneStore
             while (true)
             {
                 await Task.Delay(150).ConfigureAwait(false);
-                State state; long revision; lock (_gate) { state = _state; revision = _revision; }
-                var saved = new PhoneFile(2, state.SelectedId, state.Profiles.Select(SaveProfile).ToArray(), state.RemovedDevices?.ToArray(),
-                    state.RemovedProfiles?.Select(SaveProfile).ToArray());
-                Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-                AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, JsonOptions));
-                lock (_gate) if (revision == _revision) { _writing = false; return; }
+                lock (_gate) { WriteState(_state); _writing = false; return; }
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { lock (_gate) _writing = false; Trace.WriteLine("Save phone library: " + ex.Message); }
     }
     public Task FlushAsync() { lock (_gate) return _save; }
+    private void BackupBeforeMigration()
+    {
+        string backup = FilePath + ".pre-connection-management.bak";
+        if (File.Exists(FilePath) && !File.Exists(backup))
+            AtomicFile.Write(backup, stream => { using var original = File.OpenRead(FilePath); original.CopyTo(stream); });
+    }
+    private void WriteState(State state)
+    {
+        if (_legacyFormat) BackupBeforeMigration();
+        var saved = new PhoneFile(3, state.SelectedId, state.Profiles.Select(SaveProfile).ToArray(), state.RemovedDevices?.ToArray(),
+            state.RemovedProfiles?.Select(SaveProfile).ToArray());
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, JsonOptions));
+        _legacyFormat = false;
+    }
     private static SavedPhone SaveProfile(AndroidPhoneProfile profile) => new(profile.Id, profile.Name, profile.LastDevice,
-        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder);
+        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress);
     private sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
-    private sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null);
+    private sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null, bool ManuallyDisconnected = false, string? LastWirelessAddress = null);
     private sealed record PhoneFile(int Version, string SelectedId, SavedPhone[] Phones, AndroidDevice[]? RemovedDevices = null,
         SavedPhone[]? RemovedProfiles = null);
 }

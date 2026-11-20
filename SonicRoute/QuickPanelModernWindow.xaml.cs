@@ -920,7 +920,6 @@ namespace SonicRoute
             if (keepThrottle) SchedulePendingVolumeFlush(false);
         }
 
-        /// <summary>行静音视觉：静音后音量条/百分比变强调色 RGB 反色，图标右上显示反色圆点。</summary>
         private void ApplyRowAudioState(AppRow row, int volume, bool muted, bool known)
         {
             row.Volume = volume;
@@ -933,6 +932,7 @@ namespace SonicRoute
             row.Slider.IsEnabled = volume >= 0;
             if (volume >= 0) row.Slider.Value = volume;
             if (known) ApplyRowMutedVisual(row, muted);
+            else ApplyRowMuteAppearance(row.Slider, row.MuteDot, row.IsMuted);
             row.MuteKnown = known;
             if (row.IconButton != null)
             {
@@ -951,9 +951,7 @@ namespace SonicRoute
                 return;
             }
             if (row.IconButton != null) row.IconButton.IsEnabled = row.Slider.IsEnabled && !row.MuteBusy;
-            row.Slider.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
-            row.MuteDot.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
-            row.IsMuted = muted;
+            ApplyRowMuteAppearance(row.Slider, row.MuteDot, muted);
             if (muted) row.PeakLevel = 0f;
             UpdatePeakVisual(row);
             if (!_updatingRowVolumes) UpdateMeterTargets();

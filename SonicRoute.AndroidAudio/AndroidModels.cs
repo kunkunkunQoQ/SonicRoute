@@ -145,12 +145,27 @@ public static class AndroidOutputIdentity
 
 public sealed record AndroidDevice(string Serial, string Name, string State, bool IsWifi, string? HardwareId = null, string? TransportId = null)
 {
-    public override string ToString() => $"{Name} · {(IsWifi ? "Wi-Fi" : "USB")}" +
-        (State == "device" ? "" : State == "unauthorized" ? " · 待授权" : " · 未连接");
+    // Secondary evidence distinguishes devices that report the same hardware serial.
+    public string? IdentityFingerprint { get; init; }
+    // A process-local transport selector, never persisted or reconstructed from a saved profile.
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? ConnectionTarget { get; init; }
+    // Windows PnP identifies an attachment by its interface path, independently of the ADB serial.
+    [System.Text.Json.Serialization.JsonIgnore]
+    internal string? UsbInterfacePath { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string CommandTarget => ConnectionTarget ?? Serial;
+    public override string ToString() => State is "device" or "unauthorized"
+        ? $"{Name} · {(IsWifi ? "Wi-Fi" : "USB")}" + (State == "unauthorized" ? " · 待授权" : "")
+        : $"{Name} · 未连接";
 }
 
 public static class AndroidDeviceIdentity
 {
+    // A removal must match the specific connection, even when a phone reuses its address or USB path.
+    internal static bool SameAttachment(AndroidDevice first, AndroidDevice second) => ReferenceEquals(first, second)
+        || first.ConnectionTarget != null && first.ConnectionTarget == second.ConnectionTarget;
+
     // Wireless endpoint ports and discovery suffixes may change. Never identify a phone by its model or IP.
     public static string Key(AndroidDevice device)
     {
@@ -165,7 +180,7 @@ public static class AndroidDeviceIdentity
         return (device.IsWifi ? "endpoint:" : "device:") + serial;
     }
     public static bool Matches(AndroidDevice? left, AndroidDevice? right) => left != null && right != null
-        && (StringComparer.Ordinal.Equals(left.Serial, right.Serial) || StringComparer.Ordinal.Equals(Key(left), Key(right)));
+        && (SamePhysicalDevice(left, right) || SameTransport(left, right));
 
     internal static string? StableKey(AndroidDevice? device)
     {
@@ -174,14 +189,40 @@ public static class AndroidDeviceIdentity
         return key.StartsWith("device:", StringComparison.Ordinal) && key.Length > "device:".Length ? key : null;
     }
 
+    internal static bool ConflictingEvidence(AndroidDevice? left, AndroidDevice? right) => left != null && right != null
+        && ((StableKey(left) is { } a && StableKey(right) is { } b && a != b)
+            || (left.IdentityFingerprint is { } x && right.IdentityFingerprint is { } y && x != y));
+
     internal static bool SamePhysicalDevice(AndroidDevice? left, AndroidDevice? right) =>
-        StableKey(left) is { } key && string.Equals(key, StableKey(right), StringComparison.Ordinal);
+        StableKey(left) is { } key && string.Equals(key, StableKey(right), StringComparison.Ordinal)
+        && !ConflictingEvidence(left, right);
+
+    internal static bool SameTransport(AndroidDevice? left, AndroidDevice? right) => left != null && right != null
+        && left.Serial == right.Serial && left.TransportId == right.TransportId
+        && !ConflictingEvidence(left, right)
+        && (left.ConnectionTarget == null || right.ConnectionTarget == null || left.ConnectionTarget == right.ConnectionTarget);
 
     internal static bool MatchesSavedDevice(AndroidDevice? saved, AndroidDevice device)
     {
-        if (saved == null) return false;
+        if (saved == null || ConflictingEvidence(saved, device)) return false;
         string? savedKey = StableKey(saved), currentKey = StableKey(device);
         return savedKey != null && currentKey != null ? savedKey == currentKey : saved.Serial == device.Serial;
+    }
+
+    // A display/drag/profile may hold an older record. Resolve it against the shared
+    // live list, preferring verified physical identity over an endpoint-only alias.
+    internal static AndroidDevice? FindOnlineDevice(AndroidDevice? saved, IEnumerable<AndroidDevice>? devices)
+    {
+        if (saved == null || devices == null) return null;
+        AndroidDevice? best = null;
+        foreach (var candidate in devices)
+        {
+            if (candidate.State != "device" || !MatchesSavedDevice(saved, candidate)) continue;
+            if (best == null || (SamePhysicalDevice(saved, candidate) && !SamePhysicalDevice(saved, best))
+                || (SamePhysicalDevice(saved, candidate) == SamePhysicalDevice(saved, best)
+                    && candidate.Serial == saved.Serial && best.Serial != saved.Serial)) best = candidate;
+        }
+        return best;
     }
 
     internal static AndroidDevice? WirelessServiceIdentity(AndroidMdnsService service) =>
@@ -199,8 +240,10 @@ public static class AndroidDeviceIdentity
     }
 
     public static IReadOnlyList<AndroidDevice> Distinct(IReadOnlyList<AndroidDevice> devices) => devices
-        .GroupBy(Key, StringComparer.Ordinal).Select(group => group.OrderByDescending(d => d.State == "device")
-            .ThenByDescending(d => d.Serial.Contains("_adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase)).First()).ToArray();
+        .GroupBy(Key, StringComparer.Ordinal).SelectMany(group => group.Any(d =>
+            group.Any(other => ConflictingEvidence(d, other)) || d.ConnectionTarget != null && AndroidConnectionManager.IsAmbiguous(d, devices))
+            ? group : group.OrderByDescending(d => d.State == "device")
+                .ThenByDescending(d => d.Serial.Contains("_adb-tls-connect._tcp", StringComparison.OrdinalIgnoreCase)).Take(1)).ToArray();
 }
 
 public sealed record AndroidApp(string Package, string Name, int Uid, string Category, byte[]? IconPng = null, int PlatformCategory = -1)
@@ -276,7 +319,9 @@ public enum AndroidErrorCode
     InvalidPhoneOutputId,
     InvalidPhoneOutputDevice,
     NoAudioRouteOrEnded,
-    PairTimedOut
+    PairTimedOut,
+    UsbInterfaceInUse,
+    UsbInterfaceUnavailable
 }
 
 public static class AndroidError

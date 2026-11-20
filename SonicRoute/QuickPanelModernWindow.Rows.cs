@@ -8,12 +8,57 @@ using System.Windows.Media;
 using SonicRoute.Core;
 using SonicRoute.Core.Models;
 using Button = System.Windows.Controls.Button;
-using Brush = System.Windows.Media.Brush;
 
 namespace SonicRoute
 {
     public partial class QuickPanelModernWindow
     {
+        private Grid CreateRowMuteIcon(AppItem item, out Button button, out Border muteDot)
+        {
+            var iconGrid = new Grid { Width = 30, Height = 30, Margin = new Thickness(0, 0, 2, 0) };
+            var appIcon = new System.Windows.Controls.ContentControl
+            {
+                Width = 18,
+                Height = 18,
+                Focusable = false,
+                HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
+                VerticalContentAlignment = System.Windows.VerticalAlignment.Stretch,
+                Content = item,
+                ContentTemplate = (DataTemplate)FindResource("AppIconTemplate")
+            };
+            // 图标与首字兜底共用模板；AppItem.Icon 的异步通知仍会自动刷新。
+            button = new Button
+            {
+                Content = appIcon,
+                Style = (Style)FindResource("RowIconButton")
+            };
+            iconGrid.Children.Add(button);
+            muteDot = new Border
+            {
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
+                IsHitTestVisible = false,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                VerticalAlignment = System.Windows.VerticalAlignment.Top,
+                Margin = new Thickness(0, 2, 1, 0),
+                Visibility = Visibility.Collapsed
+            };
+            muteDot.SetResourceReference(Border.BackgroundProperty, "Theme.AccentInverse");
+            iconGrid.Children.Add(muteDot);
+            DockPanel.SetDock(iconGrid, Dock.Left);
+            return iconGrid;
+        }
+
+        private static void ApplyRowMuteAppearance(Slider slider, Border muteDot, bool muted)
+        {
+            var visibility = muted ? Visibility.Visible : Visibility.Collapsed;
+            if (muteDot.Visibility == visibility) return;
+            muteDot.Visibility = visibility;
+            if (muted) slider.SetResourceReference(Slider.ForegroundProperty, "Theme.AccentInverse");
+            else slider.ClearValue(Slider.ForegroundProperty);
+        }
+
         private FrameworkElement CreateAppRowVisual(AppRow row)
         {
             if (row.RootElement != null) return row.RootElement;
@@ -28,47 +73,13 @@ namespace SonicRoute
             };
             var dock = new DockPanel();
 
-            // 图标按钮（点击静音/取消静音），右上角静音点
-            var iconGrid = new Grid { Width = 30, Height = 30, Margin = new Thickness(0, 0, 2, 0) };
-            var appIcon = new System.Windows.Controls.ContentControl
-            {
-                Width = 18,
-                Height = 18,
-                Focusable = false,
-                HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch,
-                VerticalContentAlignment = System.Windows.VerticalAlignment.Stretch,
-                Content = item,
-                ContentTemplate = (DataTemplate)FindResource("AppIconTemplate")
-            };
-            // 图标与首字兜底共用模板；AppItem.Icon 的异步通知仍会自动刷新。
-            var iconBtn = new Button
-            {
-                Content = appIcon,
-                Style = (Style)FindResource("RowIconButton"),
-                Tag = row,
-                ToolTip = item.Label,
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                Padding = new Thickness(2)
-            };
-            iconBtn.Click += async (_, _) => await RowIconToggleMuteAsync(row);
+            var iconGrid = CreateRowMuteIcon(item, out var iconBtn, out row.MuteDot);
             row.IconButton = iconBtn;
+            iconBtn.Tag = row;
+            iconBtn.ToolTip = item.Label;
+            iconBtn.Click += async (_, _) => await RowIconToggleMuteAsync(row);
             AppIconDragController.AttachDesktop(iconGrid, item);
             System.Windows.Automation.AutomationProperties.SetName(iconBtn, item.Label + " " + L10n.T("Qp.Mute"));
-            iconGrid.Children.Add(iconBtn);
-            row.MuteDot = new Border
-            {
-                Width = 8,
-                Height = 8,
-                CornerRadius = new CornerRadius(4),
-                Background = ThemeService.GetInvertedAccentBrush(),
-                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-                VerticalAlignment = System.Windows.VerticalAlignment.Top,
-                Margin = new Thickness(0, 2, 1, 0),
-                Visibility = Visibility.Collapsed
-            };
-            iconGrid.Children.Add(row.MuteDot);
-            DockPanel.SetDock(iconGrid, Dock.Left);
 
             var expand = new ToggleButton
             {
@@ -110,7 +121,6 @@ namespace SonicRoute
             row.Slider.Margin = new Thickness(0, 0, 6, 0);
             row.Slider.Tag = row;
             System.Windows.Automation.AutomationProperties.SetName(row.Slider, item.Label + " " + L10n.T("Ov.VolumeTitle"));
-            row.Slider.Foreground = (Brush)FindResource("Theme.Accent");
             row.Slider.ApplyTemplate();
             row.TrackBg = row.Slider.Template.FindName("PART_TrackBg", row.Slider) as Border;
             row.TrackFill = row.Slider.Template.FindName("PART_TrackFill", row.Slider) as Border;

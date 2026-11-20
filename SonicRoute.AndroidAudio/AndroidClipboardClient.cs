@@ -39,9 +39,9 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
         StreamReader? errReader = null;
         try
         {
-            await adb.RunAsync(token, "-s", device.Serial, "push", adb.CatalogFile, remote).ConfigureAwait(false);
+            await adb.RunAsync(token, "-s", device.CommandTarget, "push", adb.CatalogFile, remote).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
-            var session = await adb.OpenShellAsync(device.Serial,
+            var session = await adb.OpenShellAsync(device.CommandTarget,
                 "echo SR_CLIPBOARD_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.ClipboardBridge " + id,
                 redirectInput: true, token).ConfigureAwait(false);
             _session = session;
@@ -106,14 +106,14 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
             {
                 if (pid != null)
                 {
-                    string command = await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell",
+                    string command = await adb.RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell",
                         "if [ -r /proc/" + pid + "/cmdline ]; then cat /proc/" + pid + "/cmdline; fi").ConfigureAwait(false);
                     if (IsOwnedCommand(command.Replace('\0', ' '), id))
-                        await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "kill", "-TERM", pid).ConfigureAwait(false);
+                        await adb.RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "kill", "-TERM", pid).ConfigureAwait(false);
                 }
             }
             catch (Exception) { /* Transport may already be gone; never kill a shared process. */ }
-            try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
+            try { await adb.RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
             catch (Exception) { }
             if (stderr != null) { try { await stderr.ConfigureAwait(false); } catch { } } // Drain but do not retain or log clipboard helper output.
             errReader?.Dispose();

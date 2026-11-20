@@ -45,7 +45,8 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     {
         internal readonly AndroidDevice Device = device;
         internal readonly IAndroidClipboardClient Client = client;
-        internal readonly CancellationTokenSource Stop = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+        internal readonly CancellationTokenSource Stop = CancellationTokenSource.CreateLinkedTokenSource(lifetime,
+            PhoneAudioWindowCache.Manager.OperationToken(device));
         internal readonly Channel<(long Version, string Text, long RemoteRevision)> Writes = Channel.CreateBounded<(long, string, long)>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = true });
         internal Task Completion = Task.CompletedTask;
@@ -89,7 +90,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         foreach (var saved in _enabled)
         {
             if (saved.IsWifi) continue;
-            var live = devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(saved, d));
+            var live = PhoneAudioWindowCache.GetOnlineDevice(saved);
             if (live == null) return true;
             string key = AndroidDeviceIdentity.Key(live);
             if (!_sessions.TryGetValue(key, out var session) || session.Finished || session.Stop.IsCancellationRequested)
@@ -149,7 +150,11 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     internal void ProfilesChanged()
     {
         if (!dispatcher.CheckAccess()) { Post(ProfilesChanged); return; }
-        if (!_disposed && UpdateProfilePreferences()) { QueueSave(); Reconcile(false); }
+        if (!_disposed)
+        {
+            if (UpdateProfilePreferences()) QueueSave();
+            Reconcile(false);
+        }
     }
 
     private bool UpdateProfilePreferences()
@@ -186,27 +191,19 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         }
         return changed;
     }
-    private static bool SameTransport(AndroidDevice left, AndroidDevice right) => left.Serial == right.Serial
-        && AndroidDeviceIdentity.Key(left) == AndroidDeviceIdentity.Key(right);
+    private static bool SameTransport(AndroidDevice left, AndroidDevice right) => AndroidDeviceIdentity.SameTransport(left, right);
     private void DevicesChanged() => Post(() => Reconcile(true));
     private void Post(Action action)
     {
         if (!_disposed && !dispatcher.HasShutdownStarted) _ = dispatcher.BeginInvoke(new Action(() => { if (!_disposed) action(); }));
     }
-    private AndroidDevice? FindOnlineTransport(AndroidDevice saved, IReadOnlyList<AndroidDevice> devices)
+    private AndroidDevice? FindOnlineTransport(AndroidDevice saved)
     {
         _sessions.TryGetValue(AndroidDeviceIdentity.Key(saved), out var current);
-        AndroidDevice? preferred = null, first = null, alternative = null;
-        foreach (var device in devices)
-        {
-            if (device.State != "device" || !AndroidDeviceIdentity.MatchesSavedDevice(saved, device)) continue;
-            // One wireless phone may appear under both its IP and its mDNS service name.
-            if (current is { Finished: false } && SameTransport(current.Device, device)) return device;
-            if (current is { Finished: true } && !SameTransport(current.Device, device)) alternative ??= device;
-            if (device.Serial == saved.Serial) preferred = device;
-            first ??= device;
-        }
-        return alternative ?? preferred ?? first;
+        if (current is { Finished: false } && !current.Stop.IsCancellationRequested
+            && (PhoneAudioWindowCache.Manager.IsCurrent(current.Device) || PhoneAudioWindowCache.Manager.AwaitingDiscovery(current.Device)))
+            return current.Device;
+        return PhoneAudioWindowCache.Manager.Get(saved, current?.Device).Device;
     }
     private void Reconcile(bool retry, Session? recovering = null)
     {
@@ -218,8 +215,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             else PhoneAudioWindowCache.DevicesChanged -= DevicesChanged;
             _watching = watch;
         }
-        var devices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
-        var targets = _enabled.Select(saved => FindOnlineTransport(saved, devices))
+        var targets = _enabled.Select(FindOnlineTransport)
             .Where(d => d != null).Cast<AndroidDevice>().DistinctBy(AndroidDeviceIdentity.Key).ToArray();
         foreach (var pair in _sessions.ToArray())
             if (!targets.Any(d => AndroidDeviceIdentity.Key(d) == pair.Key))

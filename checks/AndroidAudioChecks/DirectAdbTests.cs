@@ -303,6 +303,8 @@ internal static partial class Program
             await using var wifiPhone = new FakeAdbdServer(useTls: true, requirePublicKeyFallback: false, keyBytes, peerMaxPayload: 64 * 1024, serverCert: tlsCert);
 
             var usbPresent = false;
+            const string usbInterfacePath = @"\\?\usb#vid_18d1&pid_4ee7#FAKEUSB01#{f72fe0d4-cbcb-407d-8814-9ed673d0dd6b}";
+            string? blockedUsbPath = Path.Combine(tempDir, "exclusive-usb-fixture");
             Action? usbChangedCallback = null;
             using var watcherToken = new CancellationTokenSource();
 
@@ -310,10 +312,11 @@ internal static partial class Program
                 keyStore,
                 ownsKeyStore: false,
                 enumerateUsb: () => usbPresent
-                    ? [new WinUsbDeviceDescriptor(@"\\?\usb#vid_18d1&pid_4ee7#FAKEUSB01#{f72fe0d4-cbcb-407d-8814-9ed673d0dd6b}", @"USB\VID_18D1&PID_4EE7\FAKEUSB01")]
+                    ? [new WinUsbDeviceDescriptor(usbInterfacePath, @"USB\VID_18D1&PID_4EE7\FAKEUSB01")]
                     : [],
                 openUsbLink: _ =>
                 {
+                    if (blockedUsbPath != null) return WinUsbAdbLink.TryOpen(blockedUsbPath);
                     var tcp = new TcpClient { NoDelay = true };
                     tcp.Connect(IPAddress.Loopback, usbPhone.Port);
                     return new StreamAdbPacketLink(tcp.GetStream(), tcp, supportsTlsUpgrade: false);
@@ -331,7 +334,20 @@ internal static partial class Program
 
             // Initial snapshot empty, then USB arrives via event
             await WaitUntilAsync(() => trackedSnapshots.Count >= 1, TimeSpan.FromSeconds(3));
-            usbPresent = true;
+            using (var held = new FileStream(blockedUsbPath, FileMode.CreateNew, FileAccess.ReadWrite,
+                FileShare.None, 4096, FileOptions.DeleteOnClose))
+            {
+                usbPresent = true;
+                var blocked = await direct.DevicesAsync(default);
+                var savedWifi = new AndroidDevice("192.0.2.1:40123", "Fixture", "device", true, "fakeusb01");
+                Check(DirectAdbTransport.UsbAccessError(blocked, savedWifi) == AndroidErrorCode.UsbInterfaceInUse
+                    && DirectAdbTransport.UsbAccessError(blocked, savedWifi with { HardwareId = "another-phone" }) == null
+                    && blocked.All(d => d.State != "device" && d.UsbInterfacePath == usbInterfacePath),
+                    "Win32 sharing violation is attributed only to the matching USB interface and cannot admit a phone");
+            }
+            Check((await direct.DevicesAsync(default)).Count == 0,
+                "a removed USB path clears the access diagnostic on the next scan");
+            blockedUsbPath = null;
             usbChangedCallback?.Invoke();
             await WaitUntilAsync(() => trackedSnapshots.Any(s => s.Any(d => d.Serial == "FAKEUSB01" && d.State == "device")), TimeSpan.FromSeconds(3));
 
@@ -359,6 +375,37 @@ internal static partial class Program
                 && bothDevices.Any(d => d.Serial == "127.0.0.1:" + wifiPhone.Port && d.IsWifi)
                 && pairMsg == "Successfully paired to 127.0.0.1:37123 [guid=adb-direct-guid]",
                 "DirectAdbTransport exposes USB + Wi-Fi TLS devices and wireless pairing");
+            string admittedWifi = AdbTransportTarget.Create(bothDevices.Single(d => d.IsWifi), direct)!;
+            using var pinnedDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            Check((await direct.RunShellAsync(admittedWifi, "echo tls_ok", pinnedDeadline.Token)).Output == "tls_ok\n",
+                "transport ID selector reaches the already admitted Wi-Fi connection");
+
+            var oldUsb = bothDevices.Single(d => !d.IsWifi);
+            Check(oldUsb.UsbInterfacePath == usbInterfacePath && bothDevices.Single(d => d.IsWifi).UsbInterfacePath == null,
+                "only the USB attachment carries its exact Windows interface path for device-specific removal");
+            string oldUsbTarget = AdbTransportTarget.Create(oldUsb, direct)!;
+            var wifi = bothDevices.Single(d => d.IsWifi);
+            using (var keepWifi = await direct.OpenLocalAbstractAsync(admittedWifi, "sonicroute_echo", pinnedDeadline.Token))
+            {
+                usbPresent = false;
+                usbChangedCallback!.Invoke();
+                await WaitUntilAsync(() => trackedSnapshots.Any(s => s.Count == 1 && s[0] == wifi), TimeSpan.FromSeconds(3));
+                byte[] marker = "usb-unplugged"u8.ToArray();
+                await keepWifi.WriteAsync(marker, pinnedDeadline.Token);
+                var echoed = new byte[marker.Length];
+                await keepWifi.ReadExactlyAsync(echoed, pinnedDeadline.Token);
+                Check(echoed.SequenceEqual(marker),
+                    "USB removal updates the tracked list and keeps the existing Wi-Fi stream alive");
+            }
+
+            usbPresent = true;
+            usbChangedCallback!();
+            await WaitUntilAsync(() => trackedSnapshots.Any(s => s.Contains(wifi)
+                && s.Any(d => d.State == "device" && d.Serial == oldUsb.Serial && d.TransportId != oldUsb.TransportId)), TimeSpan.FromSeconds(3));
+            bool staleUsbRejected = false;
+            try { await direct.GetSerialNoAsync(oldUsbTarget, pinnedDeadline.Token); }
+            catch (IOException) { staleUsbRejected = true; }
+            Check(staleUsbRejected, "replugging the same USB path and serial rejects the previous USB transport ID");
 
             await using (var adbViaDirect = new AdbClient(tempDir, direct))
             {
@@ -402,6 +449,117 @@ internal static partial class Program
                 await mixed.DisconnectAsync(address, default);
                 Check(!(await mixed.DevicesAsync(default)).Any(d => d.Serial == address && d.State == "device"),
                     "explicit disconnect releases the original Wi-Fi transport while the external daemon is present");
+            }
+
+            await direct.ConnectAsync("127.0.0.1:" + wifiPhone.Port, default);
+            var replacement = (await direct.DevicesAsync(default)).Single(d => d.IsWifi);
+            string replacementTarget = AdbTransportTarget.Create(replacement, direct)!;
+            bool oldRejected = false;
+            using var replacementDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try { await direct.RunShellAsync(admittedWifi, "echo tls_ok", replacementDeadline.Token); }
+            catch (IOException) { oldRejected = true; }
+            Check(oldRejected && replacementTarget != admittedWifi
+                && (await direct.RunShellAsync(replacementTarget, "echo tls_ok", replacementDeadline.Token)).Output == "tls_ok\n",
+                "reused Wi-Fi address cannot receive an old connection's commands or cleanup");
+            int replacementPort = await direct.ForwardTcpToLocalAbstractAsync(replacementTarget, "sonicroute_echo", default);
+            string replacementSpec = "tcp:" + replacementPort;
+            await direct.RemoveForwardAsync(admittedWifi, replacementSpec, default);
+            Check((await direct.ListForwardsAsync(default)).Any(rule => rule.Serial == replacementTarget && rule.Local == replacementSpec),
+                "retired Wi-Fi transport cannot remove a replacement transport's port forward");
+            await direct.RemoveForwardAsync(replacementTarget, replacementSpec, default);
+
+            using (var panel = new CancellationTokenSource())
+            await using (var adb = new AdbClient(tempDir, direct))
+            {
+                var lost = new ConcurrentQueue<string>();
+                var listening = adb.WatchPanelWirelessAsync(lost.Enqueue, () => { }, panel.Token);
+                var shared = new PairingFixtureTransport();
+                await using var both = new ArbitratedAdbTransport(_ => Task.FromResult(true), shared, direct);
+                int aliasReads = 0;
+                var aliasWatch = both.WatchPanelWirelessAsync(_ => { }, () => Interlocked.Increment(ref aliasReads), panel.Token);
+                var remote = new FakeAdbdServer(true, false, keyBytes, 64 * 1024, tlsCert);
+                string dropped;
+                try
+                {
+                    string address = "127.0.0.1:" + remote.Port;
+                    await direct.ConnectAsync(address, default);
+                    dropped = AdbTransportTarget.Create((await direct.DevicesAsync(default)).Single(d => d.Serial == address), direct)!;
+                    shared.Devices = [new AndroidDevice(address, "external phone", "device", true, TransportId: "42")
+                        { ConnectionTarget = AdbTransportTarget.CreateSocket("42", "fixture-daemon") }];
+                    var before = await both.DevicesAsync(default);
+                    Check(before.Count(d => d.Serial == address) == 1 && !before.Contains(shared.Devices[0]),
+                        "one direct Wi-Fi session shadows the external transport at the same phone address");
+                }
+                finally { await remote.DisposeAsync(); }
+                await WaitUntilAsync(() => lost.Contains(dropped), TimeSpan.FromSeconds(3));
+                Check(lost.SequenceEqual([dropped]) && direct.OwnsWifiConnection(replacement.Serial),
+                    "remote Wi-Fi socket loss emits only the dropped generation and keeps the other phone connected");
+                await WaitUntilAsync(() => Volatile.Read(ref aliasReads) == 1, TimeSpan.FromSeconds(3));
+                Check((await both.DevicesAsync(default)).Contains(shared.Devices[0]),
+                    "loss of a shadowing direct session requests one fresh read to reveal the already connected external phone");
+                panel.Cancel();
+                try { await Task.WhenAll(listening, aliasWatch); } catch (OperationCanceledException) { }
+                await direct.DisconnectAsync(replacementTarget, default);
+                Check(lost.SequenceEqual([dropped]), "closing the final panel detaches the direct disconnect callback");
+            }
+
+            var initial = wifi with { ConnectionTarget = admittedWifi };
+            var fresh = replacement with { ConnectionTarget = replacementTarget };
+            var healthy = oldUsb with { ConnectionTarget = oldUsbTarget };
+            var pending = new TaskCompletionSource<IReadOnlyList<AndroidDevice>>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var discovery = new AndroidDeviceDiscovery(_ => pending.Task);
+            discovery.Publish([initial, healthy]);
+            var scanning = discovery.ReadAsync(default);
+            discovery.RemoveTransport(admittedWifi);
+            var third = healthy with { Serial = "third-phone", ConnectionTarget = "third-session" };
+            pending.SetResult([initial, fresh, healthy, third]);
+            Check((await scanning).SequenceEqual([fresh, healthy, third]), "an in-flight scan drops only the departed generation and publishes other phones");
+            discovery.RemoveTransport(admittedWifi);
+            Check(discovery.CurrentDevices!.SequenceEqual([fresh, healthy, third]), "a late loss cannot remove a replacement on the same Wi-Fi address");
+
+            using (var panel = new CancellationTokenSource())
+            {
+                var external = new AdbSocketClient(new IPEndPoint(IPAddress.Loopback, fake5037.Port));
+                var lost = new ConcurrentQueue<string>();
+                int changed = 0;
+                var listening = external.WatchPanelWirelessAsync(lost.Enqueue, () => Interlocked.Increment(ref changed), panel.Token);
+                const string usbRow = "USB-SERIAL\tdevice transport_id:9\n";
+                const string first = "10.0.0.1:1111\tdevice transport_id:7\n";
+                const string second = "10.0.0.2:2222\tdevice transport_id:8\n";
+                fake5037.DevicesResponse = first + second + usbRow;
+                var startup = await external.DevicesAsync(default);
+                await fake5037.TrackingStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+                fake5037.SendTrackFrame(second + usbRow);
+                await WaitUntilAsync(() => lost.Count == 1, TimeSpan.FromSeconds(3));
+                Check(lost.Single() == startup[0].ConnectionTarget && changed == 0, "external ADB loss reports the daemon-qualified Wi-Fi target without refreshing healthy phones");
+                fake5037.SendTrackFrame(second);
+                await WaitUntilAsync(() => lost.Count == 2, TimeSpan.FromSeconds(3));
+                Check(lost.Last() == startup[2].ConnectionTarget, "an external USB loss is qualified by daemon and transport ID, independently of Windows USB paths");
+                fake5037.SendTrackFrame(second + "10.0.0.1:1111\tdevice transport_id:10\n");
+                await WaitUntilAsync(() => Volatile.Read(ref changed) == 1, TimeSpan.FromSeconds(3));
+                Check(lost.Count == 2, "external ADB arrival at a reused address requests one fresh identity read");
+                panel.Cancel();
+                try { await listening; } catch (OperationCanceledException) { }
+            }
+
+            await using (var broken = new FakeSmartSocket5037 { RejectTracking = true, DevicesResponse = "10.0.0.1:1111\tdevice transport_id:7\n" })
+            using (var panel = new CancellationTokenSource())
+            {
+                var external = new AdbSocketClient(new IPEndPoint(IPAddress.Loopback, broken.Port));
+                int rereads = 0;
+                var listening = external.WatchPanelWirelessAsync(_ => { }, () => Interlocked.Increment(ref rereads), panel.Token);
+                await external.DevicesAsync(default);
+                await WaitUntilAsync(() => Volatile.Read(ref rereads) == 1, TimeSpan.FromSeconds(3));
+                await external.DevicesAsync(default);
+                await Task.Delay(350);
+                Check(broken.TrackAttempts == 2 && rereads == 1,
+                    "persistent external tracking failure is retried once and rereading the same daemon list does not start another attempt");
+                broken.DevicesResponse = "10.0.0.1:1111\tdevice transport_id:9\n";
+                await external.DevicesAsync(default);
+                await WaitUntilAsync(() => broken.TrackAttempts == 3, TimeSpan.FromSeconds(3));
+                panel.Cancel();
+                try { await listening; } catch (OperationCanceledException) { }
+                Check(broken.TrackAttempts == 3 && rereads == 1, "a new external transport re-arms tracking and closing the panel cancels the pending retry");
             }
 
             await fake5037.DisposeAsync().ConfigureAwait(false);
@@ -766,6 +924,12 @@ internal static partial class Program
 
         public int Port { get; }
         public string DevicesResponse { get; set; } = "";
+        public TaskCompletionSource TrackingStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool RejectTracking { get; init; }
+        private int _trackAttempts;
+        public int TrackAttempts => Volatile.Read(ref _trackAttempts);
+        private readonly System.Threading.Channels.Channel<string> _trackFrames = System.Threading.Channels.Channel.CreateUnbounded<string>();
+        public void SendTrackFrame(string text) => _trackFrames.Writer.TryWrite(text);
 
         private async Task RunAsync()
         {
@@ -781,6 +945,21 @@ internal static partial class Program
                     byte[] reqBytes = new byte[len];
                     await stream.ReadExactlyAsync(reqBytes, _cts.Token).ConfigureAwait(false);
                     string req = Encoding.UTF8.GetString(reqBytes);
+                    if (req == "host:track-devices-l")
+                    {
+                        Interlocked.Increment(ref _trackAttempts);
+                        if (RejectTracking) continue; // EOF before the initial tracking frame.
+                        await stream.WriteAsync("OKAY"u8.ToArray(), _cts.Token);
+                        SendTrackFrame(DevicesResponse);
+                        TrackingStarted.TrySetResult();
+                        await foreach (string frame in _trackFrames.Reader.ReadAllAsync(_cts.Token))
+                        {
+                            byte[] body = Encoding.UTF8.GetBytes(frame);
+                            await stream.WriteAsync(Encoding.ASCII.GetBytes(body.Length.ToString("x4", CultureInfo.InvariantCulture)), _cts.Token);
+                            await stream.WriteAsync(body, _cts.Token);
+                        }
+                        continue;
+                    }
                     string reply = req switch
                     {
                         "host:version" => "0029",

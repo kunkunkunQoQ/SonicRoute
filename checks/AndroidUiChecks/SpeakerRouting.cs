@@ -271,6 +271,7 @@ internal static partial class Program
             Pump((Task)panelType.GetMethod("BuildAppRowsAsync", Hidden)!.Invoke(panel, [new List<AudioAppInfo> { pcInfo }, config])!);
             var pcRow = ((System.Collections.IDictionary)panelType.GetField("_rows", Hidden)!.GetValue(panel)!)[(int)pcInfo.ProcessId]!;
             var pcRoot = (FrameworkElement)pcRow.GetType().GetField("RootElement")!.GetValue(pcRow)!;
+            CheckPanelMuteAppearance(panel, pcRow, second, neighbour);
             Button[] DesktopRoutes() => Descendants<Button>(pcRoot).Where(button => button.Tag is AudioDeviceInfo).ToArray();
             Descendants<ToggleButton>(pcRoot).Single().IsChecked = true;
             Until(() => DesktopRoutes().Any(button => ((AudioDeviceInfo)button.Tag).Flow == EDataFlow.eCapture));
@@ -325,6 +326,43 @@ internal static partial class Program
             while (source.Session.State.OutputId != id && DateTime.UtcNow < deadline) Pump(Task.Delay(10));
             DrainUi();
         }
+    }
+
+    private static void CheckPanelMuteAppearance(QuickPanelModernWindow panel, object desktopRow, AndroidAudioSource phone, AndroidAudioSource neighbour)
+    {
+        var panelType = typeof(QuickPanelModernWindow);
+        var incoming = (System.Collections.IDictionary)panelType.GetField("_androidRows", Hidden)!.GetValue(panel)!;
+        var batch = panelType.GetMethod("ApplyAllRowsMutedVisual", Hidden)!;
+        static T Field<T>(object row, string name) => (T)row.GetType().GetField(name, Hidden | BindingFlags.Public)!.GetValue(row)!;
+        var buttons = new[] { Field<Button>(desktopRow, "IconButton"), Field<Button>(incoming[phone.Id]!, "Icon"), Field<Button>(incoming[neighbour.Id]!, "Icon") };
+        var dots = new[] { Field<Border>(desktopRow, "MuteDot"), Field<Border>(incoming[phone.Id]!, "MuteDot"), Field<Border>(incoming[neighbour.Id]!, "MuteDot") };
+        var sliders = new[] { Field<Slider>(desktopRow, "Slider"), Field<Slider>(incoming[phone.Id]!, "Volume"), Field<Slider>(incoming[neighbour.Id]!, "Volume") };
+        var volumes = sliders.Select(slider => slider.Value).ToArray();
+        bool Appearance(int index, bool muted) => dots[index].Visibility == (muted ? Visibility.Visible : Visibility.Collapsed)
+            && dots[index].Background == panel.FindResource("Theme.AccentInverse") && buttons[index].Opacity == 1
+            && sliders[index].Foreground == panel.FindResource(muted ? "Theme.AccentInverse" : "Theme.Accent") && sliders[index].Value == volumes[index];
+        Check(dots.All(dot => dot is { Width: 8, Height: 8, HorizontalAlignment: HorizontalAlignment.Right, VerticalAlignment: VerticalAlignment.Top, IsHitTestVisible: false })
+            && buttons.All(button => button.Content is ContentControl { Width: 18, Height: 18 })
+            && dots.Select(dot => dot.Parent).SequenceEqual(buttons.Select(button => button.Parent)),
+            "PC and incoming apps use the same full-size icon and non-interactive upper-right mute dot");
+        buttons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); DrainUi();
+        Check(phone.Session.State.Muted && !neighbour.Session.State.Muted && Appearance(0, false) && Appearance(1, true) && Appearance(2, false),
+            "clicking an incoming app shows its mute dot and inverse slider while adjacent PC and phone rows keep their accent");
+        try
+        {
+            ThemeService.Apply("dark", "#00FFFF"); DrainUi();
+            Check(Appearance(0, false) && Appearance(1, true) && Appearance(2, false),
+                "already-present mute dots and sliders track a custom accent change without another mute event");
+            buttons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); DrainUi();
+            Check(!phone.Session.State.Muted && Appearance(1, false), "unmuting restores the phone row's theme accent and hides its dot");
+            foreach (bool muted in new[] { true, false })
+            {
+                batch.Invoke(panel, [muted]);
+                Check(Enumerable.Range(0, dots.Length).All(index => Appearance(index, muted)),
+                    "batch mute feedback matches across PC and incoming rows without moving sliders: " + muted);
+            }
+        }
+        finally { ThemeService.Apply("light", "#00CBE9"); }
     }
 
     private static void CheckAndroidPeakMeter(QuickPanelModernWindow panel, AndroidAudioSource first, AndroidAudioSource second,

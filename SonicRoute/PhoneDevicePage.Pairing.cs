@@ -78,6 +78,7 @@ public partial class PhoneDevicePage
                     if (!CanShowQr) return;
                     PairQrImage.Source = bitmap;
                     PairQrImage.Visibility = Visibility.Visible;
+                    long managementRevision = PhoneAudioWindowCache.Manager.Revision;
                     var wireless = Wireless;
                     // Network-interface discovery and its initial I/O must also stay off the UI thread.
                     var paired = await Task.Run(() => wireless.PairQrAsync(qr, token), token);
@@ -86,7 +87,7 @@ public partial class PhoneDevicePage
                     await RunAsync(async connectToken =>
                     {
                         SetOperationStatusKey("Phone.StatusPairedConnecting");
-                        ApplyConnection(await wireless.FinishPairingAsync(paired, connectToken), connectToken);
+                        ApplyConnection(await wireless.FinishPairingAsync(paired, connectToken), connectToken, managementRevision);
                     }, "Phone.ConnectedStatus", fromQr: true);
                     return;
                 }

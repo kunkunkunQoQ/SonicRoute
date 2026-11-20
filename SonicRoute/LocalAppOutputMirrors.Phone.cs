@@ -26,7 +26,7 @@ internal static partial class LocalAppOutputMirrors
     }
 
     internal static Task PhoneRemovedAsync(AndroidDevice device, bool recover = false) =>
-        PruneAsync((_, sink) => sink.Player is AndroidPhonePcmPlayer phone && AndroidDeviceIdentity.MatchesSavedDevice(device, phone.Device), recover);
+        PruneAsync((_, sink) => sink.Player is AndroidPhonePcmPlayer phone && AndroidDeviceIdentity.Matches(device, phone.Device), recover);
 
     static partial void ReleaseUnusedPhoneWatch()
     {

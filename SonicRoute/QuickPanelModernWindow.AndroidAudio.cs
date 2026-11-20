@@ -16,7 +16,6 @@ using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using Button = System.Windows.Controls.Button;
 using Slider = System.Windows.Controls.Slider;
-using Brush = System.Windows.Media.Brush;
 #endif
 
 namespace SonicRoute;
@@ -54,6 +53,7 @@ public partial class QuickPanelModernWindow
         internal float PeakLevel;
         internal bool Muted;
         internal Button Icon = null!;
+        internal Border MuteDot = null!;
         internal AppItem IconItem = null!;
         internal ToggleButton Expand = null!;
         internal AnimatedExpandHost Wrap = null!;
@@ -402,11 +402,7 @@ public partial class QuickPanelModernWindow
             finally { row.ApplyingState = false; }
         }
         row.Volume.IsEnabled = state.State == CaptureState.Receiving;
-        row.Muted = state.Muted;
-        if (state.Muted || !row.Volume.IsEnabled) row.PeakLevel = 0f;
-        row.Volume.Foreground = state.Muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
-        row.Icon.Opacity = state.Muted ? 0.45 : 1;
-        UpdateAndroidPeakVisual(row);
+        ApplyIncomingRowMutedVisual(row, state.Muted);
         if (!refreshLabels)
         {
             UpdateAndroidRoute(row);
@@ -446,11 +442,9 @@ public partial class QuickPanelModernWindow
         row.Root = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
         var header = new Border { Height = legacy ? 36 : 52, Padding = new Thickness(4, 0, 4, 0), CornerRadius = new CornerRadius(8) };
         var dock = new DockPanel();
-        row.Icon = new Button { Width = 30, Height = 30, VerticalAlignment = VerticalAlignment.Center,
-            Style = (Style)FindResource("RowIconButton"), ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip"
-                : "Phone.AirPlayDragFromMixer"), appName) };
-        row.Icon.Content = new ContentControl { Content = row.IconItem, Width = 22, Height = 22,
-            ContentTemplate = (DataTemplate)FindResource("AppIconTemplate") };
+        var iconGrid = CreateRowMuteIcon(row.IconItem, out row.Icon, out row.MuteDot);
+        row.Icon.ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip"
+            : "Phone.AirPlayDragFromMixer"), appName);
         row.Icon.Click += (_, _) => session.SetMute(!session.State.Muted);
         if (source.Android is { } android) AndroidAppDragController.Attach(row.Icon, () => new AndroidAppDrag(android.Device, android.App));
         else AppIconDragController.AttachDesktop(row.Icon, row.IconItem, () =>
@@ -458,7 +452,7 @@ public partial class QuickPanelModernWindow
             if (AirPlayHost.Find(source.Id) != null) AirPlayHost.ShowMirror();
         });
         System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
-        DockPanel.SetDock(row.Icon, Dock.Left); dock.Children.Add(row.Icon);
+        dock.Children.Add(iconGrid);
         row.Expand = new ToggleButton { Width = legacy && showOutputName ? 80 : 32, Height = legacy ? 24 : 32,
             VerticalAlignment = VerticalAlignment.Center, Style = (Style)FindResource("RowExpandButton"), ToolTip = L10n.T("Qp.ExpandDevices") };
         var glyph = new TextBlock { Text = "▾", RenderTransform = row.Arrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
@@ -473,7 +467,7 @@ public partial class QuickPanelModernWindow
         Slider volume = legacy ? new Slider() : new AppRowVolumeSlider(); row.Volume = volume;
         volume.Minimum = 0; volume.Maximum = 100; volume.Value = state.Volume; volume.Height = legacy ? 32 : 48;
         volume.VerticalAlignment = VerticalAlignment.Center; volume.Margin = new Thickness(0, 0, 6, 0);
-        volume.Style = (Style)FindResource("RowSliderStyle"); volume.SetResourceReference(Slider.ForegroundProperty, "Theme.Accent");
+        volume.Style = (Style)FindResource("RowSliderStyle");
         volume.ApplyTemplate();
         row.TrackBg = volume.Template.FindName("PART_TrackBg", volume) as Border;
         row.TrackFill = volume.Template.FindName("PART_TrackFill", volume) as Border;
@@ -568,14 +562,14 @@ public partial class QuickPanelModernWindow
     }
     private void ApplyAllAndroidRowsMutedVisual(bool muted)
     {
-        foreach (var row in _androidRows.Values)
-        {
-            row.Muted = muted;
-            if (muted) row.PeakLevel = 0f;
-            row.Volume.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
-            row.Icon.Opacity = muted ? 0.45 : 1;
-            UpdateAndroidPeakVisual(row);
-        }
+        foreach (var row in _androidRows.Values) ApplyIncomingRowMutedVisual(row, muted);
+    }
+    private void ApplyIncomingRowMutedVisual(AndroidRow row, bool muted)
+    {
+        row.Muted = muted;
+        if (muted || !row.Volume.IsEnabled) row.PeakLevel = 0f;
+        ApplyRowMuteAppearance(row.Volume, row.MuteDot, muted);
+        UpdateAndroidPeakVisual(row);
     }
     private void UpdateAndroidSliderLayout(AndroidRow row)
     {

@@ -30,6 +30,7 @@ internal static partial class Program
         Check(result.Device.Serial == transport && reads == 8 && pairing.Guid == "adb-phone",
             "QR waits through transient scan errors and delayed/offline mDNS transports after pairing");
         Check(!commands.Any(c => c[0] == "connect" && c[1].EndsWith(":37000")), "pairing never reuses the pairing port as the connection port");
+        Check(result.WirelessAddress == null, "a paired GUID alone cannot identify a numeric connection endpoint");
 
         reads = 0; bool connected = false;
         var attempts = new List<string>();
@@ -44,6 +45,7 @@ internal static partial class Program
         string Connect() { attempts.Add("192.168.1.10:38000"); connected = ++reads >= 2; return connected ? "connected to 192.168.1.10:38000" : throw new IOException("temporary endpoint failure"); }
         result = await wireless.FinishPairingAsync(await wireless.PairCodeAsync("192.168.1.10:37000", "123456", default), default);
         Check(result.Device.Serial == transport && attempts.Count == 2, "code pairing retries a transient endpoint failure and recognizes the service-name transport");
+        Check(result.WirelessAddress == "192.168.1.10:38000", "the exact paired connect-service alias carries its current numeric endpoint");
         Check(attempts.All(a => a == "192.168.1.10:38000"), "pair completion connects only services on the paired host");
 
         reads = 0;
@@ -67,8 +69,20 @@ internal static partial class Program
         }), NoConnectionDelay);
         result = await wireless.ConnectAsync("192.168.1.10:38000", default);
         Check(result.Device.Serial == transport, "direct connection resolves an existing service-name alias without relying on mDNS discovery");
+        Check(result.WirelessAddress == "192.168.1.10:38000", "a manually connected address is retained when ADB identifies its canonical service name");
         result = await wireless.ReconnectAsync(new("adb-phone-old123._adb-tls-connect._tcp", "Phone", "offline", true), default);
         Check(result.Device.Serial == transport, "reconnect accepts the same phone after its random service suffix changes");
+
+        wireless = new AndroidWirelessConnection((_, args) => Task.FromResult(args[0] switch
+        {
+            "devices" => header + transport + " device model:Phone\n",
+            "mdns" => "adb-phone-abc123 _adb-tls-connect._tcp 192.168.1.10:38001\n"
+                + "adb-phone-abc123 _adb-tls-connect._tcp 192.168.1.11:38002\n",
+            _ => throw new IOException("unavailable")
+        }), NoConnectionDelay);
+        result = await wireless.FinishPairingAsync(new("192.168.1.10:37000", "adb-phone"), default);
+        Check(result.Device.Serial == transport && result.WirelessAddress == null,
+            "two different endpoints advertising one service cannot replace a remembered address");
 
         connected = false;
         wireless = new AndroidWirelessConnection((_, args) => Task.FromResult(args[0] switch
@@ -133,6 +147,49 @@ internal static partial class Program
             "an empty scan started before pairing cannot overwrite the newly published connected phone");
         discovery.Publish(connected);
         Check(changes == 1, "republishing the same device snapshot does not wake subscribers again");
+        discovery.Invalidate();
+        Check(changes == 2 && discovery.CurrentDevices == null && ReferenceEquals(discovery.Devices, connected),
+            "invalidated discovery retains presentation data but rejects it for new stream starts");
+        discovery.Publish(connected);
+        Check(changes == 3 && ReferenceEquals(discovery.CurrentDevices, connected),
+            "publishing the same list after invalidation makes it current again and notifies consumers");
+
+        long beforeHandshake = discovery.Revision;
+        var replacement = connected[0] with { HardwareId = "replacement", ConnectionTarget = "new-instance" };
+        discovery.Publish([replacement]);
+        bool admitted = false;
+        Check(!discovery.PublishConnection(new(connected[0], connected), beforeHandshake, _ => admitted = true)
+            && !admitted && discovery.CurrentDevices!.Single() == replacement,
+            "a late recovery cannot overwrite a new identity at a reused address");
+        discovery.Publish([connected[0], replacement with { Serial = "another-device" }]);
+        Check(discovery.PublishConnection(new(connected[0], connected), beforeHandshake, r => r.Devices.Count == 2)
+            && discovery.CurrentDevices!.Count == 2, "an unchanged transport can be admitted without dropping a newer phone");
+
+        var usb = new AndroidDevice("USB-A", "Phone", "device", false, TransportId: "usb-1");
+        var emulator = new AndroidDevice("emulator-5554", "Emulator", "device", false, TransportId: "2");
+        discovery.Publish([usb, wifi, emulator]);
+        var beforeReplug = discovery.CurrentDevices;
+        discovery.Publish([usb with { TransportId = "usb-2" }, wifi, emulator]);
+        discovery.RemoveAbsentUsbDevices(beforeReplug, new HashSet<string>(), []);
+        Check(discovery.CurrentDevices?.First().TransportId == "usb-2", "a late empty USB probe cannot retire a newer attachment");
+        discovery.RemoveAbsentUsbDevices(discovery.CurrentDevices, new HashSet<string>(), []);
+        Check(discovery.CurrentDevices!.SequenceEqual([wifi, emulator]), "confirmed USB absence preserves Wi-Fi and local emulators");
+        discovery.Invalidate();
+        discovery.RemoveAbsentUsbDevices(discovery.CurrentDevices, new HashSet<string>(), []);
+        Check(discovery.CurrentDevices == null, "a USB presence fallback cannot make an invalidated snapshot current");
+
+        var originalUsb = usb with { UsbInterfacePath = "port", TransportId = "usb-5" };
+        var newUsb = originalUsb with { TransportId = "usb-6" };
+        var unmapped = usb with { TransportId = "3" }; // Some shared ADB servers expose only a serial.
+        discovery.Publish([newUsb, unmapped, wifi]);
+        discovery.RemoveAbsentUsbDevices(discovery.CurrentDevices, null, [originalUsb]);
+        Check(discovery.CurrentDevices!.SequenceEqual([newUsb, unmapped, wifi]),
+            "a delayed path removal cannot retire a replacement attachment or a shared ADB transport with an unverified path");
+        var beforeOtherPhoneLost = discovery.CurrentDevices;
+        discovery.Publish([newUsb, unmapped]);
+        discovery.RemoveAbsentUsbDevices(beforeOtherPhoneLost, null, [newUsb]);
+        Check(discovery.CurrentDevices!.SequenceEqual([unmapped]),
+            "a concurrent change on another phone does not hide a verified USB removal");
 
         var oldResponse = new TaskCompletionSource<IReadOnlyList<AndroidDevice>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var newResponse = new TaskCompletionSource<IReadOnlyList<AndroidDevice>>(TaskCreationOptions.RunContinuationsAsynchronously);

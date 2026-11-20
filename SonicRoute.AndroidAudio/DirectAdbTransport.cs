@@ -25,7 +25,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     private readonly ConcurrentDictionary<string, TcpDeviceSlot> _tcpDevices = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ForwardSession> _forwards = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<long, Action> _deviceWatchSubscribers = new();
-    private long _nextTransportId;
+    private static long _nextTransportId;
     private long _nextSubscriberId;
     private int _disposed;
 
@@ -93,6 +93,25 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
 
     public event Action<string>? UsbAccessDenied;
     internal event Action? WifiChanged;
+    internal event Action<string>? WifiTransportLost;
+
+    private const string UsbInUse = "usb_in_use";
+    private const string UsbUnavailable = "usb_unavailable";
+
+    internal static AndroidErrorCode? UsbAccessError(IReadOnlyList<AndroidDevice>? devices, AndroidDevice? selected)
+    {
+        if (devices == null) return null;
+        // The PnP instance serial may differ in case from the serial reported by Android.
+        // Use this comparison only for presenting the diagnostic, never for admitting a device.
+        foreach (var device in devices)
+        {
+            if (device.IsWifi || (device.State != UsbInUse && device.State != UsbUnavailable)) continue;
+            if (selected != null && !string.Equals(AndroidDeviceIdentity.StableKey(device),
+                AndroidDeviceIdentity.StableKey(selected), StringComparison.OrdinalIgnoreCase)) continue;
+            return device.State == UsbInUse ? AndroidErrorCode.UsbInterfaceInUse : AndroidErrorCode.UsbInterfaceUnavailable;
+        }
+        return null;
+    }
 
     public Task<string> VersionAsync(CancellationToken token)
     {
@@ -102,13 +121,6 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
 
     public Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token)
         => DevicesAsync(token, retryFailedHandshakes: true);
-
-    private async Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token, bool retryFailedHandshakes)
-    {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-        await EnsureUsbDevicesSyncedAsync(token, retryFailedHandshakes).ConfigureAwait(false);
-        return SnapshotDevices();
-    }
 
     public async Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> onChanged, CancellationToken token)
     {
@@ -234,8 +246,10 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     public async Task RemoveForwardAsync(string serial, string localSpec, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrEmpty(serial);
         ArgumentException.ThrowIfNullOrEmpty(localSpec);
-        if (_forwards.TryRemove(localSpec, out var session))
+        if (_forwards.TryGetValue(localSpec, out var session) && session.Serial == serial
+            && _forwards.TryRemove(new KeyValuePair<string, ForwardSession>(localSpec, session)))
             await session.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -289,6 +303,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
             {
                 if (_tcpDevices.TryRemove(new KeyValuePair<string, TcpDeviceSlot>(normalized, slot)))
                     NotifyWifiChanged();
+                WifiTransportLost?.Invoke(AdbTransportTarget.CreateDirect(slot.TransportId));
                 _ = slot.Connection.DisposeAsync();
             };
             if (!_tcpDevices.TryAdd(normalized, slot))
@@ -316,6 +331,14 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     {
         token.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrEmpty(address);
+        if (AdbTransportTarget.TryParse(address, out bool direct, out string id))
+        {
+            if (!direct) throw new IOException("ADB transport changed.");
+            var admitted = _tcpDevices.Values.FirstOrDefault(s => s.TransportId == id);
+            if (admitted != null && _tcpDevices.TryRemove(new KeyValuePair<string, TcpDeviceSlot>(admitted.Address, admitted)))
+            { await admitted.Connection.DisposeAsync().ConfigureAwait(false); NotifyWifiChanged(); }
+            return "disconnected admitted transport";
+        }
         if (address.Equals("all", StringComparison.OrdinalIgnoreCase))
         {
             foreach (string key in _tcpDevices.Keys.ToList())
@@ -380,7 +403,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
                         continue;
                     if (slot.PendingHandshake is { IsCompleted: false }
                         || slot.Connection is { HasActiveStreams: true }
-                        || HasActiveForward(slot.EffectiveSerial, slot.FallbackSerial))
+                        || HasActiveForward(slot.EffectiveSerial, slot.FallbackSerial, slot.TransportId))
                     {
                         continue;
                     }
@@ -398,7 +421,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         {
             if (!_tcpDevices.TryGetValue(tcpKey, out var tcp))
                 continue;
-            if (HasActiveForwardForTcp(tcp.Address))
+            if (HasActiveForwardForTcp(tcp.Address, tcp.TransportId))
                 continue;
             if (tcp.Connection.IsConnected && (!includeIdleTcp || tcp.Connection.HasActiveStreams))
                 continue;
@@ -407,11 +430,12 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         }
     }
 
-    private bool HasActiveForward(string primarySerial, string? alternateSerial = null)
+    private bool HasActiveForward(string primarySerial, string? alternateSerial = null, string? transportId = null)
     {
         foreach (var fwd in _forwards.Values)
         {
             if (fwd.Serial.Equals(primarySerial, StringComparison.Ordinal)
+                || (transportId != null && AdbTransportTarget.TryParse(fwd.Serial, out bool direct, out string id) && direct && id == transportId)
                 || (alternateSerial != null && fwd.Serial.Equals(alternateSerial, StringComparison.Ordinal)))
             {
                 return true;
@@ -420,12 +444,13 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         return false;
     }
 
-    private bool HasActiveForwardForTcp(string normalizedAddress)
+    private bool HasActiveForwardForTcp(string normalizedAddress, string transportId)
     {
         foreach (var fwd in _forwards.Values)
         {
             if (fwd.Serial.Equals(normalizedAddress, StringComparison.OrdinalIgnoreCase))
                 return true;
+            if (AdbTransportTarget.TryParse(fwd.Serial, out bool direct, out string id) && direct && id == transportId) return true;
             if (TryNormalizeAddress(fwd.Serial, out string? norm)
                 && norm!.Equals(normalizedAddress, StringComparison.OrdinalIgnoreCase))
             {
@@ -438,6 +463,16 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     private async Task<AdbMuxConnection> ResolveConnectionAsync(string serial, CancellationToken token)
     {
         ArgumentException.ThrowIfNullOrEmpty(serial);
+        if (AdbTransportTarget.TryParse(serial, out bool direct, out string id))
+        {
+            token.ThrowIfCancellationRequested();
+            if (!direct) throw new IOException("ADB transport changed.");
+            var wifi = _tcpDevices.Values.FirstOrDefault(s => s.TransportId == id);
+            if (wifi?.Connection is { IsConnected: true } tcpConnection) return tcpConnection;
+            var usb = _usbDevices.Values.FirstOrDefault(s => s.TransportId == id);
+            if (usb?.Connection is { IsConnected: true } usbConnection) return usbConnection;
+            throw new IOException("The admitted ADB transport is no longer connected.");
+        }
         if (_tcpDevices.TryGetValue(serial, out var tcp) && tcp.Connection.IsConnected)
             return tcp.Connection;
 
@@ -447,7 +482,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         var usbMatch = FindUsbSlotBySerial(serial);
         if (usbMatch == null)
         {
-            await EnsureUsbDevicesSyncedAsync(token).ConfigureAwait(false);
+            await DevicesAsync(token, retryFailedHandshakes: false).ConfigureAwait(false);
             usbMatch = FindUsbSlotBySerial(serial);
         }
         if (usbMatch != null)
@@ -472,8 +507,9 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         return null;
     }
 
-    private async Task EnsureUsbDevicesSyncedAsync(CancellationToken token, bool retryFailedHandshakes = false)
+    private async Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token, bool retryFailedHandshakes)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         await _usbSyncGate.WaitAsync(token).ConfigureAwait(false);
         try
         {
@@ -483,18 +519,19 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
             foreach (var d in present)
                 presentMap[d.DevicePath] = d;
 
-            foreach (string path in _usbDevices.Keys.ToList())
+            foreach (var entry in _usbDevices)
             {
-                var slot = _usbDevices[path];
-                if (!presentMap.ContainsKey(path) || slot.Connection is { IsConnected: false }
+                var slot = entry.Value;
+                if (!presentMap.ContainsKey(entry.Key) || slot.Connection is { IsConnected: false }
                     || (retryFailedHandshakes && slot.AuthFailure != null))
                 {
-                    if (_usbDevices.TryRemove(path, out var gone))
-                        await DisposeUsbSlotAsync(gone).ConfigureAwait(false);
+                    if (_usbDevices.TryRemove(entry))
+                        await DisposeUsbSlotAsync(slot).ConfigureAwait(false);
                 }
             }
 
             var waitTasks = new List<Task>();
+            List<AndroidDevice>? unavailable = null;
             foreach (var desc in present)
             {
                 if (_usbDevices.ContainsKey(desc.DevicePath)) continue;
@@ -507,6 +544,10 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
                 catch (IOException ex)
                 {
                     UsbAccessDenied?.Invoke(ex.Message);
+                    string serial = ExtractFallbackSerial(desc.InstanceId, desc.DevicePath);
+                    string state = ex.InnerException is System.ComponentModel.Win32Exception { NativeErrorCode: 32 }
+                        ? UsbInUse : UsbUnavailable;
+                    (unavailable ??= []).Add(new AndroidDevice(serial, serial, state, IsWifi: false) { UsbInterfacePath = desc.DevicePath });
                     continue;
                 }
                 if (link == null) continue;
@@ -525,6 +566,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
 
             if (waitTasks.Count > 0)
                 await Task.WhenAll(waitTasks).ConfigureAwait(false);
+            return SnapshotDevices(unavailable);
         }
         finally
         {
@@ -578,9 +620,9 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         }
     }
 
-    private IReadOnlyList<AndroidDevice> SnapshotDevices()
+    private IReadOnlyList<AndroidDevice> SnapshotDevices(List<AndroidDevice>? unavailable)
     {
-        var list = new List<AndroidDevice>();
+        var list = unavailable ?? [];
         foreach (var slot in _usbDevices.Values.OrderBy(s => s.TransportId, StringComparer.Ordinal))
         {
             if (slot.Connection is { IsConnected: true } conn)
@@ -589,13 +631,13 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
                     ?? conn.DeviceProperties.GetValueOrDefault("ro.product.device")
                     ?? slot.EffectiveSerial;
                 string state = string.IsNullOrEmpty(conn.DeviceType) ? "device" : conn.DeviceType;
-                list.Add(new AndroidDevice(slot.EffectiveSerial, model.Replace('_', ' '), state, IsWifi: false, TransportId: slot.TransportId));
+                list.Add(new AndroidDevice(slot.EffectiveSerial, model.Replace('_', ' '), state, IsWifi: false, TransportId: slot.TransportId) { UsbInterfacePath = slot.DevicePath });
             }
             else
             {
                 string state = slot.AuthFailure == null && slot.PendingHandshake is { IsCompleted: false }
                     ? "unauthorized" : "offline";
-                list.Add(new AndroidDevice(slot.EffectiveSerial, slot.EffectiveSerial, state, IsWifi: false, TransportId: slot.TransportId));
+                list.Add(new AndroidDevice(slot.EffectiveSerial, slot.EffectiveSerial, state, IsWifi: false, TransportId: slot.TransportId) { UsbInterfacePath = slot.DevicePath });
             }
         }
 
@@ -682,13 +724,14 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     private static async Task DisposeUsbSlotAsync(UsbDeviceSlot slot)
     {
         slot.Lifetime.Cancel();
-        if (slot.Connection != null)
-        {
-            try { await slot.Connection.DisposeAsync().ConfigureAwait(false); } catch { }
-        }
+        // A handshake that passed its cancellation check can still publish its connection.
         if (slot.PendingHandshake != null)
         {
             try { await slot.PendingHandshake.ConfigureAwait(false); } catch { }
+        }
+        if (slot.Connection != null)
+        {
+            try { await slot.Connection.DisposeAsync().ConfigureAwait(false); } catch { }
         }
         slot.Lifetime.Dispose();
     }
@@ -779,11 +822,46 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
 /// </summary>
 internal sealed class ArbitratedAdbTransport : IAdbTransport, IAsyncDisposable
 {
+    internal async Task WatchPanelWirelessAsync(Action<string> lost, Action changed, CancellationToken token)
+    {
+        string[] shadowed = [];
+        void ObserveAliases(IReadOnlyList<AndroidDevice> external, IReadOnlyList<AndroidDevice> merged)
+        {
+            string[] aliases = ReferenceEquals(external, merged) ? [] : merged
+                .Where(d => d.IsWifi && d.TransportId?.StartsWith("wifi-", StringComparison.Ordinal) == true
+                    && external.Any(other => other.State == "device" && other.IsWifi && other.ConnectionTarget != null
+                        && d.Serial.Equals(other.Serial, StringComparison.OrdinalIgnoreCase)))
+                .Select(d => AdbTransportTarget.CreateDirect(d.TransportId!)).ToArray();
+            Volatile.Write(ref shadowed, aliases);
+        }
+        void DirectLost(string target)
+        {
+            lost(target);
+            // A direct session shadows an externally owned connection at the same
+            // address. A fresh identity read can now expose that surviving session.
+            if (Volatile.Read(ref shadowed).Contains(target)) changed();
+        }
+        MergedExternalDevices += ObserveAliases;
+        _directTransport.WifiTransportLost += DirectLost;
+        try
+        {
+            if (_socketTransport is AdbSocketClient socket)
+                await socket.WatchPanelWirelessAsync(lost, changed, token).ConfigureAwait(false);
+            else await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _directTransport.WifiTransportLost -= DirectLost;
+            MergedExternalDevices -= ObserveAliases;
+        }
+    }
+
     private readonly Func<CancellationToken, Task<bool>> _isSocketActiveAsync;
     private readonly IAdbTransport _socketTransport;
     private readonly DirectAdbTransport _directTransport;
     private readonly bool _ownsDirect;
     private int _disposed;
+    private event Action<IReadOnlyList<AndroidDevice>, IReadOnlyList<AndroidDevice>>? MergedExternalDevices;
 
     public ArbitratedAdbTransport(IPEndPoint? socketEndpoint = null)
         : this(
@@ -826,10 +904,12 @@ internal sealed class ArbitratedAdbTransport : IAdbTransport, IAsyncDisposable
     public async Task<string> VersionAsync(CancellationToken token) =>
         await (await SelectAsync(token).ConfigureAwait(false)).VersionAsync(token).ConfigureAwait(false);
 
-    private Task<IAdbTransport> SelectDeviceAsync(string serial, CancellationToken token)
+    internal Task<IAdbTransport> SelectDeviceAsync(string serial, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (AdbTransportTarget.TryParse(serial, out bool direct, out _))
+            return Task.FromResult<IAdbTransport>(direct ? _directTransport : _socketTransport);
         return _directTransport.OwnsWifiConnection(serial)
             ? Task.FromResult<IAdbTransport>(_directTransport) : SelectAsync(token);
     }
@@ -838,7 +918,9 @@ internal sealed class ArbitratedAdbTransport : IAdbTransport, IAsyncDisposable
     {
         var transport = await SelectAsync(token).ConfigureAwait(false);
         var devices = await transport.DevicesAsync(token).ConfigureAwait(false);
-        return transport == _socketTransport ? _directTransport.IncludeOwnedWifi(devices) : devices;
+        var merged = transport == _socketTransport ? _directTransport.IncludeOwnedWifi(devices) : devices;
+        MergedExternalDevices?.Invoke(devices, merged);
+        return merged;
     }
 
     public async Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> onChanged, CancellationToken token)
