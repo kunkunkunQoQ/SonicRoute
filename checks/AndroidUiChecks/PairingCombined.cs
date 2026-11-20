@@ -364,6 +364,21 @@ internal static partial class Program
                 Check(connections.Count == 3, "the quick device refresh filters the expired port and offers the existing connection hint");
             }
             finally { quick.Close(); }
+            announceCurrent = true;
+            restoredDevice = null;
+            discovery.Publish([]);
+            int beforeRecovery = connections.Count;
+            Task<bool> Recover() => (Task<bool>)cache.GetMethod("RecoverMissingWirelessAsync", statics)!
+                .Invoke(null, [archived, discovery.Devices, CancellationToken.None])!;
+            cache.GetMethod("SetAutomaticRecovery", statics)!.Invoke(null, [archived, false]);
+            var suppressed = Recover();
+            Pump(suppressed);
+            Check(!suppressed.Result && connections.Count == beforeRecovery, "a manual disconnect suppresses on-demand Wi-Fi recovery");
+            cache.GetMethod("SetAutomaticRecovery", statics)!.Invoke(null, [archived, true]);
+            var recovered = Recover();
+            Pump(recovered);
+            Check(recovered.Result && connections.Count == beforeRecovery + 1 && store.Profile.Id == restoredId
+                && discovery.Devices!.Any(d => d.Serial == currentAddress), "wireless loss recovers the saved phone and republishes its new address");
             page.Dispose(); Until(() => Watch() == null);
             Check(activeScans == 0 && clock.QrTimers == 0 && names.Distinct().Count() == names.Count,
                 "disposal retires all deadlines/scans and every QR rotation uses a fresh identity");

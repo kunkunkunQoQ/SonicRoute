@@ -61,11 +61,7 @@ internal static partial class AndroidAudioHost
         {
             if (IsPhoneCreated) Phone.UpdateOutputs(device, sinks);
         };
-        manager.DeviceDisconnected += disconnectedDevice =>
-        {
-            PhoneAudioWindowCache.InvalidateDevices();
-            _ = PhoneAudioWindowCache.ReadDevicesAsync(MediaShutdown.Token);
-        };
+        manager.DeviceDisconnected += PhonePlaybackFailed;
         return manager;
     });
     internal static PcToPhoneAudioManager PcToPhone => LazyPcToPhone.Value;
@@ -88,6 +84,25 @@ internal static partial class AndroidAudioHost
     });
     internal static AndroidPhoneStore Phone => LazyPhone.Value;
     internal static bool IsPhoneCreated => LazyPhone.IsValueCreated;
+    internal static void PhonePlaybackFailed(AndroidDevice device) =>
+        _ = RefreshPhonePlaybackDevicesAsync(device, MediaShutdown.Token);
+
+    internal static async Task RefreshPhonePlaybackDevicesAsync(AndroidDevice? device, CancellationToken token)
+    {
+        try
+        {
+            await PreparePhoneAsync(token).ConfigureAwait(false);
+            device ??= Phone.Profile.LastDevice;
+            if (device == null || Phone.IsRemoved(device)) return;
+            var devices = await PhoneAudioWindowCache.ReadDevicesAsync(token).ConfigureAwait(false);
+            if (devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(device, d)) is { } online)
+                await ProbeOutputsIfConnectedAsync([online], token: token).ConfigureAwait(false);
+            else
+                await PhoneAudioWindowCache.RecoverMissingWirelessAsync(device, devices, token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone playback discovery: " + ex.Message); }
+    }
     // File-backed preferences are loaded once on a worker, when a phone view or playback
     // actually needs them. A closing view cancels its wait, not another caller's load.
     private static readonly Lazy<Task<AndroidPhoneStore>> PhoneRead = new(() => Task.Run(() => Phone));
@@ -158,7 +173,6 @@ internal static partial class AndroidAudioHost
                     Phone.UpdateOutputs(dev, [AndroidOutputSink.DefaultSpeaker]);
             }
             ApplicationAudio.NotifyOutputsChanged();
-            LocalAppOutputMirrors.RefreshPhoneOutputs();
         }
         if (LazyPcToPhone.IsValueCreated && cached != null)
         {
@@ -193,7 +207,6 @@ internal static partial class AndroidAudioHost
     {
         InvalidateOutputSnapshot();
         ApplicationAudio.NotifyOutputsChanged();
-        LocalAppOutputMirrors.RefreshPhoneOutputs();
     }
     private static IReadOnlyList<AudioDeviceInfo> BuildOutputSnapshot()
     {

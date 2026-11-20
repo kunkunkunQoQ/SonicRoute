@@ -45,7 +45,7 @@ public final class ClipboardBridge {
             if (!valid(value) || value.equals(last)) return;
             last = value; timestamp = clip.getDescription().getTimestamp(); ++revision;
             send(new JSONObject().put("text", value).put("revision", revision));
-        } catch (Exception ignored) { reportError(); }
+        } catch (Exception ignored) { reportError(true); }
     }
     private void command(String line) {
         try {
@@ -56,12 +56,12 @@ public final class ClipboardBridge {
             android.content.ClipDescription description = clipboard.getPrimaryClipDescription();
             if (description != null && description.getTimestamp() != timestamp) emit();
             if (message.getLong("revision") != revision) return;
-            // Record before writing so the resulting device callback is not sent back.
-            last = value;
             clipboard.setPrimaryClip(ClipData.newPlainText("SonicRoute", value));
+            // emit() runs on this same handler. Remember only a write that succeeded.
+            last = value;
             description = clipboard.getPrimaryClipDescription();
             timestamp = description == null ? 0 : description.getTimestamp();
-        } catch (Exception ignored) { reportError(); }
+        } catch (Exception ignored) { reportError(true); }
     }
     private synchronized void queueCommand(String line) {
         // Keep one pending text, even if many changes arrive while Android is busy.
@@ -78,13 +78,13 @@ public final class ClipboardBridge {
                         text = pendingText; expected = pendingRevision; pendingText = null; commandPending = false;
                     }
                     try { command(new JSONObject().put("text", text).put("revision", expected).toString()); }
-                    catch (Exception ignored) { reportError(); }
+                    catch (Exception ignored) { reportError(true); }
                 });
             }
-        } catch (Exception ignored) { reportError(); }
+        } catch (Exception ignored) { reportError(true); }
     }
-    private static void reportError() {
-        try { send(new JSONObject().put("error", "手机暂时无法同步剪贴板，请检查系统权限。")); }
+    private static void reportError(boolean itemSkipped) {
+        try { send(new JSONObject().put("error", "手机暂时无法同步剪贴板，请检查系统权限。").put("itemSkipped", itemSkipped)); }
         catch (Exception ignored) { }
     }
     private void close() {
@@ -115,6 +115,6 @@ public final class ClipboardBridge {
             }, "sonicroute-clipboard-input");
             input.setDaemon(true); input.start();
             Looper.loop();
-        } catch (Throwable ignored) { reportError(); System.exit(1); }
+        } catch (Throwable ignored) { reportError(false); System.exit(1); }
     }
 }

@@ -46,6 +46,10 @@ internal static partial class Program
             Require(get(pid).Order().SequenceEqual(destinations.Select(d => d.Id).Order()), "one entry per additional output, even when the primary and duplicates are selected");
             await Task.WhenAll(free.Select(d => Observe713HzAsync(d.Id, token)));
             Require(Snapshot(pid).Single(d => d.ToneActive).Id == source.Id, "native source and every selected mirror render the 713 Hz tone without moving the source session");
+            var continuity = await Task.WhenAll(free.Select(d => MeasureToneGapsAsync(d.Id, token)));
+            for (int i = 0; i < free.Length; i++)
+                Console.WriteLine($"Native PCM {free[i].Name}: {continuity[i]} quiet 10 ms intervals over 2 s");
+            Require(continuity.Skip(1).All(gaps => gaps <= continuity[0] + 1), "the selected mirrors do not add repeated gaps to continuous source audio");
             try
             {
                 await set(pid, source.Id, [destinations[0].Id, "{missing-local-test-endpoint}"], token);
@@ -121,6 +125,35 @@ internal static partial class Program
         };
         recorder.StartRecording();
         try { await detected.Task.WaitAsync(TimeSpan.FromSeconds(5), token); }
+        finally { recorder.StopRecording(); }
+    }
+
+    private static async Task<int> MeasureToneGapsAsync(string endpoint, CancellationToken token)
+    {
+        using var device = WasapiDeviceLease.Open(endpoint);
+        using var recorder = new WasapiLoopbackCapture(device.Device);
+        var format = recorder.WaveFormat;
+        int frames = 0, intervals = 0, gaps = 0;
+        float peak = 0f;
+        var result = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        recorder.DataAvailable += (_, packet) =>
+        {
+            var samples = MemoryMarshal.Cast<byte, float>(packet.Buffer.AsSpan(0, packet.BytesRecorded));
+            for (int i = 0; i < samples.Length; i += format.Channels)
+            {
+                peak = Math.Max(peak, Math.Abs(samples[i]));
+                if (++frames < format.SampleRate / 100) continue;
+                if (peak > 0.00001f || intervals != 0)
+                {
+                    if (peak <= 0.00001f) gaps++;
+                    if (++intervals == 200) result.TrySetResult(gaps);
+                }
+                frames = 0;
+                peak = 0f;
+            }
+        };
+        recorder.StartRecording();
+        try { return await result.Task.WaitAsync(TimeSpan.FromSeconds(5), token); }
         finally { recorder.StopRecording(); }
     }
 }

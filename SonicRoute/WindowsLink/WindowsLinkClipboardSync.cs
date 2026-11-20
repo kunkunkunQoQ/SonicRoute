@@ -23,6 +23,8 @@ internal sealed class WindowsLinkClipboardSync : IDisposable
     private (LinkClipboardRoute Route, string Text, long Revision)? _incoming;
     private (LinkClipboardRoute[] Routes, long Revision)? _local;
     private bool _reading, _writing, _listening;
+    private DispatcherTimer? _listenRetry;
+    private int _listenFailures;
     private int _refreshQueued;
     private volatile bool _disposed;
 
@@ -50,11 +52,37 @@ internal sealed class WindowsLinkClipboardSync : IDisposable
         {
             try { _desktop.SetListening(active.Length != 0); _listening = active.Length != 0; }
             catch (Exception ex) when (ex is InvalidOperationException or ExternalException)
-            { Trace.WriteLine(ex.GetType().Name); return; }
+            {
+                Trace.WriteLine(ex.GetType().Name);
+                if (active.Length != 0 && _listenRetry == null && _listenFailures < 3)
+                {
+                    int seconds = _listenFailures++ switch { 0 => 1, 1 => 3, _ => 8 };
+                    _listenRetry = new DispatcherTimer(DispatcherPriority.Background, _dispatcher) { Interval = TimeSpan.FromSeconds(seconds) };
+                    _listenRetry.Tick += RetryListening;
+                    _listenRetry.Start();
+                }
+                return;
+            }
         }
+        StopListenerRetry();
+        _listenFailures = 0;
         // Record only the sequence number on activation. Never read or send an earlier copy.
         foreach (var route in active)
             if (!_baselines.ContainsKey(route)) _baselines.Add(route, _desktop.Revision);
+    }
+
+    private void RetryListening(object? sender, EventArgs e)
+    {
+        StopListenerRetry();
+        Refresh();
+    }
+
+    private void StopListenerRetry()
+    {
+        if (_listenRetry == null) return;
+        _listenRetry.Stop();
+        _listenRetry.Tick -= RetryListening;
+        _listenRetry = null;
     }
 
     private void LocalChanged()
@@ -139,6 +167,7 @@ internal sealed class WindowsLinkClipboardSync : IDisposable
         lock (_incomingGate) _incoming = null;
         void Detach()
         {
+            StopListenerRetry();
             _desktop.Changed -= LocalChanged;
             _baselines.Clear();
             _local = null;

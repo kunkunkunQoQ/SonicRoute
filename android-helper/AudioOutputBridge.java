@@ -274,6 +274,38 @@ public final class AudioOutputBridge {
         catch (RuntimeException ignored) { } // A vendor may require its default threshold.
     }
 
+    private static AudioTrack createTrack(int sessionId, int bufferBytes, AudioManager manager, String target) {
+        AudioDeviceInfo expected = findTargetDevice(manager, target);
+        if (expected == null) throw new IllegalStateException("所选手机输出设备未连接或不可播放。");
+        AudioAttributes attributes = new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE).build();
+        boolean followsSystem = false;
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                for (AudioDeviceInfo device : manager.getAudioDevicesForAttributes(attributes))
+                    if (device.getId() == expected.getId()) followsSystem = true;
+            } catch (RuntimeException ignored) { }
+        }
+        AudioTrack track = new AudioTrack.Builder()
+            .setSessionId(sessionId)
+            .setPerformanceMode(followsSystem ? AudioTrack.PERFORMANCE_MODE_NONE : AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            .setAudioAttributes(attributes)
+            .setAudioFormat(new AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(SAMPLE_RATE)
+                .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                .build())
+            .setBufferSizeInBytes(bufferBytes)
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .build();
+        prepareStartThreshold(track);
+        track.setVolume(0f);
+        // Pinning an already-default speaker can repeatedly invalidate other media tracks on MIUI.
+        if (followsSystem || applyPreferred(track, manager, target)) return track;
+        track.release();
+        throw new IllegalStateException("所选手机输出设备未连接或不可播放。");
+    }
+
     /** Pins only our playback session; never changes the phone's global media strategy. */
     static final class DeviceRoute implements AutoCloseable {
         private final AudioManager manager;
@@ -370,41 +402,9 @@ public final class AudioOutputBridge {
 
                 final int sessionId = audioManager.generateAudioSessionId();
                 if (sessionId <= 0) throw new IllegalStateException("无法建立独立手机播放会话。");
-                try {
-                    routeHolder[0] = new DeviceRoute(context, audioManager, "RULE_MATCH_AUDIO_SESSION_ID", sessionId,
-                        findTargetDevice(audioManager, targetHolder[0]), callbackThread.getLooper());
-                } catch (NoSuchFieldException unsupportedSessionRule) {
-                    // Older releases use the track preference plus actual-route validation.
-                }
-                final AudioTrack track = new AudioTrack.Builder()
-                    .setSessionId(sessionId)
-                    // A deep-buffer media output may remain routed to another app's Bluetooth device.
-                    .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
-                    .setAudioAttributes(new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        // Returned PCM must never re-enter a whole-phone playback capture.
-                        .setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE)
-                        .build())
-                    .setAudioFormat(new AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(SAMPLE_RATE)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
-                        .build())
-                    .setBufferSizeInBytes(bufferBytes)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .build();
-                prepareStartThreshold(track);
-                track.setVolume(0f); // Do not play through an unverified default output.
-
-                boolean initialPreferred = applyPreferred(track, audioManager, targetHolder[0]);
-                if (!initialPreferred) {
-                    try { track.release(); } catch (Throwable ignored) { }
-                    try { client.close(); } catch (Throwable ignored) { }
-                    emitJson(new JSONObject().put("error", "所选手机输出设备未连接或不可播放。"));
-                    System.exit(1);
-                    return;
-                }
+                java.util.concurrent.atomic.AtomicReference<AudioTrack> currentTrack = new java.util.concurrent.atomic.AtomicReference<>(
+                    createTrack(sessionId, bufferBytes, audioManager, targetHolder[0]));
+                final boolean[] triedPolicy = { false };
 
                 final Runnable routingDeadline = () -> {
                     synchronized (targetHolder) {
@@ -416,8 +416,20 @@ public final class AudioOutputBridge {
                 final Runnable verifyRouting = () -> {
                     synchronized (targetHolder) {
                         AudioDeviceInfo expected = findTargetDevice(audioManager, targetHolder[0]);
+                        AudioTrack track = currentTrack.get();
                         AudioDeviceInfo actual = track.getRoutedDevice();
                         boolean matches = expected != null && actual != null && expected.getId() == actual.getId();
+                        // Most devices honor the track preference. Register a session policy only
+                        // when the playing track was actually routed to a different device.
+                        if (!matches && expected != null && actual != null && !triedPolicy[0]
+                                && track.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) {
+                            triedPolicy[0] = true;
+                            applyPreferred(track, audioManager, targetHolder[0]);
+                            try {
+                                routeHolder[0] = new DeviceRoute(context, audioManager, "RULE_MATCH_AUDIO_SESSION_ID",
+                                    sessionId, expected, callbackThread.getLooper());
+                            } catch (Exception unsupported) { /* Actual routing is still verified below. */ }
+                        }
                         routeVerified[0] = matches;
                         track.setVolume(matches && !mutedHolder[0] ? volumeHolder[0] : 0f);
                         if (matches) callbackHandler.removeCallbacks(routingDeadline);
@@ -447,8 +459,6 @@ public final class AudioOutputBridge {
                                 return;
                             }
                             if (changed) {
-                                boolean applied = applyPreferred(track, audioManager, currentTarget);
-                                if (!applied) { track.setVolume(0f); client.close(); }
                                 verifyRouting.run();
                             }
                         } catch (Throwable ignored) { }
@@ -483,11 +493,14 @@ public final class AudioOutputBridge {
                 // scan only for systems which cannot register device callbacks.
                 if (!outputCallbackRegistered) callbackHandler.postDelayed(periodicWatch, 5000);
 
-                track.addOnRoutingChangedListener(router -> {
+                android.media.AudioRouting.OnRoutingChangedListener onRouted = router -> {
+                    AudioTrack track = currentTrack.get();
+                    if (router != track) return;
                     prepareStartThreshold(track);
                     checkOutputsAction.run();
                     verifyRouting.run();
-                }, callbackHandler);
+                };
+                currentTrack.get().addOnRoutingChangedListener(onRouted, callbackHandler);
 
                 Thread controlThread = new Thread(() -> {
                     try {
@@ -503,6 +516,7 @@ public final class AudioOutputBridge {
                                 String nextTarget = line.substring(7).trim();
                                 if (!nextTarget.isEmpty()) {
                                     synchronized (targetHolder) {
+                                        AudioTrack track = currentTrack.get();
                                         track.setVolume(0f); routeVerified[0] = false;
                                         long started = System.nanoTime();
                                         boolean wasPlaying = track.getPlayState() == AudioTrack.PLAYSTATE_PLAYING;
@@ -525,6 +539,7 @@ public final class AudioOutputBridge {
                                         }
                                         long preferred = System.nanoTime();
                                         routeHolder[0] = nextRoute; targetHolder[0] = nextTarget;
+                                        triedPolicy[0] = true;
                                         prepareStartThreshold(track);
                                         if (wasPlaying) track.play();
                                         emitJson(new JSONObject().put("switchSetup", new JSONObject()
@@ -540,13 +555,13 @@ public final class AudioOutputBridge {
                                 float gain = Math.max(0f, Math.min(1f, pct / 100f));
                                 synchronized (targetHolder) {
                                     volumeHolder[0] = gain;
-                                    track.setVolume(routeVerified[0] && !mutedHolder[0] ? gain : 0f);
+                                    currentTrack.get().setVolume(routeVerified[0] && !mutedHolder[0] ? gain : 0f);
                                 }
                             } else if (line.startsWith("mute ")) {
                                 boolean mute = "1".equals(line.substring(5).trim()) || "true".equalsIgnoreCase(line.substring(5).trim());
                                 synchronized (targetHolder) {
                                     mutedHolder[0] = mute;
-                                    track.setVolume(routeVerified[0] && !mute ? volumeHolder[0] : 0f);
+                                    currentTrack.get().setVolume(routeVerified[0] && !mute ? volumeHolder[0] : 0f);
                                 }
                             }
                         }
@@ -562,6 +577,7 @@ public final class AudioOutputBridge {
                     byte[] pcm = new byte[BYTES_PER_FRAME * FRAMES_PER_CHUNK]; // 20ms frame chunks (3840 bytes)
                     int pending = 0;
                     boolean playing = false;
+                    long lastRebuild = 0;
                     while (true) {
                         int read;
                         try {
@@ -574,11 +590,42 @@ public final class AudioOutputBridge {
                         int total = pending + read;
                         int aligned = total - (total % BYTES_PER_FRAME);
                         if (aligned > 0) {
-                            track.write(pcm, 0, aligned, AudioTrack.WRITE_BLOCKING);
-                            if (!playing) {
-                                track.play();
-                                playing = true;
-                                verifyRouting.run();
+                            int offset = 0;
+                            while (offset < aligned) {
+                                AudioTrack track = currentTrack.get();
+                                int written = track.write(pcm, offset, aligned - offset, AudioTrack.WRITE_BLOCKING);
+                                if (written == 0 && playing) {
+                                    // A concurrent target switch can pause a blocking write.
+                                    // Wait for that switch to finish, then retry the same bytes once.
+                                    synchronized (targetHolder) {
+                                        if (track.getPlayState() != AudioTrack.PLAYSTATE_PLAYING)
+                                            throw new java.io.IOException("AudioTrack stopped during playback");
+                                    }
+                                    written = track.write(pcm, offset, aligned - offset, AudioTrack.WRITE_BLOCKING);
+                                }
+                                if (written == AudioTrack.ERROR_DEAD_OBJECT) {
+                                    long now = System.nanoTime();
+                                    if (lastRebuild != 0 && now - lastRebuild < 1000000000L)
+                                        throw new java.io.IOException("AudioTrack repeatedly invalidated");
+                                    lastRebuild = now;
+                                    synchronized (targetHolder) {
+                                        track.removeOnRoutingChangedListener(onRouted);
+                                        track.release();
+                                        routeVerified[0] = false;
+                                        AudioTrack replacement = createTrack(sessionId, bufferBytes, audioManager, targetHolder[0]);
+                                        currentTrack.set(replacement);
+                                        replacement.addOnRoutingChangedListener(onRouted, callbackHandler);
+                                        playing = false;
+                                    }
+                                    continue;
+                                }
+                                if (written <= 0) throw new java.io.IOException("AudioTrack.write returned " + written);
+                                offset += written;
+                                if (!playing) {
+                                    track.play();
+                                    playing = true;
+                                    verifyRouting.run();
+                                }
                             }
                         }
                         pending = total - aligned;
@@ -592,6 +639,8 @@ public final class AudioOutputBridge {
                         try { audioManager.unregisterAudioDeviceCallback(deviceCallback); } catch (Throwable ignored) { }
                     }
                     try { callbackThread.quitSafely(); } catch (Throwable ignored) { }
+                    AudioTrack track = currentTrack.get();
+                    track.removeOnRoutingChangedListener(onRouted);
                     try { track.stop(); } catch (Throwable ignored) { }
                     try { track.release(); } catch (Throwable ignored) { }
                     try { client.close(); } catch (Throwable ignored) { }

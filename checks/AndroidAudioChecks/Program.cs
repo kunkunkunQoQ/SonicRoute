@@ -71,14 +71,18 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--mdns-discovery") { await MdnsDiscoveryChecksAsync(args.Contains("--lan")); return 0; }
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }
+            if (args is ["--direct-adb"]) { await CheckDirectAndArbitratedTransportAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--stream-settings") { await StreamSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--encoder-catalog") { await EncoderCatalogAsync(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--device-audio") { await DeviceAudioAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--media-log-tail") { await MediaLogTailAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-latency-live") { await OutputLatencyLiveAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-startup") { await OutputStartupAsync(args[1]); return 0; }
-            if (args.Length == 2 && args[0] == "--phone-sink-hardware") { await CheckPhoneSinkHardwareAsync(args[1]); return 0; }
+            if (args.Length is >= 2 and <= 4 && args[0] == "--phone-sink-hardware")
+            { await CheckPhoneSinkHardwareAsync(args[1], args.ElementAtOrDefault(2), args.ElementAtOrDefault(3)); return 0; }
             if (args.Length == 2 && args[0] == "--phone-link-forwarding") { await CheckAndroidLinkForwardingAsync(args[1]); return 0; }
+            if (args.Length is 5 or 6 && args[0] == "--phone-route-switch-live")
+            { await CheckPhoneRouteSwitchLiveAsync(args[1], args[2], args[3], args[4], args.ElementAtOrDefault(5)); return 0; }
             if (args.Length == 2 && args[0] == "--receive-mirrors") { await CheckAndroidReceiveMirrorsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--explicit-output") { await ExplicitOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--explicit-output-live") { await ExplicitOutputLiveAsync(args[1], args[2]); return 0; }

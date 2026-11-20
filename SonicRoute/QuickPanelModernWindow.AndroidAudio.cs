@@ -26,6 +26,13 @@ public partial class QuickPanelModernWindow
 {
 #if SONICROUTE_PHONE
     private ToggleButton PhoneAudioButton = null!;
+    private bool _checkedPhonePlaybackDevices;
+    private void CheckPhonePlaybackDevices()
+    {
+        if (_checkedPhonePlaybackDevices) return;
+        _checkedPhonePlaybackDevices = true;
+        _ = AndroidAudioHost.RefreshPhonePlaybackDevicesAsync(null, _uiLifetime.Token);
+    }
     private Border AndroidDropHighlight = null!, AndroidComputerDropZone = null!, AndroidSharedDropZone = null!, AirPlayWindowsDropZone = null!, WindowsLinkDropZone = null!;
     private Grid _androidDropZones = null!;
     private readonly record struct IncomingSource(AndroidAudioSource? Android, AirPlayAudioOutput? AirPlay, WindowsLinkAudioSource? WindowsLink)

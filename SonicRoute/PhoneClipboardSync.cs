@@ -1,8 +1,10 @@
 #if SONICROUTE_PHONE
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
@@ -47,16 +49,19 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         internal readonly Channel<(long Version, string Text, long RemoteRevision)> Writes = Channel.CreateBounded<(long, string, long)>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = true });
         internal Task Completion = Task.CompletedTask;
+        internal CancellationTokenSource? RetryDelay;
+        internal int RetryCount;
         internal long RemoteRevision;
         internal bool Ready, Finished;
         internal SessionState State = SessionState.Connecting;
     }
-    private enum SessionState { Connecting, Connected, Disconnected, DesktopUnavailable }
+    private enum SessionState { Connecting, Connected, Disconnected, DesktopUnavailable, PermissionDenied }
     private static string SessionStatusText(SessionState state) => state switch
     {
         SessionState.Connected => L10n.T("Phone.ClipboardConnected"),
         SessionState.Disconnected => L10n.T("Phone.ClipboardDisconnected"),
         SessionState.DesktopUnavailable => L10n.T("Phone.ClipboardDesktopUnavailable"),
+        SessionState.PermissionDenied => L10n.T("Phone.Err.ClipboardPermissionError"),
         _ => L10n.T("Phone.ClipboardConnecting")
     };
     private readonly CancellationTokenSource _lifetime = new();
@@ -188,7 +193,22 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     {
         if (!_disposed && !dispatcher.HasShutdownStarted) _ = dispatcher.BeginInvoke(new Action(() => { if (!_disposed) action(); }));
     }
-    private void Reconcile(bool retry)
+    private AndroidDevice? FindOnlineTransport(AndroidDevice saved, IReadOnlyList<AndroidDevice> devices)
+    {
+        _sessions.TryGetValue(AndroidDeviceIdentity.Key(saved), out var current);
+        AndroidDevice? preferred = null, first = null, alternative = null;
+        foreach (var device in devices)
+        {
+            if (device.State != "device" || !AndroidDeviceIdentity.MatchesSavedDevice(saved, device)) continue;
+            // One wireless phone may appear under both its IP and its mDNS service name.
+            if (current is { Finished: false } && SameTransport(current.Device, device)) return device;
+            if (current is { Finished: true } && !SameTransport(current.Device, device)) alternative ??= device;
+            if (device.Serial == saved.Serial) preferred = device;
+            first ??= device;
+        }
+        return alternative ?? preferred ?? first;
+    }
+    private void Reconcile(bool retry, Session? recovering = null)
     {
         if (_disposed) return;
         bool watch = _enabled.Count > 0;
@@ -199,22 +219,24 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             _watching = watch;
         }
         var devices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
-        var targets = _enabled.Select(saved => devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(saved, d)))
+        var targets = _enabled.Select(saved => FindOnlineTransport(saved, devices))
             .Where(d => d != null).Cast<AndroidDevice>().DistinctBy(AndroidDeviceIdentity.Key).ToArray();
         foreach (var pair in _sessions.ToArray())
-            if (!targets.Any(d => SameTransport(d, pair.Value.Device)))
+            if (!targets.Any(d => AndroidDeviceIdentity.Key(d) == pair.Key))
             { _sessions.Remove(pair.Key); Cancel(pair.Value); }
         _pending.RemoveAll(task => task.IsCompleted);
         foreach (var device in targets)
         {
             string key = AndroidDeviceIdentity.Key(device);
             Task previous = Task.CompletedTask;
-            if (_sessions.TryGetValue(key, out var existing))
+            _sessions.TryGetValue(key, out var existing);
+            if (recovering != null && existing != recovering) continue;
+            if (existing != null)
             {
-                if (!existing.Finished || !retry) continue;
+                if (SameTransport(device, existing.Device) && (!existing.Finished || !retry)) continue;
                 Cancel(existing); previous = existing.Completion;
             }
-            var session = new Session(device, createClient(), _lifetime.Token);
+            var session = new Session(device, createClient(), _lifetime.Token) { RetryCount = recovering?.RetryCount + 1 ?? 0 };
             _sessions[key] = session;
             Interlocked.Increment(ref _activeSessions);
             session.Completion = Task.Run(async () =>
@@ -231,16 +253,36 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         UpdateDesktopListener(); Changed?.Invoke();
     }
     private bool Current(string key, Session session) => !_disposed && _sessions.TryGetValue(key, out var current) && ReferenceEquals(current, session);
-    private static void Cancel(Session session) { try { session.Stop.Cancel(); } catch (ObjectDisposedException) { } }
+    private static void Cancel(Session session)
+    {
+        session.RetryDelay?.Cancel();
+        try { session.Stop.Cancel(); } catch (ObjectDisposedException) { }
+    }
+    private async Task RetryAfterDisconnectAsync(string key, Session session)
+    {
+        using var delay = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        session.RetryDelay = delay;
+        try
+        {
+            int seconds = session.RetryCount switch { 0 => 1, 1 => 3, _ => 8 };
+            await Task.Delay(TimeSpan.FromSeconds(seconds), delay.Token);
+            if (!delay.IsCancellationRequested && Current(key, session)) Reconcile(true, session);
+        }
+        catch (OperationCanceledException) when (delay.IsCancellationRequested) { }
+        finally { session.RetryDelay = null; }
+    }
     private async Task RunAsync(string key, Session session)
     {
         Task watch = Task.CompletedTask, send = Task.CompletedTask;
+        long readyAt = 0;
+        bool retryable = false;
         SessionState endState = SessionState.Disconnected;
         try
         {
             session.Stop.Token.ThrowIfCancellationRequested();
             watch = session.Client.WatchAsync(session.Device, () =>
             {
+                Interlocked.Exchange(ref readyAt, Stopwatch.GetTimestamp());
                 long revision = session.Client.Revision;
                 Post(() =>
                 {
@@ -263,17 +305,33 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             }, session.Stop.Token);
             send = SendAsync(session);
             await await Task.WhenAny(watch, send).ConfigureAwait(false);
+            retryable = true;
         }
-        catch (OperationCanceledException) { }
-        catch (Exception) { /* Never log clipboard contents, protocol lines or payload-bearing exceptions. */ }
+        catch (OperationCanceledException) { retryable = !session.Stop.IsCancellationRequested; }
+        catch (Exception ex)
+        {
+            // Classify locally. Exceptions and protocol lines can contain clipboard text.
+            if (AndroidError.TryGetCode(ex, out var code) && code == AndroidErrorCode.ClipboardPermissionError)
+                endState = SessionState.PermissionDenied;
+            else retryable = ex is IOException or SocketException;
+        }
         finally
         {
+            bool recover = retryable && !session.Stop.IsCancellationRequested;
             session.Stop.Cancel(); session.Writes.Writer.TryComplete();
             try { await Task.WhenAll(watch, send).ConfigureAwait(false); } catch { }
             Post(() =>
             {
                 if (!Current(key, session)) return;
-                session.Ready = false; session.Finished = true; if (session.State != SessionState.DesktopUnavailable) session.State = endState;
+                session.Ready = false; session.Finished = true;
+                if (readyAt != 0 && Stopwatch.GetElapsedTime(readyAt) >= TimeSpan.FromMinutes(1)) session.RetryCount = 0;
+                bool desktopUnavailable = session.State == SessionState.DesktopUnavailable;
+                if (!desktopUnavailable) session.State = endState;
+                if ((recover || desktopUnavailable) && session.RetryCount < 3)
+                {
+                    session.State = SessionState.Connecting;
+                    _ = RetryAfterDisconnectAsync(key, session);
+                }
                 UpdateDesktopListener(); Changed?.Invoke();
             });
             session.Stop.Dispose();

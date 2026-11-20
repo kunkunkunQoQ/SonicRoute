@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Threading.Channels;
 using SonicRoute.AndroidAudio;
 
 internal static partial class Program
@@ -72,5 +73,62 @@ internal static partial class Program
         await session.SetOutputAsync("speaker-b");
         Check(multi.GetOutputs().SequenceEqual(["speaker-b"]) && liveCaptures == 1 && session.PacketsDecoded == 5,
             "whole-phone single selection hands off playback without restarting its transport");
+        await CheckWirelessPlaybackBacklogAsync(runtime, fakePhone, device, token);
+    }
+
+    private static async Task CheckWirelessPlaybackBacklogAsync(string runtime, FakeAdbServer server, AndroidDevice device, CancellationToken token)
+    {
+        using var stream = new CreditPcmStream();
+        var socket = new AdbSocketClient(server.EndPoint);
+        await using var adb = new AdbClient(runtime, new CreditAudioTransport(socket, stream));
+        var source = new AndroidPcmSource();
+        using var player = new AndroidPhonePcmPlayer(adb, device, source, "speaker", token);
+        player.Play();
+        // Hold each ADB write while another four 10 ms capture blocks arrive.
+        var block = new float[AndroidPcmSource.SampleRate * AndroidPcmSource.Channels / 100];
+        using var expected = new MemoryStream();
+        int sequence = 0;
+        void CaptureBlock()
+        {
+            for (int i = 0; i < block.Length; ++i)
+            {
+                short value = (short)(++sequence % 24000 - 12000);
+                block[i] = value / 32768f;
+                expected.WriteByte((byte)value);
+                expected.WriteByte((byte)(value >> 8));
+            }
+            source.Write(block);
+        }
+        CaptureBlock();
+        Check(await stream.Packets.Reader.ReadAsync(token) == block.Length * 2, "phone playback starts on the first 10 ms block");
+        for (int i = 0; i < 30; ++i)
+        {
+            for (int n = 0; n < 4; n++) CaptureBlock();
+            stream.Credit.Release();
+            if (await stream.Packets.Reader.ReadAsync(token) != block.Length * 8)
+                throw new InvalidDataException("Wireless PCM writer fell behind a 40 ms acknowledgement");
+        }
+        stream.Credit.Release();
+        Check(source.DroppedSamples == 0 && source.UnderflowSamples == 0 && stream.ToArray().SequenceEqual(expected.ToArray()),
+            "forty-millisecond wireless credits preserve every PCM sample in order with no queue drops");
+    }
+
+    private sealed class CreditAudioTransport(AdbSocketClient socket, Stream pcm) : PairingFixtureTransport, IAdbTransport
+    {
+        Task<IAdbShellSession> IAdbTransport.OpenShellAsync(string serial, string command, bool input, CancellationToken token) =>
+            socket.OpenShellAsync(serial, command, input, token);
+        Task<Stream> IAdbTransport.OpenLocalAbstractAsync(string serial, string name, CancellationToken token) => Task.FromResult(pcm);
+    }
+
+    private sealed class CreditPcmStream : MemoryStream
+    {
+        internal readonly Channel<int> Packets = Channel.CreateUnbounded<int>();
+        internal readonly SemaphoreSlim Credit = new(0);
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken token = default)
+        {
+            await base.WriteAsync(buffer, token);
+            Packets.Writer.TryWrite(buffer.Length);
+            await Credit.WaitAsync(token);
+        }
     }
 }

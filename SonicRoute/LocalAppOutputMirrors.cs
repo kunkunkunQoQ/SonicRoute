@@ -108,14 +108,8 @@ internal static class LocalAppOutputMirrors
         finally { ReleaseChanges(); }
     }
 
-    internal static Task PhoneRemovedAsync(AndroidDevice device) =>
-        PruneAsync((_, sink) => sink.Player is AndroidPhonePcmPlayer phone && AndroidDeviceIdentity.MatchesSavedDevice(device, phone.Device), recover: false);
-
-    internal static void RefreshPhoneOutputs()
-    {
-        if (!Routes.Values.Any(route => route.Sinks.Any(s => s.Player is AndroidPhonePcmPlayer))) return;
-        _ = PruneAsync((_, sink) => sink.Player is AndroidPhonePcmPlayer && !AndroidAudioHost.GetOutputDevices().Any(d => Ids.Equals(d.Id, sink.Id)), recover: true);
-    }
+    internal static Task PhoneRemovedAsync(AndroidDevice device, bool recover = false) =>
+        PruneAsync((_, sink) => sink.Player is AndroidPhonePcmPlayer phone && AndroidDeviceIdentity.MatchesSavedDevice(device, phone.Device), recover);
 
     private static void ReleaseChanges()
     {
@@ -371,6 +365,7 @@ internal static class LocalAppOutputMirrors
                     {
                         ExceptionDiagnostics.Record("LocalAppOutputMirrors.Playback", error);
                         _ = PruneFailed(sink);
+                        if (sink.Player is AndroidPhonePcmPlayer lost) AndroidAudioHost.PhonePlaybackFailed(lost.Device);
                     }
                     if (player is AndroidPhonePcmPlayer phone)
                     {

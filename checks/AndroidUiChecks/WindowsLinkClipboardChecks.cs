@@ -11,12 +11,22 @@ internal static partial class Program
     private sealed class IsolatedClipboard : IDesktopClipboardLink
     {
         internal bool Listening, Shareable;
-        internal int Reads, Writes;
+        internal int Reads, Writes, FailedRegistrations;
+        internal bool FailNextRegistration;
         internal string Text = "inventory before first opt-in";
         internal TaskCompletionSource? DelayWrite;
         public long Revision { get; private set; }
         public event Action? Changed;
-        public void SetListening(bool enabled) => Listening = enabled;
+        public void SetListening(bool enabled)
+        {
+            if (enabled && FailNextRegistration)
+            {
+                FailNextRegistration = false;
+                FailedRegistrations++;
+                throw new System.Runtime.InteropServices.ExternalException("Fixture registration failure");
+            }
+            Listening = enabled;
+        }
         internal void Copy(string text, bool shareable = true)
         {
             Text = text; Shareable = shareable; Revision++;
@@ -89,10 +99,12 @@ internal static partial class Program
             a.SetClipboardEnabled(idB, true);
             await Wait(() => b.GetClipboardState(idA).PeerEnabled);
             Check(!ca.Listening && !cb.Listening, "one-sided opt-in starts no clipboard listeners");
+            ca.FailNextRegistration = true;
             b.SetClipboardEnabled(idA, true);
             b.SetClipboardEnabled(idC, true);
             c.SetClipboardEnabled(idB, true);
             await Wait(() => ca.Listening && cc.Listening && cb.Listening && b.ClipboardRoutes().Length == 2);
+            Check(ca.FailedRegistrations == 1, "a transient Windows listener registration failure recovers without reopening settings or receiving text");
             Check(ca.Reads + cb.Reads + cc.Reads == 0, "mutual activation reads no existing clipboard content");
             ca.Copy("局域网 clipboard A → B");
             await Wait(() => cb.Writes == 1);
@@ -127,6 +139,15 @@ internal static partial class Program
             await a.ConnectAsync(b.LocalAddress, idB, token);
             await Wait(() => ca.Listening);
             Check(ca.Reads == previousReads && cb.Text == "fresh epoch", "reconnect renews per-session opt-in without replaying an offline copy");
+            var beforeBreak = a.ClipboardRoutes().Single();
+            var connections = (System.Collections.IDictionary)typeof(WindowsLinkService).GetField("_connections", Hidden)!.GetValue(a)!;
+            ((LinkConnection)connections[idB]!).Abort();
+            await Wait(() => a.ClipboardRoutes() is [var r] && r != beforeBreak && ca.Listening && b.GetClipboardState(idA).Active);
+            ca.Copy("after network recovery");
+            await Wait(() => cb.Text == "after network recovery");
+            cb.Copy("return copy after network recovery");
+            await Wait(() => ca.Text == "return copy after network recovery");
+            Check(!a.CanSyncClipboard(beforeBreak), "a broken TLS socket reconnects and copies new text both ways using fresh consent");
             await a.DisconnectAsync(idB);
             await Wait(() => !ca.Listening);
             await using (var restarted = Node("A"))

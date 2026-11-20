@@ -341,7 +341,10 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     }
     private async Task PumpAsync()
     {
-        byte[] floats = new byte[1920 * sizeof(float)], pcm = new byte[1920 * sizeof(short)];
+        // Send immediately when a frame arrives. After a slow wireless ACK, send the
+        // queued frames together so one round trip can carry more than 20 ms of audio.
+        const int maxSamples = AndroidPcmSource.SampleRate * AndroidPcmSource.Channels * 80 / 1000;
+        byte[] floats = new byte[maxSamples * sizeof(float)], pcm = new byte[maxSamples * sizeof(short)];
         try
         {
             while (true)
@@ -352,7 +355,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
                     int samples;
                     lock (_gate)
                     {
-                        samples = _playing ? Math.Min(1920, _source.BufferedSamples) : 0;
+                        samples = _playing ? Math.Min(maxSamples, _source.BufferedSamples) : 0;
                         if (samples == 0) break;
                         _source.Read(floats, 0, samples * sizeof(float));
                     }

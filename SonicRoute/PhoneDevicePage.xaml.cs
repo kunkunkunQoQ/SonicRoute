@@ -413,6 +413,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         try
         {
             AndroidAudioHost.Phone.RememberDevice(result.Device);
+            PhoneAudioWindowCache.SetAutomaticRecovery(result.Device, true);
             PhoneAudioWindowCache.SetDevices(result.Devices);
             ApplyDevices(PhoneAudioWindowCache.Devices ?? result.Devices);
             _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync([result.Device], force: true, _lifetime.Token);
@@ -431,7 +432,11 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         await RunAsync(async _ =>
         {
             _applyingConnection = true;
-            try { await AndroidAudioHost.RemovePhoneAsync(profile.Id, device); }
+            try
+            {
+                PhoneAudioWindowCache.SetAutomaticRecovery(device, false);
+                await AndroidAudioHost.RemovePhoneAsync(profile.Id, device);
+            }
             finally { _applyingConnection = false; }
             _showConnection = AndroidAudioHost.Phone.Profile.LastDevice == null;
         }, "Phone.StatusRemovedKeepAuth");
@@ -444,6 +449,8 @@ public partial class PhoneDevicePage : UserControl, IDisposable
             if (_device == null) throw AndroidError.WithCode(new IOException("手机未连接，请先重连，或在手机无线调试中移除此电脑。"), AndroidErrorCode.UnpairPhoneOffline);
             await Wireless.UnpairAsync(device, token, async () =>
             {
+                PhoneAudioWindowCache.SetAutomaticRecovery(device, false);
+                await LocalAppOutputMirrors.PhoneRemovedAsync(device, recover: true);
                 if (AndroidAudioHost.AreDisplaysCreated) await AndroidAudioHost.Displays.CloseDeviceAsync(device);
                 if (AndroidAudioHost.IsCreated)
                     foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)).ToArray())
@@ -504,7 +511,9 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         var device = _device; if (device == null) return;
         await RunAsync(async token =>
         {
+            PhoneAudioWindowCache.SetAutomaticRecovery(device, false);
             PhoneAudioWindowCache.InvalidateDevices();
+            await LocalAppOutputMirrors.PhoneRemovedAsync(device, recover: true);
             if (AndroidAudioHost.IsCreated)
                 foreach (var source in AndroidAudioHost.Sources.Sources.Where(s => AndroidDeviceIdentity.Matches(s.Device, device)))
                     await AndroidAudioHost.Sources.RemoveAsync(source.Id, restorePrevious: false);

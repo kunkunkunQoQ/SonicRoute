@@ -104,6 +104,8 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
 internal static class PhoneAudioWindowCache
 {
     private static readonly SemaphoreSlim RefreshGate = new(1, 1);
+    private static readonly Dictionary<string, CancellationTokenSource> Recovering = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> DisconnectedByUser = new(StringComparer.Ordinal);
     internal static AndroidDeviceDiscovery Discovery { get; set; } = new(token => AndroidAudioHost.Adb.DevicesAsync(token, deduplicate: false));
     internal static Func<AndroidWirelessConnection> CreateWirelessConnection { get; set; } = () => new(AndroidAudioHost.Adb);
     internal static IReadOnlyList<AndroidDevice>? Devices => Discovery.Devices;
@@ -115,6 +117,51 @@ internal static class PhoneAudioWindowCache
     internal static void InvalidateDevices() => Discovery.Invalidate();
     internal static event Action? DevicesChanged { add => Discovery.Changed += value; remove => Discovery.Changed -= value; }
     internal static void SetDevices(IReadOnlyList<AndroidDevice> devices) => Discovery.Publish(devices);
+
+    internal static void SetAutomaticRecovery(AndroidDevice device, bool enabled)
+    {
+        string key = AndroidDeviceIdentity.Key(device);
+        lock (Recovering)
+        {
+            if (enabled) DisconnectedByUser.Remove(key);
+            else
+            {
+                DisconnectedByUser.Add(key);
+                if (Recovering.TryGetValue(key, out var active)) active.Cancel();
+            }
+        }
+    }
+
+    // Only run on demand (opening the phone panel or losing a live helper). Direct
+    // wireless ADB sessions belong to the process and need restoring after a restart.
+    internal static async Task<bool> RecoverMissingWirelessAsync(AndroidDevice? device, IReadOnlyList<AndroidDevice> devices, CancellationToken token)
+    {
+        if (device is not { IsWifi: true } || AndroidDeviceIdentity.StableKey(device) is not { } key
+            || devices.Any(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(device, d))) return false;
+        var store = AndroidAudioHost.Phone;
+        if (store.FindProfile(device) == null || store.IsRemoved(device)) return false;
+        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(token);
+        lock (Recovering)
+        {
+            if (DisconnectedByUser.Contains(key) || !Recovering.TryAdd(key, attempt)) return false;
+        }
+        try
+        {
+            var result = await CreateWirelessConnection().ReconnectAsync(device, null, attempt.Token, devices).ConfigureAwait(false);
+            attempt.Token.ThrowIfCancellationRequested();
+            if (store.IsRemoved(device)) return false;
+            store.ObserveDevices([result.Device]);
+            // Keep any other phones observed while this Wi-Fi handshake was pending.
+            InvalidateDevices();
+            await ReadDevicesAsync(attempt.Token).ConfigureAwait(false);
+            await AndroidAudioHost.ProbeOutputsIfConnectedAsync([result.Device], token: attempt.Token).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) when (attempt.IsCancellationRequested) { }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone wireless recovery: " + ex.Message); }
+        finally { lock (Recovering) Recovering.Remove(key); }
+        return false;
+    }
 
     internal static async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken token,
         AndroidWirelessConnection? wireless = null)
@@ -140,6 +187,7 @@ internal static class PhoneAudioWindowCache
             if (!StillSelected()) return Devices ?? devices;
 
             store.ObserveDevices([result.Device]);
+            SetAutomaticRecovery(result.Device, true);
             SetDevices(result.Devices);
             return result.Devices;
         }
@@ -629,7 +677,7 @@ public partial class PhoneAudioWindow : Window
         {
             BindDevices(cachedDevices);
             await ShowSelectedDeviceAsync(forceRefresh: false);
-            if (_enableMedia && !_closed && IsVisible && cachedDevices.All(d => d.State != "device"))
+            if (_enableMedia && !_closed && IsVisible && DeviceCombo.SelectedItem is not AndroidDevice { State: "device" })
             {
                 PhoneAudioWindowCache.InvalidateDevices();
                 if (await RefreshDevicesAsync()) await ShowSelectedDeviceAsync(forceRefresh: false);
@@ -653,8 +701,12 @@ public partial class PhoneAudioWindow : Window
             var devices = userRefresh != null
                 ? await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(userRefresh.Token)
                 : await PhoneAudioWindowCache.ReadDevicesAsync(token);
+            bool recovered = userRefresh == null && _enableMedia && IsVisible && !ExternalDeviceSelected
+                && await PhoneAudioWindowCache.RecoverMissingWirelessAsync(AndroidAudioHost.Phone.Profile.LastDevice, devices, token);
+            token.ThrowIfCancellationRequested();
             if (_closed || ExternalDeviceSelected) return false;
             BindDevices(PhoneAudioWindowCache.Devices ?? devices);
+            if (recovered && IsVisible) UpdateMediaSubscription();
             if (DeviceCombo.SelectedItem == null) SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailNoAuthorizedPhone");
             return true;
         }

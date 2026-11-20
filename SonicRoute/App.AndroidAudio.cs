@@ -124,7 +124,7 @@ public partial class App
     {
         var sync = _phoneClipboard = new PhoneClipboardSync(PhoneClipboardSettingsPath, Dispatcher,
             new DesktopClipboardLink(_activateSink), () => new SonicRoute.AndroidAudio.AndroidClipboardClient(AndroidAudioHost.Adb),
-            enabled => enabled.Any(d => !d.IsWifi) && SonicRoute.AndroidAudio.AdbDevicePresence.HasPresentUsbDevices());
+            enabled => enabled.Any(d => d.IsWifi) || SonicRoute.AndroidAudio.AdbDevicePresence.HasPresentUsbDevices());
         sync.Changed += OnPhoneClipboardChanged;
         try { await sync.InitializeAsync(); }
         catch (OperationCanceledException) { }

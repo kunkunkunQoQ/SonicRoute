@@ -1176,6 +1176,9 @@ namespace SonicRoute
             row.ExpandWrap.HoldCurrentState();
             UiMotion.RotateArrow(row.ExpandArrow, true, !switching);
             if (!await BuildRowDevicesAsync(row) || _isClosed || !row.Expanded) return;
+#if SONICROUTE_PHONE
+            CheckPhonePlaybackDevices();
+#endif
             if (switching)
             {
                 row.ExpandWrap.SetExpanded(true, false);
