@@ -137,7 +137,7 @@ La documentación de la wiki está en chino simplificado.
 
 ## 💖 Apoya SonicRoute
 
-SonicRoute es un proyecto gratuito y de código abierto. Si te resulta útil en tu día a día, puedes hacer una aportación a través de Afdian para apoyar el desarrollo de nuevas funciones, las mejoras de compatibilidad y el mantenimiento a largo plazo.
+SonicRoute es un proyecto gratuito y de código abierto que seguimos desarrollando y manteniendo. Si te ayuda a gestionar el sonido de tu PC, puedes apoyarlo a través de Afdian. Tu aportación nos ayuda a desarrollar nuevas funciones, mejorar la compatibilidad y mantener el proyecto a largo plazo.
 
 ☕ [Apoyar en Afdian](https://afdian.com/a/koukou021)
 

@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | **繁體中文** | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![最新正式版](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=%E6%9C%80%E6%96%B0%E6%AD%A3%E5%BC%8F%E7%89%88)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![授權條款說明：GPL-3.0](https://img.shields.io/static/v1?label=%E6%8E%88%E6%AC%8A%E6%A2%9D%E6%AC%BE%E8%AA%AA%E6%98%8E&message=GPL-3.0&color=blue)](LICENSE) [![作業系統：Windows 10 | 11](https://img.shields.io/static/v1?label=%E4%BD%9C%E6%A5%AD%E7%B3%BB%E7%B5%B1&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![架構：x64 | ARM64](https://img.shields.io/static/v1?label=%E6%9E%B6%E6%A7%8B&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![下載次數](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%E4%B8%8B%E8%BC%89%E6%AC%A1%E6%95%B8)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![在愛發電贊助作者](https://img.shields.io/static/v1?label=&message=%E5%9C%A8%E6%84%9B%E7%99%BC%E9%9B%BB%E8%B4%8A%E5%8A%A9%E4%BD%9C%E8%80%85&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![最新正式版](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=%E6%9C%80%E6%96%B0%E6%AD%A3%E5%BC%8F%E7%89%88)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![授權條款說明：GPL-3.0](https://img.shields.io/static/v1?label=%E6%8E%88%E6%AC%8A%E6%A2%9D%E6%AC%BE%E8%AA%AA%E6%98%8E&message=GPL-3.0&color=blue)](LICENSE) [![作業系統：Windows 10 | 11](https://img.shields.io/static/v1?label=%E4%BD%9C%E6%A5%AD%E7%B3%BB%E7%B5%B1&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![架構：x64 | ARM64](https://img.shields.io/static/v1?label=%E6%9E%B6%E6%A7%8B&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![下載次數](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%E4%B8%8B%E8%BC%89%E6%AC%A1%E6%95%B8)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![透過愛發電贊助 SonicRoute](https://img.shields.io/static/v1?label=&message=%E9%80%8F%E9%81%8E%E6%84%9B%E7%99%BC%E9%9B%BB%E8%B4%8A%E5%8A%A9+SonicRoute&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **讓音樂從喇叭播放，讓遊戲聲留在耳機裡。**
 
@@ -139,9 +139,9 @@ Full 和 Lite 需要與程式架構相符的 .NET 10 Desktop Runtime，Microsoft
 
 SonicRoute 是持續維護的免費開放原始碼專案。如果它讓你在電腦上聽音樂、玩遊戲或通話更方便，歡迎透過愛發電贊助，支持新功能開發、相容性改善與長期維護。
 
-☕ [在愛發電贊助作者](https://afdian.com/a/koukou021)
+☕ [透過愛發電贊助 SonicRoute](https://afdian.com/a/koukou021)
 
-贊助完全出於自願，所有功能都能免費使用。回報問題、把 SonicRoute 推薦給朋友，或在 GitHub 上為專案加顆星，也都是支持我們的方式。謝謝你！
+贊助完全自願，所有功能都能免費使用。回報問題、向朋友推薦 SonicRoute，或在 GitHub 上給專案一顆星，也都是對專案的支持。謝謝你！
 
 ## 📜 授權條款說明
 
