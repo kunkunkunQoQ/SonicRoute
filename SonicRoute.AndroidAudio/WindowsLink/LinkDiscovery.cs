@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
-using SonicRoute.AirPlay;
 
 namespace SonicRoute.WindowsLink;
 
@@ -32,23 +31,34 @@ internal sealed class LinkDiscovery : IDisposable
     private readonly byte[] _query;
     private readonly byte[] _answer;
     private readonly string _id;
-    private AirPlayDiscovery.Lan[] _lan = [];
+    private readonly IPEndPoint? _directedTarget;
+    private NetworkSnapshot _network = new([], []);
 
-    internal LinkDiscovery(string id, string name, int port, LinkCapabilities capabilities)
+    private sealed record NetworkSnapshot((uint Address, uint Mask, int Priority)[] Subnets, IPEndPoint[] Broadcasts);
+
+    internal LinkDiscovery(string id, string name, int port, LinkCapabilities capabilities,
+        IPEndPoint? bind = null, IPEndPoint? directedTarget = null)
     {
         _id = id;
+        _directedTarget = directedTarget;
         _query = Encode(1, id, name, port, capabilities);
         _answer = Encode(2, id, name, port, capabilities);
         try
         {
             _socket.EnableBroadcast = true;
             _socket.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            _socket.Client.Bind(new IPEndPoint(IPAddress.Any, Port));
+            _socket.Client.Bind(bind ?? new IPEndPoint(IPAddress.Any, Port));
+            try { _socket.Client.IOControl((IOControlCode)(-1744830452), [0, 0, 0, 0], null); }
+            catch (Exception ex) when (ex is SocketException or PlatformNotSupportedException) { }
         }
         catch { _socket.Dispose(); throw; }
     }
 
-    internal static IPAddress? SelectDisplayLanAddress() => SelectDisplayLanAddress(ReadLanCandidates());
+    internal static IPAddress? SelectDisplayLanAddress()
+    {
+        var candidates = ReadLanCandidates(out var ipv6);
+        return SelectDisplayLanAddress(candidates) ?? ipv6;
+    }
 
     internal static IPAddress? SelectDisplayLanAddress(IReadOnlyList<LanCandidate> candidates)
     {
@@ -65,36 +75,88 @@ internal sealed class LinkDiscovery : IDisposable
             .FirstOrDefault();
     }
 
-    internal static AirPlayDiscovery.Lan[] FilterBroadcastInterfaces(AirPlayDiscovery.Lan[] interfaces)
+    internal IPAddress? RefreshInterfaces()
     {
-        if (interfaces.Length == 0) return interfaces;
-        var filtered = interfaces.Where(lan => !IsVirtualIp(lan.Address)).ToArray();
-        return filtered.Length > 0 ? filtered : interfaces;
+        IPAddress? ipv6 = null;
+        LanCandidate[] candidates = _directedTarget == null ? ReadLanCandidates(out ipv6) : [];
+        var ordered = candidates.OrderByDescending(ScoreCandidate).ToArray();
+        var subnets = ordered
+            .Select(candidate => (Address: ToAddressNumber(candidate.Address), Mask: ToAddressNumber(candidate.Mask),
+                Priority: ScoreCandidate(candidate) + 1)).ToArray();
+        IPEndPoint[] broadcasts;
+        if (_directedTarget is { } target)
+        {
+            broadcasts = [target];
+        }
+        else
+        {
+            var broadcastCandidates = ordered
+                .Select(c => (Address: ToAddressNumber(c.Address), Mask: ToAddressNumber(c.Mask), Virtual: IsVirtualIp(c.Address)))
+                .Where(s => s.Mask < uint.MaxValue - 1)
+                .ToArray();
+            var preferred = broadcastCandidates.Where(s => !s.Virtual).ToArray();
+            var active = preferred.Length > 0 ? preferred : broadcastCandidates;
+            broadcasts = active
+                .Select(subnet => subnet.Address | ~subnet.Mask).Distinct()
+                .Select(address => new IPEndPoint(FromAddressNumber(address), Port)).ToArray();
+        }
+        Volatile.Write(ref _network, new NetworkSnapshot(subnets, broadcasts));
+        return _directedTarget == null ? SelectDisplayLanAddress(candidates) ?? ipv6 : IPAddress.Loopback;
     }
 
-    private static LanCandidate[] ReadLanCandidates()
+    internal int RankAddress(IPAddress address)
     {
+        if (address.AddressFamily != AddressFamily.InterNetwork) return 0;
+        if (_directedTarget != null) return IPAddress.IsLoopback(address) ? 1 : 0;
+        uint value = ToAddressNumber(address);
+        foreach (var subnet in Volatile.Read(ref _network).Subnets)
+            if (((subnet.Address ^ value) & subnet.Mask) == 0) return subnet.Priority;
+        return 0;
+    }
+
+    private static uint ToAddressNumber(IPAddress address)
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        address.TryWriteBytes(bytes, out _);
+        return BinaryPrimitives.ReadUInt32BigEndian(bytes);
+    }
+
+    private static IPAddress FromAddressNumber(uint address)
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(bytes, address);
+        return new IPAddress(bytes);
+    }
+
+    private static LanCandidate[] ReadLanCandidates(out IPAddress? ipv6)
+    {
+        ipv6 = null;
         var list = new List<LanCandidate>();
         foreach (var adapter in NetworkInterface.GetAllNetworkInterfaces())
         {
             if (adapter.OperationalStatus != OperationalStatus.Up
-                || adapter.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel
-                || !adapter.Supports(NetworkInterfaceComponent.IPv4)) continue;
+                || adapter.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
             try
             {
                 var properties = adapter.GetIPProperties();
-                var unicast = properties.UnicastAddresses.FirstOrDefault(a =>
-                    a.Address.AddressFamily == AddressFamily.InterNetwork
-                    && a.IPv4Mask is { } mask && !mask.Equals(IPAddress.Any));
-                if (unicast == null || properties.GetIPv4Properties() is not { } ipv4) continue;
+                ipv6 ??= properties.UnicastAddresses.Select(entry => entry.Address).FirstOrDefault(ip =>
+                    ip.AddressFamily == AddressFamily.InterNetworkV6 && !ip.IsIPv6LinkLocal && !ip.IsIPv6Multicast
+                    && !ip.IsIPv6SiteLocal && !ip.IsIPv4MappedToIPv6 && !IPAddress.IsLoopback(ip) && !ip.Equals(IPAddress.IPv6Any));
+                if (!adapter.Supports(NetworkInterfaceComponent.IPv4)) continue;
+                if (properties.GetIPv4Properties() is not { } ipv4) continue;
                 bool hasGateway = properties.GatewayAddresses.Any(g =>
                     g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any));
-                list.Add(new LanCandidate(unicast.Address, unicast.IPv4Mask!, ipv4.Index,
-                    adapter.Name ?? "", adapter.Description ?? "", hasGateway, adapter.NetworkInterfaceType));
+                foreach (var unicast in properties.UnicastAddresses)
+                {
+                    if (unicast.Address.AddressFamily != AddressFamily.InterNetwork
+                        || unicast.IPv4Mask is not { } mask || mask.Equals(IPAddress.Any)) continue;
+                    list.Add(new LanCandidate(unicast.Address, mask, ipv4.Index,
+                        adapter.Name ?? "", adapter.Description ?? "", hasGateway, adapter.NetworkInterfaceType));
+                }
             }
             catch (NetworkInformationException) { }
         }
-        return list.DistinctBy(c => c.Index).ToArray();
+        return list.DistinctBy(c => (c.Address, c.Mask)).OrderByDescending(ScoreCandidate).Take(16).ToArray();
     }
 
     private static int ScoreCandidate(LanCandidate candidate)
@@ -141,15 +203,9 @@ internal sealed class LinkDiscovery : IDisposable
 
     internal async Task DiscoverAsync(CancellationToken token)
     {
-        AirPlayDiscovery.Lan[] lan = FilterBroadcastInterfaces(AirPlayDiscovery.ReadInterfaces());
-        Volatile.Write(ref _lan, lan);
-        foreach (var network in lan)
+        foreach (var target in Volatile.Read(ref _network).Broadcasts)
         {
-            uint address = BinaryPrimitives.ReadUInt32BigEndian(network.Address.GetAddressBytes());
-            uint mask = BinaryPrimitives.ReadUInt32BigEndian(network.Mask.GetAddressBytes());
-            byte[] broadcast = new byte[4];
-            BinaryPrimitives.WriteUInt32BigEndian(broadcast, address | ~mask);
-            try { await _socket.SendAsync(_query, new IPEndPoint(new IPAddress(broadcast), Port), token).ConfigureAwait(false); }
+            try { await _socket.SendAsync(_query, target, token).ConfigureAwait(false); }
             catch (SocketException) { /* A changing adapter can invalidate this broadcast. */ }
         }
     }
@@ -157,18 +213,22 @@ internal sealed class LinkDiscovery : IDisposable
     internal async Task RequestReconnectAsync(byte[] request, IPAddress address, CancellationToken token)
     {
         if (address.AddressFamily != AddressFamily.InterNetwork) return;
-        try { await _socket.SendAsync(request, new IPEndPoint(address, Port), token).ConfigureAwait(false); }
+        try { await _socket.SendAsync(request, _directedTarget ?? new IPEndPoint(address, Port), token).ConfigureAwait(false); }
         catch (SocketException) { }
     }
 
-    internal async Task ListenAsync(Action<LinkOffer> found, Action<ReadOnlyMemory<byte>, IPAddress> reconnect, CancellationToken token)
+    internal async Task ListenAsync(Action<LinkOffer, bool> found, Action<ReadOnlyMemory<byte>, IPAddress> reconnect, CancellationToken token)
     {
         while (!token.IsCancellationRequested)
         {
             UdpReceiveResult message;
             try { message = await _socket.ReceiveAsync(token).ConfigureAwait(false); }
-            catch (SocketException) when (!token.IsCancellationRequested) { continue; }
-            if (!Volatile.Read(ref _lan).Any(lan => lan.Includes(message.RemoteEndPoint.Address))) continue;
+            catch (SocketException) when (!token.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), token).ConfigureAwait(false);
+                continue;
+            }
+            if (RankAddress(message.RemoteEndPoint.Address) == 0) continue;
             if (message.Buffer is [_, _, _, _, 1, 3, ..])
             {
                 reconnect(message.Buffer, message.RemoteEndPoint.Address);
@@ -176,7 +236,7 @@ internal sealed class LinkDiscovery : IDisposable
             }
             if (!TryDecode(message.Buffer, message.RemoteEndPoint.Address, out var offer, out bool query)
                 || offer!.Id == _id) continue;
-            found(offer);
+            found(offer, query);
             if (query)
             {
                 try { await _socket.SendAsync(_answer, message.RemoteEndPoint, token).ConfigureAwait(false); }

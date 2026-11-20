@@ -227,12 +227,12 @@ internal static partial class Program
                 && !Find<TextBlock>("OperationStatus").IsVisible
                 && airPlayHost.GetField("_receiver", statics)!.GetValue(null) == null && activeScans == 0,
                 "AirPlay tab shows only its own status, stops QR and waits for an explicit start");
-            var start = (Button)Find<AirPlayReceiverView>("AirPlayConnectionView").FindName("AirPlayToggle");
-            Check(start.IsEnabled && Equals(start.Content, L10n.T("Phone.AirPlayStart")),
+            var start = (CheckBox)Find<AirPlayReceiverView>("AirPlayConnectionView").FindName("AirPlayToggle");
+            Check(start.IsEnabled && start.IsChecked == false,
                 "AirPlay is ready to start without an Android phone");
             window.Width = 456; window.UpdateLayout(); DrainUi();
             var buttonRight = start.TranslatePoint(new Point(start.ActualWidth, 0), page).X;
-            Check(start.ActualWidth > 40 && buttonRight < page.ActualWidth, "AirPlay start stays visible at a narrow window width");
+            Check(start.ActualWidth >= 32 && buttonRight < page.ActualWidth, "the AirPlay switch stays visible at a narrow window width");
             Render(page, (int)Math.Ceiling(page.ActualWidth), 260, Path.Combine(output, "airplay-connection.png"));
             var addressBox = Find<TextBox>("ConnectAddressBox");
             var savedChoices = Find<ComboBox>("SavedConnectDevices");

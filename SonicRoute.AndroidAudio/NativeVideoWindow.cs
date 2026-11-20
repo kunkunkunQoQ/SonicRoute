@@ -4,6 +4,8 @@ using System.Threading;
 
 namespace SonicRoute.AndroidAudio;
 
+internal enum NativeWindowIcon { Default, WindowsApplication, Monitor }
+
 public enum NativeWindowMouseBinding
 {
     Back,
@@ -71,12 +73,12 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
-    private const int SwShow = 5;
     private const int SwRestore = 9;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
+    private const uint SwpShowWindow = 0x0040;
     private const uint SwpFrameChanged = 0x0020;
 
     private const int SizeMinimized = 1;
@@ -194,6 +196,8 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     public nint WindowHandle => Volatile.Read(ref _hwnd);
     public string AppUserModelId => _appUserModelId;
+    internal NativeWindowIcon IconKind { get; init; }
+    private bool HideCaptionIcon => _isMirrorMode && IconKind == NativeWindowIcon.Default;
     public int ClientWidth => Volatile.Read(ref _clientW);
     public int ClientHeight => Volatile.Read(ref _clientH);
     public int ContentWidth => Volatile.Read(ref _contentW);
@@ -253,7 +257,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         nint hwnd = WindowHandle;
         if (hwnd == 0) return;
         if (Interlocked.Exchange(ref _shownFlag, 1) == 0)
-            ShowWindowAsync(hwnd, SwShow);
+            PostMessage(hwnd, WmUserShow, 0, 0);
     }
 
     public void UpdateContentSize(int width, int height)
@@ -299,6 +303,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private const int WmUserClose = 0x0400 + 2;
     private const int WmUserTopmost = 0x0400 + 3;
     private const int WmUserFullscreen = 0x0400 + 4;
+    private const int WmUserShow = 0x0400 + 5;
 
     private void ThreadMain()
     {
@@ -310,7 +315,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
             if (Volatile.Read(ref _closeRequested)) return;
 
             uint style = WsOverlappedWindow | WsClipChildren | WsClipSiblings;
-            uint exStyle = _isMirrorMode ? WsExDlgModalFrame : 0;
+            uint exStyle = HideCaptionIcon ? WsExDlgModalFrame : 0;
 
             var (winX, winY, winW, winH) = ComputeInitialWindowRect(style, exStyle);
 
@@ -394,7 +399,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private void ApplyWindowIcon(nint hwnd)
     {
-        if (_isMirrorMode)
+        if (HideCaptionIcon)
         {
             _iconPng = null;
             // Keep caption clean without generic Win32 icon, matching mirror_resize.h.
@@ -404,17 +409,43 @@ public sealed class NativeVideoWindow : IAsyncDisposable
             return;
         }
 
-        byte[]? png = _iconPng is { Length: > 0 } ? _iconPng : WicIconLoader.LoadDefaultPhoneIconPng();
+        byte[]? png = _iconPng;
         _iconPng = null;
-        if (png == null) return;
+        if (IconKind == NativeWindowIcon.Default && png is not { Length: > 0 })
+            png = WicIconLoader.LoadDefaultPhoneIconPng();
 
         int bigPx = Math.Max(32, GetSystemMetrics(11 /* SM_CXICON */));
         int smallPx = Math.Max(16, GetSystemMetrics(49 /* SM_CXSMICON */));
         _bigIcon = WicIconLoader.TryCreateIcon(png, bigPx);
         _smallIcon = WicIconLoader.TryCreateIcon(png, smallPx);
+        if (IconKind != NativeWindowIcon.Default)
+        {
+            if (_bigIcon == 0) _bigIcon = LoadStockWindowIcon(small: false);
+            if (_smallIcon == 0) _smallIcon = LoadStockWindowIcon(small: true);
+        }
         if (_bigIcon != 0) SendMessage(hwnd, WmSetIcon, IconBig, _bigIcon);
         if (_smallIcon != 0) SendMessage(hwnd, WmSetIcon, IconSmall, _smallIcon);
     }
+
+    // SHGSI_ICON returns an owned HICON, released along with decoded icons at WM_NCDESTROY.
+    private nint LoadStockWindowIcon(bool small)
+    {
+        var info = new StockIconInfo { Size = (uint)Marshal.SizeOf<StockIconInfo>() };
+        uint stockId = IconKind == NativeWindowIcon.Monitor ? 94u /* SIID_DESKTOPPC */ : 2u /* SIID_APPLICATION */;
+        return SHGetStockIconInfo(stockId, 0x100u | (small ? 1u : 0u), ref info) == 0 ? info.Icon : 0;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct StockIconInfo
+    {
+        internal uint Size;
+        internal nint Icon;
+        internal int ImageIndex, IconIndex;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] internal string? Path;
+    }
+
+    [DllImport("shell32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
+    private static extern int SHGetStockIconInfo(uint id, uint flags, ref StockIconInfo info);
 
     private static void EnsureClassRegistered(nint hInstance)
     {
@@ -535,6 +566,11 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
             case WmUserFitContent:
                 if (!_windowedPlacement.HasValue) FitWindowToContentAspect(hwnd, (int)wParam, (int)lParam);
+                return 0;
+
+            case WmUserShow:
+                // ShowWindow's first call can inherit SW_HIDE from a tray/background launch.
+                SetWindowPos(hwnd, 0, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpShowWindow);
                 return 0;
 
             case WmUserTopmost when _windowModes:
@@ -963,7 +999,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         if (button == 0) return;
 
         bool shift = IsKeyDown(0x10 /* VK_SHIFT */);
-        if (!shift && button != ScrcpyControlMessageWriter.ButtonPrimary)
+        if (!shift && WindowsKeyEvent == null && button != ScrcpyControlMessageWriter.ButtonPrimary)
         {
             NativeWindowMouseBinding? binding = button switch
             {

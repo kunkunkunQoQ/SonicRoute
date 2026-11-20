@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Interop;
+using SonicRoute.WindowsLink;
 #endif
 
 namespace SonicRoute;
@@ -19,6 +20,7 @@ public partial class App
 {
 #if SONICROUTE_PHONE
     private PhoneClipboardSync? _phoneClipboard;
+    internal HwndSource? ClipboardNotificationWindow => _activateSink;
     private Task<PhoneClipboardSync>? _phoneClipboardLoad;
     private bool _usbArrivalHookAttached;
     private bool _usbArrivalScanRunning;
@@ -29,6 +31,39 @@ public partial class App
     internal bool HasActivePhoneClipboard => _phoneClipboard?.HasActiveWork == true;
     private static string PhoneClipboardSettingsPath =>
         Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-clipboard.json");
+    internal static async Task SetWindowsLinkEnabledAsync(WindowsLinkService service, bool enabled, CancellationToken token = default)
+    {
+        if (enabled) await service.EnableAsync(token);
+        else await service.DisableAsync();
+
+        var config = ConfigService.Load();
+        if (config.WindowsLinkEnabled == enabled) return;
+        config.WindowsLinkEnabled = enabled;
+        ConfigService.QueueSave(config);
+    }
+
+    private async Task RestoreWindowsLinkAsync(bool? enabled)
+    {
+        if (enabled == false) return;
+        try
+        {
+            if (enabled == null)
+            {
+                string trustFile = Path.Combine(WindowsLinkHub.StateDirectory, "trusted.json");
+                bool hasSavedFile = await Task.Run(() => File.Exists(trustFile));
+                if (!hasSavedFile || _exiting || ConfigService.Load().WindowsLinkEnabled.HasValue) return;
+            }
+
+            var service = WindowsLinkHub.EnsureService();
+            if (enabled == true || service.Peers.Any(peer => peer.Trusted))
+                await service.EnableAsync();
+        }
+        catch (Exception ex)
+        {
+            if (!_exiting) ExceptionDiagnostics.Record("WindowsLink.Startup", ex);
+        }
+    }
+
     private void StartPhoneClipboard()
     {
         string path = PhoneClipboardSettingsPath;
@@ -296,10 +331,9 @@ public partial class App
         if (_exiting) return;
         try
         {
-            var area = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(screenX, screenY)).WorkingArea;
-            int x = Math.Max(area.Left, Math.Min(screenX - 210, area.Right - 820));
-            int y = Math.Max(area.Top, Math.Min(screenY - 30, area.Bottom - 500));
-            await WindowsLinkHub.OpenDisplayAsync(payload, x, y);
+            var (streamId, audioAvailable) = await WindowsLinkHub.OpenDisplayNearAsync(payload, screenX, screenY);
+            if (!audioAvailable && !_exiting && WindowsLinkHub.Service?.Streams.Any(stream => stream.Id == streamId) == true)
+                _trayIcon?.ShowBalloonTip(5000, payload.Peer.DisplayName, L10n.T("Phone.WindowsLinkVideoAudioUnavailable"), System.Windows.Forms.ToolTipIcon.Info);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
@@ -404,7 +438,7 @@ public partial class App
         if (_androidDisplayNotifications) AndroidAudioHost.Displays.FailedError -= AndroidDisplayFailedError;
         return _androidShutdown = Task.Run(async () =>
         {
-            var tasks = new List<Task> { clipboard, AndroidAudioHost.StopMediaAsync() };
+            var tasks = new List<Task> { clipboard, AndroidAudioHost.StopMediaAsync(), LocalAppOutputMirrors.ShutdownAsync() };
             if (AndroidAudioHost.AreDisplaysCreated) tasks.Add(AndroidAudioHost.Displays.DisposeAsync().AsTask());
             if (AndroidAudioHost.IsCreated) tasks.Add(AndroidAudioHost.Sources.DisposeAsync().AsTask());
             try { await Task.WhenAll(tasks).ConfigureAwait(false); }

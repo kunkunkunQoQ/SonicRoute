@@ -138,25 +138,29 @@ namespace SonicRoute
             try
             {
 #if SONICROUTE_PHONE
+                bool systemAudio = Info.IsExternal && string.Equals(ProcessName,
+                    "winlink:" + SonicRoute.WindowsLink.LinkRemoteApp.SystemAudioKey, StringComparison.OrdinalIgnoreCase);
                 ImageSource? icon;
                 if (Info.IsExternal && ProcessName == AirPlayHost.AppKey)
                     icon = PhoneSourceIcon.AirPlayImage;
                 else if (Info.IsExternal && string.Equals(ProcessName,
                     ApplicationAudio.AndroidKey(SonicRoute.AndroidAudio.AndroidApp.DeviceAudioPackage), StringComparison.Ordinal))
                     icon = PhoneSourceIcon.Image;
-                else if (Info.IsExternal && string.Equals(ProcessName,
-                    "winlink:" + SonicRoute.WindowsLink.LinkRemoteApp.SystemAudioKey, StringComparison.OrdinalIgnoreCase))
-                    icon = PhoneSourceIcon.MonitorImage;
+                else if (systemAudio)
+                    icon = null; // The theme-bound image is resolved when applying the result on the UI thread.
                 else
                     icon = Info.IsExternal
                     ? AppIconService.GetCustomIcon(ProcessName) ?? AppIconService.DecodePng(Info.ExternalIconPng)
                     : AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
+                ImageSource? DisplayIcon() => systemAudio ? PhoneSourceIcon.SystemAudioImage : icon;
 #else
+                const bool systemAudio = false;
                 var icon = Info.IsExternal
                     ? AppIconService.GetCustomIcon(ProcessName) ?? AppIconService.DecodePng(Info.ExternalIconPng)
                     : AppIconService.GetIconForApp(ProcessId, ProcessName, Info.IconPath);
+                ImageSource? DisplayIcon() => icon;
 #endif
-                if (icon == null || cancellation.IsCancellationRequested) return;
+                if ((!systemAudio && icon == null) || cancellation.IsCancellationRequested) return;
                 var disp = System.Windows.Application.Current?.Dispatcher;
                 if (disp != null && !disp.CheckAccess())
                 {
@@ -164,13 +168,13 @@ namespace SonicRoute
                     {
                         disp.BeginInvoke(new System.Action(() =>
                         {
-                            try { if (!cancellation.IsCancellationRequested && version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon; }
+                            try { if (!cancellation.IsCancellationRequested && version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = DisplayIcon(); }
                             finally { FinishIconLoading(version, cancellation); }
                         }), System.Windows.Threading.DispatcherPriority.Background);
                         queued = true;
                     }
                 }
-                else if (!cancellation.IsCancellationRequested && version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = icon;
+                else if (!cancellation.IsCancellationRequested && version == System.Threading.Volatile.Read(ref _iconVersion)) Icon = DisplayIcon();
             }
             catch (System.InvalidOperationException) { /* 退出期间 Dispatcher 已关闭 */ }
             finally { if (!queued) FinishIconLoading(version, cancellation); }

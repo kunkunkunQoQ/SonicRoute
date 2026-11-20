@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,31 +18,42 @@ namespace SonicRoute;
 
 public partial class WindowsLinkConnectView : UserControl
 {
-    private readonly bool _compact;
-    private bool _useDeviceFooter;
     private bool _showing;
     private bool _updating;
     private bool _busy;
     private bool _searchFoundNone;
     private int _refreshQueued;
     private WindowsLinkService? _service;
+    private IDisposable? _discoveryObserver;
+    private CancellationTokenSource? _viewCts;
     private Guid? _activePairingId;
     private string? _errorMessage;
     private string? _busyText;
-    private string? _selectedSavedPeerId;
+    private PeerRow[] _peerRows = [];
     private readonly Dictionary<Guid, LinkPairing> _pairings = new();
 
-    private sealed record DiscoveredPeerRow(string Id, string DisplayName, string Address, string Subtitle);
-    private sealed record SavedAddressOption(string PeerId, string DisplayName, string Address);
+    private sealed record PeerRow(
+        string Id,
+        string DisplayName,
+        string Address,
+        string Status,
+        string Subtitle,
+        string Failure,
+        Visibility FailureVisibility,
+        bool CanConnect,
+        Visibility ConnectVisibility,
+        Visibility OpenVisibility,
+        bool Trusted);
 
     internal event Action? StatusUpdated;
+    internal event Action<string>? PeerOpened;
 
     internal string FooterStatus
     {
         get
         {
             if (_busy && !string.IsNullOrWhiteSpace(_busyText)) return _busyText!;
-            if (_service?.IsEnabled != true) return L10n.T("Phone.Disconnected");
+            if (_service?.IsEnabled != true) return L10n.T("Phone.WindowsLinkOff");
             return _pairings.Count > 0 ? L10n.T("Phone.ProcessingStatus") : L10n.T("Phone.WindowsLinkReady");
         }
     }
@@ -56,9 +68,8 @@ public partial class WindowsLinkConnectView : UserControl
 
     internal WindowsLinkConnectView(bool compact)
     {
-        _compact = compact;
         InitializeComponent();
-        HeaderIconPath.Data = AutomationIcons.Monitor;
+        HeaderSubtitleText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         ApplyCompactMetrics(compact);
 
         Loaded += (_, _) => UpdateSubscription(IsVisible);
@@ -66,52 +77,35 @@ public partial class WindowsLinkConnectView : UserControl
         IsVisibleChanged += (_, _) => UpdateSubscription(IsLoaded && IsVisible);
     }
 
-    internal void UseDeviceFooter()
+    internal void UseDeviceFooter() => HeaderStatus.Visibility = Visibility.Collapsed;
+
+    private void DirectForm_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        _useDeviceFooter = true;
-        ReceiverHeader.Visibility = Visibility.Collapsed;
-        ServiceToggleButton.Visibility = Visibility.Visible;
-        ApplyCompactMetrics(true);
-
-        var pad = new Thickness(9, 8, 9, 8);
-        var gap = new Thickness(0, 0, 0, 6);
-        PairingCard.Padding = DirectCard.Padding = ErrorCard.Padding = pad;
-        PairingCard.Margin = DirectCard.Margin = ErrorCard.Margin = gap;
-
-        Grid.SetRow(DirectInputGrid, 0);
-        Grid.SetColumn(DirectInputGrid, 0);
-        Grid.SetColumnSpan(DirectInputGrid, 2);
-        DirectInputGrid.Margin = new Thickness(0, 0, 0, 6);
-        AddressBox.Height = 30;
-        AddressBox.FontSize = 11.5;
-
-        Grid.SetRow(DirectButtonsGrid, 1);
-        Grid.SetColumn(DirectButtonsGrid, 0);
-        Grid.SetColumnSpan(DirectButtonsGrid, 2);
-        SearchBtnCol.Width = new GridLength(1, GridUnitType.Star);
-        ConnectBtnCol.Width = new GridLength(1, GridUnitType.Star);
-        SearchButton.Height = ConnectButton.Height = 30;
-        SearchButton.FontSize = ConnectButton.FontSize = 11;
-        SearchButton.Padding = ConnectButton.Padding = new Thickness(6, 0, 6, 0);
-        SearchButton.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-        ConnectButton.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
-
-        if (_showing) _ = RefreshAsync();
+        if (DirectForm == null || ConnectButton == null || DirectForm.ActualWidth <= 0) return;
+        bool stack = DirectForm.ActualWidth - Math.Max(46, ConnectButton.DesiredSize.Width) < 114;
+        int row = stack ? 1 : 0;
+        if (Grid.GetRow(DirectButtonsGrid) == row) return;
+        Grid.SetRow(DirectButtonsGrid, row);
+        Grid.SetColumn(DirectButtonsGrid, stack ? 0 : 1);
+        Grid.SetColumnSpan(DirectButtonsGrid, stack ? 2 : 1);
+        Grid.SetColumnSpan(DirectInputGrid, stack ? 2 : 1);
+        DirectInputGrid.Margin = stack ? new Thickness(0, 0, 0, 5) : new Thickness(0, 0, 6, 0);
     }
 
     private void ApplyCompactMetrics(bool compact)
     {
-        var pad = compact ? new Thickness(11, 10, 11, 10) : new Thickness(14, 12, 14, 12);
+        var pad = compact ? new Thickness(10, 9, 10, 9) : new Thickness(14, 12, 14, 12);
         var gap = compact ? new Thickness(0, 0, 0, 8) : new Thickness(0, 0, 0, 10);
         ReceiverHeader.Padding = pad;
         ReceiverHeader.Margin = gap;
         PairingCard.Padding = pad;
         PairingCard.Margin = gap;
+        DevicesCard.Padding = pad;
+        DevicesCard.Margin = gap;
         DirectCard.Padding = pad;
         DirectCard.Margin = gap;
         ErrorCard.Padding = pad;
         ErrorCard.Margin = gap;
-        DirectTitleText.FontSize = compact ? 12.5 : 13.5;
     }
 
     private void UpdateSubscription(bool visible)
@@ -122,17 +116,29 @@ public partial class WindowsLinkConnectView : UserControl
         if (shouldShow)
         {
             _service ??= WindowsLinkHub.EnsureService();
-            _service.Changed += ServiceChanged;
+            _viewCts?.Dispose();
+            _viewCts = new CancellationTokenSource();
+            _discoveryObserver?.Dispose();
+            _discoveryObserver = _service.ObserveDiscovery();
+            WindowsLinkHub.Changed += ServiceChanged;
             _service.PairingRequested += PairingRequested;
             _service.PairingEnded += PairingEnded;
             L10n.Instance.PropertyChanged += LanguageChanged;
             _ = RefreshAsync();
         }
-        else if (_service != null)
+        else
         {
-            _service.Changed -= ServiceChanged;
-            _service.PairingRequested -= PairingRequested;
-            _service.PairingEnded -= PairingEnded;
+            _viewCts?.Cancel();
+            _viewCts?.Dispose();
+            _viewCts = null;
+            _discoveryObserver?.Dispose();
+            _discoveryObserver = null;
+            WindowsLinkHub.Changed -= ServiceChanged;
+            if (_service != null)
+            {
+                _service.PairingRequested -= PairingRequested;
+                _service.PairingEnded -= PairingEnded;
+            }
             L10n.Instance.PropertyChanged -= LanguageChanged;
         }
     }
@@ -168,10 +174,10 @@ public partial class WindowsLinkConnectView : UserControl
     private void QueueRefresh()
     {
         if (!_showing) return;
-        if (System.Threading.Interlocked.Exchange(ref _refreshQueued, 1) != 0) return;
+        if (Interlocked.Exchange(ref _refreshQueued, 1) != 0) return;
         _ = Dispatcher.BeginInvoke(new Action(async () =>
         {
-            System.Threading.Interlocked.Exchange(ref _refreshQueued, 0);
+            Interlocked.Exchange(ref _refreshQueued, 0);
             if (_showing) await RefreshAsync();
         }));
     }
@@ -189,19 +195,21 @@ public partial class WindowsLinkConnectView : UserControl
         try
         {
             bool enabled = _service.IsEnabled;
-            ReceiverHeader.Visibility = _useDeviceFooter ? Visibility.Collapsed : Visibility.Visible;
-            ServiceToggleButton.Visibility = _useDeviceFooter ? Visibility.Visible : Visibility.Collapsed;
             ServiceToggle.IsChecked = enabled;
-            ServiceToggle.ToolTip = L10n.T(enabled ? "Phone.WindowsLinkDisable" : "Phone.WindowsLinkEnable");
-            ServiceToggleButton.Content = L10n.T(enabled ? "Phone.WindowsLinkDisable" : "Phone.WindowsLinkEnable");
-            ServiceToggleButton.Tag = enabled ? null : "Start";
-            ServiceStatusText.Text = L10n.T(enabled ? "Phone.WindowsLinkReady" : "Phone.Disconnected");
-            ServiceStatusText.SetResourceReference(TextBlock.ForegroundProperty, enabled ? "Theme.Accent" : "Theme.TextSecondary");
+            string action = L10n.T(enabled ? "Phone.WindowsLinkDisable" : "Phone.WindowsLinkEnable");
+            ServiceToggle.ToolTip = action;
+            System.Windows.Automation.AutomationProperties.SetName(ServiceToggle, action);
+            ServiceStatusText.Text = _busy ? _busyText : L10n.T(enabled ? "Phone.WindowsLinkReady" : "Phone.WindowsLinkOff");
+            ServiceStatusDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, enabled ? "Theme.Success" : "Theme.TextSecondary");
+            ConnectButton.IsEnabled = !_busy && !string.IsNullOrWhiteSpace(AddressBox.Text);
 
             string localAddress = _service.LocalAddress;
             if (!string.IsNullOrWhiteSpace(localAddress))
             {
                 LocalAddressText.Text = string.Format(L10n.T("Phone.WindowsLinkLocalAddress"), localAddress);
+                LocalAddressBadge.ToolTip = L10n.T("Phone.WindowsLinkAddressMenu");
+                System.Windows.Automation.AutomationProperties.SetName(LocalAddressBadge,
+                    string.Format(L10n.T("Phone.WindowsLinkCopyAddress"), localAddress));
                 LocalAddressBadge.Visibility = Visibility.Visible;
             }
             else
@@ -209,12 +217,12 @@ public partial class WindowsLinkConnectView : UserControl
                 LocalAddressBadge.Visibility = Visibility.Collapsed;
             }
 
+            LinkPeer[] peers = _service.Peers;
             UpdatePairingCard();
-            UpdateSavedAddressCombo(_service.Peers);
-            UpdateDiscoveredPeers(_service.Peers);
+            UpdatePeerRows(peers);
             UpdateErrorCard();
 
-            SearchHintText.Visibility = _searchFoundNone && DiscoveredPeersList.Visibility != Visibility.Visible
+            SearchHintText.Visibility = _searchFoundNone && !peers.Any(p => !p.Trusted)
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
@@ -249,49 +257,46 @@ public partial class WindowsLinkConnectView : UserControl
         return trimmed.Length == 8 ? $"{trimmed[..4]} {trimmed[4..]}" : trimmed;
     }
 
-    private void UpdateSavedAddressCombo(LinkPeer[] peers)
+    private void UpdatePeerRows(LinkPeer[] peers)
     {
-        var options = peers
-            .Where(p => !string.IsNullOrWhiteSpace(p.Address))
-            .Select(p => new SavedAddressOption(p.Id, $"{p.DisplayName} ({p.Address})", p.Address!))
-            .ToArray();
+        if (peers.Any(p => !p.Trusted)) _searchFoundNone = false;
 
-        if (options.Length == 0)
-        {
-            SavedAddressCombo.Visibility = Visibility.Collapsed;
-            SavedAddressCombo.ItemsSource = null;
-            return;
-        }
-
-        string currentAddress = AddressBox.Text.Trim();
-        SavedAddressCombo.ItemsSource = options;
-        SavedAddressCombo.DisplayMemberPath = nameof(SavedAddressOption.DisplayName);
-        SavedAddressCombo.SelectedIndex = Array.FindIndex(options,
-            o => string.Equals(o.Address, currentAddress, StringComparison.OrdinalIgnoreCase));
-        SavedAddressCombo.Visibility = Visibility.Visible;
-    }
-
-    private void UpdateDiscoveredPeers(LinkPeer[] peers)
-    {
         var rows = peers
-            .Where(p => !p.Trusted)
             .Select(p =>
             {
-                string state = p.Online ? L10n.T("Phone.WindowsLinkReady") : L10n.T("Phone.Disconnected");
-                string subtitle = string.IsNullOrWhiteSpace(p.Address) ? state : $"{state} · {p.Address}";
-                return new DiscoveredPeerRow(p.Id, p.DisplayName, p.Address ?? "", subtitle);
+                string subtitle = WindowsLinkPeerStatus.Subtitle(p);
+                string failure = p.State == LinkPeerState.Failed ? WindowsLinkPeerStatus.FailureText(p.Failure) : "";
+                bool canConnect = !_busy
+                    && p.State != LinkPeerState.Connecting
+                    && (p.Trusted || !string.IsNullOrWhiteSpace(p.Address));
+                return new PeerRow(
+                    p.Id,
+                    p.DisplayName,
+                    p.Address ?? "",
+                    WindowsLinkPeerStatus.StateWithPairing(p),
+                    subtitle,
+                    failure,
+                    string.IsNullOrEmpty(failure) ? Visibility.Collapsed : Visibility.Visible,
+                    canConnect,
+                    p.Connected ? Visibility.Collapsed : Visibility.Visible,
+                    p.Connected ? Visibility.Visible : Visibility.Collapsed,
+                    p.Trusted);
             })
             .ToArray();
 
         if (rows.Length == 0)
         {
+            _peerRows = [];
             DiscoveredPeersList.ItemsSource = null;
             DiscoveredPeersList.Visibility = Visibility.Collapsed;
             return;
         }
 
-        _searchFoundNone = false;
-        DiscoveredPeersList.ItemsSource = rows;
+        if (!_peerRows.SequenceEqual(rows))
+        {
+            _peerRows = rows;
+            DiscoveredPeersList.ItemsSource = rows;
+        }
         DiscoveredPeersList.Visibility = Visibility.Visible;
     }
 
@@ -309,39 +314,34 @@ public partial class WindowsLinkConnectView : UserControl
         }
     }
 
-    private async void ServiceToggle_Click(object sender, RoutedEventArgs e)
+    private async void ServiceToggle_Changed(object sender, RoutedEventArgs e)
     {
-        if (_updating) return;
+        if (_updating || _busy || ServiceToggle == null) return;
         await ToggleServiceAsync(ServiceToggle.IsChecked == true);
-    }
-
-    private async void ServiceToggleButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_updating) return;
-        bool wantEnable = _service?.IsEnabled != true;
-        await ToggleServiceAsync(wantEnable);
     }
 
     private Task ToggleServiceAsync(bool wantEnable)
     {
         _service ??= WindowsLinkHub.EnsureService();
         _searchFoundNone = false;
-        return RunActionAsync(L10n.T("Phone.ProcessingStatus"), async () =>
-        {
-            if (wantEnable) await _service.EnableAsync();
-            else await _service.DisableAsync();
-        });
+        return RunActionAsync(L10n.T("Phone.ProcessingStatus"),
+            token => App.SetWindowsLinkEnabledAsync(_service, wantEnable, token));
     }
 
-    private async void Search_Click(object sender, RoutedEventArgs e)
+    private async void Search_Click(object sender, RoutedEventArgs e) => await TriggerSearchAsync();
+
+    internal Task TriggerSearchAsync(CancellationToken token = default)
     {
         _service ??= WindowsLinkHub.EnsureService();
         _searchFoundNone = false;
-        await RunActionAsync(L10n.T("Phone.ProcessingStatus"), async () =>
+        return RunActionAsync(L10n.T("Phone.ProcessingStatus"), async viewToken =>
         {
-            if (!_service.IsEnabled) await _service.EnableAsync();
-            await _service.DiscoverAsync();
-            if (!_service.Peers.Any(p => !p.Trusted)) _searchFoundNone = true;
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, viewToken);
+            if (!_service.IsEnabled)
+                await App.SetWindowsLinkEnabledAsync(_service, true, linked.Token);
+            await _service.SearchAsync(linked.Token);
+            if (!linked.IsCancellationRequested && !_service.Peers.Any(p => !p.Trusted))
+                _searchFoundNone = true;
         });
     }
 
@@ -351,43 +351,53 @@ public partial class WindowsLinkConnectView : UserControl
     {
         if (e.Key != Key.Enter) return;
         e.Handled = true;
-        await ConnectToInputAsync();
+        if (ConnectButton.IsEnabled) await ConnectToInputAsync();
     }
 
     private Task ConnectToInputAsync()
     {
+        if (_busy) return Task.CompletedTask;
         string address = AddressBox.Text.Trim();
-        if (address.Length == 0)
+        if (!LinkDirectAddress.TryParse(address, out _))
         {
-            _errorMessage = L10n.T("Phone.Err.InvalidAddress");
-            return RefreshAsync();
+            ShowDirectNotice(L10n.T("Phone.WindowsLinkDirectDesc"));
+            return Task.CompletedTask;
         }
 
         _service ??= WindowsLinkHub.EnsureService();
         _searchFoundNone = false;
-        string? peerId = _selectedSavedPeerId;
-        if (peerId != null && !_service.Peers.Any(p =>
-                string.Equals(p.Id, peerId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(p.Address, address, StringComparison.OrdinalIgnoreCase)))
+        return RunActionAsync(L10n.T("Phone.ProcessingStatus"), async token =>
         {
-            peerId = null;
-        }
-
-        return RunActionAsync(L10n.T("Phone.ProcessingStatus"), async () =>
-        {
-            if (!_service.IsEnabled) await _service.EnableAsync();
-            await _service.ConnectAsync(address, peerId);
-        });
+            LinkResolvedAddress resolved;
+            try { resolved = await _service.ResolveDirectAddressAsync(address, token); }
+            catch (LinkSelfConnectionException) { _errorMessage = L10n.T("Phone.WindowsLinkSelfAddress"); return; }
+            catch (System.Net.Sockets.SocketException) { _errorMessage = L10n.T("Phone.WindowsLinkNameUnavailable"); return; }
+            if (resolved.ConnectedPeer != null) { ShowDirectNotice(L10n.T("Phone.WindowsLinkAlreadyConnected")); return; }
+            if (!_service.IsEnabled)
+                await App.SetWindowsLinkEnabledAsync(_service, true, token);
+            await _service.ConnectResolvedAsync(resolved, null, token);
+        }, direct: true);
     }
 
-    private async void ConnectDiscovered_Click(object sender, RoutedEventArgs e)
+    private void OpenPeer_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: DiscoveredPeerRow row }) return;
+        if (sender is Button { Tag: PeerRow row } && _service?.Peers.Any(p => p.Id == row.Id && p.Connected) == true)
+            PeerOpened?.Invoke(row.Id);
+    }
+
+    private async void ConnectPeer_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: PeerRow row }) return;
         _service ??= WindowsLinkHub.EnsureService();
-        await RunActionAsync(L10n.T("Phone.ProcessingStatus"), async () =>
+        _searchFoundNone = false;
+        await RunActionAsync(L10n.T("Phone.ProcessingStatus"), async token =>
         {
-            if (!_service.IsEnabled) await _service.EnableAsync();
-            await _service.ConnectAsync(row.Address, row.Id);
+            if (!_service.IsEnabled)
+                await App.SetWindowsLinkEnabledAsync(_service, true, token);
+            if (row.Trusted)
+                await WindowsLinkHub.ReconnectPeerAsync(row.Id, token);
+            else
+                await _service.ConnectAsync(row.Address, row.Id, token);
         });
     }
 
@@ -407,39 +417,77 @@ public partial class WindowsLinkConnectView : UserControl
         _ = RefreshAsync();
     }
 
+    private void ShowDirectNotice(string? text)
+    {
+        if (DirectNoticeText == null) return;
+        DirectNoticeText.Text = text ?? "";
+        DirectNoticeText.Visibility = text == null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void AddressBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        AddressWatermark.Visibility = string.IsNullOrEmpty(AddressBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+        ShowDirectNotice(null);
+        if (AddressWatermark != null) AddressWatermark.Visibility = string.IsNullOrEmpty(AddressBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+        if (ConnectButton != null) ConnectButton.IsEnabled = !_busy && !string.IsNullOrWhiteSpace(AddressBox.Text);
     }
 
-    private void SavedAddressCombo_Changed(object sender, SelectionChangedEventArgs e)
+    private async void LocalAddressBadge_Click(object sender, RoutedEventArgs e)
     {
-        if (_updating || SavedAddressCombo.SelectedItem is not SavedAddressOption option) return;
-        _selectedSavedPeerId = option.PeerId;
-        AddressBox.Text = option.Address;
+        if (_service is not { IsEnabled: true } service || !LocalAddressBadge.IsEnabled) return;
+        LocalAddressBadge.IsEnabled = false;
+        try
+        {
+            var choices = await Task.Run(service.GetLocalAddresses);
+            if (!IsVisible || !service.IsEnabled || choices.Length == 0) return;
+            if (choices.Length == 1) { await CopyAddressAsync(choices[0].Address); return; }
+            var menu = ConvenienceMenus.Create();
+            menu.PlacementTarget = LocalAddressBadge;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            foreach (var choice in choices)
+            {
+                string label = string.IsNullOrEmpty(choice.Adapter) ? choice.Address : $"{choice.Adapter}  ·  {choice.Address}";
+                var item = ConvenienceMenus.Item(label);
+                item.Click += async (_, _) => await CopyAddressAsync(choice.Address);
+                menu.Items.Add(item);
+            }
+            menu.IsOpen = true;
+        }
+        catch (System.Net.NetworkInformation.NetworkInformationException) { await CopyAddressAsync(service.LocalAddress); }
+        finally { LocalAddressBadge.IsEnabled = true; }
+
+        async Task CopyAddressAsync(string address)
+        {
+            if (address.Length == 0) return;
+            bool copied = await ClipboardWriter.TryWriteTextAsync(address);
+            if (IsVisible && service.IsEnabled)
+                ShowDirectNotice(copied ? string.Format(L10n.T("Phone.WindowsLinkAddressCopied"), address) : L10n.T("Auto.CopyFailed"));
+        }
     }
 
-    private void LocalAddressBadge_Click(object sender, MouseButtonEventArgs e)
+    private async Task RunActionAsync(string busyText, Func<CancellationToken, Task> action, bool direct = false)
     {
-        if (_service == null || string.IsNullOrWhiteSpace(_service.LocalAddress)) return;
-        try { Clipboard.SetText(_service.LocalAddress); } catch { }
-    }
-
-    private async Task RunActionAsync(string busyText, Func<Task> action)
-    {
+        if (_busy) return;
         _busy = true;
         _busyText = busyText;
         _errorMessage = null;
+        ShowDirectNotice(null);
         SearchButton.IsEnabled = false;
         ConnectButton.IsEnabled = false;
         ServiceToggle.IsEnabled = false;
-        ServiceToggleButton.IsEnabled = false;
+        ServiceStatusText.Text = busyText;
+        if (_service != null) UpdatePeerRows(_service.Peers);
         StatusUpdated?.Invoke();
+        CancellationToken viewToken = _viewCts?.Token ?? CancellationToken.None;
         try
         {
-            await action();
+            await action(viewToken);
         }
         catch (OperationCanceledException) { }
+        catch (LinkAmbiguousAddressException) { _errorMessage = L10n.T("Phone.WindowsLinkAmbiguousAddress"); }
+        catch (LinkConnectionFailureException ex) { _errorMessage = WindowsLinkPeerStatus.FailureText(ex.Reason); }
+        catch (LinkAuthenticationFailureException ex) { _errorMessage = WindowsLinkPeerStatus.FailureText(ex.Reason); }
+        catch (System.Security.Authentication.AuthenticationException)
+        { _errorMessage = WindowsLinkPeerStatus.FailureText(LinkConnectFailure.IdentityMismatch); }
         catch (Exception ex)
         {
             _errorMessage = ex.Message;
@@ -449,11 +497,15 @@ public partial class WindowsLinkConnectView : UserControl
             _busy = false;
             _busyText = null;
             SearchButton.IsEnabled = true;
-            ConnectButton.IsEnabled = true;
+            ConnectButton.IsEnabled = !string.IsNullOrWhiteSpace(AddressBox.Text);
             ServiceToggle.IsEnabled = true;
-            ServiceToggleButton.IsEnabled = true;
         }
 
+        if (direct && _errorMessage != null)
+        {
+            ShowDirectNotice(_errorMessage);
+            _errorMessage = null;
+        }
         await RefreshAsync();
     }
 }

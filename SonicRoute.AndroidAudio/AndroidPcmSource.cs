@@ -9,8 +9,13 @@ namespace SonicRoute.AndroidAudio;
 public sealed class AndroidPcmSource : IWaveProvider
 {
     public const int SampleRate = 48000, Channels = 2;
+    // The phone profile includes headroom. PC-to-PC playback already includes the source mixer level.
+    internal bool PreserveQuietLevel { get; init; }
     private readonly object _gate = new();
-    private readonly float[] _samples = new float[SampleRate * Channels / 2]; // 500 ms maximum
+    private readonly float[] _samples;
+    public AndroidPcmSource() : this(false) { }
+    internal AndroidPcmSource(bool packetCounterOnly) =>
+        _samples = packetCounterOnly ? [] : new float[SampleRate * Channels / 2]; // 500 ms maximum for float renderers
     private int _start, _count;
     private float _volume = 1, _gain = 1;
     private bool _smartVolume;
@@ -24,7 +29,7 @@ public sealed class AndroidPcmSource : IWaveProvider
     public static event Action? PeakActivity;
     // Only a phone renderer subscribes; silence still carries timing without polling.
     internal event Action? DataAvailable;
-    internal event Action? PlaybackConsumed;
+    internal event Action? PlaybackBufferRequested;
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
     public int BufferedSamples { get { lock (_gate) return _count; } }
     public long DroppedSamples => Interlocked.Read(ref _dropped);
@@ -38,7 +43,15 @@ public sealed class AndroidPcmSource : IWaveProvider
     public bool SmartVolume { get => Volatile.Read(ref _smartVolume); set => Volatile.Write(ref _smartVolume, value); }
     public float EffectiveGain => ComputeEffectiveGain();
 
+    internal volatile PcmOutputMirrors? Mirrors;
     public void Write(ReadOnlySpan<float> samples)
+    {
+        var metrics = Measure(samples);
+        WriteMeasured(samples, metrics);
+        Mirrors?.Write(samples, metrics, this);
+    }
+
+    internal static (int NonSilent, float Peak) Measure(ReadOnlySpan<float> samples)
     {
         if (samples.Length % Channels != 0) throw new ArgumentException("PCM frames must contain both channels.");
         int nonSilent = 0; float peak = 0;
@@ -62,7 +75,16 @@ public sealed class AndroidPcmSource : IWaveProvider
         }
         foreach (float sample in samples[offset..])
         { float absolute = Math.Abs(sample); peak = Math.Max(peak, absolute); if (absolute > 0.0001f) nonSilent++; }
-        Interlocked.Add(ref _written, samples.Length); Interlocked.Add(ref _nonSilent, nonSilent);
+        return (nonSilent, peak);
+    }
+
+    internal void WriteMeasured(ReadOnlySpan<float> samples, (int NonSilent, float Peak) metrics)
+    {
+        var (nonSilent, peak) = metrics;
+        Interlocked.Add(ref _written, samples.Length);
+        // An encoded-packet mirror only needs to know whether this frame reached its committed output.
+        if (_samples.Length == 0) return;
+        Interlocked.Add(ref _nonSilent, nonSilent);
         Volatile.Write(ref _lastPeak, peak);
         if (!float.IsNaN(peak) && peak >= 0f)
         {
@@ -151,12 +173,26 @@ public sealed class AndroidPcmSource : IWaveProvider
             ApplyGain(_samples.AsSpan(_start, first), destination, gain);
             ApplyGain(_samples.AsSpan(0, take - first), destination[first..], gain);
             destination[take..].Clear();
-            _start = (_start + take) % _samples.Length; _count -= take;
+            if (take > 0) { _start = (_start + take) % _samples.Length; _count -= take; }
             Interlocked.Add(ref _read, take);
             Interlocked.Add(ref _underflow, destination.Length - take);
         }
-        if (take > 0) PlaybackConsumed?.Invoke();
+        PlaybackBufferRequested?.Invoke();
         return count; // live source: an underrun is silence, not EOF
+    }
+
+    // A Windows Link relay sends the original 16-bit packet and has no need to copy its float playback queue.
+    internal bool ConsumeRelayPacket(ref long lastWritten)
+    {
+        lock (_gate)
+        {
+            long written = SamplesWritten;
+            if (written == lastWritten) return false;
+            lastWritten = written;
+            Interlocked.Add(ref _read, _count);
+            _start = _count = 0;
+            return true;
+        }
     }
 
     private float ComputeEffectiveGain()
@@ -170,7 +206,7 @@ public sealed class AndroidPcmSource : IWaveProvider
         float rangeFactor = float.IsNaN(env) || env <= 0.15f
             ? 0.25f
             : Math.Clamp(0.25f * MathF.Pow(0.15f / env, 0.70f), 0.08f, 0.25f);
-        return curved * headerGain * rangeFactor;
+        return curved * headerGain * (PreserveQuietLevel ? rangeFactor / 0.25f : rangeFactor);
     }
 
     private static void ApplyGain(ReadOnlySpan<float> samples, Span<float> destination, float gain)
@@ -204,6 +240,7 @@ public sealed class AndroidPcmSource : IWaveProvider
             _lastWriteTick = _lastNonSilentWriteTick = -1000;
             Volatile.Write(ref _meterWaiting, 0);
         }
+        Mirrors?.ClearBuffers();
     }
 }
 
@@ -214,6 +251,8 @@ public sealed class WasapiPcmPlayer : IPcmPlayer
     private readonly AndroidPcmSource _source;
     private int _disposed;
     public event Action<Exception>? Failed;
+
+    internal string EndpointId => _device.Device.ID;
 
     public WasapiPcmPlayer(AndroidPcmSource source, string? endpointId)
     {
@@ -237,24 +276,24 @@ public sealed class WasapiPcmPlayer : IPcmPlayer
     {
         var playing = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int reads = 0;
-        // WASAPI primes its first buffer before starting. Wait for a subsequent buffer with input.
+        // WASAPI primes its first buffer before starting. A second request confirms the output runs even while the source app is paused.
         void Consumed()
         {
             if (++reads == 2) playing.TrySetResult();
         }
         void PlaybackFailed(Exception error) => playing.TrySetException(error);
-        _source.PlaybackConsumed += Consumed;
+        _source.PlaybackBufferRequested += Consumed;
         Failed += PlaybackFailed;
         try
         {
             Play();
             try { await playing.Task.WaitAsync(TimeSpan.FromSeconds(4), token).ConfigureAwait(false); }
-            catch (TimeoutException ex) { throw new IOException("WASAPI did not consume the incoming audio.", ex); }
+            catch (TimeoutException ex) { throw new IOException("WASAPI did not start reading playback buffers.", ex); }
         }
         finally
         {
             Failed -= PlaybackFailed;
-            _source.PlaybackConsumed -= Consumed;
+            _source.PlaybackBufferRequested -= Consumed;
         }
     }
     public void Stop() => _output.Stop();

@@ -1,0 +1,36 @@
+<Window x:Class="SonicRoute.WindowsLinkReceiveWindow" x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SonicRoute"
+        Title="{Binding [Phone.LinkFiles], Source={x:Static local:L10n.Instance}}"
+        Icon="/SonicRoute;component/SonicRoute.ico" Width="410" SizeToContent="Height" ResizeMode="NoResize"
+        ShowActivated="False" WindowStartupLocation="CenterScreen" Background="{DynamicResource Theme.WindowBg}">
+    <Border Background="{DynamicResource Theme.WindowBg}" Padding="20,18">
+      <StackPanel>
+        <TextBlock x:Name="SenderLabel" Foreground="{DynamicResource Theme.TextPrimary}" FontSize="16"
+                   FontWeight="SemiBold" TextWrapping="Wrap"/>
+        <Border Style="{StaticResource Card}" Margin="0,14,0,14" Padding="12,10">
+            <StackPanel>
+                <TextBlock x:Name="FileLabel" Foreground="{DynamicResource Theme.TextPrimary}"
+                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="FileSizeLabel" Margin="0,3,0,0" Foreground="{DynamicResource Theme.TextSecondary}"/>
+                <TextBlock x:Name="FolderLabel" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Theme.TextSecondary}"/>
+                <ProgressBar x:Name="ReceiveProgress" Height="4" Maximum="1" Foreground="{DynamicResource Theme.Accent}"
+                             Margin="0,9,0,0" Visibility="Collapsed"/>
+            </StackPanel>
+        </Border>
+        <TextBlock x:Name="ResultLabel" Visibility="Collapsed" Margin="0,0,0,12" TextWrapping="Wrap"
+                   Foreground="{DynamicResource Theme.TextSecondary}" AutomationProperties.LiveSetting="Polite"/>
+        <WrapPanel HorizontalAlignment="Right">
+            <Button x:Name="DeclineButton" Style="{StaticResource QuickPanelToolButton}" Padding="12,4" Margin="0,0,8,0" MinWidth="58" MinHeight="32"
+                    Content="{Binding [Phone.WindowsLinkPairDecline], Source={x:Static local:L10n.Instance}}" Click="Decline_Click"/>
+            <Button x:Name="SaveAsButton" Style="{StaticResource QuickPanelToolButton}" Padding="12,4" Margin="0,0,8,0" MinHeight="32"
+                    Content="{Binding [Phone.LinkFileAccept], Source={x:Static local:L10n.Instance}}" Click="SaveAs_Click"/>
+            <Button x:Name="SaveButton" Style="{StaticResource QuickPanelToolButton}" Padding="14,4" MinHeight="32"
+                    Background="{DynamicResource Theme.Overlay}" BorderBrush="{DynamicResource Theme.Accent}"
+                    Content="{Binding [Phone.LinkFileReceive], Source={x:Static local:L10n.Instance}}" Click="Save_Click"/>
+        </WrapPanel>
+      </StackPanel>
+    </Border>
+</Window>

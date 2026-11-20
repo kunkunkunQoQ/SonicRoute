@@ -4,7 +4,7 @@ using SonicRoute.AndroidAudio;
 
 namespace SonicRoute.WindowsLink;
 
-internal sealed partial class LinkH264Encoder : IDisposable
+internal sealed partial class LinkVideoEncoder : IDisposable
 {
     private static readonly Guid Encoder = new("6ca50344-051a-4ded-9779-a43305165e35");
     private static readonly Guid Transform = new("bf94c121-5b05-4e6f-8000-ba598961414d");
@@ -26,6 +26,22 @@ internal sealed partial class LinkH264Encoder : IDisposable
     private static readonly Guid KeyFrame = new("398c1b98-8353-475a-9ef2-8f265d260345");
     private static readonly Guid SequenceHeader = new("3c036de7-3ad0-4c9e-9216-ee6d6ac21cb3");
 
+    private static readonly Guid Hevc = new("43564548-0000-0010-8000-00aa00389b71");
+    private static readonly Guid EncoderCategory = new("f79eac7d-e545-4387-bdee-d647d7bde42a");
+    private readonly bool _hevc;
+    private static readonly Lazy<bool> HevcAvailable = new(() =>
+    {
+        try
+        {
+            using var probe = new LinkVideoEncoder(640, 360, 30, 2_000_000, hevc: true);
+            return true;
+        }
+        catch (Exception ex) when (IsCodecFailure(ex)) { return false; }
+    });
+    internal static bool SupportsHevc => HevcAvailable.Value;
+    internal static bool IsCodecFailure(Exception ex) =>
+        ex is COMException or NotSupportedException or InvalidDataException or DllNotFoundException or ArgumentException;
+
     private readonly int _width, _height, _fps;
     private ComPtr? _encoder, _settings;
     private nint _mta;
@@ -35,10 +51,13 @@ internal sealed partial class LinkH264Encoder : IDisposable
     private byte[]? _header;
     private long _lastKey = -1;
 
-    internal LinkH264Encoder(int width, int height, int fps, int bitrate)
+    internal LinkVideoEncoder(int width, int height, int fps, int bitrate, bool hevc = false)
     {
-        if (width < 16 || height < 16 || (width | height) % 2 != 0 || width > 1920 || height > 1080)
-            throw new ArgumentOutOfRangeException(nameof(width), "H.264 requires even dimensions from 16 to 1920 × 1080.");
+        if (!LinkVideoOptions.ValidFrameSize(width, height))
+            throw new ArgumentOutOfRangeException(nameof(width), $"Unsupported Windows Link encoding dimensions: {width} × {height}.");
+        if (hevc && !LinkVideoOptions.ValidHevcFrameSize(width, height))
+            throw new NotSupportedException($"The Windows HEVC transform cannot encode {width} × {height}.");
+        _hevc = hevc;
         _width = width;
         _height = height;
         _fps = fps;
@@ -47,14 +66,16 @@ internal sealed partial class LinkH264Encoder : IDisposable
             Check(Win32Native.CoIncrementMTAUsage(out _mta));
             Check(MFStartup(0x00020070, 1));
             _mfStarted = true;
-            Check(Win32Native.CoCreateInstance(in Encoder, 0, Win32Native.CLSCTX_INPROC_SERVER, in Transform, out nint native));
+            nint native;
+            if (_hevc) native = OpenHevcEncoder();
+            else Check(Win32Native.CoCreateInstance(in Encoder, 0, Win32Native.CLSCTX_INPROC_SERVER, in Transform, out native));
             _encoder = new ComPtr(native);
             _encoder.TryQueryInterface(CodecApi, out _settings);
             SetCodec(LowLatency, 11, 0xffff);
 
-            using var output = Format(H264);
+            using var output = Format(_hevc ? Hevc : H264);
             Check(ComVtbl.Get<SetUInt>(output.Handle, 21)(output.Handle, in Bitrate, (uint)bitrate));
-            Check(ComVtbl.Get<SetUInt>(output.Handle, 21)(output.Handle, in Profile, 66));
+            Check(ComVtbl.Get<SetUInt>(output.Handle, 21)(output.Handle, in Profile, _hevc ? 1u : 66u));
             Check(ComVtbl.Get<SetType>(native, 16)(native, 0, output.Handle, 0));
             using var input = Format(Nv12);
             Check(ComVtbl.Get<SetType>(native, 15)(native, 0, input.Handle, 0));
@@ -65,6 +86,30 @@ internal sealed partial class LinkH264Encoder : IDisposable
             Check(ComVtbl.Get<ProcessMessage>(native, 23)(native, 0x10000003, 0));
         }
         catch { Dispose(); throw; }
+    }
+
+    private static nint OpenHevcEncoder()
+    {
+        // Our encoder drives ProcessInput/ProcessOutput synchronously. This also finds
+        // the software transform installed through the Windows HEVC media extension.
+        var output = new RegisterType { Major = Video, Subtype = Hevc };
+        const uint flags = 0x01 | 0x10 | 0x40; // SYNCMFT, LOCALMFT, SORTANDFILTER
+        Check(MFTEnumEx(EncoderCategory, flags, 0, in output, out nint list, out uint count));
+        try
+        {
+            for (int i = 0; i < count; i++)
+            {
+                nint activation = Marshal.ReadIntPtr(list, i * nint.Size);
+                if (ComVtbl.Get<ActivateObject>(activation, 33)(activation, in Transform, out nint encoder) >= 0 && encoder != 0)
+                    return encoder;
+            }
+        }
+        finally
+        {
+            for (int i = 0; i < count; i++) Marshal.Release(Marshal.ReadIntPtr(list, i * nint.Size));
+            Marshal.FreeCoTaskMem(list);
+        }
+        throw new NotSupportedException("A synchronous Windows HEVC encoder is unavailable.");
     }
 
     private ComPtr Format(Guid subtype)
@@ -135,6 +180,9 @@ internal sealed partial class LinkH264Encoder : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int UnlockBuffer(nint self);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int SetLength(nint self, uint length);
 
+    [StructLayout(LayoutKind.Sequential)] private struct RegisterType { internal Guid Major, Subtype; }
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int ActivateObject(nint self, in Guid iid, out nint result);
+    [DllImport("mfplat.dll")] private static extern int MFTEnumEx(Guid category, uint flags, nint input, in RegisterType output, out nint list, out uint count);
     [DllImport("mfplat.dll")] private static extern int MFStartup(uint version, uint flags);
     [DllImport("mfplat.dll")] private static extern int MFShutdown();
     [DllImport("mfplat.dll")] private static extern int MFCreateMediaType(out nint type);

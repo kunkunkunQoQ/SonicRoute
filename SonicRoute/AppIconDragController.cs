@@ -34,12 +34,14 @@ internal static class AppIconDragController
     }
     internal static void Attach(FrameworkElement element, Action drag, Func<bool>? canDrag = null)
     {
+        TouchHoldDrag.Attach(element, _ => canDrag?.Invoke() == false ? null : drag);
         Point? origin = null;
-        element.PreviewMouseLeftButtonDown += (_, e) => origin = canDrag?.Invoke() == false ? null : e.GetPosition(element);
+        element.PreviewMouseLeftButtonDown += (_, e) =>
+            origin = TouchHoldDrag.IsTouchMouse(e) || canDrag?.Invoke() == false ? null : e.GetPosition(element);
         element.PreviewMouseLeftButtonUp += (_, _) => origin = null;
         element.PreviewMouseMove += (_, e) =>
         {
-            if (origin is not { } start || e.LeftButton != MouseButtonState.Pressed || IsDragging) return;
+            if (TouchHoldDrag.IsTouchMouse(e) || origin is not { } start || e.LeftButton != MouseButtonState.Pressed || IsDragging) return;
             var point = e.GetPosition(element);
             if (Math.Abs(point.X - start.X) < SystemParameters.MinimumHorizontalDragDistance
                 && Math.Abs(point.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
@@ -67,6 +69,7 @@ internal static class AppIconDragController
 #endif
     internal static DragResult Run(FrameworkElement source, System.Windows.IDataObject data, ImageSource? icon, string label, Action<bool>? changed = null)
     {
+        if (TouchHoldDrag.Current is { } touch) return RunTouch(touch, data, icon, label, changed);
         bool released = false, cancelled = false; ScreenPoint drop = default;
         var preview = new IconPreview(icon, label);
         Window[] panels = Array.Empty<Window>();
@@ -104,6 +107,58 @@ internal static class AppIconDragController
         }
         return new DragResult(result == DragDropEffects.None && released && !cancelled && !InsidePanel(drop), drop.X, drop.Y);
     }
+    private static DragResult RunTouch(TouchHoldDrag touch, System.Windows.IDataObject data, ImageSource? icon, string label, Action<bool>? changed)
+    {
+        var preview = new IconPreview(icon, label);
+#if SONICROUTE_PHONE
+        Window? target = null;
+        void Route(Point screen, bool drop)
+        {
+            var point = new ScreenPoint { X = (int)Math.Round(screen.X), Y = (int)Math.Round(screen.Y) };
+            var root = GetAncestor(WindowFromPoint(point), 2 /* GA_ROOT */);
+            var next = root == IntPtr.Zero ? null : HwndSource.FromHwnd(root)?.RootVisual as Window;
+            if (next is QuickPanelModernWindow quick && !quick.ContainsTouchDrop(screen)) next = null;
+            if (next != target)
+            {
+                if (target is QuickPanelModernWindow oldQuick) oldQuick.ClearAndroidDropHighlight();
+                if (target is PhoneAudioWindow oldPhone) oldPhone.ClearPcDropHighlight();
+                target = next;
+            }
+            var input = new PanelDragInput(data, screen);
+            if (next is QuickPanelModernWindow panel) panel.HandleTouchDrag(input, drop);
+            else if (next is PhoneAudioWindow phone) phone.HandleTouchDrag(input, drop);
+        }
+#endif
+        IsDragging = true;
+        try
+        {
+            changed?.Invoke(true);
+            preview.Show();
+            bool released = touch.Track(screen =>
+            {
+                preview.Move((int)Math.Round(screen.X), (int)Math.Round(screen.Y));
+#if SONICROUTE_PHONE
+                Route(screen, false);
+#endif
+            }, out var end);
+#if SONICROUTE_PHONE
+            if (released) Route(end, true);
+#endif
+            var point = new ScreenPoint { X = (int)Math.Round(end.X), Y = (int)Math.Round(end.Y) };
+            return new DragResult(released && !InsidePanel(point), point.X, point.Y);
+        }
+        finally
+        {
+            preview.Close();
+            IsDragging = false;
+            changed?.Invoke(false);
+#if SONICROUTE_PHONE
+            if (target is QuickPanelModernWindow quick && quick.IsVisible) quick.ClearAndroidDropHighlight();
+            if (target is PhoneAudioWindow phone && phone.IsVisible) phone.ClearPcDropHighlight();
+#endif
+        }
+    }
+
     internal readonly struct DragResult
     {
         internal bool Outside { get; }
@@ -178,6 +233,10 @@ internal static class AppIconDragController
     }
     [StructLayout(LayoutKind.Sequential)] private struct ScreenPoint { internal int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct ScreenRect { internal int Left, Top, Right, Bottom; }
+#if SONICROUTE_PHONE
+    [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(ScreenPoint point);
+    [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+#endif
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out ScreenPoint point);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out ScreenRect rect);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);

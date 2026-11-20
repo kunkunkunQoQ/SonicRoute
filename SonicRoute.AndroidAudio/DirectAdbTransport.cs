@@ -182,6 +182,12 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         return await conn.OpenShellAsync(command, redirectInput, token).ConfigureAwait(false);
     }
 
+    public async Task<Stream> OpenFileSyncAsync(string serial, CancellationToken token)
+    {
+        var connection = await ResolveConnectionAsync(serial, token).ConfigureAwait(false);
+        return await connection.OpenStreamAsync("sync:", token).ConfigureAwait(false);
+    }
+
     public async Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token)
     {
         var conn = await ResolveConnectionAsync(serial, token).ConfigureAwait(false);
@@ -811,6 +817,9 @@ internal sealed class ArbitratedAdbTransport : IAdbTransport, IAsyncDisposable
 
     public async Task<IAdbShellSession> OpenShellAsync(string serial, string command, bool redirectInput, CancellationToken token) =>
         await (await SelectAsync(token).ConfigureAwait(false)).OpenShellAsync(serial, command, redirectInput, token).ConfigureAwait(false);
+
+    public async Task<Stream> OpenFileSyncAsync(string serial, CancellationToken token) =>
+        await (await SelectAsync(token).ConfigureAwait(false)).OpenFileSyncAsync(serial, token).ConfigureAwait(false);
 
     public async Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token) =>
         await (await SelectAsync(token).ConfigureAwait(false)).PushAsync(serial, localPath, remotePath, token).ConfigureAwait(false);

@@ -13,7 +13,7 @@ using SonicRoute.Core.Models;
 
 namespace SonicRoute;
 
-internal static class AndroidAudioHost
+internal static partial class AndroidAudioHost
 {
     private static readonly object PhoneOperations = new();
     private static readonly object OutputSnapshotGate = new();
@@ -21,6 +21,14 @@ internal static class AndroidAudioHost
     private static readonly LocalSilenceLeasePool SilenceLeases = new(FindSilenceEndpoint,
         id => { var state = SystemVolumeService.ReadStateChecked(id); return (state.Muted, state.MuteKnown); },
         SystemVolumeService.SetMute, ReadSilenceRoles, WriteSilenceRoles);
+    private static readonly Guid WindowsLinkMuteContext = Guid.NewGuid();
+    private static readonly LocalSilenceLeasePool WindowsLinkSilenceLeases = new(FindWindowsLinkOutput,
+        ReadWindowsLinkOutputMute, SetWindowsLinkOutputMute, ReadSilenceRoles, WriteSilenceRoles)
+        {
+            VerifyPlaybackRoute = VerifyWindowsPlaybackRoute,
+            ObservePlayback = (pid, id, revoke) => new WindowsLinkPlaybackWatch(pid, id, revoke) { CheckReservedOutput = RevalidateWindowsLinkSilence }
+        };
+    private static readonly AlreadyMutedOutputLeases MutedOutputs = new(AllWindowsOutputsUserMuted);
     private static readonly Dictionary<string, long> ProbeTimestamps = new(StringComparer.Ordinal);
     static AndroidAudioHost()
     {
@@ -36,7 +44,8 @@ internal static class AndroidAudioHost
         new AndroidAudioSettingsStore(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-audio.json")));
     private static readonly Lazy<AndroidAudioManager> LazySources = new(() =>
     {
-        var sources = new AndroidAudioManager(Adb, LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
+        var sources = new AndroidAudioManager(() => new AndroidAudioSession(Adb, LazySettings.Value.GetStreaming)
+            { LinkService = () => WindowsLinkHub.Service }, LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
         sources.Changed += ApplicationAudio.NotifyChanged;
         sources.ResourcesRetired += OnResourcesRetired;
         return sources;
@@ -120,6 +129,7 @@ internal static class AndroidAudioHost
             if (!Phone.RemoveDevice(profileId, PhoneAudioWindowCache.Devices)) return;
         // Complete owned cleanup even if selecting the replacement profile hides this page.
         var cleanup = new List<Task>();
+        cleanup.Add(LocalAppOutputMirrors.PhoneRemovedAsync(device));
         if (AreDisplaysCreated) cleanup.Add(Displays.CloseDeviceAsync(device));
         if (IsCreated)
             cleanup.AddRange(Sources.Sources.Where(s => AndroidDeviceIdentity.MatchesSavedDevice(device, s.Device))
@@ -148,6 +158,7 @@ internal static class AndroidAudioHost
                     Phone.UpdateOutputs(dev, [AndroidOutputSink.DefaultSpeaker]);
             }
             ApplicationAudio.NotifyOutputsChanged();
+            LocalAppOutputMirrors.RefreshPhoneOutputs();
         }
         if (LazyPcToPhone.IsValueCreated && cached != null)
         {
@@ -182,6 +193,7 @@ internal static class AndroidAudioHost
     {
         InvalidateOutputSnapshot();
         ApplicationAudio.NotifyOutputsChanged();
+        LocalAppOutputMirrors.RefreshPhoneOutputs();
     }
     private static IReadOnlyList<AudioDeviceInfo> BuildOutputSnapshot()
     {
@@ -241,7 +253,7 @@ internal static class AndroidAudioHost
             result.Add((sink, AndroidOutputIdentity.FormatDeviceId(phoneKey, sink.Key)));
         return result;
     }
-    internal static AndroidPhonePcmPlayer CreatePhonePcmPlayer(AndroidPcmSource pcm, string endpoint, CancellationToken token)
+    internal static AndroidPhonePcmPlayer CreatePhonePcmPlayer(AndroidPcmSource pcm, string endpoint, CancellationToken token, AdbClient? adb = null)
     {
         if (!AndroidOutputIdentity.TryParseDeviceId(endpoint, out string phoneKey, out string sink))
             throw AndroidError.WithCode(new IOException("无效的设备输出。"), AndroidErrorCode.InvalidPhoneOutputDevice);
@@ -255,7 +267,7 @@ internal static class AndroidAudioHost
             throw AndroidError.WithCode(new IOException("所选设备输出已断开。"), AndroidErrorCode.SelectedPhoneOutputDisconnected);
 
         token.ThrowIfCancellationRequested();
-        return new AndroidPhonePcmPlayer(Adb, device, pcm, sink, token, (connected, outputs) => Phone.UpdateOutputs(connected, outputs));
+        return new AndroidPhonePcmPlayer(adb ?? Adb, device, pcm, sink, token, (connected, outputs) => Phone.UpdateOutputs(connected, outputs));
 
         bool IsTarget(AndroidDevice? candidate) => candidate is { State: "device" }
             && string.Equals(AndroidDeviceIdentity.Key(candidate), phoneKey, StringComparison.OrdinalIgnoreCase);
@@ -308,7 +320,170 @@ internal static class AndroidAudioHost
         return SilenceLeases.Acquire(processId);
     }
     internal static IPcProcessSilenceLease? AcquireWindowsLinkSilenceLease(int processId) =>
-        processId > 0 && TryGetPcAppPhoneOutput(processId) == null ? SilenceLeases.Acquire(processId) : null;
+        processId > 0 && TryGetPcAppPhoneOutput(processId) == null
+            ? MutedOutputs.Acquire(processId) ?? WindowsLinkSilenceLeases.Acquire(processId) : null;
+
+    internal static bool HasWindowsLinkSilenceEndpoint() => WindowsLinkSilenceLeases.HasUsableEndpoint() || MutedOutputs.Available();
+    internal static void RevalidateWindowsLinkSilence()
+    {
+        MutedOutputs.Revalidate();
+        WindowsLinkSilenceLeases.Revalidate();
+        SourceSpeakers.Revalidate();
+        SystemSpeakers.Revalidate();
+    }
+    internal static void WindowsLinkOutputUnmuted(string id, Guid context)
+    {
+        MutedOutputs.NoteUnmuted();
+        if (context == WindowsLinkMuteContext) return;
+        WindowsLinkSilenceLeases.NoteUnmuted(id);
+        SourceSpeakers.NoteUnmuted(id);
+    }
+
+    private static bool AllWindowsOutputsUserMuted()
+    {
+        try
+        {
+            using var devices = new WasapiDeviceLease.Enumerator();
+            bool any = false, silent = true;
+            foreach (var lease in devices.ActiveRender())
+            using (lease)
+            {
+                var device = lease.Device;
+                if (silent) silent = device.AudioEndpointVolume.Mute && !SilenceLeases.OwnsEndpoint(device.ID)
+                    && !WindowsLinkSilenceLeases.OwnsEndpoint(device.ID) && !SourceSpeakers.OwnsEndpoint(device.ID);
+                any = true;
+            }
+            return any && silent;
+        }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
+    }
+
+    private static (bool Muted, bool Known) ReadWindowsLinkOutputMute(string id)
+    {
+        try
+        {
+            using var enumerator = new WasapiDeviceLease.Enumerator();
+            using var lease = enumerator.GetDevice(id);
+            var device = lease.Device;
+            return (device.AudioEndpointVolume.Mute, true);
+        }
+        catch (System.Runtime.InteropServices.COMException) { return (false, false); }
+    }
+
+    private static bool SetWindowsLinkOutputMute(string id, bool muted) => SetWindowsLinkMute(id, muted, allowDefault: false);
+
+    private static bool SetWindowsLinkMute(string id, bool muted, bool allowDefault)
+    {
+        try
+        {
+            using var enumerator = new WasapiDeviceLease.Enumerator();
+            using var lease = enumerator.GetDevice(id);
+            var device = lease.Device;
+            if (muted && !allowDefault)
+                foreach (var role in Enum.GetValues<NAudio.CoreAudioApi.Role>())
+                {
+                    using var current = enumerator.TryDefault(role);
+                    if (string.Equals(current?.Device.ID, id, StringComparison.OrdinalIgnoreCase)) return false;
+                }
+            var volume = device.AudioEndpointVolume;
+            volume.NotificationGuid = WindowsLinkMuteContext;
+            volume.Mute = muted;
+            return true;
+        }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
+    }
+
+    // A hardware mute or a bus-backed render device is preferred over another software mixer.
+    internal static bool CanSilenceWindowsLinkOutput(NAudio.CoreAudioApi.MMDevice device)
+    {
+        if (device.AudioEndpointVolume.HardwareSupport.HasFlag(NAudio.CoreAudioApi.EEndpointHardwareSupport.Mute)) return true;
+        string? adapter;
+        try { adapter = device.DeviceTopology.GetConnector(0).ConnectedToDeviceId; }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
+        catch (InvalidOperationException) { return false; }
+        int start = adapter?.IndexOf(@"\\?\", StringComparison.Ordinal) ?? -1;
+        if (start < 0) return false;
+        string bus = adapter![(start + 4)..].Split('#', 2)[0];
+        return bus.Equals("USB", StringComparison.OrdinalIgnoreCase) || bus.Equals("HDAUDIO", StringComparison.OrdinalIgnoreCase)
+            || bus.Equals("INTELAUDIO", StringComparison.OrdinalIgnoreCase) || bus.Equals("PCI", StringComparison.OrdinalIgnoreCase)
+            || bus.StartsWith("BTH", StringComparison.OrdinalIgnoreCase) || bus.Equals("ACPI", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FindWindowsLinkOutput(IReadOnlySet<int> owned, string? reserved)
+    {
+        using var devices = new WasapiDeviceLease.Enumerator();
+        var defaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var role in Enum.GetValues<NAudio.CoreAudioApi.Role>())
+        {
+            using var current = devices.TryDefault(role);
+            if (current != null) defaults.Add(current.Device.ID);
+        }
+        string? candidate = null;
+        int bestRank = -1;
+        foreach (var lease in devices.ActiveRender())
+        using (lease)
+        {
+            var device = lease.Device;
+            string id = device.ID;
+            if (defaults.Contains(id) || SilenceLeases.OwnsEndpoint(id) || SourceSpeakers.OwnsEndpoint(id)
+                || reserved != null && !string.Equals(reserved, id, StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                bool muted = device.AudioEndpointVolume.Mute;
+                bool terminal = CanSilenceWindowsLinkOutput(device);
+                int rank = (terminal ? 2 : 0) + (muted ? 1 : 0);
+                if (rank <= bestRank) continue;
+                var sessions = device.AudioSessionManager.Sessions;
+                bool occupied = false;
+                for (int i = 0; i < sessions.Count && !occupied; i++)
+                {
+                    using var session = sessions[i];
+                    int pid = (int)session.GetProcessID;
+                    var state = session.State;
+                    // A reservation watches existing dormant sessions and yields when another application resumes.
+                    if (state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive
+                        || (!terminal && pid != 0 && state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateInactive))
+                        occupied = !owned.Contains(pid) && !owned.Any(root => WindowsLinkPlaybackWatch.ContainsProcess(root, pid));
+                }
+                if (!occupied) { candidate = id; bestRank = rank; }
+            }
+            catch (System.Runtime.InteropServices.COMException) { }
+        }
+        return candidate;
+    }
+
+    private static bool VerifyWindowsPlaybackRoute(int processId, string targetId)
+    {
+        // Persisted policy can succeed while an app keeps an explicitly opened device.
+        // Give active render sessions a short migration window only during this user-initiated switch.
+        using var devices = new WasapiDeviceLease.Enumerator();
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            bool targetMuted = false, otherActive = false;
+            foreach (var lease in devices.ActiveRender())
+            using (lease)
+            {
+                var endpoint = lease.Device;
+                if (string.Equals(endpoint.ID, targetId, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetMuted = endpoint.AudioEndpointVolume.Mute;
+                    continue;
+                }
+                if (otherActive) continue;
+                var sessions = endpoint.AudioSessionManager.Sessions;
+                for (int i = 0; i < sessions.Count && !otherActive; i++)
+                {
+                    using var session = sessions[i];
+                    otherActive = session.State == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive
+                        && WindowsLinkPlaybackWatch.ContainsProcess(processId, (int)session.GetProcessID);
+                }
+            }
+            if (!targetMuted) return false;
+            if (!otherActive) return true;
+            if (attempt < 3) Thread.Sleep(100);
+        }
+        throw new InvalidOperationException(L10n.T("Phone.WindowsLinkAppKeptOutput"));
+    }
 
     private static (string? Multimedia, string? Console) ReadSilenceRoles(int pid)
     {
@@ -334,6 +509,7 @@ internal static class AndroidAudioHost
         var hidden = ConfigService.Load().HiddenOutputDevices;
         var candidate = outputs
             .Where(d => !string.Equals(d.Id, defaultId, StringComparison.OrdinalIgnoreCase)
+                && !WindowsLinkSilenceLeases.OwnsEndpoint(d.Id) && !SourceSpeakers.OwnsEndpoint(d.Id)
                 && !AndroidOutputIdentity.IsPhoneOutput(d.Id)
                 && d.DisplayName?.Contains("Microphone", StringComparison.OrdinalIgnoreCase) != true
                 && d.DisplayName?.Contains("麦克风", StringComparison.OrdinalIgnoreCase) != true)

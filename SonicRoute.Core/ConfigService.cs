@@ -78,6 +78,9 @@ namespace SonicRoute.Core
         /// <summary>手机音频伴随面板开关；关闭快速面板时保留，下次打开恢复。</summary>
         public bool QuickPanelShowPhoneAudio { get; set; } = true;
 
+        /// <summary>Null lets existing paired installations restore Windows Link on startup.</summary>
+        public bool? WindowsLinkEnabled { get; set; }
+
         public string AirPlayReceiverName { get; set; } = "";
         public int AirPlayVideoDecoder { get; set; }
         public bool AirPlayRequireCode { get; set; }
@@ -273,6 +276,17 @@ namespace SonicRoute.Core
             Load();
             lock (_lock)
                 return new HashSet<string>(_publishedSnapshot?.HiddenPanelApps ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static bool IsPanelAppVisible(string? processName)
+        {
+            Load();
+            lock (_lock)
+            {
+                var hidden = _publishedSnapshot?.HiddenPanelApps;
+                return hidden == null || hidden.Count == 0
+                    || processName != null && !hidden.Contains(processName, StringComparer.OrdinalIgnoreCase);
+            }
         }
 
         /// <summary>Called by the settings owner: capture now, coalesce only not-yet-committed saves.</summary>

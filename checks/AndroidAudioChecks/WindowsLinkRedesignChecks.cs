@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Text.Json;
 using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
 using SonicRoute.WindowsLink;
@@ -138,8 +139,10 @@ internal static partial class Program
                 (_, ep, _) => createdPlayer = new MockPcmPlayer { EndpointId = ep },
                 watchDefault: _ => new NoopDisposable(),
                 lifetime: token);
-            playback.Push(new byte[384]);
+            playback.Start();
             await WaitUntilAsync(() => playback.State.State == CaptureState.Receiving, token);
+            Check(playback.Pcm?.SamplesWritten == 0, "a paused stream confirms its output before the source produces PCM");
+            playback.Push(new byte[384]);
             IPhoneAudioSession session = playback;
             session.SetVolume(42);
             session.SetMute(true);
@@ -160,12 +163,18 @@ internal static partial class Program
             Check(session.State.State == CaptureState.Idle && createdPlayer is { Disposed: true },
                 "disposing LinkAudioPlayback disposes player and returns session to idle");
 
-            var customSettings = new LinkPeerSettings(AllowRemoteInput: false, VideoDecoder: AndroidStreamSettings.WindowsVideoDecoder,
-                VideoBitRate: 24_000_000, VideoMaxFps: 60, VideoMaxHeight: 720);
+            var customSettings = new LinkPeerSettings(AllowRemoteInput: false, VideoDecoder: AndroidStreamSettings.WindowsHevcDecoder,
+                VideoBitRate: 24_000_000, VideoMaxFps: 60, VideoMaxHeight: 720, VideoEncoder: "h265");
             nodeA.UpdatePeerSettings(bIdOnA, customSettings);
             nodeA.PinManyApps(bIdOnA, [fetched[0], fetched[1]]);
             nodeA.SetAppSmartVolume(bIdOnA, fetched[0].Key, false);
             nodeA.UnpinApp(bIdOnA, fetched[1].Key);
+            string automaticApp = fetchedAudio[^1].Key;
+            nodeA.SetAppSmartVolume(bIdOnA, automaticApp.ToUpperInvariant(), false);
+            Check(!nodeA.IsSmartVolumeEnabled(bIdOnA, automaticApp)
+                && nodeA.IsSmartVolumeEnabled(bIdOnA, fetched[1].Key)
+                && nodeA.GetPinnedApps(bIdOnA).All(pin => pin.Key != automaticApp),
+                "an automatically listed app can disable smart volume by app identity without pinning it");
 
             Check(!nodeA.GetPeerSettings(bIdOnA).AllowRemoteInput
                 && !nodeA.IsSmartVolumeEnabled(bIdOnA, fetched[0].Key)
@@ -185,11 +194,31 @@ internal static partial class Program
                 && reloadedSettings.VideoMaxHeight == 720
                 && reloadedSettings.VideoMaxFps == 60
                 && reloadedSettings.VideoBitRate == 24_000_000
-                && reloadedSettings.VideoDecoder == AndroidStreamSettings.WindowsVideoDecoder
+                && reloadedSettings.VideoDecoder == AndroidStreamSettings.WindowsHevcDecoder
+                && reloadedSettings.VideoEncoder == "h265"
                 && reloadedPins.Length == 1
                 && !reloadedPins[0].SmartVolume
+                && !restored.IsSmartVolumeEnabled(bIdOnA, fetched[0].Key)
+                && !restored.IsSmartVolumeEnabled(bIdOnA, automaticApp),
+                "peer settings and independent volume switches for pinned and automatically listed apps survive restart");
+            restored.SetAppSmartVolume(bIdOnA, automaticApp, true);
+            Check(restored.IsSmartVolumeEnabled(bIdOnA, automaticApp)
                 && !restored.IsSmartVolumeEnabled(bIdOnA, fetched[0].Key),
-                "peer settings, pinned apps, and SmartVolume persist across service restart");
+                "re-enabling an unpinned app leaves other apps' smart-volume preferences intact");
+
+            string legacyDir = Directory.CreateDirectory(Path.Combine(dirA, "legacy")).FullName;
+            string legacyPeer = new('A', 64), otherPeer = new('B', 64);
+            var oldRecords = new[] { legacyPeer, otherPeer }.Select(id => new
+            {
+                Id = id, Name = "Legacy peer", Address = "127.0.0.1:46916",
+                PinnedApps = new[] { new LinkPinnedApp("music", "Music", "music", SmartVolume: id != legacyPeer) }
+            });
+            File.WriteAllText(Path.Combine(legacyDir, "trusted.json"), JsonSerializer.Serialize(oldRecords));
+            await using var legacy = new WindowsLinkService(legacyDir, "Legacy fixture", 0, discovery: false);
+            legacy.RestoreSavedPeers();
+            legacy.UnpinApp(legacyPeer, "music");
+            Check(!legacy.IsSmartVolumeEnabled(legacyPeer, "MUSIC") && legacy.IsSmartVolumeEnabled(otherPeer, "music"),
+                "migrated per-peer smart-volume choices survive removal of a legacy pin");
         }
         finally
         {

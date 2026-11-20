@@ -115,6 +115,9 @@ namespace SonicRoute
             {
                 Interlocked.Exchange(ref _recoveryQueued, 0);
                 if (_backgroundStopped) return;
+#if SONICROUTE_PHONE
+                WindowsLinkHub.Service?.OnNetworkResume();
+#endif
                 CurrentAppService.RecoverForegroundWatcher();
                 AutoRuleService.RecoverWatcher();
                 MicMonitor?.RequestRebuild();

@@ -7,7 +7,7 @@ using SonicRoute.WindowsLink;
 
 internal static partial class Program
 {
-    private static async Task WindowsLinkNativeChecksAsync(string output)
+    private static async Task WindowsLinkNativeChecksAsync(string output, bool audioOnly)
     {
         output = Path.GetFullPath(output);
         if (Directory.Exists(output)) throw new IOException("This check requires a new output directory.");
@@ -56,6 +56,20 @@ internal static partial class Program
             var sendAudio = Task.WhenAll(
                 b.RequestPullAudioAsync(peerA, remoteApp, limit.Token),
                 b.SendAudioAsync(peerA, fixture.Id, "Silent fixture B", limit.Token));
+            if (audioOnly)
+            {
+                Guid[] streams = await sendAudio;
+                Check(a.IncomingAudioSources.Any(s => s.StreamId == streams[1] && s.Session.State.State == CaptureState.Receiving)
+                    && b.IncomingAudioSources.Any(s => s.StreamId == streams[0] && s.Session.State.State == CaptureState.Receiving),
+                    "both probed senders complete push and pull with native PCM capture and confirmed WASAPI playback");
+                Guid exclusiveId = await b.RequestPullAudioAsync(peerA, remoteApp, limit.Token, destinationOnly: true);
+                Check(silence is { Disposed: false } && b.Streams.Any(s => s.Id == exclusiveId && s.Incoming && s.DestinationOnly),
+                    "the destination-only drop switches the stream after receiver confirmation");
+                await Task.WhenAll(b.StopStreamAsync(exclusiveId), b.StopStreamAsync(streams[1]));
+                await WaitUntilAsync(() => a.Streams.Length == 0 && b.Streams.Length == 0 && silence is { Disposed: true }, limit.Token);
+                Check(true, "returning both streams releases the source route and both receivers");
+                return;
+            }
             var startAt = Stopwatch.GetTimestamp();
             Guid video = await a.ShareWindowAsync(peerB, hwnd, "Windows Link fixture", false, limit.Token);
             var openedAt = Stopwatch.GetElapsedTime(startAt);

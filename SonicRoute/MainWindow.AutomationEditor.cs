@@ -76,10 +76,15 @@ namespace SonicRoute
             AutomationProperties.SetName(grip, number.Text + ", " + L10n.T("Auto.DragOrder"));
             gripContent.Children.Add(number);
             grip.Child = gripContent;
-            grip.MouseLeftButtonDown += AutoStepGrip_MouseLeftButtonDown;
-            grip.MouseMove += AutoStepGrip_MouseMove;
-            grip.MouseLeftButtonUp += AutoStepGrip_MouseLeftButtonUp;
-            grip.LostMouseCapture += AutoStepGrip_LostMouseCapture;
+            ReorderGrip.Attach(grip, AutoStepsHost,
+                point => StartAutoStepDrag(grip, step, point),
+                MoveAutoStepDrag,
+                (point, commit) =>
+                {
+                    if (_autoGrip != grip) return;
+                    if (commit && _autoDragging) UpdateAutoDragPreview(point.Y);
+                    EndAutoDrag(commit);
+                });
             DockPanel.SetDock(grip, Dock.Left);
             head.Children.Add(grip);
 

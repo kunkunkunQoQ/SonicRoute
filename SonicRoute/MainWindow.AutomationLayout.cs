@@ -14,7 +14,6 @@ using Brushes = System.Windows.Media.Brushes;
 using CheckBox = System.Windows.Controls.CheckBox;
 using Cursors = System.Windows.Input.Cursors;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
-using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Path = System.Windows.Shapes.Path;
 using Point = System.Windows.Point;
 
@@ -49,10 +48,16 @@ namespace SonicRoute
                 Child = AutomationIcons.Create(AutomationIcons.Grip, 15), Background = Brushes.Transparent,
                 Tag = rule.Id, Cursor = Cursors.Arrow, ToolTip = L10n.T("Auto.DragRules")
             };
-            grip.MouseLeftButtonDown += AutomationRuleGrip_Down;
-            grip.MouseMove += AutomationRuleGrip_Move;
-            grip.MouseLeftButtonUp += AutomationRuleGrip_Up;
-            grip.LostMouseCapture += AutomationRuleGrip_LostCapture;
+            ReorderGrip.Attach(grip, AutoRuleList,
+                point => StartAutomationRuleDrag(grip, rule.Id, point),
+                MoveAutomationRuleDrag,
+                (point, commit) =>
+                {
+                    if (_automationRuleGrip != grip) return;
+                    _automationRulePointer = point;
+                    if (commit && _automationRuleDragging) UpdateAutomationRuleDrop();
+                    EndAutomationRuleDrag(commit);
+                });
             Add(grip, 0);
             var action = rule.Actions.FirstOrDefault()?.Action ?? rule.Action;
             Add(AutomationIcons.Create(AutomationActionIcon(action), 22,
@@ -286,22 +291,18 @@ namespace SonicRoute
         private Border? _automationRuleDropCard;
         private DispatcherOperation? _automationRuleDragOperation;
 
-        private void AutomationRuleGrip_Down(object sender, MouseButtonEventArgs e)
+        private void StartAutomationRuleDrag(FrameworkElement grip, string id, Point point)
         {
-            if (sender is not FrameworkElement { Tag: string id } grip) return;
             EndAutomationRuleDrag(false);
             _automationRuleGrip = grip;
             _automationRuleDragId = id;
-            _automationRuleDragStart = e.GetPosition(AutoRuleList);
-            if (!grip.CaptureMouse()) EndAutomationRuleDrag(false);
-            e.Handled = true;
+            _automationRuleDragStart = point;
         }
 
-        private void AutomationRuleGrip_Move(object sender, MouseEventArgs e)
+        private void MoveAutomationRuleDrag(Point point)
         {
-            if (!ReferenceEquals(sender, _automationRuleGrip)) return;
-            if (e.LeftButton != MouseButtonState.Pressed) { EndAutomationRuleDrag(false); return; }
-            _automationRulePointer = e.GetPosition(AutoRuleList);
+            if (_automationRuleGrip == null) return;
+            _automationRulePointer = point;
             if (!_automationRuleDragging)
             {
                 if (Math.Abs(_automationRulePointer.Y - _automationRuleDragStart.Y) < Math.Max(6, SystemParameters.MinimumVerticalDragDistance)) return;
@@ -310,7 +311,6 @@ namespace SonicRoute
             }
             if (_automationRuleDragOperation?.Status == DispatcherOperationStatus.Pending) return;
             _automationRuleDragOperation = Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(UpdateAutomationRuleDrop));
-            e.Handled = true;
         }
 
         private void UpdateAutomationRuleDrop()
@@ -343,23 +343,9 @@ namespace SonicRoute
                 }
             }
             // 边缘滚动只随拖动输入发生，松手后没有计时器或渲染订阅。
-            double y = Mouse.GetPosition(AutomationScroll).Y;
+            double y = AutoRuleList.TranslatePoint(_automationRulePointer, AutomationScroll).Y;
             if (y < 24) AutomationScroll.ScrollToVerticalOffset(Math.Max(0, AutomationScroll.VerticalOffset - 18));
             else if (y > AutomationScroll.ViewportHeight - 24) AutomationScroll.ScrollToVerticalOffset(AutomationScroll.VerticalOffset + 18);
-        }
-
-        private void AutomationRuleGrip_Up(object sender, MouseButtonEventArgs e)
-        {
-            if (!ReferenceEquals(sender, _automationRuleGrip)) return;
-            _automationRulePointer = e.GetPosition(AutoRuleList);
-            if (_automationRuleDragging) UpdateAutomationRuleDrop();
-            EndAutomationRuleDrag(true);
-            e.Handled = true;
-        }
-
-        private void AutomationRuleGrip_LostCapture(object sender, MouseEventArgs e)
-        {
-            if (ReferenceEquals(sender, _automationRuleGrip)) EndAutomationRuleDrag(false);
         }
 
         private void EndAutomationRuleDrag(bool commit)
@@ -376,7 +362,7 @@ namespace SonicRoute
             _automationRuleDropCard?.ClearValue(Border.BorderThicknessProperty);
             _automationRuleDropCard = null;
             if (source != null && _autoRows.TryGetValue(source, out var row)) row.Element.ClearValue(OpacityProperty);
-            if (grip?.IsMouseCaptured == true) grip.ReleaseMouseCapture();
+            ReorderGrip.Release(grip);
             if (!commit || !moved || source == null || target == null || source == target) return;
             var ids = _autoRules.Select(rule => rule.Id).ToList();
             if (!ids.Remove(source)) return;

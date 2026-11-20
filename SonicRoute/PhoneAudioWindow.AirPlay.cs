@@ -1,5 +1,6 @@
 #if SONICROUTE_PHONE
 using System;
+using System.Linq;
 using System.Threading;
 using System.Windows;
 using SonicRoute.Core.Models;
@@ -21,6 +22,7 @@ public partial class PhoneAudioWindow
     {
         bool airPlay = AirPlaySelected;
         bool windows = WindowsLinkSelected;
+        if (!windows) WatchWindowsLatency(null);
         var peer = CurrentWindowsPeer;
         if (_windowsLinkRowPeerId != peer?.Id)
         {
@@ -38,17 +40,19 @@ public partial class PhoneAudioWindow
                 _windowsLinkView = new WindowsLinkConnectView(compact: true);
                 _windowsLinkView.UseDeviceFooter();
                 _windowsLinkView.StatusUpdated += UpdateWindowsLinkFooter;
+                _windowsLinkView.PeerOpened += id =>
+                {
+                    if (DeviceCombo is { } selector &&
+                        selector.Items.OfType<LinkPeer>().FirstOrDefault(p => p.Id == id && p.Connected) is { } peerChoice)
+                        selector.SelectedItem = peerChoice;
+                };
             }
             WindowsLinkPane.Content = _windowsLinkView;
         }
 
         AirPlayPane.Visibility = airPlay ? Visibility.Visible : Visibility.Collapsed;
         WindowsLinkPane.Visibility = showWindowsPane ? Visibility.Visible : Visibility.Collapsed;
-        if (peer == null)
-        {
-            WindowsLinkSystemAudioButton.Visibility = Visibility.Collapsed;
-            WindowsLinkAudioEmpty.Visibility = Visibility.Collapsed;
-        }
+        if (peer == null) WindowsLinkAudioEmpty.Visibility = Visibility.Collapsed;
         if (external)
         {
             if (!wasExternal)
@@ -83,13 +87,12 @@ public partial class PhoneAudioWindow
         }
         DeviceMediaCard.Visibility = external ? Visibility.Collapsed : Visibility.Visible;
         WindowsLinkViewChoices.Visibility = peer != null ? Visibility.Visible : Visibility.Collapsed;
+        SetPeerAppearance(peer != null);
         UpdateWindowsLinkSearchHint();
         DeviceSearchCard.Visibility = !external || peer != null ? Visibility.Visible : Visibility.Collapsed;
         DeviceKindIcon.Data = airPlay ? AutomationIcons.AirPlay : windows ? AutomationIcons.Monitor : AutomationIcons.Phone;
         bool showFooterAction = !external || peer != null;
         RefreshButton.Visibility = showFooterAction ? Visibility.Visible : Visibility.Collapsed;
-        RefreshColumn.Width = new GridLength(showFooterAction ? 36 : 0);
-        RefreshGap.Width = new GridLength(showFooterAction ? 4 : 0);
         if (windows) ConnectionSignal.Visibility = ConnectionUsbIcon.Visibility = Visibility.Collapsed;
         UpdateReturnDropText();
         if (airPlay) UpdateAirPlayFooter();
@@ -102,8 +105,8 @@ public partial class PhoneAudioWindow
 
     private static bool IsAirPlayDrag(AudioAppInfo? app) => app?.ProcessName == AirPlayHost.AppKey;
 
-    private static bool CanSendWindowsLinkAudio(AudioAppInfo? app) =>
-        LinkAudioCapture.IsSupported && app is { IsExternal: false, ProcessId: > 0 }
+    private static bool IsWindowsLinkAudioApp(AudioAppInfo? app) =>
+        app is { IsExternal: false, ProcessId: > 0 }
         && app.ProcessId != Environment.ProcessId
         && !string.Equals(app.ProcessName, "Idle", StringComparison.OrdinalIgnoreCase);
 

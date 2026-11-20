@@ -4,7 +4,7 @@ using SonicRoute.AndroidAudio;
 
 namespace SonicRoute.WindowsLink;
 
-internal sealed partial class LinkH264Encoder
+internal sealed partial class LinkVideoEncoder
 {
     internal byte[]? Encode(ReadOnlySpan<byte> bgra, int stride, long ptsUs, out bool key)
     {
@@ -33,14 +33,15 @@ internal sealed partial class LinkH264Encoder
         key = false;
         if (data == null) return null;
         ToAnnexB(data);
-        int types = NalTypes(data);
-        key = (types & (1 << 5)) != 0;
-        const int parameters = (1 << 7) | (1 << 8);
+        ulong types = NalTypes(data);
+        // HEVC BLA, IDR and CRA pictures are random-access points.
+        key = _hevc ? (types & (0x3ful << 16)) != 0 : (types & (1ul << 5)) != 0;
+        ulong parameters = _hevc ? 7ul << 32 : (1ul << 7) | (1ul << 8);
         if (key && (types & parameters) != parameters)
         {
             _header ??= ReadHeader();
             if ((NalTypes(_header) & parameters) != parameters)
-                throw new InvalidDataException("The H.264 encoder did not provide SPS and PPS.");
+                throw new InvalidDataException("The window encoder did not provide the required parameter sets.");
             byte[] joined = new byte[_header.Length + data.Length];
             _header.CopyTo(joined, 0);
             data.CopyTo(joined, _header.Length);
@@ -100,7 +101,9 @@ internal sealed partial class LinkH264Encoder
             Check(ComVtbl.Get<LockBuffer>(pointer, 3)(pointer, out nint data, out _, out uint size));
             try
             {
-                if (size is 0 or > LinkConnection.MaxVideoFrame) return null;
+                if (size == 0) return null;
+                if (size > LinkConnection.MaxVideoFrame)
+                    throw new IOException("The compressed Windows Link frame exceeds the maximum supported size.");
                 byte[] bytes = new byte[size];
                 Marshal.Copy(data, bytes, 0, bytes.Length);
                 return bytes;
@@ -123,10 +126,11 @@ internal sealed partial class LinkH264Encoder
         Check(ComVtbl.Get<AllocatedBlob>(output, 16)(output, in SequenceHeader, out nint data, out uint length));
         try
         {
-            if (length is < 4 or > 65536) throw new InvalidDataException("Invalid H.264 sequence header.");
+            if (length is < 4 or > 65536) throw new InvalidDataException("Invalid video sequence header.");
             byte[] header = new byte[length];
             Marshal.Copy(data, header, 0, header.Length);
             if (header[0] != 1) { ToAnnexB(header); return header; }
+            if (_hevc) return DecodeHevcHeader(header);
             if (header.Length < 7) throw new InvalidDataException("Invalid AVC configuration.");
             using var result = new MemoryStream();
             int offset = 6;
@@ -138,14 +142,29 @@ internal sealed partial class LinkH264Encoder
         finally { Marshal.FreeCoTaskMem(data); }
     }
 
+    private static byte[] DecodeHevcHeader(byte[] header)
+    {
+        if (header.Length < 23) throw new InvalidDataException("Invalid HEVC decoder configuration.");
+        using var result = new MemoryStream();
+        int offset = 23;
+        for (int i = 0; i < header[22]; i++)
+        {
+            if (offset + 3 > header.Length) throw new InvalidDataException("Missing HEVC parameter array.");
+            int count = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(offset + 1));
+            offset += 3;
+            ReadParameterSets(header, ref offset, count, result);
+        }
+        return result.ToArray();
+    }
+
     private static void ReadParameterSets(byte[] config, ref int offset, int count, Stream output)
     {
         for (int i = 0; i < count; i++)
         {
-            if (offset + 2 > config.Length) throw new InvalidDataException("Invalid AVC parameter set.");
+            if (offset + 2 > config.Length) throw new InvalidDataException("Invalid video parameter set.");
             int length = BinaryPrimitives.ReadUInt16BigEndian(config.AsSpan(offset));
             offset += 2;
-            if (length < 1 || offset + length > config.Length) throw new InvalidDataException("Invalid AVC parameter set.");
+            if (length < 1 || offset + length > config.Length) throw new InvalidDataException("Invalid video parameter set.");
             output.Write([0, 0, 0, 1]);
             output.Write(config.AsSpan(offset, length));
             offset += length;
@@ -158,24 +177,24 @@ internal sealed partial class LinkH264Encoder
         int offset = 0;
         while (offset < data.Length)
         {
-            if (data.Length - offset < 4) throw new InvalidDataException("Invalid H.264 NAL unit length.");
+            if (data.Length - offset < 4) throw new InvalidDataException("Invalid video NAL unit length.");
             int length = BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(offset));
             if (length <= 0 || length > data.Length - offset - 4)
-                throw new InvalidDataException("Invalid H.264 NAL unit length.");
+                throw new InvalidDataException("Invalid video NAL unit length.");
             BinaryPrimitives.WriteInt32BigEndian(data.AsSpan(offset), 1);
             offset += 4 + length;
         }
     }
 
-    private static int NalTypes(byte[] data)
+    private ulong NalTypes(byte[] data)
     {
-        int types = 0;
+        ulong types = 0;
         for (int i = 0; i < data.Length - 3; i++)
         {
             int skip = Prefix(data, i);
             if (skip == 0 || i + skip >= data.Length) continue;
             i += skip;
-            types |= 1 << (data[i] & 31);
+            types |= 1ul << (_hevc ? (data[i] >> 1) & 63 : data[i] & 31);
         }
         return types;
     }

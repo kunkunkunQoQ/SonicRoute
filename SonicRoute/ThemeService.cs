@@ -16,6 +16,8 @@ namespace SonicRoute
     public static class ThemeService
     {
         // 冻结画刷复用；容量封顶，避免拖动自定义 RGB 时把所有中间色永久留在静态缓存中。
+        internal static event Action? PaletteChanged;
+        internal static bool Dark { get; private set; }
         private const int BrushCacheLimit = 256;
         #if NET9_0_OR_GREATER
         private static readonly System.Threading.Lock _brushGate = new();
@@ -106,6 +108,8 @@ namespace SonicRoute
                     Application.Current.Resources[key] = brush;
             }
 
+            bool modeChanged = Dark != dark;
+            Dark = dark;
             if (dark)
             {
                 Set("Theme.WindowBg", Color.FromRgb(0x1E, 0x1E, 0x1E));
@@ -119,6 +123,8 @@ namespace SonicRoute
                 Set("Theme.SliderBg", Color.FromRgb(0x4B, 0x4B, 0x4B));
                 Set("Theme.Overlay", Blend(accentColor, Colors.Black, 0.78));
                 Set("Theme.SurfaceCard", Color.FromRgb(0x23, 0x23, 0x23));
+                Set("Theme.DeviceIconBackground", Blend(Color.FromRgb(0x2B, 0x2B, 0x2B), accentColor, 0.16));
+                Set("Theme.DeviceIconForeground", Blend(accentColor, Colors.White, 0.60));
             }
             else
             {
@@ -133,8 +139,11 @@ namespace SonicRoute
                 Set("Theme.SliderBg", Color.FromRgb(0xD8, 0xDC, 0xE2));
                 Set("Theme.Overlay", Blend(accentColor, Colors.White, 0.90));
                 Set("Theme.SurfaceCard", Color.FromRgb(0xFA, 0xFB, 0xFC));
+                Set("Theme.DeviceIconBackground", Blend(accentColor, Colors.White, 0.90));
+                Set("Theme.DeviceIconForeground", Color.FromRgb(0x6B, 0x72, 0x80));
             }
 
+            bool accentChanged = Application.Current.Resources["Theme.Accent"] is not SolidColorBrush oldAccent || oldAccent.Color != accentColor;
             Set("Theme.Accent", accentColor);
             // 禁用状态共用现有 RGB 反色及冻结画刷缓存，动态资源随主题一起更新。
             var invertedAccent = GetInvertedAccentBrush();
@@ -151,27 +160,29 @@ namespace SonicRoute
             Set("Theme.AccentPressed", pressed);
             Set("Theme.AccentDisabled", disabled);
             Set("Theme.OnAccent", Color.FromRgb(0xFF, 0xFF, 0xFF));
+            Set("Theme.AccentIconInk", Luminance(accentColor) > 0.179 ? Colors.Black : Colors.White);
             Set("Theme.Success", Color.FromRgb(0x16, 0xA3, 0x4A));
             Set("Theme.Fail", Color.FromRgb(0xDC, 0x26, 0x26));
 
             // 透明度重新应用到最新背景色（主题切换后保持用户设置的透明度）
             ApplyBackgroundOpacity(_lastOpacity);
+            if (modeChanged || accentChanged) PaletteChanged?.Invoke();
         }
 
         private static int _lastOpacity = 96;
 
-        // 只在主题变化时计算；对比基准为主题底色，桌面透过背景时仍受用户透明度影响。
+        private static double Luminance(Color color)
+        {
+            double Linear(byte channel)
+            {
+                double value = channel / 255.0;
+                return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
+            }
+            return 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
+        }
+
         private static Color OsdAccent(Color accent, Color background, bool dark)
         {
-            double Luminance(Color color)
-            {
-                double Linear(byte channel)
-                {
-                    double value = channel / 255.0;
-                    return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
-                }
-                return 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
-            }
             double backgroundLight = Luminance(background);
             Color result = accent;
             for (int i = 0; i <= 10; i++)

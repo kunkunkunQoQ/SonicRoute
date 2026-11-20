@@ -22,6 +22,7 @@ namespace SonicRoute
     {
         static App()
         {
+            WindowsTouch.Initialize();
 #if SONICROUTE_PHONE
             ApplicationAudio.EnsureNameResolver();
 #endif
@@ -223,6 +224,9 @@ namespace SonicRoute
                 return IntPtr.Zero;
             });
             StartPhoneClipboard();
+#if SONICROUTE_PHONE
+            _ = RestoreWindowsLinkAsync(config.WindowsLinkEnabled);
+#endif
 
             // 前台监听：recent 模式下自动跟随前台音频应用（抖音/游戏等），并维护"最近有音频的前台应用"
             var foregroundWarmup = CurrentAppService.StartForegroundWatcher();

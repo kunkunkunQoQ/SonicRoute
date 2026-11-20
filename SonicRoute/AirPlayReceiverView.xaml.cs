@@ -13,18 +13,25 @@ namespace SonicRoute;
 
 public partial class AirPlayReceiverView : System.Windows.Controls.UserControl
 {
-    private bool _watching, _busy;
+    private bool _watching, _syncingSwitch;
     private bool _hevcAvailable, _checkedHevc, _updatingControls, _decodingArtwork;
     private AirPlayStatus? _status;
     private byte[]? _artworkTarget;
     private int _refreshQueued, _hasAudioSource;
     internal event Action? StatusUpdated;
     internal string FooterStatus => ReceiveStatusLabel.Text;
-    internal void UseDeviceFooter() => ReceiverHeader.Visibility = Visibility.Collapsed;
+    internal void UseDeviceFooter() => HeaderStatus.Visibility = Visibility.Collapsed;
 
     public AirPlayReceiverView()
     {
         InitializeComponent();
+        SizeChanged += (_, e) =>
+        {
+            int columns = e.NewSize.Width < 330 ? 1 : 2;
+            if (PreferenceFields.Columns == columns) return;
+            PreferenceFields.Columns = columns;
+            DecoderField.Margin = columns == 1 ? new Thickness(0, 7, 0, 0) : new Thickness(10, 0, 0, 0);
+        };
         Loaded += (_, _) => UpdateSubscription(IsVisible);
         Unloaded += (_, _) => UpdateSubscription(false);
         IsVisibleChanged += (_, _) => UpdateSubscription(IsLoaded && IsVisible);
@@ -141,12 +148,14 @@ public partial class AirPlayReceiverView : System.Windows.Controls.UserControl
         Volatile.Write(ref _status, status);
         Volatile.Write(ref _hasAudioSource, AirPlayHost.Source != null ? 1 : 0);
         bool running = status.Stage is AirPlayStage.Waiting or AirPlayStage.Connected;
-        AirPlayToggle.Content = L10n.T(running ? "Phone.StopReceiving" : "Phone.AirPlayStart");
-        AirPlayToggle.Tag = running ? null : "Start";
-        AirPlayToggle.IsEnabled = !_busy && status.Stage != AirPlayStage.Starting;
-        ReceiverPreferences.IsEnabled = !_busy && !running && status.Stage != AirPlayStage.Starting;
-        ReceiverPreferences.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
-        AirPlaySteps.Visibility = status.Stage == AirPlayStage.Connected ? Visibility.Collapsed : Visibility.Visible;
+        bool changing = status.Stage is AirPlayStage.Starting or AirPlayStage.Stopping;
+        AirPlayToggle.IsEnabled = !changing;
+        _syncingSwitch = true;
+        try { AirPlayToggle.IsChecked = running || status.Stage == AirPlayStage.Starting; }
+        finally { _syncingSwitch = false; }
+        ReceiverPreferences.IsEnabled = !running && !changing;
+        ReceiverPreferences.Visibility = running || changing ? Visibility.Collapsed : Visibility.Visible;
+        AirPlaySteps.Visibility = status.Stage == AirPlayStage.Waiting ? Visibility.Visible : Visibility.Collapsed;
         MirrorDecoder.ToolTip = L10n.T("Phone.AirPlayDecoderHint");
         MirrorControls.Visibility = status.Mirroring ? Visibility.Visible : Visibility.Collapsed;
         MirrorTopmost.Content = L10n.T(status.Topmost ? "Phone.AirPlayUnpinWindow" : "Phone.AirPlayPinWindow");
@@ -155,10 +164,12 @@ public partial class AirPlayReceiverView : System.Windows.Controls.UserControl
         ReceiveCode.Text = status.Code ?? "";
         ReceiveStatusLabel.Text = L10n.T(status.Stage switch
         {
-            AirPlayStage.Starting => "Phone.ProcessingStatus",
+            AirPlayStage.Starting => "Phone.AirPlayStarting",
+            AirPlayStage.Stopping => "Phone.AirPlayStopping",
+            AirPlayStage.Failed => "Phone.AirPlayFailed",
             AirPlayStage.Waiting => "Phone.AirPlayWaitingShort",
             AirPlayStage.Connected => "Phone.ConnectedStatus",
-            _ => "Phone.Disconnected"
+            _ => "Phone.AirPlayOff"
         });
         ReceiveStatusDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, status.ErrorKey != null ? "Theme.Fail" : status.Stage switch
         {
@@ -230,23 +241,12 @@ public partial class AirPlayReceiverView : System.Windows.Controls.UserControl
     private void Topmost_Click(object sender, RoutedEventArgs e) => AirPlayHost.SetMirrorTopmost(!AirPlayHost.Status.Topmost);
     private void Fullscreen_Click(object sender, RoutedEventArgs e) => AirPlayHost.SetMirrorFullscreen(!AirPlayHost.Status.Fullscreen);
 
-    private async void Toggle_Click(object sender, RoutedEventArgs e)
+    private async void ReceiveSwitch_Changed(object sender, RoutedEventArgs e)
     {
-        if (!_watching || _busy) return;
-        bool running = AirPlayHost.Status.Stage is AirPlayStage.Waiting or AirPlayStage.Connected;
-        if (!running && CanEditPreferences) SavePreferences();
-        _busy = true;
-        Refresh();
-        try
-        {
-            if (running) await AirPlayHost.StopAsync();
-            else await AirPlayHost.StartAsync();
-        }
-        finally
-        {
-            _busy = false;
-            if (_watching) Refresh();
-        }
+        if (!_watching || _syncingSwitch || !AirPlayToggle.IsEnabled) return;
+        bool enabled = AirPlayToggle.IsChecked == true;
+        if (enabled && CanEditPreferences) SavePreferences();
+        await AirPlayHost.SetReceivingAsync(enabled);
     }
 }
 #endif

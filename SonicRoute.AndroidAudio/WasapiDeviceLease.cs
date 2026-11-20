@@ -27,27 +27,93 @@ internal sealed class WasapiDeviceLease : IDisposable
         Device = (MMDevice)DeviceConstructor.Invoke(new[] { endpoint });
     }
 
-    internal static WasapiDeviceLease Open(string? endpointId)
+    private static object Unique(int hr, nint pointer)
     {
-        object enumerator = Activator.CreateInstance(Type.GetTypeFromCLSID(
-            new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), true)!)!;
-        IntPtr pointer = IntPtr.Zero;
-        object? endpoint = null;
         try
         {
-            var api = (IEndpointEnumerator)enumerator;
-            Marshal.ThrowExceptionForHR(string.IsNullOrEmpty(endpointId)
-                ? api.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia, out pointer)
-                : api.GetDevice(endpointId, out pointer));
-            endpoint = Marshal.GetUniqueObjectForIUnknown(pointer);
-            return new WasapiDeviceLease(endpoint);
+            Marshal.ThrowExceptionForHR(hr);
+            return Marshal.GetUniqueObjectForIUnknown(pointer);
         }
-        catch { if (endpoint != null) Marshal.ReleaseComObject(endpoint); throw; }
-        finally
+        finally { if (pointer != 0) Marshal.Release(pointer); }
+    }
+
+    private static WasapiDeviceLease Wrap(int hr, nint pointer)
+    {
+        object endpoint = Unique(hr, pointer);
+        try { return new WasapiDeviceLease(endpoint); }
+        catch { Marshal.ReleaseComObject(endpoint); throw; }
+    }
+
+    internal sealed class Enumerator : IDisposable
+    {
+        private static readonly Guid ClassId = new("BCDE0395-E52F-467C-8E3D-C4579291692E");
+        private static readonly Guid InterfaceId = typeof(IEndpointEnumerator).GUID;
+        private IEndpointEnumerator? _api;
+        private nint _mta;
+
+        internal Enumerator()
         {
-            if (pointer != IntPtr.Zero) Marshal.Release(pointer);
-            Marshal.ReleaseComObject(enumerator);
+            Marshal.ThrowExceptionForHR(Win32Native.CoIncrementMTAUsage(out _mta));
+            try
+            {
+                // Avoid introducing either library's imported coclass into the shared RCW cache.
+                int hr = Win32Native.CoCreateInstance(in ClassId, 0, Win32Native.CLSCTX_INPROC_SERVER, in InterfaceId, out nint pointer);
+                _api = (IEndpointEnumerator)Unique(hr, pointer);
+            }
+            catch { Dispose(); throw; }
         }
+
+        private IEndpointEnumerator Api => _api ?? throw new ObjectDisposedException(nameof(Enumerator));
+
+        internal WasapiDeviceLease GetDevice(string id)
+        {
+            int hr = Api.GetDevice(id, out nint device);
+            return Wrap(hr, device);
+        }
+
+        internal WasapiDeviceLease? TryDefault(Role role)
+        {
+            int hr = Api.GetDefaultAudioEndpoint(DataFlow.Render, role, out nint device);
+            if (hr == unchecked((int)0x80070490)) return null; // E_NOTFOUND: no current default for this role.
+            return Wrap(hr, device);
+        }
+
+        internal IEnumerable<WasapiDeviceLease> ActiveRender()
+        {
+            int hr = Api.EnumAudioEndpoints(DataFlow.Render, (int)DeviceState.Active, out nint pointer);
+            var collection = (IEndpointCollection)Unique(hr, pointer);
+            try
+            {
+                Marshal.ThrowExceptionForHR(collection.GetCount(out uint count));
+                for (uint i = 0; i < count; i++)
+                {
+                    hr = collection.Item(i, out nint device);
+                    yield return Wrap(hr, device);
+                }
+            }
+            finally { Marshal.ReleaseComObject(collection); }
+        }
+
+        internal void Register(IMMNotificationClient callback) =>
+            Marshal.ThrowExceptionForHR(Api.RegisterEndpointNotificationCallback(callback));
+
+        internal void Unregister(IMMNotificationClient callback) =>
+            Marshal.ThrowExceptionForHR(Api.UnregisterEndpointNotificationCallback(callback));
+
+        public void Dispose()
+        {
+            var api = Interlocked.Exchange(ref _api, null);
+            if (api != null) Marshal.ReleaseComObject(api);
+            nint mta = Interlocked.Exchange(ref _mta, 0);
+            if (mta != 0) Win32Native.CoDecrementMTAUsage(mta);
+        }
+    }
+
+    internal static WasapiDeviceLease Open(string? endpointId)
+    {
+        using var enumerator = new Enumerator();
+        return !string.IsNullOrEmpty(endpointId) ? enumerator.GetDevice(endpointId)
+            : enumerator.TryDefault(Role.Multimedia) ?? throw new COMException("No default playback device.", unchecked((int)0x80070490));
     }
 
     public void Dispose()
@@ -60,26 +126,28 @@ internal sealed class WasapiDeviceLease : IDisposable
 
     internal static IDisposable ObserveDefaultOutput(IMMNotificationClient callback)
     {
-        object enumerator = Activator.CreateInstance(Type.GetTypeFromCLSID(
-            new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E"), true)!)!;
-        try
-        {
-            Marshal.ThrowExceptionForHR(((IEndpointEnumerator)enumerator).RegisterEndpointNotificationCallback(callback));
-            return new NotificationLease(enumerator, callback);
-        }
-        catch { Marshal.ReleaseComObject(enumerator); throw; }
+        var enumerator = new Enumerator();
+        try { enumerator.Register(callback); return new NotificationLease(enumerator, callback); }
+        catch { enumerator.Dispose(); throw; }
     }
 
-    private sealed class NotificationLease(object enumerator, IMMNotificationClient callback) : IDisposable
+    private sealed class NotificationLease(Enumerator enumerator, IMMNotificationClient callback) : IDisposable
     {
-        private object? _enumerator = enumerator;
+        private Enumerator? _enumerator = enumerator;
         public void Dispose()
         {
-            object? current = Interlocked.Exchange(ref _enumerator, null);
+            var current = Interlocked.Exchange(ref _enumerator, null);
             if (current == null) return;
-            try { ((IEndpointEnumerator)current).UnregisterEndpointNotificationCallback(callback); }
-            finally { Marshal.ReleaseComObject(current); }
+            try { current.Unregister(callback); }
+            finally { current.Dispose(); }
         }
+    }
+
+    [ComImport, Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IEndpointCollection
+    {
+        [PreserveSig] int GetCount(out uint count);
+        [PreserveSig] int Item(uint index, out nint device);
     }
 
     [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

@@ -31,7 +31,7 @@ public partial class PhoneDevicePage
         {
             get
             {
-                if (App.IsSystemAudio) return PhoneSourceIcon.MonitorImage;
+                if (App.IsSystemAudio) return PhoneSourceIcon.SystemAudioImage;
                 if (!Volatile.Read(ref _iconDecoded))
                 {
                     _icon = AppIconService.DecodePng(App.IconPng);
@@ -41,13 +41,8 @@ public partial class PhoneDevicePage
             }
         }
 
-        public string Description => App.IsSystemAudio
-            ? L10n.T("Phone.WindowsLinkDeviceAudioDesc")
-            : App.HasWindow
-                ? L10n.T("Phone.WindowsLinkRemoteWindowDesc")
-                : string.IsNullOrWhiteSpace(App.ProcessName)
-                    ? L10n.T("Phone.WindowsLinkRemoteAppDesc")
-                    : $"{App.ProcessName} · {L10n.T("Phone.WindowsLinkRemoteAppDesc")}";
+        public string Description => string.Equals(Name, App.ProcessName, StringComparison.CurrentCultureIgnoreCase)
+            ? L10n.T("Phone.WindowsLinkRemoteAppDesc") : App.ProcessName;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -63,20 +58,10 @@ public partial class PhoneDevicePage
     internal sealed class WindowsLinkAppChoice : INotifyPropertyChanged
     {
         public WindowsLinkAppItem Item { get; }
-        private bool _retained;
+        public bool CanPin => false;
+        public bool Retained => false;
+        public string ActionText => "";
         private bool _smartVolume;
-
-        public bool Retained
-        {
-            get => _retained;
-            internal set
-            {
-                if (_retained == value) return;
-                _retained = value;
-                PropertyChanged?.Invoke(this, new(nameof(Retained)));
-                PropertyChanged?.Invoke(this, new(nameof(ActionText)));
-            }
-        }
 
         public bool SmartVolume
         {
@@ -89,31 +74,21 @@ public partial class PhoneDevicePage
             }
         }
 
-        public string ActionText => L10n.T(Retained ? "Phone.RemoveFromQuickPanel" : "Phone.AddToQuickPanel");
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        internal WindowsLinkAppChoice(WindowsLinkAppItem item, bool retained, bool smartVolume = true)
+        internal WindowsLinkAppChoice(WindowsLinkAppItem item, bool smartVolume)
         {
             Item = item;
-            _retained = retained;
             _smartVolume = smartVolume;
-        }
-
-        internal void RefreshLanguage()
-        {
-            Item.RefreshLanguage();
-            PropertyChanged?.Invoke(this, new(nameof(ActionText)));
         }
     }
 
-    private WindowsLinkAppItem[] _windowsCatalog = [];
-    private WindowsLinkAppChoice[] _windowsCatalogChoices = [];
     private string? _windowsCatalogPeerId;
     private CancellationTokenSource? _windowsLinkCatalogOp;
-    private LinkPinnedApp[] _windowsPinnedSnapshot = [];
-    private string? _windowsRetainedPeerId;
+    private string _windowsEmptyKey = "Phone.NoDisplayedApps";
     private string _windowsOriginalName = "";
     private bool _suppressWindowsLinkInput;
+    private string? _removePeer;
 
     internal void RefreshWindowsLinkPeerState()
     {
@@ -135,7 +110,7 @@ public partial class PhoneDevicePage
 
     private void WindowsLinkPageChanged()
     {
-        if (_disposed || (IsLoaded && !_active)) return;
+        if (_disposed) return;
         if (!Dispatcher.CheckAccess())
         {
             Dispatcher.BeginInvoke(new Action(WindowsLinkPageChanged));
@@ -159,22 +134,21 @@ public partial class PhoneDevicePage
             return;
         }
 
-        if (_windowsRetainedPeerId != peer.Id && CatalogPanel.Visibility == Visibility.Visible)
-        {
-            CancelWindowsLinkCatalog();
-            ReleaseCatalog();
-        }
-
+        UpdateWindowsFileCard(peer);
+        UpdateWindowsDesktop(peer);
         DeviceName.Text = peer.DisplayName;
-        string state = L10n.T(peer.Connected ? "Phone.ConnectedStatus" : "Phone.Disconnected");
-        DeviceDescription.Text = string.IsNullOrWhiteSpace(peer.Address) ? state : $"{state} · {peer.Address}";
+        string state = WindowsLinkPeerStatus.Text(peer);
+        string? failure = peer.State == LinkPeerState.Failed ? WindowsLinkPeerStatus.FailureText(peer.Failure) : null;
+        string addressPart = string.IsNullOrWhiteSpace(peer.Address) ? state : $"{state} · {peer.Address}";
+        DeviceDescription.Text = string.IsNullOrWhiteSpace(failure) ? addressPart : $"{addressPart} · {failure}";
 
         ReconnectButton.Visibility = peer.Connected ? Visibility.Collapsed : Visibility.Visible;
-        ReconnectButton.IsEnabled = !_busy;
+        ReconnectButton.IsEnabled = !_busy && peer.State != LinkPeerState.Connecting;
+        DisconnectButton.Visibility = peer.Connected ? Visibility.Visible : Visibility.Collapsed;
         DisconnectButton.IsEnabled = peer.Connected && !_busy;
         DisconnectButton.Content = L10n.T("Phone.Disconnect");
         RemoveDeviceButton.IsEnabled = !_busy;
-        AddAppsButton.IsEnabled = peer.Connected && !_busy;
+        AddAppsButton.Visibility = Visibility.Collapsed;
 
         var settings = service.GetPeerSettings(peer.Id);
         _streamApplying = true;
@@ -183,13 +157,29 @@ public partial class PhoneDevicePage
             _streamLanguage = L10n.CurrentLanguage;
             StreamingCard.IsEnabled = !_busy;
 
+            WindowsNativeResolutionHint.DataContext = peer;
+            WindowsVideoResolutionCombo.Visibility = Visibility.Visible;
+            WindowsVideoResolutionCombo.ItemsSource = new StreamOption[]
+            {
+                new(L10n.T("Phone.WindowsLinkRes720p"), "720"),
+                new(L10n.T("Phone.WindowsLinkRes1080p"), "1080"),
+                new(L10n.T("Phone.WindowsLinkResNative"), "0")
+            };
+            WindowsVideoResolutionCombo.SelectedValue = settings.VideoMaxHeight switch
+            {
+                0 => "0",
+                <= 720 => "720",
+                _ => "1080"
+            };
+
             VideoEncoderCombo.SelectedValuePath = nameof(StreamOption.Value);
             VideoEncoderCombo.ItemsSource = new StreamOption[]
             {
-                new(L10n.T("Phone.WindowsLinkRes720p"), "720"),
-                new(L10n.T("Phone.WindowsLinkRes1080p"), "1080")
+                new(L10n.T("Phone.StreamAutomatic"), ""),
+                new("H.264 (AVC)", "h264"),
+                new("H.265 (HEVC)", "h265")
             };
-            VideoEncoderCombo.SelectedValue = settings.VideoMaxHeight <= 720 ? "720" : "1080";
+            VideoEncoderCombo.SelectedValue = settings.VideoEncoder ?? "";
             UpdateCodecToolTip(VideoEncoderCombo, "Phone.StreamEncoder");
 
             const string windowsName = "Microsoft H.264 Video Decoder MFT";
@@ -198,7 +188,8 @@ public partial class PhoneDevicePage
             {
                 new(L10n.T("Phone.StreamDecoderAutomatic"), ""),
                 new(string.Format(L10n.T("Phone.StreamDecoderAccelerated"), windowsName + " / D3D11"), AndroidAudio.AndroidStreamSettings.WindowsVideoDecoder),
-                new(string.Format(L10n.T("Phone.StreamDecoderSoftware"), windowsName + " / CPU"), AndroidAudio.AndroidStreamSettings.SoftwareVideoDecoder)
+                new(string.Format(L10n.T("Phone.StreamDecoderSoftware"), windowsName + " / CPU"), AndroidAudio.AndroidStreamSettings.SoftwareVideoDecoder),
+                new(string.Format(L10n.T("Phone.StreamDecoderHevc"), "Microsoft HEVC Video Decoder MFT"), AndroidAudio.AndroidStreamSettings.WindowsHevcDecoder)
             };
             VideoDecoderCombo.SelectedValue = settings.VideoDecoder ?? "";
             UpdateCodecToolTip(VideoDecoderCombo, "Phone.StreamDecoder");
@@ -211,74 +202,35 @@ public partial class PhoneDevicePage
             _streamApplying = false;
         }
 
-        _suppressWindowsLinkInput = true;
-        try
-        {
-            WindowsLinkAllowInputSwitch.IsChecked = settings.AllowRemoteInput;
-            WindowsLinkAllowInputSwitch.IsEnabled = !_busy;
-        }
-        finally
-        {
-            _suppressWindowsLinkInput = false;
-        }
+        RefreshWindowsTrust(service, peer);
+        RefreshWindowsClipboard(service, peer.Id);
+        WindowsReceiveFolderPath.Text = service.GetReceiveDirectory();
 
-        var pinned = service.GetPinnedApps(peer.Id);
-        bool pinnedChanged = _windowsRetainedPeerId != peer.Id
-            || !PinnedListsMatch(_windowsPinnedSnapshot, pinned);
-        _windowsRetainedPeerId = peer.Id;
-        _windowsPinnedSnapshot = pinned;
-
-        if (pinnedChanged)
+        if (!peer.Connected)
         {
-            RetainedApps.ItemsSource = pinned.Select(p =>
-            {
-                var app = new LinkRemoteApp(p.Key, p.Name, p.ProcessName, 0, false, false, 0, null, DecodeBase64Icon(p.IconPngBase64));
-                return new WindowsLinkAppChoice(new WindowsLinkAppItem(app), true, p.SmartVolume);
-            }).ToArray();
+            CancelWindowsLinkCatalog();
+            RetainedApps.ItemsSource = null;
+            _windowsEmptyKey = "Phone.WindowsLinkAppsOffline";
         }
-        else if (RetainedApps.ItemsSource is IEnumerable<WindowsLinkAppChoice> existing)
-        {
-            var smartByKey = pinned.ToDictionary(p => p.Key, p => p.SmartVolume, StringComparer.OrdinalIgnoreCase);
-            foreach (var choice in existing)
-            {
-                if (smartByKey.TryGetValue(choice.Item.Key, out bool smart))
-                    choice.SmartVolume = smart;
-            }
-        }
-
-        RetainedCount.Text = string.Format(L10n.T("Phone.RetainedCountFormat"), pinned.Length);
-        RetainedEmpty.Visibility = pinned.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-
-        if (pinnedChanged && CatalogPanel.Visibility == Visibility.Visible)
-            ApplyWindowsLinkCatalogFilter();
+        else if (_active && IsVisible && _windowsCatalogPeerId != peer.Id)
+            _ = LoadWindowsAudioAppsAsync(peer.Id, false);
+        UpdateWindowsAudioStatus();
     }
 
-    private static bool PinnedListsMatch(LinkPinnedApp[] left, LinkPinnedApp[] right)
+    private void UpdateWindowsAudioStatus()
     {
-        if (left.Length != right.Length) return false;
-        for (int i = 0; i < left.Length; i++)
-        {
-            if (!string.Equals(left[i].Key, right[i].Key, StringComparison.OrdinalIgnoreCase)
-                || left[i].Name != right[i].Name
-                || left[i].ProcessName != right[i].ProcessName
-                || left[i].IconPngBase64 != right[i].IconPngBase64)
-                return false;
-        }
-        return true;
+        int count = RetainedApps.Items.Count;
+        RetainedCount.Text = count == 0 ? "" : string.Format(L10n.T("Phone.RetainedCountFormat"), count);
+        WindowsAudioEmpty.Text = L10n.T(_windowsEmptyKey);
+        WindowsAudioEmpty.Visibility = count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private static byte[]? DecodeBase64Icon(string? b64)
-    {
-        if (string.IsNullOrWhiteSpace(b64)) return null;
-        try { return Convert.FromBase64String(b64); }
-        catch { return null; }
-    }
-
-    private void WindowsLinkStreamSettingsChanged()
+    private void WindowsLinkStreamSettingsChanged(object sender)
     {
         if (_streamApplying || _disposed || SelectedWindowsLinkPeer is not { } peerId
             || WindowsLinkHub.Service is not { } service) return;
-        if (VideoEncoderCombo.SelectedValue is not string resStr
+        if (WindowsVideoResolutionCombo.SelectedValue is not string resStr
+            || VideoEncoderCombo.SelectedValue is not string encoder
             || VideoDecoderCombo.SelectedValue is not string decoder
             || VideoBitRateCombo.SelectedValue is not string bitRateStr
             || VideoFpsCombo.SelectedValue is not string fpsStr) return;
@@ -288,8 +240,20 @@ public partial class PhoneDevicePage
         int bitRate = int.TryParse(bitRateStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedRate) ? parsedRate : current.VideoBitRate;
         int fps = int.TryParse(fpsStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedFps) ? parsedFps : current.VideoMaxFps;
 
+        if (encoder == "h264" && decoder == AndroidAudio.AndroidStreamSettings.WindowsHevcDecoder
+            || encoder == "h265" && decoder is (AndroidAudio.AndroidStreamSettings.WindowsVideoDecoder or AndroidAudio.AndroidStreamSettings.SoftwareVideoDecoder))
+        {
+            _streamApplying = true;
+            try
+            {
+                if (ReferenceEquals(sender, VideoDecoderCombo)) VideoEncoderCombo.SelectedValue = encoder = "";
+                else VideoDecoderCombo.SelectedValue = decoder = "";
+            }
+            finally { _streamApplying = false; }
+        }
         var updated = (current with
         {
+            VideoEncoder = NullIfAutomatic(encoder),
             VideoDecoder = NullIfAutomatic(decoder),
             VideoBitRate = bitRate,
             VideoMaxFps = fps,
@@ -329,87 +293,121 @@ public partial class PhoneDevicePage
         }, "Phone.StatusWifiDisconnectedSaved");
     }
 
-    private void RemoveWindowsLinkPeer()
+    private void WindowsClipboardStateChanged(string peerId)
     {
-        if (SelectedWindowsLinkPeer is not { } peerId || _busy) return;
+        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => WindowsClipboardStateChanged(peerId))); return; }
+        if (!_disposed && _active && SelectedWindowsLinkPeer == peerId && WindowsLinkHub.Service is { } service)
+            RefreshWindowsClipboard(service, peerId);
+    }
+
+    private void RefreshWindowsClipboard(WindowsLinkService service, string peerId)
+    {
+        var state = service.GetClipboardState(peerId);
+        ClipboardCard.ToolTip = string.Format(L10n.T("Phone.LinkClipboardScope"), WindowsLinkService.MaxClipboardBytes);
+        _suppressClipboard = true;
+        try
+        {
+            ClipboardSyncToggle.IsChecked = state.Enabled;
+            ClipboardSyncToggle.IsEnabled = state.Enabled || (state.Connected && state.Supported);
+        }
+        finally { _suppressClipboard = false; }
+        ClipboardStatus.Text = L10n.T(!state.Connected ? "Phone.LinkClipboardOffline" :
+            !state.Supported ? "Phone.LinkClipboardUpdate" : state.Active ? "Phone.ClipboardConnected" :
+            state.Enabled ? "Phone.LinkClipboardWaitPeer" : state.PeerEnabled ? "Phone.LinkClipboardReady" : "Phone.LinkClipboardOff");
+    }
+
+    private void AskRemoveWindowsPeer()
+    {
+        if (SelectedWindowsLinkPeer is not { } peer || _busy) return;
+        _removePeer = peer;
+        WindowsRemoveMessage.Text = string.Format(L10n.T("Phone.LinkRemoveConfirm"), DeviceName.Text);
+        WindowsRemovePanel.Visibility = Visibility.Visible;
+        WindowsRemovePanel.BringIntoView();
+        WindowsRemoveCancel.Focus();
+    }
+
+    private void ClearWindowsRemovePrompt()
+    {
+        _removePeer = null;
+        WindowsRemovePanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void WindowsRemoveCancel_Click(object sender, RoutedEventArgs e)
+    {
+        ClearWindowsRemovePrompt();
+        RemoveDeviceButton.Focus();
+    }
+
+    private void WindowsRemoveConfirm_Click(object sender, RoutedEventArgs e)
+    {
+        if (_removePeer is not { } peerId || SelectedWindowsLinkPeer != peerId || _busy ||
+            WindowsLinkHub.Service is not { } service) return;
+        try { service.Remove(peerId); }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            WindowsRemoveMessage.Text = string.Format(L10n.T("Phone.LinkRemoveFailed"), DeviceName.Text);
+            return;
+        }
+        ClearWindowsRemovePrompt();
         CancelWindowsLinkCatalog();
-        WindowsLinkHub.Service?.Remove(peerId);
         SelectedWindowsLinkPeer = null;
-        SetOperationStatusKey("Phone.StatusRemovedKeepAuth");
+        WindowsLinkConnectionChoice.IsChecked = true;
+        SetOperationStatusKey("Phone.LinkRemoved");
         ShowConnection();
     }
 
-    private async void AddWindowsLinkAppsAsync()
+    private void WindowsAudioCatalogChanged(string peerId)
     {
-        if (_disposed || !_active || _busy || SelectedWindowsLinkPeer is not { } peerId) return;
-        var peer = WindowsLinkHub.Service?.Peers.FirstOrDefault(p => string.Equals(p.Id, peerId, StringComparison.OrdinalIgnoreCase));
-        if (peer is not { Connected: true })
+        if (!Dispatcher.CheckAccess())
         {
-            SetOperationStatusKey("Phone.WindowsLinkNeedConnect");
+            Dispatcher.BeginInvoke(new Action(() => WindowsAudioCatalogChanged(peerId)));
             return;
         }
-        SetCatalogVisible(true);
-        CatalogSearch.Focus();
-        await LoadWindowsLinkCatalogAsync(false);
+        if (_active && IsVisible && SelectedWindowsLinkPeer == peerId)
+            _ = LoadWindowsAudioAppsAsync(peerId, false);
     }
 
-    private async Task LoadWindowsLinkCatalogAsync(bool refresh)
+    private async Task LoadWindowsAudioAppsAsync(string peerId, bool refresh)
     {
-        if (SelectedWindowsLinkPeer is not { } peerId || WindowsLinkHub.Service is not { } service) return;
-        if (!refresh && _windowsCatalogPeerId == peerId && _windowsCatalog.Length > 0)
-        {
-            ApplyWindowsLinkCatalogFilter();
-            return;
-        }
-
-        CancelWindowsLinkCatalog();
-        var op = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        if (!_active || !IsVisible || SelectedWindowsLinkPeer != peerId || WindowsLinkHub.Service is not { } service) return;
+        if (_windowsCatalogPeerId != peerId) RetainedApps.ItemsSource = null;
+        _windowsLinkCatalogOp?.Cancel();
+        using var op = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         _windowsLinkCatalogOp = op;
-        SetCatalogStatus(CatalogStatusKind.Loading);
+        _windowsCatalogPeerId = peerId;
+        _windowsEmptyKey = "Tray.Loading";
+        UpdateWindowsAudioStatus();
         try
         {
-            var apps = await service.RequestCatalogAsync(peerId, includeIcons: true, op.Token);
-            if (_disposed || op.IsCancellationRequested || SelectedWindowsLinkPeer != peerId) return;
-            _windowsCatalog = apps
-                .Where(a => !a.IsSystemAudio && !string.IsNullOrWhiteSpace(a.Key))
-                .Select(a => new WindowsLinkAppItem(a))
-                .ToArray();
-            _windowsCatalogPeerId = peerId;
-            _windowsCatalogChoices = _windowsCatalog.Select(item => new WindowsLinkAppChoice(item, false)).ToArray();
-            service.UpdatePinnedMetadata(peerId, apps);
-            ApplyWindowsLinkCatalogFilter();
+            var apps = await service.RequestCatalogAsync(peerId, includeIcons: true, op.Token, audioOnly: true, refresh: refresh);
+            if (op.IsCancellationRequested || SelectedWindowsLinkPeer != peerId) return;
+            ApplyWindowsAudioApps(service, peerId, apps);
         }
         catch (OperationCanceledException) when (op.IsCancellationRequested) { }
-        catch (Exception ex)
+        catch (Exception)
         {
-            if (!_disposed && !op.IsCancellationRequested) SetOperationStatusError(ex);
-            if (_windowsCatalog.Length == 0) SetCatalogStatus(CatalogStatusKind.Empty);
+            if (!op.IsCancellationRequested)
+            {
+                _windowsEmptyKey = "Phone.WindowsLinkReadFailed";
+                UpdateWindowsAudioStatus();
+            }
         }
         finally
         {
             if (ReferenceEquals(_windowsLinkCatalogOp, op)) _windowsLinkCatalogOp = null;
-            op.Dispose();
         }
     }
 
-    private void ApplyWindowsLinkCatalogFilter()
+    private void ApplyWindowsAudioApps(WindowsLinkService service, string peerId, LinkRemoteApp[] apps)
     {
-        if (CatalogApps == null || CatalogPanel.Visibility != Visibility.Visible || SelectedWindowsLinkPeer is not { } peerId) return;
-        string query = CatalogSearch.Text.Trim();
-        var pinned = (WindowsLinkHub.Service?.GetPinnedApps(peerId) ?? [])
-            .Select(a => a.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var choice in _windowsCatalogChoices)
-            choice.Retained = pinned.Contains(choice.Item.Key);
-
-        var filtered = _windowsCatalogChoices
-            .Where(a => query.Length == 0
-                || a.Item.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)
-                || a.Item.Package.Contains(query, StringComparison.OrdinalIgnoreCase))
+        RetainedApps.ItemsSource = apps.Where(app => !app.IsSystemAudio && app.ProcessId > 0
+                && (app.HasAudioSession ?? app.IsPlaying) && !string.IsNullOrWhiteSpace(app.Key))
+            .DistinctBy(app => app.Key, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(app => app.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(app => new WindowsLinkAppChoice(new WindowsLinkAppItem(app), service.IsSmartVolumeEnabled(peerId, app.Key)))
             .ToArray();
-        if (CatalogApps.ItemsSource is not IReadOnlyList<WindowsLinkAppChoice> previous || !previous.SequenceEqual(filtered))
-            CatalogApps.ItemsSource = filtered;
-        SetCatalogStatus(_windowsCatalog.Length == 0 ? CatalogStatusKind.Empty : CatalogStatusKind.Loaded);
+        _windowsEmptyKey = "Phone.NoDisplayedApps";
+        UpdateWindowsAudioStatus();
     }
 
     private void CancelWindowsLinkCatalog()
@@ -417,8 +415,6 @@ public partial class PhoneDevicePage
         var op = _windowsLinkCatalogOp;
         _windowsLinkCatalogOp = null;
         op?.Cancel();
-        _windowsCatalog = [];
-        _windowsCatalogChoices = [];
         _windowsCatalogPeerId = null;
     }
 }

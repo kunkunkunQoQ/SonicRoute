@@ -9,6 +9,7 @@ namespace SonicRoute;
 public partial class PhoneDevicePage
 {
     private WindowsLinkConnectView? _windowsLinkView;
+    internal event Action? PeerOpenedFromList;
     internal string? SelectedWindowsLinkPeer { get; private set; }
 
     private void ConnectionChoice_Changed(object sender, RoutedEventArgs e)
@@ -29,7 +30,15 @@ public partial class PhoneDevicePage
         if (connection && windows)
         {
             _operation?.Cancel();
-            _windowsLinkView ??= new WindowsLinkConnectView();
+            if (_windowsLinkView == null)
+            {
+                _windowsLinkView = new WindowsLinkConnectView();
+                _windowsLinkView.PeerOpened += id =>
+                {
+                    ShowWindowsLinkPeer(id);
+                    PeerOpenedFromList?.Invoke();
+                };
+            }
             WindowsLinkCard.Content = _windowsLinkView;
             _ = _windowsLinkView.RefreshAsync();
         }
@@ -38,6 +47,7 @@ public partial class PhoneDevicePage
 
     internal void ShowWindowsLinkPeer(string id)
     {
+        ClearWindowsRemovePrompt();
         SelectedWindowsLinkPeer = id;
         _showConnection = false;
         ReleaseCatalog();
@@ -51,14 +61,19 @@ public partial class PhoneDevicePage
     {
         if (SelectedWindowsLinkPeer != null)
         {
-            await ReconnectWindowsLinkPeerAsync();
+            if (WindowsLinkHub.Service?.Peers.Any(peer => peer.Id == SelectedWindowsLinkPeer && peer.Connected) == true)
+                await LoadWindowsAudioAppsAsync(SelectedWindowsLinkPeer, true);
+            else
+                await ReconnectWindowsLinkPeerAsync();
             return;
         }
-        if (_windowsLinkView == null || WindowsLinkHub.Service is not { } service) return;
+        if (_windowsLinkView == null) return;
         try
         {
-            if (service.IsEnabled) await service.DiscoverAsync(_lifetime.Token);
-            await _windowsLinkView.RefreshAsync();
+            if (WindowsLinkHub.Service is { IsEnabled: true })
+                await _windowsLinkView.TriggerSearchAsync(_lifetime.Token);
+            else
+                await _windowsLinkView.RefreshAsync();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { SetOperationStatusError(ex); }

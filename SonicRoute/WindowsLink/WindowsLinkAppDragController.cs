@@ -15,7 +15,7 @@ internal static class WindowsLinkAppDragController
     internal static void Run(FrameworkElement source, WindowsLinkAppDrag payload, ImageSource? icon = null)
     {
         ImageSource? previewIcon = icon ?? (payload.App.IsSystemAudio
-            ? PhoneSourceIcon.MonitorImage
+            ? PhoneSourceIcon.SystemAudioImage
             : AppIconService.DecodePng(payload.App.IconPng));
         var result = AppIconDragController.Run(
             source,

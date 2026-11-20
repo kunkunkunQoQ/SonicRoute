@@ -276,7 +276,7 @@ public partial class PhoneDevicePage
     private void StreamSettings_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_streamApplying || _disposed) return;
-        if (SelectedWindowsLinkPeer != null) { WindowsLinkStreamSettingsChanged(); return; }
+        if (SelectedWindowsLinkPeer != null) { WindowsLinkStreamSettingsChanged(sender); return; }
         if (_streamStore == null || _streamDevice == null) return;
         if (VideoDecoderCombo.SelectedItem is StreamOption { IsEnabled: false } unavailable
             && unavailable.Value != _streamSettings.VideoDecoder)

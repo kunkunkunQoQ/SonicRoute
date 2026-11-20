@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using SonicRoute.AndroidAudio;
@@ -18,48 +19,105 @@ internal static class LinkWindowCapture
     internal static LinkWindow[] GetWindows()
     {
         var entries = new List<LinkWindow>();
-        EnumWindows((window, _) =>
+        var processes = new Dictionary<int, (string? Name, long StartTicks)>();
+        EnumWindows((handle, _) =>
         {
-            GetWindowThreadProcessId(window, out uint pid);
-            if (pid == 0 || pid == Environment.ProcessId || !IsWindowVisible(window) || window == GetShellWindow()) return true;
-            if (DwmGetWindowAttribute(window, 14, out uint cloaked, sizeof(uint)) == 0 && cloaked != 0) return true;
-            var title = new StringBuilder(160);
-            if (GetWindowText(window, title, title.Capacity) != 0)
-                entries.Add(new LinkWindow(window, title.ToString(), (int)pid));
+            if (ReadWindow(handle, processes) is { } window) entries.Add(window);
             return true;
         }, 0);
         return entries.OrderBy(window => window.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
     }
 
-    internal static Task CaptureAsync(nint window, LinkBgraFrame deliver, int maxFps, CancellationToken token)
-        => Task.Factory.StartNew(() => Capture(window, deliver, maxFps, token), token,
+    internal static (string? Name, long StartTicks) ReadProcess(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            string? name = process.ProcessName;
+            try { return (name, process.StartTime.ToUniversalTime().Ticks); }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { return (name, 0); }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        { return (null, 0); }
+    }
+
+    private const int GwlExStyle = -20;
+    private const long WsExToolWindow = 0x00000080L;
+    private const long WsExAppWindow = 0x00040000L;
+
+    internal static LinkWindow? ReadWindow(nint handle, Dictionary<int, (string? Name, long StartTicks)>? processes = null)
+    {
+        uint thread = GetWindowThreadProcessId(handle, out uint pid);
+        if (thread == 0 || pid == 0 || pid == Environment.ProcessId || handle == GetShellWindow() || !IsWindowVisible(handle))
+            return null;
+        if (DwmGetWindowAttribute(handle, 14, out uint cloaked, sizeof(uint)) == 0 && cloaked != 0) return null;
+        nint exStyle = GetWindowLongPtr(handle, GwlExStyle);
+        if ((exStyle & WsExToolWindow) != 0 && (exStyle & WsExAppWindow) == 0) return null;
+        if (!IsIconic(handle) && (!GetWindowRect(handle, out var rect) || rect.Right <= rect.Left || rect.Bottom <= rect.Top))
+            return null;
+        var title = new StringBuilder(160);
+        if (GetWindowText(handle, title, title.Capacity) == 0) return null;
+        var className = new StringBuilder(64);
+        if (GetClassName(handle, className, className.Capacity) > 0)
+        {
+            string cls = className.ToString();
+            if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return null;
+        }
+        if (processes == null || !processes.TryGetValue((int)pid, out var process))
+        {
+            process = ReadProcess((int)pid);
+            if (processes != null) processes[(int)pid] = process;
+        }
+        if (GetWindowThreadProcessId(handle, out uint currentPid) != thread || currentPid != pid) return null;
+        return new LinkWindow(handle, title.ToString(), (int)pid)
+        {
+            ThreadId = thread,
+            ProcessName = process.Name,
+            ProcessStartTicks = process.StartTicks
+        };
+    }
+
+    internal static Task CaptureAsync(LinkCaptureTarget target, LinkBgraFrame deliver, int maxFps, CancellationToken token)
+        => Task.Factory.StartNew(() => Capture(target, deliver, maxFps, token), token,
             TaskCreationOptions.LongRunning, TaskScheduler.Default);
 
     // An active capture owns a single MTA worker. A frame is requested at the output
     // cadence, rather than waking on every desktop refresh and copying discarded frames.
-    private static void Capture(nint window, LinkBgraFrame deliver, int maxFps, CancellationToken token)
+    private static void Capture(LinkCaptureTarget target, LinkBgraFrame deliver, int maxFps, CancellationToken token)
     {
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362)) throw new PlatformNotSupportedException("Windows Graphics Capture is unavailable.");
-        GetWindowThreadProcessId(window, out uint expectedPid);
-        if (expectedPid == 0 || expectedPid == Environment.ProcessId) throw new InvalidOperationException("Select another visible window.");
+        if (target is LinkWindow) EnsureCurrentTarget(target);
         Check(RoInitialize(1));
         try
         {
             var factory = Activate("Windows.Graphics.Capture.GraphicsCaptureItem", ItemInterop);
             using (factory)
             {
-                int result = ComVtbl.Get<GetInterface>(factory.Handle, 3)(factory.Handle, window, in Item, out nint captureItem);
+                int method = target is LinkMonitor ? 4 : 3; // IGraphicsCaptureItemInterop.CreateForMonitor / CreateForWindow
+                int result = ComVtbl.Get<GetInterface>(factory.Handle, method)(factory.Handle, target.Handle, in Item, out nint captureItem);
                 Check(result);
                 using var item = new ComPtr(captureItem);
+                EnsureCurrentTarget(target);
                 Check(ComVtbl.Get<GetSize>(item.Handle, 7)(item.Handle, out Size size));
                 Validate(size);
-                Run(item.Handle, size, window, expectedPid, maxFps, deliver, token);
+                Run(item.Handle, size, target as LinkWindow, maxFps, deliver, token);
             }
         }
         finally { RoUninitialize(); }
     }
 
-    private static unsafe void Run(nint item, Size size, nint window, uint expectedPid, int fps, LinkBgraFrame deliver, CancellationToken token)
+    private static void EnsureCurrentTarget(LinkCaptureTarget target)
+    {
+        if (target is LinkMonitor monitor)
+        {
+            if (!LinkMonitors.IsCurrent(monitor))
+                throw new InvalidOperationException("The selected display changed before capture.");
+        }
+        else if (ReadWindow(target.Handle)?.InstanceId != target.InstanceId)
+            throw new InvalidOperationException("The selected window changed before capture.");
+    }
+
+    private static unsafe void Run(nint item, Size size, LinkWindow? window, int fps, LinkBgraFrame deliver, CancellationToken token)
     {
         int hr = D3D11CreateDevice(0, 1, 0, 0x20, 0, 0, 7, out nint rawDevice, out _, out nint rawContext);
         if (hr < 0) hr = D3D11CreateDevice(0, 5, 0, 0x20, 0, 0, 7, out rawDevice, out _, out rawContext);
@@ -82,7 +140,7 @@ internal static class LinkWindowCapture
         {
         do
         {
-            if (GetWindowThreadProcessId(window, out uint pid) == 0 || pid != expectedPid) return;
+            if (window != null && (GetWindowThreadProcessId(window.Handle, out uint pid) != window.ThreadId || pid != window.ProcessId)) return;
             Check(ComVtbl.Get<GetPtr>(poolPtr, 7)(poolPtr, out nint framePtr));
             if (framePtr == 0) continue;
             Size content;
@@ -134,8 +192,10 @@ internal static class LinkWindowCapture
 
     private static void Validate(Size size)
     {
-        if (size.Width < 1 || size.Height < 1 || (long)size.Width * size.Height > 16_777_216L)
-            throw new NotSupportedException("The selected window exceeds the Windows Link capture size limit.");
+        if (size.Width < 1 || size.Height < 1)
+            throw new InvalidOperationException("The selected window or display has no drawable surface.");
+        if ((long)size.Width * size.Height > LinkVideoOptions.MaxFramePixels)
+            throw new NotSupportedException("The selected window or display exceeds the Windows Link capture size limit.");
     }
 
     private static ComPtr Activate(string name, Guid iid)
@@ -162,6 +222,7 @@ internal static class LinkWindowCapture
     }
 
     [StructLayout(LayoutKind.Sequential)] private readonly record struct Size(int Width, int Height);
+    [StructLayout(LayoutKind.Sequential)] private readonly record struct Rect(int Left, int Top, int Right, int Bottom);
     [StructLayout(LayoutKind.Sequential)]
     private struct TextureDesc { internal uint Width, Height, Mips, Array, Format, Samples, Quality, Usage, Bind, CpuAccess, Misc; }
     [StructLayout(LayoutKind.Sequential)] private struct Mapping { internal nint Data; internal uint Pitch, DepthPitch; }
@@ -191,8 +252,12 @@ internal static class LinkWindowCapture
         nint levels, uint count, uint sdk, out nint device, out uint level, out nint context);
     [DllImport("user32.dll")] private static extern bool EnumWindows(EnumerateWindow callback, nint state);
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint window);
+    [DllImport("user32.dll")] private static extern bool IsIconic(nint window);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint window, out Rect rect);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint window, int index);
     [DllImport("user32.dll")] private static extern nint GetShellWindow();
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(nint window, out uint pid);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(nint window, StringBuilder buffer, int length);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(nint window, StringBuilder buffer, int length);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(nint window, uint attribute, out uint value, uint size);
 }

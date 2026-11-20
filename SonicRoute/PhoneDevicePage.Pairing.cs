@@ -19,7 +19,14 @@ public partial class PhoneDevicePage
 
     private void PairingLoaded(object sender, RoutedEventArgs e) { UpdateQrPairing(); UpdateSavedDeviceSearch(); UpdateStreamingVisibility(); }
     private void PairingUnloaded(object sender, RoutedEventArgs e) { StopQrPairing(); CancelEncoderRead(); }
-    private void PairingVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) { UpdateQrPairing(); UpdateStreamingVisibility(); }
+    private void PairingVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        UpdateQrPairing();
+        UpdateStreamingVisibility();
+        if (!ReferenceEquals(sender, this) || SelectedWindowsLinkPeer == null) return;
+        if (IsVisible && _active) RefreshWindowsLinkDevicePage();
+        else CancelWindowsLinkCatalog();
+    }
     private void QrPair_Click(object sender, RoutedEventArgs e)
     {
         if (!CanShowQr) return;

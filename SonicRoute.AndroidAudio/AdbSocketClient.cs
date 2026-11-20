@@ -347,16 +347,23 @@ public sealed class AdbSocketClient : IAdbTransport
         return token.Length > 0;
     }
 
-    public async Task<Stream> OpenLocalAbstractAsync(string serial, string name, CancellationToken token)
+    public Task<Stream> OpenLocalAbstractAsync(string serial, string name, CancellationToken token)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        return OpenDeviceStreamAsync(serial, "localabstract:" + name, token);
+    }
+
+    public Task<Stream> OpenFileSyncAsync(string serial, CancellationToken token) => OpenDeviceStreamAsync(serial, "sync:", token);
+
+    private async Task<Stream> OpenDeviceStreamAsync(string serial, string service, CancellationToken token)
     {
         ArgumentException.ThrowIfNullOrEmpty(serial);
-        ArgumentException.ThrowIfNullOrEmpty(name);
         TcpClient? client = null;
         try
         {
             client = await OpenTransportAsync(serial, token).ConfigureAwait(false);
             var stream = client.GetStream();
-            await SendRequestAsync(stream, "localabstract:" + name, token).ConfigureAwait(false);
+            await SendRequestAsync(stream, service, token).ConfigureAwait(false);
             await ReadStatusAsync(stream, token).ConfigureAwait(false);
             var owned = new OwnedNetworkStream(client, stream);
             client = null;

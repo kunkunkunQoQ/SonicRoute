@@ -4,7 +4,6 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
-using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
 
@@ -17,7 +16,10 @@ internal sealed partial class WindowsLinkService(
     bool discovery = true,
     Func<bool, CancellationToken, Task<LinkRemoteApp[]>>? localCatalogProvider = null,
     Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer>? audioPlayerFactory = null,
-    Func<int, IPcProcessSilenceLease?>? acquireLocalSilence = null)
+    Func<int, IPcProcessSilenceLease?>? acquireLocalSilence = null,
+    TimeSpan? offerLifetime = null,
+    IPEndPoint? discoveryBind = null,
+    IPEndPoint? discoveryTarget = null)
     : IAsyncDisposable
 {
     private const int MaximumPeers = 4;
@@ -30,7 +32,9 @@ internal sealed partial class WindowsLinkService(
     private readonly string _trustFile = Path.Combine(stateDirectory, "trusted.json");
     private readonly Func<bool, CancellationToken, Task<LinkRemoteApp[]>>? _localCatalogProvider = localCatalogProvider;
     private readonly Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer>? _audioPlayerFactory = audioPlayerFactory;
-    private readonly Dictionary<string, (LinkOffer Offer, long At)> _offers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<TimedOffer>> _offers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly long _offerLifetime = (long)((offerLifetime ?? TimeSpan.FromMinutes(2)).TotalSeconds * Stopwatch.Frequency);
+    private readonly Dictionary<string, LinkConnectFailure> _failures = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, LinkConnection> _connections = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Guid, (string PeerId, TaskCompletionSource<bool> Result)> _pairing = new();
     private readonly HashSet<string> _paused = new(StringComparer.OrdinalIgnoreCase);
@@ -48,7 +52,13 @@ internal sealed partial class WindowsLinkService(
         LinkCapabilities Capabilities,
         bool AutoConnect,
         LinkPeerSettings? Settings = null,
-        List<LinkPinnedApp>? PinnedApps = null);
+        List<LinkPinnedApp>? PinnedApps = null,
+        List<string>? DisabledSmartVolumeApps = null,
+        bool LastConnectionIncoming = false,
+        Guid FullTrustGrant = default,
+        string? DirectAddress = null,
+        bool ClipboardEnabled = false,
+        bool SupportsClipboardSync = false);
 
     private sealed class LinkRun
     {
@@ -56,12 +66,25 @@ internal sealed partial class WindowsLinkService(
         private readonly HashSet<Task> _tasks = new();
         private readonly CancellationTokenSource _stop = new();
         internal readonly SemaphoreSlim Handshakes = new(8, 8);
-        internal readonly HashSet<string> Retrying = new(StringComparer.OrdinalIgnoreCase);
+        internal readonly Dictionary<string, RetryWork> Retrying = new(StringComparer.OrdinalIgnoreCase);
+        internal readonly Dictionary<string, RetryWork> ManualConnections = new(StringComparer.OrdinalIgnoreCase);
+        internal readonly SemaphoreSlim Outbound = new(4, 4);
+        internal readonly SemaphoreSlim DiscoveryWake = new(0, 1);
+        internal long LastProbe;
+        internal long NetworkRefreshAt;
+        internal long SearchRetryAt;
+        internal long ProbeRetryAt;
+        internal bool ProbeRequested = true;
+        internal long SearchEndsAt;
+        internal int SearchWaiters;
+        internal TaskCompletionSource? Search;
+        internal long TrustRevision;
         internal readonly Dictionary<IPEndPoint, int> Dialing = new();
         internal readonly Dictionary<string, (long Issued, long AcceptedAt)> ReverseDials = new(StringComparer.OrdinalIgnoreCase);
+        internal readonly Dictionary<string, long> OfferRetryWakeAt = new(StringComparer.OrdinalIgnoreCase);
         internal TcpListener Listener { get; }
         internal LinkDiscovery? Lan { get; }
-        internal string Address { get; }
+        internal string Address { get; set; }
         internal int Port { get; }
         internal CancellationToken Token { get; }
 
@@ -100,6 +123,8 @@ internal sealed partial class WindowsLinkService(
             try { await Task.WhenAll(pending).ConfigureAwait(false); }
             catch (Exception) { /* Individual jobs report their errors at the point of use. */ }
             Handshakes.Dispose();
+            Outbound.Dispose();
+            DiscoveryWake.Dispose();
             _stop.Dispose();
         }
     }
@@ -111,6 +136,41 @@ internal sealed partial class WindowsLinkService(
     public bool IsEnabled { get { lock (_gate) return _run != null; } }
     public bool HasActiveWork { get { lock (_gate) return _connections.Count > 0 || _streams.Count > 0; } }
     public string LocalAddress { get { lock (_gate) return _run?.Address ?? ""; } }
+    public LinkLocalAddress[] GetLocalAddresses()
+    {
+        string preferred;
+        int listenPort;
+        lock (_gate)
+        {
+            if (_run == null) return [];
+            preferred = _run.Address;
+            listenPort = _run.Port;
+        }
+        var addresses = new Dictionary<string, LinkLocalAddress>(StringComparer.Ordinal);
+        if (discovery)
+        {
+            foreach (var adapter in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (adapter.OperationalStatus != OperationalStatus.Up || adapter.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                    continue;
+                try
+                {
+                    foreach (var entry in adapter.GetIPProperties().UnicastAddresses)
+                    {
+                        var ip = entry.Address;
+                        if (IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any)
+                            || ip.IsIPv6Multicast || ip.IsIPv6LinkLocal) continue;
+                        string address = new IPEndPoint(ip, listenPort).ToString();
+                        addresses.TryAdd(address, new LinkLocalAddress(adapter.Name, address));
+                    }
+                }
+                catch (NetworkInformationException) { }
+            }
+        }
+        if (preferred.Length > 0) addresses.TryAdd(preferred, new LinkLocalAddress("", preferred));
+        return addresses.Values.OrderByDescending(entry => entry.Address == preferred)
+            .ThenBy(entry => entry.Adapter, StringComparer.CurrentCultureIgnoreCase).ThenBy(entry => entry.Address, StringComparer.Ordinal).ToArray();
+    }
     public string LocalName => _name;
 
     public LinkPeer[] Peers
@@ -119,31 +179,90 @@ internal sealed partial class WindowsLinkService(
         {
             lock (_gate)
             {
-                var fresh = _offers.Values.Where(o => Stopwatch.GetElapsedTime(o.At) < TimeSpan.FromMinutes(2))
-                    .ToDictionary(o => o.Offer.Id, o => o.Offer, StringComparer.OrdinalIgnoreCase);
-                return _saved.Keys.Concat(fresh.Keys).Concat(_connections.Keys).Distinct(StringComparer.OrdinalIgnoreCase)
+                return _saved.Keys.Concat(_offers.Keys).Concat(_connections.Keys).Distinct(StringComparer.OrdinalIgnoreCase)
                     .Select(id =>
                     {
                         _saved.TryGetValue(id, out var saved);
-                        fresh.TryGetValue(id, out var seen);
+                        var seen = BestOfferLocked(id, saved);
                         _connections.TryGetValue(id, out var connected);
                         bool active = connected?.IsOpen == true;
+                        if (saved == null && seen == null && !active) return null;
+                        var failure = _failures.GetValueOrDefault(id);
+                        var state = active ? LinkPeerState.Connected
+                            : _run?.ManualConnections.ContainsKey(id) == true || _run?.Retrying.GetValueOrDefault(id)?.Dialing == true
+                                ? LinkPeerState.Connecting
+                            : saved != null && (!saved.AutoConnect || _paused.Contains(id)) ? LinkPeerState.DisconnectedByUser
+                            : failure != LinkConnectFailure.None ? LinkPeerState.Failed
+                            : seen != null ? (saved == null ? LinkPeerState.Discovered : LinkPeerState.Online)
+                            : LinkPeerState.Offline;
                         return new LinkPeer(id, connected?.Hello.Name ?? saved?.Name ?? seen!.Name, saved?.Alias,
                             active ? saved?.Address : seen?.Endpoint.ToString() ?? saved?.Address, saved != null,
                             active || seen != null, active,
-                            connected?.Hello.Capabilities ?? seen?.Capabilities ?? saved?.Capabilities ?? LinkCapabilities.None);
+                            connected?.Hello.Capabilities ?? seen?.Capabilities ?? saved?.Capabilities ?? LinkCapabilities.None)
+                        { State = state, Failure = failure, SupportsNativeVideo = active && connected!.Hello.SupportsNativeVideo,
+                            SupportsFileBrowse = active && connected!.Hello.SupportsFileBrowse,
+                            SupportsSourcePlayback = active && connected!.Hello.SupportsSourcePlayback,
+                            SupportsAudioRelay = active && connected!.Hello.SupportsAudioRelay };
                     })
+                    .OfType<LinkPeer>()
                     .OrderByDescending(peer => peer.Connected).ThenByDescending(peer => peer.Trusted)
                     .ThenBy(peer => peer.DisplayName, StringComparer.CurrentCultureIgnoreCase).ToArray();
             }
         }
     }
 
+    internal Func<CancellationToken, bool> ProbeAudioCapture { get; init; } = PcProcessLoopbackCapture.CanInitializeProcessLoopback;
+    internal Func<int?, Action<ReadOnlyMemory<byte>>, Action, CancellationToken, Task> CaptureAudio { get; init; } = LinkAudioCapture.CaptureAsync;
+    private volatile bool _canSendAudio;
+    internal bool CanSendAudio => _canSendAudio;
+    internal Func<bool>? ProbeExclusiveCapture { get; init; }
+    internal Func<bool>? ProbeSpeakerFallback { get; init; }
+    internal Func<int, bool>? ProbeAppSpeaker { get; init; }
+    internal Func<int, IPcProcessSilenceLease?>? AcquireSpeakerFallback { get; init; }
+    internal Func<IPcProcessSilenceLease?>? AcquireSystemSpeakerSilence { get; init; }
+    private readonly object _exclusiveProbeGate = new();
+    private long _lastExclusiveProbe;
+    private volatile WindowsLinkExclusiveMode _localAudioRoute;
+    internal WindowsLinkExclusiveMode AudioIsolation => _localAudioRoute;
+    internal bool CanSendExclusively => _localAudioRoute.HasFlag(WindowsLinkExclusiveMode.DedicatedOutput);
+    internal bool CanUseSpeakerFallback => _localAudioRoute.HasFlag(WindowsLinkExclusiveMode.MuteSourceSpeaker);
+
+    internal void RefreshExclusiveCapability(bool force = false)
+    {
+        lock (_exclusiveProbeGate)
+        {
+            if (!force && _lastExclusiveProbe != 0 && Stopwatch.GetElapsedTime(_lastExclusiveProbe) < TimeSpan.FromSeconds(2)) return;
+            var route = WindowsLinkExclusiveMode.Unavailable;
+            if (CanSendAudio)
+            {
+                if (acquireLocalSilence != null && IsAvailable(ProbeExclusiveCapture, defaultValue: true))
+                    route |= WindowsLinkExclusiveMode.DedicatedOutput;
+                if (AcquireSpeakerFallback != null && IsAvailable(ProbeSpeakerFallback, defaultValue: false))
+                    route |= WindowsLinkExclusiveMode.MuteSourceSpeaker;
+            }
+            _localAudioRoute = route;
+            _lastExclusiveProbe = Stopwatch.GetTimestamp();
+        }
+
+        static bool IsAvailable(Func<bool>? probe, bool defaultValue)
+        {
+            try { return probe?.Invoke() ?? defaultValue; }
+            catch (Exception ex) when (ex is not (OutOfMemoryException or OperationCanceledException))
+            {
+                Trace.WriteLine(ex);
+                return false;
+            }
+        }
+    }
+
+    private LinkCapabilities _videoCapabilities;
     private LinkCapabilities LocalCapabilities =>
+        _videoCapabilities | LinkCapabilities.FileTransfer | LinkCapabilities.FullTrust |
         LinkCapabilities.AudioReceive | LinkCapabilities.AudioReady | LinkCapabilities.WindowReceive | LinkCapabilities.RemoteBrowse | LinkCapabilities.AudioCatalog
-        | (LinkAudioCapture.IsSupported ? LinkCapabilities.ProcessAudio | LinkCapabilities.SystemAudio : 0)
-        | (LinkAudioCapture.IsSupported && acquireLocalSilence != null ? LinkCapabilities.DestinationOnly : 0)
-        | (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362) ? LinkCapabilities.WindowCapture | LinkCapabilities.WindowInput : 0);
+        | (CanSendAudio ? LinkCapabilities.ProcessAudio | LinkCapabilities.SystemAudio | LinkCapabilities.WindowAudio : 0)
+        | (CanSendExclusively ? LinkCapabilities.DestinationOnly : 0)
+        | (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362)
+            ? LinkCapabilities.WindowCapture | LinkCapabilities.WindowInput | LinkCapabilities.MonitorCapture : 0);
 
     public async Task EnableAsync(CancellationToken token = default)
     {
@@ -163,29 +282,38 @@ internal sealed partial class WindowsLinkService(
         lock (_gate) LoadSavedPeers();
         _identity ??= LinkSecurity.LoadIdentity(stateDirectory);
 
+        _canSendAudio = ProbeAudioCapture(token);
+        RefreshExclusiveCapability(force: true);
+        _videoCapabilities = (LinkVideoEncoder.SupportsHevc ? LinkCapabilities.HevcEncode : 0)
+            | (MediaFoundationH264Decoder.SupportsHevc ? LinkCapabilities.HevcDecode : 0);
         token.ThrowIfCancellationRequested();
-        var listener = new TcpListener(discovery ? IPAddress.IPv6Any : IPAddress.Loopback, port);
+        var bindAddress = Socket.OSSupportsIPv6 ? IPAddress.IPv6Any : IPAddress.Any;
+        var listener = new TcpListener(discovery ? bindAddress : IPAddress.Loopback, port);
         LinkDiscovery? lan = null;
         try
         {
-            if (discovery) listener.Server.DualMode = true;
+            if (listener.Server.AddressFamily == AddressFamily.InterNetworkV6 && Socket.OSSupportsIPv4)
+                listener.Server.DualMode = true;
             listener.Start(16);
             int actualPort = ((IPEndPoint)listener.LocalEndpoint).Port;
-            var displayIp = discovery
-                ? (LinkDiscovery.SelectDisplayLanAddress() ?? AirPlayDiscovery.ReadInterfaces().FirstOrDefault()?.Address)
-                : null;
-            if (discovery) lan = new LinkDiscovery(LinkSecurity.Id(_identity), _name, actualPort, LocalCapabilities);
-            var run = new LinkRun(listener, lan, new IPEndPoint(displayIp ?? IPAddress.Loopback, actualPort).ToString());
+            if (discovery && Socket.OSSupportsIPv4)
+                lan = new LinkDiscovery(LinkSecurity.Id(_identity), _name, actualPort, LocalCapabilities, discoveryBind, discoveryTarget);
+            var displayIp = lan != null ? lan.RefreshInterfaces() : discovery ? LinkDiscovery.SelectDisplayLanAddress() : null;
+            string address = discovery
+                ? DisplayAddress(discoveryBind?.Address ?? displayIp, actualPort)
+                : new IPEndPoint(IPAddress.Loopback, actualPort).ToString();
+            var run = new LinkRun(listener, lan, address);
             lock (_gate) _run = run;
             _ = run.Track(() => AcceptAsync(run));
             if (lan != null)
             {
                 string localId = LinkSecurity.Id(_identity);
-                _ = run.Track(() => lan.ListenAsync(offer => Found(run, offer),
+                _ = run.Track(() => lan.ListenAsync((offer, isQuery) => FoundOffer(run, offer, isQuery),
                     (packet, address) => HandleReconnectRequest(run, localId, packet, address), run.Token));
                 NetworkChange.NetworkAddressChanged += NetworkChanged;
-                _ = run.Track(() => SendDiscoveryAsync(run));
+                NetworkChange.NetworkAvailabilityChanged += NetworkAvailabilityChanged;
             }
+            _ = run.Track(() => DiscoveryLoopAsync(run));
             RetrySaved(run);
         }
         catch { listener.Stop(); lan?.Dispose(); throw; }
@@ -237,7 +365,11 @@ internal sealed partial class WindowsLinkService(
                 })
                 .ToList();
         }
-        return peer with { Settings = settings, PinnedApps = pinned };
+        var disabled = (peer.DisabledSmartVolumeApps ?? pinned?.Where(app => !app.SmartVolume).Select(app => app.Key).ToList() ?? [])
+            .Where(key => !string.IsNullOrWhiteSpace(key) && key.Length <= 128)
+            .Select(key => key.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        string? direct = LinkDirectAddress.TryParse(peer.DirectAddress, out var target) ? target.Canonical : null;
+        return peer with { Settings = settings, PinnedApps = pinned, DisabledSmartVolumeApps = disabled, DirectAddress = direct };
     }
 
     public async Task DisableAsync()
@@ -258,8 +390,14 @@ internal sealed partial class WindowsLinkService(
             _run = null;
             _offers.Clear();
             _paused.Clear();
+            _failures.Clear();
+            run.Search?.TrySetCanceled();
         }
-        if (run.Lan != null) NetworkChange.NetworkAddressChanged -= NetworkChanged;
+        if (run.Lan != null)
+        {
+            NetworkChange.NetworkAddressChanged -= NetworkChanged;
+            NetworkChange.NetworkAvailabilityChanged -= NetworkAvailabilityChanged;
+        }
         await run.StopAsync().ConfigureAwait(false);
     }
 
@@ -275,44 +413,6 @@ internal sealed partial class WindowsLinkService(
             _identity = null;
         }
         finally { _lifecycle.Release(); }
-    }
-
-    public Task DiscoverAsync(CancellationToken token = default)
-    {
-        LinkRun run = GetRun();
-        return run.Track(() => SendDiscoveryAsync(run)).WaitAsync(token);
-    }
-
-    private void NetworkChanged(object? sender, EventArgs e)
-    {
-        LinkRun? run;
-        lock (_gate) run = _run;
-        if (run == null) return;
-        _ = run.Track(() => SendDiscoveryAsync(run));
-        RetrySaved(run);
-    }
-
-    private static async Task SendDiscoveryAsync(LinkRun run)
-    {
-        if (run.Lan == null) return;
-        try { await run.Lan.DiscoverAsync(run.Token).ConfigureAwait(false); }
-        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or NetworkInformationException) { }
-    }
-
-    private void Found(LinkRun run, LinkOffer offer)
-    {
-        bool changed;
-        lock (_gate)
-        {
-            if (_run != run) return;
-            changed = !_offers.TryGetValue(offer.Id, out var previous) || previous.Offer != offer
-                || Stopwatch.GetElapsedTime(previous.At) >= TimeSpan.FromMinutes(2);
-            if (_offers.Count >= SavedLimit && !_offers.ContainsKey(offer.Id))
-                _offers.Remove(_offers.MinBy(item => item.Value.At).Key);
-            _offers[offer.Id] = (offer, Stopwatch.GetTimestamp());
-        }
-        if (changed) Notify();
-        ScheduleRetry(run, offer.Id);
     }
 
     private LinkRun GetRun()

@@ -7,6 +7,7 @@ namespace SonicRoute.AndroidAudio;
 public interface IPcProcessSilenceLease : IDisposable
 {
     void Release(bool restorePreviousEndpoint);
+    CancellationToken Invalidated => CancellationToken.None;
 }
 
 /// <summary>Streams per-process Windows 11 loopback audio to an Android phone's speaker or Bluetooth output sink.</summary>
@@ -594,8 +595,27 @@ internal static class PcProcessLoopbackCapture
         }
     }
 
-    private static void CaptureLoopMta(int processId, Stream destination, CancellationToken token, Action onProcessExited,
-        Action<int, int>? onPacketStreamed, bool excludeProcess, Action? onStarted)
+    // Called on the Windows Link startup worker. Some serviced Windows 10 builds
+    // support process loopback below build 20348. Test the actual capture format
+    // without starting capture or opening a playback endpoint.
+    internal static bool CanInitializeProcessLoopback(CancellationToken token)
+    {
+        using var sampleEvent = new AutoResetEvent(false);
+        try
+        {
+            var client = InitializeCaptureClient(Environment.ProcessId, token, false, sampleEvent, out _);
+            Marshal.ReleaseComObject(client);
+            return true;
+        }
+        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
+        {
+            Trace.WriteLine($"Windows Link process loopback unavailable (0x{ex.HResult:X8}): {ex.Message}");
+            return false;
+        }
+    }
+
+    private static IAudioClient InitializeCaptureClient(int processId, CancellationToken token, bool excludeProcess,
+        AutoResetEvent sampleEvent, out bool useEventCallback)
     {
         var wfx = new WAVEFORMATEX
         {
@@ -608,33 +628,39 @@ internal static class PcProcessLoopbackCapture
             cbSize = 0
         };
 
+        uint flags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
+            | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+        var client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
+        try
+        {
+            if (client.Initialize(0, flags | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 200_000, 0, ref wfx, IntPtr.Zero) >= 0
+                && client.SetEventHandle(sampleEvent.SafeWaitHandle.DangerousGetHandle()) >= 0)
+            {
+                useEventCallback = true;
+                return client;
+            }
+        }
+        catch { Marshal.ReleaseComObject(client); throw; }
+        Marshal.ReleaseComObject(client);
+        client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
+        try
+        {
+            Marshal.ThrowExceptionForHR(client.Initialize(0, flags, 200_000, 0, ref wfx, IntPtr.Zero));
+            useEventCallback = false;
+            return client;
+        }
+        catch { Marshal.ReleaseComObject(client); throw; }
+    }
+
+    private static void CaptureLoopMta(int processId, Stream destination, CancellationToken token, Action onProcessExited,
+        Action<int, int>? onPacketStreamed, bool excludeProcess, Action? onStarted)
+    {
         IAudioClient? client = null;
         IAudioCaptureClient? capture = null;
         using var sampleEvent = new AutoResetEvent(false);
-        bool useEventCallback = true;
-
         try
         {
-            client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
-            uint eventFlags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-                | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY | AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
-            int hrInit = client.Initialize(0, eventFlags, 200_000, 0, ref wfx, IntPtr.Zero);
-            if (hrInit >= 0)
-            {
-                int hrEvt = client.SetEventHandle(sampleEvent.SafeWaitHandle.DangerousGetHandle());
-                if (hrEvt < 0) useEventCallback = false;
-            }
-            else
-            {
-                Marshal.ReleaseComObject(client);
-                client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
-                useEventCallback = false;
-                uint pollFlags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
-                    | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
-                hrInit = client.Initialize(0, pollFlags, 200_000, 0, ref wfx, IntPtr.Zero);
-                if (hrInit < 0) Marshal.ThrowExceptionForHR(hrInit);
-            }
-
+            client = InitializeCaptureClient(processId, token, excludeProcess, sampleEvent, out bool useEventCallback);
             Guid iidCapture = IID_IAudioCaptureClient;
             int hrService = client.GetService(ref iidCapture, out object capObj);
             if (hrService < 0 || capObj == null) Marshal.ThrowExceptionForHR(hrService < 0 ? hrService : -1);

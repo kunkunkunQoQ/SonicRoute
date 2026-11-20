@@ -7,6 +7,7 @@ namespace SonicRoute.AndroidAudio;
 
 public sealed record AndroidPhoneProfile(string Name, AndroidDevice? LastDevice, IReadOnlyList<AndroidApp> RetainedApps)
 {
+    public string ReceiveFolder { get; init; } = AndroidFileTransfer.Downloads;
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
     public IReadOnlyList<string> DisabledSmartVolumeApps { get; init; } = Array.Empty<string>();
     public IReadOnlyList<AndroidApp> QuickPanelApps { get; init; } = RetainedApps;
@@ -94,6 +95,7 @@ public sealed class AndroidPhoneStore
         return WithQuickPanelApps(new(CleanName(saved.Name), saved.Device, Array.AsReadOnly(apps))
         {
             Id = saved.Id,
+            ReceiveFolder = AndroidFileTransfer.IsSharedPath(saved.ReceiveFolder) ? saved.ReceiveFolder! : AndroidFileTransfer.Downloads,
             DisabledSmartVolumeApps = Array.AsReadOnly((saved.DisabledSmartVolumePackages ?? []).Take(1000).Where(packages.Contains).Distinct(StringComparer.Ordinal).ToArray())
         });
     }
@@ -278,6 +280,12 @@ public sealed class AndroidPhoneStore
         : p with { RetainedApps = Array.AsReadOnly(p.RetainedApps.Where(a => a.Package != package).ToArray()),
             DisabledSmartVolumeApps = p.DisabledSmartVolumeApps.Contains(package)
                 ? Array.AsReadOnly(p.DisabledSmartVolumeApps.Where(a => a != package).ToArray()) : p.DisabledSmartVolumeApps });
+    internal void SetReceiveFolder(string profileId, string folder)
+    {
+        AndroidFileTransfer.ValidateFolder(folder);
+        ChangeProfile(profileId, p => p.ReceiveFolder == folder ? p : p with { ReceiveFolder = folder });
+    }
+
     public void SetSmartVolume(string package, bool enabled)
     {
         AdbClient.ValidatePackage(package);
@@ -394,9 +402,9 @@ public sealed class AndroidPhoneStore
     }
     public Task FlushAsync() { lock (_gate) return _save; }
     private static SavedPhone SaveProfile(AndroidPhoneProfile profile) => new(profile.Id, profile.Name, profile.LastDevice,
-        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray());
+        profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder);
     private sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
-    private sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
+    private sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null);
     private sealed record PhoneFile(int Version, string SelectedId, SavedPhone[] Phones, AndroidDevice[]? RemovedDevices = null,
         SavedPhone[]? RemovedProfiles = null);
 }

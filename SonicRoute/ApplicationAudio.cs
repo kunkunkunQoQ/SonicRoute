@@ -114,9 +114,9 @@ internal static class ApplicationAudio
 #if SONICROUTE_PHONE
         if (app is { IsExternal: true })
         {
-            outputs = outputs.Where(d => !IsWindowsLinkOutputDevice(d.Id));
-            if (app.ProcessName == AirPlayHost.AppKey || WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) != null)
-                return outputs;
+            if (WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) is { } linked)
+                return WindowsLinkIncomingOutputs.Choices(linked, outputs);
+            if (app.ProcessName == AirPlayHost.AppKey) return outputs.Where(d => !IsWindowsLinkOutputDevice(d.Id));
             var source = Source(app);
             if (source == null) return outputs.Where(d => !IsExternalOutputDevice(d.Id)).ToList();
             var phoneOutputs = AndroidAudioHost.OutputsForDevice(source.Device);
@@ -124,11 +124,13 @@ internal static class ApplicationAudio
             foreach (var phone in phoneOutputs) remaining.TryAdd(phone.Id, phone);
             var config = ConfigService.Load();
             var list = new List<AudioDeviceInfo>();
-            foreach (var device in outputs)
+            foreach (var device in WindowsLinkIncomingOutputs.PhoneChoices(outputs))
             {
                 if (!IsPhoneOutputDevice(device.Id)) list.Add(device);
                 else if (remaining.Remove(device.Id, out var phone)) list.Add(PanelDevices.WithDeviceName(phone, config));
             }
+            list.Add(new AudioDeviceInfo { Id = AndroidAudioSession.SourcePhoneOutputId,
+                DisplayName = L10n.T("Phone.NativeAudioOutput"), Flow = EDataFlow.eRender });
             // A live source can retain access to its own outputs during device-discovery changes.
             foreach (var phone in phoneOutputs)
                 if (remaining.Remove(phone.Id)) list.Add(PanelDevices.WithDeviceName(phone, config));
@@ -230,7 +232,7 @@ internal static class ApplicationAudio
     }
     private static AndroidAudioSource? Source(AudioAppInfo app) => !app.IsExternal || !AndroidAudioHost.IsCreated ? null
         : AndroidAudioHost.Sources.FindSource(app.ExternalSourceId!);
-    private static IPhoneAudioSession? ExternalSession(AudioAppInfo app) => Source(app)?.Session
+    internal static IPhoneAudioSession? ExternalSession(AudioAppInfo app) => Source(app)?.Session
         ?? (IPhoneAudioSession?)AirPlayHost.Find(app.ExternalSourceId)
         ?? WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId)?.Session;
     private static bool IsSourcePhoneOutput(AndroidAudioSource source, string deviceId) =>
@@ -309,7 +311,7 @@ internal static class ApplicationAudio
     }
     internal static string? GetPhoneRoutedDeviceId(int processId) =>
 #if SONICROUTE_PHONE
-        AndroidAudioHost.TryGetPcAppPhoneOutput(processId);
+        AndroidAudioHost.TryGetPcAppPhoneOutput(processId) ?? LocalAppOutputMirrors.GetExclusivePhone(processId, out _);
 #else
         null;
 #endif
@@ -321,7 +323,7 @@ internal static class ApplicationAudio
 #if SONICROUTE_PHONE
         if (flow == EDataFlow.eRender)
         {
-            if (AndroidAudioHost.TryGetPcAppPhoneOutput(processId) is { } phoneOut) return phoneOut;
+            if (GetPhoneRoutedDeviceId(processId) is { } phoneOut) return phoneOut;
         }
 #endif
         return AudioService.GetPersistedEndpoint(processId, flow);
@@ -342,11 +344,11 @@ internal static class ApplicationAudio
 #if SONICROUTE_PHONE
             if (flow == EDataFlow.eRender)
             {
+                if ((AppPlaybackOutputs.IsManaged((int)app.ProcessId) || LocalAppOutputMirrors.GetExclusivePhone((int)app.ProcessId, out _) != null)
+                    && !WindowsLinkOutputIdentity.IsWindowsLinkOutput(deviceId))
+                    return AppPlaybackOutputs.SetAsync(app, [deviceId], deviceId, false).GetAwaiter().GetResult();
                 if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
-                {
-                    WindowsLinkHub.Service?.StopOutgoingAudioForProcessAsync((int)app.ProcessId, onlyExclusive: true).GetAwaiter().GetResult();
-                    return AndroidAudioHost.RoutePcAppToPhone((int)app.ProcessId, deviceId);
-                }
+                    return AppPlaybackOutputs.SetAsync(app, [deviceId], deviceId, false).GetAwaiter().GetResult();
                 if (WindowsLinkOutputIdentity.IsWindowsLinkOutput(deviceId))
                     return WindowsLinkHub.RoutePcAppToPeerAsync((int)app.ProcessId, deviceId).GetAwaiter().GetResult();
                 AndroidAudioHost.StopPcAppToPhone((int)app.ProcessId, restorePreviousEndpoint: false);
@@ -374,7 +376,7 @@ internal static class ApplicationAudio
 #if SONICROUTE_PHONE
     private static async Task<(bool Success, int HResult, string Message)> ApplyExternalEndpointAsync(AudioAppInfo app, EDataFlow flow, string deviceId)
     {
-        if (IsWindowsLinkOutputDevice(deviceId))
+        if (IsWindowsLinkOutputDevice(deviceId) && WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) == null && Source(app) == null)
             return (false, -1, L10n.T("Phone.WindowsLinkLocalAppsOnly"));
         if (flow == EDataFlow.eRender && AirPlayHost.Find(app.ExternalSourceId) is { } airPlay)
         {
@@ -396,7 +398,7 @@ internal static class ApplicationAudio
         {
             try
             {
-                await wlSource.Session.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
+                await WindowsLinkIncomingOutputs.ApplyAsync(wlSource, [deviceId], allowSpeakerMute: false).ConfigureAwait(false);
                 return (true, 0, "");
             }
             catch (Exception ex)
@@ -481,6 +483,8 @@ internal static class ApplicationAudio
     internal static (int OutOk, int InOk, int Total, bool Applied) ResetAllPersistedEndpointsChecked()
     {
 #if SONICROUTE_PHONE
+        AppPlaybackOutputs.ForgetAll();
+        LocalAppOutputMirrors.ClearAllAsync().GetAwaiter().GetResult();
         int phoneStopped = AndroidAudioHost.StopAllPcAppsToPhone(restorePreviousEndpoint: true);
         WindowsLinkHub.StopAllPcAppsToPeers();
 #else

@@ -22,6 +22,8 @@ public interface IDesktopClipboardLink : IDisposable
     void SetListening(bool enabled);
     Task<string?> ReadAsync(CancellationToken token);
     Task<(bool Written, long Revision)> WriteAsync(string text, long expectedRevision, CancellationToken token);
+    Task<(bool Written, long Revision)> WriteIfCurrentAsync(string text, long expectedRevision, Func<bool> current, CancellationToken token) =>
+        current() ? WriteAsync(text, expectedRevision, token) : Task.FromResult((false, expectedRevision));
 }
 
 /// <summary>Opt-in per-device text sharing. Views do not own active connections or clipboard history.</summary>
@@ -414,7 +416,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
 }
 
 /// <summary>Shares the application's existing hidden HWND. Clipboard work runs off the dispatcher.</summary>
-internal sealed class DesktopClipboardLink(HwndSource? source) : IDesktopClipboardLink
+internal sealed partial class DesktopClipboardLink(HwndSource? source, int maxTextBytes = AndroidClipboardClient.MaxTextBytes) : IDesktopClipboardLink
 {
     public event Action? Changed;
     private bool _listening;
@@ -427,14 +429,12 @@ internal sealed class DesktopClipboardLink(HwndSource? source) : IDesktopClipboa
         if (enabled)
         {
             _handle = source.Handle;
-            source.AddHook(ClipboardMessage);
-            if (!AddClipboardFormatListener(source.Handle)) { source.RemoveHook(ClipboardMessage); throw new ExternalException(); }
+            Listeners.GetValue(source, static window => new ClipboardListeners(window)).Subscribe(OnChanged);
         }
-        else { RemoveClipboardFormatListener(source.Handle); source.RemoveHook(ClipboardMessage); }
+        else if (Listeners.TryGetValue(source, out var listeners)) listeners.Unsubscribe(OnChanged);
         _listening = enabled;
     }
-    private IntPtr ClipboardMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
-    { if (message == 0x031D) Changed?.Invoke(); return IntPtr.Zero; }
+    private void OnChanged() => Changed?.Invoke();
     public async Task<string?> ReadAsync(CancellationToken token)
     {
         for (int attempt = 0; attempt < 4; ++attempt)
@@ -445,10 +445,10 @@ internal sealed class DesktopClipboardLink(HwndSource? source) : IDesktopClipboa
                 if (!OpenClipboard(IntPtr.Zero)) return (Busy: true, Text: (string?)null);
                 try
                 {
-                    if (!IsClipboardFormatAvailable(13)) return (false, (string?)null);
+                    if (!IsClipboardFormatAvailable(13) || ExcludeFromSharing()) return (false, (string?)null);
                     IntPtr data = GetClipboardData(13);
                     long bytes = data == IntPtr.Zero ? 0 : (long)GlobalSize(data);
-                    if (bytes is < 2 or > AndroidClipboardClient.MaxTextBytes * 2 + 2) return (false, (string?)null);
+                    if (bytes < 2 || bytes > maxTextBytes * 2L + 2) return (false, (string?)null);
                     IntPtr pointer = GlobalLock(data); if (pointer == IntPtr.Zero) return (false, (string?)null);
                     try
                     {
@@ -465,7 +465,10 @@ internal sealed class DesktopClipboardLink(HwndSource? source) : IDesktopClipboa
         }
         return null;
     }
-    public async Task<(bool Written, long Revision)> WriteAsync(string text, long expectedRevision, CancellationToken token)
+    public Task<(bool Written, long Revision)> WriteAsync(string text, long expectedRevision, CancellationToken token) =>
+        WriteIfCurrentAsync(text, expectedRevision, static () => true, token);
+
+    public async Task<(bool Written, long Revision)> WriteIfCurrentAsync(string text, long expectedRevision, Func<bool> current, CancellationToken token)
     {
         bool written = false; long revision = expectedRevision;
         bool completed = await ClipboardWriter.TryWriteTextAsync(text, value =>
@@ -474,7 +477,7 @@ internal sealed class DesktopClipboardLink(HwndSource? source) : IDesktopClipboa
         if (!OpenClipboard(_handle)) throw new ExternalException();
         try
         {
-            if (Revision != expectedRevision) return; // A newer computer copy wins while waiting for the clipboard lock.
+            if (Revision != expectedRevision || !current()) return; // A newer local copy or a revoked grant wins.
             IntPtr data = GlobalAlloc(0x42, (UIntPtr)((value.Length + 1) * 2));
             if (data == IntPtr.Zero) throw new ExternalException();
             try
@@ -483,7 +486,8 @@ internal sealed class DesktopClipboardLink(HwndSource? source) : IDesktopClipboa
                 try { Marshal.Copy((value + '\0').ToCharArray(), 0, pointer, value.Length + 1); }
                 finally { GlobalUnlock(data); }
                 token.ThrowIfCancellationRequested();
-                if (!EmptyClipboard() || SetClipboardData(13, data) == IntPtr.Zero) throw new ExternalException();
+                if (!current()) return;
+                if (!EmptyClipboard() || !MarkReceivedClipboard() || SetClipboardData(13, data) == IntPtr.Zero) throw new ExternalException();
                 data = IntPtr.Zero; // Ownership transferred to Windows.
                 written = true; revision = Revision;
             }

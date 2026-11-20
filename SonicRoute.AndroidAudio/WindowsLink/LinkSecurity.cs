@@ -13,8 +13,19 @@ using SonicRoute.Core;
 
 namespace SonicRoute.WindowsLink;
 
-internal sealed record LinkHello(string Name, int Port, LinkCapabilities Capabilities, bool Trusted, byte[] Commitment);
-internal sealed record LinkSecure(SslStream Stream, string Id, LinkHello Hello);
+internal sealed record LinkHello(string Name, int Port, LinkCapabilities Capabilities, bool Trusted, byte[] Commitment,
+    bool SupportsNativeVideo = false, bool SupportsFileBrowse = false, bool SupportsClipboardSync = false,
+    bool SupportsSourcePlayback = false, bool SupportsAudioRelay = false);
+internal sealed record LinkSecure(SslStream Stream, string Id, LinkHello Hello, bool PairingVerified);
+internal sealed class LinkAuthenticationFailureException(LinkConnectFailure reason, string message) : AuthenticationException(message)
+{
+    internal LinkConnectFailure Reason { get; } = reason;
+}
+internal sealed class LinkConnectionFailureException(LinkConnectFailure reason, string message, Exception? inner)
+    : IOException(message, inner)
+{
+    internal LinkConnectFailure Reason { get; } = reason;
+}
 internal sealed class LinkDuplicatePairingException() : IOException("Another connection is already pairing this Windows Link peer.");
 
 internal static class LinkSecurity
@@ -108,8 +119,8 @@ internal static class LinkSecurity
     internal static async Task<LinkSecure> AuthenticateAsync(
         TcpClient socket, bool incoming, X509Certificate2 identity, string? expectedId, string name, int port,
         LinkCapabilities capabilities, Func<string, bool> trusted, Func<string, LinkHello, bool> allowPairing,
-        Func<string, string, string, CancellationToken, Task<bool>> confirm,
-        CancellationToken token)
+        Func<string, string, string, CancellationToken, Task<bool>> confirm, bool permitPairing,
+        CancellationToken token, bool supportsClipboardSync = false)
     {
         string localId = Id(identity);
         string? remoteId = null;
@@ -151,19 +162,24 @@ internal static class LinkSecurity
                 }, stage).ConfigureAwait(false);
 
             if (remoteId == null || stream.NegotiatedApplicationProtocol != Protocol)
-                throw new AuthenticationException("Windows Link identity or protocol mismatch.");
+                throw new LinkAuthenticationFailureException(LinkConnectFailure.Incompatible, "Windows Link identity or protocol mismatch.");
 
             byte[] nonce = RandomNumberGenerator.GetBytes(NonceSize);
             bool knowsPeer = trusted(remoteId);
-            var hello = new LinkHello(name, port, capabilities, knowsPeer, SHA256.HashData(nonce));
+            var hello = new LinkHello(name, port, capabilities, knowsPeer, SHA256.HashData(nonce), SupportsNativeVideo: true,
+                SupportsFileBrowse: capabilities.HasFlag(LinkCapabilities.FileTransfer), SupportsClipboardSync: supportsClipboardSync,
+                SupportsSourcePlayback: true, SupportsAudioRelay: true);
             await WriteHelloAsync(stream, hello, stage).ConfigureAwait(false);
             LinkHello remote = await ReadHelloAsync(stream, stage).ConfigureAwait(false);
-            if (!knowsPeer || !remote.Trusted)
+            bool needsPairing = !knowsPeer || !remote.Trusted;
+            if (needsPairing)
             {
-                bool allowed = allowPairing(remoteId, remote);
+                bool allowed = permitPairing && allowPairing(remoteId, remote);
                 await stream.WriteAsync(new byte[] { allowed ? (byte)1 : (byte)0 }, stage).ConfigureAwait(false);
                 byte[] decision = new byte[1];
                 await stream.ReadExactlyAsync(decision, stage).ConfigureAwait(false);
+                if (!permitPairing)
+                    throw new LinkAuthenticationFailureException(LinkConnectFailure.PairingRejected, "The remote computer no longer trusts this device.");
                 if (!allowed || decision[0] != 1) throw new LinkDuplicatePairingException();
                 await stream.WriteAsync(nonce, stage).ConfigureAwait(false);
                 byte[] remoteNonce = new byte[NonceSize];
@@ -185,9 +201,9 @@ internal static class LinkSecurity
                 byte[] confirmation = new byte[1];
                 await stream.ReadExactlyAsync(confirmation, stage).ConfigureAwait(false);
                 if (!accepted || confirmation[0] != 1)
-                    throw new AuthenticationException("Windows Link pairing was declined.");
+                    throw new LinkAuthenticationFailureException(LinkConnectFailure.PairingRejected, "Windows Link pairing was declined.");
             }
-            return new LinkSecure(stream, remoteId, remote);
+            return new LinkSecure(stream, remoteId, remote, needsPairing);
         }
         catch { stream.Dispose(); throw; }
     }

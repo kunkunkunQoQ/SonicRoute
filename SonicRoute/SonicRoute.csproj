@@ -44,7 +44,7 @@
 
   <ItemGroup Condition="'$(SonicRouteEdition)' == 'Lite'">
     <Compile Remove="AndroidAudioHost.cs;AndroidAppDragController.cs;PhoneAudioWindow.xaml.cs;PhoneDevicePage.xaml.cs;PhoneClipboardSync.cs;WindowsLinkConnectView.xaml.cs" />
-    <Page Remove="PhoneAudioWindow.xaml;PhoneDevicePage.xaml;AirPlayReceiverView.xaml;WindowsLinkConnectView.xaml" />
+    <Page Remove="PhoneAudioWindow.xaml;PhoneDevicePage.xaml;AirPlayReceiverView.xaml;WindowsLinkConnectView.xaml;WindowsLink/WindowsLinkReceiveWindow.xaml" />
   </ItemGroup>
   <ItemGroup Condition="'$(SonicRouteEdition)' == 'Full'">
     <EmbeddedResource Include="..\build\FullRelease.files.json" LogicalName="SonicRoute.FullRelease.files.json" />

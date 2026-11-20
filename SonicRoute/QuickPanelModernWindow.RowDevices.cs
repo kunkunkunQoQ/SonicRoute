@@ -29,7 +29,7 @@ public partial class QuickPanelModernWindow
         {
             var button = new Button { Content = ShortName(device.DisplayName), Tag = device };
             System.Windows.Automation.AutomationProperties.SetName(button, device.DisplayName);
-            button.ToolTipOpening += (_, e) => e.Handled = true;
+            button.ToolTipOpening += (_, e) => e.Handled = button.ToolTip == null;
             button.SetResourceReference(StyleProperty, "DevButton");
             configure(button, device);
             wrap.Children.Add(button);

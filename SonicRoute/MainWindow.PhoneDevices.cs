@@ -190,9 +190,20 @@ public partial class MainWindow
         WindowsLinkSidebarChanged();
     }
 
+    private int _windowsLinkSidebarRefreshQueued;
+
     private void WindowsLinkSidebarChanged()
     {
-        if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(WindowsLinkSidebarChanged)); return; }
+        if (!Dispatcher.CheckAccess())
+        {
+            if (System.Threading.Interlocked.Exchange(ref _windowsLinkSidebarRefreshQueued, 1) != 0) return;
+            _ = Dispatcher.BeginInvoke(new Action(() =>
+            {
+                System.Threading.Interlocked.Exchange(ref _windowsLinkSidebarRefreshQueued, 0);
+                WindowsLinkSidebarChanged();
+            }));
+            return;
+        }
         if (_isClosed || !_phoneInitialized) return;
         SyncExternalOutputDevices();
         if (IsLoaded && (!IsVisible || WindowState == WindowState.Minimized
@@ -215,7 +226,7 @@ public partial class MainWindow
                     _windowsLinkSidebarDevices.Add(peer.Id, item);
                     _phoneDevicesList.Items.Add(item);
                 }
-                item.Update(peer.DisplayName, L10n.T(peer.Connected ? "Phone.ConnectedStatus" : "Phone.Disconnected"), peer.Connected);
+                item.Update(peer.DisplayName, WindowsLinkPeerStatus.Text(peer), peer.Connected);
             }
         }
         finally { _suppressPhoneSelection = suppressed; }
@@ -235,7 +246,11 @@ public partial class MainWindow
         await InitializePhoneManagementAsync();
         if (_isClosed) return;
         NavApps.IsChecked = true;
-        _phoneDevicePage ??= new PhoneDevicePage();
+        if (_phoneDevicePage == null)
+        {
+            _phoneDevicePage = new PhoneDevicePage();
+            _phoneDevicePage.PeerOpenedFromList += UpdatePhoneSidebarSelection;
+        }
         if (addDevice) _phoneDevicePage.ShowConnection();
         else if (windowsPeer != null) _phoneDevicePage.ShowWindowsLinkPeer(windowsPeer);
         else _phoneDevicePage.ShowDevice();

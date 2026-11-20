@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using SonicRoute.AndroidAudio;
 
@@ -15,52 +16,75 @@ internal sealed class LinkVideoViewer : IAsyncDisposable
     private readonly Task _show;
     private NativeVideoWindow? _window;
     private byte[]? _assembly;
+    private readonly int _frameLimit;
+    private readonly bool _allowCodecSwitch;
     private int _length;
     private long _pts;
     private bool _key;
+    private bool _switchedToAvc;
     private bool _needKey = true;
     private bool _disposed;
     private long _lastMove;
 
-    private sealed record Frame(byte[] Data, int Length, long Pts, bool Key);
+    private sealed record Frame(byte[] Data, int Length, long Pts, bool Key, bool SwitchedToAvc);
 
     internal LinkVideoViewer(
-        string title,
+        LinkMedia media,
         Action<byte[]>? input,
         Action<Exception?> ended,
         string? decoderMode = null,
-        byte[]? iconPng = null,
         int x = 100,
-        int y = 80)
-        => _show = Task.Run(async () =>
+        int y = 80,
+        bool hevc = false, int width = 0, int height = 0, int frameLimit = LinkConnection.LegacyMaxVideoFrame)
+    {
+        _frameLimit = frameLimit;
+        _allowCodecSwitch = media.NativeResolution && hevc;
+        _show = Task.Run(async () =>
         {
             Exception? error = null;
-            try { await ShowAsync(title, input, decoderMode, iconPng, x, y, _stop.Token).ConfigureAwait(false); }
+            try { await ShowAsync(media, input, decoderMode, x, y, hevc, width, height, _stop.Token).ConfigureAwait(false); }
             catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }
             catch (Exception ex) { error = ex; }
             finally { ended(error); }
         });
+    }
 
     internal void Push(ReadOnlySpan<byte> chunk)
     {
         lock (_gate)
         {
             if (_disposed) return;
+            if (chunk.Length is <= 9 or > LinkConnection.VideoChunk + 9)
+                throw new InvalidDataException("Invalid Windows Link video fragment size.");
             byte flags = chunk[0];
             long pts = BinaryPrimitives.ReadInt64LittleEndian(chunk[1..]);
-            if ((flags & ~7) != 0 || pts < 0 || pts > TimeSpan.FromDays(365).TotalMicroseconds)
+            bool avc = (flags & 8) != 0;
+            if ((flags & ~15) != 0 || (avc && !_allowCodecSwitch) || pts < 0 || pts > TimeSpan.FromDays(365).TotalMicroseconds)
                 throw new InvalidDataException("Invalid Windows Link video timestamp or flags.");
             if ((flags & 1) != 0)
             {
-                _assembly ??= ArrayPool<byte>.Shared.Rent(LinkConnection.MaxVideoFrame);
                 _length = 0;
                 _pts = pts;
                 _key = (flags & 4) != 0;
+                _switchedToAvc = avc;
             }
-            if (_assembly == null || pts != _pts || _length + chunk.Length - 9 > LinkConnection.MaxVideoFrame)
+            else if (_length == 0 || pts != _pts || _key != ((flags & 4) != 0) || _switchedToAvc != avc)
                 throw new InvalidDataException("Invalid Windows Link video fragment sequence.");
+            int required = _length + chunk.Length - 9;
+            if (required > _frameLimit)
+                throw new InvalidDataException("Windows Link video frame exceeds the negotiated size.");
+            if (_assembly == null || _assembly.Length < required)
+            {
+                var buffer = ArrayPool<byte>.Shared.Rent(required);
+                if (_assembly != null)
+                {
+                    _assembly.AsSpan(0, _length).CopyTo(buffer);
+                    Return(_assembly);
+                }
+                _assembly = buffer;
+            }
             chunk[9..].CopyTo(_assembly.AsSpan(_length));
-            _length += chunk.Length - 9;
+            _length = required;
             if ((flags & 2) == 0) return;
 
             if (_frames.Count >= 2)
@@ -70,21 +94,41 @@ internal sealed class LinkVideoViewer : IAsyncDisposable
             }
             if (!_needKey || _key)
             {
-                _frames.Enqueue(new Frame(_assembly, _length, pts, _key));
+                _frames.Enqueue(new Frame(_assembly, _length, pts, _key, _switchedToAvc));
                 _assembly = null;
                 _needKey = false;
                 if (_ready.CurrentCount == 0) _ready.Release();
+            }
+            else
+            {
+                Return(_assembly);
+                _assembly = null;
             }
             _length = 0;
         }
     }
 
-    private async Task ShowAsync(string title, Action<byte[]>? input, string? decoderMode, byte[]? iconPng, int x, int y, CancellationToken token)
+    internal static NativeVideoWindow CreateWindow(LinkMedia media, bool acceptsInput, int x, int y)
+    {
+        string key = media.AppKey ?? media.Name;
+        bool monitor = key.StartsWith(LinkRemoteApp.MonitorKeyPrefix, StringComparison.OrdinalIgnoreCase)
+            || media.InstanceId?.StartsWith("m:", StringComparison.Ordinal) == true;
+        byte[] identity = SHA256.HashData(Encoding.UTF8.GetBytes(media.PeerId.ToUpperInvariant() + "\n" + key.ToUpperInvariant()));
+        return new NativeVideoWindow(media.Name, isMirrorMode: true, preferText: acceptsInput, iconPng: monitor ? null : media.IconPng,
+            x: x, y: y, initialClientWidth: 800, initialClientHeight: 450,
+            appUserModelId: "SonicRoute.WindowsLink." + Convert.ToHexString(identity.AsSpan(0, 16)),
+            acceptsGamepad: false, windowModes: true)
+        {
+            IconKind = monitor ? NativeWindowIcon.Monitor : NativeWindowIcon.WindowsApplication
+        };
+    }
+
+    private async Task ShowAsync(LinkMedia media, Action<byte[]>? input, string? decoderMode, int x, int y, bool hevc, int initialWidth, int initialHeight, CancellationToken token)
     {
         NativeVideoWindow? window = null;
         D3D11VideoSurfaceRenderer? renderer = null;
         MediaFoundationH264Decoder? decoder = null;
-        string? effectiveDecoder = decoderMode is AndroidStreamSettings.WindowsVideoDecoder or AndroidStreamSettings.SoftwareVideoDecoder
+        string? effectiveDecoder = hevc ? AndroidStreamSettings.WindowsHevcDecoder : decoderMode is AndroidStreamSettings.WindowsVideoDecoder or AndroidStreamSettings.SoftwareVideoDecoder
             ? decoderMode : null;
         try
         {
@@ -119,18 +163,27 @@ internal sealed class LinkVideoViewer : IAsyncDisposable
                 {
                     if (window == null)
                     {
-                        window = new NativeVideoWindow(title, isMirrorMode: true, preferText: input != null, iconPng: iconPng,
-                            x: x, y: y, initialClientWidth: 800, initialClientHeight: 450, acceptsGamepad: false, windowModes: true);
+                        window = CreateWindow(media, input != null, x, y);
                         window.CloseRequested += _stop.Cancel;
                         if (input != null) AttachInput(window, input);
                         nint hwnd = await window.CreateAsync(token).ConfigureAwait(false);
                         renderer = new D3D11VideoSurfaceRenderer(hwnd, window.ClientWidth, window.ClientHeight, isMirrorMode: true);
                         window.ClientSizeChanged += renderer.Resize;
                         window.PaintRequested += renderer.RenderLastFrame;
-                        decoder = new MediaFoundationH264Decoder(renderer.DeviceHandle, decoder: effectiveDecoder) { SkipCorruptFrames = true };
                         Volatile.Write(ref _window, window);
                     }
-                    decoder!.DecodePacket(next.Data.AsSpan(0, next.Length), next.Pts, hardware, software);
+                    if (hevc && next.SwitchedToAvc)
+                    {
+                        if (!next.Key) continue;
+                        decoder?.Dispose();
+                        decoder = null;
+                        hevc = false;
+                        effectiveDecoder = null;
+                        initialWidth = initialHeight = 0;
+                    }
+                    decoder ??= new MediaFoundationH264Decoder(renderer!.DeviceHandle, initialWidth, initialHeight, decoder: effectiveDecoder,
+                        codec: hevc ? ScrcpyVideoStreamHeader.CodecH265 : ScrcpyVideoStreamHeader.CodecH264) { SkipCorruptFrames = true };
+                    decoder.DecodePacket(next.Data.AsSpan(0, next.Length), next.Pts, hardware, software);
                 }
                 finally { Return(next.Data); }
             }

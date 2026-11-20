@@ -7,11 +7,11 @@ namespace SonicRoute.WindowsLink;
 
 internal static class LinkAudioCapture
 {
-    internal static bool IsSupported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 20348);
+    internal static Task CaptureAsync(int? processId, Action<ReadOnlyMemory<byte>> onPcm, Action onStarted, CancellationToken token) =>
+        SharedProcessCapture.SubscribeAsync(processId, onPcm, onStarted, token);
 
-    internal static async Task CaptureAsync(int? processId, Action<ReadOnlyMemory<byte>> onPcm, Action onStarted, CancellationToken token)
+    internal static async Task CaptureNativeAsync(int? processId, Action<ReadOnlyMemory<byte>> onPcm, Action onStarted, CancellationToken token)
     {
-        if (!IsSupported) throw new PlatformNotSupportedException("Windows build 20348 or later is required for process loopback.");
         using var destination = new PcmWriter(onPcm);
         await PcProcessLoopbackCapture.RunMtaCaptureLoopAsync(processId ?? Environment.ProcessId, destination, token,
             static () => { }, excludeProcess: processId == null, onStarted: onStarted).ConfigureAwait(false);
@@ -39,9 +39,13 @@ internal sealed record WindowsLinkAudioSource(
     string AppKey,
     string Name,
     byte[]? IconPng,
-    LinkAudioPlayback Session);
+    LinkAudioPlayback Session)
+{
+    internal string? InstanceId { get; init; }
+    internal bool IsRelayed { get; init; }
+}
 
-internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
+internal sealed partial class LinkAudioPlayback : IPhoneAudioSession, IMultiOutputAudioSession, IAsyncDisposable
 {
     private readonly AndroidPcmSource _audio;
     private readonly object _gate = new();
@@ -51,12 +55,13 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
     private readonly CancellationToken _lifetime;
     private readonly Action _changed;
     private readonly Action<Exception?> _failed;
+    internal Func<bool>? SourceAlreadyPlaying { get; init; }
     private IPcmPlayer? _player;
     private IDisposable? _defaultWatch;
     private AndroidAudioState _state;
     private string? _endpoint;
     private bool _disposed;
-    private int _received, _defaultQueued, _defaultVersion;
+    private int _defaultQueued, _defaultVersion;
 
     internal LinkAudioPlayback(
         bool smartVolume,
@@ -66,7 +71,9 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
         Func<Action, IDisposable>? watchDefault = null,
         CancellationToken lifetime = default)
     {
-        _audio = new AndroidPcmSource { SmartVolume = smartVolume };
+        _mirrors = new PcmOutputMirrors(true, RemoveMirrorsAsync, static id => WindowsLinkOutputIdentity.TryParsePeerId(id, out _));
+        _mirrors.SetLevels(1, smartVolume);
+        _audio = new AndroidPcmSource { SmartVolume = smartVolume, PreserveQuietLevel = true, Mirrors = _mirrors };
         _state = new AndroidAudioState(CaptureState.Starting, SmartVolume: smartVolume);
         _changed = changed;
         _failed = failed;
@@ -74,6 +81,9 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
         _watchDefault = watchDefault ?? DefaultOutputNotifications.Subscribe;
         _lifetime = lifetime;
     }
+
+    string?[] IMultiOutputAudioSession.GetOutputs() => GetOutputs();
+    Task IMultiOutputAudioSession.SetOutputsAsync(IReadOnlyList<string?> outputs) => SetOutputsAsync(outputs);
 
     public AndroidAudioState State => Volatile.Read(ref _state);
     public AndroidPcmSource? Pcm => State.State == CaptureState.Receiving ? _audio : null;
@@ -86,13 +96,14 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
         try
         {
             for (int i = 0; i < data.Length; i++) scratch[i] = data[i] * (1.0f / 32768f);
-            _audio.Write(scratch.AsSpan(0, data.Length));
+            var samples = scratch.AsSpan(0, data.Length);
+            _audio.Write(samples);
         }
         finally { ArrayPool<float>.Shared.Return(scratch, clearArray: true); }
-
-        if (Interlocked.Exchange(ref _received, 1) == 0)
-            _ = Task.Run(EnsureInitialOutputAsync);
     }
+
+    // A paused application can own an audio session without producing capture packets.
+    internal void Start() => _ = Task.Run(EnsureInitialOutputAsync);
 
     private async Task EnsureInitialOutputAsync()
     {
@@ -151,13 +162,8 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
 
     public void SetMute(bool muted) => SetLevel(null, muted);
 
-    internal void SetPlayback(string? endpointId, float volume, bool muted)
-    {
-        int percent = Math.Clamp((int)Math.Round(volume * 100f), 0, 100);
-        SetLevel(percent, muted);
-        if (!string.Equals(Volatile.Read(ref _state).OutputId, endpointId, StringComparison.OrdinalIgnoreCase))
-            _ = SetOutputAsync(endpointId);
-    }
+    internal void SetPlaybackLevel(float volume, bool muted) =>
+        SetLevel(Math.Clamp((int)Math.Round(volume * 100f), 0, 100), muted);
 
     internal void SetSmartVolume(bool smartVolume)
     {
@@ -165,6 +171,7 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
         lock (_gate)
         {
             if (_disposed || _state.SmartVolume == smartVolume) return;
+            _mirrors.SetLevels(_audio.Volume, smartVolume);
             Volatile.Write(ref _state, _state with { SmartVolume = smartVolume });
         }
         _changed();
@@ -177,60 +184,64 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
             if (_disposed || (volume ?? _state.Volume) == _state.Volume && (muted ?? _state.Muted) == _state.Muted) return;
             var next = _state with { Volume = volume ?? _state.Volume, Muted = muted ?? _state.Muted };
             _audio.Volume = next.Muted ? 0 : next.Volume / 100f;
+            _mirrors.SetLevels(_audio.Volume, next.SmartVolume);
             Volatile.Write(ref _state, next);
         }
         _changed();
     }
 
-    public Task SetOutputAsync(string? endpoint) => Task.Run(() => ChangeOutputAsync(endpoint));
+    public Task SetOutputAsync(string? endpoint) => SetOutputsAsync([endpoint]);
 
-    private async Task ChangeOutputAsync(string? endpoint, bool refreshDefault = false, Predicate<AndroidPhonePcmPlayer>? phoneMatch = null)
+    private async Task ChangeOutputAsync(string? endpoint, bool refreshDefault = false, Predicate<IPcmPlayer>? playerMatch = null)
     {
         await _routes.WaitAsync(_lifetime).ConfigureAwait(false);
-        try
-        {
-            IPcmPlayer? previous;
-            lock (_gate)
-            {
-                if (_disposed)
-                {
-                    if (refreshDefault || phoneMatch != null) return;
-                    throw new ObjectDisposedException(nameof(LinkAudioPlayback));
-                }
-                if (_player == null)
-                {
-                    if (refreshDefault || phoneMatch != null) return;
-                    if (string.Equals(_endpoint, endpoint, StringComparison.OrdinalIgnoreCase)) return;
-                    _endpoint = endpoint;
-                    if (endpoint != null) StopWatch();
-                    Volatile.Write(ref _state, _state with { OutputId = endpoint });
-                    goto NotifyChange;
-                }
-                if (refreshDefault ? _endpoint != null : string.Equals(endpoint, _endpoint, StringComparison.OrdinalIgnoreCase)) return;
-                if (phoneMatch != null && (_player is not AndroidPhonePcmPlayer phone || !phoneMatch(phone))) return;
-                previous = _player;
-            }
-            bool addedWatch = endpoint == null && _defaultWatch == null;
-            if (addedWatch) _defaultWatch = _watchDefault(DefaultChanged);
-            try { await ReplacePlayerAsync(previous, endpoint).ConfigureAwait(false); }
-            catch
-            {
-                if (addedWatch) StopWatch();
-                throw;
-            }
-            lock (_gate)
-            {
-                _endpoint = endpoint;
-                Volatile.Write(ref _state, _state with { OutputId = endpoint });
-            }
-            if (endpoint != null) StopWatch();
-        }
+        bool changed;
+        try { changed = await ChangePrimaryLockedAsync(endpoint, refreshDefault, playerMatch).ConfigureAwait(false); }
         finally { _routes.Release(); }
-    NotifyChange:
-        if (!refreshDefault) _changed();
+        if (changed && !refreshDefault) _changed();
     }
 
-    private async Task ReplacePlayerAsync(IPcmPlayer previous, string? endpoint)
+    private async Task<bool> ChangePrimaryLockedAsync(string? endpoint, bool refreshDefault = false, Predicate<IPcmPlayer>? playerMatch = null, bool restorePrevious = true)
+    {
+        IPcmPlayer? previous;
+        lock (_gate)
+        {
+            if (_disposed)
+            {
+                if (refreshDefault || playerMatch != null) return false;
+                throw new ObjectDisposedException(nameof(LinkAudioPlayback));
+            }
+            if (_player == null)
+            {
+                if (refreshDefault || playerMatch != null) return false;
+                if (string.Equals(_endpoint, endpoint, StringComparison.OrdinalIgnoreCase)) return false;
+                _endpoint = endpoint;
+                if (endpoint != null) StopWatch();
+                Volatile.Write(ref _state, _state with { OutputId = endpoint });
+                return true;
+            }
+            if (refreshDefault ? _endpoint != null : string.Equals(endpoint, _endpoint, StringComparison.OrdinalIgnoreCase)) return false;
+            if (playerMatch != null && !playerMatch(_player)) return false;
+            previous = _player;
+        }
+        bool addedWatch = endpoint == null && _defaultWatch == null;
+        if (addedWatch) _defaultWatch = _watchDefault(DefaultChanged);
+        try { await ReplacePlayerAsync(previous, endpoint, restorePrevious).ConfigureAwait(false); }
+        catch
+        {
+            if (addedWatch) StopWatch();
+            throw;
+        }
+        lock (_gate)
+        {
+            _endpoint = endpoint;
+            Volatile.Write(ref _state, _state with { OutputId = endpoint });
+        }
+        if (endpoint != null) StopWatch();
+        return true;
+    }
+
+    private async Task ReplacePlayerAsync(IPcmPlayer previous, string? endpoint, bool restorePrevious)
     {
         var next = _createPlayer(_audio, endpoint, _lifetime);
         bool switching = false;
@@ -248,7 +259,8 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
         catch
         {
             DisposeQuietly(next);
-            if (switching && !_lifetime.IsCancellationRequested && previous is not AndroidPhonePcmPlayer { Failure: not null })
+            if (switching && restorePrevious && !_lifetime.IsCancellationRequested && previous is not AndroidPhonePcmPlayer { Failure: not null }
+                && previous is not WindowsLinkService.RelayPlayer { Failure: not null })
             {
                 try { previous.Play(); }
                 catch (Exception ex)
@@ -266,12 +278,16 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
     private void SetPlayer(IPcmPlayer next)
     {
         Volatile.Write(ref _player, next);
+        _mirrors.SetPrimary(next);
+        if (next is IFailedPcmPlayer remote)
+        {
+            void Lost(Exception error) => _ = RecoverOutputAsync(p => ReferenceEquals(p, next), error: error);
+            remote.Failed += Lost;
+            if (next is WindowsLinkService.RelayPlayer { Failure: { } failure }) Lost(failure);
+        }
         if (next is WasapiPcmPlayer wasapi)
         {
-            wasapi.Failed += ex =>
-            {
-                if (ReferenceEquals(Volatile.Read(ref _player), next)) _failed(ex);
-            };
+            wasapi.Failed += ex => _ = RecoverOutputAsync(p => ReferenceEquals(p, next), error: ex);
         }
         if (next is AndroidPhonePcmPlayer phone)
         {
@@ -283,21 +299,62 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
     private void QueuePhoneFallback(AndroidPhonePcmPlayer player)
     {
         if (ReferenceEquals(Volatile.Read(ref _player), player) && !_lifetime.IsCancellationRequested)
-            _ = ReturnToWindowsAsync(current => ReferenceEquals(current, player));
+            _ = RecoverOutputAsync(current => ReferenceEquals(current, player));
     }
 
-    internal Task PhoneRemovedAsync(AndroidDevice device) =>
-        ReturnToWindowsAsync(current => AndroidDeviceIdentity.MatchesSavedDevice(device, current.Device));
+    internal async Task PhoneRemovedAsync(AndroidDevice device)
+    {
+        await RemoveMirrorsAsync(p => p is AndroidPhonePcmPlayer phone && AndroidDeviceIdentity.MatchesSavedDevice(device, phone.Device)).ConfigureAwait(false);
+        await RecoverOutputAsync(current => current is AndroidPhonePcmPlayer p && AndroidDeviceIdentity.MatchesSavedDevice(device, p.Device),
+            unavailablePhone: AndroidDeviceIdentity.Key(device)).ConfigureAwait(false);
+    }
 
-    private Task ReturnToWindowsAsync(Predicate<AndroidPhonePcmPlayer> phoneMatch) =>
+    private Task RecoverOutputAsync(Predicate<IPcmPlayer> playerMatch, Exception? error = null, string? unavailablePhone = null) =>
         Task.Run(async () =>
         {
-            try { await ChangeOutputAsync(null, phoneMatch: phoneMatch).ConfigureAwait(false); }
+            try
+            {
+                await _routes.WaitAsync(_lifetime).ConfigureAwait(false);
+                try
+                {
+                    if (_disposed || _player == null || !playerMatch(_player)) return;
+                    var selected = _mirrors.IdsSnapshot();
+                    foreach (var candidate in selected)
+                    {
+                        try
+                        {
+                            var others = selected.Where(id => !StringComparer.OrdinalIgnoreCase.Equals(id, candidate)).ToArray();
+                            await _mirrors.ApplyAsync(others, _createPlayer,
+                                () => ChangePrimaryLockedAsync(candidate, restorePrevious: false), _lifetime).ConfigureAwait(false);
+                            _changed();
+                            return;
+                        }
+                        catch (Exception ex) when (!_lifetime.IsCancellationRequested) { error = ex; }
+                    }
+                    bool linkedOutput = AndroidOutputIdentity.IsPhoneOutput(_endpoint) || WindowsLinkOutputIdentity.IsWindowsLinkOutput(_endpoint);
+                    if (linkedOutput && SourceAlreadyPlaying?.Invoke() != true)
+                    {
+                        string?[][] previous;
+                        lock (_gate) previous = _previousOutputs.ToArray();
+                        var unavailable = new HashSet<string?>(StringComparer.OrdinalIgnoreCase) { _endpoint };
+                        foreach (var group in previous)
+                        {
+                            if (unavailablePhone != null)
+                                foreach (var id in group)
+                                    if (AndroidOutputIdentity.TryParseDeviceId(id, out var phone, out _) &&
+                                        string.Equals(phone, unavailablePhone, StringComparison.OrdinalIgnoreCase)) unavailable.Add(id);
+                            if (await RestoreOutputsAsync(group, unavailable).ConfigureAwait(false)) { _changed(); return; }
+                        }
+                    }
+                    _failed(linkedOutput ? null : error);
+                }
+                finally { _routes.Release(); }
+            }
             catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.WriteLine("Windows Link phone output fallback: " + ex.GetType().Name);
-                if (Volatile.Read(ref _player) is AndroidPhonePcmPlayer current && phoneMatch(current)) _failed(ex);
+                System.Diagnostics.Trace.WriteLine("Windows Link output fallback: " + ex.GetType().Name);
+                if (Volatile.Read(ref _player) is { } current && playerMatch(current)) _failed(ex);
             }
         });
 
@@ -348,6 +405,7 @@ internal sealed class LinkAudioPlayback : IPhoneAudioSession, IAsyncDisposable
                 Volatile.Write(ref _state, _state with { State = CaptureState.Idle });
             }
             StopWatch();
+            _mirrors.Clear();
             DisposeQuietly(Interlocked.Exchange(ref _player, null));
             _audio.Clear();
         }

@@ -10,6 +10,31 @@
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <local:PhoneDeviceNameConverter x:Key="PhoneDeviceName"/>
+        <Style x:Key="PeerViewTab" TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template"><Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Tab" Height="30" CornerRadius="6" BorderThickness="1" BorderBrush="Transparent" Background="Transparent">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path Data="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Width="14" Height="14"
+                                  Stretch="Uniform" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.5" Margin="0,0,6,0"/>
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Tab" Property="Background" Value="{DynamicResource Theme.NavHover}"/></Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Tab" Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
+                            <Setter TargetName="Tab" Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Tab" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value></Setter>
+        </Style>
     </Window.Resources>
     <Border x:Name="PhoneSurface" Background="{DynamicResource Theme.WindowBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
             BorderThickness="1" CornerRadius="12" Padding="8,12">
@@ -93,13 +118,15 @@
                     </Grid>
                 </Grid>
             </Border>
-            <UniformGrid x:Name="WindowsLinkViewChoices" Grid.Row="0" Columns="2"
-                         Visibility="Collapsed" Margin="0,0,0,6">
-                <RadioButton x:Name="WindowsLinkAudioChoice" GroupName="WindowsLinkView" IsChecked="True"
+            <Border x:Name="WindowsLinkViewChoices" Grid.Row="0" CornerRadius="8" Padding="2"
+                    Background="{DynamicResource Theme.Overlay}" Visibility="Collapsed" Margin="0,0,0,8">
+              <UniformGrid Columns="2">
+                <RadioButton x:Name="WindowsLinkAudioChoice" Style="{StaticResource PeerViewTab}" Tag="{x:Static local:AutomationIcons.Speaker}" GroupName="WindowsLinkView" IsChecked="True"
                              Content="{Binding [Apps.Volume], Source={x:Static local:L10n.Instance}}" Checked="WindowsLinkView_Changed"/>
-                <RadioButton x:Name="WindowsLinkWindowChoice" GroupName="WindowsLinkView"
+                <RadioButton x:Name="WindowsLinkWindowChoice" Style="{StaticResource PeerViewTab}" Tag="{x:Static local:AutomationIcons.Monitor}" GroupName="WindowsLinkView"
                              Content="{Binding [Phone.WindowsLinkWindowBadge], Source={x:Static local:L10n.Instance}}" Checked="WindowsLinkView_Changed"/>
-            </UniformGrid>
+              </UniformGrid>
+            </Border>
             <Grid x:Name="DeviceSearchCard" Grid.Row="1" Margin="0,0,0,6">
                 <TextBox x:Name="SearchBox" Height="28" Style="{StaticResource ModernTextBox}"
                          local:InputAppearance.HasSearchIcon="True" VerticalContentAlignment="Center" Padding="8,0"
@@ -113,7 +140,8 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch"
                      PreviewMouseLeftButtonDown="Apps_MouseDown" PreviewMouseMove="Apps_MouseMove"
                      PreviewKeyDown="Apps_KeyDown" QueryContinueDrag="Apps_QueryContinueDrag"
-                     MouseDoubleClick="WindowsLinkItem_DoubleClick">
+                     MouseEnter="WindowsAudioListEntered" GotKeyboardFocus="WindowsAudioListFocused"
+                     ContextMenuOpening="WindowsAudioMenu_Opening" MouseDoubleClick="WindowsLinkItem_DoubleClick">
                 <ListBox.Template>
                     <ControlTemplate TargetType="ListBox">
                         <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
@@ -139,11 +167,11 @@
                                     <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
                                 </DataTrigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
                                     <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.NavSelected}"/>
                                     <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/></Trigger>
@@ -179,9 +207,13 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
-            <TextBlock x:Name="WindowsLinkAudioEmpty" Grid.Row="2" Visibility="Collapsed" VerticalAlignment="Center"
-                       HorizontalAlignment="Center" Foreground="{DynamicResource Theme.TextSecondary}"
-                       Text="{Binding [Phone.NoDisplayedApps], Source={x:Static local:L10n.Instance}}"/>
+            <StackPanel x:Name="WindowsLinkAudioEmpty" Grid.Row="2" Margin="10,0" Visibility="Collapsed"
+                        VerticalAlignment="Center" IsHitTestVisible="False">
+                <Path x:Name="PeerEmptyIcon" Width="25" Height="25" HorizontalAlignment="Center" Stretch="Uniform"
+                      Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.3" Margin="0,0,0,10"/>
+                <TextBlock x:Name="PeerEmptyText" TextWrapping="Wrap" FontSize="12" TextAlignment="Center"
+                           Foreground="{DynamicResource Theme.TextSecondary}"/>
+            </StackPanel>
             <StackPanel x:Name="PhoneEmptyPanel" Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed">
                 <TextBlock Text="{Binding [Phone.NoDisplayedApps], Source={x:Static local:L10n.Instance}}" Foreground="{DynamicResource Theme.TextSecondary}" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                 <Button Content="{Binding [Phone.ManagePhoneApps], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Click="ManageApps_Click"/>
@@ -189,24 +221,17 @@
             <Border x:Name="AirPlayPane" Grid.Row="2" VerticalAlignment="Top" Visibility="Collapsed"
                     Padding="10" CornerRadius="10" Background="{DynamicResource Theme.SurfaceBgAlpha}"
                     BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1">
-                <ScrollViewer Style="{StaticResource PanelEdgeScrollViewer}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <ScrollViewer Padding="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                     <local:AirPlayReceiverView x:Name="AirPlayReceiverPane"/>
                 </ScrollViewer>
             </Border>
-            <ScrollViewer x:Name="WindowsLinkPane" Grid.Row="2" Visibility="Collapsed" Style="{StaticResource PanelEdgeScrollViewer}"
+            <ScrollViewer x:Name="WindowsLinkPane" Grid.Row="2" Visibility="Collapsed" Padding="0"
                           VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False"/>
-            <Grid Grid.Row="3" Margin="0,6,0,0">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="RefreshGap" Width="4"/><ColumnDefinition x:Name="RefreshColumn" Width="36"/></Grid.ColumnDefinitions>
-                <Button x:Name="WindowsLinkSystemAudioButton" Grid.ColumnSpan="3" Visibility="Collapsed" Margin="0,0,0,5"
-                        Style="{StaticResource QuickPanelToolButton}" Click="WindowsLinkSystemAudio_Click"
-                        ToolTip="{Binding [Phone.WindowsLinkDeviceAudioDesc], Source={x:Static local:L10n.Instance}}">
-                    <TextBlock Text="{Binding [Phone.WindowsLinkDeviceAudioDesc], Source={x:Static local:L10n.Instance}}"
-                               TextTrimming="CharacterEllipsis"/>
-                </Button>
-                <Border x:Name="PhoneDeviceCard" Grid.Row="1" Grid.Column="0" Height="36"
+            <Grid x:Name="DeviceFooter" Grid.Row="3" Height="36" Margin="0,6,0,0" UseLayoutRounding="True">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Border x:Name="PhoneDeviceCard" Grid.Column="0"
                         Background="{DynamicResource Theme.SurfaceBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
-                        BorderThickness="1" CornerRadius="10" Padding="6,2,4,2">
+                        BorderThickness="1" CornerRadius="8" Padding="6,2,4,2">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
                         <Border x:Name="DeviceKindGrip" Background="Transparent">
@@ -215,7 +240,7 @@
                                   Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
                         </Border>
                         <ComboBox x:Name="DeviceCombo" Grid.Column="1" Grid.ColumnSpan="3" Height="24" Background="Transparent" BorderThickness="0"
-                                  Padding="0,0,64,0" FontSize="11" FontWeight="Bold" Style="{StaticResource RoundedComboBox}"
+                                  Padding="4,0,64,0" FontSize="11" FontWeight="Bold" Style="{StaticResource RoundedComboBox}"
                                   SelectionChanged="Device_Changed" AutomationProperties.Name="{Binding [Phone.DeviceSelector], Source={x:Static local:L10n.Instance}}">
                             <ComboBox.Resources>
                                 <!-- Reuse the shared arrow/template; reserve room for the status overlay. -->
@@ -270,9 +295,9 @@
                                    FontSize="10" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
-                <Button x:Name="RefreshButton" Grid.Row="1" Grid.Column="2" Width="36" Height="36"
-                        Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.SurfaceBg}"
-                        Margin="0" Padding="0" Click="Refresh_Click" ToolTip="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}" AutomationProperties.Name="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}">
+                <Button x:Name="RefreshButton" Grid.Column="1" Width="{Binding Height, ElementName=DeviceFooter}"
+                        Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.SurfaceBgAlpha}"
+                        Margin="4,0,0,0" Padding="0" Click="Refresh_Click" ToolTip="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}" AutomationProperties.Name="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}">
                     <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
                 </Button>
             </Grid>

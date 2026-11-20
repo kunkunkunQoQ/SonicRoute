@@ -11,11 +11,12 @@ internal static partial class Program
         try
         {
             await RunWindowsLinkChecksAsync(root);
+            await RunWindowsLinkDiscoveryChecksAsync(root);
             Console.WriteLine($"PASS {_checks} Windows Link checks");
         }
         finally
         {
-            foreach (string node in new[] { "node-a", "node-b" })
+            foreach (string node in new[] { "node-a", "node-b", "discovery-a", "discovery-b" })
             {
                 string directory = Path.Combine(root, node);
                 if (!Directory.Exists(directory) || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
@@ -35,8 +36,22 @@ internal static partial class Program
         Directory.CreateDirectory(stateB);
 
         using var safety = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        await using var a = new WindowsLinkService(stateA, "Node A", port: 0, discovery: false);
-        await using var b = new WindowsLinkService(stateB, "Node B", port: 0, discovery: false);
+        bool captureB = false;
+        bool mutedSpare = true;
+        bool spareProbeFailed = false;
+        int probesB = 0;
+        await using var a = new WindowsLinkService(stateA, "Node A", port: 0, discovery: false)
+            { ProbeAudioCapture = _ => true };
+        await using var b = new WindowsLinkService(stateB, "Node B", port: 0, discovery: false,
+            localCatalogProvider: (_, _) => Task.FromResult(new[] { new LinkRemoteApp("music", "Music", "music", 82, true, false, 0, null, null) }),
+            acquireLocalSilence: _ => null)
+        {
+            ProbeAudioCapture = _ => { Interlocked.Increment(ref probesB); return captureB; },
+            ProbeExclusiveCapture = () => spareProbeFailed
+                ? throw new InvalidOperationException("The secondary output was removed during enumeration.") : mutedSpare,
+            ProbeSpeakerFallback = () => true,
+            AcquireSpeakerFallback = _ => throw new InvalidOperationException("This catalog check must never change speaker mute.")
+        };
 
         var rejectA = new TaskCompletionSource<LinkPairing>(TaskCreationOptions.RunContinuationsAsynchronously);
         var rejectB = new TaskCompletionSource<LinkPairing>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -93,6 +108,10 @@ internal static partial class Program
             && a.Peers[0].Connected && b.Peers[0].Connected, safety.Token);
         LinkPeer peerB = a.Peers[0];
         LinkPeer peerA = b.Peers[0];
+        const LinkCapabilities send = LinkCapabilities.ProcessAudio | LinkCapabilities.SystemAudio;
+        Check((peerA.Capabilities & send) == send && (peerB.Capabilities & (send | LinkCapabilities.DestinationOnly)) == 0
+            && peerB.Capabilities.HasFlag(LinkCapabilities.AudioReceive) && probesB == 1,
+            "a receive-only peer remains an audio destination and advertises no unavailable drag modes");
         Check(peerB.Trusted && peerB.Connected && peerB.Name == "Node B"
             && peerA.Trusted && peerA.Connected && peerA.Name == "Node A"
             && peerA.Id != peerB.Id && peerA.Id.Length == 64 && peerB.Id.Length == 64,
@@ -105,6 +124,7 @@ internal static partial class Program
 
         await a.DisableAsync();
         await b.DisableAsync();
+        captureB = true;
         Check(a.Peers.Length == 1 && !a.Peers[0].Connected && a.Peers[0].Trusted
             && b.Peers.Length == 1 && !b.Peers[0].Connected && b.Peers[0].Trusted,
             "disabling drops active links while retaining trusted peers");
@@ -118,6 +138,29 @@ internal static partial class Program
             && a.Peers[0].Trusted && a.Peers[0].Connected
             && b.Peers[0].Trusted && b.Peers[0].Connected,
             "trusted peers reconnect over mutual TLS without re-prompting for pairing");
+        Check(probesB == 2 && (a.Peers[0].Capabilities & (send | LinkCapabilities.DestinationOnly)) == (send | LinkCapabilities.DestinationOnly),
+            "reconnecting replaces saved receive-only flags with the newly detected sending and exclusive playback modes");
+        mutedSpare = false;
+        b.RefreshExclusiveCapability(force: true);
+        var onlyShared = (await a.RequestCatalogAsync(peerB.Id, false, safety.Token, audioOnly: true, refresh: true)).Single();
+        Check(!onlyShared.SupportsExclusivePlayback(a.Peers[0].Capabilities) && !b.CanSendExclusively,
+            "the live audio catalog overrides previously advertised exclusive support when the spare output becomes unavailable");
+        Check(onlyShared.CanMuteSourceSpeaker && b.CanUseSpeakerFallback,
+            "the live catalog reports shared-speaker muting separately from application isolation");
+        spareProbeFailed = true;
+        b.RefreshExclusiveCapability(force: true);
+        Check(b.CanUseSpeakerFallback, "a failed spare-output probe still permits playback through the source speaker");
+        spareProbeFailed = false;
+        bool requiresOptIn = false;
+        try { await a.RequestPullAudioAsync(peerB.Id, onlyShared, safety.Token, destinationOnly: true); }
+        catch (NotSupportedException) { requiresOptIn = true; }
+        Check(requiresOptIn && a.Streams.Length == 0 && b.Streams.Length == 0,
+            "destination-only pulls without explicit opt-in cannot mute a shared speaker");
+        mutedSpare = true;
+        b.RefreshExclusiveCapability(force: true);
+        var exclusive = (await a.RequestCatalogAsync(peerB.Id, false, safety.Token, audioOnly: true, refresh: true)).Single();
+        Check(exclusive.SupportsExclusivePlayback(LinkCapabilities.None) && exclusive.CanMuteSourceSpeaker,
+            "a spare output and an explicitly permitted speaker fallback remain available together");
 
         // 4. Simultaneous bidirectional connect converges to one connection without duplicates.
         await a.DisableAsync();
