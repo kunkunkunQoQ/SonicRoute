@@ -1,5 +1,5 @@
 <!-- Generated via docs/readme/generate.cjs. Release metadata: docs/readme/shared.json. Source version: build/Version.props. Body: renderAI(). Run node docs/readme/generate.cjs to update. -->
-# 🎧 SonicRoute (AI / LLM Machine Specification)
+# 🎧 SonicRoute v1.34 Beta (AI / LLM Machine Specification)
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | **🤖 AI**
 
@@ -9,7 +9,7 @@ SCHEMA_SPEC:
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
   version: "v1.33 (1.33.0.0)"
   source_version: "v1.34"
-  source_status: "Development version; not the current published release."
+  source_status: "v1.34 Beta (preview branch)"
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   license: "GNU General Public License v3.0 only (SPDX: GPL-3.0-only; commercial use and paid distribution permitted subject to GPL; see LICENSE and docs/LICENSING.md)"

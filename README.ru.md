@@ -1,16 +1,25 @@
 <!-- Generated from docs/readme/shared.json and docs/readme/locales/ru-RU.json. Edit those sources, then run node docs/readme/generate.cjs. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
-# 🎧 SonicRoute
+# 🎧 SonicRoute v1.34 Beta
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | **Русский** | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![v1.34 Beta](https://img.shields.io/badge/Beta-v1.34-orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+
+## Основные изменения с версии v1.33
+
+- **Windows Link** связывает два компьютера с Windows. Включите функцию в SonicRoute Full на обоих ПК. Найдите второй ПК в локальной сети или введите его адрес, затем сверьте восьмизначный код на обоих экранах для сопряжения.
+- Слушайте звук отдельного приложения только на принимающем ПК или на обоих ПК одновременно. Можно передавать и весь системный звук, а также задействовать несколько устройств вывода сразу.
+- Делитесь окном приложения или экраном вместе со звуком. С вашего разрешения на другом ПК можно управлять ими мышью и клавиатурой. Передавайте файлы и папки. Если включить синхронизацию на обоих ПК, скопированный текст будет доступен на обоих без форматирования.
+- Просматривайте папки Android-телефона и выбирайте сразу несколько файлов для передачи с телефона на ПК или обратно. Передача звука и синхронизация буфера обмена по беспроводной сети стабильнее работают после простоя или повторного подключения.
+
+[Руководство по Windows Link](docs/windows-link.md) · [Посмотреть все изменения](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta)
 
 **Направляйте звук каждого приложения на нужное вам устройство.**
 
 Слушайте музыку через колонки, а игры и звонки — в наушниках. SonicRoute — аудиопрограмма для Windows, работающая в области уведомлений: выбирайте устройства вывода и ввода для отдельных приложений, управляйте звуком с помощью горячих клавиш, прокрутки в области уведомлений или панели и объединяйте повторяющиеся действия в правила автоматизации.
 
-📥 [Скачать последнюю версию](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [Руководство пользователя](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Вики (на китайском)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [Скачать стабильную версию](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [Руководство пользователя](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Вики (на китайском)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментально) · Девять языков интерфейса · [GPL-3.0](LICENSE)
 

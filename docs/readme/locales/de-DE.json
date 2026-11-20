@@ -1,8 +1,17 @@
 {
     "title": "SonicRoute",
+    "betaHeading": "Die wichtigsten Änderungen seit {release}",
+    "betaChanges": [
+        "**Windows Link** verbindet zwei Windows-PCs. Aktiviere die Funktion auf beiden PCs in SonicRoute Full. Suche den anderen PC im lokalen Netz oder gib seine Adresse ein. Vergleiche zum Koppeln den achtstelligen Code auf beiden Geräten.",
+        "Spiele den Ton einer App nur auf dem Ziel-PC oder auf beiden PCs gleichzeitig ab. Du kannst auch den gesamten Systemton übertragen und mehrere Ausgänge gleichzeitig nutzen.",
+        "Teile ein Fenster oder einen Bildschirm samt Ton. Mit deiner Freigabe kann die Gegenseite Maus und Tastatur verwenden. Übertrage Dateien und Ordner oder synchronisiere kopierten Klartext, wenn die Synchronisierung auf beiden PCs aktiv ist.",
+        "Durchsuche die Ordner auf deinem Android-Gerät und übertrage mehrere ausgewählte Dateien auf einmal in beide Richtungen zwischen Smartphone und PC. Die drahtlose Audioübertragung und die Synchronisierung der Zwischenablage laufen nach Leerlaufphasen oder einer erneuten Verbindung zuverlässiger weiter."
+    ],
+    "betaGuide": "Anleitung für Windows Link",
+    "betaCompare": "Alle Änderungen ansehen",
     "tagline": "Leite den Ton jeder App an das gewünschte Gerät weiter.",
     "intro": "Lass Musik über deine Lautsprecher laufen und Spiele oder Anrufe über dein Headset. SonicRoute ist ein Windows-Audiowerkzeug im Infobereich: Wähle für einzelne Apps Ausgabe- und Eingabegeräte, steuere den Ton per Tastenkürzel, Mausrad im Infobereich oder Panel und kombiniere wiederkehrende Aktionen zu Automatisierungsregeln.",
-    "download": "Neueste Version herunterladen",
+    "download": "Stabile Version herunterladen",
     "guide": "Benutzerhandbuch",
     "wiki": "Wiki (Chinesisch)",
     "support": "Unterstützung auf Afdian",

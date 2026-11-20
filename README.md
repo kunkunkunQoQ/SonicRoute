@@ -1,10 +1,19 @@
 <!-- Generated from docs/readme/shared.json and docs/readme/locales/zh-CN.json. Edit those sources, then run node docs/readme/generate.cjs. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
-# 🎧 音跃 SonicRoute
+# 🎧 音跃 SonicRoute v1.34 Beta
 
 **简体中文** | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![爱发电](https://img.shields.io/badge/赞助-爱发电-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![v1.34 Beta](https://img.shields.io/badge/Beta-v1.34-orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![爱发电](https://img.shields.io/badge/赞助-爱发电-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+
+## 相较正式版 v1.33，这次更新了什么？
+
+- **两台电脑配对**。在两台 Windows 电脑的 Full 版中打开「应用 → 添加设备 → Windows Link」，搜索同一局域网内的电脑或手动输入地址。两边核对同一个 8 位码即可配对。
+- **跨电脑播放声音**。把音乐应用拖到另一台电脑，可选仅在对方播放，或两台一起播放。也可以转发整台电脑的声音，或为同一音源选择多个输出。
+- **共享画面、文件和剪贴板**。共享应用窗口或整台显示器时可以一起传声音，获得授权后可用键鼠操作。两台电脑能互传文件和文件夹，双方开启剪贴板同步后，还能同步新复制的纯文本。
+- **Android 文件与无线连接**。在电脑上浏览手机目录，可多选文件，在手机和电脑之间双向传输。此次还修复了无线连接空闲或重连后，音频或剪贴板同步容易中断的问题。
+
+[Windows Link 使用指南](docs/windows-link.md) · [查看完整改动](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta)
 
 **把每个应用的声音，送到你想要的设备。**
 

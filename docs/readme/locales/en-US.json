@@ -1,8 +1,17 @@
 {
     "title": "SonicRoute",
+    "betaHeading": "What’s changed since {release}?",
+    "betaChanges": [
+        "**Pair two Windows PCs.** Open Windows Link in SonicRoute Full on both PCs. Find the other PC on your local network or enter its address, then confirm the matching eight-digit code on both screens.",
+        "**Choose where audio plays.** Drag an app to the other PC to play it there or on both PCs at once. You can also send the whole system mix or select multiple outputs for one source.",
+        "**Share a window or display with sound.** Grant permission to let the other person use their keyboard and mouse. You can also transfer files and folders between PCs. Turn on clipboard sync on both PCs to share newly copied plain text.",
+        "**Browse Android files from your PC.** Select multiple files to transfer in either direction. This update also improves wireless audio and clipboard sync after idle periods or reconnection."
+    ],
+    "betaGuide": "Windows Link guide",
+    "betaCompare": "Compare all changes",
     "tagline": "Send each app's audio to the device you choose.",
     "intro": "Keep music on your speakers and games or calls on your headset. SonicRoute is a Windows audio utility that lives in the system tray: choose output and input devices for individual apps, control audio with hotkeys, the tray wheel or a panel, and combine routine actions into automation rules.",
-    "download": "Download the latest release",
+    "download": "Download the stable release",
     "guide": "User guide",
     "wiki": "Wiki (Chinese)",
     "support": "Support on Afdian",

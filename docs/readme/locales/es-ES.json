@@ -1,8 +1,17 @@
 {
     "title": "SonicRoute",
+    "betaHeading": "Principales cambios desde {release}",
+    "betaChanges": [
+        "**Windows Link** conecta dos equipos Windows. Actívalo en ambos desde SonicRoute Full. Busca el otro equipo en la red local o introduce su dirección y compara el código de ocho dígitos en las dos pantallas para emparejarlos.",
+        "Escucha el audio de una aplicación solo en el equipo de destino o en ambos a la vez. También puedes transmitir todo el audio del sistema y usar varias salidas simultáneamente.",
+        "Comparte una ventana o una pantalla con su audio y permite que la otra persona use el teclado y el ratón. Transfiere archivos y carpetas. Si activas la sincronización en ambos equipos, también se comparte el texto sin formato que copies.",
+        "Explora las carpetas del teléfono Android y selecciona varios archivos para transferirlos del teléfono al PC o del PC al teléfono. El audio inalámbrico y la sincronización del portapapeles se reanudan con mayor fiabilidad tras un periodo de inactividad o una reconexión."
+    ],
+    "betaGuide": "Guía de Windows Link",
+    "betaCompare": "Ver todos los cambios",
     "tagline": "Envía el audio de cada aplicación al dispositivo que elijas.",
     "intro": "Escucha música por los altavoces y juegos o llamadas con los auriculares. SonicRoute es una utilidad de audio para Windows que permanece en el área de notificación: elige los dispositivos de salida y entrada de cada aplicación, controla el audio con atajos, la rueda del área de notificación o un panel, y combina acciones habituales en reglas de automatización.",
-    "download": "Descargar la última versión",
+    "download": "Descargar la versión estable",
     "guide": "Guía de usuario",
     "wiki": "Wiki (en chino)",
     "support": "Apoyar en Afdian",

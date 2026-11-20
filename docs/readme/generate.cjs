@@ -4,6 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const shared = JSON.parse(fs.readFileSync(path.join(__dirname, 'shared.json'), 'utf8'));
+const sourceVersion = fs.readFileSync(path.join(root, 'build/Version.props'), 'utf8').match(/<SonicRouteVersion>(\d+\.\d+(?:\.\d+)?)<\/SonicRouteVersion>/)?.[1];
+if (!sourceVersion) throw new Error('Missing source version in build/Version.props');
+const betaLabel = 'v' + sourceVersion + ' ' + shared.betaBranch;
 const reference = JSON.parse(fs.readFileSync(path.join(__dirname, 'locales/en-US.json'), 'utf8'));
 const args = process.argv.slice(2);
 if (args.length > 1 || (args.length && args[0] !== '--check')) throw new Error('Usage: node docs/readme/generate.cjs [--check]');
@@ -40,6 +43,7 @@ function render(language, text) {
   const period = cjk ? '。' : '.';
   const experimentalSuffix = cjk ? '（' + text.experimental + '）' : ' (' + text.experimental + ')';
   const releaseUrl = shared.repository + '/releases';
+  const compareUrl = shared.repository + '/compare/' + shared.release + '...' + shared.betaBranch;
   const downloadAsset = (suffix, release = shared.release) => releaseUrl + '/download/' + release + '/SonicRoute-' + release + '-' + suffix;
   const historicalNet8Asset = suffix => downloadAsset(suffix, shared.net8LastRelease);
   const arm64Label = 'ARM64' + experimentalSuffix + (shared.arm64LastRelease === shared.release ? '' : ' · ' + shared.arm64LastRelease);
@@ -74,12 +78,15 @@ function render(language, text) {
   return [
     '<!-- Generated from docs/readme/shared.json and docs/readme/locales/' + language.locale + '.json. Edit those sources, then run node docs/readme/generate.cjs. -->',
     '<!-- AI / LLM Context: ' + wiki(pages.ai) + ' -->',
-    '# 🎧 ' + text.title, '', navigation, '',
-    `[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](${releaseUrl}) ` +
+    '# 🎧 ' + text.title + ' ' + betaLabel, '', navigation, '',
+    `[![${betaLabel}](https://img.shields.io/badge/${shared.betaBranch}-v${sourceVersion}-orange)](${compareUrl}) ` +
       '[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) ' +
       `[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](${shared.repository}) ` +
       `[![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](${releaseUrl}) ` +
       `[![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](${releaseUrl}) ` + sponsor, '',
+    '## ' + fill(text.betaHeading), '',
+    ...text.betaChanges.map(change => '- ' + fill(change)), '',
+    link(text.betaGuide, 'docs/windows-link.md') + ' · ' + link(text.betaCompare, compareUrl), '',
     '**' + text.tagline + '**', '', text.intro, '',
     '📥 ' + [link(text.download, releaseUrl + '/latest'), `Microsoft Store (${link('Full', shared.store)} / ${link('Lite', shared.storeLite)})`, link(text.guide, wiki(pages.guide)), link(text.wiki, shared.repository + '/wiki')].join(' · '), '',
     shared.minimumWindows + ' · x64 / ARM64' + experimentalSuffix + ' · ' + text.languages + ' · ' + link(text.license, 'LICENSE'), '',
@@ -148,15 +155,13 @@ function render(language, text) {
 }
 function renderAI(shared) {
   const navigation = shared.languages.map(item => link(item.name, item.file)).join(' | ') + ' | **🤖 AI**';
-  const sourceVersion = fs.readFileSync(path.join(root, 'build/Version.props'), 'utf8').match(/<SonicRouteVersion>(\d+\.\d+(?:\.\d+)?)<\/SonicRouteVersion>/)?.[1];
-  if (!sourceVersion) throw new Error('Missing source version in build/Version.props');
   const actionBody = fs.readFileSync(path.join(root, 'SonicRoute.Core/Models/AutoRule.cs'), 'utf8').match(/public enum AutoRuleAction\s*\{([\s\S]*?)\n    \}/)?.[1];
   const actionValues = [...(actionBody ?? '').matchAll(/^\s*\w+\s*=\s*(\d+)\s*,?\s*$/gm)].map(match => Number(match[1]));
   if (!actionValues.length) throw new Error('Missing source automation actions');
   const sourceActionCount = Math.max(...actionValues) + 1;
   return [
     '<!-- Generated via docs/readme/generate.cjs. Release metadata: docs/readme/shared.json. Source version: build/Version.props. Body: renderAI(). Run node docs/readme/generate.cjs to update. -->',
-    '# 🎧 SonicRoute (AI / LLM Machine Specification)', '',
+    '# 🎧 SonicRoute ' + betaLabel + ' (AI / LLM Machine Specification)', '',
     navigation, '',
     '```yaml',
     "SCHEMA_SPEC:",
@@ -164,7 +169,7 @@ function renderAI(shared) {
     "  platform: \"Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)\"",
     `  version: "${shared.release} (${shared.release.slice(1).split('.').concat(['0', '0']).slice(0, 4).join('.')})"`,
     `  source_version: "v${sourceVersion}"`,
-    `  source_status: "${shared.release === 'v' + sourceVersion ? 'Same version number as the published release; source may contain later commits.' : 'Development version; not the current published release.'}"`,
+    `  source_status: "${betaLabel} (preview branch)"`,
     "  version_scope: \"version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download.\"",
     "  repository: \"https://github.com/kunkunkunQoQ/SonicRoute\"",
     "  license: \"GNU General Public License v3.0 only (SPDX: GPL-3.0-only; commercial use and paid distribution permitted subject to GPL; see LICENSE and docs/LICENSING.md)\"",
