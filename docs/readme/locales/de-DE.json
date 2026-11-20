@@ -76,6 +76,9 @@
         "**Zuverlässigerer Gerätewechsel.** Geplant sind flexiblere Übergaben zwischen Ausgaben und die automatische Wiederherstellung der Zuordnung, wenn Geräte angeschlossen oder getrennt werden. Auch Apps mit mehreren Audiositzungen sollen davon profitieren."
     ],
     "roadmapFeedback": "Idee teilen oder Problem melden",
+    "sponsorTitle": "SonicRoute unterstützen",
+    "sponsorIntro": "SonicRoute ist kostenlos und quelloffen. Wenn Ihnen SonicRoute im Alltag hilft, können Sie das Projekt über Afdian unterstützen. Ihre Spende hilft dabei, neue Funktionen zu entwickeln, die Kompatibilität zu verbessern und SonicRoute langfristig zu pflegen.",
+    "sponsorNote": "Spenden sind freiwillig. Sie können alle Funktionen auch ohne Spende nutzen. Wenn Sie ein Problem melden, SonicRoute weiterempfehlen oder dem Projekt auf GitHub einen Stern geben, helfen Sie ebenfalls. Vielen Dank!",
     "footerDocs": "Anleitungen lesen (Chinesisch)",
     "footerIssues": "Problem melden",
     "bilibili": "Bilibili",

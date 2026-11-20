@@ -76,6 +76,9 @@
         "**Changement de sortie audio.** Les améliorations envisagées portent sur le passage d’une sortie à l’autre, le rétablissement du routage après le branchement ou le débranchement d’un périphérique, et la fiabilité avec les applications qui ouvrent plusieurs sessions audio."
     ],
     "roadmapFeedback": "Partager une idée ou signaler un problème",
+    "sponsorTitle": "Soutenir SonicRoute",
+    "sponsorIntro": "SonicRoute est un logiciel libre et gratuit. S’il vous est utile au quotidien, vous pouvez faire un don sur Afdian. Votre soutien contribue au développement de nouvelles fonctionnalités, à l’amélioration de la compatibilité et à la maintenance du projet sur le long terme.",
+    "sponsorNote": "Les dons sont facultatifs. Toutes les fonctionnalités sont accessibles sans don. Signaler un problème, faire connaître SonicRoute ou donner une étoile au projet sur GitHub sont autant de façons de contribuer. Merci !",
     "footerDocs": "Lire les guides (en chinois)",
     "footerIssues": "Signaler un problème",
     "bilibili": "Bilibili",

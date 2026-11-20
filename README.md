@@ -142,6 +142,14 @@ SonicRoute 主要依靠系统事件检测变化，必要时才每秒检查一次
 
 [提交建议或问题](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 
+## 💖 支持 SonicRoute
+
+SonicRoute 是一个持续维护的免费开源项目。如果它让你在电脑上听音乐、玩游戏或通话更方便，欢迎通过爱发电赞助，支持新功能开发、兼容性改进和长期维护。
+
+☕ [在爱发电赞助](https://afdian.com/a/koukou021)
+
+赞助完全自愿，使用任何功能都无需赞助。反馈问题、把 SonicRoute 分享给朋友，或在 GitHub 上为项目点一颗星，都是对项目的支持。谢谢你！
+
 ## 📜 许可证
 
 - **GPL-3.0 开源协议**：SonicRoute 采用 GNU 通用公共许可证第 3 版，仅限该版本（GPL-3.0-only），详见 [LICENSE](LICENSE)。允许商用、销售和收费分发，须遵守 GPL 条款。

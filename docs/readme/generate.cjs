@@ -155,6 +155,8 @@ function render(language, text) {
     '> **' + text.aiPromptTitle + '**' + colon + fill(text.aiPromptBody), '',
     '## 📌 ' + text.roadmapTitle, '', ...text.roadmapItems.map(item => '- ' + fill(item)), '',
     link(text.roadmapFeedback, shared.repository + '/issues/new/choose') + period, '',
+    '## 💖 ' + text.sponsorTitle, '', text.sponsorIntro, '',
+    '☕ ' + link(text.support, shared.author.afdian), '', text.sponsorNote, '',
     '## 📜 ' + text.licenseTitle, '',
     ...text.licensePoints.map(item => '- ' + fill(item)), '',
     '---', '',

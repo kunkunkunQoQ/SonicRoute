@@ -144,6 +144,14 @@ Full과 Lite는 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요�
 
 [아이디어 공유 또는 문제 제보](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
+## 💖 SonicRoute 후원하기
+
+SonicRoute는 꾸준히 개발하고 유지 관리하는 무료 오픈 소스 프로젝트입니다. 평소 PC에서 소리를 조절할 때 SonicRoute가 도움이 되었다면 Afdian을 통해 후원하실 수 있습니다. 후원금은 새 기능 개발과 호환성 개선, 장기적인 유지 관리에 쓰입니다.
+
+☕ [Afdian에서 후원](https://afdian.com/a/koukou021)
+
+후원은 자율이며 모든 기능은 후원 여부와 관계없이 이용할 수 있습니다. 문제를 제보하거나 주변에 SonicRoute를 소개하는 일, GitHub에서 별표를 남기는 일도 큰 도움이 됩니다. 감사합니다!
+
 ## 📜 라이선스
 
 - **GPL-3.0 오픈 소스**: SonicRoute는 GNU 일반 공중 사용 허가서 제3판만 적용합니다(GPL-3.0-only). [LICENSE](LICENSE)를 참조하세요. GPL 조건에 따른 상업적 사용, 판매 및 유료 배포가 허용됩니다.

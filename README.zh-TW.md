@@ -144,6 +144,14 @@ Full 和 Lite 需要與程式架構相符的 .NET 10 Desktop Runtime，Microsoft
 
 [分享想法或回報問題](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose)。
 
+## 💖 支持 SonicRoute
+
+SonicRoute 是持續維護的免費開放原始碼專案。如果它讓你在電腦上聽音樂、玩遊戲或通話更方便，歡迎透過愛發電贊助，支持新功能開發、相容性改善與長期維護。
+
+☕ [在愛發電贊助作者](https://afdian.com/a/koukou021)
+
+贊助完全出於自願，所有功能都能免費使用。回報問題、把 SonicRoute 推薦給朋友，或在 GitHub 上為專案加顆星，也都是支持我們的方式。謝謝你！
+
 ## 📜 授權條款說明
 
 - **GPL-3.0 開源授權**：SonicRoute 採用 GNU 通用公共授權條款第 3 版，僅限該版本（GPL-3.0-only），詳見 [LICENSE](LICENSE)。允許商用、銷售與付費散布，須遵守 GPL 條款。
