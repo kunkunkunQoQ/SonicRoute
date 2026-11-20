@@ -46,7 +46,7 @@ internal static partial class AppPlaybackOutputs
             Histories.Clear();
         }
     }
-    private static void Remember(int pid, string[] before, string[] outputs, string preferred, bool allowSpeakerMute)
+    private static void Remember(int pid, string[] before, string[] outputs, string preferred)
     {
         lock (HistoryGate)
         {
@@ -72,7 +72,7 @@ internal static partial class AppPlaybackOutputs
                 history.Previous.Insert(0, previous);
                 if (history.Previous.Count > 12) history.Previous.RemoveAt(12);
             }
-            history.Current = new(outputs, preferred, allowSpeakerMute);
+            history.Current = new(outputs, preferred, AllowSpeakerMute: true);
         }
     }
 

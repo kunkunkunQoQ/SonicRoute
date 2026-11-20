@@ -5,6 +5,9 @@ namespace SonicRoute.AndroidAudio;
 
 internal static class AudioProcessTree
 {
+    internal static bool ContainsProcess(int root, int candidate) =>
+        root == candidate || candidate > 0 && DescendsFrom(candidate, root);
+
     internal static bool DescendsFrom(int child, int ancestor)
     {
         long newest = long.MaxValue;

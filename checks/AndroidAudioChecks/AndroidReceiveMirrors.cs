@@ -74,6 +74,7 @@ internal static partial class Program
         Check(multi.GetOutputs().SequenceEqual(["speaker-b"]) && liveCaptures == 1 && session.PacketsDecoded == 5,
             "whole-phone single selection hands off playback without restarting its transport");
         await CheckWirelessPlaybackBacklogAsync(runtime, fakePhone, device, token);
+        await CheckSavedPhoneSelectionAsync(directory);
     }
 
     private static async Task CheckWirelessPlaybackBacklogAsync(string runtime, FakeAdbServer server, AndroidDevice device, CancellationToken token)

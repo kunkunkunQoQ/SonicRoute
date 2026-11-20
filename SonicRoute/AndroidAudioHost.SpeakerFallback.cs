@@ -19,9 +19,6 @@ internal static partial class AndroidAudioHost
         processId > 0 && processId != Environment.ProcessId && TryGetPcAppPhoneOutput(processId) == null
             ? SourceSpeakers.Acquire(processId) : null;
 
-    internal static bool CanMuteAppSpeaker(int processId) => processId > 0 && processId != Environment.ProcessId
-        && TryGetPcAppPhoneOutput(processId) == null && FindAppSpeaker(processId) != null;
-
     private static string? FindAppSpeaker(int processId)
     {
         using var devices = new WasapiDeviceLease.Enumerator();

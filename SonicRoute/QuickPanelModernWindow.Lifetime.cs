@@ -136,6 +136,9 @@ namespace SonicRoute
             _entranceMotion.Stop();
             ClearRowVisuals();
             CurrentAppService.CurrentChanged -= OnSharedCurrentChanged;
+#if !SONICROUTE_PHONE
+            ApplicationAudio.Changed -= OnLocalPlaybackChanged;
+#endif
             SystemParameters.StaticPropertyChanged -= OnSystemParamChanged;
             _suppressDevCombo = true;
             _systemReady = _meterEnabled = false;

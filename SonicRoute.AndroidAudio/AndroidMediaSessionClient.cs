@@ -79,7 +79,7 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
     private long _pingStart;
     private TaskCompletionSource<double>? _pendingPing;
     public event Action<AndroidConnectionQuality>? ConnectionQualityChanged;
-    public async Task WatchAsync(AndroidDevice device, Action<AndroidMediaState> changed, CancellationToken token)
+    public async Task WatchAsync(AndroidDevice device, Action<AndroidMediaState> changed, CancellationToken token, bool measureLatency = true)
     {
         using var probes = CancellationTokenSource.CreateLinkedTokenSource(token);
         Task latency = Task.CompletedTask;
@@ -126,7 +126,7 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
                     {
                         previous = AndroidMediaState.Parse(json.RootElement, previous);
                         changed(previous);
-                        if (device.IsWifi && !latencyStarted)
+                        if (measureLatency && device.IsWifi && !latencyStarted)
                         { latencyStarted = true; latency = WatchLatencyAsync(probes.Token); }
                     }
                 }

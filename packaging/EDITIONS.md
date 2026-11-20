@@ -8,6 +8,8 @@
 | `SonicRouteEdition=Lite` | `SonicRoute-v<版本>-Lite-x64.exe` / `-Lite-arm64.exe` | 编译、资源、依赖和发行文件均排除 |
 | `SonicRoute.Legacy` / .NET Framework 4.8 | `SonicRoute-v<版本>-Legacy-x64.zip` | 编译和资源均排除，保留原多文件兼容布局 |
 
+三版均支持在快捷面板中用 Ctrl 增减本机播放设备，用 Shift 连续选择。多选成功后会保存应用与输出组合，重启后在该应用的音频会话出现时恢复，切回单输出会移除组合。Full 的「手机当前输出」跟随所选手机的媒体路由，支持 Windows 应用、Android 来源和 AirPlay。Lite 与 Legacy 仅在多选时采集一次应用声音，同一采集线程直接把 48 kHz 立体声 PCM16 送入各个 WASAPI 输出。设备暂时写不下时，才为该输出分配最多 250 ms 的队列，等设备通知后补写。托盘启动时，窗口样式和触控处理在首次打开界面时加载。Legacy 将本机播放所需的 NAudio 程序集内嵌到 EXE，沿用原有 ZIP 更新格式。
+
 Full 和 Lite 都是单个 EXE，依赖匹配架构的 .NET 10 Desktop Runtime。完整版本不增加 Full、Android、Phone 或 Lite 后缀。没有启用程序压缩或 WPF 裁剪；Release 保留 ReadyToRun，并统一关闭调试符号发布。
 
 上表列出构建能力，不表示每个版本都发布了全部目标。v1.31 实际提供 Full/Lite/Legacy x64，ARM64 最近的实验下载为 v1.30；以对应 Release 的实际附件为准。

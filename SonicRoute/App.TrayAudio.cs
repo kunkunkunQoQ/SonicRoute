@@ -307,14 +307,19 @@ namespace SonicRoute
                 owner.IsOpen = false;
                 var config = ConfigService.Load();
                 bool previous = config.TrayWheelPaused;
+                if (_trayWheel?.TrySetPaused(!previous) != true)
+                {
+                    ShowOsd(L10n.T("Tray.PauseWheel"), L10n.T("Tray.AudioActionFailed"));
+                    return;
+                }
                 config.TrayWheelPaused = !previous;
                 if (!ConfigService.TrySave(config))
                 {
                     config.TrayWheelPaused = previous;
+                    _trayWheel.TrySetPaused(previous);
                     ShowOsd(L10n.T("Tray.PauseWheel"), L10n.T("Tray.SaveFailed"));
                     return;
                 }
-                _trayWheel?.DiscardPendingWheel();
             };
             owner.Items.Add(pause);
         }

@@ -107,7 +107,7 @@ namespace SonicRoute
             return false;
 #else
             if (!_uiWorkingSetTrimRequested || !_startupWarmupComplete || _exiting || Dispatcher.HasShutdownStarted
-                || HasActiveUiWindows()) return false;
+                || HasActiveUiWindows() || LocalAppOutputMirrors.HasActiveRoutes) return false;
             foreach (Window window in Windows)
                 if (window.IsVisible) return false;
             long now = Stopwatch.GetTimestamp();

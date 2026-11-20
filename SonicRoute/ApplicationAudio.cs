@@ -51,7 +51,35 @@ internal static class ApplicationAudio
 
     internal static event Action? Changed;
     internal static event Action? OutputsChanged;
+#if SONICROUTE_PHONE
+    internal static event Action<AudioUiChange>? UiChanged;
+    internal static void NotifySourceChanged(string? id) =>
+        PublishChange(new(id == null ? AudioUiScope.SourceList : AudioUiScope.SourceState, id));
+    private static void PublishChange(AudioUiChange change)
+    {
+        if (UiChanged is { } subscribers)
+            foreach (Action<AudioUiChange> listener in subscribers.GetInvocationList())
+                try { listener(change); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
+        PublishChanged();
+    }
+#endif
+    internal static void NotifyRouteChanged(int pid)
+    {
+#if SONICROUTE_PHONE
+        PublishChange(new(AudioUiScope.Routes, Pid: pid));
+#else
+        PublishChanged();
+#endif
+    }
     internal static void NotifyChanged()
+    {
+#if SONICROUTE_PHONE
+        PublishChange(AudioUiChange.All);
+#else
+        PublishChanged();
+#endif
+    }
+    private static void PublishChanged()
     {
         var changed = Changed;
         if (changed != null) foreach (Action listener in changed.GetInvocationList())
@@ -62,7 +90,11 @@ internal static class ApplicationAudio
         var changed = OutputsChanged;
         if (changed != null) foreach (Action listener in changed.GetInvocationList())
             try { listener(); } catch (Exception ex) { System.Diagnostics.Trace.WriteLine(ex.Message); }
-        NotifyChanged();
+#if SONICROUTE_PHONE
+        PublishChange(new(AudioUiScope.Outputs));
+#else
+        PublishChanged();
+#endif
     }
     internal static bool IsPhoneOutputDevice(string? deviceId) =>
 #if SONICROUTE_PHONE
@@ -96,16 +128,28 @@ internal static class ApplicationAudio
             if (source == null) return outputs.Where(d => !IsExternalOutputDevice(d.Id)).ToList();
             var phoneOutputs = AndroidAudioHost.OutputsForDevice(source.Device);
             var remaining = new Dictionary<string, AudioDeviceInfo>(StringComparer.OrdinalIgnoreCase);
-            foreach (var phone in phoneOutputs) remaining.TryAdd(phone.Id, phone);
+            // The source handset can keep playing natively. Give its current route one button;
+            // players on other handsets need the address of their own media output.
+            foreach (var phone in phoneOutputs)
+                if (!AndroidOutputIdentity.IsPhoneCurrentOutput(phone.Id)) remaining.TryAdd(phone.Id, phone);
             var config = ConfigService.Load();
             var list = new List<AudioDeviceInfo>();
+            bool addedNative = false;
+            void AddNative()
+            {
+                if (addedNative) return;
+                list.Add(new PanelDevices.LocalizedDevice("Phone.NativeAudioOutput") {
+                    Id = AndroidAudioSession.SourcePhoneOutputId, Flow = EDataFlow.eRender });
+                addedNative = true;
+            }
             foreach (var device in outputs)
             {
-                if (!IsPhoneOutputDevice(device.Id)) list.Add(device);
-                else if (remaining.Remove(device.Id, out var phone)) list.Add(PanelDevices.WithDeviceName(phone, config));
+                if (!IsPhoneOutputDevice(device.Id)) { list.Add(device); continue; }
+                if (IsSourcePhoneOutput(source, device.Id)) AddNative();
+                else if (AndroidOutputIdentity.IsPhoneCurrentOutput(device.Id)) { list.Add(device); continue; }
+                if (remaining.Remove(device.Id, out var phone)) list.Add(PanelDevices.WithDeviceName(phone, config));
             }
-            list.Add(new PanelDevices.LocalizedDevice("Phone.NativeAudioOutput") {
-                Id = AndroidAudioSession.SourcePhoneOutputId, Flow = EDataFlow.eRender });
+            AddNative();
             // A live source can retain access to its own outputs during device-discovery changes.
             foreach (var phone in phoneOutputs)
                 if (remaining.Remove(phone.Id)) list.Add(PanelDevices.WithDeviceName(phone, config));
@@ -297,15 +341,18 @@ internal static class ApplicationAudio
     {
         if (!app.IsExternal)
         {
-#if SONICROUTE_PHONE
             if (flow == EDataFlow.eRender)
             {
-                if (AppPlaybackOutputs.IsManaged((int)app.ProcessId) || LocalAppOutputMirrors.GetExtraOutputs((int)app.ProcessId).Length != 0
-                    || AndroidOutputIdentity.IsPhoneOutput(deviceId))
-                    return AppPlaybackOutputs.SetAsync(app, [deviceId], deviceId, false).GetAwaiter().GetResult();
-                AndroidAudioHost.StopPcAppToPhone((int)app.ProcessId, restorePreviousEndpoint: false);
-            }
+                bool managed = LocalAppOutputMirrors.GetExtraOutputs((int)app.ProcessId).Length != 0;
+#if SONICROUTE_PHONE
+                managed |= AppPlaybackOutputs.IsManaged((int)app.ProcessId) || AndroidOutputIdentity.IsPhoneOutput(deviceId);
 #endif
+                if (managed || AppPlaybackRestore.HasSavedChoice((int)app.ProcessId))
+                    return AppPlaybackOutputs.SetAsync(app, [deviceId], deviceId).GetAwaiter().GetResult();
+#if SONICROUTE_PHONE
+                AndroidAudioHost.StopPcAppToPhone((int)app.ProcessId, restorePreviousEndpoint: false);
+#endif
+            }
             var result = AudioService.ApplyEndpoint((int)app.ProcessId, flow, deviceId);
             if (!result.Success)
                 result.Message = string.Format(L10n.T("Dev.RouteFailed"), result.Message);
@@ -351,8 +398,10 @@ internal static class ApplicationAudio
             {
                 if (AndroidOutputIdentity.IsPhoneOutput(deviceId))
                 {
-                    if (!IsSourcePhoneOutput(source, deviceId)) return (false, -1, L10n.T("Phone.Err.SelectSourcePhoneOutput"));
-                    await source.Session.SetOutputAsync(deviceId).ConfigureAwait(false);
+                    bool own = IsSourcePhoneOutput(source, deviceId);
+                    bool current = AndroidOutputIdentity.IsPhoneCurrentOutput(deviceId);
+                    if (!own && !current) return (false, -1, L10n.T("Phone.Err.SelectSourcePhoneOutput"));
+                    await source.Session.SetOutputAsync(own && current ? AndroidAudioSession.SourcePhoneOutputId : deviceId).ConfigureAwait(false);
                 }
                 else await source.Session.SetOutputAsync(AudioService.IsSystemDefault(deviceId) ? null : deviceId).ConfigureAwait(false);
                 return (true, 0, "");
@@ -404,6 +453,17 @@ internal static class ApplicationAudio
         }
         return (target, result.Succeeded, result.Total);
     }
+    internal static bool CombineExternalMute(bool nativeMuted)
+    {
+        if (!nativeMuted) return false;
+#if SONICROUTE_PHONE
+        if (AndroidAudioHost.IsCreated)
+            foreach (var source in AndroidAudioHost.Sources.Sources)
+                if (source.Session.State is { State: CaptureState.Receiving, Muted: false }) return false;
+        if (AirPlayHost.Source?.State is { State: CaptureState.Receiving, Muted: false }) return false;
+#endif
+        return true;
+    }
     internal static bool AllMuted()
     {
         var states = GetApps().Select(ReadStateChecked).Where(s => s.MuteKnown).ToArray();
@@ -416,9 +476,10 @@ internal static class ApplicationAudio
     }
     internal static (int OutOk, int InOk, int Total, bool Applied) ResetAllPersistedEndpointsChecked()
     {
+        bool cleared = AppPlaybackRestore.ClearAsync().GetAwaiter().GetResult();
+        LocalAppOutputMirrors.ClearAllAsync().GetAwaiter().GetResult();
 #if SONICROUTE_PHONE
         AppPlaybackOutputs.ForgetAll();
-        LocalAppOutputMirrors.ClearAllAsync().GetAwaiter().GetResult();
         int phoneStopped = AndroidAudioHost.StopAllPcAppsToPhone(restorePreviousEndpoint: true);
 #else
         const int phoneStopped = 0;
@@ -426,6 +487,45 @@ internal static class ApplicationAudio
         var native = AudioService.ResetAllPersistedEndpointsChecked();
         var external = MergeExternal(Array.Empty<AudioAppInfo>());
         int changed = external.Count(app => ApplyEndpoint(app, EDataFlow.eRender, AudioService.SystemDefaultDeviceId).Success);
-        return (native.OutOk + changed + phoneStopped, native.InOk, native.Total + external.Count, native.Applied && changed == external.Count);
+        return (native.OutOk + changed + phoneStopped, native.InOk, native.Total + external.Count, cleared && native.Applied && changed == external.Count);
     }
 }
+
+#if SONICROUTE_PHONE
+[Flags]
+internal enum AudioUiScope { None = 0, SourceState = 1, SourceList = 2, Routes = 4, Outputs = 8 }
+
+internal readonly record struct AudioUiChange(AudioUiScope Scope, string? SourceId = null, int Pid = 0)
+{
+    internal static readonly AudioUiChange All = new(AudioUiScope.SourceList | AudioUiScope.Routes | AudioUiScope.Outputs);
+    internal bool Has(AudioUiScope scope) => (Scope & scope) != 0;
+
+    // Multiple sources or PIDs widen only their part of the pending update.
+    internal AudioUiChange Merge(AudioUiChange next)
+    {
+        string? source = Has(AudioUiScope.SourceState) ? SourceId : next.SourceId;
+        if (Has(AudioUiScope.SourceState) && next.Has(AudioUiScope.SourceState) && source != next.SourceId) source = null;
+        int pid = Has(AudioUiScope.Routes) ? Pid : next.Pid;
+        if (Has(AudioUiScope.Routes) && next.Has(AudioUiScope.Routes) && pid != next.Pid) pid = 0;
+        return new(Scope | next.Scope, source, pid);
+    }
+}
+
+internal sealed class PendingAudioUiChange
+{
+    private AudioUiChange _pending;
+    internal bool Add(AudioUiChange change)
+    {
+        lock (this)
+        {
+            bool post = _pending.Scope == AudioUiScope.None;
+            _pending = _pending.Merge(change);
+            return post;
+        }
+    }
+    internal AudioUiChange Take()
+    {
+        lock (this) { var change = _pending; _pending = default; return change; }
+    }
+}
+#endif

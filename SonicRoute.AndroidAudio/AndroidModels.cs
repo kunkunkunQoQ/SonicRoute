@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace SonicRoute.AndroidAudio;
 
-public enum AndroidOutputSinkKind { Speaker, Bluetooth }
+public enum AndroidOutputSinkKind { Speaker, Bluetooth, Current }
 
 public sealed record AndroidOutputSink(
     string Key,
@@ -13,6 +13,7 @@ public sealed record AndroidOutputSink(
     string? Address = null)
 {
     public static readonly AndroidOutputSink DefaultSpeaker = new("speaker", AndroidOutputSinkKind.Speaker, 0, 2, "手机扬声器");
+    public static readonly AndroidOutputSink Current = new("current", AndroidOutputSinkKind.Current, 0, 0, "手机当前输出");
 
     public static IReadOnlyList<AndroidOutputSink> ParseList(JsonElement element)
     {
@@ -24,6 +25,7 @@ public sealed record AndroidOutputSink(
                 if (item.ValueKind != JsonValueKind.Object) continue;
                 string key = item.TryGetProperty("key", out var k) ? (k.GetString() ?? "").Trim() : "";
                 if (key.Length is 0 or > 128) continue;
+                if (string.Equals(key, Current.Key, StringComparison.OrdinalIgnoreCase)) continue;
                 string kindText = item.TryGetProperty("kind", out var kd) ? (kd.GetString() ?? "").Trim() : "";
                 var kind = string.Equals(kindText, "bluetooth", StringComparison.OrdinalIgnoreCase)
                     || key.StartsWith("bt:", StringComparison.OrdinalIgnoreCase)
@@ -55,7 +57,7 @@ public sealed record AndroidOutputSink(
         {
             foreach (var sink in outputs)
             {
-                if (sink == null || string.IsNullOrWhiteSpace(sink.Key)) continue;
+                if (sink == null || sink.Kind == AndroidOutputSinkKind.Current || string.IsNullOrWhiteSpace(sink.Key)) continue;
                 string? address = string.IsNullOrWhiteSpace(sink.Address)
                     || string.Equals(sink.Address.Trim(), "00:00:00:00:00:00", StringComparison.OrdinalIgnoreCase)
                     ? null
@@ -107,6 +109,9 @@ public static class AndroidOutputIdentity
 
     public static bool IsPhoneBluetoothOutput(string? deviceId) =>
         TryParseDeviceId(deviceId, out _, out string sinkKey) && sinkKey.StartsWith("bt:", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsPhoneCurrentOutput(string? deviceId) =>
+        TryParseDeviceId(deviceId, out _, out string sinkKey) && string.Equals(sinkKey, AndroidOutputSink.Current.Key, StringComparison.OrdinalIgnoreCase);
 
     public static string FormatDeviceId(string phoneKey, string sinkKey) =>
         $"{Prefix}{phoneKey}:{sinkKey}";
@@ -313,10 +318,4 @@ public sealed record AndroidAudioState(CaptureState State, AndroidDevice? Device
 public interface IAudioTransport : IAsyncDisposable
 {
     Task<Stream> ConnectAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken cancellationToken);
-}
-
-public interface IPcmPlayer : IDisposable
-{
-    void Play();
-    void Stop();
 }

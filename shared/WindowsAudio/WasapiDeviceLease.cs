@@ -16,8 +16,11 @@ internal sealed class WasapiDeviceLease : IDisposable
     internal MMDevice Device { get; }
     private static readonly ConstructorInfo DeviceConstructor = typeof(MMDevice)
         .GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance)
-        .Single(c => c.GetParameters() is [var p]
-            && p.ParameterType.GUID == new Guid("D666063F-1587-4E43-81F1-B948E807363F"));
+        .Single(c =>
+        {
+            var parameters = c.GetParameters();
+            return parameters.Length == 1 && parameters[0].ParameterType.GUID == new Guid("D666063F-1587-4E43-81F1-B948E807363F");
+        });
 
     private WasapiDeviceLease(object endpoint)
     {
@@ -104,7 +107,7 @@ internal sealed class WasapiDeviceLease : IDisposable
         {
             var api = Interlocked.Exchange(ref _api, null);
             if (api != null) Marshal.ReleaseComObject(api);
-            nint mta = Interlocked.Exchange(ref _mta, 0);
+            nint mta = Interlocked.Exchange(ref _mta, IntPtr.Zero);
             if (mta != 0) Win32Native.CoDecrementMTAUsage(mta);
         }
     }
@@ -112,7 +115,7 @@ internal sealed class WasapiDeviceLease : IDisposable
     internal static WasapiDeviceLease Open(string? endpointId)
     {
         using var enumerator = new Enumerator();
-        return !string.IsNullOrEmpty(endpointId) ? enumerator.GetDevice(endpointId)
+        return !string.IsNullOrEmpty(endpointId) ? enumerator.GetDevice(endpointId!)
             : enumerator.TryDefault(Role.Multimedia) ?? throw new COMException("No default playback device.", unchecked((int)0x80070490));
     }
 

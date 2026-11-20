@@ -22,6 +22,7 @@ internal static class AirPlayHost
     private static AirPlayStatus _inactive = new(AirPlayStage.Off);
     private static AirPlayStatus? _transition;
     private static int _exiting;
+    private static AirPlayAudioOutput? _publishedSource;
     internal static event Action? Changed;
     internal static event Action? PreferencesChanged;
     internal static AirPlayStatus Status => Volatile.Read(ref _transition) ?? Volatile.Read(ref _receiver)?.Status ?? Volatile.Read(ref _inactive);
@@ -172,7 +173,9 @@ internal static class AirPlayHost
     private static void Publish()
     {
         PublishDisplay();
-        ApplicationAudio.NotifyChanged();
+        var source = Source;
+        var previous = Interlocked.Exchange(ref _publishedSource, source);
+        ApplicationAudio.NotifySourceChanged(ReferenceEquals(previous, source) ? source?.Id : null);
     }
 
     private static void PublishDisplay()

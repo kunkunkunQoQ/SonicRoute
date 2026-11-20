@@ -7,8 +7,13 @@ namespace SonicRoute;
 
 internal static class WindowsTouch
 {
+    private static bool _initialized;
+
+    // Called on the UI dispatcher before creating controls.
     internal static void Initialize()
     {
+        if (_initialized) return;
+        _initialized = true;
         EventManager.RegisterClassHandler(typeof(ScrollViewer), FrameworkElement.LoadedEvent,
             new RoutedEventHandler(ScrollViewerLoaded));
         EventManager.RegisterClassHandler(typeof(ScrollViewer), ScrollViewer.ScrollChangedEvent,

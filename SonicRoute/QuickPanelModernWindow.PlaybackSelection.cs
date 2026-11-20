@@ -1,20 +1,32 @@
-#if SONICROUTE_PHONE
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
-using Button = System.Windows.Controls.Button;
 
 namespace SonicRoute;
 
 public partial class QuickPanelModernWindow
 {
-    private Task QueuePlaybackClickAsync(AppRow row, AudioDeviceInfo device, Button button, ModifierKeys modifiers)
+#if !SONICROUTE_PHONE
+    // Full already refreshes expanded rows from its combined local/external playback subscription.
+    private int _localPlaybackRefreshQueued;
+    private void OnLocalPlaybackChanged()
+    {
+        if (_isClosed || Interlocked.Exchange(ref _localPlaybackRefreshQueued, 1) != 0) return;
+        _uiLifetime.Post(Dispatcher, () =>
+        {
+            Interlocked.Exchange(ref _localPlaybackRefreshQueued, 0);
+            if (_isClosed || !IsVisible) return;
+            foreach (var row in _rows.Values)
+                if (row.Expanded && row.PlaybackChange.IsCompleted) _ = BuildRowDevicesAsync(row);
+        });
+    }
+#endif
+    private Task QueuePlaybackClickAsync(AppRow row, AudioDeviceInfo device, ModifierKeys modifiers)
     {
         var previous = row.PlaybackChange;
         return row.PlaybackChange = ApplyClickAsync();
@@ -35,42 +47,15 @@ public partial class QuickPanelModernWindow
                 string preferred = next.Contains(primary, StringComparer.OrdinalIgnoreCase) ? primary : next[0];
 
                 MarkLastUsed(row.App);
-                var result = await AppPlaybackOutputs.SetAsync(row.App, next, preferred, allowSpeakerMute: false);
+                var result = await AppPlaybackOutputs.SetAsync(row.App, next, preferred);
                 if (_isClosed) return;
-                if (result.Success) SetAnchor();
-                else
-                {
-                    ShowOsd(AppDisplayName.Get(row.App), result.Message);
-                    if (result.HResult == SourceSpeakerConsentRequiredException.ErrorCode && button.IsVisible && !selected.SetEquals(next))
-                    {
-                        var menu = ConvenienceMenus.Create();
-                        var names = row.DeviceButtons.Where(b => b.Flow == EDataFlow.eRender && next.Contains(b.Id, StringComparer.OrdinalIgnoreCase))
-                            .Select(b => b.Button.Content?.ToString());
-                        string target = string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), string.Join(" + ", names));
-                        var confirm = ConvenienceMenus.Item(string.Format(L10n.T("Phone.MuteSourceSpeakerAction"), target));
-                        confirm.ToolTip = L10n.T("Phone.MuteSourceSpeakerDesc");
-                        confirm.Click += async (_, _) =>
-                        {
-                            if (_isClosed || !_rows.TryGetValue(pid, out var live) || live != row) return;
-                            var retry = await AppPlaybackOutputs.SetAsync(row.App, next, preferred, allowSpeakerMute: true);
-                            if (_isClosed) return;
-                            if (retry.Success) SetAnchor();
-                            else ShowOsd(AppDisplayName.Get(row.App), retry.Message);
-                            if (row.Expanded) await BuildRowDevicesAsync(row);
-                        };
-                        menu.Items.Add(confirm);
-                        menu.PlacementTarget = button;
-                        menu.Placement = PlacementMode.Bottom;
-                        menu.IsOpen = true;
-                    }
-                }
-                if (row.Expanded) await BuildRowDevicesAsync(row);
-
-                void SetAnchor()
+                if (result.Success)
                 {
                     if (!modifiers.HasFlag(ModifierKeys.Shift) || row.PlaybackAnchor == null)
                         row.PlaybackAnchor = device.Id;
                 }
+                else ShowOsd(AppDisplayName.Get(row.App), result.Message);
+                if (row.Expanded) await BuildRowDevicesAsync(row);
             }
             catch (OperationCanceledException) when (_isClosed) { }
             catch (Exception ex) { if (!_isClosed) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
@@ -99,4 +84,3 @@ public partial class QuickPanelModernWindow
             : visible.ToArray();
     }
 }
-#endif

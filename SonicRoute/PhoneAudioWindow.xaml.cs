@@ -231,6 +231,7 @@ public partial class PhoneAudioWindow : Window
     private string? _pcDropSignature;
     private int? _pcDropTargetIndex;
     private bool _pcDropZonesDirty = true;
+    private IReadOnlyList<AndroidDevice>? _pcDropDevices;
     private string _connStatusKey = "Phone.Disconnected";
     private string? _connDetailKey;
     private Exception? _connError;
@@ -374,13 +375,15 @@ public partial class PhoneAudioWindow : Window
     {
         // Device/profile/output events invalidate this snapshot. DragOver must only read
         // already-built cells, rather than allocate device IDs/signatures on every move.
-        if (_closed || AirPlaySelected || (!force && !_pcDropZonesDirty)) return;
+        if (_closed || AirPlaySelected) return;
+        var devices = PhoneAudioWindowCache.Devices;
+        if (!force && !_pcDropZonesDirty && ReferenceEquals(devices, _pcDropDevices)) return;
+        _pcDropDevices = devices;
         _pcDropZonesDirty = false;
         var device = DeviceCombo.SelectedItem as AndroidDevice
             ?? (AndroidAudioHost.IsPhoneCreated ? AndroidAudioHost.Phone.Profile.LastDevice : null);
-        var zones = AndroidAudioHost.GetDropZonesForDevice(device);
-        if (zones.Count == 0)
-            zones = [(AndroidOutputSink.DefaultSpeaker, "")];
+        // A remembered phone keeps its output configuration, but cannot receive a drop.
+        var zones = AndroidAudioHost.GetDropZonesForDevice(devices != null && AndroidAudioHost.IsPhoneOnline(device) ? device : null);
 
         var sigBuilder = new StringBuilder();
         bool airPlayDrag = IsAirPlayDrag(AppIconDragController.DesktopDragSource);
@@ -402,18 +405,24 @@ public partial class PhoneAudioWindow : Window
         _pcDropGrid.Children.Clear();
         _pcDropGrid.RowDefinitions.Clear();
 
+        int bluetoothCount = 0;
         for (int i = 0; i < zones.Count; i++)
         {
             _pcDropGrid.RowDefinitions.Add(new RowDefinition());
             var (sink, deviceId) = zones[i];
-            string cellName = i == 0 ? "PcSpeakerDropZone" : $"PcBluetoothDropZone_{i}";
+            string cellName = sink.Kind switch
+            {
+                AndroidOutputSinkKind.Current => "PcCurrentOutputDropZone",
+                AndroidOutputSinkKind.Speaker => "PcSpeakerDropZone",
+                _ => $"PcBluetoothDropZone_{++bluetoothCount}"
+            };
             string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
-            string targetName = sink.Kind == AndroidOutputSinkKind.Speaker ? AndroidAudioHost.OutputDisplayName(device, sink) : sinkName;
+            string targetName = sink.Kind == AndroidOutputSinkKind.Bluetooth ? sinkName : AndroidAudioHost.OutputDisplayName(device, sink);
             string title = sink.Kind == AndroidOutputSinkKind.Speaker
                 ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"), targetName)
                 : string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), targetName);
 
-            string description = airPlayDrag ? L10n.T("Phone.AirPlayDropOutput") : sink.Kind == AndroidOutputSinkKind.Speaker
+            string description = airPlayDrag ? L10n.T("Phone.AirPlayDropOutput") : sink.Kind != AndroidOutputSinkKind.Bluetooth
                 ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerDesc"), AndroidAudioHost.OutputDisplayName(device, sink))
                 : L10n.T("Phone.PcDropOnlyOnBtDesc");
             var corners = zones.Count == 1
@@ -438,6 +447,11 @@ public partial class PhoneAudioWindow : Window
                 Grid.SetRow(divider, i);
                 _pcDropGrid.Children.Add(divider);
             }
+        }
+        if (_pcDropCells.Count == 0 && !AndroidAudioHost.IsDragging)
+        {
+            _pcDropTargetIndex = null;
+            PcDropHighlight.Visibility = Visibility.Collapsed;
         }
         ApplyPcDropCellBackgrounds(_pcDropTargetIndex);
     }
@@ -491,7 +505,11 @@ public partial class PhoneAudioWindow : Window
         _pcDropGrid.Visibility = Visibility.Visible;
         bool visible = index != null || AppIconDragController.IsDesktopDragging
             && (!IsAirPlayDrag(AppIconDragController.DesktopDragSource) || DeviceCombo.SelectedItem is AndroidDevice { State: "device" });
-        if (visible) EnsurePcDropZones();
+        if (visible)
+        {
+            EnsurePcDropZones();
+            if (_pcDropCells.Count == 0) { index = null; visible = false; }
+        }
         if (_pcDropTargetIndex == index && (PcDropHighlight.Visibility == Visibility.Visible) == visible) return;
         _pcDropTargetIndex = index;
         if (!visible)
@@ -860,8 +878,9 @@ public partial class PhoneAudioWindow : Window
             EnsurePcDropZones();
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
             int index = GetPcDropZoneIndex(e.GetPosition(PcDropHighlight).Y, height, _pcDropCells.Count);
-            SetPcDropTarget(index);
-            e.Effects = System.Windows.DragDropEffects.Copy;
+            bool available = _pcDropCells.Count != 0;
+            SetPcDropTarget(available ? index : null);
+            e.Effects = available ? System.Windows.DragDropEffects.Copy : System.Windows.DragDropEffects.None;
             e.Handled = true;
             return;
         }
@@ -906,7 +925,7 @@ public partial class PhoneAudioWindow : Window
         }
         if (playback != null && (!IsAirPlayDrag(playback) || airPlay != null && DeviceCombo.SelectedItem is AndroidDevice { State: "device" }))
         {
-            EnsurePcDropZones();
+            EnsurePcDropZones(force: true);
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
             int index = GetPcDropZoneIndex(e.GetPosition(PcDropHighlight).Y, height, _pcDropCells.Count);
             var cell = _pcDropCells.Count > 0 ? _pcDropCells[index] : null;

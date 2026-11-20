@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace SonicRoute.AndroidAudio;
 
 internal static class LocalProcessAudioCapture
@@ -6,7 +8,7 @@ internal static class LocalProcessAudioCapture
     {
         using var destination = new PcmWriter(onPcm);
         await PcProcessLoopbackCapture.RunMtaCaptureLoopAsync(processId, destination, token,
-            static () => { }, onStarted: onStarted).ConfigureAwait(false);
+            onProcessExited: null, onStarted: onStarted).ConfigureAwait(false);
     }
 
     private sealed class PcmWriter(Action<ReadOnlyMemory<byte>> output) : Stream

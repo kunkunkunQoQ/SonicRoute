@@ -44,8 +44,8 @@ internal static partial class AndroidAudioHost
         new AndroidAudioSettingsStore(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-audio.json")));
     private static readonly Lazy<AndroidAudioManager> LazySources = new(() =>
     {
-        var sources = new AndroidAudioManager(() => new AndroidAudioSession(Adb, LazySettings.Value.GetStreaming), LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
-        sources.Changed += ApplicationAudio.NotifyChanged;
+        var sources = new AndroidAudioManager(() => new AndroidAudioSession(Adb, LazySettings.Value.GetStreaming, FindOnlinePhone), LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
+        sources.SourceChanged += ApplicationAudio.NotifySourceChanged;
         sources.ResourcesRetired += OnResourcesRetired;
         return sources;
     });
@@ -54,7 +54,7 @@ internal static partial class AndroidAudioHost
     private static readonly Lazy<PcToPhoneAudioManager> LazyPcToPhone = new(() =>
     {
         var manager = new PcToPhoneAudioManager(() => Adb, AcquireLocalSilenceLease);
-        manager.Changed += ApplicationAudio.NotifyChanged;
+        manager.RouteChanged += ApplicationAudio.NotifyRouteChanged;
         manager.ResourcesRetired += OnResourcesRetired;
         manager.OutputsObserved += (device, sinks) =>
         {
@@ -141,18 +141,23 @@ internal static partial class AndroidAudioHost
     {
         lock (PhoneOperations)
             if (!Phone.RemoveDevice(profileId, PhoneAudioWindowCache.Devices)) return;
+        (await PrepareStreamingAsync(MediaShutdown.Token).ConfigureAwait(false)).ForgetSourceRoutes(device);
         // Complete owned cleanup even if selecting the replacement profile hides this page.
         var cleanup = new List<Task>();
         cleanup.Add(LocalAppOutputMirrors.PhoneRemovedAsync(device));
         if (AreDisplaysCreated) cleanup.Add(Displays.CloseDeviceAsync(device));
-        if (IsCreated)
-            cleanup.AddRange(Sources.Sources.Where(s => AndroidDeviceIdentity.MatchesSavedDevice(device, s.Device))
-                .Select(s => Sources.RemoveAsync(s.Id, restorePrevious: false)));
+        if (IsCreated) cleanup.Add(DisconnectAndroidSourcesAsync(device));
         if (IsPcToPhoneCreated) cleanup.Add(PcToPhone.StopPhoneAsync(device));
         if (AirPlayHost.Source is { } airPlay) cleanup.Add(airPlay.PhoneRemovedAsync(device));
         await Task.WhenAll(cleanup);
         await Phone.FlushAsync();
     }
+    internal static Task DisconnectAndroidSourcesAsync(AndroidDevice device) =>
+        !IsCreated ? Task.CompletedTask : Task.WhenAll(Sources.Sources.Select(source =>
+            AndroidDeviceIdentity.MatchesSavedDevice(device, source.Device)
+                ? Sources.RemoveAsync(source.Id, restorePrevious: false)
+                : source.Session.PhoneRemovedAsync(device)));
+
     internal static bool IsPhoneOnline(AndroidDevice? device)
     {
         if (device == null) return false;
@@ -215,11 +220,8 @@ internal static partial class AndroidAudioHost
         foreach (var profile in store.Profiles)
         {
             if (profile.LastDevice is not { } device || store.IsRemoved(device) || !IsPhoneOnline(device)) continue;
-            string phoneKey = AndroidDeviceIdentity.Key(device);
-            var sinks = profile.OutputSinks is { Count: > 0 } ? profile.OutputSinks : [AndroidOutputSink.DefaultSpeaker];
-            foreach (var sink in sinks)
+            foreach (var (sink, id) in GetDropZonesForDevice(device))
             {
-                string id = AndroidOutputIdentity.FormatDeviceId(phoneKey, sink.Key);
                 if (!seenIds.Add(id)) continue;
                 list.Add(new AudioDeviceInfo
                 {
@@ -235,6 +237,11 @@ internal static partial class AndroidAudioHost
     internal static string OutputDisplayName(AndroidDevice? device, AndroidOutputSink sink)
     {
         string phoneName = device == null ? L10n.T("Phone.Title") : LazyPhone.IsValueCreated ? Phone.GetDisplayName(device) : device.Name;
+        if (sink.Kind == AndroidOutputSinkKind.Current)
+        {
+            string current = L10n.T("Phone.NativeAudioOutput");
+            return PhoneAudioWindowCache.Devices?.Count(d => d.State == "device") > 1 ? current + " · " + phoneName : current;
+        }
         string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
         return sink.Kind == AndroidOutputSinkKind.Speaker
             ? string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName) : string.Format(L10n.T("Phone.BluetoothOutputFormat"), sinkName, phoneName);
@@ -260,7 +267,9 @@ internal static partial class AndroidAudioHost
         IReadOnlyList<AndroidOutputSink> sinks = [AndroidOutputSink.DefaultSpeaker];
         if (LazyPhone.IsValueCreated && Phone.FindProfile(device) is { OutputSinks.Count: > 0 } profile)
             sinks = profile.OutputSinks;
-        var result = new List<(AndroidOutputSink, string)>(sinks.Count);
+        var result = new List<(AndroidOutputSink, string)>(sinks.Count + 1);
+        if (IsPhoneOnline(device))
+            result.Add((AndroidOutputSink.Current, AndroidOutputIdentity.FormatDeviceId(phoneKey, AndroidOutputSink.Current.Key)));
         foreach (var sink in sinks)
             result.Add((sink, AndroidOutputIdentity.FormatDeviceId(phoneKey, sink.Key)));
         return result;
@@ -270,9 +279,7 @@ internal static partial class AndroidAudioHost
         if (!AndroidOutputIdentity.TryParseDeviceId(endpoint, out string phoneKey, out string sink))
             throw AndroidError.WithCode(new IOException("无效的设备输出。"), AndroidErrorCode.InvalidPhoneOutputDevice);
 
-        var devices = PhoneAudioWindowCache.Devices;
-        var device = devices != null ? devices.FirstOrDefault(IsTarget)
-            : Phone.Profiles.Select(profile => profile.LastDevice).FirstOrDefault(IsTarget);
+        var device = FindOnlinePhone(phoneKey);
         if (device == null || Phone.IsRemoved(device))
             throw AndroidError.WithCode(new IOException("设备未连接或离线。"), AndroidErrorCode.PhoneOffline);
         if (!GetDropZonesForDevice(device).Any(output => string.Equals(output.DeviceId, endpoint, StringComparison.OrdinalIgnoreCase)))
@@ -280,9 +287,15 @@ internal static partial class AndroidAudioHost
 
         token.ThrowIfCancellationRequested();
         return new AndroidPhonePcmPlayer(adb ?? Adb, device, pcm, sink, token, (connected, outputs) => Phone.UpdateOutputs(connected, outputs));
+    }
 
-        bool IsTarget(AndroidDevice? candidate) => candidate is { State: "device" }
-            && string.Equals(AndroidDeviceIdentity.Key(candidate), phoneKey, StringComparison.OrdinalIgnoreCase);
+    private static AndroidDevice? FindOnlinePhone(string phoneKey)
+    {
+        bool Matches(AndroidDevice? candidate) => candidate is { State: "device" }
+            && string.Equals(AndroidDeviceIdentity.Key(candidate), phoneKey, StringComparison.OrdinalIgnoreCase)
+            && !Phone.IsRemoved(candidate);
+        return PhoneAudioWindowCache.Devices is { } online
+            ? online.FirstOrDefault(Matches) : Phone.Profiles.Select(profile => profile.LastDevice).FirstOrDefault(Matches);
     }
     internal static string? TryGetPcAppPhoneOutput(int processId) =>
         LazyPcToPhone.IsValueCreated ? PcToPhone.GetPersistedEndpoint(processId) : null;
@@ -673,9 +686,11 @@ internal static partial class AndroidAudioHost
 
     internal static async Task StopMediaAsync()
     {
+        if (LazySources.IsValueCreated) Sources.BeginShutdown();
         MediaShutdown.Cancel();
         var pending = new List<Task>();
         if (LazyPcToPhone.IsValueCreated) pending.Add(PcToPhone.DisposeAsync().AsTask());
+        if (SavedSourceStartup.IsValueCreated) pending.Add(SavedSourceStartup.Value);
         lock (MediaWatches) pending.AddRange(MediaWatches);
         // A cancelled view may have left a small configuration read in flight. Finish
         // that existing read before shutdown flushes settings; never start one here.

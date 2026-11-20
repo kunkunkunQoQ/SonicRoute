@@ -6,6 +6,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly object _stateGate = new(), _logGate = new();
     private readonly Func<IAudioTransport> _transportFactory;
+    private readonly Func<string, AndroidDevice?>? _resolvePhone;
     private readonly Func<AndroidDevice, AndroidPcmSource, string?, CancellationToken, IPcmPlayer> _playerFactory;
     private readonly Func<Action, IDisposable>? _watchDefaultOutput;
     private IDisposable? _defaultOutputWatch;
@@ -26,9 +27,10 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private int _generation;
     private bool _disposed;
     private Exception? _renderFailure;
-    private bool _requestedPhoneAudio, _capturePhoneAudio, _initialKeepPhoneAudio;
+    private bool _requestedPhoneAudio, _capturePhoneAudio, _initialKeepPhoneAudio, _pendingNativeOutput;
     private CancellationToken _sourceLifetime;
     public event Action<AndroidAudioState>? Changed;
+    internal event Action<string?[]?>? OutputSelectionCommitted;
     public AndroidAudioState State => Volatile.Read(ref _state);
     public AndroidPcmSource? Pcm => Volatile.Read(ref _pcm);
     public long PacketsDecoded => _receiver?.PacketsDecoded ?? 0;
@@ -38,32 +40,37 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     private ScrcpyOpusReceiver? _receiver;
     private readonly Func<AndroidDevice, AndroidStreamSettings>? _streaming;
 
-    public AndroidAudioSession(AdbClient adb, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
+    public AndroidAudioSession(AdbClient adb, Func<AndroidDevice, AndroidStreamSettings>? streaming = null,
+        Func<string, AndroidDevice?>? resolvePhone = null)
     {
         _mirrors = new(RemoveFailedOutputsAsync);
         _streaming = streaming;
+        _resolvePhone = resolvePhone;
         _watchDefaultOutput = DefaultOutputNotifications.Subscribe;
         _transportFactory = () => new ScrcpyAdbTransport(adb, Log, streaming);
         _playerFactory = (device, source, id, token) =>
         {
-            if (!AndroidOutputIdentity.IsPhoneOutput(id)) return new WasapiPcmPlayer(source, id);
-            string sink = GetSourcePhoneSink(device, id!);
-            return new AndroidPhonePcmPlayer(adb, device, source, sink, token);
+            return AndroidOutputIdentity.TryParseDeviceId(id, out _, out string sink)
+                ? new AndroidPhonePcmPlayer(adb, device, source, sink, token)
+                : new WasapiPcmPlayer(source, id);
         };
     }
     public AndroidAudioSession(Func<IAudioTransport> transportFactory, Func<AndroidPcmSource, string?, IPcmPlayer> playerFactory,
-        Func<Action, IDisposable>? watchDefaultOutput = null, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
+        Func<Action, IDisposable>? watchDefaultOutput = null, Func<AndroidDevice, AndroidStreamSettings>? streaming = null,
+        Func<string, AndroidDevice?>? resolvePhone = null)
     {
         _mirrors = new(RemoveFailedOutputsAsync);
         _transportFactory = transportFactory;
         _playerFactory = (_, pcm, id, _) => playerFactory(pcm, id);
         _watchDefaultOutput = watchDefaultOutput;
         _streaming = streaming;
+        _resolvePhone = resolvePhone;
     }
 
     private IPcmPlayer CreatePlayer(AndroidDevice device, AndroidPcmSource pcm, string? id, CancellationToken token)
     {
         if (id == SourcePhoneOutputId) return NativePhonePlayback.Instance;
+        if (AndroidOutputIdentity.IsPhoneOutput(id)) device = ResolvePhoneOutput(device, id!).Device;
         return _playerFactory(device, pcm, id, token);
     }
 
@@ -82,10 +89,20 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             _initialKeepPhoneAudio = keepPhoneAudio;
-            _requestedPhoneAudio = State.OutputId == SourcePhoneOutputId || keepPhoneAudio;
+            bool nativeAlias = IsSourcePhoneCurrent(device, State.OutputId) || _extraIds.Any(id => IsSourcePhoneCurrent(device, id));
+            if (nativeAlias)
+            {
+                string?[] renderers = new[] { State.OutputId }.Concat(_extraIds)
+                    .Where(id => id != SourcePhoneOutputId && !IsSourcePhoneCurrent(device, id)).ToArray();
+                var (primary, extras) = PcmOutputMirrors.Select(renderers.Length == 0 ? [SourcePhoneOutputId] : renderers, State.OutputId);
+                Volatile.Write(ref _extraIds, extras);
+                Update(s => s with { OutputId = primary });
+            }
+            _requestedPhoneAudio = nativeAlias || _pendingNativeOutput || State.OutputId == SourcePhoneOutputId || keepPhoneAudio;
+            _pendingNativeOutput = false;
             _sourceLifetime = token;
-            await StartCoreAsync(device, app, _requestedPhoneAudio && !AndroidOutputIdentity.IsPhoneOutput(State.OutputId)
-                && !_extraIds.Any(AndroidOutputIdentity.IsPhoneOutput), token).ConfigureAwait(false);
+            await StartCoreAsync(device, app, _requestedPhoneAudio && !IsSourcePhoneOutput(device, State.OutputId)
+                && !_extraIds.Any(id => IsSourcePhoneOutput(device, id)), token).ConfigureAwait(false);
         }
         finally { _operations.Release(); }
     }
@@ -260,14 +277,20 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     public Task SetOutputAsync(string? endpointId) => SetOutputsAsync([endpointId]);
 
     private Task SetOutputsAsync(IReadOnlyList<string?> outputs) => ApplyOutputsAsync(outputs.ToArray());
-    private async Task ApplyOutputsAsync(string?[] desired, bool explicitSelection = false)
+    internal Task RestoreOutputsAsync(string?[] desired, Func<bool> stillSelected) => ApplyOutputsAsync(desired, true, stillSelected);
+
+    private async Task ApplyOutputsAsync(string?[] desired, bool explicitSelection = false, Func<bool>? restore = null)
     {
         await _operations.WaitAsync().ConfigureAwait(false);
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            if (restore != null && !restore()) return;
             var previous = CurrentSelection();
             await ApplyOutputsLockedAsync(desired, explicitSelection).ConfigureAwait(false);
+            if (restore == null && State.State == CaptureState.Receiving)
+                OutputSelectionCommitted?.Invoke(explicitSelection && desired.Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1
+                    ? CurrentSelection() : null);
             if (State.State == CaptureState.Receiving && !previous.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(CurrentSelection()))
             {
                 _outputHistory.Insert(0, previous);
@@ -283,6 +306,10 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
 
     private async Task ApplyOutputsLockedAsync(string?[] desired, bool explicitSelection)
     {
+        var device = State.Device;
+        if (device != null)
+            for (int i = 0; i < desired.Length; i++)
+                if (IsSourcePhoneCurrent(device, desired[i])) desired[i] = SourcePhoneOutputId;
         bool native = desired.Contains(SourcePhoneOutputId, StringComparer.OrdinalIgnoreCase);
         var renderers = desired.Where(id => id != SourcePhoneOutputId).ToArray();
         if (renderers.Length == 0 && native) renderers = [SourcePhoneOutputId];
@@ -299,16 +326,16 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             // Enter the operation queue in call order, then open additional devices away from the UI thread.
             if (extras.Length != 0 && SynchronizationContext.Current != null)
                 await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
-            bool extraPhone = extras.Any(AndroidOutputIdentity.IsPhoneOutput);
-            var device = State.Device;
+            bool extraSourcePhone = device != null && extras.Any(id => IsSourcePhoneOutput(device, id));
             if (device != null)
-                foreach (var id in extras.Where(AndroidOutputIdentity.IsPhoneOutput)) GetSourcePhoneSink(device, id);
+                foreach (var id in extras.Where(AndroidOutputIdentity.IsPhoneOutput)) ResolvePhoneOutput(device, id);
             if (device != null && _pcm != null && _outputRun != null)
                 await _mirrors.ApplyAsync(extras, (pcm, id, ct) => CreatePlayer(device, pcm, id, ct),
-                    () => ChangePrimaryLockedAsync(primary, extraPhone), _outputRun.Token).ConfigureAwait(false);
-            else await ChangePrimaryLockedAsync(primary, extraPhone).ConfigureAwait(false);
+                    () => ChangePrimaryLockedAsync(primary, extraSourcePhone), _outputRun.Token).ConfigureAwait(false);
+            else await ChangePrimaryLockedAsync(primary, extraSourcePhone).ConfigureAwait(false);
             bool changed = !extras.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(_extraIds);
             Volatile.Write(ref _extraIds, extras);
+            if (_pcm == null) _pendingNativeOutput = native;
             if (changed) Notify(State);
         }
         catch
@@ -330,28 +357,52 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         try
         {
             if (_disposed || generation != _generation || !ReferenceEquals(_player, failed)) return;
-            string? lost = State.OutputId;
-            var remaining = CurrentSelection().Where(id => !string.Equals(id, lost, StringComparison.OrdinalIgnoreCase)).ToArray();
-            var choices = remaining.Length != 0 ? new[] { remaining } : _outputHistory.ToArray();
-            foreach (var choice in choices)
-            {
-                var usable = choice.Where(id => !string.Equals(id, lost, StringComparison.OrdinalIgnoreCase)).ToArray();
-                if (usable.Length == 0) continue;
-                try
-                {
-                    await ApplyOutputsLockedAsync(usable, true).ConfigureAwait(false);
-                    return;
-                }
-                catch (Exception ex) when (!_sourceLifetime.IsCancellationRequested) { Log("Output recovery: " + ex.Message); }
-            }
-            Volatile.Write(ref _renderFailure, reason);
-            _run?.Cancel();
+            await RecoverOutputLockedAsync(State.OutputId, reason).ConfigureAwait(false);
         }
         finally
         {
             if (_pcm != null) _pcm.Mirrors = _mirrors;
             _operations.Release();
         }
+    }
+
+    internal async Task PhoneRemovedAsync(AndroidDevice device)
+    {
+        string lost = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), AndroidOutputSink.Current.Key);
+        await _operations.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_disposed || _pcm == null || !CurrentSelection().Contains(lost, StringComparer.OrdinalIgnoreCase)) return;
+            await RecoverOutputLockedAsync(lost, new IOException("目标手机已移除。"), fallbackToDefault: true).ConfigureAwait(false);
+            var remaining = CurrentSelection();
+            OutputSelectionCommitted?.Invoke(remaining.Length > 1 && !remaining.Contains(lost, StringComparer.OrdinalIgnoreCase) ? remaining : null);
+        }
+        finally
+        {
+            if (_pcm != null) _pcm.Mirrors = _mirrors;
+            _operations.Release();
+        }
+    }
+
+    private async Task RecoverOutputLockedAsync(string? lost, Exception reason, bool fallbackToDefault = false)
+    {
+        bool Keep(string? id) => !string.Equals(id, lost, StringComparison.OrdinalIgnoreCase);
+        var remaining = CurrentSelection().Where(Keep).ToArray();
+        IEnumerable<string?[]> choices = remaining.Length != 0 ? new[] { remaining } : _outputHistory;
+        if (fallbackToDefault) choices = choices.Append([null]);
+        foreach (var choice in choices)
+        {
+            var usable = choice.Where(Keep).ToArray();
+            if (usable.Length == 0) continue;
+            try
+            {
+                await ApplyOutputsLockedAsync(usable, true).ConfigureAwait(false);
+                return;
+            }
+            catch (Exception ex) when (!_sourceLifetime.IsCancellationRequested) { Log("Output recovery: " + ex.Message); }
+        }
+        Volatile.Write(ref _renderFailure, reason);
+        _run?.Cancel();
     }
 
     private async Task RemoveFailedOutputsAsync(Predicate<IPcmPlayer> match)
@@ -362,8 +413,8 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             if (!_mirrors.Remove(match)) return;
             var extras = _mirrors.IdsSnapshot();
             Volatile.Write(ref _extraIds, extras);
-            if (_pcm != null && !_disposed)
-                await ChangePrimaryLockedAsync(State.OutputId, extras.Any(AndroidOutputIdentity.IsPhoneOutput)).ConfigureAwait(false);
+            if (_pcm != null && !_disposed && State.Device is { } device)
+                await ChangePrimaryLockedAsync(State.OutputId, extras.Any(id => IsSourcePhoneOutput(device, id))).ConfigureAwait(false);
             Notify(State);
         }
         catch (Exception ex) { Log("Mirror output recovery: " + ex.Message); }
@@ -374,11 +425,12 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         }
     }
 
-    private async Task ChangePrimaryLockedAsync(string? endpointId, bool extraPhone)
+    private async Task ChangePrimaryLockedAsync(string? endpointId, bool extraSourcePhone)
     {
-        bool phoneOutput = AndroidOutputIdentity.IsPhoneOutput(endpointId);
-        string? sink = phoneOutput && State.Device != null ? GetSourcePhoneSink(State.Device, endpointId!) : null;
-        bool keepPhoneAudio = _requestedPhoneAudio && !phoneOutput && !extraPhone;
+        var source = State.Device;
+        (AndroidDevice Device, string Sink)? target = source != null && AndroidOutputIdentity.IsPhoneOutput(endpointId)
+            ? ResolvePhoneOutput(source, endpointId!) : null;
+        bool keepPhoneAudio = _requestedPhoneAudio && !extraSourcePhone && !AndroidDeviceIdentity.Matches(source, target?.Device);
         if (_pcm != null && _capturePhoneAudio != keepPhoneAudio)
         {
             // Keep capture exclusive when selecting a phone sink, so there is
@@ -386,7 +438,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             var old = State;
             bool previousMode = _capturePhoneAudio;
             Update(s => s with { OutputId = endpointId });
-            try { await StartCoreAsync(old.Device!, old.App!, keepPhoneAudio, _sourceLifetime, sink != null ? endpointId : null, preserveMirrors: true).ConfigureAwait(false); }
+            try { await StartCoreAsync(old.Device!, old.App!, keepPhoneAudio, _sourceLifetime, target.HasValue ? endpointId : null, preserveMirrors: true).ConfigureAwait(false); }
             catch (Exception ex)
             {
                 Update(s => s with { OutputId = old.OutputId });
@@ -406,9 +458,9 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             return;
         }
         if (string.Equals(State.OutputId, endpointId, StringComparison.OrdinalIgnoreCase)) return;
-        if (sink != null && _player is AndroidPhonePcmPlayer { Failure: null } phone)
+        if (target is { } output && _player is AndroidPhonePcmPlayer { Failure: null } phone && AndroidDeviceIdentity.Matches(output.Device, phone.Device))
         {
-            await phone.SwitchTargetAsync(sink, _run?.Token ?? default).ConfigureAwait(false);
+            await phone.SwitchTargetAsync(output.Sink, _run?.Token ?? default).ConfigureAwait(false);
             Update(s => s with { OutputId = endpointId });
             return;
         }
@@ -428,7 +480,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
 
     private async Task<IPcmPlayer> PreparePhoneOutputAsync(AndroidDevice device, AndroidPcmSource pcm, string endpointId, CancellationToken token)
     {
-        IPcmPlayer player = _playerFactory(device, pcm, endpointId, token);
+        IPcmPlayer player = CreatePlayer(device, pcm, endpointId, token);
         try
         {
             if (player is AndroidPhonePcmPlayer phone) await phone.VerifyBeforePlaybackAsync(token).ConfigureAwait(false);
@@ -527,13 +579,28 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             if (handled != Volatile.Read(ref _defaultOutputRevision)) QueueDefaultOutputRefresh();
         }
     }
-    private static string GetSourcePhoneSink(AndroidDevice device, string endpointId)
+    private static bool IsSourcePhoneOutput(AndroidDevice device, string? endpointId) =>
+        AndroidOutputIdentity.TryParseDeviceId(endpointId, out string phone, out _)
+        && string.Equals(phone, AndroidDeviceIdentity.Key(device), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSourcePhoneCurrent(AndroidDevice device, string? endpointId) =>
+        AndroidOutputIdentity.IsPhoneCurrentOutput(endpointId) && IsSourcePhoneOutput(device, endpointId);
+
+    private (AndroidDevice Device, string Sink) ResolvePhoneOutput(AndroidDevice source, string endpointId)
     {
-        if (!AndroidOutputIdentity.TryParseDeviceId(endpointId, out string phone, out string sink)
-            || !string.Equals(phone, AndroidDeviceIdentity.Key(device), StringComparison.OrdinalIgnoreCase)
-            || (sink != "speaker" && !sink.StartsWith("bt:", StringComparison.OrdinalIgnoreCase)))
-            throw AndroidError.WithCode(new InvalidOperationException("请选择此应用所在手机的输出设备。"), AndroidErrorCode.SelectSourcePhoneOutput);
-        return sink;
+        if (AndroidOutputIdentity.TryParseDeviceId(endpointId, out string phone, out string sink))
+        {
+            if (string.Equals(phone, AndroidDeviceIdentity.Key(source), StringComparison.OrdinalIgnoreCase)
+                && (sink == "speaker" || sink.StartsWith("bt:", StringComparison.OrdinalIgnoreCase))) return (source, sink);
+            if (string.Equals(sink, AndroidOutputSink.Current.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                var target = _resolvePhone?.Invoke(phone);
+                if (target is { State: "device" } && string.Equals(phone, AndroidDeviceIdentity.Key(target), StringComparison.OrdinalIgnoreCase))
+                    return (target, AndroidOutputSink.Current.Key);
+                throw AndroidError.WithCode(new IOException("目标手机未连接。"), AndroidErrorCode.PhoneOffline);
+            }
+        }
+        throw AndroidError.WithCode(new InvalidOperationException("请选择此应用所在手机的输出设备。"), AndroidErrorCode.SelectSourcePhoneOutput);
     }
     private AndroidAudioState Update(Func<AndroidAudioState, AndroidAudioState> change)
     {

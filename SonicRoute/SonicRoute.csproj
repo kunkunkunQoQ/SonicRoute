@@ -59,4 +59,5 @@
           产生混合架构产物并触发 CS8012「引用程序集面向的是另一个处理器」。
   -->
 
+  <Import Project="../shared/WindowsAudio/WindowsAudio.props" Condition="'$(SonicRouteEdition)' == 'Lite'" />
 </Project>
