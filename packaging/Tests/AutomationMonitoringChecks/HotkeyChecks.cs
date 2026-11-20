@@ -6,15 +6,13 @@ public sealed partial class App
 {
     private QuickPanelModernWindow? _quickPanel = null;
     private readonly TrayFixture _trayWheel = new();
-    internal bool IsHotkeyCaptureActive => false;
-    internal bool BypassTrayWheel;
-    internal bool ShouldBypassTrayWheel(int delta) => BypassTrayWheel;
+    internal bool IsHotkeyCaptureActive { get; set; }
     internal int GlobalCalls;
     private void ToggleQuickPanel() { }
     internal Task TestHotkey(string action) => ExecuteHotkeyCoreAsync(action);
     internal void ApplyAppMuteReadback(int pid, bool muted) => _quickPanel?.ApplyAppMuteReadback(pid, muted);
     internal QuickPanelModernWindow? TestPanel { get => _quickPanel; set => _quickPanel = value; }
-    private Task<string?> CycleDeviceAsync(int pid, EDataFlow flow) => Task.FromResult<string?>("test-device");
+    private Task<string?> CycleDeviceAsync(SonicRoute.Core.Models.AudioAppInfo app, EDataFlow flow) => Task.FromResult<string?>("test-device");
     private Task<string?> CycleAllAppsDeviceAsync(EDataFlow flow) { GlobalCalls++; return Task.FromResult<string?>("test-device"); }
     private Task<string?> CycleSystemDefaultDeviceAsync(EDataFlow flow) { GlobalCalls++; return Task.FromResult<string?>("test-device"); }
 }

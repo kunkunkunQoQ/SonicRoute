@@ -236,7 +236,7 @@ namespace SonicRoute
 
             // 托盘滚轮调音量（传入托盘图标：关闭"整片托盘区域"开关时仅音跃图标上滚轮响应）
             _trayWheel = new TrayWheelService(_trayIcon);
-            _trayWheel.Start();
+            _trayWheel.Start(_hotkeys.MouseHook);
 
             StartBackgroundMonitoring();
             AppPlaybackRestore.Start();
@@ -688,7 +688,6 @@ namespace SonicRoute
             _hotkeys?.RegistrationStatus ?? new Dictionary<string, string>();
 
         internal bool IsHotkeyCaptureActive => _mainWindow is { IsVisible: true } && _mainWindow.IsHotkeyRecording;
-        internal bool ShouldBypassTrayWheel(int delta) => IsHotkeyCaptureActive || _hotkeys?.HandlesMouseWheel(delta) == true;
 
         private readonly SemaphoreSlim _volumeHotkeyGate = new(1, 1);
 

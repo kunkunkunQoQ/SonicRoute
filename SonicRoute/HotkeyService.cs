@@ -27,6 +27,7 @@ namespace SonicRoute
         private readonly HwndSource _source;
         private readonly Dictionary<int, string> _actionById = new();
         private readonly MouseHotkeyHook _mouseHook;
+        internal MouseHotkeyHook MouseHook => _mouseHook;
         private Dictionary<string, string> _requestedBindings = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _mouseByAction = new(StringComparer.Ordinal);
         private List<KeyValuePair<string, string>> _compiledMouseBindings = new();
@@ -184,8 +185,6 @@ namespace SonicRoute
                 _ => false
             };
         }
-
-        internal bool HandlesMouseWheel(int delta) => _mouseHook.IsInstalled && _mouseHook.HasWheelBinding(delta);
 
         private bool TryRegister(string action, string? combo)
         {

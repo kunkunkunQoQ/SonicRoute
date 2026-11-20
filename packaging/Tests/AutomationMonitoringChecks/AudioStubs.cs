@@ -14,13 +14,33 @@ namespace SonicRoute
         public void ShowMicMuteOsd(string title,bool muted) { MicNotices++; }
         internal bool SetQuickPanelVisibility(bool visible)=>true;
     }
-    internal static class L10n { internal static string T(string key)=>key; }
+    internal sealed class L10n
+    {
+        internal static L10n Instance { get; } = new();
+        public string this[string key] => key;
+        internal static string T(string key) => key;
+    }
     internal sealed class AppRuntimeIdentity
     {
         internal static AppRuntimeIdentity Current { get; }=new();
         internal string CommandEdition=>"IsolatedAutomationCheck";
     }
     internal static class AutoRuleScheduler { internal static void Log(string text) { } }
+    internal static class AppPlaybackRestore
+    {
+        internal static bool HasSavedChoice(int pid) => false;
+        internal static Task<bool> ClearAsync() => Task.FromResult(true);
+    }
+    internal static class LocalAppOutputMirrors
+    {
+        internal static string[] GetExtraOutputs(int pid) => Array.Empty<string>();
+        internal static Task ClearAllAsync() => Task.CompletedTask;
+    }
+    internal static class AppPlaybackOutputs
+    {
+        internal static Task<(bool Success, int HResult, string Message)> SetAsync(AudioAppInfo app, string[] ids, string primary)
+            => throw new InvalidOperationException("Unexpected managed playback route in the fixture.");
+    }
     internal static class AudioService
     {
         internal const string SystemDefaultDeviceId="@@SYSTEM_DEFAULT@@";
@@ -40,7 +60,8 @@ namespace SonicRoute
         internal static EDataFlow? LastFlow;
         internal static bool IsSystemDefault(string? id)=>Core.AudioService.IsSystemDefault(id);
         internal static List<AudioDeviceInfo> GetDevices(EDataFlow flow){LastFlow=flow;DeviceReads++;return (flow==EDataFlow.eCapture?Inputs:Outputs).ToList();}
-        internal static List<AudioAppInfo> GetApps(){AppReads++;if(ThrowApps)throw new InvalidOperationException("Simulated unavailable audio discovery");return Apps.ToList();}
+        internal static List<AudioAppInfo> GetApps(bool refresh=false){AppReads++;if(ThrowApps)throw new InvalidOperationException("Simulated unavailable audio discovery");return Apps.ToList();}
+        internal static Task<List<AudioAppInfo>> GetAppsAsync(bool refresh=false)=>Task.FromResult(GetApps(refresh));
         internal static string? GetDefaultDeviceId(EDataFlow flow){LastFlow=flow;return flow==EDataFlow.eCapture?DefaultInput:DefaultOutput;}
         internal static string? GetPersistedEndpoint(int pid,EDataFlow flow)=>Endpoints.TryGetValue((pid,flow),out var id)?id:null;
         internal static (int OutOk,int InOk,int Total,bool Applied) ResetAllPersistedEndpointsChecked()=>(1,1,1,ResetApplied);
@@ -95,6 +116,8 @@ namespace SonicRoute
         internal static (int Succeeded,int Total) ChangeAllPlaybackVolumeChecked(int value,bool relative,CancellationToken token=default){token.ThrowIfCancellationRequested();LastVolume=(value,relative);return Batch;}
         internal static (int Succeeded,int Total) ChangeAllPlaybackMuteChecked(bool? muted,CancellationToken token=default){token.ThrowIfCancellationRequested();LastMute=muted;return Batch;}
         internal static bool SetVolumePercent(int pid,int value)=>true;
+        internal static (bool Applied,int Actual) SetVolumePercentChecked(int pid,int value)=>(true,value);
+        internal static (int Volume,bool Muted,bool MuteKnown) ReadStateChecked(int pid)=>(50,false,true);
         internal static (int Current,int Requested,int Actual,bool Applied) AdjustVolumePercent(int pid,int delta){AdjustTargets.Add((pid,delta));return(50,50+delta,50+delta,true);}
         internal static bool SetMute(int pid,bool mute)=>true;
         internal static readonly List<int> MuteTargets=new();

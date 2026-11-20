@@ -10,21 +10,16 @@ namespace SonicRoute;
 // Only native identity/API/key boundaries and audio are fakes.
 internal sealed partial class TrayWheelService : IDisposable
 {
-    private const int WM_MOUSEWHEEL = 0x020A;
     [StructLayout(LayoutKind.Sequential)] private struct POINT { public int x, y; }
     [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] private struct MSLLHOOKSTRUCT
-    { public POINT pt; public uint mouseData, flags, time; public IntPtr dwExtraInfo; }
     [StructLayout(LayoutKind.Sequential)] private struct NOTIFYICONIDENTIFIER
     { public int cbSize; public IntPtr hWnd; public int uID; public Guid guidItem; }
     private static readonly int TrayIdentifierSize = Marshal.SizeOf<NOTIFYICONIDENTIFIER>();
-    private IntPtr _hook = IntPtr.Zero;
+    private MouseHotkeyHook? _mouseHook;
+    internal bool IsEnabled => _mouseHook?.TrayWheel == this;
     private bool _disposed, _dispatchScheduled;
     private int _wheelGeneration;
     private int _pendingDelta, _pendingDeviceDelta, _pendingSystemDeviceDelta, _pendingSystemVolumeDelta;
-    private readonly object _appsLock = new();
-    private List<AudioAppInfo>? _cachedApps;
-    private DateTime _cachedAt;
     internal bool OverIcon = true;
     internal IntPtr IconWindow = new(1);
     internal int IconId = 1, IdentityReads;
@@ -33,7 +28,6 @@ internal sealed partial class TrayWheelService : IDisposable
     internal bool Pending => _dispatchScheduled;
     internal int VolumeNotices, DeviceNotices;
     internal string? LastDeviceText;
-    private static IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr message, IntPtr data) => IntPtr.Zero;
     private bool TryGetTrayIconIdentity(out IntPtr hwnd, out int id)
     { IdentityReads++; hwnd = IconWindow; id = IconId; return OverIcon && hwnd != IntPtr.Zero; }
     private static int Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER identifier, out RECT rect)
@@ -42,20 +36,11 @@ internal sealed partial class TrayWheelService : IDisposable
         => ShellRect = new() { Left = left, Top = top, Right = right, Bottom = bottom };
     internal bool Hit(int x, int y) => IsOverOurIcon(new POINT { x = x, y = y });
     internal void ExpireIconRect() => _cachedIconRectAt = System.Diagnostics.Stopwatch.GetTimestamp() - 30L * System.Diagnostics.Stopwatch.Frequency;
-    private static IntPtr FindWindow(string? name, string? text) => new(1);
-    private static IntPtr FindWindowEx(IntPtr parent, IntPtr child, string name, string? text) => new(2);
-    private static bool GetWindowRect(IntPtr window, out RECT rect) { rect = new() { Left = 0, Top = 0, Right = 100, Bottom = 100 }; return true; }
     private static bool PtInRect(ref RECT rect, POINT point) => point.x >= rect.Left && point.x < rect.Right && point.y >= rect.Top && point.y < rect.Bottom;
     private void ShowOsd(string name, string text) { DeviceNotices++; LastDeviceText = text; }
     private void ShowVolumeOsd(string name, int volume, string text, bool muted, string target) { VolumeNotices++; }
-    internal void Feed(int delta)
-    {
-        var data = new MSLLHOOKSTRUCT { pt = new() { x = 50, y = 50 }, mouseData = unchecked((uint)(delta << 16)) };
-        IntPtr pointer = Marshal.AllocHGlobal(Marshal.SizeOf<MSLLHOOKSTRUCT>());
-        try { Marshal.StructureToPtr(data, pointer, false); HookProc(0, new IntPtr(WM_MOUSEWHEEL), pointer); }
-        finally { Marshal.FreeHGlobal(pointer); }
-    }
-    public void Dispose() { _disposed = true; DiscardPendingWheel(); }
+    internal void Feed(int delta) => MouseInputBoundary.Wheel(delta);
+    public void Dispose() { _disposed = true; DiscardPendingWheel(); if (IsEnabled) _mouseHook!.TrySetTrayWheel(null, out _); }
 }
 
 internal static class TrayWheelChecks
@@ -75,6 +60,9 @@ internal static class TrayWheelChecks
         {
             try
             {
+                config.TrayWheelEverywhere = true;
+                hit.CheckNotificationArea(Check);
+                config.TrayWheelEverywhere = false;
                 TrayWheelService.ShellResult = 0;
                 TrayWheelService.SetShellRect(0, 0, 100, 100);
                 Check(hit.Hit(50, 50), "S_OK zero HRESULT accepts the live icon rectangle");
@@ -109,6 +97,8 @@ internal static class TrayWheelChecks
             }
             finally
             {
+                TrayWheelService.RestoreShell();
+                config.TrayWheelEverywhere = false;
                 TrayWheelService.ShellResult = 0;
                 TrayWheelService.SetShellRect(0, 0, 100, 100);
             }
@@ -116,10 +106,14 @@ internal static class TrayWheelChecks
         AudioService.EndpointApplied = true;
         AudioService.Apps.Add(new AudioAppInfo { ProcessId = 101234, ProcessName = "HotkeyTarget", DisplayName = "Target" });
         AudioService.Outputs.AddRange(new[] { "A", "B", "C" }.Select(id => new AudioDeviceInfo { Id = id, DisplayName = id, Flow = EDataFlow.eRender }));
+        using var mouse = new MouseHotkeyHook();
         using var wheel = new TrayWheelService();
+        wheel.Start(mouse);
         int originalStep = config.VolumeStep;
         try
         {
+            MouseRoutingChecks.Run(app, wheel, mouse, Check);
+            await Drain(wheel);
             int identityReads = wheel.IdentityReads, shellCalls = TrayWheelService.ShellCalls;
             wheel.Feed(0);
             Check(!wheel.Pending && wheel.IdentityReads == identityReads && TrayWheelService.ShellCalls == shellCalls, "zero wheel delta skips hit testing and dispatch entirely");
@@ -252,12 +246,12 @@ internal static class TrayWheelChecks
             Check(SystemVolumeService.Volumes.Count == 1, "Shift also works in the saved whole-tray region");
             SystemVolumeService.Volumes.Clear();
             AudioService.EndpointWrites.Clear(); SessionVolumeService.AdjustTargets.Clear();
-            app.BypassTrayWheel = true;
+            app.IsHotkeyCaptureActive = true;
             KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
             KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
             KeyBoundary.Down.Add(0x10); wheel.Feed(120); KeyBoundary.Down.Clear(); await Drain(wheel);
             Check(AudioService.EndpointWrites.Count == 0 && SessionVolumeService.AdjustTargets.Count == 0 && SystemDefaultDeviceService.Writes.Count == 0 && SystemVolumeService.Volumes.Count == 0, "global mouse binding/capture bypass prevents all region actions");
-            app.BypassTrayWheel = false;
+            app.IsHotkeyCaptureActive = false;
             config.TrayWheelPaused = true;
             KeyBoundary.Down.Add(0x12); wheel.Feed(-120); KeyBoundary.Down.Clear(); wheel.Feed(120); await Drain(wheel);
             KeyBoundary.Down.Add(0x12); KeyBoundary.Down.Add(0x10); wheel.Feed(-120); KeyBoundary.Down.Clear(); await Drain(wheel);
@@ -279,7 +273,7 @@ internal static class TrayWheelChecks
         }
         finally
         {
-            KeyBoundary.Down.Clear(); app.BypassTrayWheel = false;
+            KeyBoundary.Down.Clear(); app.IsHotkeyCaptureActive = false;
             app.TestPanel = null; config.VolumeStep = originalStep;
             SystemVolumeService.Succeeds = SystemVolumeService.VolumeReadable = true; SystemVolumeService.VolumeMuted = false; SystemVolumeService.Volumes.Clear();
             AudioService.ThrowApps = false; SystemDefaultDeviceService.Succeeds = true; SystemDefaultDeviceService.Writes.Clear(); config.HiddenOutputDevices.Clear();

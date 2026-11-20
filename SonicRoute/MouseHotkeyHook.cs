@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace SonicRoute
 {
     /// <summary>
-    /// 鼠标快捷键（低级鼠标钩子 WH_MOUSE_LL）。
+    /// 鼠标快捷键与托盘滚轮调音共用一个低级鼠标钩子 WH_MOUSE_LL。
     /// RegisterHotKey 对鼠标按键（XButton1/2、MButton、滚轮）支持不可靠（实测侧键注册后不触发），
     /// 因此所有含鼠标键/滚轮的绑定统一走低级鼠标钩子，键盘绑定仍用 RegisterHotKey。
     /// 支持：MButton（中键）、XButton1 / XButton2（侧键）、WheelUp / WheelDown（滚轮），
@@ -32,11 +32,15 @@ namespace SonicRoute
 
         private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
 
+        [Flags]
+        private enum MouseKey { None = 0, Middle = 1, Side1 = 2, Side2 = 4, WheelUp = 8, WheelDown = 16 }
+
         private readonly LowLevelMouseProc _proc;
         private IntPtr _hook;
-        private readonly Dictionary<string, string> _actionsByCombo = new(StringComparer.OrdinalIgnoreCase);
-        private readonly List<(uint Mods, string Key, string Action)> _bindings = new();
+        private readonly Dictionary<(MouseKey Key, uint Mods), string> _bindings = new();
+        private MouseKey _boundKeys;
         public bool IsInstalled => _hook != IntPtr.Zero;
+        internal TrayWheelService? TrayWheel { get; private set; }
         private bool _disposed;
 
         public event Action<string>? HotkeyPressed;
@@ -49,103 +53,96 @@ namespace SonicRoute
         /// <summary>替换鼠标绑定集合（combo → action）。combo 形如 "Ctrl+XButton1"、"WheelUp"。</summary>
         public void Reload(IEnumerable<KeyValuePair<string, string>> bindings)
         {
-            _actionsByCombo.Clear();
+            _boundKeys = MouseKey.None;
             _bindings.Clear();
             if (_disposed) return;
             foreach (var kv in bindings)
             {
-                var parts = SplitCombo(kv.Key);
-                if (parts.Length == 0) continue;
-                string key = parts[parts.Length - 1];
-                if (!(key.Equals("MButton", StringComparison.OrdinalIgnoreCase)
-                    || key.Equals("XButton1", StringComparison.OrdinalIgnoreCase)
-                    || key.Equals("XButton2", StringComparison.OrdinalIgnoreCase)
-                    || key.Equals("WheelUp", StringComparison.OrdinalIgnoreCase)
-                    || key.Equals("WheelDown", StringComparison.OrdinalIgnoreCase))) continue;
-                for (uint mods = 0; mods < 16; mods++)
-                    if (ComboMatches(kv.Key, mods, key))
-                    {
-                        string canonical = mods + ":" + key.ToUpperInvariant();
-                        if (!_actionsByCombo.ContainsKey(canonical))
-                        {
-                            _actionsByCombo.Add(canonical, kv.Value);
-                            _bindings.Add((mods, key, kv.Value));
-                        }
-                        break;
-                    }
+                if (!TryParseMouseCombo(kv.Key, out var key, out uint mods) || _bindings.ContainsKey((key, mods))) continue;
+                _bindings.Add((key, mods), kv.Value);
+                _boundKeys |= key;
             }
-            if (_disposed) return;
-            if (_bindings.Count == 0)
+            TryUpdateRegistration(TrayWheel != null || _bindings.Count != 0, out _);
+        }
+
+        internal bool TrySetTrayWheel(TrayWheelService? trayWheel, out int error)
+        {
+            if (_disposed) { error = 6; return false; } // ERROR_INVALID_HANDLE
+            if (!TryUpdateRegistration(trayWheel != null || _bindings.Count != 0, out error)) return false;
+            TrayWheel = trayWheel;
+            return true;
+        }
+
+        private bool TryUpdateRegistration(bool needed, out int error)
+        {
+            error = 0;
+            if (needed == IsInstalled) return true;
+            if (needed)
             {
-                if (_hook != IntPtr.Zero) UnhookWindowsHookEx(_hook);
-                _hook = IntPtr.Zero;
-            }
-            else if (_hook == IntPtr.Zero)
                 _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
+                if (_hook != IntPtr.Zero) return true;
+                error = Marshal.GetLastWin32Error();
+                return false;
+            }
+            if (!UnhookWindowsHookEx(_hook))
+            {
+                error = Marshal.GetLastWin32Error();
+                if (error != 1404) return false; // Windows may already have removed the hook.
+            }
+            _hook = IntPtr.Zero;
+            return true;
         }
 
         internal bool IsRegistered(string combo, string action) => IsInstalled && !_disposed
-            && _bindings.Any(binding => binding.Action == action && ComboMatches(combo, binding.Mods, binding.Key));
+            && TryParseMouseCombo(combo, out var key, out uint mods)
+            && _bindings.TryGetValue((key, mods), out string? registered) && registered == action;
 
         private IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam)
         {
             uint msg = (uint)wParam.ToInt64();
-            if (nCode >= 0 && !_disposed && _bindings.Count > 0
-                && (msg == WM_MBUTTONDOWN || msg == WM_XBUTTONDOWN || msg == WM_MOUSEWHEEL))
+            if (nCode < 0 || (msg != WM_MOUSEWHEEL && msg != WM_MBUTTONDOWN && msg != WM_XBUTTONDOWN) || _disposed)
+                return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+            try
             {
-                try
+                if (System.Windows.Application.Current is App app && app.IsHotkeyCaptureActive)
+                    return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+                MouseKey key;
+                int delta = 0;
+                POINT point = default;
+                if (msg == WM_MOUSEWHEEL)
                 {
-                    // 录制态让 WPF 捕获输入，避免既有滚轮绑定抢先调音量并吞掉事件。
-                    if (System.Windows.Application.Current is App app && app.IsHotkeyCaptureActive)
+                    if (TrayWheel == null && (_boundKeys & (MouseKey.WheelUp | MouseKey.WheelDown)) == 0)
                         return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
-                    var ms = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    delta = (short)(data.mouseData >> 16);
+                    if (delta == 0) return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+                    key = delta > 0 ? MouseKey.WheelUp : MouseKey.WheelDown;
+                    point = data.pt;
+                }
+                else if (msg == WM_XBUTTONDOWN)
+                {
+                    if ((_boundKeys & (MouseKey.Side1 | MouseKey.Side2)) == 0)
+                        return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
+                    var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+                    key = (data.mouseData >> 16) switch { 1 => MouseKey.Side1, 2 => MouseKey.Side2, _ => MouseKey.None };
+                }
+                else key = MouseKey.Middle;
 
-                    // 只有按下事件参与匹配（滚轮/中键无"按下"语义，直接处理；XButton 需按下）
-                    if (msg == WM_MBUTTONDOWN || msg == WM_XBUTTONDOWN || msg == WM_MOUSEWHEEL)
+                uint? mods = null;
+                if ((_boundKeys & key) != 0)
+                {
+                    mods = GetPressedMods();
+                    if (_bindings.TryGetValue((key, mods.Value), out var action))
                     {
-                        string? pressed = null;
-                        if (msg == WM_MBUTTONDOWN) pressed = "MButton";
-                        else if (msg == WM_XBUTTONDOWN)
-                        {
-                            int btn = (int)((ms.mouseData >> 16) & 0xFFFF);
-                            pressed = btn switch { 1 => "XButton1", 2 => "XButton2", _ => null };
-                        }
-                        else if (msg == WM_MOUSEWHEEL)
-                        {
-                            int delta = (short)((ms.mouseData >> 16) & 0xFFFF);
-                            pressed = delta > 0 ? "WheelUp" : "WheelDown";
-                        }
-
-                        if (pressed != null)
-                        {
-                            uint mods = GetPressedMods();
-                            foreach (var binding in _bindings)
-                            {
-                                if (binding.Mods == mods && string.Equals(binding.Key, pressed, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    HotkeyPressed?.Invoke(binding.Action);
-                                    return new IntPtr(1); // 吞掉事件，避免同时触发系统默认行为（如侧键=浏览器后退）
-                                }
-                            }
-                        }
+                        HotkeyPressed?.Invoke(action);
+                        return new IntPtr(1);
                     }
                 }
-                catch
-                {
-                    // 钩子回调内不允许抛异常
-                }
+                if (msg == WM_MOUSEWHEEL && TrayWheel is { } tray && tray.HitTest(point.x, point.y))
+                    tray.QueueWheel(delta, mods ?? GetPressedMods());
             }
+            catch { /* Never let an exception escape the native input callback. */ }
             return CallNextHookEx(IntPtr.Zero, nCode, wParam, lParam);
-        }
-
-        internal bool HasWheelBinding(int delta)
-        {
-            if (_disposed || delta == 0) return false;
-            string key = delta > 0 ? "WheelUp" : "WheelDown";
-            uint mods = GetPressedMods();
-            foreach (var binding in _bindings)
-                if (binding.Mods == mods && string.Equals(binding.Key, key, StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
         }
 
         /// <summary>拆分快捷键组合串（'+' 分隔）：去空段 + 逐段 Trim。
@@ -156,27 +153,34 @@ namespace SonicRoute
                  .Where(s => s.Length > 0)
                  .ToArray();
 
-        /// <summary>检查组合串（"Ctrl+XButton1"）在当前修饰键状态下是否匹配按下的键。</summary>
-        private static bool ComboMatches(string combo, uint pressedMods, string pressedKey)
+        private static bool TryParseMouseCombo(string combo, out MouseKey key, out uint mods)
         {
             var parts = SplitCombo(combo);
+            key = MouseKey.None;
+            mods = 0;
             if (parts.Length < 1) return false;
 
-            uint needMods = 0;
-            // net48 无 Index/Range（System.Index / System.Range 类型不存在）：用 Take 取"除最后一段之外"的修饰键
             foreach (var p in parts.Take(parts.Length - 1))
             {
                 switch (p.ToLowerInvariant())
                 {
-                    case "ctrl": needMods |= MOD_CONTROL; break;
-                    case "alt": needMods |= MOD_ALT; break;
-                    case "shift": needMods |= MOD_SHIFT; break;
-                    case "win": needMods |= MOD_WIN; break;
+                    case "ctrl": mods |= MOD_CONTROL; break;
+                    case "alt": mods |= MOD_ALT; break;
+                    case "shift": mods |= MOD_SHIFT; break;
+                    case "win": mods |= MOD_WIN; break;
                     default: return false;
                 }
             }
-            if (needMods != pressedMods) return false;
-            return string.Equals(parts[parts.Length - 1], pressedKey, StringComparison.OrdinalIgnoreCase);
+            key = parts[parts.Length - 1].ToLowerInvariant() switch
+            {
+                "mbutton" => MouseKey.Middle,
+                "xbutton1" => MouseKey.Side1,
+                "xbutton2" => MouseKey.Side2,
+                "wheelup" => MouseKey.WheelUp,
+                "wheeldown" => MouseKey.WheelDown,
+                _ => MouseKey.None
+            };
+            return key != MouseKey.None;
         }
 
         internal static uint GetPressedMods()
@@ -212,12 +216,9 @@ namespace SonicRoute
         {
             _disposed = true;
             _bindings.Clear();
-            _actionsByCombo.Clear();
-            if (_hook != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(_hook);
-                _hook = IntPtr.Zero;
-            }
+            _boundKeys = MouseKey.None;
+            TrayWheel = null;
+            TryUpdateRegistration(false, out _);
         }
 
         [DllImport("user32.dll", SetLastError = true)]
