@@ -67,6 +67,9 @@
         "**Cambio de salida de audio.** Está previsto facilitar el paso de una salida a otra, recuperar la asignación de dispositivos cuando se conecten o desconecten y mejorar la estabilidad en aplicaciones con varias sesiones de audio."
     ],
     "roadmapFeedback": "Comparte una idea o informa de un problema",
+    "sponsorTitle": "Apoya SonicRoute",
+    "sponsorIntro": "SonicRoute es un proyecto gratuito y de código abierto. Si te resulta útil en tu día a día, puedes hacer una aportación a través de Afdian para apoyar el desarrollo de nuevas funciones, las mejoras de compatibilidad y el mantenimiento a largo plazo.",
+    "sponsorNote": "Las aportaciones son voluntarias. Puedes usar todas las funciones sin hacer una donación. También ayudas cuando informas de un problema, recomiendas SonicRoute o le das una estrella en GitHub. ¡Gracias!",
     "footerDocs": "Leer las guías (en chino)",
     "footerIssues": "Informar de un problema",
     "bilibili": "Bilibili",

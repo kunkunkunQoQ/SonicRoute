@@ -67,6 +67,9 @@
         "**应用音频路由。** 计划改进设备插拔或状态变化后的输出切换与恢复，并提高特殊应用和多音频会话场景下的路由稳定性。"
     ],
     "roadmapFeedback": "提交建议或问题",
+    "sponsorTitle": "支持 SonicRoute",
+    "sponsorIntro": "SonicRoute 是一个持续维护的免费开源项目。如果它让你在电脑上听音乐、玩游戏或通话更方便，欢迎通过爱发电赞助，支持新功能开发、兼容性改进和长期维护。",
+    "sponsorNote": "赞助完全自愿，使用任何功能都无需赞助。反馈问题、把 SonicRoute 分享给朋友，或在 GitHub 上为项目点一颗星，都是对项目的支持。谢谢你！",
     "footerDocs": "查看文档",
     "footerIssues": "反馈问题",
     "bilibili": "哔哩哔哩",

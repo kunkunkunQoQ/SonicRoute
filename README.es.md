@@ -135,6 +135,14 @@ La documentación de la wiki está en chino simplificado.
 
 [Comparte una idea o informa de un problema](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
+## 💖 Apoya SonicRoute
+
+SonicRoute es un proyecto gratuito y de código abierto. Si te resulta útil en tu día a día, puedes hacer una aportación a través de Afdian para apoyar el desarrollo de nuevas funciones, las mejoras de compatibilidad y el mantenimiento a largo plazo.
+
+☕ [Apoyar en Afdian](https://afdian.com/a/koukou021)
+
+Las aportaciones son voluntarias. Puedes usar todas las funciones sin hacer una donación. También ayudas cuando informas de un problema, recomiendas SonicRoute o le das una estrella en GitHub. ¡Gracias!
+
 ## 📜 Licencia
 
 - **Licencia.** SonicRoute se distribuye bajo la versión 3, exclusivamente, de la Licencia Pública General de GNU (GPL-3.0-only). La licencia permite el uso comercial, la venta y la distribución de pago con arreglo a sus condiciones. Consulta [LICENSE](LICENSE).

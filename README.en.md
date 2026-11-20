@@ -135,6 +135,14 @@ The Wiki is currently in Chinese.
 
 [Share an idea or report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
+## 💖 Support SonicRoute
+
+SonicRoute is a free, open-source project. If it makes managing audio on your PC easier, a donation through Afdian helps fund new features, compatibility improvements, and long-term maintenance.
+
+☕ [Support on Afdian](https://afdian.com/a/koukou021)
+
+Donations are optional. You can use every feature without donating. Reporting an issue, recommending SonicRoute to a friend, or giving the project a star on GitHub also helps. Thank you!
+
 ## 📜 License
 
 - **License.** SonicRoute is licensed under the GNU General Public License version 3 only (GPL-3.0-only). Commercial use, sale and paid distribution are allowed under its terms. See [LICENSE](LICENSE).
