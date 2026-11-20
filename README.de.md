@@ -146,11 +146,11 @@ Das Wiki ist derzeit auf vereinfachtem Chinesisch.
 
 ## 💖 SonicRoute unterstützen
 
-SonicRoute ist kostenlos und quelloffen. Wenn Ihnen SonicRoute im Alltag hilft, können Sie das Projekt über Afdian unterstützen. Ihre Spende hilft dabei, neue Funktionen zu entwickeln, die Kompatibilität zu verbessern und SonicRoute langfristig zu pflegen.
+SonicRoute ist ein kostenloses Open-Source-Projekt und wird laufend weiterentwickelt. Wenn Ihnen SonicRoute im Alltag hilft, können Sie über Afdian spenden. Ihre Spende hilft uns, neue Funktionen zu entwickeln, die Kompatibilität zu verbessern und SonicRoute langfristig zu pflegen.
 
 ☕ [Auf Afdian unterstützen](https://afdian.com/a/koukou021)
 
-Spenden sind freiwillig. Sie können alle Funktionen auch ohne Spende nutzen. Wenn Sie ein Problem melden, SonicRoute weiterempfehlen oder dem Projekt auf GitHub einen Stern geben, helfen Sie ebenfalls. Vielen Dank!
+Spenden sind freiwillig. Sie können alle Funktionen auch ohne Spende nutzen. Auch Fehlermeldungen, Weiterempfehlungen und ein Stern auf GitHub helfen dem Projekt. Vielen Dank!
 
 ## 📜 Lizenz
 

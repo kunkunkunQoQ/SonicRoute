@@ -4,7 +4,7 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | **Français** | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Beta : v1.34](https://img.shields.io/static/v1?label=Beta&message=v1.34&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta) [![Licence : GPL-3.0](https://img.shields.io/static/v1?label=Licence&message=GPL-3.0&color=blue)](LICENSE) [![Système : Windows 10 | 11](https://img.shields.io/static/v1?label=Syst%C3%A8me&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Architecture : x64 | ARM64](https://img.shields.io/static/v1?label=Architecture&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Téléchargements](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=T%C3%A9l%C3%A9chargements)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Soutenir sur Afdian](https://img.shields.io/static/v1?label=&message=Soutenir+sur+Afdian&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Beta : v1.34](https://img.shields.io/static/v1?label=Beta&message=v1.34&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta) [![Licence : GPL-3.0](https://img.shields.io/static/v1?label=Licence&message=GPL-3.0&color=blue)](LICENSE) [![Système : Windows 10 | 11](https://img.shields.io/static/v1?label=Syst%C3%A8me&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Architecture : x64 | ARM64](https://img.shields.io/static/v1?label=Architecture&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Téléchargements](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=T%C3%A9l%C3%A9chargements)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Soutenir SonicRoute sur Afdian](https://img.shields.io/static/v1?label=&message=Soutenir+SonicRoute+sur+Afdian&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 ## Principaux changements depuis v1.33
 
@@ -146,9 +146,9 @@ Le Wiki est actuellement en chinois simplifié.
 
 ## 💖 Soutenir SonicRoute
 
-SonicRoute est un logiciel libre et gratuit. S’il vous est utile au quotidien, vous pouvez faire un don sur Afdian. Votre soutien contribue au développement de nouvelles fonctionnalités, à l’amélioration de la compatibilité et à la maintenance du projet sur le long terme.
+SonicRoute est un logiciel libre et gratuit que nous continuons à faire évoluer. S’il vous est utile au quotidien, vous pouvez faire un don sur Afdian. Vos dons nous aident à développer de nouvelles fonctionnalités, à améliorer la compatibilité et à maintenir le logiciel sur le long terme.
 
-☕ [Soutenir sur Afdian](https://afdian.com/a/koukou021)
+☕ [Soutenir SonicRoute sur Afdian](https://afdian.com/a/koukou021)
 
 Les dons sont facultatifs. Toutes les fonctionnalités sont accessibles sans don. Signaler un problème, faire connaître SonicRoute ou donner une étoile au projet sur GitHub sont autant de façons de contribuer. Merci !
 
