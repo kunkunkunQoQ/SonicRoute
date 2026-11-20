@@ -37,7 +37,7 @@ internal static partial class AppPlaybackOutputs
                     await multi.SetOutputsAsync(outputs.Select(id => AudioService.IsSystemDefault(id) ? null : id).ToArray()).ConfigureAwait(false);
                     return (true, 0, L10n.T("History.Status.success"));
                 }
-                catch (Exception ex) { return (false, ex.HResult, ex.Message); }
+                catch (Exception ex) { return RouteError(ex); }
             }
             return outputs.Length == 1 ? await ApplicationAudio.ApplyEndpointAsync(app, EDataFlow.eRender, outputs[0])
                 : (false, -1, L10n.T("Phone.StatusOperationFailed"));
@@ -139,7 +139,7 @@ internal static partial class AppPlaybackOutputs
                 try { await restore().ConfigureAwait(false); }
                 catch (Exception rollback) { ExceptionDiagnostics.Record("AppPlaybackOutputs.Restore", rollback); }
             }
-            return (false, ex.HResult, ex.Message);
+            return RouteError(ex);
         }
         finally { ApplicationAudio.NotifyChanged(); }
 
@@ -152,6 +152,12 @@ internal static partial class AppPlaybackOutputs
             if (AndroidAudioHost.StopPcAppToPhone(pid, restorePreviousEndpoint: true))
                 undo.Push(() => { Require(AndroidAudioHost.RoutePcAppToPhone(pid, previousPhone!)); return Task.CompletedTask; });
         }
+    }
+
+    private static (bool Success, int HResult, string Message) RouteError(Exception error)
+    {
+        string detail = AndroidErrorTranslation.Format(error);
+        return (false, error.HResult, string.Format(L10n.T("Dev.RouteFailed"), detail));
     }
 
     private sealed class RouteFailure : Exception

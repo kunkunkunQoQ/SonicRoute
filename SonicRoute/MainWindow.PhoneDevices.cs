@@ -166,7 +166,7 @@ public partial class MainWindow
                     _phoneSidebarDevices.Add(profile.Id, entry); _phoneDevicesList.Items.Add(entry);
                 }
                 var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
-                entry.Update(profile.Name, device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
+                entry.Update(store.GetProfileDisplayName(profile), device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
             }
         }
         finally { _suppressPhoneSelection = selectionSuppressed; }
@@ -215,7 +215,7 @@ public partial class MainWindow
             if (_phoneSidebarDevices.TryGetValue(profile.Id, out var entry))
             {
                 var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, profile.LastDevice));
-                entry.Update(profile.Name, device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
+                entry.Update(store.GetProfileDisplayName(profile), device == null ? L10n.T("Phone.Disconnected") : device.IsWifi ? L10n.T("Phone.WifiConnected") : L10n.T("Phone.UsbConnected"), device != null);
             }
         }
         if (_phoneRefreshError != null) PhoneDevicesHost.ToolTip = AndroidErrorTranslation.Format(_phoneRefreshError);

@@ -119,7 +119,7 @@ namespace SonicRoute.Core
             var result = new List<AudioDeviceInfo>();
             int hr = enumerator.EnumAudioEndpoints(flow, DeviceState.ACTIVE, out var collection);
             if (hr < 0)
-                throw new InvalidOperationException($"枚举{(flow == EDataFlow.eRender ? "播放" : "录音")}设备失败 HRESULT=0x{hr:X8} ({hr})");
+                throw new InvalidOperationException($"IMMDeviceEnumerator.EnumAudioEndpoints ({flow}): HRESULT 0x{hr:X8} ({hr})");
 
             try
             {
@@ -300,7 +300,7 @@ namespace SonicRoute.Core
                 {
                     int hr = enumerator.EnumAudioEndpoints(flow, DeviceState.ACTIVE, out var devices);
                     if (hr < 0)
-                        throw new InvalidOperationException($"枚举音频设备失败 HRESULT=0x{hr:X8} ({hr})");
+                        throw new InvalidOperationException($"IMMDeviceEnumerator.EnumAudioEndpoints ({flow}): HRESULT 0x{hr:X8} ({hr})");
                     try
                     {
                         Marshal.ThrowExceptionForHR(devices.GetCount(out uint count));

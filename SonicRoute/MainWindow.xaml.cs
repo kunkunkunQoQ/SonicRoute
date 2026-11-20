@@ -330,6 +330,9 @@ namespace SonicRoute
                 WindowShadow.CornerRadius = new CornerRadius(10);
                 RootBorder.Margin = new Thickness(0);
             }
+            TitlebarMaxButton.SetBinding(ToolTipProperty, new System.Windows.Data.Binding(
+                _titleMaximized ? "[Window.Restore]" : "[Window.Maximize]") { Source = L10n.Instance });
+            ToolTipService.SetIsEnabled(HeaderTitleText, !_titleMaximized);
         }
 
         private void TitlebarClose_Click(object sender, RoutedEventArgs e)
@@ -446,7 +449,8 @@ namespace SonicRoute
             {
                 AppsOutputCombo.ItemsSource = ApplicationAudio.OutputsForApp(_appsSelected, _outputDisplay);
                 AppsInputCombo.ItemsSource = _inputDisplay;
-                if (appsId != null) AppsOutputCombo.SelectedItem = _outputDisplay.FirstOrDefault(d => d.Id == appsId);
+                if (appsId != null) AppsOutputCombo.SelectedItem = AppsOutputCombo.Items.OfType<AudioDeviceInfo>()
+                    .FirstOrDefault(d => string.Equals(d.Id, appsId, StringComparison.OrdinalIgnoreCase));
                 if (appsInputId != null) AppsInputCombo.SelectedItem = _inputDisplay.FirstOrDefault(d => d.Id == appsInputId);
             }
             finally { _suppressDevCombo = suppressed; }
@@ -474,12 +478,7 @@ namespace SonicRoute
             panel.Items.Clear();
             foreach (var dev in devices)
             {
-                var btn = new Button
-                {
-                    Content = ShortName(dev.DisplayName),
-                    Tag = dev
-                };
-                System.Windows.Automation.AutomationProperties.SetName(btn, dev.DisplayName);
+                var btn = PanelDevices.CreateShortcut(dev);
                 btn.SetResourceReference(StyleProperty, "QuickDevButton");
                 btn.Click += (_, _) => select(dev);
                 panel.Items.Add(btn);
@@ -840,10 +839,11 @@ namespace SonicRoute
                 var outId = output.Result;
                 string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
                 _suppressDevCombo = true;
+                var choices = AppsOutputCombo.Items.OfType<AudioDeviceInfo>();
                 AppsOutputCombo.SelectedItem = outShort == null
-                                               ? (_outputDisplay.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault())
-                                               : _outputDisplay.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
-                                                 ?? _outputDisplay.FirstOrDefault(d => d.IsDefault) ?? _outputDisplay.FirstOrDefault();
+                    ? choices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? choices.FirstOrDefault(d => d.IsDefault) ?? choices.FirstOrDefault()
+                    : choices.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
+                        ?? choices.FirstOrDefault(d => d.IsDefault) ?? choices.FirstOrDefault();
                 _suppressDevCombo = false;
                 // 输入设备（麦克风）：与输出一致
                 var inId = input.Result;
@@ -1186,6 +1186,8 @@ namespace SonicRoute
             ((App)Application.Current).RebuildTrayMenu();
             RefreshLangCombo(L10n.CurrentLanguage);
             RefreshCustomLangList();
+            InvalidateSettingsDeviceSections();
+            EnsureSettingsDeviceSections();
             RefreshDynamicTexts();
             SyncExecutionHistoryOptions();
             RefreshAutomationTemplateHint();
@@ -1209,10 +1211,6 @@ namespace SonicRoute
                 }
                 UpdateAppsDisableAutoButton();
                 UpdateAppsShowInPanelButton();
-                // 设置页动态文本
-                InvalidateSettingsDeviceSections();
-                EnsureSettingsDeviceSections();
-                RefreshCustomLangList();
             }
             catch { }
         }
@@ -1618,8 +1616,7 @@ namespace SonicRoute
             }
             else
             {
-                string[] eggs = { L10n.T("St.Egg1"), L10n.T("St.Egg2"), L10n.T("St.Egg3"), L10n.T("St.Egg4") };
-                ShowToast(_authorClicks <= eggs.Length ? eggs[_authorClicks - 1] : $"还需点击 {5 - _authorClicks} 次");
+                ShowToast(L10n.T("St.Egg" + _authorClicks.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             }
         }
 
@@ -2575,16 +2572,6 @@ namespace SonicRoute
         // 工具
         // ==================================================================
 
-        private static string ShortName(string? full)
-        {
-            if (string.IsNullOrWhiteSpace(full)) return "(未知设备)";
-            int paren = full.IndexOf('(');
-            string head = paren > 0 ? full.Substring(0, paren).Trim() : full;
-            if (head.Length <= 12) return head;
-            return head.Substring(0, 11) + "…";
-        }
-
-
         // ==================================================================
         // 自动化规则（极简自动化页）
         // ==================================================================
@@ -2830,7 +2817,7 @@ namespace SonicRoute
                     text += " · " + L10n.T("Auto.LaunchModeRandom");
                 return text;
             }).ToList();
-            return string.Join("、", actionTexts);
+            return string.Join(L10n.T("Auto.ActionListSeparator"), actionTexts);
         }
 
         private static string BuildScheduleTriggerText(AutoRule r)
@@ -3657,9 +3644,10 @@ namespace SonicRoute
                 {
                     Style = (Style)FindResource("SelCombo"),
                     Width = 260,
-                    DisplayMemberPath = "DisplayLabel",
+                    ItemTemplate = (DataTemplate)FindResource("AudioDeviceLabel"),
                     Tag = step
                 };
+                TextSearch.SetTextPath(cb, nameof(AudioDeviceInfo.DisplayName));
                 var flow = AutoRuleActions.UsesCaptureDevice(step.Action) ? EDataFlow.eCapture : EDataFlow.eRender;
                 var devices = flow == EDataFlow.eRender ? (_autoOutputs ?? _outputs) : (_autoInputs ?? _inputs);
                 foreach (var d in AutomationDeviceChoices(step, flow, devices)) cb.Items.Add(d);
