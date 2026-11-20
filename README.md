@@ -25,10 +25,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="将手机应用拖到电脑的快速面板，展开应用行切换输出，再拖回手机"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="自动化规则编辑器中的应用触发条件和音频操作步骤"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="自动化规则编辑器：触发条件为按下快捷键，操作菜单中选中了“设置系统默认播放设备”"></a>
 </div>
 
-<sub>左图演示如何把手机应用的声音拖到电脑上播放，再切换输出设备。右图展示如何为自动化规则选择触发条件并安排操作顺序。</sub>
+<sub>左图演示如何把手机应用的声音拖到电脑上播放，再切换输出设备。右图展示如何为快捷键规则选择要执行的音频操作。</sub>
 
 <details>
 <summary><sub>🖼️ 更多截图：快速面板和手机管理</sub></summary>

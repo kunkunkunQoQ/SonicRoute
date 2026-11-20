@@ -25,10 +25,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Eine Android-App wird ins Schnellpanel des PCs gezogen. Dort lässt sich ihr Ausgabegerät wechseln."></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Regeleditor mit einem App-Auslöser und den zugehörigen Audioaktionen"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Regeleditor mit Tastenkürzel als Auslöser. Im geöffneten Aktionsmenü ist das Festlegen des Standardwiedergabegeräts ausgewählt."></a>
 </div>
 
-<sub>Links wird der Ton einer Smartphone-App per Drag-and-drop auf den PC umgeleitet und die Ausgabe gewechselt. Rechts ist der Regeleditor mit Auslöser und Aktionsfolge zu sehen.</sub>
+<sub>Links wird der Ton einer Smartphone-App per Drag-and-drop auf den PC umgeleitet und die Ausgabe gewechselt. Rechts ist das Aktionsmenü einer Regel geöffnet, die per Tastenkürzel ausgelöst wird.</sub>
 
 <details>
 <summary><sub>🖼️ Weitere Screenshots von Schnellpanel und Smartphone-Verwaltung</sub></summary>
