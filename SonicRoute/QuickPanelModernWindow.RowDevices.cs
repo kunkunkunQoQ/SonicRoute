@@ -29,7 +29,7 @@ public partial class QuickPanelModernWindow
         foreach (var device in devices)
         {
             var button = PanelDevices.CreateShortcut(device);
-            button.ToolTipOpening += (_, e) => e.Handled = true;
+            button.ToolTipOpening += (_, e) => e.Handled = button.ToolTip == null;
             button.SetResourceReference(StyleProperty, "DevButton");
             configure(button, device);
             wrap.Children.Add(button);

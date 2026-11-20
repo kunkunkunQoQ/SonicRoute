@@ -76,14 +76,13 @@ internal sealed class ComPtr : IDisposable
     public void Dispose() => ComVtbl.SafeRelease(ref _ptr);
 }
 
-internal static class Win32Native
+internal static partial class Win32Native
 {
     public const int S_OK = 0;
     public const int RPC_E_CHANGED_MODE = unchecked((int)0x80010106);
     public const int REGDB_E_CLASSNOTREG = unchecked((int)0x80040154);
     public const uint COINIT_APARTMENTTHREADED = 0x2;
     public const uint COINIT_MULTITHREADED = 0x0;
-    public const uint CLSCTX_INPROC_SERVER = 0x1;
 
     [DllImport("ole32.dll")]
     public static extern int CoInitializeEx(nint pvReserved, uint dwCoInit);
@@ -92,16 +91,7 @@ internal static class Win32Native
     public static extern void CoUninitialize();
 
     [DllImport("ole32.dll")]
-    public static extern int CoIncrementMTAUsage(out nint pCookie);
-
-    [DllImport("ole32.dll")]
-    public static extern int CoDecrementMTAUsage(nint cookie);
-
-    [DllImport("ole32.dll")]
     public static extern void CoFreeUnusedLibrariesEx(uint dwUnloadDelay, uint dwReserved);
-
-    [DllImport("ole32.dll")]
-    public static extern int CoCreateInstance(in Guid rclsid, nint pUnkOuter, uint dwClsContext, in Guid riid, out nint ppv);
 
     [DllImport("ole32.dll")]
     public static extern void PropVariantClear(ref PropVariant pvar);

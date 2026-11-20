@@ -202,6 +202,7 @@
         <SolidColorBrush x:Key="Theme.AccentPressed" Color="#1E40AF"/>
         <SolidColorBrush x:Key="Theme.AccentDisabled" Color="#93C5FD"/>
         <SolidColorBrush x:Key="Theme.OnAccent" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Theme.AccentIconInk" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="Theme.SurfaceCard" Color="#FAFBFC"/>
         <SolidColorBrush x:Key="Theme.Success" Color="#16A34A"/>
         <SolidColorBrush x:Key="Theme.Fail" Color="#DC2626"/>

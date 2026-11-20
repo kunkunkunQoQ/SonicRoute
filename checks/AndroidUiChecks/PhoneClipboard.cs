@@ -63,6 +63,34 @@ internal static partial class Program
         }
         public void Dispose() { Listening = false; Changed = null; }
     }
+    private static async Task CheckPhoneClipboardReadError(string output, AndroidDevice phone)
+    {
+        var runtime = Directory.CreateDirectory(Path.Combine(output, "clipboard-runtime"));
+        File.WriteAllBytes(Path.Combine(runtime.FullName, "sonicroute-catalog.jar"), [0]);
+        var shell = new CleanupShell();
+        using var adb = new AdbClient(runtime.FullName, new CleanupTransport(shell));
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var received = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new AndroidClipboardClient(adb);
+        Task watch = client.WatchAsync(phone, () => { }, text => received.TrySetResult(text), stop.Token);
+        try
+        {
+            await shell.PublishAsync("""{"ready":true,"revision":0}""");
+            await shell.PublishAsync("""{"error":"fixture read unavailable","itemSkipped":true}""");
+            await shell.PublishAsync("""{"text":"next copy","revision":1}""");
+            Check(await received.Task.WaitAsync(stop.Token) == "next copy" && !watch.IsCompleted,
+                "a single Android clipboard access error leaves the same helper listening for the next copy");
+            await shell.PublishAsync("""{"error":"fixture bridge unavailable","itemSkipped":false}""");
+            try { await watch; throw new InvalidOperationException("Expected helper failure"); }
+            catch (IOException ex) when (AndroidError.TryGetCode(ex, out var code) && code == AndroidErrorCode.ClipboardPermissionError)
+            { Check(true, "a terminal helper error remains distinguishable from a skipped clipboard item"); }
+        }
+        finally
+        {
+            stop.Cancel();
+            if (!watch.IsCompleted) try { await watch; } catch (OperationCanceledException) { }
+        }
+    }
     private static int PhoneClipboardChecks(string output)
     {
         const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
@@ -82,6 +110,7 @@ internal static partial class Program
         void Ready(AndroidDevice device) => Until(() => sync.Status(device).Contains("双向"));
         try
         {
+            Pump(CheckPhoneClipboardReadError(output, one));
             Pump(sync.InitializeAsync());
             Check(!sync.IsEnabled(one) && clients.Count == 0 && !desktop.Listening && desktop.Reads == 0,
                 "default-off clipboard allocates no phone connection or desktop listener and reads no old clipboard");
@@ -159,11 +188,21 @@ internal static partial class Program
             Check(!sync.IsEnabled(one) && sync.IsEnabled(two) && desktop.Reads == 0 && scans == 0,
                 "restarting restores independent device switches from the small file without scanning cached devices or sending old text");
             var last = clients.Last(); int count = clients.Count;
-            last.End.TrySetException(new IOException("fixture disconnection")); Until(() => sync.Status(two).Contains("断"));
-            Pump(Task.Delay(100));
-            Check(clients.Count == count && !desktop.Listening, "transport failure releases the clipboard listener and does not start a retry polling loop");
-            discovery.Publish([one, two]); Ready(two);
-            Check(clients.Count == count + 1, "an existing explicit device refresh retries a failed clipboard connection");
+            var alias = two with { Serial = "clipboard-fixture-second-address" };
+            discovery.Publish([alias, two, one]); DrainUi();
+            Check(clients.Count == count && !last.Stopped, "reordering two addresses for the same phone keeps the working clipboard helper");
+            last.End.TrySetException(new IOException("fixture disconnection")); Until(() => !desktop.Listening);
+            desktop.Copy("offline clipboard");
+            Ready(two);
+            Check(clients.Count == count + 1 && clients.Last().Device?.Serial == alias.Serial && clients.Last().Sent.IsEmpty,
+                "an interrupted helper recovers on the other address without a refresh or replaying the offline clipboard");
+            desktop.Copy("copy after recovery"); Until(() => clients.Last().Sent.LastOrDefault() == "copy after recovery");
+            clients.Last().Copy("phone after recovery"); Until(() => desktop.Text == "phone after recovery");
+            Check(scans == 0, "both directions resume on the replacement helper using the existing device snapshot");
+            clients.Last().End.TrySetException(new IOException("offline again")); Until(() => !desktop.Listening);
+            sync.SetEnabled(two, false); Pump(Task.Delay(3200));
+            Check(clients.Count == count + 1 && !desktop.Listening, "turning sync off cancels a pending reconnect");
+            sync.SetEnabled(two, true); Ready(two);
             var restored = clients.Last(); discovery.Publish(Array.Empty<AndroidDevice>()); Until(() => restored.Stopped);
             Check(!desktop.Listening && sync.IsEnabled(two), "disconnect suspends live work while retaining the saved device preference");
             discovery.Publish([one, two with { Serial = "clipboard-fixture-two-new-transport" }]); Ready(two);

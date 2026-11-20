@@ -1,8 +1,63 @@
 using System.Text.Json;
+using MMDeviceEnumerator = NAudio.CoreAudioApi.MMDeviceEnumerator;
 using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
+    private static async Task CheckPhoneRouteSwitchLiveAsync(string runtime, string profile, string address, string package,
+        string? additionalWindowsOutput)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(100));
+        var token = timeout.Token;
+        await using var adb = new AdbClient(runtime);
+        var saved = new AndroidPhoneStore(profile).Profile.LastDevice ?? throw new InvalidOperationException("No saved phone");
+        var device = (await new AndroidWirelessConnection(adb).ReconnectAsync(saved, address, token)).Device;
+        int uid = await adb.ResolveUidAsync(device, package, token);
+        var speaker = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker");
+        await using var session = new AndroidAudioSession(adb);
+        using var enumerator = additionalWindowsOutput == null ? null : new MMDeviceEnumerator();
+        using var local = enumerator?.GetDevice(additionalWindowsOutput!);
+        var multi = (IMultiOutputAudioSession)session;
+        await multi.SetOutputsAsync([AndroidAudioSession.SourcePhoneOutputId]);
+        await session.StartAsync(device, new AndroidApp(package, package, uid, "media"), true, token);
+        for (int i = 0; i < 2; i++)
+        {
+            await multi.SetOutputsAsync([speaker]);
+            var capture = session.Pcm;
+            if (local != null && i == 1)
+            {
+                await multi.SetOutputsAsync([speaker, local.ID]);
+                Check(ReferenceEquals(capture, session.Pcm) && multi.GetOutputs().Contains(local.ID),
+                    "adding the Windows speaker retains the running phone capture");
+            }
+            var first = session.PhoneOutputDiagnostics ?? throw new IOException(session.GetLog());
+            float peak = 0;
+            for (int step = 0; step < 24; step++)
+            {
+                await Task.Delay(250, token);
+                if (i == 1 && local != null) peak = Math.Max(peak, local.AudioMeterInformation.MasterPeakValue);
+            }
+            var last = session.PhoneOutputDiagnostics ?? throw new IOException(session.GetLog());
+            long bytes = last.Bytes - first.Bytes;
+            Console.WriteLine($"Speaker pass {i + 1}: bytes={bytes} nonSilentBytes={last.NonSilentBytes - first.NonSilentBytes} dropped={session.Pcm?.DroppedSamples}");
+            Check(last.RoutedType == 2 && bytes > 48000 * 4 * 5 && session.Pcm?.DroppedSamples == 0 && !session.UsesSourcePhonePlayback,
+                "explicit Xiaomi speaker receives six seconds of captured application PCM");
+            if (i == 1 && local != null)
+            {
+                Check(peak > 0 && last.NonSilentBytes > first.NonSilentBytes, $"both the Windows endpoint (peak {peak:F3}) and phone received music");
+                await multi.SetOutputsAsync([speaker]);
+                Check(ReferenceEquals(capture, session.Pcm) && multi.GetOutputs().SequenceEqual([speaker]),
+                    "removing the Windows speaker retains phone playback");
+            }
+            await multi.SetOutputsAsync([AndroidAudioSession.SourcePhoneOutputId]);
+            long decoded = session.PacketsDecoded;
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            Check(session.UsesSourcePhonePlayback && session.PhoneOutputDiagnostics == null && session.PacketsDecoded > decoded
+                && multi.GetOutputs().SequenceEqual([AndroidAudioSession.SourcePhoneOutputId]),
+                "returning to the native phone output retires the PCM renderer and keeps the source connected");
+        }
+    }
+
     private static async Task ExplicitOutputLiveAsync(string runtime, string output, bool allowSilence = false)
     {
         Directory.CreateDirectory(output);

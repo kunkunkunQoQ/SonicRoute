@@ -66,7 +66,14 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
                 {
                     if (line.Length > MaxTextBytes * 6 + 32) throw AndroidError.WithCode(new IOException("剪贴板消息过长。"), AndroidErrorCode.ClipboardMessageTooLong);
                     using var json = JsonDocument.Parse(line);
-                    if (json.RootElement.TryGetProperty("error", out _)) throw AndroidError.WithCode(new IOException("手机暂时无法同步剪贴板，请检查系统权限。"), AndroidErrorCode.ClipboardPermissionError);
+                    if (json.RootElement.TryGetProperty("error", out _))
+                    {
+                        // Once ready, the helper reports individual read/write failures and keeps listening.
+                        // If it actually exits, the same stream reports EOF.
+                        if (started && json.RootElement.TryGetProperty("itemSkipped", out var skipped)
+                            && skipped.ValueKind == JsonValueKind.True) continue;
+                        throw AndroidError.WithCode(new IOException("手机暂时无法同步剪贴板，请检查系统权限。"), AndroidErrorCode.ClipboardPermissionError);
+                    }
                     if (json.RootElement.TryGetProperty("revision", out var revision)) Interlocked.Exchange(ref _revision, revision.GetInt64());
                     if (json.RootElement.TryGetProperty("ready", out var value) && value.GetBoolean())
                     { started = true; startup.CancelAfter(Timeout.Infinite); ready(); }

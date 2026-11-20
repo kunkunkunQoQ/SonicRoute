@@ -60,6 +60,8 @@ namespace SonicRoute
             public double CollapsedHeight => LegacyLayout ? 38 : 54;
             public bool ShowOutputName;
             public string? OutputId;
+            public string? PlaybackAnchor;
+            public Task PlaybackChange = Task.CompletedTask;
             public StackPanel ExpandPanel = null!;
             public AnimatedExpandHost ExpandWrap = null!;
             public RotateTransform ExpandArrow = new();
@@ -77,7 +79,7 @@ namespace SonicRoute
         private bool _contentReady;
         private int _loadVersion;
         private int _globalMuteVersion;
-        private (int Load, int OutputVersion, bool Muted)? _globalMuteLoadState;
+        private (int Load, int OutputVersion, bool Muted, bool EligibleNativeState)? _globalMuteLoadState;
         private Func<IEnumerable<int>, (Dictionary<int, (int Volume, bool Muted, bool MuteKnown)> Apps, bool? AllMuted)> _readPanelState = SessionVolumeService.ReadPanelStateChecked;
         private Func<int, bool, (string Output, string Input)> _readRowEndpoints = static (pid, mic) =>
         {
@@ -121,6 +123,7 @@ namespace SonicRoute
 
         public QuickPanelModernWindow()
         {
+            App.EnsureWindowResources();
             InitializeComponent();
             AppListPanel.ApplyTemplate();
             AppListScroll = (ScrollViewer)AppListPanel.Template.FindName("AppListScroll", AppListPanel);
@@ -184,6 +187,9 @@ namespace SonicRoute
             SystemParameters.StaticPropertyChanged += OnSystemParamChanged;
             // 共享"当前应用"变化（前台自动跟随切换）时同步面板高亮
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
+#if !SONICROUTE_PHONE
+            ApplicationAudio.Changed += OnLocalPlaybackChanged;
+#endif
             Closed += (_, _) => CleanupClosedWindow();
         }
 
@@ -400,8 +406,11 @@ namespace SonicRoute
                 var cached = _globalMuteLoadState;
                 bool? output = cached.HasValue && cached.Value.Load == loadVersion && cached.Value.OutputVersion == outputVersion
                     ? cached.Value.Muted : null;
-                var state = await _uiLifetime.ReadAsync(output, static saved =>
-                    (Output: ApplicationAudio.HasExternal ? ApplicationAudio.AllMuted() : saved ?? SessionVolumeService.AllMuted(), Mic: GlobalMicMuteService.IsMuted()));
+                bool eligible = output.HasValue && cached!.Value.EligibleNativeState;
+                var state = await _uiLifetime.ReadAsync((Output: output, Eligible: eligible), static saved =>
+                    (Output: ApplicationAudio.HasExternal
+                        ? saved.Eligible ? ApplicationAudio.CombineExternalMute(saved.Output!.Value) : ApplicationAudio.AllMuted()
+                        : saved.Output ?? SessionVolumeService.AllMuted(), Mic: GlobalMicMuteService.IsMuted()));
                 if (_isClosed || loadVersion != _loadVersion) return;
                 if (outputVersion == _globalMuteVersion) { ApplyGlobalMuteVisual(state.Output); GlobalMuteButton.IsEnabled = true; }
                 if (micVersion == _micMuteVersion) { ApplyMicMuteVisual(state.Mic); MicMuteButton.IsEnabled = true; }
@@ -697,7 +706,13 @@ namespace SonicRoute
                 });
                 if (_isClosed) return;
                 var vols = snapshot.States;
-                if (snapshot.AllMuted.HasValue) _globalMuteLoadState = (loadVersion, outputVersion, snapshot.AllMuted.Value);
+                if (snapshot.AllMuted is { } muted)
+                {
+                    // A render snapshot also contains internal host streams. A known eligible PC row
+                    // witnesses the result. Ambiguous or empty snapshots use the normal app lookup.
+                    bool witnessed = vols.Values.Any(v => v.known && v.muted == muted);
+                    _globalMuteLoadState = (loadVersion, outputVersion, muted, witnessed);
+                }
                 _updatingRowVolumes = true;
                 if (_appRowsSignature == signature)
                 {
@@ -1158,6 +1173,9 @@ namespace SonicRoute
             row.ExpandWrap.HoldCurrentState();
             UiMotion.RotateArrow(row.ExpandArrow, true, !switching);
             if (!await BuildRowDevicesAsync(row) || _isClosed || !row.Expanded) return;
+#if SONICROUTE_PHONE
+            CheckPhonePlaybackDevices();
+#endif
             if (switching)
             {
                 row.ExpandWrap.SetExpanded(true, false);
@@ -1260,6 +1278,7 @@ namespace SonicRoute
                     static target => target.Read(target.Pid, target.MicOn));
                 if (_isClosed || !row.Expanded || request != row.DeviceBuildVersion
                     || !_rows.TryGetValue(pid, out var current) || current != row) return false;
+                var playbackOutputs = AppPlaybackOutputs.GetSelected(pid, selected.Output);
                 UpdateRowName(row, selected.Output);
                 if (row.DeviceSignature != structure)
                 {
@@ -1269,7 +1288,14 @@ namespace SonicRoute
                     {
                         AddRowDeviceGroup(row.ExpandPanel, devices, flow, (button, device) =>
                         {
-                            button.Click += (_, _) => OnRowDeviceClickAsync(row, device, flow);
+                            if (flow == EDataFlow.eRender)
+                            {
+                                button.ToolTip = L10n.T("Qp.PlaybackMultiSelect");
+                                System.Windows.Automation.AutomationProperties.SetHelpText(button, (string)button.ToolTip);
+                                button.Click += async (_, _) => await QueuePlaybackClickAsync(row, device, Keyboard.Modifiers);
+                            }
+                            else
+                                button.Click += async (_, _) => await OnRowDeviceClickAsync(row, device, flow);
                             row.DeviceButtons.Add((button, device.Id, flow));
                         });
                     }
@@ -1281,6 +1307,8 @@ namespace SonicRoute
                 {
                     string activeId = (item.Flow == EDataFlow.eRender ? selected.Output : selected.Input)
                         ?? (item.Flow == EDataFlow.eRender ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId);
+                    if (item.Flow == EDataFlow.eRender)
+                        activeId = playbackOutputs.Contains(item.Id) ? item.Id : "";
                     SetRowDeviceSelection(item.Button, item.Id, activeId);
                     item.Button.IsEnabled = true;
                 }
@@ -1290,12 +1318,14 @@ namespace SonicRoute
             catch
             {
                 if (!_isClosed && request == row.DeviceBuildVersion)
+                {
                     foreach (var item in row.DeviceButtons) item.Button.IsEnabled = true;
+                }
                 return false;
             }
         }
 
-        private async void OnRowDeviceClickAsync(AppRow row, AudioDeviceInfo dev, EDataFlow flow)
+        private async Task OnRowDeviceClickAsync(AppRow row, AudioDeviceInfo dev, EDataFlow flow)
         {
             MarkLastUsed(row.App);
             var pid = (int)row.App.ProcessId;

@@ -7,7 +7,7 @@ using SonicRoute.AndroidAudio;
 
 namespace SonicRoute.AirPlay;
 
-internal enum AirPlayStage { Off, Starting, Waiting, Connected, Failed }
+internal enum AirPlayStage { Off, Starting, Waiting, Connected, Failed, Stopping }
 internal sealed record AirPlayStatus(AirPlayStage Stage, string? Name = null, string? Sender = null, string? ErrorKey = null,
     int? NetworkError = null, bool Mirroring = false, bool MirrorAudioUnavailable = false,
     bool Topmost = false, bool Fullscreen = false, string? Code = null, AirPlayMetadata? Metadata = null);

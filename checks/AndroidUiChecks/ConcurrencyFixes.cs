@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using NAudio.CoreAudioApi;
 using SonicRoute;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
@@ -40,26 +41,27 @@ internal static partial class Program
 
     private static void CheckSilenceLeaseFailures()
     {
+        CheckSourceSpeakerLeases();
         var type = typeof(App).Assembly.GetType("SonicRoute.LocalSilenceLeasePool")!;
         bool known = true, muted = false, setSucceeds = true, routeSucceeds = true, throwRoute = false;
         int muteWrites = 0, routeWrites = 0;
-        var routes = new Dictionary<int, string>();
+        var routes = new Dictionary<int, (string? Multimedia, string? Console)>();
         object NewPool() => Activator.CreateInstance(type, ConcurrencyHidden, null, new object[]
         {
             (Func<string?>)(() => "silent-output"),
             (Func<string, (bool, bool)>)(_ => (muted, known)),
             (Func<string, bool, bool>)((_, value) => { muteWrites++; if (setSucceeds) muted = value; return setSucceeds; }),
-            (Func<int, string?>)(_ => "original-output"),
-            (Func<int, string, bool>)((pid, id) =>
+            (Func<int, (string?, string?)>)(pid => routes.GetValueOrDefault(pid, ("original-output", "original-console"))),
+            (Func<int, (string?, string?), bool>)((pid, ids) =>
             {
                 routeWrites++;
-                if (id == "silent-output")
+                if (ids == ("silent-output", "silent-output"))
                 {
-                    routes[pid] = id; // Simulate one Windows role changing even when the other fails.
+                    routes[pid] = routeSucceeds ? ids : ("silent-output", "original-console");
                     if (throwRoute) throw new IOException("route fixture failure");
                     return routeSucceeds;
                 }
-                routes[pid] = id; return true;
+                routes[pid] = ids; return true;
             })
         }, null)!;
         IPcProcessSilenceLease? Acquire(object pool, int pid) =>
@@ -72,24 +74,162 @@ internal static partial class Program
         Check(Acquire(NewPool(), 1) == null && routeWrites == 0 && !muted,
             "failed endpoint mute cannot be counted as a successful silence lease");
         setSucceeds = true; routeSucceeds = false;
-        Check(Acquire(NewPool(), 1) == null && !muted && routes[1] == "original-output",
+        Check(Acquire(NewPool(), 1) == null && !muted && routes[1] == ("original-output", "original-console"),
             "failed route rolls back partial role changes and the temporary endpoint mute");
         routeSucceeds = true; throwRoute = true;
         bool failed = false;
         try { Acquire(NewPool(), 2); } catch (TargetInvocationException ex) when (ex.InnerException is IOException) { failed = true; }
-        Check(failed && !muted && routes[2] == "original-output", "throwing route performs the same rollback without leaking a lease");
+        Check(failed && !muted && routes[2] == ("original-output", "original-console"), "throwing route performs the same rollback without leaking a lease");
         throwRoute = false;
         var pool = NewPool();
         var first = Acquire(pool, 3)!; var second = Acquire(pool, 4)!;
         routeSucceeds = false;
-        Check(Acquire(pool, 5) == null && muted && routes[5] == "original-output", "a failed additional lease preserves existing successful leases");
+        Check(Acquire(pool, 5) == null && muted && routes[5] == ("original-output", "original-console"), "a failed additional lease preserves existing successful leases");
+        routes[3] = ("user-selected-output", "silent-output");
         first.Dispose(); first.Dispose();
-        Check(muted && routes[3] == "original-output", "idempotent first release preserves the shared mute");
+        Check(muted && routes[3] == ("user-selected-output", "original-console"), "release restores its console route and preserves a new multimedia route");
         second.Release(false);
-        Check(!muted && routes[4] == "silent-output", "last release restores only owned mute and honors route restoration choice");
+        Check(!muted && routes[4] == ("silent-output", "silent-output"), "last release restores only owned mute and honors route restoration choice");
         routeSucceeds = true; muted = true;
         Acquire(NewPool(), 6)!.Dispose();
         Check(muted, "an endpoint already muted before the lease stays muted after release");
+        string? available = null;
+        int isolatedWrites = 0;
+        bool spareMuted = false;
+        var isolated = Activator.CreateInstance(type, ConcurrencyHidden, null, new object[]
+        {
+            (Func<IReadOnlySet<int>, string?, string?>)((_, current) => current == null || available == current ? available : null),
+            (Func<string, (bool, bool)>)(_ => (spareMuted, true)),
+            (Func<string, bool, bool>)((_, value) => { spareMuted = value; return true; }),
+            (Func<int, (string?, string?)>)(pid => routes.GetValueOrDefault(pid, ("preferred", "console"))),
+            (Func<int, (string?, string?), bool>)((pid, ids) => { isolatedWrites++; routes[pid] = ids; return true; })
+        }, null)!;
+        Check(Acquire(isolated, 81) == null && isolatedWrites == 0,
+            "The silence lease leaves all routes alone when no usable output exists");
+        available = "unused-spare";
+        var exclusive = Acquire(isolated, 81)!;
+        Check(spareMuted && routes[81] == (available, available), "The silence lease mutes an unused secondary output and routes the selected app onto it");
+        available = null;
+        Check(Acquire(isolated, 82) == null && !routes.ContainsKey(82),
+            "another app cannot acquire a previously eligible output after its mute or occupancy changes");
+        type.GetMethod("Revalidate", ConcurrencyHidden)!.Invoke(isolated, null);
+        Check(exclusive.Invalidated.IsCancellationRequested, "loss of an available secondary output revokes its exclusive route");
+        routes[81] = ("manually-switched", "unused-spare");
+        exclusive.Dispose();
+        Check(!spareMuted && routes[81] == ("manually-switched", "console"), "ending the silence lease restores its mute and only unchanged route roles");
+        available = "unused-spare";
+        var userChanged = Acquire(isolated, 84)!;
+        type.GetMethod("NoteUnmuted", ConcurrencyHidden)!.Invoke(isolated, [available]);
+        type.GetMethod("Revalidate", ConcurrencyHidden)!.Invoke(isolated, null);
+        bool revoked = userChanged.Invalidated.IsCancellationRequested;
+        userChanged.Dispose();
+        Check(revoked && spareMuted, "an external unmute and re-mute revokes the route and preserves the user's last setting");
+        type.GetProperty("VerifyPlaybackRoute", ConcurrencyHidden)!.SetValue(isolated, (Func<int, string, bool>)((_, _) => false));
+        Check(Acquire(isolated, 83) == null && routes[83] == ("preferred", "console"),
+            "a player that keeps rendering on its former device fails exclusive mode and regains its prior policy");
+
+        bool allMuted = false;
+        var mutedType = typeof(App).Assembly.GetType("SonicRoute.AlreadyMutedOutputLeases")!;
+        var readOnly = Activator.CreateInstance(mutedType, ConcurrencyHidden | BindingFlags.Public, null,
+            new object[] { (Func<bool>)(() => allMuted) }, null)!;
+        IPcProcessSilenceLease? AcquireReadOnly() =>
+            (IPcProcessSilenceLease?)mutedType.GetMethod("Acquire", ConcurrencyHidden)!.Invoke(readOnly, [91]);
+        Check(AcquireReadOnly() == null, "one audible output rules out destination-only playback through an unchanged local route");
+        allMuted = true;
+        using (var alreadySilent = AcquireReadOnly()!)
+        {
+            allMuted = false;
+            mutedType.GetMethod("Revalidate", ConcurrencyHidden)!.Invoke(readOnly, null);
+            Check(alreadySilent.Invalidated.IsCancellationRequested, "adding an audible output revokes the read-only silence lease");
+        }
+        allMuted = true;
+        using (var alreadySilent = AcquireReadOnly()!)
+        {
+            mutedType.GetMethod("NoteUnmuted", ConcurrencyHidden)!.Invoke(readOnly, null);
+            mutedType.GetMethod("Revalidate", ConcurrencyHidden)!.Invoke(readOnly, null);
+            Check(alreadySilent.Invalidated.IsCancellationRequested, "a user's unmute ends read-only routing even if the endpoint is muted again");
+        }
+    }
+
+    private static void CheckSourceSpeakerLeases()
+    {
+        var type = typeof(App).Assembly.GetType("SonicRoute.SourceSpeakerLeases", true)!;
+        var initial = new Dictionary<string, bool> { ["speaker"] = false, ["headphones"] = false };
+        var outputs = new Dictionary<int, string> { [1] = "speaker", [2] = "speaker", [3] = "headphones" };
+        var unavailable = new HashSet<string>();
+        var writes = new List<(string, bool)>();
+        bool failWrite = false;
+        var pool = Activator.CreateInstance(type, ConcurrencyHidden, null, new object[]
+        {
+            (Func<int, string?>)(pid => outputs.GetValueOrDefault(pid)),
+            (Func<string, (bool, bool)>)(id => (initial[id], !unavailable.Contains(id))),
+            (Func<string, bool, bool>)((id, muted) =>
+            {
+                if (failWrite) return false;
+                writes.Add((id, muted)); initial[id] = muted; return true;
+            })
+        }, null)!;
+        IPcProcessSilenceLease? Acquire(int pid) =>
+            (IPcProcessSilenceLease?)type.GetMethod("Acquire", ConcurrencyHidden)!.Invoke(pool, [pid]);
+        void Revalidate() => type.GetMethod("Revalidate", ConcurrencyHidden)!.Invoke(pool, null);
+        void Unmuted() => type.GetMethod("NoteUnmuted", ConcurrencyHidden)!.Invoke(pool, ["speaker"]);
+
+        Check(Acquire(99) == null && writes.Count == 0, "an ambiguous or missing application speaker causes no mute write");
+        failWrite = true;
+        Check(Acquire(1) == null && !initial["speaker"], "a failed speaker mute does not produce a successful transfer");
+        failWrite = false;
+        using var first = Acquire(1)!;
+        using var second = Acquire(2)!;
+        using var headphones = Acquire(3)!;
+        Check(writes.SequenceEqual([("speaker", true), ("headphones", true)]),
+            "overlapping applications mute their shared speaker once and own a separate output independently");
+        first.Dispose();
+        Check(initial["speaker"] && initial["headphones"], "returning the first application preserves overlapping speaker leases");
+        second.Dispose(); second.Dispose();
+        Check(!initial["speaker"] && initial["headphones"] && writes.Count == 3, "the last release restores just its speaker once");
+
+        initial["speaker"] = true;
+        using (Acquire(1)!) { }
+        Check(initial["speaker"] && writes.Count == 3, "transferring a pre-muted speaker preserves the user's original setting");
+        initial["speaker"] = false;
+        using (var moved = Acquire(1)!)
+        {
+            outputs[1] = "headphones"; Revalidate();
+            Check(moved.Invalidated.IsCancellationRequested, "an application changing speakers ends its exclusive transfer");
+        }
+        outputs[1] = "speaker";
+        using (var userChanged = Acquire(1)!)
+        {
+            Unmuted(); // A physical unmute followed by a user mute before the queued notification is processed.
+            Revalidate();
+            Check(userChanged.Invalidated.IsCancellationRequested, "a user's speaker unmute revokes the active transfer");
+        }
+        Check(initial["speaker"], "returning after a user unmute and re-mute preserves the user's latest setting");
+        unavailable.Add("headphones"); Revalidate();
+        Check(headphones.Invalidated.IsCancellationRequested, "an unplugged speaker releases the transfer");
+        headphones.Dispose();
+        unavailable.Clear(); Revalidate();
+        Check(!initial["headphones"], "reconnecting an unavailable speaker restores its previously owned mute");
+    }
+
+    private static void CheckDormantPlaybackWatch()
+    {
+        using var devices = new MMDeviceEnumerator();
+        if (!devices.HasDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia)) return;
+        using var output = devices.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+        using var client = output.AudioClient;
+        client.Initialize(AudioClientShareMode.Shared, AudioClientStreamFlags.None, 1_000_000, 0, client.MixFormat, Guid.NewGuid());
+        client.Start();
+        client.Stop();
+        using var resumed = new ManualResetEventSlim();
+        var type = typeof(App).Assembly.GetType("SonicRoute.LocalPlaybackWatch", true)!;
+        using var watch = (IDisposable)Activator.CreateInstance(type, ConcurrencyHidden, null,
+            new object[] { Environment.ProcessId, "different-output", (Action)resumed.Set }, null)!;
+        type.GetMethod("Refresh", ConcurrencyHidden)!.Invoke(watch, null);
+        Check(!resumed.IsSet, "a dormant session on the previous endpoint can be watched without changing its volume or route");
+        client.Start();
+        try { Check(resumed.Wait(TimeSpan.FromSeconds(3)), "resuming the same WASAPI session on its previous output revokes an exclusive share"); }
+        finally { client.Stop(); }
     }
 
     private sealed class RecoveryCallbackWatcher(object storeGate) : FileSystemWatcher

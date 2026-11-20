@@ -13,6 +13,11 @@ internal static partial class Program
     private static void Check(bool condition, string name) { if (!condition) throw new Exception("FAIL " + name); _checks++; Console.WriteLine("PASS " + name); }
     public static async Task<int> Main(string[] args)
     {
+        if (args is ["--live-current-output", var directory, var serial, var serverPort, var report])
+        {
+            await LiveCurrentOutputAsync(directory, serial, int.Parse(serverPort), report);
+            return 0;
+        }
         string? logRoot = args.Length >= 2 && args[0] is ("--decoder-settings" or "--android-hevc-start" or "--android-hevc-recovery" or "--gamepad-window" or "--airplay-window-modes") && args.Contains("--file-log") ? args[1] : null;
         if (logRoot != null) Directory.CreateDirectory(logRoot);
         using var fileLog = logRoot == null ? null : new StreamWriter(Path.Combine(logRoot, "console.log")) { AutoFlush = true };
@@ -23,6 +28,7 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--airplay-phone-output") { await AirPlayPhoneOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-eld-decode") { AirPlayEldFixture(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-window-modes") { await AirPlayWindowModesAsync(); return 0; }
+            if (args.Length == 1 && args[0] == "--android-file-directory") { await AndroidFileDirectoryAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--decoder-settings") { await DecoderSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-start") { await AndroidHevcStartAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-recovery") { await AndroidHevcStartAsync(args[1], checkResize: true); return 0; }
@@ -38,15 +44,22 @@ internal static partial class Program
                 return 0;
             }
             if (args.Length > 0 && args[0] == "--pairing-fixes") { await PairingFixesAsync(args[1]); return 0; }
+            if (args.Length == 2 && args[0] == "--android-files-live") { await AndroidFilesLiveAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--mdns-discovery") { await MdnsDiscoveryChecksAsync(args.Contains("--lan")); return 0; }
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }
+            if (args is ["--direct-adb"]) { await CheckDirectAndArbitratedTransportAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--stream-settings") { await StreamSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--encoder-catalog") { await EncoderCatalogAsync(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--device-audio") { await DeviceAudioAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--media-log-tail") { await MediaLogTailAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-latency-live") { await OutputLatencyLiveAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--output-startup") { await OutputStartupAsync(args[1]); return 0; }
+            if (args.Length is >= 2 and <= 4 && args[0] == "--phone-sink-hardware")
+            { await CheckPhoneSinkHardwareAsync(args[1], args.ElementAtOrDefault(2), args.ElementAtOrDefault(3)); return 0; }
+            if (args.Length is 5 or 6 && args[0] == "--phone-route-switch-live")
+            { await CheckPhoneRouteSwitchLiveAsync(args[1], args[2], args[3], args[4], args.ElementAtOrDefault(5)); return 0; }
+            if (args.Length == 2 && args[0] == "--receive-mirrors") { await CheckAndroidReceiveMirrorsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--explicit-output") { await ExplicitOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--explicit-output-live") { await ExplicitOutputLiveAsync(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--output-switch-latency-live") { await ExplicitOutputLiveAsync(args[1], args[2], allowSilence: true); return 0; }

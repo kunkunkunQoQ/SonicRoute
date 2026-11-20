@@ -29,7 +29,7 @@ namespace SonicRoute
                     return;
                 }
                 var app = new App();
-                app.InitializeComponent();
+                app.PrepareStartupResources();
                 if (RestartCoordinator.CompleteHandoff(ref args))
                 {
                     app.StartupArguments = args;

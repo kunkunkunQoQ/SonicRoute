@@ -13,6 +13,7 @@ namespace SonicRoute.Core
     [JsonSerializable(typeof(AppConfig))]
     [JsonSerializable(typeof(AutoRule))]
     [JsonSerializable(typeof(List<AutoRule>))]
+    [JsonSerializable(typeof(Dictionary<string, SavedPlaybackSelection>))]
     internal partial class PersistenceJsonContext : JsonSerializerContext
     {
     }

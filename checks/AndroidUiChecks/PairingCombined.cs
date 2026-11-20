@@ -227,12 +227,12 @@ internal static partial class Program
                 && !Find<TextBlock>("OperationStatus").IsVisible
                 && airPlayHost.GetField("_receiver", statics)!.GetValue(null) == null && activeScans == 0,
                 "AirPlay tab shows only its own status, stops QR and waits for an explicit start");
-            var start = (Button)Find<AirPlayReceiverView>("AirPlayConnectionView").FindName("AirPlayToggle");
-            Check(start.IsEnabled && Equals(start.Content, L10n.T("Phone.AirPlayStart")),
+            var start = (CheckBox)Find<AirPlayReceiverView>("AirPlayConnectionView").FindName("AirPlayToggle");
+            Check(start.IsEnabled && start.IsChecked == false,
                 "AirPlay is ready to start without an Android phone");
             window.Width = 456; window.UpdateLayout(); DrainUi();
             var buttonRight = start.TranslatePoint(new Point(start.ActualWidth, 0), page).X;
-            Check(start.ActualWidth > 40 && buttonRight < page.ActualWidth, "AirPlay start stays visible at a narrow window width");
+            Check(start.ActualWidth >= 32 && buttonRight < page.ActualWidth, "the AirPlay switch stays visible at a narrow window width");
             Render(page, (int)Math.Ceiling(page.ActualWidth), 260, Path.Combine(output, "airplay-connection.png"));
             var addressBox = Find<TextBox>("ConnectAddressBox");
             var savedChoices = Find<ComboBox>("SavedConnectDevices");
@@ -364,6 +364,21 @@ internal static partial class Program
                 Check(connections.Count == 3, "the quick device refresh filters the expired port and offers the existing connection hint");
             }
             finally { quick.Close(); }
+            announceCurrent = true;
+            restoredDevice = null;
+            discovery.Publish([]);
+            int beforeRecovery = connections.Count;
+            Task<bool> Recover() => (Task<bool>)cache.GetMethod("RecoverMissingWirelessAsync", statics)!
+                .Invoke(null, [archived, discovery.Devices, CancellationToken.None])!;
+            cache.GetMethod("SetAutomaticRecovery", statics)!.Invoke(null, [archived, false]);
+            var suppressed = Recover();
+            Pump(suppressed);
+            Check(!suppressed.Result && connections.Count == beforeRecovery, "a manual disconnect suppresses on-demand Wi-Fi recovery");
+            cache.GetMethod("SetAutomaticRecovery", statics)!.Invoke(null, [archived, true]);
+            var recovered = Recover();
+            Pump(recovered);
+            Check(recovered.Result && connections.Count == beforeRecovery + 1 && store.Profile.Id == restoredId
+                && discovery.Devices!.Any(d => d.Serial == currentAddress), "wireless loss recovers the saved phone and republishes its new address");
             page.Dispose(); Until(() => Watch() == null);
             Check(activeScans == 0 && clock.QrTimers == 0 && names.Distinct().Count() == names.Count,
                 "disposal retires all deadlines/scans and every QR rotation uses a fresh identity");

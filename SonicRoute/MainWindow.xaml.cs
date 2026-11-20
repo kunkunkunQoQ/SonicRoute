@@ -98,6 +98,7 @@ namespace SonicRoute
 
         public MainWindow()
         {
+            App.EnsureWindowResources();
             var swInit = System.Diagnostics.Stopwatch.StartNew();
             InitializeComponent();
             swInit.Stop();
@@ -2585,6 +2586,7 @@ namespace SonicRoute
         private AutoRuleStep? _autoDragStep;
         private bool _autoDragging;
         private double _autoDragStartY;
+        private System.Windows.Point _autoDragPointerOnScroll;
         private int _autoDragTarget = -1;
         private FrameworkElement? _autoGrip;
         private readonly List<AutoDragRow> _autoDragRows = new();
@@ -3306,34 +3308,29 @@ namespace SonicRoute
             box.CaretIndex = caret;
         }
 
-        private void AutoStepGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        private void StartAutoStepDrag(FrameworkElement grip, AutoRuleStep step, System.Windows.Point point)
         {
-            if (sender is not FrameworkElement grip || grip.Tag is not Border block || block.Tag is not AutoRuleStep step) return;
             EndAutoDrag(commit: false);
             _autoDragFrom = _autoSteps.IndexOf(step);
             if (_autoDragFrom < 0) return;
             _autoDragStep = step;
-            _autoDragStartY = e.GetPosition(AutoStepsHost).Y;
+            _autoDragStartY = point.Y;
             _autoDragLastPointerY = _autoDragStartY;
             _autoDragDistance = 0;
             _autoDragTarget = _autoDragFrom;
             _autoGrip = grip;
-            if (!grip.CaptureMouse()) EndAutoDrag(commit: false);
-            e.Handled = true;
         }
 
-        private void AutoStepGrip_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        private void MoveAutoStepDrag(System.Windows.Point point)
         {
             if (_autoGrip == null) return;
-            if (e.LeftButton != MouseButtonState.Pressed) { EndAutoDrag(commit: false); return; }
-            double y = e.GetPosition(AutoStepsHost).Y;
+            _autoDragPointerOnScroll = AutoStepsHost.TranslatePoint(point, AutomationScroll);
             if (!_autoDragging)
             {
-                if (Math.Abs(y - _autoDragStartY) < SystemParameters.MinimumVerticalDragDistance) return;
+                if (Math.Abs(point.Y - _autoDragStartY) < SystemParameters.MinimumVerticalDragDistance) return;
                 if (!BeginAutoDragPreview()) { EndAutoDrag(commit: false); return; }
             }
             QueueAutoDragFrame();
-            e.Handled = true;
         }
 
         private bool BeginAutoDragPreview()
@@ -3377,16 +3374,16 @@ namespace SonicRoute
 
         private void AutoDrag_Rendering(object? sender, EventArgs e)
         {
-            if (!_autoDragging || _autoGrip == null || Mouse.LeftButton != MouseButtonState.Pressed)
+            if (!_autoDragging || _autoGrip == null)
             { EndAutoDrag(commit: false); return; }
-            UpdateAutoDragPreview(Mouse.GetPosition(AutoStepsHost).Y);
+            var point = _autoDragPointerOnScroll;
+            UpdateAutoDragPreview(AutomationScroll.TranslatePoint(point, AutoStepsHost).Y);
 
             // 只有靠近可见区域边缘时连续请求帧；停在中间即解除 Rendering。
             var time = e is RenderingEventArgs rendering ? rendering.RenderingTime : TimeSpan.Zero;
             double seconds = _autoDragLastFrame == TimeSpan.Zero ? 1.0 / 60
                 : MathEx.Clamp((time - _autoDragLastFrame).TotalSeconds, 0, 0.05);
             _autoDragLastFrame = time;
-            var point = Mouse.GetPosition(AutomationScroll);
             double speed = 0;
             if (point.X >= 0 && point.X <= AutomationScroll.ActualWidth)
             {
@@ -3483,19 +3480,6 @@ namespace SonicRoute
             row.Slide.BeginAnimation(TranslateTransform.YProperty, animation);
         }
 
-        private void AutoStepGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            if (_autoGrip == null) return;
-            if (_autoDragging) UpdateAutoDragPreview(e.GetPosition(AutoStepsHost).Y);
-            EndAutoDrag(commit: true);
-            e.Handled = true;
-        }
-
-        private void AutoStepGrip_LostMouseCapture(object sender, System.Windows.Input.MouseEventArgs e)
-        {
-            if (ReferenceEquals(sender, _autoGrip)) EndAutoDrag(commit: false);
-        }
-
         private void EndAutoDrag(bool commit)
         {
             StopAutoDragFrames();
@@ -3536,7 +3520,7 @@ namespace SonicRoute
                 if (_autoStepNumbers.TryGetValue(_autoSteps[i], out var number))
                     number.Text = string.Format(L10n.T("Auto.StepNumber"), i + 1);
             _autoGrip = null; _autoDragStep = null; _autoDragFrom = -1; _autoDragTarget = -1; _autoDragging = false;
-            if (grip?.IsMouseCaptured == true) grip.ReleaseMouseCapture();
+            ReorderGrip.Release(grip);
             if (commit && moved != null && step != null && from >= 0 && target >= 0
                 && from < _autoSteps.Count && target < _autoSteps.Count && ReferenceEquals(_autoSteps[from], step))
             {

@@ -13,15 +13,22 @@ using SonicRoute.Core.Models;
 
 namespace SonicRoute;
 
-internal static class AndroidAudioHost
+internal static partial class AndroidAudioHost
 {
     private static readonly object PhoneOperations = new();
     private static readonly object OutputSnapshotGate = new();
     private static IReadOnlyList<AudioDeviceInfo>? _outputSnapshot;
     private static readonly LocalSilenceLeasePool SilenceLeases = new(FindSilenceEndpoint,
         id => { var state = SystemVolumeService.ReadStateChecked(id); return (state.Muted, state.MuteKnown); },
-        SystemVolumeService.SetMute, pid => AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender),
-        (pid, id) => AudioService.ApplyEndpoint(pid, EDataFlow.eRender, id).Success);
+        SystemVolumeService.SetMute, ReadSilenceRoles, WriteSilenceRoles);
+    private static readonly Guid OutputMuteContext = Guid.NewGuid();
+    private static readonly LocalSilenceLeasePool MirrorSilenceLeases = new(FindMirrorSilenceOutput,
+        ReadOutputMute, SetReservedOutputMute, ReadSilenceRoles, WriteSilenceRoles)
+        {
+            VerifyPlaybackRoute = VerifyWindowsPlaybackRoute,
+            ObservePlayback = (pid, id, revoke) => new LocalPlaybackWatch(pid, id, revoke) { CheckReservedOutput = RevalidateLocalSilence }
+        };
+    private static readonly AlreadyMutedOutputLeases MutedOutputs = new(AllWindowsOutputsUserMuted);
     private static readonly Dictionary<string, long> ProbeTimestamps = new(StringComparer.Ordinal);
     static AndroidAudioHost()
     {
@@ -37,8 +44,8 @@ internal static class AndroidAudioHost
         new AndroidAudioSettingsStore(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-audio.json")));
     private static readonly Lazy<AndroidAudioManager> LazySources = new(() =>
     {
-        var sources = new AndroidAudioManager(Adb, LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
-        sources.Changed += ApplicationAudio.NotifyChanged;
+        var sources = new AndroidAudioManager(() => new AndroidAudioSession(Adb, LazySettings.Value.GetStreaming, FindOnlinePhone), LazySettings.Value, (device, pkg) => IsPhoneCreated ? Phone.IsSmartVolumeEnabled(device, pkg) : true);
+        sources.SourceChanged += ApplicationAudio.NotifySourceChanged;
         sources.ResourcesRetired += OnResourcesRetired;
         return sources;
     });
@@ -47,17 +54,13 @@ internal static class AndroidAudioHost
     private static readonly Lazy<PcToPhoneAudioManager> LazyPcToPhone = new(() =>
     {
         var manager = new PcToPhoneAudioManager(() => Adb, AcquireLocalSilenceLease);
-        manager.Changed += ApplicationAudio.NotifyChanged;
+        manager.RouteChanged += ApplicationAudio.NotifyRouteChanged;
         manager.ResourcesRetired += OnResourcesRetired;
         manager.OutputsObserved += (device, sinks) =>
         {
             if (IsPhoneCreated) Phone.UpdateOutputs(device, sinks);
         };
-        manager.DeviceDisconnected += disconnectedDevice =>
-        {
-            PhoneAudioWindowCache.InvalidateDevices();
-            _ = PhoneAudioWindowCache.ReadDevicesAsync(MediaShutdown.Token);
-        };
+        manager.DeviceDisconnected += PhonePlaybackFailed;
         return manager;
     });
     internal static PcToPhoneAudioManager PcToPhone => LazyPcToPhone.Value;
@@ -80,6 +83,25 @@ internal static class AndroidAudioHost
     });
     internal static AndroidPhoneStore Phone => LazyPhone.Value;
     internal static bool IsPhoneCreated => LazyPhone.IsValueCreated;
+    internal static void PhonePlaybackFailed(AndroidDevice device) =>
+        _ = RefreshPhonePlaybackDevicesAsync(device, MediaShutdown.Token);
+
+    internal static async Task RefreshPhonePlaybackDevicesAsync(AndroidDevice? device, CancellationToken token)
+    {
+        try
+        {
+            await PreparePhoneAsync(token).ConfigureAwait(false);
+            device ??= Phone.Profile.LastDevice;
+            if (device == null || Phone.IsRemoved(device)) return;
+            var devices = await PhoneAudioWindowCache.ReadDevicesAsync(token).ConfigureAwait(false);
+            if (devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(device, d)) is { } online)
+                await ProbeOutputsIfConnectedAsync([online], token: token).ConfigureAwait(false);
+            else
+                await PhoneAudioWindowCache.RecoverMissingWirelessAsync(device, devices, token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone playback discovery: " + ex.Message); }
+    }
     // File-backed preferences are loaded once on a worker, when a phone view or playback
     // actually needs them. A closing view cancels its wait, not another caller's load.
     private static readonly Lazy<Task<AndroidPhoneStore>> PhoneRead = new(() => Task.Run(() => Phone));
@@ -119,17 +141,23 @@ internal static class AndroidAudioHost
     {
         lock (PhoneOperations)
             if (!Phone.RemoveDevice(profileId, PhoneAudioWindowCache.Devices)) return;
+        (await PrepareStreamingAsync(MediaShutdown.Token).ConfigureAwait(false)).ForgetSourceRoutes(device);
         // Complete owned cleanup even if selecting the replacement profile hides this page.
         var cleanup = new List<Task>();
+        cleanup.Add(LocalAppOutputMirrors.PhoneRemovedAsync(device));
         if (AreDisplaysCreated) cleanup.Add(Displays.CloseDeviceAsync(device));
-        if (IsCreated)
-            cleanup.AddRange(Sources.Sources.Where(s => AndroidDeviceIdentity.MatchesSavedDevice(device, s.Device))
-                .Select(s => Sources.RemoveAsync(s.Id, restorePrevious: false)));
+        if (IsCreated) cleanup.Add(DisconnectAndroidSourcesAsync(device));
         if (IsPcToPhoneCreated) cleanup.Add(PcToPhone.StopPhoneAsync(device));
         if (AirPlayHost.Source is { } airPlay) cleanup.Add(airPlay.PhoneRemovedAsync(device));
         await Task.WhenAll(cleanup);
         await Phone.FlushAsync();
     }
+    internal static Task DisconnectAndroidSourcesAsync(AndroidDevice device) =>
+        !IsCreated ? Task.CompletedTask : Task.WhenAll(Sources.Sources.Select(source =>
+            AndroidDeviceIdentity.MatchesSavedDevice(device, source.Device)
+                ? Sources.RemoveAsync(source.Id, restorePrevious: false)
+                : source.Session.PhoneRemovedAsync(device)));
+
     internal static bool IsPhoneOnline(AndroidDevice? device)
     {
         if (device == null) return false;
@@ -192,11 +220,8 @@ internal static class AndroidAudioHost
         foreach (var profile in store.Profiles)
         {
             if (profile.LastDevice is not { } device || store.IsRemoved(device) || !IsPhoneOnline(device)) continue;
-            string phoneKey = AndroidDeviceIdentity.Key(device);
-            var sinks = profile.OutputSinks is { Count: > 0 } ? profile.OutputSinks : [AndroidOutputSink.DefaultSpeaker];
-            foreach (var sink in sinks)
+            foreach (var (sink, id) in GetDropZonesForDevice(device))
             {
-                string id = AndroidOutputIdentity.FormatDeviceId(phoneKey, sink.Key);
                 if (!seenIds.Add(id)) continue;
                 list.Add(new AudioDeviceInfo
                 {
@@ -212,6 +237,11 @@ internal static class AndroidAudioHost
     internal static string OutputDisplayName(AndroidDevice? device, AndroidOutputSink sink)
     {
         string phoneName = device == null ? L10n.T("Phone.Title") : LazyPhone.IsValueCreated ? Phone.GetDisplayName(device) : device.Name;
+        if (sink.Kind == AndroidOutputSinkKind.Current)
+        {
+            string current = L10n.T("Phone.NativeAudioOutput");
+            return PhoneAudioWindowCache.Devices?.Count(d => d.State == "device") > 1 ? current + " · " + phoneName : current;
+        }
         string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
         return sink.Kind == AndroidOutputSinkKind.Speaker
             ? string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName) : string.Format(L10n.T("Phone.BluetoothOutputFormat"), sinkName, phoneName);
@@ -237,29 +267,35 @@ internal static class AndroidAudioHost
         IReadOnlyList<AndroidOutputSink> sinks = [AndroidOutputSink.DefaultSpeaker];
         if (LazyPhone.IsValueCreated && Phone.FindProfile(device) is { OutputSinks.Count: > 0 } profile)
             sinks = profile.OutputSinks;
-        var result = new List<(AndroidOutputSink, string)>(sinks.Count);
+        var result = new List<(AndroidOutputSink, string)>(sinks.Count + 1);
+        if (IsPhoneOnline(device))
+            result.Add((AndroidOutputSink.Current, AndroidOutputIdentity.FormatDeviceId(phoneKey, AndroidOutputSink.Current.Key)));
         foreach (var sink in sinks)
             result.Add((sink, AndroidOutputIdentity.FormatDeviceId(phoneKey, sink.Key)));
         return result;
     }
-    internal static AndroidPhonePcmPlayer CreatePhonePcmPlayer(AndroidPcmSource pcm, string endpoint, CancellationToken token)
+    internal static AndroidPhonePcmPlayer CreatePhonePcmPlayer(AndroidPcmSource pcm, string endpoint, CancellationToken token, AdbClient? adb = null)
     {
         if (!AndroidOutputIdentity.TryParseDeviceId(endpoint, out string phoneKey, out string sink))
             throw AndroidError.WithCode(new IOException("无效的设备输出。"), AndroidErrorCode.InvalidPhoneOutputDevice);
 
-        var devices = PhoneAudioWindowCache.Devices;
-        var device = devices != null ? devices.FirstOrDefault(IsTarget)
-            : Phone.Profiles.Select(profile => profile.LastDevice).FirstOrDefault(IsTarget);
+        var device = FindOnlinePhone(phoneKey);
         if (device == null || Phone.IsRemoved(device))
             throw AndroidError.WithCode(new IOException("设备未连接或离线。"), AndroidErrorCode.PhoneOffline);
         if (!GetDropZonesForDevice(device).Any(output => string.Equals(output.DeviceId, endpoint, StringComparison.OrdinalIgnoreCase)))
             throw AndroidError.WithCode(new IOException("所选设备输出已断开。"), AndroidErrorCode.SelectedPhoneOutputDisconnected);
 
         token.ThrowIfCancellationRequested();
-        return new AndroidPhonePcmPlayer(Adb, device, pcm, sink, token, (connected, outputs) => Phone.UpdateOutputs(connected, outputs));
+        return new AndroidPhonePcmPlayer(adb ?? Adb, device, pcm, sink, token, (connected, outputs) => Phone.UpdateOutputs(connected, outputs));
+    }
 
-        bool IsTarget(AndroidDevice? candidate) => candidate is { State: "device" }
-            && string.Equals(AndroidDeviceIdentity.Key(candidate), phoneKey, StringComparison.OrdinalIgnoreCase);
+    private static AndroidDevice? FindOnlinePhone(string phoneKey)
+    {
+        bool Matches(AndroidDevice? candidate) => candidate is { State: "device" }
+            && string.Equals(AndroidDeviceIdentity.Key(candidate), phoneKey, StringComparison.OrdinalIgnoreCase)
+            && !Phone.IsRemoved(candidate);
+        return PhoneAudioWindowCache.Devices is { } online
+            ? online.FirstOrDefault(Matches) : Phone.Profiles.Select(profile => profile.LastDevice).FirstOrDefault(Matches);
     }
     internal static string? TryGetPcAppPhoneOutput(int processId) =>
         LazyPcToPhone.IsValueCreated ? PcToPhone.GetPersistedEndpoint(processId) : null;
@@ -308,6 +344,187 @@ internal static class AndroidAudioHost
         if (processId <= 0 || (IsPcToPhoneCreated && !PcToPhone.EnableLiveStreaming)) return null;
         return SilenceLeases.Acquire(processId);
     }
+    internal static IPcProcessSilenceLease? AcquireMirrorSilenceLease(int processId) =>
+        processId > 0 && TryGetPcAppPhoneOutput(processId) == null
+            ? MutedOutputs.Acquire(processId) ?? MirrorSilenceLeases.Acquire(processId) : null;
+
+    internal static void RevalidateLocalSilence()
+    {
+        MutedOutputs.Revalidate();
+        MirrorSilenceLeases.Revalidate();
+        SourceSpeakers.Revalidate();
+    }
+    internal static void OutputUnmuted(string id, Guid context)
+    {
+        MutedOutputs.NoteUnmuted();
+        if (context == OutputMuteContext) return;
+        MirrorSilenceLeases.NoteUnmuted(id);
+        SourceSpeakers.NoteUnmuted(id);
+    }
+
+    private static bool AllWindowsOutputsUserMuted()
+    {
+        try
+        {
+            using var devices = new WasapiDeviceLease.Enumerator();
+            bool any = false, silent = true;
+            foreach (var lease in devices.ActiveRender())
+            using (lease)
+            {
+                var device = lease.Device;
+                if (silent) silent = device.AudioEndpointVolume.Mute && !SilenceLeases.OwnsEndpoint(device.ID)
+                    && !MirrorSilenceLeases.OwnsEndpoint(device.ID) && !SourceSpeakers.OwnsEndpoint(device.ID);
+                any = true;
+            }
+            return any && silent;
+        }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
+    }
+
+    private static (bool Muted, bool Known) ReadOutputMute(string id)
+    {
+        try
+        {
+            using var enumerator = new WasapiDeviceLease.Enumerator();
+            using var lease = enumerator.GetDevice(id);
+            var device = lease.Device;
+            return (device.AudioEndpointVolume.Mute, true);
+        }
+        catch (System.Runtime.InteropServices.COMException) { return (false, false); }
+    }
+
+    private static bool SetReservedOutputMute(string id, bool muted) => SetOutputMute(id, muted, allowDefault: false);
+
+    private static bool SetOutputMute(string id, bool muted, bool allowDefault)
+    {
+        try
+        {
+            using var enumerator = new WasapiDeviceLease.Enumerator();
+            using var lease = enumerator.GetDevice(id);
+            var device = lease.Device;
+            if (muted && !allowDefault)
+                foreach (var role in Enum.GetValues<NAudio.CoreAudioApi.Role>())
+                {
+                    using var current = enumerator.TryDefault(role);
+                    if (string.Equals(current?.Device.ID, id, StringComparison.OrdinalIgnoreCase)) return false;
+                }
+            var volume = device.AudioEndpointVolume;
+            volume.NotificationGuid = OutputMuteContext;
+            volume.Mute = muted;
+            return true;
+        }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
+    }
+
+    // A hardware mute or a bus-backed render device is preferred over another software mixer.
+    internal static bool CanSilenceMirrorOutput(NAudio.CoreAudioApi.MMDevice device)
+    {
+        if (device.AudioEndpointVolume.HardwareSupport.HasFlag(NAudio.CoreAudioApi.EEndpointHardwareSupport.Mute)) return true;
+        string? adapter;
+        try { adapter = device.DeviceTopology.GetConnector(0).ConnectedToDeviceId; }
+        catch (System.Runtime.InteropServices.COMException) { return false; }
+        catch (InvalidOperationException) { return false; }
+        int start = adapter?.IndexOf(@"\\?\", StringComparison.Ordinal) ?? -1;
+        if (start < 0) return false;
+        string bus = adapter![(start + 4)..].Split('#', 2)[0];
+        return bus.Equals("USB", StringComparison.OrdinalIgnoreCase) || bus.Equals("HDAUDIO", StringComparison.OrdinalIgnoreCase)
+            || bus.Equals("INTELAUDIO", StringComparison.OrdinalIgnoreCase) || bus.Equals("PCI", StringComparison.OrdinalIgnoreCase)
+            || bus.StartsWith("BTH", StringComparison.OrdinalIgnoreCase) || bus.Equals("ACPI", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FindMirrorSilenceOutput(IReadOnlySet<int> owned, string? reserved)
+    {
+        using var devices = new WasapiDeviceLease.Enumerator();
+        var defaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var role in Enum.GetValues<NAudio.CoreAudioApi.Role>())
+        {
+            using var current = devices.TryDefault(role);
+            if (current != null) defaults.Add(current.Device.ID);
+        }
+        string? candidate = null;
+        int bestRank = -1;
+        foreach (var lease in devices.ActiveRender())
+        using (lease)
+        {
+            var device = lease.Device;
+            string id = device.ID;
+            if (defaults.Contains(id) || SilenceLeases.OwnsEndpoint(id) || SourceSpeakers.OwnsEndpoint(id)
+                || reserved != null && !string.Equals(reserved, id, StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                bool muted = device.AudioEndpointVolume.Mute;
+                bool terminal = CanSilenceMirrorOutput(device);
+                int rank = (terminal ? 2 : 0) + (muted ? 1 : 0);
+                if (rank <= bestRank) continue;
+                var sessions = device.AudioSessionManager.Sessions;
+                bool occupied = false;
+                for (int i = 0; i < sessions.Count && !occupied; i++)
+                {
+                    using var session = sessions[i];
+                    int pid = (int)session.GetProcessID;
+                    var state = session.State;
+                    // A reservation watches existing dormant sessions and yields when another application resumes.
+                    if (state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive
+                        || (!terminal && pid != 0 && state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateInactive))
+                        occupied = !owned.Contains(pid) && !owned.Any(root => LocalPlaybackWatch.ContainsProcess(root, pid));
+                }
+                if (!occupied) { candidate = id; bestRank = rank; }
+            }
+            catch (System.Runtime.InteropServices.COMException) { }
+        }
+        return candidate;
+    }
+
+    private static bool VerifyWindowsPlaybackRoute(int processId, string targetId)
+    {
+        // Persisted policy can succeed while an app keeps an explicitly opened device.
+        // Give active render sessions a short migration window only during this user-initiated switch.
+        using var devices = new WasapiDeviceLease.Enumerator();
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            bool targetMuted = false, otherActive = false;
+            foreach (var lease in devices.ActiveRender())
+            using (lease)
+            {
+                var endpoint = lease.Device;
+                if (string.Equals(endpoint.ID, targetId, StringComparison.OrdinalIgnoreCase))
+                {
+                    targetMuted = endpoint.AudioEndpointVolume.Mute;
+                    continue;
+                }
+                if (otherActive) continue;
+                var sessions = endpoint.AudioSessionManager.Sessions;
+                for (int i = 0; i < sessions.Count && !otherActive; i++)
+                {
+                    using var session = sessions[i];
+                    otherActive = session.State == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive
+                        && LocalPlaybackWatch.ContainsProcess(processId, (int)session.GetProcessID);
+                }
+            }
+            if (!targetMuted) return false;
+            if (!otherActive) return true;
+            if (attempt < 3) Thread.Sleep(100);
+        }
+        throw new InvalidOperationException(L10n.T("Phone.AppKeptOutput"));
+    }
+
+    private static (string? Multimedia, string? Console) ReadSilenceRoles(int pid)
+    {
+        using var policy = new AudioPolicyConfig(EDataFlow.eRender);
+        return (Unpack(policy.GetDefaultEndPoint(pid, ERole.eMultimedia)), Unpack(policy.GetDefaultEndPoint(pid, ERole.eConsole)));
+
+        static string? Unpack(string? value) => string.IsNullOrWhiteSpace(value) ? null : AudioPolicyConfig.UnpackDeviceId(value);
+    }
+
+    private static bool WriteSilenceRoles(int pid, (string? Multimedia, string? Console) ids)
+    {
+        using var policy = new AudioPolicyConfig(EDataFlow.eRender);
+        int multimedia = policy.SetDefaultEndPoint(Pack(ids.Multimedia), pid, ERole.eMultimedia);
+        int console = policy.SetDefaultEndPoint(Pack(ids.Console), pid, ERole.eConsole);
+        return multimedia >= 0 && console >= 0;
+
+        static string? Pack(string? value) => value == null ? null : AudioPolicyConfig.EnsureFullDeviceId(value, EDataFlow.eRender);
+    }
     private static string? FindSilenceEndpoint()
     {
         var outputs = AudioService.GetDevices(EDataFlow.eRender);
@@ -315,6 +532,7 @@ internal static class AndroidAudioHost
         var hidden = ConfigService.Load().HiddenOutputDevices;
         var candidate = outputs
             .Where(d => !string.Equals(d.Id, defaultId, StringComparison.OrdinalIgnoreCase)
+                && !MirrorSilenceLeases.OwnsEndpoint(d.Id) && !SourceSpeakers.OwnsEndpoint(d.Id)
                 && !AndroidOutputIdentity.IsPhoneOutput(d.Id)
                 && d.DisplayName?.Contains("Microphone", StringComparison.OrdinalIgnoreCase) != true
                 && d.DisplayName?.Contains("麦克风", StringComparison.OrdinalIgnoreCase) != true)
@@ -432,7 +650,7 @@ internal static class AndroidAudioHost
     }
     internal static bool HasActiveWork()
     {
-        if (IsDragging) return true;
+        if (IsDragging || LocalAppOutputMirrors.HasActiveRoutes) return true;
         if (IsCreated && Sources.HasActiveWork) return true;
         if (AreDisplaysCreated && (Displays.Count > 0 || HasActiveDisplayResources())) return true;
         if (IsPcToPhoneCreated && PcToPhone.HasActiveWork) return true;
@@ -468,9 +686,11 @@ internal static class AndroidAudioHost
 
     internal static async Task StopMediaAsync()
     {
+        if (LazySources.IsValueCreated) Sources.BeginShutdown();
         MediaShutdown.Cancel();
         var pending = new List<Task>();
         if (LazyPcToPhone.IsValueCreated) pending.Add(PcToPhone.DisposeAsync().AsTask());
+        if (SavedSourceStartup.IsValueCreated) pending.Add(SavedSourceStartup.Value);
         lock (MediaWatches) pending.AddRange(MediaWatches);
         // A cancelled view may have left a small configuration read in flight. Finish
         // that existing read before shutdown flushes settings; never start one here.

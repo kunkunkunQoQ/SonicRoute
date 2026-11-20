@@ -125,7 +125,9 @@ namespace SonicRoute.Core.Interop
         /// 同时设置 eMultimedia 与 eConsole 两个 role（已验证）。
         /// 返回 HRESULT（&gt;=0 成功）。
         /// </summary>
-        public int SetDefaultEndPoint(string fullDeviceId, int processId)
+        public int SetDefaultEndPoint(string? fullDeviceId, int processId) => SetDefaultEndPoint(fullDeviceId, processId, null);
+
+        public int SetDefaultEndPoint(string? fullDeviceId, int processId, ERole? role)
         {
             lock (_sync)
             {
@@ -142,6 +144,7 @@ namespace SonicRoute.Core.Interop
                 try
                 {
                     var fn = GetMethod<SetPersistedDefaultAudioEndpointDelegate>(factory, VTBL_SLOT_SET);
+                    if (role.HasValue) return fn(factory, (uint)processId, _flow, role.Value, hstring);
                     int hr1 = fn(factory, (uint)processId, _flow, ERole.eMultimedia, hstring);
                     int hr2 = fn(factory, (uint)processId, _flow, ERole.eConsole, hstring);
                     return hr1 < 0 ? hr1 : hr2;
@@ -157,14 +160,16 @@ namespace SonicRoute.Core.Interop
         /// <summary>
         /// 读取某进程当前持久化的设备完整 ID；未设置时返回 null。
         /// </summary>
-        public string? GetDefaultEndPoint(int processId)
+        public string? GetDefaultEndPoint(int processId) => GetDefaultEndPoint(processId, ERole.eMultimedia);
+
+        public string? GetDefaultEndPoint(int processId, ERole role)
         {
             lock (_sync)
             {
                 IntPtr factory = EnsureFactory();
                 var fn = GetMethod<GetPersistedDefaultAudioEndpointDelegate>(factory, VTBL_SLOT_GET);
 
-                int hr = fn(factory, (uint)processId, _flow, ERole.eMultimedia, out IntPtr hstring);
+                int hr = fn(factory, (uint)processId, _flow, role, out IntPtr hstring);
                 try
                 {
                     if (hr < 0 || hstring == IntPtr.Zero) return null;

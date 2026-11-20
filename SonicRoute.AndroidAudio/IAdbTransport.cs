@@ -38,6 +38,7 @@ public interface IAdbTransport
     Task<string> GetSerialNoAsync(string serial, CancellationToken token);
     Task<AdbShellResult> RunShellAsync(string serial, string command, CancellationToken token);
     Task<IAdbShellSession> OpenShellAsync(string serial, string command, bool redirectInput, CancellationToken token);
+    Task<Stream> OpenFileSyncAsync(string serial, CancellationToken token) => throw new NotSupportedException();
     Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token);
     Task<int> ForwardTcpToLocalAbstractAsync(string serial, string localAbstractName, CancellationToken token);
     Task RemoveForwardAsync(string serial, string localSpec, CancellationToken token);

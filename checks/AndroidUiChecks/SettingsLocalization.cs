@@ -254,6 +254,12 @@ internal static partial class Program
             try { outputPicker.SelectedItem = outputPicker.Items.OfType<AudioDeviceInfo>().Single(item => item.Id == speakerId); }
             finally { suppressSelection.SetValue(main, false); }
             string? originalRoute = source.Session.State.OutputId;
+            var nativeOutput = outputPicker.Items.OfType<AudioDeviceInfo>().Single(item => item.Id == AndroidAudioSession.SourcePhoneOutputId);
+            var nativeLabel = (TextBlock)outputPicker.ItemTemplate.LoadContent();
+            nativeLabel.DataContext = nativeOutput;
+            var routeError = typeof(App).Assembly.GetType("SonicRoute.AppPlaybackOutputs")!
+                .GetMethod("RouteError", statics)!;
+            var phoneOffline = AndroidError.WithCode(new IOException("diagnostic"), AndroidErrorCode.PhoneOffline);
             foreach (string language in L10n.SupportedLanguages.Select(entry => entry.Code))
             {
                 L10n.Instance.SetLanguage(language);
@@ -262,6 +268,13 @@ internal static partial class Program
                 Check(outputPicker.SelectedItem is AudioDeviceInfo selected && selected.Id == speakerId
                     && source.Session.State.OutputId == originalRoute,
                     language + " refreshing a per-app device list preserves its selection and active audio route");
+                string expectedNative = L10n.T("Phone.NativeAudioOutput");
+                Check(nativeOutput.DisplayName == expectedNative && nativeLabel.Text.Contains(expectedNative),
+                    language + " the existing native playback choice follows the interface language");
+                var failure = ((bool Success, int HResult, string Message))routeError.Invoke(null, [phoneOffline])!;
+                Check(!failure.Success && failure.HResult == phoneOffline.HResult && failure.Message
+                    == string.Format(L10n.T("Dev.RouteFailed"), L10n.T("Phone.Err.PhoneOffline")),
+                    language + " multiple-output failures preserve the code and translate the underlying device error");
                 string expectedName = L10n.T("Phone.DefaultName");
                 Check(expectedName != "Phone.DefaultName" && deviceName.Text == expectedName && sidebarLabel.Text == expectedName
                     && subtitle.Text == string.Format(L10n.T("Phone.FromDevice"), expectedName)

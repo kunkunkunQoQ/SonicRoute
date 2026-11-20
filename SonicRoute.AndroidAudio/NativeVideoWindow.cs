@@ -71,12 +71,12 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
-    private const int SwShow = 5;
     private const int SwRestore = 9;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
+    private const uint SwpShowWindow = 0x0040;
     private const uint SwpFrameChanged = 0x0020;
 
     private const int SizeMinimized = 1;
@@ -251,7 +251,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         nint hwnd = WindowHandle;
         if (hwnd == 0) return;
         if (Interlocked.Exchange(ref _shownFlag, 1) == 0)
-            ShowWindowAsync(hwnd, SwShow);
+            PostMessage(hwnd, WmUserShow, 0, 0);
     }
 
     public void UpdateContentSize(int width, int height)
@@ -297,6 +297,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private const int WmUserClose = 0x0400 + 2;
     private const int WmUserTopmost = 0x0400 + 3;
     private const int WmUserFullscreen = 0x0400 + 4;
+    private const int WmUserShow = 0x0400 + 5;
 
     private void ThreadMain()
     {
@@ -533,6 +534,11 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
             case WmUserFitContent:
                 if (!_windowedPlacement.HasValue) FitWindowToContentAspect(hwnd, (int)wParam, (int)lParam);
+                return 0;
+
+            case WmUserShow:
+                // ShowWindow's first call can inherit SW_HIDE from a tray/background launch.
+                SetWindowPos(hwnd, 0, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpShowWindow);
                 return 0;
 
             case WmUserTopmost when _windowModes:

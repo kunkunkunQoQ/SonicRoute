@@ -15,7 +15,13 @@ public sealed record AndroidWindowSize(int Width, int Height)
 }
 
 public sealed record AndroidAppAudioSettings(int Volume = 100, string? OutputId = null,
-    AndroidVirtualDisplaySize? DisplaySize = null, AndroidWindowSize? WindowSize = null);
+    AndroidVirtualDisplaySize? DisplaySize = null, AndroidWindowSize? WindowSize = null)
+{
+    // Only an explicitly selected multi-output source is eligible for automatic capture.
+    public string?[]? ResumeOutputs { get; init; }
+}
+
+internal sealed record AndroidSavedSourceRoute(string DeviceKey, string Package, string?[] Outputs);
 
 /// <summary>Phone application and streaming preferences, independent of the desktop configuration.</summary>
 public sealed class AndroidAudioSettingsStore
@@ -102,6 +108,60 @@ public sealed class AndroidAudioSettingsStore
             _apps[key] = (previous ?? new()) with { Volume = volume, OutputId = outputId }; ++_revision;
             if (!_writing) { _writing = true; _save = Task.Run(SaveAsync); }
         }
+    }
+
+    internal event Action? SavedSourcesChanged;
+
+    internal AndroidSavedSourceRoute[] GetSavedSources()
+    {
+        lock (_gate)
+        {
+            var routes = new List<AndroidSavedSourceRoute>();
+            foreach (var (key, settings) in _apps)
+            {
+                int separator = key.IndexOf('\n');
+                if (separator <= 0 || !key.StartsWith("device:", StringComparison.Ordinal)
+                    || settings.ResumeOutputs is not { Length: > 1 and <= 128 } outputs) continue;
+                routes.Add(new(key[..separator], key[(separator + 1)..], outputs.ToArray()));
+            }
+            return routes.ToArray();
+        }
+    }
+
+    internal void RememberSourceOutputs(AndroidDevice device, string package, string?[]? outputs)
+    {
+        if (AndroidDeviceIdentity.StableKey(device) is not { } phone) return;
+        string key = phone + "\n" + package;
+        lock (_gate)
+        {
+            _apps.TryGetValue(key, out var previous);
+            var next = outputs?.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (next is not { Length: > 1 and <= 128 } || next.Any(id => AndroidOutputIdentity.IsPhoneOutput(id)
+                && (!AndroidOutputIdentity.TryParseDeviceId(id, out string keyPart, out _) || !keyPart.StartsWith("device:", StringComparison.Ordinal))))
+                next = null;
+            if (previous?.ResumeOutputs is { } old
+                ? next != null && old.SequenceEqual(next, StringComparer.OrdinalIgnoreCase) : next == null) return;
+            _apps[key] = (previous ?? Get(device, package)) with { ResumeOutputs = next };
+            ++_revision;
+            if (!_writing) { _writing = true; _save = Task.Run(SaveAsync); }
+        }
+        SavedSourcesChanged?.Invoke();
+    }
+
+    internal void ForgetSourceRoutes(AndroidDevice device, Func<string, bool>? matches = null)
+    {
+        if (AndroidDeviceIdentity.StableKey(device) is not { } stable) return;
+        string prefix = stable + "\n";
+        lock (_gate)
+        {
+            string[] keys = _apps.Where(e => e.Value.ResumeOutputs != null && e.Key.StartsWith(prefix, StringComparison.Ordinal)
+                && (matches == null || matches(e.Key[prefix.Length..]))).Select(e => e.Key).ToArray();
+            if (keys.Length == 0) return;
+            foreach (string key in keys) _apps[key] = _apps[key] with { ResumeOutputs = null };
+            ++_revision;
+            if (!_writing) { _writing = true; _save = Task.Run(SaveAsync); }
+        }
+        SavedSourcesChanged?.Invoke();
     }
 
     public void RememberDisplay(AndroidDevice device, string package, AndroidVirtualDisplaySize size)

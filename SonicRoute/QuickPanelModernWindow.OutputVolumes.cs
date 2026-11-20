@@ -185,7 +185,7 @@ namespace SonicRoute
             var hidden = config.PanelOutputVolumesRetainedOnly
                 ? new HashSet<string>(config.HiddenOutputDevices ?? new List<string>(), StringComparer.OrdinalIgnoreCase) : null;
             return devices.Where(d => d.Flow == EDataFlow.eRender && !string.IsNullOrWhiteSpace(d.Id)
-                && !AudioService.IsSystemDefault(d.Id) && !ApplicationAudio.IsPhoneOutputDevice(d.Id) && hidden?.Contains(d.Id) != true).ToList();
+                && !AudioService.IsSystemDefault(d.Id) && !ApplicationAudio.IsExternalOutputDevice(d.Id) && hidden?.Contains(d.Id) != true).ToList();
         }
 
         internal void RefreshOutputVolumeFilter()

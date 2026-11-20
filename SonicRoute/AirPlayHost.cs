@@ -20,10 +20,12 @@ internal static class AirPlayHost
     private static readonly SemaphoreSlim Operations = new(1, 1);
     private static AirPlayReceiver? _receiver;
     private static AirPlayStatus _inactive = new(AirPlayStage.Off);
+    private static AirPlayStatus? _transition;
     private static int _exiting;
+    private static AirPlayAudioOutput? _publishedSource;
     internal static event Action? Changed;
     internal static event Action? PreferencesChanged;
-    internal static AirPlayStatus Status => Volatile.Read(ref _receiver)?.Status ?? Volatile.Read(ref _inactive);
+    internal static AirPlayStatus Status => Volatile.Read(ref _transition) ?? Volatile.Read(ref _receiver)?.Status ?? Volatile.Read(ref _inactive);
     internal static AirPlayAudioOutput? Source => Volatile.Read(ref _receiver)?.Source;
 
     internal static AirPlayAudioOutput? Find(string? id) => id != null && Source is { } source && source.Id == id ? source : null;
@@ -62,6 +64,25 @@ internal static class AirPlayHost
         return host.Length == 0 ? "SonicRoute" : "SonicRoute - " + host;
     }
 
+    internal static async Task SetReceivingAsync(bool enabled)
+    {
+        var stage = Status.Stage;
+        if (stage is AirPlayStage.Starting or AirPlayStage.Stopping || enabled == (stage is AirPlayStage.Waiting or AirPlayStage.Connected)) return;
+        var transition = new AirPlayStatus(enabled ? AirPlayStage.Starting : AirPlayStage.Stopping);
+        if (Interlocked.CompareExchange(ref _transition, transition, null) != null) return;
+        try
+        {
+            // Publish the intent before scheduling network work so every open switch disables together.
+            PublishDisplay();
+            await (enabled ? StartAsync() : StopAsync()).ConfigureAwait(false);
+        }
+        finally
+        {
+            Volatile.Write(ref _transition, null);
+            PublishDisplay();
+        }
+    }
+
     internal static Task StartAsync()
     {
         var (configuredName, video, requireCode) = Preferences;
@@ -70,7 +91,14 @@ internal static class AirPlayHost
             await Operations.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (Volatile.Read(ref _exiting) != 0 || _receiver != null) return;
+                if (Volatile.Read(ref _exiting) != 0) return;
+                if (_receiver is { } previous)
+                {
+                    if (previous.Status.Stage != AirPlayStage.Off) return;
+                    // A timed-out receiver may have published Off just before its observer acquires Operations.
+                    Volatile.Write(ref _receiver, null);
+                    await CloseAsync(previous).ConfigureAwait(false);
+                }
                 Volatile.Write(ref _inactive, new(AirPlayStage.Starting));
                 Publish();
                 try
@@ -145,7 +173,9 @@ internal static class AirPlayHost
     private static void Publish()
     {
         PublishDisplay();
-        ApplicationAudio.NotifyChanged();
+        var source = Source;
+        var previous = Interlocked.Exchange(ref _publishedSource, source);
+        ApplicationAudio.NotifySourceChanged(ReferenceEquals(previous, source) ? source?.Id : null);
     }
 
     private static void PublishDisplay()

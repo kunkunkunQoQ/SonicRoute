@@ -20,7 +20,7 @@ namespace SonicRoute
     public static class PanelDevices
     {
         // TextSearch reads DisplayName directly when the user types in a device picker.
-        private sealed class LocalizedDevice(string nameKey) : AudioDeviceInfo
+        internal sealed class LocalizedDevice(string nameKey) : AudioDeviceInfo
         {
             internal string NameKey { get; } = nameKey;
             public override string DisplayName => L10n.T(NameKey);

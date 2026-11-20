@@ -389,6 +389,21 @@ internal static partial class Program
             Check(via5037.Count == 1 && via5037[0].Serial == "5037-SERIAL" && directEnumCalls == 0,
                 "ArbitratedAdbTransport defers to external 5037 daemon without opening Direct USB handles");
 
+            await using (var mixed = new ArbitratedAdbTransport(_ => Task.FromResult(true),
+                new AdbSocketClient(new IPEndPoint(IPAddress.Loopback, fake5037.Port)), direct))
+            {
+                string address = "127.0.0.1:" + wifiPhone.Port;
+                fake5037.DevicesResponse += address + "\toffline\n";
+                var listed = await mixed.DevicesAsync(default);
+                Check(listed.Count(d => d.Serial == address) == 1 && listed.Any(d => d.Serial == address && d.State == "device")
+                    && listed.Any(d => d.Serial == "5037-SERIAL"), "starting external ADB keeps the owned Wi-Fi phone online alongside daemon devices");
+                var reply = await mixed.RunShellAsync(address, "echo tls_ok", default);
+                Check(reply.Output == "tls_ok\n", "commands to the live Wi-Fi phone keep using its original TLS connection");
+                await mixed.DisconnectAsync(address, default);
+                Check(!(await mixed.DevicesAsync(default)).Any(d => d.Serial == address && d.State == "device"),
+                    "explicit disconnect releases the original Wi-Fi transport while the external daemon is present");
+            }
+
             await fake5037.DisposeAsync().ConfigureAwait(false);
             string verAfterStop = await arbiter.VersionAsync(default).ConfigureAwait(false);
             var afterStop = await arbiter.DevicesAsync(default).ConfigureAwait(false);
@@ -517,8 +532,6 @@ internal static partial class Program
                             CertificateRevocationCheckMode = X509RevocationMode.NoCheck
                         }, _cts.Token).ConfigureAwait(false);
 
-                        var (postTlsCnxn, _) = await ReadPacketAsync(stream, payloadBuf, _cts.Token).ConfigureAwait(false);
-                        if (postTlsCnxn.Command != AdbCommands.Cnxn) return;
                     }
                     else
                     {
@@ -552,6 +565,7 @@ internal static partial class Program
                     while (!_cts.IsCancellationRequested)
                     {
                         var (hdr, len) = await ReadPacketAsync(stream, payloadBuf, _cts.Token).ConfigureAwait(false);
+                        if (hdr.Command == AdbCommands.Cnxn) return; // a repeated host handshake retires the online transport
                         if (hdr.Command == AdbCommands.Open)
                         {
                             string dest = Encoding.UTF8.GetString(payloadBuf, 0, len).TrimEnd('\0');

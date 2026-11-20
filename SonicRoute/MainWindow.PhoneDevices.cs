@@ -117,7 +117,7 @@ public partial class MainWindow
     {
         if (_suppressPhoneSelection || _phoneDevicesList.SelectedItem is not PhoneSidebarItem item) return;
         AndroidAudioHost.Phone.SelectProfile(item.Id);
-        SelectPhoneManagement(); _phoneDevicePage?.ShowDevice(); UpdatePhoneSidebarSelection();
+        SelectPhoneManagement();
     }
     private void UpdatePhoneSidebarSelection()
     {
@@ -183,6 +183,7 @@ public partial class MainWindow
         NavApps.IsChecked = true;
         _phoneDevicePage ??= new PhoneDevicePage();
         if (addDevice) _phoneDevicePage.ShowConnection();
+        else _phoneDevicePage.ShowDevice();
         PhoneDetailsHost.Child = _phoneDevicePage;
         ShowPhoneDeviceDetails(true);
         AppsListBox.SelectedItem = null;

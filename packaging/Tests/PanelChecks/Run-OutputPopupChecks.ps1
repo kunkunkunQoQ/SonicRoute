@@ -1,5 +1,5 @@
 param([string]$Framework = 'net10.0-windows', [string]$DotNetHost = '', [string]$OutputDirectory = '', [switch]$Followup, [switch]$Optimization,
-      [switch]$TrayMenu, [switch]$OsdLight, [switch]$Baseline, [string]$AssemblyPath = '')
+      [switch]$TrayMenu, [switch]$OsdLight, [switch]$Baseline, [string]$AssemblyPath = '', [string]$PlaybackProbe = '', [string]$PlaybackOutputSet = '', [switch]$PlaybackRestore)
 $ErrorActionPreference = 'Stop'
 $sourceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot ('bin/output-popup/' + $Framework) }
@@ -24,7 +24,7 @@ public static class OutputPopupLauncher {
  [DllImport("kernel32.dll")] static extern bool GetExitCodeProcess(IntPtr handle,out uint code);
  [DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr handle,uint code);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
- public static uint Run(string app,string arguments,string cwd) {
+ public static uint Run(string app,string arguments,string cwd,uint timeoutMs) {
   string name="SonicRoute-OutputChecks-"+Guid.NewGuid().ToString("N");
   IntPtr desktop=CreateDesktop(name,IntPtr.Zero,IntPtr.Zero,0,0x1ff,IntPtr.Zero);
   if(desktop==IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -32,7 +32,7 @@ public static class OutputPopupLauncher {
   try {
    var start=new Start {Size=Marshal.SizeOf(typeof(Start)),Desktop="WinSta0\\"+name,Flags=1,Show=0};
    if(!CreateProcess(app,new StringBuilder("\""+app+"\" "+arguments),IntPtr.Zero,IntPtr.Zero,false,0x08000000,IntPtr.Zero,cwd,ref start,out process)) throw new Win32Exception(Marshal.GetLastWin32Error());
-   if(WaitForSingleObject(process.Process,45000)!=0) {
+   if(WaitForSingleObject(process.Process,timeoutMs)!=0) {
     TerminateProcess(process.Process,124); WaitForSingleObject(process.Process,5000);
     throw new TimeoutException("Private popup check timed out; test process "+process.Pid);
    }
@@ -46,6 +46,16 @@ public static class OutputPopupLauncher {
 }
 '@
 $modeArguments = if ($OsdLight) { '--osd-light-live' } elseif ($TrayMenu) { '--tray-submenu-live' } elseif ($Followup) { '--output-popup-live --output-followup-live' } else { '--output-popup-live' }
+if ($PlaybackProbe) {
+    if (!$DotNetHost) { $DotNetHost = (Get-Command dotnet -ErrorAction Stop).Source }
+    $env:SONICROUTE_CHECK_DOTNET_HOST = $DotNetHost
+    $modeArguments = '--local-playback-buttons "' + (Resolve-Path -LiteralPath $PlaybackProbe).Path + '"'
+    if ($PlaybackRestore) {
+        if (!$PlaybackOutputSet) { throw 'Playback restore checks require a shared set of three idle endpoints.' }
+        $modeArguments = '--playback-restore "' + (Resolve-Path -LiteralPath $PlaybackProbe).Path + '"'
+    }
+}
+if ($PlaybackProbe -and $PlaybackOutputSet) { $modeArguments += ' "' + [IO.Path]::GetFullPath($PlaybackOutputSet) + '"' }
 if ($Baseline) { $modeArguments += ' --baseline' }
 if ($Optimization) { $modeArguments += ' --output-optimization-live' }
 if ($Framework -eq 'net48') {
@@ -59,6 +69,7 @@ if ($Framework -eq 'net48') {
     if ($AssemblyPath) { $assembly = [IO.Path]::GetFullPath($AssemblyPath) }
     $arguments = '"' + $assembly + '" ' + $modeArguments + ' "' + $resultDirectory + '"'
 }
-$code = [OutputPopupLauncher]::Run($hostPath, $arguments, $sourceRoot)
+$timeoutMs = if ($PlaybackProbe) { 100000 } else { 45000 }
+$code = [OutputPopupLauncher]::Run($hostPath, $arguments, $sourceRoot, $timeoutMs)
 Get-Content -LiteralPath (Join-Path $resultDirectory 'console.log') -Tail 18
 exit $code

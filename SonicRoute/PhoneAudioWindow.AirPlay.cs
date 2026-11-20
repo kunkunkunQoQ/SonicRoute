@@ -36,14 +36,15 @@ public partial class PhoneAudioWindow
         }
         DeviceMediaCard.Visibility = DeviceSearchCard.Visibility = airPlay ? Visibility.Collapsed : Visibility.Visible;
         DeviceKindIcon.Data = airPlay ? AutomationIcons.AirPlay : AutomationIcons.Phone;
-        ConnectionText.Visibility = airPlay ? Visibility.Collapsed : Visibility.Visible;
         RefreshButton.Visibility = airPlay ? Visibility.Collapsed : Visibility.Visible;
-        RefreshColumn.Width = new GridLength(airPlay ? 0 : 36);
-        RefreshGap.Width = new GridLength(airPlay ? 0 : 4);
         AirPlayPane.Visibility = airPlay ? Visibility.Visible : Visibility.Collapsed;
         UpdateReturnDropText();
         if (airPlay) UpdateAirPlayFooter();
-        else DeviceKindGrip.ToolTip = null;
+        else
+        {
+            DeviceKindGrip.ToolTip = null;
+            UpdateConnectionStatusText();
+        }
     }
 
     private static bool IsAirPlayDrag(AudioAppInfo? app) => app?.ProcessName == AirPlayHost.AppKey;
@@ -75,6 +76,8 @@ public partial class PhoneAudioWindow
     {
         if (!AirPlaySelected || _closed) return;
         ConnectionSignal.Visibility = ConnectionUsbIcon.Visibility = Visibility.Collapsed;
+        ConnectionText.Text = AirPlayReceiverPane.FooterStatus;
+        ConnectionText.ToolTip = ConnectionText.Text;
         DeviceKindGrip.ToolTip = AirPlayHost.Source != null ? L10n.T("Phone.AirPlayDragToWindows") : null;
     }
 }

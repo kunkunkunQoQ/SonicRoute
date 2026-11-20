@@ -20,6 +20,17 @@
             <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
             <Setter Property="Padding" Value="8,4"/><Setter Property="FontSize" Value="11"/>
         </Style>
+        <Style x:Key="ReceiveToComputerButton" TargetType="Button" BasedOn="{StaticResource PhoneCommandButton}">
+            <Setter Property="Padding" Value="14,5"/><Setter Property="MinHeight" Value="32"/>
+            <Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.Accent}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.AccentIconInk}"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/></Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/></Trigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="PhoneDeviceActionButton" TargetType="Button" BasedOn="{StaticResource PhoneCommandButton}">
             <Setter Property="Padding" Value="8,4"/><Setter Property="FontSize" Value="11"/>
             <Setter Property="MinHeight" Value="30"/><Setter Property="MinWidth" Value="0"/>
@@ -66,6 +77,66 @@
         </DataTemplate>
         <Style x:Key="StreamOptionItem" TargetType="ComboBoxItem" BasedOn="{StaticResource RoundedComboItem}">
             <Setter Property="IsEnabled" Value="{Binding IsEnabled}"/>
+        </Style>
+        <Style x:Key="AndroidFileRow" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="AutomationProperties.Name" Value="{Binding Label}"/>
+            <Setter Property="ToolTip" Value="{Binding Label}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Grid>
+                            <Border x:Name="Row" Margin="2,1" CornerRadius="6" BorderThickness="1"
+                                    Background="Transparent" BorderBrush="Transparent" Padding="9,0">
+                                <Grid MinHeight="36">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/><ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="22"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path x:Name="Icon" Width="16" Height="16" Stretch="Uniform" HorizontalAlignment="Left"
+                                          Data="{x:Static local:AutomationIcons.File}" Stroke="{DynamicResource Theme.TextSecondary}"
+                                          StrokeThickness="1.5" StrokeLineJoin="Round"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Label}" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" FontSize="13" Margin="2,0,7,0"/>
+                                    <TextBlock Grid.Column="2" x:Name="Size" Text="{Binding SizeText}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Theme.TextSecondary}" FontSize="11" Margin="2,0,6,0"/>
+                                    <Border Grid.Column="3" x:Name="CheckBox" Width="15" Height="15" CornerRadius="4"
+                                            BorderThickness="1" BorderBrush="{DynamicResource Theme.Border}" HorizontalAlignment="Right">
+                                        <Path x:Name="Check" Visibility="Hidden" Data="M2,6 L5,9 L11,3" Stretch="Uniform"
+                                              Margin="2" Stroke="{DynamicResource Theme.AccentIconInk}" StrokeThickness="1.6"/>
+                                    </Border>
+                                    <Path x:Name="Next" Grid.Column="3" Visibility="Collapsed" Width="5" Height="9"
+                                          HorizontalAlignment="Right" Margin="0,0,4,0" Data="M1,1 L5,5 L1,9"
+                                          Stretch="Fill" Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.4"/>
+                                </Grid>
+                            </Border>
+                            <Button x:Name="OpenFolder" Visibility="Collapsed" Focusable="False"
+                                    AutomationProperties.Name="{Binding Label}" Cursor="Hand" Click="AndroidFolder_Click">
+                                <Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"/></ControlTemplate></Button.Template>
+                            </Button>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource Theme.NavHover}"/></Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Row" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                                <Setter TargetName="CheckBox" Property="Background" Value="{DynamicResource Theme.Accent}"/>
+                                <Setter TargetName="CheckBox" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
+                                <Setter TargetName="Check" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/></Trigger>
+                            <DataTrigger Binding="{Binding Directory}" Value="True">
+                                <Setter TargetName="Icon" Property="Data" Value="M2,6 Q2,4 4,4 H9 L12,7 H20 Q22,7 22,9 V18 Q22,20 20,20 H4 Q2,20 2,18 Z"/>
+                                <Setter TargetName="Icon" Property="Stroke" Value="{DynamicResource Theme.TextPrimary}"/>
+                                <Setter TargetName="Icon" Property="Fill" Value="{DynamicResource Theme.Overlay}"/>
+                                <Setter TargetName="CheckBox" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="Size" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="Next" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="OpenFolder" Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
     <Grid>
@@ -182,15 +253,131 @@
                     </StackPanel>
                 </Border>
                 <Button x:Name="AddAppsButton" Content="{Binding [Phone.AddQuickPanelAppButton], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Height="38" Margin="0,0,0,12" Click="AddApps_Click"/>
+                <Border x:Name="FileTransferCard" Style="{StaticResource PhoneCard}" Visibility="Collapsed">
+                    <StackPanel>
+                        <StackPanel x:Name="AndroidFilePicker" Visibility="Collapsed" PreviewKeyDown="AndroidFilePicker_KeyDown">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Button x:Name="AndroidFileUp" Style="{StaticResource PhoneCommandButton}" Width="32" Height="32" Padding="0" Margin="0,0,7,0"
+                                        AutomationProperties.Name="{Binding [Phone.AndroidParentFolder], Source={x:Static local:L10n.Instance}}"
+                                        ToolTip="{Binding [Phone.AndroidParentFolder], Source={x:Static local:L10n.Instance}}" Click="AndroidFileUp_Click">
+                                    <Path Data="M9,2 L3,8 L9,14 M3,8 H16" Width="14" Height="13" Stretch="Uniform"
+                                          Stroke="{DynamicResource Theme.TextPrimary}" StrokeThickness="1.5" StrokeLineJoin="Round"/>
+                                </Button>
+                                <TextBlock Grid.Column="1" x:Name="AndroidFilePath" VerticalAlignment="Center" FontSize="14"
+                                           FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
+                                <Button x:Name="AndroidFileCancel" Grid.Column="2" Style="{StaticResource PhoneCommandButton}"
+                                        Width="32" Height="32" Padding="0" Margin="0" Background="Transparent" BorderBrush="Transparent"
+                                        AutomationProperties.Name="{Binding [Phone.FileClose], Source={x:Static local:L10n.Instance}}"
+                                        ToolTip="{Binding [Phone.FileClose], Source={x:Static local:L10n.Instance}}" Click="AndroidFileCancel_Click">
+                                    <Path Data="M2,2 L12,12 M12,2 L2,12" Width="11" Height="11" Stretch="Uniform"
+                                          Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
+                                </Button>
+                            </Grid>
+                            <Border BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1" CornerRadius="8" Padding="2"
+                                    Background="{DynamicResource Theme.SurfaceBg}">
+                                <Grid MinHeight="84">
+                                    <ListBox x:Name="AndroidFileEntries" MaxHeight="260" BorderThickness="0" Background="Transparent"
+                                             AutomationProperties.LabeledBy="{Binding ElementName=AndroidFilePath}"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                             VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.VirtualizationMode="Recycling"
+                                             TextSearch.TextPath="Label" SelectionMode="Multiple" ItemContainerStyle="{StaticResource AndroidFileRow}"
+                                             SelectionChanged="AndroidFileSelection_Changed" PreviewKeyDown="AndroidFileEntries_KeyDown"/>
+                                    <TextBlock x:Name="AndroidFileEmpty" Style="{StaticResource PhoneHint}" HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" Margin="10" TextAlignment="Center" IsHitTestVisible="False"/>
+                                </Grid>
+                            </Border>
+                            <Button x:Name="AndroidFileGet" Style="{StaticResource ReceiveToComputerButton}" HorizontalAlignment="Right"
+                                    Click="AndroidFileGet_Click" Margin="0,9,0,0"/>
+                        </StackPanel>
+                        <StackPanel>
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel"><Style.Triggers>
+                                    <DataTrigger Binding="{Binding Visibility, ElementName=AndroidFilePicker}" Value="Visible"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                                </Style.Triggers></Style>
+                            </StackPanel.Style>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding [Phone.Files], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <Button x:Name="AndroidBrowseFiles" Grid.Column="1" Style="{StaticResource PhoneCommandButton}"
+                                        AutomationProperties.Name="{Binding [Phone.AndroidBrowseFiles], Source={x:Static local:L10n.Instance}}"
+                                        Margin="6,0,0,0" MinHeight="30" Padding="10,4" FontSize="12" Click="AndroidBrowseFiles_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Path Width="13" Height="13" Data="M8,1 V10 M4,6 L8,10 L12,6 M2,12 V15 H14 V12"
+                                              Stretch="Uniform" Stroke="{DynamicResource Theme.TextPrimary}" StrokeThickness="1.5" StrokeLineJoin="Round"/>
+                                        <TextBlock Text="{Binding [Phone.AndroidBrowseFiles], Source={x:Static local:L10n.Instance}}" Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                            <Button x:Name="SendFileButton" Margin="0,10,0,0" MinHeight="104" Padding="12,10"
+                                    Opacity="1" AllowDrop="True" AutomationProperties.Name="{Binding Text, ElementName=FileDropLabel}"
+                                    PreviewDragOver="File_DragOver" PreviewDragLeave="File_DragLeave"
+                                    PreviewDrop="File_Drop" Click="SendFile_Click">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource PhoneCommandButton}">
+                                        <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Background" Value="{DynamicResource Theme.WindowBg}"/>
+                                                <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+                                                <Setter Property="Cursor" Value="Arrow"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <StackPanel>
+                                    <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" HorizontalAlignment="Center"
+                                               Foreground="{Binding Foreground, ElementName=SendFileButton}" FontSize="22"/>
+                                    <TextBlock x:Name="FileDropLabel" Margin="0,8,0,0" TextAlignment="Center"
+                                               Foreground="{Binding Foreground, ElementName=SendFileButton}" FontSize="12"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Button>
+                            <TextBlock x:Name="FileStatus" Style="{StaticResource PhoneHint}" Margin="0,6,0,0"
+                                       Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
+                            <Grid x:Name="FileProgressRow" Visibility="Collapsed" Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <ProgressBar x:Name="FileProgress" Height="4" Maximum="1" VerticalAlignment="Center"
+                                             Foreground="{DynamicResource Theme.Accent}"/>
+                                <Button Grid.Column="1" Style="{StaticResource PhoneCommandButton}" Margin="10,0,0,0" Click="CancelFile_Click"
+                                        Content="{Binding [Auto.Cancel], Source={x:Static local:L10n.Instance}}"/>
+                            </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Style="{StaticResource PhoneHint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,9,0"
+                                           Text="{Binding [Phone.AndroidReceiveFolder], Source={x:Static local:L10n.Instance}}"/>
+                                <TextBlock x:Name="AndroidReceivePath" Grid.Column="1" Style="{StaticResource PhoneHint}" FontSize="11"
+                                           Foreground="{DynamicResource Theme.TextPrimary}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                                <Button x:Name="AndroidChangeFolder" Grid.Column="2" Style="{StaticResource PhoneCommandButton}" Margin="6,0,0,0"
+                                        Background="Transparent" BorderBrush="Transparent" FontSize="11"
+                                        Content="{Binding [Phone.FileChangeFolder], Source={x:Static local:L10n.Instance}}" Click="AndroidChangeFolder_Click"/>
+                            </Grid>
+                            <Grid Margin="0,7,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding [Phone.FileReceiveFolder], Source={x:Static local:L10n.Instance}}"
+                                           Style="{StaticResource PhoneHint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,9,0"/>
+                                <TextBlock x:Name="LocalReceiveFolderPath" Grid.Column="1" Style="{StaticResource PhoneHint}"
+                                           Foreground="{DynamicResource Theme.TextPrimary}" FontSize="11"
+                                           VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                                <Button x:Name="ChangeLocalReceiveFolder" Grid.Column="2" Style="{StaticResource PhoneCommandButton}" Margin="6,0,0,0"
+                                        Background="Transparent" BorderBrush="Transparent" FontSize="11"
+                                        Content="{Binding [Phone.FileChangeFolder], Source={x:Static local:L10n.Instance}}" Click="LocalReceiveFolder_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
                 <Border x:Name="ClipboardCard" Style="{StaticResource PhoneCard}" Margin="0">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Margin="0,0,12,0">
                             <TextBlock Text="{Binding [Phone.ClipboardSyncTitle], Source={x:Static local:L10n.Instance}}" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="ClipboardStatus" Text="{Binding [Phone.ClipboardDefaultHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" FontSize="11" Margin="0,4,0,0"/>
+                            <TextBlock x:Name="ClipboardStatus" AutomationProperties.LiveSetting="Polite" Text="{Binding [Phone.ClipboardDefaultHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" FontSize="11" Margin="0,4,0,0"/>
                         </StackPanel>
                         <CheckBox x:Name="ClipboardSyncToggle" Grid.Column="1" Style="{DynamicResource AutomationSwitch}" Width="34"
-                                  VerticalAlignment="Center" Checked="ClipboardSync_Changed" Unchecked="ClipboardSync_Changed" AutomationProperties.Name="{Binding [Phone.ClipboardEnableToggle], Source={x:Static local:L10n.Instance}}"/>
+                                  VerticalAlignment="Center" AutomationProperties.HelpText="{Binding Text, ElementName=ClipboardStatus}" Checked="ClipboardSync_Changed" Unchecked="ClipboardSync_Changed" AutomationProperties.Name="{Binding [Phone.ClipboardEnableToggle], Source={x:Static local:L10n.Instance}}"/>
                     </Grid>
                 </Border>
             </StackPanel>

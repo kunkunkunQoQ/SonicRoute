@@ -92,6 +92,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     private readonly bool _ownsKeyStore;
 
     public event Action<string>? UsbAccessDenied;
+    internal event Action? WifiChanged;
 
     public Task<string> VersionAsync(CancellationToken token)
     {
@@ -182,6 +183,12 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         return await conn.OpenShellAsync(command, redirectInput, token).ConfigureAwait(false);
     }
 
+    public async Task<Stream> OpenFileSyncAsync(string serial, CancellationToken token)
+    {
+        var connection = await ResolveConnectionAsync(serial, token).ConfigureAwait(false);
+        return await connection.OpenStreamAsync("sync:", token).ConfigureAwait(false);
+    }
+
     public async Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token)
     {
         var conn = await ResolveConnectionAsync(serial, token).ConfigureAwait(false);
@@ -264,8 +271,8 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         {
             if (existing.Connection.IsConnected)
                 return "already connected to " + normalized;
-            if (_tcpDevices.TryRemove(normalized, out var stale))
-                await stale.Connection.DisposeAsync().ConfigureAwait(false);
+            if (_tcpDevices.TryRemove(new KeyValuePair<string, TcpDeviceSlot>(normalized, existing)))
+                await existing.Connection.DisposeAsync().ConfigureAwait(false);
         }
 
         var (host, port) = SplitHostPort(normalized);
@@ -281,7 +288,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
             conn.Disconnected += () =>
             {
                 if (_tcpDevices.TryRemove(new KeyValuePair<string, TcpDeviceSlot>(normalized, slot)))
-                    NotifyDevicesChanged();
+                    NotifyWifiChanged();
                 _ = slot.Connection.DisposeAsync();
             };
             if (!_tcpDevices.TryAdd(normalized, slot))
@@ -289,8 +296,13 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
                 await conn.DisposeAsync().ConfigureAwait(false);
                 return "already connected to " + normalized;
             }
+            if (!conn.IsConnected)
+            {
+                _tcpDevices.TryRemove(new KeyValuePair<string, TcpDeviceSlot>(normalized, slot));
+                throw new EndOfStreamException("Wi-Fi ADB closed during connection setup.");
+            }
             conn = null;
-            NotifyDevicesChanged();
+            NotifyWifiChanged();
             return "connected to " + normalized;
         }
         finally
@@ -311,7 +323,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
                 if (_tcpDevices.TryRemove(key, out var slot))
                     await slot.Connection.DisposeAsync().ConfigureAwait(false);
             }
-            NotifyDevicesChanged();
+            NotifyWifiChanged();
             return "disconnected everything";
         }
 
@@ -319,7 +331,7 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
         if (_tcpDevices.TryRemove(normalized, out var removed))
         {
             await removed.Connection.DisposeAsync().ConfigureAwait(false);
-            NotifyDevicesChanged();
+            NotifyWifiChanged();
             return "disconnected " + normalized;
         }
         return "";
@@ -587,6 +599,25 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
             }
         }
 
+        AddWifiDevices(list);
+        return list;
+    }
+
+    internal bool OwnsWifiConnection(string serial) =>
+        _tcpDevices.TryGetValue(serial, out var slot) && slot.Connection.IsConnected;
+
+    internal IReadOnlyList<AndroidDevice> IncludeOwnedWifi(IReadOnlyList<AndroidDevice> external)
+    {
+        if (_tcpDevices.IsEmpty) return external;
+        var list = new List<AndroidDevice>();
+        AddWifiDevices(list);
+        var owned = list.Select(d => d.Serial).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        list.AddRange(external.Where(d => !owned.Contains(d.Serial)));
+        return list;
+    }
+
+    private void AddWifiDevices(List<AndroidDevice> list)
+    {
         foreach (var slot in _tcpDevices.Values.OrderBy(s => s.TransportId, StringComparer.Ordinal))
         {
             if (!slot.Connection.IsConnected) continue;
@@ -595,8 +626,6 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
                 ?? slot.Address;
             list.Add(new AndroidDevice(slot.Address, model.Replace('_', ' '), "device", IsWifi: true, TransportId: slot.TransportId));
         }
-
-        return list;
     }
 
     private static async Task RunForwardLoopAsync(TcpListener listener, AdbMuxConnection conn, string localAbstractName, CancellationToken token)
@@ -668,6 +697,12 @@ internal sealed class DirectAdbTransport : IAdbTransport, IAsyncDisposable, IAdb
     {
         foreach (var cb in _deviceWatchSubscribers.Values)
             cb();
+    }
+
+    private void NotifyWifiChanged()
+    {
+        NotifyDevicesChanged();
+        WifiChanged?.Invoke();
     }
 
     private static (string Host, int Port) SplitHostPort(string normalizedAddress)
@@ -791,50 +826,105 @@ internal sealed class ArbitratedAdbTransport : IAdbTransport, IAsyncDisposable
     public async Task<string> VersionAsync(CancellationToken token) =>
         await (await SelectAsync(token).ConfigureAwait(false)).VersionAsync(token).ConfigureAwait(false);
 
-    public async Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).DevicesAsync(token).ConfigureAwait(false);
+    private Task<IAdbTransport> SelectDeviceAsync(string serial, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        return _directTransport.OwnsWifiConnection(serial)
+            ? Task.FromResult<IAdbTransport>(_directTransport) : SelectAsync(token);
+    }
+
+    public async Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token)
+    {
+        var transport = await SelectAsync(token).ConfigureAwait(false);
+        var devices = await transport.DevicesAsync(token).ConfigureAwait(false);
+        return transport == _socketTransport ? _directTransport.IncludeOwnedWifi(devices) : devices;
+    }
 
     public async Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> onChanged, CancellationToken token)
     {
         var transport = await SelectAsync(token).ConfigureAwait(false);
-        await transport.TrackDevicesAsync(onChanged, token).ConfigureAwait(false);
+        if (transport != _socketTransport)
+        {
+            await transport.TrackDevicesAsync(onChanged, token).ConfigureAwait(false);
+            return;
+        }
+        using var watch = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var changed = Channel.CreateBounded<bool>(1);
+        IReadOnlyList<AndroidDevice>? external = null;
+        void Signal() => changed.Writer.TryWrite(true);
+        async Task WatchDaemonAsync()
+        {
+            try
+            {
+                await transport.TrackDevicesAsync(list => { Volatile.Write(ref external, list); Signal(); }, watch.Token).ConfigureAwait(false);
+            }
+            finally { changed.Writer.TryComplete(); }
+        }
+        _directTransport.WifiChanged += Signal;
+        var daemon = WatchDaemonAsync();
+        try
+        {
+            await foreach (var _ in changed.Reader.ReadAllAsync(token).ConfigureAwait(false))
+                if (Volatile.Read(ref external) is { } list) onChanged(_directTransport.IncludeOwnedWifi(list));
+        }
+        finally
+        {
+            _directTransport.WifiChanged -= Signal;
+            watch.Cancel();
+            await daemon.ConfigureAwait(false);
+        }
     }
 
     public async Task<IReadOnlyList<string>> FeaturesAsync(string serial, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).FeaturesAsync(serial, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).FeaturesAsync(serial, token).ConfigureAwait(false);
 
     public async Task<string> GetSerialNoAsync(string serial, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).GetSerialNoAsync(serial, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).GetSerialNoAsync(serial, token).ConfigureAwait(false);
 
     public async Task<AdbShellResult> RunShellAsync(string serial, string command, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).RunShellAsync(serial, command, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).RunShellAsync(serial, command, token).ConfigureAwait(false);
 
     public async Task<IAdbShellSession> OpenShellAsync(string serial, string command, bool redirectInput, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).OpenShellAsync(serial, command, redirectInput, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).OpenShellAsync(serial, command, redirectInput, token).ConfigureAwait(false);
+
+    public async Task<Stream> OpenFileSyncAsync(string serial, CancellationToken token) =>
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).OpenFileSyncAsync(serial, token).ConfigureAwait(false);
 
     public async Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).PushAsync(serial, localPath, remotePath, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).PushAsync(serial, localPath, remotePath, token).ConfigureAwait(false);
 
     public async Task<int> ForwardTcpToLocalAbstractAsync(string serial, string localAbstractName, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).ForwardTcpToLocalAbstractAsync(serial, localAbstractName, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).ForwardTcpToLocalAbstractAsync(serial, localAbstractName, token).ConfigureAwait(false);
 
     public async Task RemoveForwardAsync(string serial, string localSpec, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).RemoveForwardAsync(serial, localSpec, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).RemoveForwardAsync(serial, localSpec, token).ConfigureAwait(false);
 
-    public async Task<IReadOnlyList<AdbForwardRule>> ListForwardsAsync(CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).ListForwardsAsync(token).ConfigureAwait(false);
+    public async Task<IReadOnlyList<AdbForwardRule>> ListForwardsAsync(CancellationToken token)
+    {
+        var transport = await SelectAsync(token).ConfigureAwait(false);
+        var rules = await transport.ListForwardsAsync(token).ConfigureAwait(false);
+        if (transport != _socketTransport) return rules;
+        var owned = await _directTransport.ListForwardsAsync(token).ConfigureAwait(false);
+        return owned.Count == 0 ? rules : [.. owned, .. rules];
+    }
 
     public async Task<Stream> OpenLocalAbstractAsync(string serial, string name, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).OpenLocalAbstractAsync(serial, name, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(serial, token).ConfigureAwait(false)).OpenLocalAbstractAsync(serial, name, token).ConfigureAwait(false);
 
     public async Task<string> PairAsync(string address, string password, CancellationToken token) =>
         await (await SelectAsync(token).ConfigureAwait(false)).PairAsync(address, password, token).ConfigureAwait(false);
 
     public async Task<string> ConnectAsync(string address, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).ConnectAsync(address, token).ConfigureAwait(false);
+        await (await SelectDeviceAsync(address, token).ConfigureAwait(false)).ConnectAsync(address, token).ConfigureAwait(false);
 
-    public async Task<string> DisconnectAsync(string address, CancellationToken token) =>
-        await (await SelectAsync(token).ConfigureAwait(false)).DisconnectAsync(address, token).ConfigureAwait(false);
+    public async Task<string> DisconnectAsync(string address, CancellationToken token)
+    {
+        var transport = await SelectDeviceAsync(address, token).ConfigureAwait(false);
+        if (transport == _socketTransport && address.Equals("all", StringComparison.OrdinalIgnoreCase))
+            await _directTransport.DisconnectAsync(address, token).ConfigureAwait(false);
+        return await transport.DisconnectAsync(address, token).ConfigureAwait(false);
+    }
 
     public async Task<IReadOnlyList<AndroidMdnsService>> MdnsServicesAsync(CancellationToken token) =>
         await (await SelectAsync(token).ConfigureAwait(false)).MdnsServicesAsync(token).ConfigureAwait(false);

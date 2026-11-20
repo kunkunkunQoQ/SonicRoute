@@ -65,6 +65,7 @@ namespace SonicRoute
 
         private ContextMenu CreateTrayMenu(int foregroundPid, IntPtr foregroundHwnd)
         {
+            App.EnsureWindowResources();
             if (_trayMenu != null || _trayMenuLifetime != null) CloseTrayMenu();
             var menu = ConvenienceMenus.Create();
             _trayMenuLifetime = new WindowUiLifetime();

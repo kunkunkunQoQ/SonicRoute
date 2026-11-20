@@ -19,13 +19,6 @@
                         <DataTemplate><TextBlock Text="{Binding}" TextAlignment="Center" TextWrapping="Wrap"/></DataTemplate>
                     </Setter.Value>
                 </Setter>
-                <Style.Triggers>
-                    <Trigger Property="Tag" Value="Start">
-                        <Setter Property="FontWeight" Value="SemiBold"/>
-                        <Setter Property="Background" Value="{DynamicResource Theme.NavSelected}"/>
-                        <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
-                    </Trigger>
-                </Style.Triggers>
             </Style>
             <Style x:Key="AirPlayFieldLabel" TargetType="TextBlock">
                 <Setter Property="FontSize" Value="11"/>
@@ -36,63 +29,65 @@
         </ResourceDictionary>
     </UserControl.Resources>
     <StackPanel>
-        <Grid Margin="0,0,0,8">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
-                <Border Width="26" Height="26" CornerRadius="7" Background="{DynamicResource Theme.NavSelected}" Margin="0,0,7,0">
-                    <Viewbox Width="15" Height="15" IsHitTestVisible="False">
-                        <Path Width="24" Height="24" Data="{x:Static local:AutomationIcons.AirPlay}" Stroke="{DynamicResource Theme.TextPrimary}"
-                              StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                    </Viewbox>
-                </Border>
-                <TextBlock Text="AirPlay" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
-                           Foreground="{DynamicResource Theme.TextPrimary}"/>
-            </StackPanel>
-            <Border Grid.Column="1" Background="{DynamicResource Theme.SurfaceAlt}" CornerRadius="10" Padding="7,3" VerticalAlignment="Center" MaxWidth="106">
-                <Grid>
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                    <Ellipse x:Name="ReceiveStatusDot" Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"
-                             Fill="{DynamicResource Theme.TextSecondary}"/>
-                    <TextBlock x:Name="ReceiveStatusLabel" Grid.Column="1" FontSize="10.5" TextTrimming="CharacterEllipsis"
-                               Foreground="{DynamicResource Theme.TextSecondary}" VerticalAlignment="Center"
-                               ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" AutomationProperties.LiveSetting="Polite"/>
-                </Grid>
+        <Grid x:Name="ReceiverHeader" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <Border Width="32" Height="32" CornerRadius="9" Background="{DynamicResource Theme.NavSelected}" Margin="0,0,9,0" VerticalAlignment="Center">
+                <Viewbox Width="18" Height="18" IsHitTestVisible="False">
+                    <Path Width="24" Height="24" Data="{x:Static local:AutomationIcons.AirPlay}" Stroke="{DynamicResource Theme.TextPrimary}"
+                          StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                </Viewbox>
             </Border>
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                <TextBlock Text="{Binding [Phone.AirPlayReceive], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold"
+                           TextWrapping="Wrap" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                <StackPanel x:Name="HeaderStatus" Orientation="Horizontal" Margin="0,2,0,0">
+                    <Ellipse x:Name="ReceiveStatusDot" Width="5" Height="5" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ReceiveStatusLabel" FontSize="11" Foreground="{DynamicResource Theme.TextSecondary}"
+                               AutomationProperties.LiveSetting="Polite"/>
+                </StackPanel>
+            </StackPanel>
+            <CheckBox x:Name="AirPlayToggle" Grid.Column="2" Width="36" Height="32" VerticalAlignment="Center"
+                      Style="{StaticResource AutomationSwitch}" Checked="ReceiveSwitch_Changed" Unchecked="ReceiveSwitch_Changed"
+                      AutomationProperties.Name="{Binding [Phone.AirPlayReceive], Source={x:Static local:L10n.Instance}}"/>
         </Grid>
-        <TextBlock x:Name="AirPlayStatusText" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="11"
-                   TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
-        <Button x:Name="AirPlayToggle" Margin="0,0,0,8" Click="Toggle_Click" Style="{StaticResource AirPlayButtonStyle}"/>
-        <Grid x:Name="ReceiverPreferences">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" MaxWidth="85"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-            <TextBlock Text="{Binding [Phone.AirPlayName], Source={x:Static local:L10n.Instance}}" Margin="0,0,8,6"
-                       Style="{StaticResource AirPlayFieldLabel}"/>
-            <TextBox x:Name="ReceiverName" Grid.Column="1" Style="{StaticResource ModernTextBox}" FontSize="11" MinHeight="28" Height="28"
-                     Padding="8,2" Margin="0,0,0,6" MaxLength="50"
-                     PreviewKeyDown="Name_KeyDown" LostKeyboardFocus="Name_LostKeyboardFocus"
-                     AutomationProperties.Name="{Binding [Phone.AirPlayName], Source={x:Static local:L10n.Instance}}"/>
-            <TextBlock Grid.Row="1" Text="{Binding [Phone.StreamVideoLabel], Source={x:Static local:L10n.Instance}}" Margin="0,0,8,6"
-                       Style="{StaticResource AirPlayFieldLabel}"/>
-            <ComboBox x:Name="MirrorDecoder" Grid.Row="1" Grid.Column="1" Style="{StaticResource RoundedComboBox}" Height="28" FontSize="11"
-                      Margin="0,0,0,6" Padding="8,0" SelectionChanged="Decoder_Changed"
-                      AutomationProperties.Name="{Binding [Phone.StreamDecoder], Source={x:Static local:L10n.Instance}}">
-                <ComboBox.Resources>
-                    <Style TargetType="ToggleButton">
-                        <Setter Property="Padding" Value="{Binding Padding, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
-                    </Style>
-                </ComboBox.Resources>
-                <ComboBox.ItemTemplate>
-                    <DataTemplate><TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/></DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-            <Grid Grid.Row="2" Grid.ColumnSpan="2" MinHeight="26">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                <TextBlock Text="{Binding [Phone.AirPlayRequireCode], Source={x:Static local:L10n.Instance}}" Style="{StaticResource AirPlayFieldLabel}"/>
-                <CheckBox x:Name="RequireCode" Grid.Column="1" Width="34" Margin="6,0,0,0" VerticalAlignment="Center"
-                          Style="{StaticResource AutomationSwitch}" Click="RequireCode_Click"
-                          AutomationProperties.Name="{Binding [Phone.AirPlayRequireCode], Source={x:Static local:L10n.Instance}}"/>
-            </Grid>
-        </Grid>
+        <Border x:Name="ReceiverPreferences" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Theme.Border}" Padding="0,10,0,0">
+            <StackPanel>
+                <UniformGrid x:Name="PreferenceFields" Columns="2">
+                    <StackPanel>
+                        <TextBlock Text="{Binding [Phone.AirPlayName], Source={x:Static local:L10n.Instance}}" Margin="0,0,0,4"
+                                   Style="{StaticResource AirPlayFieldLabel}"/>
+                        <TextBox x:Name="ReceiverName" Style="{StaticResource ModernTextBox}" FontSize="12" Height="30"
+                                 Padding="8,2" MaxLength="50" PreviewKeyDown="Name_KeyDown" LostKeyboardFocus="Name_LostKeyboardFocus"
+                                 AutomationProperties.Name="{Binding [Phone.AirPlayName], Source={x:Static local:L10n.Instance}}"/>
+                    </StackPanel>
+                    <StackPanel x:Name="DecoderField" Margin="10,0,0,0">
+                        <TextBlock Text="{Binding [Phone.StreamDecoder], Source={x:Static local:L10n.Instance}}" Margin="0,0,0,4"
+                                   Style="{StaticResource AirPlayFieldLabel}"/>
+                        <ComboBox x:Name="MirrorDecoder" Style="{StaticResource RoundedComboBox}" Height="30" FontSize="12"
+                                  Padding="8,0" SelectionChanged="Decoder_Changed"
+                                  AutomationProperties.Name="{Binding [Phone.StreamDecoder], Source={x:Static local:L10n.Instance}}">
+                            <ComboBox.Resources>
+                                <Style TargetType="ToggleButton">
+                                    <Setter Property="Padding" Value="{Binding Padding, RelativeSource={RelativeSource AncestorType=ComboBox}}"/>
+                                </Style>
+                            </ComboBox.Resources>
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate><TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                </UniformGrid>
+                <Grid Margin="0,9,0,0" MinHeight="28">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding [Phone.AirPlayRequireCode], Source={x:Static local:L10n.Instance}}" Style="{StaticResource AirPlayFieldLabel}"/>
+                    <CheckBox x:Name="RequireCode" Grid.Column="1" Width="36" Margin="8,0,0,0" VerticalAlignment="Center"
+                              Style="{StaticResource AutomationSwitch}" Click="RequireCode_Click"
+                              AutomationProperties.Name="{Binding [Phone.AirPlayRequireCode], Source={x:Static local:L10n.Instance}}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+        <TextBlock x:Name="AirPlayStatusText" Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12"
+                   TextWrapping="Wrap" Margin="0,3,0,7" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
         <Border x:Name="CodePanel" Margin="0,0,0,6" Padding="8,5" CornerRadius="8" Visibility="Collapsed" Background="{DynamicResource Theme.NavSelected}">
             <Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

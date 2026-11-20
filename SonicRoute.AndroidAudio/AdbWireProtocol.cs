@@ -382,11 +382,8 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
                                 token).ConfigureAwait(false);
                             await link.UpgradeToTlsAsync(keyStore.GetTlsClientCertificate(), serverCertificateValidator, targetHost, token).ConfigureAwait(false);
                             isTls = true;
-                            // Per adb.exe client state machine, resend host CNXN after upgrading to TLS 1.3.
-                            await link.WritePacketAsync(
-                                AdbPacketHeader.Create(AdbCommands.Cnxn, VersionSkipChecksum, LocalMaxPayload, bannerBytes, computeChecksum: false),
-                                bannerBytes,
-                                token).ConfigureAwait(false);
+                            // adbd sends its CNXN once TLS authentication completes. A second host
+                            // CNXN puts the authenticated transport back through handle_offline.
                             break;
 
                         case AdbCommands.Auth:

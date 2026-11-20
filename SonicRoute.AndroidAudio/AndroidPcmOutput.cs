@@ -117,7 +117,8 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             {
                 ThrowIfEnded();
                 if (string.Equals(_target, target, StringComparison.OrdinalIgnoreCase)) return;
-                if (!_outputs.Any(s => string.Equals(s.Key, target, StringComparison.OrdinalIgnoreCase)))
+                if (!string.Equals(target, AndroidOutputSink.Current.Key, StringComparison.OrdinalIgnoreCase)
+                    && !_outputs.Any(s => string.Equals(s.Key, target, StringComparison.OrdinalIgnoreCase)))
                     throw AndroidError.WithCode(new IOException("所选手机输出设备未连接。"), AndroidErrorCode.SelectedPhoneOutputDisconnected);
                 _target = target;
                 verified = (_verified = new(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
@@ -341,7 +342,10 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     }
     private async Task PumpAsync()
     {
-        byte[] floats = new byte[1920 * sizeof(float)], pcm = new byte[1920 * sizeof(short)];
+        // Send immediately when a frame arrives. After a slow wireless ACK, send the
+        // queued frames together so one round trip can carry more than 20 ms of audio.
+        const int maxSamples = AndroidPcmSource.SampleRate * AndroidPcmSource.Channels * 80 / 1000;
+        byte[] floats = new byte[maxSamples * sizeof(float)], pcm = new byte[maxSamples * sizeof(short)];
         try
         {
             while (true)
@@ -352,7 +356,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
                     int samples;
                     lock (_gate)
                     {
-                        samples = _playing ? Math.Min(1920, _source.BufferedSamples) : 0;
+                        samples = _playing ? Math.Min(maxSamples, _source.BufferedSamples) : 0;
                         if (samples == 0) break;
                         _source.Read(floats, 0, samples * sizeof(float));
                     }

@@ -1,12 +1,11 @@
 using NAudio.Wave;
-using NAudio.CoreAudioApi;
 using System.Runtime.InteropServices;
 using System.Numerics;
 
 namespace SonicRoute.AndroidAudio;
 
 /// <summary>One producer and one WASAPI consumer; bounded float PCM, 48 kHz stereo.</summary>
-public sealed class AndroidPcmSource : IWaveProvider
+public sealed class AndroidPcmSource : IWasapiPlaybackSource
 {
     public const int SampleRate = 48000, Channels = 2;
     private readonly object _gate = new();
@@ -24,6 +23,12 @@ public sealed class AndroidPcmSource : IWaveProvider
     public static event Action? PeakActivity;
     // Only a phone renderer subscribes; silence still carries timing without polling.
     internal event Action? DataAvailable;
+    private event Action? PlaybackBufferRequested;
+    event Action? IWasapiPlaybackSource.PlaybackBufferRequested
+    {
+        add => PlaybackBufferRequested += value;
+        remove => PlaybackBufferRequested -= value;
+    }
     public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
     public int BufferedSamples { get { lock (_gate) return _count; } }
     public long DroppedSamples => Interlocked.Read(ref _dropped);
@@ -37,7 +42,15 @@ public sealed class AndroidPcmSource : IWaveProvider
     public bool SmartVolume { get => Volatile.Read(ref _smartVolume); set => Volatile.Write(ref _smartVolume, value); }
     public float EffectiveGain => ComputeEffectiveGain();
 
+    internal volatile PcmOutputMirrors? Mirrors;
     public void Write(ReadOnlySpan<float> samples)
+    {
+        var metrics = Measure(samples);
+        WriteMeasured(samples, metrics);
+        Mirrors?.Write(samples, metrics, this);
+    }
+
+    internal static (int NonSilent, float Peak) Measure(ReadOnlySpan<float> samples)
     {
         if (samples.Length % Channels != 0) throw new ArgumentException("PCM frames must contain both channels.");
         int nonSilent = 0; float peak = 0;
@@ -61,7 +74,14 @@ public sealed class AndroidPcmSource : IWaveProvider
         }
         foreach (float sample in samples[offset..])
         { float absolute = Math.Abs(sample); peak = Math.Max(peak, absolute); if (absolute > 0.0001f) nonSilent++; }
-        Interlocked.Add(ref _written, samples.Length); Interlocked.Add(ref _nonSilent, nonSilent);
+        return (nonSilent, peak);
+    }
+
+    internal void WriteMeasured(ReadOnlySpan<float> samples, (int NonSilent, float Peak) metrics)
+    {
+        var (nonSilent, peak) = metrics;
+        Interlocked.Add(ref _written, samples.Length);
+        Interlocked.Add(ref _nonSilent, nonSilent);
         Volatile.Write(ref _lastPeak, peak);
         if (!float.IsNaN(peak) && peak >= 0f)
         {
@@ -142,17 +162,19 @@ public sealed class AndroidPcmSource : IWaveProvider
         if (count % WaveFormat.BlockAlign != 0) throw new ArgumentException("Unaligned PCM read.");
         Span<float> destination = MemoryMarshal.Cast<byte, float>(buffer.AsSpan(offset, count));
         float gain = ComputeEffectiveGain();
+        int take;
         lock (_gate)
         {
-            int take = Math.Min(destination.Length, _count);
+            take = Math.Min(destination.Length, _count);
             int first = Math.Min(take, _samples.Length - _start);
             ApplyGain(_samples.AsSpan(_start, first), destination, gain);
             ApplyGain(_samples.AsSpan(0, take - first), destination[first..], gain);
             destination[take..].Clear();
-            _start = (_start + take) % _samples.Length; _count -= take;
+            if (take > 0) { _start = (_start + take) % _samples.Length; _count -= take; }
             Interlocked.Add(ref _read, take);
             Interlocked.Add(ref _underflow, destination.Length - take);
         }
+        PlaybackBufferRequested?.Invoke();
         return count; // live source: an underrun is silence, not EOF
     }
 
@@ -201,38 +223,11 @@ public sealed class AndroidPcmSource : IWaveProvider
             _lastWriteTick = _lastNonSilentWriteTick = -1000;
             Volatile.Write(ref _meterWaiting, 0);
         }
+        Mirrors?.ClearBuffers();
     }
 }
 
-public sealed class WasapiPcmPlayer : IPcmPlayer
+public sealed partial class WasapiPcmPlayer
 {
-    private readonly WasapiDeviceLease _device;
-    private readonly WasapiOut _output;
-    private int _disposed;
-    public event Action<Exception>? Failed;
-
-    public WasapiPcmPlayer(AndroidPcmSource source, string? endpointId)
-    {
-        _device = WasapiDeviceLease.Open(endpointId);
-        try
-        {
-            _output = new WasapiOut(_device.Device, AudioClientShareMode.Shared, true, 100);
-            _output.Init(source); // shared-mode conversion adapts to the endpoint's mix format
-            _output.PlaybackStopped += (_, e) => { if (e.Exception != null) Failed?.Invoke(e.Exception); };
-        }
-        catch
-        {
-            try { _output?.Dispose(); } catch { }
-            try { _device.Dispose(); } catch { }
-            throw;
-        }
-    }
-    public void Play() => _output.Play();
-    public void Stop() => _output.Stop();
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        try { _output.Dispose(); }
-        finally { _device.Dispose(); }
-    }
+    public WasapiPcmPlayer(AndroidPcmSource source, string? endpointId) : this((IWasapiPlaybackSource)source, endpointId) { }
 }

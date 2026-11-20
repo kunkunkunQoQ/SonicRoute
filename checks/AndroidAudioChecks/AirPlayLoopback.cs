@@ -153,7 +153,10 @@ internal static partial class Program
         await source.SetOutputAsync(null).WaitAsync(lifetime.Token);
         Check(source.State.OutputId == null && defaultWatches == 1 && source.State.Muted
             && ReferenceEquals(source.Pcm, pcmSource), "the same AirPlay session can return to the Windows default output");
-        await source.SetOutputAsync(speaker).WaitAsync(lifetime.Token);
+        var current = AndroidOutputIdentity.FormatDeviceId(phoneKey, "current");
+        await source.SetOutputAsync(current).WaitAsync(lifetime.Token);
+        Check(source.State.OutputId == current && source.State.State == CaptureState.Receiving,
+            "AirPlay can select Android's current media route without ending its input stream");
         await source.PhoneRemovedAsync(device).WaitAsync(lifetime.Token);
         Check(source.State.State == CaptureState.Receiving && source.State.OutputId == null && defaultWatches == 1,
             "removing the selected Android device releases its renderer and resumes Windows output");

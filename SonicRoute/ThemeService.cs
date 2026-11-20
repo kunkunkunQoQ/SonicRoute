@@ -151,6 +151,7 @@ namespace SonicRoute
             Set("Theme.AccentPressed", pressed);
             Set("Theme.AccentDisabled", disabled);
             Set("Theme.OnAccent", Color.FromRgb(0xFF, 0xFF, 0xFF));
+            Set("Theme.AccentIconInk", Luminance(accentColor) > 0.179 ? Colors.Black : Colors.White);
             Set("Theme.Success", Color.FromRgb(0x16, 0xA3, 0x4A));
             Set("Theme.Fail", Color.FromRgb(0xDC, 0x26, 0x26));
 
@@ -160,18 +161,18 @@ namespace SonicRoute
 
         private static int _lastOpacity = 96;
 
-        // 只在主题变化时计算；对比基准为主题底色，桌面透过背景时仍受用户透明度影响。
+        private static double Luminance(Color color)
+        {
+            double Linear(byte channel)
+            {
+                double value = channel / 255.0;
+                return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
+            }
+            return 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
+        }
+
         private static Color OsdAccent(Color accent, Color background, bool dark)
         {
-            double Luminance(Color color)
-            {
-                double Linear(byte channel)
-                {
-                    double value = channel / 255.0;
-                    return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
-                }
-                return 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
-            }
             double backgroundLight = Luminance(background);
             Color result = accent;
             for (int i = 0; i <= 10; i++)

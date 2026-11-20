@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using SonicRoute.AndroidAudio;
 
@@ -183,10 +184,42 @@ internal static partial class Program
             && releasedCount == 2 && restoredCount == 1,
             "explicitly rerouting a PC app to a PC endpoint releases its silence lease without overwriting the new endpoint");
 
+        await SourceExitDuringPhoneStartupAsync(alias, spkId);
         await File.WriteAllTextAsync(Path.Combine(output, "result.json"), JsonSerializer.Serialize(new
         { Passed = true, Assertions = _checks, RealDeviceAccess = false,
             Scope = "Device removal, discovery suppression, scoped video cleanup, resolution persistence, phone output sinks and PC-to-phone routing" }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"PASS {_checks} device action assertions");
+    }
+
+    private static async Task SourceExitDuringPhoneStartupAsync(AndroidDevice device, string target)
+    {
+        using var child = Process.Start(new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"), "/d /q")
+        { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true })!;
+        using var allowSetup = new ManualResetEventSlim();
+        var enteredSetup = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var restored = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int released = 0;
+        await using var manager = new PcToPhoneAudioManager(() =>
+        {
+            enteredSetup.TrySetResult();
+            allowSetup.Wait(TimeSpan.FromSeconds(10));
+            throw new IOException("Test phone closed.");
+        }, _ => new FakeSilenceLease(() => Interlocked.Increment(ref released), () => restored.TrySetResult()));
+        try
+        {
+            Check(manager.RouteProcess(child.Id, target, device).Success, "test source started a single phone route");
+            await enteredSetup.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            child.StandardInput.Close();
+            await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            await restored.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Check(manager.ActiveCount == 0 && released == 1,
+                "source exit retires its route and restores local audio before a stalled phone setup returns");
+        }
+        finally
+        {
+            child.StandardInput.Close();
+            allowSetup.Set();
+        }
     }
 
     private sealed class FakeSilenceLease(Action onRelease, Action onRestore) : IPcProcessSilenceLease

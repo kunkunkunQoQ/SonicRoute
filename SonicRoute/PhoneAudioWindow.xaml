@@ -131,11 +131,11 @@
                                     <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
                                 </DataTrigger>
                                 <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.NavHover}"/>
                                     <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
                                 </Trigger>
                                 <Trigger Property="IsSelected" Value="True">
-                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Theme.NavSelected}"/>
                                     <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
                                 </Trigger>
                                 <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/></Trigger>
@@ -147,9 +147,9 @@
                     <DataTemplate>
                         <DockPanel Height="42">
                             <Grid Width="28" Height="28" Margin="2,0,6,0">
-                                <Border x:Name="AppIconAccent" Background="{DynamicResource Theme.Accent}" CornerRadius="7"/>
-                                <TextBlock x:Name="AppIconInitial" Text="{Binding Initial}" Foreground="White" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                <Image Source="{Binding Icon}" Stretch="Uniform"/>
+                                <TextBlock x:Name="AppIconInitial" Text="{Binding Initial}" Foreground="{DynamicResource Theme.TextSecondary}"
+                                           FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                <Image x:Name="AppIconImage" Source="{Binding Icon}" Stretch="Uniform"/>
                             </Grid>
                             <Border DockPanel.Dock="Right" Background="{DynamicResource Theme.SurfaceBg}"
                                     CornerRadius="6" Padding="5,2" Margin="6,0,0,0" VerticalAlignment="Center"
@@ -164,9 +164,8 @@
                             </StackPanel>
                         </DockPanel>
                         <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding App.IsDeviceAudio}" Value="True">
-                                <Setter TargetName="AppIconAccent" Property="Visibility" Value="Collapsed"/>
-                                <Setter TargetName="AppIconInitial" Property="Visibility" Value="Collapsed"/>
+                            <DataTrigger Binding="{Binding Source, ElementName=AppIconImage}" Value="{x:Null}">
+                                <Setter TargetName="AppIconInitial" Property="Visibility" Value="Visible"/>
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>
@@ -179,15 +178,15 @@
             <Border x:Name="AirPlayPane" Grid.Row="2" VerticalAlignment="Top" Visibility="Collapsed"
                     Padding="10" CornerRadius="10" Background="{DynamicResource Theme.SurfaceBgAlpha}"
                     BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                <ScrollViewer Padding="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
                     <local:AirPlayReceiverView x:Name="AirPlayReceiverPane"/>
                 </ScrollViewer>
             </Border>
-            <Grid Grid.Row="3" Margin="0,6,0,0">
-                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition x:Name="RefreshGap" Width="4"/><ColumnDefinition x:Name="RefreshColumn" Width="36"/></Grid.ColumnDefinitions>
-                <Border x:Name="PhoneDeviceCard" Grid.Column="0" Height="36"
+            <Grid x:Name="DeviceFooter" Grid.Row="3" Height="36" Margin="0,6,0,0" UseLayoutRounding="True">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Border x:Name="PhoneDeviceCard" Grid.Column="0"
                         Background="{DynamicResource Theme.SurfaceBgAlpha}" BorderBrush="{DynamicResource Theme.Border}"
-                        BorderThickness="1" CornerRadius="10" Padding="6,2,4,2">
+                        BorderThickness="1" CornerRadius="8" Padding="6,2,4,2">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="20"/><ColumnDefinition Width="*"/><ColumnDefinition Width="56"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions>
                         <Border x:Name="DeviceKindGrip" Background="Transparent">
@@ -196,7 +195,7 @@
                                   Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
                         </Border>
                         <ComboBox x:Name="DeviceCombo" Grid.Column="1" Grid.ColumnSpan="3" Height="24" Background="Transparent" BorderThickness="0"
-                                  Padding="0,0,64,0" FontSize="11" FontWeight="Bold" Style="{StaticResource RoundedComboBox}"
+                                  Padding="4,0,64,0" FontSize="11" FontWeight="Bold" Style="{StaticResource RoundedComboBox}"
                                   SelectionChanged="Device_Changed" AutomationProperties.Name="{Binding [Phone.DeviceSelector], Source={x:Static local:L10n.Instance}}">
                             <ComboBox.Resources>
                                 <!-- Reuse the shared arrow/template; reserve room for the status overlay. -->
@@ -251,9 +250,9 @@
                                    FontSize="10" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
-                <Button x:Name="RefreshButton" Grid.Column="2" Width="36" Height="36"
-                        Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.SurfaceBg}"
-                        Margin="0" Padding="0" Click="Refresh_Click" ToolTip="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}" AutomationProperties.Name="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}">
+                <Button x:Name="RefreshButton" Grid.Column="1" Width="{Binding Height, ElementName=DeviceFooter}"
+                        Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.SurfaceBgAlpha}"
+                        Margin="4,0,0,0" Padding="0" Click="Refresh_Click" ToolTip="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}" AutomationProperties.Name="{Binding [History.Refresh], Source={x:Static local:L10n.Instance}}">
                     <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="15"/>
                 </Button>
             </Grid>

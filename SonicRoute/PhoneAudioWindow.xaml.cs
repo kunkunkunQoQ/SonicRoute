@@ -100,6 +100,8 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
 internal static class PhoneAudioWindowCache
 {
     private static readonly SemaphoreSlim RefreshGate = new(1, 1);
+    private static readonly Dictionary<string, CancellationTokenSource> Recovering = new(StringComparer.Ordinal);
+    private static readonly HashSet<string> DisconnectedByUser = new(StringComparer.Ordinal);
     internal static AndroidDeviceDiscovery Discovery { get; set; } = new(token => AndroidAudioHost.Adb.DevicesAsync(token, deduplicate: false));
     internal static Func<AndroidWirelessConnection> CreateWirelessConnection { get; set; } = () => new(AndroidAudioHost.Adb);
     internal static IReadOnlyList<AndroidDevice>? Devices => Discovery.Devices;
@@ -109,6 +111,51 @@ internal static class PhoneAudioWindowCache
     internal static void InvalidateDevices() => Discovery.Invalidate();
     internal static event Action? DevicesChanged { add => Discovery.Changed += value; remove => Discovery.Changed -= value; }
     internal static void SetDevices(IReadOnlyList<AndroidDevice> devices) => Discovery.Publish(devices);
+
+    internal static void SetAutomaticRecovery(AndroidDevice device, bool enabled)
+    {
+        string key = AndroidDeviceIdentity.Key(device);
+        lock (Recovering)
+        {
+            if (enabled) DisconnectedByUser.Remove(key);
+            else
+            {
+                DisconnectedByUser.Add(key);
+                if (Recovering.TryGetValue(key, out var active)) active.Cancel();
+            }
+        }
+    }
+
+    // Only run on demand (opening the phone panel or losing a live helper). Direct
+    // wireless ADB sessions belong to the process and need restoring after a restart.
+    internal static async Task<bool> RecoverMissingWirelessAsync(AndroidDevice? device, IReadOnlyList<AndroidDevice> devices, CancellationToken token)
+    {
+        if (device is not { IsWifi: true } || AndroidDeviceIdentity.StableKey(device) is not { } key
+            || devices.Any(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(device, d))) return false;
+        var store = AndroidAudioHost.Phone;
+        if (store.FindProfile(device) == null || store.IsRemoved(device)) return false;
+        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(token);
+        lock (Recovering)
+        {
+            if (DisconnectedByUser.Contains(key) || !Recovering.TryAdd(key, attempt)) return false;
+        }
+        try
+        {
+            var result = await CreateWirelessConnection().ReconnectAsync(device, null, attempt.Token, devices).ConfigureAwait(false);
+            attempt.Token.ThrowIfCancellationRequested();
+            if (store.IsRemoved(device)) return false;
+            store.ObserveDevices([result.Device]);
+            // Keep any other phones observed while this Wi-Fi handshake was pending.
+            InvalidateDevices();
+            await ReadDevicesAsync(attempt.Token).ConfigureAwait(false);
+            await AndroidAudioHost.ProbeOutputsIfConnectedAsync([result.Device], token: attempt.Token).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) when (attempt.IsCancellationRequested) { }
+        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone wireless recovery: " + ex.Message); }
+        finally { lock (Recovering) Recovering.Remove(key); }
+        return false;
+    }
 
     internal static async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken token,
         AndroidWirelessConnection? wireless = null)
@@ -134,6 +181,7 @@ internal static class PhoneAudioWindowCache
             if (!StillSelected()) return Devices ?? devices;
 
             store.ObserveDevices([result.Device]);
+            SetAutomaticRecovery(result.Device, true);
             SetDevices(result.Devices);
             return result.Devices;
         }
@@ -183,6 +231,7 @@ public partial class PhoneAudioWindow : Window
     private string? _pcDropSignature;
     private int? _pcDropTargetIndex;
     private bool _pcDropZonesDirty = true;
+    private IReadOnlyList<AndroidDevice>? _pcDropDevices;
     private string _connStatusKey = "Phone.Disconnected";
     private string? _connDetailKey;
     private Exception? _connError;
@@ -199,6 +248,8 @@ public partial class PhoneAudioWindow : Window
     {
         _enableMedia = loadDevicesOnShow;
         InitializeComponent();
+        TouchHoldDrag.Attach(PhoneApps, ChooseTouchAppDrag);
+        AirPlayReceiverPane.UseDeviceFooter();
         AirPlayReceiverPane.StatusUpdated += UpdateAirPlayFooter;
         AppIconDragController.Attach(DeviceKindGrip, DragAirPlayToWindows, CanDragAirPlayToWindows);
         _entranceMotion = new PanelEntranceMotion(PhoneSurface, PhoneSlide);
@@ -293,7 +344,7 @@ public partial class PhoneAudioWindow : Window
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(2),
             Visibility = Visibility.Collapsed,
-            IsHitTestVisible = false,
+            AllowDrop = true,
             Child = modes
         };
         PcDropHighlight.SetResourceReference(Border.BorderBrushProperty, "Theme.Accent");
@@ -324,13 +375,15 @@ public partial class PhoneAudioWindow : Window
     {
         // Device/profile/output events invalidate this snapshot. DragOver must only read
         // already-built cells, rather than allocate device IDs/signatures on every move.
-        if (_closed || AirPlaySelected || (!force && !_pcDropZonesDirty)) return;
+        if (_closed || AirPlaySelected) return;
+        var devices = PhoneAudioWindowCache.Devices;
+        if (!force && !_pcDropZonesDirty && ReferenceEquals(devices, _pcDropDevices)) return;
+        _pcDropDevices = devices;
         _pcDropZonesDirty = false;
         var device = DeviceCombo.SelectedItem as AndroidDevice
             ?? (AndroidAudioHost.IsPhoneCreated ? AndroidAudioHost.Phone.Profile.LastDevice : null);
-        var zones = AndroidAudioHost.GetDropZonesForDevice(device);
-        if (zones.Count == 0)
-            zones = [(AndroidOutputSink.DefaultSpeaker, "")];
+        // A remembered phone keeps its output configuration, but cannot receive a drop.
+        var zones = AndroidAudioHost.GetDropZonesForDevice(devices != null && AndroidAudioHost.IsPhoneOnline(device) ? device : null);
 
         var sigBuilder = new StringBuilder();
         bool airPlayDrag = IsAirPlayDrag(AppIconDragController.DesktopDragSource);
@@ -352,18 +405,24 @@ public partial class PhoneAudioWindow : Window
         _pcDropGrid.Children.Clear();
         _pcDropGrid.RowDefinitions.Clear();
 
+        int bluetoothCount = 0;
         for (int i = 0; i < zones.Count; i++)
         {
             _pcDropGrid.RowDefinitions.Add(new RowDefinition());
             var (sink, deviceId) = zones[i];
-            string cellName = i == 0 ? "PcSpeakerDropZone" : $"PcBluetoothDropZone_{i}";
+            string cellName = sink.Kind switch
+            {
+                AndroidOutputSinkKind.Current => "PcCurrentOutputDropZone",
+                AndroidOutputSinkKind.Speaker => "PcSpeakerDropZone",
+                _ => $"PcBluetoothDropZone_{++bluetoothCount}"
+            };
             string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
-            string targetName = sink.Kind == AndroidOutputSinkKind.Speaker ? AndroidAudioHost.OutputDisplayName(device, sink) : sinkName;
+            string targetName = sink.Kind == AndroidOutputSinkKind.Bluetooth ? sinkName : AndroidAudioHost.OutputDisplayName(device, sink);
             string title = sink.Kind == AndroidOutputSinkKind.Speaker
                 ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerTitle"), targetName)
                 : string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), targetName);
 
-            string description = airPlayDrag ? L10n.T("Phone.AirPlayDropOutput") : sink.Kind == AndroidOutputSinkKind.Speaker
+            string description = airPlayDrag ? L10n.T("Phone.AirPlayDropOutput") : sink.Kind != AndroidOutputSinkKind.Bluetooth
                 ? string.Format(L10n.T("Phone.PcDropOnlyOnSpeakerDesc"), AndroidAudioHost.OutputDisplayName(device, sink))
                 : L10n.T("Phone.PcDropOnlyOnBtDesc");
             var corners = zones.Count == 1
@@ -388,6 +447,11 @@ public partial class PhoneAudioWindow : Window
                 Grid.SetRow(divider, i);
                 _pcDropGrid.Children.Add(divider);
             }
+        }
+        if (_pcDropCells.Count == 0 && !AndroidAudioHost.IsDragging)
+        {
+            _pcDropTargetIndex = null;
+            PcDropHighlight.Visibility = Visibility.Collapsed;
         }
         ApplyPcDropCellBackgrounds(_pcDropTargetIndex);
     }
@@ -441,7 +505,11 @@ public partial class PhoneAudioWindow : Window
         _pcDropGrid.Visibility = Visibility.Visible;
         bool visible = index != null || AppIconDragController.IsDesktopDragging
             && (!IsAirPlayDrag(AppIconDragController.DesktopDragSource) || DeviceCombo.SelectedItem is AndroidDevice { State: "device" });
-        if (visible) EnsurePcDropZones();
+        if (visible)
+        {
+            EnsurePcDropZones();
+            if (_pcDropCells.Count == 0) { index = null; visible = false; }
+        }
         if (_pcDropTargetIndex == index && (PcDropHighlight.Visibility == Visibility.Visible) == visible) return;
         _pcDropTargetIndex = index;
         if (!visible)
@@ -459,6 +527,7 @@ public partial class PhoneAudioWindow : Window
     {
         if (_closed) return;
         if (!Dispatcher.CheckAccess()) { _mediaUiLifetime.Post(Dispatcher, Android_ReturnDragStateChanged); return; }
+        if (AndroidAudioHost.IsDragging) UpdateReturnDropText();
         SetAndroidReturnTarget(false);
         if (!AndroidAudioHost.IsDragging) SetPcDropTarget(null);
     }
@@ -515,7 +584,7 @@ public partial class PhoneAudioWindow : Window
         {
             BindDevices(cachedDevices);
             await ShowSelectedDeviceAsync(forceRefresh: false);
-            if (_enableMedia && !_closed && IsVisible && cachedDevices.All(d => d.State != "device"))
+            if (_enableMedia && !_closed && IsVisible && DeviceCombo.SelectedItem is not AndroidDevice { State: "device" })
             {
                 PhoneAudioWindowCache.InvalidateDevices();
                 if (await RefreshDevicesAsync()) await ShowSelectedDeviceAsync(forceRefresh: false);
@@ -539,8 +608,12 @@ public partial class PhoneAudioWindow : Window
             var devices = userRefresh != null
                 ? await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(userRefresh.Token)
                 : await PhoneAudioWindowCache.ReadDevicesAsync(token);
+            bool recovered = userRefresh == null && _enableMedia && IsVisible && !AirPlaySelected
+                && await PhoneAudioWindowCache.RecoverMissingWirelessAsync(AndroidAudioHost.Phone.Profile.LastDevice, devices, token);
+            token.ThrowIfCancellationRequested();
             if (_closed || AirPlaySelected) return false;
             BindDevices(PhoneAudioWindowCache.Devices ?? devices);
+            if (recovered && IsVisible) UpdateMediaSubscription();
             if (DeviceCombo.SelectedItem == null) SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailNoAuthorizedPhone");
             return true;
         }
@@ -737,25 +810,50 @@ public partial class PhoneAudioWindow : Window
         if (!await RefreshDevicesCoreAsync(recoverWireless: true)) return;
         await ShowSelectedDeviceAsync(forceRefresh: true);
     }
+    private Action? ChooseTouchAppDrag(DependencyObject hit)
+    {
+        if (AirPlaySelected) return null;
+        var item = (ItemsControl.ContainerFromElement(PhoneApps, hit) as ListBoxItem)?.Content;
+        if (item is not PhoneAppItem phoneItem) return null;
+        var selected = DeviceCombo.SelectedItem;
+        return () =>
+        {
+            if (ReferenceEquals(selected, DeviceCombo.SelectedItem) && PhoneApps.Items.Contains(phoneItem)) DragAppRow(phoneItem);
+        };
+    }
     private void Apps_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        if (TouchHoldDrag.IsTouchMouse(e) || AirPlaySelected) return;
         _dragStart = e.GetPosition(PhoneApps);
         _dragItem = (ItemsControl.ContainerFromElement(PhoneApps, e.OriginalSource as DependencyObject) as ListBoxItem)?.Content as PhoneAppItem;
     }
     private void Apps_MouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || _dragItem == null || AndroidAudioHost.IsDragging) return;
+        if (TouchHoldDrag.IsTouchMouse(e) || e.LeftButton != MouseButtonState.Pressed || AndroidAudioHost.IsDragging || _dragItem == null) return;
         Point point = e.GetPosition(PhoneApps);
         if (Math.Abs(point.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(point.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-        if (DeviceCombo.SelectedItem is not AndroidDevice device) return;
-        var payload = new AndroidAppDrag(device, _dragItem.App);
-        try { AndroidAppDragController.Run(PhoneApps, payload); }
-        finally { _dragItem = null; }
+        var item = _dragItem;
+        _dragItem = null;
+        DragAppRow(item);
+    }
+    private void DragAppRow(PhoneAppItem phoneItem)
+    {
+        if (DeviceCombo.SelectedItem is AndroidDevice device)
+        {
+            var payload = new AndroidAppDrag(device, phoneItem.App);
+            AndroidAppDragController.Run(PhoneApps, payload);
+        }
     }
     private void Apps_QueryContinueDrag(object sender, System.Windows.QueryContinueDragEventArgs e)
     { if (e.EscapePressed) { e.Action = System.Windows.DragAction.Cancel; e.Handled = true; } }
-    private void PhoneApp_DragOver(object sender, System.Windows.DragEventArgs e)
+    internal void HandleTouchDrag(PanelDragInput input, bool drop)
+    {
+        if (drop) DropPhoneApp(input);
+        else HoverPhoneApp(input);
+    }
+    private void PhoneApp_DragOver(object sender, System.Windows.DragEventArgs e) => HoverPhoneApp(new PanelDragInput(e));
+    private void HoverPhoneApp(PanelDragInput e)
     {
         var playback = AppIconDragController.AppFromDrag(e.Data);
         bool airPlay = IsAirPlayDrag(playback);
@@ -769,6 +867,7 @@ public partial class PhoneAudioWindow : Window
         }
         if (e.Data.GetDataPresent(AndroidAppDrag.Format, false) && e.Data.GetData(AndroidAppDrag.Format, false) is AndroidAppDrag)
         {
+            UpdateReturnDropText();
             SetAndroidReturnTarget(true);
             e.Effects = System.Windows.DragDropEffects.Move;
             e.Handled = true;
@@ -779,8 +878,9 @@ public partial class PhoneAudioWindow : Window
             EnsurePcDropZones();
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
             int index = GetPcDropZoneIndex(e.GetPosition(PcDropHighlight).Y, height, _pcDropCells.Count);
-            SetPcDropTarget(index);
-            e.Effects = System.Windows.DragDropEffects.Copy;
+            bool available = _pcDropCells.Count != 0;
+            SetPcDropTarget(available ? index : null);
+            e.Effects = available ? System.Windows.DragDropEffects.Copy : System.Windows.DragDropEffects.None;
             e.Handled = true;
             return;
         }
@@ -791,16 +891,18 @@ public partial class PhoneAudioWindow : Window
     private void PhoneApp_DragLeave(object sender, System.Windows.DragEventArgs e)
     {
         FrameworkElement target = AirPlaySelected ? AirPlayPane : PhoneApps;
-        var point = e.GetPosition(target);
-        if (AppIconDragController.IsDesktopDragging || AndroidAudioHost.IsDragging)
+        if (!AppIconDragController.IsDesktopDragging && !AndroidAudioHost.IsDragging)
         {
-            var cursor = System.Windows.Forms.Cursor.Position;
-            point = target.PointFromScreen(new Point(cursor.X, cursor.Y));
+            ClearPcDropHighlight();
+            return;
         }
+        var cursor = System.Windows.Forms.Cursor.Position;
+        var point = target.PointFromScreen(new Point(cursor.X, cursor.Y));
         if (!new Rect(0, 0, target.ActualWidth, target.ActualHeight).Contains(point))
             ClearPcDropHighlight();
     }
-    private async void PhoneApp_Drop(object sender, System.Windows.DragEventArgs e)
+    private void PhoneApp_Drop(object sender, System.Windows.DragEventArgs e) => DropPhoneApp(new PanelDragInput(e));
+    private async void DropPhoneApp(PanelDragInput e)
     {
         var playback = AppIconDragController.AppFromDrag(e.Data);
         var airPlay = IsAirPlayDrag(playback) ? AirPlayHost.Find(playback?.ExternalSourceId) : null;
@@ -823,7 +925,7 @@ public partial class PhoneAudioWindow : Window
         }
         if (playback != null && (!IsAirPlayDrag(playback) || airPlay != null && DeviceCombo.SelectedItem is AndroidDevice { State: "device" }))
         {
-            EnsurePcDropZones();
+            EnsurePcDropZones(force: true);
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
             int index = GetPcDropZoneIndex(e.GetPosition(PcDropHighlight).Y, height, _pcDropCells.Count);
             var cell = _pcDropCells.Count > 0 ? _pcDropCells[index] : null;

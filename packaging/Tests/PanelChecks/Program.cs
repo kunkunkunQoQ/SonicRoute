@@ -120,12 +120,18 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args.Contains("--output-popup-live") || args.Contains("--tray-submenu-live") || args.Contains("--osd-light-live") || args.Contains("--mic-osd-persistence"))
+        if (args.Length == 3 && args[0] == "--playback-restore-worker") return RunRestoreWorker(args[1], args[2]);
+        if (args.Contains("--output-popup-live") || args.Contains("--tray-submenu-live") || args.Contains("--osd-light-live") || args.Contains("--mic-osd-persistence") || args.Contains("--local-playback-buttons") || args.Contains("--playback-restore"))
         {
             AttachOutputTestDesktop();
             Directory.CreateDirectory(args.Last());
             var liveLog = new StreamWriter(Path.Combine(args.Last(), "console.log")) { AutoFlush = true };
             Console.SetOut(liveLog); Console.SetError(liveLog);
+        }
+        if (args.Length == 4 && args[0] == "--playback-restore")
+        {
+            try { CheckPlaybackRestart(args[1], args[2], args[3]); return 0; }
+            catch (Exception error) { Console.Error.WriteLine(error); return 1; }
         }
         var directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "isolated-" + Guid.NewGuid().ToString("N"));
         Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", directory);
@@ -194,6 +200,7 @@ internal static partial class Program
                 "application exposes only the remaining quick panel");
             var theme = assembly.GetType("SonicRoute.ThemeService")!.GetMethod("Apply", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                 null, new[] { typeof(string), typeof(string) }, null)!;
+            if (args.Length >= 3 && args[0] == "--local-playback-buttons") { CheckLocalPlaybackButtons(theme, args[1], args.Length == 4 ? args[2] : null); return 0; }
             if (args.Contains("--theme-compatibility")) { CheckThemeCompatibility(theme, windows, args.Last()); Console.WriteLine($"RESULT passed={_checks} THEME_COMPATIBILITY=true WINDOWS_SHOWN=false AUDIO_WRITES=NONE"); return 0; }
             if (args.Contains("--abcde")) { CheckAbcde(theme, windows); Console.WriteLine($"RESULT passed={_checks} ABCDE=true WINDOWS_SHOWN=false AUDIO_WRITES=FAKES_ONLY"); return 0; }
             if (args.Contains("--output-popup-live")) { CheckLiveOutputPopup(theme, windows, args.Last(), args.Contains("--output-followup-live"), args.Contains("--output-optimization-live")); Console.WriteLine($"RESULT passed={_checks} PRIVATE_DESKTOP=true AUDIO_READS_ONLY=true INPUT_INJECTED=false"); return 0; }
