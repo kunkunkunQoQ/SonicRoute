@@ -1195,7 +1195,7 @@ namespace SonicRoute
             EnsureSettingsDeviceSections();
             RefreshDynamicTexts();
             SyncExecutionHistoryOptions();
-            RefreshAutomationTemplateHint();
+            RefreshAutomationLanguage();
         }
 
         /// <summary>语言切换后刷新代码动态文本（XAML 绑定已由 PropertyChanged 自动刷新；
@@ -2998,18 +2998,18 @@ namespace SonicRoute
             LoadAutoAppCombo(AutoTriggerAppCombo);
             if (AutoTriggerCombo.Items.Count == 0)
             {
-                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerHotkey"), Tag = AutoRuleTrigger.Hotkey });
-                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppStart"), Tag = AutoRuleTrigger.AppStart });
-                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppSwitch"), Tag = AutoRuleTrigger.AppSwitch });
-                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerAppExit"), Tag = AutoRuleTrigger.AppExit });
-                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerSchedule"), Tag = AutoRuleTrigger.Schedule });
-                AutoTriggerCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.TriggerStartup"), Tag = AutoRuleTrigger.Startup });
+                AutoTriggerCombo.Items.Add(LocalizedAutoItem("Auto.TriggerHotkey", AutoRuleTrigger.Hotkey));
+                AutoTriggerCombo.Items.Add(LocalizedAutoItem("Auto.TriggerAppStart", AutoRuleTrigger.AppStart));
+                AutoTriggerCombo.Items.Add(LocalizedAutoItem("Auto.TriggerAppSwitch", AutoRuleTrigger.AppSwitch));
+                AutoTriggerCombo.Items.Add(LocalizedAutoItem("Auto.TriggerAppExit", AutoRuleTrigger.AppExit));
+                AutoTriggerCombo.Items.Add(LocalizedAutoItem("Auto.TriggerSchedule", AutoRuleTrigger.Schedule));
+                AutoTriggerCombo.Items.Add(LocalizedAutoItem("Auto.TriggerStartup", AutoRuleTrigger.Startup));
             }
             if (AutoScheduleModeCombo.Items.Count == 0)
             {
-                AutoScheduleModeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.ScheduleOnce"), Tag = 0 });
-                AutoScheduleModeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.ScheduleDaily"), Tag = 1 });
-                AutoScheduleModeCombo.Items.Add(new ComboBoxItem { Content = L10n.T("Auto.ScheduleWeekly"), Tag = 2 });
+                AutoScheduleModeCombo.Items.Add(LocalizedAutoItem("Auto.ScheduleOnce", 0));
+                AutoScheduleModeCombo.Items.Add(LocalizedAutoItem("Auto.ScheduleDaily", 1));
+                AutoScheduleModeCombo.Items.Add(LocalizedAutoItem("Auto.ScheduleWeekly", 2));
             }
             if (AutoScheduleHourCombo.Items.Count == 0)
             {

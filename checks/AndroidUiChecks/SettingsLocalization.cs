@@ -62,6 +62,7 @@ internal static partial class Program
                 Check(Equals(((Button)shortcuts.Items[1]).Content, "1234567890🎧…"),
                     theme + " shortened device names preserve emoji at the truncation point");
                 var applyLanguage = typeof(MainWindow).GetMethod("ApplyLanguage", Hidden)!;
+                if (theme == "light") CheckRetainedAutomationEditorLanguage(window, applyLanguage);
                 Check(title.Text == $"SonicRoute {App.DisplayVersion}" && title.Text == window.Title,
                     theme + " Full window starts with its original brand and version");
                 maximize.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -143,6 +144,37 @@ internal static partial class Program
                 && routeError(new IOException(speakerPrompt, speakerConsentCode)) == (false, speakerConsentCode, speakerPrompt),
                 language + " incoming and source speaker consent keep their confirmation text and status");
         }
+    }
+
+    private static void CheckRetainedAutomationEditorLanguage(MainWindow window, MethodInfo applyLanguage)
+    {
+        applyLanguage.Invoke(window, ["zh-CN"]);
+        typeof(MainWindow).GetMethod("EnsureAutomationPage", Hidden)!.Invoke(window, null);
+        var draft = new AutoRule { Name = "作業用の下書き", Trigger = AutoRuleTrigger.Hotkey };
+        draft.SetSteps([new AutoRuleStep { Action = AutoRuleAction.SetSystemOutput,
+            TargetDeviceId = "disconnected-test-device", DelayMs = 1250, StopOnFailure = true }]);
+        typeof(MainWindow).GetMethod("OpenAutomationRuleEditor", Hidden)!.Invoke(window, [draft, false]);
+        var steps = (ItemsControl)window.FindName("AutoStepsHost");
+        var trigger = (ComboBox)window.FindName("AutoTriggerCombo");
+        var selection = trigger.SelectedItem;
+        var model = ((List<AutoRuleStep>)typeof(MainWindow).GetField("_autoSteps", Hidden)!.GetValue(window)!)[0];
+        ((TextBox)window.FindName("AutoNameBox")).Text = "未保存のルール名";
+        Descendants<TextBox>((DependencyObject)steps.Items[0]).Single().Clear();
+
+        applyLanguage.Invoke(window, ["ja-JP"]);
+        DrainUi();
+        var card = (DependencyObject)steps.Items[0];
+        var texts = Descendants<TextBlock>(card).Select(label => label.Text).ToList();
+        Check(ReferenceEquals(trigger.SelectedItem, selection) && Equals(((ComboBoxItem)selection).Content, L10n.T("Auto.TriggerHotkey"))
+            && ((TextBlock)window.FindName("AutoHotkeyHintText")).Text == L10n.T("Auto.HotkeyHint")
+            && ((Button)window.FindName("AutoHotkeyCapture")).Content is TextBlock hotkey && hotkey.Text == L10n.T("Auto.HotkeyUnbound")
+            && texts.Contains(L10n.T("Auto.Delete")) && texts.Contains(L10n.T("Auto.TargetDevice")) && texts.Contains(L10n.T("Auto.Delay"))
+            && Descendants<CheckBox>(card).Any(check => Equals(check.Content, L10n.T("Auto.StopOnFailure")) && check.IsChecked == true),
+            "retained automation editor translates trigger, hotkey, step controls and stop setting on zh-CN to ja-JP switch");
+        Check(((TextBox)window.FindName("AutoNameBox")).Text == "未保存のルール名" && model.TargetDeviceId == "disconnected-test-device"
+            && model.Action == AutoRuleAction.SetSystemOutput && model.StopOnFailure && model.DelayMs == 1250
+            && Descendants<TextBox>(card).Single().Text.Length == 0,
+            "language switch retains the unsaved name, step settings, offline device and partially edited delay");
     }
 
     private static void CheckPartialBuiltinLanguageOverrides()
