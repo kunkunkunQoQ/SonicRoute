@@ -42,6 +42,8 @@ internal static partial class Program
     private static void CheckSilenceLeaseFailures()
     {
         CheckSourceSpeakerLeases();
+        CheckSpareOutputRetries();
+        CheckPlaybackMigration();
         var type = typeof(App).Assembly.GetType("SonicRoute.LocalSilenceLeasePool")!;
         bool known = true, muted = false, setSucceeds = true, routeSucceeds = true, throwRoute = false;
         int muteWrites = 0, routeWrites = 0;
@@ -98,7 +100,8 @@ internal static partial class Program
         bool spareMuted = false;
         var isolated = Activator.CreateInstance(type, ConcurrencyHidden, null, new object[]
         {
-            (Func<IReadOnlySet<int>, string?, string?>)((_, current) => current == null || available == current ? available : null),
+            (Func<IReadOnlySet<int>, string?, IReadOnlyList<string>>)((_, current) =>
+                available != null && (current == null || available == current) ? [available] : []),
             (Func<string, (bool, bool)>)(_ => (spareMuted, true)),
             (Func<string, bool, bool>)((_, value) => { spareMuted = value; return true; }),
             (Func<int, (string?, string?)>)(pid => routes.GetValueOrDefault(pid, ("preferred", "console"))),
@@ -124,7 +127,8 @@ internal static partial class Program
         bool revoked = userChanged.Invalidated.IsCancellationRequested;
         userChanged.Dispose();
         Check(revoked && spareMuted, "an external unmute and re-mute revokes the route and preserves the user's last setting");
-        type.GetProperty("VerifyPlaybackRoute", ConcurrencyHidden)!.SetValue(isolated, (Func<int, string, bool>)((_, _) => false));
+        type.GetProperty("VerifyPlaybackRoute", ConcurrencyHidden)!.SetValue(isolated,
+            (Func<int, string, bool, IReadOnlySet<int>, bool>)((_, _, _, _) => false));
         Check(Acquire(isolated, 83) == null && routes[83] == ("preferred", "console"),
             "a player that keeps rendering on its former device fails exclusive mode and regains its prior policy");
 
@@ -151,6 +155,120 @@ internal static partial class Program
         }
     }
 
+    private static void CheckSpareOutputRetries()
+    {
+        var type = typeof(App).Assembly.GetType("SonicRoute.LocalSilenceLeasePool", true)!;
+        string[] candidates = ["usb", "line-out", "hdmi"];
+        var mute = candidates.ToDictionary(id => id, id => id == "hdmi");
+        var routes = new Dictionary<int, (string? Multimedia, string? Console)>();
+        (string? Multimedia, string? Console) original = ("default-media", "default-console");
+        var attempts = new List<string>();
+        var beforeAttempt = new List<(string? Multimedia, string? Console)>();
+        var activeAtVerification = new List<bool>();
+        var accepted = new Dictionary<int, string> { [101] = "line-out", [102] = "usb" };
+        var pool = Activator.CreateInstance(type, ConcurrencyHidden, null, new object[]
+        {
+            (Func<IReadOnlySet<int>, string?, IReadOnlyList<string>>)((_, current) => current == null ? candidates : [current]),
+            (Func<string, (bool, bool)>)(id => (mute[id], true)),
+            (Func<string, bool, bool>)((id, value) => { mute[id] = value; return true; }),
+            (Func<int, (string?, string?)>)(pid => routes.GetValueOrDefault(pid, original)),
+            (Func<int, (string?, string?), bool>)((pid, next) =>
+            {
+                if (next.Item1 != null && next.Item1 == next.Item2 && mute.ContainsKey(next.Item1))
+                {
+                    attempts.Add(next.Item1);
+                    beforeAttempt.Add(routes.GetValueOrDefault(pid, original));
+                    if (next.Item1 == "hdmi")
+                    {
+                        routes[pid] = ("hdmi", original.Console);
+                        return false;
+                    }
+                }
+                if (pid == 104 && next == original)
+                {
+                    routes[pid] = ("usb", original.Console);
+                    return false;
+                }
+                routes[pid] = next;
+                return true;
+            })
+        }, null)!;
+        type.GetProperty("VerifyPlaybackRoute", ConcurrencyHidden)!.SetValue(pool, (Func<int, string, bool, IReadOnlySet<int>, bool>)((pid, id, wasActive, _) =>
+        {
+            activeAtVerification.Add(wasActive);
+            if (pid == 101 && id == "usb") throw new InvalidOperationException("Player kept its original output");
+            return accepted.GetValueOrDefault(pid) == id;
+        }));
+        IPcProcessSilenceLease? Acquire(int pid) =>
+            (IPcProcessSilenceLease?)type.GetMethod("AcquireForPlayback", ConcurrencyHidden)!.Invoke(pool, [pid, pid == 101]);
+
+        var first = Acquire(101);
+        Check(first != null && attempts.SequenceEqual(["usb", "line-out"]) && beforeAttempt.All(route => route == original)
+            && !mute["usb"] && mute["line-out"] && routes[101] == ("line-out", "line-out"),
+            "a rejected first output is restored before trying the second, and a successful retry stops the search");
+        Check(activeAtVerification.SequenceEqual([true, true]),
+            "all candidates use the original activity of the app even when its session disappears during the first switch");
+        attempts.Clear();
+        var second = Acquire(102);
+        Check(second != null && attempts.SequenceEqual(["line-out", "usb"]) && !first!.Invalidated.IsCancellationRequested
+            && mute["line-out"] && mute["usb"] && routes[101] == ("line-out", "line-out") && routes[102] == ("usb", "usb"),
+            "an app that cannot share the reserved output uses another spare while the first app keeps playing");
+        first!.Dispose();
+        Check(!mute["line-out"] && mute["usb"] && routes[101] == original && routes[102] == ("usb", "usb"),
+            "returning the first app restores only its output and its own Windows policy");
+        second!.Dispose();
+        attempts.Clear();
+        beforeAttempt.Clear();
+        Check(Acquire(103) == null && attempts.SequenceEqual(candidates) && beforeAttempt.All(route => route == original)
+            && routes[103] == original && !mute["usb"] && !mute["line-out"] && mute["hdmi"],
+            "fallback is reached only after every spare fails, with partial policy changes rolled back and prior mutes preserved");
+        attempts.Clear();
+        bool rollbackFailed = false;
+        try { Acquire(104); }
+        catch (TargetInvocationException ex) when (ex.InnerException is IOException) { rollbackFailed = true; }
+        Check(rollbackFailed && attempts.SequenceEqual(["usb"]) && !mute["usb"] && routes[104] == ("usb", original.Console),
+            "a Windows policy rollback failure ends the switch without treating the failed output as a new baseline");
+    }
+
+    private static void CheckPlaybackMigration()
+    {
+        var host = typeof(App).Assembly.GetType("SonicRoute.AndroidAudioHost", true)!;
+        var waitForMigration = host.GetMethod("WaitForPlaybackMigration", ConcurrencyStatic)!
+            .CreateDelegate<Func<bool, Func<(bool Safe, bool Target, bool Other)>, Action, bool>>();
+        var empty = (true, false, false);
+        var target = (true, true, false);
+        var old = (true, false, true);
+        var unsafeTarget = (false, true, false);
+
+        (bool Migrated, int Samples) Run(bool wasActive, params (bool, bool, bool)[] observations)
+        {
+            int count = 0;
+            bool migrated = waitForMigration(wasActive,
+                () => observations[Math.Min(count++, observations.Length - 1)], () => { });
+            return (migrated, count);
+        }
+
+        var delayed = Run(true, old, empty, target);
+        Check(delayed.Migrated && delayed.Samples > 3,
+            "an active app can migrate after its old session disappears and the new one becomes stable");
+        Check(!Run(true, old, empty).Migrated, "an active app disappearing on every output does not count as a successful move");
+        Check(!Run(true, target, old).Migrated, "an app returning to its original output after briefly moving fails validation");
+        Check(!Run(true, target, unsafeTarget).Migrated, "a spare becoming unsafe during verification is rejected");
+        Check(Run(false, empty).Migrated, "a paused app can select a muted spare before playback resumes");
+
+        var waitForSource = host.GetMethod("WaitForOriginalSpeaker", ConcurrencyStatic)!
+            .CreateDelegate<Func<string, bool, Func<(string? Endpoint, bool Active)>, Action, bool>>();
+        int samples = 0;
+        (string? Endpoint, bool Active)[] returning = [("spare", true), (null, false), ("original", false), ("original", true)];
+        Check(waitForSource("original", true, () => returning[Math.Min(samples++, returning.Length - 1)], () => { })
+            && samples > returning.Length, "fallback waits for stable active playback back on the original speaker");
+        Check(!waitForSource("original", true, () => ("spare", true), () => { })
+            && !waitForSource("original", true, () => ("original", false), () => { }),
+            "a transient spare or an inactive original cannot trigger source-speaker mute for a playing app");
+        Check(waitForSource("original", false, () => ("original", false), () => throw new InvalidOperationException()),
+            "a paused app with its original speaker still selected needs no extra retry delay");
+    }
+
     private static void CheckSourceSpeakerLeases()
     {
         var type = typeof(App).Assembly.GetType("SonicRoute.SourceSpeakerLeases", true)!;
@@ -159,9 +277,10 @@ internal static partial class Program
         var unavailable = new HashSet<string>();
         var writes = new List<(string, bool)>();
         bool failWrite = false;
+        bool sourceActive = true;
         var pool = Activator.CreateInstance(type, ConcurrencyHidden, null, new object[]
         {
-            (Func<int, string?>)(pid => outputs.GetValueOrDefault(pid)),
+            (Func<int, (string?, bool)>)(pid => (outputs.GetValueOrDefault(pid), sourceActive)),
             (Func<string, (bool, bool)>)(id => (initial[id], !unavailable.Contains(id))),
             (Func<string, bool, bool>)((id, muted) =>
             {
@@ -170,11 +289,16 @@ internal static partial class Program
             })
         }, null)!;
         IPcProcessSilenceLease? Acquire(int pid) =>
-            (IPcProcessSilenceLease?)type.GetMethod("Acquire", ConcurrencyHidden)!.Invoke(pool, [pid]);
+            (IPcProcessSilenceLease?)type.GetMethod("Acquire", ConcurrencyHidden)!.Invoke(pool, [pid, outputs.GetValueOrDefault(pid), true]);
         void Revalidate() => type.GetMethod("Revalidate", ConcurrencyHidden)!.Invoke(pool, null);
         void Unmuted() => type.GetMethod("NoteUnmuted", ConcurrencyHidden)!.Invoke(pool, ["speaker"]);
 
         Check(Acquire(99) == null && writes.Count == 0, "an ambiguous or missing application speaker causes no mute write");
+        Check(type.GetMethod("Acquire", ConcurrencyHidden)!.Invoke(pool, [1, "headphones", true]) == null && writes.Count == 0,
+            "a last-moment change of the confirmed source speaker cannot mute a different endpoint");
+        sourceActive = false;
+        Check(Acquire(1) == null && writes.Count == 0, "a disappearing active session at lease acquisition cannot mute a dormant output");
+        sourceActive = true;
         failWrite = true;
         Check(Acquire(1) == null && !initial["speaker"], "a failed speaker mute does not produce a successful transfer");
         failWrite = false;
@@ -227,8 +351,17 @@ internal static partial class Program
             new object[] { Environment.ProcessId, "different-output", (Action)resumed.Set }, null)!;
         type.GetMethod("Refresh", ConcurrencyHidden)!.Invoke(watch, null);
         Check(!resumed.IsSet, "a dormant session on the previous endpoint can be watched without changing its volume or route");
+        using var checkReserved = new ManualResetEventSlim();
+        using var reserved = (IDisposable)Activator.CreateInstance(type, ConcurrencyHidden, null,
+            new object[] { int.MaxValue, output.ID, (Action)(() => { }) }, null)!;
+        type.GetProperty("CheckReservedOutput", ConcurrencyHidden)!.SetValue(reserved, (Action)checkReserved.Set);
+        type.GetMethod("Refresh", ConcurrencyHidden)!.Invoke(reserved, null);
         client.Start();
-        try { Check(resumed.Wait(TimeSpan.FromSeconds(3)), "resuming the same WASAPI session on its previous output revokes an exclusive share"); }
+        try
+        {
+            Check(resumed.Wait(TimeSpan.FromSeconds(3)), "resuming the same WASAPI session on its previous output revokes an exclusive share");
+            Check(checkReserved.Wait(TimeSpan.FromSeconds(3)), "a dormant foreign WASAPI session resuming on the reserved output triggers revalidation");
+        }
         finally { client.Stop(); }
     }
 

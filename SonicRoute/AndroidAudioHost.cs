@@ -22,7 +22,7 @@ internal static partial class AndroidAudioHost
         id => { var state = SystemVolumeService.ReadStateChecked(id); return (state.Muted, state.MuteKnown); },
         SystemVolumeService.SetMute, ReadSilenceRoles, WriteSilenceRoles);
     private static readonly Guid OutputMuteContext = Guid.NewGuid();
-    private static readonly LocalSilenceLeasePool MirrorSilenceLeases = new(FindMirrorSilenceOutput,
+    private static readonly LocalSilenceLeasePool MirrorSilenceLeases = new(FindMirrorSilenceOutputs,
         ReadOutputMute, SetReservedOutputMute, ReadSilenceRoles, WriteSilenceRoles)
         {
             VerifyPlaybackRoute = VerifyWindowsPlaybackRoute,
@@ -344,9 +344,14 @@ internal static partial class AndroidAudioHost
         if (processId <= 0 || (IsPcToPhoneCreated && !PcToPhone.EnableLiveStreaming)) return null;
         return SilenceLeases.Acquire(processId);
     }
-    internal static IPcProcessSilenceLease? AcquireMirrorSilenceLease(int processId) =>
-        processId > 0 && TryGetPcAppPhoneOutput(processId) == null
-            ? MutedOutputs.Acquire(processId) ?? MirrorSilenceLeases.Acquire(processId) : null;
+    internal static IPcProcessSilenceLease? AcquireMirrorSilenceLease(int processId, out (string? Endpoint, bool Active) original)
+    {
+        original = default;
+        if (processId <= 0 || TryGetPcAppPhoneOutput(processId) != null) return null;
+        if (MutedOutputs.Acquire(processId) is { } muted) return muted;
+        original = ReadAppSpeaker(processId);
+        return MirrorSilenceLeases.AcquireForPlayback(processId, original.Active);
+    }
 
     internal static void RevalidateLocalSilence()
     {
@@ -432,7 +437,7 @@ internal static partial class AndroidAudioHost
             || bus.StartsWith("BTH", StringComparison.OrdinalIgnoreCase) || bus.Equals("ACPI", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? FindMirrorSilenceOutput(IReadOnlySet<int> owned, string? reserved)
+    private static IReadOnlyList<string> FindMirrorSilenceOutputs(IReadOnlySet<int> owned, string? reserved)
     {
         using var devices = new WasapiDeviceLease.Enumerator();
         var defaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -441,8 +446,7 @@ internal static partial class AndroidAudioHost
             using var current = devices.TryDefault(role);
             if (current != null) defaults.Add(current.Device.ID);
         }
-        string? candidate = null;
-        int bestRank = -1;
+        var candidates = new List<(string Id, int Rank)>();
         foreach (var lease in devices.ActiveRender())
         using (lease)
         {
@@ -452,60 +456,110 @@ internal static partial class AndroidAudioHost
                 || reserved != null && !string.Equals(reserved, id, StringComparison.OrdinalIgnoreCase)) continue;
             try
             {
+                if (IsMonitorOrInput(device.FriendlyName)) continue;
                 bool muted = device.AudioEndpointVolume.Mute;
                 bool terminal = CanSilenceMirrorOutput(device);
-                int rank = (terminal ? 2 : 0) + (muted ? 1 : 0);
-                if (rank <= bestRank) continue;
                 var sessions = device.AudioSessionManager.Sessions;
-                bool occupied = false;
+                bool occupied = false, dormant = false;
                 for (int i = 0; i < sessions.Count && !occupied; i++)
                 {
                     using var session = sessions[i];
                     int pid = (int)session.GetProcessID;
                     var state = session.State;
-                    // A reservation watches existing dormant sessions and yields when another application resumes.
-                    if (state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive
-                        || (!terminal && pid != 0 && state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateInactive))
-                        occupied = !owned.Contains(pid) && !owned.Any(root => LocalPlaybackWatch.ContainsProcess(root, pid));
+                    if (state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateExpired
+                        || LocalPlaybackWatch.IsOwnLoopback(session, pid) || owned.Contains(pid)
+                        || owned.Any(root => LocalPlaybackWatch.ContainsProcess(root, pid))) continue;
+                    if (state == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive) occupied = true;
+                    else if (pid != 0) dormant = true;
                 }
-                if (!occupied) { candidate = id; bestRank = rank; }
+                if (!occupied)
+                {
+                    if (reserved != null) return [id];
+                    // A dormant session can resume. LocalPlaybackWatch subscribes to it before
+                    // committing; prefer an empty mixer when the hardware outputs cannot migrate.
+                    int rank = (terminal ? 4 : dormant ? 0 : 2) + (muted ? 1 : 0);
+                    candidates.Add((id, rank));
+                }
             }
             catch (System.Runtime.InteropServices.COMException) { }
         }
-        return candidate;
+        return candidates.OrderByDescending(candidate => candidate.Rank).Select(candidate => candidate.Id).ToArray();
     }
 
-    private static bool VerifyWindowsPlaybackRoute(int processId, string targetId)
+    private static bool IsMonitorOrInput(string? name) => name != null && (
+        name.Contains("Microphone", StringComparison.OrdinalIgnoreCase) || name.Contains("麦克风", StringComparison.Ordinal)
+        || name.Contains("麥克風", StringComparison.Ordinal) || name.Contains("Sidetone", StringComparison.OrdinalIgnoreCase)
+        || name.Contains("Side Tone", StringComparison.OrdinalIgnoreCase) || name.Contains("侧音", StringComparison.Ordinal)
+        || name.Contains("側音", StringComparison.Ordinal) || name.EndsWith(" Input", StringComparison.OrdinalIgnoreCase)
+        || name.Contains(" Input (", StringComparison.OrdinalIgnoreCase));
+
+    private static bool VerifyWindowsPlaybackRoute(int processId, string targetId, bool wasActive, IReadOnlySet<int> owners)
     {
-        // Persisted policy can succeed while an app keeps an explicitly opened device.
-        // Give active render sessions a short migration window only during this user-initiated switch.
         using var devices = new WasapiDeviceLease.Enumerator();
-        for (int attempt = 0; attempt < 4; attempt++)
+        return WaitForPlaybackMigration(wasActive, () => ReadPlaybackState(devices, processId, targetId, owners),
+            static () => Thread.Sleep(100));
+    }
+
+    // A player briefly closes its old session before reopening it on the requested
+    // endpoint (or on the old one). A gap alone does not prove that it migrated.
+    internal static bool WaitForPlaybackMigration(bool wasActive, Func<(bool TargetSafe, bool TargetActive, bool OtherActive)> observe, Action wait)
+    {
+        const int maxSamples = 16, stableSamples = 4;
+        int consecutive = 0;
+        for (int sample = 0; sample < maxSamples; sample++)
         {
-            bool targetMuted = false, otherActive = false;
-            foreach (var lease in devices.ActiveRender())
-            using (lease)
+            var state = observe();
+            if (!state.TargetSafe) return false;
+            wasActive |= state.TargetActive || state.OtherActive;
+            if (!state.OtherActive && (!wasActive || state.TargetActive))
             {
-                var endpoint = lease.Device;
-                if (string.Equals(endpoint.ID, targetId, StringComparison.OrdinalIgnoreCase))
-                {
-                    targetMuted = endpoint.AudioEndpointVolume.Mute;
-                    continue;
-                }
-                if (otherActive) continue;
-                var sessions = endpoint.AudioSessionManager.Sessions;
-                for (int i = 0; i < sessions.Count && !otherActive; i++)
-                {
-                    using var session = sessions[i];
-                    otherActive = session.State == NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive
-                        && LocalPlaybackWatch.ContainsProcess(processId, (int)session.GetProcessID);
-                }
+                if (++consecutive == stableSamples) return true;
             }
-            if (!targetMuted) return false;
-            if (!otherActive) return true;
-            if (attempt < 3) Thread.Sleep(100);
+            else consecutive = 0;
+            if (sample + 1 < maxSamples) wait();
         }
-        throw new InvalidOperationException(L10n.T("Phone.AppKeptOutput"));
+        return false;
+    }
+
+    private static (bool TargetSafe, bool TargetActive, bool OtherActive) ReadPlaybackState(WasapiDeviceLease.Enumerator devices,
+        int processId, string? targetId, IReadOnlySet<int>? owners)
+    {
+        if (targetId != null)
+            foreach (var role in Enum.GetValues<NAudio.CoreAudioApi.Role>())
+            {
+                using var current = devices.TryDefault(role);
+                if (string.Equals(current?.Device.ID, targetId, StringComparison.OrdinalIgnoreCase)) return (false, false, false);
+            }
+        bool targetSafe = false, targetActive = false, otherActive = false;
+        foreach (var lease in devices.ActiveRender())
+        using (lease)
+        {
+            var endpoint = lease.Device;
+            bool onTarget = string.Equals(endpoint.ID, targetId, StringComparison.OrdinalIgnoreCase);
+            if (onTarget) targetSafe = endpoint.AudioEndpointVolume.Mute;
+            if (!onTarget && otherActive) continue;
+            var sessions = endpoint.AudioSessionManager.Sessions;
+            for (int i = 0; i < sessions.Count; i++)
+            {
+                using var session = sessions[i];
+                if (session.State != NAudio.CoreAudioApi.Interfaces.AudioSessionState.AudioSessionStateActive) continue;
+                int pid = (int)session.GetProcessID;
+                if (LocalPlaybackWatch.IsOwnLoopback(session, pid)) continue;
+                if (LocalPlaybackWatch.ContainsProcess(processId, pid))
+                {
+                    if (onTarget) targetActive = true;
+                    else
+                    {
+                        otherActive = true;
+                        if (targetId == null) return (false, false, true);
+                        break;
+                    }
+                }
+                else if (onTarget && !owners!.Any(root => LocalPlaybackWatch.ContainsProcess(root, pid)))
+                    return (false, targetActive, otherActive);
+            }
+        }
+        return (targetSafe, targetActive, otherActive);
     }
 
     private static (string? Multimedia, string? Console) ReadSilenceRoles(int pid)
@@ -534,8 +588,7 @@ internal static partial class AndroidAudioHost
             .Where(d => !string.Equals(d.Id, defaultId, StringComparison.OrdinalIgnoreCase)
                 && !MirrorSilenceLeases.OwnsEndpoint(d.Id) && !SourceSpeakers.OwnsEndpoint(d.Id)
                 && !AndroidOutputIdentity.IsPhoneOutput(d.Id)
-                && d.DisplayName?.Contains("Microphone", StringComparison.OrdinalIgnoreCase) != true
-                && d.DisplayName?.Contains("麦克风", StringComparison.OrdinalIgnoreCase) != true)
+                && !IsMonitorOrInput(d.DisplayName))
             .OrderBy(d => hidden.Contains(d.Id) ? 0 : 1)
             .ThenBy(d => d.DisplayName?.Contains("Steam Streaming Speakers", StringComparison.OrdinalIgnoreCase) == true ? 0
                 : d.DisplayName?.Contains("High Definition Audio", StringComparison.OrdinalIgnoreCase) == true ? 1

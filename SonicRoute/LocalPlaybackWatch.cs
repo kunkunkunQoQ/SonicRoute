@@ -21,6 +21,12 @@ internal sealed class LocalPlaybackWatch(int processId, string routedEndpoint, A
     internal static bool ContainsProcess(int root, int candidate) =>
         root == candidate || candidate > 0 && AudioProcessTree.DescendsFrom(candidate, root);
 
+    // Windows can expose a process-loopback tap as an active session on the
+    // source's render endpoint. An unrecognized session remains a potential renderer.
+    internal static bool IsOwnLoopback(AudioSessionControl session, int pid) =>
+        pid == Environment.ProcessId && session.GetSessionIdentifier.EndsWith(
+            "%b{" + PcProcessLoopbackCapture.CaptureSessionId + "}", StringComparison.OrdinalIgnoreCase);
+
     public void Refresh()
     {
         var present = new HashSet<string>(StringComparer.Ordinal);
@@ -39,7 +45,9 @@ internal sealed class LocalPlaybackWatch(int processId, string routedEndpoint, A
                 try
                 {
                     if (session.State == AudioSessionState.AudioSessionStateExpired) continue;
-                    bool ownProcess = ContainsProcess(processId, (int)session.GetProcessID);
+                    int pid = (int)session.GetProcessID;
+                    if (IsOwnLoopback(session, pid)) continue;
+                    bool ownProcess = ContainsProcess(processId, pid);
                     if (onTarget == ownProcess) continue;
                     string key = session.GetSessionInstanceIdentifier;
                     present.Add(key);

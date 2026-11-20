@@ -61,13 +61,14 @@ internal static partial class LocalAppOutputMirrors
         {
             _phoneIsolationWatch ??= new LocalIsolationNotifications();
             IPcProcessSilenceLease? lease = null;
-            try { lease = AndroidAudioHost.AcquireMirrorSilenceLease(ProcessId); }
+            (string? Endpoint, bool Active) original = default;
+            try { lease = AndroidAudioHost.AcquireMirrorSilenceLease(ProcessId, out original); }
             catch (Exception ex) when (allowSpeakerMute && (ex is InvalidOperationException or COMException))
             {
                 ExceptionDiagnostics.Record("LocalAppOutputMirrors.Isolate", ex);
             }
             bool muteSpeaker = lease == null && allowSpeakerMute;
-            if (muteSpeaker) lease = AndroidAudioHost.AcquireSpeakerFallback(ProcessId);
+            if (muteSpeaker) lease = AndroidAudioHost.AcquireSpeakerFallback(ProcessId, original);
             if (lease == null) throw new IOException(L10n.T("Phone.AppKeptOutput"));
             try
             {

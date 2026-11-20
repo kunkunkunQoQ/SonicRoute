@@ -7,6 +7,7 @@ namespace SonicRoute.AndroidAudio;
 
 internal static class PcProcessLoopbackCapture
 {
+    internal const string CaptureSessionId = "f4f87993-b445-47c4-8e81-475afe1b6760";
     private const string VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK = "VAD\\Process_Loopback";
     private const int PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0;
     private const int AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1;
@@ -81,7 +82,7 @@ internal static class PcProcessLoopbackCapture
     [ComImport, Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IAudioClient
     {
-        [PreserveSig] int Initialize(int shareMode, uint streamFlags, long hnsBufferDuration, long hnsPeriodicity, ref WAVEFORMATEX pFormat, IntPtr audioSessionGuid);
+        [PreserveSig] int Initialize(int shareMode, uint streamFlags, long hnsBufferDuration, long hnsPeriodicity, ref WAVEFORMATEX pFormat, [In] ref Guid audioSessionGuid);
         [PreserveSig] int GetBufferSize(out uint numBufferFrames);
         [PreserveSig] int GetStreamLatency(out long phnsLatency);
         [PreserveSig] int GetCurrentPadding(out uint numPaddingFrames);
@@ -213,10 +214,11 @@ internal static class PcProcessLoopbackCapture
 
         uint flags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
             | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+        var sessionGuid = new Guid(CaptureSessionId);
         var client = ActivateProcessLoopbackClient(processId, token);
         try
         {
-            if (client.Initialize(0, flags | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 200_000, 0, ref wfx, IntPtr.Zero) >= 0
+            if (client.Initialize(0, flags | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 200_000, 0, ref wfx, ref sessionGuid) >= 0
                 && client.SetEventHandle(sampleEvent.SafeWaitHandle.DangerousGetHandle()) >= 0)
             {
                 useEventCallback = true;
@@ -228,7 +230,7 @@ internal static class PcProcessLoopbackCapture
         client = ActivateProcessLoopbackClient(processId, token);
         try
         {
-            Marshal.ThrowExceptionForHR(client.Initialize(0, flags, 200_000, 0, ref wfx, IntPtr.Zero));
+            Marshal.ThrowExceptionForHR(client.Initialize(0, flags, 200_000, 0, ref wfx, ref sessionGuid));
             useEventCallback = false;
             return client;
         }

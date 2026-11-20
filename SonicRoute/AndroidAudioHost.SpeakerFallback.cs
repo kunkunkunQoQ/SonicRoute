@@ -9,17 +9,52 @@ namespace SonicRoute;
 
 internal static partial class AndroidAudioHost
 {
-    private static readonly SourceSpeakerLeases SourceSpeakers = new(FindAppSpeaker, ReadOutputMute,
+    private static readonly SourceSpeakerLeases SourceSpeakers = new(ReadAppSpeaker, ReadOutputMute,
         (id, mute) => SetOutputMute(id, mute, allowDefault: true))
     {
         ObservePlayback = (pid, id, revoke) => new LocalPlaybackWatch(pid, id, revoke)
     };
 
-    internal static IPcProcessSilenceLease? AcquireSpeakerFallback(int processId) =>
-        processId > 0 && processId != Environment.ProcessId && TryGetPcAppPhoneOutput(processId) == null
-            ? SourceSpeakers.Acquire(processId) : null;
+    internal static IPcProcessSilenceLease? AcquireSpeakerFallback(int processId, (string? Endpoint, bool Active) original)
+    {
+        if (processId <= 0 || processId == Environment.ProcessId || TryGetPcAppPhoneOutput(processId) != null) return null;
+        if (original.Active && original.Endpoint == null) return null;
+        string? expected = original.Endpoint;
+        if (expected == null)
+        {
+            var (media, console) = ReadSilenceRoles(processId);
+            if (media != null && console != null && !string.Equals(media, console, StringComparison.OrdinalIgnoreCase)) return null;
+            using var devices = new WasapiDeviceLease.Enumerator();
+            using var system = devices.TryDefault(Role.Multimedia);
+            expected = media ?? console ?? system?.Device.ID;
+        }
+        if (expected == null) return null;
+        // A policy rollback may finish before the player reopens its original WASAPI session.
+        // Never mute a spare just because it transiently hosts the last active session.
+        bool requirePlayback = original.Active || original.Endpoint == null;
+        bool restored = WaitForOriginalSpeaker(expected, requirePlayback,
+            () => ReadAppSpeaker(processId), static () => System.Threading.Thread.Sleep(100));
+        return restored ? SourceSpeakers.Acquire(processId, expected, requirePlayback) : null;
+    }
 
-    private static string? FindAppSpeaker(int processId)
+    private static bool WaitForOriginalSpeaker(string expected, bool requirePlayback,
+        Func<(string? Endpoint, bool Active)> observe, Action wait)
+    {
+        int matches = 0;
+        for (int sample = 0; sample < 20; sample++)
+        {
+            var current = observe();
+            if (string.Equals(current.Endpoint, expected, StringComparison.OrdinalIgnoreCase) && (!requirePlayback || current.Active))
+            {
+                if (!requirePlayback || ++matches == 3) return true;
+            }
+            else matches = 0;
+            if (sample < 19) wait();
+        }
+        return false;
+    }
+
+    private static (string? Endpoint, bool Active) ReadAppSpeaker(int processId)
     {
         using var devices = new WasapiDeviceLease.Enumerator();
         string? active = null;
@@ -36,28 +71,29 @@ internal static partial class AndroidAudioHost
             {
                 using var session = sessions[i];
                 var state = session.State;
-                if (state == AudioSessionState.AudioSessionStateExpired ||
-                    !LocalPlaybackWatch.ContainsProcess(processId, (int)session.GetProcessID)) continue;
+                if (state == AudioSessionState.AudioSessionStateExpired) continue;
+                int pid = (int)session.GetProcessID;
+                if (!LocalPlaybackWatch.ContainsProcess(processId, pid) || LocalPlaybackWatch.IsOwnLoopback(session, pid)) continue;
                 if (state == AudioSessionState.AudioSessionStateInactive)
                 {
                     dormant.Add(id);
                     continue;
                 }
-                if (active != null && !string.Equals(active, id, StringComparison.OrdinalIgnoreCase)) return null;
+                if (active != null && !string.Equals(active, id, StringComparison.OrdinalIgnoreCase)) return (null, true);
                 active = id;
                 break;
             }
         }
-        if (active != null) return usable.Contains(active) ? active : null;
+        if (active != null) return (usable.Contains(active) ? active : null, true);
 
         var (media, console) = ReadSilenceRoles(processId);
-        if (media != null && console != null && !string.Equals(media, console, StringComparison.OrdinalIgnoreCase)) return null;
+        if (media != null && console != null && !string.Equals(media, console, StringComparison.OrdinalIgnoreCase)) return (null, false);
         string? preferred = media ?? console;
         if (preferred == null && dormant.Count == 1) preferred = System.Linq.Enumerable.Single(dormant);
-        if (preferred != null) return usable.Contains(preferred) ? preferred : null;
+        if (preferred != null) return (usable.Contains(preferred) ? preferred : null, false);
         using var speaker = devices.TryDefault(Role.Multimedia);
         string? defaultId = speaker?.Device.ID;
-        return defaultId != null && usable.Contains(defaultId) && (dormant.Count == 0 || dormant.Contains(defaultId)) ? defaultId : null;
+        return (defaultId != null && usable.Contains(defaultId) && (dormant.Count == 0 || dormant.Contains(defaultId)) ? defaultId : null, false);
     }
 }
 #endif
