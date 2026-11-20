@@ -55,6 +55,7 @@ function render(language, text) {
     if (!(key in variables)) throw new Error('Unknown shared placeholder: ' + key);
     return variables[key];
   });
+  const automationPreview = language.locale === 'ja-JP' ? 'docs/images/automation-editor-ja.png' : 'docs/images/automation-editor.png';
   const scenarioIcons = ['🎮 ', '🎵 ', '⚡ ', '🎙️ ', '📹 ', '📱 '];
   const editionIcons = ['⭐ ', '⚡ ', '🛡️ ', '🔄 '];
   const rows = [
@@ -96,7 +97,7 @@ function render(language, text) {
     shared.minimumWindows + ' · x64 / ARM64' + experimentalSuffix + ' · ' + text.languages + ' · ' + link(text.license, 'LICENSE'), '',
     '<div>',
     `<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="${attr(text.demoAlt)}"></a>`,
-    `<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="${attr(text.automationPreviewAlt)}"></a>`,
+    `<a href="${automationPreview}"><img src="${automationPreview}" width="380" align="top" alt="${attr(text.automationPreviewAlt)}"></a>`,
     '</div>', '',
     '<sub>' + attr(text.preview) + '</sub>', '',
     '<details>',
