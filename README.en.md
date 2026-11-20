@@ -16,10 +16,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="A phone app’s audio is dragged into the PC’s quick panel, switched to a different output, then dragged back to the phone"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Automation rule editor showing an app trigger and a sequence of audio actions"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Automation rule editor with a hotkey trigger and the action menu open to “Set system default playback device”"></a>
 </div>
 
-<sub>On the left, a phone app’s audio is dragged to the PC and switched between outputs. On the right, the rule editor shows an app trigger and a sequence of actions.</sub>
+<sub>On the left, a phone app’s audio is dragged to the PC and switched between outputs. On the right, the action menu is open for a rule triggered by a hotkey.</sub>
 
 <details>
 <summary><sub>🖼️ More screenshots of the quick panel and Android device settings</sub></summary>

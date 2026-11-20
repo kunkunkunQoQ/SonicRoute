@@ -16,10 +16,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Interface dispon
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Une application Android est déplacée vers le panneau rapide du PC pour y choisir sa sortie audio."></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Éditeur de règles avec un déclencheur lié à une application et plusieurs actions audio"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Éditeur de règles avec un raccourci clavier comme déclencheur. Le menu des actions est ouvert sur le choix du périphérique de lecture par défaut."></a>
 </div>
 
-<sub>À gauche, le son d’une application Android est envoyé au PC par glisser-déposer, puis sa sortie est modifiée. À droite, l’éditeur permet de choisir le déclencheur d’une règle et la suite d’actions à exécuter.</sub>
+<sub>À gauche, le son d’une application Android est envoyé au PC par glisser-déposer, puis sa sortie est modifiée. À droite, le menu des actions est ouvert pour une règle déclenchée par un raccourci clavier.</sub>
 
 <details>
 <summary><sub>🖼️ Autres captures du panneau rapide et de la gestion des téléphones</sub></summary>

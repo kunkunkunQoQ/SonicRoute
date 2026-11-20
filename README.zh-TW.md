@@ -16,10 +16,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="將手機應用程式拖到電腦的快速面板，切換音訊輸出裝置"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="在自動化規則編輯器中選擇與應用程式有關的觸發條件和音訊動作"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="自動化規則編輯器：觸發條件為按下快速鍵，動作選單中已選取設定系統預設播放裝置"></a>
 </div>
 
-<sub>左圖示範如何將手機上的應用程式拖到電腦的快速面板，再切換音訊輸出。右圖是自動化規則編輯器，可設定觸發條件與執行動作。</sub>
+<sub>左圖示範如何將手機上的應用程式拖到電腦的快速面板，再切換音訊輸出。右圖示範如何為快速鍵規則選擇要執行的音訊動作。</sub>
 
 <details>
 <summary><sub>🖼️ 查看更多快速面板與手機管理畫面</sub></summary>

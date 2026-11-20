@@ -16,10 +16,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지�
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="휴대폰 앱을 PC의 빠른 패널로 끌어와 오디오 출력 장치를 바꾸는 모습"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="자동화 규칙 편집기에서 앱과 관련된 실행 조건과 오디오 작업을 선택하는 화면"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="단축키로 실행하는 자동화 규칙의 작업 목록에서 시스템 기본 재생 장치 설정을 선택한 화면"></a>
 </div>
 
-<sub>왼쪽에서는 휴대폰 앱을 PC의 빠른 패널로 끌어와 소리를 재생할 장치를 바꾸는 모습을 볼 수 있습니다. 오른쪽은 규칙을 실행할 조건과 작업 순서를 정하는 자동화 편집기입니다.</sub>
+<sub>왼쪽에서는 휴대폰 앱을 PC의 빠른 패널로 끌어와 소리를 재생할 장치를 바꾸는 모습을 볼 수 있습니다. 오른쪽은 단축키로 실행할 규칙의 오디오 작업을 선택하는 화면입니다.</sub>
 
 <details>
 <summary><sub>🖼️ 빠른 패널과 휴대폰 관리 화면 더 보기</sub></summary>

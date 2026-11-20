@@ -16,10 +16,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Interfaz en nueve
 
 <div>
 <a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="Una aplicación Android se arrastra al panel rápido del PC para elegir su salida de audio."></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Editor de reglas con un disparador de aplicación y varias acciones de audio"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Editor de reglas con un atajo de teclado como disparador y el menú de acciones abierto en la opción para establecer el dispositivo de reproducción predeterminado."></a>
 </div>
 
-<sub>A la izquierda se muestra cómo enviar el sonido de una aplicación Android al PC arrastrándola y cómo cambiar su salida. A la derecha se ve el editor de reglas con un disparador y una secuencia de acciones.</sub>
+<sub>A la izquierda se muestra cómo enviar el sonido de una aplicación Android al PC arrastrándola y cómo cambiar su salida. A la derecha está abierto el menú de acciones de una regla que se ejecuta con un atajo de teclado.</sub>
 
 <details>
 <summary><sub>🖼️ Más capturas del panel rápido y de la gestión de móviles</sub></summary>
