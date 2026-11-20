@@ -82,6 +82,7 @@
 
         <!-- 标题栏按钮 -->
         <Style x:Key="TitleBarButton" TargetType="Button">
+            <Setter Property="AutomationProperties.Name" Value="{Binding ToolTip, RelativeSource={RelativeSource Self}, Mode=OneWay}"/>
             <Setter Property="Width" Value="46"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="Background" Value="Transparent"/>
@@ -265,6 +266,7 @@
 
         <!-- 设备快速切换按钮 -->
         <Style x:Key="QuickDevButton" TargetType="Button">
+            <Setter Property="ToolTip" Value="{Binding Path=(AutomationProperties.Name), RelativeSource={RelativeSource Self}, Mode=OneWay}"/>
             <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBg}"/>
             <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
@@ -312,7 +314,7 @@
                     <Ellipse Width="6" Height="6" HorizontalAlignment="Right" VerticalAlignment="Top"
                              Margin="0,-1,-1,0" Fill="{Binding DotBrush}"
                              Visibility="{Binding IsAutoSwitchDisabled, Converter={StaticResource BoolToVis}}"
-                             ToolTip="已禁用自动切换"/>
+                             ToolTip="{Binding [Apps.DisableAutoOn], Source={x:Static local:L10n.Instance}}"/>
                 </Grid>
                 <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontSize="13"
                            TextTrimming="CharacterEllipsis" MaxWidth="230"/>
@@ -871,12 +873,12 @@
                                 <Run Text="{Binding [St.AuthorHome], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                 <Hyperlink x:Name="BiliLink" Click="BiliLink_Click"
                                            Foreground="{DynamicResource Theme.Accent}">
-                                    <Run Text="哔哩哔哩"/>
+                                    <Run Text="{Binding [St.Bilibili], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                 </Hyperlink>
                                 <Run Text=" ‖ "/>
                                 <Hyperlink x:Name="IfdianLink" Click="IfdianLink_Click"
                                            Foreground="{DynamicResource Theme.Accent}">
-                                    <Run Text="爱发电"/>
+                                    <Run Text="{Binding [St.Afdian], Mode=OneWay, Source={x:Static local:L10n.Instance}}"/>
                                 </Hyperlink>
                                 <Run Text=" ‖ "/>
                                 <Hyperlink x:Name="GithubLink" Click="GithubLink_Click"
@@ -1027,15 +1029,18 @@
                            Foreground="{DynamicResource Theme.TextPrimary}"
                            VerticalAlignment="Center" Margin="16,0,0,0"
                            MouseLeftButtonDown="Titlebar_MouseDown"
-                           ToolTip="拖动移动窗口"/>
+                           ToolTip="{Binding [Window.DragToMove], Source={x:Static local:L10n.Instance}}"/>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                     <Button x:Name="UpdateNoticeButton" Visibility="Collapsed" Style="{StaticResource GhostButton}"
                             Margin="0,0,12,0" Padding="10,4" MaxWidth="300" Click="UpdateNotice_Click">
                         <TextBlock x:Name="UpdateNoticeText" Margin="12,0" TextTrimming="CharacterEllipsis"/>
                     </Button>
-                    <Button Content="─" Style="{StaticResource TitleBarButton}" Click="TitlebarMin_Click" ToolTip="最小化"/>
-                    <Button Content="□" Style="{StaticResource TitleBarButton}" Click="TitlebarMax_Click" ToolTip="最大化 / 还原"/>
-                    <Button Content="✕" Style="{StaticResource TitleCloseButton}" Click="TitlebarClose_Click" ToolTip="关闭"/>
+                    <Button Content="─" Style="{StaticResource TitleBarButton}" Click="TitlebarMin_Click"
+                            ToolTip="{Binding [Window.Minimize], Source={x:Static local:L10n.Instance}}"/>
+                    <Button x:Name="TitlebarMaxButton" Content="□" Style="{StaticResource TitleBarButton}" Click="TitlebarMax_Click"
+                            ToolTip="{Binding [Window.Maximize], Source={x:Static local:L10n.Instance}}"/>
+                    <Button Content="✕" Style="{StaticResource TitleCloseButton}" Click="TitlebarClose_Click"
+                            ToolTip="{Binding [Window.Close], Source={x:Static local:L10n.Instance}}"/>
                 </StackPanel>
             </Grid>
 
@@ -1186,7 +1191,7 @@
                                 <TextBlock Grid.ColumnSpan="2" Text="{Binding [Apps.RouteTitle], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PageTitle}" FontSize="14" Margin="0,0,0,6"/>
                                 <StackPanel x:Name="AppsOutputCard" Grid.Row="1" Margin="0,0,4,0">
                                     <TextBlock Text="{Binding [Apps.Output], Source={x:Static local:L10n.Instance}}" Style="{StaticResource SectionTitle}" TextWrapping="Wrap"/>
-                                    <ComboBox x:Name="AppsOutputCombo" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
+                                    <ComboBox x:Name="AppsOutputCombo" Style="{StaticResource SelCombo}" ItemTemplate="{StaticResource AudioDeviceLabel}" TextSearch.TextPath="DisplayName"
                                               SelectionChanged="AppsOutputCombo_SelectionChanged"/>
                                     <ItemsControl x:Name="AppsOutputQuickPanel" Margin="0,5,0,0">
                                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -1195,7 +1200,7 @@
                                 <StackPanel x:Name="AppsInputCard" Grid.Row="1" Grid.Column="1" Margin="4,0,0,0" Visibility="Collapsed">
                                     <TextBlock x:Name="AppsInputLabel" Text="{Binding [Apps.Input], Source={x:Static local:L10n.Instance}}"
                                                Style="{StaticResource SectionTitle}" TextWrapping="Wrap" Visibility="Collapsed"/>
-                                    <ComboBox x:Name="AppsInputCombo" Style="{StaticResource SelCombo}" DisplayMemberPath="DisplayLabel"
+                                    <ComboBox x:Name="AppsInputCombo" Style="{StaticResource SelCombo}" ItemTemplate="{StaticResource AudioDeviceLabel}" TextSearch.TextPath="DisplayName"
                                               SelectionChanged="AppsInputCombo_SelectionChanged" Visibility="Collapsed"/>
                                     <ItemsControl x:Name="AppsInputQuickPanel" Margin="0,5,0,0">
                                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>

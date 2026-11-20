@@ -26,7 +26,6 @@ namespace SonicRoute
                 title = full.Substring(0, split);
                 detail = full.Substring(split + 2, full.Length - split - 3);
             }
-            if (string.IsNullOrWhiteSpace(title)) title = device.DisplayLabel;
             var icon = device.Flow == EDataFlow.eCapture ? AutomationIcons.Microphone
                 : device.Id == AudioService.SystemDefaultDeviceId || full.IndexOf("HDMI", StringComparison.OrdinalIgnoreCase) >= 0
                     ? AutomationIcons.Monitor
@@ -52,7 +51,8 @@ namespace SonicRoute
         }
 
         private string SettingsDeviceTitle(AudioDeviceInfo device, string original) =>
-            _config.DeviceNames.TryGetValue(device.Id, out var custom) && !string.IsNullOrWhiteSpace(custom) ? custom : original;
+            _config.DeviceNames.TryGetValue(device.Id, out var custom) && !string.IsNullOrWhiteSpace(custom) ? custom :
+            string.IsNullOrWhiteSpace(original) ? PanelDevices.Name(device) : original;
 
         private void UpdateSettingsDeviceTitle(UIElement label, AudioDeviceInfo device)
         {
@@ -78,7 +78,7 @@ namespace SonicRoute
                 Content = BuildSettingsDeviceLabel(device), IsChecked = !hidden.Contains(device.Id),
                 Tag = device, Style = (Style)FindResource("SettingsDeviceCheck")
             };
-            AutomationProperties.SetName(check, device.DisplayName ?? device.DisplayLabel);
+            AutomationProperties.SetName(check, PanelDevices.Name(device));
             check.Checked += handler;
             check.Unchecked += handler;
             return check;
@@ -92,7 +92,7 @@ namespace SonicRoute
                 FontSize = 12.5, VerticalContentAlignment = VerticalAlignment.Center, MinWidth = 80,
                 Margin = new Thickness(16, 0, 0, 0)
             };
-            AutomationProperties.SetName(box, device.DisplayName ?? device.DisplayLabel);
+            AutomationProperties.SetName(box, PanelDevices.Name(device));
             box.TextChanged += DeviceName_TextChanged;
             box.LostKeyboardFocus += NameEdit_LostKeyboardFocus;
             var layout = new Grid();
@@ -155,7 +155,7 @@ namespace SonicRoute
                 else UpdateSettingsDeviceTitle((UIElement)check.Content, device);
                 check.Tag = device;
                 check.IsChecked = !hidden.Contains(device.Id);
-                AutomationProperties.SetName(check, device.DisplayName ?? device.DisplayLabel);
+                AutomationProperties.SetName(check, PanelDevices.Name(device));
                 PlaceSettingsRow(list, check, index++);
             }
         }
@@ -185,7 +185,7 @@ namespace SonicRoute
                 var box = (TextBox)layout.Children[1];
                 string value = _config.DeviceNames.TryGetValue(device.Id, out var name) ? name ?? "" : "";
                 if (!box.IsKeyboardFocusWithin && !string.Equals(box.Text.Trim(), value.Trim(), StringComparison.Ordinal)) box.Text = value;
-                AutomationProperties.SetName(box, device.DisplayName ?? device.DisplayLabel);
+                AutomationProperties.SetName(box, PanelDevices.Name(device));
                 PlaceSettingsRow(list, row, index++);
             }
         }

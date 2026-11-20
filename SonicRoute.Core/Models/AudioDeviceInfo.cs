@@ -3,13 +3,13 @@
 namespace SonicRoute.Core.Models
 {
     /// <summary>音频设备（播放/录音）</summary>
-    public sealed class AudioDeviceInfo
+    public class AudioDeviceInfo
     {
         /// <summary>IMMDevice.GetId() 返回的完整设备接口路径</summary>
         public required string Id { get; init; }
 
         /// <summary>友好名称（PKEY_Device_FriendlyName）</summary>
-        public string? DisplayName { get; init; }
+        public virtual string? DisplayName { get; init; }
 
         public EDataFlow Flow { get; init; }
 
