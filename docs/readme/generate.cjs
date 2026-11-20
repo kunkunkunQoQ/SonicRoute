@@ -29,15 +29,16 @@ function validate(locale, text) {
     const expected = Array.isArray(reference[key]) ? reference[key] : [reference[key]];
     if (!Array.isArray(values) || values.length !== expected.length) throw new Error(locale + ': invalid item count for ' + key);
     values.forEach((value, index) => {
-      if (typeof value !== 'string' || (!value.trim() && !(locale === 'zh-CN' && key === 'wikiNote')) || /[\r\n]/.test(value) || /https?:\/\/|<\/?[a-z]/i.test(value)) throw new Error(locale + ': invalid text for ' + key);
+      if (typeof value !== 'string' || (!value.trim() && !(locale === 'zh-CN' && key === 'wikiNote')) || /[\r\n]/.test(key === 'releaseSummary' ? value.replaceAll('\n\n', ' ') : value) || /https?:\/\/|<\/?[a-z]/i.test(value)) throw new Error(locale + ': invalid text for ' + key);
       if (JSON.stringify(placeholders(value)) !== JSON.stringify(placeholders(expected[index]))) throw new Error(locale + ': placeholders differ for ' + key);
     });
   }
 }
 function render(language, text) {
   const cjk = ['zh-CN', 'zh-TW', 'ja-JP'].includes(language.locale);
-  const colon = cjk ? '：' : language.locale === 'fr-FR' ? ' : ' : ': ';
+  const colon = cjk ? '：' : language.locale === 'fr-FR' ? '\u00a0: ' : ': ';
   const period = cjk ? '。' : '.';
+  const releaseDate = new Intl.DateTimeFormat(language.locale, { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(shared.releaseDate));
   const experimentalSuffix = cjk ? '（' + text.experimental + '）' : ' (' + text.experimental + ')';
   const releaseUrl = shared.repository + '/releases';
   const downloadAsset = (suffix, release = shared.release) => releaseUrl + '/download/' + release + '/SonicRoute-' + release + '-' + suffix;
@@ -66,8 +67,15 @@ function render(language, text) {
     [text.editionLiteNet8, `${link('x64', historicalNet8Asset('Lite-NET8-x64.exe'))} / ${link('ARM64' + experimentalSuffix, historicalNet8Asset('Lite-NET8-arm64.exe'))}`, text.net8Requirement]
   ];
   const navigation = shared.languages.map(item => item.locale === language.locale ? `**${item.name}**` : link(item.name, item.file)).join(' | ') + ' | ' + link('🤖 AI', 'README.ai.md');
-  const sponsorBadge = language.locale === 'zh-CN' ? '赞助-爱发电' : 'Support-Afdian';
-  const sponsor = `[![${text.support}](https://img.shields.io/badge/${sponsorBadge}-946CE6?logo=afdian&logoColor=white)](${shared.author.afdian})`;
+  const badge = (alt, imageUrl, target) => link(`![${alt}](${imageUrl})`, target);
+  const staticBadge = (label, message, color, target, logo = '') => {
+    const query = new URLSearchParams({ label, message, color });
+    if (logo) {
+      query.set('logo', logo);
+      query.set('logoColor', 'white');
+    }
+    return badge([label, message].filter(Boolean).join(colon), 'https://img.shields.io/static/v1?' + query, target);
+  };
   const automationImage = `<a href="${wiki(pages.automationGuide)}" title="${attr(text.automationGuide)}"><img src="docs/images/${attr(language.automationMascot)}" width="48" align="middle" alt="${attr(text.automationAlt)}"></a>`;
   const docGroups = [ ['guide', 'featuresGuide'], ['hotkeysGuide'], ['automationGuide', 'commandGuide'], ['faq'], ['technical', 'releaseInfo', 'history'] ];
   const documentLink = key => link(text[key], wiki(key === 'releaseInfo' ? pages.roadmap : pages[key]));
@@ -75,13 +83,16 @@ function render(language, text) {
     '<!-- Generated from docs/readme/shared.json and docs/readme/locales/' + language.locale + '.json. Edit those sources, then run node docs/readme/generate.cjs. -->',
     '<!-- AI / LLM Context: ' + wiki(pages.ai) + ' -->',
     '# 🎧 ' + text.title, '', navigation, '',
-    `[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](${releaseUrl}) ` +
-      '[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) ' +
-      `[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](${shared.repository}) ` +
-      `[![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](${releaseUrl}) ` +
-      `[![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](${releaseUrl}) ` + sponsor, '',
+    [
+      badge(text.currentRelease, `https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=${encodeURIComponent(text.currentRelease)}`, releaseUrl),
+      staticBadge(text.licenseTitle, 'GPL-3.0', 'blue', 'LICENSE'),
+      staticBadge(text.platformLabel, 'Windows 10 | 11', 'blue', shared.repository),
+      staticBadge(text.architectureLabel, 'x64 | ARM64', 'orange', releaseUrl),
+      badge(text.downloadCountLabel, `https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=${encodeURIComponent(text.downloadCountLabel)}`, releaseUrl),
+      staticBadge('', text.support, '946CE6', shared.author.afdian, 'afdian')
+    ].join(' '), '',
     '**' + text.tagline + '**', '', text.intro, '',
-    '📥 ' + [link(text.download, releaseUrl + '/latest'), `Microsoft Store (${link('Full', shared.store)} / ${link('Lite', shared.storeLite)})`, link(text.guide, wiki(pages.guide)), link(text.wiki, shared.repository + '/wiki')].join(' · '), '',
+    '📥 ' + [link(text.download, releaseUrl + '/latest'), `Microsoft Store (${link('Full', shared.store)} / ${link('Lite', shared.storeLite)})`, link(text.guideTitle, wiki(pages.guide)), link(text.wiki, shared.repository + '/wiki')].join(' · '), '',
     shared.minimumWindows + ' · x64 / ARM64' + experimentalSuffix + ' · ' + text.languages + ' · ' + link(text.license, 'LICENSE'), '',
     '<div>',
     `<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="${attr(text.demoAlt)}"></a>`,
@@ -101,7 +112,7 @@ function render(language, text) {
     '| ' + [text.scenario, text.whatYouCanDo].join(' | ') + ' |', '|---|---|',
     ...text.useCaseNames.map((scenario, index) => '| ' + tableCell((scenarioIcons[index] || '') + scenario) + ' | ' + tableCell(fill(text.useCaseActions[index])) + ' |'), '',
     '## 🚀 ' + text.downloadTitle, '',
-    '**' + text.currentRelease + colon + link(shared.release, releaseUrl + '/tag/' + shared.release) + '** · ' + shared.releaseDate + ' · ' + link(text.releaseNotes, shared.releaseNotes), '',
+    '**' + text.currentRelease + colon + link(shared.release, releaseUrl + '/tag/' + shared.release) + '** · ' + releaseDate + ' · ' + link(text.releaseNotes, shared.releaseNotes), '',
     fill(text.downloadIntro), '',
     '| ' + [text.edition, text.downloadColumn, text.requirements].join(' | ') + ' |', '|---|---|---|',
     ...rows.map(row => '| ' + row.map(tableCell).join(' | ') + ' |'), '',
@@ -117,7 +128,7 @@ function render(language, text) {
     ...text.steps.map((step, index) => (index + 1) + '. ' + step), '',
     '### ⚡ ' + text.cliTitle, '',
     fill(text.commandNote), '',
-    '```bash',
+    '```powershell',
     '# ' + text.commandSnippetComment,
     'sr "' + text.ruleExample + '"',
     '```', '',
@@ -125,9 +136,9 @@ function render(language, text) {
     fill(text.releaseSummary), '',
     '### ❓ ' + text.faqQuickTitle, '',
     ...text.faqQuestions.flatMap((question, index) => [
-      '**Q' + colon + question + '**',
+      '**' + question + '**',
       '',
-      'A' + colon + text.faqAnswers[index],
+      text.faqAnswers[index],
       ''
     ]),
     '## 📚 ' + text.docsTitle, '', ...(text.wikiNote ? [text.wikiNote, ''] : []),
@@ -143,7 +154,7 @@ function render(language, text) {
     `<a href="EASTER_EGGS.md" title="${attr(text.footerTitle)}"><img src="docs/images/mascot-cozy-knit.png" width="56" align="right" alt="${attr(text.easterEgg)}"></a>`, '',
     text.thanks + ' ' + link(text.footerDocs, shared.repository + '/wiki') + ' · ' + link(text.footerIssues, shared.repository + '/issues') + period, '',
     '**' + text.author + colon + [link(text.bilibili, shared.author.bilibili), link(text.afdian, shared.author.afdian), link('GitHub', shared.author.github)].join(' | ') + '**', '',
-    `<div align="right"><sub><a href="${wiki(pages.ai)}" title="AI / LLM Context">🤖 AI Context</a></sub></div>`, ''
+    `<div align="right"><sub><a href="${wiki(pages.ai)}">🤖 ${attr(text.aiWikiLabel)}</a></sub></div>`, ''
   ].join('\n');
 }
 function renderAI(shared) {

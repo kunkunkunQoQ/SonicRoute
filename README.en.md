@@ -4,111 +4,115 @@
 
 [简体中文](README.md) | **English** | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE) [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arch](https://img.shields.io/badge/Arch-x64%20%7C%20ARM64-orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Support on Afdian](https://img.shields.io/badge/Support-Afdian-946CE6?logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Current stable release](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=Current%20stable%20release)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![License: GPL-3.0](https://img.shields.io/static/v1?label=License&message=GPL-3.0&color=blue)](LICENSE) [![Platform: Windows 10 | 11](https://img.shields.io/static/v1?label=Platform&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Architecture: x64 | ARM64](https://img.shields.io/static/v1?label=Architecture&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=Downloads)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Support on Afdian](https://img.shields.io/static/v1?label=&message=Support+on+Afdian&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **Send each app's audio to the device you choose.**
 
-Keep music on your speakers and games or calls on your headset. SonicRoute is a Windows audio utility that lives in the system tray: choose output and input devices for individual apps, control audio with hotkeys, the tray wheel or a panel, and combine routine actions into automation rules.
+Play music through your speakers and keep games and calls in your headset. SonicRoute runs in the Windows system tray. Choose a playback device and microphone for each app, adjust the volume with hotkeys or the mouse wheel, and use automation rules for changes you make regularly.
 
-📥 [Download the latest release](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [User guide](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [Download the latest release](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [User guide (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages · [GPL-3.0](LICENSE)
 
 <div>
-<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="SonicRoute live demo: drag mobile app audio to the PC Quick Panel, expand per-app output routes, and drag back"></a>
-<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="SonicRoute automation rule editor: select app triggers and audio action steps"></a>
+<a href="docs/images/phone-audio-drag-demo.gif"><img src="docs/images/phone-audio-drag-demo.gif" width="380" align="top" alt="A phone app’s audio is dragged into the PC’s quick panel, switched to a different output, then dragged back to the phone"></a>
+<a href="docs/images/automation-editor.png"><img src="docs/images/automation-editor.png" width="380" align="top" alt="Automation rule editor showing an app trigger and a sequence of audio actions"></a>
 </div>
 
-<sub>Interface preview: Live drag-and-drop quick panel &amp; mobile audio routing (left); automation rule editor for custom triggers and action chains (right).</sub>
+<sub>On the left, a phone app’s audio is dragged to the PC and switched between outputs. On the right, the rule editor shows an app trigger and a sequence of actions.</sub>
 
 <details>
-<summary><sub>🖼️ More screenshots: Quick Panel &amp; Phone Management</sub></summary>
+<summary><sub>🖼️ More screenshots of the quick panel and Android device settings</sub></summary>
 
 <div>
-<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="SonicRoute Quick panel: output device and per-app volume controls"></a>
-<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="SonicRoute Phone Management: Android device pairing, pinned mobile apps, and virtual display audio settings"></a>
+<a href="docs/images/quick-panel.png"><img src="docs/images/quick-panel.png" width="275" align="top" alt="Quick panel with an output selector and a volume slider for each app"></a>
+<a href="docs/images/phone-management.png"><img src="docs/images/phone-management.png" width="465" align="top" alt="Android device settings for pairing, pinned apps and virtual display audio"></a>
 </div>
 
 </details>
 
 ## ✨ What SonicRoute offers
 
-- **Independent app audio routing (playback + recording).** Assign output and input devices to individual apps—send games and voice chat to headphones and headsets, and music to speakers. Settings persist natively in Windows even after closing SonicRoute, without altering system mixer settings.
-- **Smart foreground focus and tray wheel blind adjustments.** System events lock onto the active audio app in milliseconds. Scroll directly over the system tray to adjust volume or Alt+scroll to switch devices, paired with on-screen OSD feedback and global mic mute, without leaving your active window.
-- **Quick panel and live audio activity indicators.** The card panel features 350–850px adjustable height and position saving; control per-app volume sliders with real-time sound activity meters.
-- **Android Phone Integration & AirPlay Reception (Full Edition)**: Route Android audio into PC with per-app volume and adaptive virtual display windows (with H.265 and foreground gamepad support) or stream PC audio to phone; receive Apple AirPlay audio and aspect-preserving screen mirroring directly in C#, route AirPlay to PC outputs or connected Android speakers/Bluetooth from Quick Panel, and balance loudness with SmartVolume.
-- **Automation combo engine and blazing CLI (6 triggers × 39 actions).** Trigger rules by app launch, focus, exit, schedule, hotkeys, or startup. Chain device switching, volume, muting, app launch with file associations, and PowerShell scripts; use the built-in sr named-pipe command for instant script and hardware deck control without extra background processes.
-- **Event-first detection.** Uses system notifications with a necessary one-second snapshot fallback when needed, and cleans up unneeded data on demand. Full adds optional Android phone audio, virtual-display and AirPlay integration; Lite and Legacy remain PC-only. Available in nine languages.
+- **Choose where each app plays and records.** Send music to your speakers and game audio to your headset, then select the headset microphone for voice chat. Windows remembers the device choices when you exit SonicRoute.
+- **Adjust the current app from the tray.** SonicRoute can follow the foreground app. Scroll over the SonicRoute tray icon to change the target app’s volume, or hold Alt and scroll to switch its output. On-screen indicators show changes, and a global hotkey lets you mute your microphones.
+- **See which apps are playing audio.** The quick panel has a volume slider and a live level meter for each app. It remembers its position, and you can set its height from 350 to 850 device-independent pixels.
+- **Connect an Android device or use AirPlay (Full).** Play Android app audio on the PC, open apps in separate virtual display windows, or send PC audio back to the phone. Android supports H.265 video and gamepad input in the active video window. The built-in C# AirPlay receiver plays audio and mirrors the screen at its original aspect ratio. In the quick panel, send that audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Smart Volume evens out loud passages on supported streams.
+- **Run rules from an event or the command line.** Choose from 6 triggers and 39 actions. Trigger a rule with a hotkey, on a schedule, when an app opens, closes or gains focus, or when SonicRoute starts. Chain actions to switch devices, set volume, mute audio, open a program or file, or run PowerShell. Scripts and hardware controllers can run a rule with `sr` through the existing SonicRoute process.
+- **Respond to Windows events.** SonicRoute uses system notifications, checks process state once a second when needed, and releases data it no longer needs. All three editions support nine interface languages. Lite and Legacy focus on PC audio.
 
 ## 🎮 Everyday uses
 
-Turn tedious manual sound adjustments into seamless, one-time automations. [Set up automation](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
+For example, one rule can switch to your headset and open voice chat when you launch a game. [Set up automation](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99)
 
 | Everyday scenario | How SonicRoute helps |
 |---|---|
-| 🎮 **Voice chat too loud, or game sound drowning out teammates** | Adjust voice chat (Discord) volume independently without altering game audio; keep game in headset and chat in earpiece |
-| 🎵 **Listening to music or watching videos while gaming** | Send music to speakers and keep games in your headset. Hover your mouse over the tray icon and scroll to adjust music volume or Alt+scroll to switch devices without Alt+Tabbing. |
-| ⚡ **Constantly swapping headsets and changing Windows settings for games** | Create a rule: launch game → switch to headset + set volume to 40% + start voice chat; restore speakers on exit |
-| 🎙️ **Stepping away from the PC or taking a private call** | Mute all microphones with Ctrl+Shift+N and confirm mute state instantly via the on-screen OSD banner |
-| 📹 **Streaming on OBS or recording tutorials** | Route applications to dedicated physical or virtual audio tracks so private chats and alerts never end up in recordings |
-| 📱 **Stream phone audio to PC, or control phone apps on desktop** | Route Android audio to PC headphones or speakers and interact with mobile apps in adaptive virtual display windows, or receive Apple AirPlay audio and screen mirroring; switch PC or Android speaker/Bluetooth outputs directly from Quick Panel |
+| 🎮 **Game audio drowns out voice chat** | Adjust voice chat (such as Discord) without changing the game’s volume. You can also send the game and the chat to different outputs. |
+| 🎵 **Listen to music or watch a video while gaming** | Send music to your speakers and keep the game in your headset. Scroll over the SonicRoute icon to adjust the target app’s volume, or hold Alt and scroll to switch its output. |
+| ⚡ **Switch to a headset when a game starts** | Create a rule that switches to the headset, sets the volume to 40% and opens voice chat when the game starts. Use an exit rule to switch back to the speakers. |
+| 🎙️ **Step away from a call or speak privately** | The default shortcut, Ctrl+Shift+N, toggles mute for all microphones. Enable the persistent on-screen indicator to see when they’re muted. |
+| 📹 **Stream with OBS or record a tutorial** | Send the apps you want to record to a separate physical or virtual output, then select that output in your recording software. Leave chats and notifications on another output. |
+| 📱 **Listen to a phone or use its apps on your PC** | In Full, route Android audio to the PC and use phone apps in a virtual display. You can also receive AirPlay audio and screen mirroring. Use the quick panel to play the audio on a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. |
 
 ## 🚀 Download and get started
 
-**Current release: [v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026-11-18 · [Release notes (Chinese)](docs/release-v1.33.md)
+**Current stable release: [v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · November 18, 2026 · [Release notes (Chinese)](docs/release-v1.33.md)
 
-Choose Full x64 for optional Android phone audio, virtual-display and AirPlay integration; choose Lite x64 for PC-only audio features, Legacy x64 for .NET Framework 4.8 systems, or the experimental ARM64 editions for ARM64 PCs. Full includes optional phone and AirPlay integration; Lite and Legacy do not. Microsoft Store provides Full and Lite, and currently available versions are shown on the Store pages. Direct download links below are for v1.33.
+Choose **Full** for Android audio, virtual displays and AirPlay, or **Lite** for PC audio only. Both have x64 and experimental ARM64 builds. **Legacy** is the PC-only x64 edition for systems using .NET Framework 4.8. The direct downloads below are for v1.33. See the Microsoft Store listings for the versions of Full and Lite available there.
 
-| Version | Download | Requirements |
+| Edition | Download | Requirements |
 |---|---|---|
-| ⭐ Full (.NET 10, with optional mobile integration) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | Single EXE portable edition; requires matching .NET 10 Desktop Runtime, includes optional Android audio, virtual display and AirPlay integration. |
-| ⭐ Lite (.NET 10, PC audio only) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | Single-file portable edition; requires matching .NET 10 Desktop Runtime, PC audio features only. |
-| 🛡️ Legacy x64 (PC audio only, .NET Framework 4.8) | [Complete ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | No extra runtime required; relies on built-in .NET Framework 4.8, unpack and run. |
-| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full / Lite editions; requires x64 .NET 10 Desktop Runtime; Store listing controls availability. |
+| ⭐ Full (.NET 10, includes Android and AirPlay) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | One portable executable with Android and AirPlay support. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64). |
+| ⭐ Lite (.NET 10, PC audio only) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | One portable executable. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64). |
+| 🛡️ Legacy x64 (PC audio only, .NET Framework 4.8) | [Download ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | Extract the ZIP and run SonicRoute. It uses Windows’ .NET Framework 4.8. |
+| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | The Store offers Full and Lite. Both require the x64 .NET 10 Desktop Runtime. |
 
 <details>
-<summary><sub>📦 Historical NET8 editions (discontinued, click to expand)</sub></summary>
+<summary><sub>📦 Archived .NET 8 downloads (no longer maintained)</sub></summary>
 
-| Version | Download | Requirements |
+| Edition | Download | Requirements |
 |---|---|---|
-| Lite NET8 (Discontinued) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Discontinued and retired (no further updates); recommended to migrate to .NET 10 or Legacy. |
+| Lite for .NET 8 (discontinued) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Archived build. For updates, switch to a .NET 10 edition or Legacy. |
 </details>
 
 > [!NOTE]
-> Full and Lite require [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0); Legacy relies on built-in .NET Framework 4.8 and needs no runtime installation (historical [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) editions are discontinued).
+> For Full or Lite, install [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) for the architecture you downloaded. Legacy uses .NET Framework 4.8. Older builds that use [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) are available in the archive and no longer receive updates.
 
-### 🏁 3-Step Quick Start
+### 🏁 Quick start
 
-1. **Launch & Keep in Tray**: Double-click to start; SonicRoute stays in your system tray (drag it out of the overflow menu to keep it pinned). Double-click the tray icon to open the main window.
-2. **Select & Route Devices**: Check your headphones and speakers under Settings → Kept devices. Left-click the tray icon to pop up the quick panel, and route each app with instant volume sliders.
-3. **Tray Blind Control & Shortcuts**: Hover over the system tray and scroll to adjust app volume, Alt+scroll to switch audio routes, or Shift+scroll for master volume; combine with global mute hotkeys and automation for seamless in-game control.
+1. **Open SonicRoute.** Start the executable, then double-click the SonicRoute icon in the system tray to open the main window. If the icon is hidden, you can drag it out of the hidden icons menu.
+2. **Choose your devices.** In Settings, select the headphones and speakers you want to see in the quick panel. Click the tray icon once to open the panel. Expand an app’s row to select its output device, or drag its slider to adjust the volume.
+3. **Use the mouse wheel.** Scroll over the SonicRoute icon to adjust the target app’s volume. Hold Alt while scrolling to change its output, or Shift to adjust the default output device’s volume. You can extend these controls to the entire system tray in Settings.
 
-### ⚡ CLI & Automation Integration
+### ⚡ Run an automation rule from the command line
 
-The `sr` command communicates with a running SonicRoute instance via named pipe in milliseconds (will not start an instance if absent). Launch SonicRoute once to register the command, then restart your terminal to integrate with scripts, AutoHotkey, or Stream Deck. If needed, refer to [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
+The `sr` command sends a rule name or ID to a running copy of SonicRoute over a named pipe. Start SonicRoute once to register the command, then close and reopen your terminal. You can now call `sr` from a script, AutoHotkey or Stream Deck. If SonicRoute is closed, `sr` returns an error. See [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98).
 
-```bash
+```powershell
 # Trigger an automation rule (SonicRoute must be running)
 sr "Rule name or ID"
 ```
 
-### 🆕 v1.33 Release Highlights
+### 🆕 What’s new in v1.33
 
-v1.33 adds a self-built C# AirPlay audio and aspect-preserving screen mirror receiver to Full (PCM/ALAC/AAC-LC/AAC-ELD, optional PIN, topmost/F11 fullscreen, and drag-and-drop routing to PC or Android speakers/Bluetooth), H.265 (HEVC) with H.264 fallback, Audio/Video decoder selectors with visible-only encoder queries, foreground-gated gamepads, a combined QR (2-min auto-refresh) and manual pairing card, saved wireless LAN discovery and unified reconnect/quick-panel/sidebar refresh verification (filtering expired ports via TCP probes and recovering updated IP/port by saved device identity while preserving manual address drafts on failure), and device settings restore; across all editions (Full/Lite/Legacy), it adds two independent persistent mic OSD toggles, a single-row Configuration management card, >20-row app list virtualization, coalesced OSD rendering, PNG input and retired texture release, removal of explicit close-window GC requests in Full (leaving collection to the runtime), config .bak protection, on-demand error diagnostics, standalone Store Lite support, and an offline GPL-3.0-only viewer. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
+Full can now receive AirPlay audio (PCM, ALAC, AAC-LC and AAC-ELD) and mirror a screen at its original aspect ratio using a receiver written in C#. Set an optional pairing code, keep the mirror on top or press F11 for full screen. Drag audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Android and AirPlay support H.265 (HEVC). Android falls back to H.264 if the encoder cannot start. You can choose Android audio and video decoders. SonicRoute checks the available encoders when you open the device settings and sends gamepad input only to the focused video window.
 
-### ❓ Quick FAQ
+Android pairing now puts the QR code (refreshed every two minutes) beside the manual pairing code. Reconnecting or refreshing a device checks its identity and looks for its current address and port on the local network. SonicRoute preserves a manually entered address if the search fails and can restore settings for a previously paired device.
 
-**Q: Will app routing and volume settings persist after closing SonicRoute?**
+All editions now have separate options to keep the mic indicator on screen when all microphones are muted or when the default recording device is muted. Configuration tools share one row. Long app lists render only the visible rows once the list exceeds 20 entries. SonicRoute combines on-screen updates and frees decoded PNG source data, backs up settings to `config.json.bak` and records diagnostics when errors occur. Full also releases unused video textures and leaves garbage collection to the runtime when a window closes. Lite is available separately in the Microsoft Store, and all editions include an offline copy of the GPL-3.0-only license. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
 
-A: Windows keeps app routes and existing audio sessions after SonicRoute closes. Hotkeys, tray controls, automation, phone audio, screen mirroring and clipboard sync require SonicRoute to keep running.
+### ❓ Common questions
 
-**Q: Which runtime does each edition require?**
+**What happens to app routing and volume when I exit SonicRoute?**
 
-A: Full and Lite require the matching .NET 10 Desktop Runtime; Legacy uses .NET Framework 4.8. The Store package needs the x64 .NET 10 Desktop Runtime. Historical NET8 builds are no longer maintained, but archived downloads remain available.
+Windows keeps each app’s device choices and the volume of existing audio sessions. Keep SonicRoute running to use hotkeys, tray controls, automation, phone audio, screen mirroring or clipboard sync.
 
-**Q: Does running SonicRoute in the background consume CPU or battery?**
+**Which runtime do I need?**
 
-A: Detection prioritizes system events and uses a necessary one-second snapshot fallback when needed. Unneeded data is cleaned up on demand; actual CPU use depends on the system and workload.
+Full and Lite require the .NET 10 Desktop Runtime for the build’s architecture. The Store editions require the x64 runtime. Legacy uses .NET Framework 4.8. Archived .NET 8 builds are still available but no longer receive updates.
+
+**How much CPU or battery does SonicRoute use in the background?**
+
+SonicRoute relies on Windows notifications and checks process state once a second when needed. It releases data it no longer uses. CPU use and battery impact depend on your system and what you’re doing.
 
 ## 📚 Documentation
 
@@ -116,26 +120,26 @@ The Wiki is currently in Chinese.
 
 | Topic | Guides |
 |---|---|
-| Installation, panels and everyday controls | [User guide](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Features](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) |
+| Installation, panels and everyday controls | [User guide (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Features](https://github.com/kunkunkunQoQ/SonicRoute/wiki/02-%E5%8A%9F%E8%83%BD%E7%89%B9%E6%80%A7) |
 | Default keys, bindings and control targets | [Hotkeys](https://github.com/kunkunkunQoQ/SonicRoute/wiki/03-%E5%BF%AB%E6%8D%B7%E9%94%AE) |
 | Triggers, actions and script integration | [Automation](https://github.com/kunkunkunQoQ/SonicRoute/wiki/04-%E8%87%AA%E5%8A%A8%E5%8C%96%E8%A7%84%E5%88%99) · [Command line](https://github.com/kunkunkunQoQ/SonicRoute/wiki/05-%E5%91%BD%E4%BB%A4%E8%A1%8C%E6%89%A7%E8%A1%8C%E8%A7%84%E5%88%99) |
 | Installation and troubleshooting | [FAQ](https://github.com/kunkunkunQoQ/SonicRoute/wiki/06-%E5%B8%B8%E8%A7%81%E9%97%AE%E9%A2%98) |
 | Source, builds and releases | [Technical implementation](https://github.com/kunkunkunQoQ/SonicRoute/wiki/07-%E6%8A%80%E6%9C%AF%E5%AE%9E%E7%8E%B0) · [Release information](https://github.com/kunkunkunQoQ/SonicRoute/wiki/08-%E7%89%88%E6%9C%AC%E7%9B%B8%E5%85%B3) · [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) |
 
 > [!TIP]
-> **AI Summaries & Low-Token Troubleshooting**: When using AI assistants (such as Cursor, Copilot, ChatGPT, or Claude) to troubleshoot issues, explore architecture, or write scripts, refer directly to [README.ai.md](README.ai.md). Structured in a high-density DSL specifically for LLMs, it eliminates verbose prose, drastically reduces token consumption, and helps AI pinpoint root causes in seconds.
+> **Using an AI assistant**: For help with a script or a technical issue, give your assistant [README.ai.md](README.ai.md). It summarizes the architecture, commands and troubleshooting steps in a compact format for tools such as Cursor, Copilot, ChatGPT and Claude.
 
 ## 📌 Roadmap
 
-- **Audio routing enhancement**: Plan to further advance the core routing engine with dynamic stream handover, automatic recovery upon device plug/unplug, and improved routing stability for complex multi-session and protected apps.
+- **Audio routing.** Planned work includes moving audio between devices as they connect or disconnect, recovering interrupted routes, and making routing more reliable for apps with unusual audio behavior or multiple audio sessions.
 
 [Share an idea or report an issue](https://github.com/kunkunkunQoQ/SonicRoute/issues/new/choose).
 
 ## 📜 License
 
-- **GPL-3.0 open source**: SonicRoute is licensed under the GNU General Public License version 3 only (GPL-3.0-only); see [LICENSE](LICENSE). Commercial use, sale and paid distribution are permitted subject to GPL.
-- **Redistribution**: Retain the required copyright and license notices, mark modifications, and license covered modified works under GPL version 3. When conveying covered binaries, provide the complete Corresponding Source as required by GPL section 6; see [LICENSE](LICENSE).
-- **Scope and earlier licenses**: From the GPL migration on 2026-11-17, the complete covered project in this revision, including earlier code, is offered under GPL-3.0-only to the extent the copyright holder may license it. Previously granted MIT and custom-license permissions remain valid; existing tags and released binaries are not relabeled. Third-party components retain their own licenses (see [third-party notices](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
+- **License.** SonicRoute is licensed under the GNU General Public License version 3 only (GPL-3.0-only). Commercial use, sale and paid distribution are allowed under its terms. See [LICENSE](LICENSE).
+- **Redistribution.** Keep the required copyright and license notices, identify your changes, and distribute covered modified works under GPL version 3. If you distribute covered binaries, provide the complete Corresponding Source as required by section 6. See [LICENSE](LICENSE).
+- **Scope and earlier licenses.** As of November 17, 2026, GPL-3.0-only covers this revision of the project, including earlier code, to the extent the copyright holder can license it. Permissions already granted under the MIT license and the former custom license remain valid. Existing tags and previously released binaries retain their original licensing. Third-party components retain their own licenses (see [third-party notices](packaging/AndroidLab/THIRD-PARTY-NOTICES.md)).
 
 ---
 
@@ -145,4 +149,4 @@ Thanks for using SonicRoute. [Read the guides (Chinese)](https://github.com/kunk
 
 **Author: [Bilibili](https://b23.tv/TDqSAKM) | [Afdian](https://afdian.com/a/koukou021) | [GitHub](https://github.com/kunkunkunQoQ)**
 
-<div align="right"><sub><a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI" title="AI / LLM Context">🤖 AI Context</a></sub></div>
+<div align="right"><sub><a href="https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI">🤖 Reference for AI assistants</a></sub></div>
