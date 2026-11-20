@@ -1,4 +1,10 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Windows.Automation;
+using System.Windows.Data;
+using Button = System.Windows.Controls.Button;
+using Binding = System.Windows.Data.Binding;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
@@ -13,10 +19,65 @@ namespace SonicRoute
     /// </summary>
     public static class PanelDevices
     {
-        internal static AudioDeviceInfo WithDeviceName(AudioDeviceInfo device, AppConfig config) =>
-            config.DeviceNames.TryGetValue(device.Id, out var name) && !string.IsNullOrWhiteSpace(name)
-                ? new AudioDeviceInfo { Id = device.Id, DisplayName = name, Flow = device.Flow, IsDefault = device.IsDefault }
-                : device;
+        // TextSearch reads DisplayName directly when the user types in a device picker.
+        internal sealed class LocalizedDevice(string nameKey) : AudioDeviceInfo
+        {
+            internal string NameKey { get; } = nameKey;
+            public override string DisplayName => L10n.T(NameKey);
+        }
+
+        internal static string? NameKey(AudioDeviceInfo device) =>
+            device is LocalizedDevice localized ? localized.NameKey :
+            string.IsNullOrWhiteSpace(device.DisplayName) ? "Dev.Unknown" : null;
+
+        internal static string Name(AudioDeviceInfo device) =>
+            NameKey(device) is string key ? L10n.T(key) : device.DisplayName!;
+
+        internal static string ShortName(string full)
+        {
+            int paren = full.IndexOf('(');
+            string head = paren > 0 ? full.Substring(0, paren).Trim() : full;
+            if (head.Length <= 12) return head;
+            int[] elements = StringInfo.ParseCombiningCharacters(head);
+            return elements.Length <= 12 ? head : head.Substring(0, elements[11]) + "…";
+        }
+
+        private sealed class ShortcutNameConverter : IValueConverter
+        {
+            internal static readonly ShortcutNameConverter Instance = new();
+            public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+                value is string name ? ShortName(name) : "";
+            public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+                throw new NotSupportedException();
+        }
+
+        internal static Button CreateShortcut(AudioDeviceInfo device)
+        {
+            var button = new Button { Tag = device };
+            if (NameKey(device) is string key)
+            {
+                string path = "[" + key + "]";
+                button.SetBinding(Button.ContentProperty, new Binding(path)
+                {
+                    Source = L10n.Instance, Mode = BindingMode.OneWay, Converter = ShortcutNameConverter.Instance
+                });
+                button.SetBinding(AutomationProperties.NameProperty, new Binding(path) { Source = L10n.Instance, Mode = BindingMode.OneWay });
+            }
+            else
+            {
+                button.Content = ShortName(device.DisplayName!);
+                AutomationProperties.SetName(button, device.DisplayName);
+            }
+            return button;
+        }
+
+        internal static AudioDeviceInfo WithDeviceName(AudioDeviceInfo device, AppConfig config)
+        {
+            if (config.DeviceNames.TryGetValue(device.Id, out var name) && !string.IsNullOrWhiteSpace(name))
+                return new AudioDeviceInfo { Id = device.Id, DisplayName = name, Flow = device.Flow, IsDefault = device.IsDefault };
+            return device is not LocalizedDevice && string.IsNullOrWhiteSpace(device.DisplayName)
+                ? new LocalizedDevice("Dev.Unknown") { Id = device.Id, Flow = device.Flow, IsDefault = device.IsDefault } : device;
+        }
 
         /// <summary>按可见列表循环；当前项已离线或隐藏时，向后取首项，向前取末项。</summary>
         internal static int CycleIndex(int currentIndex, int count, bool previous, int steps = 1)
@@ -40,10 +101,8 @@ namespace SonicRoute
             var list = new List<AudioDeviceInfo>();
             if (!hidden.Contains(id))
             {
-                string name = L10n.T(isOut ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn");
-                if (config.DeviceNames.TryGetValue(id, out var custom) && !string.IsNullOrWhiteSpace(custom))
-                    name = custom;
-                list.Add(new AudioDeviceInfo { Id = id, DisplayName = name, Flow = flow });
+                string key = isOut ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn";
+                list.Add(WithDeviceName(new LocalizedDevice(key) { Id = id, Flow = flow }, config));
             }
             if (devs != null)
                 list.AddRange(devs);

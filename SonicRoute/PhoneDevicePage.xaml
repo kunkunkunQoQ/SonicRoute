@@ -683,6 +683,16 @@
                                                 <Style TargetType="TextBlock">
                                                     <Setter Property="Text" Value="{Binding Label}"/>
                                                     <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Connection.Name}" Value="">
+                                                            <Setter Property="Text">
+                                                                <Setter.Value>
+                                                                    <MultiBinding StringFormat="{}{0} · {1}">
+                                                                        <Binding Path="[Phone.DefaultName]" Source="{x:Static local:L10n.Instance}"/>
+                                                                        <Binding Path="Connection.Address"/>
+                                                                    </MultiBinding>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </DataTrigger>
                                                         <DataTrigger Binding="{Binding Connection}" Value="{x:Null}">
                                                             <Setter Property="Text" Value="{Binding [Phone.ManualConnectAddress], Source={x:Static local:L10n.Instance}}"/>
                                                         </DataTrigger>

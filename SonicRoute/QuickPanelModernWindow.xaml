@@ -232,6 +232,7 @@
                               DockPanel.Dock="Right" Margin="6,0,0,0"
                               Content="▴" Click="OutputVolumesToggle_Click"/>
                 <ComboBox x:Name="SystemDevCombo" Style="{StaticResource RoundedComboBox}" Height="32"
+                          ItemTemplate="{StaticResource AudioDeviceLabel}" TextSearch.TextPath="DisplayName"
                           SelectionChanged="SystemDevCombo_SelectionChanged"/>
             </DockPanel>
 

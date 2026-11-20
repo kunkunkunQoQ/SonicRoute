@@ -20,6 +20,7 @@ internal sealed record AndroidSavedConnection(string Name, AndroidDevice Device,
 public sealed class AndroidPhoneStore
 {
     private readonly object _gate = new();
+    private readonly Func<string>? _defaultName;
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private sealed record State(IReadOnlyList<AndroidPhoneProfile> Profiles, string SelectedId,
         IReadOnlyList<AndroidDevice>? RemovedDevices = null, IReadOnlyList<AndroidPhoneProfile>? RemovedProfiles = null);
@@ -34,10 +35,13 @@ public sealed class AndroidPhoneStore
     public IReadOnlyList<AndroidPhoneProfile> Profiles { get { lock (_gate) return _state.Profiles; } }
     public AndroidPhoneProfile Profile { get { lock (_gate) return _state.Profiles.First(p => p.Id == _state.SelectedId); } }
 
-    public AndroidPhoneStore(string filePath)
+    public AndroidPhoneStore(string filePath) : this(filePath, null) { }
+
+    public AndroidPhoneStore(string filePath, Func<string>? defaultName)
     {
         FilePath = Path.GetFullPath(filePath);
-        var draft = new AndroidPhoneProfile("我的手机", null, Array.Empty<AndroidApp>());
+        _defaultName = defaultName;
+        var draft = new AndroidPhoneProfile("", null, Array.Empty<AndroidApp>());
         _state = new(Array.AsReadOnly(new[] { draft }), draft.Id);
         try
         {
@@ -99,7 +103,7 @@ public sealed class AndroidPhoneStore
             DisabledSmartVolumeApps = Array.AsReadOnly((saved.DisabledSmartVolumePackages ?? []).Take(1000).Where(packages.Contains).Distinct(StringComparer.Ordinal).ToArray())
         });
     }
-    private static string CleanName(string? value) => string.IsNullOrWhiteSpace(value) ? "我的手机" : value.Trim()[..Math.Min(value.Trim().Length, 64)];
+    private static string CleanName(string? value) => string.IsNullOrWhiteSpace(value) ? "" : value.Trim()[..Math.Min(value.Trim().Length, 64)];
     private static void ValidateApp(AndroidApp app)
     {
         AdbClient.ValidatePackage(app.Package);
@@ -107,7 +111,9 @@ public sealed class AndroidPhoneStore
     }
     public AndroidPhoneProfile? FindProfile(AndroidDevice device)
     { lock (_gate) return _state.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.MatchesSavedDevice(p.LastDevice, device)); }
-    public string GetDisplayName(AndroidDevice device) => FindProfile(device)?.Name ?? device.Name;
+    public string GetProfileDisplayName(AndroidPhoneProfile profile) => profile.Name.Length != 0
+        ? profile.Name : _defaultName?.Invoke() ?? profile.LastDevice?.Name ?? "Android";
+    public string GetDisplayName(AndroidDevice device) => FindProfile(device) is { } profile ? GetProfileDisplayName(profile) : device.Name;
     internal IReadOnlyList<AndroidSavedConnection> FindWirelessConnectionCandidates(IReadOnlyList<AndroidMdnsService> services,
         IReadOnlyList<AndroidDevice> connectedDevices)
     {
@@ -129,8 +135,8 @@ public sealed class AndroidPhoneStore
             address = endpoint.ToString();
             string identity = AndroidDeviceIdentity.Key(device);
             if (!seen.Add((identity, address))) return;
-            string name = names[identity].FirstOrDefault()?.Name ?? device.Name;
-            found.Add(new(string.IsNullOrWhiteSpace(name) ? address : name, device, address));
+            string name = names[identity].FirstOrDefault()?.Name ?? (string.IsNullOrWhiteSpace(device.Name) ? address : device.Name);
+            found.Add(new(name, device, address));
         }
 
         // A ready ADB transport can supply the current address even when mDNS is silent or stale.
@@ -211,7 +217,7 @@ public sealed class AndroidPhoneStore
                 archived = Array.AsReadOnly((archived ?? []).Where(p => !AndroidDeviceIdentity.SamePhysicalDevice(p.LastDevice, identity)).Append(saved).ToArray());
             }
             var remaining = state.Profiles.Where(p => p.Id != profileId).ToArray();
-            if (remaining.Length == 0) remaining = [new("我的手机", null, Array.Empty<AndroidApp>())];
+            if (remaining.Length == 0) remaining = [new("", null, Array.Empty<AndroidApp>())];
             removed = true;
             return state with { Profiles = Array.AsReadOnly(remaining),
                 SelectedId = state.SelectedId == profileId ? remaining[0].Id : state.SelectedId, RemovedDevices = ignored, RemovedProfiles = archived };
@@ -239,7 +245,7 @@ public sealed class AndroidPhoneStore
             if (index < 0)
             {
                 if (profiles.Count >= 32) throw AndroidError.WithCode(new InvalidOperationException("最多可保存 32 台手机。"), AndroidErrorCode.MaxSavedPhones);
-                next = new("我的手机", device, Array.Empty<AndroidApp>());
+                next = new("", device, Array.Empty<AndroidApp>());
                 profiles.Add(next); changed = true;
             }
             else
@@ -254,7 +260,7 @@ public sealed class AndroidPhoneStore
             var primary = group.FirstOrDefault(p => p.Id == selected) ?? group.First();
             var apps = group.OrderByDescending(p => p.Id == primary.Id).SelectMany(p => p.RetainedApps).DistinctBy(a => a.Package).ToArray();
             var disabledSmart = group.SelectMany(p => p.DisabledSmartVolumeApps).Distinct(StringComparer.Ordinal).ToArray();
-            var merged = WithQuickPanelApps(primary with { Name = primary.Name == "我的手机" ? group.FirstOrDefault(p => p.Name != "我的手机")?.Name ?? primary.Name : primary.Name,
+            var merged = WithQuickPanelApps(primary with { Name = primary.Name.Length == 0 ? group.FirstOrDefault(p => p.Name.Length != 0)?.Name ?? "" : primary.Name,
                 RetainedApps = Array.AsReadOnly(apps), DisabledSmartVolumeApps = Array.AsReadOnly(disabledSmart) });
             profiles[profiles.FindIndex(p => p.Id == primary.Id)] = merged;
             profiles.RemoveAll(p => p.Id != primary.Id && group.Any(member => member.Id == p.Id));

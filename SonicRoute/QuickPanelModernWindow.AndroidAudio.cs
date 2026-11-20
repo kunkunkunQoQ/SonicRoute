@@ -834,9 +834,18 @@ public partial class QuickPanelModernWindow
     private void UpdateAndroidRoute(AndroidRow row)
     {
         string id = row.Source.Session.State.OutputId ?? AudioService.SystemDefaultDeviceId;
-        if (row.Name != null) row.Name.Text = row.ShowOutputName
-            ? ShortName(id == AndroidAudioSession.SourcePhoneOutputId ? L10n.T("Phone.NativeAudioOutput")
-                : _outputDisplay.FirstOrDefault(d => d.Id == id)?.DisplayName ?? L10n.T("Dev.SystemDefaultOut")) : row.IconItem.Label;
+        if (row.Name != null)
+        {
+            if (row.ShowOutputName)
+            {
+                var output = _outputDisplay.FirstOrDefault(d => d.Id == id);
+                string name = id == AndroidAudioSession.SourcePhoneOutputId ? L10n.T("Phone.NativeAudioOutput")
+                    : output != null ? PanelDevices.Name(output)
+                    : L10n.T(AudioService.IsSystemDefault(id) ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
+                row.Name.Text = PanelDevices.ShortName(name);
+            }
+            else row.Name.Text = row.IconItem.Label;
+        }
         if (!row.Expanded || row.Devices.Count == 0) return;
         var selected = row.Source.Session is IMultiOutputAudioSession ? IncomingOutputs(row.Source) : null;
         foreach (var entry in row.Devices)

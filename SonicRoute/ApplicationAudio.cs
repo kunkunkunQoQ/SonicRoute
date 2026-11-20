@@ -129,8 +129,8 @@ internal static class ApplicationAudio
                 if (!IsPhoneOutputDevice(device.Id)) list.Add(device);
                 else if (remaining.Remove(device.Id, out var phone)) list.Add(PanelDevices.WithDeviceName(phone, config));
             }
-            list.Add(new AudioDeviceInfo { Id = AndroidAudioSession.SourcePhoneOutputId,
-                DisplayName = L10n.T("Phone.NativeAudioOutput"), Flow = EDataFlow.eRender });
+            list.Add(new PanelDevices.LocalizedDevice("Phone.NativeAudioOutput")
+                { Id = AndroidAudioSession.SourcePhoneOutputId, Flow = EDataFlow.eRender });
             // A live source can retain access to its own outputs during device-discovery changes.
             foreach (var phone in phoneOutputs)
                 if (remaining.Remove(phone.Id)) list.Add(PanelDevices.WithDeviceName(phone, config));
@@ -355,7 +355,10 @@ internal static class ApplicationAudio
                 WindowsLinkHub.Service?.StopOutgoingAudioForProcessAsync((int)app.ProcessId, onlyExclusive: true).GetAwaiter().GetResult();
             }
 #endif
-            return AudioService.ApplyEndpoint((int)app.ProcessId, flow, deviceId);
+            var result = AudioService.ApplyEndpoint((int)app.ProcessId, flow, deviceId);
+            if (!result.Success)
+                result.Message = string.Format(L10n.T("Dev.RouteFailed"), result.Message);
+            return result;
         }
 #if SONICROUTE_PHONE
         // Synchronous callers (automation/hotkeys/tray) already execute on workers.

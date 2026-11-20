@@ -8,6 +8,21 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="ScrollControls.xaml"/>
             </ResourceDictionary.MergedDictionaries>
+        <local:AudioDeviceLabelConverter x:Key="AudioDeviceLabelConverter"/>
+        <DataTemplate x:Key="AudioDeviceLabel">
+            <TextBlock TextTrimming="CharacterEllipsis">
+                <TextBlock.Text>
+                    <MultiBinding Converter="{StaticResource AudioDeviceLabelConverter}" Mode="OneWay">
+                        <Binding/>
+                        <Binding Path="[Dev.Unknown]" Source="{x:Static local:L10n.Instance}"/>
+                        <Binding Path="[Dev.SystemDefaultOut]" Source="{x:Static local:L10n.Instance}"/>
+                        <Binding Path="[Dev.SystemDefaultIn]" Source="{x:Static local:L10n.Instance}"/>
+                        <Binding Path="[Ov.Default]" Source="{x:Static local:L10n.Instance}"/>
+                        <Binding Path="[Phone.NativeAudioOutput]" Source="{x:Static local:L10n.Instance}"/>
+                    </MultiBinding>
+                </TextBlock.Text>
+            </TextBlock>
+        </DataTemplate>
         <Style x:Key="Card" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource Theme.SurfaceBgAlpha}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}"/>
