@@ -598,8 +598,13 @@ public partial class QuickPanelModernWindow
     private void UpdateAndroidRoute(AndroidRow row)
     {
         string id = row.Source.Session.State.OutputId ?? AudioService.SystemDefaultDeviceId;
-        if (row.Name != null) row.Name.Text = row.ShowOutputName
-            ? ShortName(_outputDisplay.FirstOrDefault(d => d.Id == id)?.DisplayName ?? L10n.T("Dev.SystemDefaultOut")) : row.IconItem.Label;
+        if (row.Name != null)
+        {
+            var output = row.ShowOutputName ? _outputDisplay.FirstOrDefault(d => d.Id == id) : null;
+            row.Name.Text = row.ShowOutputName
+                ? PanelDevices.ShortName(output != null ? PanelDevices.Name(output) : L10n.T(AudioService.IsSystemDefault(id) ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable"))
+                : row.IconItem.Label;
+        }
         foreach (var entry in row.Devices) SetRowDeviceSelection(entry.Button, entry.Id, id);
     }
     private void RefreshAndroidAppIcons(string processName)

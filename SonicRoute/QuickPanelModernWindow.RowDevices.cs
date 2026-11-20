@@ -20,15 +20,15 @@ public partial class QuickPanelModernWindow
         Action<Button, AudioDeviceInfo> configure, Button? trailingAction = null)
     {
         bool playback = flow == EDataFlow.eRender;
-        var label = new TextBlock { Text = L10n.T(playback ? "Qp.Output" : "Qp.Input"), FontSize = 11,
+        var label = new TextBlock { FontSize = 11,
             FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 0, 3) };
+        label.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(playback ? "[Qp.Output]" : "[Qp.Input]") { Source = L10n.Instance });
         label.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
 
         var wrap = new WrapPanel { Margin = new Thickness(0, 0, 0, playback ? 8 : 4) };
         foreach (var device in devices)
         {
-            var button = new Button { Content = ShortName(device.DisplayName), Tag = device };
-            System.Windows.Automation.AutomationProperties.SetName(button, device.DisplayName);
+            var button = PanelDevices.CreateShortcut(device);
             button.ToolTipOpening += (_, e) => e.Handled = true;
             button.SetResourceReference(StyleProperty, "DevButton");
             configure(button, device);

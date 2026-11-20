@@ -82,7 +82,7 @@ namespace SonicRoute.Core.Interop
                 int hrCreate = NativeMethods.WindowsCreateString(
                     ACTIVATABLE_CLASS_ID, (uint)ACTIVATABLE_CLASS_ID.Length, out IntPtr hClass);
                 if (hrCreate < 0)
-                    throw new InvalidOperationException($"WindowsCreateString 失败 HRESULT=0x{hrCreate:X8} ({hrCreate})");
+                    throw new InvalidOperationException($"WindowsCreateString: HRESULT 0x{hrCreate:X8} ({hrCreate})");
 
                 try
                 {
@@ -91,10 +91,10 @@ namespace SonicRoute.Core.Interop
                     try
                     {
                         if (hr < 0)
-                            throw new InvalidOperationException($"RoGetActivationFactory 失败 HRESULT=0x{hr:X8} ({hr})");
+                            throw new InvalidOperationException($"RoGetActivationFactory: HRESULT 0x{hr:X8} ({hr})");
                         hr = Marshal.QueryInterface(factoryUnk, ref iid, out queried);
                         if (hr < 0)
-                            throw new InvalidOperationException($"QueryInterface 失败 HRESULT=0x{hr:X8} ({hr})");
+                            throw new InvalidOperationException($"QueryInterface: HRESULT 0x{hr:X8} ({hr})");
                         _factory = queried;
                         queried = IntPtr.Zero;
                         return _factory;
@@ -136,7 +136,7 @@ namespace SonicRoute.Core.Interop
                 {
                     int hrCreate = NativeMethods.WindowsCreateString(fullDeviceId, (uint)fullDeviceId.Length, out hstring);
                     if (hrCreate < 0)
-                        throw new InvalidOperationException($"WindowsCreateString 失败 HRESULT=0x{hrCreate:X8} ({hrCreate})");
+                        throw new InvalidOperationException($"WindowsCreateString: HRESULT 0x{hrCreate:X8} ({hrCreate})");
                 }
 
                 try

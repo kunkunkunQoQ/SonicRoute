@@ -180,7 +180,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         bool connection = IsConnectionPage;
         if ((connection || _device == null) && CatalogPanel.Visibility == Visibility.Visible)
         { _operation?.Cancel(); ReleaseCatalog(); }
-        DeviceName.Text = profile.Name;
+        DeviceName.Text = AndroidAudioHost.Phone.GetProfileDisplayName(profile);
         var display = _device ?? profile.LastDevice;
         DeviceDescription.Text = display == null ? L10n.T("Phone.Disconnected") : $"{AndroidAudioHost.Phone.GetDisplayName(display)} · {(display.IsWifi ? "Wi-Fi" : "USB")} · {(_device == null ? L10n.T("Phone.Disconnected") : L10n.T("Phone.ConnectedStatus"))}";
         bool appsChanged = !ReferenceEquals(_retainedSnapshot, profile.RetainedApps);

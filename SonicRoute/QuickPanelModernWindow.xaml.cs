@@ -842,14 +842,13 @@ namespace SonicRoute
                     output = device;
                     break;
                 }
-                primary = output?.DisplayName
-                    ?? L10n.T(systemDefault ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
+                primary = output != null ? PanelDevices.Name(output) : L10n.T(systemDefault ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
                 // 简洁布局不需要实际默认设备；索引遍历快照不创建闭包或枚举器。
                 if (needDefault)
                 {
                     var devices = _outputDisplay;
                     for (int i = 0; i < devices.Count; i++)
-                        if (devices[i].IsDefault) { suffix = devices[i].DisplayName ?? string.Empty; break; }
+                        if (devices[i].IsDefault) { suffix = PanelDevices.Name(devices[i]); break; }
                 }
             }
             else primary = AppDisplayName.Get(row.App);
@@ -1303,7 +1302,7 @@ namespace SonicRoute
             var (ok, _, msg) = await Task.Run(() => ApplicationAudio.ApplyEndpoint(row.App, flow, dev.Id));
             if (ok)
             {
-                ShowOsd(AppDisplayName.Get(row.App), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName);
+                ShowOsd(AppDisplayName.Get(row.App), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + PanelDevices.Name(dev));
                 if (flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
                     UpdateRowName(current, dev.Id);
             }
@@ -1339,15 +1338,6 @@ namespace SonicRoute
                 if (isCur) row.HeaderBorder.SetResourceReference(BackgroundProperty, "Theme.Overlay");
                 else row.HeaderBorder.ClearValue(BackgroundProperty);
             }
-        }
-
-        private static string ShortName(string? full)
-        {
-            if (string.IsNullOrWhiteSpace(full)) return "(未知设备)";
-            int paren = full.IndexOf('(');
-            string head = paren > 0 ? full.Substring(0, paren).Trim() : full;
-            if (head.Length <= 12) return head;
-            return head.Substring(0, 11) + "…";
         }
 
         // ------------------------------------------------------------------

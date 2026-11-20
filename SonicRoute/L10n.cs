@@ -141,18 +141,22 @@ namespace SonicRoute
                             return ParseLangJson(fs);
                     return new Dictionary<string, string>();
                 }
+                var resName = "SonicRoute.Resources.Lang." + lang + ".json";
+                using var embedded = typeof(L10n).Assembly.GetManifestResourceStream(resName);
+                var table = embedded == null ? new Dictionary<string, string>() : ParseLangJson(embedded);
                 var ext = Path.Combine(ExternalLangDir, lang + ".json");
                 // 带 Lang.Custom 的同名外置文件不覆盖内置语言内容（仅作为附加语言存在于下拉框）
                 if (File.Exists(ext) && !_customLangCodes.Contains(lang))
                 {
-                    try { using var fs = File.OpenRead(ext); return ParseLangJson(fs); }
+                    try
+                    {
+                        using var fs = File.OpenRead(ext);
+                        foreach (var entry in ParseLangJson(fs))
+                            table[entry.Key] = entry.Value;
+                    }
                     catch { /* 损坏的覆盖回退内置同语言。 */ }
                 }
-                var resName = "SonicRoute.Resources.Lang." + lang + ".json";
-                using (var rs = typeof(L10n).Assembly.GetManifestResourceStream(resName))
-                {
-                    if (rs != null) return ParseLangJson(rs);
-                }
+                return table;
             }
             catch { }
             return new Dictionary<string, string>();

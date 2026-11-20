@@ -293,7 +293,7 @@ public partial class App
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => AndroidDisplayFailedError(app, ex))); return; }
         string detail = AndroidErrorTranslation.Format(ex);
-        string body = app != null ? $"{app.Name}：{detail}" : detail;
+        string body = app != null ? string.Format(L10n.T("Phone.DisplayErrorFormat"), app.Name, detail) : detail;
         if (!_exiting) _trayIcon?.ShowBalloonTip(5000, L10n.T("Phone.DisplayFallbackTitle"), body, System.Windows.Forms.ToolTipIcon.Info);
     }
     internal void TogglePhoneAudioWindow(QuickPanelModernWindow panel)

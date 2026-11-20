@@ -298,7 +298,10 @@ internal static class ApplicationAudio
                 AndroidAudioHost.StopPcAppToPhone((int)app.ProcessId, restorePreviousEndpoint: false);
             }
 #endif
-            return AudioService.ApplyEndpoint((int)app.ProcessId, flow, deviceId);
+            var result = AudioService.ApplyEndpoint((int)app.ProcessId, flow, deviceId);
+            if (!result.Success)
+                result.Message = string.Format(L10n.T("Dev.RouteFailed"), result.Message);
+            return result;
         }
 #if SONICROUTE_PHONE
         // Synchronous callers (automation/hotkeys/tray) already execute on workers.

@@ -1199,6 +1199,7 @@ public partial class PhoneAudioWindow : Window
     private void OnLanguageChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_closed) return;
+        DeviceNamesChanged();
         UpdateReturnDropText();
         _pcDropZonesDirty = true;
         if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)

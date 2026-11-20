@@ -72,7 +72,7 @@ internal static class AndroidAudioHost
     internal static AndroidAudioManager Sources => LazySources.Value;
     private static readonly Lazy<AndroidPhoneStore> LazyPhone = new(() =>
     {
-        var phone = new AndroidPhoneStore(PhoneStorePath);
+        var phone = new AndroidPhoneStore(PhoneStorePath, () => L10n.T("Phone.DefaultName"));
         phone.Changed += OnPhoneStoreChanged;
         phone.DisplayNamesChanged += PhoneOutputsChanged;
         phone.OutputsChanged += PhoneOutputsChanged;
@@ -274,7 +274,7 @@ internal static class AndroidAudioHost
                 && string.Equals(AndroidDeviceIdentity.Key(p.LastDevice), phoneKey, StringComparison.OrdinalIgnoreCase))?.LastDevice
             : null);
         var res = PcToPhone.RouteProcess(processId, deviceId, fallback);
-        return res.Success ? (true, 0, L10n.T("History.Status.success")) : (false, res.HResult, processId <= 0 ? L10n.T("Phone.Err.InvalidProcessId") : L10n.T("Phone.Err.InvalidPhoneOutputId"));
+        return res.Success ? (true, 0, L10n.T("History.Status.success")) : (false, res.HResult, processId <= 0 ? L10n.T("Phone.Err.InvalidProcessId") : L10n.T("Phone.Err.PhoneAudioOutputStopped"));
     }
     internal static bool StopPcAppToPhone(int processId, bool restorePreviousEndpoint) =>
         LazyPcToPhone.IsValueCreated && PcToPhone.StopProcess(processId, restorePreviousEndpoint);
@@ -368,18 +368,7 @@ internal static class AndroidAudioHost
                 string liveName = store != null ? store.GetDisplayName(live) : live.Name;
                 if (!string.IsNullOrWhiteSpace(liveName)) return liveName;
             }
-            if (store != null)
-            {
-                foreach (var profile in store.Profiles)
-                {
-                    if (profile.LastDevice is { } saved && !store.IsRemoved(saved))
-                    {
-                        string name = store.GetDisplayName(saved);
-                        if (!string.IsNullOrWhiteSpace(name)) return name;
-                    }
-                    if (!string.IsNullOrWhiteSpace(profile.Name)) return profile.Name;
-                }
-            }
+            if (store?.Profiles.FirstOrDefault() is { } profile) return store.GetProfileDisplayName(profile);
             return L10n.T("Phone.AudioWindowTitle");
         }
         if (store != null)

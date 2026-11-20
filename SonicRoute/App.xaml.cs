@@ -843,7 +843,7 @@ namespace SonicRoute
         {
             return config.DeviceNames.TryGetValue(dev.Id, out var n) && !string.IsNullOrWhiteSpace(n)
                 ? n
-                : dev.DisplayName ?? string.Empty;
+                : PanelDevices.Name(dev);
         }
 
         /// <summary>在当前应用的可见设备间循环切换，返回切换到的设备名；失败/无设备返回 null。
