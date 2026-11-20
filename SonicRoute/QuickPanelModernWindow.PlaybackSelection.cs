@@ -8,7 +8,6 @@ using System.Windows.Input;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
-using SonicRoute.WindowsLink;
 using Button = System.Windows.Controls.Button;
 
 namespace SonicRoute;
@@ -48,8 +47,8 @@ public partial class QuickPanelModernWindow
                         var names = row.DeviceButtons.Where(b => b.Flow == EDataFlow.eRender && next.Contains(b.Id, StringComparer.OrdinalIgnoreCase))
                             .Select(b => b.Button.Content?.ToString());
                         string target = string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), string.Join(" + ", names));
-                        var confirm = ConvenienceMenus.Item(string.Format(L10n.T("Phone.WindowsLinkMuteSpeakerAction"), target));
-                        confirm.ToolTip = L10n.T("Phone.WindowsLinkMuteSpeakerDesc");
+                        var confirm = ConvenienceMenus.Item(string.Format(L10n.T("Phone.MuteSourceSpeakerAction"), target));
+                        confirm.ToolTip = L10n.T("Phone.MuteSourceSpeakerDesc");
                         confirm.Click += async (_, _) =>
                         {
                             if (_isClosed || !_rows.TryGetValue(pid, out var live) || live != row) return;
@@ -76,24 +75,6 @@ public partial class QuickPanelModernWindow
             catch (OperationCanceledException) when (_isClosed) { }
             catch (Exception ex) { if (!_isClosed) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
         }
-    }
-
-    private static async Task<(bool Success, int HResult, string Message)> ApplyPeerMenuAsync(
-        AudioAppInfo app, string peer, bool destinationOnly, bool allowSpeakerMute)
-    {
-        if (destinationOnly) return await AppPlaybackOutputs.SetAsync(app, [peer], peer, allowSpeakerMute);
-        // Retiring an exclusive route restores the previous Windows output; the dedicated, muted endpoint
-        // currently visible in per-app policy must never be chosen as the local speaker.
-        int pid = (int)app.ProcessId;
-        WindowsLinkHub.GetPcAppOutput(pid, out bool exclusive);
-        if (exclusive)
-        {
-            var result = await WindowsLinkHub.RoutePcAppToPeerAsync(pid, peer);
-            if (!result.Success) return result;
-        }
-        string local = await Task.Run(() => ApplicationAudio.GetPersistedEndpoint(pid, EDataFlow.eRender))
-            ?? AudioService.SystemDefaultDeviceId;
-        return await AppPlaybackOutputs.SetAsync(app, [local, peer], local, allowSpeakerMute: false);
     }
 
     internal static string[] SelectPlaybackRange(string[] order, HashSet<string> selected, string clicked, string? anchor, ModifierKeys modifiers)

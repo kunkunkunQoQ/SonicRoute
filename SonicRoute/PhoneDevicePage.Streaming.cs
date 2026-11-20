@@ -207,7 +207,6 @@ public partial class PhoneDevicePage
     private void UpdateStreamingVisibility()
     {
         if (StreamingCard == null) return; // IsVisibleChanged can run inside InitializeComponent.
-        if (SelectedWindowsLinkPeer != null) { CancelEncoderRead(); return; }
         if (_disposed || !_active || !IsLoaded || !IsVisible || !StreamingCard.IsVisible
             || _streamOperation == null)
         { CancelEncoderRead(); return; }
@@ -275,9 +274,7 @@ public partial class PhoneDevicePage
 
     private void StreamSettings_Changed(object sender, SelectionChangedEventArgs e)
     {
-        if (_streamApplying || _disposed) return;
-        if (SelectedWindowsLinkPeer != null) { WindowsLinkStreamSettingsChanged(sender); return; }
-        if (_streamStore == null || _streamDevice == null) return;
+        if (_streamApplying || _disposed || _streamStore == null || _streamDevice == null) return;
         if (VideoDecoderCombo.SelectedItem is StreamOption { IsEnabled: false } unavailable
             && unavailable.Value != _streamSettings.VideoDecoder)
         {

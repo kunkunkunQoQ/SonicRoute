@@ -15,7 +15,7 @@ internal sealed class LocalSilenceLeasePool
     private readonly Func<string, bool, bool> _setMute;
     private readonly Func<int, (string? Multimedia, string? Console)> _readRoute;
     private readonly Func<int, (string? Multimedia, string? Console), bool> _applyRoute;
-    // The phone and Windows Link pools must not reserve the same output concurrently.
+    // The two routing paths must not reserve the same output concurrently.
     internal static readonly object Gate = new();
     private Reservation? _reservation;
     private readonly Dictionary<int, Lease> _leases = new();
@@ -38,11 +38,6 @@ internal sealed class LocalSilenceLeasePool
         _setMute = setMute;
         _readRoute = readRoute;
         _applyRoute = applyRoute;
-    }
-
-    internal bool HasUsableEndpoint()
-    {
-        lock (Gate) return _reservation?.Invalid != true && _find(_leases.Keys.ToHashSet(), _reservation?.Endpoint) != null;
     }
 
     internal bool OwnsEndpoint(string endpoint)
@@ -212,7 +207,6 @@ internal sealed class AlreadyMutedOutputLeases(Func<bool> allMuted)
     private long _unmuteRevision;
     private Group? _active;
 
-    internal bool Available() => allMuted();
     internal void NoteUnmuted() => Interlocked.Increment(ref _unmuteRevision);
 
     internal IPcProcessSilenceLease? Acquire(int processId)

@@ -16,8 +16,6 @@ namespace SonicRoute
     public static class ThemeService
     {
         // 冻结画刷复用；容量封顶，避免拖动自定义 RGB 时把所有中间色永久留在静态缓存中。
-        internal static event Action? PaletteChanged;
-        internal static bool Dark { get; private set; }
         private const int BrushCacheLimit = 256;
         #if NET9_0_OR_GREATER
         private static readonly System.Threading.Lock _brushGate = new();
@@ -108,8 +106,6 @@ namespace SonicRoute
                     Application.Current.Resources[key] = brush;
             }
 
-            bool modeChanged = Dark != dark;
-            Dark = dark;
             if (dark)
             {
                 Set("Theme.WindowBg", Color.FromRgb(0x1E, 0x1E, 0x1E));
@@ -123,8 +119,6 @@ namespace SonicRoute
                 Set("Theme.SliderBg", Color.FromRgb(0x4B, 0x4B, 0x4B));
                 Set("Theme.Overlay", Blend(accentColor, Colors.Black, 0.78));
                 Set("Theme.SurfaceCard", Color.FromRgb(0x23, 0x23, 0x23));
-                Set("Theme.DeviceIconBackground", Blend(Color.FromRgb(0x2B, 0x2B, 0x2B), accentColor, 0.16));
-                Set("Theme.DeviceIconForeground", Blend(accentColor, Colors.White, 0.60));
             }
             else
             {
@@ -139,11 +133,8 @@ namespace SonicRoute
                 Set("Theme.SliderBg", Color.FromRgb(0xD8, 0xDC, 0xE2));
                 Set("Theme.Overlay", Blend(accentColor, Colors.White, 0.90));
                 Set("Theme.SurfaceCard", Color.FromRgb(0xFA, 0xFB, 0xFC));
-                Set("Theme.DeviceIconBackground", Blend(accentColor, Colors.White, 0.90));
-                Set("Theme.DeviceIconForeground", Color.FromRgb(0x6B, 0x72, 0x80));
             }
 
-            bool accentChanged = Application.Current.Resources["Theme.Accent"] is not SolidColorBrush oldAccent || oldAccent.Color != accentColor;
             Set("Theme.Accent", accentColor);
             // 禁用状态共用现有 RGB 反色及冻结画刷缓存，动态资源随主题一起更新。
             var invertedAccent = GetInvertedAccentBrush();
@@ -166,7 +157,6 @@ namespace SonicRoute
 
             // 透明度重新应用到最新背景色（主题切换后保持用户设置的透明度）
             ApplyBackgroundOpacity(_lastOpacity);
-            if (modeChanged || accentChanged) PaletteChanged?.Invoke();
         }
 
         private static int _lastOpacity = 96;

@@ -9,6 +9,65 @@ using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
+    private static int CheckAndroidFileCard()
+    {
+        const BindingFlags statics = BindingFlags.NonPublic | BindingFlags.Static;
+        var assembly = typeof(App).Assembly;
+        var cache = assembly.GetType("SonicRoute.PhoneAudioWindowCache")!;
+        var host = assembly.GetType("SonicRoute.AndroidAudioHost")!;
+        var store = (AndroidPhoneStore)host.GetProperty("Phone", statics)!.GetValue(null)!;
+        var phone = new AndroidDevice("file-card-fixture", "Phone", "device", false, "file-card-fixture");
+        var discovery = new AndroidDeviceDiscovery(_ => throw new InvalidOperationException("Unexpected discovery scan."));
+        discovery.Publish([phone]);
+        cache.GetProperty("Discovery", statics)!.SetValue(null, discovery);
+        store.RememberDevice(phone);
+        using var page = new PhoneDevicePage();
+        void Show(string method) => typeof(PhoneDevicePage).GetMethod(method, Hidden)!.Invoke(page, null);
+        T Control<T>(string name) where T : FrameworkElement => (T)page.FindName(name);
+        var card = Control<Border>("FileTransferCard");
+        var drop = Control<Button>("SendFileButton");
+        var browse = Control<Button>("AndroidBrowseFiles");
+        var picker = Control<FrameworkElement>("AndroidFilePicker");
+        var path = Control<TextBlock>("AndroidReceivePath");
+        var pc = Control<TextBlock>("LocalReceiveFolderPath");
+        var settings = (ReceiveDirectorySettings)typeof(PhoneDevicePage).GetField("AndroidReceiveFolder", statics)!.GetValue(null)!;
+        DragDropEffects Hover(DataObject content)
+        {
+            var e = (DragEventArgs)Activator.CreateInstance(typeof(DragEventArgs), Hidden, null,
+                [content, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy, drop, new Point(12, 12)], null)!;
+            e.RoutedEvent = DragDrop.PreviewDragOverEvent;
+            drop.RaiseEvent(e);
+            return e.Effects;
+        }
+
+        Show("ShowDevice");
+        Check(card.Visibility == Visibility.Visible && drop.IsEnabled && drop.AllowDrop && browse.IsEnabled
+            && picker.Visibility == Visibility.Collapsed && Equals(path.ToolTip, AndroidFileTransfer.Downloads)
+            && pc.Text == settings.GetReceiveDirectory(), "the saved phone opens with its file actions and both default destinations");
+        var file = new DataObject(DataFormats.FileDrop, new[] { Path.Combine(Path.GetTempPath(), "file-card.txt") });
+        Check(Hover(file) == DragDropEffects.Copy && Hover(new DataObject(DataFormats.Text, "example")) == DragDropEffects.None,
+            "the Android file drop target accepts file paths and declines text without starting a transfer");
+
+        string target = Path.Combine(Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")!, "received");
+        settings.SetReceiveDirectory(Directory.CreateDirectory(target).FullName);
+        store.SetReceiveFolder(store.Profile.Id, "/sdcard/Documents");
+        Show("ShowDevice");
+        Check(Equals(path.ToolTip, "/sdcard/Documents") && pc.Text == target, "both custom receive folders appear on the phone card");
+        Show("ShowConnection");
+        Check(card.Visibility == Visibility.Collapsed && Control<FrameworkElement>("ConnectionPanel").Visibility == Visibility.Visible,
+            "opening the Android connection page hides file transfer");
+        Control<RadioButton>("AirPlayConnectionChoice").IsChecked = true;
+        Check(card.Visibility == Visibility.Collapsed && Control<FrameworkElement>("AirPlayCard").Visibility == Visibility.Visible,
+            "switching to AirPlay keeps the phone file actions hidden");
+        discovery.Publish([]);
+        Show("ShowDevice");
+        Check(card.Visibility == Visibility.Visible && !drop.IsEnabled && !browse.IsEnabled
+            && picker.Visibility == Visibility.Collapsed && Hover(file) == DragDropEffects.None
+            && !(bool)host.GetProperty("IsAdbCreated", statics)!.GetValue(null)!,
+            "a disconnected phone keeps its saved folders and disables browsing and drops without initializing ADB");
+        return 0;
+    }
+
     private static int AndroidFilesUi(string output)
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(65));
@@ -43,7 +102,7 @@ internal static partial class Program
         T Control<T>(string id) where T : FrameworkElement => (T)page.FindName(id);
         void Click(string id) => Control<Button>(id).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         var entries = Control<ListBox>("AndroidFileEntries");
-        var send = Control<Button>("SendWindowsFileButton");
+        var send = Control<Button>("SendFileButton");
         var picker = Control<FrameworkElement>("AndroidFilePicker");
         var path = Control<TextBlock>("AndroidFilePath");
         var get = Control<Button>("AndroidFileGet");
@@ -105,7 +164,7 @@ internal static partial class Program
             var paths = fixtureFiles.Select(name => Path.Combine(work, name)).ToArray();
             Check(OleDragOver(window, send, new DataObject(DataFormats.FileDrop, paths), .5, drop: true) == DragDropEffects.Copy,
                 "the restored drop area accepts both Windows files");
-            Until(() => send.IsEnabled && Control<TextBlock>("WindowsFileStatus").Text.Contains(folder));
+            Until(() => send.IsEnabled && Control<TextBlock>("FileStatus").Text.Contains(folder));
             Click("AndroidBrowseFiles");
             Until(() => In(folder) && Entry(encoded) != null && Entry(ordinary) != null);
             Check(Descendants<TextBlock>(Row(encoded)).Any(text => text.IsVisible && text.Text == decoded)
@@ -123,7 +182,7 @@ internal static partial class Program
             var viewport = Descendants<ScrollViewer>(entries).First();
             Check(viewport.ScrollableWidth <= .5 && entries.ActualWidth <= 380 && Entry(longName) != null,
                 "long names fit a narrow phone picker without horizontal scrolling");
-            SaveWindowRegion(Control<FrameworkElement>("WindowsFileCard"), Path.Combine(output, "android-file-picker.png"));
+            SaveWindowRegion(Control<FrameworkElement>("FileTransferCard"), Path.Combine(output, "android-file-picker.png"));
             Click("AndroidFileGet");
             Until(() => send.IsEnabled && fixtureFiles.All(name => File.Exists(Path.Combine(pc, name))));
             Check(fixtureFiles.All(name => File.ReadAllBytes(Path.Combine(work, name)).SequenceEqual(File.ReadAllBytes(Path.Combine(pc, name))))

@@ -25,9 +25,7 @@ public partial class MainWindow
     private PhoneDevicePage? _phoneDevicePage;
     private ListBox _phoneDevicesList = null!;
     private System.Windows.Media.ImageSource _phoneSidebarIcon = null!;
-    private System.Windows.Media.ImageSource _windowsLinkSidebarIcon = null!;
     private readonly Dictionary<string, PhoneSidebarItem> _phoneSidebarDevices = new();
-    private readonly Dictionary<string, PhoneSidebarItem> _windowsLinkSidebarDevices = new();
     private bool _suppressPhoneSelection;
     private Border? _phoneSidebarCount;
     private bool _phoneInitialized;
@@ -71,7 +69,6 @@ public partial class MainWindow
         var pen = new System.Windows.Media.Pen { Thickness = 1.5 };
         BindingOperations.SetBinding(pen, System.Windows.Media.Pen.BrushProperty, new Binding(nameof(TextBlock.Foreground)) { Source = count });
         _phoneSidebarIcon = new System.Windows.Media.DrawingImage(new System.Windows.Media.GeometryDrawing(null, pen, AutomationIcons.Phone));
-        _windowsLinkSidebarIcon = new System.Windows.Media.DrawingImage(new System.Windows.Media.GeometryDrawing(null, pen, AutomationIcons.Monitor));
         Grid.SetColumn(_phoneSidebarCount,1); headingGrid.Children.Add(_phoneSidebarCount); PhoneDevicesHost.Children.Add(headingGrid);
         _phoneDevicesList = new ListBox { Name = "PhoneDevicesList", BorderThickness = new Thickness(0),
             Background = System.Windows.Media.Brushes.Transparent, FontSize = 13, MaxHeight = 220,
@@ -93,17 +90,15 @@ public partial class MainWindow
         AndroidAudioHost.Phone.OutputsChanged += PhoneLibraryChanged;
         L10n.Instance.PropertyChanged += PhoneLanguageChanged;
         PhoneAudioWindowCache.DevicesChanged += PhoneDevicesChanged;
-        WindowsLinkHub.Changed += WindowsLinkSidebarChanged;
         IsVisibleChanged += PhoneManagementVisibilityChanged; StateChanged += PhoneManagementStateChanged;
         var cachedDevices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
         AndroidAudioHost.Phone.ObserveDevices(cachedDevices);
         _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(cachedDevices, force: false, _uiLifetime.Token);
         PhoneLibraryChanged();
     }
-    private sealed class PhoneSidebarItem(string id, System.Windows.Media.ImageSource icon, bool windowsLink = false) : INotifyPropertyChanged
+    private sealed class PhoneSidebarItem(string id, System.Windows.Media.ImageSource icon) : INotifyPropertyChanged
     {
         public string Id { get; } = id;
-        public bool IsWindowsLink { get; } = windowsLink;
         public System.Windows.Media.ImageSource Icon { get; } = icon;
         public string Label { get; private set; } = "";
         public string Subtitle { get; private set; } = "";
@@ -121,11 +116,6 @@ public partial class MainWindow
     private void PhoneSidebar_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressPhoneSelection || _phoneDevicesList.SelectedItem is not PhoneSidebarItem item) return;
-        if (item.IsWindowsLink)
-        {
-            OpenPhoneManagement(addDevice: false, windowsPeer: item.Id);
-            return;
-        }
         AndroidAudioHost.Phone.SelectProfile(item.Id);
         SelectPhoneManagement();
     }
@@ -134,15 +124,8 @@ public partial class MainWindow
         bool suppressed = _suppressPhoneSelection; _suppressPhoneSelection = true;
         try
         {
-            PhoneSidebarItem? selected = null;
-            if (PhoneDetailsHost.Visibility == Visibility.Visible && _phoneDevicePage != null)
-            {
-                if (_phoneDevicePage.SelectedWindowsLinkPeer is { } peer)
-                    _windowsLinkSidebarDevices.TryGetValue(peer, out selected);
-                else if (!_phoneDevicePage.IsConnectionPage)
-                    _phoneSidebarDevices.TryGetValue(AndroidAudioHost.Phone.Profile.Id, out selected);
-            }
-            _phoneDevicesList.SelectedItem = selected;
+            _phoneDevicesList.SelectedItem = PhoneDetailsHost.Visibility == Visibility.Visible && _phoneDevicePage?.IsConnectionPage == false
+                && _phoneSidebarDevices.TryGetValue(AndroidAudioHost.Phone.Profile.Id, out var selected) ? selected : null;
         }
         finally { _suppressPhoneSelection = suppressed; }
     }
@@ -187,72 +170,19 @@ public partial class MainWindow
             }
         }
         finally { _suppressPhoneSelection = selectionSuppressed; }
-        WindowsLinkSidebarChanged();
-    }
-
-    private int _windowsLinkSidebarRefreshQueued;
-
-    private void WindowsLinkSidebarChanged()
-    {
-        if (!Dispatcher.CheckAccess())
-        {
-            if (System.Threading.Interlocked.Exchange(ref _windowsLinkSidebarRefreshQueued, 1) != 0) return;
-            _ = Dispatcher.BeginInvoke(new Action(() =>
-            {
-                System.Threading.Interlocked.Exchange(ref _windowsLinkSidebarRefreshQueued, 0);
-                WindowsLinkSidebarChanged();
-            }));
-            return;
-        }
-        if (_isClosed || !_phoneInitialized) return;
-        SyncExternalOutputDevices();
-        if (IsLoaded && (!IsVisible || WindowState == WindowState.Minimized
-            || AppsPage.Visibility != Visibility.Visible)) return;
-        var peers = WindowsLinkHub.EnsureService().Peers.Where(peer => peer.Trusted).ToArray();
-        var ids = peers.Select(peer => peer.Id).ToHashSet(StringComparer.Ordinal);
-        bool suppressed = _suppressPhoneSelection; _suppressPhoneSelection = true;
-        try
-        {
-            foreach (string removed in _windowsLinkSidebarDevices.Keys.Where(id => !ids.Contains(id)).ToArray())
-            {
-                _phoneDevicesList.Items.Remove(_windowsLinkSidebarDevices[removed]);
-                _windowsLinkSidebarDevices.Remove(removed);
-            }
-            foreach (var peer in peers)
-            {
-                if (!_windowsLinkSidebarDevices.TryGetValue(peer.Id, out var item))
-                {
-                    item = new PhoneSidebarItem(peer.Id, _windowsLinkSidebarIcon, windowsLink: true);
-                    _windowsLinkSidebarDevices.Add(peer.Id, item);
-                    _phoneDevicesList.Items.Add(item);
-                }
-                item.Update(peer.DisplayName, WindowsLinkPeerStatus.Text(peer), peer.Connected);
-            }
-        }
-        finally { _suppressPhoneSelection = suppressed; }
-        if (_phoneDevicePage?.SelectedWindowsLinkPeer is { } current && !ids.Contains(current))
-            _phoneDevicePage.ShowConnection();
-        else
-            _phoneDevicePage?.RefreshWindowsLinkPeerState();
         UpdatePhoneSidebarSelection();
-        if (_phoneSidebarCount?.Child is TextBlock count)
-            count.Text = (_phoneSidebarDevices.Count + peers.Length).ToString();
+        var count = _phoneSidebarCount!.Child as TextBlock;
+        if (count == null) { count = new TextBlock { FontSize = 11 }; count.SetResourceReference(TextBlock.ForegroundProperty,"Theme.TextSecondary"); _phoneSidebarCount.Child = count; }
+        count.Text = profiles.Length.ToString();
     }
-
     internal void SelectPhoneManagement() => OpenPhoneManagement(addDevice: false);
-
-    private async void OpenPhoneManagement(bool addDevice, string? windowsPeer = null)
+    private async void OpenPhoneManagement(bool addDevice)
     {
         await InitializePhoneManagementAsync();
         if (_isClosed) return;
         NavApps.IsChecked = true;
-        if (_phoneDevicePage == null)
-        {
-            _phoneDevicePage = new PhoneDevicePage();
-            _phoneDevicePage.PeerOpenedFromList += UpdatePhoneSidebarSelection;
-        }
+        _phoneDevicePage ??= new PhoneDevicePage();
         if (addDevice) _phoneDevicePage.ShowConnection();
-        else if (windowsPeer != null) _phoneDevicePage.ShowWindowsLinkPeer(windowsPeer);
         else _phoneDevicePage.ShowDevice();
         PhoneDetailsHost.Child = _phoneDevicePage;
         ShowPhoneDeviceDetails(true);
@@ -289,7 +219,6 @@ public partial class MainWindow
             }
         }
         if (_phoneRefreshError != null) PhoneDevicesHost.ToolTip = AndroidErrorTranslation.Format(_phoneRefreshError);
-        WindowsLinkSidebarChanged();
     }
     private async Task RefreshPhoneDevicesAsync()
     {
@@ -314,11 +243,10 @@ public partial class MainWindow
         AndroidAudioHost.Phone.OutputsChanged -= PhoneLibraryChanged;
         L10n.Instance.PropertyChanged -= PhoneLanguageChanged;
         PhoneAudioWindowCache.DevicesChanged -= PhoneDevicesChanged;
-        WindowsLinkHub.Changed -= WindowsLinkSidebarChanged;
         IsVisibleChanged -= PhoneManagementVisibilityChanged; StateChanged -= PhoneManagementStateChanged;
         _phoneDevicesList.SelectionChanged -= PhoneSidebar_SelectionChanged;
         _phoneDevicesList.Items.Clear();
-        _phoneDevicePage?.Dispose(); _phoneDevicePage = null; PhoneDetailsHost.Child = null; PhoneDevicesHost.Children.Clear(); _phoneSidebarDevices.Clear(); _windowsLinkSidebarDevices.Clear();
+        _phoneDevicePage?.Dispose(); _phoneDevicePage = null; PhoneDetailsHost.Child = null; PhoneDevicesHost.Children.Clear(); _phoneSidebarDevices.Clear();
         _phoneSidebarIcon = null!; _phoneRefreshError = null; _phoneInitialization = null;
         PhoneDevicesHost.ToolTip = null;
         AndroidAudioHost.TrimForIdle();

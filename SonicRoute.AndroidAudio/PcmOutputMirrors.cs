@@ -1,10 +1,7 @@
-using SonicRoute.WindowsLink;
-
 namespace SonicRoute.AndroidAudio;
 
 // Output changes are serialized by the owning session. PCM readers consume an immutable snapshot.
-internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<IPcmPlayer>, Task> removeFailed,
-    Func<string, bool>? forwardsPackets = null)
+internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeFailed)
 {
     private sealed record Output(string Id, AndroidPcmSource Pcm, IPcmPlayer Player);
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
@@ -13,9 +10,6 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
     private float _volume = 1;
     private bool _smart;
     private string? _primaryDevice;
-    private PhoneLinkAudioPlayer? _primaryPeer;
-    private PhoneLinkAudioPlayer[] _peerPlayers = [];
-
     internal string[] IdsSnapshot() => Volatile.Read(ref _outputs).Select(output => output.Id).ToArray();
     internal static (string? Primary, string[] Extras) Select(IReadOnlyList<string?> selection, string? current)
     {
@@ -36,7 +30,6 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
         lock (_gate)
         {
             _primaryDevice = (player as WasapiPcmPlayer)?.EndpointId;
-            _primaryPeer = player as PhoneLinkAudioPlayer;
             UpdateAudible();
         }
     }
@@ -46,8 +39,6 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
         if (duplicate != null) duplicate.Pcm.Clear();
         var audible = duplicate == null ? _outputs : _outputs.Where(o => o != duplicate).ToArray();
         Volatile.Write(ref _audible, audible);
-        var peers = audible.Select(o => o.Player).OfType<PhoneLinkAudioPlayer>();
-        Volatile.Write(ref _peerPlayers, _primaryPeer == null ? peers.ToArray() : peers.Prepend(_primaryPeer).ToArray());
     }
     internal void ClearBuffers() { foreach (var o in Volatile.Read(ref _outputs)) o.Pcm.Clear(); }
     internal void Write(ReadOnlySpan<float> samples, (int NonSilent, float Peak) metrics, AndroidPcmSource primary)
@@ -57,8 +48,6 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
             output.Pcm.HeaderGain = primary.HeaderGain;
             output.Pcm.WriteMeasured(samples, metrics);
         }
-        var peers = Volatile.Read(ref _peerPlayers);
-        if (peers.Length != 0) PhoneLinkAudioPlayer.Send(peers, samples, primary.EffectiveGain);
     }
     internal async Task ApplyAsync(string[] desired, Func<AndroidPcmSource, string, CancellationToken, IPcmPlayer> create,
         Func<Task> commitPrimary, CancellationToken token)
@@ -75,11 +64,10 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
                 var output = Array.Find(previous, o => Ids.Equals(o.Id, id));
                 if (output == null)
                 {
-                    var pcm = new AndroidPcmSource(forwardsPackets?.Invoke(id) == true) { PreserveQuietLevel = preserveQuietLevel };
+                    var pcm = new AndroidPcmSource();
                     var player = create(pcm, id, token);
                     staged.Add(output = new Output(id, pcm, player));
                     void Failed(Exception error) => _ = Task.Run(() => removeFailed(p => ReferenceEquals(p, player)));
-                    if (player is IFailedPcmPlayer reported) reported.Failed += Failed;
                     if (player is WasapiPcmPlayer wasapi)
                     {
                         wasapi.Failed += Failed;

@@ -6,6 +6,7 @@ internal static partial class Program
 {
     private static async Task AndroidFileDirectoryAsync()
     {
+        CheckReceiveDirectory();
         static string Label(string name) => AndroidFileTransfer.FormatDisplayName(name);
         Check(Label("%E4%B8%AD%E6%96%87%20A+B.pdf") == "中文 A+B.pdf"
             && Label("0%E2%82%AC+1") == "0€+1",
@@ -60,5 +61,35 @@ internal static partial class Program
                 : files.All(f => f.SizeText == "")), wide ? "64-bit listings display the real size above 4 GiB" :
                 "a 32-bit listing cannot mislabel a wrapped file size");
         }
+    }
+
+    private static void CheckReceiveDirectory()
+    {
+        Check(new[] { @"..\escape.exe", @"C:\escape.exe", "payload.exe:side", "con.exe", "fake\u202e.exe" }
+                .All(name => !AndroidFileTransfer.IsSafeTransferName(name)),
+            "phone file names exclude paths, alternate streams, Windows device names and direction overrides");
+        var root = Directory.CreateTempSubdirectory("SonicRoute-android-receive-");
+        try
+        {
+            string settings = Path.Combine(root.FullName, "receive-folder.txt");
+            var folder = new ReceiveDirectorySettings(settings);
+            string downloads = folder.GetReceiveDirectory();
+            folder.SetReceiveDirectory(root.FullName);
+            Check(Path.IsPathFullyQualified(downloads) && new ReceiveDirectorySettings(settings).GetReceiveDirectory() == root.FullName,
+                "the PC receive folder defaults to Downloads and reloads the chosen destination");
+            string destination = Path.Combine(root.FullName, "文档.txt");
+            File.WriteAllText(destination, "existing");
+            Directory.CreateDirectory(Path.Combine(root.FullName, "文档 (1).txt"));
+            string part = Path.Combine(root.FullName, "download.partial");
+            File.WriteAllText(part, "incoming");
+            string saved = AndroidFileTransfer.CommitToReceiveDirectory(part, destination, CancellationToken.None);
+            Check(Path.GetFileName(saved) == "文档 (2).txt" && File.ReadAllText(saved) == "incoming"
+                && File.ReadAllText(destination) == "existing" && !File.Exists(part),
+                "an Android download preserves colliding files and folders when committing the new file");
+            folder.SetReceiveDirectory(null);
+            Check(new ReceiveDirectorySettings(settings).GetReceiveDirectory() == downloads,
+                "reset restores the original PC download folder");
+        }
+        finally { root.Delete(recursive: true); }
     }
 }

@@ -2,8 +2,6 @@
 using System.Diagnostics;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
-using SonicRoute.Core.Interop;
-using SonicRoute.WindowsLink;
 
 namespace SonicRoute;
 
@@ -20,20 +18,6 @@ internal static partial class AppPlaybackOutputs
     private static readonly Dictionary<int, History> Histories = [];
     private static long _historyEpoch;
     internal static bool IsManaged(int pid) { lock (HistoryGate) return Histories.ContainsKey(pid); }
-    internal static string PreviousLocalOutput(int pid)
-    {
-        lock (HistoryGate)
-        {
-            if (Histories.TryGetValue(pid, out var history))
-            {
-                foreach (var c in new[] { history.Current }.Concat(history.Previous))
-                    if (c?.Outputs.FirstOrDefault(id => !CrossDevice(id)) is { } local) return local;
-            }
-        }
-        return Streams(pid).Any(s => s.DestinationOnly) || LocalAppOutputMirrors.GetExclusivePhone(pid, out _) != null
-            ? AudioService.SystemDefaultDeviceId : Endpoint(AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
-    }
-    private static bool CrossDevice(string id) => AndroidOutputIdentity.IsPhoneOutput(id) || WindowsLinkOutputIdentity.IsWindowsLinkOutput(id);
     private static History? HistoryFor(int pid)
     {
         lock (HistoryGate)
@@ -68,7 +52,7 @@ internal static partial class AppPlaybackOutputs
         {
             if (!Histories.TryGetValue(pid, out var history))
             {
-                if (!outputs.Any(CrossDevice)) return;
+                if (!outputs.Any(AndroidOutputIdentity.IsPhoneOutput)) return;
                 try
                 {
                     var process = Process.GetProcessById(pid);
@@ -95,7 +79,7 @@ internal static partial class AppPlaybackOutputs
     // Mark work with the exact successful choice that observed the disconnect. A later manual command wins.
     internal static void OutputEnded(int pid, string output, bool recover)
     {
-        if (!CrossDevice(output)) return;
+        if (!AndroidOutputIdentity.IsPhoneOutput(output)) return;
         History? history;
         Choice? expected;
         lock (HistoryGate)
@@ -116,11 +100,7 @@ internal static partial class AppPlaybackOutputs
         {
             if (Histories.GetValueOrDefault(pid) != history || !ReferenceEquals(history.Current, expected) || history.Process.HasExited) return false;
         }
-        var stillLive = Streams(pid);
-        bool present = WindowsLinkOutputIdentity.TryParsePeerId(lost, out var peer)
-            ? stillLive.Any(s => Ids.Equals(s.PeerId, peer))
-            : LocalAppOutputMirrors.GetExtraOutputs(pid).Contains(lost, Ids);
-        if (present) return false;
+        if (LocalAppOutputMirrors.GetExtraOutputs(pid).Contains(lost, Ids)) return false;
         // An explicit stop removes intent but must not open another output.
         if (!recover)
         {
@@ -130,16 +110,14 @@ internal static partial class AppPlaybackOutputs
             return true;
         }
         var historyBefore = history.Previous.ToArray();
-        var externalIds = WindowsLinkHub.Service?.Peers.Where(p => p.Connected && p.Capabilities.HasFlag(LinkCapabilities.AudioReceive))
-            .Select(p => WindowsLinkOutputIdentity.FormatDeviceId(p.Id)).ToHashSet(Ids) ?? new HashSet<string>(Ids);
-        foreach (var phone in AndroidAudioHost.GetOutputDevices()) externalIds.Add(phone.Id);
+        var externalIds = AndroidAudioHost.GetOutputDevices().Select(phone => phone.Id).ToHashSet(Ids);
         var localIds = new HashSet<string>(Ids) { AudioService.SystemDefaultDeviceId };
-        if (historyBefore.Any(c => c.Outputs.Any(id => !CrossDevice(id) && !AudioService.IsSystemDefault(id))))
+        if (historyBefore.Any(c => c.Outputs.Any(id => !AndroidOutputIdentity.IsPhoneOutput(id) && !AudioService.IsSystemDefault(id))))
             using (var devices = new WasapiDeviceLease.Enumerator())
                 foreach (var lease in devices.ActiveRender()) using (lease) localIds.Add(lease.Device.ID);
-        bool Available(string id) => !Ids.Equals(id, lost) && (CrossDevice(id) ? externalIds.Contains(id) : localIds.Contains(id));
+        bool Available(string id) => !Ids.Equals(id, lost) && (AndroidOutputIdentity.IsPhoneOutput(id) ? externalIds.Contains(id) : localIds.Contains(id));
         // A Windows endpoint in the current selection remains governed by native routing even while unplugged.
-        var remaining = expected.Outputs.Where(id => !CrossDevice(id) || Available(id)).ToArray();
+        var remaining = expected.Outputs.Where(id => !AndroidOutputIdentity.IsPhoneOutput(id) || Available(id)).ToArray();
         var candidates = remaining.Length != 0
             ? new[] { expected with { Outputs = remaining } }
             : historyBefore.Select(c => c with { Outputs = c.Outputs.Where(Available).ToArray() }).Where(c => c.Outputs.Length != 0);

@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -9,7 +10,10 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
-using SonicRoute.WindowsLink;
+using Control = System.Windows.Controls.Control;
+using DataFormats = System.Windows.DataFormats;
+using DragDropEffects = System.Windows.DragDropEffects;
+using DragEventArgs = System.Windows.DragEventArgs;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 
 namespace SonicRoute;
@@ -21,39 +25,106 @@ public partial class PhoneDevicePage
     private CancellationTokenSource? _androidListing, _androidFileWork;
     private string? _androidViewSerial, _androidTransferSerial, _androidStatusSerial, _androidFileMessage;
     private string _androidFolder = AndroidFileTransfer.Downloads;
-    private bool _choosingPhoneFolder;
+    private bool _choosingPhoneFolder, _fileDragOver;
 
-    private string? AndroidFileTarget() => !_disposed && SelectedWindowsLinkPeer == null && !IsConnectionPage
+    private string? AndroidFileTarget() => !_disposed && !IsConnectionPage
         && _androidFileWork == null && _device?.State == "device" ? _device.Serial : null;
 
     private void UpdateAndroidFiles(bool connectionPage)
     {
         string? serial = connectionPage ? null : _device?.Serial;
         ResetAndroidFilePicker(serial);
-        WindowsFileCard.Visibility = connectionPage ? Visibility.Collapsed : Visibility.Visible;
+        FileTransferCard.Visibility = connectionPage ? Visibility.Collapsed : Visibility.Visible;
         if (connectionPage) return;
-        AndroidBrowseFiles.Visibility = AndroidReceiveFolderRow.Visibility = Visibility.Visible;
         bool ready = AndroidFileTarget() != null;
-        SendWindowsFileButton.IsEnabled = AndroidChangeFolder.IsEnabled = AndroidBrowseFiles.IsEnabled = ready;
-        if (!ready) SetWindowsFileDragOver(false);
-        WindowsFileDropLabel.Text = L10n.T(serial != null ? "Phone.LinkFileDropHint" : "Phone.LinkFileOfflineHint");
+        SendFileButton.IsEnabled = AndroidChangeFolder.IsEnabled = AndroidBrowseFiles.IsEnabled = ready;
+        if (!ready) SetFileDragOver(false);
+        FileDropLabel.Text = L10n.T(serial != null ? "Phone.FileDropHint" : "Phone.FileOfflineHint");
         string folder = AndroidAudioHost.Phone.Profile.ReceiveFolder;
         AndroidReceivePath.Text = AndroidFolderLabel(folder);
         AndroidReceivePath.ToolTip = folder;
-        WindowsReceiveFolderPath.Text = AndroidReceiveFolder.GetReceiveDirectory();
+        LocalReceiveFolderPath.Text = AndroidReceiveFolder.GetReceiveDirectory();
         bool working = serial != null && _androidTransferSerial == serial && _androidFileWork != null;
-        WindowsFileProgressRow.Visibility = working ? Visibility.Visible : Visibility.Collapsed;
-        WindowsFileProgress.IsIndeterminate = working;
-        WindowsFileStatus.Text = serial != null && _androidStatusSerial == serial ? _androidFileMessage ?? "" : "";
-        WindowsFileStatus.Visibility = WindowsFileStatus.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        FileProgressRow.Visibility = working ? Visibility.Visible : Visibility.Collapsed;
+        FileProgress.IsIndeterminate = working;
+        FileStatus.Text = serial != null && _androidStatusSerial == serial ? _androidFileMessage ?? "" : "";
+        FileStatus.Visibility = FileStatus.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         UpdateAndroidFileAction();
+    }
+
+    private async void SendFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (AndroidFileTarget() is not { } serial) return;
+        var dialog = new Microsoft.Win32.OpenFileDialog { Title = L10n.T("Phone.FileSend"), CheckFileExists = true, Multiselect = true };
+        if (dialog.ShowDialog(Window.GetWindow(this)) == true && AndroidFileTarget() == serial)
+            await RunAndroidFilesAsync(serial, dialog.FileNames);
+    }
+
+    private void SetFileDragOver(bool over)
+    {
+        if (_fileDragOver == over) return;
+        _fileDragOver = over;
+        if (over) SendFileButton.SetResourceReference(Control.BorderBrushProperty, "Theme.Accent");
+        else SendFileButton.ClearValue(Control.BorderBrushProperty);
+    }
+
+    private static bool HasFileDrop(DragEventArgs e) => e.AllowedEffects.HasFlag(DragDropEffects.Copy)
+        && e.Data.GetDataPresent(DataFormats.FileDrop, autoConvert: false);
+
+    private void File_DragOver(object sender, DragEventArgs e)
+    {
+        bool accepted = AndroidFileTarget() != null && HasFileDrop(e);
+        e.Effects = accepted ? DragDropEffects.Copy : DragDropEffects.None;
+        SetFileDragOver(accepted);
+        e.Handled = true;
+    }
+
+    private void File_DragLeave(object sender, DragEventArgs e) => SetFileDragOver(false);
+
+    private async void File_Drop(object sender, DragEventArgs e)
+    {
+        SetFileDragOver(false);
+        e.Handled = true;
+        e.Effects = DragDropEffects.None;
+        if (AndroidFileTarget() is not { } serial || !HasFileDrop(e)) return;
+        try
+        {
+            if (e.Data.GetData(DataFormats.FileDrop, autoConvert: false) is not string[] { Length: > 0 } paths) return;
+            e.Effects = DragDropEffects.Copy;
+            await RunAndroidFilesAsync(serial, paths);
+        }
+        catch (ExternalException ex) { SetAndroidFileStatus(serial, ex.Message); }
+    }
+
+    private void CancelFile_Click(object sender, RoutedEventArgs e) => _androidFileWork?.Cancel();
+
+    private void LocalReceiveFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (_disposed) return;
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = L10n.T("Phone.FileReceiveFolder"),
+            InitialDirectory = AndroidReceiveFolder.GetReceiveDirectory(),
+            Multiselect = false
+        };
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true) return;
+        try
+        {
+            AndroidReceiveFolder.SetReceiveDirectory(dialog.FolderName);
+            LocalReceiveFolderPath.Text = dialog.FolderName;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            System.Windows.MessageBox.Show(Window.GetWindow(this), ex.Message, L10n.T("Phone.FileReceiveFolder"),
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private void SetAndroidFileStatus(string serial, string? message)
     {
         _androidStatusSerial = serial;
         _androidFileMessage = message;
-        if (!_disposed && SelectedWindowsLinkPeer == null && _androidViewSerial == serial)
+        if (!_disposed && _androidViewSerial == serial)
             UpdateAndroidFiles(IsConnectionPage);
     }
 
@@ -226,18 +297,18 @@ public partial class PhoneDevicePage
             var files = new AndroidFileTransfer(AndroidAudioHost.Adb, serial);
             string saved = "";
             if (pullFrom == null && !await Task.Run(() => paths.All(p => Path.IsPathFullyQualified(p) && File.Exists(p)), work.Token))
-                throw new IOException(L10n.T("Phone.LinkFileOnlyFiles"));
+                throw new IOException(L10n.T("Phone.FileOnlyFiles"));
             for (int i = 0; i < paths.Length; i++)
             {
                 string path = paths[i];
                 work.Token.ThrowIfCancellationRequested();
-                SetAndroidFileStatus(serial, string.Format(L10n.T("Phone.LinkFileBatchProgress"), i + 1, paths.Length, Path.GetFileName(path)));
+                SetAndroidFileStatus(serial, string.Format(L10n.T("Phone.FileBatchProgress"), i + 1, paths.Length, Path.GetFileName(path)));
                 // Opening a source or creating a receive folder can block on a Windows network share.
                 saved = await Task.Run(() => pullFrom == null
                     ? files.SendAsync(path, phoneFolder, work.Token)
                     : files.ReceiveAsync(pullFrom, path, pcFolder, work.Token), work.Token);
             }
-            SetAndroidFileStatus(serial, string.Format(L10n.T("Phone.LinkFileSaved"), paths.Length == 1 ? saved : pullFrom == null ? phoneFolder : pcFolder));
+            SetAndroidFileStatus(serial, string.Format(L10n.T("Phone.FileSaved"), paths.Length == 1 ? saved : pullFrom == null ? phoneFolder : pcFolder));
         }
         catch (OperationCanceledException) { SetAndroidFileStatus(serial, L10n.T("Auto.Cancel")); }
         catch (Exception ex) { SetAndroidFileStatus(serial, ex.Message); }
@@ -245,7 +316,7 @@ public partial class PhoneDevicePage
         {
             _androidFileWork = null;
             _androidTransferSerial = null;
-            if (!_disposed && SelectedWindowsLinkPeer == null) UpdateAndroidFiles(IsConnectionPage);
+            if (!_disposed) UpdateAndroidFiles(IsConnectionPage);
         }
     }
 }

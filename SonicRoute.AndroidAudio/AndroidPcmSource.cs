@@ -9,13 +9,8 @@ namespace SonicRoute.AndroidAudio;
 public sealed class AndroidPcmSource : IWaveProvider
 {
     public const int SampleRate = 48000, Channels = 2;
-    // The phone profile includes headroom. PC-to-PC playback already includes the source mixer level.
-    internal bool PreserveQuietLevel { get; init; }
     private readonly object _gate = new();
-    private readonly float[] _samples;
-    public AndroidPcmSource() : this(false) { }
-    internal AndroidPcmSource(bool packetCounterOnly) =>
-        _samples = packetCounterOnly ? [] : new float[SampleRate * Channels / 2]; // 500 ms maximum for float renderers
+    private readonly float[] _samples = new float[SampleRate * Channels / 2]; // 500 ms maximum
     private int _start, _count;
     private float _volume = 1, _gain = 1;
     private bool _smartVolume;
@@ -82,8 +77,6 @@ public sealed class AndroidPcmSource : IWaveProvider
     {
         var (nonSilent, peak) = metrics;
         Interlocked.Add(ref _written, samples.Length);
-        // An encoded-packet mirror only needs to know whether this frame reached its committed output.
-        if (_samples.Length == 0) return;
         Interlocked.Add(ref _nonSilent, nonSilent);
         Volatile.Write(ref _lastPeak, peak);
         if (!float.IsNaN(peak) && peak >= 0f)
@@ -181,20 +174,6 @@ public sealed class AndroidPcmSource : IWaveProvider
         return count; // live source: an underrun is silence, not EOF
     }
 
-    // A Windows Link relay sends the original 16-bit packet and has no need to copy its float playback queue.
-    internal bool ConsumeRelayPacket(ref long lastWritten)
-    {
-        lock (_gate)
-        {
-            long written = SamplesWritten;
-            if (written == lastWritten) return false;
-            lastWritten = written;
-            Interlocked.Add(ref _read, _count);
-            _start = _count = 0;
-            return true;
-        }
-    }
-
     private float ComputeEffectiveGain()
     {
         float volume = Volume;
@@ -206,7 +185,7 @@ public sealed class AndroidPcmSource : IWaveProvider
         float rangeFactor = float.IsNaN(env) || env <= 0.15f
             ? 0.25f
             : Math.Clamp(0.25f * MathF.Pow(0.15f / env, 0.70f), 0.08f, 0.25f);
-        return curved * headerGain * (PreserveQuietLevel ? rangeFactor / 0.25f : rangeFactor);
+        return curved * headerGain * rangeFactor;
     }
 
     private static void ApplyGain(ReadOnlySpan<float> samples, Span<float> destination, float gain)

@@ -25,7 +25,7 @@ internal static partial class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        if (args is ["--silent-route-child"]) { Console.In.ReadToEnd(); return 0; }
+        if (args is ["--mirror-tone", var endpoint]) { MovableToneAsync(endpoint).GetAwaiter().GetResult(); return 0; }
         var stdout = Console.Out;
         var stderr = Console.Error;
         StreamWriter? fileLog = null;
@@ -37,54 +37,30 @@ internal static partial class Program
             if (fileLog != null) { Console.SetOut(fileLog); Console.SetError(fileLog); }
             Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Path.Combine(output, "ui-data-" + Guid.NewGuid().ToString("N")));
             Environment.SetEnvironmentVariable("SONICROUTE_INSTANCE_ID", "AndroidUiChecks");
-            if (args.Contains("--windows-link-source-playback"))
-            {
-                CheckSourcePlaybackAsync().GetAwaiter().GetResult();
-                return 0;
-            }
-            if (args.Contains("--windows-link-phone-output"))
-            {
-                CheckExternalPhoneOutputsAsync().GetAwaiter().GetResult();
-                return 0;
-            }
-            if (args.Contains("--windows-link-multi-route"))
-            {
-                CheckMultipleWindowsOutputsAsync().GetAwaiter().GetResult();
-                return 0;
-            }
-            if (args.Contains("--windows-link-clipboard"))
-            {
-                SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
-                Pump(WindowsLinkClipboardChecksAsync());
-                return 0;
-            }
-            int privateStation = Array.IndexOf(args, "--windows-link-clipboard-native");
+            if (args.Contains("--local-mirrors")) return CheckLocalMirrorsAsync(output).GetAwaiter().GetResult();
+            if (args.Contains("--playback-selection")) { CheckPlaybackRange(); return 0; }
+            int privateStation = Array.IndexOf(args, "--desktop-clipboard-native");
             if (privateStation >= 0)
             {
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
                 Pump(NativeClipboardFixture.Run(args[privateStation + 1]));
                 return 0;
             }
-            if (args.Contains("--windows-link-silence"))
+            if (args.Contains("--playback-silence"))
             {
                 CheckSilenceLeaseFailures();
                 Task.Run(CheckDormantPlaybackWatch).GetAwaiter().GetResult();
                 return 0;
             }
-            bool linkOutputs = args.Contains("--windows-link-push-ui") || args.Contains("--windows-link-incoming-outputs") || args.Contains("--kun-app-to-phone");
-            App app = args.Contains("--windows-connect-ui") || args.Contains("--windows-touch") || args.Contains("--android-files-ui") || args.Contains("--windows-link-ui") || linkOutputs || args.Contains("--windows-link-trust-live") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") ? new RoutingFixtureApp() : new App();
+            App app = args.Contains("--windows-touch") || args.Contains("--android-file-card") || args.Contains("--android-files-ui") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") ? new RoutingFixtureApp() : new App();
             if (app is RoutingFixtureApp)
             { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
+            if (args.Contains("--android-file-card")) return CheckAndroidFileCard();
             if (args.Contains("--android-files-ui")) return AndroidFilesUi(output);
-            if (args.Contains("--windows-link-ui")) return WindowsLinkUi(output, args.Contains("--windows-touch"));
-            if (args.Contains("--kun-app-to-phone")) return WindowsToPhoneSinkUi();
-            if (linkOutputs) return WindowsLinkOutputUi(args.Contains("--windows-link-incoming-outputs"));
-            if (args.Contains("--windows-connect-ui")) return WindowsConnectUi(output, args.Contains("--file-browser"));
             if (args.Contains("--windows-touch")) return WindowsTouchChecks();
-            if (args.Contains("--windows-link-trust-live")) return WindowsLinkTrustSyncUi(args.Contains("--open-desktop") ? output : null);
             if (args.Contains("--pairing-combined")) return PairingCombinedUi(output);
             if (args.Contains("--device-panel-airplay")) return DevicePanelAirPlayUi(output, args.Contains("--airplay-lan-start"));
             if (args.Contains("--drop-compat"))

@@ -404,7 +404,6 @@ internal static class PcProcessLoopbackCapture
 {
     private const string VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK = "VAD\\Process_Loopback";
     private const int PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0;
-    private const int PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE = 1;
     private const int AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1;
     private const uint AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000;
     private const uint AUDCLNT_STREAMFLAGS_EVENTCALLBACK = 0x00040000;
@@ -523,14 +522,14 @@ internal static class PcProcessLoopbackCapture
     }
 
     public static Task RunMtaCaptureLoopAsync(int processId, Stream destination, CancellationToken token, Action onProcessExited,
-        Action<int, int>? onPacketStreamed = null, bool excludeProcess = false, Action? onStarted = null)
+        Action<int, int>? onPacketStreamed = null, Action? onStarted = null)
     {
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
             try
             {
-                CaptureLoopMta(processId, destination, token, onProcessExited, onPacketStreamed, excludeProcess, onStarted);
+                CaptureLoopMta(processId, destination, token, onProcessExited, onPacketStreamed, onStarted);
                 tcs.TrySetResult();
             }
             catch (OperationCanceledException) { tcs.TrySetCanceled(token); }
@@ -545,7 +544,7 @@ internal static class PcProcessLoopbackCapture
         return tcs.Task;
     }
 
-    private static IAudioClient ActivateProcessLoopbackClient(int processId, CancellationToken token, bool excludeProcess)
+    private static IAudioClient ActivateProcessLoopbackClient(int processId, CancellationToken token)
     {
         var actParams = new AUDIOCLIENT_ACTIVATION_PARAMS
         {
@@ -553,9 +552,7 @@ internal static class PcProcessLoopbackCapture
             ProcessLoopbackParams = new AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS
             {
                 TargetProcessId = (uint)processId,
-                ProcessLoopbackMode = excludeProcess
-                    ? PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE
-                    : PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
+                ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE
             }
         };
         int paramSize = Marshal.SizeOf<AUDIOCLIENT_ACTIVATION_PARAMS>();
@@ -595,26 +592,7 @@ internal static class PcProcessLoopbackCapture
         }
     }
 
-    // Called on the Windows Link startup worker. Some serviced Windows 10 builds
-    // support process loopback below build 20348. Test the actual capture format
-    // without starting capture or opening a playback endpoint.
-    internal static bool CanInitializeProcessLoopback(CancellationToken token)
-    {
-        using var sampleEvent = new AutoResetEvent(false);
-        try
-        {
-            var client = InitializeCaptureClient(Environment.ProcessId, token, false, sampleEvent, out _);
-            Marshal.ReleaseComObject(client);
-            return true;
-        }
-        catch (Exception ex) when (ex is not (OperationCanceledException or OutOfMemoryException))
-        {
-            Trace.WriteLine($"Windows Link process loopback unavailable (0x{ex.HResult:X8}): {ex.Message}");
-            return false;
-        }
-    }
-
-    private static IAudioClient InitializeCaptureClient(int processId, CancellationToken token, bool excludeProcess,
+    private static IAudioClient InitializeCaptureClient(int processId, CancellationToken token,
         AutoResetEvent sampleEvent, out bool useEventCallback)
     {
         var wfx = new WAVEFORMATEX
@@ -630,7 +608,7 @@ internal static class PcProcessLoopbackCapture
 
         uint flags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM
             | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
-        var client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
+        var client = ActivateProcessLoopbackClient(processId, token);
         try
         {
             if (client.Initialize(0, flags | AUDCLNT_STREAMFLAGS_EVENTCALLBACK, 200_000, 0, ref wfx, IntPtr.Zero) >= 0
@@ -642,7 +620,7 @@ internal static class PcProcessLoopbackCapture
         }
         catch { Marshal.ReleaseComObject(client); throw; }
         Marshal.ReleaseComObject(client);
-        client = ActivateProcessLoopbackClient(processId, token, excludeProcess);
+        client = ActivateProcessLoopbackClient(processId, token);
         try
         {
             Marshal.ThrowExceptionForHR(client.Initialize(0, flags, 200_000, 0, ref wfx, IntPtr.Zero));
@@ -653,14 +631,14 @@ internal static class PcProcessLoopbackCapture
     }
 
     private static void CaptureLoopMta(int processId, Stream destination, CancellationToken token, Action onProcessExited,
-        Action<int, int>? onPacketStreamed, bool excludeProcess, Action? onStarted)
+        Action<int, int>? onPacketStreamed, Action? onStarted)
     {
         IAudioClient? client = null;
         IAudioCaptureClient? capture = null;
         using var sampleEvent = new AutoResetEvent(false);
         try
         {
-            client = InitializeCaptureClient(processId, token, excludeProcess, sampleEvent, out bool useEventCallback);
+            client = InitializeCaptureClient(processId, token, sampleEvent, out bool useEventCallback);
             Guid iidCapture = IID_IAudioCaptureClient;
             int hrService = client.GetService(ref iidCapture, out object capObj);
             if (hrService < 0 || capObj == null) Marshal.ThrowExceptionForHR(hrService < 0 ? hrService : -1);

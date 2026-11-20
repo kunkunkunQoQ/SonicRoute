@@ -61,7 +61,6 @@ namespace SonicRoute
             public bool ShowOutputName;
             public string? OutputId;
 #if SONICROUTE_PHONE
-            public bool WindowsLinkExclusive;
             public string? PlaybackAnchor;
             public Task PlaybackChange = Task.CompletedTask;
 #endif
@@ -189,10 +188,6 @@ namespace SonicRoute
             SystemParameters.StaticPropertyChanged += OnSystemParamChanged;
             // 共享"当前应用"变化（前台自动跟随切换）时同步面板高亮
             CurrentAppService.CurrentChanged += OnSharedCurrentChanged;
-#if SONICROUTE_PHONE
-            WindowsLinkHub.Changed += OnWindowsLinkChanged;
-            Closed += (_, _) => WindowsLinkHub.Changed -= OnWindowsLinkChanged;
-#endif
             Closed += (_, _) => CleanupClosedWindow();
         }
 
@@ -304,10 +299,6 @@ namespace SonicRoute
             }
             catch { }
         }
-
-#if SONICROUTE_PHONE
-        private void OnWindowsLinkChanged() => Android_StateChanged();
-#endif
 
         /// <summary>刷新数据并显示面板（定位到任务栏右下角）。</summary>
         private bool _entrancePlayed;
@@ -839,10 +830,6 @@ namespace SonicRoute
 
         private void UpdateRowName(AppRow row, string? outputId)
         {
-#if SONICROUTE_PHONE
-            if (row.WindowsLinkExclusive && WindowsLinkHub.GetPcAppOutput((int)row.App.ProcessId, out bool only) is { } peer && only)
-                outputId = peer;
-#endif
             row.OutputId = outputId;
             if (row.Name == null) return;
             string primary;
@@ -1283,9 +1270,6 @@ namespace SonicRoute
                     || !_rows.TryGetValue(pid, out var current) || current != row) return false;
 #if SONICROUTE_PHONE
                 var playbackOutputs = AppPlaybackOutputs.GetSelected(pid, selected.Output);
-                string? linkOutput = WindowsLinkHub.GetPcAppOutput(pid, out bool onlyOnPeer);
-                row.WindowsLinkExclusive = onlyOnPeer;
-                if (onlyOnPeer && linkOutput != null) selected.Output = linkOutput;
 #endif
                 UpdateRowName(row, selected.Output);
                 if (row.DeviceSignature != structure)
@@ -1306,21 +1290,6 @@ namespace SonicRoute
                             else
 #endif
                                 button.Click += async (_, _) => await OnRowDeviceClickAsync(row, device, flow);
-#if SONICROUTE_PHONE
-                            if (flow == EDataFlow.eRender && SonicRoute.WindowsLink.WindowsLinkOutputIdentity.TryParsePeerId(device.Id, out var peerId)
-                                && WindowsLinkHub.Service?.Peers.FirstOrDefault(p => p.Id == peerId && p.Connected) is { } peer)
-                            {
-                                button.ContextMenu = WindowsLinkPlaybackMenu.Create(
-                                    string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), peer.DisplayName),
-                                    WindowsLinkHub.LocalExclusiveMode(peer), true,
-                                    (only, muteSpeaker) => OnRowDeviceClickAsync(row, device, flow, only, muteSpeaker),
-                                    () => Task.Run(() =>
-                                    {
-                                        WindowsLinkHub.Service?.RefreshExclusiveCapability();
-                                        return WindowsLinkHub.LocalExclusiveMode(peer);
-                                    }));
-                            }
-#endif
                             row.DeviceButtons.Add((button, device.Id, flow));
                         });
                     }
@@ -1352,22 +1321,15 @@ namespace SonicRoute
             }
         }
 
-        private async Task OnRowDeviceClickAsync(AppRow row, AudioDeviceInfo dev, EDataFlow flow, bool destinationOnly = false, bool allowSpeakerMute = false)
+        private async Task OnRowDeviceClickAsync(AppRow row, AudioDeviceInfo dev, EDataFlow flow)
         {
             MarkLastUsed(row.App);
             var pid = (int)row.App.ProcessId;
-            var (ok, _, msg) =
-#if SONICROUTE_PHONE
-                flow == EDataFlow.eRender && ApplicationAudio.IsWindowsLinkOutputDevice(dev.Id)
-                    ? await ApplyPeerMenuAsync(row.App, dev.Id, destinationOnly, allowSpeakerMute) :
-#endif
-                await Task.Run(() => ApplicationAudio.ApplyEndpoint(row.App, flow, dev.Id));
+            var (ok, _, msg) = await Task.Run(() => ApplicationAudio.ApplyEndpoint(row.App, flow, dev.Id));
             if (ok)
             {
-                bool windowsLink = ApplicationAudio.IsWindowsLinkOutputDevice(dev.Id);
-                ShowOsd(AppDisplayName.Get(row.App), windowsLink ? $"{dev.DisplayName} · {msg}"
-                    : (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName);
-                if (!windowsLink && flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
+                ShowOsd(AppDisplayName.Get(row.App), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + dev.DisplayName);
+                if (flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
                     UpdateRowName(current, dev.Id);
             }
             else

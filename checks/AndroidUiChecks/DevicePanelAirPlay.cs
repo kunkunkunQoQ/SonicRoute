@@ -55,9 +55,13 @@ internal static partial class Program
             var view = (AirPlayReceiverView)panel.FindName("AirPlayReceiverPane");
             var list = (ListBox)panel.FindName("PhoneApps");
             var deviceIcon = (System.Windows.Shapes.Path)panel.FindName("DeviceKindIcon");
-            Check(panel.Title == "设备面板" && selector.Items.OfType<AndroidDevice>().Count() == 1
+            Check(panel.Title == "设备面板" && selector.Items.Count == 2 && selector.Items.OfType<AndroidDevice>().Count() == 1
                 && selector.Items.Contains(choice) && selector.SelectedItem is AndroidDevice,
-                "Device Panel has the saved Android device and AirPlay together in its dropdown");
+                "the device dropdown lists the saved Android device and the AirPlay receiver");
+            var connections = Descendants<RadioButton>(widePage).Where(button => button.GroupName == "PhoneConnection")
+                .Select(button => button.Name).ToHashSet();
+            Check(connections.SetEquals(["AndroidConnectionChoice", "AirPlayConnectionChoice"]),
+                "the connection page offers Android and AirPlay");
             Check(!view.IsVisible && panel.FindName("AirPlayButton") == null && list.Items.Count == 2,
                 "Android shows its original app pane and no separate AirPlay footer button");
             Check(ReferenceEquals(deviceIcon.Data, AutomationIcons.Phone), "Android has its phone icon in the device selector");

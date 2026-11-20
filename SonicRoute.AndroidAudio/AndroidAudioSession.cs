@@ -1,9 +1,7 @@
-using SonicRoute.WindowsLink;
-
 namespace SonicRoute.AndroidAudio;
 
 /// <summary>A distinct external source, never a fabricated Windows process/session ID.</summary>
-public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.IPhoneAudioSession, IMultiOutputAudioSession
+public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.IPhoneAudioSession, IMultiOutputAudioSession
 {
     private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly object _stateGate = new(), _logGate = new();
@@ -20,7 +18,6 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
     private AndroidPcmSource? _pcm;
     private readonly PcmOutputMirrors _mirrors;
     internal const string SourcePhoneOutputId = "@@ANDROID_NATIVE_OUTPUT@@";
-    internal Func<WindowsLinkService?>? LinkService { get; init; }
     internal bool UsesSourcePhonePlayback => _capturePhoneAudio && State.State == CaptureState.Receiving;
     private readonly List<string?[]> _outputHistory = [];
     private CancellationTokenSource? _outputRun;
@@ -29,7 +26,7 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
     private int _generation;
     private bool _disposed;
     private Exception? _renderFailure;
-    private bool _requestedPhoneAudio, _capturePhoneAudio, _selectionIncludesNative, _initialKeepPhoneAudio;
+    private bool _requestedPhoneAudio, _capturePhoneAudio, _initialKeepPhoneAudio;
     private CancellationToken _sourceLifetime;
     public event Action<AndroidAudioState>? Changed;
     public AndroidAudioState State => Volatile.Read(ref _state);
@@ -43,7 +40,7 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
 
     public AndroidAudioSession(AdbClient adb, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
     {
-        _mirrors = new(false, RemoveFailedOutputsAsync, WindowsLinkOutputIdentity.IsWindowsLinkOutput);
+        _mirrors = new(RemoveFailedOutputsAsync);
         _streaming = streaming;
         _watchDefaultOutput = DefaultOutputNotifications.Subscribe;
         _transportFactory = () => new ScrcpyAdbTransport(adb, Log, streaming);
@@ -56,17 +53,18 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
     }
     public AndroidAudioSession(Func<IAudioTransport> transportFactory, Func<AndroidPcmSource, string?, IPcmPlayer> playerFactory,
         Func<Action, IDisposable>? watchDefaultOutput = null, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
-    { _mirrors = new(false, RemoveFailedOutputsAsync, WindowsLinkOutputIdentity.IsWindowsLinkOutput); _transportFactory = transportFactory; _playerFactory = (_, pcm, id, _) => playerFactory(pcm, id); _watchDefaultOutput = watchDefaultOutput; _streaming = streaming; }
+    {
+        _mirrors = new(RemoveFailedOutputsAsync);
+        _transportFactory = transportFactory;
+        _playerFactory = (_, pcm, id, _) => playerFactory(pcm, id);
+        _watchDefaultOutput = watchDefaultOutput;
+        _streaming = streaming;
+    }
 
     private IPcmPlayer CreatePlayer(AndroidDevice device, AndroidPcmSource pcm, string? id, CancellationToken token)
     {
         if (id == SourcePhoneOutputId) return NativePhonePlayback.Instance;
-        if (!WindowsLinkOutputIdentity.TryParsePeerId(id, out var peer)) return _playerFactory(device, pcm, id, token);
-        var service = LinkService?.Invoke() ?? throw new IOException("Windows Link is disconnected.");
-        var app = State.App ?? throw new IOException("The phone audio session has stopped.");
-        var source = new LinkExternalAudioDescriptor(app.IsDeviceAudio ? LinkRemoteApp.SystemAudioKey : app.Package,
-            app.IsDeviceAudio ? device.Name : app.Name, app.IsDeviceAudio, app.IconPng);
-        return new PhoneLinkAudioPlayer(service, source, peer, token);
+        return _playerFactory(device, pcm, id, token);
     }
 
     private sealed class NativePhonePlayback : IPcmPlayer
@@ -84,8 +82,7 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             _initialKeepPhoneAudio = keepPhoneAudio;
-            _requestedPhoneAudio = State.OutputId == SourcePhoneOutputId || keepPhoneAudio
-                && (_selectionIncludesNative || !WindowsLinkOutputIdentity.IsWindowsLinkOutput(State.OutputId) && !_extraIds.Any(WindowsLinkOutputIdentity.IsWindowsLinkOutput));
+            _requestedPhoneAudio = State.OutputId == SourcePhoneOutputId || keepPhoneAudio;
             _sourceLifetime = token;
             await StartCoreAsync(device, app, _requestedPhoneAudio && !AndroidOutputIdentity.IsPhoneOutput(State.OutputId)
                 && !_extraIds.Any(AndroidOutputIdentity.IsPhoneOutput), token).ConfigureAwait(false);
@@ -291,11 +288,9 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
         if (renderers.Length == 0 && native) renderers = [SourcePhoneOutputId];
         var (primary, extras) = PcmOutputMirrors.Select(renderers, State.OutputId);
         bool oldNative = _requestedPhoneAudio;
-        bool oldPreference = _selectionIncludesNative;
-        bool explicitMode = explicitSelection && _pcm != null || native || desired.Any(WindowsLinkOutputIdentity.IsWindowsLinkOutput);
+        bool explicitMode = explicitSelection && _pcm != null || native;
         if (explicitMode)
         {
-            _selectionIncludesNative = native;
             _requestedPhoneAudio = native;
         }
         else if (_pcm != null) _requestedPhoneAudio = _initialKeepPhoneAudio;
@@ -319,7 +314,6 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
         catch
         {
             _requestedPhoneAudio = oldNative;
-            _selectionIncludesNative = oldPreference;
             throw;
         }
     }
@@ -574,12 +568,7 @@ public sealed partial class AndroidAudioSession : IAsyncDisposable, SonicRoute.A
             Volatile.Write(ref _renderFailure, error); Log("Audio output: " + error.Message);
             try { _run?.Cancel(); } catch (ObjectDisposedException) { }
         }
-        if (player is PhoneLinkAudioPlayer peer)
-        {
-            peer.Failed += FailedExternal;
-            if (peer.Failure is { } error) FailedExternal(error);
-        }
-        else if (player is WasapiPcmPlayer wasapi) wasapi.Failed += Failed;
+        if (player is WasapiPcmPlayer wasapi) wasapi.Failed += Failed;
         else if (player is AndroidPhonePcmPlayer phone)
         {
             phone.Failed += FailedExternal;

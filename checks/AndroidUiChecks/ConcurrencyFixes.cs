@@ -105,10 +105,10 @@ internal static partial class Program
             (Func<int, (string?, string?), bool>)((pid, ids) => { isolatedWrites++; routes[pid] = ids; return true; })
         }, null)!;
         Check(Acquire(isolated, 81) == null && isolatedWrites == 0,
-            "Windows Link leaves all routes alone when no usable output exists");
+            "The silence lease leaves all routes alone when no usable output exists");
         available = "unused-spare";
         var exclusive = Acquire(isolated, 81)!;
-        Check(spareMuted && routes[81] == (available, available), "Windows Link silences an unused secondary output and routes the selected app onto it");
+        Check(spareMuted && routes[81] == (available, available), "The silence lease mutes an unused secondary output and routes the selected app onto it");
         available = null;
         Check(Acquire(isolated, 82) == null && !routes.ContainsKey(82),
             "another app cannot acquire a previously eligible output after its mute or occupancy changes");
@@ -116,7 +116,7 @@ internal static partial class Program
         Check(exclusive.Invalidated.IsCancellationRequested, "loss of an available secondary output revokes its exclusive route");
         routes[81] = ("manually-switched", "unused-spare");
         exclusive.Dispose();
-        Check(!spareMuted && routes[81] == ("manually-switched", "console"), "ending a Windows Link lease restores its mute and only unchanged route roles");
+        Check(!spareMuted && routes[81] == ("manually-switched", "console"), "ending the silence lease restores its mute and only unchanged route roles");
         available = "unused-spare";
         var userChanged = Acquire(isolated, 84)!;
         type.GetMethod("NoteUnmuted", ConcurrencyHidden)!.Invoke(isolated, [available]);
@@ -222,7 +222,7 @@ internal static partial class Program
         client.Start();
         client.Stop();
         using var resumed = new ManualResetEventSlim();
-        var type = typeof(App).Assembly.GetType("SonicRoute.WindowsLinkPlaybackWatch", true)!;
+        var type = typeof(App).Assembly.GetType("SonicRoute.LocalPlaybackWatch", true)!;
         using var watch = (IDisposable)Activator.CreateInstance(type, ConcurrencyHidden, null,
             new object[] { Environment.ProcessId, "different-output", (Action)resumed.Set }, null)!;
         type.GetMethod("Refresh", ConcurrencyHidden)!.Invoke(watch, null);

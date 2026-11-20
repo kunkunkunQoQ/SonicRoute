@@ -63,7 +63,7 @@
                     <TextBlock Text="{Binding Item.Description}" Style="{StaticResource PhoneHint}" FontSize="10" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="PinButton" Tag="{Binding Item.App}" Style="{StaticResource PhonePinButton}" Click="RetainApp_Click" ToolTip="{Binding ActionText}" AutomationProperties.Name="{Binding ActionText}">
+                    <Button Tag="{Binding Item.App}" Style="{StaticResource PhonePinButton}" Click="RetainApp_Click" ToolTip="{Binding ActionText}" AutomationProperties.Name="{Binding ActionText}">
                         <Viewbox Style="{StaticResource PhonePinGraphic}"><Path Data="{x:Static local:AutomationIcons.Pin}" Fill="{DynamicResource Theme.Accent}"/></Viewbox>
                     </Button>
                     <CheckBox IsChecked="{Binding SmartVolume, Mode=OneWay}" Style="{DynamicResource AutomationSwitch}"
@@ -71,11 +71,6 @@
                               ToolTip="{Binding [Phone.SmartVolumeTitle], Source={x:Static local:L10n.Instance}}" AutomationProperties.Name="{Binding [Phone.SmartVolumeTitle], Source={x:Static local:L10n.Instance}}"/>
                 </StackPanel>
             </Grid>
-            <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding CanPin}" Value="False">
-                    <Setter TargetName="PinButton" Property="Visibility" Value="Collapsed"/>
-                </DataTrigger>
-            </DataTemplate.Triggers>
         </DataTemplate>
         <DataTemplate x:Key="EncoderOptionTemplate">
             <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis" Style="{x:Null}"/>
@@ -153,7 +148,7 @@
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <Border Background="{DynamicResource Theme.Overlay}" CornerRadius="10" Width="38" Height="48" HorizontalAlignment="Left">
-                            <Viewbox Width="22" Height="32"><Path x:Name="DeviceIdentityIcon" Data="{x:Static local:AutomationIcons.Phone}" Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/></Viewbox>
+                            <Viewbox Width="22" Height="32"><Path Data="{x:Static local:AutomationIcons.Phone}" Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/></Viewbox>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <Grid>
@@ -180,83 +175,29 @@
                         </StackPanel>
                         <StackPanel x:Name="DeviceCommands" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0">
                             <Button x:Name="ReconnectButton" Content="{Binding [Phone.Reconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Reconnect_Click"/>
-                            <StackPanel x:Name="PhoneDeviceCommands" Orientation="Horizontal">
-                                <Button x:Name="DisconnectButton" Content="{Binding [Phone.Disconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Disconnect_Click"/>
-                                <Button x:Name="UnpairButton" Content="{Binding [Phone.Unpair], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Unpair_Click"/>
-                                <Button x:Name="RemoveDeviceButton" Content="{Binding [Phone.DeleteDevice], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Margin="0" Click="RemoveDevice_Click"/>
-                            </StackPanel>
+                            <Button x:Name="DisconnectButton" Content="{Binding [Phone.Disconnect], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Disconnect_Click"/>
+                            <Button x:Name="UnpairButton" Content="{Binding [Phone.Unpair], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Click="Unpair_Click"/>
+                            <Button x:Name="RemoveDeviceButton" Content="{Binding [Phone.DeleteDevice], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneDeviceActionButton}" Margin="0" Click="RemoveDevice_Click"/>
                         </StackPanel>
                     </Grid>
-                    <Grid x:Name="WindowsDesktopRow" Margin="0,8,0,0" Visibility="Collapsed">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                        <Button x:Name="WindowsDesktopOpen" Style="{StaticResource PhoneDeviceActionButton}" Margin="0"
-                                AutomationProperties.Name="{Binding [Phone.WindowsDesktopOpen], Source={x:Static local:L10n.Instance}}"
-                                Click="WindowsDesktopOpen_Click">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Data="{x:Static local:AutomationIcons.Monitor}" Width="16" Height="16" Stretch="Uniform"
-                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.7"/>
-                                <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" Text="{Binding [Phone.WindowsDesktopOpen], Source={x:Static local:L10n.Instance}}"/>
-                            </StackPanel>
-                        </Button>
-                        <TextBlock x:Name="WindowsDesktopStatus" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center"
-                                   Style="{StaticResource PhoneHint}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/>
-                    </Grid>
-                </StackPanel>
-            </Border>
-            <Border x:Name="WindowsRemovePanel" Style="{StaticResource PhoneCard}" Visibility="Collapsed">
-                <StackPanel>
-                    <TextBlock x:Name="WindowsRemoveMessage" AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap" FontWeight="SemiBold"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                        <Button x:Name="WindowsRemoveCancel" Style="{StaticResource PhoneCommandButton}" Content="{Binding [Auto.Cancel], Source={x:Static local:L10n.Instance}}" Click="WindowsRemoveCancel_Click"/>
-                        <Button x:Name="WindowsRemoveConfirm" Style="{StaticResource PhoneCommandButton}" Margin="0" Content="{Binding [Phone.DeleteDevice], Source={x:Static local:L10n.Instance}}" Click="WindowsRemoveConfirm_Click"/>
-                    </StackPanel>
                 </StackPanel>
             </Border>
             <Border x:Name="StreamingCard" Style="{StaticResource PhoneCard}" IsVisibleChanged="StreamingVisibilityChanged"
                     ToolTip="{Binding [Phone.StreamApplyHint], Source={x:Static local:L10n.Instance}}">
                 <Grid TextElement.FontSize="11">
-                    <Grid.Resources>
-                        <Style x:Key="PeerQualityColumn" TargetType="ColumnDefinition">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Visibility, ElementName=WindowsVideoResolutionCombo}" Value="Visible">
-                                    <Setter Property="Width" Value="*"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Grid.Resources>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*" MinWidth="80"/>
                         <ColumnDefinition Width="*" MinWidth="80"/>
-                        <ColumnDefinition MinWidth="86">
-                            <ColumnDefinition.Style>
-                                <Style TargetType="ColumnDefinition" BasedOn="{StaticResource PeerQualityColumn}">
-                                    <Setter Property="Width" Value="86"/>
-                                </Style>
-                            </ColumnDefinition.Style>
-                        </ColumnDefinition>
-                        <ColumnDefinition MinWidth="70">
-                            <ColumnDefinition.Style>
-                                <Style TargetType="ColumnDefinition" BasedOn="{StaticResource PeerQualityColumn}">
-                                    <Setter Property="Width" Value="70"/>
-                                </Style>
-                            </ColumnDefinition.Style>
-                        </ColumnDefinition>
+                        <ColumnDefinition Width="86"/>
+                        <ColumnDefinition Width="70"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <TextBlock Text="{Binding [Phone.StreamAudioLabel], Source={x:Static local:L10n.Instance}}"
                                VerticalAlignment="Center" Margin="0,0,8,6"/>
-                    <TextBlock x:Name="AudioFixedHint" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="4"
-                               Text="{Binding [Phone.WindowsLinkAudioFixed], Source={x:Static local:L10n.Instance}}"
-                               ToolTip="{Binding [Phone.WindowsLinkAudioFixed], Source={x:Static local:L10n.Instance}}"
-                               Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12"
-                               VerticalAlignment="Center" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"
-                               Visibility="Collapsed"/>
                     <ComboBox x:Name="AudioEncoderCombo" Grid.Column="1" Style="{StaticResource RoundedComboBox}"
                               ItemTemplate="{StaticResource EncoderOptionTemplate}"
                               ItemContainerStyle="{StaticResource StreamOptionItem}"
@@ -276,9 +217,19 @@
 
                     <TextBlock Grid.Row="1" Text="{Binding [Phone.StreamVideoLabel], Source={x:Static local:L10n.Instance}}"
                                VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox x:Name="WindowsVideoResolutionCombo" Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource RoundedComboBox}"
-                              ItemTemplate="{StaticResource EncoderOptionTemplate}" SelectedValuePath="Value" Height="28" Margin="0,0,8,0" FontSize="11"
-                              Visibility="Collapsed" AutomationProperties.Name="{Binding [Phone.WindowsLinkResolution], Source={x:Static local:L10n.Instance}}"
+                    <ComboBox x:Name="VideoEncoderCombo" Grid.Row="1" Grid.Column="1" Style="{StaticResource RoundedComboBox}"
+                              ItemTemplate="{StaticResource EncoderOptionTemplate}"
+                              ItemContainerStyle="{StaticResource StreamOptionItem}"
+                              Height="28" FontSize="11" Margin="0,0,8,0"
+                              ToolTip="{Binding [Phone.StreamEncoder], Source={x:Static local:L10n.Instance}}"
+                              AutomationProperties.Name="{Binding [Phone.StreamEncoder], Source={x:Static local:L10n.Instance}}"
+                              DropDownOpened="StreamEncoder_DropDownOpened" SelectionChanged="StreamSettings_Changed"/>
+                    <ComboBox x:Name="VideoDecoderCombo" Grid.Row="1" Grid.Column="2" Style="{StaticResource RoundedComboBox}"
+                              ItemTemplate="{StaticResource EncoderOptionTemplate}"
+                              ItemContainerStyle="{StaticResource StreamOptionItem}"
+                              Height="28" FontSize="11" Margin="0,0,8,0"
+                              ToolTip="{Binding [Phone.StreamDecoder], Source={x:Static local:L10n.Instance}}"
+                              AutomationProperties.Name="{Binding [Phone.StreamDecoder], Source={x:Static local:L10n.Instance}}"
                               SelectionChanged="StreamSettings_Changed"/>
                     <ComboBox x:Name="VideoBitRateCombo" Grid.Row="1" Grid.Column="3" Style="{StaticResource RoundedComboBox}"
                               ToolTip="{Binding [Phone.StreamBitRate], Source={x:Static local:L10n.Instance}}"
@@ -286,168 +237,24 @@
                     <ComboBox x:Name="VideoFpsCombo" Grid.Row="1" Grid.Column="4" Style="{StaticResource RoundedComboBox}"
                               ToolTip="{Binding [Phone.StreamFps], Source={x:Static local:L10n.Instance}}"
                               MinWidth="70" Height="28" FontSize="11" SelectionChanged="StreamSettings_Changed"/>
-                    <TextBlock x:Name="WindowsNativeResolutionHint" Grid.Row="3" Grid.ColumnSpan="5" Margin="0,6,0,0"
-                               Text="{Binding [Phone.WindowsLinkNativeUpdateHint], Source={x:Static local:L10n.Instance}}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock" BasedOn="{StaticResource PhoneHint}">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <MultiDataTrigger>
-                                        <MultiDataTrigger.Conditions>
-                                            <Condition Binding="{Binding Connected}" Value="True"/>
-                                            <Condition Binding="{Binding SupportsNativeVideo}" Value="False"/>
-                                            <Condition Binding="{Binding SelectedValue, ElementName=WindowsVideoResolutionCombo}" Value="0"/>
-                                        </MultiDataTrigger.Conditions>
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </MultiDataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                    <TextBlock Grid.Row="2" Text="{Binding [Phone.StreamCodecs], Source={x:Static local:L10n.Instance}}"
-                               VerticalAlignment="Center" Margin="0,6,8,0"
-                               Visibility="{Binding Visibility, ElementName=WindowsVideoResolutionCombo}"/>
-                    <Grid Grid.Column="1">
-                        <Grid.Style>
-                            <Style TargetType="Grid">
-                                <Setter Property="Grid.Row" Value="1"/>
-                                <Setter Property="Grid.ColumnSpan" Value="2"/>
-                                <Setter Property="Margin" Value="0,0,8,0"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Visibility, ElementName=WindowsVideoResolutionCombo}" Value="Visible">
-                                        <Setter Property="Grid.Row" Value="2"/>
-                                        <Setter Property="Grid.ColumnSpan" Value="4"/>
-                                        <Setter Property="Margin" Value="0,6,0,0"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Grid.Style>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <ComboBox x:Name="VideoEncoderCombo" Style="{StaticResource RoundedComboBox}"
-                                  ItemTemplate="{StaticResource EncoderOptionTemplate}"
-                                  ItemContainerStyle="{StaticResource StreamOptionItem}"
-                                  Height="28" FontSize="11"
-                                  ToolTip="{Binding [Phone.StreamEncoder], Source={x:Static local:L10n.Instance}}"
-                                  AutomationProperties.Name="{Binding [Phone.StreamEncoder], Source={x:Static local:L10n.Instance}}"
-                                  DropDownOpened="StreamEncoder_DropDownOpened" SelectionChanged="StreamSettings_Changed"/>
-                        <ComboBox x:Name="VideoDecoderCombo" Grid.Column="2" Style="{StaticResource RoundedComboBox}"
-                                  ItemTemplate="{StaticResource EncoderOptionTemplate}"
-                                  ItemContainerStyle="{StaticResource StreamOptionItem}"
-                                  Height="28" FontSize="11"
-                                  ToolTip="{Binding [Phone.StreamDecoder], Source={x:Static local:L10n.Instance}}"
-                                  AutomationProperties.Name="{Binding [Phone.StreamDecoder], Source={x:Static local:L10n.Instance}}"
-                                  SelectionChanged="StreamSettings_Changed"/>
-                    </Grid>
                 </Grid>
             </Border>
             <StackPanel x:Name="RetainedPanel">
                 <Border Style="{StaticResource PhoneCard}" Padding="12,10,12,8">
                     <StackPanel>
-                        <Grid>
-                            <Grid.Style>
-                                <Style TargetType="Grid">
-                                    <Setter Property="Margin" Value="4,0,4,6"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Visibility, ElementName=SmartVolumeHeader}" Value="Visible">
-                                            <Setter Property="Margin" Value="0,2,0,4"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Grid.Style>
+                        <Grid Margin="4,0,4,6">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock x:Name="SmartVolumeHeader" Text="{Binding [Phone.SmartVolumeTitle], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold" Visibility="Collapsed"/>
-                            <TextBlock x:Name="RetainedHeader" Text="{Binding [Phone.QuickPanelAppsTitle], Source={x:Static local:L10n.Instance}}" FontSize="17" FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding [Phone.QuickPanelAppsTitle], Source={x:Static local:L10n.Instance}}" FontSize="17" FontWeight="SemiBold"/>
                             <TextBlock x:Name="RetainedCount" Grid.Column="1" Style="{StaticResource PhoneHint}" VerticalAlignment="Center"/>
                         </Grid>
-                        <TextBlock x:Name="PinDescription" Text="{Binding [Phone.PinDesc], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
+                        <TextBlock Text="{Binding [Phone.PinDesc], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="4,0,0,10"/>
                         <ItemsControl x:Name="RetainedApps" ItemTemplate="{StaticResource PhoneLibraryItem}"/>
-                        <TextBlock x:Name="WindowsAudioEmpty" Style="{StaticResource PhoneHint}" Margin="0,0,0,4" Visibility="Collapsed"/>
                         <TextBlock x:Name="RetainedEmpty" Text="{Binding [Phone.RetainedEmptyHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,12"/>
                     </StackPanel>
                 </Border>
                 <Button x:Name="AddAppsButton" Content="{Binding [Phone.AddQuickPanelAppButton], Source={x:Static local:L10n.Instance}}" Style="{StaticResource QuickPanelToolButton}" Background="{DynamicResource Theme.Overlay}" Height="38" Margin="0,0,0,12" Click="AddApps_Click"/>
-                <Border x:Name="WindowsFileCard" Style="{StaticResource PhoneCard}" Visibility="Collapsed" IsVisibleChanged="WindowsFileCard_VisibilityChanged" Unloaded="WindowsFileCard_Unloaded">
+                <Border x:Name="FileTransferCard" Style="{StaticResource PhoneCard}" Visibility="Collapsed">
                     <StackPanel>
-                        <StackPanel x:Name="WindowsFileBrowser" Visibility="Collapsed" PreviewKeyDown="WindowsBrowser_KeyDown">
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <Button x:Name="WindowsBrowserUp" Style="{StaticResource PhoneCommandButton}" Width="32" Height="32" Padding="0" Margin="0,0,7,0"
-                                        AutomationProperties.Name="{Binding [Phone.AndroidParentFolder], Source={x:Static local:L10n.Instance}}"
-                                        ToolTip="{Binding [Phone.AndroidParentFolder], Source={x:Static local:L10n.Instance}}" Click="WindowsBrowserUp_Click">
-                                    <Path Data="M9,2 L3,8 L9,14 M3,8 H16" Width="14" Height="13" Stretch="Uniform" Stroke="{DynamicResource Theme.TextPrimary}" StrokeThickness="1.5" StrokeLineJoin="Round"/>
-                                </Button>
-                                <TextBlock x:Name="WindowsBrowserPath" Grid.Column="1" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"
-                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
-                                <Button x:Name="WindowsBrowserClose" Grid.Column="2" Style="{StaticResource PhoneCommandButton}" Width="32" Height="32" Margin="6,0,0,0" Padding="0"
-                                        AutomationProperties.Name="{Binding [Phone.LinkFileClose], Source={x:Static local:L10n.Instance}}"
-                                        ToolTip="{Binding [Phone.LinkFileClose], Source={x:Static local:L10n.Instance}}" Click="WindowsBrowserClose_Click">
-                                    <Path Data="M2,2 L12,12 M12,2 L2,12" Width="11" Height="11" Stretch="Uniform" Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
-                                </Button>
-                            </Grid>
-                            <ListBox x:Name="WindowsBrowserEntries" Background="{DynamicResource Theme.SurfaceBg}" BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1"
-                                     MaxHeight="258" MinHeight="64" Padding="3" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                     ScrollViewer.VerticalScrollBarVisibility="Auto" VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.VirtualizationMode="Recycling"
-                                     SelectionMode="Multiple" TextSearch.TextPath="Name" AutomationProperties.LabeledBy="{Binding ElementName=WindowsBrowserPath}"
-                                     SelectionChanged="WindowsBrowserSelection_Changed">
-                                <ListBox.ItemContainerStyle>
-                                    <Style TargetType="ListBoxItem">
-                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                        <Setter Property="AutomationProperties.Name" Value="{Binding Name}"/>
-                                        <Setter Property="Template"><Setter.Value>
-                                            <ControlTemplate TargetType="ListBoxItem">
-                                                <Border x:Name="Row" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" CornerRadius="6" Margin="2,1" Padding="8,1">
-                                                    <ContentPresenter/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource Theme.NavHover}"/></Trigger>
-                                                    <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="{DynamicResource Theme.Overlay}"/></Trigger>
-                                                    <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/></Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value></Setter>
-                                    </Style>
-                                </ListBox.ItemContainerStyle>
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid MinHeight="32">
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions><ColumnDefinition Width="23"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                                <Path Width="15" Height="15" Stretch="Uniform" HorizontalAlignment="Left" StrokeThickness="1.5" StrokeLineJoin="Round">
-                                                    <Path.Style>
-                                                        <Style TargetType="Path">
-                                                            <Setter Property="Data" Value="{x:Static local:AutomationIcons.File}"/><Setter Property="Stroke" Value="{DynamicResource Theme.TextSecondary}"/>
-                                                            <Style.Triggers><DataTrigger Binding="{Binding IsDirectory}" Value="True">
-                                                                <Setter Property="Data" Value="M2,6 L9,6 L11,9 L22,9 L22,20 L2,20 Z"/>
-                                                            </DataTrigger></Style.Triggers>
-                                                        </Style>
-                                                    </Path.Style>
-                                                </Path>
-                                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="13" ToolTip="{Binding Path}"/>
-                                                <TextBlock Grid.Column="2" Text="{Binding Detail}" Margin="6,0" VerticalAlignment="Center" Style="{StaticResource PhoneHint}" FontSize="11"/>
-                                                <Button Grid.ColumnSpan="3" Cursor="Hand" AutomationProperties.Name="{Binding Name}" ToolTip="{Binding Path}" Click="WindowsBrowserEntry_Click">
-                                                    <Button.Template><ControlTemplate TargetType="Button"><Border Background="Transparent"/></ControlTemplate></Button.Template>
-                                                </Button>
-                                            </Grid>
-                                            <CheckBox Grid.Column="1" Margin="4,0,5,0" VerticalAlignment="Center" Visibility="{Binding SelectVisibility}"
-                                                      IsChecked="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}, Mode=TwoWay}"
-                                                      AutomationProperties.Name="{Binding Name}"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                            <TextBlock x:Name="WindowsBrowserStatus" Style="{StaticResource PhoneHint}" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite"/>
-                            <Grid Margin="0,8,0,0">
-                                <Button x:Name="WindowsBrowserMore" Style="{StaticResource PhoneCommandButton}" HorizontalAlignment="Left" Visibility="Collapsed"
-                                        Content="{Binding [Phone.LinkBrowseMore], Source={x:Static local:L10n.Instance}}" Click="WindowsBrowserMore_Click"/>
-                                <Button x:Name="WindowsBrowserGet" Style="{StaticResource ReceiveToComputerButton}" HorizontalAlignment="Right"
-                                        Content="{Binding [Phone.AndroidReceiveToPc], Source={x:Static local:L10n.Instance}}" Click="WindowsBrowserGet_Click"/>
-                            </Grid>
-                        </StackPanel>
                         <StackPanel x:Name="AndroidFilePicker" Visibility="Collapsed" PreviewKeyDown="AndroidFilePicker_KeyDown">
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -461,8 +268,8 @@
                                            FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
                                 <Button x:Name="AndroidFileCancel" Grid.Column="2" Style="{StaticResource PhoneCommandButton}"
                                         Width="32" Height="32" Padding="0" Margin="0" Background="Transparent" BorderBrush="Transparent"
-                                        AutomationProperties.Name="{Binding [Phone.LinkFileClose], Source={x:Static local:L10n.Instance}}"
-                                        ToolTip="{Binding [Phone.LinkFileClose], Source={x:Static local:L10n.Instance}}" Click="AndroidFileCancel_Click">
+                                        AutomationProperties.Name="{Binding [Phone.FileClose], Source={x:Static local:L10n.Instance}}"
+                                        ToolTip="{Binding [Phone.FileClose], Source={x:Static local:L10n.Instance}}" Click="AndroidFileCancel_Click">
                                     <Path Data="M2,2 L12,12 M12,2 L2,12" Width="11" Height="11" Stretch="Uniform"
                                           Stroke="{DynamicResource Theme.TextSecondary}" StrokeThickness="1.5"/>
                                 </Button>
@@ -487,21 +294,14 @@
                             <StackPanel.Style>
                                 <Style TargetType="StackPanel"><Style.Triggers>
                                     <DataTrigger Binding="{Binding Visibility, ElementName=AndroidFilePicker}" Value="Visible"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
-                                    <DataTrigger Binding="{Binding Visibility, ElementName=WindowsFileBrowser}" Value="Visible"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                                 </Style.Triggers></Style>
                             </StackPanel.Style>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding [Phone.LinkFiles], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <WrapPanel x:Name="WindowsBrowseActions" Grid.Column="1" HorizontalAlignment="Right" Visibility="Collapsed">
-                                    <Button x:Name="WindowsSendFolder" Style="{StaticResource PhoneCommandButton}" Margin="6,0,0,0" MinHeight="30"
-                                            Content="{Binding [Phone.LinkSendFolder], Source={x:Static local:L10n.Instance}}" Click="WindowsSendFolder_Click"/>
-                                    <Button x:Name="WindowsBrowseFiles" Style="{StaticResource PhoneCommandButton}" Margin="6,0,0,0" MinHeight="30"
-                                            Content="{Binding [Phone.LinkBrowseFiles], Source={x:Static local:L10n.Instance}}" Click="WindowsBrowseFiles_Click"/>
-                                </WrapPanel>
+                                <TextBlock Text="{Binding [Phone.Files], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
                                 <Button x:Name="AndroidBrowseFiles" Grid.Column="1" Style="{StaticResource PhoneCommandButton}"
                                         AutomationProperties.Name="{Binding [Phone.AndroidBrowseFiles], Source={x:Static local:L10n.Instance}}"
-                                        Margin="6,0,0,0" MinHeight="30" Padding="10,4" FontSize="12" Visibility="Collapsed" Click="AndroidBrowseFiles_Click">
+                                        Margin="6,0,0,0" MinHeight="30" Padding="10,4" FontSize="12" Click="AndroidBrowseFiles_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <Path Width="13" Height="13" Data="M8,1 V10 M4,6 L8,10 L12,6 M2,12 V15 H14 V12"
                                               Stretch="Uniform" Stroke="{DynamicResource Theme.TextPrimary}" StrokeThickness="1.5" StrokeLineJoin="Round"/>
@@ -509,10 +309,10 @@
                                     </StackPanel>
                                 </Button>
                             </Grid>
-                            <Button x:Name="SendWindowsFileButton" Margin="0,10,0,0" MinHeight="104" Padding="12,10"
-                                    Opacity="1" AllowDrop="True" AutomationProperties.Name="{Binding Text, ElementName=WindowsFileDropLabel}"
-                                    PreviewDragOver="WindowsFile_DragOver" PreviewDragLeave="WindowsFile_DragLeave"
-                                    PreviewDrop="WindowsFile_Drop" Click="SendWindowsFile_Click">
+                            <Button x:Name="SendFileButton" Margin="0,10,0,0" MinHeight="104" Padding="12,10"
+                                    Opacity="1" AllowDrop="True" AutomationProperties.Name="{Binding Text, ElementName=FileDropLabel}"
+                                    PreviewDragOver="File_DragOver" PreviewDragLeave="File_DragLeave"
+                                    PreviewDrop="File_Drop" Click="SendFile_Click">
                                 <Button.Style>
                                     <Style TargetType="Button" BasedOn="{StaticResource PhoneCommandButton}">
                                         <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
@@ -528,22 +328,22 @@
                                 </Button.Style>
                                 <StackPanel>
                                     <TextBlock Text="&#xE898;" FontFamily="Segoe MDL2 Assets" HorizontalAlignment="Center"
-                                               Foreground="{Binding Foreground, ElementName=SendWindowsFileButton}" FontSize="22"/>
-                                    <TextBlock x:Name="WindowsFileDropLabel" Margin="0,8,0,0" TextAlignment="Center"
-                                               Foreground="{Binding Foreground, ElementName=SendWindowsFileButton}" FontSize="12"
+                                               Foreground="{Binding Foreground, ElementName=SendFileButton}" FontSize="22"/>
+                                    <TextBlock x:Name="FileDropLabel" Margin="0,8,0,0" TextAlignment="Center"
+                                               Foreground="{Binding Foreground, ElementName=SendFileButton}" FontSize="12"
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Button>
-                            <TextBlock x:Name="WindowsFileStatus" Style="{StaticResource PhoneHint}" Margin="0,6,0,0"
+                            <TextBlock x:Name="FileStatus" Style="{StaticResource PhoneHint}" Margin="0,6,0,0"
                                        Visibility="Collapsed" AutomationProperties.LiveSetting="Polite"/>
-                            <Grid x:Name="WindowsFileProgressRow" Visibility="Collapsed" Margin="0,6,0,0">
+                            <Grid x:Name="FileProgressRow" Visibility="Collapsed" Margin="0,6,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <ProgressBar x:Name="WindowsFileProgress" Height="4" Maximum="1" VerticalAlignment="Center"
+                                <ProgressBar x:Name="FileProgress" Height="4" Maximum="1" VerticalAlignment="Center"
                                              Foreground="{DynamicResource Theme.Accent}"/>
-                                <Button Grid.Column="1" Style="{StaticResource PhoneCommandButton}" Margin="10,0,0,0" Click="CancelWindowsFile_Click"
+                                <Button Grid.Column="1" Style="{StaticResource PhoneCommandButton}" Margin="10,0,0,0" Click="CancelFile_Click"
                                         Content="{Binding [Auto.Cancel], Source={x:Static local:L10n.Instance}}"/>
                             </Grid>
-                            <Grid x:Name="AndroidReceiveFolderRow" Visibility="Collapsed" Margin="0,8,0,0">
+                            <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <TextBlock Style="{StaticResource PhoneHint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,9,0"
                                            Text="{Binding [Phone.AndroidReceiveFolder], Source={x:Static local:L10n.Instance}}"/>
@@ -552,24 +352,24 @@
                                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                                 <Button x:Name="AndroidChangeFolder" Grid.Column="2" Style="{StaticResource PhoneCommandButton}" Margin="6,0,0,0"
                                         Background="Transparent" BorderBrush="Transparent" FontSize="11"
-                                        Content="{Binding [Phone.LinkFileChangeFolder], Source={x:Static local:L10n.Instance}}" Click="AndroidChangeFolder_Click"/>
+                                        Content="{Binding [Phone.FileChangeFolder], Source={x:Static local:L10n.Instance}}" Click="AndroidChangeFolder_Click"/>
                             </Grid>
                             <Grid Margin="0,7,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock Text="{Binding [Phone.LinkFileReceiveFolder], Source={x:Static local:L10n.Instance}}"
+                                <TextBlock Text="{Binding [Phone.FileReceiveFolder], Source={x:Static local:L10n.Instance}}"
                                            Style="{StaticResource PhoneHint}" FontSize="11" VerticalAlignment="Center" Margin="0,0,9,0"/>
-                                <TextBlock x:Name="WindowsReceiveFolderPath" Grid.Column="1" Style="{StaticResource PhoneHint}"
+                                <TextBlock x:Name="LocalReceiveFolderPath" Grid.Column="1" Style="{StaticResource PhoneHint}"
                                            Foreground="{DynamicResource Theme.TextPrimary}" FontSize="11"
                                            VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                                 <Button x:Name="ChangeLocalReceiveFolder" Grid.Column="2" Style="{StaticResource PhoneCommandButton}" Margin="6,0,0,0"
                                         Background="Transparent" BorderBrush="Transparent" FontSize="11"
-                                        Content="{Binding [Phone.LinkFileChangeFolder], Source={x:Static local:L10n.Instance}}" Click="WindowsReceiveFolder_Click"/>
+                                        Content="{Binding [Phone.FileChangeFolder], Source={x:Static local:L10n.Instance}}" Click="LocalReceiveFolder_Click"/>
                             </Grid>
                         </StackPanel>
                     </StackPanel>
                 </Border>
-                <Border x:Name="ClipboardCard" Style="{StaticResource PhoneCard}">
+                <Border x:Name="ClipboardCard" Style="{StaticResource PhoneCard}" Margin="0">
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Margin="0,0,12,0">
@@ -580,63 +380,17 @@
                                   VerticalAlignment="Center" AutomationProperties.HelpText="{Binding Text, ElementName=ClipboardStatus}" Checked="ClipboardSync_Changed" Unchecked="ClipboardSync_Changed" AutomationProperties.Name="{Binding [Phone.ClipboardEnableToggle], Source={x:Static local:L10n.Instance}}"/>
                     </Grid>
                 </Border>
-                <Border x:Name="WindowsLinkInputCard" Style="{StaticResource PhoneCard}" Margin="0" Padding="14,12" Visibility="Collapsed">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="29"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="&#xE765;" FontFamily="Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Top" Margin="0,3,0,0"
-                                       Foreground="{DynamicResource Theme.TextSecondary}"/>
-                            <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding [Phone.WindowsLinkAllowInputTitle], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding [Phone.WindowsLinkAllowInputHint], Source={x:Static local:L10n.Instance}}" Style="{StaticResource PhoneHint}" Margin="0,3,0,0"/>
-                            </StackPanel>
-                            <CheckBox x:Name="WindowsLinkAllowInputSwitch" Grid.Column="2" Style="{DynamicResource AutomationSwitch}" Width="34"
-                                      VerticalAlignment="Center" Click="WindowsLinkAllowInput_Click"
-                                      AutomationProperties.Name="{Binding [Phone.WindowsLinkAllowInputTitle], Source={x:Static local:L10n.Instance}}"/>
-                        </Grid>
-                        <Border Height="1" Margin="29,12,0,12" Background="{DynamicResource Theme.Border}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="29"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <TextBlock Text="&#xE72E;" FontFamily="Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Top" Margin="0,3,0,0"
-                                       Foreground="{DynamicResource Theme.TextSecondary}"/>
-                            <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding [Phone.LinkTrustTitle], Source={x:Static local:L10n.Instance}}" FontSize="14" FontWeight="SemiBold"/>
-                                <TextBlock x:Name="WindowsTrustStatus" Style="{StaticResource PhoneHint}" Margin="0,3,0,0" AutomationProperties.LiveSetting="Polite"/>
-                            </StackPanel>
-                            <Button x:Name="WindowsTrustAction" Grid.Column="2" Style="{StaticResource PhoneCommandButton}" MinHeight="28"
-                                    VerticalAlignment="Center" Click="WindowsTrustAction_Click"/>
-                        </Grid>
-                        <Grid x:Name="WindowsTrustCodes" Visibility="Collapsed" Margin="29,10,0,0">
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-                            <Label Target="{Binding ElementName=WindowsTrustLocal}" Padding="0,0,10,0" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Theme.TextSecondary}" Content="{Binding [Phone.LinkTrustLocal], Source={x:Static local:L10n.Instance}}"/>
-                            <TextBox x:Name="WindowsTrustLocal" Grid.Column="1" Grid.ColumnSpan="2" IsReadOnly="True" FontSize="16" FontWeight="SemiBold"
-                                     HorizontalAlignment="Left" BorderThickness="0" Background="Transparent" Padding="3,0"/>
-                            <Label Grid.Row="1" Target="{Binding ElementName=WindowsTrustPeerCode}" Padding="0,4,10,0" VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Theme.TextSecondary}" Content="{Binding [Phone.LinkTrustPeerCode], Source={x:Static local:L10n.Instance}}"/>
-                            <TextBox x:Name="WindowsTrustPeerCode" Grid.Row="1" Grid.Column="1" Margin="0,5,8,0" Padding="6,3" MaxLength="8"
-                                     VerticalContentAlignment="Center" InputMethod.IsInputMethodEnabled="False"
-                                     TextChanged="WindowsTrustCode_Changed" KeyDown="WindowsTrustCode_KeyDown"/>
-                            <Button x:Name="WindowsTrustVerify" Grid.Row="1" Grid.Column="2" Margin="0,5,0,0" Style="{StaticResource PhoneCommandButton}"
-                                    Content="{Binding [Phone.LinkTrustVerify], Source={x:Static local:L10n.Instance}}" Click="WindowsTrustVerify_Click"/>
-                        </Grid>
-                    </StackPanel>
-                </Border>
             </StackPanel>
             <StackPanel x:Name="ConnectionPanel" Visibility="Collapsed" IsVisibleChanged="PairingVisibilityChanged">
-                <StackPanel x:Name="ConnectionChoices" Orientation="Horizontal" Margin="0,0,0,8">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                     <RadioButton x:Name="AndroidConnectionChoice" GroupName="PhoneConnection" Content="Android"
                                  IsChecked="True" Checked="ConnectionChoice_Changed"/>
                     <RadioButton x:Name="AirPlayConnectionChoice" GroupName="PhoneConnection" Content="AirPlay"
-                                 Checked="ConnectionChoice_Changed"/>
-                    <RadioButton x:Name="WindowsLinkConnectionChoice" GroupName="PhoneConnection" Content="Windows Link"
                                  Checked="ConnectionChoice_Changed"/>
                 </StackPanel>
                 <Border x:Name="AirPlayCard" Style="{StaticResource PhoneCard}" Visibility="Collapsed">
                     <local:AirPlayReceiverView x:Name="AirPlayConnectionView"/>
                 </Border>
-                <ContentControl x:Name="WindowsLinkCard" Visibility="Collapsed" HorizontalContentAlignment="Stretch"/>
                 <Border x:Name="PairingCard" Style="{StaticResource PhoneCard}">
                 <Grid x:Name="PairMethodsGrid">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="0.9*" MinWidth="182"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -753,9 +507,6 @@
                 <Style.Triggers>
                     <Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger>
                     <DataTrigger Binding="{Binding IsVisible, ElementName=AirPlayCard}" Value="True">
-                        <Setter Property="Visibility" Value="Collapsed"/>
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding IsVisible, ElementName=WindowsLinkCard}" Value="True">
                         <Setter Property="Visibility" Value="Collapsed"/>
                     </DataTrigger>
                 </Style.Triggers>

@@ -9,9 +9,14 @@ using NAudio.CoreAudioApi.Interfaces;
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
 using AudioPolicyConfig = SonicRoute.Core.Interop.AudioPolicyConfig;
-using SonicRoute.WindowsLink;
 
 namespace SonicRoute;
+
+internal sealed class SourceSpeakerConsentRequiredException : InvalidOperationException
+{
+    internal const int ErrorCode = unchecked((int)0x8004A101);
+    internal SourceSpeakerConsentRequiredException(string message) : base(message) { HResult = ErrorCode; }
+}
 
 // The app's original output belongs to Windows. One process loopback capture feeds all additional outputs.
 internal static class LocalAppOutputMirrors
@@ -20,9 +25,11 @@ internal static class LocalAppOutputMirrors
     private static readonly ConcurrentDictionary<int, Route> Routes = new();
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
     private static IDisposable? _deviceWatch;
-    private static WindowsLinkCatalogNotifications? _phoneIsolationWatch;
+    private static LocalIsolationNotifications? _phoneIsolationWatch;
     private static int _refreshQueued;
     private static readonly CancellationTokenSource Shutdown = new();
+
+    internal static bool HasActiveRoutes => !Routes.IsEmpty;
 
     internal static string[] GetExtraOutputs(int processId) =>
         Routes.TryGetValue(processId, out var route) ? route.Sinks.Select(s => s.Id).ToArray() : [];
@@ -57,7 +64,7 @@ internal static class LocalAppOutputMirrors
             await Changes.WaitAsync(lifetime.Token).ConfigureAwait(false);
             try
             {
-                if (processId <= 0 || processId == Environment.ProcessId || LinkWindowAudioOwner.DescendsFrom(Environment.ProcessId, processId))
+                if (processId <= 0 || processId == Environment.ProcessId || AudioProcessTree.DescendsFrom(Environment.ProcessId, processId))
                     throw new InvalidOperationException(L10n.T("Tray.AppUnavailable"));
                 _deviceWatch ??= WasapiDeviceLease.ObserveDefaultOutput(new DeviceEvents());
                 var endpoints = ResolveOutputs(processId, primaryOutputId, requested, strict: true);
@@ -117,7 +124,7 @@ internal static class LocalAppOutputMirrors
         {
             if (_phoneIsolationWatch != null && !Routes.Values.Any(r => r.PhoneOnly))
             {
-                _ = _phoneIsolationWatch.ReleaseAsync();
+                _ = _phoneIsolationWatch.StopAsync();
                 _phoneIsolationWatch = null;
             }
             if (Routes.IsEmpty) Interlocked.Exchange(ref _deviceWatch, null)?.Dispose();
@@ -237,7 +244,7 @@ internal static class LocalAppOutputMirrors
         for (int i = 0; i < sessions.Count; i++)
         {
             using var session = sessions[i];
-            if (session.State == AudioSessionState.AudioSessionStateActive && WindowsLinkPlaybackWatch.ContainsProcess(pid, (int)session.GetProcessID)) return true;
+            if (session.State == AudioSessionState.AudioSessionStateActive && LocalPlaybackWatch.ContainsProcess(pid, (int)session.GetProcessID)) return true;
         }
         return false;
     }
@@ -268,7 +275,7 @@ internal static class LocalAppOutputMirrors
                 bool keep = false;
                 try
                 {
-                    if (session.State == AudioSessionState.AudioSessionStateExpired || !WindowsLinkPlaybackWatch.ContainsProcess(pid, (int)session.GetProcessID)) continue;
+                    if (session.State == AudioSessionState.AudioSessionStateExpired || !LocalPlaybackWatch.ContainsProcess(pid, (int)session.GetProcessID)) continue;
                     var key = session.GetSessionInstanceIdentifier;
                     present.Add(key);
                     if (_sourceSessions.ContainsKey(key)) continue;
@@ -333,7 +340,7 @@ internal static class LocalAppOutputMirrors
             _process.EnableRaisingEvents = true;
             if (HasExited) throw new InvalidOperationException(L10n.T("Tray.AppUnavailable"));
             var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            Capture = LinkAudioCapture.CaptureAsync(processId, Push, () => ready.TrySetResult(), _stop.Token);
+            Capture = LocalProcessAudioCapture.CaptureAsync(processId, Push, () => ready.TrySetResult(), _stop.Token);
             var first = await Task.WhenAny(ready.Task, Capture).WaitAsync(token).ConfigureAwait(false);
             await first.ConfigureAwait(false);
             if (Capture.IsCompleted) throw new IOException(L10n.T("Tray.AppUnavailable"));
@@ -394,9 +401,9 @@ internal static class LocalAppOutputMirrors
 
         private void Isolate(bool allowSpeakerMute)
         {
-            _phoneIsolationWatch ??= WindowsLinkCatalogNotifications.Acquire();
+            _phoneIsolationWatch ??= new LocalIsolationNotifications();
             IPcProcessSilenceLease? lease = null;
-            try { lease = AndroidAudioHost.AcquireWindowsLinkSilenceLease(processId); }
+            try { lease = AndroidAudioHost.AcquireMirrorSilenceLease(processId); }
             catch (Exception ex) when (ex is InvalidOperationException or COMException)
             {
                 if (!allowSpeakerMute && AndroidAudioHost.CanMuteAppSpeaker(processId))
@@ -405,10 +412,10 @@ internal static class LocalAppOutputMirrors
                 ExceptionDiagnostics.Record("LocalAppOutputMirrors.Isolate", ex);
             }
             if (lease == null && !allowSpeakerMute && AndroidAudioHost.CanMuteAppSpeaker(processId))
-                throw new SourceSpeakerConsentRequiredException(L10n.T("Phone.WindowsLinkMuteSpeakerDesc"));
+                throw new SourceSpeakerConsentRequiredException(L10n.T("Phone.MuteSourceSpeakerDesc"));
             bool muteSpeaker = lease == null && allowSpeakerMute;
-            if (muteSpeaker) lease = AndroidAudioHost.AcquireWindowsLinkSpeakerFallback(processId);
-            if (lease == null) throw new IOException(L10n.T("Phone.WindowsLinkAppKeptOutput"));
+            if (muteSpeaker) lease = AndroidAudioHost.AcquireSpeakerFallback(processId);
+            if (lease == null) throw new IOException(L10n.T("Phone.AppKeptOutput"));
             try
             {
                 _invalidated = lease.Invalidated.Register(() => _ = PruneAsync((route, _) => route == this && _silence == lease));

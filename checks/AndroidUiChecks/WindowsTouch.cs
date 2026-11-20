@@ -67,36 +67,6 @@ internal static partial class Program
         Pump(finish.Task.WaitAsync(TimeSpan.FromSeconds(4)));
     }
 
-    private static void CheckTouchPeerRow(PhoneAudioWindow quick, QuickPanelModernWindow mixer, Type hub)
-    {
-        var list = (ListBox)quick.FindName("PhoneApps");
-        var row = (ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(1);
-        var center = new Point(row.ActualWidth / 2, row.ActualHeight / 2);
-        using (var hold = new FixtureContact(row, center))
-        {
-            hold.Press();
-            Pump(Task.Delay(700));
-            hold.Lift();
-            DrainUi();
-            Check(row.ContextMenu?.IsOpen == true, "holding a peer app row without moving opens its playback menu");
-            row.ContextMenu!.IsOpen = false;
-            DrainUi();
-        }
-
-        var shared = (Border)mixer.FindName("AndroidSharedDropZone");
-        var dragSource = hub.GetProperty("DragSource", BindingFlags.Static | BindingFlags.NonPublic)!;
-        bool payloadPublished = false, hoverReached = false;
-        DragHeldContact(row, center, finger =>
-        {
-            mixer.UpdateLayout();
-            payloadPublished = dragSource.GetValue(null) != null && shared.IsVisible;
-            finger.MoveTo(shared, new Point(shared.ActualWidth / 2, shared.ActualHeight / 2));
-            hoverReached = ReferenceEquals(shared.Background, mixer.FindResource("Theme.Overlay"));
-        });
-        Check(payloadPublished && hoverReached && dragSource.GetValue(null) == null && row.ContextMenu?.IsOpen != true,
-            "a held peer app drags across independent panel windows, highlights shared playback, and releases cleanly");
-    }
-
     private static int WindowsTouchChecks()
     {
         Console.WriteLine($"Windows digitizer flags {GetSystemMetrics(94)}; maximum contacts {GetSystemMetrics(95)}. Source: in-process WPF touch reports.");

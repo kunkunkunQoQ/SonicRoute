@@ -2,7 +2,6 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
-using SonicRoute.WindowsLink;
 
 namespace SonicRoute.AndroidAudio;
 
@@ -31,7 +30,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial)
     {
         ValidateFolder(destination);
         string name = Path.GetFileName(path);
-        if (!Path.IsPathFullyQualified(path) || !WindowsLinkService.IsSafeTransferName(name))
+        if (!Path.IsPathFullyQualified(path) || !IsSafeTransferName(name))
             throw new IOException("Invalid file name.");
         using var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var transport = await adb.ResolveTransportAsync(token).ConfigureAwait(false);
@@ -185,7 +184,7 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial)
 
     internal async Task<string> ReceiveAsync(string folder, string name, string destination, CancellationToken token)
     {
-        if (!ValidSegment(name) || !WindowsLinkService.IsSafeTransferName(name)) throw new IOException("Invalid Windows file name.");
+        if (!ValidSegment(name) || !IsSafeTransferName(name)) throw new IOException("Invalid Windows file name.");
         Directory.CreateDirectory(destination);
         string temp = Path.Combine(destination, ".sonicroute-" + Guid.NewGuid().ToString("N") + ".part");
         await using var input = await OpenAsync("RECV", folder + "/" + name, token).ConfigureAwait(false);
@@ -212,9 +211,50 @@ internal sealed class AndroidFileTransfer(AdbClient adb, string serial)
                 }
                 finally { ArrayPool<byte>.Shared.Return(buf); }
             }
-            return WindowsLinkService.CommitToReceiveDirectory(temp, Path.Combine(destination, name), token);
+            return CommitToReceiveDirectory(temp, Path.Combine(destination, name), token);
         }
         finally { File.Delete(temp); }
+    }
+
+    internal static string CommitToReceiveDirectory(string temp, string path, CancellationToken token)
+    {
+        string directory = Path.GetDirectoryName(path)!;
+        string stem = Path.GetFileNameWithoutExtension(path);
+        string extension = Path.GetExtension(path);
+        string candidate = path;
+        for (int index = 1; ; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                File.Move(temp, candidate, overwrite: false);
+                return candidate;
+            }
+            catch (IOException ex) when ((ex.HResult & 0xffff) is 80 or 183 || Directory.Exists(candidate) || File.Exists(candidate)) { }
+            string suffix = $" ({index})";
+            // File components are limited to 255 UTF-16 code units, including the suffix.
+            string ext = TrimFilePart(extension, 255 - suffix.Length);
+            string prefix = TrimFilePart(stem, 255 - suffix.Length - ext.Length);
+            candidate = Path.Combine(directory, prefix + suffix + ext);
+        }
+    }
+
+    private static string TrimFilePart(string value, int limit)
+    {
+        if (value.Length <= limit) return value;
+        if (limit > 0 && char.IsHighSurrogate(value[limit - 1])) limit--;
+        return value[..limit];
+    }
+
+    internal static bool IsSafeTransferName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name.EndsWith('.') || name.EndsWith(' ')
+            || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Any(c => char.IsControl(c)
+                || c is >= '\u202a' and <= '\u202e' or >= '\u2066' and <= '\u2069')) return false;
+        string device = name.Split('.')[0].TrimEnd().ToUpperInvariant();
+        return device is not ("CON" or "PRN" or "AUX" or "NUL" or "CONIN$" or "CONOUT$")
+            && !(device.Length == 4 && (device.StartsWith("COM") || device.StartsWith("LPT"))
+                && "0123456789¹²³".Contains(device[3]));
     }
 
     private static bool ValidSegment(string name) => name.Length != 0 && name is not "." and not ".."

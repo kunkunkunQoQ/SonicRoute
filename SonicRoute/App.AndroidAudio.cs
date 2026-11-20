@@ -11,7 +11,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Interop;
-using SonicRoute.WindowsLink;
 #endif
 
 namespace SonicRoute;
@@ -20,7 +19,6 @@ public partial class App
 {
 #if SONICROUTE_PHONE
     private PhoneClipboardSync? _phoneClipboard;
-    internal HwndSource? ClipboardNotificationWindow => _activateSink;
     private Task<PhoneClipboardSync>? _phoneClipboardLoad;
     private bool _usbArrivalHookAttached;
     private bool _usbArrivalScanRunning;
@@ -31,39 +29,6 @@ public partial class App
     internal bool HasActivePhoneClipboard => _phoneClipboard?.HasActiveWork == true;
     private static string PhoneClipboardSettingsPath =>
         Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-clipboard.json");
-    internal static async Task SetWindowsLinkEnabledAsync(WindowsLinkService service, bool enabled, CancellationToken token = default)
-    {
-        if (enabled) await service.EnableAsync(token);
-        else await service.DisableAsync();
-
-        var config = ConfigService.Load();
-        if (config.WindowsLinkEnabled == enabled) return;
-        config.WindowsLinkEnabled = enabled;
-        ConfigService.QueueSave(config);
-    }
-
-    private async Task RestoreWindowsLinkAsync(bool? enabled)
-    {
-        if (enabled == false) return;
-        try
-        {
-            if (enabled == null)
-            {
-                string trustFile = Path.Combine(WindowsLinkHub.StateDirectory, "trusted.json");
-                bool hasSavedFile = await Task.Run(() => File.Exists(trustFile));
-                if (!hasSavedFile || _exiting || ConfigService.Load().WindowsLinkEnabled.HasValue) return;
-            }
-
-            var service = WindowsLinkHub.EnsureService();
-            if (enabled == true || service.Peers.Any(peer => peer.Trusted))
-                await service.EnableAsync();
-        }
-        catch (Exception ex)
-        {
-            if (!_exiting) ExceptionDiagnostics.Record("WindowsLink.Startup", ex);
-        }
-    }
-
     private void StartPhoneClipboard()
     {
         string path = PhoneClipboardSettingsPath;
@@ -267,7 +232,7 @@ public partial class App
     private QuickPanelModernWindow? _openingPhonePanel;
     private bool _androidDisplayNotifications;
     private readonly Dictionary<SonicRoute.AndroidAudio.IVirtualDisplayClient, VirtualDisplayPresentation> _displayAudioWatches = new();
-    internal bool KeepQuickPanelForAndroid => AndroidAudioHost.IsDragging || WindowsLinkHub.IsDragging
+    internal bool KeepQuickPanelForAndroid => AndroidAudioHost.IsDragging
         || AppIconDragController.IsDesktopDragging || _phoneAudioWindow?.IsActive == true
         || _phoneAudioWindow?.IsKeyboardFocusWithin == true;
     internal bool IsPhoneAudioVisible => _phoneAudioWindow?.IsVisible == true;
@@ -326,25 +291,6 @@ public partial class App
         }
     }
 
-    internal async Task OpenWindowsLinkDisplayAsync(WindowsLinkAppDrag payload, int screenX, int screenY)
-    {
-        if (_exiting) return;
-        try
-        {
-            var (streamId, audioAvailable) = await WindowsLinkHub.OpenDisplayNearAsync(payload, screenX, screenY);
-            if (!audioAvailable && !_exiting && WindowsLinkHub.Service?.Streams.Any(stream => stream.Id == streamId) == true)
-                _trayIcon?.ShowBalloonTip(5000, payload.Peer.DisplayName, L10n.T("Phone.WindowsLinkVideoAudioUnavailable"), System.Windows.Forms.ToolTipIcon.Info);
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Trace.WriteLine("Windows Link shared window: " + ex);
-            if (!_exiting) _trayIcon?.ShowBalloonTip(5000, payload.App.Name, ex.Message, System.Windows.Forms.ToolTipIcon.Info);
-        }
-    }
-
-    internal Task ReturnWindowsLinkToPeerAsync(string peerId, string appKey) =>
-        WindowsLinkHub.ReturnToPeerAsync(peerId, appKey);
     private void AndroidDisplayFailedError(SonicRoute.AndroidAudio.AndroidApp? app, Exception ex)
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(() => AndroidDisplayFailedError(app, ex))); return; }

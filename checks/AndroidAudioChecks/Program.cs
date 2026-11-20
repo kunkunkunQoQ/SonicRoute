@@ -13,7 +13,7 @@ internal static partial class Program
     private static void Check(bool condition, string name) { if (!condition) throw new Exception("FAIL " + name); _checks++; Console.WriteLine("PASS " + name); }
     public static async Task<int> Main(string[] args)
     {
-        string? logRoot = args.Length >= 2 && args[0] is ("--decoder-settings" or "--android-hevc-start" or "--android-hevc-recovery" or "--gamepad-window" or "--airplay-window-modes" or "--windows-link-input" or "--windows-link-window-audio-native" or "--windows-link-native-resolution") && args.Contains("--file-log") ? args[1] : null;
+        string? logRoot = args.Length >= 2 && args[0] is ("--decoder-settings" or "--android-hevc-start" or "--android-hevc-recovery" or "--gamepad-window" or "--airplay-window-modes") && args.Contains("--file-log") ? args[1] : null;
         if (logRoot != null) Directory.CreateDirectory(logRoot);
         using var fileLog = logRoot == null ? null : new StreamWriter(Path.Combine(logRoot, "console.log")) { AutoFlush = true };
         if (fileLog != null) { Console.SetOut(fileLog); Console.SetError(fileLog); }
@@ -23,7 +23,6 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--airplay-phone-output") { await AirPlayPhoneOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-eld-decode") { AirPlayEldFixture(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--airplay-window-modes") { await AirPlayWindowModesAsync(); return 0; }
-            if (args.Length == 1 && args[0] == "--windows-link-window-icons") { await WindowsLinkWindowIconsAsync(); return 0; }
             if (args.Length == 1 && args[0] == "--android-file-directory") { await AndroidFileDirectoryAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--decoder-settings") { await DecoderSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-start") { await AndroidHevcStartAsync(args[1]); return 0; }
@@ -41,33 +40,6 @@ internal static partial class Program
             }
             if (args.Length > 0 && args[0] == "--pairing-fixes") { await PairingFixesAsync(args[1]); return 0; }
             if (args.Length == 2 && args[0] == "--android-files-live") { await AndroidFilesLiveAsync(args[1]); return 0; }
-            if (args.Length > 0 && args[0] == "--windows-link") { await WindowsLinkChecksAsync(); return 0; }
-            if (args.Length > 0 && args[0] == "--windows-link-input") { WindowInputChecks.Run(); return 0; }
-            if (args.Length == 1 && args[0] == "--windows-link-addresses") { await WindowsLinkAddressChecksAsync(); return 0; }
-            if (args.Length >= 2 && args[0] == "--windows-link-monitor-input-fixture") { WindowInputChecks.MonitorFixture(args[1], args.Contains("--render-video")); return 0; }
-            if (args.Length is 1 or 2 && args[0] == "--windows-link-trust") { await WindowsLinkTrustChecksAsync(args.ElementAtOrDefault(1)); return 0; }
-            if (args.Length is 1 or 2 && args[0] == "--windows-link-files") { await WindowsLinkFileChecksAsync(args.ElementAtOrDefault(1)); return 0; }
-            if (args.Length == 1 && args[0] == "--windows-link-file-browser") { await WindowsLinkFileBrowserAsync(); return 0; }
-            if (args.Length == 2 && args[0] == "--windows-link-browse-paths") { CheckFileBrowsePaths(args[1]); return 0; }
-            if (args.Length == 3 && args[0] == "--windows-link-lan-reconnect") { await WindowsLinkLanReconnectAsync(args[1], args[2]); return 0; }
-            if (args.Length == 3 && args[0] == "--windows-link-lan-tone") { await WindowsLinkLanToneAsync(args[1], args[2]); return 0; }
-            if (args.Length == 1 && args[0] == "--windows-link-tone-source") { await PlayLinkToneAsync(); return 0; }
-            if (args.Length > 0 && args[0] == "--windows-link-codecs") { await Task.Run(WindowsLinkCodecChecks); return 0; }
-            if (args.Length >= 2 && args[0] == "--windows-link-native-resolution")
-            {
-                await CheckNativeResolutionAsync(args[1]);
-                await CheckNativeVideoFragmentsAsync();
-                return 0;
-            }
-            if (args.Length == 2 && args[0] == "--windows-link-monitor-native") { await WindowsLinkMonitorNativeAsync(args[1]); return 0; }
-            if (args.Length >= 2 && args[0] == "--windows-link-window-audio-native") { await WindowInputChecks.WindowAudioAsync(args[1]); return 0; }
-            if (args.Length == 2 && args[0] == "--windows-link-window-audio-source") { await WindowInputChecks.WindowAudioSenderAsync(args[1]); return 0; }
-            if (args.Length == 2 && args[0] is "--windows-link-native" or "--windows-link-audio-native")
-            {
-                await WindowsLinkNativeChecksAsync(args[1], audioOnly: args[0] == "--windows-link-audio-native");
-                return 0;
-            }
-            if (args.Length == 2 && args[0] == "--windows-link-window-fixture") { await WindowsLinkWindowFixtureAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--mdns-discovery") { await MdnsDiscoveryChecksAsync(args.Contains("--lan")); return 0; }
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }
@@ -80,7 +52,6 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--output-startup") { await OutputStartupAsync(args[1]); return 0; }
             if (args.Length is >= 2 and <= 4 && args[0] == "--phone-sink-hardware")
             { await CheckPhoneSinkHardwareAsync(args[1], args.ElementAtOrDefault(2), args.ElementAtOrDefault(3)); return 0; }
-            if (args.Length == 2 && args[0] == "--phone-link-forwarding") { await CheckAndroidLinkForwardingAsync(args[1]); return 0; }
             if (args.Length is 5 or 6 && args[0] == "--phone-route-switch-live")
             { await CheckPhoneRouteSwitchLiveAsync(args[1], args[2], args[3], args[4], args.ElementAtOrDefault(5)); return 0; }
             if (args.Length == 2 && args[0] == "--receive-mirrors") { await CheckAndroidReceiveMirrorsAsync(args[1]); return 0; }

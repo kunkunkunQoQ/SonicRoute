@@ -63,10 +63,6 @@ internal static class AppIconDragController
 
     internal static AudioAppInfo? AppFromDrag(System.Windows.IDataObject data, string format = DesktopFormat) =>
         data.GetDataPresent(format, false) ? data.GetData(format, false) as AudioAppInfo : null;
-#if SONICROUTE_PHONE
-    internal static WindowsLinkAppDrag? WindowsLinkFromDrag(System.Windows.IDataObject data) =>
-        data.GetDataPresent(WindowsLinkAppDrag.Format, false) ? data.GetData(WindowsLinkAppDrag.Format, false) as WindowsLinkAppDrag : null;
-#endif
     internal static DragResult Run(FrameworkElement source, System.Windows.IDataObject data, ImageSource? icon, string label, Action<bool>? changed = null)
     {
         if (TouchHoldDrag.Current is { } touch) return RunTouch(touch, data, icon, label, changed);

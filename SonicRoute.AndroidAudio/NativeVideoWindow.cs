@@ -4,8 +4,6 @@ using System.Threading;
 
 namespace SonicRoute.AndroidAudio;
 
-internal enum NativeWindowIcon { Default, WindowsApplication, Monitor }
-
 public enum NativeWindowMouseBinding
 {
     Back,
@@ -196,8 +194,6 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     public nint WindowHandle => Volatile.Read(ref _hwnd);
     public string AppUserModelId => _appUserModelId;
-    internal NativeWindowIcon IconKind { get; init; }
-    private bool HideCaptionIcon => _isMirrorMode && IconKind == NativeWindowIcon.Default;
     public int ClientWidth => Volatile.Read(ref _clientW);
     public int ClientHeight => Volatile.Read(ref _clientH);
     public int ContentWidth => Volatile.Read(ref _contentW);
@@ -217,8 +213,6 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     public event Action<int, int, int, int, float, float, int>? ScrollEvent;
     public event Action<byte, int, int, int>? KeyEvent;
     public event Action<string>? TextInput;
-    internal event Action<bool, uint>? WindowsKeyEvent;
-    internal event Action? WindowsInputFocusLost;
     public event Action<NativeWindowMouseBinding, byte>? MouseShortcut;
     public event Action<GamepadInputState>? GamepadStateChanged;
 
@@ -315,7 +309,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
             if (Volatile.Read(ref _closeRequested)) return;
 
             uint style = WsOverlappedWindow | WsClipChildren | WsClipSiblings;
-            uint exStyle = HideCaptionIcon ? WsExDlgModalFrame : 0;
+            uint exStyle = _isMirrorMode ? WsExDlgModalFrame : 0;
 
             var (winX, winY, winW, winH) = ComputeInitialWindowRect(style, exStyle);
 
@@ -399,7 +393,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private void ApplyWindowIcon(nint hwnd)
     {
-        if (HideCaptionIcon)
+        if (_isMirrorMode)
         {
             _iconPng = null;
             // Keep caption clean without generic Win32 icon, matching mirror_resize.h.
@@ -409,43 +403,17 @@ public sealed class NativeVideoWindow : IAsyncDisposable
             return;
         }
 
-        byte[]? png = _iconPng;
+        byte[]? png = _iconPng is { Length: > 0 } ? _iconPng : WicIconLoader.LoadDefaultPhoneIconPng();
         _iconPng = null;
-        if (IconKind == NativeWindowIcon.Default && png is not { Length: > 0 })
-            png = WicIconLoader.LoadDefaultPhoneIconPng();
+        if (png == null) return;
 
         int bigPx = Math.Max(32, GetSystemMetrics(11 /* SM_CXICON */));
         int smallPx = Math.Max(16, GetSystemMetrics(49 /* SM_CXSMICON */));
         _bigIcon = WicIconLoader.TryCreateIcon(png, bigPx);
         _smallIcon = WicIconLoader.TryCreateIcon(png, smallPx);
-        if (IconKind != NativeWindowIcon.Default)
-        {
-            if (_bigIcon == 0) _bigIcon = LoadStockWindowIcon(small: false);
-            if (_smallIcon == 0) _smallIcon = LoadStockWindowIcon(small: true);
-        }
         if (_bigIcon != 0) SendMessage(hwnd, WmSetIcon, IconBig, _bigIcon);
         if (_smallIcon != 0) SendMessage(hwnd, WmSetIcon, IconSmall, _smallIcon);
     }
-
-    // SHGSI_ICON returns an owned HICON, released along with decoded icons at WM_NCDESTROY.
-    private nint LoadStockWindowIcon(bool small)
-    {
-        var info = new StockIconInfo { Size = (uint)Marshal.SizeOf<StockIconInfo>() };
-        uint stockId = IconKind == NativeWindowIcon.Monitor ? 94u /* SIID_DESKTOPPC */ : 2u /* SIID_APPLICATION */;
-        return SHGetStockIconInfo(stockId, 0x100u | (small ? 1u : 0u), ref info) == 0 ? info.Icon : 0;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct StockIconInfo
-    {
-        internal uint Size;
-        internal nint Icon;
-        internal int ImageIndex, IconIndex;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] internal string? Path;
-    }
-
-    [DllImport("shell32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
-    private static extern int SHGetStockIconInfo(uint id, uint flags, ref StockIconInfo info);
 
     private static void EnsureClassRegistered(nint hInstance)
     {
@@ -999,7 +967,7 @@ public sealed class NativeVideoWindow : IAsyncDisposable
         if (button == 0) return;
 
         bool shift = IsKeyDown(0x10 /* VK_SHIFT */);
-        if (!shift && WindowsKeyEvent == null && button != ScrcpyControlMessageWriter.ButtonPrimary)
+        if (!shift && button != ScrcpyControlMessageWriter.ButtonPrimary)
         {
             NativeWindowMouseBinding? binding = button switch
             {
@@ -1087,12 +1055,6 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
         if (!ctrl && !alt && !win && _preferText && IsPrintableVirtualKey(vk))
             return;
-
-        if (WindowsKeyEvent is { } windowsKey)
-        {
-            if (!isSys && !alt && !win) windowsKey(isDown, vk);
-            return;
-        }
 
         if (!AndroidKeycodeMapper.TryMapVirtualKey(vk, extended, out int androidKey))
             return;
@@ -1342,7 +1304,6 @@ public sealed class NativeVideoWindow : IAsyncDisposable
 
     private void OnGamepadFocusLostOrMinimized(nint hwnd)
     {
-        WindowsInputFocusLost?.Invoke();
         Volatile.Write(ref _hasFocus, false);
         StopGamepadTimerIfNeeded(hwnd);
         _xinputConnectedMask = 0;
