@@ -77,7 +77,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     private int _activeSessions;
     private long _version;
     private string? _lastText;
-    private (string Text, long Version, long Revision)? _desktopWrite;
+    private (string Text, long Version, long Revision, Session Origin)? _desktopWrite;
     private CancellationTokenSource? _clipboardWork;
     public event Action? Changed;
     internal bool HasActiveWork => !_disposed && (_desktopListening || Volatile.Read(ref _activeSessions) > 0);
@@ -393,7 +393,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
                 session.Writes.Writer.TryWrite((version, text, session.RemoteRevision));
         if (origin != null)
         {
-            _desktopWrite = (text, version, desktop.Revision);
+            _desktopWrite = (text, version, desktop.Revision, origin);
             if (!_writing) _ = WriteDesktopAsync();
         }
     }
@@ -405,9 +405,9 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             while (!_disposed && _desktopWrite is { } pending)
             {
                 _desktopWrite = null;
-                if (pending.Version != _version) continue;
                 var token = _clipboardWork?.Token ?? new CancellationToken(true);
-                var result = await desktop.WriteAsync(pending.Text, pending.Revision, token);
+                var result = await desktop.WriteIfCurrentAsync(pending.Text, pending.Revision,
+                    () => pending.Version == Interlocked.Read(ref _version) && !pending.Origin.Stop.IsCancellationRequested, token);
                 // A newer phone event may have arrived while our own write held the clipboard.
                 // Advance only our own revision, never a concurrent computer copy's revision.
                 if (result.Written && _desktopWrite is { } next && next.Revision == pending.Revision)
@@ -459,8 +459,8 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         if (_disposed) return;
         _disposed = true;
         if (_watching) PhoneAudioWindowCache.DevicesChanged -= DevicesChanged;
-        desktop.Changed -= DesktopChanged; desktop.Dispose();
         _clipboardWork?.Cancel(); _clipboardWork?.Dispose(); _clipboardWork = null;
+        desktop.Changed -= DesktopChanged; desktop.Dispose();
         _lifetime.Cancel();
         _lastText = null; _desktopWrite = null;
         foreach (var session in _sessions.Values) session.Writes.Writer.TryComplete();
@@ -528,24 +528,37 @@ internal sealed partial class DesktopClipboardLink(HwndSource? source, int maxTe
         bool completed = await ClipboardWriter.TryWriteTextAsync(text, value =>
         {
         token.ThrowIfCancellationRequested();
+        if (_handle == IntPtr.Zero || !current()) return;
         if (!OpenClipboard(_handle)) throw new ExternalException();
         try
         {
-            if (Revision != expectedRevision || !current()) return; // A newer local copy or a revoked grant wins.
+            if (Revision != expectedRevision) return; // A newer local copy wins.
+            if (Formats.Remote == 0 || Formats.Cloud == 0) return;
             IntPtr data = GlobalAlloc(0x42, (UIntPtr)((value.Length + 1) * 2));
             if (data == IntPtr.Zero) throw new ExternalException();
+            IntPtr remoteFlag = IntPtr.Zero, cloudFlag = IntPtr.Zero;
             try
             {
                 IntPtr pointer = GlobalLock(data); if (pointer == IntPtr.Zero) throw new ExternalException();
                 try { Marshal.Copy((value + '\0').ToCharArray(), 0, pointer, value.Length + 1); }
                 finally { GlobalUnlock(data); }
+                // Prepare both zero DWORDs before clearing the previous clipboard contents.
+                remoteFlag = GlobalAlloc(0x42, 4);
+                cloudFlag = GlobalAlloc(0x42, 4);
+                if (remoteFlag == IntPtr.Zero || cloudFlag == IntPtr.Zero) throw new ExternalException();
                 token.ThrowIfCancellationRequested();
                 if (!current()) return;
-                if (!EmptyClipboard() || !MarkReceivedClipboard() || SetClipboardData(13, data) == IntPtr.Zero) throw new ExternalException();
-                data = IntPtr.Zero; // Ownership transferred to Windows.
+                if (!EmptyClipboard()) throw new ExternalException();
+                if (!TransferClipboardData(Formats.Remote, ref remoteFlag) || !TransferClipboardData(Formats.Cloud, ref cloudFlag)
+                    || !TransferClipboardData(13, ref data)) return;
                 written = true; revision = Revision;
             }
-            finally { if (data != IntPtr.Zero) GlobalFree(data); }
+            finally
+            {
+                if (data != IntPtr.Zero) GlobalFree(data);
+                if (remoteFlag != IntPtr.Zero) GlobalFree(remoteFlag);
+                if (cloudFlag != IntPtr.Zero) GlobalFree(cloudFlag);
+            }
         }
         finally { CloseClipboard(); }
         });

@@ -45,6 +45,7 @@ internal static partial class Program
         internal bool Listening;
         internal int Reads, Writes;
         internal TaskCompletionSource? ReadGate, WriteGate;
+        internal Task? LastWrite;
         public long Revision { get; private set; }
         public void SetListening(bool enabled) => Listening = enabled;
         internal void Copy(string text) { Text = text; Revision++; if (Listening) Changed?.Invoke(); }
@@ -54,11 +55,19 @@ internal static partial class Program
             if (ReadGate is { } gate) { ReadGate = null; await gate.Task.WaitAsync(token); }
             return snapshot;
         }
-        public async Task<(bool Written, long Revision)> WriteAsync(string text, long expectedRevision, CancellationToken token)
+        public Task<(bool Written, long Revision)> WriteAsync(string text, long expectedRevision, CancellationToken token) =>
+            WriteIfCurrentAsync(text, expectedRevision, static () => true, token);
+        public Task<(bool Written, long Revision)> WriteIfCurrentAsync(string text, long expectedRevision, Func<bool> current, CancellationToken token)
+        {
+            var write = WriteCoreAsync(text, expectedRevision, current, token);
+            LastWrite = write;
+            return write;
+        }
+        private async Task<(bool Written, long Revision)> WriteCoreAsync(string text, long expectedRevision, Func<bool> current, CancellationToken token)
         {
             if (WriteGate is { } gate) { WriteGate = null; await gate.Task.WaitAsync(token); }
             token.ThrowIfCancellationRequested();
-            if (Revision != expectedRevision) return (false, Revision);
+            if (Revision != expectedRevision || !current()) return (false, Revision);
             Writes++; Copy(text); return (true, Revision);
         }
         public void Dispose() { Listening = false; Changed = null; }
@@ -150,9 +159,10 @@ internal static partial class Program
                 "a delayed computer clipboard read cannot overwrite a newer phone copy");
 
             var writeGate = desktop.WriteGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            int writesBeforeBurst = desktop.Writes;
             a.Copy("remote write one"); DrainUi(); a.Copy("remote write two"); DrainUi();
             writeGate.SetResult(); Until(() => desktop.Text == "remote write two");
-            Check(desktop.Text == "remote write two", "concurrent phone updates serialize their desktop writes and finish with the newest text");
+            Check(desktop.Writes == writesBeforeBurst + 1, "only the newest phone update is written after a blocked desktop write");
             writeGate = desktop.WriteGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
             a.Copy("in-flight remote write"); DrainUi(); desktop.Copy("newer local copy"); writeGate.SetResult();
             Until(() => a.Sent.Last() == "newer local copy");
@@ -174,7 +184,14 @@ internal static partial class Program
                 "an unprocessed phone event cannot lend its new revision to an older computer send");
             Until(() => desktop.Text == "phone event waiting on dispatcher");
 
+            writeGate = desktop.WriteGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            int writesBeforeSourceDisable = desktop.Writes;
+            a.Copy("pending from disabled source"); Until(() => desktop.WriteGate == null);
+            var revokedWrite = desktop.LastWrite!;
             sync.SetEnabled(one, false); Until(() => a.Stopped);
+            writeGate.SetResult(); Pump(revokedWrite);
+            Check(desktop.Writes == writesBeforeSourceDisable && desktop.Listening,
+                "disabling the source cancels its in-flight desktop write while another phone remains enabled");
             a.Copy("disabled source"); DrainUi(); desktop.Copy("only second phone"); Until(() => b.Sent.Last() == "only second phone");
             Check(desktop.Text == "only second phone" && !a.Sent.Contains("only second phone") && desktop.Listening,
                 "disabling one device stops only that connection and ignores queued notifications from it");
