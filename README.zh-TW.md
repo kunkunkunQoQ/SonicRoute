@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json and docs/readme/locales/zh-TW.json. Edit those sources, then run node docs/readme/generate.cjs. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/zh-TW.json, and docs/readme/releases/v1.34.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 音躍 SonicRoute
 
@@ -55,15 +55,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 ## 🚀 下載與快速入門
 
-**最新正式版：[v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026年11月18日 · [版本資訊（簡體中文）](docs/release-v1.33.md)
+**最新正式版：[v1.34](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.34)** · 2026年11月21日 · [版本資訊（簡體中文）](docs/release-v1.34.md)
 
-若要使用 Android 音訊、虛擬螢幕或 AirPlay，請選 **Full x64**。只需要電腦音訊功能，可選 **Lite x64**。若電腦只能使用 .NET Framework 4.8，請選 **Legacy x64**。ARM64 版目前為實驗版本。下表提供 v1.33 的直接下載連結。Full 和 Lite 也可從 Microsoft Store 取得，上架版本請見各自的商店頁面。
+若要使用 Android 音訊、虛擬螢幕或 AirPlay，請選 **Full x64**。只需要電腦音訊功能，可選 **Lite x64**。若電腦只能使用 .NET Framework 4.8，請選 **Legacy x64**。ARM64 版目前為實驗版本。下表提供 v1.34 的直接下載連結。Full 和 Lite 也可從 Microsoft Store 取得，上架版本請見各自的商店頁面。
 
 | 版本 | 下載 | 系統需求 |
 |---|---|---|
-| ⭐ Full（.NET 10，含手機連線功能） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | 單一執行檔，內含選用的 Android 音訊、虛擬螢幕與 AirPlay 功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
-| ⭐ Lite（.NET 10，僅電腦音訊） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | 單一執行檔，僅提供電腦音訊功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
-| 🛡️ Legacy x64（僅電腦功能，.NET Framework 4.8） | [ZIP 壓縮檔](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | 使用 Windows 的 .NET Framework 4.8，解壓縮後即可執行。 |
+| ⭐ Full（.NET 10，含手機連線功能） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-arm64.exe) | 單一執行檔，內含選用的 Android 音訊、虛擬螢幕與 AirPlay 功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
+| ⭐ Lite（.NET 10，僅電腦音訊） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-arm64.exe) | 單一執行檔，僅提供電腦音訊功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
+| 🛡️ Legacy x64（僅電腦功能，.NET Framework 4.8） | [ZIP 壓縮檔](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Legacy-x64.zip) | 使用 Windows 的 .NET Framework 4.8，解壓縮後即可執行。 |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full 與 Lite 均需要 x64 版 .NET 10 Desktop Runtime。上架版本請見各自的商店頁面。 |
 
 <details>
@@ -92,13 +92,22 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 sr "規則名稱或 ID"
 ```
 
-### 🆕 v1.33 更新重點
+### 🆕 v1.34 更新重點
+
+各版本現在都能為同一個應用程式選擇多個電腦播放裝置。重新啟動 SonicRoute 後，應用程式再次播放時會還原所選裝置。系統匣音量調整與滑鼠快速鍵共用同一個系統滑鼠監聽機制。
+
+Full 的兩個 Android 面板會同步顯示 USB 和 Wi-Fi 連線狀態。透過手機快速面板的重新整理功能，也可以重新連線至選取的裝置。Android 應用程式的輸出選單現在會顯示手機目前輸出的自訂名稱。舊版資訊請參閱[版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+
+<details>
+<summary>v1.33</summary>
 
 Full 新增以 C# 實作的 AirPlay 接收功能，可播放 PCM、ALAC、AAC-LC 與 AAC-ELD 音訊，並依原始比例鏡像顯示畫面。可選擇啟用連線碼、將視窗保持在最上層或按 F11 切換全螢幕。拖曳即可把音訊送到電腦、Android 手機喇叭或手機連線的藍牙裝置。
 
 Android 連線支援 H.265（HEVC），可選擇音訊與視訊解碼器。只有在開啟裝置設定時才會查詢編碼器，遊戲控制器的輸入也只會傳到前景虛擬螢幕。配對頁將每兩分鐘更新一次的 QR 碼與手動配對碼放在同一張卡片中。從裝置設定重新連線、重新整理快速面板或側邊欄時，都會在區域網路搜尋已儲存的裝置，略過失效的連接埠，並依裝置識別資訊找回新的 IP 位址與連接埠。找不到裝置或連線失敗時會保留手動輸入的位址，重新連線時也可還原裝置設定。
 
 所有版本都能分別設定兩種麥克風狀態是否持續顯示在螢幕上，並將設定檔管理操作集中在同一列。應用程式清單超過 20 項時會重複利用顯示列，連續的螢幕提示（OSD）也會合併更新。程式會釋放已解碼 PNG 的原始資料；Full 也會釋放停用的圖形紋理，關閉視窗時由執行階段自行回收記憶體。其他更新包括 .bak 設定備份、按需產生的錯誤診斷紀錄、獨立的 Microsoft Store Lite 版，以及可離線閱讀的 GPL-3.0-only 授權條款。詳見 [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+
+</details>
 
 ### ❓ 常見問題
 

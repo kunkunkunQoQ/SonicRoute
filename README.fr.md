@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json and docs/readme/locales/fr-FR.json. Edit those sources, then run node docs/readme/generate.cjs. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/fr-FR.json, and docs/readme/releases/v1.34.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 SonicRoute
 
@@ -55,15 +55,15 @@ Une règle peut sélectionner le casque et lancer la discussion vocale à l’ou
 
 ## 🚀 Télécharger et commencer
 
-**Version stable : [v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 18 novembre 2026 · [Notes de version (en chinois)](docs/release-v1.33.md)
+**Version stable : [v1.34](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.34)** · 21 novembre 2026 · [Notes de version (en chinois)](docs/release-v1.34.md)
 
-Choisissez **Full x64** pour l’audio Android, les écrans virtuels et AirPlay, ou **Lite x64** pour l’audio du PC. **Legacy x64** convient aux PC équipés de .NET Framework 4.8. Les éditions ARM64 sont expérimentales. Full et Lite sont aussi disponibles dans le Microsoft Store. Les liens de téléchargement direct correspondent à v1.33.
+Choisissez **Full x64** pour l’audio Android, les écrans virtuels et AirPlay, ou **Lite x64** pour l’audio du PC. **Legacy x64** convient aux PC équipés de .NET Framework 4.8. Les éditions ARM64 sont expérimentales. Full et Lite sont aussi disponibles dans le Microsoft Store. Les liens de téléchargement direct correspondent à v1.34.
 
 | Édition | Téléchargement | Configuration requise |
 |---|---|---|
-| ⭐ Full (.NET 10, intégration mobile facultative) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | Un seul exécutable portable pour l’audio du PC, l’audio Android, les écrans virtuels et AirPlay. Nécessite .NET 10 Desktop Runtime pour l’architecture choisie. |
-| ⭐ Lite (.NET 10, audio PC uniquement) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | Un seul exécutable portable pour l’audio du PC. Nécessite .NET 10 Desktop Runtime pour l’architecture choisie. |
-| 🛡️ Legacy x64 (audio PC uniquement, .NET Framework 4.8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | Décompressez l’archive et lancez SonicRoute. Cette édition utilise .NET Framework 4.8 fourni avec Windows. |
+| ⭐ Full (.NET 10, intégration mobile facultative) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-arm64.exe) | Un seul exécutable portable pour l’audio du PC, l’audio Android, les écrans virtuels et AirPlay. Nécessite .NET 10 Desktop Runtime pour l’architecture choisie. |
+| ⭐ Lite (.NET 10, audio PC uniquement) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-x64.exe) / [ARM64 (expérimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-arm64.exe) | Un seul exécutable portable pour l’audio du PC. Nécessite .NET 10 Desktop Runtime pour l’architecture choisie. |
+| 🛡️ Legacy x64 (audio PC uniquement, .NET Framework 4.8) | [Archive ZIP complète](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Legacy-x64.zip) | Décompressez l’archive et lancez SonicRoute. Cette édition utilise .NET Framework 4.8 fourni avec Windows. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Les éditions Full et Lite nécessitent .NET 10 Desktop Runtime pour x64. Consultez leur fiche pour connaître la version disponible. |
 
 <details>
@@ -92,13 +92,22 @@ Au premier lancement normal, SonicRoute enregistre la commande `sr` pour votre c
 sr "Nom ou ID de la règle"
 ```
 
-### 🆕 Points forts de la version v1.33
+### 🆕 Points forts de la version v1.34
+
+Toutes les éditions permettent désormais de sélectionner plusieurs périphériques de lecture du PC pour chaque application. Après le redémarrage de SonicRoute, la sélection est rétablie dès que l’application émet à nouveau du son. Le réglage du volume depuis la zone de notification et les raccourcis à la souris partagent le même mécanisme de suivi de la souris au niveau du système.
+
+Dans l’édition Full, l’état des connexions USB et Wi-Fi est synchronisé entre les deux panneaux Android. L’actualisation du panneau rapide du téléphone permet aussi de reconnecter l’appareil sélectionné. Le menu de sortie des applications Android affiche désormais le nom personnalisé de la sortie audio actuelle du téléphone. Les versions précédentes figurent dans [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+
+<details>
+<summary>v1.33</summary>
 
 Dans l’édition Full, la version 1.33 ajoute un récepteur AirPlay écrit en C# pour l’audio (PCM, ALAC, AAC-LC et AAC-ELD) et la recopie d’écran au format d’origine. Un code d’accès facultatif protège la diffusion. La fenêtre peut rester au premier plan ou passer en plein écran avec F11. Un glisser-déposer envoie le son vers une sortie du PC, le haut-parleur d’un appareil Android connecté ou sa sortie Bluetooth.
 
 Full prend aussi en charge le H.265 (HEVC). Sur Android, vous pouvez choisir les décodeurs audio et vidéo. La recherche des encodeurs disponibles se fait uniquement lorsque la page de l’appareil est ouverte. Seule la fenêtre vidéo active reçoit les commandes de la manette. Le QR code, renouvelé toutes les deux minutes, et le code d’association manuelle figurent au même endroit. Lors d’une reconnexion ou d’une actualisation depuis le panneau rapide ou la barre latérale, SonicRoute retrouve les appareils sans fil enregistrés sur le réseau local, même si leur adresse IP ou leur port a changé. Les anciens ports sont écartés et l’adresse saisie à la main est conservée en cas d’échec. Les réglages des appareils peuvent être restaurés.
 
 Toutes les éditions proposent deux options indépendantes pour afficher en permanence l’état des micros coupés, regroupent la gestion des profils sur une ligne et utilisent une liste virtualisée au-delà de 20 applications. Les mises à jour de l’affichage à l’écran sont regroupées, les données PNG d’origine et les textures inutilisées libérées. À la fermeture d’une fenêtre, Full laisse .NET gérer la récupération de mémoire. S’y ajoutent la sauvegarde `config.json.bak`, des diagnostics en cas d’erreur, une édition Lite distincte dans le Microsoft Store et le texte de la licence GPL-3.0-only consultable hors ligne. Pour en savoir plus, consultez la rubrique « [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) ».
+
+</details>
 
 ### ❓ Questions fréquentes
 

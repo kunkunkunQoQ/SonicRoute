@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json and docs/readme/locales/zh-CN.json. Edit those sources, then run node docs/readme/generate.cjs. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/zh-CN.json, and docs/readme/releases/v1.34.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 音跃 SonicRoute
 
@@ -55,15 +55,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [
 
 ## 🚀 下载与开始使用
 
-**当前正式版：[v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026年11月18日 · [更新说明](docs/release-v1.33.md)
+**当前正式版：[v1.34](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.34)** · 2026年11月21日 · [更新说明](docs/release-v1.34.md)
 
-想在电脑上播放 Android 手机的声音、使用虚拟屏幕或接收 AirPlay 投屏，请选 **Full**。只需电脑音频功能，可选 **Lite**。已有 .NET Framework 4.8 的 x64 电脑也可使用 **Legacy**。ARM64 构建为实验版。下表列出 v1.33 的下载链接，Microsoft Store 的 Full 和 Lite 版本以各自的商店页面为准。
+想在电脑上播放 Android 手机的声音、使用虚拟屏幕或接收 AirPlay 投屏，请选 **Full**。只需电脑音频功能，可选 **Lite**。已有 .NET Framework 4.8 的 x64 电脑也可使用 **Legacy**。ARM64 构建为实验版。下表列出 v1.34 的下载链接，Microsoft Store 的 Full 和 Lite 版本以各自的商店页面为准。
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| ⭐ Full（.NET 10，含可选手机互联） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | 单个便携 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime，可选用 Android 手机互联、虚拟屏幕和 AirPlay。 |
-| ⭐ Lite（.NET 10，仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | 单个便携 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime。 |
-| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | 解压后运行。需要 .NET Framework 4.8，系统已安装时无需额外安装运行库。 |
+| ⭐ Full（.NET 10，含可选手机互联） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-arm64.exe) | 单个便携 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime，可选用 Android 手机互联、虚拟屏幕和 AirPlay。 |
+| ⭐ Lite（.NET 10，仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-arm64.exe) | 单个便携 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime。 |
+| 🛡️ Legacy x64（仅电脑功能，.NET Framework 4.8） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Legacy-x64.zip) | 解压后运行。需要 .NET Framework 4.8，系统已安装时无需额外安装运行库。 |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full 和 Lite 分别上架，均需要 x64 版 .NET 10 Desktop Runtime。 |
 
 <details>
@@ -92,13 +92,22 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [
 sr "规则名称或 ID"
 ```
 
-### 🆕 v1.33 更新要点
+### 🆕 v1.34 更新要点
+
+各版本现在都可以为同一个应用选择多个电脑播放设备。重启 SonicRoute 后，应用再次播放时会恢复所选设备。托盘音量调节和鼠标快捷键共用一个系统鼠标监听。
+
+Full 的两个 Android 面板同步显示 USB 和 Wi-Fi 连接状态。快捷手机面板的「刷新」也能重新连接选中的设备。Android 应用的输出菜单现在会显示手机当前输出的自定义名称。早期版本详见[版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+
+<details>
+<summary>v1.33</summary>
 
 Full 新增 C# AirPlay 接收功能，可播放 PCM、ALAC、AAC-LC 和 AAC-ELD 音频，按原比例显示镜像，设置投屏码、置顶窗口或按 F11 全屏，也能把声音转到电脑或 Android 手机的扬声器、蓝牙设备。
 
 Android 串流支持 H.265，编码器启动失败时自动回退到 H.264。设备页提供音频和视频解码器选项，仅在打开时查询编码器。手柄输入只发送到当前获得焦点的视频窗口。无线配对页面把二维码（每两分钟更新）与手动配对放在一起。重连和刷新时会跳过失效端口，按设备身份查找新地址，并在失败时保留手动输入的内容。重新添加设备时可恢复已保存的设置。
 
 各版本均可分别设置两种麦克风静音常驻提示、在同一行管理配置文件，并通过 .bak 备份保护配置，按需记录错误。应用列表超过 20 项时按需显示，连续的屏幕提示会合并，图像解码后会释放原始 PNG 数据并清理闲置纹理。Full 关闭窗口时将内存回收交给运行时处理。Lite 现有独立的商店包，各版本均可离线查看 GPL-3.0-only 许可证。详见[版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+
+</details>
 
 ### ❓ 常见问题
 
