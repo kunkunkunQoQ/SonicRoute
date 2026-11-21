@@ -138,8 +138,11 @@ internal static class ApplicationAudio
             void AddNative()
             {
                 if (addedNative) return;
-                list.Add(new PanelDevices.LocalizedDevice("Phone.NativeAudioOutput") {
-                    Id = AndroidAudioSession.SourcePhoneOutputId, Flow = EDataFlow.eRender });
+                string currentId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(source.Device), AndroidOutputSink.Current.Key);
+                const string nativeId = AndroidAudioSession.SourcePhoneOutputId;
+                list.Add(config.DeviceNames.TryGetValue(currentId, out var name) && !string.IsNullOrWhiteSpace(name)
+                    ? new AudioDeviceInfo { Id = nativeId, DisplayName = name, Flow = EDataFlow.eRender }
+                    : new PanelDevices.LocalizedDevice("Phone.NativeAudioOutput") { Id = nativeId, Flow = EDataFlow.eRender });
                 addedNative = true;
             }
             foreach (var device in outputs)

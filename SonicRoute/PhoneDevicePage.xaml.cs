@@ -390,8 +390,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     private async void Reconnect_Click(object sender, RoutedEventArgs e) => await RunAsync(async token =>
     {
         if (AndroidAudioHost.Phone.Profile.LastDevice == null) return;
-        await RefreshSelectedDeviceCoreAsync(token);
-        if (_device == null) throw AndroidError.WithCode(new IOException("未发现设备，请开启无线调试或更新连接地址。"), AndroidErrorCode.ReconnectNoDeviceFound);
+        ApplyRefreshedDevices(await PhoneAudioWindowCache.ReconnectSelectedDeviceAsync(token, _wireless), token);
     });
     private async void Disconnect_Click(object sender, RoutedEventArgs e)
     {

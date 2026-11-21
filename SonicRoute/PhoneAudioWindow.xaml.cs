@@ -517,7 +517,7 @@ public partial class PhoneAudioWindow : Window
         try
         {
             var devices = userRefresh != null
-                ? await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(userRefresh.Token)
+                ? await PhoneAudioWindowCache.ReconnectSelectedDeviceAsync(userRefresh.Token)
                 : await PhoneAudioWindowCache.ReadDevicesAsync(token);
             if (userRefresh == null && _enableMedia && IsVisible && !AirPlaySelected)
                 await PhoneAudioWindowCache.RecoverMissingWirelessAsync(AndroidAudioHost.Phone.Profile.LastDevice, devices, token);

@@ -100,6 +100,8 @@ internal static partial class Program
             "AirPlay gets Windows outputs and the connected phones' speaker and Bluetooth choices");
         var reordered = new[] { windows[0], merged.Single(d => d.Id == speakerId), windows[1],
             merged.Single(d => d.Id == otherId), merged.Single(d => d.Id == bluetoothId) };
+        const string currentAlias = "手机原生输出";
+        config.DeviceNames[currentId] = currentAlias;
         config.DeviceNames[speakerId] = "桌面扬声器";
         var androidChoices = ((IEnumerable<AudioDeviceInfo>)outputsForApp.Invoke(null, [firstInfo, reordered])!).ToArray();
         Check(androidChoices.Select(endpoint => endpoint.Id).SequenceEqual(new[] { windows[0].Id, AndroidAudioSession.SourcePhoneOutputId,
@@ -144,6 +146,8 @@ internal static partial class Program
                     || ((AudioDeviceInfo)b.Tag).Id == speakerId || ((AudioDeviceInfo)b.Tag).Id == bluetoothId
                     || ((AudioDeviceInfo)b.Tag).Id == otherCurrent),
                 "incoming quick panel exposes native playback once, the source's physical outputs, and the other phone's current output");
+            Check(pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == AndroidAudioSession.SourcePhoneOutputId).Content?.ToString() == currentAlias,
+                "the incoming playback button uses the alias saved for the source phone's current output");
             var speakerPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId);
             var btPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == bluetoothId);
             Check(speakerPill.Content?.ToString() == "我的小米13 扬声器"
@@ -183,6 +187,9 @@ internal static partial class Program
                 && ImmediatelyBefore(mainOrder, speakerId, bluetoothId)
                 && mainOrder.Contains(otherCurrent) && !mainOrder.Contains(currentId),
                 "main-window Android list uses the native current identity once in the source handset group");
+            Check(combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == AndroidAudioSession.SourcePhoneOutputId).DisplayName == currentAlias,
+                "the incoming app details use the same saved alias with the native routing identity");
+            config.DeviceNames.Remove(currentId);
             Check(combo.Items.OfType<AudioDeviceInfo>().Count(d => AndroidOutputIdentity.IsPhoneOutput(d.Id)) == 3
                 && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId).DisplayName == "小米13 扬声器"
                 && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == bluetoothId).DisplayName == "耳机 (小米13 · 蓝牙)",

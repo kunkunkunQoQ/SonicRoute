@@ -198,6 +198,15 @@ internal static partial class Program
         discovery.Publish([live, usb]);
         var phone = new PhoneAudioWindow(false) { Left = -10000, Top = -10000, ShowActivated = false, ShowInTaskbar = false };
         var main = new MainWindow();
+        var wireless = new AndroidWirelessConnection((_, _) => throw new IOException("unexpected fixture ADB command"));
+        var wirelessFactory = cache.GetProperty("CreateWirelessConnection", statics)!;
+        var previousFactory = wirelessFactory.GetValue(null);
+        var adb = (AdbClient)host.GetProperty("Adb", statics)!.GetValue(null)!;
+        var transport = typeof(AdbClient).GetField("_resolvedTransport", Hidden)!;
+        var previousTransport = transport.GetValue(adb);
+        var shell = new CleanupShell();
+        wirelessFactory.SetValue(null, (Func<AndroidWirelessConnection>)(() => wireless));
+        transport.SetValue(adb, new CleanupTransport(shell));
         object? Call(object target, string method, params object?[] args) => target.GetType().GetMethod(method, Hidden)!.Invoke(target, args);
         try
         {
@@ -205,21 +214,50 @@ internal static partial class Program
             phone.Show(); Pump((Task)Call(phone, "InitializeDevicesAsync")!);
             var combo = (ComboBox)phone.FindName("DeviceCombo"); var badge = (TextBlock)phone.FindName("ConnectionText");
             var sidebar = (ListBox)main.FindName("PhoneDevicesList");
+            var details = (PhoneDevicePage)((Border)main.FindName("PhoneDetailsHost")).Child;
+            var refresh = (Button)phone.FindName("RefreshButton");
+            var reconnect = (Button)details.FindName("ReconnectButton");
+            var catalogRead = typeof(PhoneAudioWindow).GetField("_catalogRead", Hidden)!;
+            void RefreshQuick()
+            {
+                refresh.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Until(() => refresh.IsEnabled && catalogRead.GetValue(phone) == null);
+                DrainUi();
+            }
             bool SidebarConnected() => sidebar.Items.Cast<object>().Any(i => (bool)i.GetType().GetProperty("IsActive")!.GetValue(i)!);
             Check(badge.Text == L10n.T("Phone.Disconnected") && !SidebarConnected() && store.Profiles.Count == 1,
                 "historic tombstone conflict is consistently offline and neither USB/Wi-Fi creates a duplicate profile");
-            var wireless = new AndroidWirelessConnection((_, _) => throw new IOException("unexpected fixture ADB command"));
-            Pump((Task)cache.GetMethod("RefreshSelectedDeviceAsync", statics)!.Invoke(null, [CancellationToken.None, wireless])!); DrainUi();
+            RefreshQuick();
             Check(store.Profile.Id == profileId && store.Profile.RetainedApps.Count == 2 && !store.IsRemoved(live),
-                "explicit reconnect preserves the active profile, merges retained apps and clears its historical removal");
+                "quick Refresh explicitly reconnects the existing profile, merges retained apps and clears its historical removal");
             Check(combo.Items.OfType<AndroidDevice>().Count() == 1 && Equals(combo.SelectedItem, live)
                 && badge.Text == L10n.T("Phone.ConnectedStatus"),
                 $"quick panel selects the repaired live transport (choices={combo.Items.OfType<AndroidDevice>().Count()}, badge={badge.Text}, selected={combo.SelectedItem})");
             Check(SidebarConnected(), "main sidebar reflects explicit admission for the existing profile");
+
+            // Drop the admitted transport before the button receives its result.
+            // A scan returning successfully does not guarantee a connected phone.
+            store.SetDisconnected(live, true);
             available = [usb];
-            Pump((Task)cache.GetMethod("RefreshSelectedDeviceAsync", statics)!.Invoke(null, [CancellationToken.None, wireless])!); DrainUi();
+            void DropAfterAdmission()
+            {
+                if (store.Profile.ManuallyDisconnected) return;
+                discovery.Changed -= DropAfterAdmission;
+                discovery.Publish([]);
+            }
+            discovery.Changed += DropAfterAdmission;
+            try { RefreshQuick(); }
+            finally { discovery.Changed -= DropAfterAdmission; }
+            Check(badge.Text == L10n.T("Phone.Disconnected") && !SidebarConnected()
+                && badge.ToolTip?.ToString()?.Contains(L10n.T("Phone.Err.ReconnectNoDeviceFound")) == true,
+                "quick Refresh reports the explicit reconnect failure when the admitted phone goes offline");
+
+            reconnect.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var busy = typeof(PhoneDevicePage).GetField("_busy", Hidden)!;
+            Until(() => !(bool)busy.GetValue(details)!);
+            DrainUi();
             Check(store.Profile.Id == profileId && Equals(combo.SelectedItem, usb) && SidebarConnected(),
-                "refreshing the saved Wi-Fi profile uses its verified USB connection when Wi-Fi is absent");
+                "device Reconnect uses the same verified USB connection when Wi-Fi is absent");
             available = [live];
             Pump((Task)cache.GetMethod("RefreshSelectedDeviceAsync", statics)!.Invoke(null, [CancellationToken.None, wireless])!); DrainUi();
             Check(store.Profile.Id == profileId && Equals(combo.SelectedItem, live) && SidebarConnected(),
@@ -250,7 +288,13 @@ internal static partial class Program
             Pump(displays.DisposeAsync().AsTask()); Pump(sources.DisposeAsync().AsTask());
             Console.WriteLine($"PASS {_checks} managed connection UI assertions (mock transport, no device access)"); return 0;
         }
-        finally { phone.Close(); main.Close(); }
+        finally
+        {
+            phone.Close(); main.Close();
+            wirelessFactory.SetValue(null, previousFactory);
+            transport.SetValue(adb, previousTransport);
+            Pump(shell.DisposeAsync().AsTask());
+        }
     }
 
     private sealed class ConnectionDisplayFixture : IVirtualDisplayClient

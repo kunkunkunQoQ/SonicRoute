@@ -235,6 +235,22 @@ internal static class PhoneAudioWindowCache
         return false;
     }
 
+    internal static async Task<IReadOnlyList<AndroidDevice>> ReconnectSelectedDeviceAsync(CancellationToken token,
+        AndroidWirelessConnection? wireless = null)
+    {
+        var store = AndroidAudioHost.Phone;
+        var selected = store.Profile;
+        var devices = await RefreshSelectedDeviceAsync(token, wireless).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        if (selected.LastDevice == null) return devices;
+
+        var current = store.Profile;
+        if (current.Id != selected.Id) throw new OperationCanceledException(token);
+        if (GetOnlineDevice(current.LastDevice) == null)
+            throw AndroidError.WithCode(new IOException("未发现设备，请开启无线调试或更新连接地址。"), AndroidErrorCode.ReconnectNoDeviceFound);
+        return devices;
+    }
+
     internal static async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken token,
         AndroidWirelessConnection? wireless = null)
     {
