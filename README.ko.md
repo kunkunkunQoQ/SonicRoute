@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json, docs/readme/locales/ko-KR.json, and docs/readme/releases/v1.34.json. Run node docs/readme/generate.cjs after editing. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/ko-KR.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 SonicRoute
 
@@ -55,15 +55,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지�
 
 ## 🚀 다운로드 및 첫 설정
 
-**최신 정식 버전: [v1.34](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.34)** · 2026년 11월 21일 · [릴리스 노트(중국어 간체)](docs/release-v1.34.md)
+**최신 정식 버전: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 2026년 11월 21일 · [릴리스 노트(중국어 간체)](docs/release-v1.35.md)
 
-Android 오디오, 가상 디스플레이, AirPlay를 사용하려면 **Full x64**를 선택하세요. PC 오디오 기능만 필요하면 **Lite x64**, .NET Framework 4.8을 사용하는 환경에서는 **Legacy x64**가 적합합니다. ARM64용 빌드는 실험 버전입니다. 아래 표에서 v1.34 버전을 직접 다운로드할 수 있습니다. Microsoft Store에서 배포하는 Full과 Lite의 버전은 각 스토어 페이지에서 확인하세요.
+Android 오디오, 가상 디스플레이, AirPlay를 사용하려면 **Full x64**를 선택하세요. PC 오디오 기능만 필요하면 **Lite x64**, .NET Framework 4.8을 사용하는 환경에서는 **Legacy x64**가 적합합니다. ARM64용 빌드는 실험 버전입니다. 아래 표에서 v1.35 버전을 직접 다운로드할 수 있습니다. Microsoft Store에서 배포하는 Full과 Lite의 버전은 각 스토어 페이지에서 확인하세요.
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| ⭐ Full(.NET 10, 휴대폰 연동 지원) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-arm64.exe) | 단일 실행 파일로 제공되며, Android 오디오, 가상 디스플레이 및 AirPlay 연동을 선택해 사용할 수 있습니다. 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. |
-| ⭐ Lite(.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-arm64.exe) | PC 오디오 기능만 담은 단일 실행 파일입니다. 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. |
-| 🛡️ Legacy x64(PC 오디오 전용, .NET Framework 4.8) | [ZIP 파일](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Legacy-x64.zip) | Windows의 .NET Framework 4.8을 사용합니다. ZIP 파일의 압축을 풀고 실행하세요. |
+| ⭐ Full(.NET 10, 휴대폰 연동 지원) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | 단일 실행 파일로 제공되며, Android 오디오, 가상 디스플레이 및 AirPlay 연동을 선택해 사용할 수 있습니다. 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. |
+| ⭐ Lite(.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | PC 오디오 기능만 담은 단일 실행 파일입니다. 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. |
+| 🛡️ Legacy x64(PC 오디오 전용, .NET Framework 4.8) | [ZIP 파일](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | Windows의 .NET Framework 4.8을 사용합니다. ZIP 파일의 압축을 풀고 실행하세요. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full과 Lite 모두 x64용 .NET 10 Desktop Runtime이 필요합니다. 배포 중인 버전은 각 스토어 페이지에서 확인하세요. |
 
 <details>
@@ -92,20 +92,18 @@ Android 오디오, 가상 디스플레이, AirPlay를 사용하려면 **Full x64
 sr "규칙 이름 또는 ID"
 ```
 
-### 🆕 v1.34 주요 변경 사항
+### 🆕 v1.35 주요 변경 사항
+
+모든 에디션에서 빠른 패널의 즉시 전환 UX가 통합되었습니다. PC 앱 마이크 입력과 외부 오디오 항목도 클릭 즉시 강조 표시되며 버튼을 비활성화하지 않고 순차 적용되고, 행 제목에 선택한 출력 이름이 바로 반영됩니다. 장치 전환 단축키는 논블로킹 대기열로 실행되며 45 ms 이내에 완료되면 전환 중 배너 없이 바로 결과를 표시하고, 지연 시에는 현지화된 전환 중 안내를 최소 500 ms 동안 유지합니다. 네이티브 오디오 세션이 이동할 때 명시적으로 선택한 다중 출력 미러가 해제되던 문제도 수정했습니다.
+
+Full에서는 Android 모드 전환과 가상 디스플레이의 반응성을 유지하고, 다중 장치 클립보드 동기화에서 원본 장치 비활성화 및 오류 경로의 동시성과 핸들 정리를 보완했습니다. 이전 릴리스는 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
+
+<details>
+<summary>v1.34</summary>
 
 모든 에디션에서 앱마다 여러 PC 재생 장치를 선택할 수 있습니다. SonicRoute를 다시 시작한 뒤 해당 앱이 오디오를 재생하면 선택한 장치가 복원됩니다. 시스템 트레이의 볼륨 조절과 마우스 단축키는 하나의 시스템 마우스 후크를 공유합니다.
 
 Full에서는 두 Android 패널의 USB 및 Wi-Fi 연결 상태가 동기화됩니다. 휴대폰 빠른 패널에서 새로 고침으로 선택한 장치에 다시 연결할 수도 있습니다. Android 앱의 출력 메뉴에는 휴대폰의 현재 출력에 지정한 이름이 표시됩니다. 이전 릴리스는 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
-
-<details>
-<summary>v1.33</summary>
-
-Full에 C#으로 구현한 AirPlay 수신 기능이 추가되었습니다. PCM, ALAC, AAC-LC, AAC-ELD 오디오를 재생하고 원래 화면 비율로 미러링할 수 있습니다. 연결 PIN, 창을 항상 위에 표시하는 옵션, F11 전체 화면을 지원하며, 드래그하여 소리를 PC나 Android 휴대폰의 스피커 또는 휴대폰에 연결된 Bluetooth 장치로 보낼 수 있습니다.
-
-Android 연동에서는 H.265(HEVC)를 지원하며 오디오 및 비디오 디코더를 선택할 수 있습니다. 인코더 목록은 기기 설정 화면이 열려 있을 때만 조회하며 게임패드 입력은 현재 사용 중인 가상 디스플레이 창으로만 보냅니다. 페어링 화면에는 2분마다 갱신되는 QR 코드와 수동 페어링 코드 입력란이 함께 표시됩니다. 기기 설정에서 다시 연결하거나 빠른 패널과 사이드바를 새로 고치면 로컬 네트워크에서 저장된 기기를 찾습니다. 유효하지 않은 포트를 거르고 기기 식별 정보로 새 IP 주소와 포트를 확인합니다. 기기를 찾지 못하거나 연결에 실패해도 직접 입력한 주소는 유지되며, 다시 연결할 때 기기 설정을 복원할 수 있습니다.
-
-모든 에디션에서 마이크 전체를 음소거했을 때와 기본 녹음 장치를 음소거했을 때의 화면 표시(OSD)를 각각 설정할 수 있습니다. 설정 파일 관리 기능은 한 줄에 모았습니다. 목록에 앱이 20개를 넘으면 화면에 표시할 행을 재사용하고 연속된 OSD 업데이트는 한 번에 처리합니다. PNG 디코딩이 끝나면 원본 데이터를 해제합니다. Full에서는 더 이상 사용하지 않는 텍스처도 해제하며, 창을 닫을 때 메모리를 회수할 시점은 런타임이 결정합니다. 설정 파일의 .bak 백업, 오류가 발생했을 때의 진단 로그, 별도의 Microsoft Store용 Lite 버전, 오프라인 GPL-3.0-only 라이선스 열람도 지원합니다. 자세한 내용은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
 
 </details>
 

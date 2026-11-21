@@ -25,6 +25,9 @@ if (new Set(shared.languages.map(language => language.file)).size !== shared.lan
 const releaseSummaryPath = path.join(__dirname, 'releases', shared.release + '.json');
 const releaseSummaries = fs.existsSync(releaseSummaryPath) ? JSON.parse(fs.readFileSync(releaseSummaryPath, 'utf8')) : null;
 if (releaseSummaries && JSON.stringify(Object.keys(releaseSummaries).sort()) !== JSON.stringify(interfaceLocales)) throw new Error('Release summary languages differ from built-in interface languages');
+const previousSummaryVersion = shared.release === 'v1.35' ? 'v1.34' : 'v1.33';
+const previousSummaryPath = previousSummaryVersion === 'v1.34' ? path.join(__dirname, 'releases', 'v1.34.json') : null;
+const previousReleaseSummaries = previousSummaryPath && fs.existsSync(previousSummaryPath) ? JSON.parse(fs.readFileSync(previousSummaryPath, 'utf8')) : null;
 function validate(locale, text) {
   if (JSON.stringify(Object.keys(text).sort()) !== JSON.stringify(keys)) throw new Error(locale + ': translation keys differ');
   for (const key of keys) {
@@ -37,7 +40,7 @@ function validate(locale, text) {
     });
   }
 }
-function render(language, text, releaseSummary = text.releaseSummary) {
+function render(language, text, releaseSummary = text.releaseSummary, previousReleaseSummary = text.releaseSummary) {
   const cjk = ['zh-CN', 'zh-TW', 'ja-JP'].includes(language.locale);
   const colon = cjk ? '：' : language.locale === 'fr-FR' ? '\u00a0: ' : ': ';
   const period = cjk ? '。' : '.';
@@ -139,8 +142,8 @@ function render(language, text, releaseSummary = text.releaseSummary) {
     '### 🆕 ' + fill(text.releaseHighlightsTitle), '',
     fill(releaseSummary), '',
     ...(releaseSummaries ? [
-      '<details>', '<summary>v1.33</summary>', '',
-      fill(text.releaseSummary), '', '</details>', ''
+      '<details>', `<summary>${previousSummaryVersion}</summary>`, '',
+      fill(previousReleaseSummary), '', '</details>', ''
     ] : []),
     '### ❓ ' + text.faqQuickTitle, '',
     ...text.faqQuestions.flatMap((question, index) => [
@@ -382,6 +385,7 @@ function renderAI(shared) {
     `    source: ["${shared.releaseNotes}"]`,
     `    symbols: ["${shared.release}"]`,
     "    facts:",
+    "      - \"v1.35: All editions unify QuickPanel optimistic switching for PC microphone inputs (eCapture, single-select independent of playback) and single-output external/AirPlay rows without disabling buttons, update row output names optimistically across PC/Android/AirPlay (preserving default suffix on PC default rows), harden SystemDevCombo rollback/concurrency, run device-switching hotkeys via a non-blocking queue with 45ms fast-completion / 500ms minimum-pending OSD thresholds and 9-locale switching strings, and keep explicitly selected LocalAppOutputMirrors intact when native sessions move between selected endpoints. Full preserves CanChangeActiveOutputs across mode switches, instruments output startup phases without slowing virtual display input, cancels a disabled source phone's in-flight desktop clipboard write while keeping other devices active, and pre-allocates Remote/Cloud clipboard flags before EmptyClipboard.\"",
     "      - \"v1.34: Full, Lite, and Legacy support selecting multiple PC playback devices per app and restoring that selection on playback after restart. Tray volume adjustment and mouse shortcuts share one system mouse hook. Full synchronizes Android USB/Wi-Fi state across both device panels, reconnects from quick phone panel refresh, respects custom names in Android app output menus, and adds Android file browsing and transfer.\"",
     "      - \"v1.33: Full adds a self-built C# AirPlay audio and aspect-preserving screen mirror receiver (PCM/ALAC/AAC-LC and 44.1/48 kHz stereo AAC-ELD without SBR, optional PIN, media metadata/cover, topmost/F11 fullscreen, and drag-and-drop/Quick Panel routing to PC or Android speaker/Bluetooth outputs), adds H.265 (HEVC) with same-connection H.264 fallback and keyframe/corrupt-frame guards, adds Audio/Video decoder selectors (Auto, Concentus Opus, Windows D3D11/software) with visible-only on-demand encoder queries (up to 4 phones cached), enforces foreground-only gamepad gating and SIMD phone PCM16 conversion, combines QR (2-min auto-refresh) and manual pairing in one card with one-shot LAN mDNS discovery and unified device-settings reconnect, quick phone panel refresh, and app-sidebar refresh (verifying active ADB identity first, filtering expired ports via mDNS + short TCP probes, recovering updated IP/port by saved identity and overwriting saved address only after identity verification while preserving manual drafts on failure), device settings restore on re-add/USB restore, and pairing identity/deadline hardening; across all editions (Full/Lite/Legacy), adds two independent persistent Mic OSD toggles, a single-row experimental Configuration management card (Export/Import/Clear), >20-row app list virtualization, coalesced OSD rendering, ImageDataStream PNG input release and retired GPU texture cleanup (Full idle reclaim removes explicit close-window GC requests in favor of natural runtime collection; Lite/Legacy retain single window-close working-set trim), config.json.bak protection, single-instance restart handoff, multi-key mouse arbitration, on-demand error diagnostics, standalone Store Lite MSIX support (9N37LQ8SMLF6), and GPL-3.0-only migration (from 2026-11-17) with an offline viewer.\"",
     "      - \"v1.32: Full merges the pure C# Android backend (DirectAdbTransport/WinUsbAdbTransport/Spake25519/SspiPairingTls, MediaFoundation H.264/D3D11/Win32 NativeVideoWindow, and self-written Android server) removing external adb.exe, scrcpy, FFmpeg, and SDL2 binaries, adds focus-gated XInput/RawInput HID gamepad passthrough (up to 4 slots) to virtual displays, tightens the phone companion panel gap from 12 to 6 DIP, adds automatic Windows default playback device following for phone System Output, commits six C# pipeline fixes and SmartVolume curve tuning, and pools ADB/media/catalog caches with idle LOH compaction; across all editions (Full/Lite/Legacy), fixes tray long-name submenu overlap and adds bounded icon decode, 8s idle OSD release, and per-window theme dictionary loading.\"",
@@ -481,8 +485,10 @@ const outputs = shared.languages.map(language => {
   const text = JSON.parse(fs.readFileSync(path.join(__dirname, 'locales', language.locale + '.json'), 'utf8'));
   validate(language.locale, text);
   const releaseSummary = releaseSummaries?.[language.locale];
+  const previousReleaseSummary = previousReleaseSummaries?.[language.locale];
   if (releaseSummaries) validate(language.locale, { ...text, releaseSummary });
-  return { file: language.file, body: render(language, text, releaseSummary) };
+  if (previousReleaseSummaries) validate(language.locale, { ...text, releaseSummary: previousReleaseSummary });
+  return { file: language.file, body: render(language, text, releaseSummary, previousReleaseSummary) };
 });
 outputs.push({ file: 'README.ai.md', body: renderAI(shared) });
 const stale = [];

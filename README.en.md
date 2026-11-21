@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json, docs/readme/locales/en-US.json, and docs/readme/releases/v1.34.json. Run node docs/readme/generate.cjs after editing. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/en-US.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 SonicRoute
 
@@ -55,15 +55,15 @@ For example, one rule can switch to your headset and open voice chat when you la
 
 ## 🚀 Download and get started
 
-**Current stable release: [v1.34](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.34)** · November 21, 2026 · [Release notes (Chinese)](docs/release-v1.34.md)
+**Current stable release: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · November 21, 2026 · [Release notes (Chinese)](docs/release-v1.35.md)
 
-Choose **Full** for Android audio, virtual displays and AirPlay, or **Lite** for PC audio only. Both have x64 and experimental ARM64 builds. **Legacy** is the PC-only x64 edition for systems using .NET Framework 4.8. The direct downloads below are for v1.34. See the Microsoft Store listings for the versions of Full and Lite available there.
+Choose **Full** for Android audio, virtual displays and AirPlay, or **Lite** for PC audio only. Both have x64 and experimental ARM64 builds. **Legacy** is the PC-only x64 edition for systems using .NET Framework 4.8. The direct downloads below are for v1.35. See the Microsoft Store listings for the versions of Full and Lite available there.
 
 | Edition | Download | Requirements |
 |---|---|---|
-| ⭐ Full (.NET 10, includes Android and AirPlay) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-arm64.exe) | One portable executable with Android and AirPlay support. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64). |
-| ⭐ Lite (.NET 10, PC audio only) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Lite-arm64.exe) | One portable executable. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64). |
-| 🛡️ Legacy x64 (PC audio only, .NET Framework 4.8) | [Download ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.34/SonicRoute-v1.34-Legacy-x64.zip) | Extract the ZIP and run SonicRoute. It uses Windows’ .NET Framework 4.8. |
+| ⭐ Full (.NET 10, includes Android and AirPlay) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | One portable executable with Android and AirPlay support. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64). |
+| ⭐ Lite (.NET 10, PC audio only) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | One portable executable. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64). |
+| 🛡️ Legacy x64 (PC audio only, .NET Framework 4.8) | [Download ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | Extract the ZIP and run SonicRoute. It uses Windows’ .NET Framework 4.8. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | The Store offers Full and Lite. Both require the x64 .NET 10 Desktop Runtime. |
 
 <details>
@@ -92,20 +92,18 @@ The `sr` command sends a rule name or ID to a running copy of SonicRoute over a 
 sr "Rule name or ID"
 ```
 
-### 🆕 What’s new in v1.34
+### 🆕 What’s new in v1.35
+
+All editions now deliver unified optimistic switching in the quick panel: PC app microphone selections and external audio rows highlight right away and apply sequentially without disabling buttons, while row titles update immediately to show the target output. Device-switching hotkeys run in a non-blocking queue with flicker-free OSD feedback that skips the pending banner for switches under 45 ms and holds slower pending notices for at least 500 ms. Explicit multi-output mirrors also stay intact when native audio sessions move between selected endpoints.
+
+Full preserves output-switching responsiveness across Android mode transitions and tightens concurrency and handle cleanup in multi-device clipboard synchronization. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
+
+<details>
+<summary>v1.34</summary>
 
 All editions can now select multiple PC playback devices per app and restore the selection when the app plays audio again after SonicRoute restarts. Tray volume controls and mouse shortcuts now share a single system mouse hook.
 
 Full keeps USB and Wi-Fi connection status in sync across both Android panels. Refresh in the quick phone panel can also reconnect the selected device. Android app output menus now show the custom name set for the phone’s current output. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
-
-<details>
-<summary>v1.33</summary>
-
-Full can now receive AirPlay audio (PCM, ALAC, AAC-LC and AAC-ELD) and mirror a screen at its original aspect ratio using a receiver written in C#. Set an optional pairing code, keep the mirror on top or press F11 for full screen. Drag audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Android and AirPlay support H.265 (HEVC). Android falls back to H.264 if the encoder cannot start. You can choose Android audio and video decoders. SonicRoute checks the available encoders when you open the device settings and sends gamepad input only to the focused video window.
-
-Android pairing now puts the QR code (refreshed every two minutes) beside the manual pairing code. Reconnecting or refreshing a device checks its identity and looks for its current address and port on the local network. SonicRoute preserves a manually entered address if the search fails and can restore settings for a previously paired device.
-
-All editions now have separate options to keep the mic indicator on screen when all microphones are muted or when the default recording device is muted. Configuration tools share one row. Long app lists render only the visible rows once the list exceeds 20 entries. SonicRoute combines on-screen updates and frees decoded PNG source data, backs up settings to `config.json.bak` and records diagnostics when errors occur. Full also releases unused video textures and leaves garbage collection to the runtime when a window closes. Lite is available separately in the Microsoft Store, and all editions include an offline copy of the GPL-3.0-only license. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for details.
 
 </details>
 
