@@ -12,9 +12,11 @@ namespace SonicRoute;
 public partial class QuickPanelModernWindow
 {
     private record PlaybackIntent(string[] Outputs, string? Anchor);
+    private sealed record PendingInputIntent(string DeviceId);
 
     private Func<int, string?, HashSet<string>> _readRowPlaybackOutputs = AppPlaybackOutputs.GetSelected;
     private Func<AudioAppInfo, string[], string?, Task<(bool Success, int HResult, string Message)>> _setRowPlaybackOutputs = AppPlaybackOutputs.SetAsync;
+    private Func<AudioAppInfo, EDataFlow, string, (bool Success, int HResult, string Message)> _applyRowEndpoint = ApplicationAudio.ApplyEndpoint;
 
 #if !SONICROUTE_PHONE
     // Full already refreshes expanded rows from its combined local/external playback subscription.
@@ -50,6 +52,7 @@ public partial class QuickPanelModernWindow
         var required = request.Outputs.Where(Available).ToArray();
         row.PendingPlayback = request;
         UpdateLocalPlaybackSelection(row);
+        UpdateRowName(row, row.OutputId);
         var previous = row.PlaybackChange;
         return row.PlaybackChange = ApplyClickAsync();
 
@@ -100,10 +103,15 @@ public partial class QuickPanelModernWindow
                         else if (playbackRead > row.ConfirmedPlaybackRead)
                         {
                             row.ConfirmedPlaybackRead = playbackRead;
-                            if (applied) row.ConfirmedPlayback = request.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                            if (applied)
+                            {
+                                row.ConfirmedPlayback = request.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                                row.OutputId = SelectOptimisticPrimaryOutput(request.Outputs, row.OutputId, preferPhysical: true);
+                            }
                         }
                         row.PendingPlayback = null;
                         UpdateLocalPlaybackSelection(row);
+                        UpdateRowName(row, row.OutputId);
                     }
                 }
             }
@@ -131,6 +139,130 @@ public partial class QuickPanelModernWindow
         var selected = row.PendingPlayback?.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? row.ConfirmedPlayback;
         foreach (var item in row.DeviceButtons)
             if (item.Flow == EDataFlow.eRender) SetRowDeviceSelection(item.Button, item.Id, selected.Contains(item.Id) ? item.Id : "");
+    }
+
+    private void ConfirmLocalInput(AppRow row, int read, string? input)
+    {
+        if (read <= row.ConfirmedInputRead) return;
+        row.ConfirmedInputRead = read;
+        row.ConfirmedInput = string.IsNullOrWhiteSpace(input) ? AudioService.SystemDefaultInputDeviceId : input;
+    }
+
+    private void UpdateLocalInputSelection(AppRow row)
+    {
+        string? pendingId = row.PendingInput?.DeviceId;
+        bool pendingPresent = pendingId != null && row.DeviceButtons.Any(item =>
+            item.Flow == EDataFlow.eCapture && string.Equals(item.Id, pendingId, StringComparison.OrdinalIgnoreCase));
+        string selected = pendingPresent ? pendingId! : row.ConfirmedInput ?? AudioService.SystemDefaultInputDeviceId;
+        foreach (var item in row.DeviceButtons)
+            if (item.Flow == EDataFlow.eCapture) SetRowDeviceSelection(item.Button, item.Id, selected);
+    }
+
+    private Task QueueInputClickAsync(AppRow row, AudioDeviceInfo dev)
+    {
+        int pid = (int)row.App.ProcessId;
+        if (!Current()) return Task.CompletedTask;
+        if (!row.DeviceButtons.Any(entry => entry.Flow == EDataFlow.eCapture && string.Equals(entry.Id, dev.Id, StringComparison.OrdinalIgnoreCase)))
+            return Task.CompletedTask;
+        if (!Available(dev.Id))
+        {
+            ShowOsd(AppDisplayName.Get(row.App), L10n.T("Ov.CurrentUnavailable"));
+            return Task.CompletedTask;
+        }
+
+        var request = new PendingInputIntent(dev.Id);
+        row.PendingInput = request;
+        UpdateLocalInputSelection(row);
+        var previous = row.InputChange;
+        return row.InputChange = ApplyInputClickAsync();
+
+        bool Current() => !_isClosed && _rows.TryGetValue(pid, out var live) && ReferenceEquals(live, row);
+        bool Available(string id) => _inputDisplay.Any(input => string.Equals(id, input.Id, StringComparison.OrdinalIgnoreCase));
+
+        async Task ApplyInputClickAsync()
+        {
+            bool applied = false;
+            try
+            {
+                await previous;
+                if (!Current()) return;
+                if (!Available(request.DeviceId))
+                {
+                    ShowOsd(AppDisplayName.Get(row.App), L10n.T("Ov.CurrentUnavailable"));
+                    return;
+                }
+                MarkLastUsed(row.App);
+                var (ok, _, msg) = await Task.Run(() => _applyRowEndpoint(row.App, EDataFlow.eCapture, request.DeviceId));
+                applied = ok;
+                if (!Current()) return;
+                if (ok)
+                    ShowOsd(AppDisplayName.Get(row.App), "🎤 " + PanelDevices.Name(dev));
+                else
+                    ShowOsd(AppDisplayName.Get(row.App), $"✗ {msg}");
+            }
+            catch (OperationCanceledException) when (!Current()) { }
+            catch (Exception ex) { if (Current()) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
+            finally
+            {
+                if (Current() && ReferenceEquals(row.PendingInput, request))
+                {
+                    int inputRead = ++row.InputReadVersion;
+                    string? confirmedInput = null;
+                    try
+                    {
+                        var actual = await ReadLocalPlaybackAsync(pid, micOn: true);
+                        confirmedInput = actual.Input;
+                    }
+                    catch (OperationCanceledException) when (!Current()) { }
+                    catch (Exception ex) { if (Current()) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
+
+                    if (Current() && ReferenceEquals(row.PendingInput, request))
+                    {
+                        if (confirmedInput != null)
+                            ConfirmLocalInput(row, inputRead, confirmedInput);
+                        else if (inputRead > row.ConfirmedInputRead)
+                        {
+                            row.ConfirmedInputRead = inputRead;
+                            if (applied) row.ConfirmedInput = request.DeviceId;
+                        }
+                        row.PendingInput = null;
+                        UpdateLocalInputSelection(row);
+                    }
+                }
+            }
+        }
+    }
+
+    internal static string SelectOptimisticPrimaryOutput(IReadOnlyList<string> outputs, string? currentOutputId,
+        bool preferPhysical, string? lowPriorityId = null)
+    {
+        if (outputs.Count == 0)
+            return AudioService.SystemDefaultDeviceId;
+
+        string? first = null;
+        string? matchedCurrent = null;
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            string id = outputs[i];
+            if (preferPhysical && ApplicationAudio.IsPhoneOutputDevice(id)) continue;
+            if (lowPriorityId != null && string.Equals(id, lowPriorityId, StringComparison.OrdinalIgnoreCase)) continue;
+            if (AudioService.IsSystemDefault(id)) return id;
+            first ??= id;
+            if (currentOutputId != null && string.Equals(id, currentOutputId, StringComparison.OrdinalIgnoreCase))
+                matchedCurrent = id;
+        }
+        if (matchedCurrent != null) return matchedCurrent;
+        if (first != null) return first;
+
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            string id = outputs[i];
+            if (AudioService.IsSystemDefault(id)) return id;
+            first ??= id;
+            if (currentOutputId != null && string.Equals(id, currentOutputId, StringComparison.OrdinalIgnoreCase))
+                matchedCurrent = id;
+        }
+        return matchedCurrent ?? first ?? AudioService.SystemDefaultDeviceId;
     }
 
     private static PlaybackIntent CreatePlaybackIntent(string[] order, HashSet<string> selected, string clicked, string? anchor, ModifierKeys modifiers)

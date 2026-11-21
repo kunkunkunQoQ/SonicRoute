@@ -65,6 +65,10 @@ namespace SonicRoute
             public HashSet<string> ConfirmedPlayback = new(StringComparer.OrdinalIgnoreCase);
             public PlaybackIntent? PendingPlayback;
             public int PlaybackReadVersion, ConfirmedPlaybackRead;
+            public Task InputChange = Task.CompletedTask;
+            public string? ConfirmedInput;
+            public PendingInputIntent? PendingInput;
+            public int InputReadVersion, ConfirmedInputRead;
             public StackPanel ExpandPanel = null!;
             public AnimatedExpandHost ExpandWrap = null!;
             public RotateTransform ExpandArrow = new();
@@ -428,8 +432,14 @@ namespace SonicRoute
         // 顶部：系统音频设备（选择控制对象 + 系统设备音量/静音；不修改系统默认设备）
         // ------------------------------------------------------------------
 
+        private int _systemDefaultChangeVersion;
+        private Task _systemDefaultChangeTask = Task.CompletedTask;
+        private Func<EDataFlow, string, (bool Success, int HResult, string Message)> _setSystemDefault = SystemDefaultDeviceService.SetDefault;
+        private Func<EDataFlow, string?> _readSystemDefaultId = AudioService.GetDefaultDeviceId;
+
         private void SetSystemDevices(List<AudioDeviceInfo> devices, string? defaultId)
         {
+            ++_systemDefaultChangeVersion;
             foreach (var d in devices) d.IsDefault = d.Id == defaultId;
 
             _suppressDevCombo = true;
@@ -446,6 +456,7 @@ namespace SonicRoute
         private async void SystemDevCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressDevCombo) return;
+            int version = ++_systemDefaultChangeVersion;
             if (SystemDevCombo.SelectedItem is AudioDeviceInfo dev)
             {
                 FlushPendingVolumes();
@@ -454,20 +465,77 @@ namespace SonicRoute
                 // 设置「快速面板更改系统默认设备」开启时：下拉切换 = 更改系统默认输出设备（IPolicyConfig.SetDefaultEndpoint）
                 if (SonicRoute.Core.ConfigService.Load().PanelChangeSystemDefault)
                 {
-                    var ok = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, dev.Id));
-                    if (ok.Success && !_isClosed)
-                    {
-                        foreach (var output in _outputDisplay)
-                            output.IsDefault = string.Equals(output.Id, dev.Id, StringComparison.OrdinalIgnoreCase);
-                        RefreshRowDeviceNames();
-                    }
-                    if (!ok.Success)
-                    {
-                        ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
-                    }
+                    var previous = _systemDefaultChangeTask;
+                    var apply = ApplySystemDefaultChangeAsync(previous, dev, version);
+                    _systemDefaultChangeTask = apply;
+                    await apply;
+                    return;
                 }
             }
-            await RefreshSystemVolumeAsync();
+            if (!_isClosed && version == _systemDefaultChangeVersion)
+                await RefreshSystemVolumeAsync();
+        }
+
+        private async Task ApplySystemDefaultChangeAsync(Task previous, AudioDeviceInfo dev, int version)
+        {
+            try
+            {
+                try { await previous; } catch { }
+                if (_isClosed || version != _systemDefaultChangeVersion) return;
+
+                var ok = await Task.Run(() => _setSystemDefault(EDataFlow.eRender, dev.Id));
+                if (_isClosed || version != _systemDefaultChangeVersion) return;
+
+                if (ok.Success)
+                {
+                    ApplySystemDefaultDisplaySelection(dev.Id);
+                    RefreshRowDeviceNames();
+                }
+                else
+                {
+                    ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
+                    string? actual = null;
+                    try { actual = await _uiLifetime.ReadAsync(() => _readSystemDefaultId(EDataFlow.eRender)); }
+                    catch (OperationCanceledException) when (_isClosed) { return; }
+                    if (_isClosed || version != _systemDefaultChangeVersion) return;
+                    RestoreSystemDefaultComboSelection(actual);
+                    RefreshRowDeviceNames();
+                }
+            }
+            catch (OperationCanceledException) when (_isClosed) { }
+            if (!_isClosed && version == _systemDefaultChangeVersion)
+                await RefreshSystemVolumeAsync();
+        }
+
+        private void ApplySystemDefaultDisplaySelection(string? defaultId)
+        {
+            static bool SameDevice(string? first, string? second) =>
+                first != null && second != null
+                && (string.Equals(first, second, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(AudioPolicyConfig.UnpackDeviceId(first), AudioPolicyConfig.UnpackDeviceId(second), StringComparison.OrdinalIgnoreCase));
+
+            foreach (var output in _outputDisplay)
+                output.IsDefault = SameDevice(output.Id, defaultId);
+            if (SystemDevCombo.ItemsSource is IEnumerable<AudioDeviceInfo> items)
+            {
+                foreach (var item in items)
+                    item.IsDefault = SameDevice(item.Id, defaultId);
+            }
+        }
+
+        private void RestoreSystemDefaultComboSelection(string? actualDefaultId)
+        {
+            ApplySystemDefaultDisplaySelection(actualDefaultId);
+            AudioDeviceInfo? match = null;
+            if (SystemDevCombo.ItemsSource is IEnumerable<AudioDeviceInfo> items)
+                match = items.FirstOrDefault(d => d.IsDefault);
+            _suppressDevCombo = true;
+            try
+            {
+                SystemDevCombo.SelectedItem = match;
+                _systemDeviceId = match?.Id ?? (actualDefaultId == null ? null : AudioPolicyConfig.UnpackDeviceId(actualDefaultId));
+            }
+            finally { _suppressDevCombo = false; }
         }
 
         /// <summary>全局输出静音/全局麦克风静音：文本固定，静音状态文字变强调色。</summary>
@@ -850,13 +918,16 @@ namespace SonicRoute
             string? suffix = null;
             if (row.ShowOutputName)
             {
-                bool systemDefault = AudioService.IsSystemDefault(outputId);
+                string? displayId = row.PendingPlayback is { } pending
+                    ? SelectOptimisticPrimaryOutput(pending.Outputs, outputId, preferPhysical: true)
+                    : outputId;
+                bool systemDefault = AudioService.IsSystemDefault(displayId);
                 bool needDefault = systemDefault && !row.LegacyLayout;
                 AudioDeviceInfo? output = null;
                 // 直接查现有快照，不创建每行 LINQ 闭包；找到即停止。
                 foreach (var device in _outputDisplay)
                 {
-                    if (!string.Equals(device.Id, outputId, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(device.Id, displayId, StringComparison.OrdinalIgnoreCase)) continue;
                     output = device;
                     break;
                 }
@@ -885,6 +956,10 @@ namespace SonicRoute
         {
             foreach (var row in _rows.Values)
                 if (row.ShowOutputName) UpdateRowName(row, row.OutputId);
+#if SONICROUTE_PHONE
+            foreach (var row in _androidRows.Values)
+                if (row.ShowOutputName) UpdateAndroidRoute(row);
+#endif
         }
 
         /// <summary>更新行滑块填充宽度；圆点定位与输入由标准 Track 处理。</summary>
@@ -1261,6 +1336,7 @@ namespace SonicRoute
         {
             int request = ++row.DeviceBuildVersion;
             int playbackRead = ++row.PlaybackReadVersion;
+            int inputRead = ++row.InputReadVersion;
             int pid = (int)row.App.ProcessId;
             var cfg = ConfigService.Load();
             bool micOn = _micUiOn;
@@ -1273,14 +1349,13 @@ namespace SonicRoute
             Add(null);
             foreach (var device in inputs) { Add(device.Id); Add(device.DisplayName); }
             string structure = signature.ToString();
-            foreach (var cached in row.DeviceButtons)
-                if (cached.Flow == EDataFlow.eCapture) cached.Button.IsEnabled = false;
             try
             {
                 var selected = await ReadLocalPlaybackAsync(pid, micOn);
                 if (_isClosed || !row.Expanded || request != row.DeviceBuildVersion
                     || !_rows.TryGetValue(pid, out var current) || current != row) return false;
                 ConfirmLocalPlayback(row, playbackRead, selected.Output, selected.Playback);
+                if (micOn) ConfirmLocalInput(row, inputRead, selected.Input);
                 if (row.DeviceSignature != structure)
                 {
                     row.ExpandPanel.Children.Clear();
@@ -1296,7 +1371,7 @@ namespace SonicRoute
                                 button.Click += async (_, _) => await QueuePlaybackClickAsync(row, device, Keyboard.Modifiers);
                             }
                             else
-                                button.Click += async (_, _) => await OnRowDeviceClickAsync(row, device, flow);
+                                button.Click += async (_, _) => await QueueInputClickAsync(row, device);
                             row.DeviceButtons.Add((button, device.Id, flow));
                         });
                     }
@@ -1305,12 +1380,9 @@ namespace SonicRoute
                     row.DeviceSignature = structure;
                 }
                 foreach (var item in row.DeviceButtons)
-                {
-                    if (item.Flow == EDataFlow.eCapture)
-                        SetRowDeviceSelection(item.Button, item.Id, selected.Input ?? AudioService.SystemDefaultInputDeviceId);
                     item.Button.IsEnabled = true;
-                }
                 UpdateLocalPlaybackSelection(row);
+                if (micOn) UpdateLocalInputSelection(row);
                 row.ExpandWrap.InvalidateMeasure();
                 return true;
             }
@@ -1322,24 +1394,6 @@ namespace SonicRoute
                 }
                 return false;
             }
-        }
-
-        private async Task OnRowDeviceClickAsync(AppRow row, AudioDeviceInfo dev, EDataFlow flow)
-        {
-            MarkLastUsed(row.App);
-            var pid = (int)row.App.ProcessId;
-            var (ok, _, msg) = await Task.Run(() => ApplicationAudio.ApplyEndpoint(row.App, flow, dev.Id));
-            if (ok)
-            {
-                ShowOsd(AppDisplayName.Get(row.App), (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + PanelDevices.Name(dev));
-                if (flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
-                    UpdateRowName(current, dev.Id);
-            }
-            else
-                ShowOsd(AppDisplayName.Get(row.App), $"✗ {msg}");
-
-            // 仍展开时重建，刷新高亮
-            if (row.Expanded) await BuildRowDevicesAsync(row);
         }
 
         private void MarkLastUsed(AudioAppInfo app)
