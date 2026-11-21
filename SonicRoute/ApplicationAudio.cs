@@ -340,6 +340,15 @@ internal static class ApplicationAudio
         return null;
     }
 
+    internal static string GetExpectedOutputId(AudioAppInfo app, string deviceId)
+    {
+#if SONICROUTE_PHONE
+        if (AndroidOutputIdentity.IsPhoneCurrentOutput(deviceId) && Source(app) is { } source && IsSourcePhoneOutput(source, deviceId))
+            return AndroidAudioSession.SourcePhoneOutputId;
+#endif
+        return deviceId;
+    }
+
     internal static (bool Success, int HResult, string Message) ApplyEndpoint(AudioAppInfo app, EDataFlow flow, string deviceId)
     {
         if (!app.IsExternal)

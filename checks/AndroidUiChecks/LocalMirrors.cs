@@ -17,9 +17,15 @@ internal static partial class Program
         Environment.SetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY", Directory.CreateDirectory(Path.Combine(directory, Guid.NewGuid().ToString("N"))).FullName);
         var mirrors = typeof(SonicRoute.App).Assembly.GetType("SonicRoute.LocalAppOutputMirrors", true)!;
         const BindingFlags statics = BindingFlags.NonPublic | BindingFlags.Static;
-        var set = mirrors.GetMethod("SetExtraOutputsAsync", statics)!.CreateDelegate<Func<int, string?, IReadOnlyCollection<string>, CancellationToken, Task>>();
+        var set = mirrors.GetMethod("SetExtraOutputsAsync", statics)!.CreateDelegate<Func<int, IReadOnlyCollection<string>, CancellationToken, Task>>();
         var get = mirrors.GetMethod("GetExtraOutputs", statics)!.CreateDelegate<Func<int, string[]>>();
         var clear = mirrors.GetMethod("ClearAsync", statics)!.CreateDelegate<Func<int, Task>>();
+        var resolve = mirrors.GetMethod("ResolveOutputs", statics)!.CreateDelegate<Func<string[], bool, string[]>>();
+        using (var defaultEndpoint = WasapiDeviceLease.Open(null))
+        {
+            var id = defaultEndpoint.Device.ID;
+            Require(resolve([id, id], true).SequenceEqual([id]), "an explicit mirror can target the current default, once per endpoint ID");
+        }
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(28));
         var token = deadline.Token;
         var before = Snapshot();
@@ -37,12 +43,12 @@ internal static partial class Program
         try
         {
             await tone.StandardOutput.ReadLineAsync(token);
-            using (var defaultEndpoint = WasapiDeviceLease.Open(null))
-                await set(pid, AudioService.SystemDefaultDeviceId, [AudioService.SystemDefaultDeviceId, defaultEndpoint.Device.ID, source.Id], token);
-            Require(!get(pid).Any(), "the default alias, its physical output, and a native session never create duplicate playback");
-            string[] requested = [source.Id, ..destinations.Select(d => d.Id), destinations[0].Id];
-            await set(pid, source.Id, requested, token);
-            Require(get(pid).Order().SequenceEqual(destinations.Select(d => d.Id).Order()), "one entry per additional output, even when the primary and duplicates are selected");
+            await Until(() => Snapshot(pid).Any(d => d.Id == source.Id && d.ToneActive), token);
+            await set(pid, [source.Id], token);
+            Require(get(pid).SequenceEqual([source.Id]), "an explicit mirror is kept on the source's active playback endpoint");
+            string[] requested = [..destinations.Select(d => d.Id), destinations[0].Id];
+            await set(pid, requested, token);
+            Require(get(pid).Order().SequenceEqual(destinations.Select(d => d.Id).Order()), "one entry per explicitly selected mirror endpoint");
             await Task.WhenAll(free.Select(d => Observe713HzAsync(d.Id, token)));
             Require(Snapshot(pid).Single(d => d.ToneActive).Id == source.Id, "native source and every selected mirror render the 713 Hz tone without moving the source session");
             var continuity = await Task.WhenAll(free.Select(d => MeasureToneGapsAsync(d.Id, token)));
@@ -51,19 +57,21 @@ internal static partial class Program
             Require(continuity.Skip(1).All(gaps => gaps <= continuity[0] + 1), "the selected mirrors do not add repeated gaps to continuous source audio");
             try
             {
-                await set(pid, source.Id, [destinations[0].Id, "{missing-local-test-endpoint}"], token);
+                await set(pid, [destinations[0].Id, "{missing-local-test-endpoint}"], token);
                 throw new InvalidOperationException("An unavailable endpoint was accepted.");
             }
             catch (Exception ex) when (ex is COMException or IOException or ArgumentException) { }
             Require(get(pid).Length == destinations.Length, "an unavailable new selection preserves the previous set");
             await clear(pid);
             Require(get(pid).Length == 0 && Snapshot(pid).Single(d => d.ToneActive).Id == source.Id, "clearing extras leaves original playback intact");
-            await set(pid, source.Id, [destinations[0].Id], token);
-            await tone.StandardInput.WriteLineAsync(destinations[0].Id);
+            string nextSource = destinations[0].Id;
+            await set(pid, [source.Id, nextSource], token);
+            await tone.StandardInput.WriteLineAsync(nextSource);
             await tone.StandardOutput.ReadLineAsync(token);
-            await Until(() => get(pid).Length == 0, token);
-            Require(Snapshot(pid).Single(d => d.ToneActive).Id == destinations[0].Id, "moving the app directly to a mirrored endpoint automatically removes that echo path");
-            await set(pid, destinations[0].Id, [source.Id], token);
+            await Until(() => Snapshot(pid).Any(d => d.Id == nextSource && d.ToneActive), token);
+            await Task.WhenAll(Observe713HzAsync(source.Id, token), Observe713HzAsync(nextSource, token));
+            Require(get(pid).ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([source.Id, nextSource]),
+                "moving the native session between two selected endpoints preserves both mirrors");
             await tone.StandardInput.WriteLineAsync(); await tone.WaitForExitAsync(token);
             await Until(() => get(pid).Length == 0, token);
             var after = Snapshot();

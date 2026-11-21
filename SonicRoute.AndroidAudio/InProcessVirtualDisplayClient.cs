@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
@@ -14,8 +15,6 @@ namespace SonicRoute.AndroidAudio;
 /// </summary>
 public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 {
-    private readonly record struct ControlPacket(byte[] Data, int GamepadFocusVersion = 0);
-
     private readonly AdbClient _adb;
     private readonly IVideoStreamTransport _transport;
     private readonly Func<AndroidAudioSettingsStore>? _settingsProvider;
@@ -27,7 +26,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
     private NativeVideoWindow? _window;
     private D3D11VideoSurfaceRenderer? _renderer;
     private MediaFoundationH264Decoder? _decoder;
-    private Channel<ControlPacket>? _controlOutbound;
+    private ControlQueue? _controlOutbound;
     private Task _completion = Task.CompletedTask;
 
     private AndroidAudioSettingsStore? _settings;
@@ -191,7 +190,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         var window = _window!;
         var renderer = _renderer!;
 
-        _controlOutbound = Channel.CreateUnbounded<ControlPacket>(new UnboundedChannelOptions { SingleReader = true });
+        _controlOutbound = new ControlQueue();
 
         window.PaintRequested += renderer.RenderLastFrame;
         window.ClientSizeChanged += renderer.Resize;
@@ -276,7 +275,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
     }
 
     private void EnqueueControl(byte[] packet, int gamepadFocusVersion = 0) =>
-        _controlOutbound?.Writer.TryWrite(new ControlPacket(packet, gamepadFocusVersion));
+        _controlOutbound?.Enqueue(packet, gamepadFocusVersion);
 
     private void SendRestoreStartApp()
     {
@@ -296,7 +295,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
     {
         Task videoTask = RunVideoLoopAsync(session.VideoStream, codecId, ct);
         Task controlSendTask = session.ControlStream != null
-            ? RunControlSendLoopAsync(session.ControlStream, ct)
+            ? _controlOutbound!.SendAsync(session.ControlStream, version => _window?.CanSendGamepadInput(version) == true, ct)
             : Task.CompletedTask;
         Task controlDrainTask = session.ControlStream != null
             ? ScrcpyControlMessageWriter.DrainDeviceMessagesAsync(session.ControlStream, ct)
@@ -441,21 +440,90 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         }
     }
 
-    private async Task RunControlSendLoopAsync(Stream controlStream, CancellationToken ct)
+    internal sealed class ControlQueue
     {
-        var reader = _controlOutbound!.Reader;
-        try
+        private sealed class PendingHover(byte[] data)
         {
-            await foreach (var packet in reader.ReadAllAsync(ct).ConfigureAwait(false))
-            {
-                if (packet.GamepadFocusVersion != 0 && _window?.CanSendGamepadInput(packet.GamepadFocusVersion) != true)
-                    continue;
+            public byte[]? Data = data;
+        }
 
-                await controlStream.WriteAsync(packet.Data, ct).ConfigureAwait(false);
+        private readonly record struct ControlPacket(byte[]? Data, int GamepadFocusVersion = 0, PendingHover? Hover = null);
+
+        private readonly object _gate = new();
+        private Channel<ControlPacket>? _channel = Channel.CreateUnbounded<ControlPacket>(new UnboundedChannelOptions { SingleReader = true });
+        private PendingHover? _pendingHover;
+
+        internal void Enqueue(byte[] data, int gamepadFocusVersion = 0)
+        {
+            bool isMouse = data.Length == 32 && data[0] == ScrcpyControlMessageWriter.TypeInjectTouchEvent
+                && BinaryPrimitives.ReadUInt64BigEndian(data.AsSpan(2, 8)) == ScrcpyControlMessageWriter.PointerIdMouse;
+
+            lock (_gate)
+            {
+                if (_channel is null) return;
+                if (isMouse && data[1] == ScrcpyControlMessageWriter.MotionActionHoverMove)
+                {
+                    // Only the unsent hover at the FIFO tail can be replaced.
+                    if (_pendingHover is null)
+                    {
+                        _pendingHover = new PendingHover(data);
+                        _channel.Writer.TryWrite(new ControlPacket(null, Hover: _pendingHover));
+                    }
+                    else
+                    {
+                        _pendingHover.Data = data;
+                    }
+                    return;
+                }
+
+                if (_pendingHover is not null && isMouse
+                    && data[1] is ScrcpyControlMessageWriter.MotionActionDown or ScrcpyControlMessageWriter.MotionActionUp)
+                    _pendingHover.Data = null; // This click carries its own coordinates.
+
+                _pendingHover = null;
+                _channel.Writer.TryWrite(new ControlPacket(data, gamepadFocusVersion));
             }
         }
-        catch (OperationCanceledException) { }
-        catch (IOException) { }
+
+        internal async Task SendAsync(Stream controlStream, Func<int, bool> canSendGamepadInput, CancellationToken ct)
+        {
+            var channel = _channel;
+            if (channel is null) return;
+            try
+            {
+                await foreach (var packet in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    byte[]? data = packet.Data;
+                    if (packet.Hover is { } hover)
+                    {
+                        lock (_gate)
+                        {
+                            if (ReferenceEquals(_pendingHover, hover)) _pendingHover = null;
+                            data = hover.Data;
+                        }
+                    }
+
+                    if (data is null || (packet.GamepadFocusVersion != 0 && !canSendGamepadInput(packet.GamepadFocusVersion)))
+                        continue;
+
+                    await controlStream.WriteAsync(data, ct).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (IOException) { }
+            finally { Close(); }
+        }
+
+        internal void Close()
+        {
+            lock (_gate)
+            {
+                _channel?.Writer.TryComplete();
+                _channel = null;
+                _pendingHover = null;
+            }
+        }
     }
 
     private void OnServerLogLine(string line)
@@ -503,7 +571,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         await _teardownLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            _controlOutbound?.Writer.TryComplete();
+            _controlOutbound?.Close();
             var session = Interlocked.Exchange(ref _session, null);
             if (session != null)
             {

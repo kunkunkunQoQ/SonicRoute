@@ -33,6 +33,7 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--android-hevc-start") { await AndroidHevcStartAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-recovery") { await AndroidHevcStartAsync(args[1], checkResize: true); return 0; }
             if (args.Length > 0 && args[0] == "--gamepad-window") { await CheckGamepadProtocolAndZeroIdleWindowAsync(); return 0; }
+            if (args is ["--display-control-queue"]) { await CheckDisplayControlQueueAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--identity-review") { await IdentityReviewAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--display-concurrency") { await DisplayConcurrencyAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--idle-retirement") { await IdleRetirementAsync(args[1]); return 0; }

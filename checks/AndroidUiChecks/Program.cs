@@ -56,12 +56,16 @@ internal static partial class Program
                 return 0;
             }
             bool panelEvents = args.Contains("--usb-panel-events") || args.Contains("--wireless-panel-events");
-            App app = panelEvents || args.Contains("--managed-connection-ui") || args.Contains("--connection-consistency") || args.Contains("--windows-touch") || args.Contains("--android-file-card") || args.Contains("--android-files-ui") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") || args.Contains("--interaction-audit") || args.Contains("--device-actions") ? new RoutingFixtureApp() : new App();
+            bool pcPlayback = args.Contains("--pc-playback-optimistic");
+            bool hotkeyOutput = args.Contains("--hotkey-output-osd");
+            App app = pcPlayback || hotkeyOutput || panelEvents || args.Contains("--managed-connection-ui") || args.Contains("--connection-consistency") || args.Contains("--windows-touch") || args.Contains("--android-file-card") || args.Contains("--android-files-ui") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") || args.Contains("--interaction-audit") || args.Contains("--device-actions") ? new RoutingFixtureApp() : new App();
             if (app is RoutingFixtureApp)
             { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
+            if (pcPlayback) return CheckPcOptimisticPlayback(output);
+            if (hotkeyOutput) return CheckHotkeyOutputOsd(app, output, args.Contains("--profile-osd-startup"));
             if (args.Contains("--android-file-card")) return CheckAndroidFileCard();
             if (args.Contains("--android-files-ui")) return AndroidFilesUi(output);
             if (args.Contains("--windows-touch")) return WindowsTouchChecks();

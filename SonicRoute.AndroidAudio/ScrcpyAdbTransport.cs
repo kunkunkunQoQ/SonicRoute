@@ -21,7 +21,11 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
     public ScrcpyAdbTransport(AdbClient adb, Action<string>? log = null, Func<AndroidDevice, AndroidStreamSettings>? streaming = null)
     { _adb = adb; _log = log ?? (_ => { }); _streaming = streaming; }
 
-    public async Task<Stream> ConnectAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token)
+    public Task<Stream> ConnectAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token) =>
+        ConnectAsync(device, app, keepPhoneAudio, token, null);
+
+    internal async Task<Stream> ConnectAsync(AndroidDevice device, AndroidApp app, bool keepPhoneAudio, CancellationToken token,
+        AndroidOutputSwitchTiming? timing)
     {
         _serial = device.CommandTarget;
         var streaming = (_streaming?.Invoke(device) ?? new()).Normalize();
@@ -36,16 +40,19 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         if (!int.TryParse(sdkText.Trim(), out int sdk) || sdk < 33) throw AndroidError.WithCode(new NotSupportedException("应用音频捕获要求 Android 13 或更高；已验证的参考机型为 Android 16。"), AndroidErrorCode.Android13Required);
         if (!File.Exists(_adb.CatalogFile)) throw new FileNotFoundException("Missing verified SonicRoute audio helper.", _adb.CatalogFile);
         _remote = "/data/local/tmp/sonicroute_audio_" + _scid + ".jar";
-        await _adb.RunAsync(token, "-s", _serial, "push", _adb.CatalogFile, _remote).ConfigureAwait(false);
+        using (timing?.Measure("capture_jar"))
+            await _adb.RunAsync(token, "-s", _serial, "push", _adb.CatalogFile, _remote).ConfigureAwait(false);
         string socketName = "sonicroute_" + _scid;
         string command = "echo SR_PID:$$; CLASSPATH=" + _remote + " exec app_process / org.sonicroute.android.SonicRouteServer 3.3.4 "
             + $"scid={_scid} socket_prefix=sonicroute log_level=info video=false audio=true control=false audio_codec=opus audio_source=playback "
             + CaptureOptions(app, keepPhoneAudio) + " " + streaming.AudioOptions() + " "
             + "tunnel_forward=true send_device_meta=false send_dummy_byte=true cleanup=false";
-        _server = await _adb.OpenShellAsync(_serial, command, redirectInput: false, token).ConfigureAwait(false);
+        using (timing?.Measure("capture_shell"))
+            _server = await _adb.OpenShellAsync(_serial, command, redirectInput: false, token).ConfigureAwait(false);
         _logs = Task.WhenAll(ReadLogAsync(_server.OutputStream), ReadLogAsync(_server.ErrorStream));
         using var connect = CancellationTokenSource.CreateLinkedTokenSource(token);
         connect.CancelAfter(TimeSpan.FromSeconds(12));
+        using var socketPhase = timing?.Measure("capture_socket");
         while (true)
         {
             connect.Token.ThrowIfCancellationRequested();

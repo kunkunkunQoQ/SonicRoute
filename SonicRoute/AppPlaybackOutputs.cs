@@ -120,8 +120,6 @@ internal static partial class AppPlaybackOutputs
 #if SONICROUTE_PHONE
         string? previousPhone = AndroidAudioHost.TryGetPcAppPhoneOutput(pid);
         bool previousPhoneOnly = LocalAppOutputMirrors.GetExclusivePhone(pid, out bool previousSpeakerMute) != null;
-        string? oldPrimary = previousPhoneOnly ? null
-            : previousPhone ?? Endpoint(AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
 #endif
         try
         {
@@ -130,7 +128,7 @@ internal static partial class AppPlaybackOutputs
             if (previousPhone != null) StopPhone();
             if (previousPhoneOnly && primary != null)
             {
-                await LocalAppOutputMirrors.SetExtraOutputsAsync(pid, null, oldExtras).ConfigureAwait(false);
+                await LocalAppOutputMirrors.SetExtraOutputsAsync(pid, oldExtras).ConfigureAwait(false);
                 undo.Push(RestoreMirrors);
             }
 #endif
@@ -160,7 +158,7 @@ internal static partial class AppPlaybackOutputs
                 if (primary == null) await LocalAppOutputMirrors.SetExclusivePhoneOutputsAsync(pid, extras, allowSpeakerMute).ConfigureAwait(false);
                 else
 #endif
-                    await LocalAppOutputMirrors.SetExtraOutputsAsync(pid, primary, extras).ConfigureAwait(false);
+                    await LocalAppOutputMirrors.SetExtraOutputsAsync(pid, extras).ConfigureAwait(false);
             }
             return (true, 0, L10n.T("History.Status.success"));
         }
@@ -179,7 +177,7 @@ internal static partial class AppPlaybackOutputs
 #if SONICROUTE_PHONE
         Task RestoreMirrors() => previousPhoneOnly
             ? LocalAppOutputMirrors.SetExclusivePhoneOutputsAsync(pid, oldExtras, previousSpeakerMute)
-            : LocalAppOutputMirrors.SetExtraOutputsAsync(pid, oldPrimary, oldExtras);
+            : LocalAppOutputMirrors.SetExtraOutputsAsync(pid, oldExtras);
 
         void StopPhone()
         {

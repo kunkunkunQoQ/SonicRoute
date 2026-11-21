@@ -11,6 +11,11 @@ namespace SonicRoute;
 
 public partial class QuickPanelModernWindow
 {
+    private record PlaybackIntent(string[] Outputs, string? Anchor);
+
+    private Func<int, string?, HashSet<string>> _readRowPlaybackOutputs = AppPlaybackOutputs.GetSelected;
+    private Func<AudioAppInfo, string[], string?, Task<(bool Success, int HResult, string Message)>> _setRowPlaybackOutputs = AppPlaybackOutputs.SetAsync;
+
 #if !SONICROUTE_PHONE
     // Full already refreshes expanded rows from its combined local/external playback subscription.
     private int _localPlaybackRefreshQueued;
@@ -28,38 +33,112 @@ public partial class QuickPanelModernWindow
 #endif
     private Task QueuePlaybackClickAsync(AppRow row, AudioDeviceInfo device, ModifierKeys modifiers)
     {
+        int pid = (int)row.App.ProcessId;
+        if (!Current()) return Task.CompletedTask;
+        var order = row.DeviceButtons.Where(entry => entry.Flow == EDataFlow.eRender).Select(entry => entry.Id).ToArray();
+        if (!order.Contains(device.Id, StringComparer.OrdinalIgnoreCase)) return Task.CompletedTask;
+        if (!Available(device.Id))
+        {
+            ShowOsd(AppDisplayName.Get(row.App), L10n.T("Ov.CurrentUnavailable"));
+            return Task.CompletedTask;
+        }
+
+        var pending = row.PendingPlayback;
+        var request = CreatePlaybackIntent(order,
+            pending?.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? row.ConfirmedPlayback,
+            device.Id, pending?.Anchor ?? row.PlaybackAnchor, modifiers);
+        var required = request.Outputs.Where(Available).ToArray();
+        row.PendingPlayback = request;
+        UpdateLocalPlaybackSelection(row);
         var previous = row.PlaybackChange;
         return row.PlaybackChange = ApplyClickAsync();
 
+        bool Current() => !_isClosed && _rows.TryGetValue(pid, out var live) && ReferenceEquals(live, row);
+        bool Available(string id) => _outputDisplay.Any(output => string.Equals(id, output.Id, StringComparison.OrdinalIgnoreCase));
+
         async Task ApplyClickAsync()
         {
-            await previous;
-            if (_isClosed || !_rows.TryGetValue((int)row.App.ProcessId, out var current) || current != row) return;
+            bool applied = false;
             try
             {
-                int pid = (int)row.App.ProcessId;
-                var primary = await _uiLifetime.ReadAsync((Pid: pid, Read: _readRowEndpoints), static p => p.Read(p.Pid, false).Output);
-                if (_isClosed) return;
-                var selected = AppPlaybackOutputs.GetSelected(pid, primary);
-                var order = row.DeviceButtons.Where(x => x.Flow == EDataFlow.eRender).Select(x => x.Id).ToArray();
-                var next = SelectPlaybackRange(order, selected, device.Id, row.PlaybackAnchor, modifiers);
-                if (next.Length == 0) next = [AudioService.SystemDefaultDeviceId];
-                string preferred = next.Contains(primary, StringComparer.OrdinalIgnoreCase) ? primary : next[0];
-
-                MarkLastUsed(row.App);
-                var result = await AppPlaybackOutputs.SetAsync(row.App, next, preferred);
-                if (_isClosed) return;
-                if (result.Success)
+                await previous;
+                if (!Current()) return;
+                int beforeRead = ++row.PlaybackReadVersion;
+                var before = await ReadLocalPlaybackAsync(pid, micOn: false);
+                if (!Current()) return;
+                ConfirmLocalPlayback(row, beforeRead, before.Output, before.Playback);
+                if (required.Any(id => !Available(id)))
                 {
-                    if (!modifiers.HasFlag(ModifierKeys.Shift) || row.PlaybackAnchor == null)
-                        row.PlaybackAnchor = device.Id;
+                    ShowOsd(AppDisplayName.Get(row.App), L10n.T("Ov.CurrentUnavailable"));
+                    return;
                 }
+
+                string preferred = request.Outputs.Contains(before.Output, StringComparer.OrdinalIgnoreCase) ? before.Output : request.Outputs[0];
+                MarkLastUsed(row.App);
+                var result = await _setRowPlaybackOutputs(row.App, request.Outputs, preferred);
+                applied = result.Success;
+                if (!Current()) return;
+                if (applied) row.PlaybackAnchor = request.Anchor;
                 else ShowOsd(AppDisplayName.Get(row.App), result.Message);
-                if (row.Expanded) await BuildRowDevicesAsync(row);
             }
-            catch (OperationCanceledException) when (_isClosed) { }
-            catch (Exception ex) { if (!_isClosed) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
+            catch (OperationCanceledException) when (!Current()) { }
+            catch (Exception ex) { if (Current()) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
+            finally
+            {
+                if (Current() && ReferenceEquals(row.PendingPlayback, request))
+                {
+                    int playbackRead = ++row.PlaybackReadVersion;
+                    (string Output, string Input, HashSet<string> Playback)? confirmed = null;
+                    try { confirmed = await ReadLocalPlaybackAsync(pid, micOn: false); }
+                    catch (OperationCanceledException) when (!Current()) { }
+                    catch (Exception ex) { if (Current()) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
+
+                    if (Current() && ReferenceEquals(row.PendingPlayback, request))
+                    {
+                        if (confirmed is { } actual)
+                            ConfirmLocalPlayback(row, playbackRead, actual.Output, actual.Playback);
+                        else if (playbackRead > row.ConfirmedPlaybackRead)
+                        {
+                            row.ConfirmedPlaybackRead = playbackRead;
+                            if (applied) row.ConfirmedPlayback = request.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                        }
+                        row.PendingPlayback = null;
+                        UpdateLocalPlaybackSelection(row);
+                    }
+                }
+            }
         }
+    }
+
+    private Task<(string Output, string Input, HashSet<string> Playback)> ReadLocalPlaybackAsync(int pid, bool micOn) =>
+        _uiLifetime.ReadAsync((Pid: pid, MicOn: micOn, Endpoints: _readRowEndpoints, Outputs: _readRowPlaybackOutputs), static target =>
+        {
+            var (output, input) = target.Endpoints(target.Pid, target.MicOn);
+            return (output, input, target.Outputs(target.Pid, output));
+        });
+
+    private void ConfirmLocalPlayback(AppRow row, int read, string output, HashSet<string> playback)
+    {
+        // Device-list reads can finish after a newer confirmation. Only the latest snapshot wins.
+        if (read <= row.ConfirmedPlaybackRead) return;
+        row.ConfirmedPlaybackRead = read;
+        row.ConfirmedPlayback = playback;
+        UpdateRowName(row, output);
+    }
+
+    private void UpdateLocalPlaybackSelection(AppRow row)
+    {
+        var selected = row.PendingPlayback?.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? row.ConfirmedPlayback;
+        foreach (var item in row.DeviceButtons)
+            if (item.Flow == EDataFlow.eRender) SetRowDeviceSelection(item.Button, item.Id, selected.Contains(item.Id) ? item.Id : "");
+    }
+
+    private static PlaybackIntent CreatePlaybackIntent(string[] order, HashSet<string> selected, string clicked, string? anchor, ModifierKeys modifiers)
+    {
+        var outputs = SelectPlaybackRange(order, selected, clicked, anchor, modifiers);
+        if (outputs.Length == 0) outputs = [AudioService.SystemDefaultDeviceId];
+        if (!modifiers.HasFlag(ModifierKeys.Shift) || anchor == null) anchor = clicked;
+        return new PlaybackIntent(outputs, anchor);
     }
 
     internal static string[] SelectPlaybackRange(string[] order, HashSet<string> selected, string clicked, string? anchor, ModifierKeys modifiers)

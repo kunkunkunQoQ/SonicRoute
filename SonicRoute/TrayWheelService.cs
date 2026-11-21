@@ -389,6 +389,11 @@ namespace SonicRoute
 
         // Shared OSD controller for Lite / Legacy.
         internal void ShowOsd(string app, string text) => _osdService.Show(app, text);
+        internal void BeginDeviceSwitch(object request) => _osdService.BeginDeviceSwitch(request);
+        internal void CancelDeviceSwitch() => _osdService.CancelDeviceSwitch();
+        internal void ShowDeviceSwitch(object request, string title, string text) => _osdService.ShowDeviceSwitch(request, title, text);
+        internal void ShowDeviceSwitchPending(object request, string title, string text) => _osdService.ShowDeviceSwitchPending(request, title, text);
+        internal void ShowDeviceSwitchResult(object request, string title, string text, bool success) => _osdService.ShowDeviceSwitchResult(request, title, text, success);
         internal Task FinishTemporaryOsdAsync() => _osdService.FinishTemporaryNoticeAsync();
         internal void ShowVolumeOsd(string app, int volume, string text, bool muted = false, string? target = null)
             => _osdService.ShowVolume(app, volume, text, muted, target);

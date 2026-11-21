@@ -62,6 +62,9 @@ namespace SonicRoute
             public string? OutputId;
             public string? PlaybackAnchor;
             public Task PlaybackChange = Task.CompletedTask;
+            public HashSet<string> ConfirmedPlayback = new(StringComparer.OrdinalIgnoreCase);
+            public PlaybackIntent? PendingPlayback;
+            public int PlaybackReadVersion, ConfirmedPlaybackRead;
             public StackPanel ExpandPanel = null!;
             public AnimatedExpandHost ExpandWrap = null!;
             public RotateTransform ExpandArrow = new();
@@ -1257,6 +1260,7 @@ namespace SonicRoute
         private async Task<bool> BuildRowDevicesAsync(AppRow row)
         {
             int request = ++row.DeviceBuildVersion;
+            int playbackRead = ++row.PlaybackReadVersion;
             int pid = (int)row.App.ProcessId;
             var cfg = ConfigService.Load();
             bool micOn = _micUiOn;
@@ -1269,15 +1273,14 @@ namespace SonicRoute
             Add(null);
             foreach (var device in inputs) { Add(device.Id); Add(device.DisplayName); }
             string structure = signature.ToString();
-            foreach (var cached in row.DeviceButtons) cached.Button.IsEnabled = false;
+            foreach (var cached in row.DeviceButtons)
+                if (cached.Flow == EDataFlow.eCapture) cached.Button.IsEnabled = false;
             try
             {
-                var selected = await _uiLifetime.ReadAsync((Pid: pid, MicOn: micOn, Read: _readRowEndpoints),
-                    static target => target.Read(target.Pid, target.MicOn));
+                var selected = await ReadLocalPlaybackAsync(pid, micOn);
                 if (_isClosed || !row.Expanded || request != row.DeviceBuildVersion
                     || !_rows.TryGetValue(pid, out var current) || current != row) return false;
-                var playbackOutputs = AppPlaybackOutputs.GetSelected(pid, selected.Output);
-                UpdateRowName(row, selected.Output);
+                ConfirmLocalPlayback(row, playbackRead, selected.Output, selected.Playback);
                 if (row.DeviceSignature != structure)
                 {
                     row.ExpandPanel.Children.Clear();
@@ -1303,13 +1306,11 @@ namespace SonicRoute
                 }
                 foreach (var item in row.DeviceButtons)
                 {
-                    string activeId = (item.Flow == EDataFlow.eRender ? selected.Output : selected.Input)
-                        ?? (item.Flow == EDataFlow.eRender ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId);
-                    if (item.Flow == EDataFlow.eRender)
-                        activeId = playbackOutputs.Contains(item.Id) ? item.Id : "";
-                    SetRowDeviceSelection(item.Button, item.Id, activeId);
+                    if (item.Flow == EDataFlow.eCapture)
+                        SetRowDeviceSelection(item.Button, item.Id, selected.Input ?? AudioService.SystemDefaultInputDeviceId);
                     item.Button.IsEnabled = true;
                 }
+                UpdateLocalPlaybackSelection(row);
                 row.ExpandWrap.InvalidateMeasure();
                 return true;
             }

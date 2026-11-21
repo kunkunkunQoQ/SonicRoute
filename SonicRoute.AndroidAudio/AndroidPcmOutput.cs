@@ -51,16 +51,20 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         _onOutputs = onOutputs; _onRouted = onRouted;
     }
 
-    public static async Task<AndroidAudioOutputConnection> OpenAsync(AdbClient adb, AndroidDevice device, string target,
+    public static Task<AndroidAudioOutputConnection> OpenAsync(AdbClient adb, AndroidDevice device, string target,
         CancellationToken token, Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null,
-        Action<string, int, string>? onRouted = null)
+        Action<string, int, string>? onRouted = null) => OpenTimedAsync(adb, device, target, token, onOutputs, onRouted, null);
+
+    internal static async Task<AndroidAudioOutputConnection> OpenTimedAsync(AdbClient adb, AndroidDevice device, string target,
+        CancellationToken token, Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs,
+        Action<string, int, string>? onRouted, AndroidOutputSwitchTiming? timing)
     {
         var output = new AndroidAudioOutputConnection(adb, device, target, token, onOutputs, onRouted);
-        try { await output.OpenCoreAsync().ConfigureAwait(false); return output; }
+        try { await output.OpenCoreAsync(timing).ConfigureAwait(false); return output; }
         catch { await output.DisposeAsync().ConfigureAwait(false); throw; }
     }
 
-    private async Task OpenCoreAsync()
+    private async Task OpenCoreAsync(AndroidOutputSwitchTiming? timing)
     {
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         startup.CancelAfter(TimeSpan.FromSeconds(30));
@@ -68,25 +72,32 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         _adb.ValidateCatalog();
         if (Device.State != "device") await RefreshDeviceAsync(token).ConfigureAwait(false);
-        try { await PushRuntimeAsync().ConfigureAwait(false); }
-        catch (Exception) when (!token.IsCancellationRequested)
+        using (timing?.Measure("output_jar"))
         {
-            await RefreshDeviceAsync(token).ConfigureAwait(false);
-            await PushRuntimeAsync().ConfigureAwait(false);
+            try { await PushRuntimeAsync().ConfigureAwait(false); }
+            catch (Exception) when (!token.IsCancellationRequested)
+            {
+                await RefreshDeviceAsync(token).ConfigureAwait(false);
+                await PushRuntimeAsync().ConfigureAwait(false);
+            }
         }
 
-        _helper = await _adb.OpenShellAsync(Device.CommandTarget,
-            "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
-            + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'",
-            redirectInput: true, token).ConfigureAwait(false);
-        _writer = new StreamWriter(_helper.InputStream, Utf8NoBom, bufferSize: 1024, leaveOpen: true) { NewLine = "\n" };
-        _stdout = ReadOutputAsync();
-        _stderr = ReadErrorAsync();
-        await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+        using (timing?.Measure("output_helper_ready"))
+        {
+            _helper = await _adb.OpenShellAsync(Device.CommandTarget,
+                "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
+                + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'",
+                redirectInput: true, token).ConfigureAwait(false);
+            _writer = new StreamWriter(_helper.InputStream, Utf8NoBom, bufferSize: 1024, leaveOpen: true) { NewLine = "\n" };
+            _stdout = ReadOutputAsync();
+            _stderr = ReadErrorAsync();
+            await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+        }
 
         try
         {
-            _pcmStream = await _adb.OpenLocalAbstractAsync(Device.CommandTarget, _socket, token).ConfigureAwait(false);
+            using (timing?.Measure("output_socket"))
+                _pcmStream = await _adb.OpenLocalAbstractAsync(Device.CommandTarget, _socket, token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or SocketException)
         {
@@ -291,13 +302,15 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     public event Action<Exception>? Failed;
 
     public AndroidPhonePcmPlayer(AdbClient adb, AndroidDevice device, AndroidPcmSource source, string sinkKey, CancellationToken token,
-        Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null, CancellationToken managementToken = default)
+        Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null, CancellationToken managementToken = default,
+        AndroidOutputSwitchTiming? timing = null)
     {
         _source = source;
         _connectionLifetime = CancellationTokenSource.CreateLinkedTokenSource(token, managementToken);
         try
         {
-            _output = AndroidAudioOutputConnection.OpenAsync(adb, device, sinkKey, _connectionLifetime.Token, onOutputs).GetAwaiter().GetResult();
+            _output = AndroidAudioOutputConnection.OpenTimedAsync(adb, device, sinkKey, _connectionLifetime.Token, onOutputs, null, timing)
+                .GetAwaiter().GetResult();
             _output.Failed += OnFailure;
             _source.DataAvailable += Wake;
             _pump = Task.Run(PumpAsync);

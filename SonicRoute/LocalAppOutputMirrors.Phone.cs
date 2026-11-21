@@ -22,7 +22,7 @@ internal static partial class LocalAppOutputMirrors
     {
         if (phones.Length == 0 || phones.Any(id => !AndroidOutputIdentity.IsPhoneOutput(id)))
             throw new ArgumentException(L10n.T("Phone.Err.InvalidPhoneOutputDevice"));
-        return SetOutputsAsync(pid, null, phones, phoneOnly: true, allowSpeakerMute, default);
+        return SetOutputsAsync(pid, phones, phoneOnly: true, allowSpeakerMute, default);
     }
 
     internal static Task PhoneRemovedAsync(AndroidDevice device, bool recover = false) =>

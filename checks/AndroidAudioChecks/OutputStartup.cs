@@ -15,6 +15,7 @@ internal static partial class Program
         await PhoneSwitchStartupAsync(output, cancelWhileWarming: false);
         await PhoneSwitchStartupAsync(output, cancelWhileWarming: true);
         await VerifyBeforeStoppingAsync(output);
+        await CheckOutputSwitchTimingAsync(output);
         Directory.CreateDirectory(output);
         await File.WriteAllTextAsync(Path.Combine(output, "output-startup.json"), JsonSerializer.Serialize(new
         {

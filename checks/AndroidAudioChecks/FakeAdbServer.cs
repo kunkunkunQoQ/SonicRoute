@@ -21,6 +21,11 @@ internal sealed class FakeAdbServer : IAsyncDisposable
     private readonly ConcurrentDictionary<string, (string Target, TaskCompletionSource Primed, NetworkStream Shell)> _audio = new();
     private readonly Dictionary<string, List<byte>> _bySink = new();
     public Func<string, Task>? BeforeRouteReport { get; set; }
+    public byte[]? CaptureWire { get; init; }
+    private int _capturePid = 5000;
+    private readonly ConcurrentDictionary<int, (string Command, TaskCompletionSource Exited)> _captures = new();
+    public int LiveCaptures => _captures.Count;
+    public int PeakCaptures { get; private set; }
     public bool RejectBluetooth { get; set; }
     internal byte[] ReceivedFor(string sink) { lock (_gate) return _bySink.GetValueOrDefault(sink)?.ToArray() ?? []; }
     internal void DropSink(string sink)
@@ -202,6 +207,13 @@ internal sealed class FakeAdbServer : IAsyncDisposable
                 if (service.StartsWith("localabstract:", StringComparison.Ordinal))
                 {
                     await stream.WriteAsync("OKAY"u8.ToArray(), token).ConfigureAwait(false);
+                    if (CaptureWire is { } capture && service.StartsWith("localabstract:sonicroute_", StringComparison.Ordinal)
+                        && !service.StartsWith("localabstract:sonicroute_out_", StringComparison.Ordinal))
+                    {
+                        await stream.WriteAsync(capture, token).ConfigureAwait(false);
+                        await stream.ReadAsync(new byte[1], token).ConfigureAwait(false);
+                        return;
+                    }
                     byte[] buf = new byte[4096];
                     int n;
                     while ((n = await stream.ReadAsync(buf, token).ConfigureAwait(false)) > 0)
@@ -302,6 +314,40 @@ internal sealed class FakeAdbServer : IAsyncDisposable
             await SendV2PacketAsync(stream, 3, [42], token).ConfigureAwait(false);
             return;
         }
+        if (CaptureWire != null)
+        {
+            string? reply = cmd switch
+            {
+                "pm list packages -U" => "package:com.example.music uid:10123\n",
+                "getprop ro.build.version.sdk" => "36\n",
+                _ => null
+            };
+            if (cmd.Contains("org.sonicroute.android.SonicRouteServer", StringComparison.Ordinal))
+            {
+                int pid = Interlocked.Increment(ref _capturePid);
+                var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _captures[pid] = (cmd, exited);
+                PeakCaptures = Math.Max(PeakCaptures, LiveCaptures);
+                try
+                {
+                    await SendV2PacketAsync(stream, 1, Encoding.UTF8.GetBytes($"SR_PID:{pid}\n"), token).ConfigureAwait(false);
+                    await exited.Task.WaitAsync(token).ConfigureAwait(false);
+                }
+                finally { _captures.TryRemove(pid, out _); }
+            }
+            else if (cmd.StartsWith("cat /proc/", StringComparison.Ordinal)
+                && int.TryParse(cmd.Split('/')[2], out int pid) && _captures.TryGetValue(pid, out var owned))
+                reply = owned.Command;
+            else if (cmd.StartsWith("kill -TERM ", StringComparison.Ordinal)
+                && int.TryParse(cmd[11..], out int killed) && _captures.TryRemove(killed, out var terminated))
+                terminated.Exited.TrySetResult();
+            if (reply != null) await SendV2PacketAsync(stream, 1, Encoding.UTF8.GetBytes(reply), token).ConfigureAwait(false);
+            if (reply != null || cmd.Contains("org.sonicroute.android.SonicRouteServer", StringComparison.Ordinal))
+            {
+                await SendV2PacketAsync(stream, 3, [0], token).ConfigureAwait(false);
+                return;
+            }
+        }
         if (cmd.Contains("org.sonicroute.android.Catalog", StringComparison.Ordinal))
         {
             await SendV2PacketAsync(stream, 1, "{\"package\":\"com.example.music\",\"name\":\"Music\",\"uid\":10123,\"category\":1}\n"u8.ToArray(), token).ConfigureAwait(false);
@@ -357,6 +403,8 @@ internal sealed class FakeAdbServer : IAsyncDisposable
                     token).ConfigureAwait(false);
                 await PumpStdinPacketsAsync(stream, token, async line =>
                 {
+                    if (BeforeRouteReport != null && line.StartsWith("target ", StringComparison.Ordinal))
+                        await BeforeRouteReport(line[7..]).WaitAsync(token).ConfigureAwait(false);
                     if (line == "target bt:aa")
                     {
                         await SendV2PacketAsync(stream, 1,
