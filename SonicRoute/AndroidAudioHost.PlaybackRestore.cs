@@ -309,7 +309,11 @@ internal static partial class AndroidAudioHost
                     if (localWatch == null && pending.Any(p => p.Route.Outputs.Any(id =>
                         id != AndroidAudioSession.SourcePhoneOutputId && !AndroidOutputIdentity.IsPhoneOutput(id) && (id == null ? local.Count == 0 : !local.Contains(id)))))
                     {
-                        localWatch = WasapiDeviceLease.ObserveDefaultOutput(new PendingDeviceNotification(Wake));
+                        localWatch = DefaultOutputNotifications.SubscribeTopology(() =>
+                        {
+                            AudioService.InvalidateDeviceCache(EDataFlow.eRender);
+                            Wake();
+                        });
                         Wake(); // Check device arrivals between the scan and COM registration.
                     }
                     await changes.Reader.ReadAsync(token).ConfigureAwait(false);
@@ -324,17 +328,6 @@ internal static partial class AndroidAudioHost
         }
         catch (OperationCanceledException) when (MediaShutdown.IsCancellationRequested) { }
         catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Restore saved phone sources: " + ex.Message); }
-    }
-
-    [System.Runtime.InteropServices.ComVisible(true), System.Runtime.InteropServices.ClassInterface(System.Runtime.InteropServices.ClassInterfaceType.None)]
-    private sealed class PendingDeviceNotification(Action changed) : NAudio.CoreAudioApi.Interfaces.IMMNotificationClient
-    {
-        private void Changed() { AudioService.InvalidateDeviceCache(EDataFlow.eRender); changed(); }
-        public void OnDeviceAdded(string id) => Changed();
-        public void OnDeviceRemoved(string id) => Changed();
-        public void OnDeviceStateChanged(string id, NAudio.CoreAudioApi.DeviceState state) => Changed();
-        public void OnDefaultDeviceChanged(NAudio.CoreAudioApi.DataFlow flow, NAudio.CoreAudioApi.Role role, string id) { if (flow == NAudio.CoreAudioApi.DataFlow.Render) Changed(); }
-        public void OnPropertyValueChanged(string id, NAudio.CoreAudioApi.PropertyKey key) { }
     }
 }
 #endif

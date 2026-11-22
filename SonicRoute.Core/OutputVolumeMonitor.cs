@@ -32,7 +32,7 @@ namespace SonicRoute.Core
             internal ObservedVolume(IMMDevice device, Action changed)
             {
                 Subscription = new EndpointVolumeSubscription(device,
-                    new MicrophoneStateMonitor.VolumeCallback(() =>
+                    new AudioEndpointVolumeCallback(() =>
                     {
                         Interlocked.Exchange(ref Dirty, 1);
                         changed();
@@ -42,7 +42,7 @@ namespace SonicRoute.Core
         }
 
         private readonly Dictionary<string, ObservedVolume> _volumes = new(StringComparer.OrdinalIgnoreCase);
-        private readonly DeviceCallback _deviceCallback;
+        private IDisposable? _deviceNotification;
         private IMMDeviceEnumerator? _enumerator;
         private bool _deviceRegistered;
         private int _disposed, _needsRecovery, _needsTopologyRecovery = 1;
@@ -53,7 +53,13 @@ namespace SonicRoute.Core
 
         public OutputVolumeMonitor()
         {
-            _deviceCallback = new DeviceCallback(() => Signal(true));
+        }
+
+        private void OnDeviceNotification(AudioDeviceChange change)
+        {
+            if (change.Kind != AudioDeviceChangeKind.DefaultChanged
+                || (change.Flow == EDataFlow.eRender && change.Role == ERole.eConsole))
+                Signal(true);
         }
 
         // Incremental reads return only new/changed endpoints. Explicit refreshes
@@ -96,11 +102,9 @@ namespace SonicRoute.Core
                 try
                 {
                     _enumerator ??= (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+                    _deviceNotification ??= AudioDeviceNotificationHub.Subscribe(OnDeviceNotification);
                     if (!_deviceRegistered)
-                    {
-                        try { _deviceRegistered = _enumerator.RegisterEndpointNotificationCallback(_deviceCallback) >= 0; }
-                        catch { }
-                    }
+                        _deviceRegistered = AudioDeviceNotificationHub.EnsureRegistered();
                     if (!ReferenceEquals(targetSet, _appliedTargets))
                     {
                         var removed = new List<string>();
@@ -148,6 +152,7 @@ namespace SonicRoute.Core
                 catch
                 {
                     recovery = true;
+                    AudioDeviceNotificationHub.InvalidateRegistration();
                     Release();
                     foreach (string id in targets) result[id] = (-1, false);
                 }
@@ -169,11 +174,12 @@ namespace SonicRoute.Core
             _volumes.Clear();
             Volatile.Write(ref _appliedTargets, null);
             _dirtyDevices.Clear();
+            _deviceNotification?.Dispose();
+            _deviceNotification = null;
+            _deviceRegistered = false;
             if (_enumerator == null) return;
-            if (_deviceRegistered) try { _enumerator.UnregisterEndpointNotificationCallback(_deviceCallback); } catch { }
             try { Marshal.ReleaseComObject(_enumerator); } catch { }
             _enumerator = null;
-            _deviceRegistered = false;
         }
 
         public void Dispose()
@@ -181,25 +187,6 @@ namespace SonicRoute.Core
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
             Invalidated = null;
             Completion = Task.Run(() => { lock (_gate) Release(); });
-        }
-
-        [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-        public sealed class DeviceCallback : IMMNotificationClient
-        {
-            private readonly Action _changed;
-            internal DeviceCallback(Action changed) { _changed = changed; }
-            private int Changed()
-            {
-                AudioService.InvalidateDeviceCache(EDataFlow.eRender);
-                _changed();
-                return 0;
-            }
-            public int OnDeviceAdded(string id) => Changed();
-            public int OnDeviceRemoved(string id) => Changed();
-            public int OnDeviceStateChanged(string id, DeviceState state) => Changed();
-            public int OnPropertyValueChanged(string id, PROPERTYKEY key) => Changed();
-            public int OnDefaultDeviceChanged(EDataFlow flow, ERole role, string? id)
-                => flow == EDataFlow.eRender && role == ERole.eConsole ? Changed() : 0;
         }
     }
 }

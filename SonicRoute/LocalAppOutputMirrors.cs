@@ -9,9 +9,6 @@ using SonicRoute.Core;
 using SonicRoute.Core.Compat;
 #if SONICROUTE_PHONE
 using System.Buffers;
-using LocalMirrorPlayer = SonicRoute.AndroidAudio.IPcmPlayer;
-#else
-using LocalMirrorPlayer = SonicRoute.AndroidAudio.DesktopMirrorPlayer;
 #endif
 using AudioPolicyConfig = SonicRoute.Core.Interop.AudioPolicyConfig;
 
@@ -60,7 +57,11 @@ internal static partial class LocalAppOutputMirrors
             {
                 if (processId <= 0 || AudioProcessTree.ContainsProcess(processId, AppInfo.CurrentProcessId))
                     throw new InvalidOperationException(L10n.T("Tray.AppUnavailable"));
+#if SONICROUTE_PHONE
+                _deviceWatch ??= DefaultOutputNotifications.SubscribeTopology(QueueRefresh, includeDefaultChanged: false);
+#else
                 _deviceWatch ??= WasapiDeviceLease.ObserveDefaultOutput(new DeviceEvents());
+#endif
                 var endpoints = ResolveOutputs(requested, strict: true);
                 Routes.TryGetValue(processId, out var route);
                 if (endpoints.Length == 0) { if (route != null) await RemoveAsync(route); return; }
@@ -187,6 +188,7 @@ internal static partial class LocalAppOutputMirrors
         });
     }
 
+#if !SONICROUTE_PHONE
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
     private sealed class DeviceEvents : IMMNotificationClient
     {
@@ -196,6 +198,7 @@ internal static partial class LocalAppOutputMirrors
         public void OnDeviceAdded(string id) { }
         public void OnPropertyValueChanged(string id, PropertyKey key) { }
     }
+#endif
 
     private static string[] ResolveOutputs(string[] requested, bool strict)
     {
@@ -219,13 +222,16 @@ internal static partial class LocalAppOutputMirrors
         return selected.ToArray();
     }
 
-    private sealed class Sink(string id, LocalMirrorPlayer player)
+    private sealed class Sink(string id, IDisposable player)
     {
         internal readonly string Id = id;
 #if SONICROUTE_PHONE
-        internal required AndroidPcmSource Pcm { get; init; }
+        internal AndroidPcmSource? Pcm { get; init; }
+        internal DesktopMirrorPlayer? DesktopPlayer => Player as DesktopMirrorPlayer;
+#else
+        internal DesktopMirrorPlayer DesktopPlayer => (DesktopMirrorPlayer)Player;
 #endif
-        internal readonly LocalMirrorPlayer Player = player;
+        internal readonly IDisposable Player = player;
 
         internal void Dispose()
         {
@@ -277,24 +283,19 @@ internal static partial class LocalAppOutputMirrors
                 {
                     var existing = previous.FirstOrDefault(s => Ids.Equals(s.Id, id));
                     if (existing != null) { next.Add(existing); continue; }
-#if SONICROUTE_PHONE
-                    var pcm = new AndroidPcmSource();
-                    IPcmPlayer player = AndroidOutputIdentity.IsPhoneOutput(id)
-                        ? AndroidAudioHost.CreatePhonePcmPlayer(pcm, id, change.Token) : new WasapiPcmPlayer(pcm, id);
-                    var sink = new Sink(id, player) { Pcm = pcm };
-#else
-                    var player = new DesktopMirrorPlayer(id);
-                    var sink = new Sink(id, player);
-#endif
-                    staged.Add(sink);
+                    Sink sink = null!;
                     void Failed(Exception error)
                     {
                         ExceptionDiagnostics.Record("LocalAppOutputMirrors.Playback", error);
                         _ = PruneFailed(sink);
                     }
 #if SONICROUTE_PHONE
-                    if (player is AndroidPhonePcmPlayer phone)
+                    if (AndroidOutputIdentity.IsPhoneOutput(id))
                     {
+                        var pcm = new AndroidPcmSource();
+                        var phone = AndroidAudioHost.CreatePhonePcmPlayer(pcm, id, change.Token);
+                        sink = new Sink(id, phone) { Pcm = pcm };
+                        staged.Add(sink);
                         phone.Failed += error =>
                         {
                             Failed(error);
@@ -304,12 +305,17 @@ internal static partial class LocalAppOutputMirrors
                         phone.Play();
                         if (phone.Failure is { } error) throw error;
                     }
-                    else if (player is WasapiPcmPlayer windows)
+                    else
                     {
-                        windows.Failed += Failed;
-                        await windows.PlayAndConfirmAsync(change.Token).ConfigureAwait(false);
+                        var desktop = new DesktopMirrorPlayer(id);
+                        sink = new Sink(id, desktop);
+                        staged.Add(sink);
+                        desktop.Failed += Failed;
                     }
 #else
+                    var player = new DesktopMirrorPlayer(id);
+                    sink = new Sink(id, player);
+                    staged.Add(sink);
                     player.Failed += Failed;
 #endif
                     next.Add(sink);
@@ -338,6 +344,13 @@ internal static partial class LocalAppOutputMirrors
             var outputs = Sinks;
             if (outputs.Length == 0) return;
 #if SONICROUTE_PHONE
+            bool hasPhone = false;
+            foreach (var sink in outputs)
+            {
+                if (sink.DesktopPlayer is { } desktop) desktop.Write(packet);
+                else if (sink.Pcm != null) hasPhone = true;
+            }
+            if (!hasPhone) return;
             var data = MemoryMarshal.Cast<byte, short>(packet.Span);
             float[] scratch = ArrayPool<float>.Shared.Rent(data.Length);
             try
@@ -345,11 +358,11 @@ internal static partial class LocalAppOutputMirrors
                 var floats = scratch.AsSpan(0, data.Length);
                 for (int i = 0; i < data.Length; i++) floats[i] = data[i] * (1f / 32768);
                 var metrics = AndroidPcmSource.Measure(floats);
-                foreach (var sink in outputs) sink.Pcm.WriteMeasured(floats, metrics);
+                foreach (var sink in outputs) sink.Pcm?.WriteMeasured(floats, metrics);
             }
             finally { ArrayPool<float>.Shared.Return(scratch); }
 #else
-            foreach (var sink in outputs) sink.Player.Write(packet);
+            foreach (var sink in outputs) sink.DesktopPlayer.Write(packet);
 #endif
         }
 

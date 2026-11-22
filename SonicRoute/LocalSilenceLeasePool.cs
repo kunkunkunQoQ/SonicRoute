@@ -41,7 +41,8 @@ internal sealed class LocalSilenceLeasePool
         _applyRoute = applyRoute;
     }
 
-    internal bool OwnsEndpoint(string endpoint) => _reservations.ContainsKey(endpoint);
+    internal bool OwnsEndpoint(string endpoint) =>
+        _reservations.TryGetValue(endpoint, out var reservation) && Volatile.Read(ref reservation.Committed);
 
     internal void NoteUnmuted(string endpoint)
     {
@@ -152,6 +153,7 @@ internal sealed class LocalSilenceLeasePool
                 if (!Volatile.Read(ref reservation.UserUnmuted) && !lease.Invalidated.IsCancellationRequested
                     && (lease.Watch == null || Eligible(owners, endpoint)))
                 {
+                    Volatile.Write(ref reservation.Committed, true);
                     success = true;
                     return lease;
                 }
@@ -219,6 +221,7 @@ internal sealed class LocalSilenceLeasePool
         internal bool ChangedMute;
         internal bool UserUnmuted;
         internal bool Invalid;
+        internal bool Committed;
     }
     private sealed class Lease(LocalSilenceLeasePool owner, int processId,
         (string? Multimedia, string? Console) previous, Reservation reservation) : IPcProcessSilenceLease

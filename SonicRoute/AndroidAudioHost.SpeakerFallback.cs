@@ -19,12 +19,12 @@ internal static partial class AndroidAudioHost
     {
         if (processId <= 0 || processId == Environment.ProcessId || TryGetPcAppPhoneOutput(processId) != null) return null;
         if (original.Active && original.Endpoint == null) return null;
+        using var devices = new WasapiDeviceLease.Enumerator();
         string? expected = original.Endpoint;
         if (expected == null)
         {
             var (media, console) = ReadSilenceRoles(processId);
             if (media != null && console != null && !string.Equals(media, console, StringComparison.OrdinalIgnoreCase)) return null;
-            using var devices = new WasapiDeviceLease.Enumerator();
             using var system = devices.TryDefault(Role.Multimedia);
             expected = media ?? console ?? system?.Device.ID;
         }
@@ -33,7 +33,7 @@ internal static partial class AndroidAudioHost
         // Never mute a spare just because it transiently hosts the last active session.
         bool requirePlayback = original.Active || original.Endpoint == null;
         bool restored = WaitForOriginalSpeaker(expected, requirePlayback,
-            () => ReadAppSpeaker(processId), static () => System.Threading.Thread.Sleep(100));
+            () => ReadAppSpeaker(processId, devices), static () => System.Threading.Thread.Sleep(100));
         return restored ? SourceSpeakers.Acquire(processId, expected, requirePlayback) : null;
     }
 
@@ -54,9 +54,12 @@ internal static partial class AndroidAudioHost
         return false;
     }
 
-    private static (string? Endpoint, bool Active) ReadAppSpeaker(int processId)
+    private static (string? Endpoint, bool Active) ReadAppSpeaker(int processId) => ReadAppSpeaker(processId, null);
+
+    private static (string? Endpoint, bool Active) ReadAppSpeaker(int processId, WasapiDeviceLease.Enumerator? sharedEnumerator)
     {
-        using var devices = new WasapiDeviceLease.Enumerator();
+        using var owned = sharedEnumerator == null ? new WasapiDeviceLease.Enumerator() : null;
+        var devices = sharedEnumerator ?? owned!;
         string? active = null;
         var dormant = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var usable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

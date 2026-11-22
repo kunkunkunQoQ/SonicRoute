@@ -18,11 +18,15 @@ internal static partial class AndroidAudioHost
     private static readonly object PhoneOperations = new();
     private static readonly object OutputSnapshotGate = new();
     private static IReadOnlyList<AudioDeviceInfo>? _outputSnapshot;
-    private static readonly LocalSilenceLeasePool SilenceLeases = new(FindSilenceEndpoint,
-        id => { var state = SystemVolumeService.ReadStateChecked(id); return (state.Muted, state.MuteKnown); },
-        SystemVolumeService.SetMute, ReadSilenceRoles, WriteSilenceRoles);
     private static readonly Guid OutputMuteContext = Guid.NewGuid();
-    private static readonly LocalSilenceLeasePool MirrorSilenceLeases = new(FindMirrorSilenceOutputs,
+    private static readonly LocalSilenceLeasePool SilenceLeases = new(
+        (owned, reserved) => FindAvailableSilenceOutputs(owned, reserved, id => (MirrorSilenceLeases?.OwnsEndpoint(id) ?? false) || (SourceSpeakers?.OwnsEndpoint(id) ?? false)),
+        ReadOutputMute, SetReservedOutputMute, ReadSilenceRoles, WriteSilenceRoles)
+        {
+            ObservePlayback = (pid, id, revoke) => new LocalPlaybackWatch(pid, id, revoke) { CheckReservedOutput = RevalidateLocalSilence }
+        };
+    private static readonly LocalSilenceLeasePool MirrorSilenceLeases = new(
+        (owned, reserved) => FindAvailableSilenceOutputs(owned, reserved, id => SilenceLeases.OwnsEndpoint(id) || (SourceSpeakers?.OwnsEndpoint(id) ?? false)),
         ReadOutputMute, SetReservedOutputMute, ReadSilenceRoles, WriteSilenceRoles)
         {
             VerifyPlaybackRoute = VerifyWindowsPlaybackRoute,
@@ -406,6 +410,7 @@ internal static partial class AndroidAudioHost
     internal static void RevalidateLocalSilence()
     {
         MutedOutputs.Revalidate();
+        SilenceLeases.Revalidate();
         MirrorSilenceLeases.Revalidate();
         SourceSpeakers.Revalidate();
     }
@@ -413,6 +418,7 @@ internal static partial class AndroidAudioHost
     {
         MutedOutputs.NoteUnmuted();
         if (context == OutputMuteContext) return;
+        SilenceLeases.NoteUnmuted(id);
         MirrorSilenceLeases.NoteUnmuted(id);
         SourceSpeakers.NoteUnmuted(id);
     }
@@ -487,7 +493,7 @@ internal static partial class AndroidAudioHost
             || bus.StartsWith("BTH", StringComparison.OrdinalIgnoreCase) || bus.Equals("ACPI", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyList<string> FindMirrorSilenceOutputs(IReadOnlySet<int> owned, string? reserved)
+    private static IReadOnlyList<string> FindAvailableSilenceOutputs(IReadOnlySet<int> owned, string? reserved, Func<string, bool> isOwnedByOtherPool)
     {
         using var devices = new WasapiDeviceLease.Enumerator();
         var defaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -502,8 +508,8 @@ internal static partial class AndroidAudioHost
         {
             var device = lease.Device;
             string id = device.ID;
-            if (defaults.Contains(id) || SilenceLeases.OwnsEndpoint(id) || SourceSpeakers.OwnsEndpoint(id)
-                || reserved != null && !string.Equals(reserved, id, StringComparison.OrdinalIgnoreCase)) continue;
+            if (defaults.Contains(id) || isOwnedByOtherPool(id)
+                || (reserved != null && !string.Equals(reserved, id, StringComparison.OrdinalIgnoreCase))) continue;
             try
             {
                 if (IsMonitorOrInput(device.FriendlyName)) continue;
@@ -628,23 +634,6 @@ internal static partial class AndroidAudioHost
         return multimedia >= 0 && console >= 0;
 
         static string? Pack(string? value) => value == null ? null : AudioPolicyConfig.EnsureFullDeviceId(value, EDataFlow.eRender);
-    }
-    private static string? FindSilenceEndpoint()
-    {
-        var outputs = AudioService.GetDevices(EDataFlow.eRender);
-        string? defaultId = AudioService.GetDefaultDeviceId(EDataFlow.eRender);
-        var hidden = ConfigService.Load().HiddenOutputDevices;
-        var candidate = outputs
-            .Where(d => !string.Equals(d.Id, defaultId, StringComparison.OrdinalIgnoreCase)
-                && !MirrorSilenceLeases.OwnsEndpoint(d.Id) && !SourceSpeakers.OwnsEndpoint(d.Id)
-                && !AndroidOutputIdentity.IsPhoneOutput(d.Id)
-                && !IsMonitorOrInput(d.DisplayName))
-            .OrderBy(d => hidden.Contains(d.Id) ? 0 : 1)
-            .ThenBy(d => d.DisplayName?.Contains("Steam Streaming Speakers", StringComparison.OrdinalIgnoreCase) == true ? 0
-                : d.DisplayName?.Contains("High Definition Audio", StringComparison.OrdinalIgnoreCase) == true ? 1
-                : d.DisplayName?.Contains("Sonar", StringComparison.OrdinalIgnoreCase) != true ? 2 : 3)
-            .FirstOrDefault();
-        return candidate?.Id;
     }
     private static readonly Lazy<AndroidAppCatalogCache> LazyCatalog = new(() =>
         new AndroidAppCatalogCache(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-app-catalog.json"),

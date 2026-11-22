@@ -95,6 +95,39 @@ namespace SonicRoute.Core
         /// <summary>设备/会话通知只使快照过期；不在回调内等待枚举锁或释放 COM。</summary>
         public static void InvalidateCache() => Interlocked.Increment(ref _cacheGeneration);
 
+        /// <summary>空闲收回时释放已缓存的会话 COM 接口；正在刷新则跳过，避免阻塞调用方。</summary>
+        public static void ReleaseIdleCache()
+        {
+            Dictionary<int, List<ISimpleAudioVolume>>? retiredRender = null, retiredCapture = null;
+            if (!Monitor.TryEnter(_refreshLock)) return;
+            try
+            {
+                if (_refreshInProgress) return;
+                lock (_lock)
+                {
+                    retiredRender = Retire(_renderUse, _renderVolumes);
+                    _renderVolumes = new Dictionary<int, List<ISimpleAudioVolume>>();
+                    _renderUse = new SnapshotUse();
+                    _lastEnum = DateTime.MinValue;
+                    _snapshotComplete = false;
+
+                    retiredCapture = Retire(_captureUse, _captureVolumes);
+                    _captureVolumes = new Dictionary<int, List<ISimpleAudioVolume>>();
+                    _captureUse = new SnapshotUse();
+                    _lastCaptureEnum = DateTime.MinValue;
+                    _captureSnapshotComplete = false;
+
+                    Interlocked.Increment(ref _cacheGeneration);
+                }
+            }
+            finally
+            {
+                Monitor.Exit(_refreshLock);
+            }
+            if (retiredRender != null && retiredRender.Count > 0) ReleaseVolumes(retiredRender);
+            if (retiredCapture != null && retiredCapture.Count > 0) ReleaseVolumes(retiredCapture);
+        }
+
         /// <summary>该 PID 是否有可用的（输出）会话；缓存未命中会自动刷新（受节流保护）。</summary>
         public static bool HasSession(int pid)
         {
@@ -728,7 +761,7 @@ namespace SonicRoute.Core
                                     try
                                     {
                                         if (session.GetProcessId(out uint pid) < 0) { complete = false; continue; }
-                                        if (pid == 0) continue;
+                                        if (pid == 0 || AudioService.IsInternalApplication(pid, null)) continue;
                                         if (session.GetState(out var st) < 0) complete = false;
                                         else if (st == AudioSessionState.Expired) continue;
                                         var vol = (ISimpleAudioVolume)session;

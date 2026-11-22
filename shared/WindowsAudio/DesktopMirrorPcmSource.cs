@@ -1,4 +1,3 @@
-#if !SONICROUTE_PHONE
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.AndroidAudio;
@@ -47,4 +46,3 @@ internal sealed class DesktopMirrorPcmSource
         return take;
     }
 }
-#endif
