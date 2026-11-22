@@ -8,7 +8,7 @@
 
 **让每个应用的声音从你选的设备播放。**
 
-让音乐从音箱播放，让游戏和通话走耳机。SonicRoute 常驻 Windows 任务栏的通知区域，可为每个应用分别选择播放和录音设备。按快捷键、在托盘图标上滚动鼠标滚轮，或打开快速面板，都能调节音量。常用操作可以保存为自动化规则。
+让音乐从音箱播放，让游戏和通话走耳机。SonicRoute 常驻 Windows 任务栏的通知区域，可为每个应用分别选择播放和录音设备。在快速面板中按住 Ctrl 可增减播放设备，按住 Shift 可选择连续范围，各版本均可组合多个电脑输出，Full 还可加入可用的手机输出。按快捷键、在托盘图标上滚动鼠标滚轮，或打开快速面板，都能调节音量。常用操作可以保存为自动化规则。
 
 📥 [下载正式版](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -33,7 +33,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [
 
 ## ✨ 主要功能
 
-- **按应用选择播放和录音设备。** 游戏用耳机，音乐用音箱，通话应用还可以单独选择麦克风。Windows 会保存应用的设备选择，退出 SonicRoute 后仍然有效。
+- **按应用选择播放和录音设备。** 游戏用耳机，音乐用音箱，通话应用还可以单独选择麦克风。在快速面板中，按住 Ctrl 可增减播放设备，按住 Shift 可选择连续范围；各版本均可组合多个电脑输出，Full 还可加入可用的手机输出。Windows 会保存应用的设备选择，退出 SonicRoute 后仍然有效。
 - **用滚轮控制当前应用。** 默认优先选择最近在前台使用且有音频会话的应用。在托盘图标上滚动即可调节音量，按住 Alt 滚动可切换该应用的输出。屏幕提示（OSD）会显示操作结果，也可以用全局快捷键切换麦克风静音。
 - **在快速面板查看各应用的音量。** 滑块可单独调节应用音量，实时电平表能看出哪个应用正在发声。面板位置可保存，高度可在 350 至 850 个逻辑像素之间调整，实际高度受屏幕可用空间限制。
 - **Android 手机互联与 AirPlay 接收（Full）。** 将 Android 应用的声音送到电脑，或将电脑声音传回手机。在独立虚拟屏幕中操作手机应用，支持 H.265 和前台窗口的手柄输入。内置 C# AirPlay 接收器可播放音频并按原比例显示屏幕镜像。在快速面板中可将声音送到电脑、Android 手机扬声器或与手机连接的蓝牙设备。智能音量（SmartVolume）可减小响度波动。

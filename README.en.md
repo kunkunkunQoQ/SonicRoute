@@ -8,7 +8,7 @@
 
 **Send each app's audio to the device you choose.**
 
-Play music through your speakers and keep games and calls in your headset. SonicRoute runs in the Windows system tray. Choose a playback device and microphone for each app, adjust the volume with hotkeys or the mouse wheel, and use automation rules for changes you make regularly.
+Play music through your speakers and keep games and calls in your headset. SonicRoute runs in the Windows system tray. Choose a playback device and microphone for each app. In the Quick Panel, Ctrl-click to add or remove playback devices and Shift-click to select a range—combine multiple PC outputs in any edition, or include available phone outputs in Full. Adjust the volume with hotkeys or the mouse wheel, and use automation rules for changes you make regularly.
 
 📥 [Download the latest release](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [User guide (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -33,7 +33,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 ## ✨ What SonicRoute offers
 
-- **Choose where each app plays and records.** Send music to your speakers and game audio to your headset, then select the headset microphone for voice chat. Windows remembers the device choices when you exit SonicRoute.
+- **Choose where each app plays and records.** Send music to your speakers and game audio to your headset, then select the headset microphone for voice chat. In the Quick Panel, Ctrl-click to add or remove playback devices and Shift-click to select a range; all editions can combine multiple PC outputs, and Full can also add available phone outputs. Windows remembers the device choices when you exit SonicRoute.
 - **Adjust the current app from the tray.** SonicRoute can follow the foreground app. Scroll over the SonicRoute tray icon to change the target app’s volume, or hold Alt and scroll to switch its output. On-screen indicators show changes, and a global hotkey lets you mute your microphones.
 - **See which apps are playing audio.** The quick panel has a volume slider and a live level meter for each app. It remembers its position, and you can set its height from 350 to 850 device-independent pixels.
 - **Connect an Android device or use AirPlay (Full).** Play Android app audio on the PC, open apps in separate virtual display windows, or send PC audio back to the phone. Android supports H.265 video and gamepad input in the active video window. The built-in C# AirPlay receiver plays audio and mirrors the screen at its original aspect ratio. In the quick panel, send that audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Smart Volume evens out loud passages on supported streams.
