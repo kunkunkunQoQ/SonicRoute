@@ -71,12 +71,33 @@ public sealed class AndroidPhoneStore
         _defaultName = defaultName;
         var draft = new AndroidPhoneProfile("", null, Array.Empty<AndroidApp>());
         _state = new(Array.AsReadOnly(new[] { draft }), draft.Id);
+        string backup = FilePath + ".bak";
+        bool hasPrimary = File.Exists(FilePath), hasBackup = File.Exists(backup);
+        if (!hasPrimary && !hasBackup) return;
+        _loadedSafely = false;
+        if (hasPrimary && TryLoadState(FilePath, out var loaded, out bool legacy))
+        {
+            _state = loaded;
+            _loadedSafely = true;
+            _legacyFormat = legacy;
+            return;
+        }
+        if (hasBackup && TryLoadState(backup, out loaded, out legacy))
+        {
+            _state = loaded;
+            _loadedSafely = true;
+            _legacyFormat = legacy;
+        }
+    }
+
+    private static bool TryLoadState(string path, out State loaded, out bool legacy)
+    {
+        loaded = default!;
+        legacy = false;
         try
         {
-            if (!File.Exists(FilePath)) return;
-            _loadedSafely = false;
-            if (new FileInfo(FilePath).Length > 32 * 1024 * 1024) return;
-            using var file = File.OpenRead(FilePath);
+            if (new FileInfo(path).Length > 32 * 1024 * 1024) return false;
+            using var file = File.OpenRead(path);
             using var json = JsonDocument.Parse(file);
             int version = json.RootElement.GetProperty("Version").GetInt32();
             AndroidPhoneProfile[] profiles; string? selected;
@@ -85,14 +106,14 @@ public sealed class AndroidPhoneStore
             if (version == 1)
             {
                 var saved = json.RootElement.Deserialize<LegacyFile>();
-                if (saved?.Apps == null) return;
+                if (saved?.Apps == null) return false;
                 profiles = [LoadProfile(new(Guid.NewGuid().ToString("N"), saved.Name, saved.Device, saved.Apps, saved.DisabledSmartVolumePackages))];
                 selected = profiles[0].Id;
             }
             else if (version is 2 or 3)
             {
                 var saved = json.RootElement.Deserialize<PhoneFile>();
-                if (saved?.Phones == null || saved.Phones.Length is < 1 or > 32) return;
+                if (saved?.Phones == null || saved.Phones.Length is < 1 or > 32) return false;
                 profiles = saved.Phones.Select(LoadProfile).DistinctBy(p => p.Id).ToArray();
                 selected = saved.SelectedId;
                 removed = Array.AsReadOnly((saved.RemovedDevices ?? []).Where(d => d != null && !string.IsNullOrWhiteSpace(d.Serial)
@@ -101,13 +122,13 @@ public sealed class AndroidPhoneStore
                 if (saved.RemovedProfiles is { Length: > 0 } archived)
                     removedProfiles = LoadRemovedProfiles(archived);
             }
-            else return;
-            _state = new(Array.AsReadOnly(profiles), profiles.FirstOrDefault(p => p.Id == selected)?.Id ?? profiles[0].Id, removed, removedProfiles);
-            _loadedSafely = true;
-            _legacyFormat = version < 3;
+            else return false;
+            loaded = new(Array.AsReadOnly(profiles), profiles.FirstOrDefault(p => p.Id == selected)?.Id ?? profiles[0].Id, removed, removedProfiles);
+            legacy = version < 3;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidOperationException or KeyNotFoundException)
-        { Trace.WriteLine("Phone library: " + ex.Message); }
+        { Trace.WriteLine("Phone library: " + ex.Message); return false; }
     }
 
     private static IReadOnlyList<AndroidPhoneProfile> LoadRemovedProfiles(SavedPhone[] saved)
@@ -553,6 +574,7 @@ public sealed class AndroidPhoneStore
         var saved = new PhoneFile(3, state.SelectedId, state.Profiles.Select(SaveProfile).ToArray(), state.RemovedDevices?.ToArray(),
             state.RemovedProfiles?.Select(SaveProfile).ToArray());
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        AtomicFile.BackupBeforeWrite(FilePath);
         AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, JsonOptions));
         _legacyFormat = false;
     }

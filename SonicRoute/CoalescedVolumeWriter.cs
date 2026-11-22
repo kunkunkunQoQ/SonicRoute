@@ -51,6 +51,13 @@ namespace SonicRoute
 
         private void Tick(object? sender, EventArgs e) { _timer.Stop(); Flush(); _throttled = false; }
 
+        internal void Cancel(int pid)
+        {
+            if (_disposed) return;
+            _pending.Remove(pid);
+            _latest[pid] = ++_version;
+        }
+
         internal void Flush()
         {
             _timer.Stop();

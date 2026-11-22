@@ -33,6 +33,30 @@ namespace SonicRoute
         internal static string Name(AudioDeviceInfo device) =>
             NameKey(device) is string key ? L10n.T(key) : device.DisplayName!;
 
+        internal static string DisplayName(AudioDeviceInfo device, AppConfig config) =>
+            config.DeviceNames.TryGetValue(device.Id, out var name) && !string.IsNullOrWhiteSpace(name)
+                ? name : Name(device);
+
+        internal static bool AreSameEndpoint(string? left, string? right) =>
+            left != null && right != null
+            && (string.Equals(left, right, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(AudioPolicyConfig.UnpackDeviceId(left), AudioPolicyConfig.UnpackDeviceId(right), StringComparison.OrdinalIgnoreCase));
+
+        internal static List<AudioDeviceInfo> VisibleForAppOutputs(
+            AudioAppInfo? app, IEnumerable<AudioDeviceInfo> outputs, AppConfig config, string? includeDeviceId = null) =>
+            ApplicationAudio.OutputsForApp(app, outputs)
+                .Where(d => !config.HiddenOutputDevices.Contains(d.Id) || AreSameEndpoint(d.Id, includeDeviceId))
+                .ToList();
+
+        internal static List<AudioDeviceInfo> VisibleSystemOutputs(IEnumerable<AudioDeviceInfo> outputs, AppConfig config) =>
+            outputs.Where(d => !config.HiddenOutputDevices.Contains(d.Id) && !ApplicationAudio.IsExternalOutputDevice(d.Id))
+                .ToList();
+
+        internal static List<AudioDeviceInfo> VisibleInputs(
+            IEnumerable<AudioDeviceInfo> inputs, AppConfig config, string? includeDeviceId = null) =>
+            inputs.Where(d => !config.HiddenInputDevices.Contains(d.Id) || AreSameEndpoint(d.Id, includeDeviceId))
+                .ToList();
+
         internal static string ShortName(string full)
         {
             int paren = full.IndexOf('(');

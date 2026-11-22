@@ -137,8 +137,8 @@ public partial class App
             });
             if (!ReferenceEquals(scope.Pending, request)) return;
 
-            if (!app.IsExternal && _quickPanel is { IsVisible: true } panel)
-                panel.RefreshAppRouteReadback((int)app.ProcessId);
+            if (!app.IsExternal)
+                NotifyAppRouteChanged((int)app.ProcessId);
             string resultTitle = result.Success ? OsdService.FormatDeviceFinalTitle(title) : OsdService.FormatDeviceFailedTitle(title);
             string resultText = result.Actual == null ? L10n.T("Ov.CurrentUnavailable") : "🔊 " + result.Actual;
             _trayWheel?.ShowDeviceSwitchResult(request.Notice, resultTitle, resultText, result.Success);
@@ -203,7 +203,7 @@ public partial class App
         ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(id);
 
     private static bool SameOutput(string first, string second) =>
-        string.Equals(OutputId(first), OutputId(second), StringComparison.OrdinalIgnoreCase);
+        PanelDevices.AreSameEndpoint(OutputId(first), OutputId(second));
 
     private static (string? Id, bool Confirmable) ReadHotkeyOutput(AudioAppInfo app)
     {

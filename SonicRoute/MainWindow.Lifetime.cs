@@ -44,6 +44,8 @@ namespace SonicRoute
             IsVisibleChanged -= AutoRefreshVisibilityChanged;
             AutoRuleService.ExecutionStateChanged -= AutoExecutionStateChanged;
             PreviewKeyDown -= MainWindow_PreviewKeyDown;
+            PreviewMouseDown -= MainWindow_PreviewMouseDown;
+            PreviewMouseWheel -= MainWindow_PreviewMouseWheel;
             _hwndSource?.RemoveHook(TaskbarMinimizeWndProc);
             _hwndSource = null;
 

@@ -448,11 +448,12 @@ namespace SonicRoute
             _suppressDevCombo = true;
             try
             {
-                AppsOutputCombo.ItemsSource = ApplicationAudio.OutputsForApp(_appsSelected, _outputDisplay);
-                AppsInputCombo.ItemsSource = _inputDisplay;
+                AppsOutputCombo.ItemsSource = PanelDevices.VisibleForAppOutputs(_appsSelected, _outputDisplay, _config, appsId);
+                AppsInputCombo.ItemsSource = PanelDevices.VisibleInputs(_inputDisplay, _config, appsInputId);
                 if (appsId != null) AppsOutputCombo.SelectedItem = AppsOutputCombo.Items.OfType<AudioDeviceInfo>()
                     .FirstOrDefault(d => string.Equals(d.Id, appsId, StringComparison.OrdinalIgnoreCase));
-                if (appsInputId != null) AppsInputCombo.SelectedItem = _inputDisplay.FirstOrDefault(d => d.Id == appsInputId);
+                if (appsInputId != null) AppsInputCombo.SelectedItem = AppsInputCombo.Items.OfType<AudioDeviceInfo>()
+                    .FirstOrDefault(d => string.Equals(d.Id, appsInputId, StringComparison.OrdinalIgnoreCase));
             }
             finally { _suppressDevCombo = suppressed; }
             RenderAppsRouteButtons();
@@ -595,7 +596,7 @@ namespace SonicRoute
             _appsSelected = (AppsListBox.SelectedItem as AppItem)?.Info;
             bool routesSuppressed = _suppressDevCombo;
             _suppressDevCombo = true;
-            try { AppsOutputCombo.ItemsSource = ApplicationAudio.OutputsForApp(_appsSelected, _outputDisplay); }
+            try { AppsOutputCombo.ItemsSource = PanelDevices.VisibleForAppOutputs(_appsSelected, _outputDisplay, _config); }
             finally { _suppressDevCombo = routesSuppressed; }
             RenderAppsRouteButtons();
             AppsInputCard.IsEnabled = _appsSelected?.IsExternal != true;
@@ -751,7 +752,12 @@ namespace SonicRoute
             {
                 var result = await Task.Run(() => ApplicationAudio.ToggleMuteChecked(app));
                 if (_isClosed || _appsSelected?.Identity != app.Identity) return;
-                if (result.Applied) ApplyAppsMuteVisual(result.Muted);
+                if (result.Applied)
+                {
+                    ApplyAppsMuteVisual(result.Muted);
+                    if (!app.IsExternal)
+                        (System.Windows.Application.Current as App)?.NotifyAppMuteChanged(pid, result.Muted, caller: this);
+                }
                 else ShowToast(L10n.T("Tray.AudioUnavailable"));
             }
             finally
@@ -782,6 +788,8 @@ namespace SonicRoute
             if (_isClosed || _appsSelected?.Identity != app.Identity) return;
             if (ok)
             {
+                if (!app.IsExternal)
+                    (System.Windows.Application.Current as App)?.NotifyAppRouteChanged(pid, caller: this);
                 await RefreshAppsSelectionAsync();
             }
             else
@@ -810,6 +818,8 @@ namespace SonicRoute
             if (_isClosed || _appsSelected?.Identity != app.Identity) return;
             if (ok)
             {
+                if (!app.IsExternal)
+                    (System.Windows.Application.Current as App)?.NotifyAppRouteChanged(pid, caller: this);
                 await RefreshAppsSelectionAsync();
             }
             else
@@ -840,22 +850,24 @@ namespace SonicRoute
                 var outId = output.Result;
                 string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
                 _suppressDevCombo = true;
-                var choices = AppsOutputCombo.Items.OfType<AudioDeviceInfo>();
+                var outChoices = PanelDevices.VisibleForAppOutputs(app, _outputDisplay, _config, outShort);
+                AppsOutputCombo.ItemsSource = outChoices;
                 AppsOutputCombo.SelectedItem = outShort == null
-                    ? choices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? choices.FirstOrDefault(d => d.IsDefault) ?? choices.FirstOrDefault()
-                    : choices.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
-                        ?? choices.FirstOrDefault(d => d.IsDefault) ?? choices.FirstOrDefault();
+                    ? outChoices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? outChoices.FirstOrDefault(d => d.IsDefault) ?? outChoices.FirstOrDefault()
+                    : outChoices.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
+                        ?? outChoices.FirstOrDefault(d => d.IsDefault) ?? outChoices.FirstOrDefault();
                 _suppressDevCombo = false;
                 // 输入设备（麦克风）：与输出一致
                 var inId = input.Result;
                 string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
                 _suppressDevCombo = true;
+                var inChoices = PanelDevices.VisibleInputs(_inputDisplay, _config, inShort);
                 AppsInputCombo.ItemsSource = null;
-                AppsInputCombo.ItemsSource = _inputDisplay;
+                AppsInputCombo.ItemsSource = inChoices;
                 AppsInputCombo.SelectedItem = inShort == null
-                                              ? (_inputDisplay.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault())
-                                              : _inputDisplay.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase))
-                                                ?? _inputDisplay.FirstOrDefault(d => d.IsDefault) ?? _inputDisplay.FirstOrDefault();
+                                              ? (inChoices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? inChoices.FirstOrDefault(d => d.IsDefault) ?? inChoices.FirstOrDefault())
+                                              : inChoices.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase))
+                                                ?? inChoices.FirstOrDefault(d => d.IsDefault) ?? inChoices.FirstOrDefault();
                 _suppressDevCombo = false;
                 HighlightAppsRouteButtons();
                 int vol = state.Result.Volume;
@@ -896,7 +908,7 @@ namespace SonicRoute
             if (_suppressFilter) return;
             SaveSettings(_config);
             UpdateSelectAllLabels();
-            RenderAppsRouteButtons();
+            RefreshDeviceDisplays();
             // 快速切换界面立即生效（刷新设备显示）
             if (_config.PanelOutputVolumesRetainedOnly)
                 ((App)Application.Current).QuickPanelInstance?.RefreshOutputVolumeFilter();
@@ -912,7 +924,7 @@ namespace SonicRoute
             if (_suppressFilter) return;
             SaveSettings(_config);
             UpdateSelectAllLabels();
-            RenderAppsRouteButtons();
+            RefreshDeviceDisplays();
         }
 
         /// <summary>输出设备全选/全不选。</summary>
@@ -940,7 +952,7 @@ namespace SonicRoute
             if (suppressed) return;
             SaveSettings(_config);
             UpdateSelectAllLabels();
-            RenderAppsRouteButtons();
+            RefreshDeviceDisplays();
             if (_config.PanelOutputVolumesRetainedOnly && boxes[0].Tag is AudioDeviceInfo { Flow: EDataFlow.eRender })
                 ((App)Application.Current).QuickPanelInstance?.RefreshOutputVolumeFilter();
         }
@@ -4001,51 +4013,91 @@ namespace SonicRoute
 
             bool filling = false;        // 填充/恢复选中期间不写回配置
             string lastExt = "\0";       // 已按哪个扩展名枚举过（路径改了要重枚举）
+            int fillVersion = 0;
 
-            void Fill()
+            void ApplyOpenWithItems(System.Collections.Generic.List<OpenWithItem> items)
             {
                 filling = true;
                 try
                 {
                     openCombo.Items.Clear();
-                    openCombo.Items.Add(new OpenWithItem { Label = L10n.T("Auto.OpenWithDefault"), ExePath = "" });
-
-                    foreach (var app in OpenWithService.GetHandlers(item.Path))
-                    {
-                        openCombo.Items.Add(new OpenWithItem
-                        {
-                            Label = app.DisplayName,
-                            ExePath = app.ExePath,
-                            Icon = AppIconService.GetIconForPath(app.ExePath)
-                        });
-                    }
-
-                    // 已保存但不在系统列表中的应用也保留：程序被移动 / 关联变化时不丢配置
-                    if (!string.IsNullOrWhiteSpace(item.OpenWith)
-                        && !openCombo.Items.OfType<OpenWithItem>().Any(
-                            x => string.Equals(x.ExePath, item.OpenWith, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        openCombo.Items.Add(new OpenWithItem
-                        {
-                            Label = string.IsNullOrWhiteSpace(item.OpenWithName)
-                                ? ProgramDisplayName(item.OpenWith) : item.OpenWithName,
-                            ExePath = item.OpenWith,
-                            Icon = AppIconService.GetIconForPath(item.OpenWith)
-                        });
-                    }
-
-                    openCombo.Items.Add(new OpenWithItem { Label = L10n.T("Auto.OpenWithPick"), ExePath = AutoLaunchPickTag });
-
+                    foreach (var entry in items) openCombo.Items.Add(entry);
                     int sel = 0;
                     if (!string.IsNullOrWhiteSpace(item.OpenWith))
                     {
-                        int hit = openCombo.Items.OfType<OpenWithItem>().ToList()
-                            .FindIndex(x => string.Equals(x.ExePath, item.OpenWith, StringComparison.OrdinalIgnoreCase));
+                        int hit = items.FindIndex(x => string.Equals(x.ExePath, item.OpenWith, StringComparison.OrdinalIgnoreCase));
                         if (hit >= 0) sel = hit;
                     }
                     openCombo.SelectedIndex = sel;
                 }
                 finally { filling = false; }
+            }
+
+            void QueueFill()
+            {
+                int version = ++fillVersion;
+                string targetPath = item.Path;
+                string savedPath = item.OpenWith;
+                string savedName = item.OpenWithName;
+                string defaultLabel = L10n.T("Auto.OpenWithDefault");
+                string pickLabel = L10n.T("Auto.OpenWithPick");
+
+                var placeholders = new System.Collections.Generic.List<OpenWithItem>
+                {
+                    new OpenWithItem { Label = defaultLabel, ExePath = "" }
+                };
+                if (!string.IsNullOrWhiteSpace(savedPath))
+                {
+                    placeholders.Add(new OpenWithItem
+                    {
+                        Label = string.IsNullOrWhiteSpace(savedName) ? ProgramDisplayName(savedPath) : savedName,
+                        ExePath = savedPath
+                    });
+                }
+                placeholders.Add(new OpenWithItem { Label = pickLabel, ExePath = AutoLaunchPickTag });
+                ApplyOpenWithItems(placeholders);
+
+                _ = LoadOpenWithAsync(targetPath, savedPath, savedName, defaultLabel, pickLabel, version);
+            }
+
+            async Task LoadOpenWithAsync(string targetPath, string savedPath, string savedName, string defaultLabel, string pickLabel, int version)
+            {
+                try
+                {
+                    var items = await _uiLifetime.ReadAsync(() =>
+                    {
+                        var list = new System.Collections.Generic.List<OpenWithItem>
+                        {
+                            new OpenWithItem { Label = defaultLabel, ExePath = "" }
+                        };
+                        foreach (var app in OpenWithService.GetHandlers(targetPath))
+                        {
+                            list.Add(new OpenWithItem
+                            {
+                                Label = app.DisplayName,
+                                ExePath = app.ExePath,
+                                Icon = AppIconService.GetIconForPath(app.ExePath)
+                            });
+                        }
+                        // 已保存但不在系统列表中的应用也保留：程序被移动 / 关联变化时不丢配置
+                        if (!string.IsNullOrWhiteSpace(savedPath)
+                            && !list.Any(x => string.Equals(x.ExePath, savedPath, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            list.Add(new OpenWithItem
+                            {
+                                Label = string.IsNullOrWhiteSpace(savedName) ? ProgramDisplayName(savedPath) : savedName,
+                                ExePath = savedPath,
+                                Icon = AppIconService.GetIconForPath(savedPath)
+                            });
+                        }
+                        list.Add(new OpenWithItem { Label = pickLabel, ExePath = AutoLaunchPickTag });
+                        return list;
+                    });
+                    if (_isClosed || version != fillVersion) return;
+                    ApplyOpenWithItems(items);
+                }
+                catch (OperationCanceledException) when (_isClosed) { }
+                catch { }
             }
 
             // 路径被手动改过（扩展名变化）时，展开下拉前重新向系统查询关联应用
@@ -4054,7 +4106,7 @@ namespace SonicRoute
                 var ext = OpenWithService.NormalizeExtension(item.Path);
                 if (ext == lastExt) return;
                 lastExt = ext;
-                Fill();
+                QueueFill();
             };
             openCombo.SelectionChanged += (_, _) =>
             {
@@ -4071,7 +4123,7 @@ namespace SonicRoute
                     _uiLifetime.Post(Dispatcher, new Action(() =>
                     {
                         lastExt = OpenWithService.NormalizeExtension(item.Path);
-                        Fill();
+                        QueueFill();
                     }));
                     return;
                 }
@@ -4080,10 +4132,9 @@ namespace SonicRoute
                 openCombo.ToolTip = picked.ExePath.Length == 0 ? L10n.T("Auto.OpenWith") : picked.ExePath;
             };
 
-            // 构建时即按当前路径枚举系统关联应用：选完文件后打开方式立即可选，
-            // 同时避免在展开下拉的过程中改动集合
+            // 仅同步填充轻量占位项；打开方式与图标在后台线程按需解析后再刷新，避免阻塞编辑器 UI。
             lastExt = OpenWithService.NormalizeExtension(item.Path);
-            Fill();
+            QueueFill();
             DockPanel.SetDock(openCombo, Dock.Right);
             row.Children.Add(openCombo);
 

@@ -81,7 +81,11 @@ public partial class QuickPanelModernWindow
                 var result = await _setRowPlaybackOutputs(row.App, request.Outputs, preferred);
                 applied = result.Success;
                 if (!Current()) return;
-                if (applied) row.PlaybackAnchor = request.Anchor;
+                if (applied)
+                {
+                    row.PlaybackAnchor = request.Anchor;
+                    if (!row.App.IsExternal) (System.Windows.Application.Current as App)?.NotifyAppRouteChanged(pid, caller: this);
+                }
                 else ShowOsd(AppDisplayName.Get(row.App), result.Message);
             }
             catch (OperationCanceledException) when (!Current()) { }
@@ -196,7 +200,10 @@ public partial class QuickPanelModernWindow
                 applied = ok;
                 if (!Current()) return;
                 if (ok)
+                {
                     ShowOsd(AppDisplayName.Get(row.App), "🎤 " + PanelDevices.Name(dev));
+                    if (!row.App.IsExternal) (System.Windows.Application.Current as App)?.NotifyAppRouteChanged(pid, caller: this);
+                }
                 else
                     ShowOsd(AppDisplayName.Get(row.App), $"✗ {msg}");
             }

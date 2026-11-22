@@ -39,13 +39,28 @@ public sealed class AndroidAudioSettingsStore
     public AndroidAudioSettingsStore(string filePath)
     {
         FilePath = Path.GetFullPath(filePath);
+        string backup = FilePath + ".bak";
+        bool hasPrimary = File.Exists(FilePath), hasBackup = File.Exists(backup);
+        if (!hasPrimary && !hasBackup) return;
+        _loadedSafely = false;
+        if (hasPrimary && TryLoadFile(FilePath))
+        {
+            _loadedSafely = true;
+            return;
+        }
+        _apps.Clear();
+        _streams.Clear();
+        if (hasBackup && TryLoadFile(backup))
+            _loadedSafely = true;
+    }
+
+    private bool TryLoadFile(string path)
+    {
         try
         {
-            if (!File.Exists(FilePath)) return;
-            _loadedSafely = false;
-            using var file = File.OpenRead(FilePath);
+            using var file = File.OpenRead(path);
             var saved = JsonSerializer.Deserialize<SettingsFile>(file);
-            if (saved?.Version is not (1 or 2 or 3) || saved.Apps == null) return;
+            if (saved?.Version is not (1 or 2 or 3) || saved.Apps == null) return false;
             foreach (var entry in saved.Apps)
             {
                 ValidateSourceKey(entry.Key[(entry.Key.LastIndexOf('\n') + 1)..]);
@@ -59,10 +74,10 @@ public sealed class AndroidAudioSettingsStore
             if (saved.Streams != null)
                 foreach (var entry in saved.Streams)
                     if (!string.IsNullOrEmpty(entry.Key) && entry.Value != null) _streams[entry.Key] = entry.Value.Normalize();
-            _loadedSafely = true;
+            return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
-        { Trace.WriteLine("Phone audio settings: " + ex.Message); }
+        { Trace.WriteLine("Phone audio settings: " + ex.Message); return false; }
     }
 
     public AndroidAppAudioSettings Get(string package)
@@ -316,6 +331,7 @@ public sealed class AndroidAudioSettingsStore
                 {
                     if (!_loadedSafely) { _writing = false; return; }
                     Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+                    AtomicFile.BackupBeforeWrite(FilePath);
                     AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, new SettingsFile(3, _apps, _streams), JsonOptions));
                     _writing = false; return;
                 }

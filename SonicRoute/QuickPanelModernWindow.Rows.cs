@@ -136,6 +136,7 @@ namespace SonicRoute
                 row.TrackBg.SizeChanged += (_, _) => UpdateRowSliderLayout(row);
             // 标准 Track 负责点击定位和拖动；透明的 32px 区域也可命中。
             row.Slider.ValueChanged += RowSlider_ValueChanged;
+            row.Slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler(RowSliderDragCompleted), true);
             VolumePresets.Attach(row.Slider);
             row.Slider.MouseWheel += RowSlider_MouseWheel;
 

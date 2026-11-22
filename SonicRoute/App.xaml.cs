@@ -422,11 +422,37 @@ namespace SonicRoute
             _quickPanel?.RefreshAppIcons(processName);
         }
 
-        internal void ApplyAppMuteReadback(int pid, bool muted)
+        internal void NotifyAppVolumeChanged(int pid, int actual, bool? muted = null, object? caller = null)
         {
-            _quickPanel?.ApplyAppMuteReadback(pid, muted);
-            _mainWindow?.ApplyAppMuteReadback(pid, muted);
+            if (!ReferenceEquals(caller, _quickPanel) && _quickPanel is { IsVisible: true } quick)
+                quick.ApplyAppVolumeReadback(pid, actual, muted);
+            if (!ReferenceEquals(caller, _mainWindow) && _mainWindow is { IsVisible: true } main)
+                main.ApplyAppVolumeReadback(pid, actual, muted);
         }
+
+        internal void NotifyAppMuteChanged(int pid, bool muted, object? caller = null)
+        {
+            if (!ReferenceEquals(caller, _quickPanel) && _quickPanel != null)
+                _quickPanel.ApplyAppMuteReadback(pid, muted);
+            if (!ReferenceEquals(caller, _mainWindow) && _mainWindow is { IsVisible: true } main)
+                main.ApplyAppMuteReadback(pid, muted);
+        }
+
+        internal void NotifyGlobalAppMuteChanged(bool muted, object? caller = null)
+        {
+            if (!ReferenceEquals(caller, _mainWindow) && _mainWindow is { IsVisible: true } main)
+                main.ApplyGlobalAppMuteReadback(muted);
+        }
+
+        internal void NotifyAppRouteChanged(int pid, object? caller = null)
+        {
+            if (!ReferenceEquals(caller, _quickPanel) && _quickPanel is { IsVisible: true } quick)
+                quick.RefreshAppRouteReadback(pid);
+            if (!ReferenceEquals(caller, _mainWindow) && _mainWindow is { IsVisible: true } main)
+                main.RefreshAppRouteReadback(pid);
+        }
+
+        internal void ApplyAppMuteReadback(int pid, bool muted) => NotifyAppMuteChanged(pid, muted);
 
         /// <summary>检测当前是否运行在 MSIX 包中（非包环境调用 Package.Current 会抛异常）。
         /// net48 Legacy 为传统桌面程序，不依赖 WinRT / Windows App SDK，恒为 false。</summary>
@@ -806,8 +832,8 @@ namespace SonicRoute
                         if (adjusted.Current < 0) { _trayWheel?.ShowOsd(name, "⚠ " + L10n.T("Ov.NoOutputSession")); break; }
                         if (adjusted.Applied && adjusted.Actual >= 0)
                         {
-                            if (target?.IsExternal != true && _quickPanel is { IsVisible: true } modern)
-                                modern.ApplyAppVolumeReadback(pid, adjusted.Actual);
+                            if (target?.IsExternal != true)
+                                NotifyAppVolumeChanged(pid, adjusted.Actual);
                             _trayWheel?.ShowVolumeOsd(name, adjusted.Actual, $"🔉 {adjusted.Actual}%", target: target!.Identity);
                         }
                         else _trayWheel?.ShowOsd(name, L10n.T("Ov.VolAdjustFail"));
@@ -817,6 +843,8 @@ namespace SonicRoute
                 case HotkeyActions.ActSwitchInput:
                     // 实验模式 - 麦克风选项开启后才注册的隐藏动作：切换当前应用的录音（输入）设备
                     string? mdev = await CycleDeviceAsync(target!, EDataFlow.eCapture);
+                    if (!string.IsNullOrEmpty(mdev) && target?.IsExternal != true)
+                        NotifyAppRouteChanged(pid);
                     ShowDeviceHotkeyResult(name, string.IsNullOrEmpty(mdev) ? L10n.T("Ov.NoMicDevice") : $"🎤 {mdev}");
 
                     break;
@@ -890,12 +918,8 @@ namespace SonicRoute
             return PanelDevices.WithSystemDefault(list, flow, config);
         }
         /// <summary>设备名（自定义名优先）。</summary>
-        private static string DeviceDisplayName(AppConfig config, AudioDeviceInfo dev)
-        {
-            return config.DeviceNames.TryGetValue(dev.Id, out var n) && !string.IsNullOrWhiteSpace(n)
-                ? n
-                : PanelDevices.Name(dev);
-        }
+        private static string DeviceDisplayName(AppConfig config, AudioDeviceInfo dev) =>
+            PanelDevices.DisplayName(dev, config);
 
         /// <summary>在当前应用的可见设备间循环切换，返回切换到的设备名；失败/无设备返回 null。
         /// 当前"跟随系统默认"（无持久化）且默认项在列表 → 从默认项按方向切换。</summary>
@@ -945,8 +969,9 @@ namespace SonicRoute
             {
                 var config = ConfigService.Load();
                 var devs = flow == EDataFlow.eRender ? ApplicationAudio.GetOutputDevices() : AudioService.GetDevices(flow);
-                var hidden = flow == EDataFlow.eRender ? config.HiddenOutputDevices : config.HiddenInputDevices;
-                var visible = devs.Where(d => !hidden.Contains(d.Id) && !ApplicationAudio.IsExternalOutputDevice(d.Id)).ToList();
+                var visible = flow == EDataFlow.eRender
+                    ? PanelDevices.VisibleSystemOutputs(devs, config)
+                    : PanelDevices.VisibleInputs(devs, config);
                 if (visible.Count == 0) return null;
 
                 // GetDefaultDeviceId 返回完整 ID（"{0.0.0.00000000}.{...}"），需解包为短 ID 才能与设备列表比较，

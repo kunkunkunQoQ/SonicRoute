@@ -372,9 +372,7 @@ namespace SonicRoute.Core
         private static void BackupBeforeWrite()
         {
             if (_savesBlocked) throw new IOException("Configuration saves are paused because the original file could not be preserved.");
-            if (!File.Exists(ConfigPath)) return;
-            using var original = new FileStream(ConfigPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            AtomicFile.Write(BackupPath, stream => original.CopyTo(stream));
+            AtomicFile.BackupBeforeWrite(ConfigPath, BackupPath);
         }
 
         private static void WriteConfig(string json)

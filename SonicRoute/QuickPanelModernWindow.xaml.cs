@@ -103,7 +103,7 @@ namespace SonicRoute
         private string? _appRowsLayoutKey;
         private bool _rowIconsQueued;
         private bool _updatingRowVolumes;
-        private readonly Dictionary<int, int> _pendingVolume = new();
+        private CoalescedVolumeWriter? _appVolumeWriter;
         private DispatcherTimer? _volDebounce;
         private AudioMeterService? _meter;
         private Action<IReadOnlyDictionary<int, float>>? _meterListener;
@@ -641,15 +641,38 @@ namespace SonicRoute
         internal void ApplyAppVolumeReadback(int pid, int actual, bool? muted = null)
         {
             if (_isClosed || !_rows.TryGetValue(pid, out var row)) return;
-            bool updating = _updatingRowVolumes;
-            _updatingRowVolumes = true;
-            try
+            if (_appVolumeWriter?.HasPending(pid) != true && row.Slider is not { IsMouseCaptureWithin: true })
             {
-                row.Volume = actual;
-                if (row.Slider != null) { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+                bool updating = _updatingRowVolumes;
+                _updatingRowVolumes = true;
+                try
+                {
+                    row.Volume = actual;
+                    if (row.Slider != null) { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+                }
+                finally { _updatingRowVolumes = updating; }
             }
-            finally { _updatingRowVolumes = updating; }
             if (muted.HasValue) ApplyRowMutedVisual(row, muted.Value);
+        }
+
+        private void ApplyAppVolumeWriteReadback(int pid, bool applied, int actual)
+        {
+            if (_isClosed || !applied || actual < 0) return;
+            if (_rows.TryGetValue(pid, out var row)
+                && _appVolumeWriter?.HasPending(pid) != true
+                && row.Slider is not { IsMouseCaptureWithin: true }
+                && row.Volume != actual)
+            {
+                bool updating = _updatingRowVolumes;
+                _updatingRowVolumes = true;
+                try
+                {
+                    row.Volume = actual;
+                    if (row.Slider != null) { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+                }
+                finally { _updatingRowVolumes = updating; }
+            }
+            (Application.Current as App)?.NotifyAppVolumeChanged(pid, actual, caller: this);
         }
 
         internal void ApplyAppMuteReadback(int pid, bool muted)
@@ -667,8 +690,22 @@ namespace SonicRoute
 
         internal void RefreshAppRouteReadback(int pid)
         {
-            if (!_isClosed && _rows.TryGetValue(pid, out var row) && row.Expanded)
-                _ = BuildRowDevicesAsync(row);
+            if (_isClosed || !IsVisible || !_rows.TryGetValue(pid, out var row)) return;
+            if (row.Expanded) { _ = BuildRowDevicesAsync(row); return; }
+            if (row.ShowOutputName) _ = RefreshCollapsedRowOutputAsync(row, pid);
+        }
+
+        private async Task RefreshCollapsedRowOutputAsync(AppRow row, int pid)
+        {
+            var read = _readRowEndpoints;
+            try
+            {
+                string output = await _uiLifetime.ReadAsync((Pid: pid, Read: read), static args => args.Read(args.Pid, false).Output);
+                if (_isClosed || !IsVisible || !_rows.TryGetValue(pid, out var current)
+                    || !ReferenceEquals(current, row) || row.Expanded || row.PendingPlayback != null) return;
+                UpdateRowName(row, output);
+            }
+            catch (OperationCanceledException) when (_isClosed) { }
         }
 
         private void Volume_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -805,6 +842,10 @@ namespace SonicRoute
                     StopMeter();
                     ClearRowVisuals();
                     AppListPanel.Items.Clear();
+                    var nextPids = new HashSet<int>();
+                    foreach (var app in apps) nextPids.Add((int)app.ProcessId);
+                    foreach (int prevPid in _rows.Keys)
+                        if (!nextPids.Contains(prevPid)) _appVolumeWriter?.Cancel(prevPid);
                     _rows.Clear();
                 }
                 else
@@ -816,8 +857,8 @@ namespace SonicRoute
                         var removed = _rows[stale];
                         AppListPanel.Items.Remove(removed.ListItem);
                         ReleaseAppRowVisual(removed);
-                        _rows.Remove(stale); _pendingVolume.Remove(stale);
-                        _latestAppWrites[stale] = ++_appWriteSequence;
+                        _rows.Remove(stale);
+                        _appVolumeWriter?.Cancel(stale);
                     }
                 }
                 _appRowsLayoutKey = layoutKey;
@@ -976,10 +1017,15 @@ namespace SonicRoute
             row.Volume = pct;
             UpdateRowSliderLayout(row);
             if (_isClosed || _updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
-            _pendingVolume[(int)row.App.ProcessId] = pct;
-            _latestAppWrites[(int)row.App.ProcessId] = ++_appWriteSequence;
-            SchedulePendingVolumeFlush();
+            int pid = (int)row.App.ProcessId;
+            var owner = new WeakReference<QuickPanelModernWindow>(this);
+            EnsureAppVolumeWriter().Enqueue(pid, pct, (target, _, applied, actual) =>
+            {
+                if (owner.TryGetTarget(out var panel)) panel.ApplyAppVolumeWriteReadback(target, applied, actual);
+            });
         }
+
+        private void RowSliderDragCompleted(object sender, DragCompletedEventArgs e) => _appVolumeWriter?.Flush();
 
         /// <summary>行滑块鼠标滚轮：悬停应用音量条时滚轮调节该应用音量 ±4%（写回走 RowSlider_ValueChanged 防抖）。</summary>
         private void RowSlider_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -1214,7 +1260,11 @@ namespace SonicRoute
             {
                 var result = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
                 if (_isClosed || !_rows.TryGetValue(pid, out var current) || !ReferenceEquals(current, row)) return;
-                if (result.Applied) ApplyRowMutedVisual(row, result.Muted);
+                if (result.Applied)
+                {
+                    ApplyRowMutedVisual(row, result.Muted);
+                    (Application.Current as App)?.NotifyAppMuteChanged(pid, result.Muted, caller: this);
+                }
                 ShowOsd(AppDisplayName.Get(row.App), L10n.T(result.Applied
                     ? (result.Muted ? "Qp.Muted" : "Qp.Unmuted") : "Tray.AudioUnavailable"));
             }
@@ -1443,7 +1493,11 @@ namespace SonicRoute
                 ++_globalMuteVersion; // 丢弃操作进行期间读到、却延迟返回的初始化状态。
                 ApplyGlobalMuteVisual(muted);
                 GlobalMuteButton.IsEnabled = true;
-                if (result.Applied) ApplyAllRowsMutedVisual(muted);
+                if (result.Applied)
+                {
+                    ApplyAllRowsMutedVisual(muted);
+                    (Application.Current as App)?.NotifyGlobalAppMuteChanged(muted, caller: this);
+                }
             }
             // 全局输出静音 OSD 主标题显示「全部应用」（静音的是所有应用，不是音跃本身）
             ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(result.Applied
