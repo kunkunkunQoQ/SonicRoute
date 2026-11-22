@@ -1,9 +1,10 @@
+using System.Globalization;
 using System.Net.Sockets;
 using System.Text;
 
 namespace SonicRoute.AndroidAudio;
 
-/// <summary>Owns only one server PID, unique jar/socket and direct localabstract ADB stream. Never runs scrcpy.exe.</summary>
+/// <summary>Owns only one server PID, unique socket and direct localabstract ADB stream. Never runs scrcpy.exe.</summary>
 public sealed class ScrcpyAdbTransport : IAudioTransport
 {
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
@@ -12,7 +13,7 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
     private readonly Func<AndroidDevice, AndroidStreamSettings>? _streaming;
     private readonly string _scid = Random.Shared.Next(1, int.MaxValue).ToString("x8");
     private readonly CancellationTokenSource _logLifetime = new();
-    private string? _serial, _remote;
+    private string? _serial;
     private int _serverPid;
     private IAdbShellSession? _server;
     private Stream? _socketStream;
@@ -38,12 +39,11 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         }
         string sdkText = await _adb.RunAsync(token, "-s", _serial, "shell", "getprop", "ro.build.version.sdk").ConfigureAwait(false);
         if (!int.TryParse(sdkText.Trim(), out int sdk) || sdk < 33) throw AndroidError.WithCode(new NotSupportedException("应用音频捕获要求 Android 13 或更高；已验证的参考机型为 Android 16。"), AndroidErrorCode.Android13Required);
-        if (!File.Exists(_adb.CatalogFile)) throw new FileNotFoundException("Missing verified SonicRoute audio helper.", _adb.CatalogFile);
-        _remote = "/data/local/tmp/sonicroute_audio_" + _scid + ".jar";
+        string remote;
         using (timing?.Measure("capture_jar"))
-            await _adb.RunAsync(token, "-s", _serial, "push", _adb.CatalogFile, _remote).ConfigureAwait(false);
+            remote = await _adb.EnsureCatalogJarAsync(_serial, token).ConfigureAwait(false);
         string socketName = "sonicroute_" + _scid;
-        string command = "echo SR_PID:$$; CLASSPATH=" + _remote + " exec app_process / org.sonicroute.android.SonicRouteServer 3.3.4 "
+        string command = "echo SR_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.SonicRouteServer 3.3.4 "
             + $"scid={_scid} socket_prefix=sonicroute log_level=info video=false audio=true control=false audio_codec=opus audio_source=playback "
             + CaptureOptions(app, keepPhoneAudio) + " " + streaming.AudioOptions() + " "
             + "tunnel_forward=true send_device_meta=false send_dummy_byte=true cleanup=false";
@@ -126,27 +126,20 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
             if (_logs != null) { try { await _logs.ConfigureAwait(false); } catch (ObjectDisposedException) { } }
             await _server.DisposeAsync().ConfigureAwait(false); _server = null;
         }
-        if (_serial != null && _remote != null)
-        {
-            try { await _adb.RunAsync(cleanup.Token, "-s", _serial, "shell", "rm", "-f", _remote).ConfigureAwait(false); }
-            catch (Exception ex) { _log("Temporary server cleanup: " + ex.Message); }
-        }
         _logLifetime.Dispose();
     }
 
-    private async Task<bool> RequestOwnedServerExitAsync(CancellationToken token)
+    private Task<bool> RequestOwnedServerExitAsync(CancellationToken token)
     {
         int pid = Volatile.Read(ref _serverPid);
-        if (pid <= 0 || _serial == null) return false;
-        try
-        {
-            string command = await _adb.RunAsync(token, "-s", _serial, "shell", "cat", $"/proc/{pid}/cmdline").ConfigureAwait(false);
-            if ((!command.Contains("org.sonicroute.android.SonicRouteServer", StringComparison.Ordinal)
-                    && !command.Contains("com.genymobile.scrcpy.Server", StringComparison.Ordinal))
-                || !command.Contains("scid=" + _scid, StringComparison.Ordinal)) return false;
-            await _adb.RunAsync(token, "-s", _serial, "shell", "kill", "-TERM", pid.ToString()).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception ex) { _log("Owned server cleanup: " + ex.Message); return false; }
+        if (pid <= 0 || _serial == null) return Task.FromResult(false);
+        return _adb.TerminateRemoteProcessAsync(
+            _serial,
+            pid.ToString(CultureInfo.InvariantCulture),
+            command => (command.Contains("org.sonicroute.android.SonicRouteServer", StringComparison.Ordinal)
+                || command.Contains("com.genymobile.scrcpy.Server", StringComparison.Ordinal))
+                && command.Contains("scid=" + _scid, StringComparison.Ordinal),
+            msg => _log("Owned server cleanup: " + msg),
+            token);
     }
 }

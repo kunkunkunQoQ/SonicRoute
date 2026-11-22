@@ -21,6 +21,16 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
     private readonly object _encoderGate = new();
     private readonly Dictionary<string, AndroidEncoderCatalog> _encoderCatalogs = new(StringComparer.Ordinal);
     private int _encoderRevision;
+    private readonly object _jarGate = new();
+    private readonly Dictionary<string, JarGateEntry> _jarGates = new(StringComparer.Ordinal);
+    private string? _cachedJarPath, _cachedJarTag;
+    private long _cachedJarLength, _cachedJarWriteTicks;
+
+    private sealed class JarGateEntry
+    {
+        public readonly SemaphoreSlim Semaphore = new(1, 1);
+        public int Refs;
+    }
 
     public string RuntimeDirectory => _bundle?.DirectoryPath ?? _runtimeDirectory!;
     public string CatalogFile => Path.Combine(RuntimeDirectory, "sonicroute-catalog.jar");
@@ -34,6 +44,124 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
             if (!File.Exists(CatalogFile) || new FileInfo(CatalogFile).Length == 0)
                 throw AndroidError.WithCode(new InvalidDataException("手机目录服务组件缺失或损坏，请重新下载完整版本。"), AndroidErrorCode.ServerVerifyFailed);
             _catalogVerified = true;
+        }
+    }
+
+    internal async Task<string> EnsureCatalogJarAsync(string commandTarget, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(commandTarget))
+            throw new ArgumentException("Target device is required.", nameof(commandTarget));
+        token.ThrowIfCancellationRequested();
+        ValidateCatalog();
+        var info = new FileInfo(CatalogFile);
+        if (!info.Exists || info.Length == 0)
+            throw AndroidError.WithCode(new InvalidDataException("手机目录服务组件缺失或损坏，请重新下载完整版本。"), AndroidErrorCode.ServerVerifyFailed);
+
+        (string tag, string expectedLen) = GetCatalogFingerprint(info);
+        string remote = "/data/local/tmp/sonicroute-catalog-" + tag + ".jar";
+
+        JarGateEntry entry;
+        lock (_jarGate)
+        {
+            if (!_jarGates.TryGetValue(commandTarget, out entry!))
+                _jarGates[commandTarget] = entry = new JarGateEntry();
+            entry.Refs++;
+        }
+        try
+        {
+            await entry.Semaphore.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                string check = await RunAsync(token, "-s", commandTarget, "shell",
+                    $"ls -l {remote} 2>/dev/null || echo MISSING").ConfigureAwait(false);
+                if (!check.Contains("MISSING", StringComparison.Ordinal) && RemoteJarMatchesSize(check, expectedLen, remote))
+                    return remote;
+
+                string tmp = $"{remote}.{Guid.NewGuid():N}.tmp";
+                try
+                {
+                    await RunAsync(token, "-s", commandTarget, "push", info.FullName, tmp).ConfigureAwait(false);
+                    await RunAsync(token, "-s", commandTarget, "shell", $"chmod 0644 {tmp} && mv -f {tmp} {remote}").ConfigureAwait(false);
+                }
+                catch
+                {
+                    using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                    try { await RunAsync(cleanup.Token, "-s", commandTarget, "shell", "rm", "-f", tmp).ConfigureAwait(false); }
+                    catch { }
+                    throw;
+                }
+                return remote;
+            }
+            finally { entry.Semaphore.Release(); }
+        }
+        finally
+        {
+            lock (_jarGate)
+            {
+                if (--entry.Refs == 0 && _jarGates.TryGetValue(commandTarget, out var current) && ReferenceEquals(current, entry))
+                {
+                    _jarGates.Remove(commandTarget);
+                    entry.Semaphore.Dispose();
+                }
+            }
+        }
+    }
+
+    private (string Tag, string ExpectedLen) GetCatalogFingerprint(FileInfo info)
+    {
+        lock (_jarGate)
+        {
+            if (_cachedJarTag != null
+                && string.Equals(_cachedJarPath, info.FullName, StringComparison.OrdinalIgnoreCase)
+                && _cachedJarLength == info.Length
+                && _cachedJarWriteTicks == info.LastWriteTimeUtc.Ticks)
+            {
+                return (_cachedJarTag, _cachedJarLength.ToString(CultureInfo.InvariantCulture));
+            }
+            using var fs = File.OpenRead(info.FullName);
+            byte[] hash = SHA256.HashData(fs);
+            _cachedJarTag = Convert.ToHexString(hash.AsSpan(0, 4)).ToLowerInvariant();
+            _cachedJarPath = info.FullName;
+            _cachedJarLength = info.Length;
+            _cachedJarWriteTicks = info.LastWriteTimeUtc.Ticks;
+            return (_cachedJarTag, _cachedJarLength.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    private static bool RemoteJarMatchesSize(string output, string expectedLen, string remote)
+    {
+        string fileName = Path.GetFileName(remote);
+        foreach (string rawLine in output.Split('\n'))
+        {
+            string line = rawLine.Trim();
+            if (line.Length == 0 || line.Contains("MISSING", StringComparison.Ordinal)
+                || line.Contains("No such file", StringComparison.OrdinalIgnoreCase)
+                || !line.EndsWith(fileName, StringComparison.Ordinal))
+                continue;
+            string[] tokens = line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 2; i < tokens.Length - 1; i++)
+            {
+                if (tokens[i] == expectedLen) return true;
+            }
+        }
+        return false;
+    }
+
+    internal async Task<bool> TerminateRemoteProcessAsync(string commandTarget, string? pid, Func<string, bool> isOwnedCommand,
+        Action<string>? onError, CancellationToken token)
+    {
+        if (string.IsNullOrEmpty(commandTarget) || string.IsNullOrWhiteSpace(pid)) return false;
+        try
+        {
+            string command = await RunAsync(token, "-s", commandTarget, "shell", "cat", $"/proc/{pid}/cmdline").ConfigureAwait(false);
+            if (!isOwnedCommand(command.Replace('\0', ' '))) return false;
+            await RunAsync(token, "-s", commandTarget, "shell", "kill", "-TERM", pid).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            onError?.Invoke(ex.Message);
+            return false;
         }
     }
 
@@ -422,33 +550,22 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(12));
         await PrepareRuntimeAsync("audio", deadline.Token).ConfigureAwait(false);
-        ValidateCatalog();
-        string remote = "/data/local/tmp/sonicroute_encoders_" + Guid.NewGuid().ToString("N") + ".jar";
-        try
+        string remote = await EnsureCatalogJarAsync(device.CommandTarget, deadline.Token).ConfigureAwait(false);
+        string output = await RunAsync(deadline.Token, "-s", device.CommandTarget, "shell", "CLASSPATH=" + remote,
+            "app_process", "/", "org.sonicroute.android.EncoderCatalog").ConfigureAwait(false);
+        var catalog = ParseEncoders(output);
+        deadline.Token.ThrowIfCancellationRequested();
+        lock (_encoderGate)
         {
-            await RunAsync(deadline.Token, "-s", device.CommandTarget, "push", CatalogFile, remote).ConfigureAwait(false);
-            string output = await RunAsync(deadline.Token, "-s", device.CommandTarget, "shell", "CLASSPATH=" + remote,
-                "app_process", "/", "org.sonicroute.android.EncoderCatalog").ConfigureAwait(false);
-            var catalog = ParseEncoders(output);
-            deadline.Token.ThrowIfCancellationRequested();
-            lock (_encoderGate)
+            // Small process-local capability cache; no disk work, expiry timer or idle scan.
+            if (revision == _encoderRevision)
             {
-                // Small process-local capability cache; no disk work, expiry timer or idle scan.
-                if (revision == _encoderRevision)
-                {
-                    if (_encoderCatalogs.Count >= 4 && !_encoderCatalogs.ContainsKey(key))
-                        _encoderCatalogs.Remove(_encoderCatalogs.Keys.First());
-                    _encoderCatalogs[key] = catalog;
-                }
+                if (_encoderCatalogs.Count >= 4 && !_encoderCatalogs.ContainsKey(key))
+                    _encoderCatalogs.Remove(_encoderCatalogs.Keys.First());
+                _encoderCatalogs[key] = catalog;
             }
-            return catalog;
         }
-        finally
-        {
-            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
-            catch (Exception ex) when (ex is IOException or OperationCanceledException) { Trace.WriteLine("Encoder query cleanup: " + ex.Message); }
-        }
+        return catalog;
     }
 
     internal bool IsHevcEncoderUnavailable(AndroidDevice device)
@@ -511,71 +628,47 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         }
         if (device.State != "device") throw AndroidError.WithCode(new IOException("请先在手机上允许 ADB 调试授权。"), AndroidErrorCode.AuthorizeAdbFirst);
         await PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        ValidateCatalog();
-        if (!File.Exists(CatalogFile)) throw new FileNotFoundException("Missing Android app catalogue helper.", CatalogFile);
-        string remote = "/data/local/tmp/sonicroute_catalog_" + Guid.NewGuid().ToString("N") + ".jar";
-        try
+        string remote = await EnsureCatalogJarAsync(device.CommandTarget, token).ConfigureAwait(false);
+        var arguments = new List<string> { "-s", device.CommandTarget, "shell", "CLASSPATH=" + remote,
+            "app_process", "/", "org.sonicroute.android.Catalog" };
+        if (packages != null) { arguments.Add("--packages"); arguments.AddRange(packages.Distinct(StringComparer.Ordinal)); }
+        string result = await RunAsync(token, arguments.ToArray()).ConfigureAwait(false);
+        var apps = new List<AndroidApp>();
+        foreach (string line in result.Split('\n'))
         {
-            await RunAsync(token, "-s", device.CommandTarget, "push", CatalogFile, remote).ConfigureAwait(false);
-            var arguments = new List<string> { "-s", device.CommandTarget, "shell", "CLASSPATH=" + remote,
-                "app_process", "/", "org.sonicroute.android.Catalog" };
-            if (packages != null) { arguments.Add("--packages"); arguments.AddRange(packages.Distinct(StringComparer.Ordinal)); }
-            string result = await RunAsync(token, arguments.ToArray()).ConfigureAwait(false);
-            var apps = new List<AndroidApp>();
-            foreach (string line in result.Split('\n'))
-            {
-                if (!line.TrimStart().StartsWith('{')) continue;
-                using var json = JsonDocument.Parse(line);
-                var root = json.RootElement;
-                if (root.TryGetProperty("error", out var error)) throw new IOException(error.GetString());
-                string package = root.GetProperty("package").GetString()!;
-                ValidatePackage(package);
-                string? icon = root.TryGetProperty("icon", out var iconValue) ? iconValue.GetString() : null;
-                byte[]? png = string.IsNullOrEmpty(icon) ? null : Convert.FromBase64String(icon);
-                if (png?.Length > 128 * 1024) throw new InvalidDataException("Application icon is too large.");
-                apps.Add(new AndroidApp(package, root.GetProperty("name").GetString() ?? package,
-                    root.GetProperty("uid").GetInt32(), Category(root.GetProperty("category").GetInt32()), png,
-                    root.GetProperty("category").GetInt32()));
-            }
-            return apps.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            if (!line.TrimStart().StartsWith('{')) continue;
+            using var json = JsonDocument.Parse(line);
+            var root = json.RootElement;
+            if (root.TryGetProperty("error", out var error)) throw new IOException(error.GetString());
+            string package = root.GetProperty("package").GetString()!;
+            ValidatePackage(package);
+            string? icon = root.TryGetProperty("icon", out var iconValue) ? iconValue.GetString() : null;
+            byte[]? png = string.IsNullOrEmpty(icon) ? null : Convert.FromBase64String(icon);
+            if (png?.Length > 128 * 1024) throw new InvalidDataException("Application icon is too large.");
+            apps.Add(new AndroidApp(package, root.GetProperty("name").GetString() ?? package,
+                root.GetProperty("uid").GetInt32(), Category(root.GetProperty("category").GetInt32()), png,
+                root.GetProperty("category").GetInt32()));
         }
-        finally
-        {
-            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
-            catch { /* device disconnection is surfaced by the original operation */ }
-        }
+        return apps.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
     public async Task<IReadOnlyList<AndroidOutputSink>> OutputsAsync(AndroidDevice device, CancellationToken token)
     {
         if (device.State != "device") throw AndroidError.WithCode(new IOException("请先在手机上允许 ADB 调试授权。"), AndroidErrorCode.AuthorizeAdbFirst);
         await PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        ValidateCatalog();
-        if (!File.Exists(CatalogFile)) throw new FileNotFoundException("Missing Android app catalogue helper.", CatalogFile);
-        string remote = "/data/local/tmp/sonicroute_outputs_" + Guid.NewGuid().ToString("N") + ".jar";
-        try
+        string remote = await EnsureCatalogJarAsync(device.CommandTarget, token).ConfigureAwait(false);
+        string result = await RunAsync(token, "-s", device.CommandTarget, "shell",
+            "CLASSPATH=" + remote, "app_process", "/", "org.sonicroute.android.AudioOutputBridge", "list").ConfigureAwait(false);
+        foreach (string line in result.Split('\n'))
         {
-            await RunAsync(token, "-s", device.CommandTarget, "push", CatalogFile, remote).ConfigureAwait(false);
-            string result = await RunAsync(token, "-s", device.CommandTarget, "shell",
-                "CLASSPATH=" + remote, "app_process", "/", "org.sonicroute.android.AudioOutputBridge", "list").ConfigureAwait(false);
-            foreach (string line in result.Split('\n'))
-            {
-                if (!line.TrimStart().StartsWith('{')) continue;
-                using var json = JsonDocument.Parse(line);
-                if (json.RootElement.TryGetProperty("error", out var error))
-                    throw new IOException(error.GetString());
-                if (json.RootElement.TryGetProperty("outputs", out var outputs) && outputs.ValueKind == JsonValueKind.Array)
-                    return AndroidOutputSink.ParseList(outputs);
-            }
-            return [AndroidOutputSink.DefaultSpeaker];
+            if (!line.TrimStart().StartsWith('{')) continue;
+            using var json = JsonDocument.Parse(line);
+            if (json.RootElement.TryGetProperty("error", out var error))
+                throw new IOException(error.GetString());
+            if (json.RootElement.TryGetProperty("outputs", out var outputs) && outputs.ValueKind == JsonValueKind.Array)
+                return AndroidOutputSink.ParseList(outputs);
         }
-        finally
-        {
-            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try { await RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
-            catch { }
-        }
+        return [AndroidOutputSink.DefaultSpeaker];
     }
 
     public async Task<int> ResolveUidAsync(AndroidDevice device, string package, CancellationToken token)

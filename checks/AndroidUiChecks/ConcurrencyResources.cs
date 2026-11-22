@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.IO;
 using System.IO.Pipelines;
 using System.Reflection;
@@ -63,14 +64,53 @@ internal static partial class Program
         }
     }
 
-    private sealed class CleanupTransport(CleanupShell shell, Func<string, Task>? push = null) : IAdbTransport
+    private sealed class CleanupTransport(CleanupShell shell, Func<string, Task>? push = null, Func<string, Task<IAdbShellSession>>? openShell = null) : IAdbTransport
     {
-        internal int Removed;
+        internal int Terminated;
+        private readonly ConcurrentDictionary<string, long> _jars = new(StringComparer.Ordinal);
+        private string? _lastLaunch;
         public Task<AdbShellResult> RunShellAsync(string serial, string command, CancellationToken token)
-        { if (command.StartsWith("rm -f ")) Interlocked.Increment(ref Removed); return Task.FromResult(new AdbShellResult("", 0)); }
+        {
+            if (command.StartsWith("ls -l ", StringComparison.Ordinal))
+            {
+                string path = command["ls -l ".Length..].Split(' ', 2)[0];
+                return Task.FromResult(new AdbShellResult(
+                    _jars.TryGetValue(path, out long len)
+                        ? $"-rw-r--r-- 1 shell shell {len} 2026-01-01 00:00 {path}\n"
+                        : "MISSING\n",
+                    0));
+            }
+            if (command.StartsWith("chmod 0644 ", StringComparison.Ordinal))
+            {
+                int mv = command.IndexOf(" && mv -f ", StringComparison.Ordinal);
+                if (mv > 0)
+                {
+                    string tmp = command["chmod 0644 ".Length..mv].Trim();
+                    string[] mvArgs = command[(mv + " && mv -f ".Length)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (mvArgs.Length >= 2 && _jars.TryRemove(tmp, out long len))
+                        _jars[mvArgs[1]] = len;
+                }
+                return Task.FromResult(new AdbShellResult("", 0));
+            }
+            if (command.StartsWith("cat /proc/", StringComparison.Ordinal))
+                return Task.FromResult(new AdbShellResult(_lastLaunch ?? "", 0));
+            if (command.StartsWith("kill -TERM ", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref Terminated);
+                return Task.FromResult(new AdbShellResult("", 0));
+            }
+            return Task.FromResult(new AdbShellResult("", 0));
+        }
         public Task<IAdbShellSession> OpenShellAsync(string serial, string command, bool redirectInput, CancellationToken token)
-            => Task.FromResult<IAdbShellSession>(shell);
-        public Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token) => push?.Invoke(remotePath) ?? Task.CompletedTask;
+        {
+            _lastLaunch = command;
+            return openShell != null ? openShell(command) : Task.FromResult<IAdbShellSession>(shell);
+        }
+        public Task PushAsync(string serial, string localPath, string remotePath, CancellationToken token)
+        {
+            _jars[remotePath] = File.Exists(localPath) ? new FileInfo(localPath).Length : 1;
+            return push?.Invoke(remotePath) ?? Task.CompletedTask;
+        }
         public Task<string> VersionAsync(CancellationToken token) => throw new NotSupportedException();
         public Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token) => throw new NotSupportedException();
         public Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> changed, CancellationToken token) => throw new NotSupportedException();
@@ -88,11 +128,14 @@ internal static partial class Program
 
     private static async Task CheckMediaResourceCleanupAsync(string output)
     {
+        string runtime = Path.Combine(output, "fake-runtime");
+        Directory.CreateDirectory(runtime);
+        await File.WriteAllBytesAsync(Path.Combine(runtime, "sonicroute-catalog.jar"), [0]);
         foreach (bool clipboard in new[] { true, false })
         {
             var shell = new CleanupShell(); shell.Input.Block = true; shell.Input.FailFlush = true;
             var transport = new CleanupTransport(shell);
-            using var adb = new AdbClient(Path.Combine(output, "fake-runtime"), transport);
+            using var adb = new AdbClient(runtime, transport);
             typeof(AdbClient).GetField("_catalogVerified", ConcurrencyHidden)!.SetValue(adb, true);
             var phone = new AndroidDevice("offline-cleanup-fixture", "Fixture", "device", false);
             using var stop = new CancellationTokenSource();
@@ -102,6 +145,7 @@ internal static partial class Program
             {
                 var client = new AndroidClipboardClient(adb);
                 watch = client.WatchAsync(phone, () => ready.TrySetResult(), _ => { }, stop.Token);
+                await shell.PublishAsync("SR_CLIPBOARD_PID:4568");
                 await shell.PublishAsync("{\"ready\":true,\"revision\":0}");
                 await ready.Task.WaitAsync(TimeSpan.FromSeconds(3));
                 send = client.SendAsync(new string('x', 8192), 0, default);
@@ -110,6 +154,7 @@ internal static partial class Program
             {
                 var client = new AndroidMediaSessionClient(adb);
                 watch = client.WatchAsync(phone, _ => ready.TrySetResult(), stop.Token);
+                await shell.PublishAsync("SR_MEDIA_PID:4567");
                 await shell.PublishAsync("{\"package\":\"fixture.app\",\"title\":\"fixture\",\"artist\":\"fixture\",\"playing\":false,\"actions\":0,\"position\":0,\"duration\":0}");
                 await ready.Task.WaitAsync(TimeSpan.FromSeconds(3));
                 send = client.SendAsync("toggle", default);
@@ -118,8 +163,8 @@ internal static partial class Program
             stop.Cancel();
             try { await send.WaitAsync(TimeSpan.FromSeconds(3)); } catch (OperationCanceledException) { }
             try { await watch.WaitAsync(TimeSpan.FromSeconds(3)); } catch (OperationCanceledException) { }
-            Check(shell.Disposed && transport.Removed == 1,
-                (clipboard ? "clipboard" : "media") + " teardown cancels an in-flight write and still removes/disposes the helper when writer flush throws");
+            Check(shell.Disposed && transport.Terminated == 1,
+                (clipboard ? "clipboard" : "media") + " teardown cancels an in-flight write and still terminates/disposes the helper when writer flush throws");
         }
 
         var outputType = typeof(AdbClient).Assembly.GetType("SonicRoute.AndroidAudio.AndroidAudioOutputConnection")!;
@@ -135,7 +180,7 @@ internal static partial class Program
             bool lifetimeDisposed = false;
             try { _ = ((CancellationTokenSource)outputType.GetField("_lifetime", ConcurrencyHidden)!.GetValue(connection)!).Token; }
             catch (ObjectDisposedException) { lifetimeDisposed = true; }
-            Check(outputShell.Disposed && outputTransport.Removed == 1 && lifetimeDisposed,
+            Check(outputShell.Disposed && lifetimeDisposed,
                 "PCM connection cleanup releases helper and cancellation state after a throwing control writer");
         }
 

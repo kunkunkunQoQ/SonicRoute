@@ -30,7 +30,6 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
     private int _disposed;
     private readonly Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? _onOutputs;
     private readonly Action<string, int, string>? _onRouted;
-    private string Remote => "/data/local/tmp/" + _socket + ".jar";
     public AndroidDevice Device { get; private set; }
     public Stream Stream => _pcmStream!;
     public Task<Exception> Completion => _ended.Task;
@@ -72,20 +71,21 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         _adb.ValidateCatalog();
         if (Device.State != "device") await RefreshDeviceAsync(token).ConfigureAwait(false);
+        string remote;
         using (timing?.Measure("output_jar"))
         {
-            try { await PushRuntimeAsync().ConfigureAwait(false); }
+            try { remote = await _adb.EnsureCatalogJarAsync(Device.CommandTarget, token).ConfigureAwait(false); }
             catch (Exception) when (!token.IsCancellationRequested)
             {
                 await RefreshDeviceAsync(token).ConfigureAwait(false);
-                await PushRuntimeAsync().ConfigureAwait(false);
+                remote = await _adb.EnsureCatalogJarAsync(Device.CommandTarget, token).ConfigureAwait(false);
             }
         }
 
         using (timing?.Measure("output_helper_ready"))
         {
             _helper = await _adb.OpenShellAsync(Device.CommandTarget,
-                "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
+                "echo SR_PCOUT_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
                 + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'",
                 redirectInput: true, token).ConfigureAwait(false);
             _writer = new StreamWriter(_helper.InputStream, Utf8NoBom, bufferSize: 1024, leaveOpen: true) { NewLine = "\n" };
@@ -106,8 +106,6 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         _cancelSocket = _lifetime.Token.UnsafeRegister(static stream => { try { ((Stream)stream!).Dispose(); } catch { } }, _pcmStream);
         // Feed real-time PCM before awaiting hardware acknowledgement; the helper
         // keeps an unverified output muted, preventing default-device leakage.
-
-        Task PushRuntimeAsync() => _adb.RunAsync(token, "-s", Device.CommandTarget, "push", _adb.CatalogFile, Remote);
     }
 
     private async Task RefreshDeviceAsync(CancellationToken token)
@@ -259,13 +257,13 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         if (!exited && _pid != null)
         {
-            try
-            {
-                string cmdline = await _adb.RunAsync(cleanup.Token, "-s", Device.CommandTarget, "shell", "cat", "/proc/" + _pid + "/cmdline").ConfigureAwait(false);
-                if (cmdline.Contains(_socket, StringComparison.Ordinal) && cmdline.Contains("org.sonicroute.android.AudioOutputBridge", StringComparison.Ordinal))
-                    await _adb.RunAsync(cleanup.Token, "-s", Device.CommandTarget, "shell", "kill", "-TERM", _pid).ConfigureAwait(false);
-            }
-            catch (Exception ex) { Trace.WriteLine("Phone output cleanup: " + ex.Message); }
+            await _adb.TerminateRemoteProcessAsync(
+                Device.CommandTarget,
+                _pid,
+                cmdline => cmdline.Contains(_socket, StringComparison.Ordinal)
+                    && cmdline.Contains("org.sonicroute.android.AudioOutputBridge", StringComparison.Ordinal),
+                msg => Trace.WriteLine("Phone output cleanup: " + msg),
+                cleanup.Token).ConfigureAwait(false);
         }
         if (_helper != null)
         {
@@ -275,7 +273,6 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             try { _writer?.Dispose(); } catch (Exception ex) { Trace.WriteLine("Phone output writer cleanup: " + ex.Message); }
             try { await _helper.DisposeAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("Phone output session cleanup: " + ex.Message); }
         }
-        try { await _adb.RunAsync(cleanup.Token, "-s", Device.CommandTarget, "shell", "rm", "-f", Remote).ConfigureAwait(false); } catch { }
         _lifetime.Dispose();
     }
 }

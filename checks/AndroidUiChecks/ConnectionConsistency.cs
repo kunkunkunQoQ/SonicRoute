@@ -128,9 +128,9 @@ internal static partial class Program
         var previous = transport.GetValue(adb);
         var shell = new CleanupShell();
         int attempts = 0;
-        transport.SetValue(adb, new CleanupTransport(shell, path =>
+        transport.SetValue(adb, new CleanupTransport(shell, openShell: cmd =>
         {
-            if (!path.Contains("/sonicroute_media_", StringComparison.Ordinal)) return Task.CompletedTask;
+            if (!cmd.Contains("MediaSessionBridge", StringComparison.Ordinal)) return Task.FromResult<IAdbShellSession>(shell);
             Interlocked.Increment(ref attempts);
             throw new IOException("fixture media service failed to start");
         }));

@@ -423,6 +423,29 @@ internal sealed class FakeAdbServer : IAsyncDisposable
             finally { _audio.TryRemove(socket, out _); }
             return;
         }
+        if (cmd.StartsWith("ls -l /data/local/tmp/sonicroute-catalog-", StringComparison.Ordinal))
+        {
+            string path = cmd["ls -l ".Length..].Split(' ', 2)[0];
+            string reply = PushedFiles.TryGetValue(path, out var file)
+                ? $"-rw-r--r-- 1 shell shell {file.Data.Length} 2026-01-01 00:00 {path}\n"
+                : "MISSING\n";
+            await SendV2PacketAsync(stream, 1, Encoding.UTF8.GetBytes(reply), token).ConfigureAwait(false);
+            await SendV2PacketAsync(stream, 3, [0], token).ConfigureAwait(false);
+            return;
+        }
+        if (cmd.StartsWith("chmod 0644 /data/local/tmp/sonicroute-catalog-", StringComparison.Ordinal))
+        {
+            int mv = cmd.IndexOf(" && mv -f ", StringComparison.Ordinal);
+            if (mv > 0)
+            {
+                string tmp = cmd["chmod 0644 ".Length..mv].Trim();
+                string[] mvArgs = cmd[(mv + " && mv -f ".Length)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (mvArgs.Length >= 2 && PushedFiles.TryRemove(tmp, out var moved))
+                    PushedFiles[mvArgs[1]] = moved;
+            }
+            await SendV2PacketAsync(stream, 3, [0], token).ConfigureAwait(false);
+            return;
+        }
         await SendV2PacketAsync(stream, 3, [0], token).ConfigureAwait(false);
     }
 

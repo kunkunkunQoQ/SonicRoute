@@ -55,10 +55,10 @@ internal static partial class Program
         {
             var first = await adb.EncodersAsync(phone, default);
             var cached = await adb.EncodersAsync(wifi, default);
-            Check(ReferenceEquals(first, cached) && transport.Queries == 1 && transport.Pushes == 1 && transport.Cleanups == 1,
+            Check(ReferenceEquals(first, cached) && transport.Queries == 1 && transport.Pushes == 1,
                 "reopening one physical phone reuses its encoder catalog without another push or shell request");
             await adb.EncodersAsync(phone with { HardwareId = "other" }, default);
-            Check(transport.Queries == 2, "another phone cannot reuse the first phone's encoder capabilities");
+            Check(transport.Queries == 2 && transport.Pushes == 1, "another phone cannot reuse the first phone's encoder capabilities while reusing the cached remote jar");
             adb.InvalidateEncoders(phone); await adb.EncodersAsync(phone, default);
             Check(transport.Queries == 3, "an explicit refresh queries that phone again");
             using var canceled = new CancellationTokenSource(); canceled.Cancel();
@@ -71,7 +71,7 @@ internal static partial class Program
             try { await adb.EncodersAsync(phone, default); } catch (IOException) { }
             transport.Query = _ => Task.FromResult(EncoderSettingsTransport.Json);
             await adb.EncodersAsync(phone, default);
-            Check(transport.Queries == 5 && transport.Cleanups == 5, "failed queries are cleaned and retried instead of cached");
+            Check(transport.Queries == 5 && transport.Pushes == 1, "failed queries are retried instead of cached and reuse the cached jar");
 
             adb.InvalidateEncoders(phone);
             var held = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -122,15 +122,34 @@ internal static partial class Program
     private sealed class EncoderSettingsTransport : PairingFixtureTransport, IAdbTransport
     {
         internal const string Json = "{\"audio\":[\"c2.android.opus.encoder\"],\"video\":[\"c2.android.avc.encoder\"]}";
-        internal int Queries, Pushes, Cleanups;
+        internal int Queries, Pushes;
+        private readonly Dictionary<string, long> _jars = new(StringComparer.Ordinal);
         internal Func<CancellationToken, Task<string>> Query = _ => Task.FromResult(Json);
         Task IAdbTransport.PushAsync(string serial, string local, string remote, CancellationToken token)
-        { Pushes++; return Task.CompletedTask; }
+        { Pushes++; _jars[serial + "\0" + remote] = new FileInfo(local).Length; return Task.CompletedTask; }
         async Task<AdbShellResult> IAdbTransport.RunShellAsync(string serial, string command, CancellationToken token)
         {
+            if (command.StartsWith("ls -l ", StringComparison.Ordinal))
+            {
+                string path = command["ls -l ".Length..].Split(' ', 2)[0];
+                return _jars.TryGetValue(serial + "\0" + path, out long len)
+                    ? new($"-rw-r--r-- 1 shell shell {len} 2026-01-01 00:00 {path}\n", 0)
+                    : new("MISSING\n", 0);
+            }
+            if (command.StartsWith("chmod 0644 ", StringComparison.Ordinal))
+            {
+                int mv = command.IndexOf(" && mv -f ", StringComparison.Ordinal);
+                if (mv > 0)
+                {
+                    string tmp = command["chmod 0644 ".Length..mv].Trim();
+                    string[] mvArgs = command[(mv + " && mv -f ".Length)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (mvArgs.Length >= 2 && _jars.Remove(serial + "\0" + tmp, out long len))
+                        _jars[serial + "\0" + mvArgs[1]] = len;
+                }
+                return new("", 0);
+            }
             if (command.Contains("org.sonicroute.android.EncoderCatalog", StringComparison.Ordinal))
             { Queries++; return new(await Query(token), 0); }
-            if (command.StartsWith("rm -f ", StringComparison.Ordinal)) Cleanups++;
             return new("", 0);
         }
     }

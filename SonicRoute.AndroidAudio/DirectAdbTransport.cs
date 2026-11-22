@@ -888,7 +888,7 @@ internal sealed class ArbitratedAdbTransport : IAdbTransport, IAsyncDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (await _isSocketActiveAsync(token).ConfigureAwait(false))
         {
-            await _directTransport.ReleaseUsbConnectionsAsync().ConfigureAwait(false);
+            await _directTransport.ReleaseIdleConnectionsAsync().ConfigureAwait(false);
             return _socketTransport;
         }
         return _directTransport;

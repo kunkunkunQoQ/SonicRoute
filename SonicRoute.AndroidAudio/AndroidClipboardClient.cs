@@ -32,14 +32,13 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
     {
         using var sends = CancellationTokenSource.CreateLinkedTokenSource(token);
         await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        adb.ValidateCatalog();
-        string id = Guid.NewGuid().ToString("N"), remote = "/data/local/tmp/sonicroute_clipboard_" + Guid.NewGuid().ToString("N") + ".jar";
+        string id = Guid.NewGuid().ToString("N");
         string? pid = null;
         Task<string>? stderr = null;
         StreamReader? errReader = null;
         try
         {
-            await adb.RunAsync(token, "-s", device.CommandTarget, "push", adb.CatalogFile, remote).ConfigureAwait(false);
+            string remote = await adb.EnsureCatalogJarAsync(device.CommandTarget, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             var session = await adb.OpenShellAsync(device.CommandTarget,
                 "echo SR_CLIPBOARD_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.ClipboardBridge " + id,
@@ -102,19 +101,15 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
             // closed stream; that error must not skip helper/session cleanup.
             try { writer?.Dispose(); } catch { }
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(4));
-            try
+            if (pid != null)
             {
-                if (pid != null)
-                {
-                    string command = await adb.RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell",
-                        "if [ -r /proc/" + pid + "/cmdline ]; then cat /proc/" + pid + "/cmdline; fi").ConfigureAwait(false);
-                    if (IsOwnedCommand(command.Replace('\0', ' '), id))
-                        await adb.RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "kill", "-TERM", pid).ConfigureAwait(false);
-                }
+                await adb.TerminateRemoteProcessAsync(
+                    device.CommandTarget,
+                    pid,
+                    command => IsOwnedCommand(command, id),
+                    null,
+                    cleanup.Token).ConfigureAwait(false);
             }
-            catch (Exception) { /* Transport may already be gone; never kill a shared process. */ }
-            try { await adb.RunAsync(cleanup.Token, "-s", device.CommandTarget, "shell", "rm", "-f", remote).ConfigureAwait(false); }
-            catch (Exception) { }
             if (stderr != null) { try { await stderr.ConfigureAwait(false); } catch { } } // Drain but do not retain or log clipboard helper output.
             errReader?.Dispose();
             if (session != null) await session.DisposeAsync().ConfigureAwait(false);

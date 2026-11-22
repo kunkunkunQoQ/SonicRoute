@@ -236,9 +236,13 @@ public sealed class PcToPhoneAudioManager(Func<AdbClient> adbFactory, Func<int, 
         {
             var adb = adbFactory();
             if (device is not { State: "device" })
+            {
+                if (device is { ConnectionTarget: not null })
+                    throw AndroidError.WithCode(new IOException("手机连接已改变，请刷新设备。"), AndroidErrorCode.PhoneOffline);
                 device = (await adb.DevicesAsync(token).ConfigureAwait(false)).FirstOrDefault(d => d.State == "device"
                     && string.Equals(AndroidDeviceIdentity.Key(d), route.PhoneKey, StringComparison.OrdinalIgnoreCase))
                     ?? throw AndroidError.WithCode(new IOException("手机未连接或离线。"), AndroidErrorCode.PhoneOffline);
+            }
             await using var output = await AndroidAudioOutputConnection.OpenAsync(adb, device, route.SinkKey, token,
                 (phone, sinks) => OutputsObserved?.Invoke(phone, sinks),
                 (key, type, name) =>
