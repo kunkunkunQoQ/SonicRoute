@@ -8,7 +8,7 @@
 
 **讓音樂從喇叭播放，讓遊戲聲留在耳機裡。**
 
-SonicRoute 是常駐 Windows 系統匣的音訊工具。您可以為每個應用程式選擇播放和錄音裝置。在快速面板中按住 Ctrl 點選可增減播放裝置，按住 Shift 點選可選取連續範圍，各版本均可組合多個電腦輸出，Full 還可加入可用的手機輸出。您也可以使用快速鍵、滑鼠滾輪或快速面板調整音量，並把常用操作組合成自動化規則。
+SonicRoute 是常駐 Windows 系統匣的音訊工具。您可以為每個應用程式選擇播放和錄音裝置。在快速面板中按住 Ctrl 點選可增減播放裝置，按住 Shift 點選可選取連續範圍，各版本皆可組合多個電腦輸出，Full 還能加入可用的手機輸出。您也可以使用快速鍵、滑鼠滾輪或快速面板調整音量，並把常用操作組合成自動化規則。
 
 📥 [下載最新版本](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [使用指南（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -33,7 +33,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 ## ✨ SonicRoute 的功能
 
-- **為每個應用程式選擇播放與錄音裝置。** 遊戲與通話可以使用耳麥，音樂則從喇叭播放。在快速面板中，按住 Ctrl 點選可增減播放裝置，按住 Shift 點選可選取連續範圍；各版本均可組合多個電腦輸出，Full 還可加入可用的手機輸出。Windows 會儲存各應用程式的裝置設定，結束 SonicRoute 後仍然有效。
+- **為每個應用程式選擇播放與錄音裝置。** 遊戲與通話可以使用耳麥，音樂則從喇叭播放。在快速面板中，按住 Ctrl 點選可增減播放裝置，按住 Shift 點選可選取連續範圍；各版本皆可組合多個電腦輸出，Full 還能加入可用的手機輸出。Windows 會儲存各應用程式的裝置設定，結束 SonicRoute 後仍然有效。
 - **跟隨前景應用程式。** SonicRoute 會偵測視窗切換。在系統匣圖示上捲動滾輪，就能調整目前控制的應用程式音量，或按住 Alt 捲動來切換輸出裝置。可用螢幕提示（OSD）查看變更，也可用全域快速鍵將麥克風靜音。
 - **即時查看各應用程式的音量。** 快速面板會顯示各程式的音量滑桿和即時音量表。面板會記住顯示位置，高度可在 350 至 850 個邏輯像素之間調整。
 - **Android 連線與 AirPlay 接收（Full 版）。** 將 Android 應用程式的音訊傳到電腦調整，或將電腦音訊傳到手機。虛擬螢幕支援 H.265，視窗在前景時可用遊戲控制器操作。內建以 C# 實作的 AirPlay 接收功能，可播放 Apple 裝置的音訊並按原始比例鏡像顯示畫面。在快速面板中可選擇電腦輸出、Android 手機喇叭或手機連線的藍牙裝置，並透過智慧音量（SmartVolume）減少音量落差。

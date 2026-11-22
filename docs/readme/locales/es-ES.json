@@ -1,7 +1,7 @@
 {
     "title": "SonicRoute",
     "tagline": "Envía el audio de cada aplicación al dispositivo que elijas.",
-    "intro": "Escucha la música por los altavoces y reserva los auriculares para los juegos y las llamadas. SonicRoute te permite elegir en Windows la entrada y la salida de audio de cada aplicación. En el panel rápido, puedes pulsar Ctrl+clic para añadir o quitar dispositivos de reproducción y Mayús+clic para seleccionar un intervalo continuo; combina varias salidas del PC en cualquier edición o suma las salidas de teléfono disponibles en Full. Controla el sonido con atajos de teclado, desde el panel rápido o con la rueda del ratón sobre el icono de SonicRoute en el área de notificación. Puedes combinar tus ajustes habituales en reglas de automatización.",
+    "intro": "Escucha la música por los altavoces y reserva los auriculares para los juegos y las llamadas. SonicRoute te permite elegir en Windows la entrada y la salida de audio de cada aplicación. En el panel rápido, usa Ctrl+clic para añadir o quitar dispositivos de reproducción y Mayús+clic para seleccionar un intervalo continuo; combina varias salidas del PC en cualquier edición o suma las salidas de audio del teléfono disponibles en Full. Controla el sonido con atajos de teclado, desde el panel rápido o con la rueda del ratón sobre el icono de SonicRoute en el área de notificación. Puedes combinar tus ajustes habituales en reglas de automatización.",
     "download": "Descargar la última versión",
     "guide": "Guía de uso (en chino)",
     "wiki": "Wiki (en chino)",
