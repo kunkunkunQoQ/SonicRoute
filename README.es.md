@@ -34,7 +34,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Interfaz en nueve
 ## ✨ Qué ofrece SonicRoute
 
 - **Una entrada y una salida para cada aplicación.** Escucha la música por los altavoces y el juego por los auriculares. Para el chat de voz también puedes elegir el micrófono. En el panel rápido, usa Ctrl+clic para añadir o quitar dispositivos de reproducción y Mayús+clic para seleccionar un intervalo continuo; todas las ediciones pueden combinar varias salidas del PC, y Full permite añadir además las salidas disponibles del teléfono. Windows conserva estas asignaciones al cerrar SonicRoute.
-- **Control desde el área de notificación.** SonicRoute detecta los cambios de aplicación en primer plano mediante los eventos de Windows. Gira la rueda sobre el icono de SonicRoute para ajustar el volumen de la aplicación que estás controlando o mantén pulsada Alt al girarla para cambiar su salida. Un aviso en pantalla (OSD) muestra los cambios. También puedes silenciar todos los micrófonos con un atajo.
+- **Controla la aplicación actual con la rueda.** Por defecto, SonicRoute prioriza la aplicación en primer plano más reciente que tenga una sesión de audio. Gira la rueda sobre el icono en el área de notificación para ajustar su volumen o mantén pulsada Alt al girarla para cambiar su salida. Una notificación en pantalla (OSD) muestra el resultado y un atajo global permite silenciar el micrófono.
 - **Panel rápido con medidores de nivel.** Cada aplicación tiene su propio control de volumen y un medidor que muestra el nivel de audio en tiempo real. El panel recuerda su posición y permite ajustar la altura entre 350 y 850 píxeles lógicos.
 - **Android y AirPlay en la edición Full.** Escucha el audio de Android en el PC o el del PC en el móvil. Puedes usar las aplicaciones Android en pantallas virtuales, con vídeo H.265 y control con mando en la ventana activa. El receptor AirPlay escrito en C# también recibe audio y duplica la pantalla manteniendo la relación de aspecto. En el panel rápido puedes enviar el sonido a una salida del PC, al altavoz de un Android conectado o a su salida Bluetooth. El volumen inteligente (SmartVolume) atenúa las diferencias de nivel.
 - **6 disparadores y 39 acciones.** Ejecuta una regla con un atajo, a una hora programada, al iniciar SonicRoute o cuando una aplicación se abre, pasa a primer plano o se cierra. Combina cambios de dispositivo, ajustes de volumen, silenciamiento, apertura de programas y scripts de PowerShell. Con `sr` puedes ejecutar reglas desde un script o un Stream Deck.
@@ -57,7 +57,7 @@ Con una regla puedes seleccionar los auriculares y abrir el chat de voz al inici
 
 **Versión estable: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 21 de noviembre de 2026 · [Notas de la versión (en chino)](docs/release-v1.35.md)
 
-Elige **Full x64** para usar audio de Android, pantallas virtuales y AirPlay, o **Lite x64** para gestionar solo el audio del PC. **Legacy x64** está pensada para equipos con .NET Framework 4.8. Las ediciones ARM64 son experimentales. Full y Lite también están disponibles en Microsoft Store. Los enlaces de descarga directa corresponden a v1.35.
+Para escuchar el audio de Android en el PC, usar pantallas virtuales o recibir AirPlay, elige **Full**. Si solo necesitas el audio del PC, elige **Lite**. Para equipos x64 con .NET Framework 4.8 también puedes usar **Legacy**. Las compilaciones ARM64 son experimentales. La tabla siguiente incluye los enlaces de descarga directa de v1.35. En Microsoft Store, consulta las páginas correspondientes de Full y Lite.
 
 | Edición | Descarga | Requisitos |
 |---|---|---|
@@ -79,9 +79,9 @@ Elige **Full x64** para usar audio de Android, pantallas virtuales y AirPlay, o 
 
 ### 🏁 Primeros pasos
 
-1. **Inicia SonicRoute.** Haz doble clic en el ejecutable. Verás el icono de SonicRoute en el área de notificación. Para que esté siempre a la vista, arrástralo fuera de la lista de iconos ocultos. Haz doble clic en el icono para abrir la ventana principal.
+1. **Inicia SonicRoute.** Ejecuta el archivo EXE descargado. Si usas Legacy, descomprime primero el archivo ZIP por completo. Haz doble clic en el icono de SonicRoute en el área de notificación para abrir la ventana principal.
 2. **Elige los dispositivos.** En los ajustes, marca los dispositivos que quieres que aparezcan en el panel rápido. Haz clic en el icono de SonicRoute para abrirlo. Despliega la fila de una aplicación para elegir su salida. Usa el control deslizante para ajustar su volumen.
-3. **Controla el sonido con la rueda.** Sitúa el puntero sobre el icono de SonicRoute y gira la rueda para ajustar el volumen de la aplicación que estás controlando. Mantén pulsada Alt para cambiar su salida o Mayús para ajustar el volumen del sistema. En los ajustes puedes ampliar este control a toda el área de notificación.
+3. **Controla el sonido con la rueda.** Sitúa el puntero sobre el icono de SonicRoute y gira la rueda para ajustar el volumen de la aplicación que estás controlando. Mantén pulsada Alt para cambiar su salida o Mayús para ajustar el volumen del dispositivo de reproducción predeterminado del sistema. En los ajustes puedes ampliar este control a toda el área de notificación.
 
 ### ⚡ Ejecutar reglas desde la línea de comandos
 
@@ -94,9 +94,9 @@ sr "Nombre o ID de la regla"
 
 ### 🆕 Aspectos destacados de la versión v1.35
 
-Todas las ediciones unifican ahora el cambio inmediato en el panel rápido: las entradas de micrófono de las aplicaciones del PC y las filas de audio externo se resaltan al instante y se aplican en cola sin desactivar los botones, mientras el título de la fila actualiza de inmediato el nombre de la salida elegida. Los atajos de cambio de dispositivo se ejecutan en una cola sin bloqueos: si el cambio termina en menos de 45 ms muestra el resultado final sin parpadeos, y si tarda más mantiene el aviso localizado durante al menos 500 ms. También se conservan los espejos multisalida elegidos explícitamente cuando una sesión de audio nativa cambia entre salidas seleccionadas.
+Todas las ediciones unifican ahora el cambio inmediato en el panel rápido: las entradas de micrófono de las aplicaciones del PC y las filas de audio externo se resaltan al instante y se aplican en cola en segundo plano sin desactivar los botones, mientras el título de la fila actualiza de inmediato el nombre de la salida elegida. Los atajos de cambio de dispositivo se ejecutan en una cola sin bloqueos: si el cambio termina en menos de 45 ms muestra el resultado final sin parpadeos, y si tarda más mantiene el aviso localizado durante al menos 500 ms. También se conserva la duplicación de audio en varias salidas configurada explícitamente cuando una sesión nativa cambia entre las salidas seleccionadas.
 
-La edición Full mantiene la capacidad de respuesta al cambiar de modo en Android y en pantallas virtuales, y corrige condiciones de carrera y liberación de recursos en la sincronización del portapapeles entre varios dispositivos. Consulta [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) para ver las versiones anteriores.
+Full mejora la capacidad de respuesta al cambiar de modo en Android y al interactuar con pantallas virtuales, y corrige la concurrencia y la liberación de memoria y recursos en la sincronización del portapapeles entre varios dispositivos al desactivar el dispositivo de origen o en rutas de error. Consulta [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) para ver las versiones anteriores.
 
 <details>
 <summary>v1.34</summary>

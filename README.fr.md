@@ -34,7 +34,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (expérimental) · Interface dispon
 ## ✨ Ce que propose SonicRoute
 
 - **Une entrée et une sortie par application.** Envoyez la musique vers les enceintes et le son du jeu vers le casque. Pour la discussion vocale, choisissez aussi le micro à utiliser. Dans le panneau rapide, Ctrl+clic permet d’ajouter ou de retirer des périphériques de lecture et Maj+clic de sélectionner une plage ; chaque édition permet de combiner plusieurs sorties PC, et Full peut aussi y ajouter les sorties du téléphone disponibles. Windows conserve ces choix après la fermeture de SonicRoute.
-- **Contrôle du son dans la zone de notification.** SonicRoute suit l’application au premier plan grâce aux événements Windows. Survolez l’icône de SonicRoute dans la zone de notification et tournez la molette pour régler le volume de l’application ciblée. Avec Alt, la molette change sa sortie. Un indicateur à l’écran (OSD) signale les changements. Un raccourci permet également de couper tous les micros.
+- **Contrôlez l’application active à la molette.** Par défaut, SonicRoute cible en priorité l’application au premier plan récemment utilisée disposant d’une session audio. Tournez la molette sur l’icône de notification pour régler son volume, ou maintenez Alt pour changer sa sortie. L’indicateur à l’écran (OSD) confirme l’action, et un raccourci global permet de couper le micro.
 - **Panneau rapide avec indicateurs de niveau.** Chaque application dispose de son propre curseur de volume et d’un indicateur de niveau en temps réel. Le panneau mémorise sa position et sa hauteur est réglable de 350 à 850 pixels logiques.
 - **Android et AirPlay dans l’édition Full.** Écoutez le son d’Android sur le PC ou celui du PC sur le téléphone. Utilisez vos applications Android dans des écrans virtuels avec prise en charge du H.265 et de la manette dans la fenêtre active. Le récepteur AirPlay écrit en C# permet aussi de recevoir le son et de recopier l’écran en conservant ses proportions. Le panneau rapide permet de choisir une sortie du PC, le haut-parleur d’un appareil Android connecté ou sa sortie Bluetooth. Le volume intelligent (SmartVolume) atténue les écarts de niveau.
 - **6 déclencheurs et 39 actions.** Lancez une règle par raccourci clavier, à une heure donnée, au démarrage de SonicRoute ou à l’ouverture, à la fermeture ou au passage au premier plan d’une application. Enchaînez changement de périphérique, réglage du volume, mise en sourdine, lancement de programmes et scripts PowerShell. La commande `sr` permet d’appeler vos règles depuis un script ou un Stream Deck.
@@ -57,7 +57,7 @@ Une règle peut sélectionner le casque et lancer la discussion vocale à l’ou
 
 **Version stable : [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 21 novembre 2026 · [Notes de version (en chinois)](docs/release-v1.35.md)
 
-Choisissez **Full x64** pour l’audio Android, les écrans virtuels et AirPlay, ou **Lite x64** pour l’audio du PC. **Legacy x64** convient aux PC équipés de .NET Framework 4.8. Les éditions ARM64 sont expérimentales. Full et Lite sont aussi disponibles dans le Microsoft Store. Les liens de téléchargement direct correspondent à v1.35.
+Pour diffuser le son d’un smartphone Android, utiliser les écrans virtuels ou AirPlay, choisissez **Full**. Pour l’audio du PC uniquement, optez pour **Lite**. Les PC x64 équipés de .NET Framework 4.8 peuvent utiliser **Legacy**. Les versions ARM64 sont expérimentales. Les liens de téléchargement direct ci-dessous correspondent à v1.35. Pour Microsoft Store, consultez les fiches respectives de Full et Lite.
 
 | Édition | Téléchargement | Configuration requise |
 |---|---|---|
@@ -81,7 +81,7 @@ Choisissez **Full x64** pour l’audio Android, les écrans virtuels et AirPlay,
 
 1. **Lancez SonicRoute.** Double-cliquez sur l’exécutable. L’icône de SonicRoute apparaît dans la zone de notification. Pour la garder visible, faites-la glisser hors de la liste des icônes masquées. Un double-clic sur l’icône ouvre la fenêtre principale.
 2. **Choisissez les périphériques.** Dans les paramètres, cochez les périphériques à proposer dans le panneau rapide. Cliquez sur l’icône de SonicRoute pour ouvrir ce panneau. Dépliez la ligne d’une application pour choisir sa sortie. Le curseur règle son volume.
-3. **Utilisez la molette.** Placez le pointeur sur l’icône de SonicRoute et tournez la molette pour régler le volume de l’application ciblée. Maintenez Alt pour changer sa sortie, ou Maj pour régler le volume du système. Une option permet d’étendre cette commande à toute la zone de notification.
+3. **Utilisez la molette.** Placez le pointeur sur l’icône de SonicRoute et tournez la molette pour régler le volume de l’application ciblée. Maintenez Alt pour changer sa sortie, ou Maj pour régler le volume du périphérique de lecture par défaut du système. Une option permet d’étendre cette commande à toute la zone de notification.
 
 ### ⚡ Exécuter une règle en ligne de commande
 
@@ -94,9 +94,9 @@ sr "Nom ou ID de la règle"
 
 ### 🆕 Points forts de la version v1.35
 
-Toutes les éditions unifient désormais la bascule instantanée dans le panneau rapide : les entrées micro des applications PC et les sources audio externes sont mises en surbrillance dès le clic puis appliquées en file d’attente sans désactiver les boutons, tandis que le titre de la ligne affiche aussitôt la sortie choisie. Les raccourcis de changement de périphérique s’exécutent sans blocage : un basculement en moins de 45 ms affiche directement le résultat, et une opération plus longue maintient l’indicateur localisé au moins 500 ms. Les miroirs multi-sorties choisis explicitement restent également actifs lorsque la session audio native change de sortie.
+Toutes les éditions unifient désormais la bascule instantanée dans le panneau rapide : les entrées micro des applications PC et les sources audio externes sont mises en surbrillance dès le clic puis appliquées en arrière-plan en file d’attente sans désactiver les boutons, tandis que le titre de la ligne affiche aussitôt la sortie choisie. Les raccourcis de changement de périphérique s’exécutent sans blocage : un basculement en moins de 45 ms affiche directement le résultat, et une opération plus longue maintient l’indicateur localisé au moins 500 ms. La duplication audio vers plusieurs sorties configurée explicitement reste également active lorsque la session audio native bascule entre les périphériques sélectionnés.
 
-L’édition Full préserve la réactivité lors des changements de mode Android et sur les écrans virtuels, et renforce la gestion de concurrence et des ressources lors de la synchronisation du presse-papiers entre appareils. Les versions précédentes figurent dans [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+Full améliore la réactivité lors des changements de mode Android et de l’utilisation des écrans virtuels. Cette version corrige également des problèmes de concurrence et de libération des ressources (mémoire et handles) lors de la synchronisation du presse-papiers entre plusieurs appareils, notamment lorsqu’un appareil source est désactivé ou qu’une erreur survient. Les versions précédentes figurent dans [Historique des versions](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
 <details>
 <summary>v1.34</summary>

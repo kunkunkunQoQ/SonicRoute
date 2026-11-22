@@ -34,7 +34,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 ## ✨ What SonicRoute offers
 
 - **Choose where each app plays and records.** Send music to your speakers and game audio to your headset, then select the headset microphone for voice chat. In the Quick Panel, Ctrl-click to add or remove playback devices and Shift-click to select a range; all editions can combine multiple PC outputs, while Full can also include available phone outputs. Windows remembers the device choices when you exit SonicRoute.
-- **Adjust the current app from the tray.** SonicRoute can follow the foreground app. Scroll over the SonicRoute tray icon to change the target app’s volume, or hold Alt and scroll to switch its output. On-screen indicators show changes, and a global hotkey lets you mute your microphones.
+- **Control the current app with the mouse wheel.** By default, SonicRoute prioritizes the most recently used foreground app with an audio session. Scroll over the tray icon to adjust its volume, or hold Alt while scrolling to switch its output. On-screen indicators (OSD) show the result, and a global hotkey lets you toggle microphone mute.
 - **See which apps are playing audio.** The quick panel has a volume slider and a live level meter for each app. It remembers its position, and you can set its height from 350 to 850 device-independent pixels.
 - **Connect an Android device or use AirPlay (Full).** Play Android app audio on the PC, open apps in separate virtual display windows, or send PC audio back to the phone. Android supports H.265 video and gamepad input in the active video window. The built-in C# AirPlay receiver plays audio and mirrors the screen at its original aspect ratio. In the quick panel, send that audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Smart Volume evens out loud passages on supported streams.
 - **Run rules from an event or the command line.** Choose from 6 triggers and 39 actions. Trigger a rule with a hotkey, on a schedule, when an app opens, closes or gains focus, or when SonicRoute starts. Chain actions to switch devices, set volume, mute audio, open a program or file, or run PowerShell. Scripts and hardware controllers can run a rule with `sr` through the existing SonicRoute process.
@@ -79,7 +79,7 @@ Choose **Full** for Android audio, virtual displays and AirPlay, or **Lite** for
 
 ### 🏁 Quick start
 
-1. **Open SonicRoute.** Start the executable, then double-click the SonicRoute icon in the system tray to open the main window. If the icon is hidden, you can drag it out of the hidden icons menu.
+1. **Launch SonicRoute.** Run the downloaded EXE. If you use Legacy, fully extract the ZIP file first. Double-click the SonicRoute icon in the system tray to open the main window.
 2. **Choose your devices.** In Settings, select the headphones and speakers you want to see in the quick panel. Click the tray icon once to open the panel. Expand an app’s row to select its output device, or drag its slider to adjust the volume.
 3. **Use the mouse wheel.** Scroll over the SonicRoute icon to adjust the target app’s volume. Hold Alt while scrolling to change its output, or Shift to adjust the default output device’s volume. You can extend these controls to the entire system tray in Settings.
 
@@ -94,9 +94,9 @@ sr "Rule name or ID"
 
 ### 🆕 What’s new in v1.35
 
-All editions now deliver unified optimistic switching in the quick panel: PC app microphone selections and external audio rows highlight right away and apply sequentially without disabling buttons, while row titles update immediately to show the target output. Device-switching hotkeys run in a non-blocking queue with flicker-free OSD feedback that skips the pending banner for switches under 45 ms and holds slower pending notices for at least 500 ms. Explicit multi-output mirrors also stay intact when native audio sessions move between selected endpoints.
+All editions now deliver unified optimistic switching in the quick panel: PC app microphone selections and external audio rows highlight right away and apply sequentially in the background without disabling buttons, while row titles update immediately to show the target output. Device-switching hotkeys run in a non-blocking queue with flicker-free OSD feedback that skips the pending banner for switches under 45 ms and holds slower pending notices for at least 500 ms. Explicit multi-output audio mirrors also stay intact when native audio sessions move between selected endpoints.
 
-Full preserves output-switching responsiveness across Android mode transitions and tightens concurrency and handle cleanup in multi-device clipboard synchronization. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
+Full improves responsiveness during Android mode transitions and virtual display interactions, and fixes concurrency and memory/handle cleanup boundaries in multi-device clipboard synchronization when disabling source devices or handling failure paths. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
 
 <details>
 <summary>v1.34</summary>
