@@ -17,7 +17,6 @@ using SonicRoute.Core.Models;
 using SonicRoute.WindowsLink;
 using Button = System.Windows.Controls.Button;
 using Slider = System.Windows.Controls.Slider;
-using Brush = System.Windows.Media.Brush;
 #endif
 
 namespace SonicRoute;
@@ -68,15 +67,30 @@ public partial class QuickPanelModernWindow
         internal float PeakLevel;
         internal bool Muted;
         internal Button Icon = null!;
+        internal Border MuteDot = null!;
         internal AppItem IconItem = null!;
         internal ToggleButton Expand = null!;
         internal AnimatedExpandHost Wrap = null!;
         internal RotateTransform Arrow = new(0);
-        internal bool Expanded, Legacy, ShowOutputName, ApplyingState, ChangingOutput;
+        internal bool Expanded, Legacy, ShowOutputName, ApplyingState;
+        internal volatile bool Retired;
         internal TextBlock? Name;
         internal string? PhoneName, PlaybackAnchor;
         internal Task PlaybackChange = Task.CompletedTask;
+        internal int OutputRevision;
+        internal PendingAndroidOutput? PendingOutput;
+        internal string[] AvailableOutputs = [];
         internal readonly List<(Button Button, string Id)> Devices = new();
+    }
+    private Func<AudioAppInfo, EDataFlow, string, Task<(bool Success, int HResult, string Message)>> _applyExternalOutput = ApplicationAudio.ApplyEndpointAsync;
+    private sealed record PendingAndroidOutput(string[] Outputs, string? Anchor, string[] RequiredDevices) : PlaybackIntent(Outputs, Anchor)
+    {
+        internal volatile bool Invalidated;
+        internal bool IsMissingFrom(IEnumerable<AudioDeviceInfo> devices)
+        {
+            var available = devices.Select(device => device.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return RequiredDevices.Any(id => !available.Contains(id));
+        }
     }
     private readonly Dictionary<string, AndroidRow> _androidRows = new(StringComparer.Ordinal);
     private readonly List<AndroidRow> _visibleAndroidMeterRows = new();
@@ -181,7 +195,12 @@ public partial class QuickPanelModernWindow
         WindowsLinkHub.DragStateChanged -= Android_DragStateChanged;
         L10n.Instance.PropertyChanged -= AndroidLanguageChanged;
         IsVisibleChanged -= AndroidPanelVisibilityChanged;
-        foreach (var row in _androidRows.Values) row.Wrap.FinishImmediately();
+        foreach (var row in _androidRows.Values)
+        {
+            row.Retired = true;
+            ClearPendingAndroidOutput(row);
+            row.Wrap.FinishImmediately();
+        }
         _androidRows.Clear();
         _visibleAndroidMeterRows.Clear();
         _androidMeterSources.Clear();
@@ -461,6 +480,8 @@ public partial class QuickPanelModernWindow
         foreach (var row in _androidRows.Values.ToArray())
         {
             if (sources.Contains(row.Source) && row.Legacy == legacy && row.ShowOutputName == outputName) continue;
+            row.Retired = true;
+            ClearPendingAndroidOutput(row);
             row.Wrap.FinishImmediately(); AppListPanel.Items.Remove(row.Root); _androidRows.Remove(row.Source.Id);
             _androidMeterSources.TryRemove(row.MeterId, out _);
             _visibleAndroidMeterRows.Remove(row);
@@ -470,6 +491,9 @@ public partial class QuickPanelModernWindow
             var source = sources[i];
             if (!_androidRows.TryGetValue(source.Id, out var row)) _androidRows[source.Id] = row = CreateAndroidRow(source, legacy, outputName);
             _androidMeterSources[row.MeterId] = source.Session;
+            if (outputsChanged && !row.Expanded && row.PendingOutput is { } pending
+                && pending.IsMissingFrom(ApplicationAudio.OutputsForApp(row.IconItem.Info, _outputDisplay)))
+                ClearPendingAndroidOutput(row);
             string? previousName = row.PhoneName;
             RefreshSourceState(row, true);
             bool phoneNameChanged = previousName != row.PhoneName;
@@ -513,11 +537,7 @@ public partial class QuickPanelModernWindow
             finally { row.ApplyingState = false; }
         }
         row.Volume.IsEnabled = state.State == CaptureState.Receiving;
-        row.Muted = state.Muted;
-        if (state.Muted || !row.Volume.IsEnabled) row.PeakLevel = 0f;
-        row.Volume.Foreground = state.Muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
-        row.Icon.Opacity = state.Muted ? 0.45 : 1;
-        UpdateAndroidPeakVisual(row);
+        ApplyIncomingRowMutedVisual(row, state.Muted);
         if (!refreshLabels)
         {
             UpdateAndroidRoute(row);
@@ -558,11 +578,9 @@ public partial class QuickPanelModernWindow
         row.Root = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
         var header = new Border { Height = legacy ? 36 : 52, Padding = new Thickness(4, 0, 4, 0), CornerRadius = new CornerRadius(8) };
         var dock = new DockPanel();
-        row.Icon = new Button { Width = 30, Height = 30, VerticalAlignment = VerticalAlignment.Center,
-            Style = (Style)FindResource("RowIconButton"), ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip"
-                : source.WindowsLink != null ? "Phone.WindowsLinkRowIconDragTooltip" : "Phone.AirPlayDragFromMixer"), appName) };
-        row.Icon.Content = new ContentControl { Content = row.IconItem, Width = 22, Height = 22,
-            ContentTemplate = (DataTemplate)FindResource("AppIconTemplate") };
+        var iconGrid = CreateRowMuteIcon(row.IconItem, out row.Icon, out row.MuteDot);
+        row.Icon.ToolTip = string.Format(L10n.T(source.Android != null ? "Phone.RowIconDragTooltip"
+            : source.WindowsLink != null ? "Phone.WindowsLinkRowIconDragTooltip" : "Phone.AirPlayDragFromMixer"), appName);
         row.Icon.Click += (_, _) => session.SetMute(!session.State.Muted);
         if (source.Android is { } android) AndroidAppDragController.Attach(row.Icon, () => new AndroidAppDrag(android.Device, android.App));
         else if (source.WindowsLink is { } winLink)
@@ -583,7 +601,7 @@ public partial class QuickPanelModernWindow
             if (AirPlayHost.Find(source.Id) != null) AirPlayHost.ShowMirror();
         });
         System.Windows.Automation.AutomationProperties.SetName(row.Icon, string.Format(L10n.T("Phone.RowIconMuteAutomation"), appName));
-        DockPanel.SetDock(row.Icon, Dock.Left); dock.Children.Add(row.Icon);
+        dock.Children.Add(iconGrid);
         row.Expand = new ToggleButton { Width = legacy && showOutputName ? 80 : 32, Height = legacy ? 24 : 32,
             VerticalAlignment = VerticalAlignment.Center, Style = (Style)FindResource("RowExpandButton"), ToolTip = L10n.T("Qp.ExpandDevices") };
         var glyph = new TextBlock { Text = "▾", RenderTransform = row.Arrow, RenderTransformOrigin = new System.Windows.Point(0.5, 0.5) };
@@ -598,7 +616,7 @@ public partial class QuickPanelModernWindow
         Slider volume = legacy ? new Slider() : new AppRowVolumeSlider(); row.Volume = volume;
         volume.Minimum = 0; volume.Maximum = 100; volume.Value = state.Volume; volume.Height = legacy ? 32 : 48;
         volume.VerticalAlignment = VerticalAlignment.Center; volume.Margin = new Thickness(0, 0, 6, 0);
-        volume.Style = (Style)FindResource("RowSliderStyle"); volume.SetResourceReference(Slider.ForegroundProperty, "Theme.Accent");
+        volume.Style = (Style)FindResource("RowSliderStyle");
         volume.ApplyTemplate();
         row.TrackBg = volume.Template.FindName("PART_TrackBg", volume) as Border;
         row.TrackFill = volume.Template.FindName("PART_TrackFill", volume) as Border;
@@ -693,14 +711,14 @@ public partial class QuickPanelModernWindow
     }
     private void ApplyAllAndroidRowsMutedVisual(bool muted)
     {
-        foreach (var row in _androidRows.Values)
-        {
-            row.Muted = muted;
-            if (muted) row.PeakLevel = 0f;
-            row.Volume.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
-            row.Icon.Opacity = muted ? 0.45 : 1;
-            UpdateAndroidPeakVisual(row);
-        }
+        foreach (var row in _androidRows.Values) ApplyIncomingRowMutedVisual(row, muted);
+    }
+    private void ApplyIncomingRowMutedVisual(AndroidRow row, bool muted)
+    {
+        row.Muted = muted;
+        if (muted || !row.Volume.IsEnabled) row.PeakLevel = 0f;
+        ApplyRowMuteAppearance(row.Volume, row.MuteDot, muted);
+        UpdateAndroidPeakVisual(row);
     }
     private void UpdateAndroidSliderLayout(AndroidRow row)
     {
@@ -748,9 +766,13 @@ public partial class QuickPanelModernWindow
             }
             catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
         };
-        AddRowDeviceGroup(row.Details, RowPlaybackDevices(row.IconItem.Info, ConfigService.Load()), EDataFlow.eRender, (button, device) =>
+        var choices = ApplicationAudio.OutputsForApp(row.IconItem.Info, _outputDisplay).ToArray();
+        row.AvailableOutputs = choices.Select(device => device.Id).ToArray();
+        if (row.PendingOutput is { } pending && pending.IsMissingFrom(choices)) ClearPendingAndroidOutput(row);
+        var hidden = ConfigService.Load().HiddenOutputDevices;
+        AddRowDeviceGroup(row.Details, choices.Where(device => !hidden.Contains(device.Id)), EDataFlow.eRender, (button, device) =>
         {
-            button.IsEnabled = !row.ChangingOutput;
+            button.IsEnabled = true;
             row.Devices.Add((button, device.Id));
             if (row.Source.Session is IMultiOutputAudioSession)
             {
@@ -758,7 +780,7 @@ public partial class QuickPanelModernWindow
                 System.Windows.Automation.AutomationProperties.SetHelpText(button, (string)button.ToolTip);
                 button.Click += async (_, _) => await QueueIncomingOutputAsync(row, device.Id, System.Windows.Input.Keyboard.Modifiers);
             }
-            else button.Click += async (_, _) => await SetAndroidOutputAsync(row, device);
+            else button.Click += async (_, _) => await QueueSingleExternalOutputAsync(row, device);
         }, trailingAction: exit);
         UpdateAndroidRoute(row);
     }
@@ -782,108 +804,221 @@ public partial class QuickPanelModernWindow
 
     private Task QueueIncomingOutputAsync(AndroidRow row, string clicked, System.Windows.Input.ModifierKeys modifiers)
     {
-        var previous = row.PlaybackChange;
-        var source = row.Source;
-        return row.PlaybackChange = ApplyAsync();
+        var source = row.Source.Android;
+        var linked = row.Source.WindowsLink;
+        if (!Current() || !CanChange())
+            return Task.CompletedTask;
+        var timing = source == null ? null : AndroidOutputSwitchTiming.Create();
+        var order = row.Devices.Select(d => d.Id).ToArray();
+        if (!order.Contains(clicked, StringComparer.OrdinalIgnoreCase)) return Task.CompletedTask;
+        var prior = row.PendingOutput;
+        var selected = prior == null ? IncomingOutputs(row.Source) : prior.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var intent = CreatePlaybackIntent(order, selected, clicked, prior?.Anchor ?? row.PlaybackAnchor, modifiers);
+        var next = intent.Outputs;
+        bool OwnForcedOutput(string id) => source != null && AndroidOutputIdentity.TryParseDeviceId(id, out var key, out _)
+            && string.Equals(key, AndroidDeviceIdentity.Key(source.Device), StringComparison.OrdinalIgnoreCase);
+        if (next.Contains(AndroidAudioSession.SourcePhoneOutputId) && next.Any(OwnForcedOutput))
+            next = clicked == AndroidAudioSession.SourcePhoneOutputId ? next.Where(id => !OwnForcedOutput(id)).ToArray()
+                : next.Where(id => id != AndroidAudioSession.SourcePhoneOutputId).ToArray();
 
-        bool Current() => !_isClosed && _androidRows.TryGetValue(source.Id, out var live) && live == row &&
-            ReferenceEquals(live.Source.Session, source.Session);
+        var request = new PendingAndroidOutput(next, intent.Anchor,
+            next.Where(id => row.AvailableOutputs.Contains(id, StringComparer.OrdinalIgnoreCase)).ToArray());
+        int revision = ++row.OutputRevision;
+        return QueueApply(false);
 
-        async Task ApplyAsync()
+        Task QueueApply(bool consent)
         {
-            await previous;
-            if (!Current()) return;
-            var order = row.Devices.Select(d => d.Id).ToArray();
-            var selected = IncomingOutputs(source);
-            var next = SelectPlaybackRange(order, selected, clicked, row.PlaybackAnchor, modifiers);
-            if (next.Length == 0) next = [AudioService.SystemDefaultDeviceId];
-            bool OwnForcedOutput(string id) => source.Android is { } android
-                && AndroidOutputIdentity.TryParseDeviceId(id, out var key, out _)
-                && string.Equals(key, AndroidDeviceIdentity.Key(android.Device), StringComparison.OrdinalIgnoreCase);
-            if (next.Contains(AndroidAudioSession.SourcePhoneOutputId) && next.Any(OwnForcedOutput))
-                next = clicked == AndroidAudioSession.SourcePhoneOutputId ? next.Where(id => !OwnForcedOutput(id)).ToArray()
-                    : next.Where(id => id != AndroidAudioSession.SourcePhoneOutputId).ToArray();
-            await CommitAsync(next, false);
+            row.PendingOutput = request;
+            UpdateAndroidRoute(row);
+            timing?.Mark("ui_intent");
+            return row.PlaybackChange = ApplyAsync(row.PlaybackChange, consent);
         }
 
-        async Task CommitAsync(string[] next, bool consent)
+        bool CanChange() => source?.Session.CanChangeActiveOutputs ?? (linked?.Session.State.State == CaptureState.Receiving);
+        bool Current() => !_isClosed && !row.Retired && _androidRows.TryGetValue(row.Source.Id, out var live) && live == row
+            && (source != null ? ReferenceEquals(AndroidAudioHost.Sources.FindSource(row.Source.Id), source)
+                : linked != null && ReferenceEquals(WindowsLinkHub.FindIncomingAudio(row.Source.Id), linked));
+
+        async Task ApplyAsync(Task previous, bool consent)
         {
+            string outcome = "retired";
             try
             {
-                if (source.WindowsLink is { } linked)
-                    await WindowsLinkIncomingOutputs.ApplyAsync(linked, next, consent);
-                else await ((IMultiOutputAudioSession)source.Session).SetOutputsAsync(
-                    next.Select(id => AudioService.IsSystemDefault(id) ? null : id).ToArray());
-                if (!modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift) || row.PlaybackAnchor == null)
-                    row.PlaybackAnchor = clicked;
+                using (timing?.Measure("row_queue")) await previous;
+                if (!Current() || !CanChange() || request.Invalidated) return;
+                if (request.IsMissingFrom(ApplicationAudio.OutputsForApp(row.IconItem.Info, _outputDisplay)))
+                {
+                    outcome = "unavailable";
+                    ShowOsd(row.Source.Name, L10n.T(linked != null ? "Ov.CurrentUnavailable" : "Phone.Err.SelectedPhoneOutputDisconnected"));
+                    return;
+                }
+                if (linked != null)
+                    await WindowsLinkIncomingOutputs.ApplyAsync(linked, request.Outputs, consent);
+                else if (source != null)
+                {
+                    var outputs = request.Outputs.Select(id => AudioService.IsSystemDefault(id) ? null : id).ToArray();
+                    await Task.Run(() => source.Session.SetActiveOutputsAsync(outputs,
+                        () => !row.Retired && !request.Invalidated && !source.Lifetime.IsCancellationRequested, timing));
+                }
+                outcome = "committed";
+                if (Current()) row.PlaybackAnchor = request.Anchor;
             }
-            catch (WindowsLinkIncomingOutputs.SpeakerConsent confirmation) when (!consent)
+            catch (WindowsLinkIncomingOutputs.SpeakerConsent confirmation) when (!consent && linked != null)
             {
-                if (!Current() || row.Devices.FirstOrDefault(d => d.Id == clicked).Button is not { IsVisible: true } target) return;
+                if (!Current() || revision != row.OutputRevision || request.Invalidated
+                    || row.Devices.FirstOrDefault(d => d.Id == clicked).Button is not { IsVisible: true } target) return;
                 var menu = ConvenienceMenus.Create();
-                var confirm = ConvenienceMenus.Item(string.Format(L10n.T("Phone.WindowsLinkMuteSpeakerAction"), source.PhoneName));
+                var action = linked.AppKey == LinkRemoteApp.SystemAudioKey ? "Phone.WindowsLinkMuteAllOn" : "Phone.WindowsLinkMuteSpeakerAction";
+                var confirm = ConvenienceMenus.Item(string.Format(L10n.T(action), row.Source.PhoneName));
                 confirm.ToolTip = confirmation.Message;
-                if (source.WindowsLink?.AppKey == LinkRemoteApp.SystemAudioKey)
-                    confirm.Header = string.Format(L10n.T("Phone.WindowsLinkMuteAllOn"), source.PhoneName);
                 confirm.Click += async (_, _) =>
                 {
-                    if (Current())
-                    {
-                        var earlier = row.PlaybackChange;
-                        async Task ConfirmAsync() { await earlier; if (Current()) await CommitAsync(next, true); }
-                        await (row.PlaybackChange = ConfirmAsync());
-                    }
+                    if (Current() && revision == row.OutputRevision && !request.Invalidated) await QueueApply(true);
                 };
                 menu.Items.Add(confirm);
                 menu.PlacementTarget = target;
                 menu.Placement = PlacementMode.Bottom;
                 menu.IsOpen = true;
             }
-            catch (Exception ex) { if (Current()) ShowOsd(source.Name, AndroidErrorTranslation.Format(ex)); }
-            if (Current()) UpdateAndroidRoute(row);
+            catch (OperationCanceledException) when (!Current() || !CanChange() || request.Invalidated) { }
+            catch (Exception ex)
+            {
+                outcome = "failed";
+                if (Current()) ShowOsd(row.Source.Name, AndroidErrorTranslation.Format(ex));
+            }
+            finally
+            {
+                using (timing?.Measure("ui_reconcile"))
+                {
+                    if (Current() && ReferenceEquals(row.PendingOutput, request))
+                    {
+                        row.PendingOutput = null;
+                        UpdateAndroidRoute(row);
+                    }
+                }
+                if (source != null) timing?.Report(source.Session, outcome, request.Outputs);
+            }
         }
     }
 
-    private async Task SetAndroidOutputAsync(AndroidRow row, AudioDeviceInfo device)
+    private static void ClearPendingAndroidOutput(AndroidRow row)
     {
-        if (row.ChangingOutput) return;
-        row.ChangingOutput = true;
-        foreach (var entry in row.Devices) entry.Button.IsEnabled = false;
-        try
+        if (row.PendingOutput is { } pending) pending.Invalidated = true;
+        row.PendingOutput = null;
+    }
+
+    private Task QueueSingleExternalOutputAsync(AndroidRow row, AudioDeviceInfo device)
+    {
+        if (!Current()) return Task.CompletedTask;
+        if (!Available(device.Id))
         {
-            var result = await ApplicationAudio.ApplyEndpointAsync(row.IconItem.Info, EDataFlow.eRender, device.Id);
-            if (!result.Success && !_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), result.Message);
+            ShowOsd(row.Source.Name, ApplicationAudio.IsPhoneOutputDevice(device.Id)
+                ? L10n.T("Phone.Err.SelectedPhoneOutputDisconnected") : L10n.T("Ov.CurrentUnavailable"));
+            return Task.CompletedTask;
         }
-        catch (Exception ex) { if (!_isClosed) ShowOsd(L10n.T("Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex)); }
-        finally
+
+        var request = new PendingAndroidOutput([device.Id], device.Id, [device.Id]);
+        row.PendingOutput = request;
+        UpdateAndroidRoute(row);
+        var previous = row.PlaybackChange;
+        return row.PlaybackChange = ApplyAsync();
+
+        bool Current() => !_isClosed && !row.Retired
+            && _androidRows.TryGetValue(row.Source.Id, out var live) && ReferenceEquals(live, row)
+            && (row.Source.AirPlay != null
+                ? ReferenceEquals(AirPlayHost.Find(row.Source.Id), row.Source.AirPlay)
+                : ReferenceEquals(AndroidAudioHost.Sources.FindSource(row.Source.Id)?.Session, row.Source.Session));
+
+        bool Available(string id) => ApplicationAudio.OutputsForApp(row.IconItem.Info, _outputDisplay)
+            .Any(output => string.Equals(output.Id, id, StringComparison.OrdinalIgnoreCase));
+
+        async Task ApplyAsync()
         {
-            row.ChangingOutput = false;
-            if (!_isClosed)
+            try
             {
-                UpdateAndroidRoute(row);
-                foreach (var entry in row.Devices) entry.Button.IsEnabled = true;
+                await previous;
+                if (!Current() || request.Invalidated) return;
+                if (row.Source.AirPlay is { } airPlay && airPlay.State.State != CaptureState.Receiving) return;
+                if (row.Source.Android is { } android && !android.Session.CanChangeActiveOutputs) return;
+                if (request.IsMissingFrom(ApplicationAudio.OutputsForApp(row.IconItem.Info, _outputDisplay)))
+                {
+                    ShowOsd(row.Source.Name, ApplicationAudio.IsPhoneOutputDevice(device.Id)
+                        ? L10n.T("Phone.Err.SelectedPhoneOutputDisconnected") : L10n.T("Ov.CurrentUnavailable"));
+                    return;
+                }
+
+                var result = await _applyExternalOutput(row.IconItem.Info, EDataFlow.eRender, device.Id);
+                if (!Current() || request.Invalidated) return;
+                if (!result.Success)
+                    ShowOsd(L10n.T(row.Source.AirPlay != null ? "Phone.AirPlayTitle" : "Phone.AudioWindowTitle"), result.Message);
+            }
+            catch (OperationCanceledException) when (!Current() || request.Invalidated) { }
+            catch (Exception ex)
+            {
+                if (Current() && !request.Invalidated)
+                    ShowOsd(L10n.T(row.Source.AirPlay != null ? "Phone.AirPlayTitle" : "Phone.AudioWindowTitle"), AndroidErrorTranslation.Format(ex));
+            }
+            finally
+            {
+                if (Current() && ReferenceEquals(row.PendingOutput, request))
+                {
+                    row.PendingOutput = null;
+                    UpdateAndroidRoute(row);
+                }
             }
         }
     }
+
     private void UpdateAndroidRoute(AndroidRow row)
     {
-        string id = row.Source.Session.State.OutputId ?? AudioService.SystemDefaultDeviceId;
+        bool stopped = row.Source.Android is { } source ? !source.Session.CanChangeActiveOutputs
+            : row.Source.Session.State.State != CaptureState.Receiving;
+        if (row.PendingOutput != null && stopped)
+            ClearPendingAndroidOutput(row);
+        string actualId = row.Source.Session.State.OutputId ?? AudioService.SystemDefaultDeviceId;
+        string displayId = row.PendingOutput is { } pendingOutput && !stopped
+            ? SelectOptimisticPrimaryOutput(pendingOutput.Outputs, actualId, preferPhysical: false, lowPriorityId: AndroidAudioSession.SourcePhoneOutputId)
+            : actualId;
         if (row.Name != null)
         {
+            string name = row.IconItem.Label;
             if (row.ShowOutputName)
             {
-                var output = _outputDisplay.FirstOrDefault(d => d.Id == id);
-                string name = id == AndroidAudioSession.SourcePhoneOutputId ? L10n.T("Phone.NativeAudioOutput")
+                bool systemDefault = AudioService.IsSystemDefault(displayId);
+                AudioDeviceInfo? output = null;
+                foreach (var d in _outputDisplay)
+                {
+                    if (!string.Equals(d.Id, displayId, StringComparison.OrdinalIgnoreCase)) continue;
+                    output = d;
+                    break;
+                }
+                string outputName = string.Equals(displayId, AndroidAudioSession.SourcePhoneOutputId, StringComparison.OrdinalIgnoreCase)
+                    ? L10n.T("Phone.NativeAudioOutput")
                     : output != null ? PanelDevices.Name(output)
-                    : L10n.T(AudioService.IsSystemDefault(id) ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
-                row.Name.Text = PanelDevices.ShortName(name);
+                    : L10n.T(systemDefault ? "Dev.SystemDefaultOut" : "Ov.CurrentUnavailable");
+                if (row.Legacy)
+                    name = PanelDevices.ShortName(outputName);
+                else if (systemDefault)
+                {
+                    string? suffix = null;
+                    for (int i = 0; i < _outputDisplay.Count; i++)
+                        if (_outputDisplay[i].IsDefault) { suffix = PanelDevices.Name(_outputDisplay[i]); break; }
+                    name = suffix == null ? outputName : outputName + " · " + suffix;
+                }
+                else name = outputName;
             }
-            else row.Name.Text = row.IconItem.Label;
+            if (row.Name.Text != name)
+            {
+                row.Name.Text = name;
+                row.Name.ToolTip = name;
+                if (!row.Legacy) row.Volume.ToolTip = name;
+            }
         }
         if (!row.Expanded || row.Devices.Count == 0) return;
-        var selected = row.Source.Session is IMultiOutputAudioSession ? IncomingOutputs(row.Source) : null;
+        var selected = row.PendingOutput?.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            ?? (row.Source.Session is IMultiOutputAudioSession ? IncomingOutputs(row.Source) : null);
         foreach (var entry in row.Devices)
-            SetRowDeviceSelection(entry.Button, entry.Id, selected == null ? id : selected.Contains(entry.Id) ? entry.Id : "");
+            SetRowDeviceSelection(entry.Button, entry.Id, stopped ? "" : selected == null ? actualId : selected.Contains(entry.Id) ? entry.Id : "");
     }
     private void RefreshAndroidAppIcons(string processName)
     {

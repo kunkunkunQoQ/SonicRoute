@@ -45,7 +45,8 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     {
         internal readonly AndroidDevice Device = device;
         internal readonly IAndroidClipboardClient Client = client;
-        internal readonly CancellationTokenSource Stop = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+        internal readonly CancellationTokenSource Stop = CancellationTokenSource.CreateLinkedTokenSource(lifetime,
+            PhoneAudioWindowCache.Manager.OperationToken(device));
         internal readonly Channel<(long Version, string Text, long RemoteRevision)> Writes = Channel.CreateBounded<(long, string, long)>(
             new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = true });
         internal Task Completion = Task.CompletedTask;
@@ -76,7 +77,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     private int _activeSessions;
     private long _version;
     private string? _lastText;
-    private (string Text, long Version, long Revision)? _desktopWrite;
+    private (string Text, long Version, long Revision, Session Origin)? _desktopWrite;
     private CancellationTokenSource? _clipboardWork;
     public event Action? Changed;
     internal bool HasActiveWork => !_disposed && (_desktopListening || Volatile.Read(ref _activeSessions) > 0);
@@ -89,7 +90,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         foreach (var saved in _enabled)
         {
             if (saved.IsWifi) continue;
-            var live = devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(saved, d));
+            var live = PhoneAudioWindowCache.GetOnlineDevice(saved);
             if (live == null) return true;
             string key = AndroidDeviceIdentity.Key(live);
             if (!_sessions.TryGetValue(key, out var session) || session.Finished || session.Stop.IsCancellationRequested)
@@ -149,7 +150,11 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     internal void ProfilesChanged()
     {
         if (!dispatcher.CheckAccess()) { Post(ProfilesChanged); return; }
-        if (!_disposed && UpdateProfilePreferences()) { QueueSave(); Reconcile(false); }
+        if (!_disposed)
+        {
+            if (UpdateProfilePreferences()) QueueSave();
+            Reconcile(false);
+        }
     }
 
     private bool UpdateProfilePreferences()
@@ -186,27 +191,19 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         }
         return changed;
     }
-    private static bool SameTransport(AndroidDevice left, AndroidDevice right) => left.Serial == right.Serial
-        && AndroidDeviceIdentity.Key(left) == AndroidDeviceIdentity.Key(right);
+    private static bool SameTransport(AndroidDevice left, AndroidDevice right) => AndroidDeviceIdentity.SameTransport(left, right);
     private void DevicesChanged() => Post(() => Reconcile(true));
     private void Post(Action action)
     {
         if (!_disposed && !dispatcher.HasShutdownStarted) _ = dispatcher.BeginInvoke(new Action(() => { if (!_disposed) action(); }));
     }
-    private AndroidDevice? FindOnlineTransport(AndroidDevice saved, IReadOnlyList<AndroidDevice> devices)
+    private AndroidDevice? FindOnlineTransport(AndroidDevice saved)
     {
         _sessions.TryGetValue(AndroidDeviceIdentity.Key(saved), out var current);
-        AndroidDevice? preferred = null, first = null, alternative = null;
-        foreach (var device in devices)
-        {
-            if (device.State != "device" || !AndroidDeviceIdentity.MatchesSavedDevice(saved, device)) continue;
-            // One wireless phone may appear under both its IP and its mDNS service name.
-            if (current is { Finished: false } && SameTransport(current.Device, device)) return device;
-            if (current is { Finished: true } && !SameTransport(current.Device, device)) alternative ??= device;
-            if (device.Serial == saved.Serial) preferred = device;
-            first ??= device;
-        }
-        return alternative ?? preferred ?? first;
+        if (current is { Finished: false } && !current.Stop.IsCancellationRequested
+            && (PhoneAudioWindowCache.Manager.IsCurrent(current.Device) || PhoneAudioWindowCache.Manager.AwaitingDiscovery(current.Device)))
+            return current.Device;
+        return PhoneAudioWindowCache.Manager.Get(saved, current?.Device).Device;
     }
     private void Reconcile(bool retry, Session? recovering = null)
     {
@@ -218,8 +215,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             else PhoneAudioWindowCache.DevicesChanged -= DevicesChanged;
             _watching = watch;
         }
-        var devices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
-        var targets = _enabled.Select(saved => FindOnlineTransport(saved, devices))
+        var targets = _enabled.Select(FindOnlineTransport)
             .Where(d => d != null).Cast<AndroidDevice>().DistinctBy(AndroidDeviceIdentity.Key).ToArray();
         foreach (var pair in _sessions.ToArray())
             if (!targets.Any(d => AndroidDeviceIdentity.Key(d) == pair.Key))
@@ -397,7 +393,7 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
                 session.Writes.Writer.TryWrite((version, text, session.RemoteRevision));
         if (origin != null)
         {
-            _desktopWrite = (text, version, desktop.Revision);
+            _desktopWrite = (text, version, desktop.Revision, origin);
             if (!_writing) _ = WriteDesktopAsync();
         }
     }
@@ -409,9 +405,9 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
             while (!_disposed && _desktopWrite is { } pending)
             {
                 _desktopWrite = null;
-                if (pending.Version != _version) continue;
                 var token = _clipboardWork?.Token ?? new CancellationToken(true);
-                var result = await desktop.WriteAsync(pending.Text, pending.Revision, token);
+                var result = await desktop.WriteIfCurrentAsync(pending.Text, pending.Revision,
+                    () => pending.Version == Interlocked.Read(ref _version) && !pending.Origin.Stop.IsCancellationRequested, token);
                 // A newer phone event may have arrived while our own write held the clipboard.
                 // Advance only our own revision, never a concurrent computer copy's revision.
                 if (result.Written && _desktopWrite is { } next && next.Revision == pending.Revision)
@@ -463,8 +459,8 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
         if (_disposed) return;
         _disposed = true;
         if (_watching) PhoneAudioWindowCache.DevicesChanged -= DevicesChanged;
-        desktop.Changed -= DesktopChanged; desktop.Dispose();
         _clipboardWork?.Cancel(); _clipboardWork?.Dispose(); _clipboardWork = null;
+        desktop.Changed -= DesktopChanged; desktop.Dispose();
         _lifetime.Cancel();
         _lastText = null; _desktopWrite = null;
         foreach (var session in _sessions.Values) session.Writes.Writer.TryComplete();
@@ -532,24 +528,37 @@ internal sealed partial class DesktopClipboardLink(HwndSource? source, int maxTe
         bool completed = await ClipboardWriter.TryWriteTextAsync(text, value =>
         {
         token.ThrowIfCancellationRequested();
+        if (_handle == IntPtr.Zero || !current()) return;
         if (!OpenClipboard(_handle)) throw new ExternalException();
         try
         {
-            if (Revision != expectedRevision || !current()) return; // A newer local copy or a revoked grant wins.
+            if (Revision != expectedRevision) return; // A newer local copy wins.
+            if (Formats.Remote == 0 || Formats.Cloud == 0) return;
             IntPtr data = GlobalAlloc(0x42, (UIntPtr)((value.Length + 1) * 2));
             if (data == IntPtr.Zero) throw new ExternalException();
+            IntPtr remoteFlag = IntPtr.Zero, cloudFlag = IntPtr.Zero;
             try
             {
                 IntPtr pointer = GlobalLock(data); if (pointer == IntPtr.Zero) throw new ExternalException();
                 try { Marshal.Copy((value + '\0').ToCharArray(), 0, pointer, value.Length + 1); }
                 finally { GlobalUnlock(data); }
+                // Prepare both zero DWORDs before clearing the previous clipboard contents.
+                remoteFlag = GlobalAlloc(0x42, 4);
+                cloudFlag = GlobalAlloc(0x42, 4);
+                if (remoteFlag == IntPtr.Zero || cloudFlag == IntPtr.Zero) throw new ExternalException();
                 token.ThrowIfCancellationRequested();
                 if (!current()) return;
-                if (!EmptyClipboard() || !MarkReceivedClipboard() || SetClipboardData(13, data) == IntPtr.Zero) throw new ExternalException();
-                data = IntPtr.Zero; // Ownership transferred to Windows.
+                if (!EmptyClipboard()) throw new ExternalException();
+                if (!TransferClipboardData(Formats.Remote, ref remoteFlag) || !TransferClipboardData(Formats.Cloud, ref cloudFlag)
+                    || !TransferClipboardData(13, ref data)) return;
                 written = true; revision = Revision;
             }
-            finally { if (data != IntPtr.Zero) GlobalFree(data); }
+            finally
+            {
+                if (data != IntPtr.Zero) GlobalFree(data);
+                if (remoteFlag != IntPtr.Zero) GlobalFree(remoteFlag);
+                if (cloudFlag != IntPtr.Zero) GlobalFree(cloudFlag);
+            }
         }
         finally { CloseClipboard(); }
         });

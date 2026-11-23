@@ -18,11 +18,15 @@ internal static partial class AndroidAudioHost
     private static readonly object PhoneOperations = new();
     private static readonly object OutputSnapshotGate = new();
     private static IReadOnlyList<AudioDeviceInfo>? _outputSnapshot;
-    private static readonly LocalSilenceLeasePool SilenceLeases = new(FindSilenceEndpoint,
-        id => { var state = SystemVolumeService.ReadStateChecked(id); return (state.Muted, state.MuteKnown); },
-        SystemVolumeService.SetMute, ReadSilenceRoles, WriteSilenceRoles);
     private static readonly Guid OutputMuteContext = Guid.NewGuid();
-    private static readonly LocalSilenceLeasePool MirrorSilenceLeases = new(FindMirrorSilenceOutputs,
+    private static readonly LocalSilenceLeasePool SilenceLeases = new(
+        (owned, reserved) => FindAvailableSilenceOutputs(owned, reserved, id => (MirrorSilenceLeases?.OwnsEndpoint(id) ?? false) || (SourceSpeakers?.OwnsEndpoint(id) ?? false)),
+        ReadOutputMute, SetReservedOutputMute, ReadSilenceRoles, WriteSilenceRoles)
+        {
+            ObservePlayback = (pid, id, revoke) => new WindowsLinkPlaybackWatch(pid, id, revoke) { CheckReservedOutput = RevalidateWindowsLinkSilence }
+        };
+    private static readonly LocalSilenceLeasePool MirrorSilenceLeases = new(
+        (owned, reserved) => FindAvailableSilenceOutputs(owned, reserved, id => SilenceLeases.OwnsEndpoint(id) || (SourceSpeakers?.OwnsEndpoint(id) ?? false)),
         ReadOutputMute, SetReservedOutputMute, ReadSilenceRoles, WriteSilenceRoles)
         {
             VerifyPlaybackRoute = VerifyWindowsPlaybackRoute,
@@ -95,7 +99,7 @@ internal static partial class AndroidAudioHost
             device ??= Phone.Profile.LastDevice;
             if (device == null || Phone.IsRemoved(device)) return;
             var devices = await PhoneAudioWindowCache.ReadDevicesAsync(token).ConfigureAwait(false);
-            if (devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(device, d)) is { } online)
+            if (PhoneAudioWindowCache.GetOnlineDevice(device) is { } online)
                 await ProbeOutputsIfConnectedAsync([online], token: token).ConfigureAwait(false);
             else
                 await PhoneAudioWindowCache.RecoverMissingWirelessAsync(device, devices, token).ConfigureAwait(false);
@@ -118,13 +122,13 @@ internal static partial class AndroidAudioHost
         bool keepPhoneAudio = true, bool displayOwned = false)
     {
         MediaShutdown.Token.ThrowIfCancellationRequested();
-        await Task.WhenAll(PreparePhoneAsync(MediaShutdown.Token),
-            SourcesRead.Value.WaitAsync(MediaShutdown.Token)).ConfigureAwait(false);
+        device = await ResolveOperationDeviceAsync(device, AndroidErrorCode.PhoneOffline).ConfigureAwait(false);
+        await SourcesRead.Value.WaitAsync(MediaShutdown.Token).ConfigureAwait(false);
         MediaShutdown.Token.ThrowIfCancellationRequested();
         Task<AndroidAudioSource> start;
         lock (PhoneOperations)
         {
-            if (Phone.IsRemoved(device)) throw AndroidError.WithCode(new IOException("此手机已移除，请先添加设备。"), AndroidErrorCode.PhoneRemovedAddFirst);
+            RequireCurrentDevice(device, AndroidErrorCode.PhoneOffline);
             start = Sources.AddAsync(device, app, keepPhoneAudio, displayOwned: displayOwned);
         }
         _ = ProbeOutputsIfConnectedAsync([device], token: MediaShutdown.Token);
@@ -132,49 +136,102 @@ internal static partial class AndroidAudioHost
     }
     internal static Task<IVirtualDisplayClient> OpenDisplayAsync(AndroidDevice device, AndroidApp app, int x, int y)
     {
+        return OpenLiveDisplayAsync(device, app, x, y);
+    }
+    private static async Task<IVirtualDisplayClient> OpenLiveDisplayAsync(AndroidDevice device, AndroidApp app, int x, int y)
+    {
+        device = await ResolveOperationDeviceAsync(device, AndroidErrorCode.DisplayPhoneNotConnected).ConfigureAwait(false);
+        Task<IVirtualDisplayClient> open;
         lock (PhoneOperations)
         {
-            if (Phone.IsRemoved(device)) throw AndroidError.WithCode(new IOException("此手机已移除，请先添加设备。"), AndroidErrorCode.PhoneRemovedAddFirst);
-            return Displays.OpenAsync(device, app, x, y);
+            RequireCurrentDevice(device, AndroidErrorCode.DisplayPhoneNotConnected);
+            open = Displays.OpenAsync(device, app, x, y);
         }
+        return await open.ConfigureAwait(false);
+    }
+    internal static async Task<AndroidDevice> ResolveOperationDeviceAsync(AndroidDevice device, AndroidErrorCode offlineCode)
+    {
+        var token = MediaShutdown.Token;
+        await PreparePhoneAsync(token).ConfigureAwait(false);
+        var initial = PhoneAudioWindowCache.Manager.Get(device);
+        if (initial.State is AndroidManagedConnectionState.Removed or AndroidManagedConnectionState.ManuallyDisconnected
+            or AndroidManagedConnectionState.IdentityConflict) throw ConnectionError(initial.State, offlineCode);
+        var live = await PhoneAudioWindowCache.ResolveOnlineDeviceAsync(device, token).ConfigureAwait(false);
+        token.ThrowIfCancellationRequested();
+        if (live == null) throw ConnectionError(PhoneAudioWindowCache.Manager.Get(device).State, offlineCode);
+        RequireCurrentDevice(live, offlineCode);
+        return live;
+    }
+    private static IOException ConnectionError(AndroidManagedConnectionState state, AndroidErrorCode offlineCode) =>
+        state == AndroidManagedConnectionState.Removed
+            ? AndroidError.WithCode(new IOException("此手机已移除，请先添加设备。"), AndroidErrorCode.PhoneRemovedAddFirst)
+            : AndroidError.WithCode(new IOException("设备未连接或身份待确认，请刷新设备后重试。"), offlineCode);
+
+    private static void RequireCurrentDevice(AndroidDevice device, AndroidErrorCode offlineCode)
+    {
+        if (!PhoneAudioWindowCache.Manager.IsCurrent(device))
+            throw ConnectionError(PhoneAudioWindowCache.Manager.Get(device).State, offlineCode);
     }
     internal static async Task RemovePhoneAsync(string profileId, AndroidDevice device)
     {
+        IReadOnlyList<AndroidDevice> aliases;
         lock (PhoneOperations)
-            if (!Phone.RemoveDevice(profileId, PhoneAudioWindowCache.Devices)) return;
-        (await PrepareStreamingAsync(MediaShutdown.Token).ConfigureAwait(false)).ForgetSourceRoutes(device);
-        // Complete owned cleanup even if selecting the replacement profile hides this page.
-        var cleanup = new List<Task>();
-        cleanup.Add(LocalAppOutputMirrors.PhoneRemovedAsync(device));
-        if (AreDisplaysCreated) cleanup.Add(Displays.CloseDeviceAsync(device));
-        if (IsCreated) cleanup.Add(DisconnectAndroidSourcesAsync(device));
-        if (IsPcToPhoneCreated) cleanup.Add(PcToPhone.StopPhoneAsync(device));
-        if (AirPlayHost.Source is { } airPlay) cleanup.Add(airPlay.PhoneRemovedAsync(device));
-        await Task.WhenAll(cleanup);
+            if (!PhoneAudioWindowCache.Manager.Remove(profileId, out aliases)) return;
+        foreach (var alias in aliases) PhoneAudioWindowCache.CancelRecovery(alias);
+        PhoneAudioWindowCache.NotifyManagementChanged();
+        try { await CleanupManagedPhoneAsync(aliases); }
+        finally { PhoneAudioWindowCache.Manager.CompleteRetirement(aliases); PhoneAudioWindowCache.NotifyManagementChanged(); }
         await Phone.FlushAsync();
     }
+    internal static async Task StopManagedPhoneAsync(AndroidDevice device, Func<Task>? finishTransport = null)
+    {
+        var aliases = (PhoneAudioWindowCache.Discovery.CurrentDevices ?? []).Where(d => AndroidDeviceIdentity.Matches(device, d))
+            .Append(device).Distinct().ToArray();
+        lock (PhoneOperations)
+        {
+            PhoneAudioWindowCache.Manager.BeginRetirement(aliases);
+            try { PhoneAudioWindowCache.SetAutomaticRecovery(device, false); }
+            catch { PhoneAudioWindowCache.Manager.CompleteRetirement(aliases); throw; }
+        }
+        try
+        {
+            await CleanupManagedPhoneAsync(aliases);
+            if (finishTransport != null) await finishTransport();
+        }
+        finally { PhoneAudioWindowCache.Manager.CompleteRetirement(aliases); PhoneAudioWindowCache.NotifyManagementChanged(); }
+    }
+    private static async Task CleanupManagedPhoneAsync(IReadOnlyList<AndroidDevice> aliases)
+    {
+        // Block new operations first, then retire all owned sessions (including a
+        // former USB/Wi-Fi alias). The saved settings themselves are kept.
+        // Complete owned cleanup even if selecting the replacement profile hides this page.
+        var settings = await PrepareStreamingAsync(MediaShutdown.Token).ConfigureAwait(false);
+        foreach (var alias in aliases.DistinctBy(AndroidDeviceIdentity.Key))
+        {
+            settings.ForgetPhoneRoutes(alias);
+            var cleanup = new List<Task> { LocalAppOutputMirrors.PhoneRemovedAsync(alias) };
+            if (IsCreated) cleanup.Add(DisconnectAndroidSourcesAsync(alias));
+            if (AreDisplaysCreated) cleanup.Add(Displays.CloseDeviceAsync(alias));
+            if (IsPcToPhoneCreated) cleanup.Add(PcToPhone.StopPhoneAsync(alias));
+            if (AirPlayHost.Source is { } airPlay) cleanup.Add(airPlay.PhoneRemovedAsync(alias));
+            await Task.WhenAll(cleanup);
+        }
+        await settings.FlushAsync();
+    }
     internal static Task DisconnectAndroidSourcesAsync(AndroidDevice device) =>
-        !IsCreated ? Task.CompletedTask : Task.WhenAll(Sources.Sources.Select(source =>
-            AndroidDeviceIdentity.MatchesSavedDevice(device, source.Device)
-                ? Sources.RemoveAsync(source.Id, restorePrevious: false)
-                : source.Session.PhoneRemovedAsync(device)));
+        !IsCreated ? Task.CompletedTask : Sources.RemovePhoneAsync(device);
 
     internal static bool IsPhoneOnline(AndroidDevice? device)
-    {
-        if (device == null) return false;
-        if (PhoneAudioWindowCache.Devices is { } cached)
-            return cached.Any(d => d.State == "device" && AndroidDeviceIdentity.Matches(d, device));
-        return device.State == "device";
-    }
+        => PhoneAudioWindowCache.GetOnlineDevice(device) != null;
     private static void OnCachedDevicesChanged()
     {
         InvalidateOutputSnapshot();
-        var cached = PhoneAudioWindowCache.Devices;
+        var cached = PhoneAudioWindowCache.Discovery.CurrentDevices;
         if (LazyPhone.IsValueCreated)
         {
             foreach (var profile in Phone.Profiles)
             {
-                if (profile.LastDevice is { } dev && !IsPhoneOnline(dev) && profile.OutputSinks.Count > 1)
+                if (cached != null && profile.LastDevice is { } dev && !IsPhoneOnline(dev) && profile.OutputSinks.Count > 1)
                     Phone.UpdateOutputs(dev, [AndroidOutputSink.DefaultSpeaker]);
             }
             ApplicationAudio.NotifyOutputsChanged();
@@ -183,8 +240,7 @@ internal static partial class AndroidAudioHost
         {
             foreach (var route in PcToPhone.GetActiveRoutes())
             {
-                bool online = cached.Any(d => d.State == "device"
-                    && string.Equals(AndroidDeviceIdentity.Key(d), route.PhoneKey, StringComparison.OrdinalIgnoreCase));
+                bool online = FindOnlinePhone(route.PhoneKey) != null;
                 if (!online)
                     PcToPhone.StopProcess(route.ProcessId, restorePreviousEndpoint: true);
             }
@@ -203,6 +259,7 @@ internal static partial class AndroidAudioHost
     {
         (System.Windows.Application.Current as App)?.PhoneClipboardProfilesChanged();
         InvalidateOutputSnapshot();
+        ApplicationAudio.NotifyOutputsChanged();
         if (LazySources.IsValueCreated && LazyPhone.IsValueCreated)
             Sources.SyncSmartVolume(Phone.IsSmartVolumeEnabled);
     }
@@ -220,7 +277,7 @@ internal static partial class AndroidAudioHost
         var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profile in store.Profiles)
         {
-            if (profile.LastDevice is not { } device || store.IsRemoved(device) || !IsPhoneOnline(device)) continue;
+            if (PhoneAudioWindowCache.GetOnlineDevice(profile.LastDevice) is not { } device) continue;
             foreach (var (sink, id) in GetDropZonesForDevice(device))
             {
                 if (!seenIds.Add(id)) continue;
@@ -241,7 +298,7 @@ internal static partial class AndroidAudioHost
         if (sink.Kind == AndroidOutputSinkKind.Current)
         {
             string current = L10n.T("Phone.NativeAudioOutput");
-            return PhoneAudioWindowCache.Devices?.Count(d => d.State == "device") > 1 ? current + " · " + phoneName : current;
+            return PhoneAudioWindowCache.OnlineDevices.Count > 1 ? current + " · " + phoneName : current;
         }
         string sinkName = sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name;
         return sink.Kind == AndroidOutputSinkKind.Speaker
@@ -263,7 +320,8 @@ internal static partial class AndroidAudioHost
     }
     internal static IReadOnlyList<(AndroidOutputSink Sink, string DeviceId)> GetDropZonesForDevice(AndroidDevice? device)
     {
-        if (device == null) return Array.Empty<(AndroidOutputSink, string)>();
+        if (PhoneAudioWindowCache.GetOnlineDevice(device) is not { } live) return Array.Empty<(AndroidOutputSink, string)>();
+        device = live;
         string phoneKey = AndroidDeviceIdentity.Key(device);
         IReadOnlyList<AndroidOutputSink> sinks = [AndroidOutputSink.DefaultSpeaker];
         if (LazyPhone.IsValueCreated && Phone.FindProfile(device) is { OutputSinks.Count: > 0 } profile)
@@ -281,36 +339,31 @@ internal static partial class AndroidAudioHost
             throw AndroidError.WithCode(new IOException("无效的设备输出。"), AndroidErrorCode.InvalidPhoneOutputDevice);
 
         var device = FindOnlinePhone(phoneKey);
-        if (device == null || Phone.IsRemoved(device))
+        if (device == null)
             throw AndroidError.WithCode(new IOException("设备未连接或离线。"), AndroidErrorCode.PhoneOffline);
         if (!GetDropZonesForDevice(device).Any(output => string.Equals(output.DeviceId, endpoint, StringComparison.OrdinalIgnoreCase)))
             throw AndroidError.WithCode(new IOException("所选设备输出已断开。"), AndroidErrorCode.SelectedPhoneOutputDisconnected);
 
         token.ThrowIfCancellationRequested();
-        return new AndroidPhonePcmPlayer(adb ?? Adb, device, pcm, sink, token, (connected, outputs) => Phone.UpdateOutputs(connected, outputs));
+        return new AndroidPhonePcmPlayer(adb ?? Adb, device, pcm, sink, token,
+            (connected, outputs) => { if (PhoneAudioWindowCache.Manager.IsCurrent(connected)) Phone.UpdateOutputs(connected, outputs); },
+            PhoneAudioWindowCache.Manager.OperationToken(device));
     }
 
-    private static AndroidDevice? FindOnlinePhone(string phoneKey)
-    {
-        bool Matches(AndroidDevice? candidate) => candidate is { State: "device" }
-            && string.Equals(AndroidDeviceIdentity.Key(candidate), phoneKey, StringComparison.OrdinalIgnoreCase)
-            && !Phone.IsRemoved(candidate);
-        return PhoneAudioWindowCache.Devices is { } online
-            ? online.FirstOrDefault(Matches) : Phone.Profiles.Select(profile => profile.LastDevice).FirstOrDefault(Matches);
-    }
+    private static AndroidDevice? FindOnlinePhone(string phoneKey) => PhoneAudioWindowCache.Manager.ResolveKey(phoneKey);
     internal static string? TryGetPcAppPhoneOutput(int processId) =>
         LazyPcToPhone.IsValueCreated ? PcToPhone.GetPersistedEndpoint(processId) : null;
     internal static (bool Success, int HResult, string Message) RoutePcAppToPhone(int processId, string deviceId)
     {
         if (!AndroidOutputIdentity.TryParseDeviceId(deviceId, out string phoneKey, out _))
             return (false, -1, L10n.T("Phone.Err.InvalidPhoneOutputDevice"));
-        var connected = PhoneAudioWindowCache.Devices?.FirstOrDefault(d =>
-            d.State == "device" && string.Equals(AndroidDeviceIdentity.Key(d), phoneKey, StringComparison.OrdinalIgnoreCase));
-        var fallback = connected ?? (LazyPhone.IsValueCreated
-            ? Phone.Profiles.FirstOrDefault(p => p.LastDevice != null
-                && string.Equals(AndroidDeviceIdentity.Key(p.LastDevice), phoneKey, StringComparison.OrdinalIgnoreCase))?.LastDevice
-            : null);
-        var res = PcToPhone.RouteProcess(processId, deviceId, fallback);
+        (bool Success, int HResult, string Message) res;
+        lock (PhoneOperations)
+        {
+            var connected = FindOnlinePhone(phoneKey);
+            if (connected == null) return (false, -1, L10n.T("Phone.Err.PhoneOffline"));
+            res = PcToPhone.RouteProcess(processId, deviceId, connected);
+        }
         return res.Success ? (true, 0, L10n.T("History.Status.success")) : (false, res.HResult, processId <= 0 ? L10n.T("Phone.Err.InvalidProcessId") : L10n.T("Phone.Err.PhoneAudioOutputStopped"));
     }
     internal static bool StopPcAppToPhone(int processId, bool restorePreviousEndpoint) =>
@@ -321,7 +374,7 @@ internal static partial class AndroidAudioHost
     {
         if (devices == null || !LazyAdb.IsValueCreated || !LazyPhone.IsValueCreated) return;
         long now = Environment.TickCount64;
-        foreach (var device in devices)
+        foreach (var device in devices.Select(PhoneAudioWindowCache.GetOnlineDevice).OfType<AndroidDevice>().DistinctBy(AndroidDeviceIdentity.Key))
         {
             if (device.State != "device" || string.Equals(device.Serial, "offline-fixture", StringComparison.Ordinal)) continue;
             lock (ProbeTimestamps)
@@ -331,8 +384,9 @@ internal static partial class AndroidAudioHost
             }
             try
             {
-                var outputs = await Adb.OutputsAsync(device, token).ConfigureAwait(false);
-                Phone.UpdateOutputs(device, outputs);
+                using var read = CancellationTokenSource.CreateLinkedTokenSource(token, PhoneAudioWindowCache.Manager.OperationToken(device));
+                var outputs = await Adb.OutputsAsync(device, read.Token).ConfigureAwait(false);
+                if (PhoneAudioWindowCache.Manager.IsCurrent(device)) Phone.UpdateOutputs(device, outputs);
             }
             catch
             {
@@ -362,6 +416,7 @@ internal static partial class AndroidAudioHost
     internal static void RevalidateWindowsLinkSilence()
     {
         MutedOutputs.Revalidate();
+        SilenceLeases.Revalidate();
         MirrorSilenceLeases.Revalidate();
         SourceSpeakers.Revalidate();
         SystemSpeakers.Revalidate();
@@ -370,6 +425,7 @@ internal static partial class AndroidAudioHost
     {
         MutedOutputs.NoteUnmuted();
         if (context == OutputMuteContext) return;
+        SilenceLeases.NoteUnmuted(id);
         MirrorSilenceLeases.NoteUnmuted(id);
         SourceSpeakers.NoteUnmuted(id);
     }
@@ -444,7 +500,7 @@ internal static partial class AndroidAudioHost
             || bus.StartsWith("BTH", StringComparison.OrdinalIgnoreCase) || bus.Equals("ACPI", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IReadOnlyList<string> FindMirrorSilenceOutputs(IReadOnlySet<int> owned, string? reserved)
+    private static IReadOnlyList<string> FindAvailableSilenceOutputs(IReadOnlySet<int> owned, string? reserved, Func<string, bool> isOwnedByOtherPool)
     {
         using var devices = new WasapiDeviceLease.Enumerator();
         var defaults = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -459,8 +515,8 @@ internal static partial class AndroidAudioHost
         {
             var device = lease.Device;
             string id = device.ID;
-            if (defaults.Contains(id) || SilenceLeases.OwnsEndpoint(id) || SourceSpeakers.OwnsEndpoint(id)
-                || reserved != null && !string.Equals(reserved, id, StringComparison.OrdinalIgnoreCase)) continue;
+            if (defaults.Contains(id) || isOwnedByOtherPool(id)
+                || (reserved != null && !string.Equals(reserved, id, StringComparison.OrdinalIgnoreCase))) continue;
             try
             {
                 if (IsMonitorOrInput(device.FriendlyName)) continue;
@@ -586,23 +642,6 @@ internal static partial class AndroidAudioHost
 
         static string? Pack(string? value) => value == null ? null : AudioPolicyConfig.EnsureFullDeviceId(value, EDataFlow.eRender);
     }
-    private static string? FindSilenceEndpoint()
-    {
-        var outputs = AudioService.GetDevices(EDataFlow.eRender);
-        string? defaultId = AudioService.GetDefaultDeviceId(EDataFlow.eRender);
-        var hidden = ConfigService.Load().HiddenOutputDevices;
-        var candidate = outputs
-            .Where(d => !string.Equals(d.Id, defaultId, StringComparison.OrdinalIgnoreCase)
-                && !MirrorSilenceLeases.OwnsEndpoint(d.Id) && !SourceSpeakers.OwnsEndpoint(d.Id)
-                && !AndroidOutputIdentity.IsPhoneOutput(d.Id)
-                && !IsMonitorOrInput(d.DisplayName))
-            .OrderBy(d => hidden.Contains(d.Id) ? 0 : 1)
-            .ThenBy(d => d.DisplayName?.Contains("Steam Streaming Speakers", StringComparison.OrdinalIgnoreCase) == true ? 0
-                : d.DisplayName?.Contains("High Definition Audio", StringComparison.OrdinalIgnoreCase) == true ? 1
-                : d.DisplayName?.Contains("Sonar", StringComparison.OrdinalIgnoreCase) != true ? 2 : 3)
-            .FirstOrDefault();
-        return candidate?.Id;
-    }
     private static readonly Lazy<AndroidAppCatalogCache> LazyCatalog = new(() =>
         new AndroidAppCatalogCache(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-app-catalog.json"),
             (device, token) => Adb.AppsAsync(device, token)));
@@ -722,6 +761,12 @@ internal static partial class AndroidAudioHost
         return (System.Windows.Application.Current as App)?.HasActivePhoneClipboard == true;
     }
 
+    // An endpoint-only record may acquire a stable key on manual refresh. Defer
+    // that optional identity retry while existing playback is using the old key.
+    internal static bool HasActivePlaybackConnections() => LocalAppOutputMirrors.HasActiveRoutes
+        || (IsCreated && Sources.HasActiveWork) || (AreDisplaysCreated && Displays.Count > 0)
+        || (IsPcToPhoneCreated && PcToPhone.HasActiveWork) || AirPlayHost.Source != null;
+
     private static void OnResourcesRetired() =>
         (System.Windows.Application.Current as App)?.RequestRetiredPhoneReclaim();
 
@@ -785,6 +830,14 @@ internal static class AndroidLabRuntime
 }
 internal static class AndroidErrorTranslation
 {
+    internal static string? WithUsbAccessDetail(string? text, AndroidDevice? selected)
+    {
+        if (DirectAdbTransport.UsbAccessError(PhoneAudioWindowCache.Discovery.CurrentDevices, selected) is not { } code)
+            return text;
+        string hint = Format(code);
+        return string.IsNullOrEmpty(text) ? hint : text + Environment.NewLine + hint;
+    }
+
     internal static string Format(Exception? ex)
     {
         if (ex == null) return "";

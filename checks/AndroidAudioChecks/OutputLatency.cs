@@ -5,6 +5,91 @@ using SonicRoute.AndroidAudio;
 
 internal static partial class Program
 {
+    private static async Task CheckOutputSwitchTimingAsync(string output)
+    {
+        string runtime = await FakeAudioOutputRuntimeAsync(output);
+        await using var server = new FakeAdbServer { CaptureWire = [0, .. BuildWire()] };
+        await using var adb = new AdbClient(runtime, new AdbSocketClient(server.EndPoint));
+        await using var session = new AndroidAudioSession(adb);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var device = new AndroidDevice("fake-usb-1", "Fixture", "device", false);
+        var app = new AndroidApp("com.example.music", "Fixture", 10123, "media");
+        string native = AndroidAudioSession.SourcePhoneOutputId;
+        string speaker = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker");
+        string bluetooth = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "bt:aa");
+        await session.SetOutputAsync(native);
+        session.SetVolume(37);
+        session.SetMute(true);
+        await session.StartAsync(device, app, true, deadline.Token);
+
+        int committed = 0;
+        session.OutputSelectionCommitted += _ => committed++;
+        var routeRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRoute = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.BeforeRouteReport = _ => { routeRequested.TrySetResult(); return releaseRoute.Task; };
+        Task firstSwitch = SwitchAsync(speaker);
+        try
+        {
+            await routeRequested.Task.WaitAsync(deadline.Token);
+            Check(!firstSwitch.IsCompleted && session.State.OutputId == native && committed == 0,
+                "native to speaker keeps the prior confirmed output until the new route acknowledges");
+        }
+        finally { releaseRoute.TrySetResult(); }
+        await firstSwitch.WaitAsync(deadline.Token);
+        server.BeforeRouteReport = null;
+        Check(session.State.OutputId == speaker && session.PhoneOutputDiagnostics?.RoutedType == 2 && committed == 1,
+            "speaker is committed after hardware routing acknowledges in the fake ADB session");
+        var pcm = session.Pcm;
+        int pushed = server.PushedFiles.Count;
+        await SwitchAsync(bluetooth);
+        Check(session.State.OutputId == bluetooth && session.PhoneOutputDiagnostics?.RoutedType == 8,
+            "warm speaker to Bluetooth uses the acknowledged target");
+        await SwitchAsync(speaker);
+        Check(session.State.OutputId == speaker && session.PhoneOutputDiagnostics?.RoutedType == 2
+            && ReferenceEquals(session.Pcm, pcm) && server.PushedFiles.Count == pushed,
+            "Bluetooth to speaker reuses the capture and playback helper without uploads");
+        int commands = server.Commands.Count;
+        await SwitchAsync(speaker);
+        Check(server.Commands.Count == commands && ReferenceEquals(session.Pcm, pcm),
+            "repeating the current speaker performs zero ADB operations");
+        await SwitchAsync(native);
+        var captures = server.Commands.Where(command => command.Contains("org.sonicroute.android.SonicRouteServer", StringComparison.Ordinal)).ToArray();
+        Check(session.State.OutputId == native && session.State.State == CaptureState.Receiving && captures.Length == 3
+            && captures[0].Contains("audio_dup=true") && captures[1].Contains("audio_dup=false") && captures[2].Contains("audio_dup=true")
+            && server.PeakCaptures == 1 && server.LiveCaptures == 1,
+            "speaker to native restores duplicate capture mode only after the owned old capture exits");
+        Check(session.State.Volume == 37 && session.State.Muted && session.Pcm?.Volume == 0
+            && server.ReceivedFor("speaker").All(b => b == 0), "volume and mute persist and the mocked phone output receives only silence");
+        server.RejectBluetooth = true;
+        bool rejected = false;
+        try { await SwitchAsync(bluetooth); }
+        catch (IOException) { rejected = true; }
+        Check(rejected && session.State is { State: CaptureState.Receiving, OutputId: AndroidAudioSession.SourcePhoneOutputId }
+            && server.PeakCaptures == 1 && server.LiveCaptures == 1,
+            "a rejected cold route restores the last confirmed native capture without concurrent helpers");
+        await session.StopAsync();
+        Check(server.LiveCaptures == 0, "the final stop releases the owned capture");
+        string[] timings = session.GetLog().Split(Environment.NewLine).Where(line => line.Contains("Audio route (", StringComparison.Ordinal)).ToArray();
+        Check(timings.Length == 6 && timings[0].Contains("capture_jar=") && timings[0].Contains("capture_socket=")
+            && timings[0].Contains("output_jar=") && timings[0].Contains("output_socket=") && timings[0].Contains("phone_route=")
+            && !timings[1].Contains("capture_connect=") && !timings[3].Contains("phone_route=") && timings[5].Contains("capture_recover="),
+            "timing reports distinguish cold capture, phone setup, warm routing and repeated selection");
+        await File.WriteAllLinesAsync(Path.Combine(output, "mock-output-switch-timing.log"),
+            new[] { "Loopback fake ADB and fake routed-device acknowledgements. No hardware or acoustic timing." }.Concat(timings));
+
+        async Task SwitchAsync(string id)
+        {
+            var timing = new AndroidOutputSwitchTiming();
+            string outcome = "failed";
+            try
+            {
+                await session.SetActiveOutputsAsync([id], () => true, timing).WaitAsync(deadline.Token);
+                outcome = "committed";
+            }
+            finally { timing.Report(session, outcome, [id]); }
+        }
+    }
+
     // Bounded, silent hardware timing; never opens a phone app, changes its media state,
     // or restarts shared ADB. The helper's actual routed device remains the acceptance gate.
     private static async Task OutputLatencyLiveAsync(string output)

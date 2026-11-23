@@ -375,10 +375,25 @@ internal static partial class Program
             Pump(suppressed);
             Check(!suppressed.Result && connections.Count == beforeRecovery, "a manual disconnect suppresses on-demand Wi-Fi recovery");
             cache.GetMethod("SetAutomaticRecovery", statics)!.Invoke(null, [archived, true]);
+            int unnecessaryScans = 0;
+            refreshSnapshot = _ => { unnecessaryScans++; throw new IOException("post-handshake listing unavailable"); };
             var recovered = Recover();
             Pump(recovered);
             Check(recovered.Result && connections.Count == beforeRecovery + 1 && store.Profile.Id == restoredId
-                && discovery.Devices!.Any(d => d.Serial == currentAddress), "wireless loss recovers the saved phone and republishes its new address");
+                && discovery.Devices!.Any(d => d.Serial == currentAddress) && unnecessaryScans == 0,
+                "wireless loss publishes the verified connection without requiring a redundant post-handshake scan");
+            var usb = archived with { Serial = archived.HardwareId!, State = "device", IsWifi = false };
+            store.RememberDevice(usb);
+            restoredDevice = null;
+            refreshSnapshot = devices;
+            discovery.Publish([]);
+            announceCurrent = false;
+            int beforeUnplug = connections.Count, beforeLookup = reconnectLookups, beforeProfiles = store.Profiles.Count;
+            Find<Button>("ReconnectButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Until(() => store.Profile.LastDevice?.Serial == currentAddress && Find<Button>("ReconnectButton").IsEnabled);
+            Check(connections.Count == beforeUnplug + 1 && connections[^1] == currentAddress && reconnectLookups == beforeLookup
+                && store.Profile.Id == restoredId && store.Profiles.Count == beforeProfiles && store.Profile.RetainedApps.Single().Package == keptPackage,
+                "after USB unplug the original device button opens a new wireless session without mDNS, a ready alias or another profile");
             page.Dispose(); Until(() => Watch() == null);
             Check(activeScans == 0 && clock.QrTimers == 0 && names.Distinct().Count() == names.Count,
                 "disposal retires all deadlines/scans and every QR rotation uses a fresh identity");

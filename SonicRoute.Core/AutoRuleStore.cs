@@ -196,6 +196,15 @@ namespace SonicRoute.Core
                         entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(file), ReadOptions);
                     }
                     catch { /* 损坏文件仍占用名称。 */ }
+                    if (entry.Rule == null)
+                    {
+                        string backup = file + ".bak";
+                        if (File.Exists(backup))
+                        {
+                            try { entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(backup), ReadOptions); }
+                            catch { }
+                        }
+                    }
                     _files[file] = entry;
                 }
             }
@@ -380,12 +389,14 @@ namespace SonicRoute.Core
                 int suffix = 1;
                 while ((_files.ContainsKey(target) || File.Exists(target)) && !oldPaths.Contains(target, StringComparer.OrdinalIgnoreCase))
                     target = Path.Combine(RulesDir, $"{baseName}({suffix++}).json");
+                AtomicFile.BackupBeforeWrite(target);
                 AtomicFile.WriteAllText(target, JsonSerializer.Serialize(rule, SaveOptions));
                 // 新文件完整提交后才清理旧名称；写入失败不会走到这里。
                 foreach (string old in oldPaths)
                 {
                     if (string.Equals(old, target, StringComparison.OrdinalIgnoreCase)) continue;
                     try { File.Delete(old); _files.Remove(old); } catch { }
+                    try { if (File.Exists(old + ".bak")) File.Delete(old + ".bak"); } catch { }
                 }
                 var info = new FileInfo(target);
                 _files[target] = new Entry { Rule = rule.Clone(), Length = info.Length, Written = info.LastWriteTimeUtc.Ticks };
@@ -406,6 +417,7 @@ namespace SonicRoute.Core
                     {
                         File.Delete(file);
                         _files.Remove(file);
+                        try { if (File.Exists(file + ".bak")) File.Delete(file + ".bak"); } catch { }
                     }
                     RebuildCache();
                 }

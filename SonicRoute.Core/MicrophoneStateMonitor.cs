@@ -11,8 +11,8 @@ namespace SonicRoute.Core
     public sealed class MicrophoneStateMonitor : IDisposable
     {
         private readonly object _gate = new(), _requestGate = new();
-        private readonly VolumeCallback _volumeCallback;
-        private readonly DeviceCallback _deviceCallback;
+        private readonly AudioEndpointVolumeCallback _volumeCallback;
+        private IDisposable? _deviceNotification;
         private IMMDeviceEnumerator? _enumerator;
         private readonly Dictionary<string, EndpointVolumeSubscription> _volumes = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<IAudioEndpointVolume> _capture = new();
@@ -28,8 +28,15 @@ namespace SonicRoute.Core
 
         public MicrophoneStateMonitor()
         {
-            _volumeCallback = new VolumeCallback(() => Signal(false));
-            _deviceCallback = new DeviceCallback(() => Signal(true));
+            _volumeCallback = new AudioEndpointVolumeCallback(() => Signal(false));
+        }
+
+        private void OnDeviceNotification(AudioDeviceChange change)
+        {
+            if (change.Kind == AudioDeviceChangeKind.Topology) Signal(true);
+            else if (change.Kind == AudioDeviceChangeKind.DefaultChanged
+                && change.Flow == EDataFlow.eCapture && change.Role == ERole.eMultimedia)
+                Signal(true);
         }
 
         public Task<(bool All, bool Default, bool Known)> ReadStateAsync()
@@ -78,6 +85,7 @@ namespace SonicRoute.Core
                 }
                 catch
                 {
+                    AudioDeviceNotificationHub.InvalidateRegistration();
                     Release();
                     Interlocked.Exchange(ref _dirty, 1);
                     SetRecoveryRequired(true);
@@ -92,7 +100,8 @@ namespace SonicRoute.Core
         {
             Release();
             _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
-            _deviceRegistered = _enumerator.RegisterEndpointNotificationCallback(_deviceCallback) >= 0;
+            _deviceNotification = AudioDeviceNotificationHub.Subscribe(OnDeviceNotification);
+            _deviceRegistered = AudioDeviceNotificationHub.EnsureRegistered();
             Marshal.ThrowExceptionForHR(_enumerator.EnumAudioEndpoints(EDataFlow.eCapture, DeviceState.ACTIVE, out var devices));
             try
             {
@@ -159,10 +168,10 @@ namespace SonicRoute.Core
         {
             foreach (var subscription in _volumes.Values) subscription.Dispose();
             _volumes.Clear(); _capture.Clear(); _default = null;
+            _deviceNotification?.Dispose();
+            _deviceNotification = null;
             if (_enumerator != null)
             {
-                if (_deviceRegistered)
-                    try { _enumerator.UnregisterEndpointNotificationCallback(_deviceCallback); } catch { }
                 Free(_enumerator); _enumerator = null;
             }
             _deviceRegistered = false;
@@ -176,40 +185,6 @@ namespace SonicRoute.Core
                 Invalidated = null;
                 Completion = Task.Run(() => { lock (_gate) Release(); });
             }
-        }
-
-        [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-        public sealed class VolumeCallback : IAudioEndpointVolumeCallback
-        {
-            private readonly Action _changed;
-            internal VolumeCallback(Action changed) { _changed = changed; }
-            public int OnNotify(IntPtr notification) { _changed(); return 0; }
-        }
-        [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-        public sealed class DeviceCallback : IMMNotificationClient
-        {
-            private readonly Action _changed;
-            internal DeviceCallback(Action changed) { _changed = changed; }
-            private void InvalidateDevices()
-            {
-                AudioService.InvalidateDeviceCache();
-                AudioService.InvalidateAppsCache();
-                SessionVolumeService.InvalidateCache();
-                _changed();
-            }
-            public int OnDeviceStateChanged(string id, DeviceState state) { InvalidateDevices(); return 0; }
-            public int OnDeviceAdded(string id) { InvalidateDevices(); return 0; }
-            public int OnDeviceRemoved(string id) { InvalidateDevices(); return 0; }
-            public int OnDefaultDeviceChanged(EDataFlow flow, ERole role, string? id)
-            {
-                AudioService.InvalidateDeviceCache(flow);
-                AudioService.InvalidateAppsCache();
-                SessionVolumeService.InvalidateCache();
-                if (flow == EDataFlow.eCapture && role == ERole.eMultimedia) _changed();
-                return 0;
-            }
-            public int OnPropertyValueChanged(string id, PROPERTYKEY key)
-            { AudioService.InvalidateDeviceCache(); return 0; }
         }
     }
 }

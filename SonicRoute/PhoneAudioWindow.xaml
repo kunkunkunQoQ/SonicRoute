@@ -275,7 +275,7 @@
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
-                        <Grid x:Name="ConnectionSignal" Grid.Column="2" Width="14" Height="12"
+                        <Grid x:Name="ConnectionSignal" Grid.Column="2" Width="14" Height="12" Visibility="Collapsed"
                               HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0"
                               ToolTip="{Binding [Phone.MeasuringLatency], Source={x:Static local:L10n.Instance}}">
                             <Path x:Name="SignalOuter" Data="M0,3.3 Q7,-2.5 14,3.3 L12.4,4.9 Q7,0.4 1.6,4.9 Z"

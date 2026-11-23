@@ -310,7 +310,7 @@ namespace SonicRoute.Core
             private readonly ConcurrentQueue<(string Device, object Session)> _arrivals = new();
             private readonly List<ManagerHandle> _managers = new();
             private readonly List<string> _removed = new();
-            private readonly MeterDeviceCallback _deviceCallback;
+            private readonly IDisposable _deviceNotification;
             private IMMDeviceEnumerator? _enumerator;
             private bool _deviceRegistered;
             private int _stopped, _topologyDirty, _recovery;
@@ -324,19 +324,17 @@ namespace SonicRoute.Core
             internal MeterGraph(HashSet<int> targets, Action wake, Func<bool> isStopping)
             {
                 _targets = targets; _wake = wake; _isStopping = isStopping;
-                _deviceCallback = new MeterDeviceCallback(() =>
+                _deviceNotification = AudioDeviceNotificationHub.Subscribe(change =>
                 {
-                    if (Volatile.Read(ref _stopped) != 0) return;
+                    if (change.Kind != AudioDeviceChangeKind.Topology || Volatile.Read(ref _stopped) != 0) return;
                     Interlocked.Exchange(ref _topologyDirty, 1);
-                    SessionVolumeService.InvalidateCache();
                     _wake();
                 });
                 try
                 {
                     if (_isStopping()) return;
                     _enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
-                    try { _deviceRegistered = _enumerator.RegisterEndpointNotificationCallback(_deviceCallback) >= 0; }
-                    catch { RequireRecovery(); }
+                    _deviceRegistered = AudioDeviceNotificationHub.EnsureRegistered();
                     if (!_deviceRegistered) RequireRecovery();
                     Marshal.ThrowExceptionForHR(_enumerator.EnumAudioEndpoints(EDataFlow.eRender, DeviceState.ACTIVE, out var devices));
                     try
@@ -467,8 +465,7 @@ namespace SonicRoute.Core
             public void Dispose()
             {
                 Interlocked.Exchange(ref _stopped, 1);
-                if (_deviceRegistered && _enumerator != null)
-                    try { _enumerator.UnregisterEndpointNotificationCallback(_deviceCallback); } catch { }
+                _deviceNotification.Dispose();
                 foreach (var manager in _managers)
                 {
                     if (manager.Registered)
@@ -544,18 +541,6 @@ namespace SonicRoute.Core
             public int OnSimpleVolumeChanged(float volume, bool muted, ref Guid context) => 0;
             public int OnChannelVolumeChanged(uint count, IntPtr volumes, uint changed, ref Guid context) => 0;
             public int OnGroupingParamChanged(ref Guid grouping, ref Guid context) => 0;
-        }
-
-        [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-        public sealed class MeterDeviceCallback : IMMNotificationClient
-        {
-            private readonly Action _changed;
-            internal MeterDeviceCallback(Action changed) { _changed = changed; }
-            public int OnDeviceStateChanged(string id, DeviceState state) { _changed(); return 0; }
-            public int OnDeviceAdded(string id) { _changed(); return 0; }
-            public int OnDeviceRemoved(string id) { _changed(); return 0; }
-            public int OnDefaultDeviceChanged(EDataFlow flow, ERole role, string? id) => 0;
-            public int OnPropertyValueChanged(string id, PROPERTYKEY key) => 0;
         }
     }
 }

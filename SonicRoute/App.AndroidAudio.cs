@@ -1,6 +1,7 @@
 using System;
 using System.Windows;
 #if SONICROUTE_PHONE
+using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
 using SonicRoute.Core.Compat;
 using System.IO;
@@ -12,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Interop;
 using SonicRoute.WindowsLink;
+using System.Windows.Threading;
 #endif
 
 namespace SonicRoute;
@@ -22,11 +24,125 @@ public partial class App
     private PhoneClipboardSync? _phoneClipboard;
     internal HwndSource? ClipboardNotificationWindow => _activateSink;
     private Task<PhoneClipboardSync>? _phoneClipboardLoad;
-    private bool _usbArrivalHookAttached;
+    private bool _usbArrivalWanted;
     private bool _usbArrivalScanRunning;
     private bool _usbArrivalRescanRequested;
     private CancellationTokenSource? _usbArrivalDebounce;
     private CancellationTokenSource? _usbArrivalShutdown;
+    private Action<IReadOnlyCollection<AndroidDevice>>? _androidUsbChanged;
+    private readonly Dictionary<string, AndroidDevice> _removedPanelUsbDevices = new(StringComparer.OrdinalIgnoreCase);
+    private HwndSource? _usbSink;
+    private IntPtr _usbRegistration;
+    private DispatcherTimer? _usbPanelDebounce;
+    internal bool AndroidUsbNotificationsAvailable => !_exiting && _activateSink is { IsDisposed: false };
+    internal event Action<IReadOnlyCollection<AndroidDevice>>? AndroidUsbInterfaceChanged
+    {
+        add
+        {
+            Dispatcher.VerifyAccess();
+            if (value == null || !AndroidUsbNotificationsAvailable) return;
+            _androidUsbChanged += value;
+            SyncUsbDeviceHook();
+        }
+        remove
+        {
+            Dispatcher.VerifyAccess();
+            _androidUsbChanged -= value;
+            if (_androidUsbChanged == null) DetachPanelUsbState();
+            SyncUsbDeviceHook();
+        }
+    }
+
+    private void SyncUsbDeviceHook()
+    {
+        bool wantPanel = _androidUsbChanged != null;
+        bool wantClipboard = !_exiting && _phoneClipboard?.HasEnabledUsbTargets == true;
+        _usbArrivalWanted = wantClipboard;
+        if (!wantClipboard) DetachUsbClipboardState();
+        bool wantAny = !_exiting && _activateSink is { IsDisposed: false } && (wantPanel || wantClipboard);
+        if (wantAny)
+        {
+            if (wantClipboard && _usbArrivalShutdown == null)
+                _usbArrivalShutdown = new CancellationTokenSource();
+            if (_usbSink == null)
+            {
+                _usbSink = _activateSink!;
+                _usbRegistration = WinUsbDeviceWatcher.RegisterAdbInterface(_usbSink.Handle);
+                _usbSink.AddHook(SharedUsbDeviceChangeMessage);
+            }
+            return;
+        }
+        DetachSharedUsbHook();
+    }
+
+    private IntPtr SharedUsbDeviceChangeMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int wmDeviceChange = 0x0219, dbtDevNodesChanged = 0x0007, dbtDeviceArrival = 0x8000;
+        if (message != wmDeviceChange) return IntPtr.Zero;
+        bool adbChange = WinUsbDeviceWatcher.IsAdbInterfaceChange(message, wParam, lParam);
+        if (_androidUsbChanged != null
+            && (adbChange || (_usbRegistration == IntPtr.Zero && wParam == (IntPtr)dbtDevNodesChanged)))
+        {
+            if (adbChange && WinUsbDeviceWatcher.ReadChangedInterfacePath(lParam) is { } path)
+            {
+                const int removalComplete = 0x8004;
+                if (wParam != (IntPtr)removalComplete) _removedPanelUsbDevices.Remove(path);
+                else if (PhoneAudioWindowCache.Discovery.CurrentDevices?.FirstOrDefault(d =>
+                    string.Equals(d.UsbInterfacePath, path, StringComparison.OrdinalIgnoreCase)) is { } removed)
+                    _removedPanelUsbDevices[path] = removed;
+            }
+            if (_usbPanelDebounce == null)
+            {
+                _usbPanelDebounce = new DispatcherTimer(DispatcherPriority.Normal, Dispatcher) { Interval = TimeSpan.FromMilliseconds(200) };
+                _usbPanelDebounce.Tick += PublishPanelUsbChange;
+            }
+            _usbPanelDebounce.Stop();
+            _usbPanelDebounce.Start();
+        }
+        if (_usbArrivalWanted)
+        {
+            int evt = unchecked((int)wParam.ToInt64());
+            if (evt == dbtDeviceArrival || evt == dbtDevNodesChanged)
+                QueueUsbClipboardArrivalScan();
+        }
+        return IntPtr.Zero;
+    }
+    private void PublishPanelUsbChange(object? sender, EventArgs args)
+    {
+        _usbPanelDebounce?.Stop();
+        var observed = PhoneAudioWindowCache.Discovery.CurrentDevices;
+        // A second edge can supersede an in-flight failed scan. Retain the first
+        // removal until it is reflected in discovery or the interface reappears.
+        foreach (var path in _removedPanelUsbDevices.Where(p => observed?.Any(device =>
+            AndroidDeviceIdentity.SameAttachment(device, p.Value)) != true).Select(p => p.Key).ToArray())
+            _removedPanelUsbDevices.Remove(path);
+        _androidUsbChanged?.Invoke(_removedPanelUsbDevices.Values.ToArray());
+    }
+    private void DetachPanelUsbState()
+    {
+        _removedPanelUsbDevices.Clear();
+        if (_usbPanelDebounce != null)
+        {
+            _usbPanelDebounce.Stop();
+            _usbPanelDebounce.Tick -= PublishPanelUsbChange;
+            _usbPanelDebounce = null;
+        }
+        _androidUsbChanged = null;
+    }
+    private void DetachSharedUsbHook()
+    {
+        DetachPanelUsbState();
+        _usbArrivalWanted = false;
+        DetachUsbClipboardState();
+        if (_usbSink is { IsDisposed: false }) _usbSink.RemoveHook(SharedUsbDeviceChangeMessage);
+        _usbSink = null;
+        if (_usbRegistration != IntPtr.Zero)
+        {
+            WinUsbDeviceWatcher.UnregisterDeviceNotification(_usbRegistration);
+            _usbRegistration = IntPtr.Zero;
+        }
+    }
+
     internal event Action? PhoneClipboardChanged;
     internal bool HasActivePhoneClipboard => _phoneClipboard?.HasActiveWork == true;
     private static string PhoneClipboardSettingsPath =>
@@ -128,30 +244,15 @@ public partial class App
         sync.Changed += OnPhoneClipboardChanged;
         try { await sync.InitializeAsync(); }
         catch (OperationCanceledException) { }
-        UpdateUsbClipboardArrivalHook();
+        SyncUsbDeviceHook();
         return sync;
     }
     private void OnPhoneClipboardChanged()
     {
-        UpdateUsbClipboardArrivalHook();
+        SyncUsbDeviceHook();
         PhoneClipboardChanged?.Invoke();
     }
-    private void UpdateUsbClipboardArrivalHook()
-    {
-        bool wantHook = !_exiting && _activateSink is { IsDisposed: false } && _phoneClipboard?.HasEnabledUsbTargets == true;
-        if (wantHook == _usbArrivalHookAttached) return;
-        if (wantHook)
-        {
-            _usbArrivalShutdown = new CancellationTokenSource();
-            _activateSink!.AddHook(UsbClipboardDeviceChangeMessage);
-            _usbArrivalHookAttached = true;
-        }
-        else
-        {
-            DetachUsbClipboardArrivalHook();
-        }
-    }
-    private void DetachUsbClipboardArrivalHook()
+    private void DetachUsbClipboardState()
     {
         _usbArrivalRescanRequested = false;
         CancelUsbArrivalDebounce();
@@ -161,9 +262,6 @@ public partial class App
             _usbArrivalShutdown.Dispose();
             _usbArrivalShutdown = null;
         }
-        if (_usbArrivalHookAttached && _activateSink is { IsDisposed: false })
-            _activateSink.RemoveHook(UsbClipboardDeviceChangeMessage);
-        _usbArrivalHookAttached = false;
     }
     private void CancelUsbArrivalDebounce()
     {
@@ -172,22 +270,9 @@ public partial class App
         _usbArrivalDebounce.Dispose();
         _usbArrivalDebounce = null;
     }
-    private IntPtr UsbClipboardDeviceChangeMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        const int WmDeviceChange = 0x0219;
-        const int DbtDevNodesChanged = 0x0007;
-        const int DbtDeviceArrival = 0x8000;
-        if (message == WmDeviceChange)
-        {
-            int evt = unchecked((int)wParam.ToInt64());
-            if (evt == DbtDeviceArrival || evt == DbtDevNodesChanged)
-                QueueUsbClipboardArrivalScan();
-        }
-        return IntPtr.Zero;
-    }
     private void QueueUsbClipboardArrivalScan()
     {
-        if (_exiting || !_usbArrivalHookAttached || _phoneClipboard == null || !_phoneClipboard.ShouldScanOnUsbArrival())
+        if (_exiting || !_usbArrivalWanted || _usbSink == null || _phoneClipboard == null || !_phoneClipboard.ShouldScanOnUsbArrival())
             return;
         if (_usbArrivalScanRunning)
         {
@@ -220,7 +305,7 @@ public partial class App
             _usbArrivalDebounce = null;
             debounceCts.Dispose();
         }
-        if (_exiting || !_usbArrivalHookAttached || shutdownToken.IsCancellationRequested
+        if (_exiting || !_usbArrivalWanted || _usbSink == null || shutdownToken.IsCancellationRequested
             || _phoneClipboard == null || !_phoneClipboard.ShouldScanOnUsbArrival())
             return;
         if (_usbArrivalScanRunning)
@@ -231,7 +316,7 @@ public partial class App
         try
         {
             bool present = await Task.Run(SonicRoute.AndroidAudio.AdbDevicePresence.HasPresentUsbDevices, shutdownToken);
-            if (!present || _exiting || !_usbArrivalHookAttached || shutdownToken.IsCancellationRequested
+            if (!present || _exiting || !_usbArrivalWanted || _usbSink == null || shutdownToken.IsCancellationRequested
                 || _phoneClipboard == null || !_phoneClipboard.ShouldScanOnUsbArrival())
                 return;
             _usbArrivalScanRunning = true;
@@ -243,7 +328,7 @@ public partial class App
             {
                 _usbArrivalScanRunning = false;
             }
-            if (_usbArrivalRescanRequested && !_exiting && _usbArrivalHookAttached && !shutdownToken.IsCancellationRequested)
+            if (_usbArrivalRescanRequested && !_exiting && _usbArrivalWanted && _usbSink != null && !shutdownToken.IsCancellationRequested)
             {
                 _usbArrivalRescanRequested = false;
                 QueueUsbClipboardArrivalScan();
@@ -282,6 +367,7 @@ public partial class App
             payload = payload with { App = payload.App with { Name = ApplicationAudio.AndroidName(payload.App, payload.Device) } };
         try
         {
+            payload = payload with { Device = await AndroidAudioHost.ResolveOperationDeviceAsync(payload.Device, AndroidErrorCode.DisplayPhoneNotConnected) };
             if (!_androidDisplayNotifications)
             {
                 AndroidAudioHost.Displays.FailedError += AndroidDisplayFailedError;
@@ -426,7 +512,7 @@ public partial class App
     {
         if (_audioShutdown != null) return _audioShutdown;
         if (AndroidAudioHost.IsCreated) AndroidAudioHost.Sources.BeginShutdown();
-        DetachUsbClipboardArrivalHook();
+        DetachSharedUsbHook();
         Task clipboard = Task.CompletedTask;
         if (_phoneClipboard != null)
         {

@@ -163,8 +163,11 @@ internal static class ApplicationAudio
             void AddNative()
             {
                 if (addedNative) return;
-                list.Add(new PanelDevices.LocalizedDevice("Phone.NativeAudioOutput") {
-                    Id = AndroidAudioSession.SourcePhoneOutputId, Flow = EDataFlow.eRender });
+                string currentId = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(source.Device), AndroidOutputSink.Current.Key);
+                const string nativeId = AndroidAudioSession.SourcePhoneOutputId;
+                list.Add(config.DeviceNames.TryGetValue(currentId, out var name) && !string.IsNullOrWhiteSpace(name)
+                    ? new AudioDeviceInfo { Id = nativeId, DisplayName = name, Flow = EDataFlow.eRender }
+                    : new PanelDevices.LocalizedDevice("Phone.NativeAudioOutput") { Id = nativeId, Flow = EDataFlow.eRender });
                 addedNative = true;
             }
             foreach (var device in WindowsLinkIncomingOutputs.PhoneChoices(outputs))
@@ -379,6 +382,15 @@ internal static class ApplicationAudio
         if (flow == EDataFlow.eRender) return ExternalSession(app)?.State.OutputId;
 #endif
         return null;
+    }
+
+    internal static string GetExpectedOutputId(AudioAppInfo app, string deviceId)
+    {
+#if SONICROUTE_PHONE
+        if (AndroidOutputIdentity.IsPhoneCurrentOutput(deviceId) && Source(app) is { } source && IsSourcePhoneOutput(source, deviceId))
+            return AndroidAudioSession.SourcePhoneOutputId;
+#endif
+        return deviceId;
     }
 
     internal static (bool Success, int HResult, string Message) ApplyEndpoint(AudioAppInfo app, EDataFlow flow, string deviceId)

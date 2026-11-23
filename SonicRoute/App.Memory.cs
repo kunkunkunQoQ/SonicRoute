@@ -88,6 +88,7 @@ namespace SonicRoute
             if (HasActiveUiWindows() || !ShouldReclaimIdle() || Dispatcher.HasShutdownStarted) return;
             AppIconService.TrimForIdle();
             _trayWheel?.ReleaseIdleOsd();
+            SonicRoute.Core.SessionVolumeService.ReleaseIdleCache();
 #if SONICROUTE_PHONE
             AndroidAudioHost.TrimForIdle();
             // Retire owned UI/cache resources only. Let the runtime choose collection time:

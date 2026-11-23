@@ -7,7 +7,7 @@ using Concentus.Structs;
 namespace SonicRoute.AndroidAudio;
 
 /// <summary>scrcpy 3.3.4 audio protocol, matching demuxer.c and device/Streamer.java.</summary>
-public sealed class ScrcpyOpusReceiver
+public sealed class ScrcpyOpusReceiver : IAndroidAudioReceiver
 {
     private readonly string? _decoder;
     public ScrcpyOpusReceiver(string? decoder = null)
@@ -18,17 +18,23 @@ public sealed class ScrcpyOpusReceiver
     }
 
     public string DecoderId => _decoder ?? AndroidStreamSettings.ConcentusDecoder;
+    public uint CodecId => ScrcpyAudioProtocol.CodecOpus;
     public long PacketsDecoded { get; private set; }
     public long LastTimestampUs { get; private set; } = -1;
     public long TimestampDiscontinuities { get; private set; }
 
     public async Task ReceiveAsync(Stream stream, AndroidPcmSource pcm, Action firstFrame, CancellationToken token)
     {
-        byte[] codec = new byte[4];
-        await stream.ReadExactlyAsync(codec, token).ConfigureAwait(false);
-        uint codecId = BinaryPrimitives.ReadUInt32BigEndian(codec);
-        if (codecId is 0 or 1) throw AndroidError.WithCode(new InvalidDataException("手机未能建立应用音频捕获，请检查 Android 版本及应用支持情况。"), AndroidErrorCode.AudioCaptureNotEstablished);
-        if (codecId != 0x6f707573) throw new InvalidDataException("Expected scrcpy Opus audio stream.");
+        uint codecId = await ScrcpyAudioProtocol.ReadCodecIdAsync(stream, token).ConfigureAwait(false);
+        if (codecId != ScrcpyAudioProtocol.CodecOpus) throw new InvalidDataException("Expected scrcpy Opus audio stream.");
+        await ReceivePacketsAsync(stream, pcm, firstFrame, token).ConfigureAwait(false);
+    }
+
+    internal async Task ReceivePacketsAsync(Stream stream, AndroidPcmSource pcm, Action firstFrame, CancellationToken token)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(pcm);
+        ArgumentNullException.ThrowIfNull(firstFrame);
         byte[] header = new byte[12], payload = ArrayPool<byte>.Shared.Rent(4096);
         try
         {
@@ -79,4 +85,7 @@ public sealed class ScrcpyOpusReceiver
         }
         finally { ArrayPool<byte>.Shared.Return(payload); }
     }
+
+    Task IAndroidAudioReceiver.ReceivePacketsAsync(Stream stream, AndroidPcmSource pcm, Action firstFrame, CancellationToken token) =>
+        ReceivePacketsAsync(stream, pcm, firstFrame, token);
 }

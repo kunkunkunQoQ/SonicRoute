@@ -86,17 +86,15 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
         bool latencyStarted = false;
         AndroidMediaState? previous = null;
         await adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
-        adb.ValidateCatalog();
         string id = Guid.NewGuid().ToString("N");
-        string remote = "/data/local/tmp/sonicroute_media_" + id + ".jar";
         string? pid = null;
         Task<string>? stderr = null;
         StreamReader? errReader = null;
         try
         {
-            await adb.RunAsync(token, "-s", device.Serial, "push", adb.CatalogFile, remote).ConfigureAwait(false);
+            string remote = await adb.EnsureCatalogJarAsync(device.CommandTarget, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
-            var session = await adb.OpenShellAsync(device.Serial,
+            var session = await adb.OpenShellAsync(device.CommandTarget,
                 "echo SR_MEDIA_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.MediaSessionBridge " + id,
                 redirectInput: true, token).ConfigureAwait(false);
             _session = session;
@@ -153,19 +151,15 @@ public sealed class AndroidMediaSessionClient(AdbClient adb)
             }
             try { writer?.Dispose(); } catch (Exception ex) { Trace.WriteLine("Media writer cleanup: " + ex.GetType().Name); }
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            try
+            if (pid != null)
             {
-                if (pid != null)
-                {
-                    string command = await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell",
-                        "if [ -r /proc/" + pid + "/cmdline ]; then cat /proc/" + pid + "/cmdline; fi").ConfigureAwait(false);
-                    if (IsOwnedCommand(command.Replace('\0', ' '), id))
-                        await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "kill", "-TERM", pid).ConfigureAwait(false);
-                }
+                await adb.TerminateRemoteProcessAsync(
+                    device.CommandTarget,
+                    pid,
+                    command => IsOwnedCommand(command, id),
+                    msg => Trace.WriteLine("Media helper exit: " + msg),
+                    cleanup.Token).ConfigureAwait(false);
             }
-            catch (Exception ex) { Trace.WriteLine("Media helper exit: " + ex.Message); }
-            try { await adb.RunAsync(cleanup.Token, "-s", device.Serial, "shell", "rm", "-f", remote).ConfigureAwait(false); }
-            catch (Exception ex) { Trace.WriteLine("Media helper cleanup: " + ex.Message); }
             if (stderr != null) { try { Trace.WriteLine(await stderr.ConfigureAwait(false)); } catch { } }
             errReader?.Dispose();
             if (session != null) await session.DisposeAsync().ConfigureAwait(false);

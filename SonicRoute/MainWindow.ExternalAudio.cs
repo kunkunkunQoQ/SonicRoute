@@ -141,8 +141,45 @@ public partial class MainWindow
         }
     }
 #else
-    private void InitializeExternalAudio() { }
-    private void ReleaseExternalAudio() { }
+    private bool _localAudioSubscribed;
+    private int _localAudioRefreshQueued;
+    private void InitializeExternalAudio()
+    {
+        IsVisibleChanged += LocalAudioVisibilityChanged;
+        UpdateLocalAudioSubscription();
+    }
+    private void LocalAudioVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateLocalAudioSubscription();
+    private void UpdateLocalAudioSubscription()
+    {
+        bool active = IsVisible && !_isClosed;
+        if (active == _localAudioSubscribed) return;
+        _localAudioSubscribed = active;
+        if (active)
+        {
+            ApplicationAudio.Changed += OnLocalAudioChanged;
+            if (_appsSelected != null && AppsPage.IsVisible) _ = RefreshAppsSelectionAsync();
+        }
+        else
+        {
+            ApplicationAudio.Changed -= OnLocalAudioChanged;
+        }
+    }
+    private void ReleaseExternalAudio()
+    {
+        IsVisibleChanged -= LocalAudioVisibilityChanged;
+        if (_localAudioSubscribed) ApplicationAudio.Changed -= OnLocalAudioChanged;
+        _localAudioSubscribed = false;
+    }
+    private void OnLocalAudioChanged()
+    {
+        if (_isClosed || Interlocked.Exchange(ref _localAudioRefreshQueued, 1) != 0) return;
+        _uiLifetime.Post(Dispatcher, () =>
+        {
+            Interlocked.Exchange(ref _localAudioRefreshQueued, 0);
+            if (_isClosed || !IsVisible || !AppsPage.IsVisible || _appsSelected == null) return;
+            _ = RefreshAppsSelectionAsync();
+        });
+    }
 #endif
 
 }

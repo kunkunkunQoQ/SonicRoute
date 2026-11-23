@@ -100,10 +100,22 @@ public final class OpusAudioRunner {
     }
 
     private void streamRawPcm() throws IOException {
+        final int frameBytes = PlaybackAudioCapture.CHANNELS * PlaybackAudioCapture.BYTES_PER_SAMPLE;
         ByteBuffer buffer = ByteBuffer.allocateDirect(PlaybackAudioCapture.MAX_READ_SIZE);
+        byte[] carry = new byte[frameBytes];
+        int carryBytes = 0;
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         while (!stopped && !Thread.currentThread().isInterrupted()) {
             buffer.clear();
+            if (carryBytes > 0) {
+                buffer.put(carry, 0, carryBytes);
+            }
+            int readLimit = buffer.remaining() & ~3;
+            if (readLimit <= 0) {
+                carryBytes = 0;
+                continue;
+            }
+            buffer.limit(carryBytes + readLimit);
             int read = capture.read(buffer, info);
             if (read < 0) {
                 break;
@@ -111,8 +123,21 @@ public final class OpusAudioRunner {
             if (read == 0) {
                 continue;
             }
-            buffer.limit(read);
+            int totalBytes = carryBytes + read;
+            int alignedBytes = totalBytes & ~3;
+            int trailing = totalBytes - alignedBytes;
+            if (trailing > 0) {
+                buffer.position(alignedBytes);
+                buffer.get(carry, 0, trailing);
+            }
+            carryBytes = trailing;
+            if (alignedBytes == 0) {
+                continue;
+            }
+            buffer.limit(alignedBytes);
             buffer.position(0);
+            info.offset = 0;
+            info.size = alignedBytes;
             writer.writePacket(buffer, info);
         }
     }

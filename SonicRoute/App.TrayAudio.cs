@@ -104,7 +104,7 @@ namespace SonicRoute
                     var active = state.Devices.FirstOrDefault(d => SameTrayDevice(d.Id, state.Default));
                     TrayNamedHeader(output, active == null ? L10n.T("Dev.SystemDefaultOut")
                         : string.Format(L10n.T("Tray.SystemOutput"), DeviceDisplayName(config, active)));
-                    UpdateTrayDeviceItems(output, state.Devices.Where(d => !config.HiddenOutputDevices.Contains(d.Id) && !ApplicationAudio.IsExternalOutputDevice(d.Id)), config, state.Default,
+                    UpdateTrayDeviceItems(output, PanelDevices.VisibleSystemOutputs(state.Devices, config), config, state.Default,
                         (id, name) => _ = RunTrayAudioActionAsync(owner, L10n.T("Dev.SystemDefaultOut"), async () =>
                         {
                             var result = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, id));
@@ -207,8 +207,11 @@ namespace SonicRoute
                             Volume: ApplicationAudio.GetVolumePercent(target.App));
                     });
                     if (!result.Applied) throw new InvalidOperationException();
-                    if (result.Volume >= 0 && !target.App.IsExternal)
-                        _quickPanel?.ApplyAppVolumeReadback(target.Pid, result.Volume, !data.Muted);
+                    if (!target.App.IsExternal)
+                    {
+                        if (result.Volume >= 0) NotifyAppVolumeChanged(target.Pid, result.Volume, !data.Muted);
+                        else NotifyAppMuteChanged(target.Pid, !data.Muted);
+                    }
                     ShowOsd(target.Name, L10n.T(!data.Muted ? "Ov.AppMuted" : "Ov.AppUnmuted"));
                 });
                 parent.Items.Add(mute);
@@ -228,7 +231,7 @@ namespace SonicRoute
                             return (Applied: ok, Actual: ApplicationAudio.GetVolumePercent(target.App), Muted: ApplicationAudio.IsMuted(target.App));
                         });
                         if (!result.Applied || result.Actual < 0) throw new InvalidOperationException();
-                        if (!target.App.IsExternal) _quickPanel?.ApplyAppVolumeReadback(target.Pid, result.Actual, result.Muted);
+                        if (!target.App.IsExternal) NotifyAppVolumeChanged(target.Pid, result.Actual, result.Muted);
                         ShowVolumeOsd(target.Name, result.Actual, string.Format(L10n.T("Qp.VolOk"), result.Actual), result.Muted, target.App.Identity);
                     }), staysOpenOnClick: true);
                     VolumePresets.Update(presets.Items, data.Volume, true);
@@ -257,13 +260,14 @@ namespace SonicRoute
                     if (!TrayMenuAlive(owner, request) || read != version || !output.IsSubmenuOpen) return;
                     var config = ConfigService.Load();
                     string selected = state.Persisted == null ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(state.Persisted);
-                    var devices = PanelDevices.WithSystemDefault(state.Devices.Where(d => !config.HiddenOutputDevices.Contains(d.Id)), EDataFlow.eRender, config);
+                    var devices = PanelDevices.VisibleForAppOutputs(target.App,
+                        PanelDevices.WithSystemDefault(state.Devices, EDataFlow.eRender, config), config, selected);
                     UpdateTrayDeviceItems(output, devices, config, selected,
                         (id, name) => _ = RunTrayAppActionAsync(owner, target, async () =>
                         {
                             var result = await Task.Run(() => ApplicationAudio.ApplyEndpoint(target.App, EDataFlow.eRender, id));
                             if (!result.Success) throw new InvalidOperationException();
-                            if (!target.App.IsExternal) _quickPanel?.RefreshAppRouteReadback(target.Pid);
+                            if (!target.App.IsExternal) NotifyAppRouteChanged(target.Pid);
                             ShowOsd(target.Name, name);
                         }));
                 }
@@ -290,8 +294,7 @@ namespace SonicRoute
             finally { _volumeHotkeyGate.Release(); }
         }
 
-        private static bool SameTrayDevice(string? left, string? right) => left != null && right != null
-            && string.Equals(AudioPolicyConfig.UnpackDeviceId(left), AudioPolicyConfig.UnpackDeviceId(right), StringComparison.OrdinalIgnoreCase);
+        private static bool SameTrayDevice(string? left, string? right) => PanelDevices.AreSameEndpoint(left, right);
 
         private void AddTrayWheelPause(ContextMenu owner)
         {

@@ -12,45 +12,32 @@ namespace SonicRoute
     /// </summary>
     internal sealed class TrayWheelService : IDisposable
     {
-        private const int WH_MOUSE_LL = 14;
-        private const int WM_MOUSEWHEEL = 0x020A;
-
-        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
-
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT { public int x, y; }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct MSLLHOOKSTRUCT
-        {
-            public POINT pt;
-            public uint mouseData;
-            public uint flags;
-            public uint time;
-            public IntPtr dwExtraInfo;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
         private struct RECT { public int Left, Top, Right, Bottom; }
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("kernel32.dll")]
-        private static extern IntPtr GetModuleHandle(string? lpModuleName);
 
         [DllImport("user32.dll")]
         private static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string? lpszWindow);
+
+        [DllImport("user32.dll", EntryPoint = "GetClassLongW")]
+        private static extern uint GetClassLong(IntPtr hwnd, int index);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetParent(IntPtr hwnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -83,8 +70,8 @@ namespace SonicRoute
 
         private readonly System.Windows.Forms.NotifyIcon? _trayIcon;
 
-        private readonly LowLevelMouseProc _proc;
-        private IntPtr _hook;
+        private MouseHotkeyHook? _mouseHook;
+        internal bool IsEnabled => _mouseHook?.TrayWheel == this;
         private volatile bool _disposed;
         private int _wheelGeneration;
 
@@ -108,31 +95,22 @@ namespace SonicRoute
         public TrayWheelService(System.Windows.Forms.NotifyIcon? trayIcon)
         {
             _trayIcon = trayIcon;
-            _proc = HookProc;
             _osdService = new OsdService();
         }
 
         /// <summary>必须在 UI 线程调用（钩子回调将运行在安装线程的消息循环上）。</summary>
-        public void Start() => TrySetPaused(ConfigService.Load().TrayWheelPaused);
+        public void Start(MouseHotkeyHook mouseHook)
+        {
+            _mouseHook = mouseHook;
+            TrySetPaused(ConfigService.Load().TrayWheelPaused);
+        }
 
         internal bool TrySetPaused(bool paused)
         {
-            if (_disposed) return false;
-            if (paused)
-            {
-                if (_hook != IntPtr.Zero && !UnhookWindowsHookEx(_hook))
-                {
-                    int error = Marshal.GetLastWin32Error();
-                    // Windows can already have removed a timed-out low-level hook.
-                    if (error != 1404) return HookError(error);
-                }
-                _hook = IntPtr.Zero;
-                DiscardPendingWheel();
-                return true;
-            }
-            if (_hook != IntPtr.Zero) return true;
-            _hook = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(null), 0);
-            return _hook != IntPtr.Zero || HookError(Marshal.GetLastWin32Error());
+            if (_disposed || _mouseHook == null) return false;
+            if (!_mouseHook.TrySetTrayWheel(paused ? null : this, out int error)) return HookError(error);
+            if (paused) DiscardPendingWheel();
+            return true;
         }
 
         private static bool HookError(int error)
@@ -141,39 +119,25 @@ namespace SonicRoute
             return false;
         }
 
-        private IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam)
+        internal bool HitTest(int x, int y) =>
+            !_disposed && !ConfigService.Load().TrayWheelPaused && IsOverTray(new POINT { x = x, y = y });
+
+        internal void QueueWheel(int delta, uint mods)
         {
-            if (!_disposed && nCode >= 0 && (int)wParam == WM_MOUSEWHEEL)
+            // 输入时捕获修饰键；音频操作和 OSD 仍通过原来的合并派发处理。
+            if (mods == 1) // MOD_ALT
+                System.Threading.Interlocked.Add(ref _pendingDeviceDelta, delta);
+            else if (mods == 5) // MOD_ALT | MOD_SHIFT
+                System.Threading.Interlocked.Add(ref _pendingSystemDeviceDelta, delta);
+            else if (mods == 4) // MOD_SHIFT
+                System.Threading.Interlocked.Add(ref _pendingSystemVolumeDelta, delta);
+            else System.Threading.Interlocked.Add(ref _pendingDelta, delta);
+            if (!_dispatchScheduled)
             {
-                if (ConfigService.Load().TrayWheelPaused)
-                    return CallNextHookEx(_hook, nCode, wParam, lParam);
-                var data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                int delta = (short)((data.mouseData >> 16) & 0xFFFF);
-                if (delta == 0) return CallNextHookEx(_hook, nCode, wParam, lParam);
-                // 托盘钩子可能先收到事件；已匹配全局滚轮快捷键时只交给下一钩子。
-                if (System.Windows.Application.Current is App current && current.ShouldBypassTrayWheel(delta))
-                    return CallNextHookEx(_hook, nCode, wParam, lParam);
-                if (IsOverTray(data.pt))
-                {
-                    // 钩子线程绝不做 COM/音频调用：合并滚轮量，UI 入口启动后台处理。
-                    // 输入时捕获修饰键，异步处理时释放也不会改变本轮操作。
-                    uint mods = MouseHotkeyHook.GetPressedMods();
-                    if (mods == 1) // MOD_ALT
-                        System.Threading.Interlocked.Add(ref _pendingDeviceDelta, delta);
-                    else if (mods == 5) // MOD_ALT | MOD_SHIFT
-                        System.Threading.Interlocked.Add(ref _pendingSystemDeviceDelta, delta);
-                    else if (mods == 4) // MOD_SHIFT
-                        System.Threading.Interlocked.Add(ref _pendingSystemVolumeDelta, delta);
-                    else System.Threading.Interlocked.Add(ref _pendingDelta, delta);
-                    if (!_dispatchScheduled)
-                    {
-                        _dispatchScheduled = true;
-                        var app = (App)System.Windows.Application.Current;
-                        app.Dispatcher.BeginInvoke(new Action(ProcessPendingWheel));
-                    }
-                }
+                _dispatchScheduled = true;
+                var app = (App)System.Windows.Application.Current;
+                app.Dispatcher.BeginInvoke(new Action(ProcessPendingWheel));
             }
-            return CallNextHookEx(_hook, nCode, wParam, lParam);
         }
 
         internal void DiscardPendingWheel()
@@ -239,11 +203,51 @@ namespace SonicRoute
             }
         }
 
-        /// <summary>
-        /// 判断光标是否在"可调音量区域"：
-        /// true → 整个托盘通知区（含溢出区、第二任务栏）；
-        /// false（默认）→ 仅音跃自己的图标矩形。音量和Alt设备切换共用该判断。
-        /// </summary>
+        // HWND values can be reused. Verify the class, owner and current parent
+        // before trusting a cached window; only geometry from this input is used.
+        private const int GCW_ATOM = -32;
+        private const uint GA_ROOT = 2;
+        private struct TrayWindow
+        {
+            internal IntPtr Handle;
+            internal uint Atom;
+            internal uint Process;
+            private uint _thread;
+
+            internal IntPtr Resolve(IntPtr parent, string name)
+            {
+                if (Handle != IntPtr.Zero && GetWindowThreadProcessId(Handle, out uint process) == _thread
+                    && process == Process && GetClassLong(Handle, GCW_ATOM) == Atom
+                    && (parent == IntPtr.Zero ? GetAncestor(Handle, GA_ROOT) == Handle : GetParent(Handle) == parent))
+                    return Handle;
+                IntPtr found = parent == IntPtr.Zero ? FindWindow(name, null) : FindWindowEx(parent, IntPtr.Zero, name, null);
+                Handle = found;
+                if (found != IntPtr.Zero)
+                {
+                    Atom = GetClassLong(found, GCW_ATOM);
+                    _thread = GetWindowThreadProcessId(found, out Process);
+                    if (Atom == 0 || _thread == 0) Handle = IntPtr.Zero;
+                }
+                return found; // A fresh class lookup is usable even if its identity cannot be cached yet.
+            }
+        }
+        private TrayWindow _primaryTray, _primaryNotify, _overflow, _secondaryTray, _secondaryNotify, _otherNotify;
+
+        private static bool RegionContains(ref TrayWindow region, IntPtr parent, string name, POINT pt)
+        {
+            IntPtr hwnd = region.Resolve(parent, name);
+            if (hwnd == IntPtr.Zero) return false;
+            if (!GetWindowRect(hwnd, out var rect))
+            {
+                // Explorer can replace the window between lookup and rectangle read.
+                region = default;
+                hwnd = region.Resolve(parent, name);
+                if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out rect)) return false;
+            }
+            return PtInRect(ref rect, pt);
+        }
+
+        /// <summary>整片通知区（含溢出区和副任务栏）或仅本程序实时图标矩形。</summary>
         private bool IsOverTray(POINT pt)
         {
             try
@@ -253,25 +257,21 @@ namespace SonicRoute
             }
             catch { }
 
-            IntPtr tray = FindWindow("Shell_TrayWnd", null);
-            if (tray != IntPtr.Zero)
-            {
-                IntPtr notify = FindWindowEx(tray, IntPtr.Zero, "TrayNotifyWnd", null);
-                if (notify != IntPtr.Zero && GetWindowRect(notify, out var r) && PtInRect(ref r, pt))
-                    return true;
-                IntPtr overflow = FindWindowEx(tray, IntPtr.Zero, "NotifyContainerOverflowWindow", null);
-                if (overflow != IntPtr.Zero && GetWindowRect(overflow, out var r2) && PtInRect(ref r2, pt))
-                    return true;
-            }
-            // 第二任务栏（多显示器）
-            IntPtr tray2 = FindWindow("Shell_SecondaryTrayWnd", null);
-            if (tray2 != IntPtr.Zero)
-            {
-                IntPtr notify2 = FindWindowEx(tray2, IntPtr.Zero, "TrayNotifyWnd", null);
-                if (notify2 != IntPtr.Zero && GetWindowRect(notify2, out var r3) && PtInRect(ref r3, pt))
-                    return true;
-            }
-            return false;
+            IntPtr primary = _primaryTray.Resolve(IntPtr.Zero, "Shell_TrayWnd");
+            if (primary != IntPtr.Zero && (RegionContains(ref _primaryNotify, primary, "TrayNotifyWnd", pt)
+                || RegionContains(ref _overflow, primary, "NotifyContainerOverflowWindow", pt))) return true;
+
+            IntPtr secondary = _secondaryTray.Resolve(IntPtr.Zero, "Shell_SecondaryTrayWnd");
+            if (secondary == IntPtr.Zero) return false;
+            if (RegionContains(ref _secondaryNotify, secondary, "TrayNotifyWnd", pt)) return true;
+
+            // More than one secondary taskbar can share a class. Query the one
+            // under this input without enumerating all display windows.
+            IntPtr root = GetAncestor(WindowFromPoint(pt), GA_ROOT);
+            return root != IntPtr.Zero && root != secondary && _secondaryTray.Handle != IntPtr.Zero
+                && GetClassLong(root, GCW_ATOM) == _secondaryTray.Atom
+                && GetWindowThreadProcessId(root, out uint process) != 0 && process == _secondaryTray.Process
+                && RegionContains(ref _otherNotify, root, "TrayNotifyWnd", pt);
         }
 
         /// <summary>仅音跃图标模式：读取当前图标矩形；Shell 暂时失败时复用同一图标最近30秒的成功结果。</summary>
@@ -389,6 +389,11 @@ namespace SonicRoute
 
         // Shared OSD controller for Lite / Legacy.
         internal void ShowOsd(string app, string text) => _osdService.Show(app, text);
+        internal void BeginDeviceSwitch(object request) => _osdService.BeginDeviceSwitch(request);
+        internal void CancelDeviceSwitch() => _osdService.CancelDeviceSwitch();
+        internal void ShowDeviceSwitch(object request, string title, string text) => _osdService.ShowDeviceSwitch(request, title, text);
+        internal void ShowDeviceSwitchPending(object request, string title, string text) => _osdService.ShowDeviceSwitchPending(request, title, text);
+        internal void ShowDeviceSwitchResult(object request, string title, string text, bool success) => _osdService.ShowDeviceSwitchResult(request, title, text, success);
         internal Task FinishTemporaryOsdAsync() => _osdService.FinishTemporaryNoticeAsync();
         internal void ShowVolumeOsd(string app, int volume, string text, bool muted = false, string? target = null)
             => _osdService.ShowVolume(app, volume, text, muted, target);
@@ -407,11 +412,8 @@ namespace SonicRoute
             _disposed = true;
             DiscardPendingWheel();
             _osdService.Dispose();
-            if (_hook != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(_hook);
-                _hook = IntPtr.Zero;
-            }
+            if (IsEnabled) _mouseHook!.TrySetTrayWheel(null, out _);
+            _mouseHook = null;
         }
     }
 }

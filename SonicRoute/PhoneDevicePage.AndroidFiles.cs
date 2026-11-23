@@ -24,11 +24,11 @@ public partial class PhoneDevicePage
     private bool _choosingPhoneFolder;
 
     private string? AndroidFileTarget() => !_disposed && SelectedWindowsLinkPeer == null && !IsConnectionPage
-        && _androidFileWork == null && _device?.State == "device" ? _device.Serial : null;
+        && _androidFileWork == null && _device != null && PhoneAudioWindowCache.Manager.IsCurrent(_device) ? _device.CommandTarget : null;
 
     private void UpdateAndroidFiles(bool connectionPage)
     {
-        string? serial = connectionPage ? null : _device?.Serial;
+        string? serial = connectionPage ? null : _device?.CommandTarget;
         ResetAndroidFilePicker(serial);
         WindowsFileCard.Visibility = connectionPage ? Visibility.Collapsed : Visibility.Visible;
         if (connectionPage) return;
@@ -91,7 +91,9 @@ public partial class PhoneDevicePage
     private async Task ListAndroidFolderAsync(string serial, string folder)
     {
         _androidListing?.Cancel();
-        using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var target = _device;
+        if (target == null || target.CommandTarget != serial || !PhoneAudioWindowCache.Manager.IsCurrent(target)) return;
+        using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, PhoneAudioWindowCache.Manager.OperationToken(target));
         _androidListing = read;
         _androidFolder = folder;
         bool focusList = AndroidFilePicker.Visibility != Visibility.Visible || AndroidFileEntries.IsKeyboardFocusWithin;
@@ -215,7 +217,9 @@ public partial class PhoneDevicePage
     private async Task RunAndroidFilesAsync(string serial, string[] paths, string? pullFrom = null)
     {
         if (paths.Length == 0 || AndroidFileTarget() != serial) return;
-        using var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var target = _device;
+        if (target == null || target.CommandTarget != serial) return;
+        using var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, PhoneAudioWindowCache.Manager.OperationToken(target));
         _androidFileWork = work;
         _androidTransferSerial = serial;
         try

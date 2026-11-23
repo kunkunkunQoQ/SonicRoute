@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
 
 namespace SonicRoute.AndroidAudio;
 
@@ -22,6 +23,7 @@ public sealed class AdbSocketClient : IAdbTransport
 
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
     private readonly IPEndPoint _endpoint;
+    private event Action<string, IReadOnlyList<AndroidDevice>>? DaemonRead;
 
     public AdbSocketClient(int port = 5037) : this(new IPEndPoint(IPAddress.Loopback, port)) { }
 
@@ -87,15 +89,27 @@ public sealed class AdbSocketClient : IAdbTransport
 
     public async Task<IReadOnlyList<AndroidDevice>> DevicesAsync(CancellationToken token)
     {
-        string payload = await QueryHostStringAsync("host:devices-l", 1024 * 1024, token).ConfigureAwait(false);
-        return AdbClient.ParseDevices(payload);
+        using var client = await ConnectAsync(_endpoint, token).ConfigureAwait(false);
+        var daemon = AdbDaemonInstance.Read(client);
+        string payload = await QueryHostStringAsync(client, "host:devices-l", 1024 * 1024, token).ConfigureAwait(false);
+        var devices = DaemonDevices(payload, daemon);
+        if (daemon != null) DaemonRead?.Invoke(daemon, devices);
+        return devices;
     }
 
-    public async Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> onChanged, CancellationToken token)
+    private static AndroidDevice[] DaemonDevices(string payload, string? daemon) =>
+        AdbClient.ParseDevices(payload).Select(d => d with { ConnectionTarget = AdbTransportTarget.CreateSocket(d.TransportId, daemon) }).ToArray();
+
+    public Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> onChanged, CancellationToken token)
+        => TrackDevicesAsync(onChanged, token, expectedDaemon: null);
+
+    private async Task TrackDevicesAsync(Action<IReadOnlyList<AndroidDevice>> onChanged, CancellationToken token, string? expectedDaemon)
     {
         ArgumentNullException.ThrowIfNull(onChanged);
         using var client = await ConnectAsync(_endpoint, token).ConfigureAwait(false);
         using var cancelReg = RegisterSocketAbort(client, token);
+        string? daemon = AdbDaemonInstance.Read(client);
+        if (expectedDaemon != null && expectedDaemon != daemon) throw new IOException("The ADB daemon changed before tracking started.");
         var stream = client.GetStream();
         await SendRequestAsync(stream, "host:track-devices-l", token).ConfigureAwait(false);
         await ReadStatusAsync(stream, token).ConfigureAwait(false);
@@ -112,22 +126,83 @@ public sealed class AdbSocketClient : IAdbTransport
             if (read < 4) throw new EndOfStreamException("Incomplete ADB track-devices frame header.");
             int length = ParseHexLength(lenBuf, 1024 * 1024);
             string text = await ReadExactUtf8Async(stream, length, token).ConfigureAwait(false);
-            onChanged(AdbClient.ParseDevices(text));
+            onChanged(DaemonDevices(text, daemon));
         }
         token.ThrowIfCancellationRequested();
+    }
+
+    // A normal device read identifies the live daemon. With no daemon, this
+    // only waits for an existing read; a failed subscription has a finite budget.
+    internal async Task WatchPanelWirelessAsync(Action<string> lost, Action changed, CancellationToken token)
+    {
+        var daemons = Channel.CreateBounded<(string Id, IReadOnlyList<AndroidDevice> Devices)>(
+            new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+        string? lastDaemon = null;
+        IReadOnlyList<AndroidDevice> lastDevices = [];
+        HashSet<string>? suspendedTargets = null;
+        void Observe(string daemon, IReadOnlyList<AndroidDevice> devices)
+        {
+            lock (daemons)
+            {
+                lastDevices = devices;
+                if (daemon == lastDaemon && (suspendedTargets == null || suspendedTargets.SetEquals(OnlineTargets(devices)))) return;
+                lastDaemon = daemon;
+                suspendedTargets = null;
+                daemons.Writer.TryWrite((daemon, devices));
+            }
+        }
+        static HashSet<string> OnlineTargets(IReadOnlyList<AndroidDevice> devices) =>
+            devices.Where(d => d.State == "device" && d.ConnectionTarget != null)
+                .Select(d => d.ConnectionTarget!).ToHashSet(StringComparer.Ordinal);
+
+        DaemonRead += Observe;
+        try
+        {
+            await foreach (var daemon in daemons.Reader.ReadAllAsync(token).ConfigureAwait(false))
+            {
+                var known = OnlineTargets(daemon.Devices);
+                for (int attempt = 0; attempt < 2; ++attempt)
+                {
+                    try
+                    {
+                        await TrackDevicesAsync(devices =>
+                        {
+                            var next = OnlineTargets(devices);
+                            foreach (string target in known.Except(next)) lost(target);
+                            if (!next.IsSubsetOf(known)) changed();
+                            known = next;
+                        }, token, daemon.Id).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is IOException or SocketException or InvalidDataException)
+                    { System.Diagnostics.Trace.WriteLine("ADB device notifications: " + ex.Message); }
+                    token.ThrowIfCancellationRequested();
+                    lock (daemons) if (lastDaemon != daemon.Id) break;
+                    if (attempt == 0) await Task.Delay(250, token).ConfigureAwait(false);
+                }
+                lock (daemons)
+                {
+                    if (lastDaemon != daemon.Id) continue;
+                    suspendedTargets = OnlineTargets(lastDevices);
+                }
+                // Verify once after control-stream loss; the same unchanged list
+                // cannot restart this loop. A new transport or daemon can re-arm it.
+                changed();
+            }
+        }
+        finally { DaemonRead -= Observe; }
     }
 
     public async Task<IReadOnlyList<string>> FeaturesAsync(string serial, CancellationToken token)
     {
         ArgumentException.ThrowIfNullOrEmpty(serial);
-        string raw = await QueryHostStringAsync($"host-serial:{serial}:features", 64 * 1024, token).ConfigureAwait(false);
+        string raw = await QueryHostStringAsync(AdbTransportTarget.SocketHostCommand(serial, "features"), 64 * 1024, token, serial).ConfigureAwait(false);
         return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     public async Task<string> GetSerialNoAsync(string serial, CancellationToken token)
     {
         ArgumentException.ThrowIfNullOrEmpty(serial);
-        return (await QueryHostStringAsync($"host-serial:{serial}:get-serialno", 4096, token).ConfigureAwait(false)).Trim();
+        return (await QueryHostStringAsync(AdbTransportTarget.SocketHostCommand(serial, "get-serialno"), 4096, token, serial).ConfigureAwait(false)).Trim();
     }
 
     public Task<AdbShellResult> RunShellAsync(string serial, string command, CancellationToken token)
@@ -283,9 +358,10 @@ public sealed class AdbSocketClient : IAdbTransport
         ArgumentException.ThrowIfNullOrEmpty(serial);
         ArgumentException.ThrowIfNullOrEmpty(localAbstractName);
         using var client = await ConnectAsync(_endpoint, token).ConfigureAwait(false);
+        AdbTransportTarget.CheckSocketOwner(serial, client);
         using var cancelReg = RegisterSocketAbort(client, token);
         var stream = client.GetStream();
-        await SendRequestAsync(stream, $"host-serial:{serial}:forward:tcp:0;localabstract:{localAbstractName}", token).ConfigureAwait(false);
+        await SendRequestAsync(stream, AdbTransportTarget.SocketHostCommand(serial, $"forward:tcp:0;localabstract:{localAbstractName}"), token).ConfigureAwait(false);
         await ReadStatusAsync(stream, token).ConfigureAwait(false);
         string portText = await ReadTwoStageOrLengthStringAsync(stream, 64, token).ConfigureAwait(false);
         if (!int.TryParse(portText.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int port) || port is < 1 or > 65535)
@@ -298,9 +374,10 @@ public sealed class AdbSocketClient : IAdbTransport
         ArgumentException.ThrowIfNullOrEmpty(serial);
         ArgumentException.ThrowIfNullOrEmpty(localSpec);
         using var client = await ConnectAsync(_endpoint, token).ConfigureAwait(false);
+        AdbTransportTarget.CheckSocketOwner(serial, client);
         using var cancelReg = RegisterSocketAbort(client, token);
         var stream = client.GetStream();
-        await SendRequestAsync(stream, $"host-serial:{serial}:killforward:{localSpec}", token).ConfigureAwait(false);
+        await SendRequestAsync(stream, AdbTransportTarget.SocketHostCommand(serial, $"killforward:{localSpec}"), token).ConfigureAwait(false);
         await ReadStatusAsync(stream, token).ConfigureAwait(false);
         // ADB sends a second OKAY/FAIL from the listener handler when dispatched.
         byte[] second = new byte[4];
@@ -411,9 +488,14 @@ public sealed class AdbSocketClient : IAdbTransport
         return AndroidWirelessConnection.ParseServices(text);
     }
 
-    private async Task<string> QueryHostStringAsync(string request, int maxBytes, CancellationToken token)
+    private async Task<string> QueryHostStringAsync(string request, int maxBytes, CancellationToken token, string? selector = null)
     {
         using var client = await ConnectAsync(_endpoint, token).ConfigureAwait(false);
+        AdbTransportTarget.CheckSocketOwner(selector, client);
+        return await QueryHostStringAsync(client, request, maxBytes, token).ConfigureAwait(false);
+    }
+    private static async Task<string> QueryHostStringAsync(TcpClient client, string request, int maxBytes, CancellationToken token)
+    {
         using var cancelReg = RegisterSocketAbort(client, token);
         var stream = client.GetStream();
         await SendRequestAsync(stream, request, token).ConfigureAwait(false);
@@ -427,9 +509,10 @@ public sealed class AdbSocketClient : IAdbTransport
         try
         {
             client = await ConnectAsync(_endpoint, token).ConfigureAwait(false);
+            AdbTransportTarget.CheckSocketOwner(serial, client);
             using var cancelReg = RegisterSocketAbort(client, token);
             var stream = client.GetStream();
-            await SendRequestAsync(stream, "host:transport:" + serial, token).ConfigureAwait(false);
+            await SendRequestAsync(stream, AdbTransportTarget.SocketSelectCommand(serial), token).ConfigureAwait(false);
             await ReadStatusAsync(stream, token).ConfigureAwait(false);
             var result = client;
             client = null;

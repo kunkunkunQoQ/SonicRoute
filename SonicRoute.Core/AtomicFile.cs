@@ -22,6 +22,15 @@ namespace SonicRoute.Core
         internal static void WriteAllBytes(string path, byte[] bytes) =>
             Write(path, stream => stream.Write(bytes, 0, bytes.Length));
 
+        internal static void BackupBeforeWrite(string path) => BackupBeforeWrite(path, path + ".bak");
+
+        internal static void BackupBeforeWrite(string path, string backupPath)
+        {
+            if (!File.Exists(path)) return;
+            using var original = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            Write(backupPath, stream => original.CopyTo(stream));
+        }
+
         // Callers with large JSON snapshots can serialize directly, without allocating
         // another complete UTF-16 string. All callers keep the same atomic replacement.
         internal static void Write(string path, Action<Stream> write)

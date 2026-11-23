@@ -19,14 +19,16 @@ internal static partial class Program
         var menuField = typeof(App).GetField("_trayMenu", Instance)!;
         var buildPause = typeof(App).GetMethod("AddTrayWheelPause", Instance)!;
         var wheelType = wheelField.FieldType;
-        var handle = wheelType.GetField("_hook", Instance)!;
+        var enabled = wheelType.GetProperty("IsEnabled", Instance)!;
+        var handle = typeof(MouseHotkeyHook).GetField("_hook", Instance)!;
         using var wheel = (IDisposable)Activator.CreateInstance(wheelType, Instance, null, new object?[] { null }, null)!;
         using var shortcut = new MouseHotkeyHook();
-        shortcut.Reload(new Dictionary<string, string> { ["WheelUp"] = "check" });
-        Check(shortcut.IsInstalled, "private desktop registers the independent wheel shortcut");
+        shortcut.Reload(new Dictionary<string, string> { ["Ctrl+Alt+WheelUp"] = "check" });
+        var initialHandle = (IntPtr)handle.GetValue(shortcut)!;
+        Check(initialHandle != IntPtr.Zero, "private desktop registers the wheel shortcut");
         var config = ConfigService.Load();
         bool original = config.TrayWheelPaused;
-        bool Hooked() => (IntPtr)handle.GetValue(wheel)! != IntPtr.Zero;
+        bool TrayActive() => (bool)enabled.GetValue(wheel)!;
         void Click()
         {
             var menu = new ContextMenu();
@@ -48,17 +50,24 @@ internal static partial class Program
             wheelField.SetValue(app, wheel);
             config.TrayWheelPaused = true;
             Check(ConfigService.TrySave(config), "test profile saved paused state");
-            Call(wheel, "Start");
-            Check(!Hooked(), "persisted pause skips native hook installation");
+            wheelType.GetMethod("Start", Instance)!.Invoke(wheel, new object[] { shortcut });
+            Check(!TrayActive(), "persisted pause leaves the tray wheel inactive");
             Click();
-            Check(Hooked() && !Saved(), "resume installs the native hook and saves the setting");
+            Check(TrayActive() && (IntPtr)handle.GetValue(shortcut)! == initialHandle && !Saved(),
+                "resume shares the existing shortcut handle and saves the setting");
             using (File.Open(ConfigService.ConfigPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) Click();
-            Check(Hooked() && !config.TrayWheelPaused && !Saved(), "a failed save restores the prior hook and setting");
+            Check(TrayActive() && !config.TrayWheelPaused && !Saved(), "a failed save restores the prior hook and setting");
             var pending = wheelType.GetField("_pendingDelta", Instance)!;
             pending.SetValue(wheel, 120);
             Click();
-            Check(!Hooked() && Saved() && (int)pending.GetValue(wheel)! == 0, "pause unregisters, clears queued input and persists");
-            Check(shortcut.IsInstalled, "pausing the tray wheel leaves its independent shortcut installed");
+            Check(!TrayActive() && Saved() && (int)pending.GetValue(wheel)! == 0, "pause detaches the tray listener, clears queued input and persists");
+            Check((IntPtr)handle.GetValue(shortcut)! == initialHandle, "pausing the tray wheel retains its shortcut handle");
+            shortcut.Reload(Array.Empty<KeyValuePair<string, string>>());
+            Check(!shortcut.IsInstalled, "turning off the last shortcut releases the native hook");
+            Click();
+            Check(TrayActive() && shortcut.IsInstalled, "resuming tray alone installs the shared hook");
+            Click();
+            Check(!TrayActive() && !shortcut.IsInstalled, "pausing tray alone uninstalls the shared hook");
         }
         finally
         {

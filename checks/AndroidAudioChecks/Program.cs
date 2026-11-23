@@ -31,9 +31,12 @@ internal static partial class Program
             if (args.Length == 1 && args[0] == "--windows-link-window-icons") { await WindowsLinkWindowIconsAsync(); return 0; }
             if (args.Length == 1 && args[0] == "--android-file-directory") { await AndroidFileDirectoryAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--decoder-settings") { await DecoderSettingsAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--audio-latency") { await AudioLatencyChecksAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--raw-pcm") { await RawPcmChecksAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-start") { await AndroidHevcStartAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-recovery") { await AndroidHevcStartAsync(args[1], checkResize: true); return 0; }
             if (args.Length > 0 && args[0] == "--gamepad-window") { await CheckGamepadProtocolAndZeroIdleWindowAsync(); return 0; }
+            if (args is ["--display-control-queue"]) { await CheckDisplayControlQueueAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--identity-review") { await IdentityReviewAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--display-concurrency") { await DisplayConcurrencyAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--idle-retirement") { await IdleRetirementAsync(args[1]); return 0; }
@@ -45,6 +48,8 @@ internal static partial class Program
                 return 0;
             }
             if (args.Length > 0 && args[0] == "--pairing-fixes") { await PairingFixesAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--managed-connections") { await ManagedConnectionsAsync(args[1]); return 0; }
+            if (args is ["--capture-restore", var captureDirectory]) { await CheckCaptureRestoreAsync(captureDirectory); return 0; }
             if (args.Length == 2 && args[0] == "--android-files-live") { await AndroidFilesLiveAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--windows-link") { await WindowsLinkChecksAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--windows-link-input") { WindowInputChecks.Run(); return 0; }
@@ -77,6 +82,8 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--default-output") { await DefaultOutputAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--self-impl-fixes") { await SelfImplementationFixesAsync(args[1]); return 0; }
             if (args is ["--direct-adb"]) { await CheckDirectAndArbitratedTransportAsync(); return 0; }
+            if (args is ["--socket-generation"]) { await CheckSocketGenerationAsync(); return 0; }
+            if (args is ["--socket-generation-server", var port, var hardware]) { await RunSocketGenerationServerAsync(int.Parse(port), hardware); return 0; }
             if (args.Length > 0 && args[0] == "--stream-settings") { await StreamSettingsAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--encoder-catalog") { await EncoderCatalogAsync(args[1], args[2]); return 0; }
             if (args.Length > 0 && args[0] == "--device-audio") { await DeviceAudioAsync(args[1]); return 0; }

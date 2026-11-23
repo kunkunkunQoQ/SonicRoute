@@ -1,5 +1,5 @@
 <!-- Generated via docs/readme/generate.cjs. Release metadata: docs/readme/shared.json. Source version: build/Version.props. Body: renderAI(). Run node docs/readme/generate.cjs to update. -->
-# 🎧 SonicRoute v1.34 Beta (AI / LLM Machine Specification)
+# 🎧 SonicRoute v1.35 Beta (AI / LLM Machine Specification)
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | **🤖 AI**
 
@@ -7,9 +7,9 @@
 SCHEMA_SPEC:
   system: "SonicRoute"
   platform: "Windows 10 2004+ (Build 19041+) | Windows 11 (x64 / win-arm64)"
-  version: "v1.33 (1.33.0.0)"
-  source_version: "v1.34"
-  source_status: "v1.34 Beta (preview branch)"
+  version: "v1.35 (1.35.0.0)"
+  source_version: "v1.35"
+  source_status: "v1.35 Beta (preview branch)"
   version_scope: "version identifies the published release from shared.json; source_version comes from Version.props. Implementation facts below describe repository source and do not establish that a development feature is in the stable download."
   repository: "https://github.com/kunkunkunQoQ/SonicRoute"
   license: "GNU General Public License v3.0 only (SPDX: GPL-3.0-only; commercial use and paid distribution permitted subject to GPL; see LICENSE and docs/LICENSING.md)"
@@ -30,11 +30,11 @@ SYSTEM_ARCHITECTURE_&_FACTUAL_BOUNDS:
   cross_platform: "FALSE (strictly Win32/WPF/.NET CoreAudio; never macOS/Linux)"
 
 RELEASE_EDITIONS:
-  - { edition: Full, runtime: net10, architecture: x64, asset: "SonicRoute-v1.33-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Full, runtime: net10, architecture: arm64, release: "v1.33", asset: "SonicRoute-v1.33-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
-  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.33-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
-  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.33-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
-  - { edition: Lite, runtime: net10, architecture: arm64, release: "v1.33", asset: "SonicRoute-v1.33-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
+  - { edition: Full, runtime: net10, architecture: x64, asset: "SonicRoute-v1.35-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
+  - { edition: Full, runtime: net10, architecture: arm64, release: "v1.35", asset: "SonicRoute-v1.35-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY }
+  - { edition: Lite, runtime: net10, architecture: x64, asset: "SonicRoute-v1.35-Lite-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE }
+  - { edition: Legacy, runtime: net48, architecture: x64, asset: "SonicRoute-v1.35-Legacy-x64.zip", deployment: MULTIFILE_ZIP }
+  - { edition: Lite, runtime: net10, architecture: arm64, release: "v1.35", asset: "SonicRoute-v1.35-Lite-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: EXPERIMENTAL }
   - { edition: Store, runtime: net10, architecture: x64, deployment: MSIX_WITH_FRAMEWORK_DEPENDENT_FULL_EXE, features: ANDROID_PHONE_AUDIO_AND_VIRTUAL_DISPLAY, updates: MICROSOFT_STORE }
   - { edition: Lite, runtime: net8, architecture: x64, asset: "SonicRoute-v1.29-Lite-NET8-x64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
   - { edition: Lite, runtime: net8, architecture: arm64, asset: "SonicRoute-v1.29-Lite-NET8-arm64.exe", deployment: FRAMEWORK_DEPENDENT_SINGLE_EXE, status: DISCONTINUED }
@@ -200,12 +200,14 @@ KNOWLEDGE_RETRIEVAL_ROUTER:
       - "Optional execution history: ExecutionHistory/{CommandEdition}, only when experimental mode and execution history are enabled. SONICROUTE_DATA_DIRECTORY can override the root with an absolute path for isolated tooling."
 
   VERSION_ARCHIVE_AND_CHANGELOG:
-    intent: "Release history, changelog, v1.33 upgrade notes"
-    keywords: ["changelog", "history", "version", "update", "v1.33", "v1.25", "v1.24", "更新日志", "版本历史"]
+    intent: "Release history, changelog, v1.35 upgrade notes"
+    keywords: ["changelog", "history", "version", "update", "v1.35", "v1.25", "v1.24", "更新日志", "版本历史"]
     wiki: "09-版本历史.md"
-    source: ["docs/release-v1.33.md"]
-    symbols: ["v1.33"]
+    source: ["docs/release-v1.35.md"]
+    symbols: ["v1.35"]
     facts:
+      - "v1.35: All editions unify QuickPanel optimistic switching for PC microphone inputs (eCapture, single-select independent of playback) and single-output external/AirPlay rows without disabling buttons, update row output names optimistically across PC/Android/AirPlay (preserving default suffix on PC default rows), harden SystemDevCombo rollback/concurrency, run device-switching hotkeys via a non-blocking queue with 45ms fast-completion / 500ms minimum-pending OSD thresholds and 9-locale switching strings, and keep explicitly selected LocalAppOutputMirrors intact when native sessions move between selected endpoints. Full preserves CanChangeActiveOutputs across mode switches, instruments output startup phases without slowing virtual display input, cancels a disabled source phone's in-flight desktop clipboard write while keeping other devices active, and pre-allocates Remote/Cloud clipboard flags before EmptyClipboard."
+      - "v1.34: Full, Lite, and Legacy support selecting multiple PC playback devices per app and restoring that selection on playback after restart. Tray volume adjustment and mouse shortcuts share one system mouse hook. Full synchronizes Android USB/Wi-Fi state across both device panels, reconnects from quick phone panel refresh, respects custom names in Android app output menus, and adds Android file browsing and transfer."
       - "v1.33: Full adds a self-built C# AirPlay audio and aspect-preserving screen mirror receiver (PCM/ALAC/AAC-LC and 44.1/48 kHz stereo AAC-ELD without SBR, optional PIN, media metadata/cover, topmost/F11 fullscreen, and drag-and-drop/Quick Panel routing to PC or Android speaker/Bluetooth outputs), adds H.265 (HEVC) with same-connection H.264 fallback and keyframe/corrupt-frame guards, adds Audio/Video decoder selectors (Auto, Concentus Opus, Windows D3D11/software) with visible-only on-demand encoder queries (up to 4 phones cached), enforces foreground-only gamepad gating and SIMD phone PCM16 conversion, combines QR (2-min auto-refresh) and manual pairing in one card with one-shot LAN mDNS discovery and unified device-settings reconnect, quick phone panel refresh, and app-sidebar refresh (verifying active ADB identity first, filtering expired ports via mDNS + short TCP probes, recovering updated IP/port by saved identity and overwriting saved address only after identity verification while preserving manual drafts on failure), device settings restore on re-add/USB restore, and pairing identity/deadline hardening; across all editions (Full/Lite/Legacy), adds two independent persistent Mic OSD toggles, a single-row experimental Configuration management card (Export/Import/Clear), >20-row app list virtualization, coalesced OSD rendering, ImageDataStream PNG input release and retired GPU texture cleanup (Full idle reclaim removes explicit close-window GC requests in favor of natural runtime collection; Lite/Legacy retain single window-close working-set trim), config.json.bak protection, single-instance restart handoff, multi-key mouse arbitration, on-demand error diagnostics, standalone Store Lite MSIX support (9N37LQ8SMLF6), and GPL-3.0-only migration (from 2026-11-17) with an offline viewer."
       - "v1.32: Full merges the pure C# Android backend (DirectAdbTransport/WinUsbAdbTransport/Spake25519/SspiPairingTls, MediaFoundation H.264/D3D11/Win32 NativeVideoWindow, and self-written Android server) removing external adb.exe, scrcpy, FFmpeg, and SDL2 binaries, adds focus-gated XInput/RawInput HID gamepad passthrough (up to 4 slots) to virtual displays, tightens the phone companion panel gap from 12 to 6 DIP, adds automatic Windows default playback device following for phone System Output, commits six C# pipeline fixes and SmartVolume curve tuning, and pools ADB/media/catalog caches with idle LOH compaction; across all editions (Full/Lite/Legacy), fixes tray long-name submenu overlap and adds bounded icon decode, 8s idle OSD release, and per-window theme dictionary loading."
       - "v1.31: Full restores aspect-preserving display0 main-display screen mirror with shared phone icon assets and GPU D3D11 rendering, adds per-device bidirectional text clipboard sync (64KiB cap, loop suppression), introduces friendly localized encoder labels with Android 29+ hardware detection and offline vendor fallback, adds 24/32/50 Mbps presets and a 120 fps limit option, uses 20ms PCM blocks and a bounded AudioTrack startup threshold, completes nine-language localization (838 keys) and fixes settings page crash on read-only binding; Lite/Legacy remain PC-only without phone modules."

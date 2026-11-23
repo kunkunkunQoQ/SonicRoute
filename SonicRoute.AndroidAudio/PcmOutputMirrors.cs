@@ -3,7 +3,7 @@ using SonicRoute.WindowsLink;
 namespace SonicRoute.AndroidAudio;
 
 // Output changes are serialized by the owning session. PCM readers consume an immutable snapshot.
-internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<IPcmPlayer>, Task> removeFailed,
+internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeFailed, bool preserveQuietLevel = false,
     Func<string, bool>? forwardsPackets = null)
 {
     private sealed record Output(string Id, AndroidPcmSource Pcm, IPcmPlayer Player);
@@ -12,6 +12,7 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
     private Output[] _outputs = [], _audible = [];
     private float _volume = 1;
     private bool _smart;
+    private AudioLatencyMode _latencyMode = AudioLatencyMode.Balanced;
     private string? _primaryDevice;
     private PhoneLinkAudioPlayer? _primaryPeer;
     private PhoneLinkAudioPlayer[] _peerPlayers = [];
@@ -29,6 +30,14 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
         {
             _volume = volume; _smart = smart;
             foreach (var output in _outputs) { output.Pcm.Volume = volume; output.Pcm.SmartVolume = smart; }
+        }
+    }
+    internal void SetLatencyMode(AudioLatencyMode mode)
+    {
+        lock (_gate)
+        {
+            _latencyMode = mode;
+            foreach (var output in _outputs) output.Pcm.LatencyMode = mode;
         }
     }
     internal void SetPrimary(IPcmPlayer? player)
@@ -75,7 +84,10 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
                 var output = Array.Find(previous, o => Ids.Equals(o.Id, id));
                 if (output == null)
                 {
-                    var pcm = new AndroidPcmSource(forwardsPackets?.Invoke(id) == true) { PreserveQuietLevel = preserveQuietLevel };
+                    AudioLatencyMode latencyMode;
+                    lock (_gate) latencyMode = _latencyMode;
+                    var pcm = new AndroidPcmSource(latencyMode, packetCounterOnly: forwardsPackets?.Invoke(id) == true)
+                        { PreserveQuietLevel = preserveQuietLevel };
                     var player = create(pcm, id, token);
                     staged.Add(output = new Output(id, pcm, player));
                     void Failed(Exception error) => _ = Task.Run(() => removeFailed(p => ReferenceEquals(p, player)));
@@ -118,7 +130,12 @@ internal sealed class PcmOutputMirrors(bool preserveQuietLevel, Func<Predicate<I
         var previous = _outputs;
         lock (_gate)
         {
-            foreach (var output in next) { output.Pcm.Volume = _volume; output.Pcm.SmartVolume = _smart; }
+            foreach (var output in next)
+            {
+                output.Pcm.Volume = _volume;
+                output.Pcm.SmartVolume = _smart;
+                output.Pcm.LatencyMode = _latencyMode;
+            }
             Volatile.Write(ref _outputs, next);
             UpdateAudible();
         }

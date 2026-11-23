@@ -24,7 +24,9 @@ public sealed record VideoServerOptions(
     bool TunnelForward = true,
     bool StartAppOnServer = true,
     string ServerClassName = "org.sonicroute.android.SonicRouteServer",
-    string SocketPrefix = "sonicroute_");
+    string SocketPrefix = "sonicroute_",
+    bool IsWifi = false,
+    bool AdaptiveBitRate = true);
 
 /// <summary>Request descriptor passed to <see cref="IVideoStreamTransport"/>.</summary>
 public sealed record VideoStreamOpenRequest(
@@ -139,9 +141,9 @@ public sealed class AdbVideoStreamTransport : IVideoStreamTransport
             AdbClient.ValidatePackage(request.App.Package);
 
         string localServerPath = await _localServerPathProvider(cancellationToken).ConfigureAwait(false);
-        await EnsureRemoteServerAsync(request.Device.Serial, localServerPath, cancellationToken).ConfigureAwait(false);
+        await EnsureRemoteServerAsync(request.Device.CommandTarget, localServerPath, cancellationToken).ConfigureAwait(false);
 
-        string serial = request.Device.Serial;
+        string serial = request.Device.CommandTarget;
         string scid = request.Scid;
         string socketPrefix = string.IsNullOrWhiteSpace(request.Options.SocketPrefix) ? "sonicroute_" : request.Options.SocketPrefix;
         string socketName = socketPrefix + scid;
@@ -346,7 +348,9 @@ public sealed class AdbVideoStreamTransport : IVideoStreamTransport
           .Append(" control=").Append(opts.Control ? "true" : "false")
           .Append(" cleanup=false")
           .Append(" max_fps=").Append(opts.MaxFps.ToString(CultureInfo.InvariantCulture))
-          .Append(" video_bit_rate=").Append(opts.VideoBitRate.ToString(CultureInfo.InvariantCulture));
+          .Append(" video_bit_rate=").Append(opts.VideoBitRate.ToString(CultureInfo.InvariantCulture))
+          .Append(" video_transport=").Append(opts.IsWifi ? "wifi" : "usb")
+          .Append(" video_abr=").Append(opts.AdaptiveBitRate ? "true" : "false");
         if (!string.IsNullOrWhiteSpace(opts.VideoEncoder))
             sb.Append(" video_encoder=").Append(opts.VideoEncoder);
         if (opts.MirrorDeviceDisplay)

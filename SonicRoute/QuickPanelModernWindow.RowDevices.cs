@@ -14,7 +14,7 @@ namespace SonicRoute;
 public partial class QuickPanelModernWindow
 {
     private IEnumerable<AudioDeviceInfo> RowPlaybackDevices(AudioAppInfo app, AppConfig config) =>
-        ApplicationAudio.OutputsForApp(app, _outputDisplay).Where(device => !config.HiddenOutputDevices.Contains(device.Id));
+        PanelDevices.VisibleForAppOutputs(app, _outputDisplay, config);
 
     private void AddRowDeviceGroup(Panel parent, IEnumerable<AudioDeviceInfo> devices, EDataFlow flow,
         Action<Button, AudioDeviceInfo> configure, Button? trailingAction = null)

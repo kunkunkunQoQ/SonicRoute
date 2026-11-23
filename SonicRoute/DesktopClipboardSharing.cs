@@ -82,21 +82,11 @@ internal sealed partial class DesktopClipboardLink
         finally { GlobalUnlock(memory); }
     }
 
-    private static bool MarkReceivedClipboard()
+    private static bool TransferClipboardData(uint format, ref nint memory)
     {
-        // Both DWORDs are zero. SonicRoute recognizes its custom format; Windows respects
-        // CanUploadToCloudClipboard so receiving over the LAN cannot start another cloud transfer.
-        return SetZeroClipboardFlag(Formats.Remote) && SetZeroClipboardFlag(Formats.Cloud);
-    }
-
-    private static bool SetZeroClipboardFlag(uint format)
-    {
-        if (format == 0) return false;
-        nint memory = GlobalAlloc(0x42, 4);
-        if (memory == 0) return false;
-        if (SetClipboardData(format, memory) != 0) return true;
-        GlobalFree(memory);
-        return false;
+        if (SetClipboardData(format, memory) == 0) return false;
+        memory = 0; // Windows owns the handle after a successful transfer.
+        return true;
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] private static extern uint RegisterClipboardFormatW(string format);

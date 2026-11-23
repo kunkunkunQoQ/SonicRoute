@@ -1,4 +1,5 @@
 using System.IO;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using System.Windows;
@@ -100,6 +101,8 @@ internal static partial class Program
             "AirPlay gets Windows outputs and the connected phones' speaker and Bluetooth choices");
         var reordered = new[] { windows[0], merged.Single(d => d.Id == speakerId), windows[1],
             merged.Single(d => d.Id == otherId), merged.Single(d => d.Id == bluetoothId) };
+        const string currentAlias = "手机原生输出";
+        config.DeviceNames[currentId] = currentAlias;
         config.DeviceNames[speakerId] = "桌面扬声器";
         var androidChoices = ((IEnumerable<AudioDeviceInfo>)outputsForApp.Invoke(null, [firstInfo, reordered])!).ToArray();
         Check(androidChoices.Select(endpoint => endpoint.Id).SequenceEqual(new[] { windows[0].Id, AndroidAudioSession.SourcePhoneOutputId,
@@ -144,6 +147,8 @@ internal static partial class Program
                     || ((AudioDeviceInfo)b.Tag).Id == speakerId || ((AudioDeviceInfo)b.Tag).Id == bluetoothId
                     || ((AudioDeviceInfo)b.Tag).Id == otherCurrent),
                 "incoming quick panel exposes native playback once, the source's physical outputs, and the other phone's current output");
+            Check(pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == AndroidAudioSession.SourcePhoneOutputId).Content?.ToString() == currentAlias,
+                "the incoming playback button uses the alias saved for the source phone's current output");
             var speakerPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == speakerId);
             var btPill = pills.Single(b => ((AudioDeviceInfo)b.Tag).Id == bluetoothId);
             Check(speakerPill.Content?.ToString() == "我的小米13 扬声器"
@@ -183,6 +188,9 @@ internal static partial class Program
                 && ImmediatelyBefore(mainOrder, speakerId, bluetoothId)
                 && mainOrder.Contains(otherCurrent) && !mainOrder.Contains(currentId),
                 "main-window Android list uses the native current identity once in the source handset group");
+            Check(combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == AndroidAudioSession.SourcePhoneOutputId).DisplayName == currentAlias,
+                "the incoming app details use the same saved alias with the native routing identity");
+            config.DeviceNames.Remove(currentId);
             Check(combo.Items.OfType<AudioDeviceInfo>().Count(d => AndroidOutputIdentity.IsPhoneOutput(d.Id)) == 3
                 && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == speakerId).DisplayName == "小米13 扬声器"
                 && combo.Items.OfType<AudioDeviceInfo>().Single(d => d.Id == bluetoothId).DisplayName == "耳机 (小米13 · 蓝牙)",
@@ -271,6 +279,7 @@ internal static partial class Program
             Pump((Task)panelType.GetMethod("BuildAppRowsAsync", Hidden)!.Invoke(panel, [new List<AudioAppInfo> { pcInfo }, config])!);
             var pcRow = ((System.Collections.IDictionary)panelType.GetField("_rows", Hidden)!.GetValue(panel)!)[(int)pcInfo.ProcessId]!;
             var pcRoot = (FrameworkElement)pcRow.GetType().GetField("RootElement")!.GetValue(pcRow)!;
+            CheckPanelMuteAppearance(panel, pcRow, second, neighbour);
             Button[] DesktopRoutes() => Descendants<Button>(pcRoot).Where(button => button.Tag is AudioDeviceInfo).ToArray();
             Descendants<ToggleButton>(pcRoot).Single().IsChecked = true;
             Until(() => DesktopRoutes().Any(button => ((AudioDeviceInfo)button.Tag).Flow == EDataFlow.eCapture));
@@ -299,6 +308,7 @@ internal static partial class Program
                 "confirmed native batch mute includes both remote sources");
             neighbour.Session.SetMute(false);
             Check(!(bool)combine.Invoke(null, [true])!, "an unmuted remote overrides a muted native batch");
+            CheckOptimisticSelection();
             discovery.Publish([device, other with { State = "offline" }]); DrainUi();
             var onlineOnly = windows.Concat(readOutputs()).ToList();
             foreach (var info in new[] { pcInfo, airPlayInfo, firstInfo })
@@ -325,6 +335,212 @@ internal static partial class Program
             while (source.Session.State.OutputId != id && DateTime.UtcNow < deadline) Pump(Task.Delay(10));
             DrainUi();
         }
+
+        void CheckOptimisticSelection()
+        {
+            discovery.Publish([device, other]);
+            store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker, bluetooth]);
+            bool reject = false;
+            int queuedResolves = 0;
+            bool blockSecond = true;
+            var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var finishSecond = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var source = AddFixture(manager, device, music with { Package = "cn.test.optimistic", Uid = 1003 },
+                key =>
+                {
+                    if (blockSecond && Interlocked.Increment(ref queuedResolves) == 2)
+                    {
+                        secondEntered.TrySetResult();
+                        finishSecond.Task.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+                    }
+                    return !reject && key == AndroidDeviceIdentity.Key(device) ? device : null;
+                });
+            var session = source.Session;
+            var operations = (SemaphoreSlim)typeof(AndroidAudioSession).GetField("_operations", Hidden)!.GetValue(session)!;
+            var panelType = typeof(QuickPanelModernWindow);
+            var refresh = panelType.GetMethod("RefreshAndroidRow", Hidden)!;
+            var invokeClick = panelType.GetMethod("QueueIncomingOutputAsync", Hidden)!;
+            var refreshState = panelType.GetMethod("RefreshSourceState", Hidden)!;
+            var changes = new System.Collections.Concurrent.ConcurrentQueue<string?>();
+            session.Changed += state => changes.Enqueue(state.OutputId);
+            string system = AudioService.SystemDefaultDeviceId, pc = windows[1].Id, native = AndroidAudioSession.SourcePhoneOutputId;
+            var activeStyle = panel.FindResource("DevButtonActive");
+            System.Collections.IDictionary Rows(QuickPanelModernWindow window) =>
+                (System.Collections.IDictionary)panelType.GetField("_androidRows", Hidden)!.GetValue(window)!;
+            object Row(QuickPanelModernWindow window) => Rows(window)[source.Id]!;
+            static T Field<T>(object row, string name) => (T)row.GetType().GetField(name, Hidden)!.GetValue(row)!;
+            Button[] Pills(object row) => Field<List<(Button Button, string Id)>>(row, "Devices").Select(entry => entry.Button).ToArray();
+            bool Shows(object row, params string[] ids) => Pills(row).Where(button => ReferenceEquals(button.Style, activeStyle))
+                .Select(button => ((AudioDeviceInfo)button.Tag).Id).ToHashSet().SetEquals(ids);
+            Task Click(QuickPanelModernWindow window, object row, string id, System.Windows.Input.ModifierKeys modifiers = default) =>
+                (Task)invokeClick.Invoke(window, [row, id, modifiers])!;
+            void Prepare(QuickPanelModernWindow window)
+            {
+                panelType.GetField("_outputDisplay", Hidden)!.SetValue(window, windows.Concat(readOutputs()).ToList());
+                refresh.Invoke(window, [true]);
+                Field<ToggleButton>(Row(window), "Expand").IsChecked = true;
+                panelType.GetMethod("BuildAndroidDevices", Hidden)!.Invoke(window, [Row(window)]);
+            }
+            void Hold(Action whileBlocked)
+            {
+                if (!operations.Wait(0)) throw new InvalidOperationException("Fixture could not hold the output semaphore.");
+                try { whileBlocked(); }
+                finally { operations.Release(); }
+            }
+            void Complete(Task task) => Pump(task.WaitAsync(TimeSpan.FromSeconds(5)));
+
+            Prepare(panel);
+            var row = Row(panel);
+            Task pending = Task.CompletedTask;
+            var clock = Stopwatch.StartNew();
+            double intentMs = 0;
+            Hold(() =>
+            {
+                clock.Restart();
+                var button = Pills(row).SingleOrDefault(b => ((AudioDeviceInfo)b.Tag).Id == speakerId)
+                    ?? throw new InvalidOperationException("Missing fixture speaker. Choices: " + string.Join(", ", Pills(row).Select(b => ((AudioDeviceInfo)b.Tag).Id)));
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                intentMs = clock.Elapsed.TotalMilliseconds;
+                Check(Shows(row, speakerId) && session.State.OutputId == null,
+                    "click changes the WPF pill immediately while the actual output is blocked");
+                session.SetVolume(42);
+                refreshState.Invoke(panel, [row, false]);
+                Check(Shows(row, speakerId), "ordinary source-state refresh retains the pending selection");
+                pending = Click(panel, row, bluetoothId);
+                Check(Shows(row, bluetoothId) && !pending.IsCompleted && session.State.OutputId == null,
+                    "A to B to C displays C while both backend operations are waiting");
+            });
+            try
+            {
+                Complete(secondEntered.Task);
+                Check(Shows(row, bluetoothId) && session.State.OutputId == speakerId && !pending.IsCompleted,
+                    "an older completed switch cannot repaint over a newer selection that still awaits its route");
+            }
+            finally { finishSecond.TrySetResult(); blockSecond = false; }
+            Complete(pending);
+            double commitMs = clock.Elapsed.TotalMilliseconds;
+            Check(Shows(row, bluetoothId) && changes.Where(id => id != null).SequenceEqual([speakerId, bluetoothId]),
+                "rapid operations commit FIFO and reconcile to the latest confirmed output");
+
+            const System.Windows.Input.ModifierKeys ctrl = System.Windows.Input.ModifierKeys.Control;
+            const System.Windows.Input.ModifierKeys shift = System.Windows.Input.ModifierKeys.Shift;
+            Hold(() =>
+            {
+                _ = Click(panel, row, speakerId);
+                _ = Click(panel, row, pc, ctrl);
+                _ = Click(panel, row, bluetoothId, shift);
+                Check(Shows(row, pc, speakerId, bluetoothId),
+                    "Shift uses the pending Ctrl anchor and preserves visual range order and phone-native exclusion");
+                _ = Click(panel, row, speakerId, ctrl);
+                Check(Shows(row, pc, bluetoothId), "Ctrl removes from the latest uncommitted output set");
+                pending = Click(panel, row, speakerId, ctrl);
+                Check(Shows(row, pc, speakerId, bluetoothId), "Ctrl adds to the latest pending set without dropping an uncommitted output");
+            });
+            Complete(pending);
+            Check(Shows(row, pc, speakerId, bluetoothId)
+                && ((IMultiOutputAudioSession)session).GetOutputs().ToHashSet().SetEquals([speakerId, pc, bluetoothId]),
+                "the optimistic multi-output set reconciles to the confirmed selection");
+            Hold(() =>
+            {
+                _ = Click(panel, row, native, ctrl);
+                Check(Shows(row, pc, native), "adding native playback excludes forced outputs on the same phone");
+                pending = Click(panel, row, native);
+            });
+            Complete(pending);
+            Check(Shows(row, native), "native output remains selected after completion");
+
+            Complete(Click(panel, row, system));
+            Hold(() =>
+            {
+                _ = Click(panel, row, speakerId);
+                _ = Click(panel, row, system);
+                pending = Click(panel, row, system);
+                Check(Shows(row, system), "A to B to A and a repeated A immediately show the final intent");
+            });
+            Complete(pending);
+            Check(Shows(row, system) && session.State.OutputId == null, "repeated latest intent stays on the confirmed A output");
+            reject = true;
+            Hold(() =>
+            {
+                pending = Click(panel, row, speakerId);
+                Check(Shows(row, speakerId), "an unresolved failure still initially displays the requested target");
+            });
+            Complete(pending);
+            reject = false;
+            Check(Shows(row, system) && session.State.OutputId == null, "a rejected route rolls back to the actual output");
+
+            Hold(() =>
+            {
+                pending = Click(panel, row, bluetoothId);
+                store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker]);
+                Prepare(panel);
+                Check(Shows(row, system) && Pills(row).All(b => ((AudioDeviceInfo)b.Tag).Id != bluetoothId),
+                    "removing a pending target clears it without selecting a different device optimistically");
+            });
+            Complete(pending);
+            store.UpdateOutputs(device, [AndroidOutputSink.DefaultSpeaker, bluetooth]);
+            Prepare(panel);
+            Hold(() =>
+            {
+                pending = Click(panel, row, speakerId);
+                config.QuickPanelUseLegacyAppRows = !config.QuickPanelUseLegacyAppRows;
+                Prepare(panel);
+                Check(!ReferenceEquals(row, Row(panel)) && Shows(Row(panel), system), "a rebuilt row starts from the confirmed output");
+            });
+            Complete(pending);
+            row = Row(panel);
+            Check(Shows(row, system) && session.State.OutputId == null, "a retired row cannot commit or repaint after being replaced");
+
+            var closing = new QuickPanelModernWindow();
+            Prepare(closing);
+            Hold(() => { pending = Click(closing, Row(closing), speakerId); closing.Close(); });
+            Complete(pending);
+            Check(session.State.OutputId == null, "closing the panel retires its queued selection");
+            Task removal = Task.CompletedTask;
+            Hold(() => { pending = Click(panel, row, speakerId); removal = manager.RemoveAsync(source.Id, restorePrevious: false); refresh.Invoke(panel, [false]); });
+            Complete(Task.WhenAll(removal, pending));
+            Check(!manager.Sources.Contains(source) && !Rows(panel).Contains(source.Id),
+                "disconnect and source retirement remove the pending row and its late completion");
+            File.WriteAllLines(Path.Combine(output, "optimistic-route-timing.log"),
+                [FormattableString.Invariant($"Simulated WPF: first_click_style_ms={intentMs:F2} final_queued_ack_ms={commitMs:F2}"), session.GetLog()]);
+        }
+    }
+
+    private static void CheckPanelMuteAppearance(QuickPanelModernWindow panel, object desktopRow, AndroidAudioSource phone, AndroidAudioSource neighbour)
+    {
+        var panelType = typeof(QuickPanelModernWindow);
+        var incoming = (System.Collections.IDictionary)panelType.GetField("_androidRows", Hidden)!.GetValue(panel)!;
+        var batch = panelType.GetMethod("ApplyAllRowsMutedVisual", Hidden)!;
+        static T Field<T>(object row, string name) => (T)row.GetType().GetField(name, Hidden | BindingFlags.Public)!.GetValue(row)!;
+        var buttons = new[] { Field<Button>(desktopRow, "IconButton"), Field<Button>(incoming[phone.Id]!, "Icon"), Field<Button>(incoming[neighbour.Id]!, "Icon") };
+        var dots = new[] { Field<Border>(desktopRow, "MuteDot"), Field<Border>(incoming[phone.Id]!, "MuteDot"), Field<Border>(incoming[neighbour.Id]!, "MuteDot") };
+        var sliders = new[] { Field<Slider>(desktopRow, "Slider"), Field<Slider>(incoming[phone.Id]!, "Volume"), Field<Slider>(incoming[neighbour.Id]!, "Volume") };
+        var volumes = sliders.Select(slider => slider.Value).ToArray();
+        bool Appearance(int index, bool muted) => dots[index].Visibility == (muted ? Visibility.Visible : Visibility.Collapsed)
+            && dots[index].Background == panel.FindResource("Theme.AccentInverse") && buttons[index].Opacity == 1
+            && sliders[index].Foreground == panel.FindResource(muted ? "Theme.AccentInverse" : "Theme.Accent") && sliders[index].Value == volumes[index];
+        Check(dots.All(dot => dot is { Width: 8, Height: 8, HorizontalAlignment: HorizontalAlignment.Right, VerticalAlignment: VerticalAlignment.Top, IsHitTestVisible: false })
+            && buttons.All(button => button.Content is ContentControl { Width: 18, Height: 18 })
+            && dots.Select(dot => dot.Parent).SequenceEqual(buttons.Select(button => button.Parent)),
+            "PC and incoming apps use the same full-size icon and non-interactive upper-right mute dot");
+        buttons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); DrainUi();
+        Check(phone.Session.State.Muted && !neighbour.Session.State.Muted && Appearance(0, false) && Appearance(1, true) && Appearance(2, false),
+            "clicking an incoming app shows its mute dot and inverse slider while adjacent PC and phone rows keep their accent");
+        try
+        {
+            ThemeService.Apply("dark", "#00FFFF"); DrainUi();
+            Check(Appearance(0, false) && Appearance(1, true) && Appearance(2, false),
+                "already-present mute dots and sliders track a custom accent change without another mute event");
+            buttons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); DrainUi();
+            Check(!phone.Session.State.Muted && Appearance(1, false), "unmuting restores the phone row's theme accent and hides its dot");
+            foreach (bool muted in new[] { true, false })
+            {
+                batch.Invoke(panel, [muted]);
+                Check(Enumerable.Range(0, dots.Length).All(index => Appearance(index, muted)),
+                    "batch mute feedback matches across PC and incoming rows without moving sliders: " + muted);
+            }
+        }
+        finally { ThemeService.Apply("light", "#00CBE9"); }
     }
 
     private static void CheckAndroidPeakMeter(QuickPanelModernWindow panel, AndroidAudioSource first, AndroidAudioSource second,

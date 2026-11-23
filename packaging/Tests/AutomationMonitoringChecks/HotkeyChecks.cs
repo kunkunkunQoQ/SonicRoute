@@ -6,15 +6,16 @@ public sealed partial class App
 {
     private QuickPanelModernWindow? _quickPanel = null;
     private readonly TrayFixture _trayWheel = new();
-    internal bool IsHotkeyCaptureActive => false;
-    internal bool BypassTrayWheel;
-    internal bool ShouldBypassTrayWheel(int delta) => BypassTrayWheel;
+    internal bool IsHotkeyCaptureActive { get; set; }
     internal int GlobalCalls;
+    internal int OutputHotkeyQueues;
+    internal int? LastOutputHotkeyForegroundPid;
     private void ToggleQuickPanel() { }
-    internal Task TestHotkey(string action) => ExecuteHotkeyCoreAsync(action);
+    internal Task TestHotkey(string action, int? foregroundPid = null) => ExecuteHotkeyCoreAsync(action, foregroundPid);
     internal void ApplyAppMuteReadback(int pid, bool muted) => _quickPanel?.ApplyAppMuteReadback(pid, muted);
     internal QuickPanelModernWindow? TestPanel { get => _quickPanel; set => _quickPanel = value; }
-    private Task<string?> CycleDeviceAsync(int pid, EDataFlow flow) => Task.FromResult<string?>("test-device");
+    private Task<string?> CycleDeviceAsync(SonicRoute.Core.Models.AudioAppInfo app, EDataFlow flow) => Task.FromResult<string?>("test-device");
+    private Task QueueHotkeyOutputAsync(int? foregroundPid) { OutputHotkeyQueues++; LastOutputHotkeyForegroundPid = foregroundPid; return Task.CompletedTask; }
     private Task<string?> CycleAllAppsDeviceAsync(EDataFlow flow) { GlobalCalls++; return Task.FromResult<string?>("test-device"); }
     private Task<string?> CycleSystemDefaultDeviceAsync(EDataFlow flow) { GlobalCalls++; return Task.FromResult<string?>("test-device"); }
 }
@@ -33,6 +34,9 @@ internal sealed class TrayFixture
 {
     internal static int Notices;
     internal static string? LastText;
+    internal void BeginDeviceSwitch(object request) { }
+    internal void CancelDeviceSwitch() { }
+    internal void ShowDeviceSwitch(object request, string title, string text) => ShowOsd(title, text);
     internal void ShowOsd(string title, string text) { Notices++; LastText = text; }
     internal void ShowVolumeOsd(string title, int volume, string text, bool muted = false, string? target = null) { }
 }
@@ -48,7 +52,11 @@ internal static class HotkeyChecks
             HotkeyActions.ActSetDefaultOutput, HotkeyActions.ActSetDefaultInput, HotkeyActions.ActSystemVolUp, HotkeyActions.ActSystemVolDown })
         { await app.TestHotkey(action); Check(AudioService.AppReads == 0, "global hotkey bypasses unrelated failing current-app discovery: " + action); }
         Check(app.GlobalCalls == 4 && SystemVolumeService.Volumes.Count == 2, "global device and actual volume handlers execute despite unavailable app discovery");
-        foreach (string action in new[] { HotkeyActions.ActMute, HotkeyActions.ActVolUp, HotkeyActions.ActVolDown, HotkeyActions.ActSwitchOutput, HotkeyActions.ActSwitchInput })
+        int outputQueues = app.OutputHotkeyQueues;
+        await app.TestHotkey(HotkeyActions.ActSwitchOutput, 101234);
+        Check(app.OutputHotkeyQueues == outputQueues + 1 && app.LastOutputHotkeyForegroundPid == 101234
+            && AudioService.AppReads == 0, "output switch hotkey delegates to queued handler without current-app discovery");
+        foreach (string action in new[] { HotkeyActions.ActMute, HotkeyActions.ActVolUp, HotkeyActions.ActVolDown, HotkeyActions.ActSwitchInput })
         { int notices = TrayFixture.Notices; await app.TestHotkey(action); Check(TrayFixture.Notices == notices + 1, "current-app discovery failure gives feedback without unhandled task: " + action); }
         AudioService.ThrowApps = false;
         AudioService.Apps.Add(new SonicRoute.Core.Models.AudioAppInfo { ProcessId = 101234, ProcessName = "HotkeyTarget", DisplayName = "Target" });

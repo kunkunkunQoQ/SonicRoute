@@ -1,4 +1,3 @@
-#if !SONICROUTE_PHONE
 using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -44,6 +43,8 @@ internal sealed class DesktopMirrorPlayer : IDisposable
 
     internal void Write(ReadOnlyMemory<byte> packet)
     {
+        Exception? failure = null;
+        Action<Exception>? handler = null;
         lock (_gate)
         {
             if (_closed || _failed) return;
@@ -76,8 +77,9 @@ internal sealed class DesktopMirrorPlayer : IDisposable
                 (_pending ??= new DesktopMirrorPcmSource()).Write(packet.Span);
                 Drain(available);
             }
-            catch (Exception ex) { Fail(ex); }
+            catch (Exception ex) { failure = ex; handler = FailLocked(); }
         }
+        if (failure != null) handler?.Invoke(failure);
     }
 
     private void Drain(int available)
@@ -103,20 +105,23 @@ internal sealed class DesktopMirrorPlayer : IDisposable
 
     private void DrainOnSignal(object? state, bool timedOut)
     {
+        Exception? failure = null;
+        Action<Exception>? handler = null;
         lock (_gate)
         {
             if (_closed || _failed || _drainWait == null) return;
             try { Drain(_frames - _client.CurrentPadding); }
-            catch (Exception ex) { Fail(ex); }
+            catch (Exception ex) { failure = ex; handler = FailLocked(); }
         }
+        if (failure != null) handler?.Invoke(failure);
     }
 
-    private void Fail(Exception error)
+    private Action<Exception>? FailLocked()
     {
         _failed = true;
         _drainWait?.Unregister(null);
         _drainWait = null;
-        Failed?.Invoke(error);
+        return Failed;
     }
 
     public void Dispose()
@@ -128,6 +133,8 @@ internal sealed class DesktopMirrorPlayer : IDisposable
             _drainWait?.Unregister(null);
             _drainWait = null;
             try { _client.Stop(); }
+            catch (COMException) { }
+            catch (ObjectDisposedException) { }
             finally
             {
                 _client.Dispose();
@@ -137,4 +144,3 @@ internal sealed class DesktopMirrorPlayer : IDisposable
         }
     }
 }
-#endif

@@ -273,6 +273,11 @@
                     <ComboBox x:Name="AudioBitRateCombo" Grid.Column="3" Style="{StaticResource RoundedComboBox}"
                               ToolTip="{Binding [Phone.StreamBitRate], Source={x:Static local:L10n.Instance}}"
                               Height="28" FontSize="11" Margin="0,0,8,6" SelectionChanged="StreamSettings_Changed"/>
+                    <ComboBox x:Name="AudioLatencyCombo" Grid.Column="4" Style="{StaticResource RoundedComboBox}"
+                              ItemTemplate="{StaticResource EncoderOptionTemplate}"
+                              ToolTip="{Binding [Phone.StreamAudioLatency], Source={x:Static local:L10n.Instance}}"
+                              AutomationProperties.Name="{Binding [Phone.StreamAudioLatency], Source={x:Static local:L10n.Instance}}"
+                              MinWidth="70" Height="28" FontSize="11" Margin="0,0,0,6" SelectionChanged="StreamSettings_Changed"/>
 
                     <TextBlock Grid.Row="1" Text="{Binding [Phone.StreamVideoLabel], Source={x:Static local:L10n.Instance}}"
                                VerticalAlignment="Center" Margin="0,0,8,0"/>

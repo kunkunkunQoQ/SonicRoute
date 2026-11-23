@@ -1,5 +1,7 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,9 +20,36 @@ using Rectangle = System.Windows.Shapes.Rectangle;
 
 namespace SonicRoute
 {
+    /// <summary>共享开关/切换请求令牌：跨线程记录后台真实完成时刻，避免 45ms 边界竞态。</summary>
+    internal sealed class DeviceSwitchToken
+    {
+        internal readonly long StartedAt = Stopwatch.GetTimestamp();
+        private long _completedAt;
+
+        internal void MarkBackendCompleted()
+        {
+            if (Volatile.Read(ref _completedAt) == 0)
+                Interlocked.CompareExchange(ref _completedAt, Stopwatch.GetTimestamp(), 0);
+        }
+
+        internal bool IsBackendCompleted => Volatile.Read(ref _completedAt) != 0;
+    }
+
     /// <summary>共享 OSD：输入触发更新，复用窗口；音量专用控件可完全移除，没有周期刷新。</summary>
     internal sealed class OsdService : IDisposable
     {
+        private enum DeviceSwitchPhase : byte
+        {
+            None = 0,
+            WaitingFastWindow = 1,
+            PendingRender = 2,
+            PendingHold = 3,
+            PendingHoldElapsed = 4,
+        }
+
+        private const int FastSwitchWindowMs = 45;
+        private const int MinPendingVisibleMs = 500;
+
         private readonly struct Notice
         {
             internal Notice(string title, string text, int volume = -1, bool muted = false, string? target = null)
@@ -33,6 +62,7 @@ namespace SonicRoute
         private readonly Dispatcher _dispatcher = Application.Current.Dispatcher;
         private readonly DispatcherTimer _hideTimer;
         private DispatcherTimer? _idleReleaseTimer;
+        private DispatcherTimer? _deviceSwitchTimer;
         private const int IdleReleaseSeconds = 8;
         private const int BarFramesPerSecond = 30;
         private static bool HardwareAnimation => UiMotion.HardwareRendering && RenderOptions.ProcessRenderMode != RenderMode.SoftwareOnly;
@@ -44,6 +74,7 @@ namespace SonicRoute
         private long _barVersion;
 #endif
         private readonly EventHandler _barRenderingHandler;
+        private readonly EventHandler _pendingOpacityHandler;
         private Window? _window;
         private Border? _surface;
         private StackPanel? _stack;
@@ -77,6 +108,11 @@ namespace SonicRoute
         private bool _fadingOut, _adjusting, _dragging, _micPersistent, _restorePending, _showingMic;
         private volatile bool _disposed;
         private long _messageVersion, _micVersion, _fadeVersion;
+        private object? _deviceSwitchNotice;
+        private long _deviceSwitchVersion, _deviceSwitchStartedAt, _deviceSwitchPendingVisibleAt;
+        private DeviceSwitchPhase _deviceSwitchPhase;
+        private Notice _pendingSwitchPreview, _deferredSwitchSuccess;
+        private bool _hasPendingSwitchPreview, _hasDeferredSwitchSuccess, _waitingPendingRenderOpacity;
         private Task<(bool All, bool Default, bool Known)>? _micQuery;
         private Func<Task<(bool All, bool Default, bool Known)>> _readMicState = ReadMicStateAsync;
         private TaskCompletionSource<bool>? _temporaryNoticeCompletion;
@@ -90,11 +126,229 @@ namespace SonicRoute
         internal OsdService()
         {
             _barRenderingHandler = BarRendering;
+            _pendingOpacityHandler = OnPendingRenderOpacity;
             _hideTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1100) };
             _hideTimer.Tick += HideTimer_Tick;
         }
 
+        internal static string FormatDeviceSwitchingTitle(string? appTitle)
+        {
+            if (string.IsNullOrWhiteSpace(appTitle))
+                return L10n.T("Ov.SwitchingOutput");
+            string template = L10n.T("Ov.Switching");
+            return template.IndexOf("{0}", StringComparison.Ordinal) >= 0
+                ? string.Format(template, appTitle)
+                : appTitle + " · " + template;
+        }
+
+        internal static string FormatDeviceFinalTitle(string? appTitle) =>
+            string.IsNullOrWhiteSpace(appTitle) ? L10n.T("Ov.VolumeTitle") : appTitle!;
+
+        internal static string FormatDeviceFailedTitle(string? appTitle) =>
+            string.IsNullOrWhiteSpace(appTitle)
+                ? L10n.T("Ov.OutputSwitchFailed")
+                : L10n.T("Ov.OutputSwitchFailed") + " · " + appTitle;
+
+        private static double ElapsedMs(long sinceTimestamp) =>
+            (Stopwatch.GetTimestamp() - sinceTimestamp) * 1000.0 / Stopwatch.Frequency;
+
         internal void Show(string title, string text) => ShowCore(new Notice(title, text));
+
+        internal void BeginDeviceSwitch(object request)
+        {
+            ClearDeviceSwitchState();
+            _deviceSwitchNotice = request;
+            _deviceSwitchStartedAt = (request as DeviceSwitchToken)?.StartedAt ?? Stopwatch.GetTimestamp();
+        }
+
+        internal void CancelDeviceSwitch()
+        {
+            bool wasHolding = _deviceSwitchPhase is DeviceSwitchPhase.PendingRender
+                or DeviceSwitchPhase.PendingHold or DeviceSwitchPhase.PendingHoldElapsed;
+            ClearDeviceSwitchState();
+            _deviceSwitchNotice = null;
+            if (wasHolding && !_disposed && !_adjusting && !_showingMic && !_fadingOut && _window?.IsVisible == true)
+                _hideTimer.Start();
+        }
+
+        internal void ShowDeviceSwitch(object request, string title, string text)
+            => ShowDeviceSwitchResult(request, title, text, success: true);
+
+        internal void ShowDeviceSwitchPending(object request, string title, string text)
+        {
+            if (_disposed || _dispatcher.HasShutdownStarted || !ReferenceEquals(_deviceSwitchNotice, request)) return;
+            if ((request as DeviceSwitchToken)?.IsBackendCompleted == true) return;
+            _pendingSwitchPreview = new Notice(title, text);
+            _hasPendingSwitchPreview = true;
+            if (_deviceSwitchPhase is DeviceSwitchPhase.None or DeviceSwitchPhase.WaitingFastWindow)
+            {
+                double elapsed = ElapsedMs(_deviceSwitchStartedAt);
+                if (elapsed >= FastSwitchWindowMs)
+                {
+                    StopDeviceSwitchTimer();
+                    ShowPendingCore(request);
+                }
+                else if (_deviceSwitchPhase == DeviceSwitchPhase.None)
+                {
+                    _deviceSwitchPhase = DeviceSwitchPhase.WaitingFastWindow;
+                    ArmDeviceSwitchTimer(FastSwitchWindowMs - elapsed);
+                }
+                return;
+            }
+            ShowPendingCore(request);
+        }
+
+        internal void ShowDeviceSwitchResult(object request, string title, string text, bool success)
+        {
+            if (_disposed || _dispatcher.HasShutdownStarted || !ReferenceEquals(_deviceSwitchNotice, request)) return;
+            (request as DeviceSwitchToken)?.MarkBackendCompleted();
+            var notice = new Notice(title, text);
+            if (!success || _deviceSwitchPhase is DeviceSwitchPhase.None
+                or DeviceSwitchPhase.WaitingFastWindow or DeviceSwitchPhase.PendingHoldElapsed)
+            {
+                ClearDeviceSwitchState();
+                _deviceSwitchNotice = null;
+                ShowCore(notice);
+                return;
+            }
+            if (_deviceSwitchPhase == DeviceSwitchPhase.PendingHold && ElapsedMs(_deviceSwitchPendingVisibleAt) >= MinPendingVisibleMs)
+            {
+                ClearDeviceSwitchState();
+                _deviceSwitchNotice = null;
+                ShowCore(notice);
+                return;
+            }
+            _deferredSwitchSuccess = notice;
+            _hasDeferredSwitchSuccess = true;
+        }
+
+        private void ShowPendingCore(object request)
+        {
+            if (_adjusting) { CancelDeviceSwitch(); return; }
+            StopDeviceSwitchTimer();
+            ShowCore(_pendingSwitchPreview, deviceSwitch: request, holdAutoHide: true);
+            if (_window == null || !_window.IsVisible) { CancelDeviceSwitch(); return; }
+            _deviceSwitchPhase = DeviceSwitchPhase.PendingRender;
+            long version = _deviceSwitchVersion;
+            _dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => OnPendingLoaded(version)));
+        }
+
+        private void OnPendingLoaded(long version)
+        {
+            if (_disposed || _dispatcher.HasShutdownStarted || version != _deviceSwitchVersion
+                || _deviceSwitchPhase != DeviceSwitchPhase.PendingRender || _window?.IsVisible != true)
+                return;
+            if (_window.Opacity > 0)
+            {
+                BeginPendingHold(version);
+                return;
+            }
+            AttachPendingOpacityWait();
+        }
+
+        private void OnPendingRenderOpacity(object? sender, EventArgs e)
+        {
+            if (_disposed || _dispatcher.HasShutdownStarted || _deviceSwitchPhase != DeviceSwitchPhase.PendingRender
+                || _window?.IsVisible != true)
+            {
+                DetachPendingOpacityWait();
+                return;
+            }
+            if (_window.Opacity > 0)
+                BeginPendingHold(_deviceSwitchVersion);
+        }
+
+        private void BeginPendingHold(long version)
+        {
+            DetachPendingOpacityWait();
+            if (_disposed || _dispatcher.HasShutdownStarted || version != _deviceSwitchVersion
+                || _deviceSwitchPhase != DeviceSwitchPhase.PendingRender)
+                return;
+            _deviceSwitchPendingVisibleAt = Stopwatch.GetTimestamp();
+            _deviceSwitchPhase = DeviceSwitchPhase.PendingHold;
+            ArmDeviceSwitchTimer(MinPendingVisibleMs);
+        }
+
+        private void ArmDeviceSwitchTimer(double milliseconds)
+        {
+            if (_disposed || _dispatcher.HasShutdownStarted) return;
+            if (_deviceSwitchTimer == null)
+            {
+                _deviceSwitchTimer = new DispatcherTimer(DispatcherPriority.Normal, _dispatcher);
+                _deviceSwitchTimer.Tick += DeviceSwitchTimer_Tick;
+            }
+            _deviceSwitchTimer.Stop();
+            _deviceSwitchTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(1, Math.Ceiling(milliseconds)));
+            _deviceSwitchTimer.Start();
+        }
+
+        private void StopDeviceSwitchTimer() => _deviceSwitchTimer?.Stop();
+
+        private void AttachPendingOpacityWait()
+        {
+            if (_waitingPendingRenderOpacity) return;
+            _waitingPendingRenderOpacity = true;
+            CompositionTarget.Rendering += _pendingOpacityHandler;
+        }
+
+        private void DetachPendingOpacityWait()
+        {
+            if (!_waitingPendingRenderOpacity) return;
+            _waitingPendingRenderOpacity = false;
+            CompositionTarget.Rendering -= _pendingOpacityHandler;
+        }
+
+        private void ClearDeviceSwitchState()
+        {
+            ++_deviceSwitchVersion;
+            StopDeviceSwitchTimer();
+            DetachPendingOpacityWait();
+            _deviceSwitchPhase = DeviceSwitchPhase.None;
+            _hasPendingSwitchPreview = false;
+            _pendingSwitchPreview = default;
+            _hasDeferredSwitchSuccess = false;
+            _deferredSwitchSuccess = default;
+        }
+
+        private void DeviceSwitchTimer_Tick(object? sender, EventArgs e)
+        {
+            StopDeviceSwitchTimer();
+            if (_disposed || _dispatcher.HasShutdownStarted || _deviceSwitchNotice == null) return;
+
+            if (_deviceSwitchPhase == DeviceSwitchPhase.WaitingFastWindow)
+            {
+                if (_deviceSwitchNotice is DeviceSwitchToken token && token.IsBackendCompleted)
+                    return;
+                double remaining = FastSwitchWindowMs - ElapsedMs(_deviceSwitchStartedAt);
+                if (remaining > 1.0)
+                {
+                    ArmDeviceSwitchTimer(remaining);
+                    return;
+                }
+                if (_hasPendingSwitchPreview)
+                    ShowPendingCore(_deviceSwitchNotice);
+                return;
+            }
+
+            if (_deviceSwitchPhase == DeviceSwitchPhase.PendingHold)
+            {
+                double remaining = MinPendingVisibleMs - ElapsedMs(_deviceSwitchPendingVisibleAt);
+                if (remaining > 1.0)
+                {
+                    ArmDeviceSwitchTimer(remaining);
+                    return;
+                }
+                if (_hasDeferredSwitchSuccess)
+                {
+                    var result = _deferredSwitchSuccess;
+                    ClearDeviceSwitchState();
+                    _deviceSwitchNotice = null;
+                    ShowCore(result);
+                    return;
+                }
+                _deviceSwitchPhase = DeviceSwitchPhase.PendingHoldElapsed;
+            }
+        }
 
         /// <summary>临时命令进程退出前让最后一条 OSD 正常显示/淡出，不维持常驻麦克风横幅。</summary>
         internal Task FinishTemporaryNoticeAsync()
@@ -120,6 +374,7 @@ namespace SonicRoute
             // remain owned by their existing service and are never dropped here.
             if (_window?.IsVisible == true && !_fadingOut && _hasNotice && _notice.Volume >= 0 && _notice.Target == notice.Target)
             {
+                CancelDeviceSwitch();
                 _pendingNotice = notice;
                 _noticePending = true;
                 ++_messageVersion;
@@ -137,7 +392,8 @@ namespace SonicRoute
             if (!_noticePending) return;
             var notice = _pendingNotice;
             CancelPendingNotice();
-            ShowCore(notice);
+            // A switch may reserve its notice after this volume update was queued.
+            ShowCore(notice, deviceSwitch: _deviceSwitchNotice);
         }
 
         private void CancelPendingNotice()
@@ -148,10 +404,13 @@ namespace SonicRoute
             _noticeOperation = null;
         }
 
-        private void ShowCore(Notice notice, bool persistent = false, bool adjustment = false)
+        private void ShowCore(Notice notice, bool persistent = false, bool adjustment = false, object? deviceSwitch = null, bool holdAutoHide = false)
         {
             CancelPendingNotice();
             if (_disposed || _dispatcher.HasShutdownStarted || (_adjusting && !adjustment)) return;
+            if (!ReferenceEquals(_deviceSwitchNotice, deviceSwitch))
+                ClearDeviceSwitchState();
+            _deviceSwitchNotice = deviceSwitch;
             _idleReleaseTimer?.Stop();
             try
             {
@@ -187,7 +446,7 @@ namespace SonicRoute
                     AnimateOpacity(1, FadeIn(config));
                 }
                 if (_positionDirty) QueuePlacement();
-                if (!persistent && !_adjusting) _hideTimer.Start();
+                if (!persistent && !_adjusting && !holdAutoHide) _hideTimer.Start();
             }
             catch { } // 音频目标退出或 Dispatcher 关闭不打断输入处理。
         }
@@ -623,6 +882,7 @@ namespace SonicRoute
 
         private void Hide()
         {
+            DetachPendingOpacityWait();
             StopFade(); StopBar();
             if (_window == null) return;
             _window.Hide();
@@ -688,6 +948,9 @@ namespace SonicRoute
         }
 
         internal void ShowMic(string title, bool muted)
+            => ShowMicNotice(title, muted, deviceSwitch: null);
+
+        private void ShowMicNotice(string title, bool muted, object? deviceSwitch)
         {
             if (_disposed) return;
             _idleReleaseTimer?.Stop();
@@ -695,7 +958,7 @@ namespace SonicRoute
             _micPersistent = muted && MicMuteSources(ConfigService.Load()) != (false, false);
             _restorePending = _micPersistent && _adjusting;
             if (_adjusting) return;
-            ShowCore(new Notice(title, L10n.T(muted ? "Ov.MicMuted" : "Ov.MicUnmuted")), _micPersistent);
+            ShowCore(new Notice(title, L10n.T(muted ? "Ov.MicMuted" : "Ov.MicUnmuted")), _micPersistent, deviceSwitch: deviceSwitch);
         }
 
         internal async Task NotifyMicSettingChangedAsync()
@@ -741,7 +1004,7 @@ namespace SonicRoute
                     mic != _micVersion || _window?.IsVisible == true || MicMuteSources(ConfigService.Load()) != sources) return;
                 _restorePending = false;
                 // An unavailable driver cannot revoke a previously confirmed mute banner.
-                if (!state.Known || MatchesMicMute(sources, state)) ShowMic(L10n.T("Ov.MuteMic"), true);
+                if (!state.Known || MatchesMicMute(sources, state)) ShowMicNotice(L10n.T("Ov.MuteMic"), true, _deviceSwitchNotice);
                 else
                 {
                     _micPersistent = false;
@@ -755,6 +1018,7 @@ namespace SonicRoute
         internal void BeginAdjust()
         {
             if (_disposed) return;
+            CancelDeviceSwitch();
             _idleReleaseTimer?.Stop();
             _adjusting = true;
             ShowCore(new Notice(L10n.T("Exp.OsdDragTitle"), L10n.T("Exp.OsdDragHint")), adjustment: true);
@@ -859,6 +1123,7 @@ namespace SonicRoute
         {
             if (!_disposed && (_adjusting || _fadingOut || _micPersistent || _dragging || _window?.IsVisible == true))
                 return;
+            DetachPendingOpacityWait();
             _idleReleaseTimer?.Stop();
             CancelPendingNotice();
             _placementOperation?.Abort(); _placementOperation = null;
@@ -894,10 +1159,17 @@ namespace SonicRoute
         {
             if (_disposed) return;
             _disposed = true;
+            CancelDeviceSwitch();
             _temporaryNoticeCompletion?.TrySetResult(true); _temporaryNoticeCompletion = null;
             ++_messageVersion; ++_micVersion;
             _restorePending = false;
             _hideTimer.Stop(); _hideTimer.Tick -= HideTimer_Tick;
+            if (_deviceSwitchTimer != null)
+            {
+                _deviceSwitchTimer.Stop();
+                _deviceSwitchTimer.Tick -= DeviceSwitchTimer_Tick;
+                _deviceSwitchTimer = null;
+            }
             if (_idleReleaseTimer != null)
             {
                 _idleReleaseTimer.Stop();

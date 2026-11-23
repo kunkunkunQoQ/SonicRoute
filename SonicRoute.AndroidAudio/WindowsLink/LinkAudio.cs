@@ -71,7 +71,8 @@ internal sealed partial class LinkAudioPlayback : IPhoneAudioSession, IMultiOutp
         Func<Action, IDisposable>? watchDefault = null,
         CancellationToken lifetime = default)
     {
-        _mirrors = new PcmOutputMirrors(true, RemoveMirrorsAsync, static id => WindowsLinkOutputIdentity.TryParsePeerId(id, out _));
+        _mirrors = new PcmOutputMirrors(RemoveMirrorsAsync, preserveQuietLevel: true,
+            forwardsPackets: static id => WindowsLinkOutputIdentity.TryParsePeerId(id, out _));
         _mirrors.SetLevels(1, smartVolume);
         _audio = new AndroidPcmSource { SmartVolume = smartVolume, PreserveQuietLevel = true, Mirrors = _mirrors };
         _state = new AndroidAudioState(CaptureState.Starting, SmartVolume: smartVolume);

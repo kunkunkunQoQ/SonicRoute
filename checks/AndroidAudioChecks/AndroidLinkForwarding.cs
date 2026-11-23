@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using SonicRoute.AndroidAudio;
 using SonicRoute.WindowsLink;
 
@@ -72,19 +73,32 @@ internal static partial class Program
         var device = new AndroidDevice("fixture-phone", "Fixture", "device", true);
         var modes = new List<bool>();
         int active = 0, peak = 0;
-        await using var session = new AndroidAudioSession(() => new FakeTransport(BuildWire(),
+        var raw = BuildRawPcmWire(includeEmptyConfig: true, includeLargePacket: false, includeKeyFrameFlagOnLast: false);
+        byte[] wire = BuildWire();
+        await using var session = new AndroidAudioSession(() => new FakeTransport(wire,
             () => active--, mode => { modes.Add(mode); peak = Math.Max(peak, ++active); }),
             (_, _) => new StartupPlayer(() => { }, () => { })) { LinkService = () => bridge };
+        session.SetSmartVolume(false);
         var route = (IMultiOutputAudioSession)session;
         foreach (var app in new[] { new AndroidApp("example.audio", "Fixture music", 123, "media"), AndroidApp.DeviceAudio })
         {
+            string codec = app.IsDeviceAudio ? "Raw PCM" : "Opus";
+            if (app.IsDeviceAudio) wire = raw.Wire;
             await session.SetOutputAsync(remote);
             await session.StartAsync(device, app, true, token);
-            await Until(() => kun.IncomingAudioSources.SingleOrDefault()?.Session.Pcm?.NonSilentSamplesWritten > 0);
+            await Until(() => session.PacketsDecoded == 5 &&
+                kun.IncomingAudioSources.SingleOrDefault()?.Session.Pcm?.BufferedSamples == session.Pcm!.SamplesWritten);
             var received = kun.IncomingAudioSources.Single();
             Check(received.IsRelayed && received.AppKey == (app.IsDeviceAudio ? LinkRemoteApp.SystemAudioKey : app.Package)
                 && !session.UsesSourcePhonePlayback && modes.Last() == false && peak == 1,
-                "single KUN playback receives decoded Opus over TLS with the correct Android source identity and one exclusive capture");
+                $"{codec} reaches KUN over TLS with the correct Android source identity and one exclusive capture");
+            received.Session.SetSmartVolume(false);
+            float[] expected = app.IsDeviceAudio ? raw.ExpectedSamples : ReadBufferedSamples(session.Pcm!);
+            float[] actual = ReadBufferedSamples(received.Session.Pcm!);
+            Check(expected.Length > 0 && actual.Length == expected.Length && actual.Any(sample => Math.Abs(sample) > 0.1f)
+                && (app.IsDeviceAudio ? actual.SequenceEqual(expected)
+                    : actual.Zip(expected).All(pair => Math.Abs(pair.First - pair.Second) <= 0.5f / 32768f)),
+                $"{codec} preserves the decoded stereo samples through Windows Link PCM16 forwarding");
             await route.SetOutputsAsync([remote, AndroidAudioSession.SourcePhoneOutputId]);
             Check(session.UsesSourcePhonePlayback && modes.Last() && peak == 1, "adding native phone playback keeps one phone capture");
             await route.SetOutputsAsync(["fixture-speaker"]);
@@ -98,8 +112,15 @@ internal static partial class Program
             await kun.StopStreamAsync(kun.IncomingAudioSources.Single().StreamId);
             await Until(() => route.GetOutputs().SequenceEqual(["fixture-speaker"]));
             Check(session.State.State == CaptureState.Receiving && !session.UsesSourcePhonePlayback,
-                "losing the only remote output restores the previous speaker");
+                $"{codec} restores the previous speaker after losing the only remote output");
             await session.StopAsync();
+        }
+
+        static float[] ReadBufferedSamples(AndroidPcmSource pcm)
+        {
+            byte[] bytes = new byte[pcm.BufferedSamples * sizeof(float)];
+            pcm.Read(bytes, 0, bytes.Length);
+            return MemoryMarshal.Cast<byte, float>(bytes).ToArray();
         }
     }
 }

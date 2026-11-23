@@ -21,7 +21,7 @@ internal static partial class AndroidAudioHost
         if (key.StartsWith("device:", StringComparison.Ordinal) && key.Length > 7) return id;
         // A wireless IP/port is not a device identity. Only upgrade it with a verified live serial.
         if (!key.StartsWith("endpoint:", StringComparison.Ordinal)) return null;
-        var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && d.Serial == key[9..]);
+        var device = PhoneAudioWindowCache.Manager.ResolveKey(key);
         return AndroidDeviceIdentity.StableKey(device) is { } stable ? AndroidOutputIdentity.FormatDeviceId(stable, sink) : null;
     }
 
@@ -29,7 +29,7 @@ internal static partial class AndroidAudioHost
     {
         if (!AndroidOutputIdentity.IsPhoneOutput(id)) return id;
         if (!AndroidOutputIdentity.TryParseDeviceId(id, out var key, out var sink) || !LazyPhone.IsValueCreated) return null;
-        var device = PhoneAudioWindowCache.Devices?.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.StableKey(d) == key);
+        var device = PhoneAudioWindowCache.Manager.ResolveKey(key);
         if (device == null || Phone.FindProfile(device) is not { } profile) return null;
         if (AndroidOutputIdentity.IsPhoneCurrentOutput(id))
             return AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), AndroidOutputSink.Current.Key);
@@ -78,7 +78,8 @@ internal static partial class AndroidAudioHost
     {
         private sealed class Listener(AndroidDevice device)
         {
-            internal readonly CancellationTokenSource Stop = CancellationTokenSource.CreateLinkedTokenSource(MediaShutdown.Token);
+            internal readonly CancellationTokenSource Stop = CancellationTokenSource.CreateLinkedTokenSource(MediaShutdown.Token,
+                PhoneAudioWindowCache.Manager.OperationToken(device));
             internal int Users;
             internal Task Watch = Task.CompletedTask;
             internal async Task RunAsync()
@@ -101,19 +102,19 @@ internal static partial class AndroidAudioHost
         {
             var keys = PhoneKeys(outputs.Where(id => AndroidOutputIdentity.IsPhoneBluetoothOutput(id)
                 && ResolvePersistentOutputId(id!) == null));
-            var online = (PhoneAudioWindowCache.Devices ?? []).Where(d => d.State == "device" && !Phone.IsRemoved(d)
-                && AndroidDeviceIdentity.StableKey(d) is { } key && keys.Contains(key)).ToArray();
-            var wanted = online.Select(d => d.Serial).ToHashSet(StringComparer.Ordinal);
+            var online = PhoneAudioWindowCache.OnlineDevices.Where(d =>
+                AndroidDeviceIdentity.StableKey(d) is { } key && keys.Contains(key)).ToArray();
+            var wanted = online.Select(d => d.CommandTarget).ToHashSet(StringComparer.Ordinal);
             foreach (string serial in _owned.Where(s => !wanted.Contains(s)).ToArray())
                 await ReleaseAsync(serial).ConfigureAwait(false);
             foreach (var device in online)
             {
-                if (!_owned.Add(device.Serial)) continue;
+                if (!_owned.Add(device.CommandTarget)) continue;
                 lock (Shared)
                 {
-                    if (!Shared.TryGetValue(device.Serial, out var entry))
+                    if (!Shared.TryGetValue(device.CommandTarget, out var entry))
                     {
-                        Shared.Add(device.Serial, entry = new Listener(device));
+                        Shared.Add(device.CommandTarget, entry = new Listener(device));
                         entry.Watch = Task.Run(entry.RunAsync);
                     }
                     entry.Users++;
@@ -263,12 +264,12 @@ internal static partial class AndroidAudioHost
                     {
                         var route = entry.Route;
                         var profile = Phone.Profiles.FirstOrDefault(p => AndroidDeviceIdentity.StableKey(p.LastDevice) == route.DeviceKey);
-                        if (profile?.LastDevice == null) { pending.Remove(entry); continue; }
+                        if (profile?.LastDevice == null || profile.ManuallyDisconnected) { pending.Remove(entry); continue; }
                         bool StillSelected() => settings.Get(profile.LastDevice, route.Package).ResumeOutputs is { } saved
                             && saved.SequenceEqual(route.Outputs, StringComparer.OrdinalIgnoreCase);
                         if (!StillSelected() || (entry.Source != null && !ReferenceEquals(Sources.FindSource(entry.Source.Id), entry.Source)))
                         { pending.Remove(entry); continue; }
-                        var device = devices.FirstOrDefault(d => d.State == "device" && AndroidDeviceIdentity.StableKey(d) == route.DeviceKey);
+                        var device = PhoneAudioWindowCache.Manager.ResolveKey(route.DeviceKey);
                         if (device == null) continue;
                         var outputs = new List<string?>();
                         foreach (var id in route.Outputs)
@@ -294,7 +295,7 @@ internal static partial class AndroidAudioHost
                                 lock (PhoneOperations)
                                 {
                                     token.ThrowIfCancellationRequested();
-                                    if (!StillSelected() || Phone.IsRemoved(device)) { pending.Remove(entry); continue; }
+                                    if (!StillSelected() || !PhoneAudioWindowCache.Manager.IsCurrent(device)) { pending.Remove(entry); continue; }
                                     start = Sources.ResumeAsync(device, app, entry.LastOutputs);
                                 }
                                 entry.Source = await start.ConfigureAwait(false);
@@ -312,7 +313,11 @@ internal static partial class AndroidAudioHost
                         id != AndroidAudioSession.SourcePhoneOutputId && !AndroidOutputIdentity.IsPhoneOutput(id)
                         && !WindowsLinkOutputIdentity.IsWindowsLinkOutput(id) && (id == null ? local.Count == 0 : !local.Contains(id)))))
                     {
-                        localWatch = WasapiDeviceLease.ObserveDefaultOutput(new PendingDeviceNotification(Wake));
+                        localWatch = DefaultOutputNotifications.SubscribeTopology(() =>
+                        {
+                            AudioService.InvalidateDeviceCache(EDataFlow.eRender);
+                            Wake();
+                        });
                         Wake(); // Check device arrivals between the scan and COM registration.
                     }
                     await changes.Reader.ReadAsync(token).ConfigureAwait(false);
@@ -327,17 +332,6 @@ internal static partial class AndroidAudioHost
         }
         catch (OperationCanceledException) when (MediaShutdown.IsCancellationRequested) { }
         catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Restore saved phone sources: " + ex.Message); }
-    }
-
-    [System.Runtime.InteropServices.ComVisible(true), System.Runtime.InteropServices.ClassInterface(System.Runtime.InteropServices.ClassInterfaceType.None)]
-    private sealed class PendingDeviceNotification(Action changed) : NAudio.CoreAudioApi.Interfaces.IMMNotificationClient
-    {
-        private void Changed() { AudioService.InvalidateDeviceCache(EDataFlow.eRender); changed(); }
-        public void OnDeviceAdded(string id) => Changed();
-        public void OnDeviceRemoved(string id) => Changed();
-        public void OnDeviceStateChanged(string id, NAudio.CoreAudioApi.DeviceState state) => Changed();
-        public void OnDefaultDeviceChanged(NAudio.CoreAudioApi.DataFlow flow, NAudio.CoreAudioApi.Role role, string id) { if (flow == NAudio.CoreAudioApi.DataFlow.Render) Changed(); }
-        public void OnPropertyValueChanged(string id, NAudio.CoreAudioApi.PropertyKey key) { }
     }
 }
 #endif

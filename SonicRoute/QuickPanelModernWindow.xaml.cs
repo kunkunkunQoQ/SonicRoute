@@ -65,6 +65,13 @@ namespace SonicRoute
 #endif
             public string? PlaybackAnchor;
             public Task PlaybackChange = Task.CompletedTask;
+            public HashSet<string> ConfirmedPlayback = new(StringComparer.OrdinalIgnoreCase);
+            public PlaybackIntent? PendingPlayback;
+            public int PlaybackReadVersion, ConfirmedPlaybackRead;
+            public Task InputChange = Task.CompletedTask;
+            public string? ConfirmedInput;
+            public PendingInputIntent? PendingInput;
+            public int InputReadVersion, ConfirmedInputRead;
             public StackPanel ExpandPanel = null!;
             public AnimatedExpandHost ExpandWrap = null!;
             public RotateTransform ExpandArrow = new();
@@ -99,7 +106,7 @@ namespace SonicRoute
         private string? _appRowsLayoutKey;
         private bool _rowIconsQueued;
         private bool _updatingRowVolumes;
-        private readonly Dictionary<int, int> _pendingVolume = new();
+        private CoalescedVolumeWriter? _appVolumeWriter;
         private DispatcherTimer? _volDebounce;
         private AudioMeterService? _meter;
         private Action<IReadOnlyDictionary<int, float>>? _meterListener;
@@ -435,8 +442,14 @@ namespace SonicRoute
         // 顶部：系统音频设备（选择控制对象 + 系统设备音量/静音；不修改系统默认设备）
         // ------------------------------------------------------------------
 
+        private int _systemDefaultChangeVersion;
+        private Task _systemDefaultChangeTask = Task.CompletedTask;
+        private Func<EDataFlow, string, (bool Success, int HResult, string Message)> _setSystemDefault = SystemDefaultDeviceService.SetDefault;
+        private Func<EDataFlow, string?> _readSystemDefaultId = AudioService.GetDefaultDeviceId;
+
         private void SetSystemDevices(List<AudioDeviceInfo> devices, string? defaultId)
         {
+            ++_systemDefaultChangeVersion;
             foreach (var d in devices) d.IsDefault = d.Id == defaultId;
 
             _suppressDevCombo = true;
@@ -453,6 +466,7 @@ namespace SonicRoute
         private async void SystemDevCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressDevCombo) return;
+            int version = ++_systemDefaultChangeVersion;
             if (SystemDevCombo.SelectedItem is AudioDeviceInfo dev)
             {
                 FlushPendingVolumes();
@@ -461,20 +475,77 @@ namespace SonicRoute
                 // 设置「快速面板更改系统默认设备」开启时：下拉切换 = 更改系统默认输出设备（IPolicyConfig.SetDefaultEndpoint）
                 if (SonicRoute.Core.ConfigService.Load().PanelChangeSystemDefault)
                 {
-                    var ok = await Task.Run(() => SystemDefaultDeviceService.SetDefault(EDataFlow.eRender, dev.Id));
-                    if (ok.Success && !_isClosed)
-                    {
-                        foreach (var output in _outputDisplay)
-                            output.IsDefault = string.Equals(output.Id, dev.Id, StringComparison.OrdinalIgnoreCase);
-                        RefreshRowDeviceNames();
-                    }
-                    if (!ok.Success)
-                    {
-                        ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
-                    }
+                    var previous = _systemDefaultChangeTask;
+                    var apply = ApplySystemDefaultChangeAsync(previous, dev, version);
+                    _systemDefaultChangeTask = apply;
+                    await apply;
+                    return;
                 }
             }
-            await RefreshSystemVolumeAsync();
+            if (!_isClosed && version == _systemDefaultChangeVersion)
+                await RefreshSystemVolumeAsync();
+        }
+
+        private async Task ApplySystemDefaultChangeAsync(Task previous, AudioDeviceInfo dev, int version)
+        {
+            try
+            {
+                try { await previous; } catch { }
+                if (_isClosed || version != _systemDefaultChangeVersion) return;
+
+                var ok = await Task.Run(() => _setSystemDefault(EDataFlow.eRender, dev.Id));
+                if (_isClosed || version != _systemDefaultChangeVersion) return;
+
+                if (ok.Success)
+                {
+                    ApplySystemDefaultDisplaySelection(dev.Id);
+                    RefreshRowDeviceNames();
+                }
+                else
+                {
+                    ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
+                    string? actual = null;
+                    try { actual = await _uiLifetime.ReadAsync(() => _readSystemDefaultId(EDataFlow.eRender)); }
+                    catch (OperationCanceledException) when (_isClosed) { return; }
+                    if (_isClosed || version != _systemDefaultChangeVersion) return;
+                    RestoreSystemDefaultComboSelection(actual);
+                    RefreshRowDeviceNames();
+                }
+            }
+            catch (OperationCanceledException) when (_isClosed) { }
+            if (!_isClosed && version == _systemDefaultChangeVersion)
+                await RefreshSystemVolumeAsync();
+        }
+
+        private void ApplySystemDefaultDisplaySelection(string? defaultId)
+        {
+            static bool SameDevice(string? first, string? second) =>
+                first != null && second != null
+                && (string.Equals(first, second, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(AudioPolicyConfig.UnpackDeviceId(first), AudioPolicyConfig.UnpackDeviceId(second), StringComparison.OrdinalIgnoreCase));
+
+            foreach (var output in _outputDisplay)
+                output.IsDefault = SameDevice(output.Id, defaultId);
+            if (SystemDevCombo.ItemsSource is IEnumerable<AudioDeviceInfo> items)
+            {
+                foreach (var item in items)
+                    item.IsDefault = SameDevice(item.Id, defaultId);
+            }
+        }
+
+        private void RestoreSystemDefaultComboSelection(string? actualDefaultId)
+        {
+            ApplySystemDefaultDisplaySelection(actualDefaultId);
+            AudioDeviceInfo? match = null;
+            if (SystemDevCombo.ItemsSource is IEnumerable<AudioDeviceInfo> items)
+                match = items.FirstOrDefault(d => d.IsDefault);
+            _suppressDevCombo = true;
+            try
+            {
+                SystemDevCombo.SelectedItem = match;
+                _systemDeviceId = match?.Id ?? (actualDefaultId == null ? null : AudioPolicyConfig.UnpackDeviceId(actualDefaultId));
+            }
+            finally { _suppressDevCombo = false; }
         }
 
         /// <summary>全局输出静音/全局麦克风静音：文本固定，静音状态文字变强调色。</summary>
@@ -580,15 +651,38 @@ namespace SonicRoute
         internal void ApplyAppVolumeReadback(int pid, int actual, bool? muted = null)
         {
             if (_isClosed || !_rows.TryGetValue(pid, out var row)) return;
-            bool updating = _updatingRowVolumes;
-            _updatingRowVolumes = true;
-            try
+            if (_appVolumeWriter?.HasPending(pid) != true && row.Slider is not { IsMouseCaptureWithin: true })
             {
-                row.Volume = actual;
-                if (row.Slider != null) { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+                bool updating = _updatingRowVolumes;
+                _updatingRowVolumes = true;
+                try
+                {
+                    row.Volume = actual;
+                    if (row.Slider != null) { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+                }
+                finally { _updatingRowVolumes = updating; }
             }
-            finally { _updatingRowVolumes = updating; }
             if (muted.HasValue) ApplyRowMutedVisual(row, muted.Value);
+        }
+
+        private void ApplyAppVolumeWriteReadback(int pid, bool applied, int actual)
+        {
+            if (_isClosed || !applied || actual < 0) return;
+            if (_rows.TryGetValue(pid, out var row)
+                && _appVolumeWriter?.HasPending(pid) != true
+                && row.Slider is not { IsMouseCaptureWithin: true }
+                && row.Volume != actual)
+            {
+                bool updating = _updatingRowVolumes;
+                _updatingRowVolumes = true;
+                try
+                {
+                    row.Volume = actual;
+                    if (row.Slider != null) { row.Slider.Value = actual; row.Slider.IsEnabled = true; }
+                }
+                finally { _updatingRowVolumes = updating; }
+            }
+            (Application.Current as App)?.NotifyAppVolumeChanged(pid, actual, caller: this);
         }
 
         internal void ApplyAppMuteReadback(int pid, bool muted)
@@ -606,8 +700,22 @@ namespace SonicRoute
 
         internal void RefreshAppRouteReadback(int pid)
         {
-            if (!_isClosed && _rows.TryGetValue(pid, out var row) && row.Expanded)
-                _ = BuildRowDevicesAsync(row);
+            if (_isClosed || !IsVisible || !_rows.TryGetValue(pid, out var row)) return;
+            if (row.Expanded) { _ = BuildRowDevicesAsync(row); return; }
+            if (row.ShowOutputName) _ = RefreshCollapsedRowOutputAsync(row, pid);
+        }
+
+        private async Task RefreshCollapsedRowOutputAsync(AppRow row, int pid)
+        {
+            var read = _readRowEndpoints;
+            try
+            {
+                string output = await _uiLifetime.ReadAsync((Pid: pid, Read: read), static args => args.Read(args.Pid, false).Output);
+                if (_isClosed || !IsVisible || !_rows.TryGetValue(pid, out var current)
+                    || !ReferenceEquals(current, row) || row.Expanded || row.PendingPlayback != null) return;
+                UpdateRowName(row, output);
+            }
+            catch (OperationCanceledException) when (_isClosed) { }
         }
 
         private void Volume_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -744,6 +852,10 @@ namespace SonicRoute
                     StopMeter();
                     ClearRowVisuals();
                     AppListPanel.Items.Clear();
+                    var nextPids = new HashSet<int>();
+                    foreach (var app in apps) nextPids.Add((int)app.ProcessId);
+                    foreach (int prevPid in _rows.Keys)
+                        if (!nextPids.Contains(prevPid)) _appVolumeWriter?.Cancel(prevPid);
                     _rows.Clear();
                 }
                 else
@@ -755,8 +867,8 @@ namespace SonicRoute
                         var removed = _rows[stale];
                         AppListPanel.Items.Remove(removed.ListItem);
                         ReleaseAppRowVisual(removed);
-                        _rows.Remove(stale); _pendingVolume.Remove(stale);
-                        _latestAppWrites[stale] = ++_appWriteSequence;
+                        _rows.Remove(stale);
+                        _appVolumeWriter?.Cancel(stale);
                     }
                 }
                 _appRowsLayoutKey = layoutKey;
@@ -861,13 +973,16 @@ namespace SonicRoute
             string? suffix = null;
             if (row.ShowOutputName)
             {
-                bool systemDefault = AudioService.IsSystemDefault(outputId);
+                string? displayId = row.PendingPlayback is { } pending
+                    ? SelectOptimisticPrimaryOutput(pending.Outputs, outputId, preferPhysical: true)
+                    : outputId;
+                bool systemDefault = AudioService.IsSystemDefault(displayId);
                 bool needDefault = systemDefault && !row.LegacyLayout;
                 AudioDeviceInfo? output = null;
                 // 直接查现有快照，不创建每行 LINQ 闭包；找到即停止。
                 foreach (var device in _outputDisplay)
                 {
-                    if (!string.Equals(device.Id, outputId, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(device.Id, displayId, StringComparison.OrdinalIgnoreCase)) continue;
                     output = device;
                     break;
                 }
@@ -896,6 +1011,10 @@ namespace SonicRoute
         {
             foreach (var row in _rows.Values)
                 if (row.ShowOutputName) UpdateRowName(row, row.OutputId);
+#if SONICROUTE_PHONE
+            foreach (var row in _androidRows.Values)
+                if (row.ShowOutputName) UpdateAndroidRoute(row);
+#endif
         }
 
         /// <summary>更新行滑块填充宽度；圆点定位与输入由标准 Track 处理。</summary>
@@ -912,10 +1031,15 @@ namespace SonicRoute
             row.Volume = pct;
             UpdateRowSliderLayout(row);
             if (_isClosed || _updatingRowVolumes) return; // 初始读回和刷新不写音量，防止逐行触发无用 COM 写入。
-            _pendingVolume[(int)row.App.ProcessId] = pct;
-            _latestAppWrites[(int)row.App.ProcessId] = ++_appWriteSequence;
-            SchedulePendingVolumeFlush();
+            int pid = (int)row.App.ProcessId;
+            var owner = new WeakReference<QuickPanelModernWindow>(this);
+            EnsureAppVolumeWriter().Enqueue(pid, pct, (target, _, applied, actual) =>
+            {
+                if (owner.TryGetTarget(out var panel)) panel.ApplyAppVolumeWriteReadback(target, applied, actual);
+            });
         }
+
+        private void RowSliderDragCompleted(object sender, DragCompletedEventArgs e) => _appVolumeWriter?.Flush();
 
         /// <summary>行滑块鼠标滚轮：悬停应用音量条时滚轮调节该应用音量 ±4%（写回走 RowSlider_ValueChanged 防抖）。</summary>
         private void RowSlider_MouseWheel(object sender, MouseWheelEventArgs e)
@@ -934,7 +1058,6 @@ namespace SonicRoute
             if (keepThrottle) SchedulePendingVolumeFlush(false);
         }
 
-        /// <summary>行静音视觉：静音后音量条/百分比变强调色 RGB 反色，图标右上显示反色圆点。</summary>
         private void ApplyRowAudioState(AppRow row, int volume, bool muted, bool known)
         {
             row.Volume = volume;
@@ -947,6 +1070,7 @@ namespace SonicRoute
             row.Slider.IsEnabled = volume >= 0;
             if (volume >= 0) row.Slider.Value = volume;
             if (known) ApplyRowMutedVisual(row, muted);
+            else ApplyRowMuteAppearance(row.Slider, row.MuteDot, row.IsMuted);
             row.MuteKnown = known;
             if (row.IconButton != null)
             {
@@ -965,9 +1089,7 @@ namespace SonicRoute
                 return;
             }
             if (row.IconButton != null) row.IconButton.IsEnabled = row.Slider.IsEnabled && !row.MuteBusy;
-            row.Slider.Foreground = muted ? ThemeService.GetInvertedAccentBrush() : (Brush)FindResource("Theme.Accent");
-            row.MuteDot.Visibility = muted ? Visibility.Visible : Visibility.Collapsed;
-            row.IsMuted = muted;
+            ApplyRowMuteAppearance(row.Slider, row.MuteDot, muted);
             if (muted) row.PeakLevel = 0f;
             UpdatePeakVisual(row);
             if (!_updatingRowVolumes) UpdateMeterTargets();
@@ -1152,7 +1274,11 @@ namespace SonicRoute
             {
                 var result = await Task.Run(() => SessionVolumeService.ToggleMuteChecked(pid));
                 if (_isClosed || !_rows.TryGetValue(pid, out var current) || !ReferenceEquals(current, row)) return;
-                if (result.Applied) ApplyRowMutedVisual(row, result.Muted);
+                if (result.Applied)
+                {
+                    ApplyRowMutedVisual(row, result.Muted);
+                    (Application.Current as App)?.NotifyAppMuteChanged(pid, result.Muted, caller: this);
+                }
                 ShowOsd(AppDisplayName.Get(row.App), L10n.T(result.Applied
                     ? (result.Muted ? "Qp.Muted" : "Qp.Unmuted") : "Tray.AudioUnavailable"));
             }
@@ -1273,6 +1399,8 @@ namespace SonicRoute
         private async Task<bool> BuildRowDevicesAsync(AppRow row)
         {
             int request = ++row.DeviceBuildVersion;
+            int playbackRead = ++row.PlaybackReadVersion;
+            int inputRead = ++row.InputReadVersion;
             int pid = (int)row.App.ProcessId;
             var cfg = ConfigService.Load();
             bool micOn = _micUiOn;
@@ -1285,20 +1413,13 @@ namespace SonicRoute
             Add(null);
             foreach (var device in inputs) { Add(device.Id); Add(device.DisplayName); }
             string structure = signature.ToString();
-            foreach (var cached in row.DeviceButtons) cached.Button.IsEnabled = false;
             try
             {
-                var selected = await _uiLifetime.ReadAsync((Pid: pid, MicOn: micOn, Read: _readRowEndpoints),
-                    static target => target.Read(target.Pid, target.MicOn));
+                var selected = await ReadLocalPlaybackAsync(pid, micOn);
                 if (_isClosed || !row.Expanded || request != row.DeviceBuildVersion
                     || !_rows.TryGetValue(pid, out var current) || current != row) return false;
-                var playbackOutputs = AppPlaybackOutputs.GetSelected(pid, selected.Output);
-#if SONICROUTE_PHONE
-                string? linkOutput = WindowsLinkHub.GetPcAppOutput(pid, out bool onlyOnPeer);
-                row.WindowsLinkExclusive = onlyOnPeer;
-                if (onlyOnPeer && linkOutput != null) selected.Output = linkOutput;
-#endif
-                UpdateRowName(row, selected.Output);
+                ConfirmLocalPlayback(row, playbackRead, selected.Output, selected.Playback);
+                if (micOn) ConfirmLocalInput(row, inputRead, selected.Input);
                 if (row.DeviceSignature != structure)
                 {
                     row.ExpandPanel.Children.Clear();
@@ -1314,7 +1435,7 @@ namespace SonicRoute
                                 button.Click += async (_, _) => await QueuePlaybackClickAsync(row, device, Keyboard.Modifiers);
                             }
                             else
-                                button.Click += async (_, _) => await OnRowDeviceClickAsync(row, device, flow);
+                                button.Click += async (_, _) => await QueueInputClickAsync(row, device);
 #if SONICROUTE_PHONE
                             if (flow == EDataFlow.eRender && SonicRoute.WindowsLink.WindowsLinkOutputIdentity.TryParsePeerId(device.Id, out var peerId)
                                 && WindowsLinkHub.Service?.Peers.FirstOrDefault(p => p.Id == peerId && p.Connected) is { } peer)
@@ -1322,7 +1443,7 @@ namespace SonicRoute
                                 button.ContextMenu = WindowsLinkPlaybackMenu.Create(
                                     string.Format(L10n.T("Phone.PcDropOnlyOnTargetTitle"), peer.DisplayName),
                                     WindowsLinkHub.LocalExclusiveMode(peer), true,
-                                    (only, muteSpeaker) => OnRowDeviceClickAsync(row, device, flow, only, muteSpeaker),
+                                    (only, muteSpeaker) => QueuePeerMenuAsync(row, device, only, muteSpeaker),
                                     () => Task.Run(() =>
                                     {
                                         WindowsLinkHub.Service?.RefreshExclusiveCapability();
@@ -1338,14 +1459,9 @@ namespace SonicRoute
                     row.DeviceSignature = structure;
                 }
                 foreach (var item in row.DeviceButtons)
-                {
-                    string activeId = (item.Flow == EDataFlow.eRender ? selected.Output : selected.Input)
-                        ?? (item.Flow == EDataFlow.eRender ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId);
-                    if (item.Flow == EDataFlow.eRender)
-                        activeId = playbackOutputs.Contains(item.Id) ? item.Id : "";
-                    SetRowDeviceSelection(item.Button, item.Id, activeId);
                     item.Button.IsEnabled = true;
-                }
+                UpdateLocalPlaybackSelection(row);
+                if (micOn) UpdateLocalInputSelection(row);
                 row.ExpandWrap.InvalidateMeasure();
                 return true;
             }
@@ -1359,30 +1475,33 @@ namespace SonicRoute
             }
         }
 
-        private async Task OnRowDeviceClickAsync(AppRow row, AudioDeviceInfo dev, EDataFlow flow, bool destinationOnly = false, bool allowSpeakerMute = false)
-        {
-            MarkLastUsed(row.App);
-            var pid = (int)row.App.ProcessId;
-            var (ok, _, msg) =
 #if SONICROUTE_PHONE
-                flow == EDataFlow.eRender && ApplicationAudio.IsWindowsLinkOutputDevice(dev.Id)
-                    ? await ApplyPeerMenuAsync(row.App, dev.Id, destinationOnly, allowSpeakerMute) :
-#endif
-                await Task.Run(() => ApplicationAudio.ApplyEndpoint(row.App, flow, dev.Id));
-            if (ok)
-            {
-                bool windowsLink = ApplicationAudio.IsWindowsLinkOutputDevice(dev.Id);
-                ShowOsd(AppDisplayName.Get(row.App), windowsLink ? $"{PanelDevices.Name(dev)} · {msg}"
-                    : (flow == EDataFlow.eRender ? "🔊 " : "🎤 ") + PanelDevices.Name(dev));
-                if (!windowsLink && flow == EDataFlow.eRender && !_isClosed && _rows.TryGetValue(pid, out var current))
-                    UpdateRowName(current, dev.Id);
-            }
-            else
-                ShowOsd(AppDisplayName.Get(row.App), $"✗ {msg}");
+        private Task QueuePeerMenuAsync(AppRow row, AudioDeviceInfo device, bool destinationOnly, bool allowSpeakerMute)
+        {
+            int pid = (int)row.App.ProcessId;
+            var previous = row.PlaybackChange;
+            return row.PlaybackChange = ApplyAsync();
 
-            // 仍展开时重建，刷新高亮
-            if (row.Expanded) await BuildRowDevicesAsync(row);
+            bool Current() => !_isClosed && _rows.TryGetValue(pid, out var live) && ReferenceEquals(live, row);
+
+            async Task ApplyAsync()
+            {
+                try
+                {
+                    await previous;
+                    if (!Current()) return;
+                    MarkLastUsed(row.App);
+                    var result = await ApplyPeerMenuAsync(row.App, device.Id, destinationOnly, allowSpeakerMute);
+                    if (!Current()) return;
+                    if (result.Success && !row.App.IsExternal)
+                        (System.Windows.Application.Current as App)?.NotifyAppRouteChanged(pid, caller: this);
+                    ShowOsd(AppDisplayName.Get(row.App), result.Success ? $"{PanelDevices.Name(device)} · {result.Message}" : $"✗ {result.Message}");
+                }
+                catch (Exception ex) { if (Current()) ShowOsd(AppDisplayName.Get(row.App), ex.Message); }
+                finally { if (Current() && row.Expanded) await BuildRowDevicesAsync(row); }
+            }
         }
+#endif
 
         private void MarkLastUsed(AudioAppInfo app)
         {
@@ -1431,7 +1550,11 @@ namespace SonicRoute
                 ++_globalMuteVersion; // 丢弃操作进行期间读到、却延迟返回的初始化状态。
                 ApplyGlobalMuteVisual(muted);
                 GlobalMuteButton.IsEnabled = true;
-                if (result.Applied) ApplyAllRowsMutedVisual(muted);
+                if (result.Applied)
+                {
+                    ApplyAllRowsMutedVisual(muted);
+                    (Application.Current as App)?.NotifyGlobalAppMuteChanged(muted, caller: this);
+                }
             }
             // 全局输出静音 OSD 主标题显示「全部应用」（静音的是所有应用，不是音跃本身）
             ((App)Application.Current).ShowOsd(L10n.T("Qp.AllApps"), L10n.T(result.Applied

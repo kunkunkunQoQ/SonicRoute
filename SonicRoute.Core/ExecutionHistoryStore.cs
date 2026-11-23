@@ -182,7 +182,11 @@ namespace SonicRoute.Core
                             if (line.Length > MaxRecordBytes) { LastError = "record_too_large"; continue; }
                             try
                             {
+#if NET10_0_OR_GREATER
+                                var entry = JsonSerializer.Deserialize(line, ExecutionHistoryJsonContext.Default.ExecutionHistoryEntry);
+#else
                                 var entry = JsonSerializer.Deserialize<ExecutionHistoryEntry>(line);
+#endif
                                 if (entry == null || entry.Steps == null || entry.Steps.Count > 100
                                     || entry.Steps.Exists(step => step == null || step.TargetApp == null || step.Status == null || step.Reason == null)) continue;
                                 entries.Add(entry);

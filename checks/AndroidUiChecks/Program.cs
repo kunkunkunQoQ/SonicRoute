@@ -73,12 +73,19 @@ internal static partial class Program
                 return 0;
             }
             bool linkOutputs = args.Contains("--windows-link-push-ui") || args.Contains("--windows-link-incoming-outputs") || args.Contains("--kun-app-to-phone");
-            App app = args.Contains("--windows-connect-ui") || args.Contains("--windows-touch") || args.Contains("--android-files-ui") || args.Contains("--windows-link-ui") || linkOutputs || args.Contains("--windows-link-trust-live") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") || args.Contains("--interaction-audit") || args.Contains("--device-actions") ? new RoutingFixtureApp() : new App();
+            bool panelEvents = args.Contains("--usb-panel-events") || args.Contains("--wireless-panel-events");
+            bool pcPlayback = args.Contains("--pc-playback-optimistic");
+            bool panelOptimistic = args.Contains("--panel-optimistic-ui");
+            bool hotkeyOutput = args.Contains("--hotkey-output-osd");
+            App app = linkOutputs || args.Contains("--windows-link-ui") || args.Contains("--windows-connect-ui") || args.Contains("--windows-link-trust-live") || pcPlayback || panelOptimistic || hotkeyOutput || panelEvents || args.Contains("--managed-connection-ui") || args.Contains("--connection-consistency") || args.Contains("--windows-touch") || args.Contains("--android-files-ui") || args.Contains("--pairing-combined") || args.Contains("--drop-compat") || args.Contains("--concurrency-fixes") || args.Contains("--panel-stream-settings") || args.Contains("--device-audio") || args.Contains("--speaker-routing") || args.Contains("--phone-pages") || args.Contains("--phone-clipboard") || args.Contains("--settings-localization") || args.Contains("--experimental-config-card") || args.Contains("--device-panel-airplay") || args.Contains("--interaction-audit") || args.Contains("--device-actions") ? new RoutingFixtureApp() : new App();
             if (app is RoutingFixtureApp)
             { app.Resources = ProductResources(); app.ShutdownMode = ShutdownMode.OnExplicitShutdown; }
             else app.InitializeComponent();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(app.Dispatcher));
             L10n.Instance.SetLanguage("zh-CN"); ThemeService.Apply("light", "#00CBE9");
+            if (pcPlayback) return CheckPcOptimisticPlayback(output);
+            if (panelOptimistic) return CheckPanelOptimisticUi(app, output);
+            if (hotkeyOutput) return CheckHotkeyOutputOsd(app, output, args.Contains("--profile-osd-startup"));
             if (args.Contains("--android-files-ui")) return AndroidFilesUi(output);
             if (args.Contains("--windows-link-ui")) return WindowsLinkUi(output, args.Contains("--windows-touch"));
             if (args.Contains("--kun-app-to-phone")) return WindowsToPhoneSinkUi();
@@ -108,6 +115,10 @@ internal static partial class Program
             if (args.Contains("--experimental-config-card")) return ExperimentalConfigCardChecks(output);
             if (args.Contains("--interaction-audit")) return InteractionAuditUi(output);
             if (args.Contains("--device-actions")) return DeviceActionsUi(output);
+            if (args.Contains("--connection-consistency")) return ConnectionConsistencyUi(output);
+            if (args.Contains("--wireless-panel-events")) return WirelessPanelEventsUi(app);
+            if (args.Contains("--usb-panel-events")) return UsbPanelEventsUi(app);
+            if (args.Contains("--managed-connection-ui")) return ManagedConnectionUi(output);
             if (args.Contains("--restore-live")) return RestoreDisplayLive(output, args[2]);
             if (args.Contains("--phone-demand")) return PhoneDemandUi(output);
             if (args.Contains("--speaker-routing")) return SpeakerRoutingUi(output);

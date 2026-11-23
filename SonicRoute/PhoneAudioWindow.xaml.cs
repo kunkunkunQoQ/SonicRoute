@@ -101,100 +101,6 @@ public sealed class PhoneAppItem : INotifyPropertyChanged
     }
 }
 
-internal static class PhoneAudioWindowCache
-{
-    private static readonly SemaphoreSlim RefreshGate = new(1, 1);
-    private static readonly Dictionary<string, CancellationTokenSource> Recovering = new(StringComparer.Ordinal);
-    private static readonly HashSet<string> DisconnectedByUser = new(StringComparer.Ordinal);
-    internal static AndroidDeviceDiscovery Discovery { get; set; } = new(token => AndroidAudioHost.Adb.DevicesAsync(token, deduplicate: false));
-    internal static Func<AndroidWirelessConnection> CreateWirelessConnection { get; set; } = () => new(AndroidAudioHost.Adb);
-    internal static IReadOnlyList<AndroidDevice>? Devices => Discovery.Devices;
-    internal static string? SelectedSerial;
-    internal static bool AirPlaySelected;
-    internal static bool WindowsLinkSelected;
-    internal static string? WindowsLinkPeerId;
-    internal static Task<IReadOnlyList<AndroidDevice>> ReadDevicesAsync(CancellationToken token) => Discovery.ReadAsync(token);
-    internal static void InvalidateDevices() => Discovery.Invalidate();
-    internal static event Action? DevicesChanged { add => Discovery.Changed += value; remove => Discovery.Changed -= value; }
-    internal static void SetDevices(IReadOnlyList<AndroidDevice> devices) => Discovery.Publish(devices);
-
-    internal static void SetAutomaticRecovery(AndroidDevice device, bool enabled)
-    {
-        string key = AndroidDeviceIdentity.Key(device);
-        lock (Recovering)
-        {
-            if (enabled) DisconnectedByUser.Remove(key);
-            else
-            {
-                DisconnectedByUser.Add(key);
-                if (Recovering.TryGetValue(key, out var active)) active.Cancel();
-            }
-        }
-    }
-
-    // Only run on demand (opening the phone panel or losing a live helper). Direct
-    // wireless ADB sessions belong to the process and need restoring after a restart.
-    internal static async Task<bool> RecoverMissingWirelessAsync(AndroidDevice? device, IReadOnlyList<AndroidDevice> devices, CancellationToken token)
-    {
-        if (device is not { IsWifi: true } || AndroidDeviceIdentity.StableKey(device) is not { } key
-            || devices.Any(d => d.State == "device" && AndroidDeviceIdentity.MatchesSavedDevice(device, d))) return false;
-        var store = AndroidAudioHost.Phone;
-        if (store.FindProfile(device) == null || store.IsRemoved(device)) return false;
-        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(token);
-        lock (Recovering)
-        {
-            if (DisconnectedByUser.Contains(key) || !Recovering.TryAdd(key, attempt)) return false;
-        }
-        try
-        {
-            var result = await CreateWirelessConnection().ReconnectAsync(device, null, attempt.Token, devices).ConfigureAwait(false);
-            attempt.Token.ThrowIfCancellationRequested();
-            if (store.IsRemoved(device)) return false;
-            store.ObserveDevices([result.Device]);
-            // Keep any other phones observed while this Wi-Fi handshake was pending.
-            InvalidateDevices();
-            await ReadDevicesAsync(attempt.Token).ConfigureAwait(false);
-            await AndroidAudioHost.ProbeOutputsIfConnectedAsync([result.Device], token: attempt.Token).ConfigureAwait(false);
-            return true;
-        }
-        catch (OperationCanceledException) when (attempt.IsCancellationRequested) { }
-        catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone wireless recovery: " + ex.Message); }
-        finally { lock (Recovering) Recovering.Remove(key); }
-        return false;
-    }
-
-    internal static async Task<IReadOnlyList<AndroidDevice>> RefreshSelectedDeviceAsync(CancellationToken token,
-        AndroidWirelessConnection? wireless = null)
-    {
-        var store = AndroidAudioHost.Phone;
-        var selected = store.Profile;
-        if (selected.LastDevice is not { IsWifi: true } saved)
-            return await ReadDevicesAsync(token).ConfigureAwait(false);
-
-        bool StillSelected() => store.Profile.Id == selected.Id && !store.IsRemoved(saved);
-        await RefreshGate.WaitAsync(token).ConfigureAwait(false);
-        try
-        {
-            if (!StillSelected()) return Devices ?? [];
-            IReadOnlyList<AndroidDevice> devices;
-            try { devices = await ReadDevicesAsync(token).ConfigureAwait(false); }
-            catch (Exception ex) when (ex is IOException or SocketException) { devices = []; }
-            token.ThrowIfCancellationRequested();
-            if (!StillSelected()) return devices;
-
-            var result = await (wireless ?? CreateWirelessConnection()).ReconnectAsync(saved, null, token, devices).ConfigureAwait(false);
-            token.ThrowIfCancellationRequested();
-            if (!StillSelected()) return Devices ?? devices;
-
-            store.ObserveDevices([result.Device]);
-            SetAutomaticRecovery(result.Device, true);
-            SetDevices(result.Devices);
-            return result.Devices;
-        }
-        finally { RefreshGate.Release(); }
-    }
-}
-
 public partial class PhoneAudioWindow : Window
 {
     private readonly CancellationTokenSource _lifetime = new();
@@ -202,11 +108,13 @@ public partial class PhoneAudioWindow : Window
     private readonly PanelEntranceMotion _entranceMotion;
     private bool _entrancePrepared;
     private CancellationTokenSource? _visibleRead;
+    private bool _watchingPhoneUsb;
     private CancellationTokenSource? _userRefresh;
     private CancellationTokenSource? _catalogRead;
     private CancellationTokenSource? _mediaRead;
     private AndroidMediaSessionClient? _mediaClient;
     private AndroidDevice? _mediaDevice;
+    private AndroidDevice? _failedMediaDevice;
     private Task _mediaTask = Task.CompletedTask;
     private readonly bool _enableMedia;
     private AndroidMediaState? _mediaState;
@@ -228,7 +136,7 @@ public partial class PhoneAudioWindow : Window
     private Point _dragStart;
     private PhoneAppItem? _dragItem;
     private WindowsLinkQuickItem? _windowsDragItem;
-    private bool _closed, _refreshing, _suppressDeviceChanged;
+    private bool _closed, _refreshing, _suppressDeviceChanged, _deviceChangePending;
     private Border PcDropHighlight = null!;
     private Border _androidReturnDropZone = null!;
     private bool _androidReturnHovered;
@@ -270,6 +178,7 @@ public partial class PhoneAudioWindow : Window
         if (loadDevicesOnShow) Loaded += async (_, _) => await InitializeDevicesAsync();
         IsVisibleChanged += (_, _) =>
         {
+            PhoneAudioWindowCache.SetUsbPanelVisible(ref _watchingPhoneUsb, IsVisible && !_closed);
             if (IsVisible)
             {
                 PreparePhoneEntrance();
@@ -283,7 +192,7 @@ public partial class PhoneAudioWindow : Window
                 WindowsLinkHub.MediaChanged += WindowsLinkMediaChanged;
                 WindowsLinkHub.RemoteCatalogChanged += WindowsLinkRemoteCatalogChanged;
                 BindDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
-                DeviceNamesChanged(); RetainedAppsChanged(); UpdateMediaSubscription();
+                DeviceNamesChanged(); SynchronizeDevicePresentation();
                 Android_ReturnDragStateChanged();
                 if (_enableMedia && IsLoaded) _ = InitializeDevicesAsync();
             }
@@ -304,6 +213,7 @@ public partial class PhoneAudioWindow : Window
         };
         Closed += (_, _) =>
         {
+            PhoneAudioWindowCache.SetUsbPanelVisible(ref _watchingPhoneUsb, false);
             _entranceMotion.Stop(); _entrancePrepared = false;
             _closed = true; L10n.Instance.PropertyChanged -= OnLanguageChanged; _mediaUiLifetime.Dispose(); _lifetime.Cancel(); _catalogRead?.Cancel(); StopMediaSubscription();
             ResetWindowsLinkRows();
@@ -418,10 +328,11 @@ public partial class PhoneAudioWindow : Window
         if (!force && !_pcDropZonesDirty && ReferenceEquals(devices, _pcDropDevices)) return;
         _pcDropDevices = devices;
         _pcDropZonesDirty = false;
-        var device = DeviceCombo.SelectedItem as AndroidDevice
+        var selected = DeviceCombo.SelectedItem as AndroidDevice
             ?? (AndroidAudioHost.IsPhoneCreated ? AndroidAudioHost.Phone.Profile.LastDevice : null);
+        var device = PhoneAudioWindowCache.GetOnlineDevice(selected) ?? selected;
         // A remembered phone keeps its output configuration, but cannot receive a drop.
-        var zones = AndroidAudioHost.GetDropZonesForDevice(devices != null && AndroidAudioHost.IsPhoneOnline(device) ? device : null);
+        var zones = AndroidAudioHost.GetDropZonesForDevice(PhoneAudioWindowCache.GetOnlineDevice(device));
 
         var sigBuilder = new StringBuilder();
         bool airPlayDrag = IsAirPlayDrag(AppIconDragController.DesktopDragSource);
@@ -560,7 +471,7 @@ public partial class PhoneAudioWindow : Window
         _androidReturnDropZone.Visibility = Visibility.Collapsed;
         _pcDropGrid.Visibility = Visibility.Visible;
         bool visible = index != null || AppIconDragController.IsDesktopDragging
-            && (!IsAirPlayDrag(AppIconDragController.DesktopDragSource) || DeviceCombo.SelectedItem is AndroidDevice { State: "device" });
+            && (!IsAirPlayDrag(AppIconDragController.DesktopDragSource) || PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice) != null);
         if (visible)
         {
             EnsurePcDropZones();
@@ -674,7 +585,7 @@ public partial class PhoneAudioWindow : Window
         _pcDropZonesDirty = true;
         bool watchingOutputs = _mediaRead is { IsCancellationRequested: false } && !_mediaTask.IsCompleted;
         if (AppIconDragController.IsDesktopDragging && !watchingOutputs
-            && DeviceCombo.SelectedItem is AndroidDevice live && live.State == "device")
+            && PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice) is { } live)
             _ = Task.Run(() => AndroidAudioHost.ProbeOutputsIfConnectedAsync(new[] { live }, force: false, _lifetime.Token));
         SetPcDropTarget(null);
     }
@@ -695,14 +606,12 @@ public partial class PhoneAudioWindow : Window
         {
             BindDevices(cachedDevices);
             await ShowSelectedDeviceAsync(forceRefresh: false);
-            if (_enableMedia && !_closed && IsVisible && DeviceCombo.SelectedItem is not AndroidDevice { State: "device" })
-            {
-                PhoneAudioWindowCache.InvalidateDevices();
-                if (await RefreshDevicesAsync()) await ShowSelectedDeviceAsync(forceRefresh: false);
-            }
+            if (_enableMedia && !_closed && IsVisible && !ExternalDeviceSelected
+                && PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice) == null)
+                await RefreshDevicesAsync();
             return;
         }
-        if (await RefreshDevicesAsync()) await ShowSelectedDeviceAsync(forceRefresh: false);
+        await RefreshDevicesAsync();
     }
     private Task<bool> RefreshDevicesAsync() => RefreshDevicesCoreAsync(recoverWireless: false);
 
@@ -717,20 +626,36 @@ public partial class PhoneAudioWindow : Window
         try
         {
             var devices = userRefresh != null
-                ? await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(userRefresh.Token)
+                ? await PhoneAudioWindowCache.ReconnectSelectedDeviceAsync(userRefresh.Token)
                 : await PhoneAudioWindowCache.ReadDevicesAsync(token);
-            bool recovered = userRefresh == null && _enableMedia && IsVisible && !ExternalDeviceSelected
-                && await PhoneAudioWindowCache.RecoverMissingWirelessAsync(AndroidAudioHost.Phone.Profile.LastDevice, devices, token);
+            if (userRefresh == null && _enableMedia && IsVisible && !ExternalDeviceSelected)
+                await PhoneAudioWindowCache.RecoverMissingWirelessAsync(AndroidAudioHost.Phone.Profile.LastDevice, devices, token);
             token.ThrowIfCancellationRequested();
             if (_closed || ExternalDeviceSelected) return false;
             BindDevices(PhoneAudioWindowCache.Devices ?? devices);
-            if (recovered && IsVisible) UpdateMediaSubscription();
+            await ShowSelectedDeviceAsync(forceRefresh: false);
             if (DeviceCombo.SelectedItem == null) SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailNoAuthorizedPhone");
             return true;
         }
         catch (OperationCanceledException) { return false; }
-        catch (Exception ex) { if (!_closed && !ExternalDeviceSelected) SetConnectionStatusError("Phone.Disconnected", ex); return false; }
-        finally { _userRefresh = null; _refreshing = false; if (!_closed) RefreshButton.IsEnabled = true; }
+        catch (Exception ex) { if (!_closed && !ExternalDeviceSelected) SetConnectionStatusError("Phone.StatusOperationFailed", ex); return false; }
+        finally
+        {
+            _userRefresh = null; _refreshing = false;
+            if (!_closed)
+            {
+                RefreshButton.IsEnabled = true;
+                // A scan can fail or be superseded after another view published a
+                // connection. Never drop the notification just because we were busy.
+                if (_deviceChangePending)
+                {
+                    _deviceChangePending = false;
+                    BindDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
+                    SynchronizeDevicePresentation();
+                }
+                UpdateConnectionStatusText();
+            }
+        }
     }
     private void BindDevices(IReadOnlyList<AndroidDevice> devices)
     {
@@ -739,15 +664,17 @@ public partial class PhoneAudioWindow : Window
         try
         {
             var store = AndroidAudioHost.Phone;
-            store.ObserveDevices(devices);
             var profile = store.Profile; _boundProfileId = profile.Id;
             var peers = WindowsLinkHub.EnsureService().Peers.Where(peer => peer.Trusted);
-            object[] choices = [.. AndroidDeviceIdentity.Distinct(devices.Where(d => !store.IsRemoved(d)).Concat(store.Profiles.Where(p => p.LastDevice != null)
-                .Select(p => p.LastDevice! with { State = "offline" })).ToArray()), .. peers, AirPlayChoice, WindowsLinkChoice];
+            // One choice per library. The same managed admission drives the badge,
+            // drag/drop and stream starts; raw aliases are only used by pairing.
+            object[] choices = [.. store.Profiles.Where(p => p.LastDevice != null)
+                .Select(p => PhoneAudioWindowCache.GetOnlineDevice(p.LastDevice) ?? p.LastDevice! with { State = "offline" }), .. peers, AirPlayChoice, WindowsLinkChoice];
             if (DeviceCombo.ItemsSource is not IReadOnlyList<object> previous || !previous.SequenceEqual(choices))
                 DeviceCombo.ItemsSource = choices;
             var currentChoices = (IReadOnlyList<object>)DeviceCombo.ItemsSource;
-            var android = currentChoices.OfType<AndroidDevice>().FirstOrDefault(d => AndroidDeviceIdentity.Matches(d, profile.LastDevice));
+            var android = AndroidDeviceIdentity.FindOnlineDevice(profile.LastDevice, currentChoices.OfType<AndroidDevice>())
+                ?? currentChoices.OfType<AndroidDevice>().FirstOrDefault(d => AndroidDeviceIdentity.MatchesSavedDevice(profile.LastDevice, d));
             DeviceCombo.SelectedItem = PhoneAudioWindowCache.AirPlaySelected ? AirPlayChoice
                 : PhoneAudioWindowCache.WindowsLinkSelected
                     ? (object?)currentChoices.OfType<LinkPeer>().FirstOrDefault(peer => peer.Id == PhoneAudioWindowCache.WindowsLinkPeerId) ?? WindowsLinkChoice
@@ -776,6 +703,17 @@ public partial class PhoneAudioWindow : Window
         UpdateWindowsLinkRows();
     }
 
+    private void SynchronizeDevicePresentation()
+    {
+        if (ExternalDeviceSelected) return;
+        var selected = DeviceCombo.SelectedItem as AndroidDevice;
+        var device = PhoneAudioWindowCache.GetOnlineDevice(selected);
+        ConnectionSignal.Visibility = device?.IsWifi == true ? Visibility.Visible : Visibility.Collapsed;
+        ConnectionUsbIcon.Visibility = device is { IsWifi: false } ? Visibility.Visible : Visibility.Collapsed;
+        RetainedAppsChanged();
+        UpdateMediaSubscription();
+        UpdateConnectionStatusText();
+    }
     private async void Device_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressDeviceChanged || AirPlayPane == null || WindowsLinkPane == null) return;
@@ -791,7 +729,7 @@ public partial class PhoneAudioWindow : Window
             PhoneAudioWindowCache.SelectedSerial = selected.Serial;
             var profile = AndroidAudioHost.Phone.FindProfile(selected);
             if (profile != null) { _boundProfileId = profile.Id; AndroidAudioHost.Phone.SelectProfile(profile.Id); }
-            else AndroidAudioHost.Phone.RememberDevice(selected);
+            else return; // selecting a stale row is never an explicit device admission
             _boundProfileId = AndroidAudioHost.Phone.Profile.Id;
         }
         if (PcDropHighlight.Visibility == Visibility.Visible || _pcDropCells.Count > 0)
@@ -802,36 +740,36 @@ public partial class PhoneAudioWindow : Window
     {
         if (ExternalDeviceSelected) return;
         _catalogRead?.Cancel();
-        UpdateMediaSubscription();
-        if (DeviceCombo.SelectedItem is not AndroidDevice device)
+        SynchronizeDevicePresentation();
+        if (DeviceCombo.SelectedItem is not AndroidDevice selected)
         { _apps = Array.Empty<PhoneAppItem>(); _retainedSnapshot = null; ApplyFilter(); SetConnectionStatusKey("Phone.Disconnected"); return; }
-        ConnectionSignal.Visibility = device.IsWifi ? Visibility.Visible : Visibility.Collapsed;
-        ConnectionUsbIcon.Visibility = device.IsWifi ? Visibility.Collapsed : Visibility.Visible;
-        RetainedAppsChanged();
-        if (device.State == "device" && (!_enableMedia || forceRefresh || !IsVisible))
+        var device = PhoneAudioWindowCache.GetOnlineDevice(selected);
+        if (device != null && (!_enableMedia || forceRefresh || !IsVisible))
             _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(new[] { device }, force: forceRefresh, _lifetime.Token);
         if (!forceRefresh)
         {
-            SetConnectionStatusKey(device.State == "device" ? "Phone.ConnectedStatus" : "Phone.Disconnected",
-                device.State == "device" ? null : "Phone.DetailOfflineKeptApps");
+            SetConnectionStatusKey(device != null ? "Phone.ConnectedStatus" : "Phone.Disconnected",
+                device != null ? null : "Phone.DetailOfflineKeptApps");
 
             return;
         }
-        if (device.State != "device")
+        if (device == null)
         { SetConnectionStatusKey("Phone.Disconnected", "Phone.DetailOfflineConfirmAuth"); return; }
         await LoadCatalogAsync(device);
     }
     private async Task LoadCatalogAsync(AndroidDevice device)
     {
         _catalogRead?.Cancel();
-        using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, PhoneAudioWindowCache.Manager.OperationToken(device));
         _catalogRead = read;
         SetConnectionStatusKey("Phone.StatusLoading", "Phone.DetailLoadingAppsAndIcons");
         try
         {
             var packages = AndroidAudioHost.Phone.Profile.QuickPanelApps.Select(a => a.Package).ToArray();
             var apps = await AndroidAudioHost.Adb.AppsAsync(device, read.Token, packages);
-            if (_closed || read.IsCancellationRequested || !ReferenceEquals(DeviceCombo.SelectedItem, device)) return;
+            var current = PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice);
+            if (_closed || read.IsCancellationRequested || current == null || current.Serial != device.Serial || current.TransportId != device.TransportId
+                || !AndroidDeviceIdentity.MatchesSavedDevice(device, current)) return;
             AndroidAudioHost.Phone.UpdateMetadata(device, apps);
             RetainedAppsChanged();
             SetConnectionStatusKey("Phone.ConnectedStatus");
@@ -902,12 +840,13 @@ public partial class PhoneAudioWindow : Window
         names.Revision = unchecked(names.Revision + 1);
         if (DeviceCombo.SelectedItem is AndroidDevice device) _deviceAudioItem.UpdateDeviceName(device);
     }
-    private async void DevicesChanged()
+    private void DevicesChanged()
     {
         if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(DevicesChanged)); return; }
-        if (_closed || _refreshing) return;
+        if (_closed) return;
+        if (_refreshing) { _deviceChangePending = true; return; }
         BindDevices(PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>());
-        await ShowSelectedDeviceAsync(false);
+        SynchronizeDevicePresentation();
     }
     private void ManageApps_Click(object sender, RoutedEventArgs e)
     { if (System.Windows.Application.Current is App app) app.ShowPhoneManagement(); }
@@ -932,11 +871,20 @@ public partial class PhoneAudioWindow : Window
     {
         if (AirPlaySelected) { UpdateAirPlayFooter(); return; }
         if (WindowsLinkSelected) { UpdateWindowsLinkFooter(); return; }
-        ConnectionText.Text = L10n.T(_connStatusKey);
-        ConnectionText.ToolTip = _connError != null
+        bool online = PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice) != null;
+        ConnectionText.Text = L10n.T(online ? "Phone.ConnectedStatus" : "Phone.Disconnected");
+        // Connection and operation outcomes are independent. Keep errors visible as
+        // details instead of turning a healthy ADB connection into an offline badge.
+        string? detail = _connError != null
             ? (_connKeptOldList ? L10n.T("Phone.DetailKeptOldListPrefix") : "") + AndroidErrorTranslation.Format(_connError)
             : _connRawMessage
                 ?? (_connDetailKey != null ? L10n.T(_connDetailKey) : null);
+        bool operationStatus = _connStatusKey != "Phone.ConnectedStatus" && _connStatusKey != "Phone.Disconnected";
+        if (!operationStatus && online) detail = null;
+        if (!operationStatus && !online && detail == null && DeviceCombo.SelectedItem is AndroidDevice)
+            detail = L10n.T("Phone.DetailOfflineKeptApps");
+        if (operationStatus) detail = L10n.T(_connStatusKey) + (detail == null ? "" : " · " + detail);
+        ConnectionText.ToolTip = AndroidErrorTranslation.WithUsbAccessDetail(detail, DeviceCombo.SelectedItem as AndroidDevice);
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e)
@@ -947,6 +895,7 @@ public partial class PhoneAudioWindow : Window
             return;
         }
         _catalogRead?.Cancel();
+        _failedMediaDevice = null;
         if (!await RefreshDevicesCoreAsync(recoverWireless: true)) return;
         await ShowSelectedDeviceAsync(forceRefresh: true);
     }
@@ -992,7 +941,7 @@ public partial class PhoneAudioWindow : Window
         }
         if (item is PhoneAppItem phoneItem && DeviceCombo.SelectedItem is AndroidDevice device)
         {
-            var payload = new AndroidAppDrag(device, phoneItem.App);
+            var payload = new AndroidAppDrag(PhoneAudioWindowCache.GetOnlineDevice(device) ?? device, phoneItem.App);
             AndroidAppDragController.Run(PhoneApps, payload);
         }
     }
@@ -1049,7 +998,7 @@ public partial class PhoneAudioWindow : Window
             e.Handled = true;
             return;
         }
-        if (playback != null && (!airPlay || live && DeviceCombo.SelectedItem is AndroidDevice { State: "device" }))
+        if (playback != null && (!airPlay || live && PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice) != null))
         {
             EnsurePcDropZones();
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
@@ -1132,7 +1081,7 @@ public partial class PhoneAudioWindow : Window
             catch (Exception ex) { if (!_closed) SetConnectionStatusError("Phone.StatusIncomplete", ex); }
             return;
         }
-        if (playback != null && (!IsAirPlayDrag(playback) || airPlay != null && DeviceCombo.SelectedItem is AndroidDevice { State: "device" }))
+        if (playback != null && (!IsAirPlayDrag(playback) || airPlay != null && PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice) != null))
         {
             EnsurePcDropZones(force: true);
             double height = PcDropHighlight.ActualHeight > 0 ? PcDropHighlight.ActualHeight : Math.Max(1, PhoneApps.ActualHeight);
@@ -1186,13 +1135,18 @@ public partial class PhoneAudioWindow : Window
     private void UpdateMediaSubscription()
     {
         if (!_enableMedia || !IsVisible || _closed || ExternalDeviceSelected) return;
-        var device = DeviceCombo.SelectedItem as AndroidDevice;
-        if (device?.State == "device" && _mediaRead is { IsCancellationRequested: false }
-            && !_mediaTask.IsCompleted && _mediaDevice?.Serial == device.Serial && _mediaDevice.TransportId == device.TransportId)
-            return; // device/profile notifications must not restart the same live helper
+        var selected = DeviceCombo.SelectedItem as AndroidDevice;
+        var device = PhoneAudioWindowCache.GetOnlineDevice(selected);
+        var watching = _failedMediaDevice ?? _mediaDevice;
+        if (watching != null && (_failedMediaDevice != null || _mediaRead is { IsCancellationRequested: false })
+            && (AndroidDeviceIdentity.SameTransport(watching, device)
+                || selected != null && AndroidDeviceIdentity.MatchesSavedDevice(watching, selected) && PhoneAudioWindowCache.Manager.AwaitingDiscovery(watching)))
+            return; // ordinary profile notifications never restart a running or exhausted helper
+        _failedMediaDevice = null;
         _mediaRead?.Cancel();
         var previous = _mediaTask;
-        var read = _mediaRead = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        var read = _mediaRead = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token,
+            device == null ? CancellationToken.None : PhoneAudioWindowCache.Manager.OperationToken(device));
         _mediaDevice = device;
         ApplyMediaState(null);
         ApplyConnectionQuality(null);
@@ -1201,7 +1155,7 @@ public partial class PhoneAudioWindow : Window
     }
     private void StopMediaSubscription()
     {
-        _mediaRead?.Cancel(); _mediaDevice = null; _mediaClient = null;
+        _mediaRead?.Cancel(); _mediaDevice = null; _mediaClient = null; _failedMediaDevice = null;
         // Retain cached app rows/metadata for fast reopen, not the last track's artwork.
         _mediaState = _progressState = null; _mediaApps = null; _artworkBytes = null;
         MediaArtwork.Source = MediaAppIcon.Source = null;
@@ -1237,41 +1191,35 @@ public partial class PhoneAudioWindow : Window
         try
         {
             await previous;
-            read.Token.ThrowIfCancellationRequested();
-            var client = _mediaClient = new AndroidMediaSessionClient(AndroidAudioHost.Adb);
-            client.ConnectionQualityChanged += quality => _mediaUiLifetime.Post(Dispatcher, () =>
+            for (int attempt = 0; attempt < 2; attempt++)
             {
-                if (!_closed && !read.IsCancellationRequested && ReferenceEquals(_mediaRead, read)) ApplyConnectionQuality(quality);
-            });
-            await AndroidAudioHost.WatchMediaAsync(client, device, state => QueueMediaState(state, read), read.Token);
-            if (_enableMedia && !_closed && !read.IsCancellationRequested)
-            {
-                _ = Dispatcher.BeginInvoke(new Action(() =>
+                read.Token.ThrowIfCancellationRequested();
+                var client = _mediaClient = new AndroidMediaSessionClient(AndroidAudioHost.Adb);
+                client.ConnectionQualityChanged += quality => _mediaUiLifetime.Post(Dispatcher, () =>
                 {
-                    if (!_closed && IsVisible && _enableMedia && !ExternalDeviceSelected)
-                    {
-                        PhoneAudioWindowCache.InvalidateDevices();
-                        _ = RefreshDevicesAsync();
-                    }
-                }));
+                    if (!_closed && !read.IsCancellationRequested && ReferenceEquals(_mediaClient, client)) ApplyConnectionQuality(quality);
+                });
+                try
+                {
+                    await AndroidAudioHost.WatchMediaAsync(client, device, state => QueueMediaState(state, read), read.Token);
+                    throw AndroidError.WithCode(new EndOfStreamException(), AndroidErrorCode.MediaConnectionEnded);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    if (_closed || read.IsCancellationRequested || !ReferenceEquals(_mediaRead, read)) return;
+                    _mediaClient = null;
+                    ApplyMediaState(null);
+                    ApplyConnectionQuality(new(null));
+                    SetMediaError("Phone.MediaControlUnavailable", ex);
+                    if (attempt == 1) { _failedMediaDevice = device; return; }
+                }
+                // A helper can exit while ADB and other phones are still healthy.
+                // Allow one recovery on this transport without invalidating device discovery.
+                await Task.Delay(TimeSpan.FromSeconds(1), read.Token);
+                if (!AndroidDeviceIdentity.SameTransport(device, PhoneAudioWindowCache.GetOnlineDevice(DeviceCombo.SelectedItem as AndroidDevice))) return;
             }
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            if (!_closed && !read.IsCancellationRequested && ReferenceEquals(_mediaRead, read))
-            {
-                ApplyMediaState(null);
-                ApplyConnectionQuality(new(null));
-                SetMediaError("Phone.MediaControlUnavailable", ex);
-
-                if (_enableMedia && IsVisible)
-                {
-                    PhoneAudioWindowCache.InvalidateDevices();
-                    _ = RefreshDevicesAsync();
-                }
-            }
-        }
         finally
         {
             if (ReferenceEquals(_mediaRead, read)) { _mediaRead = null; _mediaClient = null; _mediaDevice = null; }

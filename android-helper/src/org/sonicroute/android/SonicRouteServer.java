@@ -20,6 +20,7 @@ import org.sonicroute.android.io.StreamSession;
 import org.sonicroute.android.platform.AndroidDisplayPlatform;
 import org.sonicroute.android.platform.AndroidSystemPlatform;
 import org.sonicroute.android.util.ServerLog;
+import org.sonicroute.android.video.AdaptiveBitrateController;
 import org.sonicroute.android.video.VideoEncoderRunner;
 import org.sonicroute.android.video.OwnedAppMonitor;
 import org.sonicroute.android.video.PhysicalScreenSource;
@@ -194,6 +195,44 @@ public final class SonicRouteServer {
                         videoCodec,
                         options.isSendCodecMeta(),
                         options.isSendFrameMeta());
+                final AdaptiveBitrateController abrController = options.isVideoAbr()
+                        ? createAdaptiveBitrateController(options)
+                        : null;
+                VideoEncoderRunner.RuntimeBitrateHook bitrateHook = abrController == null
+                        ? null
+                        : new VideoEncoderRunner.RuntimeBitrateHook() {
+                            @Override
+                            public void onSessionStarted(
+                                    int initialBitRateBps,
+                                    int minSupportedBps,
+                                    int maxSupportedBps,
+                                    float effectiveFps,
+                                    java.util.function.IntPredicate bitrateApplier) {
+                                abrController.resetSession(
+                                        initialBitRateBps,
+                                        minSupportedBps,
+                                        maxSupportedBps,
+                                        effectiveFps,
+                                        bitrateApplier);
+                            }
+
+                            @Override
+                            public void onPacketWritten(
+                                    int packetBytes,
+                                    long writeDurationNs,
+                                    long frameAgeUs,
+                                    boolean isKeyFrame,
+                                    boolean isConfig,
+                                    long nowNs) {
+                                abrController.onPacketSent(
+                                        packetBytes,
+                                        writeDurationNs,
+                                        frameAgeUs,
+                                        isKeyFrame,
+                                        isConfig,
+                                        nowNs);
+                            }
+                        };
                 videoRunner = new VideoEncoderRunner(
                         videoSource,
                         videoWriter,
@@ -203,7 +242,12 @@ public final class SonicRouteServer {
                         options.getVideoEncoder(),
                         options.getVideoCodecOptions(),
                         options.isDownsizeOnError(),
+                        options.isWifiTransport(),
+                        bitrateHook,
                         onCriticalFinish);
+                if (controller != null) {
+                    controller.setSyncFrameRequester(videoRunner::requestSyncFrame);
+                }
                 videoRef[0] = videoRunner;
                 activeWorkers.incrementAndGet();
             }
@@ -247,6 +291,16 @@ public final class SonicRouteServer {
                 cleanup.close();
             }
         }
+    }
+
+    public static AdaptiveBitrateController createAdaptiveBitrateController(ServerOptions options) {
+        if (options == null) {
+            throw new IllegalArgumentException("options must not be null");
+        }
+        AdaptiveBitrateController.TransportMode mode = options.isWifiTransport()
+                ? AdaptiveBitrateController.TransportMode.WIFI
+                : AdaptiveBitrateController.TransportMode.USB;
+        return new AdaptiveBitrateController(mode, options.isVideoAbr());
     }
 
     private static PlaybackAudioCapture buildAudioCapture(ServerOptions options) {

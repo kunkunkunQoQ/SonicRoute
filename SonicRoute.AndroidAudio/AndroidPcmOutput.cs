@@ -30,7 +30,6 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
     private int _disposed;
     private readonly Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? _onOutputs;
     private readonly Action<string, int, string>? _onRouted;
-    private string Remote => "/data/local/tmp/" + _socket + ".jar";
     public AndroidDevice Device { get; private set; }
     public Stream Stream => _pcmStream!;
     public Task<Exception> Completion => _ended.Task;
@@ -51,16 +50,20 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         _onOutputs = onOutputs; _onRouted = onRouted;
     }
 
-    public static async Task<AndroidAudioOutputConnection> OpenAsync(AdbClient adb, AndroidDevice device, string target,
+    public static Task<AndroidAudioOutputConnection> OpenAsync(AdbClient adb, AndroidDevice device, string target,
         CancellationToken token, Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null,
-        Action<string, int, string>? onRouted = null)
+        Action<string, int, string>? onRouted = null) => OpenTimedAsync(adb, device, target, token, onOutputs, onRouted, null);
+
+    internal static async Task<AndroidAudioOutputConnection> OpenTimedAsync(AdbClient adb, AndroidDevice device, string target,
+        CancellationToken token, Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs,
+        Action<string, int, string>? onRouted, AndroidOutputSwitchTiming? timing)
     {
         var output = new AndroidAudioOutputConnection(adb, device, target, token, onOutputs, onRouted);
-        try { await output.OpenCoreAsync().ConfigureAwait(false); return output; }
+        try { await output.OpenCoreAsync(timing).ConfigureAwait(false); return output; }
         catch { await output.DisposeAsync().ConfigureAwait(false); throw; }
     }
 
-    private async Task OpenCoreAsync()
+    private async Task OpenCoreAsync(AndroidOutputSwitchTiming? timing)
     {
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         startup.CancelAfter(TimeSpan.FromSeconds(30));
@@ -68,25 +71,33 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         _adb.ValidateCatalog();
         if (Device.State != "device") await RefreshDeviceAsync(token).ConfigureAwait(false);
-        try { await PushRuntimeAsync().ConfigureAwait(false); }
-        catch (Exception) when (!token.IsCancellationRequested)
+        string remote;
+        using (timing?.Measure("output_jar"))
         {
-            await RefreshDeviceAsync(token).ConfigureAwait(false);
-            await PushRuntimeAsync().ConfigureAwait(false);
+            try { remote = await _adb.EnsureCatalogJarAsync(Device.CommandTarget, token).ConfigureAwait(false); }
+            catch (Exception) when (!token.IsCancellationRequested)
+            {
+                await RefreshDeviceAsync(token).ConfigureAwait(false);
+                remote = await _adb.EnsureCatalogJarAsync(Device.CommandTarget, token).ConfigureAwait(false);
+            }
         }
 
-        _helper = await _adb.OpenShellAsync(Device.Serial,
-            "echo SR_PCOUT_PID:$$; CLASSPATH=" + Remote + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
-            + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'",
-            redirectInput: true, token).ConfigureAwait(false);
-        _writer = new StreamWriter(_helper.InputStream, Utf8NoBom, bufferSize: 1024, leaveOpen: true) { NewLine = "\n" };
-        _stdout = ReadOutputAsync();
-        _stderr = ReadErrorAsync();
-        await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+        using (timing?.Measure("output_helper_ready"))
+        {
+            _helper = await _adb.OpenShellAsync(Device.CommandTarget,
+                "echo SR_PCOUT_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.AudioOutputBridge play "
+                + _socket + " '" + _target.Replace("'", "'\\''", StringComparison.Ordinal) + "'",
+                redirectInput: true, token).ConfigureAwait(false);
+            _writer = new StreamWriter(_helper.InputStream, Utf8NoBom, bufferSize: 1024, leaveOpen: true) { NewLine = "\n" };
+            _stdout = ReadOutputAsync();
+            _stderr = ReadErrorAsync();
+            await _ready.Task.WaitAsync(TimeSpan.FromSeconds(10), token).ConfigureAwait(false);
+        }
 
         try
         {
-            _pcmStream = await _adb.OpenLocalAbstractAsync(Device.Serial, _socket, token).ConfigureAwait(false);
+            using (timing?.Measure("output_socket"))
+                _pcmStream = await _adb.OpenLocalAbstractAsync(Device.CommandTarget, _socket, token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or SocketException)
         {
@@ -95,12 +106,13 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         _cancelSocket = _lifetime.Token.UnsafeRegister(static stream => { try { ((Stream)stream!).Dispose(); } catch { } }, _pcmStream);
         // Feed real-time PCM before awaiting hardware acknowledgement; the helper
         // keeps an unverified output muted, preventing default-device leakage.
-
-        Task PushRuntimeAsync() => _adb.RunAsync(token, "-s", Device.Serial, "push", _adb.CatalogFile, Remote);
     }
 
     private async Task RefreshDeviceAsync(CancellationToken token)
     {
+        // An admitted helper is bound to one transport generation. Recovery is
+        // coordinated by the connection manager, never by searching raw ADB here.
+        if (Device.ConnectionTarget != null) throw AndroidError.WithCode(new IOException("手机连接已改变，请刷新设备。"), AndroidErrorCode.PhoneOffline);
         string key = AndroidDeviceIdentity.Key(Device);
         Device = (await _adb.DevicesAsync(token).ConfigureAwait(false)).FirstOrDefault(d => d.State == "device"
             && string.Equals(AndroidDeviceIdentity.Key(d), key, StringComparison.OrdinalIgnoreCase))
@@ -245,13 +257,13 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
         using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         if (!exited && _pid != null)
         {
-            try
-            {
-                string cmdline = await _adb.RunAsync(cleanup.Token, "-s", Device.Serial, "shell", "cat", "/proc/" + _pid + "/cmdline").ConfigureAwait(false);
-                if (cmdline.Contains(_socket, StringComparison.Ordinal) && cmdline.Contains("org.sonicroute.android.AudioOutputBridge", StringComparison.Ordinal))
-                    await _adb.RunAsync(cleanup.Token, "-s", Device.Serial, "shell", "kill", "-TERM", _pid).ConfigureAwait(false);
-            }
-            catch (Exception ex) { Trace.WriteLine("Phone output cleanup: " + ex.Message); }
+            await _adb.TerminateRemoteProcessAsync(
+                Device.CommandTarget,
+                _pid,
+                cmdline => cmdline.Contains(_socket, StringComparison.Ordinal)
+                    && cmdline.Contains("org.sonicroute.android.AudioOutputBridge", StringComparison.Ordinal),
+                msg => Trace.WriteLine("Phone output cleanup: " + msg),
+                cleanup.Token).ConfigureAwait(false);
         }
         if (_helper != null)
         {
@@ -261,7 +273,6 @@ internal sealed class AndroidAudioOutputConnection : IAsyncDisposable
             try { _writer?.Dispose(); } catch (Exception ex) { Trace.WriteLine("Phone output writer cleanup: " + ex.Message); }
             try { await _helper.DisposeAsync().ConfigureAwait(false); } catch (Exception ex) { Trace.WriteLine("Phone output session cleanup: " + ex.Message); }
         }
-        try { await _adb.RunAsync(cleanup.Token, "-s", Device.Serial, "shell", "rm", "-f", Remote).ConfigureAwait(false); } catch { }
         _lifetime.Dispose();
     }
 }
@@ -273,6 +284,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     private readonly AndroidPcmSource _source;
     private readonly AndroidAudioOutputConnection _output;
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly CancellationTokenSource _connectionLifetime;
     private readonly SemaphoreSlim _available = new(0, 1);
     private readonly object _gate = new();
     private readonly Task _pump;
@@ -287,12 +299,15 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
     public event Action<Exception>? Failed;
 
     public AndroidPhonePcmPlayer(AdbClient adb, AndroidDevice device, AndroidPcmSource source, string sinkKey, CancellationToken token,
-        Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null)
+        Action<AndroidDevice, IReadOnlyList<AndroidOutputSink>>? onOutputs = null, CancellationToken managementToken = default,
+        AndroidOutputSwitchTiming? timing = null)
     {
         _source = source;
+        _connectionLifetime = CancellationTokenSource.CreateLinkedTokenSource(token, managementToken);
         try
         {
-            _output = AndroidAudioOutputConnection.OpenAsync(adb, device, sinkKey, token, onOutputs).GetAwaiter().GetResult();
+            _output = AndroidAudioOutputConnection.OpenTimedAsync(adb, device, sinkKey, _connectionLifetime.Token, onOutputs, null, timing)
+                .GetAwaiter().GetResult();
             _output.Failed += OnFailure;
             _source.DataAvailable += Wake;
             _pump = Task.Run(PumpAsync);
@@ -305,7 +320,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
                 _output.Failed -= OnFailure;
                 try { _output.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { }
             }
-            _available.Dispose(); _lifetime.Dispose();
+            _available.Dispose(); _lifetime.Dispose(); _connectionLifetime.Dispose();
             throw;
         }
     }
@@ -421,7 +436,7 @@ internal sealed class AndroidPhonePcmPlayer : IPcmPlayer
         finally
         {
             try { _pump.GetAwaiter().GetResult(); }
-            finally { _available.Dispose(); _lifetime.Dispose(); }
+            finally { _available.Dispose(); _lifetime.Dispose(); _connectionLifetime.Dispose(); }
         }
     }
 }

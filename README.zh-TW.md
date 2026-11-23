@@ -1,25 +1,24 @@
-<!-- Generated from docs/readme/shared.json and docs/readme/locales/zh-TW.json. Edit those sources, then run node docs/readme/generate.cjs. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/zh-TW.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
-# 🎧 音躍 SonicRoute v1.34 Beta
+# 🎧 音躍 SonicRoute v1.35 Beta
 
 [简体中文](README.md) | [English](README.en.md) | **繁體中文** | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Beta：v1.34](https://img.shields.io/static/v1?label=Beta&message=v1.34&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta) [![授權條款說明：GPL-3.0](https://img.shields.io/static/v1?label=%E6%8E%88%E6%AC%8A%E6%A2%9D%E6%AC%BE%E8%AA%AA%E6%98%8E&message=GPL-3.0&color=blue)](LICENSE) [![作業系統：Windows 10 | 11](https://img.shields.io/static/v1?label=%E4%BD%9C%E6%A5%AD%E7%B3%BB%E7%B5%B1&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![架構：x64 | ARM64](https://img.shields.io/static/v1?label=%E6%9E%B6%E6%A7%8B&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![下載次數](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%E4%B8%8B%E8%BC%89%E6%AC%A1%E6%95%B8)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![透過愛發電贊助 SonicRoute](https://img.shields.io/static/v1?label=&message=%E9%80%8F%E9%81%8E%E6%84%9B%E7%99%BC%E9%9B%BB%E8%B4%8A%E5%8A%A9+SonicRoute&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Beta：v1.35](https://img.shields.io/static/v1?label=Beta&message=v1.35&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.35...Beta) [![授權條款說明：GPL-3.0](https://img.shields.io/static/v1?label=%E6%8E%88%E6%AC%8A%E6%A2%9D%E6%AC%BE%E8%AA%AA%E6%98%8E&message=GPL-3.0&color=blue)](LICENSE) [![作業系統：Windows 10 | 11](https://img.shields.io/static/v1?label=%E4%BD%9C%E6%A5%AD%E7%B3%BB%E7%B5%B1&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![架構：x64 | ARM64](https://img.shields.io/static/v1?label=%E6%9E%B6%E6%A7%8B&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![下載次數](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%E4%B8%8B%E8%BC%89%E6%AC%A1%E6%95%B8)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![透過愛發電贊助 SonicRoute](https://img.shields.io/static/v1?label=&message=%E9%80%8F%E9%81%8E%E6%84%9B%E7%99%BC%E9%9B%BB%E8%B4%8A%E5%8A%A9+SonicRoute&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
-## 自 v1.33 以來的主要變更
+## 自 v1.35 以來的主要變更
 
 - 在兩台 Windows 電腦上開啟 SonicRoute Full 的 **Windows Link**，搜尋同一個區域網路上的另一台電腦，或直接輸入對方的位址。核對兩邊顯示的 8 位數配對碼，再分別確認。
 - 將應用程式拖到另一台電腦，即可選擇只在對方電腦播放，或兩台同時播放。也可傳送整台電腦的聲音，或為同一個音訊來源選擇多個輸出裝置。
 - 分享應用程式視窗或整個螢幕時，可以一併分享聲音。取得許可後，對方可用鍵盤和滑鼠操作分享的內容。兩台電腦也能互傳檔案與資料夾。兩端都開啟剪貼簿同步後，新複製的純文字就會同步。
-- 從電腦瀏覽 Android 手機上的資料夾，一次選取多個檔案傳到手機或電腦。無線連線閒置或重新連線後，音訊串流與剪貼簿同步也更穩定。
 
-[Windows Link 使用指南（簡體中文）](docs/windows-link.md) · [檢視所有變更](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.33...Beta)
+[Windows Link 使用指南（簡體中文）](docs/windows-link.md) · [檢視所有變更](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.35...Beta)
 
 **讓音樂從喇叭播放，讓遊戲聲留在耳機裡。**
 
-SonicRoute 是常駐 Windows 系統匣的音訊工具。您可以為每個應用程式選擇播放和錄音裝置，使用快速鍵、滑鼠滾輪或快速面板調整音量，並把常用操作組合成自動化規則。
+SonicRoute 是常駐 Windows 系統匣的音訊工具。您可以為每個應用程式選擇播放和錄音裝置。在快速面板中按住 Ctrl 點選可增減播放裝置，按住 Shift 點選可選取連續範圍，各版本皆可組合多個電腦輸出，Full 還能加入可用的手機輸出。您也可以使用快速鍵、滑鼠滾輪或快速面板調整音量，並把常用操作組合成自動化規則。
 
-📥 [下載正式版](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [使用指南（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [下載最新版本](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [使用指南（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki（簡體中文）](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介面語言 · [GPL-3.0](LICENSE)
 
@@ -42,10 +41,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 ## ✨ SonicRoute 的功能
 
-- **為每個應用程式選擇播放與錄音裝置。** 遊戲與通話可以使用耳麥，音樂則從喇叭播放。Windows 會儲存各應用程式的裝置設定，結束 SonicRoute 後仍然有效。
-- **跟隨前景應用程式。** SonicRoute 會偵測視窗切換。在系統匣圖示上捲動滾輪，就能調整目前控制的應用程式音量，或按住 Alt 捲動來切換輸出裝置。可用螢幕提示（OSD）查看變更，也可用全域快速鍵將麥克風靜音。
+- **為每個應用程式選擇播放與錄音裝置。** 遊戲與通話可以使用耳麥，音樂則從喇叭播放。在快速面板中，按住 Ctrl 點選可增減播放裝置，按住 Shift 點選可選取連續範圍；各版本皆可組合多個電腦輸出，Full 還能加入可用的手機輸出。Windows 會儲存各應用程式的裝置設定，結束 SonicRoute 後仍然有效。
+- **用滑鼠滾輪控制目前應用程式。** 預設優先選擇最近在前景使用且有音訊工作階段的應用程式。在系統匣圖示上捲動即可調整音量，按住 Alt 捲動可切換該應用程式的輸出裝置。螢幕提示（OSD）會顯示操作結果，也能使用全域快速鍵將麥克風靜音。
 - **即時查看各應用程式的音量。** 快速面板會顯示各程式的音量滑桿和即時音量表。面板會記住顯示位置，高度可在 350 至 850 個邏輯像素之間調整。
-- **Android 連線與 AirPlay 接收（Full 版）。** 將 Android 應用程式的音訊傳到電腦調整，或將電腦音訊傳到手機。虛擬螢幕支援 H.265，視窗在前景時可用遊戲控制器操作。內建以 C# 實作的 AirPlay 接收功能，可播放 Apple 裝置的音訊並按原始比例鏡像顯示畫面。在快速面板中可選擇電腦輸出、Android 手機喇叭或手機連線的藍牙裝置，並透過智慧音量（SmartVolume）減少音量落差。
+- **Android 連線與 AirPlay 接收（Full 版）。** 將 Android 應用程式的音訊傳到電腦調整，或將電腦音訊傳到手機。虛擬螢幕支援 H.265，視窗在前景時可用遊戲控制器操作。內建以 C# 實作的 AirPlay 接收功能，可播放 Apple 裝置的音訊並按原始比例鏡像顯示畫面。在快速面板中可選擇電腦輸出、Android 手機喇叭或手機連線的藍牙裝置，並透過智慧音量（SmartVolume）減少音量落差。也可從電腦瀏覽 Android 手機資料夾，並雙向傳輸多個檔案。
 - **6 種觸發條件、39 種自動化動作。** 規則可在應用程式啟動、切換到前景、結束、到達指定時間、按下快速鍵或啟動 SonicRoute 時執行。可組合切換裝置、調整音量、靜音、啟動程式及執行 PowerShell 等動作，也能透過 `sr` 指令從指令碼或外接控制台執行規則。
 - **依 Windows 通知偵測變更。** 需要時才會每秒確認一次狀態，並適時釋放用不到的資料。Full 提供選用的手機與 AirPlay 功能，Lite 和 Legacy 則提供電腦音訊功能。介面支援九種語言。
 
@@ -64,15 +63,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 ## 🚀 下載與快速入門
 
-**最新正式版：[v1.33](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.33)** · 2026年11月18日 · [版本資訊（簡體中文）](docs/release-v1.33.md)
+**最新正式版：[v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 2026年11月21日 · [版本資訊（簡體中文）](docs/release-v1.35.md)
 
-若要使用 Android 音訊、虛擬螢幕或 AirPlay，請選 **Full x64**。只需要電腦音訊功能，可選 **Lite x64**。若電腦只能使用 .NET Framework 4.8，請選 **Legacy x64**。ARM64 版目前為實驗版本。下表提供 v1.33 的直接下載連結。Full 和 Lite 也可從 Microsoft Store 取得，上架版本請見各自的商店頁面。
+想在電腦上播放 Android 手機聲音、使用虛擬螢幕或接收 AirPlay 鏡像，請選 **Full**。只需要電腦音訊功能，可選 **Lite**。若使用 x64 電腦且已安裝 .NET Framework 4.8，也可以選擇 **Legacy**。ARM64 建置為實驗版本。下表提供 v1.35 的直接下載連結。Full 和 Lite 也可從 Microsoft Store 取得，上架版本請見各自的商店頁面。
 
 | 版本 | 下載 | 系統需求 |
 |---|---|---|
-| ⭐ Full（.NET 10，含手機連線功能） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-arm64.exe) | 單一執行檔，內含選用的 Android 音訊、虛擬螢幕與 AirPlay 功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
-| ⭐ Lite（.NET 10，僅電腦音訊） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Lite-arm64.exe) | 單一執行檔，僅提供電腦音訊功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
-| 🛡️ Legacy x64（僅電腦功能，.NET Framework 4.8） | [ZIP 壓縮檔](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.33/SonicRoute-v1.33-Legacy-x64.zip) | 使用 Windows 的 .NET Framework 4.8，解壓縮後即可執行。 |
+| ⭐ Full（.NET 10，含手機連線功能） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | 單一執行檔，內含選用的 Android 音訊、虛擬螢幕與 AirPlay 功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
+| ⭐ Lite（.NET 10，僅電腦音訊） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64（實驗性）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | 單一執行檔，僅提供電腦音訊功能。需要與程式架構相符的 .NET 10 Desktop Runtime。 |
+| 🛡️ Legacy x64（僅電腦功能，.NET Framework 4.8） | [ZIP 壓縮檔](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | 使用 Windows 的 .NET Framework 4.8，解壓縮後即可執行。 |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full 與 Lite 均需要 x64 版 .NET 10 Desktop Runtime。上架版本請見各自的商店頁面。 |
 
 <details>
@@ -90,7 +89,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 
 1. **啟動 SonicRoute。** 按兩下執行檔。使用 Legacy 版時，請先解壓縮 ZIP 檔案。程式會常駐系統匣，按兩下圖示即可開啟主視窗。如果圖示藏在選單中，可以將它拖到工作列的通知區域。
 2. **選擇應用程式的輸出裝置。** 先在設定中勾選要在快速面板顯示的耳機與喇叭。按一下系統匣圖示開啟快速面板，展開應用程式所在的那一列來選擇輸出裝置，或拖曳滑桿來調整音量。
-3. **用滑鼠滾輪控制音訊。** 將指標移到系統匣的 SonicRoute 圖示上，捲動可調整目前控制的應用程式音量。按住 Alt 捲動可切換該程式的輸出裝置，按住 Shift 捲動可調整系統音量。也可以在設定中將滾輪的作用範圍擴大至整個系統匣。
+3. **用滑鼠滾輪控制音訊。** 將指標移到系統匣的 SonicRoute 圖示上，捲動可調整目前控制的應用程式音量。按住 Alt 捲動可切換該程式的輸出裝置，按住 Shift 捲動可調整系統預設播放裝置的音量。也可以在設定中將滾輪的作用範圍擴大至整個系統匣。
 
 ### ⚡ 從命令列執行自動化規則
 
@@ -101,13 +100,20 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（實驗性） · 支援九種介�
 sr "規則名稱或 ID"
 ```
 
-### 🆕 v1.33 更新重點
+### 🆕 v1.35 更新重點
 
-Full 新增以 C# 實作的 AirPlay 接收功能，可播放 PCM、ALAC、AAC-LC 與 AAC-ELD 音訊，並依原始比例鏡像顯示畫面。可選擇啟用連線碼、將視窗保持在最上層或按 F11 切換全螢幕。拖曳即可把音訊送到電腦、Android 手機喇叭或手機連線的藍牙裝置。
+所有版本均統一了快速面板的即時切換體驗，電腦應用程式的麥克風輸入與外部音訊列在點選後皆可立即醒目提示並依序在背景套用，應用程式列標題也會同步更新目前的輸出名稱。裝置切換快速鍵改為非阻塞排隊執行，45 ms 內完成的切換會直接顯示最終結果，耗時較久時才顯示本地化的切換中提示並維持至少 500 ms 可見。同時修正了明確選擇的多輸出鏡像在原生工作階段移動時遭到意外移除的問題。
 
-Android 連線支援 H.265（HEVC），可選擇音訊與視訊解碼器。只有在開啟裝置設定時才會查詢編碼器，遊戲控制器的輸入也只會傳到前景虛擬螢幕。配對頁將每兩分鐘更新一次的 QR 碼與手動配對碼放在同一張卡片中。從裝置設定重新連線、重新整理快速面板或側邊欄時，都會在區域網路搜尋已儲存的裝置，略過失效的連接埠，並依裝置識別資訊找回新的 IP 位址與連接埠。找不到裝置或連線失敗時會保留手動輸入的位址，重新連線時也可還原裝置設定。
+Full 最佳化了 Android 模式切換與虛擬螢幕的操作回應，並修正了多裝置剪貼簿同步在停用來源裝置或失敗路徑下的並行與記憶體釋放邊界。舊版資訊請參閱[版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
-所有版本都能分別設定兩種麥克風狀態是否持續顯示在螢幕上，並將設定檔管理操作集中在同一列。應用程式清單超過 20 項時會重複利用顯示列，連續的螢幕提示（OSD）也會合併更新。程式會釋放已解碼 PNG 的原始資料；Full 也會釋放停用的圖形紋理，關閉視窗時由執行階段自行回收記憶體。其他更新包括 .bak 設定備份、按需產生的錯誤診斷紀錄、獨立的 Microsoft Store Lite 版，以及可離線閱讀的 GPL-3.0-only 授權條款。詳見 [版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+<details>
+<summary>v1.34</summary>
+
+各版本現在都能為同一個應用程式選擇多個電腦播放裝置。重新啟動 SonicRoute 後，應用程式再次播放時會還原所選裝置。系統匣音量調整與滑鼠快速鍵共用同一個系統滑鼠監聽機制。
+
+Full 的兩個 Android 面板會同步顯示 USB 和 Wi-Fi 連線狀態。透過手機快速面板的重新整理功能，也可以重新連線至選取的裝置。Android 應用程式的輸出選單現在會顯示手機目前輸出的自訂名稱。舊版資訊請參閱[版本紀錄](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+
+</details>
 
 ### ❓ 常見問題
 

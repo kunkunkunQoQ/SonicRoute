@@ -123,7 +123,7 @@ namespace SonicRoute
                 MicMonitor?.RequestRebuild();
                 AutoRuleStore.RecoverMonitoring();
                 ReloadHotkeys(force: true);
-                _trayWheel?.Start();
+                _trayWheel?.TrySetPaused(ConfigService.Load().TrayWheelPaused);
                 RefreshRuleDirectoryProbePolicy();
             }), DispatcherPriority.Background);
         }

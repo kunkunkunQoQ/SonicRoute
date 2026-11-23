@@ -45,6 +45,8 @@ internal static partial class Program
         var phones = (AndroidPhoneStore)androidHost.GetProperty("Phone", staticMember)!.GetValue(null)!;
         phones.RememberDevice(offline);
         phones.Retain(new AndroidApp("cn.fixture.music", "Android Music", 10, "media"));
+        phones.RememberDevice(backup);
+        phones.SelectProfile(phones.FindProfile(offline)!.Id);
 
         using var page = new PhoneDevicePage();
         var quick = new PhoneAudioWindow(loadDevicesOnShow: false);

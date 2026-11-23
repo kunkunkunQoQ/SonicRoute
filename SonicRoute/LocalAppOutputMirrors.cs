@@ -10,10 +10,8 @@ using SonicRoute.Core.Compat;
 #if SONICROUTE_PHONE
 using System.Buffers;
 using CaptureSource = SonicRoute.WindowsLink.LinkAudioCapture;
-using LocalMirrorPlayer = SonicRoute.AndroidAudio.IPcmPlayer;
 #else
 using CaptureSource = SonicRoute.AndroidAudio.LocalProcessAudioCapture;
-using LocalMirrorPlayer = SonicRoute.AndroidAudio.DesktopMirrorPlayer;
 #endif
 using AudioPolicyConfig = SonicRoute.Core.Interop.AudioPolicyConfig;
 
@@ -45,10 +43,10 @@ internal static partial class LocalAppOutputMirrors
     internal static string[] GetExtraOutputs(int processId) =>
         Routes.TryGetValue(processId, out var route) ? route.Sinks.Select(s => s.Id).ToArray() : [];
 
-    internal static Task SetExtraOutputsAsync(int processId, string? primaryOutputId, IReadOnlyCollection<string> extraOutputIds,
-        CancellationToken token = default) => SetOutputsAsync(processId, primaryOutputId, extraOutputIds, false, false, token);
+    internal static Task SetExtraOutputsAsync(int processId, IReadOnlyCollection<string> extraOutputIds,
+        CancellationToken token = default) => SetOutputsAsync(processId, extraOutputIds, false, false, token);
 
-    private static Task SetOutputsAsync(int processId, string? primaryOutputId, IReadOnlyCollection<string> extraOutputIds,
+    private static Task SetOutputsAsync(int processId, IReadOnlyCollection<string> extraOutputIds,
         bool phoneOnly, bool allowSpeakerMute, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
@@ -62,8 +60,12 @@ internal static partial class LocalAppOutputMirrors
             {
                 if (processId <= 0 || AudioProcessTree.ContainsProcess(processId, AppInfo.CurrentProcessId))
                     throw new InvalidOperationException(L10n.T("Tray.AppUnavailable"));
+#if SONICROUTE_PHONE
+                _deviceWatch ??= DefaultOutputNotifications.SubscribeTopology(QueueRefresh, includeDefaultChanged: false);
+#else
                 _deviceWatch ??= WasapiDeviceLease.ObserveDefaultOutput(new DeviceEvents());
-                var endpoints = ResolveOutputs(processId, primaryOutputId, requested, strict: true);
+#endif
+                var endpoints = ResolveOutputs(requested, strict: true);
                 Routes.TryGetValue(processId, out var route);
                 if (endpoints.Length == 0) { if (route != null) await RemoveAsync(route); return; }
                 if (route != null && route.HasExited) { await RemoveAsync(route); route = null; }
@@ -72,7 +74,7 @@ internal static partial class LocalAppOutputMirrors
                 try
                 {
                     if (starting) await route.StartAsync(lifetime.Token).ConfigureAwait(false);
-                    await route.UpdateAsync(primaryOutputId, endpoints, phoneOnly, allowSpeakerMute, lifetime.Token).ConfigureAwait(false);
+                    await route.UpdateAsync(endpoints, phoneOnly, allowSpeakerMute, lifetime.Token).ConfigureAwait(false);
                     if (starting)
                     {
                         Routes[processId] = route;
@@ -178,8 +180,7 @@ internal static partial class LocalAppOutputMirrors
                 foreach (var route in Routes.Values)
                 {
                     var current = route.Sinks;
-                    var allowed = ResolveOutputs(route.ProcessId, route.PrimaryId, current.Select(s => s.Id).ToArray(), strict: false).ToHashSet(Ids);
-                    foreach (var sink in current) if (allowed.Contains(sink.Id)) sink.ObserveSourceSessions(route.ProcessId);
+                    var allowed = ResolveOutputs(current.Select(s => s.Id).ToArray(), strict: false).ToHashSet(Ids);
                     if (allowed.Count == current.Length) continue;
                     if (allowed.Count == 0) await RemoveAsync(route);
                     else { route.Replace(current.Where(s => allowed.Contains(s.Id)).ToArray()); ApplicationAudio.NotifyRouteChanged(route.ProcessId); }
@@ -190,33 +191,26 @@ internal static partial class LocalAppOutputMirrors
         });
     }
 
+#if !SONICROUTE_PHONE
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
     private sealed class DeviceEvents : IMMNotificationClient
     {
-        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string id) { if (flow == DataFlow.Render) QueueRefresh(); }
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string id) { }
         public void OnDeviceStateChanged(string id, DeviceState state) => QueueRefresh();
         public void OnDeviceRemoved(string id) => QueueRefresh();
         public void OnDeviceAdded(string id) { }
         public void OnPropertyValueChanged(string id, PropertyKey key) { }
     }
+#endif
 
-    private static string[] ResolveOutputs(int pid, string? primary, string[] requested, bool strict)
+    private static string[] ResolveOutputs(string[] requested, bool strict)
     {
         using var devices = new WasapiDeviceLease.Enumerator();
-        using var console = devices.TryDefault(Role.Console);
-        using var multimedia = devices.TryDefault(Role.Multimedia);
-        var excluded = new HashSet<string?>(Ids);
-        if (primary == null || AudioService.IsSystemDefault(primary))
-        {
-            excluded.Add(console?.Device.ID);
-            excluded.Add(multimedia?.Device.ID);
-        }
-        else excluded.Add(AudioPolicyConfig.UnpackDeviceId(primary));
+        // Mirror destinations are explicit selections. Changes to the primary route do not remove them.
         var selected = new HashSet<string>(Ids);
         foreach (string id in requested)
         {
-            string? physical = AudioService.IsSystemDefault(id) ? console?.Device.ID : AudioPolicyConfig.UnpackDeviceId(id);
-            if (physical == null || excluded.Contains(physical)) continue;
+            string physical = AudioPolicyConfig.UnpackDeviceId(id);
             if (ApplicationAudio.IsPhoneOutputDevice(physical)) { selected.Add(physical); continue; }
             try
             {
@@ -224,94 +218,26 @@ internal static partial class LocalAppOutputMirrors
                 var device = lease.Device;
                 if (device.State != DeviceState.Active || device.DataFlow != DataFlow.Render)
                     throw new IOException(L10n.T("Ov.CurrentUnavailable"));
-                if (!HasActiveSourceSession(device, pid)) selected.Add(device.ID);
+                selected.Add(device.ID);
             }
             catch (Exception ex) when (!strict && (ex is COMException or IOException)) { }
         }
         return selected.ToArray();
     }
 
-    private static bool HasActiveSourceSession(MMDevice device, int pid)
-    {
-        var sessions = device.AudioSessionManager.Sessions;
-        for (int i = 0; i < sessions.Count; i++)
-        {
-            using var session = sessions[i];
-            if (session.State == AudioSessionState.AudioSessionStateActive && AudioProcessTree.ContainsProcess(pid, (int)session.GetProcessID)) return true;
-        }
-        return false;
-    }
-
-    private sealed class Sink(string id, LocalMirrorPlayer player) : IAudioSessionEventsHandler
+    private sealed class Sink(string id, IDisposable player)
     {
         internal readonly string Id = id;
 #if SONICROUTE_PHONE
-        internal required AndroidPcmSource Pcm { get; init; }
+        internal AndroidPcmSource? Pcm { get; init; }
+        internal DesktopMirrorPlayer? DesktopPlayer => Player as DesktopMirrorPlayer;
+#else
+        internal DesktopMirrorPlayer DesktopPlayer => (DesktopMirrorPlayer)Player;
 #endif
-        internal readonly LocalMirrorPlayer Player = player;
-        private WasapiDeviceLease? _observed;
-        private readonly Dictionary<string, AudioSessionControl> _sourceSessions = new(StringComparer.Ordinal);
+        internal readonly IDisposable Player = player;
 
-        // A process can open another session directly on a selected mirror without changing a default device.
-        // Subscribe only on active mirrors; existing dormant sessions can resume without a creation event.
-        internal void ObserveSourceSessions(int pid)
-        {
-#if SONICROUTE_PHONE
-            if (Player is not WasapiPcmPlayer) return;
-#endif
-            if (_observed == null)
-            {
-                _observed = WasapiDeviceLease.Open(Id);
-                _observed.Device.AudioSessionManager.OnSessionCreated += SessionCreated;
-            }
-            var sessions = _observed.Device.AudioSessionManager.Sessions;
-            var present = new HashSet<string>(StringComparer.Ordinal);
-            for (int i = 0; i < sessions.Count; i++)
-            {
-                var session = sessions[i];
-                bool keep = false;
-                try
-                {
-                    if (session.State == AudioSessionState.AudioSessionStateExpired || !AudioProcessTree.ContainsProcess(pid, (int)session.GetProcessID)) continue;
-                    var key = session.GetSessionInstanceIdentifier;
-                    present.Add(key);
-                    if (_sourceSessions.ContainsKey(key)) continue;
-                    session.RegisterEventClient(this);
-                    _sourceSessions.Add(key, session);
-                    keep = true;
-                    if (session.State == AudioSessionState.AudioSessionStateActive) QueueRefresh();
-                }
-                finally { if (!keep) session.Dispose(); }
-            }
-            foreach (var key in _sourceSessions.Keys.Where(key => !present.Contains(key)).ToArray()) ForgetSession(key);
-        }
-        private void SessionCreated(object sender, IAudioSessionControl session) => QueueRefresh();
-        public void OnStateChanged(AudioSessionState state) { if (state == AudioSessionState.AudioSessionStateActive) QueueRefresh(); }
-        public void OnVolumeChanged(float volume, bool isMuted) { }
-        public void OnDisplayNameChanged(string name) { }
-        public void OnIconPathChanged(string path) { }
-        public void OnChannelVolumeChanged(uint count, nint volumes, uint channel) { }
-        public void OnGroupingParamChanged(ref Guid groupingId) { }
-        public void OnSessionDisconnected(AudioSessionDisconnectReason reason) { }
-
-        private void ForgetSession(string key)
-        {
-            if (!_sourceSessions.TryGetValue(key, out var session)) return;
-            _sourceSessions.Remove(key);
-            try { session.UnRegisterEventClient(this); } catch (COMException) { } finally { session.Dispose(); }
-        }
         internal void Dispose()
         {
-            try
-            {
-                if (_observed != null)
-                {
-                    try { _observed.Device.AudioSessionManager.OnSessionCreated -= SessionCreated; } catch (COMException) { }
-                    foreach (var key in _sourceSessions.Keys.ToArray()) ForgetSession(key);
-                    _observed.Dispose();
-                }
-            }
-            catch (Exception ex) { ExceptionDiagnostics.Record("LocalAppOutputMirrors.DisposeObserver", ex); }
             try { Player.Dispose(); }
             catch (Exception ex) { ExceptionDiagnostics.Record("LocalAppOutputMirrors.DisposeOutput", ex); }
         }
@@ -326,7 +252,6 @@ internal static partial class LocalAppOutputMirrors
         internal Sink[] Sinks => Volatile.Read(ref _sinks);
         internal bool HasExited => _process.HasExited;
         internal int ProcessId => processId;
-        internal string? PrimaryId { get; private set; }
         internal Task Capture { get; private set; } = Task.CompletedTask;
 
         internal async Task StartAsync(CancellationToken token)
@@ -349,7 +274,7 @@ internal static partial class LocalAppOutputMirrors
             try { _stop.Cancel(); } catch (ObjectDisposedException) { }
         }
 
-        internal async Task UpdateAsync(string? primary, string[] desired, bool phoneOnly, bool allowSpeakerMute, CancellationToken token)
+        internal async Task UpdateAsync(string[] desired, bool phoneOnly, bool allowSpeakerMute, CancellationToken token)
         {
             using var change = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
             var previous = Sinks;
@@ -361,24 +286,19 @@ internal static partial class LocalAppOutputMirrors
                 {
                     var existing = previous.FirstOrDefault(s => Ids.Equals(s.Id, id));
                     if (existing != null) { next.Add(existing); continue; }
-#if SONICROUTE_PHONE
-                    var pcm = new AndroidPcmSource();
-                    IPcmPlayer player = AndroidOutputIdentity.IsPhoneOutput(id)
-                        ? AndroidAudioHost.CreatePhonePcmPlayer(pcm, id, change.Token) : new WasapiPcmPlayer(pcm, id);
-                    var sink = new Sink(id, player) { Pcm = pcm };
-#else
-                    var player = new DesktopMirrorPlayer(id);
-                    var sink = new Sink(id, player);
-#endif
-                    staged.Add(sink);
+                    Sink sink = null!;
                     void Failed(Exception error)
                     {
                         ExceptionDiagnostics.Record("LocalAppOutputMirrors.Playback", error);
                         _ = PruneFailed(sink);
                     }
 #if SONICROUTE_PHONE
-                    if (player is AndroidPhonePcmPlayer phone)
+                    if (AndroidOutputIdentity.IsPhoneOutput(id))
                     {
+                        var pcm = new AndroidPcmSource();
+                        var phone = AndroidAudioHost.CreatePhonePcmPlayer(pcm, id, change.Token);
+                        sink = new Sink(id, phone) { Pcm = pcm };
+                        staged.Add(sink);
                         phone.Failed += error =>
                         {
                             Failed(error);
@@ -388,22 +308,24 @@ internal static partial class LocalAppOutputMirrors
                         phone.Play();
                         if (phone.Failure is { } error) throw error;
                     }
-                    else if (player is WasapiPcmPlayer windows)
+                    else
                     {
-                        windows.Failed += Failed;
-                        sink.ObserveSourceSessions(processId);
-                        await windows.PlayAndConfirmAsync(change.Token).ConfigureAwait(false);
+                        var desktop = new DesktopMirrorPlayer(id);
+                        sink = new Sink(id, desktop);
+                        staged.Add(sink);
+                        desktop.Failed += Failed;
                     }
 #else
+                    var player = new DesktopMirrorPlayer(id);
+                    sink = new Sink(id, player);
+                    staged.Add(sink);
                     player.Failed += Failed;
-                    sink.ObserveSourceSessions(processId);
 #endif
                     next.Add(sink);
                 }
                 change.Token.ThrowIfCancellationRequested();
                 if (Capture.IsCompleted) { await Capture.ConfigureAwait(false); throw new IOException(L10n.T("Tray.AppUnavailable")); }
                 UpdateIsolation(phoneOnly, allowSpeakerMute);
-                PrimaryId = primary;
                 Replace(next.ToArray());
             }
             catch { foreach (var sink in staged) sink.Dispose(); throw; }
@@ -425,6 +347,13 @@ internal static partial class LocalAppOutputMirrors
             var outputs = Sinks;
             if (outputs.Length == 0) return;
 #if SONICROUTE_PHONE
+            bool hasPhone = false;
+            foreach (var sink in outputs)
+            {
+                if (sink.DesktopPlayer is { } desktop) desktop.Write(packet);
+                else if (sink.Pcm != null) hasPhone = true;
+            }
+            if (!hasPhone) return;
             var data = MemoryMarshal.Cast<byte, short>(packet.Span);
             float[] scratch = ArrayPool<float>.Shared.Rent(data.Length);
             try
@@ -432,11 +361,11 @@ internal static partial class LocalAppOutputMirrors
                 var floats = scratch.AsSpan(0, data.Length);
                 for (int i = 0; i < data.Length; i++) floats[i] = data[i] * (1f / 32768);
                 var metrics = AndroidPcmSource.Measure(floats);
-                foreach (var sink in outputs) sink.Pcm.WriteMeasured(floats, metrics);
+                foreach (var sink in outputs) sink.Pcm?.WriteMeasured(floats, metrics);
             }
             finally { ArrayPool<float>.Shared.Return(scratch); }
 #else
-            foreach (var sink in outputs) sink.Player.Write(packet);
+            foreach (var sink in outputs) sink.DesktopPlayer.Write(packet);
 #endif
         }
 
