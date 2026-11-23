@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Numerics;
 using System.Runtime.InteropServices;
 
 namespace SonicRoute.AndroidAudio;
@@ -37,6 +39,10 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     private const int MfETransformNeedMoreInput = unchecked((int)0xC00D6D72);
     private const int MfENotAccepting = unchecked((int)0xC00D36B5);
     private const int MfENoMoreTypes = unchecked((int)0xC00D36B9);
+
+    internal const int MaxPooledInputSamples = 4;
+    internal const int MaxPooledInputBufferBytes = 512 * 1024;
+    internal const int MaxTotalPooledInputBytes = 2 * 1024 * 1024;
 
     private const uint MftOutputStreamProvidesSamples = 0x100;
     private const uint MftOutputStreamCanProvideSamples = 0x200;
@@ -84,6 +90,8 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     private ComPtr _mft = new();
     private ComPtr _dxgiManager = new();
     private ComPtr _reusableSoftwareSample = new();
+    private readonly PooledInputSample?[] _inputSamplePool = new PooledInputSample?[MaxPooledInputSamples];
+    private int _inputPoolTotalBytes;
     private bool _mftProvidesOutputSamples;
     private uint _reusableOutputBufSize;
 
@@ -98,6 +106,93 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     private byte[] _swCopyBuffer = Array.Empty<byte>();
 
     internal bool SkipCorruptFrames { get; init; }
+    public long CorruptFramesSkipped { get; private set; }
+    internal Action? CorruptFrameSkipped;
+
+    internal int InputSamplePoolTotalBytes { get { lock (_gate) return _inputPoolTotalBytes; } }
+    internal int InputSamplePoolSlotCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                int count = 0;
+                for (int i = 0; i < MaxPooledInputSamples; i++)
+                {
+                    if (_inputSamplePool[i] is not null) count++;
+                }
+                return count;
+            }
+        }
+    }
+    internal long InputSamplePoolHits { get; private set; }
+    internal long InputSamplePoolBusySkips { get; private set; }
+    internal long InputSampleTransientAllocations { get; private set; }
+
+    internal bool TryGetInputSamplePoolSlotForTests(
+        int index,
+        out nint sample,
+        out nint buffer,
+        out int capacity,
+        out bool hasDiscontinuityAttr)
+    {
+        lock (_gate)
+        {
+            if ((uint)index < MaxPooledInputSamples && _inputSamplePool[index] is { } slot)
+            {
+                sample = slot.Sample;
+                buffer = slot.Buffer;
+                capacity = slot.Capacity;
+                hasDiscontinuityAttr = slot.HasDiscontinuityAttr;
+                return true;
+            }
+        }
+        sample = 0;
+        buffer = 0;
+        capacity = 0;
+        hasDiscontinuityAttr = false;
+        return false;
+    }
+
+    private sealed class PooledInputSample
+    {
+        public nint Sample;
+        public nint Buffer;
+        public int Capacity;
+        public bool HasDiscontinuityAttr;
+    }
+
+    /// <summary>Zero-allocation stack-only COM pointer guard for hot-path temporary interfaces.</summary>
+    private ref struct ComLease
+    {
+        private nint _ptr;
+
+        public ComLease(nint ptr) => _ptr = ptr;
+
+        public nint Handle => _ptr;
+        public bool IsNull => _ptr == 0;
+
+        public nint Detach()
+        {
+            nint ptr = _ptr;
+            _ptr = 0;
+            return ptr;
+        }
+
+        public bool TryQueryInterface(in Guid iid, out nint result)
+        {
+            result = 0;
+            if (_ptr == 0) return false;
+            if (ComVtbl.QueryInterface(_ptr, in iid, out nint next) >= 0 && next != 0)
+            {
+                result = next;
+                return true;
+            }
+            return false;
+        }
+
+        public void Dispose() => ComVtbl.SafeRelease(ref _ptr);
+    }
 
     public MediaFoundationH264Decoder(nint d3d11Device, int initialWidth = 0, int initialHeight = 0, string? decoder = null,
         uint codec = ScrcpyVideoStreamHeader.CodecH264)
@@ -191,7 +286,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     {
         if (ComVtbl.Get<GetAttributesFn>(_mft.Handle, 8)(_mft.Handle, out nint attrPtr) < 0 || attrPtr == 0)
             return;
-        using var attrs = new ComPtr(attrPtr);
+        using var attrs = new ComLease(attrPtr);
 
         Guid lowLatency = MfLowLatency;
         ComVtbl.Get<AttrSetUint32Fn>(attrs.Handle, 21)(attrs.Handle, in lowLatency, 1);
@@ -224,7 +319,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     {
         int hr = MFCreateMediaType(out nint mtPtr);
         ComVtbl.ThrowIfFailed(hr, "MFCreateMediaType(Input)");
-        using var mt = new ComPtr(mtPtr);
+        using var mt = new ComLease(mtPtr);
 
         Guid majorKey = MfMtMajorType, majorVal = MfMediaTypeVideo;
         Guid subKey = MfMtSubtype, subVal = format;
@@ -253,7 +348,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             if (hr == MfENoMoreTypes || hr < 0)
                 throw new InvalidOperationException($"The video decoder did not expose MFVideoFormat_NV12 output type (0x{hr:X8}).");
 
-            using var outMt = new ComPtr(outMtPtr);
+            using var outMt = new ComLease(outMtPtr);
             Guid subKey = MfMtSubtype;
             if (ComVtbl.Get<AttrGetGuidFn>(outMt.Handle, 10)(outMt.Handle, in subKey, out Guid subtype) >= 0
                 && subtype == MfVideoFormatNv12)
@@ -271,7 +366,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     {
         if (ComVtbl.Get<GetOutputCurrentTypeFn>(_mft.Handle, 18)(_mft.Handle, 0, out nint curPtr) >= 0 && curPtr != 0)
         {
-            using var cur = new ComPtr(curPtr);
+            using var cur = new ComLease(curPtr);
             Guid sizeKey = MfMtFrameSize;
             if (ComVtbl.Get<AttrGetUint64Fn>(cur.Handle, 8)(cur.Handle, in sizeKey, out ulong packed) >= 0)
             {
@@ -285,28 +380,26 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             _cropHeight = _codedHeight;
 
             Guid cropKey = MfMtMinimumDisplayAperture;
-            byte[] areaBytes = new byte[16];
-            var pin = GCHandle.Alloc(areaBytes, GCHandleType.Pinned);
-            try
+            Span<byte> areaBytes = stackalloc byte[16];
+            unsafe
             {
-                if (ComVtbl.Get<AttrGetBlobFn>(cur.Handle, 15)(cur.Handle, in cropKey, pin.AddrOfPinnedObject(), 16, out uint cb) >= 0 && cb >= 16)
+                fixed (byte* pArea = areaBytes)
                 {
-                    short ox = BitConverter.ToInt16(areaBytes, 2);
-                    short oy = BitConverter.ToInt16(areaBytes, 6);
-                    int cw = BitConverter.ToInt32(areaBytes, 8);
-                    int ch = BitConverter.ToInt32(areaBytes, 12);
-                    if (cw > 0 && ch > 0)
+                    if (ComVtbl.Get<AttrGetBlobFn>(cur.Handle, 15)(cur.Handle, in cropKey, (nint)pArea, 16, out uint cb) >= 0 && cb >= 16)
                     {
-                        _cropX = Math.Max(0, (int)ox);
-                        _cropY = Math.Max(0, (int)oy);
-                        _cropWidth = cw;
-                        _cropHeight = ch;
+                        short ox = BinaryPrimitives.ReadInt16LittleEndian(areaBytes.Slice(2, 2));
+                        short oy = BinaryPrimitives.ReadInt16LittleEndian(areaBytes.Slice(6, 2));
+                        int cw = BinaryPrimitives.ReadInt32LittleEndian(areaBytes.Slice(8, 4));
+                        int ch = BinaryPrimitives.ReadInt32LittleEndian(areaBytes.Slice(12, 4));
+                        if (cw > 0 && ch > 0)
+                        {
+                            _cropX = Math.Max(0, (int)ox);
+                            _cropY = Math.Max(0, (int)oy);
+                            _cropWidth = cw;
+                            _cropHeight = ch;
+                        }
                     }
                 }
-            }
-            finally
-            {
-                pin.Free();
             }
 
             Guid strideKey = MfMtDefaultStride;
@@ -334,88 +427,284 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         long ptsUs,
         DecodedHardwareFrameHandler? onHardwareFrame,
         DecodedSoftwareFrameHandler? onSoftwareFrame,
+        bool discontinuity = false) =>
+        DecodePacket(ReadOnlySpan<byte>.Empty, annexBData, ptsUs, onHardwareFrame, onSoftwareFrame, discontinuity);
+
+    public int DecodePacket(
+        ReadOnlySpan<byte> prefixData,
+        ReadOnlySpan<byte> annexBData,
+        long ptsUs,
+        DecodedHardwareFrameHandler? onHardwareFrame,
+        DecodedSoftwareFrameHandler? onSoftwareFrame,
         bool discontinuity = false)
     {
-        if (annexBData.IsEmpty) return 0;
+        if (prefixData.IsEmpty && annexBData.IsEmpty) return 0;
 
-        lock (_gate)
-        {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-
-            if (discontinuity)
-            {
-                var processMessage = ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23);
-                ComVtbl.ThrowIfFailed(processMessage(_mft.Handle, MftMessageCommandFlush, 0), "Flush video decoder");
-                ComVtbl.ThrowIfFailed(processMessage(_mft.Handle, MftMessageNotifyStartOfStream, 0), "Restart video decoder");
-            }
-
-            using var sample = CreateInputSample(annexBData, ptsUs, discontinuity);
-            int hr = ComVtbl.Get<ProcessInputFn>(_mft.Handle, 24)(_mft.Handle, 0, sample.Handle, 0);
-            int frames = 0;
-
-            if (hr == MfENotAccepting)
-            {
-                frames += DrainOutputLocked(onHardwareFrame, onSoftwareFrame);
-                hr = ComVtbl.Get<ProcessInputFn>(_mft.Handle, 24)(_mft.Handle, 0, sample.Handle, 0);
-            }
-            ComVtbl.ThrowIfFailed(hr, "IMFTransform.ProcessInput");
-
-            frames += DrainOutputLocked(onHardwareFrame, onSoftwareFrame);
-            return frames;
-        }
-    }
-
-    public int Drain(DecodedHardwareFrameHandler? onHardwareFrame, DecodedSoftwareFrameHandler? onSoftwareFrame)
-    {
-        lock (_gate)
-        {
-            if (_disposed || _mft.IsNull) return 0;
-            ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23)(_mft.Handle, MftMessageNotifyEndOfStream, 0);
-            ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23)(_mft.Handle, 1 /* MFT_MESSAGE_COMMAND_DRAIN */, 0);
-            return DrainOutputLocked(onHardwareFrame, onSoftwareFrame);
-        }
-    }
-
-    private ComPtr CreateInputSample(ReadOnlySpan<byte> data, long ptsUs, bool discontinuity)
-    {
-        ComVtbl.ThrowIfFailed(MFCreateMemoryBuffer((uint)data.Length, out nint bufPtr), "MFCreateMemoryBuffer");
-        using var buf = new ComPtr(bufPtr);
-
-        ComVtbl.ThrowIfFailed(ComVtbl.Get<BufferLockFn>(buf.Handle, 3)(buf.Handle, out nint dstPtr, out _, out _), "IMFMediaBuffer.Lock");
+        int corruptSkipped = 0;
+        int frames = 0;
         try
         {
-            unsafe
+            lock (_gate)
             {
-                data.CopyTo(new Span<byte>((void*)dstPtr, data.Length));
+                ObjectDisposedException.ThrowIf(_disposed, this);
+
+                if (discontinuity)
+                {
+                    var processMessage = ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23);
+                    ComVtbl.ThrowIfFailed(processMessage(_mft.Handle, MftMessageCommandFlush, 0), "Flush video decoder");
+                    ReleaseInputSamplePoolLocked();
+                    ComVtbl.ThrowIfFailed(processMessage(_mft.Handle, MftMessageNotifyStartOfStream, 0), "Restart video decoder");
+                }
+
+                nint samplePtr = AcquireAndFillInputSampleLocked(
+                    prefixData, annexBData, ptsUs, discontinuity, out PooledInputSample? pooledSlot);
+                using var transientSample = new ComLease(pooledSlot is null ? samplePtr : 0);
+
+                int hr = ComVtbl.Get<ProcessInputFn>(_mft.Handle, 24)(_mft.Handle, 0, samplePtr, 0);
+                if (hr == MfENotAccepting)
+                {
+                    frames += DrainOutputLocked(onHardwareFrame, onSoftwareFrame, ref corruptSkipped);
+                    hr = ComVtbl.Get<ProcessInputFn>(_mft.Handle, 24)(_mft.Handle, 0, samplePtr, 0);
+                }
+                ComVtbl.ThrowIfFailed(hr, "IMFTransform.ProcessInput");
+
+                frames += DrainOutputLocked(onHardwareFrame, onSoftwareFrame, ref corruptSkipped);
             }
         }
         finally
         {
-            ComVtbl.Get<BufferUnlockFn>(buf.Handle, 4)(buf.Handle);
+            NotifyCorruptFramesSkipped(corruptSkipped);
         }
 
-        ComVtbl.ThrowIfFailed(ComVtbl.Get<BufferSetLenFn>(buf.Handle, 6)(buf.Handle, (uint)data.Length), "SetCurrentLength");
-        ComVtbl.ThrowIfFailed(MFCreateSample(out nint samplePtr), "MFCreateSample");
-        var sample = new ComPtr(samplePtr);
+        return frames;
+    }
+
+    public int Drain(DecodedHardwareFrameHandler? onHardwareFrame, DecodedSoftwareFrameHandler? onSoftwareFrame)
+    {
+        int corruptSkipped = 0;
         try
         {
-            ComVtbl.ThrowIfFailed(ComVtbl.Get<SampleAddBufferFn>(sample.Handle, 42)(sample.Handle, buf.Handle), "AddBuffer");
-            ComVtbl.Get<SampleSetTimeFn>(sample.Handle, 36)(sample.Handle, ptsUs * 10);
-            if (discontinuity)
-                ComVtbl.ThrowIfFailed(ComVtbl.Get<AttrSetUint32Fn>(sample.Handle, 21)(sample.Handle, in MfSampleExtensionDiscontinuity, 1),
-                    "Mark video discontinuity");
-            return sample;
+            lock (_gate)
+            {
+                if (_disposed || _mft.IsNull) return 0;
+                ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23)(_mft.Handle, MftMessageNotifyEndOfStream, 0);
+                ComVtbl.Get<ProcessMessageFn>(_mft.Handle, 23)(_mft.Handle, 1 /* MFT_MESSAGE_COMMAND_DRAIN */, 0);
+                return DrainOutputLocked(onHardwareFrame, onSoftwareFrame, ref corruptSkipped);
+            }
         }
-        catch
+        finally
         {
-            sample.Dispose();
-            throw;
+            NotifyCorruptFramesSkipped(corruptSkipped);
         }
+    }
+
+    private void NotifyCorruptFramesSkipped(int corruptSkipped)
+    {
+        if (corruptSkipped <= 0) return;
+        var handler = CorruptFrameSkipped;
+        if (handler is null) return;
+        for (int i = 0; i < corruptSkipped; i++)
+            handler();
+    }
+
+    private static uint GetComRefCount(nint comPtr)
+    {
+        ComVtbl.Get<ComAddRefFn>(comPtr, 1)(comPtr);
+        return ComVtbl.Get<ComReleaseFn>(comPtr, 2)(comPtr);
+    }
+
+    private static int ComputePooledBufferCapacity(int totalBytes, int availableBudget)
+    {
+        int limit = Math.Min(MaxPooledInputBufferBytes, availableBudget);
+        uint rounded = BitOperations.RoundUpToPowerOf2((uint)Math.Max(totalBytes, 4096));
+        int cap = rounded > (uint)limit ? limit : (int)rounded;
+        return Math.Max(totalBytes, cap);
+    }
+
+    private static void CreateSampleAndBuffer(int capacity, out nint samplePtr, out nint bufferPtr)
+    {
+        ComVtbl.ThrowIfFailed(MFCreateMemoryBuffer((uint)capacity, out nint bPtr), "MFCreateMemoryBuffer");
+        using var buf = new ComLease(bPtr);
+        ComVtbl.ThrowIfFailed(MFCreateSample(out nint sPtr), "MFCreateSample");
+        using var sample = new ComLease(sPtr);
+        ComVtbl.ThrowIfFailed(ComVtbl.Get<SampleAddBufferFn>(sample.Handle, 42)(sample.Handle, buf.Handle), "AddBuffer");
+        samplePtr = sample.Detach();
+        bufferPtr = buf.Detach();
+    }
+
+    private static void PopulateInputSample(
+        nint samplePtr,
+        nint bufferPtr,
+        ReadOnlySpan<byte> prefixData,
+        ReadOnlySpan<byte> annexBData,
+        int totalBytes,
+        long ptsUs,
+        bool discontinuity,
+        PooledInputSample? slot)
+    {
+        ComVtbl.ThrowIfFailed(ComVtbl.Get<BufferLockFn>(bufferPtr, 3)(bufferPtr, out nint dstPtr, out uint maxLen, out _), "IMFMediaBuffer.Lock");
+        try
+        {
+            if (maxLen < (uint)totalBytes)
+                throw new InvalidOperationException($"Media Foundation input buffer capacity {maxLen} is smaller than {totalBytes} bytes.");
+            unsafe
+            {
+                var dst = new Span<byte>((void*)dstPtr, totalBytes);
+                if (!prefixData.IsEmpty)
+                {
+                    prefixData.CopyTo(dst);
+                    annexBData.CopyTo(dst.Slice(prefixData.Length));
+                }
+                else
+                {
+                    annexBData.CopyTo(dst);
+                }
+            }
+        }
+        finally
+        {
+            ComVtbl.Get<BufferUnlockFn>(bufferPtr, 4)(bufferPtr);
+        }
+
+        ComVtbl.ThrowIfFailed(ComVtbl.Get<BufferSetLenFn>(bufferPtr, 6)(bufferPtr, (uint)totalBytes), "SetCurrentLength");
+        ComVtbl.Get<SampleSetTimeFn>(samplePtr, 36)(samplePtr, ptsUs * 10);
+
+        if (discontinuity)
+        {
+            ComVtbl.ThrowIfFailed(
+                ComVtbl.Get<AttrSetUint32Fn>(samplePtr, 21)(samplePtr, in MfSampleExtensionDiscontinuity, 1),
+                "Mark video discontinuity");
+            if (slot is not null) slot.HasDiscontinuityAttr = true;
+        }
+        else if (slot is { HasDiscontinuityAttr: true })
+        {
+            ComVtbl.ThrowIfFailed(
+                ComVtbl.Get<AttrDeleteItemFn>(samplePtr, 19)(samplePtr, in MfSampleExtensionDiscontinuity),
+                "Clear video discontinuity");
+            slot.HasDiscontinuityAttr = false;
+        }
+    }
+
+    private nint AcquireAndFillInputSampleLocked(
+        ReadOnlySpan<byte> prefixData,
+        ReadOnlySpan<byte> annexBData,
+        long ptsUs,
+        bool discontinuity,
+        out PooledInputSample? pooledSlot)
+    {
+        int totalBytes = checked(prefixData.Length + annexBData.Length);
+        pooledSlot = null;
+
+        if (totalBytes <= MaxPooledInputBufferBytes)
+        {
+            PooledInputSample? reusable = null;
+            int emptyIndex = -1;
+
+            for (int i = 0; i < MaxPooledInputSamples; i++)
+            {
+                var slot = _inputSamplePool[i];
+                if (slot is null)
+                {
+                    if (emptyIndex < 0) emptyIndex = i;
+                    continue;
+                }
+
+                // Check IMFSample refcount (1) BEFORE IMFMediaBuffer refcount (2): once Sample refcount is 1
+                // under _gate, MFT no longer holds Sample and cannot acquire a fresh Buffer reference via it.
+                if (GetComRefCount(slot.Sample) != 1 || GetComRefCount(slot.Buffer) != 2)
+                {
+                    InputSamplePoolBusySkips++;
+                    continue;
+                }
+
+                if (slot.Capacity >= totalBytes)
+                {
+                    reusable = slot;
+                    break;
+                }
+
+                reusable ??= slot;
+            }
+
+            if (reusable is not null && reusable.Capacity >= totalBytes)
+            {
+                InputSamplePoolHits++;
+                pooledSlot = reusable;
+                PopulateInputSample(reusable.Sample, reusable.Buffer, prefixData, annexBData, totalBytes, ptsUs, discontinuity, reusable);
+                return reusable.Sample;
+            }
+
+            if (reusable is not null)
+            {
+                int otherBytes = _inputPoolTotalBytes - reusable.Capacity;
+                int availableBudget = MaxTotalPooledInputBytes - otherBytes;
+                if (totalBytes <= availableBudget)
+                {
+                    int targetCap = ComputePooledBufferCapacity(totalBytes, availableBudget);
+                    CreateSampleAndBuffer(targetCap, out nint newSample, out nint newBuffer);
+                    _inputPoolTotalBytes = otherBytes + targetCap;
+                    ComVtbl.SafeRelease(ref reusable.Sample);
+                    ComVtbl.SafeRelease(ref reusable.Buffer);
+                    reusable.Sample = newSample;
+                    reusable.Buffer = newBuffer;
+                    reusable.Capacity = targetCap;
+                    reusable.HasDiscontinuityAttr = false;
+
+                    pooledSlot = reusable;
+                    PopulateInputSample(newSample, newBuffer, prefixData, annexBData, totalBytes, ptsUs, discontinuity, reusable);
+                    return newSample;
+                }
+            }
+            else if (emptyIndex >= 0)
+            {
+                int availableBudget = MaxTotalPooledInputBytes - _inputPoolTotalBytes;
+                if (totalBytes <= availableBudget)
+                {
+                    int targetCap = ComputePooledBufferCapacity(totalBytes, availableBudget);
+                    CreateSampleAndBuffer(targetCap, out nint newSample, out nint newBuffer);
+                    var newSlot = new PooledInputSample
+                    {
+                        Sample = newSample,
+                        Buffer = newBuffer,
+                        Capacity = targetCap,
+                        HasDiscontinuityAttr = false
+                    };
+                    _inputSamplePool[emptyIndex] = newSlot;
+                    _inputPoolTotalBytes += targetCap;
+
+                    pooledSlot = newSlot;
+                    PopulateInputSample(newSample, newBuffer, prefixData, annexBData, totalBytes, ptsUs, discontinuity, newSlot);
+                    return newSample;
+                }
+            }
+        }
+
+        InputSampleTransientAllocations++;
+        CreateSampleAndBuffer(totalBytes, out nint transientSamplePtr, out nint transientBufferPtr);
+        using var sampleOwner = new ComLease(transientSamplePtr);
+        using var bufferOwner = new ComLease(transientBufferPtr);
+        PopulateInputSample(sampleOwner.Handle, bufferOwner.Handle, prefixData, annexBData, totalBytes, ptsUs, discontinuity, slot: null);
+        // bufferOwner releases our extra buffer reference; sampleOwner retains the sole ref until freed after ProcessInput.
+        return sampleOwner.Detach();
+    }
+
+    private void ReleaseInputSamplePoolLocked()
+    {
+        for (int i = 0; i < MaxPooledInputSamples; i++)
+        {
+            var slot = _inputSamplePool[i];
+            if (slot is null) continue;
+            _inputSamplePool[i] = null;
+            ComVtbl.SafeRelease(ref slot.Sample);
+            ComVtbl.SafeRelease(ref slot.Buffer);
+        }
+        _inputPoolTotalBytes = 0;
     }
 
     private int DrainOutputLocked(
         DecodedHardwareFrameHandler? onHardwareFrame,
-        DecodedSoftwareFrameHandler? onSoftwareFrame)
+        DecodedSoftwareFrameHandler? onSoftwareFrame,
+        ref int corruptSkipped)
     {
         int count = 0;
         while (true)
@@ -426,11 +715,9 @@ public sealed class MediaFoundationH264Decoder : IDisposable
                 EnsureSoftwareOutputSample();
                 providedSample = _reusableSoftwareSample.Handle;
                 ComVtbl.Get<SampleGetBufferByIndexFn>(providedSample, 40)(providedSample, 0, out nint bPtr);
-                if (bPtr != 0)
-                {
-                    ComVtbl.Get<BufferSetLenFn>(bPtr, 6)(bPtr, 0);
-                    Marshal.Release(bPtr);
-                }
+                using var b = new ComLease(bPtr);
+                if (!b.IsNull)
+                    ComVtbl.Get<BufferSetLenFn>(b.Handle, 6)(b.Handle, 0);
             }
 
             var outputBuf = new MftOutputDataBuffer
@@ -466,26 +753,22 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             nint outSamplePtr = outputBuf.pSample;
             if (outSamplePtr != 0)
             {
-                try
+                using var ownedOutSample = new ComLease(_mftProvidesOutputSamples ? outSamplePtr : 0);
+                if (SkipCorruptFrames
+                    && ComVtbl.Get<AttrGetUint32Fn>(outSamplePtr, 7)(outSamplePtr, in MfSampleExtensionFrameCorruption, out uint corrupt) >= 0
+                    && corrupt == 1)
                 {
-                    if (SkipCorruptFrames
-                        && ComVtbl.Get<AttrGetUint32Fn>(outSamplePtr, 7)(outSamplePtr, in MfSampleExtensionFrameCorruption, out uint corrupt) >= 0
-                        && corrupt == 1)
-                    {
-                        // Caller-supplied software samples can be reused for the next picture.
-                        if (outSamplePtr == providedSample)
-                            ComVtbl.Get<AttrDeleteItemFn>(outSamplePtr, 19)(outSamplePtr, in MfSampleExtensionFrameCorruption);
-                        continue;
-                    }
+                    CorruptFramesSkipped++;
+                    corruptSkipped++;
+                    // Caller-supplied software samples can be reused for the next picture.
+                    if (outSamplePtr == providedSample)
+                        ComVtbl.Get<AttrDeleteItemFn>(outSamplePtr, 19)(outSamplePtr, in MfSampleExtensionFrameCorruption);
+                    continue;
+                }
 
-                    if (_codedWidth <= 0 || _codedHeight <= 0) RefreshOutputDimensions();
-                    EmitSample(outSamplePtr, onHardwareFrame, onSoftwareFrame);
-                    count++;
-                }
-                finally
-                {
-                    if (_mftProvidesOutputSamples) Marshal.Release(outSamplePtr);
-                }
+                if (_codedWidth <= 0 || _codedHeight <= 0) RefreshOutputDimensions();
+                EmitSample(outSamplePtr, onHardwareFrame, onSoftwareFrame);
+                count++;
             }
         }
         return count;
@@ -499,7 +782,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             if (ComVtbl.Get<SampleGetBufferByIndexFn>(_reusableSoftwareSample.Handle, 40)(
                     _reusableSoftwareSample.Handle, 0, out nint curBuf) >= 0 && curBuf != 0)
             {
-                using (new ComPtr(curBuf))
+                using (new ComLease(curBuf))
                 {
                     if (ComVtbl.Get<BufferGetMaxLenFn>(curBuf, 7)(curBuf, out uint maxLen) >= 0 && maxLen >= needed)
                         return;
@@ -513,7 +796,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         try
         {
             ComVtbl.ThrowIfFailed(MFCreateMemoryBuffer(needed, out nint bPtr), "MFCreateMemoryBuffer(Out)");
-            using (var buf = new ComPtr(bPtr))
+            using (var buf = new ComLease(bPtr))
                 ComVtbl.ThrowIfFailed(ComVtbl.Get<SampleAddBufferFn>(sample.Handle, 42)(sample.Handle, buf.Handle), "AddBuffer(Out)");
             _reusableSoftwareSample = sample;
         }
@@ -531,77 +814,73 @@ public sealed class MediaFoundationH264Decoder : IDisposable
     {
         if (ComVtbl.Get<SampleGetBufferByIndexFn>(samplePtr, 40)(samplePtr, 0, out nint bufPtr) < 0 || bufPtr == 0)
             return;
-        using var mediaBuf = new ComPtr(bufPtr);
+        using var mediaBuf = new ComLease(bufPtr);
 
-        if (onHardwareFrame != null && mediaBuf.TryQueryInterface(in IidImfDxgiBuffer, out var dxgiBuf) && dxgiBuf != null)
+        if (onHardwareFrame != null && mediaBuf.TryQueryInterface(in IidImfDxgiBuffer, out nint dxgiBufPtr))
         {
-            using (dxgiBuf)
+            using var dxgiBuf = new ComLease(dxgiBufPtr);
+            Guid texIid = IidId3d11Texture2D;
+            if (ComVtbl.Get<DxgiBufGetResourceFn>(dxgiBuf.Handle, 3)(dxgiBuf.Handle, in texIid, out nint texPtr) >= 0 && texPtr != 0)
             {
-                Guid texIid = IidId3d11Texture2D;
-                if (ComVtbl.Get<DxgiBufGetResourceFn>(dxgiBuf.Handle, 3)(dxgiBuf.Handle, in texIid, out nint texPtr) >= 0 && texPtr != 0)
-                {
-                    using var tex = new ComPtr(texPtr);
-                    ComVtbl.Get<DxgiBufGetSubresourceFn>(dxgiBuf.Handle, 4)(dxgiBuf.Handle, out uint subresource);
-                    ComVtbl.Get<D3D11TexGetDescFn>(tex.Handle, 10)(tex.Handle, out var desc);
-                    int codedW = (int)desc.Width;
-                    int codedH = (int)desc.Height;
-                    int cropW = _cropWidth > 0 ? Math.Min(_cropWidth, codedW) : codedW;
-                    int cropH = _cropHeight > 0 ? Math.Min(_cropHeight, codedH) : codedH;
-                    onHardwareFrame(tex.Handle, subresource, codedW, codedH, _cropX, _cropY, cropW, cropH, _colorMatrix);
-                    return;
-                }
+                using var tex = new ComLease(texPtr);
+                ComVtbl.Get<DxgiBufGetSubresourceFn>(dxgiBuf.Handle, 4)(dxgiBuf.Handle, out uint subresource);
+                ComVtbl.Get<D3D11TexGetDescFn>(tex.Handle, 10)(tex.Handle, out var desc);
+                int codedW = (int)desc.Width;
+                int codedH = (int)desc.Height;
+                int cropW = _cropWidth > 0 ? Math.Min(_cropWidth, codedW) : codedW;
+                int cropH = _cropHeight > 0 ? Math.Min(_cropHeight, codedH) : codedH;
+                onHardwareFrame(tex.Handle, subresource, codedW, codedH, _cropX, _cropY, cropW, cropH, _colorMatrix);
+                return;
             }
         }
 
         if (onSoftwareFrame == null) return;
 
-        if (mediaBuf.TryQueryInterface(in IidImf2DBuffer, out var buf2d) && buf2d != null)
+        if (mediaBuf.TryQueryInterface(in IidImf2DBuffer, out nint buf2dPtr))
         {
-            using (buf2d)
+            using var buf2d = new ComLease(buf2dPtr);
+            if (ComVtbl.Get<Lock2DFn>(buf2d.Handle, 3)(buf2d.Handle, out nint scan0, out int pitch) >= 0)
             {
-                if (ComVtbl.Get<Lock2DFn>(buf2d.Handle, 3)(buf2d.Handle, out nint scan0, out int pitch) >= 0)
+                try
                 {
-                    try
+                    int absPitch = Math.Abs(pitch);
+                    int h = Math.Max(2, _codedHeight);
+                    int uvH = (h + 1) / 2;
+                    int total = absPitch * (h + uvH);
+                    if (scan0 != 0 && absPitch > 0 && total > 0)
                     {
-                        int absPitch = Math.Abs(pitch);
-                        int h = Math.Max(2, _codedHeight);
-                        int uvH = (h + 1) / 2;
-                        int total = absPitch * (h + uvH);
-                        if (scan0 != 0 && absPitch > 0 && total > 0)
+                        if (pitch > 0)
                         {
-                            if (pitch > 0)
+                            ReadOnlySpan<byte> directSpan;
+                            unsafe
                             {
-                                ReadOnlySpan<byte> directSpan;
-                                unsafe
-                                {
-                                    directSpan = new ReadOnlySpan<byte>((void*)scan0, total);
-                                }
-                                onSoftwareFrame(
-                                    directSpan,
-                                    absPitch, h, _cropX, _cropY,
-                                    _cropWidth > 0 ? _cropWidth : _codedWidth,
-                                    _cropHeight > 0 ? _cropHeight : _codedHeight,
-                                    _colorMatrix);
+                                directSpan = new ReadOnlySpan<byte>((void*)scan0, total);
                             }
-                            else
-                            {
-                                if (_swCopyBuffer.Length < total) _swCopyBuffer = new byte[total];
-                                for (int row = 0; row < h + uvH; row++)
-                                    Marshal.Copy(scan0 + row * pitch, _swCopyBuffer, row * absPitch, absPitch);
-                                onSoftwareFrame(
-                                    _swCopyBuffer.AsSpan(0, total),
-                                    absPitch, h, _cropX, _cropY,
-                                    _cropWidth > 0 ? _cropWidth : _codedWidth,
-                                    _cropHeight > 0 ? _cropHeight : _codedHeight,
-                                    _colorMatrix);
-                            }
+                            onSoftwareFrame(
+                                directSpan,
+                                absPitch, h, _cropX, _cropY,
+                                _cropWidth > 0 ? _cropWidth : _codedWidth,
+                                _cropHeight > 0 ? _cropHeight : _codedHeight,
+                                _colorMatrix);
                         }
-                        return;
+                        else
+                        {
+                            if (_swCopyBuffer.Length < total) _swCopyBuffer = new byte[total];
+                            for (int row = 0; row < h + uvH; row++)
+                                Marshal.Copy(scan0 + row * pitch, _swCopyBuffer, row * absPitch, absPitch);
+                            onSoftwareFrame(
+                                _swCopyBuffer.AsSpan(0, total),
+                                absPitch, h, _cropX, _cropY,
+                                _cropWidth > 0 ? _cropWidth : _codedWidth,
+                                _cropHeight > 0 ? _cropHeight : _codedHeight,
+                                _colorMatrix);
+                        }
                     }
-                    finally
-                    {
-                        ComVtbl.Get<Unlock2DFn>(buf2d.Handle, 4)(buf2d.Handle);
-                    }
+                    return;
+                }
+                finally
+                {
+                    ComVtbl.Get<Unlock2DFn>(buf2d.Handle, 4)(buf2d.Handle);
                 }
             }
         }
@@ -653,6 +932,7 @@ public sealed class MediaFoundationH264Decoder : IDisposable
             _reusableSoftwareSample.Dispose();
             _dxgiManager.Dispose();
             _mft.Dispose();
+            ReleaseInputSamplePoolLocked();
             _swCopyBuffer = Array.Empty<byte>();
             if (_mfStarted) { try { MFShutdown(); } catch { } _mfStarted = false; }
 
@@ -715,6 +995,8 @@ public sealed class MediaFoundationH264Decoder : IDisposable
         public uint MiscFlags;
     }
 
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate uint ComAddRefFn(nint self);
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate uint ComReleaseFn(nint self);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int ActivateObjectFn(nint self, in Guid iid, out nint ptr);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int GetOutputStreamInfoFn(nint self, uint streamId, out MftOutputStreamInfo info);
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int GetAttributesFn(nint self, out nint ppAttributes);

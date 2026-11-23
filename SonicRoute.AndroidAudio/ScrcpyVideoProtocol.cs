@@ -71,6 +71,23 @@ public sealed class ScrcpyPacketMerger
     public void Reset() => _pendingConfig = null;
 
     /// <summary>
+    /// Consumes any cached SPS/PPS/VPS configuration bytes without copying them into a scratch buffer.
+    /// </summary>
+    public bool TryConsumePendingConfig(out byte[]? config)
+    {
+        byte[]? pending = _pendingConfig;
+        _pendingConfig = null;
+        if (pending is { Length: > 0 })
+        {
+            config = pending;
+            return true;
+        }
+
+        config = null;
+        return false;
+    }
+
+    /// <summary>
     /// If <paramref name="isConfig"/> is true, caches the config bytes and returns an empty span.
     /// Otherwise returns either <paramref name="payload"/> directly or <c>[pendingConfig][payload]</c>.
     /// </summary>
@@ -110,6 +127,7 @@ public static class ScrcpyControlMessageWriter
     public const byte TypeStartApp = 16;
     public const byte TypeResizeDisplay = 18; // packaging/AndroidLab/native/resize_packet.h
     public const byte TypeInjectGamepadState = 19;
+    public const byte TypeRequestSyncFrame = 20;
 
     public const byte KeyActionDown = 0;
     public const byte KeyActionUp = 1;
@@ -232,6 +250,13 @@ public static class ScrcpyControlMessageWriter
     public static int WriteSimpleCommand(Span<byte> dst, byte type)
     {
         dst[0] = type;
+        return 1;
+    }
+
+    public static int WriteRequestSyncFrame(Span<byte> dst)
+    {
+        if (dst.IsEmpty) throw new ArgumentException("Destination span too small.", nameof(dst));
+        dst[0] = TypeRequestSyncFrame;
         return 1;
     }
 
