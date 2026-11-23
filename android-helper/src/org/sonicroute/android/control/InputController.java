@@ -53,6 +53,7 @@ public final class InputController {
     private final ExecutorService appLaunchExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "SonicRoute-AppCmd"));
 
     private VideoCaptureSource captureSource;
+    private volatile Runnable syncFrameRequester;
     private Closeable clipboardListenerHandle;
     private long lastTouchDownMs;
     private volatile boolean stopped;
@@ -76,6 +77,10 @@ public final class InputController {
 
     public void setCaptureSource(VideoCaptureSource captureSource) {
         this.captureSource = captureSource;
+    }
+
+    public void setSyncFrameRequester(Runnable requester) {
+        this.syncFrameRequester = requester;
     }
 
     public void start() {
@@ -196,6 +201,16 @@ public final class InputController {
             case ControlProtocol.TYPE_RESET_VIDEO:
                 if (captureSource != null) {
                     captureSource.requestReset();
+                }
+                break;
+            case ControlProtocol.TYPE_REQUEST_SYNC_FRAME:
+                Runnable requester = syncFrameRequester;
+                if (requester != null) {
+                    try {
+                        requester.run();
+                    } catch (RuntimeException error) {
+                        ServerLog.w("Sync frame requester failed", error);
+                    }
                 }
                 break;
             case ControlProtocol.TYPE_RESIZE_DISPLAY:
