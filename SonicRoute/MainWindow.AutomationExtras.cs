@@ -15,6 +15,7 @@ namespace SonicRoute
     public partial class MainWindow
     {
         private int _autoExecutionRefreshPending;
+        private bool _autoExecutionSubscribed;
         private static ComboBoxItem LocalizedAutoItem(string key, object tag)
         {
             var item = new ComboBoxItem { Tag = tag };
@@ -31,7 +32,15 @@ namespace SonicRoute
             string[] keys = { "Auto.TriggerHotkey", "Auto.TriggerAppStart", "Auto.TriggerAppSwitch", "Auto.TriggerAppExit", "Auto.TriggerSchedule", "Auto.TriggerStartup" };
             for (int index = 0; index < keys.Length; index++) AutoTriggerFilter.Items.Add(LocalizedAutoItem(keys[index], index));
             AutoStateFilter.SelectedIndex = AutoTriggerFilter.SelectedIndex = 0;
-            AutoRuleService.ExecutionStateChanged += AutoExecutionStateChanged;
+        }
+
+        private void UpdateAutoExecutionSubscription()
+        {
+            bool active = AutoRefreshWindowVisible;
+            if (_autoExecutionSubscribed == active) return;
+            _autoExecutionSubscribed = active;
+            if (active) AutoRuleService.ExecutionStateChanged += AutoExecutionStateChanged;
+            else AutoRuleService.ExecutionStateChanged -= AutoExecutionStateChanged;
         }
 
         private void AutoSearch_TextChanged(object sender, TextChangedEventArgs e) => ApplyAutoRuleFilters();
@@ -62,7 +71,7 @@ namespace SonicRoute
             _uiLifetime.Post(Dispatcher, new Action(() =>
             {
                 Interlocked.Exchange(ref _autoExecutionRefreshPending, 0);
-                if (!_isClosed && AutomationPageHost.Visibility == Visibility.Visible) _ = RefreshAutoRulesAsync();
+                if (AutoRefreshWindowVisible) _ = RefreshAutoRulesAsync();
             }));
         }
 

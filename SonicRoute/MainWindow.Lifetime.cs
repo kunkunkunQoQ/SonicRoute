@@ -27,7 +27,7 @@ namespace SonicRoute
         {
             if (_isClosed) return;
             _isClosed = true;
-            ReleaseExternalAudio();
+            UpdateExternalAudioSubscription();
             ReleasePhoneManagement();
             _appVolumeWriter?.Dispose(); // Commit the final value before cancelling UI-only work.
             _appVolumeWriter = null;
@@ -42,7 +42,7 @@ namespace SonicRoute
             StopAutoRefresh();
             StateChanged -= AutoRefreshWindowStateChanged;
             IsVisibleChanged -= AutoRefreshVisibilityChanged;
-            AutoRuleService.ExecutionStateChanged -= AutoExecutionStateChanged;
+            UpdateAutoExecutionSubscription();
             PreviewKeyDown -= MainWindow_PreviewKeyDown;
             PreviewMouseDown -= MainWindow_PreviewMouseDown;
             PreviewMouseWheel -= MainWindow_PreviewMouseWheel;

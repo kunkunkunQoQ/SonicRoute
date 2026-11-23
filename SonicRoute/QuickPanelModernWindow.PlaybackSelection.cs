@@ -78,7 +78,7 @@ public partial class QuickPanelModernWindow
 
                 string preferred = request.Outputs.Contains(before.Output, StringComparer.OrdinalIgnoreCase) ? before.Output : request.Outputs[0];
                 MarkLastUsed(row.App);
-                var result = await _setRowPlaybackOutputs(row.App, request.Outputs, preferred);
+                var result = await _uiLifetime.ReadAsync(_setRowPlaybackOutputs(row.App, request.Outputs, preferred));
                 applied = result.Success;
                 if (!Current()) return;
                 if (applied)
@@ -196,7 +196,8 @@ public partial class QuickPanelModernWindow
                     return;
                 }
                 MarkLastUsed(row.App);
-                var (ok, _, msg) = await Task.Run(() => _applyRowEndpoint(row.App, EDataFlow.eCapture, request.DeviceId));
+                var (ok, _, msg) = await ReadbackAfterWriteAsync((Write: _applyRowEndpoint, row.App, request.DeviceId),
+                    static state => state.Write(state.App, EDataFlow.eCapture, state.DeviceId));
                 applied = ok;
                 if (!Current()) return;
                 if (ok)

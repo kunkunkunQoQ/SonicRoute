@@ -497,19 +497,12 @@ namespace SonicRoute
         {
             if (_quickPanel == null)
             {
-                _uiWorkingSetDirty = true;
-                CancelUiReclaim();
-                AppIconService.Resume();
+                ResumeUiIcons();
                 _quickPanel = new QuickPanelModernWindow();
                 _quickPanel.Closed += (_, _) =>
                 {
                     _quickPanel = null;
-                    if (_mainWindow == null && !IsPhoneWindowOpen)
-                    {
-                        AppIconService.TrimForIdle();
-                        ScheduleUiReclaim();
-                    }
-                    else UpdateAppIconMetadataDemand();
+                    UpdateAppIconMetadataDemand();
                 };
             }
 
@@ -523,9 +516,19 @@ namespace SonicRoute
         }
 
         // Reuse the existing window references and visibility events; no separate UI registry.
-        internal void UpdateAppIconMetadataDemand() => AudioService.SetAppIconMetadataEnabled(
-            (_mainWindow?.IsVisible == true && _mainWindow.WindowState != WindowState.Minimized)
-            || _quickPanel?.IsVisible == true);
+        internal void UpdateAppIconMetadataDemand()
+        {
+            if ((_mainWindow?.IsVisible == true && _mainWindow.WindowState != WindowState.Minimized)
+                || _quickPanel?.IsVisible == true)
+            {
+                ResumeUiIcons();
+            }
+            else
+            {
+                AudioService.SetAppIconMetadataEnabled(false);
+                ScheduleUiReclaim();
+            }
+        }
 
 
         private async Task RunUiBenchmarkAsync()
@@ -647,19 +650,12 @@ namespace SonicRoute
         {
             if (_mainWindow == null)
             {
-                _uiWorkingSetDirty = true;
-                CancelUiReclaim();
-                AppIconService.Resume();
+                ResumeUiIcons();
                 _mainWindow = new MainWindow();
                 _mainWindow.Closed += (_, _) =>
                 {
                     _mainWindow = null;
-                    if (_quickPanel == null && !IsPhoneWindowOpen)
-                    {
-                        AppIconService.TrimForIdle();
-                        ScheduleUiReclaim();
-                    }
-                    else UpdateAppIconMetadataDemand();
+                    UpdateAppIconMetadataDemand();
                 };
             }
 

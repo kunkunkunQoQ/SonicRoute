@@ -54,6 +54,8 @@ public final class AndroidSystemPlatform {
     private static IInterface packageManager;
     private static IInterface statusBarService;
     private static android.hardware.input.InputManager inputManager;
+    private static volatile Method setDisplayIdMethod;
+    private static volatile Method injectInputEventMethod;
     private static long lastInjectEventsWarnMs;
 
     private AndroidSystemPlatform() {
@@ -408,7 +410,12 @@ public final class AndroidSystemPlatform {
     public static boolean injectInputEvent(InputEvent event, int displayId, int mode) {
         if (displayId != 0) {
             try {
-                InputEvent.class.getMethod("setDisplayId", int.class).invoke(event, displayId);
+                Method setDisplayId = setDisplayIdMethod;
+                if (setDisplayId == null) {
+                    setDisplayId = InputEvent.class.getMethod("setDisplayId", int.class);
+                    setDisplayIdMethod = setDisplayId;
+                }
+                setDisplayId.invoke(event, displayId);
             } catch (Throwable error) {
                 ServerLog.w("Could not bind input event to display " + displayId, error);
                 return false;
@@ -416,7 +423,11 @@ public final class AndroidSystemPlatform {
         }
         try {
             android.hardware.input.InputManager im = getInputManager();
-            Method inject = android.hardware.input.InputManager.class.getMethod("injectInputEvent", InputEvent.class, int.class);
+            Method inject = injectInputEventMethod;
+            if (inject == null) {
+                inject = android.hardware.input.InputManager.class.getMethod("injectInputEvent", InputEvent.class, int.class);
+                injectInputEventMethod = inject;
+            }
             return (boolean) inject.invoke(im, event, mode);
         } catch (InvocationTargetException error) {
             Throwable cause = error.getCause();

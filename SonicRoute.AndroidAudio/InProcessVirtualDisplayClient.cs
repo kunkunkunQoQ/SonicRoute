@@ -215,9 +215,9 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 
         window.TouchEvent += (action, ptrId, x, y, sw, sh, pressure, actionBtn, buttons) =>
         {
-            byte[] packet = new byte[32];
+            Span<byte> packet = stackalloc byte[32];
             ScrcpyControlMessageWriter.WriteInjectTouch(packet, action, ptrId, x, y, sw, sh, pressure, actionBtn, buttons);
-            EnqueueControl(packet);
+            _controlOutbound?.EnqueueTouch(packet);
         };
         window.ScrollEvent += (x, y, sw, sh, hScroll, vScroll, buttons) =>
         {
@@ -471,46 +471,63 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 
     internal sealed class ControlQueue
     {
-        private sealed class PendingHover(byte[] data)
+        private sealed class PendingMotion(byte[] data)
         {
             public byte[]? Data = data;
         }
 
-        private readonly record struct ControlPacket(byte[]? Data, int GamepadFocusVersion = 0, PendingHover? Hover = null);
+        private readonly record struct ControlPacket(byte[]? Data, int GamepadFocusVersion = 0, PendingMotion? Motion = null);
 
         private readonly object _gate = new();
-        private Channel<ControlPacket>? _channel = Channel.CreateUnbounded<ControlPacket>(new UnboundedChannelOptions { SingleReader = true });
-        private PendingHover? _pendingHover;
+        private volatile Channel<ControlPacket>? _channel = Channel.CreateUnbounded<ControlPacket>(new UnboundedChannelOptions { SingleReader = true });
+        private PendingMotion? _pendingMotion;
+        private bool _keepNextMouseMove;
 
         internal void Enqueue(byte[] data, int gamepadFocusVersion = 0)
         {
-            bool isMouse = data.Length == 32 && data[0] == ScrcpyControlMessageWriter.TypeInjectTouchEvent
-                && BinaryPrimitives.ReadUInt64BigEndian(data.AsSpan(2, 8)) == ScrcpyControlMessageWriter.PointerIdMouse;
-
             lock (_gate)
             {
-                if (_channel is null) return;
-                if (isMouse && data[1] == ScrcpyControlMessageWriter.MotionActionHoverMove)
+                if (_channel is not { } channel) return;
+                _pendingMotion = null;
+                channel.Writer.TryWrite(new ControlPacket(data, gamepadFocusVersion));
+            }
+        }
+
+        internal void EnqueueTouch(ReadOnlySpan<byte> data)
+        {
+            byte action = data[1];
+            bool isMouse = BinaryPrimitives.ReadUInt64BigEndian(data.Slice(2, 8)) == ScrcpyControlMessageWriter.PointerIdMouse;
+            bool isMouseMove = isMouse && action == ScrcpyControlMessageWriter.MotionActionMove;
+            bool isMouseButton = isMouse && action is ScrcpyControlMessageWriter.MotionActionDown or ScrcpyControlMessageWriter.MotionActionUp;
+            lock (_gate)
+            {
+                if (_channel is not { } channel) return;
+                bool canMerge = isMouse && action == ScrcpyControlMessageWriter.MotionActionHoverMove
+                    || isMouseMove && !_keepNextMouseMove;
+                // Keep the first drag sample after a button transition to help start the gesture.
+                if (isMouseButton || isMouseMove)
+                    _keepNextMouseMove = isMouseButton;
+
+                byte[]? pending = _pendingMotion?.Data;
+                if (canMerge)
                 {
-                    // Only the unsent hover at the FIFO tail can be replaced.
-                    if (_pendingHover is null)
+                    // Replace only coordinates in the unsent FIFO tail. The suffix holds
+                    // frame size, pressure, action button and held buttons.
+                    if (pending is not null && pending[1] == action && data[18..].SequenceEqual(pending.AsSpan(18)))
                     {
-                        _pendingHover = new PendingHover(data);
-                        _channel.Writer.TryWrite(new ControlPacket(null, Hover: _pendingHover));
+                        data.Slice(10, 8).CopyTo(pending.AsSpan(10, 8));
+                        return;
                     }
-                    else
-                    {
-                        _pendingHover.Data = data;
-                    }
+                    _pendingMotion = new PendingMotion(data.ToArray());
+                    channel.Writer.TryWrite(new ControlPacket(null, Motion: _pendingMotion));
                     return;
                 }
 
-                if (_pendingHover is not null && isMouse
-                    && data[1] is ScrcpyControlMessageWriter.MotionActionDown or ScrcpyControlMessageWriter.MotionActionUp)
-                    _pendingHover.Data = null; // This click carries its own coordinates.
+                if (isMouseButton && pending is not null && pending[1] == ScrcpyControlMessageWriter.MotionActionHoverMove)
+                    _pendingMotion!.Data = null; // This button event carries its own coordinates.
 
-                _pendingHover = null;
-                _channel.Writer.TryWrite(new ControlPacket(data, gamepadFocusVersion));
+                _pendingMotion = null;
+                channel.Writer.TryWrite(new ControlPacket(data.ToArray()));
             }
         }
 
@@ -523,13 +540,14 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
                 await foreach (var packet in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
                 {
                     ct.ThrowIfCancellationRequested();
+                    if (_channel is null) return;
                     byte[]? data = packet.Data;
-                    if (packet.Hover is { } hover)
+                    if (packet.Motion is { } motion)
                     {
                         lock (_gate)
                         {
-                            if (ReferenceEquals(_pendingHover, hover)) _pendingHover = null;
-                            data = hover.Data;
+                            if (ReferenceEquals(_pendingMotion, motion)) _pendingMotion = null;
+                            data = motion.Data;
                         }
                     }
 
@@ -548,9 +566,10 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         {
             lock (_gate)
             {
-                _channel?.Writer.TryComplete();
+                var channel = _channel;
                 _channel = null;
-                _pendingHover = null;
+                _pendingMotion = null;
+                channel?.Writer.TryComplete();
             }
         }
     }

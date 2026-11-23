@@ -11,6 +11,9 @@ internal static partial class AppPlaybackOutputs
 {
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
     private static readonly Dictionary<int, ProcessGate> Gates = [];
+#if SONICROUTE_IDLE_WORKING_SET_TRIM
+    internal static bool HasPendingChanges { get { lock (Gates) return Gates.Count != 0; } }
+#endif
     private sealed class ProcessGate { internal readonly SemaphoreSlim Changes = new(1, 1); internal int Users; }
 
     private static string Endpoint(string? id) => string.IsNullOrWhiteSpace(id) || AudioService.IsSystemDefault(id)

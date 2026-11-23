@@ -25,6 +25,9 @@ internal static partial class LocalAppOutputMirrors
     private static readonly CancellationTokenSource Shutdown = new();
 
     internal static bool HasActiveRoutes => !Routes.IsEmpty;
+#if SONICROUTE_IDLE_WORKING_SET_TRIM
+    internal static bool HasActiveOrChangingRoutes => Changes.CurrentCount == 0 || HasActiveRoutes;
+#endif
 
     private static string OwnerName(int pid) => @"Local\SonicRoute.AudioMirror." + pid;
 

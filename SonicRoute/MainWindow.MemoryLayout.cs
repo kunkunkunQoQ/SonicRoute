@@ -19,6 +19,42 @@ namespace SonicRoute
         private List<AutomationActionChoice>? _actionChoices;
         private string? _actionChoicesLanguage;
 
+        internal bool CanReleaseIdleUiResources => !_isClosed && IsLoaded && (!IsVisible || WindowState == WindowState.Minimized)
+            && IsEnabled && OwnedWindows.Count == 0 && !IsMouseCaptureWithin && !IsHotkeyRecording
+            && !_osdAdjusting && !_panelPosAdjusting && !_autoDragging && !_automationRuleDragging
+            && !_configTransferBusy && !_appIconImportBusy && !_languageFilesBusy && !_autoStartChangeBusy
+            && !_nameSavePending && !_themeSavePending && !_osdPreviewPending && !_restartPending;
+
+        internal void ReleaseIdleUiResources()
+        {
+            if (!CanReleaseIdleUiResources) return;
+
+            // Drop generated rows only where navigation or expanding a section rebuilds them.
+            // Keep the selected page, edit controls, and all service-owned models intact.
+            if (HotkeysPageHost.Visibility != Visibility.Visible)
+                HotkeyList?.Items.Clear();
+            if (AutoRuleList != null && AutomationPageHost.Visibility != Visibility.Visible)
+            {
+                AutoRuleList.Items.Clear();
+                _autoRows.Clear();
+                _autoRuleListSignature = null;
+            }
+            if (SettingsPage == null) return;
+            bool offPage = SettingsPageHost.Visibility != Visibility.Visible;
+            if (offPage || (_config.CollapseDeviceSections && KeepDevicesMoreToggle.IsChecked != true))
+            {
+                OutputFilterList.Items.Clear();
+                InputFilterList.Items.Clear();
+                _settingsFilterBuilt = false;
+            }
+            if (offPage || (_config.CollapseDeviceSections && DeviceNamesMoreToggle.IsChecked != true))
+            {
+                OutputNameList.Items.Clear();
+                InputNameList.Items.Clear();
+                _settingsNamesBuilt = false;
+            }
+        }
+
         private void InvalidateSettingsDeviceSections()
         {
             _settingsFilterBuilt = false;

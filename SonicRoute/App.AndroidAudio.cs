@@ -404,7 +404,15 @@ public partial class App
             await panel.Dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
         }
         catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Phone preferences: " + ex.Message); return; }
-        finally { if (ReferenceEquals(_openingPhonePanel, panel)) _openingPhonePanel = null; }
+        finally
+        {
+            if (ReferenceEquals(_openingPhonePanel, panel))
+            {
+                _openingPhonePanel = null;
+                // The owner may have closed while phone preferences were loading.
+                ScheduleUiReclaim();
+            }
+        }
         if (_exiting || _phoneAudioWindow != null || !ConfigService.Load().QuickPanelShowPhoneAudio
             || !panel.IsVisible || panel.Left < -5000 || panel.Top < -5000) return;
         var phone = _phoneAudioWindow = new PhoneAudioWindow { Owner = panel };
@@ -446,11 +454,7 @@ public partial class App
                 if (config.QuickPanelShowPhoneAudio) { config.QuickPanelShowPhoneAudio = false; ConfigService.QueueSave(config); }
                 panel.UpdatePhoneAudioButton();
             }
-            if (!_exiting && !HasActiveUiWindows())
-            {
-                AppIconService.TrimForIdle();
-                ScheduleUiReclaim();
-            }
+            ScheduleUiReclaim();
         };
         PositionPhone(); phone.Show(); panel.RefreshCompanionPlacement();
     }

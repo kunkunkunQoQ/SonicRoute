@@ -113,14 +113,16 @@ namespace SonicRoute
             if (HeaderTitleText != null)
                 HeaderTitleText.Text = $"{BuildIdentity.DisplayName} {App.DisplayVersion}";
             _config = ConfigService.Load();
-            InitializeExternalAudio();
             InitializeUpdateNotifications();
 
             Loaded += async (_, _) =>
             {
                 await LoadDevicesAsync();
                 if (_isClosed) return;
-                if (!_isClosed) { await LoadAppsAsync(); await InitializePhoneManagementAsync(); }
+                await LoadAppsAsync();
+                if (_isClosed) return;
+                await InitializePhoneManagementAsync();
+                if (_isClosed) return;
                 // 实验 UI（应用/设置输入区/名称区）可见性：麦克风选项开启时显示
                 ApplyExpMicUi(_config.ExperimentalMic);
                 NavExperimental.Visibility = _config.ExperimentalUnlocked && _config.ExperimentalMode
@@ -373,6 +375,7 @@ namespace SonicRoute
             ExperimentalPageHost.Visibility = tag == "Experimental" ? Visibility.Visible : Visibility.Collapsed;
             if (ExperimentalPage != null) ExperimentalPage.Visibility = ExperimentalPageHost.Visibility;
             AutomationPageHost.Visibility = tag == "Automation" ? Visibility.Visible : Visibility.Collapsed;
+            UpdateAutoExecutionSubscription();
 
             if (tag == "Apps") { await LoadAppsAsync(); ActivatePhoneManagement(); }
             else if (tag == "Hotkeys") BuildHotkeyList();
@@ -578,7 +581,7 @@ namespace SonicRoute
                 }
                 string? selectedIdentity = (AppsListBox.SelectedItem as AppItem)?.Identity;
                 _appItems = GetAppCandidates(apps);
-                AppItem.LoadIconsAsync(_appItems);
+                AppItem.LoadIconsAsync(_appItems, _uiLifetime.Token);
                 foreach (var item in _appItems) { item.RefreshAutoSwitchState(); item.IsMuted = muted[item.Identity]; }
                 AppsListBox.ItemsSource = null;
                 AppsListBox.ItemsSource = _appItems;
@@ -2678,8 +2681,11 @@ namespace SonicRoute
         private void AutoRefreshVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateAutoRefreshVisibility();
         private void UpdateAutoRefreshVisibility()
         {
+            UpdateExternalAudioSubscription();
+            UpdateAutoExecutionSubscription();
             if (Application.Current is App app) app.UpdateAppIconMetadataDemand();
             if (!AutoRefreshWindowVisible) { StopAutoRefresh(); return; }
+            _ = RefreshAutoRulesAsync();
             _ = RefreshAutoAppsAsync(_navigationVersion, ensureFresh: true);
         }
 
@@ -3039,14 +3045,14 @@ namespace SonicRoute
             if (sender is System.Windows.Controls.ComboBox combo) LoadAppComboIcons(combo);
         }
 
-        private static void LoadAppComboIcons(System.Windows.Controls.ComboBox combo)
+        private void LoadAppComboIcons(System.Windows.Controls.ComboBox combo)
         {
-            AppItem.LoadIconsAsync(combo.Items.OfType<AppItem>());
+            AppItem.LoadIconsAsync(combo.Items.OfType<AppItem>(), _uiLifetime.Token);
         }
 
-        private static void LoadSelectedAppIcon(System.Windows.Controls.ComboBox combo)
+        private void LoadSelectedAppIcon(System.Windows.Controls.ComboBox combo)
         {
-            if (combo.SelectedItem is AppItem item) AppItem.LoadIconsAsync(new[] { item });
+            if (combo.SelectedItem is AppItem item) AppItem.LoadIconsAsync(new[] { item }, _uiLifetime.Token);
         }
 
         private void SelectAutoApp(System.Windows.Controls.ComboBox combo, string? processName)

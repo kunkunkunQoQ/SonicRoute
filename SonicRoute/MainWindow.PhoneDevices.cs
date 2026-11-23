@@ -140,7 +140,7 @@ public partial class MainWindow
         !_isClosed && _phoneInitialized && PhoneDevicesHost.IsVisible && WindowState != WindowState.Minimized);
     private void PhoneDevicesChanged()
     {
-        if (!Dispatcher.CheckAccess()) { _ = Dispatcher.BeginInvoke(new Action(PhoneDevicesChanged)); return; }
+        if (!Dispatcher.CheckAccess()) { _uiLifetime.Post(Dispatcher, PhoneDevicesChanged, System.Windows.Threading.DispatcherPriority.Normal); return; }
         if (_isClosed) return;
         var devices = PhoneAudioWindowCache.Devices ?? Array.Empty<AndroidDevice>();
         _ = AndroidAudioHost.ProbeOutputsIfConnectedAsync(devices, force: false, _uiLifetime.Token);
@@ -148,11 +148,11 @@ public partial class MainWindow
     }
     private void PhoneLibraryChanged()
     {
-        if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(new Action(PhoneLibraryChanged)); return; }
+        if (!Dispatcher.CheckAccess()) { _uiLifetime.Post(Dispatcher, PhoneLibraryChanged, System.Windows.Threading.DispatcherPriority.Normal); return; }
         if (_isClosed || !_phoneInitialized) return;
+        if (IsLoaded && (!IsVisible || WindowState == WindowState.Minimized)) return;
         SyncExternalOutputDevices();
-        if (IsLoaded && (!IsVisible || WindowState == WindowState.Minimized
-            || AppsPage.Visibility != Visibility.Visible)) return;
+        if (IsLoaded && AppsPage.Visibility != Visibility.Visible) return;
         var store = AndroidAudioHost.Phone;
         var profiles = store.Profiles.Where(p => p.LastDevice != null).ToArray();
         var ids = profiles.Select(p => p.Id).ToHashSet(StringComparer.Ordinal);
@@ -238,8 +238,9 @@ public partial class MainWindow
                 await _phoneDevicePage.RefreshAsync();
             else if (AndroidAudioHost.Phone.Profile.LastDevice != null)
                 await PhoneAudioWindowCache.RefreshSelectedDeviceAsync(_uiLifetime.Token);
+            if (_isClosed) return;
             _phoneRefreshError = null; PhoneDevicesHost.ToolTip = null;
-            if (!_isClosed) PhoneLibraryChanged();
+            PhoneLibraryChanged();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { if (!_isClosed) { _phoneRefreshError = ex; PhoneDevicesHost.ToolTip = AndroidErrorTranslation.Format(ex); } }

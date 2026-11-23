@@ -766,20 +766,23 @@ internal static partial class AndroidAudioHost
     private static bool HasActiveDisplayResources() =>
         D3D11VideoSurfaceRenderer.ActiveInstanceCount > 0 || MediaFoundationH264Decoder.ActiveInstanceCount > 0;
 
+    private static bool PhoneUiInUse => (System.Windows.Application.Current is App app && app.IsPhoneWindowOpen)
+        || PhoneDevicePage.HasActivePage;
+
     internal static void TrimForIdle()
     {
-        bool phoneUiOpen = (System.Windows.Application.Current is App app && app.IsPhoneWindowOpen)
-            || PhoneDevicePage.HasActivePage;
-        if (!phoneUiOpen && IsCatalogCreated)
+        if (!PhoneUiInUse && IsCatalogCreated)
             Catalog.TrimForIdle();
-        if (!phoneUiOpen && !HasActiveWork())
-        {
-            lock (ProbeTimestamps) ProbeTimestamps.Clear();
-            if (IsAdbCreated)
-                _ = Adb.ReleaseIdleConnectionsAsync(includeIdleTcp: false).ContinueWith(
-                    static t => System.Diagnostics.Trace.WriteLine("Idle ADB cleanup: " + t.Exception?.GetBaseException().Message),
-                    CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-        }
+    }
+
+    internal static void ReleaseRetiredConnectionsIfIdle()
+    {
+        if (PhoneUiInUse || HasActiveWork()) return;
+        lock (ProbeTimestamps) ProbeTimestamps.Clear();
+        if (IsAdbCreated)
+            _ = Adb.ReleaseIdleConnectionsAsync(includeIdleTcp: false).ContinueWith(
+                static t => System.Diagnostics.Trace.WriteLine("Idle ADB cleanup: " + t.Exception?.GetBaseException().Message),
+                CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
 
     internal static async Task StopMediaAsync()

@@ -2,6 +2,9 @@
   <PropertyGroup Condition="'$(SonicRouteEdition)' == 'Full' and '$(TargetFramework)' == 'net10.0-windows'">
     <DefineConstants>$(DefineConstants);SONICROUTE_PHONE</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(AssemblyName)' == 'SonicRoute' and ('$(TargetFramework)' == 'net48' or ('$(SonicRouteEdition)' == 'Lite' and '$(TargetFramework)' == 'net10.0-windows'))">
+    <DefineConstants>$(DefineConstants);SONICROUTE_IDLE_WORKING_SET_TRIM</DefineConstants>
+  </PropertyGroup>
   <Target Name="ValidateSonicRouteEdition" BeforeTargets="PrepareForBuild"
           Condition="'$(SonicRouteEdition)' != 'Full' and '$(SonicRouteEdition)' != 'Lite'">
     <Error Text="SonicRouteEdition must be Full or Lite." />
