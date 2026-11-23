@@ -35,6 +35,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
     private bool _isDeviceAudio;
     private bool _firstFramePresented;
     private int _disposed;
+    private long _lastSyncFrameRequestTicks = long.MinValue;
     private VirtualDisplayState _state = VirtualDisplayState.Starting;
 
     public InProcessVirtualDisplayClient(
@@ -161,7 +162,8 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
             _renderer = new D3D11VideoSurfaceRenderer(hwnd, _window.ClientWidth, _window.ClientHeight, isMirrorMode: app.IsDeviceAudio);
             _decoder = new MediaFoundationH264Decoder(_renderer.DeviceHandle, streamHeader.Width, streamHeader.Height, decoder, streamHeader.CodecId)
             {
-                SkipCorruptFrames = streamHeader.CodecId == ScrcpyVideoStreamHeader.CodecH265
+                SkipCorruptFrames = streamHeader.CodecId == ScrcpyVideoStreamHeader.CodecH265,
+                CorruptFrameSkipped = OnCorruptFrameSkipped
             };
 
             WireWindowAndControlEvents(streamHeader.Width, streamHeader.Height);
@@ -277,6 +279,28 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
     private void EnqueueControl(byte[] packet, int gamepadFocusVersion = 0) =>
         _controlOutbound?.Enqueue(packet, gamepadFocusVersion);
 
+    private void OnCorruptFrameSkipped() => TryRequestSyncFrame();
+
+    internal bool TryRequestSyncFrame(long? timestampOverride = null)
+    {
+        if (_controlOutbound is null) return false;
+        long now = timestampOverride ?? Stopwatch.GetTimestamp();
+        long minIntervalTicks = Stopwatch.Frequency / 2; // >= 500 ms
+        while (true)
+        {
+            long prev = Volatile.Read(ref _lastSyncFrameRequestTicks);
+            if (prev != long.MinValue && now - prev < minIntervalTicks)
+                return false;
+            if (Interlocked.CompareExchange(ref _lastSyncFrameRequestTicks, now, prev) == prev)
+                break;
+        }
+
+        byte[] packet = new byte[1];
+        ScrcpyControlMessageWriter.WriteRequestSyncFrame(packet);
+        EnqueueControl(packet);
+        return true;
+    }
+
     private void SendRestoreStartApp()
     {
         if (_isDeviceAudio)
@@ -388,15 +412,19 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
                     await videoStream.ReadExactlyAsync(targetBuf.AsMemory(0, hdr.PayloadLength), ct).ConfigureAwait(false);
 
                     var payload = targetBuf.AsSpan(0, hdr.PayloadLength);
+                    if (hdr.IsConfig)
+                    {
+                        merger.Process(payload, isConfig: true);
+                        continue;
+                    }
+
                     // MediaCodec emits configuration before a restarted encoder's frames.
-                    bool newSequence = hevc && !hdr.IsConfig && merger.HasPendingConfig;
+                    bool newSequence = hevc && merger.HasPendingConfig;
                     if (newSequence && !hdr.IsKeyFrame && !ContainsHevcRandomAccessPicture(payload))
                         continue;
 
-                    var merged = merger.Process(payload, hdr.IsConfig);
-                    if (merged.IsEmpty) continue;
-
-                    _decoder!.DecodePacket(merged, hdr.PtsUs, onHardwareFrame, onSoftwareFrame,
+                    merger.TryConsumePendingConfig(out byte[]? pendingConfig);
+                    _decoder!.DecodePacket(pendingConfig.AsSpan(), payload, hdr.PtsUs, onHardwareFrame, onSoftwareFrame,
                         discontinuity: newSequence && hasVideoInput);
                     hasVideoInput = true;
                 }
