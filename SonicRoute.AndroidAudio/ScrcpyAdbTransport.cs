@@ -43,10 +43,7 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         using (timing?.Measure("capture_jar"))
             remote = await _adb.EnsureCatalogJarAsync(_serial, token).ConfigureAwait(false);
         string socketName = "sonicroute_" + _scid;
-        string command = "echo SR_PID:$$; CLASSPATH=" + remote + " exec app_process / org.sonicroute.android.SonicRouteServer 3.3.4 "
-            + $"scid={_scid} socket_prefix=sonicroute log_level=info video=false audio=true control=false audio_codec=opus audio_source=playback "
-            + CaptureOptions(app, keepPhoneAudio) + " " + streaming.AudioOptions() + " "
-            + "tunnel_forward=true send_device_meta=false send_dummy_byte=true cleanup=false";
+        string command = BuildServerShellCommand(remote, _scid, app, keepPhoneAudio, streaming);
         using (timing?.Measure("capture_shell"))
             _server = await _adb.OpenShellAsync(_serial, command, redirectInput: false, token).ConfigureAwait(false);
         _logs = Task.WhenAll(ReadLogAsync(_server.OutputStream), ReadLogAsync(_server.ErrorStream));
@@ -78,6 +75,23 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
                 throw;
             }
         }
+    }
+
+    internal static string BuildServerShellCommand(
+        string remoteJarPath,
+        string scid,
+        AndroidApp app,
+        bool keepPhoneAudio,
+        AndroidStreamSettings streaming)
+    {
+        bool rawPcm = ScrcpyAudioProtocol.IsRawPcmDecoder(streaming.AudioDecoder);
+        string codecOptions = rawPcm
+            ? "audio_codec=raw audio_source=playback " + CaptureOptions(app, keepPhoneAudio)
+            : "audio_codec=opus audio_source=playback " + CaptureOptions(app, keepPhoneAudio) + " " + streaming.AudioOptions();
+        return "echo SR_PID:$$; CLASSPATH=" + remoteJarPath + " exec app_process / org.sonicroute.android.SonicRouteServer 3.3.4 "
+            + $"scid={scid} socket_prefix=sonicroute log_level=info video=false audio=true control=false "
+            + codecOptions + " "
+            + "tunnel_forward=true send_device_meta=false send_dummy_byte=true cleanup=false";
     }
 
     internal static string CaptureOptions(AndroidApp app, bool keepPhoneAudio)
