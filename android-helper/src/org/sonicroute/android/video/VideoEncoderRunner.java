@@ -4,11 +4,12 @@ package org.sonicroute.android.video;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaFormat;
-import android.os.Build;
+import android.os.Bundle;
 import android.view.Surface;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.function.IntPredicate;
 import org.sonicroute.android.core.MediaCodecParams;
 import org.sonicroute.android.io.PacketWriter;
 import org.sonicroute.android.model.Geometry.Size;
@@ -16,14 +17,32 @@ import org.sonicroute.android.util.ServerLog;
 import org.sonicroute.android.video.VideoCaptureSource.ResetCoordinator;
 
 /**
- * Surface encoder loop for H.264 and HEVC with dynamic resize and downsize-on-error fallback.
+ * Surface encoder loop for H.264 and HEVC with capability clamping, low-latency fallback,
+ * dynamic resize, sync-frame control, and runtime adaptive bitrate callbacks.
  * Reads encoded NALUs via blocking {@code MediaCodec.dequeueOutputBuffer(-1)}.
  */
 public final class VideoEncoderRunner {
-    private static final String KEY_MAX_FPS_TO_ENCODER = "max-fps-to-encoder";
-    private static final int DEFAULT_I_FRAME_INTERVAL_SEC = 10;
-    private static final long REPEAT_PREVIOUS_FRAME_AFTER_US = 100_000L;
-    private static final int[] DOWNSIZE_FALLBACKS = { 2560, 1920, 1600, 1280, 1024, 800 };
+    /**
+     * Runtime callback hook notified when an encoder session starts and after each packet write.
+     */
+    public interface RuntimeBitrateHook {
+        void onSessionStarted(
+                int initialBitRateBps,
+                int minSupportedBps,
+                int maxSupportedBps,
+                float effectiveFps,
+                IntPredicate bitrateApplier);
+
+        void onPacketWritten(
+                int packetBytes,
+                long writeDurationNs,
+                long frameAgeUs,
+                boolean isKeyFrame,
+                boolean isConfig,
+                long nowNs);
+    }
+
+    private static final int[] DOWNSIZE_FALLBACKS = VideoEncoderConfig.DEFAULT_DOWNSIZE_FALLBACKS;
 
     private final VideoCaptureSource capture;
     private final PacketWriter writer;
@@ -31,12 +50,18 @@ public final class VideoEncoderRunner {
     private final float maxFps;
     private final List<MediaCodecParams.Entry> codecOptions;
     private final boolean downsizeOnError;
+    private final boolean isWifiTransport;
+    private final RuntimeBitrateHook bitrateHook;
     private final Runnable onFinish;
+
+    private final Object codecLock = new Object();
+    private final VideoEncoderConfig.SyncRequestGate syncRequestGate = new VideoEncoderConfig.SyncRequestGate();
 
     private volatile boolean stopped;
     private int codecId;
     private String encoderName;
     private boolean headerSent;
+    private MediaCodec activeCodec;
     private Thread thread;
 
     public VideoEncoderRunner(
@@ -49,6 +74,32 @@ public final class VideoEncoderRunner {
             List<MediaCodecParams.Entry> codecOptions,
             boolean downsizeOnError,
             Runnable onFinish) {
+        this(
+                capture,
+                writer,
+                codecId,
+                bitRate,
+                maxFps,
+                explicitEncoder,
+                codecOptions,
+                downsizeOnError,
+                false,
+                null,
+                onFinish);
+    }
+
+    public VideoEncoderRunner(
+            VideoCaptureSource capture,
+            PacketWriter writer,
+            int codecId,
+            int bitRate,
+            float maxFps,
+            String explicitEncoder,
+            List<MediaCodecParams.Entry> codecOptions,
+            boolean downsizeOnError,
+            boolean isWifiTransport,
+            RuntimeBitrateHook bitrateHook,
+            Runnable onFinish) {
         this.capture = capture;
         this.writer = writer;
         this.codecId = codecId;
@@ -57,6 +108,8 @@ public final class VideoEncoderRunner {
         this.encoderName = explicitEncoder;
         this.codecOptions = codecOptions;
         this.downsizeOnError = downsizeOnError;
+        this.isWifiTransport = isWifiTransport;
+        this.bitrateHook = bitrateHook;
         this.onFinish = onFinish;
     }
 
@@ -73,6 +126,22 @@ public final class VideoEncoderRunner {
     public void join() throws InterruptedException {
         if (thread != null) {
             thread.join();
+        }
+    }
+
+    /**
+     * Requests an immediate IDR/sync frame from the active encoder session, rate-limited to at most
+     * one request every 250 ms. Thread-safe across control and encoder threads.
+     */
+    public boolean requestSyncFrame() {
+        synchronized (codecLock) {
+            if (stopped || activeCodec == null) {
+                return false;
+            }
+            if (!syncRequestGate.tryAcquire(System.nanoTime())) {
+                return false;
+            }
+            return sendSyncFrameParameter(activeCodec);
         }
     }
 
@@ -115,8 +184,9 @@ public final class VideoEncoderRunner {
     }
 
     private boolean encodeSingleSession(Size videoSize, ResetCoordinator reset) throws IOException {
-        String mime = codecId == PacketWriter.CODEC_ID_H265 ? MediaFormat.MIMETYPE_VIDEO_HEVC : MediaFormat.MIMETYPE_VIDEO_AVC;
-        MediaFormat format = buildVideoFormat(mime);
+        String mime = codecId == PacketWriter.CODEC_ID_H265
+                ? MediaFormat.MIMETYPE_VIDEO_HEVC
+                : MediaFormat.MIMETYPE_VIDEO_AVC;
         int currentMaxSide = videoSize.getMaxSide();
         int fallbackIdx = 0;
 
@@ -126,26 +196,99 @@ public final class VideoEncoderRunner {
             boolean codecStarted = false;
             boolean captureStarted = false;
             Size activeSize = capture.getVideoSize();
+            if (activeSize == null) {
+                throw new IOException("Capture size unavailable");
+            }
             try {
                 codec = MediaCodecParams.createEncoder(mime, encoderName);
-                format.setInteger(MediaFormat.KEY_WIDTH, activeSize.getWidth());
-                format.setInteger(MediaFormat.KEY_HEIGHT, activeSize.getHeight());
+                MediaCodecInfo.CodecCapabilities caps = VideoEncoderConfig.getCapabilitiesQuietly(codec, mime);
+                MediaCodecInfo.VideoCapabilities videoCaps = caps != null ? caps.getVideoCapabilities() : null;
 
-                codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-                surface = codec.createInputSurface();
-                codec.start();
+                int width = activeSize.getWidth();
+                int height = activeSize.getHeight();
+                if (videoCaps != null && !VideoEncoderConfig.isSizeSupportedSafe(videoCaps, width, height)) {
+                    ServerLog.w("Encoder " + safeCodecName(codec, mime) + " reports unsupported size "
+                            + activeSize + " for " + mime);
+                    if (downsizeOnError && (headerSent || codecId != PacketWriter.CODEC_ID_H265)) {
+                        VideoEncoderConfig.FallbackSelection selection = VideoEncoderConfig.pickSupportedFallbackMaxSize(
+                                width,
+                                height,
+                                currentMaxSide,
+                                fallbackIdx,
+                                DOWNSIZE_FALLBACKS,
+                                (fw, fh) -> VideoEncoderConfig.isSizeSupportedSafe(videoCaps, fw, fh));
+                        if (selection != null && capture.setMaxSize(selection.getMaxSize())) {
+                            currentMaxSide = selection.getMaxSize();
+                            fallbackIdx = selection.getNextIndex();
+                            ServerLog.w("Pre-selecting supported fallback size <= " + currentMaxSide
+                                    + " (" + selection.getWidth() + "x" + selection.getHeight() + ")");
+                            capture.prepare();
+                            continue;
+                        }
+                    }
+                }
+
+                VideoEncoderConfig.ResolvedConfig resolvedConfig = VideoEncoderConfig.resolveForCodec(
+                        caps, width, height, maxFps, bitRate, isWifiTransport);
+                if (resolvedConfig.isFrameRateClamped()) {
+                    ServerLog.w("Clamped video frame rate for " + safeCodecName(codec, mime) + " (" + activeSize
+                            + ") from " + resolvedConfig.getTargetFps() + " to "
+                            + resolvedConfig.getEffectiveFps() + " fps");
+                }
+                if (resolvedConfig.isBitRateClamped()) {
+                    ServerLog.w("Clamped video bitrate for " + safeCodecName(codec, mime) + " (" + activeSize
+                            + ") from " + bitRate + " to " + resolvedConfig.getClampedBitRateBps()
+                            + " bps (supported=[" + resolvedConfig.getMinSupportedBitRateBps() + ", "
+                            + resolvedConfig.getMaxSupportedBitRateBps() + "])");
+                }
+
+                VideoEncoderConfig.ResolvedConfig activeConfig = resolvedConfig;
+                MediaFormat format = buildVideoFormat(mime, activeConfig, width, height);
+                try {
+                    codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                    surface = codec.createInputSurface();
+                    codec.start();
+                } catch (IllegalStateException | IllegalArgumentException enhancedError) {
+                    if (!activeConfig.hasLowLatencyEnhancements()) {
+                        throw enhancedError;
+                    }
+                    ServerLog.w("Low-latency enhanced format rejected for " + mime + " at " + activeSize
+                            + ", retrying with base safe format: " + enhancedError.getMessage());
+                    if (surface != null) {
+                        surface.release();
+                        surface = null;
+                    }
+                    codec = resetOrRecreateCodec(codec, mime, encoderName);
+                    activeConfig = activeConfig.withoutEnhancements();
+                    MediaFormat baseFormat = buildVideoFormat(mime, activeConfig, width, height);
+                    codec.configure(baseFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+                    surface = codec.createInputSurface();
+                    codec.start();
+                }
+
                 codecStarted = true;
                 if (stopped) {
                     return false;
                 }
                 capture.start(surface);
                 captureStarted = true;
+                setActiveCodec(codec);
                 reset.setActiveCodec(codec);
                 if (!headerSent) {
                     // Report the negotiated codec and size only once the encoder can drive the capture surface.
                     writer.writeVideoHeader(codecId, activeSize.getWidth(), activeSize.getHeight());
                     headerSent = true;
                     ServerLog.i("Texture: " + activeSize.getWidth() + "x" + activeSize.getHeight());
+                }
+                requestSyncFrame();
+                if (bitrateHook != null) {
+                    final MediaCodec sessionCodec = codec;
+                    bitrateHook.onSessionStarted(
+                            activeConfig.getClampedBitRateBps(),
+                            activeConfig.getMinSupportedBitRateBps(),
+                            activeConfig.getMaxSupportedBitRateBps(),
+                            activeConfig.getEffectiveFps(),
+                            bps -> applyRuntimeBitrate(sessionCodec, bps));
                 }
 
                 boolean eof = drainOutputs(codec);
@@ -159,7 +302,6 @@ public final class VideoEncoderRunner {
                     codecId = PacketWriter.CODEC_ID_H264;
                     encoderName = null;
                     mime = MediaFormat.MIMETYPE_VIDEO_AVC;
-                    format = buildVideoFormat(mime);
                     continue;
                 }
                 if (error instanceof IOException) {
@@ -179,6 +321,7 @@ public final class VideoEncoderRunner {
                 ServerLog.w("Encoder error at size " + activeSize + ", downsizing to <= " + nextLimit + ": " + error.getMessage());
                 capture.prepare();
             } finally {
+                clearActiveCodec(codec);
                 reset.setActiveCodec(null);
                 if (captureStarted) {
                     capture.stop();
@@ -205,6 +348,8 @@ public final class VideoEncoderRunner {
 
     private boolean drainOutputs(MediaCodec codec) throws IOException {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+        VideoEncoderConfig.StreamClockTracker clockTracker =
+                bitrateHook != null ? new VideoEncoderConfig.StreamClockTracker() : null;
         while (!stopped) {
             int index = codec.dequeueOutputBuffer(info, -1);
             if (index < 0) {
@@ -217,7 +362,21 @@ public final class VideoEncoderRunner {
                     if (out != null) {
                         out.position(info.offset);
                         out.limit(info.offset + info.size);
-                        writer.writePacket(out, info);
+                        if (bitrateHook != null) {
+                            int packetBytes = info.size;
+                            boolean isConfig = (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0;
+                            boolean isKeyFrame = (info.flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
+                            long writeStartNs = System.nanoTime();
+                            writer.writePacket(out, info);
+                            long nowNs = System.nanoTime();
+                            long writeDurationNs = Math.max(0L, nowNs - writeStartNs);
+                            long frameAgeUs = clockTracker.updateAndComputeFrameAgeUs(
+                                    info.presentationTimeUs, writeStartNs, nowNs, isConfig);
+                            bitrateHook.onPacketWritten(
+                                    packetBytes, writeDurationNs, frameAgeUs, isKeyFrame, isConfig, nowNs);
+                        } else {
+                            writer.writePacket(out, info);
+                        }
                     }
                 }
             } finally {
@@ -230,25 +389,88 @@ public final class VideoEncoderRunner {
         return false;
     }
 
-    private MediaFormat buildVideoFormat(String mime) {
-        MediaFormat format = new MediaFormat();
-        format.setString(MediaFormat.KEY_MIME, mime);
-        if (MediaFormat.MIMETYPE_VIDEO_HEVC.equals(mime)) {
-            format.setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.HEVCProfileMain);
+    private MediaFormat buildVideoFormat(
+            String mime,
+            VideoEncoderConfig.ResolvedConfig config,
+            int width,
+            int height) {
+        return VideoEncoderConfig.buildMediaFormat(config, mime, width, height, codecOptions);
+    }
+
+    private void setActiveCodec(MediaCodec codec) {
+        synchronized (codecLock) {
+            this.activeCodec = codec;
+            this.syncRequestGate.reset();
         }
-        format.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
-        format.setInteger(MediaFormat.KEY_FRAME_RATE, 60);
-        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
-        if (Build.VERSION.SDK_INT >= 24) {
-            format.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED);
+    }
+
+    private void clearActiveCodec(MediaCodec codec) {
+        synchronized (codecLock) {
+            if (this.activeCodec == codec) {
+                this.activeCodec = null;
+            }
         }
-        format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, DEFAULT_I_FRAME_INTERVAL_SEC);
-        format.setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, REPEAT_PREVIOUS_FRAME_AFTER_US);
-        if (maxFps > 0) {
-            format.setFloat(KEY_MAX_FPS_TO_ENCODER, maxFps);
+    }
+
+    private boolean applyRuntimeBitrate(MediaCodec codec, int targetBitRateBps) {
+        if (codec == null || targetBitRateBps <= 0) {
+            return false;
         }
-        MediaCodecParams.apply(format, codecOptions);
-        return format;
+        synchronized (codecLock) {
+            if (stopped || activeCodec != codec) {
+                return false;
+            }
+            Bundle params = new Bundle();
+            params.putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, targetBitRateBps);
+            try {
+                codec.setParameters(params);
+                return true;
+            } catch (IllegalStateException | IllegalArgumentException | UnsupportedOperationException error) {
+                ServerLog.w("Failed to apply runtime video bitrate " + targetBitRateBps + " bps", error);
+                return false;
+            }
+        }
+    }
+
+    private static boolean sendSyncFrameParameter(MediaCodec codec) {
+        Bundle params = new Bundle();
+        params.putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0);
+        try {
+            codec.setParameters(params);
+            return true;
+        } catch (IllegalStateException | IllegalArgumentException | UnsupportedOperationException error) {
+            ServerLog.w("Failed to request sync frame", error);
+            return false;
+        }
+    }
+
+    private static MediaCodec resetOrRecreateCodec(
+            MediaCodec codec,
+            String mime,
+            String requestedName) throws IOException {
+        if (codec != null) {
+            try {
+                codec.reset();
+                return codec;
+            } catch (Throwable ignored) {
+                try {
+                    codec.release();
+                } catch (Throwable ignoredRelease) {
+                }
+            }
+        }
+        return MediaCodecParams.createEncoder(mime, requestedName);
+    }
+
+    private static String safeCodecName(MediaCodec codec, String fallbackMime) {
+        if (codec == null) {
+            return fallbackMime;
+        }
+        try {
+            return codec.getName();
+        } catch (Throwable ignored) {
+            return fallbackMime;
+        }
     }
 
     private static Integer pickSmallerMaxSize(int currentMax, int startIndex) {

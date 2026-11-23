@@ -32,6 +32,7 @@ public final class ControlProtocol {
     public static final int TYPE_RESET_VIDEO = 17;
     public static final int TYPE_RESIZE_DISPLAY = 18;
     public static final int TYPE_INJECT_GAMEPAD_STATE = 19;
+    public static final int TYPE_REQUEST_SYNC_FRAME = 20;
 
     public static final int COPY_KEY_NONE = 0;
     public static final int COPY_KEY_COPY = 1;
@@ -159,6 +160,7 @@ public final class ControlProtocol {
                 case TYPE_ROTATE_DEVICE:
                 case TYPE_OPEN_HARD_KEYBOARD_SETTINGS:
                 case TYPE_RESET_VIDEO:
+                case TYPE_REQUEST_SYNC_FRAME:
                     return msg;
                 default:
                     throw new IOException("Unsupported control message type: " + type);
