@@ -30,6 +30,9 @@ public final class PacketWriter {
     private final boolean sendCodecMeta;
     private final boolean sendFrameMeta;
     private final ByteBuffer headerBuffer = ByteBuffer.allocate(12);
+    private volatile long lastWriteDurationNs;
+    private volatile int lastWriteBytes;
+    private volatile long totalBytesWritten;
 
     public PacketWriter(FileDescriptor fd, int codecId, boolean sendCodecMeta, boolean sendFrameMeta) {
         this.fd = fd;
@@ -99,6 +102,9 @@ public final class PacketWriter {
     }
 
     private void writeRawPacket(ByteBuffer payload, long ptsUs, boolean isConfig, boolean isKeyFrame) throws IOException {
+        final int payloadBytes = payload.remaining();
+        int packetBytes = payloadBytes;
+        final long startNs = System.nanoTime();
         if (sendFrameMeta) {
             headerBuffer.clear();
             long ptsAndFlags;
@@ -111,11 +117,28 @@ public final class PacketWriter {
                 }
             }
             headerBuffer.putLong(ptsAndFlags);
-            headerBuffer.putInt(payload.remaining());
+            headerBuffer.putInt(payloadBytes);
             headerBuffer.flip();
+            packetBytes += headerBuffer.remaining();
             writeFully(fd, headerBuffer);
         }
         writeFully(fd, payload);
+        final long elapsedNs = Math.max(0L, System.nanoTime() - startNs);
+        lastWriteDurationNs = elapsedNs;
+        lastWriteBytes = packetBytes;
+        totalBytesWritten += packetBytes;
+    }
+
+    public long getLastWriteDurationNs() {
+        return lastWriteDurationNs;
+    }
+
+    public int getLastWriteBytes() {
+        return lastWriteBytes;
+    }
+
+    public long getTotalBytesWritten() {
+        return totalBytesWritten;
     }
 
     /**
