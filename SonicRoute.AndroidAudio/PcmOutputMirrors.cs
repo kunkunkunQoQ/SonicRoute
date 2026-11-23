@@ -9,6 +9,7 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
     private Output[] _outputs = [], _audible = [];
     private float _volume = 1;
     private bool _smart;
+    private AudioLatencyMode _latencyMode = AudioLatencyMode.Balanced;
     private string? _primaryDevice;
     internal string[] IdsSnapshot() => Volatile.Read(ref _outputs).Select(output => output.Id).ToArray();
     internal static (string? Primary, string[] Extras) Select(IReadOnlyList<string?> selection, string? current)
@@ -23,6 +24,14 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
         {
             _volume = volume; _smart = smart;
             foreach (var output in _outputs) { output.Pcm.Volume = volume; output.Pcm.SmartVolume = smart; }
+        }
+    }
+    internal void SetLatencyMode(AudioLatencyMode mode)
+    {
+        lock (_gate)
+        {
+            _latencyMode = mode;
+            foreach (var output in _outputs) output.Pcm.LatencyMode = mode;
         }
     }
     internal void SetPrimary(IPcmPlayer? player)
@@ -64,7 +73,9 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
                 var output = Array.Find(previous, o => Ids.Equals(o.Id, id));
                 if (output == null)
                 {
-                    var pcm = new AndroidPcmSource();
+                    AudioLatencyMode latencyMode;
+                    lock (_gate) latencyMode = _latencyMode;
+                    var pcm = new AndroidPcmSource(latencyMode);
                     var player = create(pcm, id, token);
                     staged.Add(output = new Output(id, pcm, player));
                     void Failed(Exception error) => _ = Task.Run(() => removeFailed(p => ReferenceEquals(p, player)));
@@ -106,7 +117,12 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
         var previous = _outputs;
         lock (_gate)
         {
-            foreach (var output in next) { output.Pcm.Volume = _volume; output.Pcm.SmartVolume = _smart; }
+            foreach (var output in next)
+            {
+                output.Pcm.Volume = _volume;
+                output.Pcm.SmartVolume = _smart;
+                output.Pcm.LatencyMode = _latencyMode;
+            }
             Volatile.Write(ref _outputs, next);
             UpdateAudible();
         }
