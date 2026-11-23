@@ -195,7 +195,44 @@ public final class SonicRouteServer {
                         videoCodec,
                         options.isSendCodecMeta(),
                         options.isSendFrameMeta());
-                // ABR integration ready: pass createAdaptiveBitrateController(options) into VideoEncoderRunner.RuntimeBitrateHook once worker-a merges.
+                final AdaptiveBitrateController abrController = options.isVideoAbr()
+                        ? createAdaptiveBitrateController(options)
+                        : null;
+                VideoEncoderRunner.RuntimeBitrateHook bitrateHook = abrController == null
+                        ? null
+                        : new VideoEncoderRunner.RuntimeBitrateHook() {
+                            @Override
+                            public void onSessionStarted(
+                                    int initialBitRateBps,
+                                    int minSupportedBps,
+                                    int maxSupportedBps,
+                                    float effectiveFps,
+                                    java.util.function.IntPredicate bitrateApplier) {
+                                abrController.resetSession(
+                                        initialBitRateBps,
+                                        minSupportedBps,
+                                        maxSupportedBps,
+                                        effectiveFps,
+                                        bitrateApplier);
+                            }
+
+                            @Override
+                            public void onPacketWritten(
+                                    int packetBytes,
+                                    long writeDurationNs,
+                                    long frameAgeUs,
+                                    boolean isKeyFrame,
+                                    boolean isConfig,
+                                    long nowNs) {
+                                abrController.onPacketSent(
+                                        packetBytes,
+                                        writeDurationNs,
+                                        frameAgeUs,
+                                        isKeyFrame,
+                                        isConfig,
+                                        nowNs);
+                            }
+                        };
                 videoRunner = new VideoEncoderRunner(
                         videoSource,
                         videoWriter,
@@ -205,7 +242,12 @@ public final class SonicRouteServer {
                         options.getVideoEncoder(),
                         options.getVideoCodecOptions(),
                         options.isDownsizeOnError(),
+                        options.isWifiTransport(),
+                        bitrateHook,
                         onCriticalFinish);
+                if (controller != null) {
+                    controller.setSyncFrameRequester(videoRunner::requestSyncFrame);
+                }
                 videoRef[0] = videoRunner;
                 activeWorkers.incrementAndGet();
             }

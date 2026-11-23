@@ -122,7 +122,8 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
             TunnelForward: true,
             StartAppOnServer: !app.IsDeviceAudio,
             ServerClassName: "org.sonicroute.android.SonicRouteServer",
-            SocketPrefix: "sonicroute_");
+            SocketPrefix: "sonicroute_",
+            IsWifi: device.IsWifi);
 
         var openRequest = new VideoStreamOpenRequest(device, app, AdbVideoStreamTransport.GenerateScid(), serverOpts);
         _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(token);

@@ -63,6 +63,11 @@ internal static partial class Program
             var video = (ComboBox)page.FindName("VideoEncoderCombo");
             var audioDecoder = (ComboBox)page.FindName("AudioDecoderCombo");
             var videoDecoder = (ComboBox)page.FindName("VideoDecoderCombo");
+            var audioLatency = (ComboBox)page.FindName("AudioLatencyCombo");
+            Check(Grid.GetRow(audioLatency) == 0 && Grid.GetColumn(audioLatency) == 4
+                && (string)audioLatency.SelectedValue == AndroidStreamSettings.LatencyModeBalanced
+                && audioLatency.Items.Count == 3,
+                "audio latency mode selector occupies slot (0,4) and defaults to balanced with 3 modes");
             Until(() => Get(page, "_windowsHevcRead") is Task { IsCompletedSuccessfully: true });
             bool windowsHevc = MediaFoundationH264Decoder.SupportsHevc;
             var hevcOption = videoDecoder.Items.Cast<object>().Single(x => x.ToString()!.StartsWith("H.265 (HEVC)"));
@@ -148,11 +153,21 @@ internal static partial class Program
                     && localizedOptions[0].Label == L10n.T("Phone.StreamAutomatic"),
                     entry.Code + " localizes encoder vendor, hardware/software type, and preserves codec IDs live");
                 var decoderOptions = videoDecoder.Items.Cast<object>().Select(x => x.GetType().GetProperty("Label")!.GetValue(x)!.ToString()!).ToArray();
+                var audioDecoderOptions = audioDecoder.Items.Cast<object>().Select(x => x.ToString()!).ToArray();
+                var latencyOptions = audioLatency.Items.Cast<object>().Select(x => (
+                    Label: x.GetType().GetProperty("Label")!.GetValue(x)!.ToString()!,
+                    Value: x.GetType().GetProperty("Value")!.GetValue(x)!.ToString()!)).ToArray();
                 Check(decoderOptions[0] == L10n.T("Phone.StreamDecoderAutomatic")
                     && decoderOptions[1] == string.Format(L10n.T("Phone.StreamDecoderAccelerated"), "Microsoft H.264 Video Decoder MFT / D3D11")
                     && decoderOptions[2] == string.Format(L10n.T("Phone.StreamDecoderSoftware"), "Microsoft H.264 Video Decoder MFT / CPU")
-                    && audioDecoder.Items.Cast<object>().Any(x => x.ToString() == string.Format(L10n.T("Phone.StreamDecoderManaged"), "Concentus Opus")),
-                    entry.Code + " localizes available decoder modes and preserves their original backend names");
+                    && audioDecoderOptions.Contains(string.Format(L10n.T("Phone.StreamDecoderManaged"), "Concentus Opus"))
+                    && audioDecoderOptions.Contains(string.Format(L10n.T("Phone.StreamDecoderRawPcm"), "Raw PCM"))
+                    && latencyOptions.SequenceEqual([
+                        (L10n.T("Phone.StreamLatencyUltraLow"), AndroidStreamSettings.LatencyModeUltraLow),
+                        (L10n.T("Phone.StreamLatencyBalanced"), AndroidStreamSettings.LatencyModeBalanced),
+                        (L10n.T("Phone.StreamLatencyStable"), AndroidStreamSettings.LatencyModeStable)
+                    ]),
+                    entry.Code + " localizes available decoder modes, Raw PCM, and all three audio latency modes");
             }
             L10n.Instance.SetLanguage("zh-CN");
             DrainUi();
@@ -176,8 +191,8 @@ internal static partial class Program
                 videoDecoder.SelectedValue = AndroidStreamSettings.WindowsHevcDecoder;
                 Check(videoDecoder.SelectedItem.ToString()!.StartsWith("H.265 (HEVC)") && videoDecoder.SelectedItem.ToString()!.Contains("Microsoft HEVC Video Decoder MFT")
                     && video.Items.Count == 4 && (string)video.SelectedValue == "", "available Android H.265 uses its own translated decoder and encoder list");
-                Check(video.Items.Cast<object>().Any(x => x.ToString()!.Contains("恒定质量版 (CQ)") && x.ToString()!.Contains("c2.qti.hevc.encoder.cq"))
-                    && video.Items.Cast<object>().Any(x => x.ToString()!.Contains("高动态范围版 (HDR)") && x.ToString()!.Contains("c2.qti.hevc.encoder.hdr")),
+                Check(video.Items.Cast<object>().Any(x => x.ToString()!.Contains(L10n.T("Phone.StreamEncoderHevcCq")) && x.ToString()!.Contains("c2.qti.hevc.encoder.cq"))
+                    && video.Items.Cast<object>().Any(x => x.ToString()!.Contains(L10n.T("Phone.StreamEncoderHevcHdr")) && x.ToString()!.Contains("c2.qti.hevc.encoder.hdr")),
                     "HEVC encoder variants have distinct translated labels and unchanged codec IDs");
                 video.SelectedValue = "c2.qti.hevc.encoder";
                 Pump(settingsRead.Result.FlushAsync());
@@ -201,6 +216,40 @@ internal static partial class Program
             bitrate.SelectedValue = "50000000";
             Pump(settingsRead.Result.FlushAsync());
 
+            var audioBitRateCombo = (ComboBox)page.FindName("AudioBitRateCombo");
+            audio.SelectedValue = "c2.android.opus.encoder";
+            audioBitRateCombo.SelectedValue = "192000";
+            audioLatency.SelectedValue = AndroidStreamSettings.LatencyModeUltraLow;
+            Pump(settingsRead.Result.FlushAsync());
+            Check(settingsRead.Result.GetStreaming(device).AudioLatencyMode == AndroidStreamSettings.LatencyModeUltraLow
+                && audio.IsEnabled && audioBitRateCombo.IsEnabled,
+                "ultra-low latency mode persists cleanly while Opus encoder and bitrate controls remain enabled");
+            audioLatency.SelectedValue = AndroidStreamSettings.LatencyModeStable;
+            audioDecoder.SelectedValue = AndroidStreamSettings.RawPcmDecoder;
+            Pump(settingsRead.Result.FlushAsync());
+            Check(!audio.IsEnabled && !audioBitRateCombo.IsEnabled
+                && settingsRead.Result.GetStreaming(device) is
+                {
+                    AudioDecoder: AndroidStreamSettings.RawPcmDecoder,
+                    AudioLatencyMode: AndroidStreamSettings.LatencyModeStable,
+                    AudioEncoder: "c2.android.opus.encoder",
+                    AudioBitRate: 192000
+                },
+                "selecting Raw PCM disables Opus encoder and bitrate controls while preserving saved Opus settings and stable latency");
+            audioDecoder.SelectedValue = AndroidStreamSettings.ConcentusDecoder;
+            Pump(settingsRead.Result.FlushAsync());
+            Check(audio.IsEnabled && audioBitRateCombo.IsEnabled
+                && (string)audio.SelectedValue == "c2.android.opus.encoder"
+                && (string)audioBitRateCombo.SelectedValue == "192000"
+                && settingsRead.Result.GetStreaming(device) is
+                {
+                    AudioDecoder: AndroidStreamSettings.ConcentusDecoder,
+                    AudioLatencyMode: AndroidStreamSettings.LatencyModeStable,
+                    AudioEncoder: "c2.android.opus.encoder",
+                    AudioBitRate: 192000
+                },
+                "switching back to Concentus Opus re-enables encoder and bitrate selectors with saved values intact");
+
             foreach (string mode in new[] { "light", "dark" })
             {
                 ThemeService.Apply(mode, "#00CBE9");
@@ -208,10 +257,14 @@ internal static partial class Program
                 Render(canvas, 520, 640, Path.Combine(output, "phone-settings-" + mode + ".png"));
                 var card = (Border)page.FindName("StreamingCard");
                 var right = fpsCombo.TranslatePoint(new Point(fpsCombo.ActualWidth, 0), card).X;
+                var latencyRight = audioLatency.TranslatePoint(new Point(audioLatency.ActualWidth, 0), card).X;
                 Check(((Grid)card.Child).RowDefinitions.Count == 2 && right <= card.ActualWidth - 8
+                    && latencyRight <= card.ActualWidth - 8
                     && audio.ActualWidth >= 72 && videoDecoder.ActualWidth >= 72 && fpsCombo.ActualWidth >= 70
+                    && audioLatency.ActualWidth >= 70 && Grid.GetColumn(audioLatency) == Grid.GetColumn(fpsCombo)
+                    && Grid.GetRow(audioLatency) == Grid.GetRow(audio)
                     && Grid.GetColumn(videoDecoder) == Grid.GetColumn(audioDecoder) && Grid.GetRow(videoDecoder) == Grid.GetRow(video),
-                    mode + " encoders, decoders, 50 Mbps and 120 fps fit two rows cleanly in 520 DIP");
+                    mode + " encoders, decoders, audio latency, 50 Mbps and 120 fps fit two rows cleanly in 520 DIP");
                 var apps = (ItemsControl)page.FindName("RetainedApps");
                 var title = Descendants<TextBlock>(page).First(x => x.Text == L10n.T("Phone.QuickPanelAppsTitle"));
                 Border? ContainingCard(DependencyObject item)

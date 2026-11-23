@@ -48,6 +48,46 @@ internal static partial class Program
             await session.StopAsync();
         }
 
+        var (rawSessionWire, _, _) = BuildRawPcmWire(includeEmptyConfig: true, includeLargePacket: false, includeKeyFrameFlagOnLast: false);
+        var rawSelected = defaults with
+        {
+            AudioDecoder = AndroidStreamSettings.RawPcmDecoder,
+            AudioLatencyMode = AndroidStreamSettings.LatencyModeUltraLow
+        };
+        await using (var rawSession = new AndroidAudioSession(() => new FakeTransport(rawSessionWire, () => { }), (_, _) => new FakePlayer(),
+            streaming: _ => rawSelected))
+        {
+            await rawSession.StartAsync(phone, AndroidApp.DeviceAudio);
+            var receiver = (IAndroidAudioReceiver?)typeof(AndroidAudioSession).GetField("_receiver", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(rawSession);
+            Check(receiver is ScrcpyRawPcmReceiver
+                && receiver.DecoderId == AndroidStreamSettings.RawPcmDecoder
+                && receiver.CodecId == ScrcpyAudioProtocol.CodecRaw
+                && rawSession.Pcm is { LatencyMode: AudioLatencyMode.UltraLow, NonSilentSamplesWritten: > 0 },
+                "audio session selects ScrcpyRawPcmReceiver and applies saved latency mode on raw PCM stream");
+            await rawSession.StopAsync();
+        }
+
+        await using (var fallbackSession = new AndroidAudioSession(() => new FakeTransport(BuildWire(), () => { }), (_, _) => new FakePlayer(),
+            streaming: _ => rawSelected))
+        {
+            await fallbackSession.StartAsync(phone, AndroidApp.DeviceAudio);
+            var receiver = (IAndroidAudioReceiver?)typeof(AndroidAudioSession).GetField("_receiver", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(fallbackSession);
+            Check(receiver is ScrcpyOpusReceiver && receiver.CodecId == ScrcpyAudioProtocol.CodecOpus,
+                "audio session falls back to Concentus Opus decoder when server streams opus despite raw-pcm preference");
+            await fallbackSession.StopAsync();
+        }
+
+        byte[] unknownWire = [.. System.Text.Encoding.ASCII.GetBytes("flac")];
+        await using (var invalidCodecSession = new AndroidAudioSession(() => new FakeTransport(unknownWire, () => { }), (_, _) => new FakePlayer(),
+            streaming: _ => rawSelected))
+        {
+            bool rejectedUnknownCodec = false;
+            try { await invalidCodecSession.StartAsync(phone, AndroidApp.DeviceAudio); }
+            catch (InvalidDataException) { rejectedUnknownCodec = true; }
+            Check(rejectedUnknownCodec && invalidCodecSession.State.State == CaptureState.Failed,
+                "audio session safely rejects unknown wire codec IDs without playing garbage");
+        }
+
         string runtime = Path.Combine(output, "fake-runtime"); Directory.CreateDirectory(runtime);
         await File.WriteAllTextAsync(Path.Combine(runtime, "sonicroute-catalog.jar"), "test-only transport marker");
         var transport = new EncoderSettingsTransport();

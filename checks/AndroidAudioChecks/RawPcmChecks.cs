@@ -538,7 +538,7 @@ internal static partial class Program
         if (includeEmptyConfig)
             WritePacket(ms, 1UL << 63, []);
 
-        int[] frameCounts = includeLargePacket ? [1024, 960, 960, 960, 2048] : [960, 960, 960, 960, 960];
+        int[] frameCounts = includeLargePacket ? [1024, 480, 480, 480, 2048] : [960, 960, 960, 960, 960];
         var expected = new List<float>(frameCounts.Sum() * 2);
         long lastPts = 0;
         int totalFramesSoFar = 0;

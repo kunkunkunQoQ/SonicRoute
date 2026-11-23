@@ -84,6 +84,7 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         bool keepPhoneAudio,
         AndroidStreamSettings streaming)
     {
+        streaming = streaming.Normalize();
         bool rawPcm = ScrcpyAudioProtocol.IsRawPcmDecoder(streaming.AudioDecoder);
         string codecOptions = rawPcm
             ? "audio_codec=raw audio_source=playback " + CaptureOptions(app, keepPhoneAudio)

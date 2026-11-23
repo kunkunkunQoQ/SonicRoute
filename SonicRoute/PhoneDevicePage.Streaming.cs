@@ -161,11 +161,33 @@ public partial class PhoneDevicePage
                 choices.Add(new(label, AndroidStreamSettings.WindowsHevcDecoder, _windowsHevcAvailable == true && !deviceLacksHevc));
             }
         }
-        else choices.Add(new(string.Format(L10n.T("Phone.StreamDecoderManaged"), "Concentus Opus"), AndroidStreamSettings.ConcentusDecoder));
+        else
+        {
+            choices.Add(new(string.Format(L10n.T("Phone.StreamDecoderManaged"), "Concentus Opus"), AndroidStreamSettings.ConcentusDecoder));
+            choices.Add(new(string.Format(L10n.T("Phone.StreamDecoderRawPcm"), "Raw PCM"), AndroidStreamSettings.RawPcmDecoder));
+        }
         combo.SelectedValuePath = nameof(StreamOption.Value);
         combo.ItemsSource = choices.ToArray();
         combo.SelectedValue = selected != null && choices.Any(option => option.Value == selected) ? selected : "";
         UpdateCodecToolTip(combo, "Phone.StreamDecoder");
+    }
+
+    private static void AudioLatencyOptions(ComboBox combo, string? selected)
+    {
+        var choices = new[]
+        {
+            new StreamOption(L10n.T("Phone.StreamLatencyUltraLow"), AndroidStreamSettings.LatencyModeUltraLow),
+            new StreamOption(L10n.T("Phone.StreamLatencyBalanced"), AndroidStreamSettings.LatencyModeBalanced),
+            new StreamOption(L10n.T("Phone.StreamLatencyStable"), AndroidStreamSettings.LatencyModeStable)
+        };
+        combo.SelectedValuePath = nameof(StreamOption.Value);
+        combo.ItemsSource = choices;
+        combo.SelectedValue = selected != null && choices.Any(option => option.Value == selected)
+            ? selected
+            : AndroidStreamSettings.LatencyModeBalanced;
+        combo.ToolTip = combo.SelectedItem is StreamOption option
+            ? L10n.T("Phone.StreamAudioLatency") + " · " + option.Label
+            : L10n.T("Phone.StreamAudioLatency");
     }
 
     private static void NumericOptions(ComboBox combo, int[] presets, int selected, int divisor, string unit)
@@ -188,12 +210,21 @@ public partial class PhoneDevicePage
             ApplyVideoEncoderOptions();
             DecoderOptions(AudioDecoderCombo, false, _streamSettings.AudioDecoder);
             DecoderOptions(VideoDecoderCombo, true, _streamSettings.VideoDecoder);
+            AudioLatencyOptions(AudioLatencyCombo, _streamSettings.AudioLatencyMode);
             NumericOptions(AudioBitRateCombo, [64000, 96000, 128000, 192000, 256000, 320000], _streamSettings.AudioBitRate, 1000, " Kbps");
             NumericOptions(VideoBitRateCombo, [1000000, 4000000, 6000000, 8000000, 12000000, 16000000, 24000000, 32000000, 50000000],
                 _streamSettings.VideoBitRate, 1000000, " Mbps");
             NumericOptions(VideoFpsCombo, [15, 24, 30, 60, 120], _streamSettings.MaxFps, 1, " fps");
+            UpdateAudioCodecControlState();
         }
         finally { _streamApplying = false; }
+    }
+
+    private void UpdateAudioCodecControlState()
+    {
+        bool opusMode = _streamSettings.AudioDecoder != AndroidStreamSettings.RawPcmDecoder;
+        AudioEncoderCombo.IsEnabled = opusMode;
+        AudioBitRateCombo.IsEnabled = opusMode;
     }
 
     private void StreamEncoder_DropDownOpened(object? sender, EventArgs e)
@@ -286,10 +317,14 @@ public partial class PhoneDevicePage
         UpdateCodecToolTip(VideoEncoderCombo, "Phone.StreamEncoder");
         UpdateCodecToolTip(AudioDecoderCombo, "Phone.StreamDecoder");
         UpdateCodecToolTip(VideoDecoderCombo, "Phone.StreamDecoder");
+        AudioLatencyCombo.ToolTip = AudioLatencyCombo.SelectedItem is StreamOption latencyOption
+            ? L10n.T("Phone.StreamAudioLatency") + " · " + latencyOption.Label
+            : L10n.T("Phone.StreamAudioLatency");
         if (AudioEncoderCombo.SelectedValue is not string audioEncoder || VideoEncoderCombo.SelectedValue is not string videoEncoder
             || AudioBitRateCombo.SelectedValue is not string audioRate || VideoBitRateCombo.SelectedValue is not string videoRate
             || VideoFpsCombo.SelectedValue is not string fps || AudioDecoderCombo.SelectedValue is not string audioDecoder
-            || VideoDecoderCombo.SelectedValue is not string videoDecoder) return;
+            || VideoDecoderCombo.SelectedValue is not string videoDecoder
+            || AudioLatencyCombo.SelectedValue is not string audioLatency) return;
         bool wasHevc = UseHevc;
         _streamSettings = (_streamSettings with
         {
@@ -298,8 +333,10 @@ public partial class PhoneDevicePage
             VideoBitRate = int.Parse(videoRate, CultureInfo.InvariantCulture), MaxFps = int.Parse(fps, CultureInfo.InvariantCulture),
             VideoEncoder = wasHevc ? _streamSettings.VideoEncoder : NullIfAutomatic(videoEncoder),
             HevcEncoder = wasHevc ? NullIfAutomatic(videoEncoder) : _streamSettings.HevcEncoder,
-            VideoDecoder = NullIfAutomatic(videoDecoder)
+            VideoDecoder = NullIfAutomatic(videoDecoder),
+            AudioLatencyMode = audioLatency
         }).Normalize();
+        UpdateAudioCodecControlState();
         _streamStore.RememberStreaming(_streamDevice, _streamSettings);
         if (wasHevc != UseHevc)
         {

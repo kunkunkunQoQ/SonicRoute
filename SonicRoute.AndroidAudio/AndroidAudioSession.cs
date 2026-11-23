@@ -42,7 +42,7 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
     public long TimestampDiscontinuities => _receiver?.TimestampDiscontinuities ?? 0;
     public (long Bytes, long NonSilentBytes, int RoutedType)? PhoneOutputDiagnostics =>
         _player is AndroidPhonePcmPlayer phone ? phone.Diagnostics : null;
-    private ScrcpyOpusReceiver? _receiver;
+    private IAndroidAudioReceiver? _receiver;
     private readonly Func<AndroidDevice, AndroidStreamSettings>? _streaming;
 
     public AndroidAudioSession(AdbClient adb, Func<AndroidDevice, AndroidStreamSettings>? streaming = null,
@@ -125,13 +125,14 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
         Volatile.Write(ref _pendingRun, nextRun);
         Task<IPcmPlayer>? preparingOutput = null;
         AndroidPcmSource? warmPcm = null;
+        var streaming = (_streaming?.Invoke(device) ?? new()).Normalize();
         try
         {
             if (warmPhoneRoute)
             {
                 // Overlap route preparation with releasing the old duplicate capture.
                 // The new PCM queue is empty until the old capture has been retired.
-                warmPcm = new AndroidPcmSource();
+                warmPcm = new AndroidPcmSource(streaming.EffectiveAudioLatencyMode);
                 preparingOutput = Task.Run(() => PreparePhoneOutputAsync(device, warmPcm, endpointId!, runToken, timing), runToken);
             }
             using (timing?.Measure("capture_retire")) await StopCoreAsync(preserveMirrors).ConfigureAwait(false);
@@ -143,14 +144,15 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             _renderFailure = null;
             runToken.ThrowIfCancellationRequested();
             Update(s => s with { State = CaptureState.Starting, Device = device, App = app, Error = null, ErrorCode = null });
-            Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}");
-            string? decoder = _streaming?.Invoke(device).Normalize().AudioDecoder;
+            Log($"Start {app.Package}, UID {app.Uid}, phone audio {keepPhoneAudio}, codec {streaming.AudioCodec}, latency {streaming.AudioLatencyMode}");
             _transport = _transportFactory();
-            _pcm = warmPcm ?? new AndroidPcmSource();
+            _pcm = warmPcm ?? new AndroidPcmSource(streaming.EffectiveAudioLatencyMode);
+            _pcm.LatencyMode = streaming.EffectiveAudioLatencyMode;
             var state = State;
             _pcm.Volume = state.Muted ? 0 : state.Volume / 100f;
             _pcm.SmartVolume = state.SmartVolume;
             _mirrors.SetLevels(_pcm.Volume, _pcm.SmartVolume);
+            _mirrors.SetLatencyMode(streaming.EffectiveAudioLatencyMode);
             if (string.IsNullOrEmpty(endpointId)) WatchDefaultOutput();
             Task<Stream> connecting = timing == null ? _transport.ConnectAsync(device, app, keepPhoneAudio, runToken)
                 : ConnectTimedAsync(_transport, device, app, keepPhoneAudio, runToken, timing);
@@ -174,12 +176,13 @@ public sealed class AndroidAudioSession : IAsyncDisposable, SonicRoute.AirPlay.I
             }
             using (timing?.Measure("capture_first_pcm"))
             {
-                _receiver = new ScrcpyOpusReceiver(decoder);
-                var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                _receiveTask = _receiver.ReceiveAsync(stream, _pcm, () => first.TrySetResult(), runToken);
-                _ = ObserveReceiveAsync(_receiveTask, generation);
                 using var startup = CancellationTokenSource.CreateLinkedTokenSource(runToken);
                 startup.CancelAfter(TimeSpan.FromSeconds(15));
+                uint codecId = await ScrcpyAudioProtocol.ReadCodecIdAsync(stream, startup.Token).ConfigureAwait(false);
+                _receiver = ScrcpyAudioProtocol.CreateReceiver(codecId, streaming.AudioDecoder);
+                var first = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _receiveTask = _receiver.ReceivePacketsAsync(stream, _pcm, () => first.TrySetResult(), runToken);
+                _ = ObserveReceiveAsync(_receiveTask, generation);
                 Task completed = await Task.WhenAny(first.Task, _receiveTask).WaitAsync(startup.Token).ConfigureAwait(false);
                 await completed.ConfigureAwait(false);
             }

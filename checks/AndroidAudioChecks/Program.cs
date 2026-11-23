@@ -30,6 +30,8 @@ internal static partial class Program
             if (args.Length > 0 && args[0] == "--airplay-window-modes") { await AirPlayWindowModesAsync(); return 0; }
             if (args.Length == 1 && args[0] == "--android-file-directory") { await AndroidFileDirectoryAsync(); return 0; }
             if (args.Length > 0 && args[0] == "--decoder-settings") { await DecoderSettingsAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--audio-latency") { await AudioLatencyChecksAsync(args[1]); return 0; }
+            if (args.Length > 0 && args[0] == "--raw-pcm") { await RawPcmChecksAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-start") { await AndroidHevcStartAsync(args[1]); return 0; }
             if (args.Length > 0 && args[0] == "--android-hevc-recovery") { await AndroidHevcStartAsync(args[1], checkResize: true); return 0; }
             if (args.Length > 0 && args[0] == "--gamepad-window") { await CheckGamepadProtocolAndZeroIdleWindowAsync(); return 0; }

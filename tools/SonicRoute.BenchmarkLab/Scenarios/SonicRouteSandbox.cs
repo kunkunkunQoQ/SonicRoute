@@ -22,6 +22,7 @@ public sealed class SonicRouteSandbox : IDisposable
     private bool _disposed;
     private int _revision;
     private string _lastRuleName = "";
+    private string? _resolvedEdition;
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -71,13 +72,10 @@ public sealed class SonicRouteSandbox : IDisposable
 
     private async Task<string?> RequestAsync(ProcessMonitor monitor, string selector, CancellationToken token)
     {
-        string edition = FileVersionInfo.GetVersionInfo(monitor.Process.StartInfo.FileName).FileDescription?.Contains("Legacy", StringComparison.OrdinalIgnoreCase) == true ? "Legacy" : "Lite";
         using var identity = WindowsIdentity.GetCurrent();
-        string name = $"SonicRoute.RuleCommand.{InstanceId}_{edition}.{Process.GetCurrentProcess().SessionId}.{identity.User!.Value}";
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
-        using var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
-        await pipe.ConnectAsync(timeout.Token);
+        using var pipe = await ConnectEditionPipeAsync(monitor, identity.User!.Value, timeout.Token);
         if (!GetNamedPipeServerProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out uint pid) || pid != monitor.ProcessId)
             throw new InvalidDataException("Readiness endpoint does not belong to the owned target process.");
         byte[] request = Encoding.UTF8.GetBytes(selector);
@@ -90,6 +88,61 @@ public sealed class SonicRouteSandbox : IDisposable
         byte[] reply = new byte[size]; await pipe.ReadExactlyAsync(reply, timeout.Token);
         using var document = JsonDocument.Parse(reply);
         return document.RootElement.GetProperty("Code").GetString();
+    }
+
+    private async Task<NamedPipeClientStream> ConnectEditionPipeAsync(ProcessMonitor monitor, string userSid, CancellationToken timeoutToken)
+    {
+        string? description = FileVersionInfo.GetVersionInfo(monitor.Process.StartInfo.FileName).FileDescription;
+        string[] candidates = _resolvedEdition != null
+            ? [_resolvedEdition]
+            : description?.Contains("Legacy", StringComparison.OrdinalIgnoreCase) == true
+                ? ["Legacy"]
+                : description?.Contains("Lite", StringComparison.OrdinalIgnoreCase) == true
+                    ? ["Lite"]
+                    : ["Full", "Lite"];
+        int sessionId = Process.GetCurrentProcess().SessionId;
+
+        if (candidates.Length == 1)
+        {
+            string singleName = $"SonicRoute.RuleCommand.{InstanceId}_{candidates[0]}.{sessionId}.{userSid}";
+            var singlePipe = new NamedPipeClientStream(".", singleName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            try
+            {
+                await singlePipe.ConnectAsync(timeoutToken);
+                _resolvedEdition ??= candidates[0];
+                return singlePipe;
+            }
+            catch
+            {
+                singlePipe.Dispose();
+                throw;
+            }
+        }
+
+        while (true)
+        {
+            timeoutToken.ThrowIfCancellationRequested();
+            foreach (string candidate in candidates)
+            {
+                string pipeName = $"SonicRoute.RuleCommand.{InstanceId}_{candidate}.{sessionId}.{userSid}";
+                var candidatePipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                try
+                {
+                    await candidatePipe.ConnectAsync(100, timeoutToken);
+                    _resolvedEdition = candidate;
+                    return candidatePipe;
+                }
+                catch (TimeoutException)
+                {
+                    candidatePipe.Dispose();
+                }
+                catch
+                {
+                    candidatePipe.Dispose();
+                    throw;
+                }
+            }
+        }
     }
 
     public async Task VerifyReadyAsync(ProcessMonitor monitor, CancellationToken token)
@@ -119,7 +172,7 @@ public sealed class SonicRouteSandbox : IDisposable
         string directory = Path.Combine(SandboxPath, "ExecutionHistory");
         if (!Directory.Exists(directory)) return Array.Empty<JsonElement>();
         var entries = new List<JsonElement>();
-        // The product partitions history by command edition (Lite / Legacy).
+        // The product partitions history by command edition (Full / Lite / Legacy).
         foreach (string file in Directory.EnumerateFiles(directory, "*.jsonl", SearchOption.AllDirectories))
         {
             using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

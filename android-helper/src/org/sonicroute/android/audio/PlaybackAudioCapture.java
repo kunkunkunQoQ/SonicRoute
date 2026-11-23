@@ -152,7 +152,7 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
         if (rec == null) {
             return -1;
         }
-        int maxBytes = Math.min(outDirectBuffer.remaining(), MAX_READ_SIZE);
+        int maxBytes = Math.min(outDirectBuffer.remaining(), MAX_READ_SIZE) & ~3;
         if (maxBytes <= 0) {
             return 0;
         }
