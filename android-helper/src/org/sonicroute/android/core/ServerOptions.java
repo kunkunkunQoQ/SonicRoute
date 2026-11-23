@@ -80,6 +80,8 @@ public final class ServerOptions {
     private String videoEncoder;
     private List<MediaCodecParams.Entry> videoCodecOptions = Collections.emptyList();
     private boolean downsizeOnError = true;
+    private boolean wifiTransport;
+    private boolean videoAbr = true;
 
     private int displayId = 0;
     private NewDisplaySpec newDisplay;
@@ -240,6 +242,16 @@ public final class ServerOptions {
                 break;
             case "downsize_on_error":
                 opts.downsizeOnError = Boolean.parseBoolean(value);
+                break;
+            case "video_transport":
+                String lowerTransport = value.toLowerCase(Locale.ENGLISH);
+                if (!"usb".equals(lowerTransport) && !"wifi".equals(lowerTransport)) {
+                    throw new IllegalArgumentException("Unsupported video_transport: " + value);
+                }
+                opts.wifiTransport = "wifi".equals(lowerTransport);
+                break;
+            case "video_abr":
+                opts.videoAbr = Boolean.parseBoolean(value);
                 break;
             case "display_id":
                 opts.displayId = Integer.parseInt(value);
@@ -423,6 +435,14 @@ public final class ServerOptions {
 
     public boolean isDownsizeOnError() {
         return downsizeOnError;
+    }
+
+    public boolean isWifiTransport() {
+        return wifiTransport;
+    }
+
+    public boolean isVideoAbr() {
+        return videoAbr;
     }
 
     public int getDisplayId() {

@@ -20,6 +20,7 @@ import org.sonicroute.android.io.StreamSession;
 import org.sonicroute.android.platform.AndroidDisplayPlatform;
 import org.sonicroute.android.platform.AndroidSystemPlatform;
 import org.sonicroute.android.util.ServerLog;
+import org.sonicroute.android.video.AdaptiveBitrateController;
 import org.sonicroute.android.video.VideoEncoderRunner;
 import org.sonicroute.android.video.OwnedAppMonitor;
 import org.sonicroute.android.video.PhysicalScreenSource;
@@ -194,6 +195,7 @@ public final class SonicRouteServer {
                         videoCodec,
                         options.isSendCodecMeta(),
                         options.isSendFrameMeta());
+                // ABR integration ready: pass createAdaptiveBitrateController(options) into VideoEncoderRunner.RuntimeBitrateHook once worker-a merges.
                 videoRunner = new VideoEncoderRunner(
                         videoSource,
                         videoWriter,
@@ -247,6 +249,16 @@ public final class SonicRouteServer {
                 cleanup.close();
             }
         }
+    }
+
+    public static AdaptiveBitrateController createAdaptiveBitrateController(ServerOptions options) {
+        if (options == null) {
+            throw new IllegalArgumentException("options must not be null");
+        }
+        AdaptiveBitrateController.TransportMode mode = options.isWifiTransport()
+                ? AdaptiveBitrateController.TransportMode.WIFI
+                : AdaptiveBitrateController.TransportMode.USB;
+        return new AdaptiveBitrateController(mode, options.isVideoAbr());
     }
 
     private static PlaybackAudioCapture buildAudioCapture(ServerOptions options) {
