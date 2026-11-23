@@ -91,7 +91,11 @@ internal static partial class Program
         {
             bool rejected = false;
             try { _ = ScrcpyAudioProtocol.CreateReceiver(unknownCodec); }
-            catch (InvalidDataException ex) { rejected = ex.Message.Contains($"0x{unknownCodec:X8}", StringComparison.Ordinal); }
+            catch (InvalidDataException ex)
+            {
+                rejected = AndroidError.TryGetCode(ex, out var code) && code == AndroidErrorCode.UnsupportedAudioFormat
+                    && ex.Message.Contains($"0x{unknownCodec:X8}", StringComparison.Ordinal);
+            }
             Check(rejected, $"CreateReceiver rejects unknown codec 0x{unknownCodec:X8}");
         }
 
@@ -277,7 +281,8 @@ internal static partial class Program
             InvalidDataException? ex = null;
             try { await new ScrcpyRawPcmReceiver().ReceiveAsync(ms, pcm, () => { }, default); }
             catch (InvalidDataException caught) { ex = caught; }
-            Check(ex != null && ex.Message.Contains("Unaligned", StringComparison.Ordinal) && pcm.SamplesWritten == 0,
+            Check(ex != null && AndroidError.TryGetCode(ex, out var code) && code == AndroidErrorCode.InvalidAudioStream
+                && ex.Message.Contains("Unaligned", StringComparison.Ordinal) && pcm.SamplesWritten == 0,
                 $"rejects unaligned raw PCM packet size={badSize} before writing audio");
         }
 

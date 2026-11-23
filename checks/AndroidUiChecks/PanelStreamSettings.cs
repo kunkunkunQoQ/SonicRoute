@@ -168,6 +168,24 @@ internal static partial class Program
                         (L10n.T("Phone.StreamLatencyStable"), AndroidStreamSettings.LatencyModeStable)
                     ]),
                     entry.Code + " localizes available decoder modes, Raw PCM, and all three audio latency modes");
+                foreach (var option in latencyOptions)
+                {
+                    audioLatency.SelectedValue = option.Value;
+                    pageHost.UpdateLayout();
+                    var label = Descendants<TextBlock>(audioLatency).Single(text => text.Text == option.Label);
+                    var untrimmed = new TextBlock
+                    {
+                        Text = label.Text, FontFamily = label.FontFamily, FontSize = label.FontSize,
+                        FontStyle = label.FontStyle, FontWeight = label.FontWeight, FontStretch = label.FontStretch,
+                        Language = label.Language, FlowDirection = label.FlowDirection
+                    };
+                    untrimmed.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    var right = audioLatency.TranslatePoint(new Point(audioLatency.ActualWidth, 0), pageHost).X;
+                    Check(label.ActualWidth + 0.5 >= untrimmed.DesiredSize.Width && right <= pageHost.ActualWidth
+                        && audio.ActualWidth >= 72 && audioDecoder.ActualWidth >= 72,
+                        $"{entry.Code} displays '{option.Label}' in full at 520 DIP " +
+                        $"({label.ActualWidth:F1} available, {untrimmed.DesiredSize.Width:F1} needed)");
+                }
             }
             L10n.Instance.SetLanguage("zh-CN");
             DrainUi();

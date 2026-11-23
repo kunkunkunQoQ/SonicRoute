@@ -321,7 +321,9 @@ public enum AndroidErrorCode
     NoAudioRouteOrEnded,
     PairTimedOut,
     UsbInterfaceInUse,
-    UsbInterfaceUnavailable
+    UsbInterfaceUnavailable,
+    UnsupportedAudioFormat,
+    InvalidAudioStream
 }
 
 public static class AndroidError

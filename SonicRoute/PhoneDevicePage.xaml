@@ -190,7 +190,7 @@
                         <ColumnDefinition Width="*" MinWidth="80"/>
                         <ColumnDefinition Width="*" MinWidth="80"/>
                         <ColumnDefinition Width="86"/>
-                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="Auto" MinWidth="70"/>
                     </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
