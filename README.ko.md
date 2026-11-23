@@ -4,13 +4,13 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | **한국어** | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![최신 정식 버전](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=%EC%B5%9C%EC%8B%A0%20%EC%A0%95%EC%8B%9D%20%EB%B2%84%EC%A0%84)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![라이선스: GPL-3.0](https://img.shields.io/static/v1?label=%EB%9D%BC%EC%9D%B4%EC%84%A0%EC%8A%A4&message=GPL-3.0&color=blue)](LICENSE) [![운영 체제: Windows 10 | 11](https://img.shields.io/static/v1?label=%EC%9A%B4%EC%98%81+%EC%B2%B4%EC%A0%9C&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![아키텍처: x64 | ARM64](https://img.shields.io/static/v1?label=%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![다운로드 수](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C%20%EC%88%98)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/static/v1?label=&message=Afdian%EC%97%90%EC%84%9C+%ED%9B%84%EC%9B%90&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![최신 정식 버전](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=%EC%B5%9C%EC%8B%A0%20%EC%A0%95%EC%8B%9D%20%EB%B2%84%EC%A0%84)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![라이선스: GPL-3.0-only](https://img.shields.io/static/v1?label=%EB%9D%BC%EC%9D%B4%EC%84%A0%EC%8A%A4&message=GPL-3.0-only&color=blue)](LICENSE) [![운영 체제: Windows 10 | 11](https://img.shields.io/static/v1?label=%EC%9A%B4%EC%98%81+%EC%B2%B4%EC%A0%9C&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![아키텍처: x64 | ARM64](https://img.shields.io/static/v1?label=%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![다운로드 수](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%EB%8B%A4%EC%9A%B4%EB%A1%9C%EB%93%9C%20%EC%88%98)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Afdian에서 후원](https://img.shields.io/static/v1?label=&message=Afdian%EC%97%90%EC%84%9C+%ED%9B%84%EC%9B%90&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **앱마다 원하는 오디오 장치를 지정하세요.**
 
-SonicRoute는 Windows 작업 표시줄의 알림 영역에서 실행되는 오디오 도구입니다. 앱마다 재생 장치와 녹음 장치를 따로 지정해 음악은 스피커로, 게임과 통화 소리는 헤드셋으로 들을 수 있습니다. 빠른 패널에서 Ctrl 키를 누른 채 클릭하면 재생 장치를 선택하거나 해제하고, Shift 키를 누른 채 클릭하면 목록에서 연속된 장치를 선택합니다. 모든 에디션에서 여러 PC 출력 장치로 동시에 소리를 보낼 수 있고, Full에서는 휴대폰 출력도 추가할 수 있습니다. 단축키, 마우스 휠, 빠른 패널로 볼륨을 조절하고 자주 쓰는 작업은 규칙으로 묶어 자동화하세요.
+SonicRoute는 Windows 알림 영역에서 앱별로 소리를 조절할 수 있는 도구입니다. 음악은 스피커로 들으면서 게임과 음성 채팅은 헤드셋으로 들을 수 있습니다.
 
-📥 [최신 릴리스 다운로드](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [사용자 가이드(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [최신 릴리스 다운로드](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [에디션 선택](#downloads) · [세 단계로 시작하기](#quick-start) · [사용자 가이드(중국어 간체)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지원 · [GPL-3.0](LICENSE)
 
@@ -31,14 +31,47 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지�
 
 </details>
 
+<a name="downloads"></a>
+
+## 🚀 다운로드 및 첫 설정
+
+**최신 정식 버전: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 2026년 11월 21일 · [릴리스 노트(중국어·영어)](docs/release-v1.35.md)
+
+v1.35에서 Android 연동이나 AirPlay를 사용하려면 **Full**, PC 오디오만 사용하려면 **Lite**를 선택하세요. .NET Framework 4.8을 사용하는 x64 PC에서는 **Legacy**로 PC 오디오를 관리할 수 있습니다.
+
+| 에디션 | 다운로드 | 요구 사항 |
+|---|---|---|
+| ⭐ Full(.NET 10, 휴대폰 연동 지원) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | 설치 없이 실행하는 단일 EXE 파일입니다. 프로그램 아키텍처에 맞는 .NET 10 Desktop Runtime이 필요합니다. |
+| ⚡ Lite(.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | 설치 없이 실행하는 단일 EXE 파일입니다. 프로그램 아키텍처에 맞는 .NET 10 Desktop Runtime이 필요합니다. |
+| 🛡️ Legacy x64(PC 오디오 전용, .NET Framework 4.8) | [ZIP 파일](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | ZIP 파일을 모두 푼 뒤 실행하세요. .NET Framework 4.8이 필요합니다. |
+| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full과 Lite 모두 x64용 .NET 10 Desktop Runtime이 필요합니다. 배포 버전은 각 스토어 페이지에서 확인하세요. |
+
+<details>
+<summary><sub>📦 이전 NET8 호환 버전 다운로드(지원 종료)</sub></summary>
+
+| 에디션 | 다운로드 | 요구 사항 |
+|---|---|---|
+| Lite NET8(지원 종료) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 지원이 종료된 버전으로 기존 파일은 계속 다운로드할 수 있습니다. .NET 10 또는 Legacy 버전으로 전환하는 것을 권장합니다. |
+
+</details>
+
+> [!NOTE]
+> Full과 Lite에는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)이 필요합니다. Legacy는 Windows의 .NET Framework 4.8을 사용합니다. 이전 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 호환 버전은 지원이 종료되었지만 계속 다운로드할 수 있습니다.
+
+<a name="quick-start"></a>
+
+### 🏁 세 단계로 시작하기
+
+1. **SonicRoute를 실행하세요.** 다운로드한 EXE를 실행하세요. Legacy는 먼저 ZIP 파일을 모두 풀어야 합니다. 알림 영역에서 SonicRoute 아이콘을 두 번 클릭하면 기본 창이 열립니다.
+2. **출력 장치를 고르세요.** 설정에서 빠른 패널에 표시할 장치를 선택하세요. SonicRoute 아이콘을 한 번 클릭해 빠른 패널을 열고, 앱 항목을 펼쳐 재생 장치를 고르세요.
+3. **마우스 휠을 사용해 보세요.** SonicRoute 아이콘 위에서 휠을 굴려 앱 볼륨을 조절하세요. 기본적으로 오디오 세션이 있는 앱 중 현재 사용 중이거나 가장 최근에 사용한 포그라운드 앱을 우선합니다. Alt 키를 누른 채 굴리면 해당 앱의 출력이, Shift 키를 누른 채 굴리면 Windows 기본 재생 장치의 볼륨이 바뀝니다.
+
 ## ✨ SonicRoute의 주요 기능
 
-- **앱별 재생 및 녹음 장치 선택.** 게임은 헤드셋으로, 음악은 스피커로 듣고 음성 채팅에 쓸 마이크도 따로 지정할 수 있습니다. 빠른 패널에서 Ctrl 키를 누른 채 클릭하면 재생 장치를 선택하거나 선택을 해제할 수 있습니다. Shift 키를 누른 채 클릭하면 목록에서 연속된 장치를 선택합니다. 모든 에디션에서 여러 PC 출력 장치로 동시에 재생할 수 있으며, Full에서는 휴대폰 출력도 추가할 수 있습니다. SonicRoute를 종료해도 Windows에는 앱마다 지정한 주 재생 장치와 녹음 장치가 저장되어 있습니다. 여러 장치에서 동시에 재생하려면 SonicRoute를 계속 실행해야 합니다.
-- **마우스 휠로 현재 앱 제어.** 기본적으로 최근 포그라운드에서 사용되었고 오디오 세션이 있는 앱을 우선 선택합니다. 알림 영역 아이콘 위에서 휠을 굴려 볼륨을 조절하고, Alt 키를 누른 채 굴려 해당 앱의 출력 장치를 바꿀 수 있습니다. 변경 결과는 화면 표시(OSD)로 확인할 수 있으며 전역 단축키로 마이크를 음소거할 수도 있습니다.
-- **빠른 패널과 앱별 레벨 미터.** 앱마다 재생 레벨을 보면서 슬라이더로 볼륨을 조절할 수 있습니다. 패널 높이는 350~850 논리 픽셀 범위에서 조절할 수 있으며 표시 위치도 저장됩니다.
-- **Android 연동 및 AirPlay 수신(Full).** Android 앱의 소리를 PC로 보내거나 PC 소리를 휴대폰으로 보낼 수 있습니다. Full 개발 버전에서는 휴대폰마다 PC로 전송할 오디오 형식을 Opus(기본값)와 비압축 PCM 중에서 선택할 수 있습니다. 지연 모드는 초저지연, 균형(기본값), 안정성 우선 중에서 선택합니다. 설정은 해당 휴대폰에서 다음에 오디오를 전송할 때 적용됩니다. 휴대폰 인코더가 지원하면 이 개발 버전은 연결 상태에 맞춰 가상 디스플레이의 영상 비트레이트도 자동으로 조절합니다. 가상 디스플레이는 H.265를 지원하며 해당 창이 활성화되어 있을 때 게임패드로 조작할 수 있습니다. C#으로 구현한 AirPlay 수신기는 Apple 기기의 소리를 재생하고 원래 비율로 화면을 미러링합니다. 빠른 패널에서 PC 출력, Android 휴대폰 스피커, 휴대폰에 연결된 Bluetooth 장치 중 재생할 곳을 선택할 수 있습니다. 스마트 볼륨 조절(SmartVolume)은 음량 차이를 줄여 줍니다.
-- **6가지 실행 조건과 39가지 작업.** 앱을 시작하거나 전환하거나 종료할 때, 예약한 시각에, 단축키를 누를 때, 또는 SonicRoute를 시작할 때 규칙을 실행할 수 있습니다. 장치 전환, 볼륨 조절, 음소거, 프로그램 시작, PowerShell 실행 등을 조합할 수 있습니다. 스크립트나 외부 컨트롤러에서는 `sr` 명령으로 규칙을 호출합니다.
-- **Windows 알림을 통한 변경 감지.** 시스템 알림을 우선 사용하고 필요할 때만 1초 간격으로 상태를 확인합니다. 더 이상 필요하지 않은 데이터는 정리합니다. 휴대폰 연동과 AirPlay는 Full에서 이용할 수 있으며 Lite와 Legacy는 PC용 오디오 기능을 제공합니다. 인터페이스는 9개 언어를 지원합니다.
+- **앱마다 재생 장치와 녹음 장치를 지정하세요.** 빠른 패널에서 Ctrl 키를 누른 채 클릭하면 재생 장치를 선택하거나 해제하고, Shift 키를 누른 채 클릭하면 연속된 장치를 선택합니다. 여러 PC 출력 장치로 동시에 재생할 수 있고, Full에서는 Android 휴대폰의 출력 장치도 추가할 수 있습니다.
+- **앱별 볼륨을 바로 조절하세요.** 빠른 패널의 레벨 미터로 소리가 나는 앱을 확인하고 슬라이더로 볼륨을 조절하세요. 알림 영역의 SonicRoute 아이콘 위에서 휠을 굴리면 현재 앱의 볼륨이 바뀝니다. 전역 단축키로 모든 마이크의 음소거를 한꺼번에 켜거나 끌 수도 있습니다.
+- **자주 쓰는 작업을 규칙으로 만드세요.** 실행 조건 6가지와 작업 39가지를 조합해 장치를 바꾸거나 볼륨을 조절하거나 프로그램을 실행할 수 있습니다. 명령줄에서도 `sr`로 저장한 규칙을 실행할 수 있습니다.
+- **Full에서 Android와 AirPlay를 연결하세요.** Android 앱 소리를 PC에서 듣거나 PC 소리를 휴대폰 스피커나 휴대폰에 연결된 Bluetooth 기기로 보낼 수 있습니다. Android 앱은 H.265 영상을 지원하는 가상 디스플레이에서 열 수 있습니다. AirPlay로 Apple 기기의 소리를 듣거나 원래 비율 그대로 화면을 미러링할 수 있습니다. Android 휴대폰의 공유 저장공간을 탐색하고 여러 파일을 한 번에 보내거나 받을 수도 있습니다.
 
 ## 🎮 활용 예시
 
@@ -51,37 +84,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지�
 | ⚡ **게임을 시작할 때마다 출력 장치를 바꿀 때** | 게임을 시작하면 헤드셋으로 전환하고 볼륨을 40%로 맞춘 다음 음성 채팅 앱을 실행하도록 규칙을 만드세요. 게임이 종료되면 스피커로 복귀하는 규칙을 별도로 설정합니다. |
 | 🎙️ **잠시 자리를 비우거나 마이크를 꺼야 할 때** | 기본 단축키 Ctrl+Shift+N으로 마이크를 한꺼번에 음소거하거나 음소거를 해제합니다. 화면 표시(OSD)를 켜면 음소거 상태를 확인할 수 있습니다. |
 | 📹 **OBS로 게임을 방송하거나 설명 영상을 녹화할 때** | 녹화할 앱에는 전용 출력 장치나 가상 오디오 장치를 지정하고 OBS에서 그 장치의 소리를 캡처합니다. 개인 통화와 알림 소리는 다른 출력 장치로 보냅니다. |
-| 📱 **PC에서 휴대폰 소리를 듣거나 앱을 조작할 때** | Android 앱의 소리를 PC에서 조절하고 가상 디스플레이에서 앱을 조작하세요. Apple 기기에서는 AirPlay로 소리와 화면을 전송할 수 있습니다. 빠른 패널에서 PC 출력, Android 휴대폰 스피커, 휴대폰에 연결된 Bluetooth 장치 중 하나를 선택해 소리를 재생합니다. |
-
-## 🚀 다운로드 및 첫 설정
-
-**최신 정식 버전: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 2026년 11월 21일 · [릴리스 노트(중국어 간체)](docs/release-v1.35.md)
-
-PC에서 Android 휴대폰 소리를 재생하거나 가상 디스플레이, AirPlay를 사용하려면 **Full**을 선택하세요. PC 오디오 기능만 필요하다면 **Lite**를 권장합니다. .NET Framework 4.8이 설치된 x64 PC에서는 **Legacy**도 사용할 수 있습니다. ARM64 빌드는 실험 버전입니다. 아래 표는 v1.35의 직접 다운로드 링크이며, Microsoft Store 버전은 각 스토어 페이지의 최신 버전을 기준으로 합니다.
-
-| 에디션 | 다운로드 | 요구 사항 |
-|---|---|---|
-| ⭐ Full(.NET 10, 휴대폰 연동 지원) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | 단일 실행 파일로 제공되며, Android 오디오, 가상 디스플레이 및 AirPlay 연동을 선택해 사용할 수 있습니다. 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. |
-| ⭐ Lite(.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | PC 오디오 기능만 담은 단일 실행 파일입니다. 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. |
-| 🛡️ Legacy x64(PC 오디오 전용, .NET Framework 4.8) | [ZIP 파일](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | Windows의 .NET Framework 4.8을 사용합니다. ZIP 파일의 압축을 풀고 실행하세요. |
-| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full과 Lite 모두 x64용 .NET 10 Desktop Runtime이 필요합니다. 배포 중인 버전은 각 스토어 페이지에서 확인하세요. |
-
-<details>
-<summary><sub>📦 이전 NET8 호환 버전 다운로드(지원 종료)</sub></summary>
-
-| 에디션 | 다운로드 | 요구 사항 |
-|---|---|---|
-| Lite NET8(지원 종료) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | 지원이 종료된 버전으로 기존 파일은 계속 다운로드할 수 있습니다. .NET 10 또는 Legacy 버전으로 전환하는 것을 권장합니다. |
-</details>
-
-> [!NOTE]
-> Full과 Lite에는 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)이 필요합니다. Legacy는 Windows의 .NET Framework 4.8을 사용합니다. 이전 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) 호환 버전은 지원이 종료되었지만 계속 다운로드할 수 있습니다.
-
-### 🏁 세 단계로 시작하기
-
-1. **SonicRoute를 실행합니다.** EXE 파일을 두 번 클릭하세요. Legacy 버전은 먼저 ZIP 파일의 압축을 풀어야 합니다. 실행 후 알림 영역에 표시되는 SonicRoute 아이콘을 두 번 클릭하면 기본 창이 열립니다. 아이콘이 숨겨져 있으면 작업 표시줄의 알림 영역으로 끌어다 놓으세요.
-2. **앱의 출력 장치를 선택합니다.** 설정에서 빠른 패널에 표시할 헤드폰과 스피커를 선택하세요. 알림 영역 아이콘을 한 번 클릭하면 빠른 패널이 열립니다. 앱 항목을 펼쳐 출력 장치를 고르고, 슬라이더로 볼륨을 조절하세요.
-3. **마우스 휠로 소리를 조절합니다.** 알림 영역의 SonicRoute 아이콘 위에서 휠을 굴리면 현재 제어 중인 앱의 볼륨이 바뀝니다. Alt 키를 누르고 휠을 굴리면 해당 앱의 출력 장치가, Shift 키를 누르고 굴리면 시스템 기본 재생 장치의 볼륨이 조절됩니다. 설정에서 휠을 사용할 범위를 알림 영역 전체로 넓힐 수 있습니다.
+| 📱 **PC에서 휴대폰 소리를 듣거나 앱을 조작할 때** | Android 게임을 가상 디스플레이에서 열고 게임 소리는 PC 스피커로 들으세요. 게임패드 입력은 해당 창이 활성화된 동안에만 전달됩니다. ‘스마트 볼륨 조절’을 켜면 게임 소리가 갑자기 커지거나 작아지는 정도를 줄일 수 있습니다. |
 
 ### ⚡ 명령줄에서 자동화 규칙 실행
 
@@ -92,7 +95,21 @@ PC에서 Android 휴대폰 소리를 재생하거나 가상 디스플레이, Air
 sr "규칙 이름 또는 ID"
 ```
 
-### 🆕 v1.35 주요 변경 사항
+## ❓ 자주 묻는 질문
+
+**SonicRoute를 종료해도 앱의 출력 장치와 볼륨이 유지되나요?**
+
+앱마다 지정한 주 재생 장치와 녹음 장치는 Windows에 저장되며, 현재 오디오 세션의 볼륨도 유지됩니다. 여러 출력 장치에서 동시에 재생하거나 단축키, 알림 영역 조작, 자동화, 휴대폰 오디오, 화면 미러링, 클립보드 동기화를 사용하려면 SonicRoute를 계속 실행해야 합니다.
+
+**에디션별로 어떤 런타임이 필요한가요?**
+
+Full과 Lite는 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. Microsoft Store 버전은 x64 런타임이 필요하며 Legacy는 .NET Framework 4.8을 사용합니다. 이전 NET8 버전은 지원이 종료되었지만 계속 다운로드할 수 있습니다.
+
+**백그라운드에서 실행하면 CPU 사용량이나 배터리 소모가 얼마나 늘어나나요?**
+
+일반적으로 Windows가 변경을 알릴 때 작동하고 필요한 경우에만 1초 간격으로 상태를 확인합니다. 사용하지 않는 데이터는 필요에 따라 정리합니다. 실제 CPU 사용량과 전력 소모는 시스템과 사용 중인 기능에 따라 달라집니다.
+
+## 🆕 v1.35 주요 변경 사항
 
 빠른 패널에서 PC 앱의 마이크를 선택하면 해당 장치가 바로 강조 표시됩니다. 전환 중에도 계속 클릭할 수 있으며 변경 사항은 선택한 순서대로 적용됩니다. Full에서는 출력을 하나만 선택할 수 있는 외부 음원도 같은 방식으로 동작합니다. 출력 장치를 선택하면 앱 이름 옆에 표시되는 출력 이름도 바로 바뀝니다. 장치 전환 단축키는 연달아 눌러도 됩니다. 단축키로 현재 앱의 출력을 바꿀 때 45밀리초 안에 전환이 끝나면 결과만 표시됩니다. 전환 중이라는 안내가 나타나면 성공 결과를 표시하기 전에 최소 500밀리초 동안 유지합니다. 실패한 경우에는 즉시 알려 줍니다. Windows가 앱의 오디오 세션을 선택한 다른 출력으로 옮겨도 함께 선택한 나머지 출력에서는 재생이 계속됩니다.
 
@@ -107,19 +124,10 @@ Full에서는 두 Android 패널의 USB 및 Wi-Fi 연결 상태가 동기화됩�
 
 </details>
 
-### ❓ 자주 묻는 질문
+## Full 개발 버전의 새 기능
 
-**SonicRoute를 종료해도 앱의 출력 장치와 볼륨이 유지되나요?**
-
-앱마다 지정한 주 재생 장치와 녹음 장치는 Windows에 저장되며, 현재 오디오 세션의 볼륨도 유지됩니다. 여러 출력 장치에서 동시에 재생하거나 단축키, 알림 영역 조작, 자동화, 휴대폰 오디오, 화면 미러링, 클립보드 동기화를 사용하려면 SonicRoute를 계속 실행해야 합니다.
-
-**에디션별로 어떤 런타임이 필요한가요?**
-
-Full과 Lite는 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요합니다. Microsoft Store 버전은 x64 런타임이 필요하며 Legacy는 .NET Framework 4.8을 사용합니다. 이전 NET8 버전은 지원이 종료되었지만 계속 다운로드할 수 있습니다.
-
-**백그라운드에서 실행하면 CPU 사용량이나 배터리 소모가 얼마나 늘어나나요?**
-
-일반적으로 Windows가 변경을 알릴 때 작동하고 필요한 경우에만 1초 간격으로 상태를 확인합니다. 사용하지 않는 데이터는 필요에 따라 정리합니다. 실제 CPU 사용량과 전력 소모는 시스템과 사용 중인 기능에 따라 달라집니다.
+- Android에서 PC로 전송할 오디오 형식은 휴대폰마다 Opus(기본값) 또는 비압축 PCM으로 설정할 수 있습니다. 지연 모드는 초저지연, 균형(기본값), 안정성 우선 중에서 선택하세요. 변경 사항은 해당 휴대폰에서 다음번 오디오 전송을 시작할 때 적용됩니다.
+- 휴대폰 인코더가 지원하면 가상 디스플레이의 영상 비트레이트가 연결 상태에 따라 자동으로 조절됩니다.
 
 ## 📚 문서
 

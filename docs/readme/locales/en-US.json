@@ -1,8 +1,9 @@
 {
     "title": "SonicRoute",
     "tagline": "Send each app's audio to the device you choose.",
-    "intro": "Play music through your speakers and keep games and calls in your headset. SonicRoute runs in the Windows system tray and lets you choose each app’s playback and recording devices. In the quick panel, Ctrl-click to add or remove an output, or Shift-click to select a range. All editions can play audio through multiple PC outputs at once. Full can also use outputs on a connected Android phone. Adjust the volume with hotkeys or the mouse wheel, and save routine changes as automation rules.",
+    "intro": "Play music through your speakers while games and calls use your headset. From the Windows system tray, SonicRoute lets you choose a playback device and microphone for each app and adjust its volume.",
     "download": "Download the latest release",
+    "editionChoice": "Compare editions",
     "guide": "User guide (Chinese)",
     "wiki": "Wiki (Chinese)",
     "support": "Support on Afdian",
@@ -17,21 +18,21 @@
     "mascotAlt": "Click the mascot to open the user guide",
     "featuresTitle": "What SonicRoute offers",
     "downloadTitle": "Download and get started",
-    "releaseNotes": "Release notes (Chinese)",
-    "downloadIntro": "Choose **Full** for Android audio, virtual displays and AirPlay, or **Lite** for PC audio only. Both have x64 and experimental ARM64 builds. **Legacy** is the PC-only x64 edition for systems using .NET Framework 4.8. The direct downloads below are for {release}. See the Microsoft Store listings for the versions of Full and Lite available there.",
+    "releaseNotes": "Release notes (English and Chinese)",
+    "downloadIntro": "Choose **Lite** for Windows audio, **Full** to add Android and AirPlay, or **Legacy** for PC audio on an x64 system with .NET Framework 4.8. The table lists downloads for {release} and links to the Microsoft Store editions.",
     "edition": "Edition",
     "requirements": "Requirements",
     "singleExe": "Single EXE",
     "fullZip": "Download ZIP",
     "storeInstall": "Install from the Store",
-    "liteRequirement": "One portable executable. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64).",
-    "legacyRequirement": "Extract the ZIP and run SonicRoute. It uses Windows’ .NET Framework 4.8.",
-    "storeRequirement": "The Store offers Full and Lite. Both require the x64 .NET 10 Desktop Runtime.",
+    "liteRequirement": "Portable EXE. Requires the .NET 10 Desktop Runtime for the selected architecture.",
+    "legacyRequirement": "Extract the entire ZIP before running SonicRoute. Requires .NET Framework 4.8.",
+    "storeRequirement": "Full and Lite both require the x64 .NET 10 Desktop Runtime. See each Store listing for its current version.",
     "runtimeNote": "For Full or Lite, install {runtime} for the architecture you downloaded. Legacy uses .NET Framework 4.8. Older builds that use {runtime8} are available in the archive and no longer receive updates.",
     "steps": [
-        "**Launch SonicRoute.** Run the downloaded EXE. If you use Legacy, fully extract the ZIP file first. Double-click the SonicRoute icon in the system tray to open the main window.",
-        "**Choose your devices.** In Settings, select the headphones and speakers you want to see in the quick panel. Click the tray icon once to open the panel. Expand an app’s row to select its output device, or drag its slider to adjust the volume.",
-        "**Use the mouse wheel.** Scroll over the SonicRoute icon to adjust the target app’s volume. Hold Alt while scrolling to change its output, or Shift to adjust the default output device’s volume. You can extend these controls to the entire system tray in Settings."
+        "**Open SonicRoute.** Run the EXE (extract the ZIP first for Legacy). Double-click the SonicRoute icon in the system tray to open the main window.",
+        "**Route an app.** In Settings, choose which devices to show. Play audio in an app, then single-click the tray icon. Expand the app’s row in the quick panel to choose an output. Drag its slider to adjust its volume.",
+        "**Try the mouse wheel.** Scroll over the tray icon to adjust the current app’s volume. By default, SonicRoute looks for an audio session in the foreground app first, then in the last foreground app that had one. Hold Alt and scroll to switch the app’s output, or hold Shift and scroll to adjust the volume of the system’s default playback device."
     ],
     "commandNote": "The `sr` command sends a rule name or ID to a running copy of SonicRoute over a named pipe. Start SonicRoute once to register the command, then close and reopen your terminal. You can now call `sr` from a script, AutoHotkey or Stream Deck. If SonicRoute is closed, `sr` returns an error. See {faq}.",
     "ruleExample": "Rule name or ID",
@@ -88,12 +89,15 @@
         "**Scope and earlier licenses.** As of November 17, 2026, GPL-3.0-only covers this revision of the project, including earlier code, to the extent the copyright holder can license it. Permissions already granted under the MIT license and the former custom license remain valid. Existing tags and previously released binaries retain their original licensing. Third-party components retain their own licenses (see {noticesLink})."
     ],
     "features": [
-        "**Choose playback and recording devices for each app.** Send game audio to your headset and use its microphone for voice chat. In the quick panel, Ctrl-click a playback device to add it to or remove it from the selection. Shift-click to select a range. All editions can play audio on several PC outputs at once. Full can also include available Android phone outputs. Windows remembers each app’s primary PC output and recording device after SonicRoute exits. Playback on additional outputs requires SonicRoute to be running.",
-        "**Control the current app with the mouse wheel.** By default, SonicRoute prioritizes the most recently used foreground app with an audio session. Scroll over the tray icon to adjust its volume, or hold Alt while scrolling to switch its output. On-screen indicators (OSD) show the result, and a global hotkey lets you toggle microphone mute.",
-        "**See which apps are playing audio.** The quick panel has a volume slider and a live level meter for each app. It remembers its position, and you can set its height from 350 to 850 device-independent pixels.",
-        "**Connect an Android device or use AirPlay (Full).** Play Android app audio on the PC, open apps in separate virtual display windows, or send PC audio back to the phone. Android supports H.265 video and gamepad input in the active video window. The built-in C# AirPlay receiver plays audio and mirrors the screen at its original aspect ratio. Use the quick panel to send audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Smart Volume evens out loud passages on supported streams. In development builds of Full, you can send audio from Android to the PC using Opus (the default) or uncompressed PCM. Set the latency mode to Ultra-low latency, Balanced (the default), or Stable. Each phone’s settings take effect the next time you start an audio stream from it. When the Android encoder supports it, SonicRoute adjusts the virtual display’s video bitrate as connection conditions change.",
-        "**Run rules from an event or the command line.** Choose from 6 triggers and 39 actions. Trigger a rule with a hotkey, on a schedule, when an app opens, closes or gains focus, or when SonicRoute starts. Chain actions to switch devices, set volume, mute audio, open a program or file, or run PowerShell. Scripts and hardware controllers can run a rule with `sr` through the existing SonicRoute process.",
-        "**Respond to Windows events.** SonicRoute uses system notifications, checks process state once a second when needed, and releases data it no longer needs. All three editions support nine interface languages. Lite and Legacy focus on PC audio."
+        "**Choose where each app plays and records.** In the quick panel, Ctrl-click a playback device to add or remove it. Shift-click to select a range. All editions can play through several PC outputs at once. Full can also include outputs on a connected Android phone.",
+        "**See what’s playing and adjust its volume.** Live level meters show which apps are playing, each with its own volume slider. Scroll over the tray icon to adjust the current app’s volume, or use a hotkey to mute and unmute your microphones.",
+        "**Automate routine changes.** Choose one of {triggerCount} triggers and build a sequence from {actionCount} available actions. When a game starts, a rule can switch to your headset and open voice chat. You can also run a saved rule from a terminal or script with `sr`.",
+        "**Use Android and AirPlay on your PC (Full).** Play an Android app’s audio on your PC, send PC audio to your phone, or use an Android app in its own virtual display. SonicRoute also receives AirPlay audio and screen mirroring from Apple devices. Browse an Android phone’s shared storage and transfer multiple files in either direction."
+    ],
+    "developmentTitle": "In development for Full",
+    "developmentNotes": [
+        "For audio from Android to your PC, choose Opus (default) or uncompressed PCM. Each phone has three latency modes: Ultra-low latency, Balanced (default), and Stable. Changes take effect the next time you start an audio stream from that phone.",
+        "If the Android encoder supports it, the virtual display adjusts its video bitrate as connection conditions change."
     ],
     "scenario": "Everyday scenario",
     "whatYouCanDo": "How SonicRoute helps",
@@ -111,9 +115,9 @@
         "Create a rule that switches to the headset, sets the volume to 40% and opens voice chat when the game starts. Use an exit rule to switch back to the speakers.",
         "The default shortcut, Ctrl+Shift+N, toggles mute for all microphones. Enable the persistent on-screen indicator to see when they’re muted.",
         "Send the apps you want to record to a separate physical or virtual output, then select that output in your recording software. Leave chats and notifications on another output.",
-        "In Full, route Android audio to the PC and use phone apps in a virtual display. You can also receive AirPlay audio and screen mirroring. Use the quick panel to play the audio on a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone."
+        "Play an Android game in a virtual display on your PC, with H.265 video on supported devices. Gamepad input goes to the game only while its virtual display window has focus. Choose your PC speakers in the quick panel. Smart Volume helps even out sudden changes in loudness."
     ],
-    "editionLegacyX64": "Legacy x64 (PC audio only, .NET Framework 4.8)",
+    "editionLegacyX64": "Legacy (PC audio, x64)",
     "editionStore": "Microsoft Store",
     "commandSnippetComment": "Trigger an automation rule (SonicRoute must be running)",
     "faqQuickTitle": "Common questions",
@@ -133,9 +137,9 @@
     "cliTitle": "Run an automation rule from the command line",
     "releaseHighlightsTitle": "What’s new in {release}",
     "retiredNet8Title": "Archived .NET 8 downloads (no longer maintained)",
-    "fullRequirement": "One portable executable with Android and AirPlay support. Install the .NET 10 Desktop Runtime for the build’s architecture (x64 or ARM64).",
-    "editionFull": "Full (.NET 10, includes Android and AirPlay)",
-    "editionLite": "Lite (.NET 10, PC audio only)",
+    "fullRequirement": "Portable EXE. Requires the .NET 10 Desktop Runtime for the selected architecture.",
+    "editionFull": "Full (PC, Android and AirPlay)",
+    "editionLite": "Lite (PC audio)",
     "editionLiteNet8": "Lite for .NET 8 (discontinued)",
     "net8Requirement": "Archived build. For updates, switch to a .NET 10 edition or Legacy.",
     "platformLabel": "Platform",

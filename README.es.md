@@ -4,13 +4,13 @@
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | **Español** | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Versión estable](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=Versi%C3%B3n%20estable)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Licencia: GPL-3.0](https://img.shields.io/static/v1?label=Licencia&message=GPL-3.0&color=blue)](LICENSE) [![Sistema: Windows 10 | 11](https://img.shields.io/static/v1?label=Sistema&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arquitectura: x64 | ARM64](https://img.shields.io/static/v1?label=Arquitectura&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Descargas](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=Descargas)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Apoyar en Afdian](https://img.shields.io/static/v1?label=&message=Apoyar+en+Afdian&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Versión estable](https://img.shields.io/github/v/release/kunkunkunQoQ/SonicRoute?color=34A853&logo=github&label=Versi%C3%B3n%20estable)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Licencia: GPL-3.0-only](https://img.shields.io/static/v1?label=Licencia&message=GPL-3.0-only&color=blue)](LICENSE) [![Sistema: Windows 10 | 11](https://img.shields.io/static/v1?label=Sistema&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Arquitectura: x64 | ARM64](https://img.shields.io/static/v1?label=Arquitectura&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Descargas](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=Descargas)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Apoyar en Afdian](https://img.shields.io/static/v1?label=&message=Apoyar+en+Afdian&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **Envía el audio de cada aplicación al dispositivo que elijas.**
 
-Escucha la música por los altavoces y reserva los auriculares para los juegos y las llamadas. SonicRoute te permite elegir en Windows la entrada y la salida de audio de cada aplicación. En el panel rápido, haz clic con Ctrl para añadir o quitar una salida, o con Mayús para seleccionar varias salidas consecutivas. Puedes combinar varias salidas del PC en todas las ediciones y añadir salidas del móvil en la edición Full. Ajusta el volumen con un atajo de teclado, desde el panel rápido o con la rueda del ratón sobre el icono de SonicRoute en el área de notificación. Puedes guardar las operaciones que repites como reglas de automatización.
+SonicRoute te permite controlar el audio de cada aplicación desde el área de notificación de Windows. Puedes escuchar música por los altavoces mientras el juego y el chat de voz suenan por los auriculares.
 
-📥 [Descargar la última versión](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [Guía de usuario (en chino)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (en chino)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
+📥 [Descargar la última versión](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · [Comparar ediciones](#downloads) · [Primeros pasos](#quick-start) · [Guía de usuario (en chino)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
 
 Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Interfaz en nueve idiomas · [GPL-3.0](LICENSE)
 
@@ -31,14 +31,47 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Interfaz en nueve
 
 </details>
 
+<a name="downloads"></a>
+
+## 🚀 Descarga y primeros pasos
+
+**Versión estable: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 21 de noviembre de 2026 · [Notas de la versión (en chino e inglés)](docs/release-v1.35.md)
+
+Para v1.35, elige **Full** si quieres usar Android o AirPlay y **Lite** si solo necesitas el audio del PC. **Legacy** ofrece las funciones de audio del PC en equipos x64 con .NET Framework 4.8.
+
+| Edición | Descarga | Requisitos |
+|---|---|---|
+| ⭐ Full (.NET 10, con integración móvil opcional) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | EXE portátil. Requiere .NET 10 Desktop Runtime de la misma arquitectura que el programa. |
+| ⚡ Lite (.NET 10, solo audio de PC) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | EXE portátil. Requiere .NET 10 Desktop Runtime de la misma arquitectura que el programa. |
+| 🛡️ Legacy x64 (solo audio de PC, .NET Framework 4.8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | Extrae todo el ZIP antes de ejecutar el programa. Requiere .NET Framework 4.8. |
+| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full y Lite requieren .NET 10 Desktop Runtime para x64. La ficha de cada edición indica la versión disponible. |
+
+<details>
+<summary><sub>📦 Ediciones anteriores para .NET 8 (sin mantenimiento)</sub></summary>
+
+| Edición | Descarga | Requisitos |
+|---|---|---|
+| Lite NET8 (sin mantenimiento) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Esta edición ha dejado de recibir actualizaciones. Para instalaciones nuevas se recomienda una edición .NET 10 o Legacy. |
+
+</details>
+
+> [!NOTE]
+> Full y Lite utilizan [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) para la arquitectura elegida. Legacy requiere .NET Framework 4.8. Las antiguas ediciones para [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) siguen disponibles y ya no reciben actualizaciones.
+
+<a name="quick-start"></a>
+
+### 🏁 Primeros pasos
+
+1. **Abre SonicRoute.** Ejecuta el EXE descargado. Si usas Legacy, extrae primero todo el ZIP. Haz doble clic en el icono de SonicRoute del área de notificación para abrir la ventana principal.
+2. **Elige una salida.** En los ajustes, marca los dispositivos que quieres ver en el panel rápido. Haz clic una vez en el icono de SonicRoute, despliega la fila de una aplicación y elige dónde reproducir su audio.
+3. **Prueba la rueda.** Gírala sobre el icono de SonicRoute para ajustar el volumen. Por defecto, entre las aplicaciones con una sesión de audio, SonicRoute da prioridad a la que está en primer plano o, en su defecto, a la última que lo estuvo. Con Alt cambias su salida y con Mayús ajustas el volumen del dispositivo de reproducción predeterminado de Windows.
+
 ## ✨ Qué ofrece SonicRoute
 
-- **Dispositivos de reproducción y grabación por aplicación.** Elige los auriculares para el juego, los altavoces para la música y un micrófono para el chat de voz. En el panel rápido, haz clic con Ctrl para añadir o quitar una salida y con Mayús para seleccionar varias salidas consecutivas. Todas las ediciones permiten reproducir el sonido por varias salidas del PC a la vez. La edición Full también admite salidas del móvil. Windows conserva la salida principal y el dispositivo de grabación de cada aplicación al cerrar SonicRoute. Para reproducir el sonido por varias salidas a la vez, deja SonicRoute abierto.
-- **Controla la aplicación actual con la rueda.** Por defecto, SonicRoute prioriza la aplicación en primer plano más reciente que tenga una sesión de audio. Gira la rueda sobre el icono en el área de notificación para ajustar su volumen o mantén pulsada Alt al girarla para cambiar su salida. Una notificación en pantalla (OSD) muestra el resultado y un atajo global permite silenciar el micrófono.
-- **Panel rápido con medidores de nivel.** Cada aplicación tiene su propio control de volumen y un medidor que muestra el nivel de audio en tiempo real. El panel recuerda su posición y permite ajustar la altura entre 350 y 850 píxeles lógicos.
-- **Android y AirPlay en la edición Full.** Escucha el audio de Android en el PC o el del PC en el móvil. En la versión de desarrollo de Full puedes elegir, para cada móvil, cómo enviar el audio de Android al PC. Los formatos disponibles son Opus (predeterminado) y PCM sin comprimir. Los modos de latencia son Latencia ultrabaja, Equilibrado (predeterminado) y Estable. Los cambios se aplican en la siguiente transmisión de audio. En esta versión, si el codificador del móvil lo admite, la tasa de bits del vídeo de la pantalla virtual se ajusta a las condiciones de la conexión. Las pantallas virtuales admiten vídeo H.265 y permiten usar un mando mientras la ventana está activa. El receptor AirPlay integrado, escrito en C#, reproduce audio y duplica la pantalla manteniendo la relación de aspecto. En el panel rápido puedes elegir una salida del PC, el altavoz del móvil Android o un dispositivo Bluetooth conectado al móvil. El volumen inteligente (SmartVolume) atenúa las diferencias de nivel.
-- **6 disparadores y 39 acciones.** Ejecuta una regla con un atajo, a una hora programada, al iniciar SonicRoute o cuando una aplicación se abre, pasa a primer plano o se cierra. Combina cambios de dispositivo, ajustes de volumen, silenciamiento, apertura de programas y scripts de PowerShell. Con `sr` puedes ejecutar reglas desde un script o un Stream Deck.
-- **Detección mediante eventos.** SonicRoute utiliza las notificaciones de Windows y, cuando es necesario, comprueba el estado una vez por segundo. Los datos que ya no hacen falta se liberan cuando es necesario. Lite y Legacy incluyen las funciones del PC. Full añade Android y AirPlay. La interfaz está disponible en nueve idiomas.
+- **Elige dónde suena cada aplicación.** Asigna a cada aplicación un dispositivo de reproducción y otro de grabación. En el panel rápido, mantén pulsada Ctrl al hacer clic para añadir o quitar una salida, o Mayús para seleccionar varias seguidas. Puedes combinar varias salidas del PC y, con Full, añadir salidas del móvil Android.
+- **Ajusta el volumen sin salir del juego o de la llamada.** Los medidores del panel rápido muestran qué aplicaciones están sonando. Ajusta cada una con su control deslizante o usa la rueda sobre el icono de SonicRoute para regular la aplicación actual. Un atajo global permite silenciar o reactivar todos los micrófonos.
+- **Automatiza los cambios de audio.** Combina 6 disparadores con 39 acciones para cambiar de dispositivo, ajustar el volumen o abrir un programa. También puedes ejecutar una regla guardada desde la línea de comandos con `sr`.
+- **Conecta tu móvil con Full.** Escucha el audio de Android en el PC o envía el del PC al altavoz del móvil o a un dispositivo Bluetooth conectado a él. Abre aplicaciones Android en pantallas virtuales compatibles con H.265. El receptor AirPlay permite escuchar audio de un dispositivo Apple y duplicar su pantalla conservando las proporciones. También puedes explorar el almacenamiento compartido del móvil Android y enviar o recibir varios archivos a la vez.
 
 ## 🎮 Para el día a día
 
@@ -51,37 +84,7 @@ Con una regla puedes seleccionar los auriculares y abrir el chat de voz al inici
 | ⚡ **Configurar los auriculares y abrir el chat en cada partida** | Al abrir el juego, una regla puede seleccionar los auriculares, poner el volumen al 40 % y abrir el chat de voz. Otra regla restaura los altavoces al salir del juego. |
 | 🎙️ **Apartarte del PC o atender una llamada privada** | De forma predeterminada, Ctrl+Mayús+N silencia o reactiva todos los micrófonos. El aviso en pantalla te permite comprobar su estado. |
 | 📹 **Emitir con OBS o grabar un tutorial** | Envía el juego y el chat de voz a salidas físicas o virtuales distintas. En OBS, selecciona la salida que quieres grabar. |
-| 📱 **Escuchar el móvil en el PC o usar en él una aplicación Android** | Escucha el audio de Android en el PC y usa sus aplicaciones en una pantalla virtual. Con AirPlay puedes recibir el sonido y la imagen de un dispositivo Apple. Para el audio, elige en el panel rápido una salida del PC, el altavoz del móvil Android o su salida Bluetooth. |
-
-## 🚀 Descarga y primeros pasos
-
-**Versión estable: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 21 de noviembre de 2026 · [Notas de la versión (en chino)](docs/release-v1.35.md)
-
-Para escuchar el audio de Android en el PC, usar pantallas virtuales o recibir AirPlay, elige **Full**. Si solo necesitas el audio del PC, elige **Lite**. Para equipos x64 con .NET Framework 4.8 también puedes usar **Legacy**. Las compilaciones ARM64 son experimentales. La tabla siguiente incluye los enlaces de descarga directa de v1.35. En Microsoft Store, consulta las páginas correspondientes de Full y Lite.
-
-| Edición | Descarga | Requisitos |
-|---|---|---|
-| ⭐ Full (.NET 10, con integración móvil opcional) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | Un único ejecutable portátil para el audio del PC, el audio de Android, las pantallas virtuales y AirPlay. Requiere .NET 10 Desktop Runtime para la arquitectura elegida. |
-| ⭐ Lite (.NET 10, solo audio de PC) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | Un único ejecutable portátil para el audio del PC. Requiere .NET 10 Desktop Runtime para la arquitectura elegida. |
-| 🛡️ Legacy x64 (solo audio de PC, .NET Framework 4.8) | [ZIP completo](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | Descomprime el archivo y ejecuta SonicRoute. Esta edición utiliza .NET Framework 4.8, incluido en Windows. |
-| 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Las ediciones Full y Lite requieren .NET 10 Desktop Runtime para x64. Consulta la ficha de cada edición para ver qué versión está disponible. |
-
-<details>
-<summary><sub>📦 Ediciones anteriores para .NET 8 (sin mantenimiento)</sub></summary>
-
-| Edición | Descarga | Requisitos |
-|---|---|---|
-| Lite NET8 (sin mantenimiento) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-x64.exe) / [ARM64 (experimental)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.29/SonicRoute-v1.29-Lite-NET8-arm64.exe) | Esta edición ha dejado de recibir actualizaciones. Para instalaciones nuevas se recomienda una edición .NET 10 o Legacy. |
-</details>
-
-> [!NOTE]
-> Full y Lite requieren [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) para la arquitectura elegida. Legacy utiliza .NET Framework 4.8, incluido en Windows. Las ediciones antiguas para [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0) siguen disponibles para su descarga, aunque han dejado de recibir actualizaciones.
-
-### 🏁 Primeros pasos
-
-1. **Inicia SonicRoute.** Ejecuta el archivo EXE descargado. Si usas Legacy, descomprime primero el archivo ZIP por completo. Haz doble clic en el icono de SonicRoute en el área de notificación para abrir la ventana principal.
-2. **Elige los dispositivos.** En los ajustes, marca los dispositivos que quieres que aparezcan en el panel rápido. Haz clic en el icono de SonicRoute para abrirlo. Despliega la fila de una aplicación para elegir su salida. Usa el control deslizante para ajustar su volumen.
-3. **Controla el sonido con la rueda.** Sitúa el puntero sobre el icono de SonicRoute y gira la rueda para ajustar el volumen de la aplicación que estás controlando. Mantén pulsada Alt para cambiar su salida o Mayús para ajustar el volumen del dispositivo de reproducción predeterminado del sistema. En los ajustes puedes ampliar este control a toda el área de notificación.
+| 📱 **Escuchar el móvil en el PC o usar en él una aplicación Android** | Abre un juego de Android en una pantalla virtual y escúchalo por los altavoces del PC. El mando solo controla el juego mientras esa ventana tiene el foco. La opción «Volumen inteligente» suaviza los cambios bruscos de volumen. |
 
 ### ⚡ Ejecutar reglas desde la línea de comandos
 
@@ -92,7 +95,21 @@ La primera vez que inicias SonicRoute de la forma habitual, se registra el coman
 sr "Nombre o ID de la regla"
 ```
 
-### 🆕 Aspectos destacados de la versión v1.35
+## ❓ Preguntas frecuentes
+
+**¿Qué ajustes se conservan al salir de SonicRoute?**
+
+Windows conserva la salida principal y el dispositivo de grabación que elijas para cada aplicación, así como el volumen de las sesiones de audio existentes. Para reproducir el sonido por varias salidas a la vez, usar los atajos, los controles del área de notificación o la automatización, transmitir audio al móvil o desde él, duplicar la pantalla o sincronizar el portapapeles, SonicRoute debe seguir en ejecución.
+
+**¿Qué entorno de ejecución necesita cada edición?**
+
+Full y Lite necesitan .NET 10 Desktop Runtime para su arquitectura. Las ediciones de Microsoft Store requieren la versión x64. Legacy utiliza .NET Framework 4.8. Las ediciones antiguas para .NET 8 siguen disponibles, aunque han dejado de recibir actualizaciones.
+
+**¿Cuál es el consumo de procesador y batería en segundo plano?**
+
+SonicRoute responde principalmente a eventos de Windows. Cuando es necesario, comprueba el estado una vez por segundo y libera los datos que ya no se utilizan. El uso de CPU depende del equipo y de las funciones que utilices.
+
+## 🆕 Aspectos destacados de la versión v1.35
 
 Al elegir un micrófono para una aplicación del PC en el panel rápido, el dispositivo se resalta al instante. Puedes seguir haciendo clic mientras SonicRoute aplica los cambios en orden. En la edición Full ocurre lo mismo con las fuentes de audio externas que solo admiten una salida. Al elegir una salida, su nombre aparece de inmediato en la fila de la aplicación. Los atajos para cambiar de dispositivo se pueden pulsar varias veces seguidas. Si usas el atajo para cambiar la salida de la aplicación actual y el cambio tarda como máximo 45 ms, solo verás el resultado. Si aparece un aviso de cambio en curso, permanece visible al menos 500 ms antes de confirmar que el cambio se ha realizado. Los errores se muestran al instante. Si Windows mueve la sesión de audio de una aplicación a otra de las salidas seleccionadas, el sonido sigue reproduciéndose en las demás salidas elegidas.
 
@@ -107,19 +124,10 @@ En la edición Full, los dos paneles de Android muestran el mismo estado de cone
 
 </details>
 
-### ❓ Preguntas frecuentes
+## Novedades de la versión de desarrollo de Full
 
-**¿Qué ajustes se conservan al salir de SonicRoute?**
-
-Windows conserva la salida principal y el dispositivo de grabación que elijas para cada aplicación, así como el volumen de las sesiones de audio existentes. Para reproducir el sonido por varias salidas a la vez, usar los atajos, los controles del área de notificación o la automatización, transmitir audio al móvil o desde él, duplicar la pantalla o sincronizar el portapapeles, SonicRoute debe seguir en ejecución.
-
-**¿Qué entorno de ejecución necesita cada edición?**
-
-Full y Lite necesitan .NET 10 Desktop Runtime para su arquitectura. Las ediciones de Microsoft Store requieren la versión x64. Legacy utiliza .NET Framework 4.8. Las ediciones antiguas para .NET 8 siguen disponibles, aunque han dejado de recibir actualizaciones.
-
-**¿Cuál es el consumo de procesador y batería en segundo plano?**
-
-SonicRoute responde principalmente a eventos de Windows. Cuando es necesario, comprueba el estado una vez por segundo y libera los datos que ya no se utilizan. El uso de CPU depende del equipo y de las funciones que utilices.
+- Para enviar audio de Android al PC, elige en cada móvil Opus (predeterminado) o PCM sin comprimir. Hay tres modos de latencia: «Latencia ultrabaja», «Equilibrado» (predeterminado) y «Estable». Los cambios se aplican la próxima vez que inicies una transmisión de audio desde ese móvil.
+- Si el codificador del móvil lo admite, la tasa de bits del vídeo de la pantalla virtual se ajusta automáticamente a las condiciones de la conexión.
 
 ## 📚 Documentación
 
