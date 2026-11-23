@@ -26,7 +26,7 @@ public sealed class ScrcpyOpusReceiver : IAndroidAudioReceiver
     public async Task ReceiveAsync(Stream stream, AndroidPcmSource pcm, Action firstFrame, CancellationToken token)
     {
         uint codecId = await ScrcpyAudioProtocol.ReadCodecIdAsync(stream, token).ConfigureAwait(false);
-        if (codecId != ScrcpyAudioProtocol.CodecOpus) throw new InvalidDataException("Expected scrcpy Opus audio stream.");
+        if (codecId != ScrcpyAudioProtocol.CodecOpus) throw ScrcpyAudioProtocol.InvalidStreamData("Expected scrcpy Opus audio stream.");
         await ReceivePacketsAsync(stream, pcm, firstFrame, token).ConfigureAwait(false);
     }
 
@@ -50,7 +50,7 @@ public sealed class ScrcpyOpusReceiver : IAndroidAudioReceiver
                 await stream.ReadExactlyAsync(header, token).ConfigureAwait(false);
                 ulong flags = BinaryPrimitives.ReadUInt64BigEndian(header);
                 uint size = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(8));
-                if (size is 0 or > 262144) throw new InvalidDataException("Invalid scrcpy audio packet length.");
+                if (size is 0 or > 262144) throw ScrcpyAudioProtocol.InvalidStreamData("Invalid scrcpy audio packet length.");
                 if (size > payload.Length)
                 {
                     byte[] larger = ArrayPool<byte>.Shared.Rent((int)size);
@@ -60,17 +60,17 @@ public sealed class ScrcpyOpusReceiver : IAndroidAudioReceiver
                 await stream.ReadExactlyAsync(payload.AsMemory(0, (int)size), token).ConfigureAwait(false);
                 if ((flags & (1UL << 63)) != 0)
                 {
-                    if (configured) throw new InvalidDataException("Unexpected mid-stream Opus reconfiguration.");
+                    if (configured) throw ScrcpyAudioProtocol.InvalidStreamData("Unexpected mid-stream Opus reconfiguration.");
                     if (size < 19 || Encoding.ASCII.GetString(payload, 0, 8) != "OpusHead"
                         || payload[8] > 15 || payload[9] is < 1 or > 2 || payload[18] != 0)
-                        throw new InvalidDataException("Unsupported OpusHead.");
+                        throw ScrcpyAudioProtocol.InvalidStreamData("Unsupported OpusHead.");
                     skip = BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(10));
                     short gain = BinaryPrimitives.ReadInt16LittleEndian(payload.AsSpan(16));
                     pcm.HeaderGain = (float)Math.Pow(10, gain / (256.0 * 20));
                     configured = true;
                     continue;
                 }
-                if (!configured) throw new InvalidDataException("Missing Opus configuration.");
+                if (!configured) throw ScrcpyAudioProtocol.InvalidStreamData("Missing Opus configuration.");
                 long timestamp = (long)(flags & ((1UL << 62) - 1));
                 // TCP preserves packet order. AudioRecord may rebase its clock while capture starts;
                 // discard queued latency at that boundary and keep decoding the ordered Opus stream.

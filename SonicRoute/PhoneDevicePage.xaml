@@ -238,7 +238,7 @@
                         <ColumnDefinition MinWidth="70">
                             <ColumnDefinition.Style>
                                 <Style TargetType="ColumnDefinition" BasedOn="{StaticResource PeerQualityColumn}">
-                                    <Setter Property="Width" Value="70"/>
+                                    <Setter Property="Width" Value="Auto"/>
                                 </Style>
                             </ColumnDefinition.Style>
                         </ColumnDefinition>

@@ -52,12 +52,16 @@ public static class ScrcpyAudioProtocol
                 null or RawPcmDecoderId or AndroidStreamSettings.ConcentusDecoder => new ScrcpyRawPcmReceiver(RawPcmDecoderId),
                 _ => throw new ArgumentException("Unsupported audio decoder.", nameof(preferredDecoder))
             },
-            _ => throw new InvalidDataException($"Unsupported scrcpy audio codec: 0x{codecId:X8}.")
+            _ => throw AndroidError.WithCode(new InvalidDataException($"Unsupported scrcpy audio codec: 0x{codecId:X8}."),
+                AndroidErrorCode.UnsupportedAudioFormat)
         };
     }
 
     public static bool IsRawPcmDecoder(string? decoder) =>
         string.Equals(decoder, RawPcmDecoderId, StringComparison.Ordinal);
+
+    internal static InvalidDataException InvalidStreamData(string diagnostic) =>
+        AndroidError.WithCode(new InvalidDataException(diagnostic), AndroidErrorCode.InvalidAudioStream);
 }
 
 /// <summary>Receives scrcpy 48 kHz stereo S16LE raw PCM packets without instantiating any codec.</summary>
@@ -86,7 +90,7 @@ public sealed class ScrcpyRawPcmReceiver : IAndroidAudioReceiver
     {
         uint codecId = await ScrcpyAudioProtocol.ReadCodecIdAsync(stream, token).ConfigureAwait(false);
         if (codecId != ScrcpyAudioProtocol.CodecRaw)
-            throw new InvalidDataException("Expected scrcpy raw PCM audio stream.");
+            throw ScrcpyAudioProtocol.InvalidStreamData("Expected scrcpy raw PCM audio stream.");
         await ReceivePacketsAsync(stream, pcm, firstFrame, token).ConfigureAwait(false);
     }
 
@@ -109,19 +113,19 @@ public sealed class ScrcpyRawPcmReceiver : IAndroidAudioReceiver
                 ulong flags = BinaryPrimitives.ReadUInt64BigEndian(header);
                 uint size = BinaryPrimitives.ReadUInt32BigEndian(header.AsSpan(8));
                 if (size > MaxPacketBytes)
-                    throw new InvalidDataException("Invalid scrcpy audio packet length.");
+                    throw ScrcpyAudioProtocol.InvalidStreamData("Invalid scrcpy audio packet length.");
 
                 if ((flags & PacketFlagConfig) != 0)
                 {
                     if (size == 0)
                         continue;
-                    throw new InvalidDataException("Unsupported non-empty configuration packet in raw PCM audio stream.");
+                    throw ScrcpyAudioProtocol.InvalidStreamData("Unsupported non-empty configuration packet in raw PCM audio stream.");
                 }
 
                 if (size == 0)
-                    throw new InvalidDataException("Invalid scrcpy audio packet length.");
+                    throw ScrcpyAudioProtocol.InvalidStreamData("Invalid scrcpy audio packet length.");
                 if ((size & 3) != 0)
-                    throw new InvalidDataException("Unaligned raw PCM audio packet length.");
+                    throw ScrcpyAudioProtocol.InvalidStreamData("Unaligned raw PCM audio packet length.");
 
                 int byteCount = (int)size;
                 if (byteCount > payload.Length)

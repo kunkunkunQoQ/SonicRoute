@@ -1,13 +1,13 @@
 # 🎧 SonicRoute v1.35 正式版
 
-> **发布日期** 2026-11-21 · **主题** 快捷面板统一即时切换、防闪烁设备切换 OSD、显式多输出保留与剪贴板并发修复 · [📥 发布页](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35) · [📖 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
+> **发布日期** 2026-11-21 · **主题** 快速面板即时反馈、当前应用输出切换提示、多输出播放与剪贴板同步 · [📥 发布页](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35) · [📖 使用指南](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97)
 
 ---
 
 ## ✨ 更新亮点
 
-- 🎛️ **快捷面板统一即时切换**。Full、Lite 和 Legacy 的电脑应用麦克风输入与外部音频行均支持点击后即时高亮并排队生效，不再禁用按钮；应用行标题即时同步所选输出设备名称，失败时自动回退并提示。
-- ⚡ **设备切换快捷键与防闪烁 OSD**。全局设备切换与路由还原快捷键改为无阻塞排队执行。45 ms 内完成的快速切换直接显示结果，耗时更久时再展示本地化“切换中”提示并至少保留 500 ms 可见。
+- 🎛️ **快速面板即时反馈**。所有版本都会立即高亮为电脑应用选择的麦克风。Full 版中只支持单个输出的外部音源也会立即显示选择结果。切换期间可以继续点选，更改会依次生效。应用行的输出名称随选择更新，失败时恢复实际状态并提示。
+- ⚡ **设备切换快捷键与屏幕提示**。可连续使用设备切换或路由还原快捷键，操作会排队处理。用快捷键切换当前应用的输出时，45 毫秒内完成便直接显示结果。如果先出现切换进度提示，成功结果会等提示显示至少 500 毫秒后再出现，失败则立即提示。
 - 🔊 **显式多输出镜像稳定保留**。移除按系统默认端点或原生活动会话自动剔除镜像的逻辑，原生音频会话在已选输出之间移动时继续保持用户的多路播放组合。
 - 📋 **Android 音频与剪贴板并发修复（仅 Full）**。在模式切换期间保持输出切换能力并维持虚拟屏响应；修复停用手机来源后在途桌面剪贴板写入与清空剪贴板前的标记内存管理。
 
@@ -15,10 +15,10 @@
 
 ## 🛠️ 详细更新
 
-### 1. 全版本（Full / Lite / Legacy）· 快捷面板交互、快捷键 OSD 与多输出
+### 1. 全版本（Full / Lite / Legacy）· 快速面板交互、快捷键 OSD 与多输出
 
-- **快捷面板统一即时切换**。电脑应用的麦克风输入行支持独立单选即时切换（与多选播放输出互不干扰），AirPlay 与单输出外部音源行同样改为点击后即时高亮并按顺序排队应用，切换期间保持按钮可点击。快速面板中电脑、Android 与 AirPlay 应用行标题均即时同步显示目标输出名称（电脑系统默认输出保留默认设备后缀样式）。顶部系统设备下拉框增强默认设备回退与并发保护；目标不可用或切换失败时回退到实际状态并弹出提示。
-- **设备切换快捷键与 OSD 阈值**。切换当前或全局应用输出/输入、切换系统默认输出/输入及还原全部应用路由改为无阻塞排队处理。45 ms 内完成的快速切换直接展示最终 OSD，避免瞬时闪烁；超过该阈值后展示本地化的“正在切换输出设备”或“{应用} · 切换中”提示并至少保持 500 ms 可见，失败时立即提示，不额外等待。九种界面语言同步新增对应切换提示文案。
+- **快速面板即时反馈**。电脑应用可单独选择一个麦克风，不影响已选的多个播放输出。Full 版中，AirPlay 等只支持单个输出的外部音源也会在点击后立即高亮所选设备，按顺序应用更改，期间仍可继续点选。应用行会立即显示所选输出名称，Full 版的 Android 和 AirPlay 音源同样如此。选择电脑的系统默认输出时，名称仍带有默认设备标记。顶部系统设备下拉框增强默认设备回退与并发保护；目标不可用或切换失败时回退到实际状态并弹出提示。
+- **设备切换快捷键与 OSD 阈值**。切换当前或全局应用输出/输入、切换系统默认输出/输入及还原全部应用路由改为无阻塞排队处理。用快捷键切换当前应用的输出时，如果在 45 毫秒内完成，屏幕只显示最终结果。耗时较长时会出现“正在切换输出设备”或“{应用} · 切换中”的提示。一旦显示，至少 500 毫秒后才会用成功结果替换。失败时立即提示。九种界面语言同步新增对应切换提示文案。
 - **显式多输出镜像保留**。移除按系统默认端点或原生活动会话自动剔除已选本机镜像的逻辑。当原生音频会话在多个已选输出之间移动时，继续保留用户显式选择的多路镜像，并防止同一端点被重复添加。
 
 ### 2. Full 版 · Android 音频、虚拟屏响应与剪贴板同步
@@ -33,8 +33,8 @@
 
 ### Full, Lite, and Legacy
 
-- **Unified optimistic switching in Quick Panel**. Microphone input selections for PC apps (independent of multi-output playback) and single-output external sources (including AirPlay) now highlight immediately and apply through a serialized queue without disabling buttons. PC, Android, and AirPlay row titles update optimistically to reflect the selected output name (keeping the default-device suffix on PC system-default rows). The top system device selector hardens default rollback and concurrency handling, and failed or unavailable switches roll back cleanly with an on-screen notice.
-- **Non-blocking device hotkeys and flicker-free OSD**. Global device-switching and route-reset hotkeys execute via a non-blocking queue with two-stage OSD feedback. Switches finishing within 45 ms jump straight to the final result without flashing a pending banner; slower switches show localized switching status and keep it visible for at least 500 ms before updating (failures display immediately without waiting). All nine interface languages include the new switching and failure strings.
+- **Immediate feedback in the quick panel.** Select a microphone for a PC app and it is highlighted right away, independently of any playback outputs you selected. In Full, the same applies when choosing an output for a single-output external source, including AirPlay. You can keep clicking while changes take effect in order. Each app row immediately shows the selected output name, including Android and AirPlay rows in Full. A PC app using the system default output keeps the default-device label. If a device switch fails or the device becomes unavailable, the system device selector at the top returns to the actual selection and an on-screen notice explains the problem.
+- **Device-switching hotkeys and on-screen feedback.** You can queue device switches and route resets with their hotkeys. When you use the hotkey to switch the current app’s output and it finishes within 45 ms, only the result appears. If a progress notice appears first, it stays visible for at least 500 ms before a successful result replaces it. Failures appear immediately. The new progress and failure messages are available in all nine interface languages.
 - **Explicit multi-output mirror retention**. Removed logic that dropped mirrors based on the system default endpoint or native session moves. When a native audio session moves between selected outputs, explicitly chosen mirrors remain active and duplicate endpoints are prevented.
 
 ### Full

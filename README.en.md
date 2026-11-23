@@ -16,7 +16,7 @@
 
 **Send each app's audio to the device you choose.**
 
-Play music through your speakers and keep games and calls in your headset. SonicRoute runs in the Windows system tray. Choose a playback device and microphone for each app. In the Quick Panel, Ctrl-click to add or remove playback devices and Shift-click to select a range—combine multiple PC outputs in any edition, or include available phone outputs in Full. Adjust the volume with hotkeys or the mouse wheel, and use automation rules for changes you make regularly.
+Play music through your speakers and keep games and calls in your headset. SonicRoute runs in the Windows system tray and lets you choose each app’s playback and recording devices. In the quick panel, Ctrl-click to add or remove an output, or Shift-click to select a range. All editions can play audio through multiple PC outputs at once. Full can also use outputs on a connected Android phone. Adjust the volume with hotkeys or the mouse wheel, and save routine changes as automation rules.
 
 📥 [Download the latest release](https://github.com/kunkunkunQoQ/SonicRoute/releases/latest) · Microsoft Store ([Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6)) · [User guide (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki/01-%E4%BD%BF%E7%94%A8%E6%8C%87%E5%8D%97) · [Wiki (Chinese)](https://github.com/kunkunkunQoQ/SonicRoute/wiki)
 
@@ -41,10 +41,10 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimental) · Nine languages ·
 
 ## ✨ What SonicRoute offers
 
-- **Choose where each app plays and records.** Send music to your speakers and game audio to your headset, then select the headset microphone for voice chat. In the Quick Panel, Ctrl-click to add or remove playback devices and Shift-click to select a range; all editions can combine multiple PC outputs, while Full can also include available phone outputs. Windows remembers the device choices when you exit SonicRoute.
+- **Choose playback and recording devices for each app.** Send game audio to your headset and use its microphone for voice chat. In the quick panel, Ctrl-click a playback device to add it to or remove it from the selection. Shift-click to select a range. All editions can play audio on several PC outputs at once. Full can also include available Android phone outputs. Windows remembers each app’s primary PC output and recording device after SonicRoute exits. Playback on additional outputs requires SonicRoute to be running.
 - **Control the current app with the mouse wheel.** By default, SonicRoute prioritizes the most recently used foreground app with an audio session. Scroll over the tray icon to adjust its volume, or hold Alt while scrolling to switch its output. On-screen indicators (OSD) show the result, and a global hotkey lets you toggle microphone mute.
 - **See which apps are playing audio.** The quick panel has a volume slider and a live level meter for each app. It remembers its position, and you can set its height from 350 to 850 device-independent pixels.
-- **Connect an Android device or use AirPlay (Full).** Play Android app audio on the PC, open apps in separate virtual display windows, or send PC audio back to the phone. Android supports H.265 video and gamepad input in the active video window. The built-in C# AirPlay receiver plays audio and mirrors the screen at its original aspect ratio. In the quick panel, send that audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Smart Volume evens out loud passages on supported streams. You can also browse Android folders from the PC and transfer multiple files in either direction.
+- **Connect an Android device or use AirPlay (Full).** Play Android app audio on the PC, open apps in separate virtual display windows, or send PC audio back to the phone. Android supports H.265 video and gamepad input in the active video window. The built-in C# AirPlay receiver plays audio and mirrors the screen at its original aspect ratio. Use the quick panel to send audio to a PC output, an Android phone’s speaker or a Bluetooth device connected to the phone. Smart Volume evens out loud passages on supported streams. In development builds of Full, you can send audio from Android to the PC using Opus (the default) or uncompressed PCM. Set the latency mode to Ultra-low latency, Balanced (the default), or Stable. Each phone’s settings take effect the next time you start an audio stream from it. When the Android encoder supports it, SonicRoute adjusts the virtual display’s video bitrate as connection conditions change. You can also browse Android folders from the PC and transfer multiple files in either direction.
 - **Run rules from an event or the command line.** Choose from 6 triggers and 39 actions. Trigger a rule with a hotkey, on a schedule, when an app opens, closes or gains focus, or when SonicRoute starts. Chain actions to switch devices, set volume, mute audio, open a program or file, or run PowerShell. Scripts and hardware controllers can run a rule with `sr` through the existing SonicRoute process.
 - **Respond to Windows events.** SonicRoute uses system notifications, checks process state once a second when needed, and releases data it no longer needs. All three editions support nine interface languages. Lite and Legacy focus on PC audio.
 
@@ -102,9 +102,9 @@ sr "Rule name or ID"
 
 ### 🆕 What’s new in v1.35
 
-All editions now deliver unified optimistic switching in the quick panel: PC app microphone selections and external audio rows highlight right away and apply sequentially in the background without disabling buttons, while row titles update immediately to show the target output. Device-switching hotkeys run in a non-blocking queue with flicker-free OSD feedback that skips the pending banner for switches under 45 ms and holds slower pending notices for at least 500 ms. Explicit multi-output audio mirrors also stay intact when native audio sessions move between selected endpoints.
+When you select a microphone for a PC app in the quick panel, the device is highlighted immediately. You can keep clicking while SonicRoute applies your changes in order. Full gives the same feedback for external audio sources that use a single output. The output name in the app row updates as soon as you select a device. Device-switching hotkeys now let you queue changes. When you use the hotkey to switch the current app’s output, a switch that finishes within 45 ms shows only the result. If a progress notice appears, it stays on screen for at least 500 ms before showing success. Errors appear immediately. When Windows moves an app’s audio session to another selected output, playback continues on the other outputs you chose.
 
-Full improves responsiveness during Android mode transitions and virtual display interactions, and fixes concurrency and memory/handle cleanup boundaries in multi-device clipboard synchronization when disabling source devices or handling failure paths. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
+In Full, you can still change outputs while Android switches audio capture modes, and the virtual display remains responsive. Turning off clipboard sync for one phone cancels its pending writes to the PC clipboard. Other phones continue syncing. SonicRoute also releases clipboard memory if a write fails. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
 
 <details>
 <summary>v1.34</summary>
@@ -119,7 +119,7 @@ Full keeps USB and Wi-Fi connection status in sync across both Android panels. R
 
 **What happens to app routing and volume when I exit SonicRoute?**
 
-Windows keeps each app’s device choices and the volume of existing audio sessions. Keep SonicRoute running to use hotkeys, tray controls, automation, phone audio, screen mirroring or clipboard sync.
+Windows keeps each app’s primary PC playback device, recording device and the volume of existing audio sessions. Playback on additional outputs stops when you exit SonicRoute. Keep SonicRoute running to use hotkeys, tray controls, automation, phone audio, screen mirroring or clipboard sync.
 
 **Which runtime do I need?**
 
