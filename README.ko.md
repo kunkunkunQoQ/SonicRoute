@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json, docs/readme/locales/ko-KR.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/ko-KR.json, and docs/readme/releases/v1.36.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 SonicRoute
 
@@ -35,15 +35,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (실험 버전) · 9개 언어 지�
 
 ## 🚀 다운로드 및 첫 설정
 
-**최신 정식 버전: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 2026년 11월 21일 · [릴리스 노트(중국어·영어)](docs/release-v1.35.md)
+**최신 정식 버전: [v1.36](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.36)** · 2026년 11월 24일 · [릴리스 노트(중국어·영어)](docs/release-v1.36.md)
 
-v1.35에서 Android 연동이나 AirPlay를 사용하려면 **Full**, PC 오디오만 사용하려면 **Lite**를 선택하세요. .NET Framework 4.8을 사용하는 x64 PC에서는 **Legacy**로 PC 오디오를 관리할 수 있습니다.
+v1.36에서 Android 연동이나 AirPlay를 사용하려면 **Full**, PC 오디오만 사용하려면 **Lite**를 선택하세요. .NET Framework 4.8을 사용하는 x64 PC에서는 **Legacy**로 PC 오디오를 관리할 수 있습니다.
 
 | 에디션 | 다운로드 | 요구 사항 |
 |---|---|---|
-| ⭐ Full(.NET 10, 휴대폰 연동 지원) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | 설치 없이 실행하는 단일 EXE 파일입니다. 프로그램 아키텍처에 맞는 .NET 10 Desktop Runtime이 필요합니다. |
-| ⚡ Lite(.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | 설치 없이 실행하는 단일 EXE 파일입니다. 프로그램 아키텍처에 맞는 .NET 10 Desktop Runtime이 필요합니다. |
-| 🛡️ Legacy x64(PC 오디오 전용, .NET Framework 4.8) | [ZIP 파일](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | ZIP 파일을 모두 푼 뒤 실행하세요. .NET Framework 4.8이 필요합니다. |
+| ⭐ Full(.NET 10, 휴대폰 연동 지원) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-arm64.exe) | 설치 없이 실행하는 단일 EXE 파일입니다. 프로그램 아키텍처에 맞는 .NET 10 Desktop Runtime이 필요합니다. |
+| ⚡ Lite(.NET 10, PC 오디오 전용) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-x64.exe) / [ARM64 (실험 버전)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-arm64.exe) | 설치 없이 실행하는 단일 EXE 파일입니다. 프로그램 아키텍처에 맞는 .NET 10 Desktop Runtime이 필요합니다. |
+| 🛡️ Legacy x64(PC 오디오 전용, .NET Framework 4.8) | [ZIP 파일](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Legacy-x64.zip) | ZIP 파일을 모두 푼 뒤 실행하세요. .NET Framework 4.8이 필요합니다. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full과 Lite 모두 x64용 .NET 10 Desktop Runtime이 필요합니다. 배포 버전은 각 스토어 페이지에서 확인하세요. |
 
 <details>
@@ -68,7 +68,7 @@ v1.35에서 Android 연동이나 AirPlay를 사용하려면 **Full**, PC 오디�
 
 ## ✨ SonicRoute의 주요 기능
 
-- **앱마다 재생 장치와 녹음 장치를 지정하세요.** 빠른 패널에서 Ctrl 키를 누른 채 클릭하면 재생 장치를 선택하거나 해제하고, Shift 키를 누른 채 클릭하면 연속된 장치를 선택합니다. 여러 PC 출력 장치로 동시에 재생할 수 있고, Full에서는 Android 휴대폰의 출력 장치도 추가할 수 있습니다.
+- **앱마다 재생 장치와 녹음 장치를 지정하세요.** 빠른 패널이나 앱 페이지에서 Ctrl+클릭으로 재생 장치를 추가하거나 제거하고, Shift+클릭으로 기존 선택을 유지한 채 연속 범위를 추가하며, Ctrl+Shift+클릭으로 네이티브 라우팅 장치를 선택하거나 전환합니다. 여러 PC 출력 장치로 동시에 재생할 수 있고, Full에서는 Android 휴대폰의 출력 장치도 추가할 수 있습니다.
 - **앱별 볼륨을 바로 조절하세요.** 빠른 패널의 레벨 미터로 소리가 나는 앱을 확인하고 슬라이더로 볼륨을 조절하세요. 알림 영역의 SonicRoute 아이콘 위에서 휠을 굴리면 현재 앱의 볼륨이 바뀝니다. 전역 단축키로 모든 마이크의 음소거를 한꺼번에 켜거나 끌 수도 있습니다.
 - **자주 쓰는 작업을 규칙으로 만드세요.** 실행 조건 6가지와 작업 39가지를 조합해 장치를 바꾸거나 볼륨을 조절하거나 프로그램을 실행할 수 있습니다. 명령줄에서도 `sr`로 저장한 규칙을 실행할 수 있습니다.
 - **Full에서 Android와 AirPlay를 연결하세요.** Android 앱 소리를 PC에서 듣거나 PC 소리를 휴대폰 스피커나 휴대폰에 연결된 Bluetooth 기기로 보낼 수 있습니다. Android 앱은 H.265 영상을 지원하는 가상 디스플레이에서 열 수 있습니다. AirPlay로 Apple 기기의 소리를 듣거나 원래 비율 그대로 화면을 미러링할 수 있습니다. Android 휴대폰의 공유 저장공간을 탐색하고 여러 파일을 한 번에 보내거나 받을 수도 있습니다.
@@ -109,25 +109,20 @@ Full과 Lite는 앱과 아키텍처가 같은 .NET 10 Desktop Runtime이 필요�
 
 일반적으로 Windows가 변경을 알릴 때 작동하고 필요한 경우에만 1초 간격으로 상태를 확인합니다. 사용하지 않는 데이터는 필요에 따라 정리합니다. 실제 CPU 사용량과 전력 소모는 시스템과 사용 중인 기능에 따라 달라집니다.
 
-## 🆕 v1.35 주요 변경 사항
+## 🆕 v1.36 주요 변경 사항
+
+모든 에디션에서 빠른 패널의 다중 출력 조작이 개편되어 Shift+클릭으로 기존 선택을 유지한 채 범위를 추가하고, Ctrl+Shift+클릭으로 Windows 네이티브 라우팅 장치를 선택하거나 전환하며, 네이티브 경로와 미러 출력이 버튼 스타일로 구분됩니다. 주 창의 기본 사이드바를 접고 펼칠 수 있으며, 앱 페이지에서도 빠른 패널과 동일한 다중 출력 선택을 지원합니다.
+
+Full에서는 AirPlay 다중 장치 동시 출력, Android 비압축 PCM 오디오 전송과 3가지 지연 모드(초저지연/균형/안정성 우선), Android 11 이상 앱 오디오 캡처 호환성 개선, 무선 가상 디스플레이 적응형 비트레이트 제어를 추가했으며 Store 작업 표시줄 식별 및 AirPlay 방화벽 규칙을 지원합니다. 이전 릴리스는 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
+
+<details>
+<summary>v1.35</summary>
 
 빠른 패널에서 PC 앱의 마이크를 선택하면 해당 장치가 바로 강조 표시됩니다. 전환 중에도 계속 클릭할 수 있으며 변경 사항은 선택한 순서대로 적용됩니다. Full에서는 출력을 하나만 선택할 수 있는 외부 음원도 같은 방식으로 동작합니다. 출력 장치를 선택하면 앱 이름 옆에 표시되는 출력 이름도 바로 바뀝니다. 장치 전환 단축키는 연달아 눌러도 됩니다. 단축키로 현재 앱의 출력을 바꿀 때 45밀리초 안에 전환이 끝나면 결과만 표시됩니다. 전환 중이라는 안내가 나타나면 성공 결과를 표시하기 전에 최소 500밀리초 동안 유지합니다. 실패한 경우에는 즉시 알려 줍니다. Windows가 앱의 오디오 세션을 선택한 다른 출력으로 옮겨도 함께 선택한 나머지 출력에서는 재생이 계속됩니다.
 
 Full에서는 Android 오디오 캡처 모드가 바뀌는 동안에도 출력 장치를 변경하고 가상 디스플레이를 계속 조작할 수 있습니다. 휴대폰 한 대의 클립보드 동기화를 끄면 해당 휴대폰이 PC 클립보드에 쓰던 작업 중 아직 끝나지 않은 작업이 취소됩니다. 다른 휴대폰은 계속 동기화됩니다. 클립보드 쓰기 작업이 실패해도 할당된 메모리가 해제됩니다. 이전 변경 사항은 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
 
-<details>
-<summary>v1.34</summary>
-
-모든 에디션에서 앱마다 여러 PC 재생 장치를 선택할 수 있습니다. SonicRoute를 다시 시작한 뒤 해당 앱이 오디오를 재생하면 선택한 장치가 복원됩니다. 시스템 트레이의 볼륨 조절과 마우스 단축키는 하나의 시스템 마우스 후크를 공유합니다.
-
-Full에서는 두 Android 패널의 USB 및 Wi-Fi 연결 상태가 동기화됩니다. 휴대폰 빠른 패널에서 새로 고침으로 선택한 장치에 다시 연결할 수도 있습니다. Android 앱의 출력 메뉴에는 휴대폰의 현재 출력에 지정한 이름이 표시됩니다. 이전 릴리스는 [버전 기록](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)에서 확인하세요.
-
 </details>
-
-## Full 개발 버전의 새 기능
-
-- Android에서 PC로 전송할 오디오 형식은 휴대폰마다 Opus(기본값) 또는 비압축 PCM으로 설정할 수 있습니다. 지연 모드는 초저지연, 균형(기본값), 안정성 우선 중에서 선택하세요. 변경 사항은 해당 휴대폰에서 다음번 오디오 전송을 시작할 때 적용됩니다.
-- 휴대폰 인코더가 지원하면 가상 디스플레이의 영상 비트레이트가 연결 상태에 따라 자동으로 조절됩니다.
 
 ## 📚 문서
 

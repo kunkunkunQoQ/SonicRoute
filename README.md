@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json, docs/readme/locales/zh-CN.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/zh-CN.json, and docs/readme/releases/v1.36.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 音跃 SonicRoute
 
@@ -35,15 +35,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [
 
 ## 🚀 下载与开始使用
 
-**当前正式版：[v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 2026年11月21日 · [更新说明](docs/release-v1.35.md)
+**当前正式版：[v1.36](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.36)** · 2026年11月24日 · [更新说明](docs/release-v1.36.md)
 
-需要 Android 互联或 AirPlay 接收，请选 **Full**。只管理电脑音频，可选 **Lite**。使用 .NET Framework 4.8 的 x64 电脑还可以选 **Legacy**。下表提供正式版 v1.35 的便携包和 Microsoft Store 入口。
+需要 Android 互联或 AirPlay 接收，请选 **Full**。只管理电脑音频，可选 **Lite**。使用 .NET Framework 4.8 的 x64 电脑还可以选 **Legacy**。下表提供正式版 v1.36 的便携包和 Microsoft Store 入口。
 
 | 版本 | 下载 | 运行要求 |
 |---|---|---|
-| ⭐ Full（电脑与手机音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | 单个 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime。 |
-| ⚡ Lite（仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | 单个 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime。 |
-| 🛡️ Legacy（仅电脑音频，x64） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | 需要 .NET Framework 4.8。完整解压 ZIP 后再运行。 |
+| ⭐ Full（电脑与手机音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-arm64.exe) | 单个 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime。 |
+| ⚡ Lite（仅电脑音频） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-x64.exe) / [ARM64（实验版）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-arm64.exe) | 单个 EXE。需要与程序架构匹配的 .NET 10 Desktop Runtime。 |
+| 🛡️ Legacy（仅电脑音频，x64） | [完整 ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Legacy-x64.zip) | 需要 .NET Framework 4.8。完整解压 ZIP 后再运行。 |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full 和 Lite 均使用 x64 版 .NET 10 Desktop Runtime。在架版本见各自的商店页面。 |
 
 <details>
@@ -68,7 +68,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（实验版） · 九种语言 · [
 
 ## ✨ 主要功能
 
-- **为每个应用选择播放和录音设备。** 在快速面板中，按住 Ctrl 单击可添加或移除一个播放设备，按住 Shift 单击可选择一段连续的设备。所有版本都支持多个电脑输出同时播放，Full 还可选用已连接的 Android 手机上的输出设备。
+- **为每个应用选择播放和录音设备。** 在快速面板或“应用”页中，按住 Ctrl 单击可添加或移除一个播放设备，按住 Shift 单击可保留原有选择并追加一段连续范围，按住 Ctrl+Shift 单击可选择或切换原生路由设备。所有版本都支持多个电脑输出同时播放，Full 还可选用已连接的 Android 手机上的输出设备。
 - **查看和调节应用音量。** 快速面板的电平表会显示哪些应用正在发声。拖动滑块可单独调节应用音量，也可在托盘图标上滚动滚轮调节当前应用。用全局快捷键可将所有麦克风静音或恢复。
 - **让常用操作自动执行。** 从 6 种触发条件和 39 种操作中组合规则，例如在游戏启动时切换到耳机并调节音量。也可用 `sr` 从命令行执行已保存的规则。
 - **在电脑上使用手机音频和画面（Full）。** 在电脑上播放 Android 应用的声音，或把电脑声音传到手机。Android 应用可在独立的虚拟屏幕中操作。Apple 设备可通过 AirPlay 将声音或屏幕画面传到电脑。还可浏览 Android 手机的共享存储，一次发送或接收多个文件。
@@ -109,25 +109,20 @@ Full 和 Lite 需要与程序架构匹配的 .NET 10 Desktop Runtime，Microsoft
 
 SonicRoute 主要依靠系统事件检测变化，必要时才每秒检查一次快照，并按需清理数据。实际 CPU 占用取决于系统和正在使用的功能。
 
-## 🆕 v1.35 更新要点
+## 🆕 v1.36 更新要点
+
+全版本将快速面板的多设备操作更新为：`Shift` 单击保留原有选择并追加连续范围，`Ctrl+Shift` 单击选择或切换 Windows 原生路由主设备，并通过不同按钮样式区分原生路由与镜像分发；主窗口左侧主导航栏支持折叠并记住状态，「应用」页补齐了与快速面板一致的多输出操作。
+
+Full 新增 AirPlay 多设备同时输出、Android 未压缩 PCM 传输与「超低延迟 / 平衡 / 稳定」三档音频延迟模式，将应用音频捕获兼容下探至 Android 11 及以上，并为无线虚拟屏引入自适应视频码率控制；Store 版保持任务栏分组标识并声明 AirPlay 防火墙规则。早期版本详见[版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
+
+<details>
+<summary>v1.35</summary>
 
 在快速面板中为电脑应用选择麦克风时，所选设备会立即高亮，切换期间仍可继续点选，SonicRoute 会按顺序应用更改。Full 版中只支持单个输出的外部音源也有相同反馈。切换输出时，应用行中的设备名称会立即更新。设备切换快捷键可连续使用。用快捷键切换当前应用的输出时，若在 45 毫秒内完成，屏幕只显示结果。如果先出现切换进度提示，成功结果会等提示显示至少 500 毫秒后再出现，失败则立即提示。当 Windows 将应用的音频会话移到另一个已选输出时，其余已选输出也会继续播放。
 
 Full 版在 Android 音频采集模式切换期间仍可更改输出设备，虚拟屏幕也能继续响应操作。关闭某台手机的剪贴板同步后，该手机尚未完成的电脑剪贴板写入会被取消，其他手机可继续同步。同步失败时，SonicRoute 也会释放为写入剪贴板分配的内存。早期版本的改动见[版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
 
-<details>
-<summary>v1.34</summary>
-
-各版本现在都可以为同一个应用选择多个电脑播放设备。重启 SonicRoute 后，应用再次播放时会恢复所选设备。托盘音量调节和鼠标快捷键共用一个系统鼠标监听。
-
-Full 的两个 Android 面板同步显示 USB 和 Wi-Fi 连接状态。快捷手机面板的「刷新」也能重新连接选中的设备。Android 应用的输出菜单现在会显示手机当前输出的自定义名称。早期版本详见[版本历史](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)。
-
 </details>
-
-## Full 开发版中的功能
-
-- **Android 音频传输。** 每台手机传到电脑的音频都可单独设置。默认使用 Opus，也可改用未压缩的 PCM。延迟模式有“超低延迟”“平衡”和“稳定”，默认为“平衡”。这些设置在下次开始传输音频时生效。
-- **虚拟屏幕视频。** 如果手机的编码器支持，SonicRoute 会根据连接状况自动调整视频码率。
 
 ## 📚 使用文档
 

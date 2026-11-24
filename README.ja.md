@@ -1,4 +1,4 @@
-<!-- Generated from docs/readme/shared.json, docs/readme/locales/ja-JP.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/ja-JP.json, and docs/readme/releases/v1.36.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
 # 🎧 SonicRoute
 
@@ -35,15 +35,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64（試験提供） · 9 言語に対
 
 ## 🚀 ダウンロードと初期設定
 
-**最新の正式版：[v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 2026年11月21日 · [リリースノート（簡体字中国語・英語）](docs/release-v1.35.md)
+**最新の正式版：[v1.36](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.36)** · 2026年11月24日 · [リリースノート（簡体字中国語・英語）](docs/release-v1.36.md)
 
-Android 連携や AirPlay 受信を使う場合は **Full**、PC の音声だけを管理する場合は **Lite** を選んでください。.NET Framework 4.8 を使う x64 の PC には **Legacy** もあります。下の表に正式版 v1.35 のダウンロード先と Microsoft Store へのリンクを掲載しています。
+Android 連携や AirPlay 受信を使う場合は **Full**、PC の音声だけを管理する場合は **Lite** を選んでください。.NET Framework 4.8 を使う x64 の PC には **Legacy** もあります。下の表に正式版 v1.36 のダウンロード先と Microsoft Store へのリンクを掲載しています。
 
 | エディション | ダウンロード | 動作要件 |
 |---|---|---|
-| ⭐ Full（PC・スマートフォン連携） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64（試験提供）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | 単体の EXE ファイル。使用する版と同じアーキテクチャの .NET 10 Desktop Runtime が必要です。 |
-| ⚡ Lite（PC の音声のみ） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64（試験提供）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | 単体の EXE ファイル。使用する版と同じアーキテクチャの .NET 10 Desktop Runtime が必要です。 |
-| 🛡️ Legacy（PC の音声のみ、x64） | [ZIP ファイル](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | .NET Framework 4.8 が必要です。ZIP ファイルはすべて展開してから起動してください。 |
+| ⭐ Full（PC・スマートフォン連携） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-x64.exe) / [ARM64（試験提供）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-arm64.exe) | 単体の EXE ファイル。使用する版と同じアーキテクチャの .NET 10 Desktop Runtime が必要です。 |
+| ⚡ Lite（PC の音声のみ） | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-x64.exe) / [ARM64（試験提供）](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-arm64.exe) | 単体の EXE ファイル。使用する版と同じアーキテクチャの .NET 10 Desktop Runtime が必要です。 |
+| 🛡️ Legacy（PC の音声のみ、x64） | [ZIP ファイル](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Legacy-x64.zip) | .NET Framework 4.8 が必要です。ZIP ファイルはすべて展開してから起動してください。 |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full、Lite ともに x64 版の .NET 10 Desktop Runtime が必要です。配信中のバージョンは各ストアページで確認できます。 |
 
 <details>
@@ -68,7 +68,7 @@ Android 連携や AirPlay 受信を使う場合は **Full**、PC の音声だけ
 
 ## ✨ SonicRoute の主な機能
 
-- **アプリごとに再生先と録音デバイスを選択。** クイックパネルで Ctrl キーを押しながらクリックすると、再生デバイスを個別に追加したり、選択から外したりできます。Shift キーを押しながらクリックすると範囲選択できます。どのエディションでも PC の複数の出力先から同時に再生でき、Full では接続中の Android 端末の出力先も選べます。
+- **アプリごとに再生先と録音デバイスを選択。** クイックパネルや「アプリ」ページで Ctrl＋クリックすると再生デバイスを追加・解除でき、Shift＋クリックで現在の選択を保持したまま連続範囲を追加、Ctrl＋Shift＋クリックでネイティブルーティングデバイスを選択または切り替えできます。どのエディションでも PC の複数の出力先から同時に再生でき、Full では接続中の Android 端末の出力先も選べます。
 - **アプリごとの音量調整。** クイックパネルのレベルメーターで音が出ているアプリを確認し、スライダーで音量を調整できます。通知領域のアイコン上でホイールを回すと、操作対象のアプリの音量が変わります。ショートカットキーで、すべてのマイクをまとめてミュートしたり解除したりできます。
 - **よく使う操作を自動化。** 6 種類のトリガーと 39 種類のアクションを組み合わせ、「ゲームを起動したらヘッドセットに切り替えて音量を調整する」といったルールを作れます。保存したルールはコマンドラインから `sr` で実行できます。
 - **Android 連携と AirPlay 受信（Full）。** Android アプリの音声を PC で再生したり、PC の音声をスマートフォンに送ったりできます。Android アプリは独立した仮想ディスプレイで操作できます。Apple 製デバイスの音声や画面は AirPlay で PC に送れます。Android 端末の共有ストレージを参照し、複数のファイルをまとめて送受信することもできます。
@@ -109,25 +109,20 @@ Full と Lite には、使う版と同じアーキテクチャの .NET 10 Deskto
 
 通常は Windows の通知を受けて動作し、必要な場合にだけ 1 秒間隔で状態を確認します。不要なデータは随時解放します。CPU 使用率や消費電力は環境や使用中の機能によって変わります。
 
-## 🆕 v1.35 リリースの主な改善点
+## 🆕 v1.36 リリースの主な改善点
+
+すべてのエディションでクイックパネルの複数出力操作を見直し、Shift＋クリックで既存の選択を保持したまま連続範囲を追加、Ctrl＋Shift＋クリックで Windows ネイティブルーティング先を選択または切り替えできるようになりました。ネイティブ経路とミラー配信はボタンスタイルで区別されます。メインウィンドウの左ナビゲーションバーは折りたたみに対応し、「アプリ」ページでもクイックパネル同等のマルチ出力操作が可能になりました。
+
+Full では AirPlay の複数デバイス同時出力、Android 音声の非圧縮 PCM 転送と 3 種類の遅延モード（超低遅延／バランス／安定優先）、Android 11 以降へのアプリ音声キャプチャ互換拡大、ワイヤレス仮想ディスプレイの適応ビットレート制御を追加し、Store 版のタスクバー識別維持と AirPlay ファイアウォール規則にも対応しています。以前のリリースについては [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) をご覧ください。
+
+<details>
+<summary>v1.35</summary>
 
 クイックパネルで PC アプリのマイクを選ぶと、選んだデバイスがすぐに強調表示されます。切り替え中も続けてクリックでき、変更は順に適用されます。Full では出力先を 1 つだけ選べる外部音源でも同じように操作できます。出力先を選ぶと、アプリの行に表示されるデバイス名もすぐに変わります。デバイス切り替えのショートカットは続けて押せます。現在のアプリの出力先をショートカットで切り替えると、45 ミリ秒以内に完了した場合は結果だけが表示されます。切り替え中の表示が出た場合は、少なくとも 500 ミリ秒表示してから完了を知らせます。失敗した場合はすぐに通知されます。Windows がアプリのオーディオセッションを別の選択済み出力に移しても、選んだ他の出力で再生が続きます。
 
 Full では、Android の音声キャプチャモードの切り替え中も出力先を変更でき、仮想ディスプレイも引き続き操作できます。スマートフォン 1 台のクリップボード同期をオフにすると、その端末から PC のクリップボードへの書き込みで未完了のものが取り消されます。他の端末はそのまま同期を続けます。書き込みに失敗した場合も、そのために確保したメモリを解放するようになりました。以前の変更点は[バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)をご覧ください。
 
-<details>
-<summary>v1.34</summary>
-
-すべてのエディションで、アプリごとに複数の PC 再生デバイスを選べるようになりました。SonicRoute を再起動した後、そのアプリが再び音声を再生すると、選んだデバイスが復元されます。システムトレイでの音量操作とマウスショートカットは、1 つのシステムマウスフックを共有します。
-
-Full では、2 つの Android パネルで USB と Wi-Fi の接続状態が同期されます。スマートフォンのクイックパネルを更新すると、選択中のデバイスに再接続することもできます。Android アプリの出力先メニューには、スマートフォンの現在の出力先に設定した名前が表示されます。以前のリリースについては [バージョン履歴](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) をご覧ください。
-
 </details>
-
-## Full 開発版で使える機能
-
-- **Android からの音声転送。** PC に送る音声の形式と遅延モードを端末ごとに指定できます。形式は Opus（既定）と非圧縮 PCM の 2 種類です。遅延モードは「超低遅延」「バランス」「安定優先」から選べ、既定は「バランス」です。設定は次回の音声転送から有効になります。
-- **仮想ディスプレイの映像。** 端末のエンコーダーが対応していれば、接続状況に応じて映像のビットレートが自動で調整されます。
 
 ## 📚 ドキュメント
 
