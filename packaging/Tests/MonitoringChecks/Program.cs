@@ -166,11 +166,14 @@ internal static class Program
         });
         Case("missing device notification preserves full topology recovery", () =>
         {
-            Boundary.DeviceRegistrationFailures = 1; Boundary.Add(EDataFlow.eCapture);
+            Boundary.DeviceRegistrationFailures = 2; Boundary.Add(EDataFlow.eCapture);
             var monitor = new MicrophoneStateMonitor(); try
             {
-                monitor.ReadAsync(false).GetAwaiter().GetResult(); Assert(monitor.NeedsRecovery, "registration failure hidden");
-                monitor.ReadAsync(false).GetAwaiter().GetResult(); Assert(!monitor.NeedsRecovery && Boundary.Enumerators == 2, "topology recovery removed");
+                monitor.ReadAsync(false).GetAwaiter().GetResult();
+                Assert(monitor.NeedsRecovery && Boundary.NotificationEnumerators == 2 && Boundary.Notifications.IsEmpty, "registration failure hidden");
+                monitor.ReadAsync(false).GetAwaiter().GetResult();
+                Assert(!monitor.NeedsRecovery && Boundary.Enumerators == 2 && Boundary.NotificationEnumerators == 3
+                    && Boundary.Notifications.Count == 1, "topology recovery removed");
             }
             finally { monitor.Dispose(); monitor.Completion.GetAwaiter().GetResult(); }
         });

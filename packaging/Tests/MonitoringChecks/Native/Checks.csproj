@@ -10,7 +10,8 @@
     <ProjectReference Include="../../../../SonicRoute.Core/SonicRoute.Core.csproj" />
   </ItemGroup>
   <Target Name="PrepareNativeObserver" BeforeTargets="CoreCompile">
-    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare.ps1&quot; -OutputDirectory &quot;$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)&quot;" />
-    <ItemGroup><Compile Include="$(MSBuildProjectDirectory)/obj/prepared/$(TargetFramework)/*.cs" /></ItemGroup>
+    <PropertyGroup><PreparedObserver>$(IntermediateOutputPath)prepared</PreparedObserver></PropertyGroup>
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare.ps1&quot; -OutputDirectory &quot;$(PreparedObserver)&quot;" />
+    <ItemGroup><Compile Include="$(PreparedObserver)/*.cs" /></ItemGroup>
   </Target>
 </Project>

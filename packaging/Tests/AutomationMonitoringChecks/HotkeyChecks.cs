@@ -10,8 +10,12 @@ public sealed partial class App
     internal int GlobalCalls;
     internal int OutputHotkeyQueues;
     internal int? LastOutputHotkeyForegroundPid;
+    internal readonly List<(int Pid, int Volume)> VolumeChanges = new();
+    internal readonly List<int> RouteChanges = new();
     private void ToggleQuickPanel() { }
     internal Task TestHotkey(string action, int? foregroundPid = null) => ExecuteHotkeyCoreAsync(action, foregroundPid);
+    internal void NotifyAppVolumeChanged(int pid, int actual) => VolumeChanges.Add((pid, actual));
+    internal void NotifyAppRouteChanged(int pid) => RouteChanges.Add(pid);
     internal void ApplyAppMuteReadback(int pid, bool muted) => _quickPanel?.ApplyAppMuteReadback(pid, muted);
     internal QuickPanelModernWindow? TestPanel { get => _quickPanel; set => _quickPanel = value; }
     private Task<string?> CycleDeviceAsync(SonicRoute.Core.Models.AudioAppInfo app, EDataFlow flow) => Task.FromResult<string?>("test-device");
@@ -62,6 +66,12 @@ internal static class HotkeyChecks
         AudioService.Apps.Add(new SonicRoute.Core.Models.AudioAppInfo { ProcessId = 101234, ProcessName = "HotkeyTarget", DisplayName = "Target" });
         try
         {
+            await app.TestHotkey(HotkeyActions.ActVolUp);
+            Check(app.VolumeChanges.Count == 1 && app.VolumeChanges[0].Pid == 101234
+                && app.VolumeChanges[0].Volume == 50 + SessionVolumeService.AdjustTargets.Last().Delta,
+                "successful app-volume hotkey publishes the adjusted volume for its target");
+            await app.TestHotkey(HotkeyActions.ActSwitchInput);
+            Check(app.RouteChanges.SequenceEqual(new[] { 101234 }), "successful input route hotkey notifies for its target");
             foreach (bool visible in new[] { false, true })
             {
                 var panel = new QuickPanelModernWindow { IsVisible = visible };

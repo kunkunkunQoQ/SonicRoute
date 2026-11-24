@@ -10,3 +10,9 @@ $text = $text.Replace('new MMDeviceEnumeratorComObject()', 'MonitoringNativeChec
 $text = $text.Replace('int hr = handle.Meter.GetPeakValue', 'System.Threading.Interlocked.Increment(ref MonitoringNativeChecks.Counters.PeakReads); int hr = handle.Meter.GetPeakValue')
 $text = $text.Replace('Marshal.ThrowExceptionForHR(handle.Session.GetState', 'System.Threading.Interlocked.Increment(ref MonitoringNativeChecks.Counters.StateReads); Marshal.ThrowExceptionForHR(handle.Session.GetState')
 [IO.File]::WriteAllText((Join-Path $OutputDirectory 'ObservedAudioMeter.cs'), $text, [Text.UTF8Encoding]::new($false))
+
+# Keep the meter's internal notification hub beside the instrumented meter.
+# Its registrations and callbacks still use real Core Audio interfaces.
+$hub = [IO.File]::ReadAllText((Join-Path $sourceRoot 'SonicRoute.Core/AudioDeviceNotificationHub.cs'))
+$hub = "using SonicRoute.Core;`n" + $hub.Replace('namespace SonicRoute.Core', 'namespace MonitoringNativeChecks.Observed')
+[IO.File]::WriteAllText((Join-Path $OutputDirectory 'ObservedAudioDeviceNotificationHub.cs'), $hub, [Text.UTF8Encoding]::new($false))
