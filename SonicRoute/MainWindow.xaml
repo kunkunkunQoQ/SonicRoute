@@ -298,10 +298,19 @@
             </Setter>
         </Style>
 
+        <!-- 已选中（原生路由 / 录音）设备按钮：与快速面板共用主题色样式 -->
         <Style x:Key="QuickDevButtonActive" TargetType="Button" BasedOn="{StaticResource QuickDevButton}">
-            <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.DeviceNativeBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.DeviceNativeFg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- 已选中（捕获分发）设备按钮：与快速面板共用浅/暗区分样式 -->
+        <Style x:Key="QuickDevButtonMirror" TargetType="Button" BasedOn="{StaticResource QuickDevButton}">
+            <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.DeviceMirrorBorder}"/>
         </Style>
 
         <!-- 应用项模板（图标 + 名称，用于应用列表） -->
@@ -1019,18 +1028,43 @@
             </Grid.RowDefinitions>
 
             <!-- ======================= 标题栏 ======================= -->
-            <Grid Grid.Row="0">
+            <Grid x:Name="TitleBarGrid" Grid.Row="0" Background="Transparent" MouseLeftButtonDown="Titlebar_MouseDown">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="HeaderTitleText" Text="SonicRoute"
+                <Border x:Name="HeaderTitleHoverBg" Grid.Column="0" Margin="8,0,0,0" CornerRadius="7"
+                        Height="{Binding ActualHeight, ElementName=HeaderTitleText}"
+                        VerticalAlignment="Center" IsHitTestVisible="False">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Opacity" Value="1"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=HeaderTitleText}" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource Theme.NavHover}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="pressed">
+                                    <Setter Property="Opacity" Value="0.7"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+                <TextBlock x:Name="HeaderTitleText" Grid.Column="0" Text="SonicRoute"
                            FontSize="13.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource Theme.TextPrimary}"
-                           VerticalAlignment="Center" Margin="16,0,0,0"
-                           MouseLeftButtonDown="Titlebar_MouseDown"
+                           Background="Transparent"
+                           Padding="8,5" Margin="8,0,0,0"
+                           VerticalAlignment="Center" HorizontalAlignment="Left"
+                           Cursor="Hand"
+                           MouseLeftButtonDown="HeaderTitle_MouseLeftButtonDown"
+                           MouseMove="HeaderTitle_MouseMove"
+                           MouseLeftButtonUp="HeaderTitle_MouseLeftButtonUp"
+                           LostMouseCapture="HeaderTitle_LostMouseCapture"
                            ToolTip="{Binding [Window.DragToMove], Source={x:Static local:L10n.Instance}}"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
                     <Button x:Name="UpdateNoticeButton" Visibility="Collapsed" Style="{StaticResource GhostButton}"
                             Margin="0,0,12,0" Padding="10,4" MaxWidth="300" Click="UpdateNotice_Click">
                         <TextBlock x:Name="UpdateNoticeText" Margin="12,0" TextTrimming="CharacterEllipsis"/>
@@ -1047,12 +1081,14 @@
             <!-- ======================= 主体 ======================= -->
             <Grid Grid.Row="1">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="196"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
         <!-- ======================= 左侧导航 ======================= -->
-        <Border Grid.Column="0"
+        <local:AnimatedExpandHost x:Name="MainNavHost" Grid.Column="0" Orientation="Horizontal">
+        <Border x:Name="MainNavSidebar"
+                Width="196"
                 Background="Transparent"
                 BorderBrush="{DynamicResource Theme.Border}"
                 BorderThickness="0,0,1,0">
@@ -1080,9 +1116,10 @@
 
             </StackPanel>
         </Border>
+        </local:AnimatedExpandHost>
 
         <!-- ======================= 内容区 ======================= -->
-        <Grid Grid.Column="1">
+        <Grid x:Name="MainContentHost" Grid.Column="1">
             <Grid.Style><Style TargetType="Grid">
                 <Setter Property="Margin" Value="26,20,26,20"/>
                 <Style.Triggers><DataTrigger Binding="{Binding IsChecked, ElementName=NavApps}" Value="True">

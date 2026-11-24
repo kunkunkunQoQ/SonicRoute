@@ -30,6 +30,21 @@ internal static partial class AppPlaybackOutputs
         return outputs;
     }
 
+    internal static HashSet<string> GetSelected(AudioAppInfo app, string? persistedEndpoint)
+    {
+        if (!app.IsExternal) return GetSelected((int)app.ProcessId, persistedEndpoint);
+#if SONICROUTE_PHONE
+        if (ApplicationAudio.ExternalSession(app) is IMultiOutputAudioSession multi)
+        {
+            var outputs = multi.GetOutputs().Select(Endpoint).ToHashSet(Ids);
+            if (multi is AndroidAudioSession android && android.UsesSourcePhonePlayback)
+                outputs.Add(AndroidAudioSession.SourcePhoneOutputId);
+            return outputs;
+        }
+#endif
+        return new HashSet<string>(Ids) { Endpoint(persistedEndpoint) };
+    }
+
     internal static async Task<(bool Success, int HResult, string Message)> SetAsync(
         AudioAppInfo app, string[] selected, string? preferredPrimary)
     {

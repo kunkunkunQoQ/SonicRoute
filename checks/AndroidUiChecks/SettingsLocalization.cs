@@ -108,14 +108,213 @@ internal static partial class Program
         }
         L10n.Instance.SetLanguage("zh-CN");
         CheckPhoneLocalizationLifetimes();
+        ThemeService.Apply("light", "#00CBE9");
+        L10n.Instance.SetLanguage("zh-CN");
+        CheckMainSidebarCollapse(output);
         File.WriteAllText(Path.Combine(output, "settings-localization-summary.json"), JsonSerializer.Serialize(new
         {
             Assertions = _checks, Themes = new[] { "light", "dark" },
-            Scope = "Partial language overrides; settings language action; title-bar states and accessible names; author links; app badge; device selectors; retained phone page; quick-panel source; typed errors",
+            Scope = "Partial language overrides; settings language action; title-bar states and accessible names; author links; app badge; device selectors; retained phone page; quick-panel source; typed errors; collapsible main sidebar",
             ProductStarted = false, WindowsShown = false, PhoneAccess = false, BrowserOpened = false
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"PASS {_checks} settings localization assertions; no phone or product startup.");
         return 0;
+    }
+
+    private static void CheckMainSidebarCollapse(string output)
+    {
+        static void ClickHeaderTitle(TextBlock title)
+        {
+            title.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+                Source = title
+            });
+            title.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonUpEvent,
+                Source = title
+            });
+        }
+
+        static void LayoutWindow(FrameworkElement root)
+        {
+            root.Measure(new System.Windows.Size(920, 620));
+            root.Arrange(new System.Windows.Rect(0, 0, 920, 620));
+            root.UpdateLayout();
+        }
+
+        static bool IsAtRest(AnimatedExpandHost host, bool expanded) =>
+            (bool)typeof(AnimatedExpandHost).GetMethod("IsAtRest", Hidden)!.Invoke(host, [expanded])!;
+
+        static void OpenSettingsPage(MainWindow w)
+        {
+            typeof(MainWindow).GetMethod("EnsureSettingsPage", Hidden)!.Invoke(w, null);
+            typeof(MainWindow).GetMethod("LoadSettings", Hidden)!.Invoke(w, null);
+            ((FrameworkElement)w.FindName("AppsPage")).Visibility = Visibility.Collapsed;
+            ((FrameworkElement)w.FindName("SettingsPageHost")).Visibility = Visibility.Visible;
+            ((FrameworkElement)w.FindName("SettingsPage")).Visibility = Visibility.Visible;
+            ((RadioButton)w.FindName("NavSettings")).IsChecked = true;
+        }
+
+        var config = SonicRoute.Core.ConfigService.Load();
+        bool previousCollapsed = config.MainSidebarCollapsed;
+        config.MainSidebarCollapsed = false;
+        SonicRoute.Core.ConfigService.Save(config);
+
+        ThemeService.Apply("light", "#00CBE9");
+        L10n.Instance.SetLanguage("zh-CN");
+        var window = new MainWindow();
+        try
+        {
+            var root = (FrameworkElement)window.Content;
+            var titleBar = (Grid)window.FindName("TitleBarGrid");
+            var headerTitle = (TextBlock)window.FindName("HeaderTitleText");
+            var navHost = (AnimatedExpandHost)window.FindName("MainNavHost");
+            var navSidebar = (Border)window.FindName("MainNavSidebar");
+            var contentHost = (Grid)window.FindName("MainContentHost");
+            var settingsHost = (Border)window.FindName("SettingsPageHost");
+            var navSettings = (RadioButton)window.FindName("NavSettings");
+
+            OpenSettingsPage(window);
+            LayoutWindow(root);
+
+            var scroll = Descendants<ScrollViewer>(settingsHost).First();
+            scroll.ScrollToVerticalOffset(120);
+            LayoutWindow(root);
+            DrainUi();
+
+            object? pageBefore = settingsHost.Child;
+            double offsetBefore = scroll.VerticalOffset;
+            double expandedContentWidth = contentHost.ActualWidth;
+
+            Check(ReferenceEquals(headerTitle.Parent, titleBar)
+                && titleBar.Children.OfType<StackPanel>().Count() == 1
+                && titleBar.ActualWidth >= 900
+                && offsetBefore >= 100,
+                "title bar keeps structural invariants and Settings scroll offset moves before collapse");
+            Check(IsAtRest(navHost, true) && !navHost.IsAnimating
+                && navSidebar.Visibility == Visibility.Visible
+                && Math.Abs(navHost.ActualWidth - 196) < 0.5,
+                "main sidebar starts expanded at 196 DIP");
+
+            Render(root, 920, 620, Path.Combine(output, "sidebar-light-expanded.png"));
+
+            // LostMouseCapture cancels pending click without toggling sidebar
+            headerTitle.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent,
+                Source = headerTitle
+            });
+            headerTitle.RaiseEvent(new System.Windows.Input.MouseEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice, 0)
+            {
+                RoutedEvent = UIElement.LostMouseCaptureEvent,
+                Source = headerTitle
+            });
+            headerTitle.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(
+                System.Windows.Input.Mouse.PrimaryDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonUpEvent,
+                Source = headerTitle
+            });
+            Check(IsAtRest(navHost, true) && !SonicRoute.Core.ConfigService.Load().MainSidebarCollapsed,
+                "lost mouse capture cancels title click without toggling sidebar");
+
+            ClickHeaderTitle(headerTitle);
+            DrainUi();
+            LayoutWindow(root);
+
+            bool maximized = (bool)typeof(MainWindow).GetField("_titleMaximized", Hidden)!.GetValue(window)!;
+            SonicRoute.Core.ConfigService.FlushPendingSaves();
+            string savedJson = File.ReadAllText(SonicRoute.Core.ConfigService.ConfigPath);
+
+            Check(IsAtRest(navHost, false) && !navHost.IsAnimating
+                && navSidebar.Visibility == Visibility.Collapsed
+                && Math.Abs(navHost.ActualWidth) < 0.5,
+                "clicking HeaderTitleText collapses main sidebar to 0 DIP");
+            Check(Math.Abs((contentHost.ActualWidth - expandedContentWidth) - 196) < 0.5,
+                "collapsing main sidebar expands content host by 196 DIP");
+            Check(ReferenceEquals(settingsHost.Child, pageBefore)
+                && navSettings.IsChecked == true
+                && Math.Abs(scroll.VerticalOffset - offsetBefore) < 0.5
+                && !maximized,
+                "collapsing main sidebar preserves Settings page instance, active nav item, scroll offset, and unmaximized window state");
+            Check(SonicRoute.Core.ConfigService.Load().MainSidebarCollapsed
+                && savedJson.Contains("\"MainSidebarCollapsed\": true", StringComparison.Ordinal),
+                "collapsing main sidebar persists MainSidebarCollapsed=true to config.json");
+
+            Render(root, 920, 620, Path.Combine(output, "sidebar-light-collapsed.png"));
+
+            var restarted = new MainWindow();
+            try
+            {
+                var rRoot = (FrameworkElement)restarted.Content;
+                var rHost = (AnimatedExpandHost)restarted.FindName("MainNavHost");
+                var rSidebar = (Border)restarted.FindName("MainNavSidebar");
+                LayoutWindow(rRoot);
+                Check(IsAtRest(rHost, false) && !rHost.IsAnimating
+                    && rSidebar.Visibility == Visibility.Collapsed
+                    && Math.Abs(rHost.ActualWidth) < 0.5,
+                    "restarted window restores collapsed sidebar immediately without animation or flicker");
+            }
+            finally { restarted.Close(); }
+
+            ThemeService.Apply("dark", "#00CBE9");
+            var window2 = new MainWindow();
+            try
+            {
+                var root2 = (FrameworkElement)window2.Content;
+                var headerTitle2 = (TextBlock)window2.FindName("HeaderTitleText");
+                var navHost2 = (AnimatedExpandHost)window2.FindName("MainNavHost");
+                var navSidebar2 = (Border)window2.FindName("MainNavSidebar");
+                OpenSettingsPage(window2);
+                Render(root2, 920, 620, Path.Combine(output, "sidebar-dark-collapsed.png"));
+                Check(IsAtRest(navHost2, false) && navSidebar2.Visibility == Visibility.Collapsed
+                    && Math.Abs(navHost2.ActualWidth) < 0.5,
+                    "dark mode window starts with collapsed sidebar on Settings page");
+
+                ClickHeaderTitle(headerTitle2);
+                DrainUi();
+                LayoutWindow(root2);
+
+                SonicRoute.Core.ConfigService.FlushPendingSaves();
+                string expandedJson = File.ReadAllText(SonicRoute.Core.ConfigService.ConfigPath);
+                Check(IsAtRest(navHost2, true) && !navHost2.IsAnimating
+                    && navSidebar2.Visibility == Visibility.Visible
+                    && Math.Abs(navHost2.ActualWidth - 196) < 0.5
+                    && !SonicRoute.Core.ConfigService.Load().MainSidebarCollapsed
+                    && expandedJson.Contains("\"MainSidebarCollapsed\": false", StringComparison.Ordinal),
+                    "clicking HeaderTitleText expands sidebar back to 196 DIP and persists MainSidebarCollapsed=false");
+
+                Render(root2, 920, 620, Path.Combine(output, "sidebar-dark-expanded.png"));
+
+                navSidebar2.Visibility = Visibility.Visible;
+                navHost2.RevealWidth = 98;
+                LayoutWindow(root2);
+                double slideX = navSidebar2.TranslatePoint(new System.Windows.Point(0, 0), navHost2).X;
+                Check(Math.Abs(navHost2.ActualWidth - 98) < 0.5
+                    && Math.Abs(navSidebar2.ActualWidth - 196) < 0.5
+                    && Math.Abs(slideX - (-98)) < 0.5,
+                    "mid-flight horizontal layout locks inner sidebar at 196 DIP while sliding left by -98 DIP");
+
+                navHost2.FinishImmediately();
+                Check(!navHost2.IsAnimating && double.IsNaN(navHost2.RevealWidth),
+                    "FinishImmediately clears sidebar animation flag and RevealWidth");
+            }
+            finally { window2.Close(); }
+        }
+        finally
+        {
+            window.Close();
+            ThemeService.Apply("light", "#00CBE9");
+            L10n.Instance.SetLanguage("zh-CN");
+            config.MainSidebarCollapsed = previousCollapsed;
+            SonicRoute.Core.ConfigService.Save(config);
+        }
     }
 
     private static void CheckRetainedAutomationEditorLanguage(MainWindow window, MethodInfo applyLanguage)

@@ -155,12 +155,12 @@ namespace SonicRoute
             Set("Theme.Success", Color.FromRgb(0x16, 0xA3, 0x4A));
             Set("Theme.Fail", Color.FromRgb(0xDC, 0x26, 0x26));
             var textPrimary = dark ? Color.FromRgb(0xF3, 0xF4, 0xF6) : Color.FromRgb(0x1F, 0x29, 0x37);
-            var deviceNativeBg = dark ? Blend(accentColor, Colors.Black, 0.54) : Blend(accentColor, Colors.White, 0.52);
+            var deviceNativeBg = dark ? Blend(accentColor, Colors.Black, 0.54) : Blend(accentColor, Colors.White, 0.75);
             var darkInk = Color.FromRgb(0x11, 0x18, 0x27);
             var deviceNativeFg = ContrastRatio(deviceNativeBg, textPrimary) >= 4.5 ? textPrimary
                 : ContrastRatio(deviceNativeBg, darkInk) >= 4.5 ? darkInk
                 : Luminance(deviceNativeBg) > 0.179 ? Colors.Black : Colors.White;
-            var deviceMirrorBorder = dark ? Blend(accentColor, Colors.Black, 0.45) : Blend(accentColor, Colors.White, 0.55);
+            var deviceMirrorBorder = dark ? Blend(accentColor, Colors.Black, 0.45) : Blend(accentColor, Colors.White, 0.65);
             Set("Theme.DeviceNativeBg", deviceNativeBg);
             Set("Theme.DeviceNativeFg", deviceNativeFg);
             Set("Theme.DeviceMirrorBorder", deviceMirrorBorder);

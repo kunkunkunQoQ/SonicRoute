@@ -69,6 +69,9 @@ namespace SonicRoute.Core
         /// <summary>启动时显示快速面板。</summary>
         public bool StartPanelOnStart { get; set; } = false;
 
+        /// <summary>主窗口左侧导航栏是否折叠；启动时恢复上次状态。</summary>
+        public bool MainSidebarCollapsed { get; set; } = false;
+
         /// <summary>快速面板固定高度（px，350–850，默认 450）：展开/收起不改变；内容超出在应用区域滚动。</summary>
         public int QuickPanelHeight { get; set; } = 450;
 

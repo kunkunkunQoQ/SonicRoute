@@ -11,7 +11,7 @@ namespace SonicRoute;
 
 public partial class QuickPanelModernWindow
 {
-    private record PlaybackIntent(string[] Outputs, string? Anchor, string? PreferredPrimary = null);
+    internal record PlaybackIntent(string[] Outputs, string? Anchor, string? PreferredPrimary = null);
     private sealed record PendingInputIntent(string DeviceId);
 
     private Func<int, string?, HashSet<string>> _readRowPlaybackOutputs = AppPlaybackOutputs.GetSelected;
@@ -293,7 +293,7 @@ public partial class QuickPanelModernWindow
         return Pick(filtered: true) ?? Pick(filtered: false) ?? AudioService.SystemDefaultDeviceId;
     }
 
-    private static PlaybackIntent CreatePlaybackIntent(string[] order, HashSet<string> selected, string clicked,
+    internal static PlaybackIntent CreatePlaybackIntent(string[] order, HashSet<string> selected, string clicked,
         string? anchor, ModifierKeys modifiers, string? priorPreferred = null)
     {
         var outputs = SelectPlaybackRange(order, selected, clicked, anchor, modifiers);
