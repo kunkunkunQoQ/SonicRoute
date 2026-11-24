@@ -58,12 +58,13 @@ public partial class MainWindow
         Grid.SetColumn(PhoneDetailsHost, 1); AppsPage.Children.Add(PhoneDetailsHost);
         RegisterName(PhoneDetailsHost.Name, PhoneDetailsHost);
         PhoneDevicesHost.Visibility = Visibility.Visible;
-        var heading = new TextBlock { Margin = new Thickness(0,0,8,0), VerticalAlignment = VerticalAlignment.Center };
+        var heading = new TextBlock { Margin = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         BindingOperations.SetBinding(heading, TextBlock.TextProperty, new Binding("[Phone.Title]") { Source = L10n.Instance });
+        BindingOperations.SetBinding(heading, FrameworkElement.ToolTipProperty, new Binding("[Phone.Title]") { Source = L10n.Instance });
         heading.SetResourceReference(StyleProperty, "SectionTitle");
-        var headingGrid = new Grid { Margin = new Thickness(2,0,2,12) }; headingGrid.ColumnDefinitions.Add(new()); headingGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        var headingGrid = new Grid { Margin = new Thickness(1, 0, 1, 12) }; headingGrid.ColumnDefinitions.Add(new()); headingGrid.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         headingGrid.Children.Add(heading);
-        _phoneSidebarCount = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(6,3,6,3), VerticalAlignment = VerticalAlignment.Center };
+        _phoneSidebarCount = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(5, 3, 5, 3), VerticalAlignment = VerticalAlignment.Center };
         _phoneSidebarCount.SetResourceReference(Border.BackgroundProperty, "Theme.SurfaceAlt");
         var count = new TextBlock { FontSize = 11 }; count.SetResourceReference(TextBlock.ForegroundProperty, "Theme.TextSecondary");
         _phoneSidebarCount.Child = count;
@@ -71,22 +72,24 @@ public partial class MainWindow
         BindingOperations.SetBinding(pen, System.Windows.Media.Pen.BrushProperty, new Binding(nameof(TextBlock.Foreground)) { Source = count });
         _phoneSidebarIcon = new System.Windows.Media.DrawingImage(new System.Windows.Media.GeometryDrawing(null, pen, AutomationIcons.Phone));
         Grid.SetColumn(_phoneSidebarCount,1); headingGrid.Children.Add(_phoneSidebarCount); PhoneDevicesHost.Children.Add(headingGrid);
-        _phoneDevicesList = new ListBox { Name = "PhoneDevicesList", BorderThickness = new Thickness(0),
+        _phoneDevicesList = new ListBox { Name = "PhoneDevicesList", BorderThickness = new Thickness(0), Margin = new Thickness(0, 0, -4, 0),
             Background = System.Windows.Media.Brushes.Transparent, FontSize = 13, MaxHeight = 220,
-            ItemTemplate = (DataTemplate)FindResource("AppsCardItemTemplate"), ItemContainerStyle = (Style)FindResource("RoundedListBoxItem") };
+            ItemTemplate = (DataTemplate)FindResource("AppsCardItemTemplate"), ItemContainerStyle = (Style)FindResource("AppsSidebarListBoxItem") };
         ScrollViewer.SetHorizontalScrollBarVisibility(_phoneDevicesList, ScrollBarVisibility.Disabled);
         VirtualizingPanel.SetIsVirtualizing(_phoneDevicesList, true);
         VirtualizingPanel.SetVirtualizationMode(_phoneDevicesList, VirtualizationMode.Recycling);
         _phoneDevicesList.SelectionChanged += PhoneSidebar_SelectionChanged;
         RegisterName(_phoneDevicesList.Name, _phoneDevicesList);
         PhoneDevicesHost.Children.Add(_phoneDevicesList);
-        var add = new Button { Height = 26, FontSize = 12, Padding = new Thickness(6,2,6,2), Margin = new Thickness(0,0,0,8) };
+        var add = new Button { Height = 26, FontSize = 12, Padding = new Thickness(4, 2, 4, 2), Margin = new Thickness(0, 0, 0, 8) };
         BindingOperations.SetBinding(add, ContentControl.ContentProperty, new Binding("[Phone.AddDeviceButton]") { Source = L10n.Instance });
+        add.ContentTemplate = (DataTemplate)FindResource("SidebarEllipsisTextTemplate");
+        BindingOperations.SetBinding(add, FrameworkElement.ToolTipProperty, new Binding("[Phone.AddDeviceButton]") { Source = L10n.Instance });
         add.SetResourceReference(StyleProperty,"QuickPanelToolButton");
         add.SetResourceReference(ForegroundProperty,"Theme.TextPrimary");
         add.Click += (_, _) => OpenPhoneManagement(addDevice: true);
         PhoneDevicesHost.Children.Add(add);
-        var line = new Border { Height = 1, Margin = new Thickness(2,0,2,8) }; line.SetResourceReference(Border.BackgroundProperty,"Theme.Border"); PhoneDevicesHost.Children.Add(line);
+        var line = new Border { Height = 1, Margin = new Thickness(1, 0, 1, 8) }; line.SetResourceReference(Border.BackgroundProperty,"Theme.Border"); PhoneDevicesHost.Children.Add(line);
         AndroidAudioHost.Phone.Changed += PhoneLibraryChanged;
         AndroidAudioHost.Phone.OutputsChanged += PhoneLibraryChanged;
         L10n.Instance.PropertyChanged += PhoneLanguageChanged;
