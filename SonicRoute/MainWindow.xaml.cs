@@ -423,13 +423,6 @@ namespace SonicRoute
         private List<AudioDeviceInfo> DisplayDevices(IEnumerable<AudioDeviceInfo> devs) =>
             devs.Select(device => PanelDevices.WithDeviceName(device, _config)).ToList();
 
-
-        private IEnumerable<AudioDeviceInfo> VisibleOutputs =>
-            _outputs.Where(d => !_config.HiddenOutputDevices.Contains(d.Id));
-
-        private IEnumerable<AudioDeviceInfo> VisibleInputs =>
-            _inputs.Where(d => !_config.HiddenInputDevices.Contains(d.Id));
-
         /// <summary>刷新所有设备下拉 / 快速按钮 / 名称编辑列表的显示。</summary>
         private void ReloadDeviceDisplay()
         {
@@ -465,17 +458,6 @@ namespace SonicRoute
         // ==================================================================
         // 应用共享名称与路由操作
         // ==================================================================
-
-        /// <summary>记录"上次操作的应用"（进程名），供 last 模式使用。</summary>
-        private void MarkLastUsed(AudioAppInfo app)
-        {
-            var name = app.ProcessName;
-            if (string.IsNullOrWhiteSpace(name)) return;
-            // 与上次记录相同则跳过写盘（切设备/切应用高频点击时减少无谓的配置全量保存）
-            if (string.Equals(_config.LastUsedAppName, name, StringComparison.OrdinalIgnoreCase)) return;
-            _config.LastUsedAppName = name;
-            SaveSettings(_config);
-        }
 
         private void RenderDeviceQuickButtons(ItemsControl panel, IEnumerable<AudioDeviceInfo> devices,
             Action<AudioDeviceInfo> select, string? activeId)

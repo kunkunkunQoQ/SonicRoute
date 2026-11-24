@@ -209,7 +209,6 @@
         <SolidColorBrush x:Key="Theme.OsdTitle" Color="#6B7280"/>
         <SolidColorBrush x:Key="Theme.OsdTitleText" Color="#1F2937"/>
         <SolidColorBrush x:Key="Theme.OsdAccent" Color="#2563EB"/>
-        <SolidColorBrush x:Key="Theme.White" Color="#FFFFFF"/>
 
         <!-- ============ 圆角下拉框（圆滑 + 选中项用强调色） ============ -->
         <Style x:Key="RoundedComboItem" TargetType="ComboBoxItem">

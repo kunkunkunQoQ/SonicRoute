@@ -12,7 +12,6 @@ namespace SonicRoute.AndroidAudio;
 internal static class Spake25519
 {
     public const int MessageSize = 32;
-    public const int OutKeySize = 64;
     public const int PeerInfoSize = 8192;
     public const int AesGcmTagSize = 16;
 
@@ -59,18 +58,6 @@ internal static class Spake25519
     {
         public readonly BigInteger X, Y, Z, T;
         public ExtPoint(BigInteger x, BigInteger y, BigInteger z, BigInteger t) { X = x; Y = y; Z = z; T = t; }
-    }
-
-    internal static bool IsOnCurve(in ExtPoint p)
-    {
-        BigInteger zInv = ModInv(p.Z);
-        BigInteger x = Mod(p.X * zInv);
-        BigInteger y = Mod(p.Y * zInv);
-        BigInteger x2 = Mod(x * x);
-        BigInteger y2 = Mod(y * y);
-        BigInteger lhs = Mod(y2 - x2);
-        BigInteger rhs = Mod(1 + D * x2 * y2);
-        return lhs == rhs;
     }
 
     internal static ExtPoint Add(in ExtPoint p1, in ExtPoint p2)
