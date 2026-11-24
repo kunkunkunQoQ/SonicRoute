@@ -929,10 +929,6 @@ namespace SonicRoute
         private static Task<string?> CycleDeviceAsync(AudioAppInfo app, EDataFlow flow) =>
             Task.Run(() => CycleDevice(app, flow, previous: false));
 
-        // 托盘Alt滚轮复用同一切换实现；合并多个刻度只读取/写入一次设备路由。
-        internal static string? CycleDevice(int pid, EDataFlow flow, bool previous, int steps = 1)
-            => CycleDevice(new AudioAppInfo { ProcessId = (uint)pid }, flow, previous, steps);
-
         private static AudioDeviceInfo SelectCycleDevice(List<AudioDeviceInfo> visible, string? persisted, bool previous, int steps = 1)
         {
             string? current = persisted == null ? null : AudioPolicyConfig.UnpackDeviceId(persisted);

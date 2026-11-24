@@ -71,8 +71,6 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     private const uint WsExDlgModalFrame = 0x0000_0001;
     private const uint CsDblClks = 0x0008;
 
-    private const int SwHide = 0;
-    private const int SwShowNoActivate = 4;
     private const int SwRestore = 9;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoMove = 0x0002;
@@ -1470,7 +1468,6 @@ public sealed class NativeVideoWindow : IAsyncDisposable
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandle(string? lpModuleName);
-    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
     [DllImport("gdi32.dll")] private static extern nint GetStockObject(int i);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern ushort RegisterClassEx(in WndClassEx lpwcx);
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern nint CreateWindowEx(uint dwExStyle, string lpClassName, string lpWindowName, uint dwStyle, int x, int y, int nWidth, int nHeight, nint hWndParent, nint hMenu, nint hInstance, nint lpParam);

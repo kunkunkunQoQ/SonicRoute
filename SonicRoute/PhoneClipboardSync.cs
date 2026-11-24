@@ -39,7 +39,6 @@ public sealed class PhoneClipboardSync(string filePath, Dispatcher dispatcher, I
     {
         _shouldScanOnStartup = shouldScanOnStartup;
     }
-    internal static string SettingsPath => Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "phone-clipboard.json");
     private sealed record Saved(int Version, AndroidDevice[] EnabledDevices, AndroidDevice[]? ArchivedDevices = null);
     private sealed class Session(AndroidDevice device, IAndroidClipboardClient client, CancellationToken lifetime)
     {

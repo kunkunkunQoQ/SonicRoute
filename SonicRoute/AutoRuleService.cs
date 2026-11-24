@@ -230,8 +230,6 @@ namespace SonicRoute
             return string.Equals(NormalizeAppName(ruleApp), NormalizeAppName(processName), StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string? GetSnapshotTarget(List<AutoRule> rules) => _cachedSnapshotTarget ?? ComputeSnapshotTarget(rules);
-
         private static string? ComputeSnapshotTarget(List<AutoRule> rules)
         {
             var targets = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);

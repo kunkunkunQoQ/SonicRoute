@@ -304,12 +304,6 @@ internal static partial class AndroidAudioHost
         return sink.Kind == AndroidOutputSinkKind.Speaker
             ? string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName) : string.Format(L10n.T("Phone.BluetoothOutputFormat"), sinkName, phoneName);
     }
-    internal static AudioDeviceInfo SpeakerOutput(AndroidDevice device) => new()
-    {
-        Id = AndroidOutputIdentity.FormatDeviceId(AndroidDeviceIdentity.Key(device), "speaker"),
-        DisplayName = OutputDisplayName(device, AndroidOutputSink.DefaultSpeaker),
-        Flow = EDataFlow.eRender
-    };
     internal static IReadOnlyList<AudioDeviceInfo> OutputsForDevice(AndroidDevice device)
     {
         var zones = GetDropZonesForDevice(device);
