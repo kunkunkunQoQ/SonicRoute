@@ -296,36 +296,95 @@ internal static partial class Program
                 Check(ActualOutput() == devA, "AirPlay A->B->A stays on actual A after intermediate B failure");
                 AssertAirPlayShown(row, "AirPlay A->B->A intermediate B failure does not overwrite newer A highlight", devA);
 
-                // 1f. Even with Ctrl or Shift held during click, AirPlay strictly remains single-select
+                // 1f. Ctrl+Click / Shift+Click multi-select on AirPlay (Windows + phone speaker) and single-click return
+                void AssertAirPlayShownMulti(object r, string desc, params string[] expectedIds)
+                {
+                    var winActive = panel.FindResource("DevButtonActive");
+                    var winIdle = panel.FindResource("DevButton");
+                    var devs = Devices(r);
+                    var active = devs.Where(d => ReferenceEquals(d.Button.Style, winActive)).Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var expected = expectedIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    Check(active.SetEquals(expected)
+                        && devs.All(d => d.Button.IsEnabled && (expected.Contains(d.Id) || ReferenceEquals(d.Button.Style, winIdle))),
+                        desc);
+                }
+                string[] ActualAirPlayOutputs() => ((IMultiOutputAudioSession)source).GetOutputs()
+                    .Select(id => id ?? system).ToArray();
+
+                Pill(row, devC).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                TakeReq(devC).Finish.SetResult(true);
+                Complete(Field<Task>(row, "PlaybackChange"));
+
                 var savedKeys = new byte[256];
                 if (!GetKeyboardState(savedKeys)) throw new IOException("Unable to read keyboard state.");
                 try
                 {
                     var ctrlKeys = (byte[])savedKeys.Clone();
                     ctrlKeys[0x11] = 0x80; // VK_CONTROL
+                    ctrlKeys[0xA2] = 0x80; // VK_LCONTROL (read by WPF Keyboard.Modifiers)
                     SetKeyboardState(ctrlKeys);
+
                     Pill(row, devB).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     var pendingCtrl = Field<object>(row, "PendingOutput");
                     var pendingCtrlOuts = (string[])pendingCtrl.GetType().GetProperty("Outputs")!.GetValue(pendingCtrl)!;
-                    Check(pendingCtrlOuts.Length == 1 && pendingCtrlOuts[0] == devB,
-                        "AirPlay with Ctrl held keeps single-output pending intent");
-                    AssertAirPlayShown(row, "AirPlay with Ctrl held strictly highlights only B (never multi-select)", devB);
+                    Check(pendingCtrlOuts.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, devB]),
+                        "AirPlay Ctrl+Click adds secondary output optimistically");
+                    AssertAirPlayShownMulti(row, "AirPlay Ctrl+Click highlights both C and B optimistically", devC, devB);
                     TakeReq(devB).Finish.SetResult(true);
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, devB]),
+                        "AirPlay Ctrl+Click confirms [devC, devB] via IMultiOutputAudioSession");
+                    AssertAirPlayShownMulti(row, "AirPlay Ctrl+Click keeps [devC, devB] highlighted after commit", devC, devB);
+
+                    Pill(row, phoneSpeaker).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AssertAirPlayShownMulti(row, "AirPlay Ctrl+Click adds phone speaker alongside Windows outputs", devC, devB, phoneSpeaker);
+                    TakeReq(phoneSpeaker).Finish.SetResult(true);
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, devB, phoneSpeaker]),
+                        "AirPlay confirms [devC, devB, phoneSpeaker]");
+
+                    Pill(row, phoneSpeaker).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Pill(row, devB).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC]),
+                        "AirPlay Ctrl+Click removes devB and phoneSpeaker cleanly back to [devC]");
+                    AssertAirPlayShown(row, "AirPlay Ctrl+Click removal leaves only C highlighted", devC);
+
+                    SetKeyboardState(savedKeys);
+                    Pill(row, devC).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     Complete(Field<Task>(row, "PlaybackChange"));
 
                     var shiftKeys = (byte[])savedKeys.Clone();
                     shiftKeys[0x10] = 0x80; // VK_SHIFT
+                    shiftKeys[0xA0] = 0x80; // VK_LSHIFT (read by WPF Keyboard.Modifiers)
                     SetKeyboardState(shiftKeys);
-                    Pill(row, devC).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                    var pendingShift = Field<object>(row, "PendingOutput");
-                    var pendingShiftOuts = (string[])pendingShift.GetType().GetProperty("Outputs")!.GetValue(pendingShift)!;
-                    Check(pendingShiftOuts.Length == 1 && pendingShiftOuts[0] == devC,
-                        "AirPlay with Shift held keeps single-output pending intent");
-                    AssertAirPlayShown(row, "AirPlay with Shift held strictly highlights only C (never multi-select)", devC);
-                    TakeReq(devC).Finish.SetResult(true);
+
+                    Pill(row, phoneSpeaker).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AssertAirPlayShownMulti(row, "AirPlay Shift+Click adds phone speaker range optimistically", devC, phoneSpeaker);
+                    TakeReq(phoneSpeaker).Finish.SetResult(true);
                     Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, phoneSpeaker]),
+                        "AirPlay Shift+Click confirms [devC, phoneSpeaker]");
+
+                    Pill(row, devA).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AssertAirPlayShownMulti(row, "AirPlay Shift+Click adds contiguous range while preserving existing selection", devA, devB, devC, phoneSpeaker);
+                    TakeReq(devA).Finish.SetResult(true);
+                    TakeReq(devB).Finish.SetResult(true);
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devA, devB, devC, phoneSpeaker]),
+                        "AirPlay Shift+Click confirms contiguous range plus preserved selection");
+                    AssertAirPlayShownMulti(row, "AirPlay Shift+Click keeps all selected outputs highlighted after commit", devA, devB, devC, phoneSpeaker);
                 }
                 finally { SetKeyboardState(savedKeys); }
+
+                Pill(row, devA).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                AssertAirPlayShown(row, "AirPlay single Click returns optimistically to A", devA);
+                TakeReq(devA).Finish.SetResult(true);
+                Complete(Field<Task>(row, "PlaybackChange"));
+                Check(ActualAirPlayOutputs().SequenceEqual([devA], StringComparer.OrdinalIgnoreCase),
+                    "AirPlay single Click confirms return to single selection A");
+                AssertAirPlayShown(row, "AirPlay single Click keeps only A highlighted after commit", devA);
 
                 // 1g. Device disconnect (removed from _outputDisplay while pending or before write)
                 // Case 1: queued behind blocked B, then C is removed from _outputDisplay before C's write starts

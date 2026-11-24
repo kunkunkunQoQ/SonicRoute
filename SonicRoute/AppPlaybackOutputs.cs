@@ -1,4 +1,5 @@
 #if SONICROUTE_PHONE
+using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
 #endif
 using SonicRoute.Core;
@@ -60,7 +61,12 @@ internal static partial class AppPlaybackOutputs
                     await multi.SetOutputsAsync(outputs.Select(id => AudioService.IsSystemDefault(id) ? null : id).ToArray()).ConfigureAwait(false);
                     return (true, 0, L10n.T("History.Status.success"));
                 }
-                catch (Exception ex) { return RouteError(ex); }
+                catch (Exception ex)
+                {
+                    return multi is AirPlayAudioOutput
+                        ? (false, ex.HResult, ApplicationAudio.FormatAirPlayRouteError(ex, outputs))
+                        : RouteError(ex);
+                }
             }
 #endif
             return outputs.Length == 1 ? await ApplicationAudio.ApplyEndpointAsync(app, EDataFlow.eRender, outputs[0])
