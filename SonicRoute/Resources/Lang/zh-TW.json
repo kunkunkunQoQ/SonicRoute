@@ -253,7 +253,7 @@
   "Act.SwitchAllInput": "切換所有音訊應用程式的錄音裝置",
   "Act.SetDefaultInput": "切換系統預設錄音裝置",
   "Qp.CurrentApp": "目前應用程式：{0}",
-  "Qp.PlaybackMultiSelect": "按一下即可只在這個裝置播放。按住 Ctrl 點選可加入或取消選取，按住 Shift 點選可選取範圍，按住 Ctrl+Shift 點選可加入另一段範圍。",
+  "Qp.PlaybackMultiSelect": "按一下即可只在這個裝置播放。按住 Ctrl 點選可加入或取消選取，按住 Shift 點選可保留原有選取並加入範圍，按住 Ctrl+Shift 點選可選取或切換原生路由裝置。",
   "Qp.Output": "🔊 播放",
   "Qp.FullUi": "主視窗",
   "Qp.AppVolumes": "應用程式音量",

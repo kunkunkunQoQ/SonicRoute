@@ -73,13 +73,17 @@ internal static partial class Program
                 ClickWithModifiers(button, modifiers);
                 Finish(Field<Task>(row, "PlaybackChange"));
                 var target = expected.Select(i => ids[i]).ToArray();
-                string[] Active() => buttons.Where(b => ReferenceEquals(b.Button.Style, panel.FindResource("DevButtonActive"))).Select(b => b.Id).ToArray();
+                var activeStyle = panel.FindResource("DevButtonActive");
+                var mirrorStyle = panel.FindResource("DevButtonMirror");
+                string[] Active() => buttons.Where(b => ReferenceEquals(b.Button.Style, activeStyle) || ReferenceEquals(b.Button.Style, mirrorStyle))
+                    .Select(b => b.Id).ToArray();
+                int NativeCount() => buttons.Count(b => b.Flow == EDataFlow.eRender && ReferenceEquals(b.Button.Style, activeStyle));
                 var elapsed = Stopwatch.StartNew();
                 while (!new HashSet<string>(Active()).SetEquals(target) && elapsed.ElapsedMilliseconds < 2000) Finish(Task.Delay(30));
                 var active = Active();
                 if (!new HashSet<string>(active).SetEquals(target))
                     Console.WriteLine($"FAILURE ROUTE PID {pid} exited={tone.HasExited} before={selectedBefore ?? "default"} after={policy.GetDefaultEndPoint(pid, ERole.eMultimedia) ?? "default"} extras={string.Join(",", (string[])getExtras.Invoke(null, new object[] { pid })!)}");
-                Check(new HashSet<string>(active).SetEquals(target),
+                Check(new HashSet<string>(active).SetEquals(target) && NativeCount() <= 1,
                     $"{modifiers} click on output {index} highlights [{string.Join(",", active.Select(id => Array.IndexOf(ids, id)))}], expected [{string.Join(",", expected)}]");
             }
             Choose(0, ModifierKeys.None, 0);

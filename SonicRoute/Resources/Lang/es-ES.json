@@ -252,7 +252,7 @@
   "Act.SwitchAllInput": "Cambiar la entrada de todas las aplicaciones que usan audio",
   "Act.SetDefaultInput": "Cambiar el dispositivo de entrada predeterminado del sistema",
   "Qp.CurrentApp": "Aplicación actual: {0}",
-  "Qp.PlaybackMultiSelect": "Haz clic para reproducir solo en este dispositivo. Ctrl+clic añade o quita un dispositivo, Mayús+clic selecciona un intervalo y Ctrl+Mayús+clic lo añade a la selección.",
+  "Qp.PlaybackMultiSelect": "Haz clic para reproducir solo en este dispositivo. Ctrl+clic añade o quita un dispositivo, Mayús+clic mantiene la selección actual y añade un intervalo y Ctrl+Mayús+clic selecciona o cambia el dispositivo de enrutamiento nativo.",
   "Qp.Output": "🔊 Salida",
   "Qp.FullUi": "Ventana principal",
   "Qp.AppVolumes": "Volumen de las aplicaciones",

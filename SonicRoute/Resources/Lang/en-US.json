@@ -252,7 +252,7 @@
   "Act.SwitchAllInput": "Switch the input device for all apps with audio",
   "Act.SetDefaultInput": "Switch system default input device",
   "Qp.CurrentApp": "Current app: {0}",
-  "Qp.PlaybackMultiSelect": "Click to play only on this device. Ctrl-click to add or remove a device, Shift-click to select a range, or Ctrl+Shift-click to add a range.",
+  "Qp.PlaybackMultiSelect": "Click to play only on this device. Ctrl-click to add or remove a device, Shift-click to keep the current selection and add a range, or Ctrl+Shift-click to select or switch the native routing device.",
   "Qp.Output": "🔊 Output",
   "Qp.FullUi": "Main window",
   "Qp.AppVolumes": "App volumes",

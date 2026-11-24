@@ -21,6 +21,9 @@ internal static partial class LocalAppOutputMirrors
     private static readonly ConcurrentDictionary<int, Route> Routes = new();
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
     private static IDisposable? _deviceWatch;
+#if SONICROUTE_PHONE
+    private static IDisposable? _defaultWatch;
+#endif
     private static int _refreshQueued;
     private static readonly CancellationTokenSource Shutdown = new();
 
@@ -80,6 +83,9 @@ internal static partial class LocalAppOutputMirrors
                         Routes[processId] = route;
                         _ = RetireAfterCaptureAsync(route);
                     }
+#if SONICROUTE_PHONE
+                    if (HasSystemDefaultMirror()) _defaultWatch ??= DefaultOutputNotifications.Subscribe(QueueRefresh);
+#endif
                     ApplicationAudio.NotifyRouteChanged(route.ProcessId);
                 }
                 catch
@@ -115,15 +121,27 @@ internal static partial class LocalAppOutputMirrors
         finally { ReleaseChanges(); }
     }
 
+    private static bool HasSystemDefaultMirror() =>
+        Routes.Values.Any(route => route.Sinks.Any(sink => AudioService.IsSystemDefault(sink.Id)));
+
     private static void ReleaseChanges()
     {
         try
         {
             ReleaseUnusedPhoneWatch();
-            if (Routes.IsEmpty) Interlocked.Exchange(ref _deviceWatch, null)?.Dispose();
+#if SONICROUTE_PHONE
+            if (!HasSystemDefaultMirror()) DisposeWatch(ref _defaultWatch);
+#endif
+            if (Routes.IsEmpty) DisposeWatch(ref _deviceWatch);
         }
         catch (COMException ex) { ExceptionDiagnostics.Record("LocalAppOutputMirrors.DisposeDeviceWatch", ex); }
         finally { Changes.Release(); }
+    }
+
+    private static void DisposeWatch(ref IDisposable? watch)
+    {
+        try { Interlocked.Exchange(ref watch, null)?.Dispose(); }
+        catch (COMException ex) { ExceptionDiagnostics.Record("LocalAppOutputMirrors.DisposeDeviceWatch", ex); }
     }
 
     static partial void ReleaseUnusedPhoneWatch();
@@ -177,13 +195,57 @@ internal static partial class LocalAppOutputMirrors
             try
             {
                 Interlocked.Exchange(ref _refreshQueued, 0);
+                bool defaultLookedUp = false;
+                string? currentDefaultId = null;
+                string? CurrentDefaultId()
+                {
+                    if (!defaultLookedUp)
+                    {
+                        defaultLookedUp = true;
+                        try
+                        {
+                            using var devices = new WasapiDeviceLease.Enumerator();
+                            using var defaultLease = devices.TryDefault(Role.Multimedia);
+                            currentDefaultId = defaultLease?.Device.State == DeviceState.Active
+                                && defaultLease.Device.DataFlow == DataFlow.Render
+                                ? defaultLease.Device.ID : null;
+                        }
+                        catch (COMException ex)
+                        {
+                            ExceptionDiagnostics.Record("LocalAppOutputMirrors.OutputChange", ex);
+                            currentDefaultId = null;
+                        }
+                    }
+                    return currentDefaultId;
+                }
+
                 foreach (var route in Routes.Values)
                 {
                     var current = route.Sinks;
                     var allowed = ResolveOutputs(current.Select(s => s.Id).ToArray(), strict: false).ToHashSet(Ids);
-                    if (allowed.Count == current.Length) continue;
-                    if (allowed.Count == 0) await RemoveAsync(route);
-                    else { route.Replace(current.Where(s => allowed.Contains(s.Id)).ToArray()); ApplicationAudio.NotifyRouteChanged(route.ProcessId); }
+                    bool changed = false;
+                    var next = new List<Sink>(current.Length);
+                    foreach (var sink in current)
+                    {
+                        if (!allowed.Contains(sink.Id)) { changed = true; continue; }
+                        if (!AudioService.IsSystemDefault(sink.Id)) { next.Add(sink); continue; }
+                        string? defaultId = CurrentDefaultId();
+                        if (defaultId == null) { changed = true; continue; }
+                        if (Ids.Equals(sink.DesktopPlayer?.EndpointId, defaultId)) { next.Add(sink); continue; }
+                        try
+                        {
+                            next.Add(route.CreateDesktopSink(AudioService.SystemDefaultDeviceId));
+                            changed = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            ExceptionDiagnostics.Record("LocalAppOutputMirrors.OutputChange", ex);
+                            changed = true;
+                        }
+                    }
+                    if (!changed) continue;
+                    if (next.Count == 0) await RemoveAsync(route).ConfigureAwait(false);
+                    else { route.Replace(next.ToArray()); ApplicationAudio.NotifyRouteChanged(route.ProcessId); }
                 }
             }
             catch (Exception ex) { ExceptionDiagnostics.Record("LocalAppOutputMirrors.OutputChange", ex); }
@@ -195,7 +257,11 @@ internal static partial class LocalAppOutputMirrors
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
     private sealed class DeviceEvents : IMMNotificationClient
     {
-        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string id) { }
+        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string id)
+        {
+            if (flow == DataFlow.Render && role == Role.Multimedia && HasSystemDefaultMirror())
+                QueueRefresh();
+        }
         public void OnDeviceStateChanged(string id, DeviceState state) => QueueRefresh();
         public void OnDeviceRemoved(string id) => QueueRefresh();
         public void OnDeviceAdded(string id) { }
@@ -210,15 +276,16 @@ internal static partial class LocalAppOutputMirrors
         var selected = new HashSet<string>(Ids);
         foreach (string id in requested)
         {
-            string physical = AudioPolicyConfig.UnpackDeviceId(id);
-            if (ApplicationAudio.IsPhoneOutputDevice(physical)) { selected.Add(physical); continue; }
+            bool systemDefault = AudioService.IsSystemDefault(id);
+            string physical = systemDefault ? AudioService.SystemDefaultDeviceId : AudioPolicyConfig.UnpackDeviceId(id);
+            if (!systemDefault && ApplicationAudio.IsPhoneOutputDevice(physical)) { selected.Add(physical); continue; }
             try
             {
-                using var lease = devices.GetDevice(physical);
-                var device = lease.Device;
-                if (device.State != DeviceState.Active || device.DataFlow != DataFlow.Render)
+                using var lease = systemDefault ? devices.TryDefault(Role.Multimedia) : devices.GetDevice(physical);
+                var device = lease?.Device;
+                if (device == null || device.State != DeviceState.Active || device.DataFlow != DataFlow.Render)
                     throw new IOException(L10n.T("Ov.CurrentUnavailable"));
-                selected.Add(device.ID);
+                selected.Add(systemDefault ? AudioService.SystemDefaultDeviceId : device.ID);
             }
             catch (Exception ex) when (!strict && (ex is COMException or IOException)) { }
         }
@@ -286,42 +353,34 @@ internal static partial class LocalAppOutputMirrors
                 {
                     var existing = previous.FirstOrDefault(s => Ids.Equals(s.Id, id));
                     if (existing != null) { next.Add(existing); continue; }
-                    Sink sink = null!;
-                    void Failed(Exception error)
-                    {
-                        ExceptionDiagnostics.Record("LocalAppOutputMirrors.Playback", error);
-                        _ = PruneFailed(sink);
-                    }
 #if SONICROUTE_PHONE
                     if (AndroidOutputIdentity.IsPhoneOutput(id))
                     {
                         var pcm = new AndroidPcmSource();
                         var phone = AndroidAudioHost.CreatePhonePcmPlayer(pcm, id, change.Token);
-                        sink = new Sink(id, phone) { Pcm = pcm };
+                        var sink = new Sink(id, phone) { Pcm = pcm };
                         staged.Add(sink);
                         phone.Failed += error =>
                         {
-                            Failed(error);
+                            RecordAndPruneFailed(sink, error);
                             AndroidAudioHost.PhonePlaybackFailed(phone.Device);
                         };
                         await phone.VerifyBeforePlaybackAsync(change.Token).ConfigureAwait(false);
                         phone.Play();
                         if (phone.Failure is { } error) throw error;
+                        next.Add(sink);
                     }
                     else
                     {
-                        var desktop = new DesktopMirrorPlayer(id);
-                        sink = new Sink(id, desktop);
+                        var sink = CreateDesktopSink(id);
                         staged.Add(sink);
-                        desktop.Failed += Failed;
+                        next.Add(sink);
                     }
 #else
-                    var player = new DesktopMirrorPlayer(id);
-                    sink = new Sink(id, player);
+                    var sink = CreateDesktopSink(id);
                     staged.Add(sink);
-                    player.Failed += Failed;
-#endif
                     next.Add(sink);
+#endif
                 }
                 change.Token.ThrowIfCancellationRequested();
                 if (Capture.IsCompleted) { await Capture.ConfigureAwait(false); throw new IOException(L10n.T("Tray.AppUnavailable")); }
@@ -331,10 +390,24 @@ internal static partial class LocalAppOutputMirrors
             catch { foreach (var sink in staged) sink.Dispose(); throw; }
         }
 
+        internal Sink CreateDesktopSink(string id)
+        {
+            var player = new DesktopMirrorPlayer(AudioService.IsSystemDefault(id) ? null : id);
+            var sink = new Sink(id, player);
+            player.Failed += error => RecordAndPruneFailed(sink, error);
+            return sink;
+        }
+
+        private void RecordAndPruneFailed(Sink sink, Exception error)
+        {
+            ExceptionDiagnostics.Record("LocalAppOutputMirrors.Playback", error);
+            _ = PruneFailed(sink);
+        }
+
         partial void UpdateIsolation(bool phoneOnly, bool allowSpeakerMute);
         partial void ReleaseIsolation();
 
-        private Task PruneFailed(Sink sink) => PruneAsync((route, value) => route == this && ReferenceEquals(value, sink), recover: true);
+        internal Task PruneFailed(Sink sink) => PruneAsync((route, value) => route == this && ReferenceEquals(value, sink), recover: true);
 
         internal void Replace(Sink[] next)
         {

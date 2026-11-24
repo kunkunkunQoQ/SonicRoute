@@ -961,7 +961,7 @@ namespace SonicRoute
             if (row.ShowOutputName)
             {
                 string? displayId = row.PendingPlayback is { } pending
-                    ? SelectOptimisticPrimaryOutput(pending.Outputs, outputId, preferPhysical: true)
+                    ? SelectOptimisticPrimaryOutput(pending.Outputs, pending.PreferredPrimary ?? outputId, preferPhysical: true)
                     : outputId;
                 bool systemDefault = AudioService.IsSystemDefault(displayId);
                 bool needDefault = systemDefault && !row.LegacyLayout;

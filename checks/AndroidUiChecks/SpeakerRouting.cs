@@ -286,8 +286,10 @@ internal static partial class Program
             var desktopButtons = DesktopRoutes();
             Check(desktopButtons.Where(button => ((AudioDeviceInfo)button.Tag).Flow == EDataFlow.eRender)
                 .Select(button => ((AudioDeviceInfo)button.Tag).Id).SequenceEqual(Choices(pcInfo))
+                && desktopButtons.Where(button => button.Style == panel.FindResource("DevButtonMirror"))
+                    .Select(button => ((AudioDeviceInfo)button.Tag).Id).SequenceEqual([speakerId])
                 && desktopButtons.Where(button => button.Style == panel.FindResource("DevButtonActive"))
-                    .Select(button => ((AudioDeviceInfo)button.Tag).Id).SequenceEqual([speakerId, AudioService.SystemDefaultInputDeviceId]),
+                    .Select(button => ((AudioDeviceInfo)button.Tag).Id).SequenceEqual([AudioService.SystemDefaultInputDeviceId]),
                 "native expansion preserves normal playback order, the selected phone output, and an independent microphone choice");
             Check(desktopButtons.Count(button => ((AudioDeviceInfo)button.Tag).Id == currentId && button.IsEnabled) == 1,
                 "a native Windows application exposes one enabled current-output button for the selected phone");

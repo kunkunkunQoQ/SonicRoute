@@ -256,7 +256,7 @@
   "Act.SwitchAllInput": "切换所有音频应用的录音设备",
   "Act.SetDefaultInput": "切换系统默认录音设备",
   "Qp.CurrentApp": "当前应用：{0}",
-  "Qp.PlaybackMultiSelect": "单击可仅在此设备播放。按住 Ctrl 单击可添加或取消选择，按住 Shift 单击可选择一段范围，按住 Ctrl+Shift 单击可追加范围。",
+  "Qp.PlaybackMultiSelect": "单击可仅在此设备播放。按住 Ctrl 单击可添加或取消选择，按住 Shift 单击可保留原有选择并追加范围，按住 Ctrl+Shift 单击可选择或切换原生路由设备。",
   "Qp.Output": "🔊 播放",
   "Qp.FullUi": "主窗口",
   "Qp.AppVolumes": "应用音量",

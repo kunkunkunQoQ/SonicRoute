@@ -39,9 +39,11 @@ public partial class QuickPanelModernWindow
         parent.Children.Add(wrap);
     }
 
-    private void SetRowDeviceSelection(Button button, string id, string selected)
+    private void SetRowDeviceSelection(Button button, string id, string selected) =>
+        SetRowDeviceStyle(button, string.Equals(id, selected, StringComparison.OrdinalIgnoreCase) ? "DevButtonActive" : "DevButton");
+
+    private void SetRowDeviceStyle(Button button, string style)
     {
-        string style = string.Equals(id, selected, StringComparison.OrdinalIgnoreCase) ? "DevButtonActive" : "DevButton";
         if (!ReferenceEquals(button.Style, FindResource(style))) button.SetResourceReference(StyleProperty, style);
     }
 

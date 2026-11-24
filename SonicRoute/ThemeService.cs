@@ -154,6 +154,16 @@ namespace SonicRoute
             Set("Theme.AccentIconInk", Luminance(accentColor) > 0.179 ? Colors.Black : Colors.White);
             Set("Theme.Success", Color.FromRgb(0x16, 0xA3, 0x4A));
             Set("Theme.Fail", Color.FromRgb(0xDC, 0x26, 0x26));
+            var textPrimary = dark ? Color.FromRgb(0xF3, 0xF4, 0xF6) : Color.FromRgb(0x1F, 0x29, 0x37);
+            var deviceNativeBg = dark ? Blend(accentColor, Colors.Black, 0.54) : Blend(accentColor, Colors.White, 0.52);
+            var darkInk = Color.FromRgb(0x11, 0x18, 0x27);
+            var deviceNativeFg = ContrastRatio(deviceNativeBg, textPrimary) >= 4.5 ? textPrimary
+                : ContrastRatio(deviceNativeBg, darkInk) >= 4.5 ? darkInk
+                : Luminance(deviceNativeBg) > 0.179 ? Colors.Black : Colors.White;
+            var deviceMirrorBorder = dark ? Blend(accentColor, Colors.Black, 0.45) : Blend(accentColor, Colors.White, 0.55);
+            Set("Theme.DeviceNativeBg", deviceNativeBg);
+            Set("Theme.DeviceNativeFg", deviceNativeFg);
+            Set("Theme.DeviceMirrorBorder", deviceMirrorBorder);
 
             // 透明度重新应用到最新背景色（主题切换后保持用户设置的透明度）
             ApplyBackgroundOpacity(_lastOpacity);
@@ -169,6 +179,12 @@ namespace SonicRoute
                 return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
             }
             return 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
+        }
+
+        private static double ContrastRatio(Color a, Color b)
+        {
+            double la = Luminance(a), lb = Luminance(b);
+            return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
         }
 
         private static Color OsdAccent(Color accent, Color background, bool dark)

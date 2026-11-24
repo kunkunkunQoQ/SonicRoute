@@ -203,6 +203,9 @@
         <SolidColorBrush x:Key="Theme.AccentDisabled" Color="#93C5FD"/>
         <SolidColorBrush x:Key="Theme.OnAccent" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="Theme.AccentIconInk" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Theme.DeviceNativeBg" Color="#9BBFF6"/>
+        <SolidColorBrush x:Key="Theme.DeviceNativeFg" Color="#1F2937"/>
+        <SolidColorBrush x:Key="Theme.DeviceMirrorBorder" Color="#9DBBF4"/>
         <SolidColorBrush x:Key="Theme.SurfaceCard" Color="#FAFBFC"/>
         <SolidColorBrush x:Key="Theme.Success" Color="#16A34A"/>
         <SolidColorBrush x:Key="Theme.Fail" Color="#DC2626"/>

@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using SonicRoute;
+using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
@@ -59,12 +60,16 @@ internal static partial class Program
             var write = new PcWrite(desired, preferred, Stopwatch.GetTimestamp());
             writes.Writer.TryWrite(write);
             if (!await write.Finish.Task.WaitAsync(deadline.Token)) return (false, -1, "Simulated route rejection.");
-            Volatile.Write(ref actual, new PcRoute(desired.Contains(system) ? system : preferred ?? desired[0], desired));
+            string nextPrimary = preferred != null && desired.Contains(preferred, StringComparer.OrdinalIgnoreCase) ? preferred
+                : desired.Contains(system, StringComparer.OrdinalIgnoreCase) ? system : desired[0];
+            Volatile.Write(ref actual, new PcRoute(nextPrimary, desired));
             return (true, 0, "");
         }));
 
         var rows = (System.Collections.IDictionary)type.GetField("_rows", Hidden)!.GetValue(panel)!;
         var activeStyle = panel.FindResource("DevButtonActive");
+        var mirrorStyle = panel.FindResource("DevButtonMirror");
+        var idleStyle = panel.FindResource("DevButton");
         const ModifierKeys ctrl = ModifierKeys.Control, shift = ModifierKeys.Shift;
         bool closed = false;
         try
@@ -151,22 +156,70 @@ internal static partial class Program
             _ = Click(row, b, ctrl);
             AssertShown(row, "Ctrl removes the pending B without dropping hidden playback", a);
             _ = Click(row, c, ctrl | shift);
-            AssertShown(row, "Ctrl+Shift uses the pending anchor and retains A outside the range", a, b, c);
-            _ = Click(row, c, shift);
-            AssertShown(row, "Shift replaces the selection with the continuous B through C range", b, c);
-            var systemAndPhysical = Click(row, system, ctrl);
-            AssertShown(row, "Ctrl can combine system default with the pending physical outputs", system, b, c);
+            AssertShown(row, "Ctrl+Shift adds unselected C as native while keeping A and hidden without range fill", c, a);
+            _ = Click(row, a, ctrl | shift);
+            AssertShown(row, "Ctrl+Shift switches native routing to already-selected physical device A", a, c);
             Take([a, b, hidden], a).Finish.SetResult(true);
             Take([a, hidden], a).Finish.SetResult(true);
-            Take([a, b, c, hidden], a).Finish.SetResult(true);
-            Take([b, c], b).Finish.SetResult(true);
-            Take([system, b, c], b).Finish.SetResult(true);
+            Take([a, c, hidden], c).Finish.SetResult(true);
+            Take([a, c, hidden], a).Finish.SetResult(true);
+
+            // Rapid queued Ctrl+Shift -> Ctrl preserves PreferredPrimary without flicker.
+            _ = Click(row, b, ctrl | shift);
+            AssertShown(row, "Ctrl+Shift adds B as native while keeping A, C and hidden", b, a, c);
+            var rapidCtrl = Click(row, system, ctrl);
+            AssertShown(row, "rapid Ctrl after pending Ctrl+Shift keeps B as native without flicker", b, system, a, c);
+            Take([a, b, c, hidden], b).Finish.SetResult(true);
+            Take([system, a, b, c, hidden], b).Finish.SetResult(true);
+            Complete(rapidCtrl);
+            AssertShown(row, "confirmed multi-output keeps B native with SystemDefault and mirrors", b, system, a, c);
+
+            // Switch native between physical and SystemDefault via Ctrl+Shift.
+            var toSystemNative = Click(row, system, ctrl | shift);
+            AssertShown(row, "Ctrl+Shift switches native routing from physical B to SystemDefault", system, a, b, c);
+            Take([system, a, b, c, hidden], system).Finish.SetResult(true);
+            Complete(toSystemNative);
+            Check(Volatile.Read(ref actual).Primary == system, "backend sets SystemDefault as primary when Ctrl+Shift-clicked");
+
+            var fromSystemNative = Click(row, c, ctrl | shift);
+            AssertShown(row, "Ctrl+Shift switches native routing from SystemDefault to physical C", c, system, a, b);
+            Take([system, a, b, c, hidden], c).Finish.SetResult(true);
+            Complete(fromSystemNative);
+            Check(Volatile.Read(ref actual).Primary == c, "backend sets physical C as primary while keeping SystemDefault in mirrors");
+
+            // Shift keeps existing visible + hidden selection outside the range and adds contiguous range.
+            Seed(row, system, [system, hidden]);
+            _ = Click(row, b, ctrl);
+            var shiftKeep = Click(row, c, shift);
+            AssertShown(row, "Shift keeps existing SystemDefault and hidden output while adding B..C range", system, b, c);
+            Take([system, b, hidden], system).Finish.SetResult(true);
+            Take([system, b, c, hidden], system).Finish.SetResult(true);
+            Complete(shiftKeep);
+            Check(Volatile.Read(ref actual).Outputs.Contains(hidden, StringComparer.OrdinalIgnoreCase),
+                "Shift preserves hidden output alongside range");
+
+            // Ctrl adding SystemDefault keeps physical primary A; plain click clears mirrors.
+            Seed(row, a, [a]);
+            var systemAndPhysical = Click(row, system, ctrl);
+            AssertShown(row, "Ctrl combines system default as mirror while keeping physical A as native", a, system);
+            Take([system, a], a).Finish.SetResult(true);
             Complete(systemAndPhysical);
-            Check(Volatile.Read(ref actual).Primary == system, "the backend still receives all mirrors and chooses system default as primary");
+            Check(Volatile.Read(ref actual).Primary == a, "backend keeps physical A as primary when SystemDefault is added with Ctrl");
             var physical = Click(row, a);
             Take([a], a).Finish.SetResult(true);
             Complete(physical);
             AssertShown(row, "a plain click replaces system default and all mirrors with the selected physical output", a);
+
+            // Ctrl+Shift on a phone output is ignored.
+            string phoneId = AndroidOutputIdentity.FormatDeviceId("fixture-phone", "speaker");
+            Set("_outputDisplay", devices.Append(new AudioDeviceInfo { Id = phoneId, DisplayName = "Phone Speaker", Flow = EDataFlow.eRender }).ToList());
+            Complete(Build(row));
+            Task ignoredPhone = Click(row, phoneId, ctrl | shift);
+            Check(ignoredPhone.IsCompletedSuccessfully && !writes.Reader.TryPeek(out _),
+                "Ctrl+Shift click on a phone output is ignored without queueing a write");
+            AssertShown(row, "ignored Ctrl+Shift click on phone output leaves A native unchanged", a);
+            Set("_outputDisplay", devices);
+            Complete(Build(row));
 
             var disconnect = BlockRead();
             Task removedTarget = Click(row, c);
@@ -210,6 +263,9 @@ internal static partial class Program
             string timing = FormattableString.Invariant($"Simulated WPF first-click-to-style={feedbackMs:F2} ms warmed-click-to-style={warmFeedbackMs:F2} ms first-click-to-write-start={startedMs:F2} ms first-click-to-confirmed={completedMs:F2} ms");
             Console.WriteLine(timing);
             File.WriteAllText(Path.Combine(output, "pc-playback-timing.log"), timing + Environment.NewLine);
+
+            CheckSystemDefaultMirrorResolution();
+            CheckThemeNativeMirrorContrastAndPreviews(output);
             return 0;
         }
         finally { if (!closed) panel.Close(); }
@@ -219,9 +275,23 @@ internal static partial class Program
         static List<(Button Button, string Id, EDataFlow Flow)> Buttons(object row) => Field<List<(Button, string, EDataFlow)>>(row, "DeviceButtons");
         static (Button Button, string Id, EDataFlow Flow) Device(object row, string id) => Buttons(row).Single(item => item.Id == id);
         bool IsActive(Button button) => ReferenceEquals(button.Style, activeStyle);
-        void AssertShown(object row, string description, params string[] ids) => Check(Buttons(row)
-            .Where(item => item.Flow == EDataFlow.eRender && IsActive(item.Button)).Select(item => item.Id).ToHashSet().SetEquals(ids)
-            && Buttons(row).Where(item => item.Flow == EDataFlow.eRender).All(item => item.Button.IsEnabled), description);
+        bool IsMirror(Button button) => ReferenceEquals(button.Style, mirrorStyle);
+        bool IsIdle(Button button) => ReferenceEquals(button.Style, idleStyle);
+        void AssertShown(object row, string description, string? native, params string[] mirrors)
+        {
+            var render = Buttons(row).Where(item => item.Flow == EDataFlow.eRender).ToList();
+            var actualActive = render.Where(item => IsActive(item.Button)).Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var actualMirrors = render.Where(item => IsMirror(item.Button)).Select(item => item.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var expectedActive = native == null
+                ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(new[] { native }, StringComparer.OrdinalIgnoreCase);
+            var expectedMirrors = mirrors.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            Check(actualActive.SetEquals(expectedActive)
+                && actualMirrors.SetEquals(expectedMirrors)
+                && render.All(item => item.Button.IsEnabled
+                    && (actualActive.Contains(item.Id) || actualMirrors.Contains(item.Id) || IsIdle(item.Button))),
+                description);
+        }
         void Complete(Task task) => Pump(task.WaitAsync(deadline.Token));
         void Reload(List<AudioAppInfo> apps) => Complete((Task)type.GetMethod("BuildAppRowsAsync", Hidden)!.Invoke(panel, [apps, config])!);
         Task Build(object row) => (Task)type.GetMethod("BuildRowDevicesAsync", Hidden)!.Invoke(panel, [row])!;
@@ -256,6 +326,153 @@ internal static partial class Program
         internal readonly TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
+    private static void CheckSystemDefaultMirrorResolution()
+    {
+        var mirrors = typeof(App).Assembly.GetType("SonicRoute.LocalAppOutputMirrors", true)!;
+        var resolveOutputs = mirrors.GetMethod("ResolveOutputs", BindingFlags.Static | BindingFlags.NonPublic)!
+            .CreateDelegate<Func<string[], bool, string[]>>();
+        string system = AudioService.SystemDefaultDeviceId;
+        Check(resolveOutputs([system], true).SequenceEqual([system]),
+            "LocalAppOutputMirrors.ResolveOutputs accepts SystemDefaultDeviceId when default render output is active");
+    }
+
+    private static void CheckThemeNativeMirrorContrastAndPreviews(string output)
+    {
+        static double Luminance(System.Windows.Media.Color color)
+        {
+            static double Linear(byte channel)
+            {
+                double value = channel / 255.0;
+                return value <= 0.04045 ? value / 12.92 : Math.Pow((value + 0.055) / 1.055, 2.4);
+            }
+            return 0.2126 * Linear(color.R) + 0.7152 * Linear(color.G) + 0.0722 * Linear(color.B);
+        }
+        static double ContrastRatio(System.Windows.Media.Color a, System.Windows.Media.Color b)
+        {
+            double la = Luminance(a), lb = Luminance(b);
+            return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+        }
+        static System.Windows.Media.Color ResourceColor(string key) =>
+            ((System.Windows.Media.SolidColorBrush)Application.Current.Resources[key]).Color;
+
+        try
+        {
+            foreach (string mode in new[] { "light", "dark" })
+            {
+                foreach (string accent in new[] { "#2F80ED", "#22C55E", "#EC4899", "#00FFFF", "#1E3A8A" })
+                {
+                    ThemeService.Apply(mode, accent);
+                    var nativeBg = ResourceColor("Theme.DeviceNativeBg");
+                    var nativeFg = ResourceColor("Theme.DeviceNativeFg");
+                    var overlay = ResourceColor("Theme.Overlay");
+                    var mirrorBorder = ResourceColor("Theme.DeviceMirrorBorder");
+                    var accentColor = ResourceColor("Theme.Accent");
+                    double contrast = ContrastRatio(nativeFg, nativeBg);
+                    Check(nativeBg != overlay && mirrorBorder != accentColor && contrast >= 4.5,
+                        FormattableString.Invariant($"Theme {mode} {accent}: nativeBg!=overlay, mirrorBorder!=accent, contrast={contrast:F2}>=4.5"));
+                }
+            }
+
+            RenderQuickPanelNativeMirrorPreviews(output);
+        }
+        finally { ThemeService.Apply("light", "#00CBE9"); }
+    }
+
+    private static void RenderQuickPanelNativeMirrorPreviews(string output)
+    {
+        string system = AudioService.SystemDefaultDeviceId;
+        const string game = "preview-game", chat = "preview-chat", speakers = "preview-speakers";
+        string phoneNative = AndroidOutputIdentity.FormatDeviceId("preview-phone", AndroidOutputSink.Current.Key);
+        string phoneSpeaker = AndroidOutputIdentity.FormatDeviceId("preview-phone", "speaker");
+        const int previewPid = int.MaxValue - 457;
+        const int secondaryPid = int.MaxValue - 458;
+
+        var previewDevices = new List<AudioDeviceInfo>
+        {
+            new() { Id = system, DisplayName = "系统输出", Flow = EDataFlow.eRender },
+            new() { Id = game, DisplayName = "游戏", Flow = EDataFlow.eRender, IsDefault = true },
+            new() { Id = chat, DisplayName = "聊天", Flow = EDataFlow.eRender },
+            new() { Id = speakers, DisplayName = "扬声器", Flow = EDataFlow.eRender },
+            new() { Id = phoneNative, DisplayName = "手机原生输出", Flow = EDataFlow.eRender },
+            new() { Id = phoneSpeaker, DisplayName = "小米 扬声器", Flow = EDataFlow.eRender },
+        };
+        var previewApps = new List<AudioAppInfo>
+        {
+            new() { ProcessId = previewPid, ProcessName = "preview-game-app", DisplayName = "游戏语音" },
+            new() { ProcessId = secondaryPid, ProcessName = "preview-browser", DisplayName = "浏览器" },
+        };
+        var previewConfig = new AppConfig
+        {
+            QuickPanelUseLegacyAppRows = false,
+            QuickPanelShowOutputName = true,
+            QuickPanelCompactShowOutputName = false,
+        };
+
+        var preview = new QuickPanelModernWindow();
+        var type = typeof(QuickPanelModernWindow);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            void SetPreview(string name, object value) => type.GetField(name, Hidden)!.SetValue(preview, value);
+            SetPreview("_outputDisplay", previewDevices);
+            SetPreview("_micUiOn", false);
+            SetPreview("_readPanelState", (Func<IEnumerable<int>, (Dictionary<int, (int, bool, bool)>, bool?)>)
+                (ids => (ids.ToDictionary(id => id, id => id == previewPid ? (72, false, true) : (48, false, true)), false)));
+            SetPreview("_readRowEndpoints", (Func<int, bool, (string, string)>)((pid, _) =>
+                (pid == previewPid ? game : system, "")));
+            SetPreview("_readRowPlaybackOutputs", (Func<int, string?, HashSet<string>>)((pid, _) =>
+                pid == previewPid
+                    ? new HashSet<string>(new[] { system, game, chat, speakers }, StringComparer.OrdinalIgnoreCase)
+                    : new HashSet<string>(new[] { system }, StringComparer.OrdinalIgnoreCase)));
+
+            SetPreview("_suppressDevCombo", true);
+            try
+            {
+                var combo = (ComboBox)preview.FindName("SystemDevCombo");
+                combo.ItemsSource = previewDevices.Where(d => d.Id == game || d.Id == chat || d.Id == speakers).ToList();
+                combo.SelectedIndex = 0;
+                ((Slider)preview.FindName("VolumeSlider")).Value = 68;
+                ((TextBlock)preview.FindName("VolumePercentText")).Text = "68%";
+            }
+            finally { SetPreview("_suppressDevCombo", false); }
+
+            Pump(((Task)type.GetMethod("BuildAppRowsAsync", Hidden)!.Invoke(preview, [previewApps, previewConfig])!).WaitAsync(deadline.Token));
+            var rows = (System.Collections.IDictionary)type.GetField("_rows", Hidden)!.GetValue(preview)!;
+            object row = rows[previewPid]!;
+            row.GetType().GetField("Expanded")!.SetValue(row, true);
+            Pump(((Task)type.GetMethod("BuildRowDevicesAsync", Hidden)!.Invoke(preview, [row])!).WaitAsync(deadline.Token));
+            ((AnimatedExpandHost)row.GetType().GetField("ExpandWrap")!.GetValue(row)!).SetExpanded(true, false);
+            ((System.Windows.Media.RotateTransform)row.GetType().GetField("ExpandArrow")!.GetValue(row)!).Angle = 180;
+
+            var btns = (List<(Button Button, string Id, EDataFlow Flow)>)row.GetType().GetField("DeviceButtons")!.GetValue(row)!;
+            var activeStyle = preview.FindResource("DevButtonActive");
+            var mirrorStyle = preview.FindResource("DevButtonMirror");
+            var idleStyle = preview.FindResource("DevButton");
+            Check(btns.Count == 6
+                && ReferenceEquals(btns.Single(b => b.Id == game).Button.Style, activeStyle)
+                && btns.Where(b => b.Id == system || b.Id == chat || b.Id == speakers).All(b => ReferenceEquals(b.Button.Style, mirrorStyle))
+                && btns.Where(b => b.Id == phoneNative || b.Id == phoneSpeaker).All(b => ReferenceEquals(b.Button.Style, idleStyle)),
+                "preview row renders 6 output buttons with native DevButtonActive, 3 DevButtonMirror, and 2 DevButton");
+
+            var previews = new[]
+            {
+                ("preview-light-cyan.png", "light", "#00FFFF"),
+                ("preview-dark-cyan.png", "dark", "#00FFFF"),
+                ("preview-light-blue.png", "light", "#2F80ED"),
+                ("preview-dark-blue.png", "dark", "#2F80ED"),
+            };
+            foreach (var (fileName, mode, accent) in previews)
+            {
+                ThemeService.Apply(mode, accent);
+                DrainUi();
+                string filePath = Path.Combine(output, fileName);
+                Render((FrameworkElement)preview.Content, 372, 450, filePath);
+                Check(File.Exists(filePath), "rendered " + fileName);
+            }
+        }
+        finally { preview.Close(); }
+    }
+
     private static void CheckPlaybackRange()
     {
         const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
@@ -268,11 +485,16 @@ internal static partial class Program
             && Pick(["System", "Phone"], "System", "Phone", ModifierKeys.Control).SequenceEqual(["Phone"])
             && Pick(["Headset", "Phone"], "System", "Phone", ModifierKeys.None).SequenceEqual(["System"]),
             "Ctrl toggles only the clicked output and a plain click replaces the selection");
-        Check(Pick(["System", "Phone"], "Headset", "Phone", ModifierKeys.Shift).SequenceEqual(["Headset", "Speakers", "Phone"])
-            && Pick(["Headset"], "Phone", null, ModifierKeys.Shift).SequenceEqual(["Headset", "Speakers", "Phone"]),
-            "Shift replaces the selection with the full inclusive range in either direction");
-        Check(Pick(["System", "Speakers"], "Phone", "Speakers", ModifierKeys.Control | ModifierKeys.Shift)
-                .SequenceEqual(["System", "Speakers", "Phone"]),
-            "Ctrl+Shift adds the contiguous range and preserves previously selected outputs outside it");
+        Check(Pick(["System", "Phone", "Hidden"], "Headset", "Phone", ModifierKeys.Shift)
+                .SequenceEqual(["System", "Headset", "Speakers", "Phone", "Hidden"])
+            && Pick(["Headset"], "Phone", null, ModifierKeys.Shift).SequenceEqual(["Headset", "Speakers", "Phone"])
+            && Pick(["System", "Speakers"], "Phone", "Headset", ModifierKeys.Shift)
+                .SequenceEqual(["System", "Headset", "Speakers", "Phone"]),
+            "Shift preserves existing visible/hidden selections and adds the full inclusive range in either direction");
+        Check(Pick(["System", "Speakers", "Hidden"], "Phone", "System", ModifierKeys.Control | ModifierKeys.Shift)
+                .SequenceEqual(["System", "Speakers", "Phone", "Hidden"])
+            && Pick(["System", "Speakers"], "Speakers", "System", ModifierKeys.Control | ModifierKeys.Shift)
+                .SequenceEqual(["System", "Speakers"]),
+            "Ctrl+Shift preserves existing visible/hidden selections and adds only the clicked output without filling range");
     }
 }

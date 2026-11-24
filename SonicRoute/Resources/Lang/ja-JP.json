@@ -252,7 +252,7 @@
   "Act.SwitchAllInput": "音声を使用するすべてのアプリの入力デバイスを切り替え",
   "Act.SetDefaultInput": "システムの既定の入力デバイスを切り替え",
   "Qp.CurrentApp": "現在のアプリ：{0}",
-  "Qp.PlaybackMultiSelect": "クリックすると、このデバイスだけで再生します。Ctrl＋クリックで選択を追加・解除、Shift＋クリックで範囲を選択、Ctrl＋Shift＋クリックで範囲を追加できます。",
+  "Qp.PlaybackMultiSelect": "クリックすると、このデバイスだけで再生します。Ctrl＋クリックでデバイスを追加・解除、Shift＋クリックで現在の選択を保持したまま範囲を追加、Ctrl＋Shift＋クリックでネイティブルーティングデバイスを選択または切り替えできます。",
   "Qp.Output": "🔊 出力",
   "Qp.FullUi": "メインウィンドウ",
   "Qp.AppVolumes": "アプリの音量",

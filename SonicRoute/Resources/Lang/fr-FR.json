@@ -252,7 +252,7 @@
   "Act.SwitchAllInput": "Changer l’entrée de toutes les applications qui utilisent l’audio",
   "Act.SetDefaultInput": "Changer le périphérique d’entrée par défaut du système",
   "Qp.CurrentApp": "Application actuelle : {0}",
-  "Qp.PlaybackMultiSelect": "Cliquez pour lire le son uniquement sur ce périphérique. Ctrl+clic ajoute ou retire un périphérique, Maj+clic sélectionne une plage et Ctrl+Maj+clic ajoute une plage à la sélection.",
+  "Qp.PlaybackMultiSelect": "Cliquez pour lire le son uniquement sur ce périphérique. Ctrl+clic ajoute ou retire un périphérique, Maj+clic conserve la sélection actuelle et ajoute une plage, et Ctrl+Maj+clic sélectionne ou change le périphérique de routage natif.",
   "Qp.Output": "🔊 Sortie",
   "Qp.FullUi": "Fenêtre principale",
   "Qp.AppVolumes": "Volume des applications",

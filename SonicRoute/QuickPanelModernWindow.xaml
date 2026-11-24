@@ -74,12 +74,19 @@
             </Setter>
         </Style>
 
-        <!-- 已选中（当前）设备按钮：高亮 -->
+        <!-- 已选中（原生路由）设备按钮：主题色深色高亮 -->
         <Style x:Key="DevButtonActive" TargetType="Button" BasedOn="{StaticResource DevButton}">
-            <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
-            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource Theme.DeviceNativeBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.DeviceNativeFg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource Theme.Accent}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- 已选中（捕获分发）设备按钮：主题色浅/暗区分 -->
+        <Style x:Key="DevButtonMirror" TargetType="Button" BasedOn="{StaticResource DevButton}">
+            <Setter Property="Background" Value="{DynamicResource Theme.Overlay}"/>
+            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Theme.DeviceMirrorBorder}"/>
         </Style>
 
         <!-- 应用行展开按钮（▾/▴） -->

@@ -501,6 +501,7 @@ internal static partial class Program
             var panel = new QuickPanelModernWindow();
             var type = typeof(QuickPanelModernWindow);
             var activeStyle = panel.FindResource("DevButtonActive");
+            var mirrorStyle = panel.FindResource("DevButtonMirror");
             var idleStyle = panel.FindResource("DevButton");
             var rows = (IDictionary)type.GetField("_rows", Hidden)!.GetValue(panel)!;
 
@@ -509,11 +510,23 @@ internal static partial class Program
             static List<(Button Button, string Id, EDataFlow Flow)> Buttons(object row) => Field<List<(Button, string, EDataFlow)>>(row, "DeviceButtons");
             static Button DevBtn(object row, string id, EDataFlow flow) => Buttons(row).Single(b => b.Id == id && b.Flow == flow).Button;
             bool IsActive(Button b) => ReferenceEquals(b.Style, activeStyle);
+            bool IsMirror(Button b) => ReferenceEquals(b.Style, mirrorStyle);
             void AssertFlow(object row, EDataFlow flow, string desc, params string[] expected)
             {
                 var btns = Buttons(row).Where(b => b.Flow == flow).ToList();
                 var active = btns.Where(b => IsActive(b.Button)).Select(b => b.Id).ToHashSet();
-                Check(active.SetEquals(expected)
+                if (flow == EDataFlow.eCapture)
+                {
+                    Check(active.SetEquals(expected)
+                        && btns.All(b => b.Button.IsEnabled && (expected.Contains(b.Id) || ReferenceEquals(b.Button.Style, idleStyle))),
+                        desc);
+                    return;
+                }
+                var expectedActive = expected.Length == 0 ? new HashSet<string>() : new HashSet<string> { expected[0] };
+                var expectedMirrors = expected.Skip(1).ToHashSet();
+                var mirrors = btns.Where(b => IsMirror(b.Button)).Select(b => b.Id).ToHashSet();
+                Check(active.SetEquals(expectedActive)
+                    && mirrors.SetEquals(expectedMirrors)
                     && btns.All(b => b.Button.IsEnabled && (expected.Contains(b.Id) || ReferenceEquals(b.Button.Style, idleStyle))),
                     desc);
             }
@@ -567,7 +580,9 @@ internal static partial class Program
                 var w = new PcWrite(desired, preferred, Stopwatch.GetTimestamp());
                 outWrites.Writer.TryWrite(w);
                 if (!await w.Finish.Task.WaitAsync(deadline.Token)) return (false, -1, "Simulated output rejection");
-                actualOut[(int)appInfo.ProcessId] = (desired.Contains(sysOut) ? sysOut : preferred ?? desired[0], desired);
+                string nextPrimary = preferred != null && desired.Contains(preferred, StringComparer.OrdinalIgnoreCase) ? preferred
+                    : desired.Contains(sysOut, StringComparer.OrdinalIgnoreCase) ? sysOut : desired[0];
+                actualOut[(int)appInfo.ProcessId] = (nextPrimary, desired);
                 return (true, 0, "");
             }));
 
@@ -645,18 +660,18 @@ internal static partial class Program
                 AssertFlow(row1, EDataFlow.eRender, "output Ctrl multi-select stays active while mic is pending", outA, outB);
                 var holdMicB = TakeMic(pid1, micB);
 
-                // Range-select outB..outC via Shift while micB is still blocked
+                // Range-select outB..outC via Shift while keeping existing outA and while micB is still blocked
                 Task outShiftTask = ClickOut(row1, outC, ModifierKeys.Shift);
-                AssertFlow(row1, EDataFlow.eRender, "output Shift range updates independently while micB is blocked", outB, outC);
+                AssertFlow(row1, EDataFlow.eRender, "output Shift range preserves outA and updates independently while micB is blocked", outA, outB, outC);
                 AssertFlow(row1, EDataFlow.eCapture, "output Shift leaves pending micB intact", micB);
 
                 holdOutCtrl.Finish.SetResult(true);
-                TakeOut([outB, outC], outB).Finish.SetResult(true);
+                TakeOut([outA, outB, outC], outA).Finish.SetResult(true);
                 Complete(outShiftTask);
                 AssertFlow(row1, EDataFlow.eCapture, "output completion does not disturb still-pending micB", micB);
                 holdMicB.Finish.SetResult(true);
                 Complete(Field<Task>(row1, "InputChange"));
-                AssertFlow(row1, EDataFlow.eRender, "both output multi-select and mic confirmed independently (render)", outB, outC);
+                AssertFlow(row1, EDataFlow.eRender, "both output multi-select and mic confirmed independently (render)", outA, outB, outC);
                 AssertFlow(row1, EDataFlow.eCapture, "both output multi-select and mic confirmed independently (capture)", micB);
 
                 // 2f. Different PC apps (pid1, pid2) switching concurrently do not interfere
@@ -805,7 +820,9 @@ internal static partial class Program
                 var w = new PcWrite(desired, preferred, Stopwatch.GetTimestamp());
                 pcWrites.Writer.TryWrite(w);
                 if (!await w.Finish.Task.WaitAsync(deadline.Token)) return (false, -1, "PC name test failure");
-                Volatile.Write(ref pcActual, new PcRoute(desired.Contains(system) ? system : preferred ?? desired[0], desired));
+                string nextPrimary = preferred != null && desired.Contains(preferred, StringComparer.OrdinalIgnoreCase) ? preferred
+                    : desired.Contains(system, StringComparer.OrdinalIgnoreCase) ? system : desired[0];
+                Volatile.Write(ref pcActual, new PcRoute(nextPrimary, desired));
                 return (true, 0, "");
             }));
 
@@ -857,24 +874,45 @@ internal static partial class Program
                 wPcB.Result.Finish.SetResult(false);
                 Complete(pcClickB);
                 Check(RowName(pcRow) == "Speakers A", "PC failure rolls back row.Name.Text to actual 'Speakers A'");
-                // Multi-output primary rule: Ctrl-add pcOutB keeps current primary pcOutA; Ctrl-add system promotes system · default
+                // Multi-output primary rule: Ctrl-add pcOutB or system keeps current primary pcOutA; Ctrl+Shift promotes system · default
+                var pcActiveStyle = panel.FindResource("DevButtonActive");
+                var pcMirrorStyle = panel.FindResource("DevButtonMirror");
                 Task pcCtrlB = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
                     [pcRow, PcBtn(pcRow, pcOutB).Tag, ModifierKeys.Control])!;
-                Check(RowName(pcRow) == "Speakers A", "PC Ctrl-add secondary physical keeps current primary 'Speakers A'");
+                Check(RowName(pcRow) == "Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC Ctrl-add secondary physical keeps current primary 'Speakers A' and sets DevButtonMirror");
                 Task pcCtrlSys = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
                     [pcRow, PcBtn(pcRow, system).Tag, ModifierKeys.Control])!;
-                Check(RowName(pcRow) == "System Default · Speakers A",
-                    "PC Ctrl-add system default promotes 'System Default · Speakers A' as primary name");
+                Check(RowName(pcRow) == "Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, system).Style, pcMirrorStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC Ctrl-add system default keeps current primary 'Speakers A' as DevButtonActive and adds system as DevButtonMirror");
+                Task pcNativeSys = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
+                    [pcRow, PcBtn(pcRow, system).Tag, ModifierKeys.Control | ModifierKeys.Shift])!;
+                Check(RowName(pcRow) == "System Default · Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, system).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcMirrorStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC Ctrl+Shift-click system default immediately promotes 'System Default · Speakers A' to DevButtonActive while physical outputs become DevButtonMirror");
                 var w1 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w1); w1.Result.Finish.SetResult(true);
                 var w2 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w2); w2.Result.Finish.SetResult(true);
-                Complete(pcCtrlSys);
-                Check(RowName(pcRow) == "System Default · Speakers A", "PC multi-output success reconciles with actual route");
+                var w3 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w3); w3.Result.Finish.SetResult(true);
+                Complete(pcNativeSys);
+                Check(RowName(pcRow) == "System Default · Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, system).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcMirrorStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC multi-output success reconciles with actual route");
                 // Switch PC to pcOutB and confirm reconciliation
                 Task pcFinalB = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
                     [pcRow, PcBtn(pcRow, pcOutB).Tag, ModifierKeys.None])!;
-                var w3 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w3); w3.Result.Finish.SetResult(true);
+                var w4 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w4); w4.Result.Finish.SetResult(true);
                 Complete(pcFinalB);
-                Check(RowName(pcRow) == "Headphones B", "PC single output success reconciles row.Name.Text to 'Headphones B'");
+                Check(RowName(pcRow) == "Headphones B" && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcActiveStyle),
+                    "PC single output success reconciles row.Name.Text to 'Headphones B'");
 
                 // 3b. Android (IMultiOutputAudioSession) with ShowOutputName = true
                 Check(RowName(andRow) == "System Default · Speakers A",

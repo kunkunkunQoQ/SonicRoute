@@ -252,7 +252,7 @@
   "Act.SwitchAllInput": "오디오를 사용하는 모든 앱의 입력 장치 전환",
   "Act.SetDefaultInput": "시스템 기본 입력 장치 전환",
   "Qp.CurrentApp": "현재 앱: {0}",
-  "Qp.PlaybackMultiSelect": "클릭하면 이 장치에서만 재생합니다. Ctrl+클릭으로 장치를 선택하거나 선택을 해제하고, Shift+클릭으로 범위를 선택합니다. Ctrl+Shift+클릭하면 선택 범위를 추가합니다.",
+  "Qp.PlaybackMultiSelect": "클릭하면 이 장치에서만 재생합니다. Ctrl+클릭으로 장치를 추가하거나 제거하고, Shift+클릭으로 기존 선택을 유지한 채 범위를 추가하며, Ctrl+Shift+클릭으로 네이티브 라우팅 장치를 선택하거나 전환합니다.",
   "Qp.Output": "🔊 출력",
   "Qp.FullUi": "기본 창",
   "Qp.AppVolumes": "앱 볼륨",

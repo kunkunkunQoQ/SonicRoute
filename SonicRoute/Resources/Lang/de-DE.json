@@ -252,7 +252,7 @@
   "Act.SwitchAllInput": "Eingabegerät für alle Apps mit Audiositzung wechseln",
   "Act.SetDefaultInput": "Standardeingabegerät von Windows wechseln",
   "Qp.CurrentApp": "Aktuelle App: {0}",
-  "Qp.PlaybackMultiSelect": "Ein Klick wählt nur dieses Gerät für die Wiedergabe. Strg+Klick fügt ein Gerät hinzu oder entfernt es. Umschalt+Klick wählt einen Bereich, Strg+Umschalt+Klick fügt einen Bereich hinzu.",
+  "Qp.PlaybackMultiSelect": "Ein Klick wählt nur dieses Gerät für die Wiedergabe. Strg+Klick fügt ein Gerät hinzu oder entfernt es, Umschalt+Klick behält die aktuelle Auswahl bei und fügt einen Bereich hinzu, und Strg+Umschalt+Klick wählt das native Routing-Gerät aus oder wechselt es.",
   "Qp.Output": "🔊 Ausgabe",
   "Qp.FullUi": "Hauptfenster",
   "Qp.AppVolumes": "App-Lautstärken",

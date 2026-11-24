@@ -80,8 +80,10 @@ internal static partial class AppPlaybackOutputs
         SerializeAsync(pid, async () =>
         {
             if (!stillWanted() || PlaybackAppIdentity.Read(pid) != app) return false;
-            var before = GetSelected(pid, AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
-            if (before.SetEquals(outputs)) return true;
+            string? saved = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
+            var before = GetSelected(pid, saved);
+            if (before.SetEquals(outputs) && (outputs.All(ApplicationAudio.IsPhoneOutputDevice) || Ids.Equals(Endpoint(saved), preferred)))
+                return true;
             var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute: true).ConfigureAwait(false);
 #if SONICROUTE_PHONE
             if (result.Success) Remember(pid, before.ToArray(), outputs, preferred);
@@ -116,8 +118,9 @@ internal static partial class AppPlaybackOutputs
     {
         var undo = new Stack<Func<Task>>();
         var physical = outputs.Where(id => !ApplicationAudio.IsPhoneOutputDevice(id)).ToArray();
-        string? primary = physical.FirstOrDefault(AudioService.IsSystemDefault)
-            ?? physical.FirstOrDefault(id => Ids.Equals(id, preferred)) ?? physical.FirstOrDefault();
+        string? primary = physical.FirstOrDefault(id => Ids.Equals(id, preferred))
+            ?? physical.FirstOrDefault(AudioService.IsSystemDefault)
+            ?? physical.FirstOrDefault();
         var extras = outputs.Where(id => !Ids.Equals(id, primary)).ToArray();
         string[] oldExtras = LocalAppOutputMirrors.GetExtraOutputs(pid);
 #if SONICROUTE_PHONE
