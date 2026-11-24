@@ -16,9 +16,13 @@ namespace SonicRoute
 #if SONICROUTE_PHONE
                 AndroidLabRuntime.Initialize(ref args);
 #endif
+                var identity = AppRuntimeIdentity.Current;
+#if !NET48
+                if (identity.IsPackaged)
+                    StoreInterop.StoreActivation.SetTaskbarIdentity(StoreInterop.NativePackageIdentity.GetApplicationUserModelId());
+#endif
                 try
                 {
-                    var identity = AppRuntimeIdentity.Current;
                     if (!UpdateBootstrap.BeforeStartup(args, AppDataRoot.DirectoryPath, identity.CommandEdition,
                         identity.IsPackaged, identity.MutexName, Alert)) return;
                 }

@@ -29,24 +29,23 @@ internal sealed class AirPlayMirrorStream : IAsyncDisposable
     private int _nalLength = 4;
     private uint _codec;
 
-    internal AirPlayMirrorStream(IPAddress local, IPAddress peer, ulong id, byte[] key, string name, bool showWindow, bool allowHevc,
+    internal AirPlayMirrorStream(AirPlayListenerPorts ports, IPAddress local, IPAddress peer, ulong id, byte[] key, string name, bool showWindow, bool allowHevc,
         Action started, Action<bool, bool> modeChanged, Action<bool> ended, CancellationToken token)
     {
         string label = id.ToString(CultureInfo.InvariantCulture);
         _allowHevc = allowHevc;
-        _listener = new TcpListener(local, 0);
         _cipher = AirPlayAesCtr.FromLabels(Encoding.ASCII.GetBytes("AirPlayStreamKey" + label),
             Encoding.ASCII.GetBytes("AirPlayStreamIV" + label), key);
         _stop = CancellationTokenSource.CreateLinkedTokenSource(token);
         try
         {
-            _listener.Start(2);
+            _listener = ports.StartTcp(local, 2);
             DataPort = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _run = RunAsync(peer, name, showWindow, started, modeChanged, ended, token, _stop.Token);
         }
         catch
         {
-            _listener.Stop();
+            _listener?.Stop();
             _cipher.Dispose();
             _stop.Dispose();
             throw;

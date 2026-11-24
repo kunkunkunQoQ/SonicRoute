@@ -2,7 +2,9 @@
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10">
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
+         IgnorableNamespaces="desktop2">
   <!-- Build-Package.ps1 injects the version from build/Version.props. -->
   <Identity Name="8B44F47E.SonicRoute" Publisher="CN=1517F817-E0CD-44DA-8269-A50E0B6D7877" Version="0.0.0.0" ProcessorArchitecture="x64" />
   <Properties>
@@ -42,4 +44,15 @@
       </Extensions>
     </Application>
   </Applications>
+  <Extensions>
+    <desktop2:Extension Category="windows.firewallRules">
+      <desktop2:FirewallRules Executable="SonicRoute.exe">
+        <!-- AirPlay discovery and PTP timing. Keep the negotiated listener range in sync with AirPlayListenerPorts.cs. -->
+        <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="domainAndPrivate" LocalPortMin="5353" LocalPortMax="5353" />
+        <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="domainAndPrivate" LocalPortMin="319" LocalPortMax="320" />
+        <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="domainAndPrivate" LocalPortMin="47120" LocalPortMax="47183" />
+        <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="domainAndPrivate" LocalPortMin="47120" LocalPortMax="47183" />
+      </desktop2:FirewallRules>
+    </desktop2:Extension>
+  </Extensions>
 </Package>

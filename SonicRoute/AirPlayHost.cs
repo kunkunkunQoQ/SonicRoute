@@ -105,7 +105,8 @@ internal static class AirPlayHost
                 {
                     string name = configuredName.Length == 0 ? DefaultName : configuredName;
                     var receiver = new AirPlayReceiver(name, player: CreatePlayer,
-                        preferHevc: video == AirPlayVideoPreference.PreferHevc, requireCode: requireCode);
+                        preferHevc: video == AirPlayVideoPreference.PreferHevc, requireCode: requireCode,
+                        useStorePorts: AppRuntimeIdentity.Current.IsPackaged);
                     receiver.Changed += Publish;
                     receiver.DisplayChanged += PublishDisplay;
                     Volatile.Write(ref _receiver, receiver);

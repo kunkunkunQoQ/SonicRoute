@@ -20,6 +20,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     private const int CodeAttemptLimit = 6;
     private sealed record PairingCode(string Value);
     private readonly TcpListener _listener;
+    private readonly AirPlayListenerPorts _ports;
     private readonly AirPlayDiscovery? _discovery;
     private readonly CancellationTokenSource _stop;
     private readonly Task _run;
@@ -51,7 +52,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     // Only the test harness asks for loopback. Production never changes Windows firewall rules.
     internal AirPlayReceiver(string name, bool loopback = false,
         Func<AndroidPcmSource, string?, CancellationToken, IPcmPlayer>? player = null, Func<Action, IDisposable>? watchDefault = null,
-        bool preferHevc = false, bool requireCode = false)
+        bool preferHevc = false, bool requireCode = false, bool useStorePorts = false)
     {
         if (!ChaCha20Poly1305.IsSupported) throw new PlatformNotSupportedException("AirPlay control encryption is unavailable.");
         _player = player ?? ((pcm, endpoint, _) => new WasapiPcmPlayer(pcm, endpoint));
@@ -63,18 +64,18 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
         _requireCode = requireCode;
         _signingKey = new AirPlaySigningKey();
         _stop = new CancellationTokenSource();
-        _listener = new TcpListener(loopback ? IPAddress.Loopback : IPAddress.Any, 0);
+        _ports = new AirPlayListenerPorts(useStorePorts);
         try
         {
             _identity = new AirPlayIdentity(name, _signingKey.PublicKey, _hevc, requireCode);
             _info = _identity.Info();
             _status = WaitingStatus(null);
-            _listener.Start(8);
+            _listener = _ports.StartTcp(loopback ? IPAddress.Loopback : IPAddress.Any, 8);
             if (!loopback) _discovery = new AirPlayDiscovery(_identity, Port, _lan);
             _stop.CancelAfter(WaitLimit);
             _run = RunAsync(_stop.Token);
         }
-        catch { _listener.Stop(); _stop.Dispose(); _signingKey.Dispose(); throw; }
+        catch { _listener?.Stop(); _stop.Dispose(); _signingKey.Dispose(); throw; }
     }
 
     private async Task RunAsync(CancellationToken token)
@@ -538,11 +539,10 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                 if (!receiver.Claim(this, _pairingCode)) return (453, null);
                 _claimed = true;
                 _sender = GetSenderName(setup);
-                _eventListener = new TcpListener(local, 0);
-                _eventListener.Start(2);
+                _eventListener = receiver._ports.StartTcp(local, 2);
                 _eventTask = HoldEventConnectionAsync(_eventListener, peer, token);
                 long timingPort = _mediaKey != null ? AirPlayPlist.Int(setup, "timingPort") : 0;
-                _clock = new AirPlayClock(local, peer, protocol == "PTP", receiver._identity.Id, token,
+                _clock = new AirPlayClock(receiver._ports, local, peer, protocol == "PTP", receiver._identity.Id, token,
                     timingPort is > 0 and <= ushort.MaxValue ? (int)timingPort : 0);
                 var answer = new Dictionary<string, object?>
                 {
@@ -607,7 +607,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
             {
                 try
                 {
-                    Volatile.Write(ref _mirror, new AirPlayMirrorStream(local, peer, streamId, _mediaKey!, _sender, receiver._showWindow, receiver._hevc,
+                    Volatile.Write(ref _mirror, new AirPlayMirrorStream(receiver._ports, local, peer, streamId, _mediaKey!, _sender, receiver._showWindow, receiver._hevc,
                         () => receiver.Connected(this, _sender, mirroring: true),
                         (topmost, fullscreen) => receiver.MirrorModeChanged(this, topmost, fullscreen),
                         failed => StreamEnded(failed, "Phone.AirPlayMirrorError"), token));
@@ -626,7 +626,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     int controlPort, dataPort;
                     if (pictureOnly)
                     {
-                        var ports = new UnplayedAudioPorts(local);
+                        var ports = new UnplayedAudioPorts(receiver._ports, local);
                         Volatile.Write(ref _unplayedAudio, ports);
                         controlPort = ports.ControlPort; dataPort = ports.DataPort;
                         if (MirrorFrames > 0) receiver.Connected(this, _sender, mirroring: true);
@@ -635,7 +635,7 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
                     {
                         _output = new AirPlayAudioOutput(_sender, OutputChanged, () => StreamEnded(true, "Phone.AirPlayAudioError"),
                             receiver._player, receiver._watchDefault, token);
-                        _media = new AirPlayMediaStream(audioType, format, audioKey!, local, peer, _output,
+                        _media = new AirPlayMediaStream(receiver._ports, audioType, format, audioKey!, local, peer, _output,
                             failed => StreamEnded(failed, "Phone.AirPlayAudioError"), token, audioIv);
                         if (_recording) _media.Record();
                         controlPort = _media.ControlPort; dataPort = _media.DataPort;
@@ -714,29 +714,16 @@ internal sealed class AirPlayReceiver : IAsyncDisposable
     {
         private readonly Socket _control, _data;
 
-        internal UnplayedAudioPorts(IPAddress address)
+        internal UnplayedAudioPorts(AirPlayListenerPorts ports, IPAddress address)
         {
-            _control = Bind(address);
-            try { _data = Bind(address); }
+            // Retain the advertised endpoints for picture-only sessions.
+            _control = ports.BindUdp(address, receiveBufferSize: 4096);
+            try { _data = ports.BindUdp(address, receiveBufferSize: 4096); }
             catch { _control.Dispose(); throw; }
         }
 
         internal int ControlPort => ((IPEndPoint)_control.LocalEndPoint!).Port;
         internal int DataPort => ((IPEndPoint)_data.LocalEndPoint!).Port;
-
-        private static Socket Bind(IPAddress address)
-        {
-            // Keep the advertised UDP endpoints local to this session. There is no audio
-            // task, decoder or PCM queue when only the screen can be used.
-            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            try
-            {
-                socket.ReceiveBufferSize = 4096;
-                socket.Bind(new IPEndPoint(address, 0));
-                return socket;
-            }
-            catch { socket.Dispose(); throw; }
-        }
 
         public void Dispose() { _control.Dispose(); _data.Dispose(); }
     }

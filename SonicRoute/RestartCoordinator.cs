@@ -24,11 +24,24 @@ namespace SonicRoute
             EventHandler onExit = (_, _) => { try { exited.Set(); } catch (ObjectDisposedException) { } };
             try
             {
-                child = (start ?? Process.Start)(new ProcessStartInfo
+                string arguments = Switch + " " + AppInfo.CurrentProcessId + " " + token;
+#if !NET48
+                if (AppRuntimeIdentity.Current.IsPackaged)
                 {
-                    FileName = executable, UseShellExecute = true,
-                    Arguments = Switch + " " + AppInfo.CurrentProcessId + " " + token
-                });
+                    string appId = StoreInterop.NativePackageIdentity.GetApplicationUserModelId();
+                    int childId = StoreInterop.StoreActivation.Activate(appId, arguments);
+                    if (childId == AppInfo.CurrentProcessId)
+                        throw new InvalidOperationException("Restart activation returned the current process.");
+                    child = Process.GetProcessById(childId);
+                }
+                else
+#endif
+                {
+                    child = (start ?? Process.Start)(new ProcessStartInfo
+                    {
+                        FileName = executable, UseShellExecute = true, Arguments = arguments
+                    });
+                }
                 if (child == null) throw new InvalidOperationException("Restart did not return a child process.");
                 child.Exited += onExit;
                 child.EnableRaisingEvents = true;

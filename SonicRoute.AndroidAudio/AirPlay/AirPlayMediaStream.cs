@@ -29,7 +29,7 @@ internal sealed class AirPlayMediaStream : IAsyncDisposable
     private ushort? _lastSequence;
     private ulong? _lastBufferedNonce;
 
-    internal AirPlayMediaStream(int type, AirPlayFormat format, byte[] key, IPAddress local, IPAddress peer,
+    internal AirPlayMediaStream(AirPlayListenerPorts ports, int type, AirPlayFormat format, byte[] key, IPAddress local, IPAddress peer,
         AirPlayAudioOutput output, Action<bool> ended, CancellationToken token, byte[]? legacyIv = null)
     {
         Type = type; _format = format; _peer = peer; _output = output;
@@ -44,13 +44,9 @@ internal sealed class AirPlayMediaStream : IAsyncDisposable
                 _legacyIv = legacyIv;
             }
             _decoder = new AirPlayDecoder(format);
-            _control = NewUdp(local);
-            if (type == 96) _udp = NewUdp(local);
-            else
-            {
-                _tcp = new TcpListener(local, 0);
-                _tcp.Start(2);
-            }
+            _control = ports.BindUdp(local);
+            if (type == 96) _udp = ports.BindUdp(local);
+            else _tcp = ports.StartTcp(local, 2);
             _run = RunAsync(ended, _stop.Token);
         }
         catch
@@ -64,13 +60,6 @@ internal sealed class AirPlayMediaStream : IAsyncDisposable
     internal int Type { get; }
     internal int ControlPort => ((IPEndPoint)_control.LocalEndPoint!).Port;
     internal int DataPort => ((IPEndPoint)(_tcp?.LocalEndpoint ?? _udp!.LocalEndPoint!)).Port;
-
-    private static Socket NewUdp(IPAddress local)
-    {
-        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        try { socket.Bind(new IPEndPoint(local, 0)); return socket; }
-        catch { socket.Dispose(); throw; }
-    }
 
     internal void Record()
     {
