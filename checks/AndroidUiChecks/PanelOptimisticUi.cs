@@ -153,7 +153,7 @@ internal static partial class Program
             using var lifetime = new CancellationTokenSource();
             var playerFactory = MakePlayer("session-1");
             var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null,
-                ["AirPlayFixture", true, playerFactory, watch, false, false], null)!;
+                ["AirPlayFixture", true, playerFactory, watch, false, false, false], null)!;
             var source = (IAsyncDisposable)Activator.CreateInstance(sourceType, instance, null,
                 ["Simulated iPhone", publish, (Action)(() => { }), playerFactory, watch, CancellationToken.None], null)!;
             var session = Activator.CreateInstance(sessionType, instance, null,
@@ -836,7 +836,7 @@ internal static partial class Program
             using var transport = new TcpClient();
             using var lifetime = new CancellationTokenSource();
             var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null,
-                ["NameFixture", true, apPlayerFactory, watch, false, false], null)!;
+                ["NameFixture", true, apPlayerFactory, watch, false, false, false], null)!;
             var apSource = (IAsyncDisposable)Activator.CreateInstance(airPlaySourceType, instance, null,
                 ["AirPlay Player", publishAirPlay, (Action)(() => { }), apPlayerFactory, watch, CancellationToken.None], null)!;
             var apSession = Activator.CreateInstance(sessionType, instance, null,
@@ -1249,7 +1249,7 @@ internal static partial class Program
             using var transport = new TcpClient();
             using var lifetime = new CancellationTokenSource();
             var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null,
-                ["PerfFixture", true, playerFactory, watch, false, false], null)!;
+                ["PerfFixture", true, playerFactory, watch, false, false, false], null)!;
             var apSource = (IAsyncDisposable)Activator.CreateInstance(sourceType, instance, null,
                 ["Perf AirPlay", publish, (Action)(() => { }), playerFactory, watch, CancellationToken.None], null)!;
             var session = Activator.CreateInstance(sessionType, instance, null,
