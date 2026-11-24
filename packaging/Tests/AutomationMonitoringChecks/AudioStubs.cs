@@ -14,33 +14,12 @@ namespace SonicRoute
         public void ShowMicMuteOsd(string title,bool muted) { MicNotices++; }
         internal bool SetQuickPanelVisibility(bool visible)=>true;
     }
-    internal sealed class L10n
-    {
-        internal static L10n Instance { get; } = new();
-        public string this[string key] => key;
-        internal static string T(string key) => key;
-    }
     internal sealed class AppRuntimeIdentity
     {
         internal static AppRuntimeIdentity Current { get; }=new();
         internal string CommandEdition=>"IsolatedAutomationCheck";
     }
     internal static class AutoRuleScheduler { internal static void Log(string text) { } }
-    internal static class AppPlaybackRestore
-    {
-        internal static bool HasSavedChoice(int pid) => false;
-        internal static Task<bool> ClearAsync() => Task.FromResult(true);
-    }
-    internal static class LocalAppOutputMirrors
-    {
-        internal static string[] GetExtraOutputs(int pid) => Array.Empty<string>();
-        internal static Task ClearAllAsync() => Task.CompletedTask;
-    }
-    internal static class AppPlaybackOutputs
-    {
-        internal static Task<(bool Success, int HResult, string Message)> SetAsync(AudioAppInfo app, string[] ids, string primary)
-            => throw new InvalidOperationException("Unexpected managed playback route in the fixture.");
-    }
     internal static class AudioService
     {
         internal const string SystemDefaultDeviceId="@@SYSTEM_DEFAULT@@";

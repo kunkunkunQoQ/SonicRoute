@@ -27,13 +27,16 @@ internal static partial class OutputVolumeCases
         });
         check("output missing device notifications retain full topology recovery", () =>
         {
-            Boundary.DeviceRegistrationFailures = 1; var device = Boundary.Add(EDataFlow.eRender); var monitor = new OutputVolumeMonitor();
+            // The shared hub attempts registration in Subscribe and once more in EnsureRegistered.
+            Boundary.DeviceRegistrationFailures = 2; var device = Boundary.Add(EDataFlow.eRender); var monitor = new OutputVolumeMonitor();
             try
             {
                 monitor.ReadAsync(new[] { device.Id }, false).GetAwaiter().GetResult();
-                assert(monitor.NeedsRecovery && monitor.NeedsTopologyRecovery, "missing device callbacks lost full recovery");
+                assert(monitor.NeedsRecovery && monitor.NeedsTopologyRecovery && Boundary.NotificationEnumerators == 2
+                    && Boundary.Notifications.IsEmpty, "missing device callbacks lost full recovery");
                 monitor.ReadAsync(new[] { device.Id }, true).GetAwaiter().GetResult();
-                assert(!monitor.NeedsRecovery && !monitor.NeedsTopologyRecovery, "topology recovery did not settle");
+                assert(!monitor.NeedsRecovery && !monitor.NeedsTopologyRecovery && Boundary.NotificationEnumerators == 3
+                    && Boundary.Notifications.Count == 1, "topology recovery did not settle");
             }
             finally { monitor.Dispose(); monitor.Completion.GetAwaiter().GetResult(); }
         });
@@ -189,15 +192,19 @@ internal static partial class OutputVolumeCases
         });
         check("output device callback failure can recover without a worker loop", () =>
         {
-            Boundary.DeviceRegistrationFailures = 1; var device = Boundary.Add(EDataFlow.eRender);
+            Boundary.DeviceRegistrationFailures = 2; var device = Boundary.Add(EDataFlow.eRender);
             var monitor = new OutputVolumeMonitor();
             try
             {
-                monitor.ReadAsync(new[] { device.Id }).GetAwaiter().GetResult(); assert(monitor.NeedsRecovery, "registration failure hidden");
                 monitor.ReadAsync(new[] { device.Id }).GetAwaiter().GetResult();
-                assert(!monitor.NeedsRecovery && Boundary.Enumerators == 1 && Boundary.Notifications.Count == 1, "notification recovery failed");
+                assert(monitor.NeedsRecovery && Boundary.NotificationEnumerators == 2, "registration failure hidden");
+                monitor.ReadAsync(new[] { device.Id }).GetAwaiter().GetResult();
+                assert(!monitor.NeedsRecovery && Boundary.Enumerators == 1 && Boundary.NotificationEnumerators == 3
+                    && Boundary.Notifications.Count == 1, "notification recovery failed");
                 int signals = 0; monitor.Invalidated += topology => { if (topology) signals++; };
-                Boundary.Topology(); assert(signals == 1 && Boundary.Enumerators == 1, "callback did not defer topology work");
+                Boundary.Topology();
+                assert(signals == 1 && Boundary.Enumerators == 1 && Boundary.NotificationEnumerators == 3,
+                    "callback did not defer topology work");
             }
             finally { monitor.Dispose(); monitor.Completion.GetAwaiter().GetResult(); }
         });

@@ -7,15 +7,16 @@ namespace MonitoringChecks
     {
         internal static readonly List<Device> Devices = new();
         internal static readonly ConcurrentDictionary<IMMNotificationClient, byte> Notifications = new();
-        internal static int Enumerators, Scans, Activations, Releases, DeviceRegistrationFailures, CallbackReleases;
+        internal static int Enumerators, NotificationEnumerators, Scans, Activations, Releases, DeviceRegistrationFailures, CallbackReleases;
         [ThreadStatic] internal static int CallbackDepth;
         internal static void Reset()
         {
             Devices.Clear(); Notifications.Clear();
-            Enumerators = Scans = Activations = Releases = DeviceRegistrationFailures = CallbackReleases = 0;
+            Enumerators = NotificationEnumerators = Scans = Activations = Releases = DeviceRegistrationFailures = CallbackReleases = 0;
             System.Management.ManagementEventWatcher.Reset();
         }
         internal static IMMDeviceEnumerator CreateEnumerator() { Interlocked.Increment(ref Enumerators); return new Enumerator(); }
+        internal static IMMDeviceEnumerator CreateNotificationEnumerator() { Interlocked.Increment(ref NotificationEnumerators); return new Enumerator(); }
         internal static int Release(object value)
         { Interlocked.Increment(ref Releases); if (CallbackDepth > 0) Interlocked.Increment(ref CallbackReleases); return 0; }
         internal static Device Add(EDataFlow flow, params Session[] sessions)

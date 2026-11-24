@@ -1,3 +1,7 @@
+extern alias ProductCore;
+
+global using ExceptionDiagnostics = ProductCore::SonicRoute.Core.ExceptionDiagnostics;
+
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -292,6 +296,7 @@ namespace SonicRoute.Core
     internal static class ConfigService { internal static object Load() => new object(); }
     internal static class AppIconFiles
     {
+        internal const int IconSize = ProductCore::SonicRoute.Core.AppIconFiles.IconSize;
         internal static string? Custom;
         internal static string? GetFileName(object config, string processName) => Custom;
     }

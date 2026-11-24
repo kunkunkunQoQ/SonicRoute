@@ -6,13 +6,21 @@
     <SonicRouteEdition>Lite</SonicRouteEdition>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../../SonicRoute.Core/SonicRoute.Core.csproj" />
+    <ProjectReference Include="../../../SonicRoute.Core/SonicRoute.Core.csproj" Condition="'$(TargetFramework)' != 'net8.0-windows'" />
     <Compile Include="../../../SonicRoute/AutoRuleService.cs;../../../SonicRoute/ExecutionHistoryRun.cs;../../../SonicRoute/CurrentAppService.cs" />
     <Compile Include="../../../SonicRoute/ApplicationAudio.cs;../../../SonicRoute/AutoRuleService.ExternalAudio.cs" />
     <Compile Include="../../../SonicRoute/HotkeyActions.cs;../../../SonicRoute/PanelDevices.cs" />
+    <Compile Include="../Fixtures/LocalPlaybackBoundaries.cs" Link="LocalPlaybackBoundaries.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <!-- Use the real Core sources against .NET 8's own framework assemblies. -->
+    <Compile Include="../../../SonicRoute.Core/**/*.cs"
+             Exclude="../../../SonicRoute.Core/bin/**;../../../SonicRoute.Core/obj/**"
+             Link="Core/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
   <Target Name="PrepareHotkeyBoundary" BeforeTargets="CoreCompile">
-    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Hotkeys.ps1&quot; -OutputDirectory &quot;$(MSBuildProjectDirectory)/obj/hotkeys/$(TargetFramework)&quot;" />
-    <ItemGroup><Compile Include="$(MSBuildProjectDirectory)/obj/hotkeys/$(TargetFramework)/*.cs" /></ItemGroup>
+    <PropertyGroup><PreparedHotkeys>$(IntermediateOutputPath)hotkeys</PreparedHotkeys></PropertyGroup>
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)/Prepare-Hotkeys.ps1&quot; -OutputDirectory &quot;$(PreparedHotkeys)&quot;" />
+    <ItemGroup><Compile Include="$(PreparedHotkeys)/*.cs" /></ItemGroup>
   </Target>
 </Project>

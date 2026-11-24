@@ -11,6 +11,7 @@
     <ApplicationIcon>../../../SonicRoute/SonicRoute.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../../SonicRoute.Core/SonicRoute.Core.csproj" Aliases="ProductCore" />
     <Compile Include="../../../SonicRoute/AppIconService.cs" Link="AppIconService.cs" />
     <Compile Include="../../../SonicRoute/ImageDataStream.cs" Link="ImageDataStream.cs" />
   </ItemGroup>
