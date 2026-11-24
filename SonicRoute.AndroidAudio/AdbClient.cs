@@ -671,14 +671,23 @@ public sealed class AdbClient : IDisposable, IAsyncDisposable
         return [AndroidOutputSink.DefaultSpeaker];
     }
 
-    public async Task<int> ResolveUidAsync(AndroidDevice device, string package, CancellationToken token)
+    public Task<int> ResolveUidAsync(AndroidDevice device, string package, CancellationToken token) =>
+        ResolveUidAsync(device, package, null, token);
+
+    internal async Task<int> ResolveUidAsync(AndroidDevice device, string package, int? catalogUid, CancellationToken token)
     {
         ValidatePackage(package);
-        string text = await RunAsync(token, "-s", device.CommandTarget, "shell", "pm", "list", "packages", "-U").ConfigureAwait(false);
-        var match = Regex.Match(text, @"(?m)^package:" + Regex.Escape(package) + @"\s+uid:(\d+)\s*$");
-        if (!match.Success || !int.TryParse(match.Groups[1].Value, out int uid) || uid <= 0)
+        // Android UIDs encode the user/profile ID in the high part (UserHandle.PER_USER_RANGE).
+        // A package name alone cannot distinguish the primary installation from its clone.
+        string user = catalogUid is > 0 ? (catalogUid.Value / 100_000).ToString(CultureInfo.InvariantCulture) : "current";
+        string text = await RunAsync(token, "-s", device.CommandTarget, "shell", "pm", "list", "packages", "-U", "--user", user)
+            .ConfigureAwait(false);
+        var matches = Regex.Matches(text, @"(?m)^package:(\S+)[ \t]+uid:([0-9]+)[ \t\r]*$");
+        var candidates = matches.Where(match => match.Groups[1].Value == package).ToArray();
+        if (candidates.Length != 1 || !int.TryParse(candidates[0].Groups[2].Value, out int uid) || uid <= 0)
             throw AndroidError.WithCode(new IOException("目标应用或 UID 已不可用，请刷新手机应用列表。"), AndroidErrorCode.AppOrUidUnavailable);
-        if (Regex.Matches(text, @"(?m)^package:\S+\s+uid:" + uid + @"\s*$").Count > 1)
+        if (matches.Any(match => match.Groups[1].Value != package
+            && int.TryParse(match.Groups[2].Value, out int otherUid) && uid == otherUid))
             throw AndroidError.WithCode(new IOException("目标应用与其他包共享 UID，无法保证单应用隔离；此实验版拒绝启动该目标。"), AndroidErrorCode.SharedUidUnsupported);
         return uid;
     }

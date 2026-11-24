@@ -6,11 +6,13 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
+import android.os.UserHandle;
 import android.util.Base64;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.util.List;
 import java.util.ArrayList;
+import org.sonicroute.android.platform.AndroidSystemPlatform;
 
 /** Read-only metadata helper. Launched by app_process; never installed as an APK. */
 public final class Catalog {
@@ -19,6 +21,12 @@ public final class Catalog {
             android.os.Looper.prepareMainLooper();
             AndroidWorkarounds.apply();
             Context context = ShellContext.get();
+            int userId = AndroidSystemPlatform.getCurrentUserId();
+            if (userId != 0) {
+                // The system context belongs to user 0 even when another user is in the foreground.
+                context = (Context) Context.class.getMethod("createContextAsUser", UserHandle.class, int.class)
+                        .invoke(context.getApplicationContext(), UserHandle.getUserHandleForUid(userId * 100_000), 0);
+            }
             PackageManager manager = context.getPackageManager();
             List<ApplicationInfo> applications;
             if (args.length > 0) {

@@ -20,9 +20,9 @@ internal static partial class Program
         Check(!Options(whole, false).Contains("audio_target_packages") && Options(whole, false).Contains("audio_dup=false")
             && Options(whole, true).Contains("audio_dup=true"),
             "only explicit device capture omits the UID filter and supports both playback zones");
-        Check(Options(music, true).Contains("audio_target_packages=cn.test.music")
+        Check(Options(music, true).Contains("audio_target_packages=1001 ")
             && Options(music with { Uid = -1 }, false).Contains("audio_target_packages=cn.test.music"),
-            "ordinary and unresolved application captures retain their package filter");
+            "application capture uses the catalog UID and preserves the package filter for legacy commands");
         bool invalidRejected = false;
         try { Options(whole with { Uid = 0 }, false); }
         catch (TargetInvocationException ex) when (ex.InnerException is ArgumentException) { invalidRejected = true; }
@@ -65,8 +65,8 @@ internal static partial class Program
         Check(ready.Task.IsCompletedSuccessfully && desktopClient.State == VirtualDisplayState.Active,
             "a presented first frame activates the phone mirror cleanly");
         await desktopClient.DisposeAsync();
-        Check((int)AndroidErrorCode.NoAudioRouteOrEnded == 57 && Enum.GetValues<AndroidErrorCode>().Length == 58,
-            "removing the desktop-only error preserves the original error identifiers");
+        Check((int)AndroidErrorCode.NoAudioRouteOrEnded == 57 && (int)AndroidErrorCode.Android11Required == 39,
+            "changing the Android capture minimum preserves the existing error identifiers");
 
         byte[] wire = BuildWire();
         int starts = 0, stops = 0;

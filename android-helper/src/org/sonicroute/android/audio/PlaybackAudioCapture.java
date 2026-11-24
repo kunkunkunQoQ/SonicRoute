@@ -1,16 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package org.sonicroute.android.audio;
 
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
+import android.media.AudioRecordingConfiguration;
 import android.media.AudioTimestamp;
 import android.media.MediaCodec;
 import android.media.MediaRecorder;
 import android.os.Build;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,8 +28,7 @@ import org.sonicroute.android.util.ServerLog;
 
 /**
  * Self-authored {@code AudioPlaybackCapture} (via hidden {@code AudioPolicy}) plus direct mic fallback.
- * Supports UID/package isolation, {@code audio_dup}, {@code audio_mix_mode=uid|pr}, and strict
- * no-global leak sentinel ({@code 0x7FFFFFFF}).
+ * Supports UID/package isolation, {@code audio_dup}, and {@code audio_mix_mode=uid|pr}.
  */
 public final class PlaybackAudioCapture implements AudioCaptureSource {
     public static final int SAMPLE_RATE = 48_000;
@@ -35,17 +39,14 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
     public static final int MAX_READ_SIZE = 4096;
     private static final long ONE_SAMPLE_US = (1_000_000L + SAMPLE_RATE - 1) / SAMPLE_RATE;
 
-    // Sentinel UID guaranteeing empty capture instead of leaking unrelated phone audio.
-    private static final int NO_MATCH_SENTINEL_UID = 0x7FFFFFFF;
-
     private final AudioSourceMode sourceMode;
     private final boolean keepPlayingOnDevice;
     private final boolean prMixMode;
     private boolean strictNoGlobal;
     private volatile int[] targetUids = new int[0];
 
-    private Object registeredPolicy;
-    private AudioRecord recorder;
+    private Runnable unregisterPolicy;
+    private volatile AudioRecord recorder;
     private final AudioTimestamp timestamp = new AudioTimestamp();
     private long lastTimestampNs = -1;
     private long previousPtsUs;
@@ -72,7 +73,7 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
                 continue;
             }
             int uid = resolveUid(spec);
-            if (uid >= 0) {
+            if (uid > 0 && uid != Integer.MAX_VALUE) {
                 resolved.add(uid);
             } else {
                 ServerLog.w("Target audio package not found or no UID: " + spec);
@@ -103,47 +104,68 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
 
     @Override
     public void checkSupported() throws IOException {
-        if (sourceMode.isPlayback() && Build.VERSION.SDK_INT < 29) {
-            throw new IOException("Audio playback capture requires Android 10+");
+        if (sourceMode.isPlayback() && Build.VERSION.SDK_INT < 30) {
+            throw new IOException("Audio playback capture requires Android 11+");
         }
     }
 
     @Override
-    public void start() throws IOException {
+    public synchronized void start() throws IOException {
         stop();
         lastTimestampNs = -1;
         previousPtsUs = 0;
         nextPtsUs = 0;
 
+        String stage = sourceMode.isPlayback() ? "AudioPolicy setup" : "AudioRecord creation";
+        boolean started = false;
         try {
             recorder = sourceMode.isPlayback() ? createPlaybackPolicyRecorder() : createDirectRecorder();
-            if (recorder == null) {
-                throw new IOException("Failed to create AudioRecord instance");
+            if (recorder == null || recorder.getState() != AudioRecord.STATE_INITIALIZED) {
+                throw new IOException("AudioRecord was not initialized");
             }
+            stage = "AudioRecord.startRecording";
             recorder.startRecording();
-        } catch (IOException error) {
-            stop();
-            throw error;
-        } catch (Throwable error) {
-            stop();
-            throw new IOException("Unable to start audio capture: " + error.getMessage(), error);
+            if (recorder.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
+                throw new IOException("AudioRecord did not enter the recording state");
+            }
+            if (sourceMode.isPlayback() && isCaptureSilenced(recorder)) {
+                throw new IOException("Android silenced the recording client; check ROM capture restrictions and device lock state");
+            }
+            started = true;
+        } catch (Exception | LinkageError error) {
+            if (error instanceof IOException) {
+                throw (IOException) error;
+            }
+            throw captureFailure(stage, error);
+        } finally {
+            if (!started) {
+                stop();
+            }
+        }
+    }
+
+    private static boolean isCaptureSilenced(AudioRecord record) {
+        try {
+            AudioRecordingConfiguration config = record.getActiveRecordingConfiguration();
+            return config != null && config.isClientSilenced();
+        } catch (RuntimeException | LinkageError error) {
+            ServerLog.d("Could not query initial AudioRecord silencing status: " + error);
+            return false;
         }
     }
 
     @Override
     public synchronized void stop() {
         if (recorder != null) {
-            try {
-                recorder.stop();
-            } catch (Throwable ignored) {
-            }
-            try {
-                recorder.release();
-            } catch (Throwable ignored) {
-            }
+            AudioRecord record = recorder;
             recorder = null;
+            AndroidWorkarounds.releaseAudioRecord(record);
         }
-        unregisterPolicy();
+        if (unregisterPolicy != null) {
+            Runnable unregister = unregisterPolicy;
+            unregisterPolicy = null;
+            unregister.run();
+        }
     }
 
     @Override
@@ -158,6 +180,9 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
         }
         int readBytes = rec.read(outDirectBuffer, maxBytes);
         if (readBytes <= 0) {
+            if (readBytes < 0 && recorder == rec) {
+                throw new IOException("AudioRecord.read failed with status " + readBytes);
+            }
             return readBytes;
         }
 
@@ -185,22 +210,23 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
     }
 
     private AudioRecord createPlaybackPolicyRecorder() throws Exception {
+        int[] effectiveUids = targetUids;
+        if (effectiveUids.length == 0 && strictNoGlobal) {
+            throw new IOException("No valid target UID for isolated audio capture");
+        }
         Class<?> ruleClass = Class.forName("android.media.audiopolicy.AudioMixingRule");
         Class<?> ruleBuilderClass = Class.forName("android.media.audiopolicy.AudioMixingRule$Builder");
         Object ruleBuilder = ruleBuilderClass.getConstructor().newInstance();
 
-        int mixRolePlayers = ruleClass.getField("MIX_ROLE_PLAYERS").getInt(null);
-        ruleBuilderClass.getMethod("setTargetMixRole", int.class).invoke(ruleBuilder, mixRolePlayers);
+        // Android 11/12 infer the player role from UID and usage rules.
+        Method setRole = findPolicyMethod(ruleBuilderClass, "setTargetMixRole", int.class);
+        if (setRole != null) {
+            setRole.invoke(ruleBuilder, ruleClass.getField("MIX_ROLE_PLAYERS").getInt(null));
+        }
 
         int ruleMatchUsage = ruleClass.getField("RULE_MATCH_ATTRIBUTE_USAGE").getInt(null);
         int ruleMatchUid = readOptionalIntField(ruleClass, "RULE_MATCH_UID", 4);
         Method addMixRule = ruleBuilderClass.getMethod("addMixRule", int.class, Object.class);
-
-        int[] effectiveUids = targetUids;
-        if (effectiveUids.length == 0 && strictNoGlobal) {
-            effectiveUids = new int[] { NO_MATCH_SENTINEL_UID };
-            ServerLog.w("Strict audio isolation active with no resolved UID: capturing silence via sentinel UID");
-        }
 
         if (effectiveUids.length > 0) {
             for (int uid : effectiveUids) {
@@ -235,32 +261,121 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
         Object mixBuilder = mixBuilderClass.getConstructor(ruleClass).newInstance(mixingRule);
         mixBuilderClass.getMethod("setFormat", AudioFormat.class).invoke(mixBuilder, createPcmFormat());
 
-        int routeFlag = keepPlayingOnDevice
-                ? mixClass.getField("ROUTE_FLAG_LOOP_BACK_RENDER").getInt(null)
-                : mixClass.getField("ROUTE_FLAG_LOOP_BACK").getInt(null);
+        int routeFlag = mixClass.getField("ROUTE_FLAG_LOOP_BACK").getInt(null);
+        if (keepPlayingOnDevice) {
+            routeFlag |= mixClass.getField("ROUTE_FLAG_RENDER").getInt(null);
+        }
         mixBuilderClass.getMethod("setRouteFlags", int.class).invoke(mixBuilder, routeFlag);
         Object audioMix = mixBuilderClass.getMethod("build").invoke(mixBuilder);
 
         Class<?> policyClass = Class.forName("android.media.audiopolicy.AudioPolicy");
         Class<?> policyBuilderClass = Class.forName("android.media.audiopolicy.AudioPolicy$Builder");
-        Object policyBuilder = policyBuilderClass.getConstructor(android.content.Context.class).newInstance(ShellContext.get());
+        Object policyBuilder = policyBuilderClass.getConstructor(Context.class).newInstance(ShellContext.get());
         policyBuilderClass.getMethod("addMix", mixClass).invoke(policyBuilder, audioMix);
         Object policy = policyBuilderClass.getMethod("build").invoke(policyBuilder);
 
-        Method registerStatic = AudioManager.class.getDeclaredMethod("registerAudioPolicyStatic", policyClass);
-        registerStatic.setAccessible(true);
-        int status = (int) registerStatic.invoke(null, policy);
-        if (status != 0) {
-            throw new IOException("registerAudioPolicyStatic failed with status " + status);
-        }
-        registeredPolicy = policy;
-        return (AudioRecord) policyClass.getMethod("createAudioRecordSink", mixClass).invoke(policy, audioMix);
+        registerPolicy(policyClass, policy);
+        return createPolicySink(policyClass, policy, mixClass, audioMix);
     }
 
-    private AudioRecord createDirectRecorder() {
+    private void registerPolicy(Class<?> policyClass, Object policy) throws IOException {
+        try {
+            Method register = findPolicyMethod(AudioManager.class, "registerAudioPolicyStatic", policyClass);
+            if (register == null) {
+                register = AudioManager.class.getMethod("registerAudioPolicy", policyClass);
+            }
+            Method unregister = findPolicyMethod(AudioManager.class, "unregisterAudioPolicyAsyncStatic", policyClass);
+            if (unregister == null) {
+                unregister = findPolicyMethod(AudioManager.class, "unregisterAudioPolicyAsync", policyClass);
+            }
+            if (unregister == null) {
+                unregister = AudioManager.class.getMethod("unregisterAudioPolicy", policyClass);
+            }
+            final Method cleanup = unregister;
+            final Object cleanupReceiver = policyMethodReceiver(cleanup);
+            Object registerReceiver = policyMethodReceiver(register);
+            // Set cleanup first in case the service registers the policy before invocation fails.
+            unregisterPolicy = () -> {
+                try {
+                    cleanup.invoke(cleanupReceiver, policy);
+                } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+                    ServerLog.w("AudioPolicy unregistration failed", captureFailure(cleanup.getName(), error));
+                }
+            };
+            int status = (int) register.invoke(registerReceiver, policy);
+            if (status != 0) {
+                unregisterPolicy = null; // Registration was rejected.
+                if (ShellContext.get().checkSelfPermission("android.permission.MODIFY_AUDIO_ROUTING")
+                        != PackageManager.PERMISSION_GRANTED) {
+                    throw new IOException("AudioPolicy registration rejected by system (status " + status
+                            + "); this ROM does not grant MODIFY_AUDIO_ROUTING to the shell");
+                }
+                throw new IOException("AudioPolicy registration failed with status " + status);
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            throw captureFailure("AudioPolicy registration", error);
+        }
+    }
+
+    private static Object policyMethodReceiver(Method method) {
+        if (Modifier.isStatic(method.getModifiers())) {
+            return null;
+        }
+        Object manager = ShellContext.get().getSystemService(Context.AUDIO_SERVICE);
+        if (manager == null) {
+            throw new IllegalStateException("AudioManager service unavailable");
+        }
+        return manager;
+    }
+
+    private static AudioRecord createPolicySink(Class<?> policyClass, Object policy, Class<?> mixClass,
+            Object audioMix) throws IOException {
+        Throwable factoryError;
+        try {
+            AudioRecord record = (AudioRecord) policyClass.getMethod("createAudioRecordSink", mixClass)
+                    .invoke(policy, audioMix);
+            if (record == null) {
+                // AOSP returns null if policyReadyToUse() fails.
+                throw new IOException("AudioPolicy could not provide a recording sink");
+            }
+            if (record.getState() == AudioRecord.STATE_INITIALIZED) {
+                return record;
+            }
+            AndroidWorkarounds.releaseAudioRecord(record);
+            factoryError = new IllegalStateException("AudioPolicy returned an uninitialized recording sink");
+        } catch (InvocationTargetException error) {
+            factoryError = error.getCause();
+            if (!(factoryError instanceof NullPointerException) && !(factoryError instanceof LinkageError)) {
+                throw captureFailure("AudioPolicy.createAudioRecordSink", factoryError);
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            throw captureFailure("AudioPolicy.createAudioRecordSink", error);
+        }
+
+        try {
+            String address = (String) mixClass.getMethod("getRegistration").invoke(audioMix);
+            if (address == null || address.isEmpty()) {
+                throw new IOException("AudioPolicy has no registered loopback address");
+            }
+            int minSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_MASK, ENCODING);
+            if (minSize <= 0) {
+                throw new IOException("Android rejected the existing stereo PCM format: " + minSize);
+            }
+            ServerLog.w("AudioPolicy sink initialization failed; retrying its registered mix: " + factoryError);
+            return AndroidWorkarounds.createAudioRecord(MediaRecorder.AudioSource.REMOTE_SUBMIX,
+                    SAMPLE_RATE, CHANNELS, CHANNEL_MASK, ENCODING, minSize, address);
+        } catch (Exception | LinkageError error) {
+            IOException failure = captureFailure("AudioRecord setup for registered AudioPolicy mix", error);
+            failure.addSuppressed(factoryError);
+            throw failure;
+        }
+    }
+
+    private AudioRecord createDirectRecorder() throws Exception {
         int sourceId = toAndroidAudioSource(sourceMode);
+        int minSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_MASK, ENCODING);
         return AndroidWorkarounds.createAudioRecord(
-                sourceId, SAMPLE_RATE, CHANNEL_MASK, CHANNELS, CHANNEL_MASK, ENCODING);
+                sourceId, SAMPLE_RATE, CHANNELS, CHANNEL_MASK, ENCODING, Math.max(minSize, 4096) * 8, null);
     }
 
     private static int toAndroidAudioSource(AudioSourceMode mode) {
@@ -302,19 +417,18 @@ public final class PlaybackAudioCapture implements AudioCaptureSource {
         }
     }
 
-    private void unregisterPolicy() {
-        if (registeredPolicy == null) {
-            return;
-        }
+    private static Method findPolicyMethod(Class<?> owner, String name, Class<?> parameter) {
         try {
-            Class<?> policyClass = Class.forName("android.media.audiopolicy.AudioPolicy");
-            Method unregister = AudioManager.class.getDeclaredMethod("unregisterAudioPolicyAsyncStatic", policyClass);
-            unregister.setAccessible(true);
-            unregister.invoke(null, registeredPolicy);
-        } catch (Throwable error) {
-            ServerLog.w("unregisterAudioPolicyAsyncStatic failed", error);
-        } finally {
-            registeredPolicy = null;
+            Method method = owner.getDeclaredMethod(name, parameter);
+            method.setAccessible(true);
+            return method;
+        } catch (NoSuchMethodException ignored) {
+            return null;
         }
+    }
+
+    private static IOException captureFailure(String stage, Throwable error) {
+        Throwable cause = error instanceof InvocationTargetException ? error.getCause() : error;
+        return new IOException(stage + " failed: " + cause, cause);
     }
 }

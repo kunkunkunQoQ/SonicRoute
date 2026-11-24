@@ -738,7 +738,7 @@
   "Phone.Err.UnpairNotConfirmed": "El dispositivo no confirmó la desvinculación. Elimina este PC en Depuración inalámbrica.",
   "Phone.Err.UsbDisconnectHint": "Se ha detenido la recepción desde este dispositivo. Para desconectarlo, desenchufa el cable USB.",
   "Phone.Err.AppUidChanged": "El UID de la aplicación cambió. Actualiza la lista y vuelve a arrastrarla.",
-  "Phone.Err.Android13Required": "La captura de audio de aplicaciones requiere Android 13 o superior.",
+  "Phone.Err.Android11Required": "La captura de audio de aplicaciones requiere Android 11 o superior.",
   "Phone.Err.AudioServiceExited": "El servicio de audio del dispositivo se cerró. Revisa los registros.",
   "Phone.Err.AudioCaptureNotEstablished": "No se ha podido capturar el audio de la aplicación. Comprueba la versión de Android y si la aplicación permite capturar su audio.",
   "Phone.Err.UnsupportedAudioFormat": "Este PC no admite el formato de audio que envía el dispositivo.",

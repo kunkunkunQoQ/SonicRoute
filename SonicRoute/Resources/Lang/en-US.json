@@ -738,7 +738,7 @@
   "Phone.Err.UnpairNotConfirmed": "Device did not confirm unpairing. Remove this PC in Wireless debugging on your device.",
   "Phone.Err.UsbDisconnectHint": "Audio reception from this device has stopped. Unplug the cable to disconnect it from USB.",
   "Phone.Err.AppUidChanged": "App UID changed. Refresh the app list and drag it again.",
-  "Phone.Err.Android13Required": "App audio capture requires Android 13 or later.",
+  "Phone.Err.Android11Required": "App audio capture requires Android 11 or later.",
   "Phone.Err.AudioServiceExited": "Device audio service exited. Please check the logs.",
   "Phone.Err.AudioCaptureNotEstablished": "Couldn’t capture the app’s audio on this device. Check the Android version and whether the app allows audio capture.",
   "Phone.Err.UnsupportedAudioFormat": "This PC doesn’t support the audio format sent by the device.",

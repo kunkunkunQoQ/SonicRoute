@@ -738,7 +738,7 @@
   "Phone.Err.UnpairNotConfirmed": "Dissociation non confirmée par l’appareil. Supprimez ce PC dans le débogage sans fil.",
   "Phone.Err.UsbDisconnectHint": "La réception depuis cet appareil est arrêtée. Débranchez le câble USB pour le déconnecter.",
   "Phone.Err.AppUidChanged": "L’UID de l’application a changé. Actualisez la liste et faites-la glisser à nouveau.",
-  "Phone.Err.Android13Required": "La capture audio d’application nécessite Android 13 ou supérieur.",
+  "Phone.Err.Android11Required": "La capture audio d’application nécessite Android 11 ou supérieur.",
   "Phone.Err.AudioServiceExited": "Le service audio de l’appareil s’est arrêté. Consultez les journaux.",
   "Phone.Err.AudioCaptureNotEstablished": "Impossible de capturer le son de l’application. Vérifiez la version d’Android et si l’application autorise la capture de son audio.",
   "Phone.Err.UnsupportedAudioFormat": "Ce PC ne prend pas en charge le format audio envoyé par l’appareil.",

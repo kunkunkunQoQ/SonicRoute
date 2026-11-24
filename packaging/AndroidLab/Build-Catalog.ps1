@@ -21,7 +21,7 @@ $jdkBin = if ($JdkBinDirectory) { [IO.Path]::GetFullPath($JdkBinDirectory) } els
 $androidJar = Join-Path $reference $sdkFiles[0]
 $stubRoot = Join-Path $repositoryRoot 'android-helper\compile-stubs'
 $classpath = $androidJar
-$d8Args = @('--min-api', '31', '--lib', $androidJar, '--output', $dex)
+$d8Args = @('--min-api', '30', '--lib', $androidJar, '--output', $dex)
 if (Test-Path -LiteralPath $stubRoot) {
     $stubSources = @(Get-ChildItem -LiteralPath $stubRoot -Filter '*.java' -File -Recurse | ForEach-Object FullName)
     if ($stubSources.Count -gt 0) {
@@ -31,7 +31,7 @@ if (Test-Path -LiteralPath $stubRoot) {
         & (Join-Path $jdkBin 'jar.exe') cf $stubJar -C $stubs .
         if ($LASTEXITCODE -ne 0) { throw 'Catalogue stub archive failed' }
         $classpath = $androidJar + [IO.Path]::PathSeparator + $stubs
-        $d8Args = @('--min-api', '31', '--lib', $androidJar, '--classpath', $stubJar, '--output', $dex)
+        $d8Args += @('--classpath', $stubJar)
     }
 }
 $helperRoot = Join-Path $repositoryRoot 'android-helper'

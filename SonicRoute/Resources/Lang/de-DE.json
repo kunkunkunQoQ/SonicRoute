@@ -738,7 +738,7 @@
   "Phone.Err.UnpairNotConfirmed": "Das Gerät hat die Entkopplung nicht bestätigt. Entfernen Sie diesen PC auf dem Gerät unter „Kabelloses Debugging“.",
   "Phone.Err.UsbDisconnectHint": "Der Audioempfang von diesem Gerät wurde beendet. Ziehen Sie das Kabel ab, um die USB-Verbindung zu trennen.",
   "Phone.Err.AppUidChanged": "Die UID der App hat sich geändert. Aktualisieren Sie die App-Liste und ziehen Sie die App erneut auf das Panel.",
-  "Phone.Err.Android13Required": "App-Audioaufnahme erfordert Android 13 oder höher.",
+  "Phone.Err.Android11Required": "App-Audioaufnahme erfordert Android 11 oder höher.",
   "Phone.Err.AudioServiceExited": "Der Audiodienst auf dem Gerät wurde beendet. Prüfen Sie die Protokolle.",
   "Phone.Err.AudioCaptureNotEstablished": "Der Ton der App konnte nicht erfasst werden. Prüfen Sie die Android-Version und ob die App die Audioaufnahme zulässt.",
   "Phone.Err.UnsupportedAudioFormat": "Dieser PC unterstützt das Audioformat nicht, das das Gerät sendet.",

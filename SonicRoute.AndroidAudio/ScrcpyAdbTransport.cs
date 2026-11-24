@@ -32,13 +32,14 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
         var streaming = (_streaming?.Invoke(device) ?? new()).Normalize();
         await _adb.PrepareRuntimeAsync("audio", token).ConfigureAwait(false);
         _adb.ValidateCatalog();
+        string sdkText = await _adb.RunAsync(token, "-s", _serial, "shell", "getprop", "ro.build.version.sdk").ConfigureAwait(false);
+        if (int.TryParse(sdkText.Trim(), out int sdk) && sdk < 30)
+            throw AndroidError.WithCode(new NotSupportedException("应用音频捕获要求 Android 11 或更高版本。"), AndroidErrorCode.Android11Required);
         if (!app.IsDeviceAudio)
         {
-            int uid = await _adb.ResolveUidAsync(device, app.Package, token).ConfigureAwait(false);
+            int uid = await _adb.ResolveUidAsync(device, app.Package, app.Uid, token).ConfigureAwait(false);
             if (uid != app.Uid) throw AndroidError.WithCode(new IOException("应用 UID 已改变，请刷新列表后重新拖入。"), AndroidErrorCode.AppUidChanged);
         }
-        string sdkText = await _adb.RunAsync(token, "-s", _serial, "shell", "getprop", "ro.build.version.sdk").ConfigureAwait(false);
-        if (!int.TryParse(sdkText.Trim(), out int sdk) || sdk < 33) throw AndroidError.WithCode(new NotSupportedException("应用音频捕获要求 Android 13 或更高；已验证的参考机型为 Android 16。"), AndroidErrorCode.Android13Required);
         string remote;
         using (timing?.Measure("capture_jar"))
             remote = await _adb.EnsureCatalogJarAsync(_serial, token).ConfigureAwait(false);
@@ -98,7 +99,8 @@ public sealed class ScrcpyAdbTransport : IAudioTransport
     internal static string CaptureOptions(AndroidApp app, bool keepPhoneAudio)
     {
         if (!app.IsDeviceAudio) AdbClient.ValidatePackage(app.Package);
-        string target = app.IsDeviceAudio ? "" : " audio_target_packages=" + app.Package;
+        string target = app.IsDeviceAudio ? "" : " audio_target_packages="
+            + (app.Uid > 0 ? app.Uid.ToString(CultureInfo.InvariantCulture) : app.Package);
         return $"audio_dup={keepPhoneAudio.ToString().ToLowerInvariant()}{target} audio_mix_mode=uid";
     }
 

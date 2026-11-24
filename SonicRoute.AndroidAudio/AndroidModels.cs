@@ -300,7 +300,7 @@ public enum AndroidErrorCode
     UnpairNotConfirmed,
     UsbDisconnectHint,
     AppUidChanged,
-    Android13Required,
+    Android11Required,
     AudioServiceExited,
     AudioCaptureNotEstablished,
     MissingDisplayRuntime,

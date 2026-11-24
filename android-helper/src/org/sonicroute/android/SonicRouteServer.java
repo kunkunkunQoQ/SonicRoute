@@ -55,7 +55,11 @@ public final class SonicRouteServer {
                 throw new IllegalArgumentException("At least one of video, audio, or control must be enabled");
             }
 
-            AndroidWorkarounds.apply();
+            if (options.isAudio() && !options.isVideo()) {
+                AndroidWorkarounds.applyForAudioCapture();
+            } else {
+                AndroidWorkarounds.apply();
+            }
             if (options.isVideo() || options.isAudio()) {
                 AndroidWorkarounds.ensureMediaFrameworkInitialized();
             }

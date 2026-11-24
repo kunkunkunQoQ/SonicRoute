@@ -738,7 +738,7 @@
   "Phone.Err.UnpairNotConfirmed": "デバイスでペア設定が解除されたことを確認できませんでした。デバイスの「ワイヤレス デバッグ」からこの PC を削除してください。",
   "Phone.Err.UsbDisconnectHint": "このデバイスからの音声受信を停止しました。USB 接続を解除するにはケーブルを抜いてください。",
   "Phone.Err.AppUidChanged": "アプリの UID が変更されました。一覧を更新して再度ドラッグしてください。",
-  "Phone.Err.Android13Required": "アプリ音声のキャプチャには Android 13 以降が必要です。",
+  "Phone.Err.Android11Required": "アプリ音声のキャプチャには Android 11 以降が必要です。",
   "Phone.Err.AudioServiceExited": "デバイスの音声サービスが終了しました。ログを確認してください。",
   "Phone.Err.AudioCaptureNotEstablished": "デバイスのアプリ音声をキャプチャできませんでした。Android のバージョンと、アプリが音声のキャプチャに対応しているかを確認してください。",
   "Phone.Err.UnsupportedAudioFormat": "この PC は、デバイスから送られてきた音声の形式に対応していません。",

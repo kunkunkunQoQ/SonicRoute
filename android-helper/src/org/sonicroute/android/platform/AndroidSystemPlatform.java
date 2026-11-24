@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package org.sonicroute.android.platform;
 
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.content.AttributionSource;
 import android.content.ClipData;
@@ -174,19 +175,28 @@ public final class AndroidSystemPlatform {
             return -1;
         }
         try {
-            ApplicationInfo appInfo = null;
+            int userId = getCurrentUserId();
+            ApplicationInfo appInfo;
             try {
                 Method m = pm.getClass().getMethod("getApplicationInfo", String.class, long.class, int.class);
-                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0L, 0);
+                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0L, userId);
             } catch (NoSuchMethodException fallback) {
                 Method m = pm.getClass().getMethod("getApplicationInfo", String.class, int.class, int.class);
-                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0, 0);
+                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0, userId);
             }
-            return appInfo != null ? appInfo.uid : -1;
+            if (appInfo == null) {
+                return -1;
+            }
+            String[] packages = (String[]) pm.getClass().getMethod("getPackagesForUid", int.class).invoke(pm, appInfo.uid);
+            return packages != null && packages.length == 1 && packageName.equals(packages[0]) ? appInfo.uid : -1;
         } catch (Throwable error) {
             ServerLog.d("Could not resolve UID for " + packageName + ": " + error.getMessage());
             return -1;
         }
+    }
+
+    public static int getCurrentUserId() throws ReflectiveOperationException {
+        return (int) ActivityManager.class.getMethod("getCurrentUser").invoke(null);
     }
 
     public static boolean startApp(String packageSpec, int displayId, boolean defaultForceStop) {

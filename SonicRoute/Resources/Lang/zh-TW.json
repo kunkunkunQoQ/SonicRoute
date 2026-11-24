@@ -738,7 +738,7 @@
   "Phone.Err.UnpairNotConfirmed": "無法確認裝置是否已解除配對。請在裝置的「無線偵錯」設定中移除這部電腦。",
   "Phone.Err.UsbDisconnectHint": "已停止接收這台裝置的音訊。若要中斷 USB 連線，請拔除傳輸線。",
   "Phone.Err.AppUidChanged": "應用程式 UID 已變更，請重新整理清單後再拖入。",
-  "Phone.Err.Android13Required": "擷取應用程式音訊需要 Android 13 或更新版本。",
+  "Phone.Err.Android11Required": "擷取應用程式音訊需要 Android 11 或更新版本。",
   "Phone.Err.AudioServiceExited": "裝置的音訊服務已結束，請查看記錄檔。",
   "Phone.Err.AudioCaptureNotEstablished": "無法擷取裝置上應用程式的音訊。請檢查 Android 版本，並確認應用程式是否支援音訊擷取。",
   "Phone.Err.UnsupportedAudioFormat": "這部電腦不支援裝置傳來的音訊格式。",

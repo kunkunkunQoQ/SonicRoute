@@ -5,7 +5,6 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.IContentProvider;
-import android.os.Build;
 import android.os.Process;
 import java.lang.reflect.Field;
 
@@ -49,14 +48,14 @@ public final class ShellContext extends ContextWrapper {
     public static ShellContext get() {
         ShellContext current = instance;
         if (current == null) {
+            // Resolve ActivityThread before taking the context lock; apply() calls us under its lock.
+            Context systemContext = AndroidWorkarounds.getSystemContext();
+            if (systemContext == null) {
+                throw new IllegalStateException("System context unavailable in app_process");
+            }
             synchronized (ShellContext.class) {
                 current = instance;
                 if (current == null) {
-                    AndroidWorkarounds.ensureThreadInitialized();
-                    Context systemContext = AndroidWorkarounds.getSystemContext();
-                    if (systemContext == null) {
-                        throw new IllegalStateException("System context unavailable in app_process");
-                    }
                     current = new ShellContext(systemContext);
                     instance = current;
                 }
@@ -77,10 +76,8 @@ public final class ShellContext extends ContextWrapper {
 
     @Override
     public AttributionSource getAttributionSource() {
-        if (Build.VERSION.SDK_INT < 31) {
-            return null;
-        }
-        return new AttributionSource.Builder(Process.SHELL_UID)
+        // The framework invokes this only where AttributionSource is available.
+        return new AttributionSource.Builder(Process.myUid())
             .setPackageName(PACKAGE_NAME)
             .build();
     }

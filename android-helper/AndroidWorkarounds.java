@@ -2,7 +2,6 @@ package org.sonicroute.android;
 
 import android.app.Application;
 import android.app.Instrumentation;
-import android.content.AttributionSource;
 import android.content.Context;
 import android.content.IContentProvider;
 import android.content.pm.ApplicationInfo;
@@ -15,10 +14,12 @@ import android.os.IBinder;
 import android.os.IInterface;
 import android.os.Looper;
 import android.os.Parcel;
+import android.os.Process;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 
 /**
  * Bootstrap workarounds for standalone Android helpers launched via app_process.
@@ -57,23 +58,19 @@ public final class AndroidWorkarounds {
                 ctor.setAccessible(true);
                 activityThread = ctor.newInstance();
 
-                Field sCurrent = activityThreadClass.getDeclaredField("sCurrentActivityThread");
-                sCurrent.setAccessible(true);
-                sCurrent.set(null, activityThread);
-
-                Field mSystemThread = activityThreadClass.getDeclaredField("mSystemThread");
-                mSystemThread.setAccessible(true);
-                mSystemThread.setBoolean(activityThread, true);
+                try {
+                    setField(activityThreadClass, activityThread, "mSystemThread", true);
+                } catch (NoSuchFieldException ignored) {
+                    // Some ROMs do not expose the system-thread flag.
+                }
+                setField(activityThreadClass, null, "sCurrentActivityThread", activityThread);
             }
         } catch (ReflectiveOperationException error) {
             throw new IllegalStateException("Unable to initialize ActivityThread for app_process", error);
         }
 
-        // ConfigurationController was introduced in Android 12 (API 31) and must be populated
-        // before getSystemContext() / DisplayManagerGlobal queries ActivityThread.getConfiguration().
-        if (Build.VERSION.SDK_INT >= 31) {
-            installConfigurationController();
-        }
+        // Initialize it before the system context reads the process configuration, when present.
+        installConfigurationController();
 
         // Some e-ink devices (e.g., ONYX) misbehave on virtual/mirror display capture if
         // mBoundApplication is populated in a standalone shell process.
@@ -89,8 +86,15 @@ public final class AndroidWorkarounds {
         if (applied) {
             return;
         }
-        applied = true;
         installInitialApplication(ShellContext.get());
+        applied = true;
+    }
+
+    public static synchronized void applyForAudioCapture() {
+        ensureThreadInitialized();
+        // Legacy AudioPolicy sinks may construct AudioRecord without a Context.
+        installBoundApplication();
+        apply();
     }
 
     static Context getSystemContext() {
@@ -151,12 +155,13 @@ public final class AndroidWorkarounds {
      * an installed APK Application context do not block shell-UID capture.
      */
     public static AudioRecord createAudioRecord(
-            int source, int sampleRate, int channelConfig, int channels, int channelMask, int encoding) {
+            int source, int sampleRate, int channels, int channelMask, int encoding,
+            int bufferSizeInBytes, String mixAddress) throws Exception {
+        Constructor<AudioRecord> ctor = AudioRecord.class.getDeclaredConstructor(long.class);
+        ctor.setAccessible(true);
+        AudioRecord record = ctor.newInstance(0L);
+        boolean initialized = false;
         try {
-            Constructor<AudioRecord> ctor = AudioRecord.class.getDeclaredConstructor(long.class);
-            ctor.setAccessible(true);
-            AudioRecord record = ctor.newInstance(0L);
-
             setField(AudioRecord.class, record, "mRecordingState", AudioRecord.RECORDSTATE_STOPPED);
 
             Looper looper = Looper.myLooper();
@@ -168,6 +173,10 @@ public final class AndroidWorkarounds {
             AudioAttributes.Builder attrBuilder = new AudioAttributes.Builder();
             Method setPreset = AudioAttributes.Builder.class.getMethod("setInternalCapturePreset", int.class);
             setPreset.invoke(attrBuilder, source);
+            if (mixAddress != null) {
+                AudioAttributes.Builder.class.getMethod("addTag", String.class).invoke(attrBuilder, "addr=" + mixAddress);
+                setField(AudioRecord.class, record, "mIsSubmixFullVolume", true);
+            }
             AudioAttributes attributes = attrBuilder.build();
             setField(AudioRecord.class, record, "mAudioAttributes", attributes);
 
@@ -175,18 +184,10 @@ public final class AndroidWorkarounds {
             paramCheck.setAccessible(true);
             paramCheck.invoke(record, source, sampleRate, encoding);
 
-            setField(AudioRecord.class, record, "mChannelCount", channels);
-            setField(AudioRecord.class, record, "mChannelMask", channelMask);
-
-            int minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, encoding);
-            int bufferSizeInBytes = Math.max(minBufferSize, 4096) * 8;
-            Method buffCheck = AudioRecord.class.getDeclaredMethod("audioBuffSizeCheck", int.class);
-            buffCheck.setAccessible(true);
-            buffCheck.invoke(record, bufferSizeInBytes);
-
             int[] sampleRateOut = new int[] { sampleRate };
             int[] sessionOut = new int[] { AudioManager.AUDIO_SESSION_ID_GENERATE };
-            int initResult = invokeNativeSetup(record, attributes, sampleRateOut, channelMask, bufferSizeInBytes, sessionOut);
+            int initResult = invokeNativeSetup(record, attributes, sampleRateOut, channels, channelMask, encoding,
+                    bufferSizeInBytes, sessionOut);
             if (initResult != AudioRecord.SUCCESS) {
                 throw new IllegalStateException("AudioRecord native_setup failed with code " + initResult);
             }
@@ -194,11 +195,20 @@ public final class AndroidWorkarounds {
             setField(AudioRecord.class, record, "mSampleRate", sampleRateOut[0]);
             setField(AudioRecord.class, record, "mSessionId", sessionOut[0]);
             setField(AudioRecord.class, record, "mState", AudioRecord.STATE_INITIALIZED);
+            initialized = true;
             return record;
-        } catch (RuntimeException error) {
-            throw error;
-        } catch (Exception error) {
-            throw new IllegalStateException("Unable to construct AudioRecord", error);
+        } finally {
+            if (!initialized) {
+                releaseAudioRecord(record);
+            }
+        }
+    }
+
+    public static void releaseAudioRecord(AudioRecord record) {
+        try {
+            record.release(); // AudioRecord.release() stops an active recorder.
+        } catch (RuntimeException | LinkageError error) {
+            System.err.println("AndroidWorkarounds: AudioRecord.release failed: " + error);
         }
     }
 
@@ -206,56 +216,99 @@ public final class AndroidWorkarounds {
             AudioRecord record,
             AudioAttributes attributes,
             int[] sampleRateOut,
+            int channels,
             int channelMask,
+            int audioFormat,
             int bufferSizeInBytes,
             int[] sessionOut) throws Exception {
-        WeakReference<AudioRecord> selfRef = new WeakReference<>(record);
-        int audioFormat = record.getAudioFormat();
-        if (Build.VERSION.SDK_INT < 31) {
-            Method nativeSetup = AudioRecord.class.getDeclaredMethod(
-                "native_setup", Object.class, Object.class, int[].class, int.class,
-                int.class, int.class, int.class, int[].class, String.class, long.class);
-            nativeSetup.setAccessible(true);
-            return ((Integer) nativeSetup.invoke(
-                record, selfRef, attributes, sampleRateOut, channelMask, 0,
-                audioFormat, bufferSizeInBytes, sessionOut, ShellContext.get().getOpPackageName(), 0L)).intValue();
+        // Android 17 packages the position and index masks in AudioFormat.ChannelMasks.
+        Method nativeSetup = findNativeSetup(Object.class, Object.class, int[].class, Object.class, int.class,
+                int.class, int[].class, Parcel.class, long.class, int.class, int.class);
+        Object channelMasks = null;
+        if (nativeSetup != null) {
+            Field masks = AudioRecord.class.getDeclaredField("mChannelMasks");
+            masks.setAccessible(true);
+            Constructor<?> constructor = masks.getType().getDeclaredConstructor(int.class, int.class);
+            constructor.setAccessible(true);
+            channelMasks = constructor.newInstance(channelMask, 0);
+            masks.set(record, channelMasks);
+        } else {
+            setField(AudioRecord.class, record, "mChannelCount", channels);
+            setField(AudioRecord.class, record, "mChannelMask", channelMask);
+            nativeSetup = findSplitMaskSetup(Parcel.class, 2);
         }
-
-        AttributionSource attributionSource = ShellContext.get().getAttributionSource();
-        Method asScopedParcelState = AttributionSource.class.getDeclaredMethod("asScopedParcelState");
+        // Framework buffer validation uses the recorder's channel configuration.
+        Method buffCheck = AudioRecord.class.getDeclaredMethod("audioBuffSizeCheck", int.class);
+        buffCheck.setAccessible(true);
+        buffCheck.invoke(record, bufferSizeInBytes);
+        if (nativeSetup == null) {
+            nativeSetup = findSplitMaskSetup(Parcel.class, 1);
+        }
+        WeakReference<AudioRecord> self = new WeakReference<>(record);
+        if (nativeSetup == null) {
+            nativeSetup = findSplitMaskSetup(String.class, 1);
+            if (nativeSetup == null) {
+                nativeSetup = findSplitMaskSetup(String.class, 0);
+            }
+            if (nativeSetup == null) {
+                throw new NoSuchMethodException("No compatible AudioRecord.native_setup signature");
+            }
+            return invokeSplitMaskSetup(nativeSetup, record, self, attributes, sampleRateOut, channelMask, audioFormat,
+                    bufferSizeInBytes, sessionOut, ShellContext.PACKAGE_NAME);
+        }
+        Object attributionSource = ShellContext.get().getAttributionSource();
+        Method asScopedParcelState = attributionSource.getClass().getDeclaredMethod("asScopedParcelState");
         asScopedParcelState.setAccessible(true);
         try (AutoCloseable scopedState = (AutoCloseable) asScopedParcelState.invoke(attributionSource)) {
             Method getParcel = scopedState.getClass().getDeclaredMethod("getParcel");
-            Parcel parcel = (Parcel) getParcel.invoke(scopedState);
-            if (Build.VERSION.SDK_INT < 34) {
-                Method nativeSetup = AudioRecord.class.getDeclaredMethod(
-                    "native_setup", Object.class, Object.class, int[].class, int.class,
-                    int.class, int.class, int.class, int[].class, Parcel.class, long.class, int.class);
-                nativeSetup.setAccessible(true);
-                return ((Integer) nativeSetup.invoke(
-                    record, selfRef, attributes, sampleRateOut, channelMask, 0,
-                    audioFormat, bufferSizeInBytes, sessionOut, parcel, 0L, 0)).intValue();
+            getParcel.setAccessible(true);
+            Object parcel = getParcel.invoke(scopedState);
+            if (channelMasks != null) {
+                return (int) nativeSetup.invoke(record, self, attributes, sampleRateOut, channelMasks, audioFormat,
+                        bufferSizeInBytes, sessionOut, parcel, 0L, 0, 0);
             }
-            Method nativeSetup = AudioRecord.class.getDeclaredMethod(
-                "native_setup", Object.class, Object.class, int[].class, int.class,
-                int.class, int.class, int.class, int[].class, Parcel.class, long.class, int.class, int.class);
-            nativeSetup.setAccessible(true);
-            return ((Integer) nativeSetup.invoke(
-                record, selfRef, attributes, sampleRateOut, channelMask, 0,
-                audioFormat, bufferSizeInBytes, sessionOut, parcel, 0L, 0, 0)).intValue();
+            return invokeSplitMaskSetup(nativeSetup, record, self, attributes, sampleRateOut, channelMask, audioFormat,
+                    bufferSizeInBytes, sessionOut, parcel);
         }
+    }
+
+    private static Method findSplitMaskSetup(Class<?> attributionType, int extraInts) {
+        Class<?>[] signature = { Object.class, Object.class, int[].class, int.class, int.class, int.class,
+                int.class, int[].class, attributionType, long.class, int.class, int.class };
+        return findNativeSetup(Arrays.copyOf(signature, 10 + extraInts));
+    }
+
+    private static Method findNativeSetup(Class<?>... signature) {
+        try {
+            Method method = AudioRecord.class.getDeclaredMethod("native_setup", signature);
+            method.setAccessible(true);
+            return method;
+        } catch (NoSuchMethodException ignored) {
+            return null;
+        }
+    }
+
+    private static int invokeSplitMaskSetup(Method method, AudioRecord record, WeakReference<AudioRecord> self,
+            AudioAttributes attributes, int[] sampleRateOut, int channelMask, int audioFormat, int bufferSizeInBytes,
+            int[] sessionOut, Object attribution) throws ReflectiveOperationException {
+        Object[] args = { self, attributes, sampleRateOut, channelMask, 0, audioFormat,
+                bufferSizeInBytes, sessionOut, attribution, 0L, 0, 0 };
+        return (int) method.invoke(record, Arrays.copyOf(args, method.getParameterCount()));
     }
 
     private static void installConfigurationController() {
         try {
-            Class<?> ccClass = Class.forName("android.app.ConfigurationController");
-            Class<?> atiClass = Class.forName("android.app.ActivityThreadInternal");
-            Constructor<?> ctor = ccClass.getDeclaredConstructor(atiClass);
-            ctor.setAccessible(true);
-            Object controller = ctor.newInstance(activityThread);
             Field field = activityThreadClass.getDeclaredField("mConfigurationController");
             field.setAccessible(true);
-            field.set(activityThread, controller);
+            if (field.get(activityThread) != null) {
+                return;
+            }
+            Class<?> atiClass = Class.forName("android.app.ActivityThreadInternal");
+            Constructor<?> ctor = field.getType().getDeclaredConstructor(atiClass);
+            ctor.setAccessible(true);
+            field.set(activityThread, ctor.newInstance(activityThread));
+        } catch (NoSuchFieldException ignored) {
+            // Android 11 has no ConfigurationController.
         } catch (Throwable error) {
             System.err.println("AndroidWorkarounds: ConfigurationController init skipped: " + error);
         }
@@ -263,20 +316,24 @@ public final class AndroidWorkarounds {
 
     private static void installBoundApplication() {
         try {
-            Class<?> appBindDataClass = Class.forName("android.app.ActivityThread$AppBindData");
+            Field boundField = activityThreadClass.getDeclaredField("mBoundApplication");
+            boundField.setAccessible(true);
+            if (boundField.get(activityThread) != null) {
+                return;
+            }
+            Class<?> appBindDataClass = boundField.getType();
             Constructor<?> ctor = appBindDataClass.getDeclaredConstructor();
             ctor.setAccessible(true);
             Object bindData = ctor.newInstance();
 
             ApplicationInfo info = new ApplicationInfo();
             info.packageName = ShellContext.PACKAGE_NAME;
+            info.uid = Process.myUid();
 
             Field appInfoField = appBindDataClass.getDeclaredField("appInfo");
             appInfoField.setAccessible(true);
             appInfoField.set(bindData, info);
 
-            Field boundField = activityThreadClass.getDeclaredField("mBoundApplication");
-            boundField.setAccessible(true);
             boundField.set(activityThread, bindData);
         } catch (Throwable error) {
             System.err.println("AndroidWorkarounds: AppBindData init skipped: " + error);
@@ -285,10 +342,11 @@ public final class AndroidWorkarounds {
 
     private static void installInitialApplication(Context context) {
         try {
-            Application app = Instrumentation.newApplication(Application.class, context);
             Field initialAppField = activityThreadClass.getDeclaredField("mInitialApplication");
             initialAppField.setAccessible(true);
-            initialAppField.set(activityThread, app);
+            if (initialAppField.get(activityThread) == null) {
+                initialAppField.set(activityThread, Instrumentation.newApplication(Application.class, context));
+            }
         } catch (Throwable error) {
             System.err.println("AndroidWorkarounds: mInitialApplication init skipped: " + error);
         }

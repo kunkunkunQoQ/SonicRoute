@@ -71,7 +71,7 @@ public final class OpusAudioRunner {
             capture.checkSupported();
             capture.start();
         } catch (IOException error) {
-            ServerLog.w("Audio capture unavailable, sending disabled marker: " + error.getMessage());
+            ServerLog.w("Audio capture unavailable, sending disabled marker: " + error.getMessage(), error);
             try {
                 writer.writeAudioDisabledMarker();
             } catch (IOException ignored) {

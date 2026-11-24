@@ -389,7 +389,7 @@ internal static partial class Program
             && !rawCmd.Contains("audio_codec=opus", StringComparison.Ordinal)
             && !rawCmd.Contains("audio_bit_rate=", StringComparison.Ordinal)
             && !rawCmd.Contains("audio_encoder=", StringComparison.Ordinal)
-            && rawCmd.Contains("audio_source=playback audio_dup=false audio_target_packages=com.example.music audio_mix_mode=uid", StringComparison.Ordinal),
+            && rawCmd.Contains("audio_source=playback audio_dup=false audio_target_packages=10042 audio_mix_mode=uid", StringComparison.Ordinal),
             "ScrcpyAdbTransport emits audio_codec=raw without audio_bit_rate or audio_encoder when raw-pcm is selected");
 
         foreach (string? opusDecoder in new[] { null, AndroidStreamSettings.ConcentusDecoder })
@@ -411,15 +411,39 @@ internal static partial class Program
         try
         {
             await File.WriteAllTextAsync(Path.Combine(tempRuntime, "sonicroute-catalog.jar"), "test-jar");
-            var transport = new RawPcmTransportFixture();
+            var transport = new RawPcmTransportFixture { Sdk = 30 };
             await using var adb = new AdbClient(tempRuntime, transport);
             var phone = new AndroidDevice("raw-phone", "RawPhone", "device", false);
             await using var scrcpy = new ScrcpyAdbTransport(adb, streaming: _ => new AndroidStreamSettings(AudioBitRate: 160000, AudioDecoder: AndroidStreamSettings.ConcentusDecoder));
-            using Stream stream = await scrcpy.ConnectAsync(phone, app, keepPhoneAudio: false, default);
+            var clone = app with { Uid = 1_010_042 };
+            using Stream stream = await scrcpy.ConnectAsync(phone, clone, keepPhoneAudio: false, default);
             Check(transport.OpenedShellCommands.Count == 1
                 && transport.OpenedShellCommands[0].Contains("audio_codec=opus", StringComparison.Ordinal)
-                && transport.OpenedShellCommands[0].Contains("audio_bit_rate=160000", StringComparison.Ordinal),
-                "ScrcpyAdbTransport.ConnectAsync passes normalized stream command and completes dummy handshake");
+                && transport.OpenedShellCommands[0].Contains("audio_bit_rate=160000", StringComparison.Ordinal)
+                && transport.OpenedShellCommands[0].Contains("audio_target_packages=1010042 ", StringComparison.Ordinal),
+                "Android 11 reaches the normal handshake and passes only the selected clone UID");
+
+            transport.ClonePackages += "package:com.example.shared uid:1010042\n";
+            await CheckRejectedAsync(clone, AndroidErrorCode.SharedUidUnsupported);
+            transport.ClonePackages = "package:com.example.music uid:1010043\n";
+            await CheckRejectedAsync(clone, AndroidErrorCode.AppUidChanged);
+            transport.ClonePackages = "";
+            await CheckRejectedAsync(clone, AndroidErrorCode.AppOrUidUnavailable);
+            transport.Sdk = 29;
+            await CheckRejectedAsync(app, AndroidErrorCode.Android11Required);
+
+            async Task CheckRejectedAsync(AndroidApp target, AndroidErrorCode expected)
+            {
+                await using var capture = new ScrcpyAdbTransport(adb);
+                AndroidErrorCode? actual = null;
+                try { using Stream unexpected = await capture.ConnectAsync(phone, target, false, default); }
+                catch (Exception ex) when (AndroidError.TryGetCode(ex, out var code))
+                {
+                    actual = code;
+                }
+                Check(actual == expected && transport.OpenedShellCommands.Count == 1,
+                    $"Capture rejects {expected} before starting a server");
+            }
         }
         finally
         {
@@ -601,6 +625,8 @@ internal static partial class Program
     {
         private readonly Dictionary<string, long> _jars = new(StringComparer.Ordinal);
         internal readonly List<string> OpenedShellCommands = [];
+        internal int Sdk = 36;
+        internal string ClonePackages = "package:com.example.music uid:1010042\n";
 
         Task IAdbTransport.PushAsync(string serial, string local, string remote, CancellationToken token)
         {
@@ -629,10 +655,12 @@ internal static partial class Program
                 }
                 return Task.FromResult(new AdbShellResult("", 0));
             }
-            if (command == "pm list packages -U")
+            if (command is "pm list packages -U --user 0" or "pm list packages -U --user current")
                 return Task.FromResult(new AdbShellResult("package:com.example.music uid:10042\n", 0));
+            if (command == "pm list packages -U --user 10")
+                return Task.FromResult(new AdbShellResult(ClonePackages, 0));
             if (command == "getprop ro.build.version.sdk")
-                return Task.FromResult(new AdbShellResult("36\n", 0));
+                return Task.FromResult(new AdbShellResult($"{Sdk}\n", 0));
             return Task.FromResult(new AdbShellResult("", 0));
         }
 

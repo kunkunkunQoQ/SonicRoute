@@ -244,7 +244,8 @@ internal static partial class Program
     {
         Task<AdbShellResult> IAdbTransport.RunShellAsync(string serial, string command, CancellationToken token)
         {
-            if (command == "pm list packages -U") return Task.FromResult(new AdbShellResult("package:cn.fixture.video uid:1001\n", 0));
+            if (command is "pm list packages -U --user 0" or "pm list packages -U --user current")
+                return Task.FromResult(new AdbShellResult("package:cn.fixture.video uid:1001\n", 0));
             throw new InvalidOperationException("Unexpected simulated Android command.");
         }
     }
