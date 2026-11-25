@@ -132,7 +132,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         var viewport = contentRect;
         _scroll.ViewportHeight = viewport.Height;
 
-        float padR = _scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth + 6f : 0f;
+        float padR = _scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth : 0f;
         float x = viewport.X;
         float w = MathF.Max(240f, viewport.Width - padR);
         float y = viewport.Y - _scroll.Offset;
@@ -154,8 +154,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         // Page Header
         g.DrawText(L10n.T("St.Settings"), new UiRect(x, y, w, 30f), t.TextPrimary, 22f, 600, UiTextAlign.Leading, UiVertAlign.Center);
         y += 33f;
-        g.DrawText(L10n.T("Settings.PageHint"), new UiRect(x, y, w, 20f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        y += 34f;
+        string pageHint = L10n.T("Settings.PageHint");
+        float pageHintH = MathF.Ceiling(D2dSharedContext.Instance.MeasureText(pageHint, UiMetrics.FontFamily, 11.5f, 400, w, 2048f, true).Height);
+        g.DrawText(pageHint, new UiRect(x, y, w, pageHintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
+        y += pageHintH + 19f;
 
         y = RenderDeviceVisibilityCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
         y = RenderDeviceNamesCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
@@ -525,6 +527,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         return y + cardH;
     }
 
+    private static float MeasureDeviceHint(string hint, float width) =>
+        MathF.Ceiling(D2dSharedContext.Instance.MeasureText(hint, UiMetrics.FontFamily, 11.5f, 400,
+            MathF.Max(1f, width), 2048f, true).Height);
+
     private float RenderDeviceVisibilityCard(
         D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect viewport,
         float x, float y, float w, AppConfig cfg,
@@ -551,14 +557,18 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 bodyH += 10f + 30f + Math.Max(1, inRows) * (itemH + gap);
         }
 
-        float headerH = 48f;
+        string hint = L10n.T("Settings.KeepHint");
+        float hintWidth = MathF.Max(1f, innerW - 32f - (cfg.CollapseDeviceSections ? 102f : 0f));
+        float hintHeight = MeasureDeviceHint(hint, hintWidth);
+        const float headingHeight = 20f;
+        float headerH = headingHeight + 4f + hintHeight + 10f;
         float cardH = pad + headerH + bodyH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 110f, 26f), UiIcon.Monitor, L10n.T("Settings.KeepTitle"));
-        g.DrawText(L10n.T("Settings.KeepHint"), new UiRect(x + pad + 32f, cy + 26f, innerW - 110f, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, headingHeight), UiIcon.Monitor, L10n.T("Settings.KeepTitle"));
+        g.DrawText(hint, new UiRect(x + pad + 32f, cy + headingHeight + 4f, hintWidth, hintHeight), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
 
         if (cfg.CollapseDeviceSections)
         {
@@ -730,14 +740,18 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 bodyH += 8f + 26f + Math.Max(1, inDevices.Count) * (nameRowH + rowGap);
         }
 
-        float headerH = 48f;
+        string hint = L10n.T("St.DeviceNamesHint");
+        float hintWidth = MathF.Max(1f, innerW - 32f - (cfg.CollapseDeviceSections ? 102f : 0f));
+        float hintHeight = MeasureDeviceHint(hint, hintWidth);
+        const float headingHeight = 20f;
+        float headerH = headingHeight + 4f + hintHeight + 10f;
         float cardH = pad + headerH + bodyH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 110f, 26f), UiIcon.Label, L10n.T("St.DeviceNames"));
-        g.DrawText(L10n.T("St.DeviceNamesHint"), new UiRect(x + pad + 32f, cy + 26f, innerW - 110f, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, headingHeight), UiIcon.Label, L10n.T("St.DeviceNames"));
+        g.DrawText(hint, new UiRect(x + pad + 32f, cy + headingHeight + 4f, hintWidth, hintHeight), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
 
         if (cfg.CollapseDeviceSections)
         {

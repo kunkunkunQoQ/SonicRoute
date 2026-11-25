@@ -505,7 +505,11 @@ internal static class UiPrimitives
         g.DrawRoundedRect(rect, UiMetrics.ComboCornerRadius, edge.WithAlphaFraction(opacity), 1f);
         g.DrawText(text, new UiRect(rect.X + 10f, rect.Y, MathF.Max(0f, rect.Width - 32f), rect.Height),
             t.TextPrimary.WithAlphaFraction(opacity), fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawIcon(UiIcon.ChevronDown, new UiRect(rect.Right - 22f, rect.CenterY - 5.5f, 11f, 11f), t.TextSecondary.WithAlphaFraction(opacity), 1.8f, open ? 180f : 0f);
+        float arrowRight = rect.Right - 12f;
+        float arrowTop = rect.CenterY - 2f;
+        var arrowColor = t.TextSecondary.WithAlphaFraction(opacity);
+        g.DrawLine(arrowRight - 8f, arrowTop, arrowRight - 4f, arrowTop + 4f, arrowColor, 1.5f);
+        g.DrawLine(arrowRight - 4f, arrowTop + 4f, arrowRight, arrowTop, arrowColor, 1.5f);
     }
 
     public static void DrawTextBox(

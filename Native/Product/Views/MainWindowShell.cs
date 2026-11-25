@@ -464,7 +464,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             _pageViewport.X + 26f,
             bodyY + 20f,
             MathF.Max(40f, _pageViewport.Width - 52f),
-            MathF.Max(40f, bodyH - 20f - padBottom));
+            MathF.Max(40f, bodyH - 20f - padBottom)).Deflate(1f);
+        // The frozen RootBorder reserves 1 DIP on every side of the content presenter.
 
         if (_activePage != null)
         {
