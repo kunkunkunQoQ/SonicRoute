@@ -55,10 +55,10 @@ namespace SonicRoute
             _mouseHook = new NativeMouseBindings(window, trayWheel, everywhere);
             _mouseHook.Reload([]);
         }
-        internal void ConfigureTrayWheel(bool active, bool everywhere)
+        internal bool ConfigureTrayWheel(bool active, bool everywhere)
         {
             _mouseHook.Configure(active, everywhere);
-            _mouseHook.Reload(_compiledMouseBindings);
+            return _mouseHook.Reload(_compiledMouseBindings);
         }
         internal void Dispatch(int id)
         {

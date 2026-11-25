@@ -316,6 +316,8 @@ internal static unsafe class NativeDialogs
     [DllImport("user32.dll")] private static extern nint DispatchMessageW(in Message message);
     [DllImport("user32.dll")] private static extern void PostQuitMessage(int code);
     [DllImport("user32.dll")] private static extern short GetKeyState(int key);
+    internal static void ShowError(nint owner, string title, string message) => MessageBoxW(owner, message, title, 0x10);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)] private static extern int MessageBoxW(nint owner, string text, string caption, uint type);
     [DllImport("gdi32.dll")] private static extern nint GetStockObject(int index);
     [DllImport("ole32.dll")] private static extern int CoCreateInstance(ref Guid rclsid, nint pUnkOuter, uint dwClsContext, ref Guid riid, out nint ppv);

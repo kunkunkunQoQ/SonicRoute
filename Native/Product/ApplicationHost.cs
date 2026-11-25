@@ -209,7 +209,8 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
         StopServices();
         _updates.Dispose();
         AutoRuleStore.Shutdown();
-        ConfigService.FlushPendingSaves();
+        if (!ConfigService.PendingSaves.Wait(TimeSpan.FromSeconds(3)))
+            HandleError(new TimeoutException("Configuration write did not finish before shutdown."));
         if (Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_METRICS") == "1")
         {
             var released = new AudioRelease(Native.Audio.Com.Owners, Native.Audio.Subscription.Active, Native.Audio.MtaLifetime.Active);

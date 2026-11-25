@@ -371,6 +371,14 @@ internal abstract unsafe class LayeredWindow : IDisposable
         }
     }
 
+    internal static void ScrollFromEditor(nint owner, nuint flags, nint position)
+    {
+        if (!Instances.TryGetValue(owner, out var window) || !window.IsVisible) return;
+        var point = new Point { X = (short)(long)position, Y = (short)((long)position >> 16) };
+        ScreenToClient(owner, ref point);
+        window.OnMouseWheel(point.X / window.DpiScale, point.Y / window.DpiScale, (short)(flags >> 16) / 120f, false);
+    }
+
     internal static void ReturnFromEditor(nint owner, bool advance, bool reverse)
     {
         if (!Instances.TryGetValue(owner, out var window) || !window.IsVisible) return;
@@ -532,6 +540,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
         EnsureBackBuffer(wPx, hPx);
         _target ??= new D2dTarget(D2dSharedContext.Instance);
         _target.BeginDraw(_memDc, wPx, hPx, _dpi);
+        var editor = ActiveEditor;
+        _target.Editor = editor is { IsOpen: true } ? editor : null;
+        _target.Editor?.BeginLayout();
         try
         {
             OnRender(_target, wPx / DpiScale, hPx / DpiScale);
@@ -547,6 +558,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
         }
         finally
         {
+            _target.Editor = null;
             _target.EndDraw();
         }
 
@@ -554,6 +566,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
         var src = new Point { X = 0, Y = 0 };
         var blend = new BlendFunction { BlendOp = 0, BlendFlags = 0, SourceConstantAlpha = 255, AlphaFormat = 1 };
         UpdateLayeredWindow(Handle, 0, 0, ref size, _memDc, ref src, 0, ref blend, 2 /*ULW_ALPHA*/);
+        if (editor is { IsOpen: true }) editor.FinishLayout(this);
     }
 
     private void EnsureBackBuffer(int wPx, int hPx)
@@ -626,6 +639,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     protected virtual void OnChar(char ch) { }
     protected virtual void OnActivated(bool active) { }
     protected virtual void OnResized(float widthDip, float heightDip) { }
+    protected virtual InlineEditHost? ActiveEditor => null;
     protected virtual void OnMoved(int leftPx, int topPx) { }
     protected virtual void OnCaptureLost() { }
     protected virtual void OnWindowStateChanged(bool minimized, bool maximized) { }
@@ -737,6 +751,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                         win._topPx = unchecked((short)(((long)lParam >> 16) & 0xFFFF));
                     }
                     win.OnMoved(win._leftPx, win._topPx);
+                    if (win.ActiveEditor is { IsOpen: true } editor) editor.FinishLayout(win);
                 }
                 return 0;
 
@@ -821,6 +836,24 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 if (win._leftClickCount != 0) win.ReleasePointerCapture();
                 if (!win.NoActivate) SetFocus(hwnd);
                 if (win.Handle != hwnd || !win._visible) return 0;
+                var (fieldX, fieldY) = ExtractPoint(lParam, win.DpiScale);
+                if (win.ActiveEditor is { } field && win.InputMap is { } fields &&
+                    fields.HitTest(fieldX, fieldY - win.InputOffsetY) is { Cursor: UiCursorKind.IBeam } textField)
+                {
+                    fields.FocusPointer(fieldX, fieldY - win.InputOffsetY);
+                    bool sameField = field.IsOpen && field.FieldBounds.Contains(fieldX, fieldY);
+                    if (sameField || win.ActivateFocused(textField, MakePointerArgs(wParam, lParam, win.DpiScale,
+                            UiMouseButton.Left, msg == WmLButtonDblClk ? 2 : 1)))
+                    {
+                        if (field.IsOpen && win.IsVisible)
+                        {
+                            win.RenderNow();
+                            var pt = win.DipToScreenPx(fieldX, fieldY);
+                            field.BeginPointerSelection(pt.X, pt.Y, msg, wParam);
+                        }
+                        return 0;
+                    }
+                }
                 SetCapture(hwnd);
                 if (win.Handle != hwnd || GetCapture() != hwnd) return 0;
                 win._tooltip?.Clear();

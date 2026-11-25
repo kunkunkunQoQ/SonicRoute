@@ -379,7 +379,10 @@ internal sealed class OsdWindow : LayeredWindow
         _config.OsdCustomPhysicalY = TopPx;
         _config.OsdCustomX = (int)MathF.Round(LeftPx / scale);
         _config.OsdCustomY = (int)MathF.Round(TopPx / scale);
-        ConfigService.Save(_config);
+        if (!ConfigService.TryCommit(_config))
+        {
+            NativeDialogs.ShowError(Handle, BuildIdentity.DisplayName, L10n.T("Tray.SaveFailed"));
+        }
 
         EndAdjustFlags();
         Hide();

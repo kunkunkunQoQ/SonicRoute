@@ -64,9 +64,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private readonly Dictionary<string, (byte[] Pixels, int W, int H, int Ver)> _extIconCache = new(StringComparer.Ordinal);
     private int _extIconVer;
 
-    private readonly object _masterWriteGate = new();
-    private (string? Endpoint, int Level)? _pendingMasterWrite;
-    private bool _masterWriteRunning;
+
 
     private UiThemePalette _theme;
     private OutputVolumesPopupWindow? _outputVolumesPopup;
@@ -90,7 +88,12 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private List<AppRowState> _rows = new();
     private string? _expandedAppId;
     private readonly Dictionary<string, float> _smoothedPeaks = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _externalVolumeVersion = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Identity, Flow Flow), long> _pendingRoutes = new();
+    private Task _inputWrites = Task.CompletedTask;
+#if SONICROUTE_PHONE
+    private Task _externalOutputWrites = Task.CompletedTask;
+#endif
+    private long _routeRevision;
 
     private bool _pinned;
     private bool _loading;
@@ -238,6 +241,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
             : _config.QuickPanelShowOutputName;
         bool includeInputs = _config.ExperimentalMic && _config.MicInPanel;
         string? expandedId = _expandedAppId;
+        long readRevision = _host.EndpointWriteRevision;
+        long routesAtRead = _routeRevision;
+        long volumeAtRead = _host.AppVolumeRevision;
 
         _ = Task.Run(() =>
         {
@@ -407,7 +413,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 _defaultOutputId = defId;
                 if (_panelOutputId == null || !render.Any(d => IdCmp.Equals(d.Id, _panelOutputId)))
                     _panelOutputId = defId;
-                if (!_draggingMaster) _masterVolume = masterVol;
+                string? masterId = _config.PanelChangeSystemDefault ? defId : _panelOutputId;
+                if (!_draggingMaster && readRevision == _host.EndpointWriteRevision && !_host.EndpointVolumePending(masterId))
+                    _masterVolume = masterVol;
                 _masterMuted = masterMute;
                 _globalPlaybackMuted = globalPlaybackMuted;
                 _globalMicMuted = micMuted;
@@ -415,6 +423,22 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 _smoothedPeaks.Clear();
                 foreach (var previous in _rows)
                     if (previous.Peak > 0f) _smoothedPeaks[previous.Identity] = previous.Peak;
+                foreach (var next in newRows)
+                {
+                    var previous = _rows.Find(r => r.Identity == next.Identity);
+                    if (previous == null) continue;
+                    if (routesAtRead != _routeRevision || _pendingRoutes.ContainsKey((next.Identity, Flow.Render)))
+                    {
+                        next.NativeOutputId = previous.NativeOutputId;
+                        next.SelectedOutputs = previous.SelectedOutputs;
+                        next.CachedOutputLabel = previous.CachedOutputLabel;
+                    }
+                    next.OutputAnchor = previous.OutputAnchor;
+                    if (routesAtRead != _routeRevision || _pendingRoutes.ContainsKey((next.Identity, Flow.Capture)))
+                        next.NativeInputId = previous.NativeInputId;
+                    if (volumeAtRead != _host.AppVolumeRevision || _host.HasPendingVolume(next.App))
+                        next.Volume = previous.Volume;
+                }
                 _rows = newRows;
 
                 foreach (var row in _rows)
@@ -1395,7 +1419,12 @@ internal sealed class QuickPanelWindow : LayeredWindow
             _config.QuickPanelHeight = (int)Math.Clamp(MathF.Round(HeightDip), 350f, 850f);
             if (_resizingTopEdge && string.Equals(_config.QuickPanelPosMode, "custom", StringComparison.OrdinalIgnoreCase))
                 _config.QuickPanelCustomY = CurrentCustomPosition().Y;
-            ConfigService.TrySave(_config);
+            if (!CommitPanelSettings())
+            {
+                SetBoundsPx(LeftPx, _resizeStartTopPx, WidthDip, _resizeStartHeightDip);
+                RepositionCompanions();
+                return;
+            }
             _host.ViewSettingsChanged();
             RepositionCompanions();
             return;
@@ -1673,76 +1702,28 @@ internal sealed class QuickPanelWindow : LayeredWindow
         }
     }
 
-    private void QueueAppVolume(AppRowState row, int value)
-    {
-        if (row.IsExternal)
-        {
-            int ver = _externalVolumeVersion.TryGetValue(row.Identity, out int prev) ? prev + 1 : 1;
-            _externalVolumeVersion[row.Identity] = ver;
-            var app = row.App;
-            _ = Task.Run(() =>
-            {
-                try
-                {
-                    var st = _host.Audio.Volume(app, level: value);
-                    _host.TryPost(() =>
-                    {
-                        if (IsDisposed) return;
-                        if (_externalVolumeVersion.TryGetValue(row.Identity, out int cur) && cur == ver && st.Percent >= 0)
-                            row.Volume = st.Percent;
-                        if (IsVisible) Invalidate();
-                    });
-                }
-                catch { }
-            });
-            return;
-        }
+    private void QueueAppVolume(AppRowState row, int value) => _host.QueueAppVolume(row.App, value);
 
-        _host.QueueVolume(row.Pid, value, (actual, applied) =>
-        {
-            _host.TryPost(() =>
-            {
-                if (IsDisposed) return;
-                if (applied) row.Volume = actual;
-                if (IsVisible) Invalidate();
-            });
-        });
+    internal void ConfirmAppVolume(string identity, int actual)
+    {
+        if (IsDisposed || !IsVisible) return;
+        var row = _rows.Find(item => item.Identity == identity);
+        if (row == null || row.Volume == actual) return;
+        row.Volume = actual;
+        Invalidate();
     }
 
     private void QueueMasterVolume(int level)
     {
-        string? target = _config.PanelChangeSystemDefault ? null : (_panelOutputId ?? _defaultOutputId);
-        bool startWorker = false;
-        lock (_masterWriteGate)
-        {
-            _pendingMasterWrite = (target, level);
-            if (!_masterWriteRunning)
-            {
-                _masterWriteRunning = true;
-                startWorker = true;
-            }
-        }
-        if (!startWorker) return;
+        string? target = _config.PanelChangeSystemDefault ? _defaultOutputId : (_panelOutputId ?? _defaultOutputId);
+        _host.QueueEndpointVolume(target, level);
+    }
 
-        _ = Task.Run(() =>
-        {
-            while (true)
-            {
-                (string? Endpoint, int Level) job;
-                lock (_masterWriteGate)
-                {
-                    if (!_pendingMasterWrite.HasValue)
-                    {
-                        _masterWriteRunning = false;
-                        break;
-                    }
-                    job = _pendingMasterWrite.Value;
-                    _pendingMasterWrite = null;
-                }
-                try { _host.Audio.Volume(Flow.Render, job.Endpoint, 0, level: job.Level); }
-                catch { }
-            }
-        });
+    internal void ConfirmEndpointVolume(string endpoint, int volume)
+    {
+        if (IsDisposed) return;
+        OnOutputPopupEndpointChanged(endpoint, volume, null);
+        _outputVolumesPopup?.SyncEndpointState(endpoint, volume);
     }
 
     private void ToggleMasterMute()
@@ -1751,18 +1732,18 @@ internal sealed class QuickPanelWindow : LayeredWindow
         SyncMasterToOutputPopup(null, _masterMuted);
         Invalidate();
 
-        string? target = _config.PanelChangeSystemDefault ? null : (_panelOutputId ?? _defaultOutputId);
+        string? target = _config.PanelChangeSystemDefault ? _defaultOutputId : (_panelOutputId ?? _defaultOutputId);
         string title = ResolveDeviceDisplayName(_outputs, target);
-        _ = Task.Run(() =>
+        _host.SubmitPanelAudio(() =>
         {
             try
             {
                 var st = _host.Audio.Volume(Flow.Render, target, 0, toggle: true);
-                _host.TryPost(() =>
+                _host.PostContinuation(() =>
                 {
-                    _masterMuted = st.Muted;
-                    _masterVolume = st.Percent;
-                    SyncMasterToOutputPopup(st.Percent, st.Muted);
+                    if (IsDisposed) return;
+                    OnOutputPopupEndpointChanged(target, st.Percent, st.Muted);
+                    _outputVolumesPopup?.SyncEndpointState(target, st.Percent, st.Muted);
                     _host.PublishOsd(title, L10n.T(st.Muted ? "Qp.Muted" : "Qp.Unmuted"),
                         volume: st.Percent, muted: st.Muted, success: true);
                     if (IsVisible) Invalidate();
@@ -1770,7 +1751,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             }
             catch
             {
-                _host.TryPost(() => _host.PublishOsd(title, L10n.T("Tray.AudioUnavailable"), success: false));
+                _host.PostContinuation(_host.ReportAudioWriteFailure);
             }
         });
     }
@@ -1782,13 +1763,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         _outputVolumesPopup?.SyncEndpointState(null, null, _globalPlaybackMuted);
         Invalidate();
 
-        _ = Task.Run(() =>
+        _host.SubmitPanelAudio(() =>
         {
             try
             {
                 bool muted = _host.Audio.GlobalPlaybackMute(null);
-                _host.TryPost(() =>
+                _host.PostContinuation(() =>
                 {
+                    if (IsDisposed) return;
                     _globalPlaybackMuted = muted;
                     _masterMuted = muted;
                     _outputVolumesPopup?.SyncEndpointState(null, null, muted);
@@ -1799,8 +1781,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
             }
             catch
             {
-                _host.TryPost(() =>
+                _host.PostContinuation(() =>
                 {
+                    if (IsDisposed) return;
                     _host.PublishOsd(L10n.T("Qp.AllApps"), L10n.T("Tray.AudioUnavailable"), success: false);
                     RefreshData();
                 });
@@ -1810,13 +1793,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private void ToggleGlobalMicMute()
     {
-        _ = Task.Run(() =>
+        _host.SubmitPanelAudio(() =>
         {
             try
             {
                 bool muted = _host.Audio.GlobalMicMute(null);
-                _host.TryPost(() =>
+                _host.PostContinuation(() =>
                 {
+                    if (IsDisposed) return;
                     _globalMicMuted = muted;
                     _micKnown = true;
                     _host.PublishOsd(L10n.T("Ov.MuteMic"), L10n.T(muted ? "Qp.MicMuted" : "Qp.MicUnmuted"),
@@ -1826,7 +1810,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             }
             catch
             {
-                _host.TryPost(() => _host.PublishOsd(L10n.T("Ov.MuteMic"), L10n.T("Tray.AudioUnavailable"), success: false));
+                _host.PostContinuation(_host.ReportAudioWriteFailure);
             }
         });
     }
@@ -1841,13 +1825,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         UpdatePeakTargets();
         Invalidate();
         var app = row.App;
-        _ = Task.Run(() =>
+        _host.SubmitPanelAudio(() =>
         {
             try
             {
                 var st = _host.Audio.Volume(app, toggle: true);
-                _host.TryPost(() =>
+                _host.PostContinuation(() =>
                 {
+                    if (IsDisposed) return;
                     var current = _rows.Find(r => r.Identity == row.Identity);
                     if (current == null) return;
                     current.Muted = st.Muted;
@@ -1856,7 +1841,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     if (IsVisible) Invalidate();
                 });
             }
-            catch { }
+            catch { _host.PostContinuation(_host.ReportAudioWriteFailure); }
         });
     }
 
@@ -1876,6 +1861,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (!next) return;
         var app = target.App;
         bool includeInputs = _config.ExperimentalMic && _config.MicInPanel && !target.IsExternal;
+        long generation = _routeRevision;
         _ = Task.Run(() =>
         {
             try
@@ -1898,9 +1884,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
                 _host.TryPost(() =>
                 {
-                    target.NativeOutputId = route;
-                    target.SelectedOutputs = selected;
-                    target.NativeInputId = inputRoute;
+                    if (IsDisposed || generation != _routeRevision ||
+                        _rows.Find(r => r.Identity == target.Identity && r.Expanded) is not { } current) return;
+                    if (!_pendingRoutes.ContainsKey((current.Identity, Flow.Render)))
+                    {
+                        current.NativeOutputId = route;
+                        current.SelectedOutputs = selected;
+                    }
+                    if (!_pendingRoutes.ContainsKey((current.Identity, Flow.Capture))) current.NativeInputId = inputRoute;
                     if (IsVisible) Invalidate();
                 });
             }
@@ -1958,49 +1949,62 @@ internal sealed class QuickPanelWindow : LayeredWindow
         row.CachedOutputLabel = ResolveDeviceDisplayName(_allRenderOutputs.Length > 0 ? _allRenderOutputs : _outputs, preferred);
         Invalidate();
 
-        var app = row.App;
-        _ = Task.Run(async () =>
-        {
-            try
-            {
+        Task<ControlReply> write;
 #if SONICROUTE_PHONE
-                if (app.IsExternal)
-                {
-                    await _host.Audio.SetExternalOutputsAsync(app, nextOutputs).ConfigureAwait(false);
-                }
-                else
+        if (row.IsExternal)
+        {
+            var previous = _externalOutputWrites;
+            write = Task.Run(async () =>
+            {
+                try { await previous.ConfigureAwait(false); } catch { /* A failed selection does not cancel the next. */ }
+                return await _host.Audio.SetExternalOutputsAsync(row.App, nextOutputs).ConfigureAwait(false);
+            });
+            _externalOutputWrites = write;
+        }
+        else
 #endif
-                if (!ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(devId))
-                {
-                    await _host.CurrentApp.SelectOutputAsync(row.Pid, devId).ConfigureAwait(false);
-                }
-                else
-                {
-                    await _host.CurrentApp.SetOutputsAsync(row.Pid, preferred, nextOutputs).ConfigureAwait(false);
-                }
-            }
-            catch { }
-
-            _host.TryPost(RefreshData);
-        });
+        {
+            write = !ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(devId)
+                ? _host.CurrentApp.SelectOutputAsync(row.Pid, devId)
+                : _host.CurrentApp.SetOutputsAsync(row.Pid, preferred, nextOutputs);
+        }
+        ObserveRoute(row.Identity, Flow.Render, write);
     }
 
     private void SelectAppInput(int rowIdx, string devId)
     {
-        if (rowIdx < 0 || rowIdx >= _rows.Count) return;
+        if ((uint)rowIdx >= (uint)_rows.Count) return;
         var row = _rows[rowIdx];
         if (row.IsExternal) return;
-
         row.NativeInputId = devId;
         Invalidate();
 
-        int pid = row.Pid;
-        string? target = AudioService.IsSystemDefault(devId) ? null : devId;
-        _ = Task.Run(() =>
+        Task previous = _inputWrites;
+        var write = Task.Run(async () =>
         {
-            try { _host.Audio.SetRoute(pid, Flow.Capture, target); }
-            catch { }
-            _host.TryPost(RefreshData);
+            try { await previous.ConfigureAwait(false); } catch { }
+            bool applied = _host.Audio.SetRoute(row.Pid, Flow.Capture, AudioService.IsSystemDefault(devId) ? null : devId);
+            return new ControlReply(applied ? "ok" : "error: route");
+        });
+        _inputWrites = write;
+        ObserveRoute(row.Identity, Flow.Capture, write);
+    }
+
+    private async void ObserveRoute(string identity, Flow flow, Task<ControlReply> write)
+    {
+        var key = (identity, flow);
+        long version = ++_routeRevision;
+        _pendingRoutes[key] = version;
+        bool applied;
+        try { applied = !(await write.ConfigureAwait(false)).Text.StartsWith("error", StringComparison.OrdinalIgnoreCase); }
+        catch (Exception ex) { ExceptionDiagnostics.Record("Panel.Route", ex); applied = false; }
+        _host.PostContinuation(() =>
+        {
+            if (IsDisposed || _pendingRoutes.GetValueOrDefault(key) != version) return;
+            _pendingRoutes.Remove(key);
+            ++_routeRevision;
+            if (!applied) _host.ReportAudioWriteFailure();
+            else if (IsVisible) RefreshData();
         });
     }
 
@@ -2025,8 +2029,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     _host.AirPlay.Disconnect();
                 }
             }
-            catch { }
-            _host.TryPost(RefreshData);
+            catch (Exception ex) { ExceptionDiagnostics.Record("Panel.Disconnect", ex); _host.TryPost(_host.ReportAudioWriteFailure); }
+            _host.TryPost(() => { if (IsVisible && !IsDisposed) RefreshData(); });
         });
 #endif
     }
@@ -2047,18 +2051,19 @@ internal sealed class QuickPanelWindow : LayeredWindow
             _comboPopup = null;
             if (_config.PanelChangeSystemDefault)
             {
-                _ = Task.Run(() =>
+                _host.SubmitPanelAudio(() =>
                 {
                     try
                     {
                         _host.Audio.SetDefault(Flow.Render, picked.Key);
                         _host.TryPost(() =>
                         {
+                            if (IsDisposed) return;
                             RefreshData();
                             _outputVolumesPopup?.RefreshData();
                         });
                     }
-                    catch { }
+                    catch (Exception ex) { ExceptionDiagnostics.Record("Panel.Default", ex); _host.TryPost(_host.ReportAudioWriteFailure); }
                 });
             }
             else
@@ -2091,7 +2096,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         if (_adjustMode) return;
         _config.QuickPanelShowAllOutputVolumes = !_config.QuickPanelShowAllOutputVolumes;
-        ConfigService.TrySave(_config);
+        if (!CommitPanelSettings()) return;
         SyncCompanionsVisibility();
         Invalidate();
     }
@@ -2100,7 +2105,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private void TogglePhoneCompanion()
     {
         _config.QuickPanelShowPhoneAudio = !_config.QuickPanelShowPhoneAudio;
-        ConfigService.TrySave(_config);
+        if (!CommitPanelSettings()) return;
         SyncCompanionsVisibility();
         Invalidate();
     }
@@ -2242,11 +2247,19 @@ internal sealed class QuickPanelWindow : LayeredWindow
         return (Math.Max(0, (int)MathF.Round(LeftPx / scale)), Math.Max(0, (int)MathF.Round(TopPx / scale)));
     }
 
+    private bool CommitPanelSettings()
+    {
+        if (ConfigService.TryCommit(_config)) return true;
+        _host.PublishOsd(BuildIdentity.DisplayName, L10n.T("Tray.SaveFailed"), success: false);
+        Invalidate();
+        return false;
+    }
+
     private void SaveAdjustPosition()
     {
         _config.QuickPanelPosMode = "custom";
         (_config.QuickPanelCustomX, _config.QuickPanelCustomY) = CurrentCustomPosition();
-        ConfigService.TrySave(_config);
+        if (!CommitPanelSettings()) { CancelAdjustMode(); return; }
         _adjustMode = false;
         _adjustDragging = false;
         _host.ViewSettingsChanged();

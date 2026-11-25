@@ -43,6 +43,12 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     private string _pairAddress = "";
     private string _pairCode = "";
     private string _connectAddress = "";
+    private IReadOnlyList<AndroidSavedConnection> _savedConnections = [];
+    private AndroidSavedConnection? _savedChoice;
+    private AndroidDevice[] _restorableUsb = [];
+    private CancellationTokenSource? _searchSaved;
+    private bool _searchedSaved, _manualSearch;
+    private string? _savedSearchStatus;
     private byte[]? _qrBgra;
     private int _qrSizePx;
     private int _qrVersion;
@@ -67,7 +73,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
     private string _remoteFolder = AndroidFileTransfer.Downloads;
     private IReadOnlyList<AndroidStorageFile> _remoteFiles = Array.Empty<AndroidStorageFile>();
     private readonly HashSet<string> _selectedRemoteFiles = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Queue<(string[] Paths, string Destination, string? PullFrom)>> _pendingTransfers = new(StringComparer.Ordinal);
+
     private bool _showFileBrowser;
     private bool _choosingPhoneFolder;
     private bool _remoteLoading;
@@ -126,7 +132,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         _active = true;
         var phone = _actions.Host.Phone;
         phone.Changed += OnPhoneChanged;
-        phone.Transfers.Changed += OnTransfersChanged;
+
         phone.StartTracking();
         _airPlay.Attach();
 
@@ -149,9 +155,10 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         OnCaptureLost();
         var phone = _actions.Host.Phone;
         phone.Changed -= OnPhoneChanged;
-        phone.Transfers.Changed -= OnTransfersChanged;
+
         _airPlay.Detach();
         StopQrPairing();
+        ResetSavedSearch();
         StopMediaWatch();
         CancelEncoderRead();
         CancelRemoteList();
@@ -192,6 +199,9 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             RestartMediaWatch(online);
             CloseCatalog();
         }
+        var cached = phone.Discovery.CurrentDevices ?? [];
+        _restorableUsb = IsConnectionPage ? cached.Where(device => !device.IsWifi && device.State == "device" &&
+            phone.Connections.Resolve(device) == null && !AndroidConnectionManager.IsAmbiguous(device, cached)).ToArray() : [];
         RefreshStreamingSettings(online);
         UpdateQrPairing();
         _actions.Invalidate();
@@ -210,39 +220,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         });
     }
 
-    private void OnTransfersChanged(string profileId)
-    {
-        _actions.Host.TryPost(() =>
-        {
-            if (!_active) return;
-            var phone = _actions.Host.Phone;
-            var state = phone.Transfers.Get(profileId);
-            if (state?.Phase == AndroidFilePhase.Cancelled)
-            {
-                _pendingTransfers.Remove(profileId);
-            }
-            else if (state?.Phase != AndroidFilePhase.Running
-                && _pendingTransfers.TryGetValue(profileId, out var queue) && queue.Count > 0)
-            {
-                var targetProfile = phone.Store.Profiles.FirstOrDefault(p => p.Id == profileId);
-                var online = targetProfile?.LastDevice is { } ld ? phone.Connections.Get(ld).Device : null;
-                if (online != null)
-                {
-                    var next = queue.Dequeue();
-                    if (queue.Count == 0) _pendingTransfers.Remove(profileId);
-                    if (!phone.StartTransfer(online, next.Paths, next.Destination, next.PullFrom))
-                    {
-                        SetStatus(L10n.T("Tray.AudioActionFailed"), true);
-                    }
-                }
-                else
-                {
-                    _pendingTransfers.Remove(profileId);
-                }
-            }
-            _actions.Invalidate();
-        });
-    }
+
 
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
@@ -555,7 +533,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         AndroidDevice? online)
     {
         var transfer = phone.Transfers.Get(profile.Id);
-        int queuedCount = _pendingTransfers.TryGetValue(profile.Id, out var q) ? q.Count : 0;
+        int queuedCount = phone.QueuedTransferCount(profile.Id);
         var entries = _choosingPhoneFolder
             ? _remoteFiles.Where(f => f.Directory).ToArray()
             : _remoteFiles.ToArray();
@@ -786,11 +764,11 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
         g.DrawText(L10n.T("Phone.PairingAddressLabel"), new UiRect(cx, qy + 48f, colW, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         UiPrimitives.DrawTextBox(g, t, _hit, "phone.pairaddr", new UiRect(cx, qy + 68f, colW, 30f), _pairAddress, "192.168.1.100:37099",
-            focused: _actions.ActiveInlineEditTag == "phone.pairaddr", mono: true, fontSize: 12f);
+            focused: _actions.ActiveInlineEditTag == "phone.pairaddr", mono: true, fontSize: 12f, enabled: !_busy);
 
         g.DrawText(L10n.T("Phone.PairingCodeLabel"), new UiRect(cx, qy + 106f, colW, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         UiPrimitives.DrawTextBox(g, t, _hit, "phone.paircode", new UiRect(cx, qy + 126f, colW, 32f), _pairCode, "123456",
-            focused: _actions.ActiveInlineEditTag == "phone.paircode", mono: true, fontSize: 15f);
+            focused: _actions.ActiveInlineEditTag == "phone.paircode", mono: true, fontSize: 15f, enabled: !_busy);
 
         UiPrimitives.DrawAccentButton(g, t, _hit, "phone.pairbtn", new UiRect(cx, qy + 170f, colW, 32f), L10n.T("Phone.PairAndConnect"),
             enabled: !_busy && _pairAddress.Length > 0 && _pairCode.Length > 0, fontSize: 12f);
@@ -798,7 +776,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         y = pairCard.Bottom + 10f;
 
         // Card 2: Direct Connect + USB Refresh
-        var directCard = new UiRect(x, y, w, 108f);
+        var directCard = new UiRect(x, y, w, 140f + 32f * _restorableUsb.Length + (_savedSearchStatus == null ? 0f : 34f));
         UiPrimitives.DrawCard(g, t, directCard, 12f);
         float dx = directCard.X + 12f;
         float dw = directCard.Width - 24f;
@@ -808,12 +786,26 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         g.DrawText(L10n.T("Phone.DirectConnectDesc"), new UiRect(dx, dy + 22f, dw, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
 
         var connBox = new UiRect(dx, dy + 48f, MathF.Max(100f, dw - 196f), 32f);
-        UiPrimitives.DrawTextBox(g, t, _hit, "phone.connaddr", connBox, _connectAddress, "192.168.1.100:5555",
-            focused: _actions.ActiveInlineEditTag == "phone.connaddr", mono: true, fontSize: 12f);
+        if (_savedChoice == null)
+            UiPrimitives.DrawTextBox(g, t, _hit, "phone.connaddr", connBox, _connectAddress, "192.168.1.100:5555",
+                focused: _actions.ActiveInlineEditTag == "phone.connaddr", mono: true, fontSize: 12f, enabled: !_busy);
+        else
+            UiPrimitives.DrawComboBox(g, t, _hit, "phone.saved", connBox, SavedLabel(_savedChoice), enabled: !_busy);
         UiPrimitives.DrawAccentButton(g, t, _hit, "phone.connbtn", new UiRect(connBox.Right + 8f, dy + 48f, 88f, 32f), L10n.T("Phone.ConnectShort"),
-            enabled: !_busy && _connectAddress.Length > 0, fontSize: 12f);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.usbrefresh", new UiRect(connBox.Right + 104f, dy + 48f, 92f, 32f),
+            enabled: !_busy && (_savedChoice != null || _connectAddress.Length > 0), fontSize: 12f);
+        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.searchsaved", new UiRect(connBox.Right + 104f, dy + 48f, 92f, 32f),
+            L10n.T("Phone.SearchSavedDevices"), enabled: !_busy && !_manualSearch, fontSize: 12f, icon: UiIcon.Search);
+        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.usbrefresh", new UiRect(dx, dy + 88f, 120f, 28f),
             L10n.T("History.Refresh"), enabled: !_busy, fontSize: 12f, icon: UiIcon.Refresh);
+        float usbY = dy + 120f;
+        foreach (var device in _restorableUsb)
+        {
+            UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.restoreusb:" + AndroidDeviceIdentity.Key(device),
+                new UiRect(dx, usbY, dw, 28f), string.Format(L10n.T("Phone.RestoreUsbDevice"), device.Name), enabled: !_busy);
+            usbY += 32f;
+        }
+        if (_savedSearchStatus != null)
+            g.DrawText(L10n.T(_savedSearchStatus), new UiRect(dx, usbY, dw, 34f), t.TextSecondary, 11f, wrap: true);
 
         return directCard.Bottom + 12f;
     }
@@ -957,7 +949,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             {
                 Rename(text);
                 _actions.Invalidate();
-            });
+            }, selectAll: true, maxLength: 64);
             return true;
         }
         if (id == "phone.appsearch")
@@ -980,7 +972,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
             {
                 _pairCode = t.Trim();
                 _actions.Invalidate();
-            }, mono: true);
+            }, mono: true, maxLength: 6);
             return true;
         }
         if (id == "phone.connaddr")
@@ -996,13 +988,36 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         if (id == "phone.pairbtn")
         {
             _actions.CloseInlineEdit(commit: true);
-            RunBusy(ct => phone.PairAsync(_pairAddress.Trim(), _pairCode.Trim(), ct), "Phone.ConnectedStatus");
+            string address = _pairAddress.Trim(), code = _pairCode.Trim();
+            _pairCode = "";
+            RunBusy(ct => phone.PairAsync(address, code, ct), "Phone.ConnectedStatus");
+            return true;
+        }
+        if (id == "phone.searchsaved") { SearchSaved(manual: true); return true; }
+        if (id == "phone.saved" && !_busy)
+        {
+            var choices = _savedConnections.Select(saved => new ComboChoice(saved.Address, SavedLabel(saved))).ToList();
+            choices.Add(new("", L10n.T("Phone.ManualConnectAddress")));
+            _actions.ShowCombo(hit.Value.Bounds, choices, _savedChoice?.Address ?? "", pick =>
+            {
+                _savedChoice = _savedConnections.FirstOrDefault(saved => saved.Address == pick.Key);
+                _actions.Invalidate();
+            });
             return true;
         }
         if (id == "phone.connbtn")
         {
             _actions.CloseInlineEdit(commit: true);
-            RunBusy(ct => phone.DiscoverAndConnectAsync(_connectAddress.Trim(), ct), "Phone.ConnectedStatus");
+            var saved = _savedChoice;
+            string address = _connectAddress.Trim();
+            RunBusy(ct => phone.DiscoverAndConnectAsync(address, ct, saved), "Phone.ConnectedStatus");
+            return true;
+        }
+        const string restoreUsb = "phone.restoreusb:";
+        if (id.StartsWith(restoreUsb, StringComparison.Ordinal))
+        {
+            var chosen = _restorableUsb.FirstOrDefault(d => AndroidDeviceIdentity.Key(d) == id[restoreUsb.Length..]);
+            if (chosen != null) RunBusy(ct => phone.RestoreUsbAsync(chosen, ct), "Phone.ConnectedStatus");
             return true;
         }
         if (id == "phone.usbrefresh")
@@ -1032,7 +1047,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         {
             if (NativeDialogs.Confirm(_actions.OwnerWindow.Handle, L10n.T("Phone.DefaultName"), L10n.T("Phone.DeleteDevice")))
             {
-                _pendingTransfers.Remove(profile.Id);
+                phone.ClearQueuedTransfers(profile.Id);
                 RunBusy(_ => phone.RemovePhoneAsync(profile.Id), "Phone.StatusRemovedKeepAuth");
             }
             return true;
@@ -1189,7 +1204,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         }
         if (id == "phone.cancelfile")
         {
-            _pendingTransfers.Remove(profile.Id);
+            phone.ClearQueuedTransfers(profile.Id);
             phone.Transfers.Cancel(profile.Id);
             return true;
         }
@@ -1253,22 +1268,8 @@ internal sealed partial class PhoneDevicePageView : IViewPage
 
     private void EnqueueOrStartFiles(AndroidDevice online, string profileId, string[] paths, string destination, string? pullFrom)
     {
-        var phone = _actions.Host.Phone;
-        var current = phone.Transfers.Get(profileId);
-        bool hasQueue = _pendingTransfers.TryGetValue(profileId, out var queue) && queue.Count > 0;
-        if (current?.Phase != AndroidFilePhase.Running && !hasQueue)
-        {
-            if (phone.StartTransfer(online, paths, destination, pullFrom))
-            {
-                SetStatus("", false);
-                _actions.Invalidate();
-                return;
-            }
-        }
-
-        queue ??= new Queue<(string[] Paths, string Destination, string? PullFrom)>();
-        _pendingTransfers[profileId] = queue;
-        queue.Enqueue((paths, destination, pullFrom));
+        bool accepted = _actions.Host.Phone.EnqueueTransfer(online, profileId, paths, destination, pullFrom);
+        SetStatus(accepted ? "" : L10n.T("Tray.AudioActionFailed"), !accepted);
         _actions.Invalidate();
     }
 
@@ -1694,6 +1695,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 _actions.Host.TryPost(() =>
                 {
                     _busy = false;
+                    if (!_active) return;
                     _showConnection = _actions.Host.Phone.Store.Profile.LastDevice == null;
                     if (successKey != null) SetStatus(L10n.T(successKey), false);
                     else SetStatus("", false);
@@ -1705,6 +1707,7 @@ internal sealed partial class PhoneDevicePageView : IViewPage
                 _actions.Host.TryPost(() =>
                 {
                     _busy = false;
+                    if (!_active) return;
                     SetStatus(PhonePreview.TranslateError(ex), true);
                     UpdateQrPairing();
                     _actions.Invalidate();
@@ -1720,8 +1723,67 @@ internal sealed partial class PhoneDevicePageView : IViewPage
         _actions.Invalidate();
     }
 
+    private static string SavedLabel(AndroidSavedConnection saved) =>
+        saved.Name == saved.Address ? saved.Address : saved.Name + " · " + saved.Address;
+
+    private void ResetSavedSearch()
+    {
+        CancelCts(ref _searchSaved);
+        _savedConnections = [];
+        _savedChoice = null;
+        _searchedSaved = _manualSearch = false;
+        _savedSearchStatus = null;
+    }
+
+    private void SearchSaved(bool manual)
+    {
+        if (!CanShowQr || (!manual && _searchedSaved)) return;
+        _searchedSaved = true;
+        if (manual)
+        {
+            _manualSearch = true;
+            _savedSearchStatus = "Phone.ProcessingStatus";
+            _actions.Invalidate();
+        }
+        if (_searchSaved != null) return;
+        var phone = _actions.Host.Phone;
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime);
+        var token = cts.Token;
+        _searchSaved = cts;
+        _ = Task.Run(async () =>
+        {
+            IReadOnlyList<AndroidSavedConnection> found = [];
+            try
+            {
+                var services = await AndroidMdnsDiscovery.DiscoverConnectionsAsync(token).ConfigureAwait(false);
+                var candidates = phone.Store.FindWirelessConnectionCandidates(services, phone.Discovery.CurrentDevices ?? []);
+                found = await AndroidWirelessConnection.VerifySavedConnectionsAsync(candidates, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            catch (Exception ex) { ExceptionDiagnostics.Record("NativePhone.SavedDeviceSearch", ex); }
+            _actions.Host.TryPost(() =>
+            {
+                if (!ReferenceEquals(_searchSaved, cts)) return;
+                _searchSaved = null;
+                cts.Dispose();
+                bool requested = _manualSearch;
+                _manualSearch = false;
+                _savedSearchStatus = requested && found.Count == 0 ? "Phone.SavedDevicesNotFound" : null;
+                if (CanShowQr && (requested || (_connectAddress.Length == 0 && _actions.ActiveInlineEditTag != "phone.connaddr")))
+                {
+                    _savedConnections = found;
+                    _savedChoice = found.FirstOrDefault(item => _savedChoice is { } old &&
+                        AndroidDeviceIdentity.MatchesSavedDevice(item.Device, old.Device)) ?? found.FirstOrDefault();
+                }
+                if (_active) _actions.Invalidate();
+            });
+        });
+    }
+
     private void UpdateQrPairing()
     {
+        if (!_active || !IsConnectionPage || _airPlayConnectionChoice) ResetSavedSearch();
+        else SearchSaved(manual: false);
         if (!CanShowQr)
         {
             StopQrPairing();

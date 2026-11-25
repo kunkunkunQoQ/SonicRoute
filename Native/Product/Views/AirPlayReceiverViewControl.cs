@@ -38,7 +38,7 @@ internal sealed class AirPlayReceiverViewControl
             actions.Config,
             actions.Invalidate,
             actions.ShowCombo,
-            (tag, rect, text, onChanged, onCommit) => actions.StartInlineEdit(tag, rect, text, onChanged, onCommit, mono: false, password: false, selectAll: true),
+            (tag, rect, text, onChanged, onCommit) => actions.StartInlineEdit(tag, rect, text, onChanged, onCommit, mono: false, password: false, selectAll: false, maxLength: 50),
             () => actions.ActiveInlineEditTag,
             actions.CloseInlineEdit,
             idPrefix)
@@ -333,8 +333,7 @@ internal sealed class AirPlayReceiverViewControl
                 string norm = AirPlayIdentity.NormalizeName(text);
                 if (norm == AirPlayPreview.DefaultName) norm = "";
                 _config.AirPlayReceiverName = norm;
-                ConfigService.TrySave(_config);
-                _invalidate();
+                CommitSettings();
             });
             return true;
         }
@@ -355,8 +354,7 @@ internal sealed class AirPlayReceiverViewControl
                 if (int.TryParse(picked.Key, out int val))
                 {
                     _config.AirPlayVideoDecoder = val;
-                    ConfigService.TrySave(_config);
-                    _invalidate();
+                    CommitSettings();
                 }
             });
             return true;
@@ -365,8 +363,7 @@ internal sealed class AirPlayReceiverViewControl
         if (hitId == $"{_idPrefix}.pin" || hitId == $"{_idPrefix}.pin:sw")
         {
             _config.AirPlayRequireCode = !_config.AirPlayRequireCode;
-            ConfigService.TrySave(_config);
-            _invalidate();
+            CommitSettings();
             return true;
         }
 
@@ -395,6 +392,13 @@ internal sealed class AirPlayReceiverViewControl
         }
 
         return false;
+    }
+
+    private void CommitSettings()
+    {
+        if (!ConfigService.TryCommit(_config))
+            _host.PublishOsd(L10n.T("Nav.Settings"), L10n.T("Tray.SaveFailed"), success: false);
+        _invalidate();
     }
 
     private bool TryGetArtwork(byte[]? png, out byte[] bgra, out int w, out int h, out int ver)

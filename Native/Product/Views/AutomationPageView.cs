@@ -41,6 +41,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     private bool _isNewDraft;
     private string? _templateHint;
     private bool _capturingHotkey;
+    private int _openWithRequest;
 
 
     // Rule drag-to-reorder state
@@ -129,6 +130,12 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         CancelHotkeyCapture();
         OnCaptureLost();
         actions.CloseInlineEdit(commit: true);
+    }
+
+    public void OnFocusLost()
+    {
+        _openWithRequest++;
+        CancelHotkeyCapture();
     }
 
     public void OnCaptureLost()
@@ -271,7 +278,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         float triggerW = MathF.Min(180f, innerW * 0.32f);
         var searchRect = new UiRect(card.X, y, innerW - stateW - triggerW - 60f, 36f);
         UiPrimitives.DrawTextBox(g, t, hit, "auto.search", searchRect, _searchText, L10n.T("Auto.Search"),
-            focused: actions.ActiveInlineEditTag == "auto.search", fontSize: 12f);
+            focused: actions.ActiveInlineEditTag == "auto.search", fontSize: 12f, search: true);
         RegisterBtn("auto.search", searchRect, card, hit, () =>
         {
             actions.StartInlineEdit("auto.search", searchRect, _searchText,
@@ -499,7 +506,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         RegisterBtn("edit.name", nameRect, _editorViewport, hit, () =>
         {
             actions.StartInlineEdit("edit.name", nameRect, _editingRule.Name,
-                txt => { _editingRule.Name = txt; },
+                null,
                 (txt, _) => { _editingRule.Name = txt.Trim(); actions.Invalidate(); });
         }, UiCursorKind.IBeam);
         y += 42f;
@@ -515,23 +522,15 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (_editingRule.Trigger == AutoRuleTrigger.Hotkey)
         {
             g.DrawText(L10n.T("Auto.Hotkey"), new UiRect(ex, y, labelW - 8f, 34f), t.TextSecondary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            var hkRect = new UiRect(inputX, y, MathF.Max(100f, inputW - 72f), 34f);
+            var hkRect = new UiRect(inputX, y, inputW, 34f);
             string hkLabel = _capturingHotkey
                 ? L10n.T("Auto.HotkeyCapturing")
                 : string.IsNullOrWhiteSpace(_editingRule.Hotkey) ? L10n.T("Auto.HotkeyUnbound") : _editingRule.Hotkey;
-            UiPrimitives.DrawSecondaryButton(g, t, hit, "edit.hk.rec", hkRect, hkLabel, active: _capturingHotkey, icon: UiIcon.Keyboard);
+            HotkeyBinding.Draw(g, t, hit, "edit.hk.rec", hkRect, hkLabel);
             RegisterBtn("edit.hk.rec", hkRect, _editorViewport, hit, ToggleHotkeyCapture);
 
-            var hkClrRect = new UiRect(hkRect.Right + 6f, y, 66f, 34f);
-            UiPrimitives.DrawSecondaryButton(g, t, hit, "edit.hk.clr", hkClrRect, L10n.T("Auto.HotkeyClear"));
-            RegisterBtn("edit.hk.clr", hkClrRect, _editorViewport, hit, () =>
-            {
-                CancelHotkeyCapture();
-                _editingRule.Hotkey = "";
-                actions.Invalidate();
-            });
             y += 38f;
-            g.DrawText(L10n.T("Auto.HotkeyHint"), new UiRect(inputX, y, inputW, 18f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            g.DrawText(L10n.T(_capturingHotkey ? "Auto.HotkeyCapturing" : "Auto.HotkeyHint"), new UiRect(inputX, y, inputW, 18f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             y += 22f;
             if (HasHotkeyConflict(_editingRule))
             {
@@ -553,7 +552,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             RegisterBtn("edit.trigapp.box", boxRect, _editorViewport, hit, () =>
             {
                 actions.StartInlineEdit("edit.trigapp.box", boxRect, _editingRule.TriggerApp,
-                    txt => { _editingRule.TriggerApp = txt; },
+                    null,
                     (txt, _) => { _editingRule.TriggerApp = txt.Trim(); actions.Invalidate(); });
             }, UiCursorKind.IBeam);
 
@@ -773,7 +772,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             UiPrimitives.DrawTextBox(g, t, hit, tag, appBox, step.TargetApp, "app.exe", focused: actions.ActiveInlineEditTag == tag, fontSize: 12f);
             RegisterBtn(tag, appBox, _editorViewport, hit, () =>
             {
-                actions.StartInlineEdit(tag, appBox, step.TargetApp, txt => step.TargetApp = txt, (txt, _) => { step.TargetApp = txt.Trim(); actions.Invalidate(); });
+                actions.StartInlineEdit(tag, appBox, step.TargetApp, null, (txt, _) => { step.TargetApp = txt.Trim(); actions.Invalidate(); });
             }, UiCursorKind.IBeam);
 
             var pickRect = new UiRect(appBox.Right + 6f, y, pickW, 32f);
@@ -834,14 +833,14 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             string tTag = $"step.{index}.osdt";
             UiPrimitives.DrawTextBox(g, t, hit, tTag, tRect, step.OsdTitle, L10n.T("Auto.OsdDefaultTitle"), focused: actions.ActiveInlineEditTag == tTag, fontSize: 12f);
             RegisterBtn(tTag, tRect, _editorViewport, hit, () =>
-                actions.StartInlineEdit(tTag, tRect, step.OsdTitle, s => step.OsdTitle = s, (s, _) => { step.OsdTitle = s; actions.Invalidate(); }), UiCursorKind.IBeam);
+                actions.StartInlineEdit(tTag, tRect, step.OsdTitle, null, (s, _) => { step.OsdTitle = s; actions.Invalidate(); }), UiCursorKind.IBeam);
 
             g.DrawText(L10n.T("Auto.OsdText"), new UiRect(tRect.Right + 10f, y, 58f, 32f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             var xRect = new UiRect(tRect.Right + 72f, y, MathF.Max(60f, w - (tRect.Right - x + 72f)), 32f);
             string xTag = $"step.{index}.osdx";
             UiPrimitives.DrawTextBox(g, t, hit, xTag, xRect, step.OsdText, "", focused: actions.ActiveInlineEditTag == xTag, fontSize: 12f);
             RegisterBtn(xTag, xRect, _editorViewport, hit, () =>
-                actions.StartInlineEdit(xTag, xRect, step.OsdText, s => step.OsdText = s, (s, _) => { step.OsdText = s; actions.Invalidate(); }), UiCursorKind.IBeam);
+                actions.StartInlineEdit(xTag, xRect, step.OsdText, null, (s, _) => { step.OsdText = s; actions.Invalidate(); }), UiCursorKind.IBeam);
             y += 40f;
         }
 
@@ -878,11 +877,12 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             {
                 int itemIdx = li;
                 var item = step.LaunchItems[li];
-                var pathRect = new UiRect(ix, y, MathF.Max(80f, iw - 64f), 30f);
+                float choiceW = MathF.Min(132f, iw * 0.35f);
+                var pathRect = new UiRect(ix, y, MathF.Max(36f, iw - choiceW - 70f), 30f);
                 string pTag = $"step.{index}.li.{li}";
                 UiPrimitives.DrawTextBox(g, t, hit, pTag, pathRect, item.Path, "C:\\...", focused: actions.ActiveInlineEditTag == pTag, fontSize: 11.5f);
                 RegisterBtn(pTag, pathRect, _editorViewport, hit, () =>
-                    actions.StartInlineEdit(pTag, pathRect, item.Path, s => item.Path = s, (s, _) => { item.Path = s.Trim(); actions.Invalidate(); }), UiCursorKind.IBeam);
+                    actions.StartInlineEdit(pTag, pathRect, item.Path, null, (s, _) => { item.Path = s.Trim(); actions.Invalidate(); }), UiCursorKind.IBeam);
 
                 var brRect = new UiRect(pathRect.Right + 4f, y, 28f, 30f);
                 UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.{index}.libr.{li}", brRect, UiIcon.File, 13f);
@@ -895,7 +895,14 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                     }
                 });
 
-                var rmRect = new UiRect(brRect.Right + 2f, y, 28f, 30f);
+                string openId = $"step.{index}.openwith.{li}";
+                var openRect = new UiRect(brRect.Right + 4f, y, choiceW, 30f);
+                string label = item.OpenWith.Length == 0 ? L10n.T("Auto.OpenWithDefault")
+                    : string.IsNullOrWhiteSpace(item.OpenWithName) ? Path.GetFileNameWithoutExtension(item.OpenWith) : item.OpenWithName;
+                UiPrimitives.DrawComboBox(g, t, hit, openId, openRect, label, fontSize: 12f);
+                RegisterBtn(openId, openRect, _editorViewport, hit, () => OpenWithMenu(item, openRect),
+                    tooltip: string.IsNullOrEmpty(item.OpenWith) ? L10n.T("Auto.OpenWith") : item.OpenWith);
+                var rmRect = new UiRect(openRect.Right + 2f, y, 28f, 30f);
                 UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.{index}.lirm.{li}", rmRect, UiIcon.Close, 13f, iconColor: t.Fail);
                 RegisterBtn($"step.{index}.lirm.{li}", rmRect, _editorViewport, hit, () => { step.LaunchItems.RemoveAt(itemIdx); actions.Invalidate(); });
                 y += 36f;
@@ -925,7 +932,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 string psTag = $"step.{index}.ps.{pi}";
                 UiPrimitives.DrawTextBox(g, t, hit, psTag, pRect, step.ProgramPaths[pi], "script.ps1 / command", focused: actions.ActiveInlineEditTag == psTag, mono: true, fontSize: 11.5f);
                 RegisterBtn(psTag, pRect, _editorViewport, hit, () =>
-                    actions.StartInlineEdit(psTag, pRect, step.ProgramPaths[pathIdx], s => step.ProgramPaths[pathIdx] = s, (s, _) => { step.ProgramPaths[pathIdx] = s; actions.Invalidate(); }, mono: true), UiCursorKind.IBeam);
+                    actions.StartInlineEdit(psTag, pRect, step.ProgramPaths[pathIdx], null, (s, _) => { step.ProgramPaths[pathIdx] = s; actions.Invalidate(); }, mono: true), UiCursorKind.IBeam);
 
                 var rmRect = new UiRect(pRect.Right + 4f, y, 28f, 30f);
                 UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.{index}.psrm.{pi}", rmRect, UiIcon.Close, 13f, iconColor: t.Fail);
@@ -1004,6 +1011,17 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
+        _openWithRequest++;
+        if (_capturingHotkey && _editingRule != null)
+        {
+            if (HotkeyBinding.MouseButton(e.Button) is string button)
+            {
+                _editingRule.Hotkey = HotkeyBinding.Format(button, e.Ctrl, e.Alt, e.Shift);
+                CancelHotkeyCapture();
+                return true;
+            }
+            if (targetId != "edit.hk.rec") CancelHotkeyCapture();
+        }
         if (e.Button == UiMouseButton.Right)
         {
             if (targetId == null || !_rightClicks.TryGetValue(targetId, out var contextMenu)) return false;
@@ -1090,7 +1108,15 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)
     {
+        _openWithRequest++;
         if (horizontal) return false;
+        if (_capturingHotkey && _editingRule != null && delta != 0)
+        {
+            _editingRule.Hotkey = HotkeyBinding.Wheel(delta);
+            CancelHotkeyCapture();
+            return true;
+        }
+
         if (_listViewport.Contains(x, y)) { _listScroll.OnWheel(delta); return true; }
         if (_editorViewport.Contains(x, y))
         {
@@ -1115,6 +1141,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
+        _openWithRequest++;
         if (vk == 0x1B /*VK_ESCAPE*/)
         {
             if (_ruleDragging || _dragRuleId != null)
@@ -1138,21 +1165,12 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
         if (_capturingHotkey && _editingRule != null)
         {
-            if (vk is 0x10 or 0x11 or 0x12 or 0x5B or 0x5C or 0xA0 or 0xA1 or 0xA2 or 0xA3 or 0xA4 or 0xA5)
-                return true;
-            string? keyName = KeyName(vk);
-            if (keyName != null)
+            if (HotkeyBinding.Keyboard(vk, ctrl, alt, shift) is string combo)
             {
-                var parts = new List<string>(5);
-                if (ctrl) parts.Add("Ctrl");
-                if (alt) parts.Add("Alt");
-                if (shift) parts.Add("Shift");
-                parts.Add(keyName);
-                _editingRule.Hotkey = string.Join("+", parts);
+                _editingRule.Hotkey = combo;
                 CancelHotkeyCapture();
-                actions.Invalidate();
-                return true;
             }
+            return true;
         }
 
         return false;
@@ -1174,34 +1192,22 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             _dropRuleAfter = _ruleDragPointerY >= row.RowRect.CenterY;
             if (_ruleDragPointerY < row.RowRect.Bottom) break;
         }
-        if (_dropRuleId != null && _dragRuleId != null && _dropRuleId != _dragRuleId)
-        {
-            var ids = _rules.Select(r => r.Id).ToList();
-            if (ids.Remove(_dragRuleId))
-            {
-                int idx = ids.IndexOf(_dropRuleId);
-                if (idx >= 0)
-                {
-                    ids.Insert(idx + (_dropRuleAfter ? 1 : 0), _dragRuleId);
-                    actions.Config.AutomationRuleOrder = ids;
-                }
-            }
-        }
     }
 
     private void CommitOrCancelRuleDrag(bool commit)
     {
         if (commit && _dropRuleId != null && _dragRuleId != null && _dropRuleId != _dragRuleId)
         {
-            ConfigService.TrySave(actions.Config);
-            actions.Host.ViewSettingsChanged();
-            LoadRules();
-        }
-        else if (!commit && _ruleDragging)
-        {
-            var reloaded = ConfigService.Load();
-            actions.Config.AutomationRuleOrder = new List<string>(reloaded.AutomationRuleOrder ?? new List<string>());
-            LoadRules();
+            var ids = _rules.Select(rule => rule.Id).ToList();
+            bool removed = ids.Remove(_dragRuleId);
+            int index = ids.IndexOf(_dropRuleId);
+            if (removed && index >= 0)
+            {
+                ids.Insert(index + (_dropRuleAfter ? 1 : 0), _dragRuleId);
+                actions.Config.AutomationRuleOrder = ids;
+                if (actions.CommitSettings()) actions.Host.ViewSettingsChanged();
+                LoadRules();
+            }
         }
         _dragRuleId = _dropRuleId = null;
         _ruleDragging = false;
@@ -1263,6 +1269,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (!_capturingHotkey) return;
         _capturingHotkey = false;
         actions.Host.HoldHotkeys(false);
+        actions.Invalidate();
     }
 
     private void OpenRuleInEditor(AutoRule rule, bool isNewDraft, string? templateHint)
@@ -1349,7 +1356,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         string name = baseName;
         for (int suffix = 2; occupied.Contains(name); suffix++) name = $"{baseName} ({suffix})";
         var copy = rule.CopyAsNew(name);
-        AutoRuleStore.Save(copy);
+        if (!actions.WriteRule(() => AutoRuleStore.Save(copy))) return;
         actions.Host.ViewSettingsChanged();
         LoadRules();
         OpenRuleInEditor(copy, false, null);
@@ -1381,10 +1388,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Auto.Delete"),
             IsZh() ? $"确定删除“{name}”？" : $"Delete rule \"{name}\"?"))
             return;
-        AutoRuleStore.Delete(id);
+        if (!actions.WriteRule(() => AutoRuleStore.Delete(id))) return;
         actions.Config.FavoriteRuleIds.Remove(id);
         actions.Config.AutomationRuleOrder.Remove(id);
-        ConfigService.TrySave(actions.Config);
+        actions.CommitSettings(); // deletion already committed to the rule store; refresh even if metadata failed
         actions.Host.ViewSettingsChanged();
         if (_editingRule?.Id == id) { _editingRule = null; _editingSteps.Clear(); }
         LoadRules();
@@ -1396,7 +1403,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         var rule = AutoRuleStore.Find(id);
         if (rule == null) return;
         rule.Enabled = !rule.Enabled;
-        AutoRuleStore.Save(rule);
+        if (!actions.WriteRule(() => AutoRuleStore.Save(rule))) return;
         if (_editingRule?.Id == id) _editingRule.Enabled = rule.Enabled;
         actions.Host.ViewSettingsChanged();
         LoadRules();
@@ -1407,7 +1414,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     {
         if (actions.Config.FavoriteRuleIds.Contains(id)) actions.Config.FavoriteRuleIds.Remove(id);
         else actions.Config.FavoriteRuleIds.Add(id);
-        ConfigService.TrySave(actions.Config);
+        if (!actions.CommitSettings()) return;
         actions.Host.ViewSettingsChanged();
         actions.Invalidate();
     }
@@ -1481,7 +1488,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             _editingRule.ScheduleTime = "08:00";
         }
         _editingRule.SetSteps(_editingSteps);
-        AutoRuleStore.Save(_editingRule, L10n.T("Auto.DefaultNamePrefix"));
+        if (!actions.WriteRule(() => AutoRuleStore.Save(_editingRule, L10n.T("Auto.DefaultNamePrefix")))) return;
         CancelHotkeyCapture();
         _isNewDraft = false;
         _templateHint = null;
@@ -1549,7 +1556,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             new() { Text = L10n.T("Auto.ResetRuleOrder"), Enabled = actions.Config.AutomationRuleOrder.Count > 0, Click = () =>
             {
                 actions.Config.AutomationRuleOrder.Clear();
-                ConfigService.TrySave(actions.Config);
+                if (!actions.CommitSettings()) return;
                 actions.Host.ViewSettingsChanged();
                 LoadRules();
                 actions.Invalidate();
@@ -1661,6 +1668,44 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         });
     }
 
+    private async void OpenWithMenu(AutoLaunchItem item, UiRect anchor)
+    {
+        int request = ++_openWithRequest;
+        string path = item.Path;
+        List<ComboChoice> choices;
+        try { choices = await Task.Run(() => OpenWithChoices.ForFile(path)).ConfigureAwait(false); }
+        catch (Exception ex)
+        {
+            ExceptionDiagnostics.Record("Native.OpenWith", ex);
+            choices = [];
+        }
+        actions.Host.TryPost(() =>
+        {
+            if (request != _openWithRequest || _disposed || !_observed || !_editingSteps.Any(step => step.LaunchItems.Contains(item))) return;
+            choices.Insert(0, new("", L10n.T("Auto.OpenWithDefault")));
+            if (item.OpenWith.Length > 0 && !choices.Any(c => string.Equals(item.OpenWith, c.Key, StringComparison.OrdinalIgnoreCase)))
+                choices.Add(new(item.OpenWith, string.IsNullOrEmpty(item.OpenWithName) ? Path.GetFileNameWithoutExtension(item.OpenWith) : item.OpenWithName));
+            const string chooseProgram = "<pick>";
+            choices.Add(new(chooseProgram, L10n.T("Auto.OpenWithPick")));
+            actions.ShowCombo(anchor, choices, item.OpenWith, picked =>
+            {
+                if (picked.Key == chooseProgram)
+                {
+                    string? exe = NativeDialogs.Open(actions.OwnerWindow.Handle, L10n.T("Auto.FileFilterExe") + "|*.exe");
+                    if (exe == null) return;
+                    item.OpenWith = exe;
+                    item.OpenWithName = Path.GetFileNameWithoutExtension(exe);
+                }
+                else
+                {
+                    item.OpenWith = picked.Key;
+                    item.OpenWithName = picked.Key.Length == 0 ? "" : picked.Label;
+                }
+                actions.Invalidate();
+            });
+        });
+    }
+
     private void OpenStepDeviceCombo(UiRect anchor, AutoRuleStep step)
     {
         bool capture = AutoRuleActions.UsesCaptureDevice(step.Action);
@@ -1721,18 +1766,17 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             return false;
 
         string hk = rule.Hotkey.Trim();
-        if (actions.Host.HotkeyStatuses.TryGetValue(AutoRuleService.HotkeyPrefix + rule.Id, out string? status)
-            && string.Equals(status, "", StringComparison.Ordinal))
-        {
-            return true;
-        }
+        var persisted = _rules.Find(other => other.Id == rule.Id);
+        if (!_capturingHotkey && persisted is { Enabled: true, Trigger: AutoRuleTrigger.Hotkey }
+            && string.Equals(persisted.Hotkey, hk, StringComparison.OrdinalIgnoreCase)
+            && (!actions.Host.HotkeyStatuses.TryGetValue(AutoRuleService.HotkeyPrefix + rule.Id, out var status)
+                || string.IsNullOrEmpty(status))) return true;
 
-        foreach (var kv in actions.Config.Hotkeys)
+        foreach (string action in HotkeyActions.All)
         {
-            if (!actions.Config.ExperimentalMic && kv.Key is HotkeyActions.ActSwitchInput or HotkeyActions.ActSwitchAllInput)
-                continue;
-            if (!string.IsNullOrWhiteSpace(kv.Value) && string.Equals(kv.Value.Trim(), hk, StringComparison.OrdinalIgnoreCase))
-                return true;
+            if (!actions.Config.ExperimentalMic && action is HotkeyActions.ActSwitchInput or HotkeyActions.ActSwitchAllInput) continue;
+            string configured = actions.Config.Hotkeys.GetValueOrDefault(action, HotkeyActions.Defaults[action]);
+            if (string.Equals(configured, hk, StringComparison.OrdinalIgnoreCase)) return true;
         }
 
         foreach (var other in _rules)
@@ -1847,43 +1891,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             _ => dark
                 ? (UiColor.FromRgb(0x25, 0x46, 0x4A), UiColor.FromRgb(0x3E, 0x6E, 0x70), UiColor.FromRgb(0xB8, 0xEC, 0xE9))
                 : (UiColor.FromRgb(0xE8, 0xF6, 0xF5), UiColor.FromRgb(0xC3, 0xE7, 0xE5), UiColor.FromRgb(0x17, 0x66, 0x64)),
-        };
-    }
-
-    private static string? KeyName(int vk)
-    {
-        if (vk is >= 0x30 and <= 0x39 or >= 0x41 and <= 0x5A) return ((char)vk).ToString();
-        if (vk is >= 0x70 and <= 0x87) return "F" + (vk - 0x6F);
-        if (vk is >= 0x60 and <= 0x69) return "NumPad" + (vk - 0x60);
-        return vk switch
-        {
-            0x20 => "Space",
-            0x09 => "Tab",
-            0x0D => "Enter",
-            0x26 => "Up",
-            0x28 => "Down",
-            0x25 => "Left",
-            0x27 => "Right",
-            0x2D => "Insert",
-            0x2E => "Delete",
-            0x24 => "Home",
-            0x23 => "End",
-            0x21 => "PageUp",
-            0x22 => "PageDown",
-            0x08 => "Back",
-            0x90 => "NumLock",
-            0xBB => "OemPlus",
-            0xBD => "OemMinus",
-            0xBC => "OemComma",
-            0xBE => "OemPeriod",
-            0xBF => "OemQuestion",
-            0xDB => "OemOpenBrackets",
-            0xDD => "OemCloseBrackets",
-            0xDC => "OemPipes",
-            0xBA => "OemSemicolon",
-            0xDE => "OemQuotes",
-            0xC0 => "OemTilde",
-            _ => null
         };
     }
 

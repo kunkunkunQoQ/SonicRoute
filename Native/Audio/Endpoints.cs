@@ -29,7 +29,7 @@ internal sealed unsafe class Endpoints : IDisposable
         try { return Marshal.PtrToStringUni(value)!; }
         finally { Marshal.FreeCoTaskMem(value); }
     }
-    private static string ReadName(Com device)
+    internal static string ReadName(Com device)
     {
         nint value = 0;
         Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)device.Slot(4))(device.Handle,0,&value), "OpenPropertyStore");

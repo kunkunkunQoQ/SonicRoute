@@ -34,9 +34,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
     private readonly UiHitMap _hit = new();
     private readonly UiScrollState _scroll = new();
 
-    private readonly object _writeGate = new();
-    private readonly Dictionary<string, int> _pendingWrites = new(StringComparer.OrdinalIgnoreCase);
-    private bool _writeLoopRunning;
+
 
     private UiThemePalette _theme;
     private List<OutputDeviceRow> _rows = new();
@@ -145,6 +143,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         }
         _loading = true;
         _refreshQueued = false;
+        long readRevision = _host.EndpointWriteRevision;
 
         _ = Task.Run(() =>
         {
@@ -199,6 +198,11 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                         _host.FlushVolumeWrites();
                     }
                 }
+
+                foreach (var next in nextRows)
+                    if ((readRevision != _host.EndpointWriteRevision || _host.EndpointVolumePending(next.Id)) &&
+                        _rows.Find(row => string.Equals(row.Id, next.Id, StringComparison.OrdinalIgnoreCase)) is { } previous)
+                        next.Volume = previous.Volume;
 
                 int prevCount = _rows.Count;
                 _rows = nextRows;
@@ -452,14 +456,14 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             if (dIdx >= 0 && dIdx < _rows.Count)
             {
                 string id = _rows[dIdx].Id;
-                _ = Task.Run(() =>
+                _host.SubmitPanelAudio(() =>
                 {
                     try
                     {
                         _host.Audio.SetDefault(Flow.Render, id);
-                        _host.TryPost(() => { _onDefaultChanged?.Invoke(); RefreshData(); });
+                        _host.PostContinuation(() => { if (!IsDisposed) { _onDefaultChanged?.Invoke(); RefreshData(); } });
                     }
-                    catch { }
+                    catch { _host.PostContinuation(_host.ReportAudioWriteFailure); }
                 });
             }
         }
@@ -472,20 +476,20 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 _onEndpointStateChanged?.Invoke(row.Id, null, row.Muted);
                 Invalidate();
                 string id = row.Id;
-                _ = Task.Run(() =>
+                _host.SubmitPanelAudio(() =>
                 {
                     try
                     {
                         var st = _host.Audio.Volume(Flow.Render, id, 0, toggle: true);
                         _host.TryPost(() =>
                         {
-                            row.Muted = st.Muted;
-                            row.Volume = st.Percent;
+                            if (IsDisposed) return;
+                            SyncEndpointState(id, st.Percent, st.Muted);
                             _onEndpointStateChanged?.Invoke(id, st.Percent, st.Muted);
                             if (IsVisible) Invalidate();
                         });
                     }
-                    catch { }
+                    catch { _host.PostContinuation(_host.ReportAudioWriteFailure); }
                 });
             }
         }
@@ -574,40 +578,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         _hit.ActiveId = null;
     }
 
-    private void QueueDeviceVolume(string deviceId, int level)
-    {
-        bool startWorker = false;
-        lock (_writeGate)
-        {
-            _pendingWrites[deviceId] = level;
-            if (!_writeLoopRunning)
-            {
-                _writeLoopRunning = true;
-                startWorker = true;
-            }
-        }
-        if (!startWorker) return;
-
-        _ = Task.Run(() =>
-        {
-            while (true)
-            {
-                KeyValuePair<string, int> next;
-                lock (_writeGate)
-                {
-                    if (_pendingWrites.Count == 0)
-                    {
-                        _writeLoopRunning = false;
-                        break;
-                    }
-                    next = _pendingWrites.First();
-                    _pendingWrites.Remove(next.Key);
-                }
-                try { _host.Audio.Volume(Flow.Render, next.Key, 0, level: next.Value); }
-                catch { }
-            }
-        });
-    }
+    private void QueueDeviceVolume(string deviceId, int level) => _host.QueueEndpointVolume(deviceId, level);
 
     private void SubscribeAudio(bool enable)
     {

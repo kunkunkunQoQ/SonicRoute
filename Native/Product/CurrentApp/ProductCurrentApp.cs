@@ -22,13 +22,16 @@ internal sealed partial class ProductCurrentApp(ProductAudio audio, IMainThread 
     internal void RecordUsedApp(AudioAppInfo? app)
     {
         if (app == null || string.IsNullOrWhiteSpace(app.ProcessName)) return;
-        _selection.Current = app;
-        var cfg = ConfigService.Load();
-        if (!string.Equals(cfg.LastUsedAppName, app.ProcessName, StringComparison.OrdinalIgnoreCase))
+        owner.PostContinuation(() =>
         {
+            if (_closed) return;
+            _selection.Current = app;
+            var cfg = ConfigService.Load();
+            if (string.Equals(cfg.LastUsedAppName, app.ProcessName, StringComparison.OrdinalIgnoreCase)) return;
             cfg.LastUsedAppName = app.ProcessName;
-            ConfigService.Save(cfg);
-        }
+            if (!ConfigService.TryCommit(cfg))
+                feedback.Publish(FeedbackKind.Osd, BuildIdentity.DisplayName, L10n.T("Tray.SaveFailed"), success: false);
+        });
     }
 
     internal bool NeedsForeground

@@ -445,6 +445,7 @@ internal sealed unsafe class D2dSharedContext : IDisposable
 
 internal sealed unsafe class D2dTarget : IDisposable
 {
+    internal InlineEditHost? Editor { get; set; }
     private const int RecreateTarget = unchecked((int)0x8899000C);
     private const int MaxCachedBitmaps = 96;
 

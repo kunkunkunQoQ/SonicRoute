@@ -106,7 +106,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         _activeCombo is { IsVisible: true } ||
         _inlineEdit.IsOpen || _licenseViewer is { IsOpen: true };
     public string? ActiveInlineEditTag => _inlineEdit.ActiveTag;
-    public UiRect ActiveInlineEditRect => _inlineRectDip;
+    public UiRect ActiveInlineEditRect => _inlineEdit.FieldBounds.IsEmpty ? _inlineRectDip : _inlineEdit.FieldBounds;
 
     public void ShowMain(nint ownerHint)
     {
@@ -147,6 +147,12 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 #endif
     }
 
+    internal void ConfirmAppVolume(string identity, int actual)
+    {
+        if (!IsDisposed && IsVisible && _activePage is AppsPageView apps)
+            apps.ConfirmAppVolume(identity, actual);
+    }
+
     public void ExternalRefresh()
     {
         if (IsDisposed) return;
@@ -167,7 +173,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         _historyViewer?.UpdateTheme();
         _licenseViewer?.UpdateTheme();
         if (_inlineEdit.IsOpen)
-            _inlineEdit.SetTheme(_theme.SurfaceBg, _theme.TextPrimary);
+            _inlineEdit.SetTheme(_inlineEdit.ReadOnlyMultiline ? _theme.SurfaceAlt : _theme.SurfaceBg, _theme.TextPrimary);
         if (IsVisible) Invalidate();
     }
 
@@ -250,11 +256,14 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         Action<string, bool> onCommitted,
         bool mono = false,
         bool password = false,
-        bool selectAll = true)
+        bool selectAll = false,
+        bool readOnlyMultiline = false,
+        int maxLength = 0)
     {
         if (Handle == 0 || !IsVisible) return;
         ClosePopups();
-        _inlineEdit.Close(commit: false, viaEnter: false);
+        CloseInlineEdit(commit: true);
+        if (Handle == 0 || !IsVisible || IsDisposed) return;
 
         _inlineTextChanged = onTextChanged;
         _inlineCommitted = onCommitted;
@@ -275,11 +284,13 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             hPx,
             _inlineFontSize,
             Dpi,
-            _theme.SurfaceBg,
+            readOnlyMultiline ? _theme.SurfaceAlt : _theme.SurfaceBg,
             _theme.TextPrimary,
             mono,
             password,
-            selectAll);
+            selectAll,
+            readOnlyMultiline,
+            maxLength);
         Invalidate();
     }
 
@@ -290,6 +301,12 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             _inlineEdit.Close(commit, viaEnter: false);
             Invalidate();
         }
+    }
+
+    internal void OpenUpdateSettings()
+    {
+        NavigateTo(MainNavTab.Settings);
+        if (_activePage is SettingsPageView settings) settings.ScrollToUpdates();
     }
 
     public void NavigateTo(MainNavTab tab)
@@ -308,6 +325,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         Invalidate();
     }
 
+    protected override InlineEditHost ActiveEditor => _inlineEdit;
+
     protected override string GetWindowTitle() => WindowTitle;
 
     protected override void OnShown()
@@ -320,7 +339,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         _historyViewer?.Close();
         _licenseViewer?.Close();
-        CloseInlineEdit(commit: false);
+        CloseInlineEdit(commit: true);
         ClosePopups();
         _activePage?.OnDeactivated();
         _sidebarAnimating = false;
@@ -338,7 +357,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         if (minimized)
         {
-            CloseInlineEdit(commit: false);
+            CloseInlineEdit(commit: true);
             ClosePopups();
             _activePage?.OnDeactivated();
             StopAnimationTimer();
@@ -374,26 +393,15 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         Invalidate();
     }
 
-    protected override void OnMoved(int leftPx, int topPx)
-    {
-        RepositionInlineEdit();
-    }
+    protected override void OnDpiChanged(uint newDpi) => Invalidate();
 
-    protected override void OnResized(float widthDip, float heightDip)
-    {
-        RepositionInlineEdit();
-    }
-
-    protected override void OnDpiChanged(uint newDpi)
-    {
-        RepositionInlineEdit();
-        Invalidate();
-    }
+    protected override void OnFocusLost() => _activePage?.OnFocusLost();
 
     protected override void OnActivated(bool active)
     {
         if (!active)
         {
+            _activePage?.OnFocusLost();
             _titleTextPressed = false;
             _titleBarPressed = false;
         }
@@ -642,13 +650,14 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     protected override void OnPointerDown(UiPointerEventArgs e)
     {
-        if (_inlineEdit.IsOpen && !_inlineRectDip.Contains(e.X, e.Y))
+        if (_inlineEdit.IsOpen && !ActiveInlineEditRect.Contains(e.X, e.Y))
         {
             CloseInlineEdit(commit: true);
             if (!IsVisible || IsDisposed) return;
         }
 
         var hit = _hit.HitTest(e.X, e.Y);
+        if (!_pageViewport.Contains(e.X, e.Y)) _activePage?.OnFocusLost();
         if (e.Button != UiMouseButton.Left)
         {
             if (_activePage?.OnPointerDown(e, hit?.Id) == true) Invalidate();
@@ -725,7 +734,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             case "shell.min": MinimizeWindow(); break;
             case "shell.max": ToggleMaximize(); break;
             case "shell.close": Hide(); break;
-            case "shell.updateNotice": NavigateTo(MainNavTab.Settings); break;
+            case "shell.updateNotice": OpenUpdateSettings(); break;
             case "nav.Apps": NavigateTo(MainNavTab.Apps); break;
             case "nav.Hotkeys": NavigateTo(MainNavTab.Hotkeys); break;
             case "nav.Theme": NavigateTo(MainNavTab.Theme); break;
@@ -765,7 +774,11 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     private void ToggleSidebar()
     {
         _config.MainSidebarCollapsed = !_config.MainSidebarCollapsed;
-        ConfigService.TrySave(_config);
+        if (!ConfigService.TryCommit(_config))
+        {
+            ShowNotice(L10n.T("Tray.SaveFailed"));
+            return;
+        }
 
         _sidebarStartWidth = _sidebarWidth;
         _sidebarTargetWidth = _config.MainSidebarCollapsed
@@ -809,14 +822,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         _activeCombo = null;
     }
 
-    private void RepositionInlineEdit()
-    {
-        if (!_inlineEdit.IsOpen || Handle == 0) return;
-        var screen = DipToScreenPx(_inlineRectDip.X, _inlineRectDip.Y);
-        int wPx = Math.Max(24, (int)MathF.Round(_inlineRectDip.Width * DpiScale));
-        int hPx = Math.Max(20, (int)MathF.Round(_inlineRectDip.Height * DpiScale));
-        _inlineEdit.Reposition(screen.X, screen.Y, wPx, hPx, _inlineFontSize, Dpi);
-    }
+
 
     private void OnInlineTextChanged(string tag, string text) => _inlineTextChanged?.Invoke(text);
 
@@ -849,6 +855,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         _noticeTimer?.Dispose();
         _noticeTimer = null;
         ClosePopups();
+        CloseInlineEdit(commit: true);
         _inlineEdit.TextChanged -= OnInlineTextChanged;
         _inlineEdit.Committed -= OnInlineCommitted;
         _inlineEdit.Dispose();

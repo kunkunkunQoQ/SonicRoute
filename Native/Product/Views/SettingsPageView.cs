@@ -22,6 +22,7 @@ namespace SonicRoute.Native.Product.Views;
 internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 {
     private readonly UiScrollState _scroll = new();
+    private readonly AliasEditor _aliasEditor = new(actions);
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
 
     private Endpoint[] _outputs = [];
@@ -40,12 +41,20 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     private bool _configImportBusy;
     private int _autoStartSyncVersion;
     private bool _draggingVolumeStep;
+    private int _initialVolumeStep;
+    private bool _scrollToUpdates;
     private UiRect _volumeStepSliderRect;
     private UiRect _contentRect;
     private int _authorClicks;
     private string _updateNotes = "";
     private bool _subscribedUpdates;
     private bool _disposed;
+
+    internal void ScrollToUpdates()
+    {
+        _scrollToUpdates = true;
+        actions.Invalidate();
+    }
 
     public void OnActivated()
     {
@@ -77,7 +86,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     public void OnCaptureLost()
     {
         _scroll.EndDrag();
-        _draggingVolumeStep = false;
+        FinishVolumeStepDrag();
     }
 
     public void OnFilesDropped(string[] paths)
@@ -164,6 +173,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         y = RenderDefaultAppCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
         y = RenderAudioBehaviorCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
         y = RenderLanguageCard(g, t, hit, viewport, x, y, w, RegisterClick) + 14f;
+        float updatesOffset = y - startY;
         y = RenderAboutCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
         y = RenderMaintenanceCard(g, t, hit, viewport, x, y, w, RegisterClick);
         y += 16f;
@@ -172,6 +182,12 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         g.PopClip();
 
         _scroll.ContentHeight = MathF.Max(0f, y - startY);
+        if (_scrollToUpdates)
+        {
+            _scrollToUpdates = false;
+            _scroll.Offset = updatesOffset;
+            actions.Invalidate();
+        }
         _scroll.Clamp();
         _scroll.Draw(g, t, hit, "st.scroll", viewport);
     }
@@ -452,15 +468,14 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         cy = DrawSettingsSwitchWithHint(g, t, hit, "st.traywheel.paused", new UiRect(x + pad, cy, innerW, rowH),
             UiIcon.Pause, L10n.T("Tray.PauseWheel"), L10n.T("Tray.PauseWheelHint"), cfg.TrayWheelPaused, true, () =>
             {
-                cfg.TrayWheelPaused = !cfg.TrayWheelPaused;
-                SaveConfig();
+                actions.Host.SetTrayWheelPaused(!cfg.TrayWheelPaused);
             }, register);
 
         cy = DrawSettingsSwitchWithHint(g, t, hit, "st.expmic", new UiRect(x + pad, cy, innerW, rowH),
             UiIcon.Microphone, L10n.T("St.ExperimentalMic"), L10n.T("St.ExperimentalMicHint"), cfg.ExperimentalMic, true, () =>
             {
                 cfg.ExperimentalMic = !cfg.ExperimentalMic;
-                SaveConfig();
+                if (!SaveConfig()) return;
                 actions.ShowNotice(L10n.T("St.ExpMicNeedRestart"));
             }, register);
 
@@ -470,7 +485,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 UiIcon.Microphone, L10n.T("Exp.MicPanel"), "", cfg.MicInPanel, true, () =>
                 {
                     cfg.MicInPanel = !cfg.MicInPanel;
-                    SaveConfig();
+                    if (!SaveConfig()) return;
                     actions.ShowNotice(L10n.T("St.ExpMicPanelNeedRestart"));
                 }, register);
         }
@@ -519,7 +534,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 UiIcon.Experiment, L10n.T("St.ExperimentalMode"), L10n.T("St.ExperimentalModeHint"), cfg.ExperimentalMode, false, () =>
                 {
                     cfg.ExperimentalMode = !cfg.ExperimentalMode;
-                    SaveConfig();
+                    if (!SaveConfig()) return;
                     actions.ShowNotice(L10n.T("St.ExpModeNeedRestart"));
                 }, register);
         }
@@ -713,7 +728,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             // Small inline rename icon button on right
             var editRect = new UiRect(cardRect.Right - 24f, cardRect.CenterY - 10f, 20f, 20f);
             UiPrimitives.DrawGhostIconButton(g, t, hit, editId, editRect, UiIcon.Edit, 12f, tooltip: L10n.T("St.DeviceNames"));
-            register(editId, editRect, () => StartRenameDevice(dev, cardRect), UiCursorKind.Hand, L10n.T("St.DeviceNames"));
+            string tag = "st.rename." + dev.Id;
+            if (actions.ActiveInlineEditTag == tag)
+                UiPrimitives.DrawTextBox(g, t, hit, tag, cardRect, actions.Config.DeviceNames.GetValueOrDefault(dev.Id, ""), focused: true);
+            register(editId, editRect, () => _aliasEditor.Open(tag, cardRect, dev.Id, device: true), UiCursorKind.Hand, L10n.T("St.DeviceNames"));
         }
 
         int totalRows = (int)MathF.Ceiling(devices.Count / (float)cols);
@@ -812,8 +830,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             float boxW = MathF.Max(120f, w * 0.48f);
             var boxRect = new UiRect(rowRect.Right - 10f - boxW, rowRect.CenterY - 15f, boxW, 30f);
             string alias = cfg.DeviceNames.TryGetValue(dev.Id, out var saved) ? saved : "";
-            UiPrimitives.DrawTextBox(g, t, hit, boxId, boxRect, alias, title, focused: actions.ActiveInlineEditTag == boxId);
-            register(boxId, boxRect, () => StartRenameDevice(dev, boxRect), UiCursorKind.IBeam, dev.DisplayName);
+            UiPrimitives.DrawTextBox(g, t, hit, boxId, boxRect, alias, focused: actions.ActiveInlineEditTag == boxId);
+            register(boxId, boxRect, () => _aliasEditor.Open(boxId, boxRect, dev.Id, device: true), UiCursorKind.IBeam, dev.DisplayName);
 
             y += rowH + rowGap;
         }
@@ -913,7 +931,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         int statusLines = 1 + (outcomeLine != null ? 1 : 0) + (dlLine != null ? 1 : 0) + (errLine != null ? 1 : 0);
         float statusH = statusLines * 18f + 10f;
         float progH = showProgress ? 16f : 0f;
-        float notesH = showNotes ? 76f : 0f;
+        float notesH = showNotes ? Math.Clamp(D2dSharedContext.Instance.MeasureText(notes, UiMetrics.FontFamily, 12f, 400, Math.Max(1f, innerW - 22f), 180f, true).Height + 8f, 28f, 180f) + 13f : 0f;
         float actionsH = showActionRow ? 42f : 0f;
         float footerH = 28f;
 
@@ -951,7 +969,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 UiIcon.Clock, L10n.T("Upd.Automatic"), L10n.T("Upd.AutomaticHint"), cfg.AutoCheckUpdates, true, () =>
                 {
                     cfg.AutoCheckUpdates = !cfg.AutoCheckUpdates;
-                    SaveConfig();
+                    if (!SaveConfig()) return;
                     updates.AutomaticSettingChanged(cfg.AutoCheckUpdates);
                 }, register);
         }
@@ -980,11 +998,13 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
         if (showNotes)
         {
-            var notesRect = new UiRect(x + pad, cy, innerW, 68f);
-            g.FillRoundedRect(notesRect, 6f, t.SurfaceAlt);
-            g.DrawRoundedRect(notesRect, 6f, t.Border, 1f);
-            g.DrawText(notes.Trim(), notesRect.Deflate(8f, 6f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: true);
-            cy += 76f;
+            var notesRect = new UiRect(x + pad, cy + 5f, innerW, notesH - 13f);
+            const string id = "st.about.notes";
+            UiPrimitives.DrawTextBox(g, t, hit, id, notesRect, notes, focused: actions.ActiveInlineEditTag == id,
+                fontSize: 12f, readOnlyMultiline: true);
+            register(id, notesRect, () => actions.StartInlineEdit(id, notesRect, notes, null, (_, _) => { },
+                selectAll: false, readOnlyMultiline: true), UiCursorKind.IBeam, null);
+            cy += notesH;
         }
 
         if (showActionRow)
@@ -1027,18 +1047,23 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         cy += 4f;
         // 5-click version / author label to unlock experimental mode
         string verText = $"{L10n.T("App.About")} · SonicRoute {displayVersion} Native AOT";
-        var verRect = new UiRect(x + pad, cy, innerW * 0.62f, 24f);
+        float right = x + w - pad;
+        void Link(string id, string label, Action click)
+        {
+            float width = D2dSharedContext.Instance.MeasureText(label, UiMetrics.FontFamily, 12f, 400, 160f, 24f, false).Width + 8f;
+            var rect = new UiRect(right - width, cy, width, 24f);
+            register(id, rect, click, UiCursorKind.Hand, null);
+            g.DrawText(label, rect, hit.IsHover(id) ? t.AccentHover : t.Accent, 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
+            right = rect.X - 2f;
+        }
+        Link("st.about.license", "GPL-3.0", ShowLicense);
+        Link("st.about.github", "GitHub", () => OpenUrl(UpdateProtocol.Repository));
+        Link("st.about.ifdian", L10n.T("St.Afdian"), () => OpenUrl("https://www.ifdian.net/a/koukou021"));
+        Link("st.about.bili", L10n.T("St.Bilibili"), () => OpenUrl("https://b23.tv/TDqSAKM"));
+
+        var verRect = new UiRect(x + pad, cy, MathF.Max(1f, right - x - pad - 4f), 24f);
         register("st.about.author", verRect, OnAuthorLabelClicked, UiCursorKind.Hand, L10n.T("St.ExpAuthorTip"));
         g.DrawText(verText, verRect, hit.IsHover("st.about.author") ? t.Accent : t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
-        // GitHub & GPL-3.0 links on the right
-        var ghRect = new UiRect(x + w - pad - 130f, cy, 58f, 24f);
-        register("st.about.github", ghRect, () => OpenUrl(UpdateProtocol.Repository), UiCursorKind.Hand, null);
-        g.DrawText("GitHub", ghRect, hit.IsHover("st.about.github") ? t.AccentHover : t.Accent, 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
-
-        var licRect = new UiRect(x + w - pad - 66f, cy, 66f, 24f);
-        register("st.about.license", licRect, ShowLicense, UiCursorKind.Hand, null);
-        g.DrawText("GPL-3.0", licRect, hit.IsHover("st.about.license") ? t.AccentHover : t.Accent, 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
 
         return y + cardH;
     }
@@ -1121,6 +1146,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
         if (targetId == "st.volstep.slider")
         {
+            _initialVolumeStep = actions.Config.VolumeStep;
             _draggingVolumeStep = true;
             UpdateVolumeStepFromX(e.X);
             return true;
@@ -1139,8 +1165,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         }
         if (_draggingVolumeStep)
         {
-            _draggingVolumeStep = false;
-            SaveConfig();
+            FinishVolumeStepDrag();
             return true;
         }
         if (clickId == null) return false;
@@ -1172,11 +1197,31 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     {
         if (_disposed) return;
         _disposed = true;
+        _aliasEditor.Dispose();
         if (_subscribedUpdates)
         {
             actions.Host.Updates.Changed -= OnUpdatesChanged;
             _subscribedUpdates = false;
         }
+    }
+
+    private void FinishVolumeStepDrag()
+    {
+        if (!_draggingVolumeStep) return;
+        _draggingVolumeStep = false;
+        if (_initialVolumeStep != actions.Config.VolumeStep) SaveConfig();
+    }
+
+    public bool OnFocusedKey(string id, int vk)
+    {
+        if (id != "st.volstep.slider" ||
+            !ViewSliderKeys.TryChange(vk, actions.Config.VolumeStep, 1, 20, 1, 5, out double next)) return false;
+        if ((int)next != actions.Config.VolumeStep)
+        {
+            actions.Config.VolumeStep = (int)next;
+            SaveConfig();
+        }
+        return true;
     }
 
     private void UpdateVolumeStepFromX(float x)
@@ -1196,9 +1241,9 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         actions.ShowCombo(anchor, choices, L10n.CurrentLanguage, picked =>
         {
             if (string.Equals(picked.Key, L10n.CurrentLanguage, StringComparison.OrdinalIgnoreCase)) return;
+            actions.Config.Language = picked.Key;
+            if (!SaveConfig()) return;
             L10n.Instance.ApplyImportedLanguage(picked.Key);
-            actions.Config.Language = L10n.CurrentLanguage;
-            SaveConfig();
             actions.RefreshAll();
             actions.ShowNotice(L10n.T("St.LangApplied"));
         });
@@ -1221,18 +1266,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             SaveConfig();
         });
     }
-    private void StartRenameDevice(AudioDeviceInfo device, UiRect rect)
-    {
-        string current = actions.Config.DeviceNames.TryGetValue(device.Id, out var name) ? name : "";
-        actions.StartInlineEdit("st.rename." + device.Id, rect, current, null, (text, _) =>
-        {
-            string trimmed = text.Trim();
-            if (string.IsNullOrEmpty(trimmed)) actions.Config.DeviceNames.Remove(device.Id);
-            else actions.Config.DeviceNames[device.Id] = trimmed;
-            SaveConfig();
-        });
-    }
-
     private void OnAuthorLabelClicked()
     {
         var cfg = actions.Config;
@@ -1243,7 +1276,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             _authorClicks = 0;
             cfg.ExperimentalUnlocked = true;
             cfg.ExperimentalMode = true;
-            SaveConfig();
+            if (!SaveConfig()) return;
             actions.ShowNotice(L10n.T("St.EggDone"));
         }
         else
@@ -1271,8 +1304,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             return;
         }
         actions.Config.Language = res.Code;
+        if (!SaveConfig()) return;
         L10n.Instance.ApplyImportedLanguage(res.Code);
-        SaveConfig();
         actions.RefreshAll();
         actions.ShowNotice(res.CoveragePct < 90
             ? string.Format(L10n.T("Exp.LangCoverageLow"), res.CoveragePct)
@@ -1399,8 +1432,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     {
         if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ClearConfig"), L10n.T("Exp.ClearConfigHint")))
             return;
-        ConfigService.ResetToDefault();
-        actions.Host.RestartPreview();
+        if (ConfigService.TryResetToDefault(out _)) actions.Host.RestartPreview();
+        else actions.ShowNotice(L10n.T("Tray.SaveFailed"));
     }
 
     private void OnUpdatesChanged(string? notes)
@@ -1538,7 +1571,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 actions.Host.SetPreviewAutoStart(false);
                 actions.Config.AutoStart = false;
             }
-            SaveConfig();
+            if (!SaveConfig()) return;
             if (!_disposed) actions.ShowNotice(L10n.T("St.CleanAutoStartDone"));
         }
         catch
@@ -1570,12 +1603,11 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         catch { }
     }
 
-    private void SaveConfig()
+    private bool SaveConfig()
     {
-        if (!ConfigService.TrySave(actions.Config))
-            actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+        if (!actions.CommitSettings()) return false;
         actions.NotifySettingsChanged();
-        actions.Host.ViewSettingsChanged();
+        return true;
     }
 
     private List<AudioDeviceInfo> BuildDeviceList(Endpoint[] endpoints, Flow flow, bool includeSystemDefault)

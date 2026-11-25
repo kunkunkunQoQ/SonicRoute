@@ -10,12 +10,18 @@ internal sealed unsafe partial class NativeApplicationWindow
     private nint sharedIcon, whiteIcon;
     private Win.Rect lastIconRect;
     private long lastIconRectTime;
+    private Win.Point? rightDownPoint;
+    private uint lastContextEvent;
+    private long lastContextAt;
+    internal Win.Point TrayMenuPoint { get; private set; }
 
     private Win.NotifyIcon TrayData() => new() { Size = (uint)sizeof(Win.NotifyIcon), Window = Handle, Id = 1 };
 
     private void RestoreTray()
     {
         lastIconRect = default;
+        rightDownPoint = null;
+        lastContextEvent = 0;
         if (sharedIcon == 0)
         {
             int px = Math.Clamp(Win.GetSystemMetrics(49) * 2, 32, 64);
@@ -116,8 +122,12 @@ internal sealed unsafe partial class NativeApplicationWindow
         uint value = (ushort)l;
         switch (value)
         {
+            case 0x201: // start of a new left-button gesture
+                doubleClick = false;
+                break;
+            case 0x400 when versionFour: // NIN_SELECT; redundant alongside WM_LBUTTONUP on some shells
             case 0x202: // left up
-                if (doubleClick) { doubleClick = false; break; }
+                if (doubleClick) break;
                 pendingClick?.Dispose();
                 pendingClick = ScheduleOnce(TimeSpan.FromMilliseconds(280), () => { pendingClick = null; Raise(ShellSignalKind.QuickPanel); });
                 break;
@@ -125,9 +135,33 @@ internal sealed unsafe partial class NativeApplicationWindow
                 pendingClick?.Dispose(); pendingClick = null; doubleClick = true;
                 Raise(ShellSignalKind.MainWindow);
                 break;
-            case 0x7b: case 0x205 when !versionFour:
+            case 0x204: // WM_RBUTTONDOWN, v4 coordinates are signed screen pixels.
+                rightDownPoint = versionFour ? TrayMousePoint(w) : null;
+                lastContextEvent = 0;
+                break;
+            case 0x7b: // WM_CONTEXTMENU, including keyboard invocation
+            case 0x205: // WM_RBUTTONUP; some Explorer hosts deliver both notifications.
                 pendingClick?.Dispose(); pendingClick = null;
-                Raise(ShellSignalKind.TrayMenu);
+                doubleClick = false;
+                long now = Environment.TickCount64;
+                bool duplicate = lastContextEvent != 0 && lastContextEvent != value && now - lastContextAt < 500;
+                lastContextEvent = value;
+                lastContextAt = now;
+                if (!duplicate)
+                {
+                    // v4 does not specify wParam coordinates for WM_CONTEXTMENU.
+                    // Use the preceding mouse anchor, or the actual icon for a keyboard request.
+                    if (value == 0x205 && versionFour) TrayMenuPoint = TrayMousePoint(w);
+                    else if (rightDownPoint is { } point) TrayMenuPoint = point;
+                    else
+                    {
+                        Win.GetCursorPos(out var cursor);
+                        TrayMenuPoint = value == 0x7b && TryGetTrayRect(out var rect) && !rect.Contains(cursor, 1)
+                            ? new Win.Point { X = rect.Left, Y = rect.Top } : cursor;
+                    }
+                    Raise(ShellSignalKind.TrayMenu);
+                }
+                rightDownPoint = null;
                 break;
             case 0x401: // NIN_KEYSELECT
                 pendingClick?.Dispose(); pendingClick = null;
@@ -135,6 +169,11 @@ internal sealed unsafe partial class NativeApplicationWindow
                 break;
         }
     }
+
+    private static Win.Point TrayMousePoint(nuint packed) => new()
+    {
+        X = unchecked((short)packed), Y = unchecked((short)(packed >> 16))
+    };
 
     internal bool TryGetTrayRect(out Win.Rect rect)
     {
@@ -184,6 +223,7 @@ internal static unsafe partial class ShellNative
         internal uint Size; internal int Width, Height; internal ushort Planes, Bits;
         internal uint Compression, Bytes; internal int X, Y; internal uint Colors, Important, FirstColor;
     }
+    [LibraryImport("user32")] internal static partial int GetCursorPos(out Point point);
     [LibraryImport("user32")] internal static partial int GetIconInfo(nint icon, out IconInfo info);
     [LibraryImport("user32")] internal static partial nint CreateIconIndirect(in IconInfo info);
     [LibraryImport("user32")] internal static partial int DestroyIcon(nint icon);

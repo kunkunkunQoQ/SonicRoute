@@ -41,6 +41,7 @@ internal sealed class ThemePageView : IViewPage
     private UiRect _panelCustomYRect;
 
     private string? _draggingSlider;
+    private double _initialSliderValue;
     private bool _osdMoreExpanded = true;
     private ColorPickerWindow? _pickerWindow;
 
@@ -53,18 +54,14 @@ internal sealed class ThemePageView : IViewPage
 
     public void OnDeactivated()
     {
-        _draggingSlider = null;
+        FinishSliderDrag(preview: false);
         if (_pickerWindow is { IsVisible: true }) _pickerWindow.CloseWindow();
         _pickerWindow = null;
     }
 
     public void OnCaptureLost()
     {
-        if (_draggingSlider != null)
-        {
-            _draggingSlider = null;
-            ConfigService.TrySave(_actions.Config);
-        }
+        FinishSliderDrag(preview: false);
         _scroll.EndDrag();
         _actions.Invalidate();
     }
@@ -131,24 +128,12 @@ internal sealed class ThemePageView : IViewPage
         DrawSectionBadgeHeader(g, t, new UiRect(inner.X, y, inner.Width, 38f), UiIcon.Palette, L10n.T("St.ThemeMode"), L10n.T("Th.ModeHint"));
         y += 54f;
 
-        float modeX = inner.X;
-        float remainingLabels = inner.Width - 12f;
-        float naturalTotal = 0f;
-        Span<float> modeWidths = stackalloc float[ThemeModes.Length];
-        for (int i = 0; i < ThemeModes.Length; i++)
-        {
-            var mode = ThemeModes[i];
-            int weight = string.Equals(cfg.ThemeMode, mode.Key, StringComparison.OrdinalIgnoreCase) ? 600 : 400;
-            float labelWidth = D2dSharedContext.Instance.MeasureText(L10n.T(mode.LabelKey), UiMetrics.FontFamily, 12.5f, weight, inner.Width, 46f, false).Width;
-            modeWidths[i] = MathF.Max(68f, MathF.Ceiling(labelWidth) + 43f);
-            naturalTotal += modeWidths[i];
-        }
-        float widthScale = MathF.Min(1f, remainingLabels / naturalTotal);
+        const float modeGap = 8f;
+        float modeW = MathF.Min(136f, (inner.Width - modeGap * 2f) / 3f);
         for (int i = 0; i < ThemeModes.Length; i++)
         {
             var (key, labelKey, icon) = ThemeModes[i];
-            var mr = new UiRect(modeX, y, modeWidths[i] * widthScale, 46f);
-            modeX = mr.Right + 6f;
+            var mr = new UiRect(inner.X + i * (modeW + modeGap), y, modeW, 46f);
             bool selected = string.Equals(cfg.ThemeMode, key, StringComparison.OrdinalIgnoreCase)
                 || (key == "system" && string.IsNullOrEmpty(cfg.ThemeMode));
             string id = "th.mode." + key;
@@ -322,7 +307,7 @@ internal sealed class ThemePageView : IViewPage
                 _clicks[gid] = () =>
                 {
                     cfg.OsdPosition = codeCopy;
-                    SaveAndNotifySettings();
+                    if (!SaveAndNotifySettings()) return;
                     _actions.Host.PreviewOsd();
                 };
             }
@@ -400,7 +385,7 @@ internal sealed class ThemePageView : IViewPage
             cfg.QuickPanelPosMode = "default";
             cfg.QuickPanelCustomX = -1;
             cfg.QuickPanelCustomY = -1;
-            SaveAndNotifySettings();
+            if (!SaveAndNotifySettings()) return;
             _actions.ShowNotice(L10n.T("Exp.PanelPosResetDone"));
         };
 
@@ -546,6 +531,7 @@ internal sealed class ThemePageView : IViewPage
             _ => null,
         };
         if (_draggingSlider == null) return false;
+        _initialSliderValue = SliderValue(_draggingSlider);
         ApplySliderDrag(_draggingSlider, e.X);
         return true;
     }
@@ -555,11 +541,7 @@ internal sealed class ThemePageView : IViewPage
         if (e.Button != UiMouseButton.Left) return false;
         if (_draggingSlider != null)
         {
-            string finished = _draggingSlider;
-            _draggingSlider = null;
-            ConfigService.TrySave(_actions.Config);
-            if (finished is "osdW" or "osdFont") _actions.Host.PreviewOsd();
-            if (finished is "panelH") _actions.NotifySettingsChanged();
+            FinishSliderDrag(preview: true);
             return true;
         }
         if (_scroll.Dragging)
@@ -613,17 +595,36 @@ internal sealed class ThemePageView : IViewPage
             }
         }
         SetValue(value);
-        if (!ConfigService.TrySave(cfg))
-        {
-            SetValue(current);
-            _actions.ShowNotice(L10n.T("Tray.SaveFailed"));
-            return true;
-        }
+        if (!_actions.CommitSettings()) return true;
         if (id == "th.opacity") _actions.NotifyThemeChanged();
         if (id == "th.panel.h") _actions.NotifySettingsChanged();
         if (id is "th.osd.w" or "th.osd.font") _actions.Host.PreviewOsd();
         _actions.Invalidate();
         return true;
+    }
+
+    private double SliderValue(string id) => id switch
+    {
+        "opacity" => _actions.Config.BackgroundOpacity,
+        "osdW" => _actions.Config.OsdWidth,
+        "osdFont" => _actions.Config.OsdFontScale,
+        "osdFin" => _actions.Config.OsdFadeInMs,
+        "osdFout" => _actions.Config.OsdFadeOutMs,
+        _ => _actions.Config.QuickPanelHeight
+    };
+
+    private void FinishSliderDrag(bool preview)
+    {
+        if (_draggingSlider is not string id) return;
+        _draggingSlider = null;
+        if (SliderValue(id) == _initialSliderValue) return;
+        if (!_actions.CommitSettings())
+        {
+            if (id == "opacity") _actions.NotifyThemeChanged();
+            return;
+        }
+        if (preview && id is ("osdW" or "osdFont")) _actions.Host.PreviewOsd();
+        if (id == "panelH") _actions.NotifySettingsChanged();
     }
 
     private void ApplySliderDrag(string name, float x)
@@ -740,7 +741,7 @@ internal sealed class ThemePageView : IViewPage
         cfg.OsdFontScale = 1.0;
         cfg.OsdFadeInMs = 100;
         cfg.OsdFadeOutMs = 200;
-        SaveAndNotifySettings();
+        if (!SaveAndNotifySettings()) return;
         _actions.Host.PreviewOsd();
         _actions.ShowNotice(L10n.T("Exp.OsdResetDone"));
     }
@@ -751,26 +752,19 @@ internal sealed class ThemePageView : IViewPage
         string previous = cfg.Accent;
         if (string.Equals(previous, value, StringComparison.OrdinalIgnoreCase)) return;
         cfg.Accent = value;
-        if (!ConfigService.TrySave(cfg))
-        {
-            cfg.Accent = previous;
-            _actions.ShowNotice(L10n.T("St.SaveFailed"));
-        }
-        _actions.NotifyThemeChanged();
+        if (_actions.CommitSettings()) _actions.NotifyThemeChanged();
     }
 
     private void SaveAndNotifyTheme()
     {
-        if (!ConfigService.TrySave(_actions.Config))
-            _actions.ShowNotice(L10n.T("St.SaveFailed"));
-        _actions.NotifyThemeChanged();
+        if (_actions.CommitSettings()) _actions.NotifyThemeChanged();
     }
 
-    private void SaveAndNotifySettings()
+    private bool SaveAndNotifySettings()
     {
-        if (!ConfigService.TrySave(_actions.Config))
-            _actions.ShowNotice(L10n.T("St.SaveFailed"));
+        if (!_actions.CommitSettings()) return false;
         _actions.NotifySettingsChanged();
+        return true;
     }
 
     public void Dispose()

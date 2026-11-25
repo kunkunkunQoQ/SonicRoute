@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 
 namespace SonicRoute.Native.Ui;
 
@@ -8,7 +7,7 @@ internal enum UiMenuDotKind { None, Accent, Success, Fail }
 
 internal sealed class UiMenuItem
 {
-    public string Text { get; init; } = "";
+    public string Text { get; set; } = "";
     public Action? Click { get; init; }
     public bool IsSeparator { get; init; }
     public bool IsHeader { get; init; }
@@ -18,8 +17,10 @@ internal sealed class UiMenuItem
     public UiIcon? Icon { get; init; }
     public UiMenuDotKind Dot { get; init; }
     public string? RightHint { get; init; }
-    public string? Tooltip { get; init; }
+    public string? Tooltip { get; set; }
     public List<UiMenuItem>? SubItems { get; init; }
+    public Action<PopupMenuWindow>? SubmenuOpened { get; init; }
+    public float MaxTextWidth { get; init; } = float.PositiveInfinity;
 
     public static UiMenuItem Separator() => new() { IsSeparator = true };
     public static UiMenuItem Header(string text) => new() { Text = text, IsHeader = true, Enabled = false };
@@ -49,26 +50,37 @@ internal sealed class PopupMenuWindow : LayeredWindow
     private int _hoverIndex = -1;
     private int _focusedIndex = -1;
     private int _openSubIndex = -1;
-    private int _pressedIndex = -1;
+    private UiMenuItem? _pressedItem;
     private float _contentHeight;
-    private bool _closingAll;
+    private bool _closingAll, _focusOnLoad;
+    private readonly Func<TimeSpan, Action, IDisposable>? _schedule;
+    private IDisposable? _pendingHover;
+    private int _anchorX, _anchorY;
+    private int? _flipEdge;
+    private bool _alignBottomUp;
+    private bool TrayStyle => _schedule != null;
+    protected override UiHitMap InputMap => _hit;
 
-    private PopupMenuWindow(UiThemePalette theme, List<UiMenuItem> items, nint owner, PopupMenuWindow? parentMenu)
-        : base(220f, 120f, 140f, 40f)
+    private PopupMenuWindow(UiThemePalette theme, List<UiMenuItem> items, nint owner, PopupMenuWindow? parentMenu,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
+        : base(220f, 120f, 24f, 20f)
     {
         _theme = theme;
         _items = items;
         _parentMenu = parentMenu;
         TopMost = true;
         ToolWindow = true;
-        NoActivate = false;
+        _schedule = schedule ?? parentMenu?._schedule;
+        // One foreground HWND owns keyboard navigation and outside activation for the whole chain.
+        NoActivate = parentMenu != null;
         DestroyOnClose = true;
         OwnerHandle = owner;
     }
 
-    public static PopupMenuWindow ShowAtCursor(UiThemePalette theme, List<UiMenuItem> items, nint owner, int screenXPx, int screenYPx, bool alignBottomUp = false)
+    public static PopupMenuWindow ShowAtCursor(UiThemePalette theme, List<UiMenuItem> items, nint owner, int screenXPx, int screenYPx, bool alignBottomUp = false,
+        Func<TimeSpan, Action, IDisposable>? schedule = null)
     {
-        var menu = new PopupMenuWindow(theme, items, owner, null);
+        var menu = new PopupMenuWindow(theme, items, owner, null, schedule);
         menu.OpenAt(screenXPx, screenYPx, alignBottomUp);
         return menu;
     }
@@ -87,45 +99,72 @@ internal sealed class PopupMenuWindow : LayeredWindow
         ReleasePointerCapture();
         CloseSubMenu();
         _items = items;
-        _hoverIndex = -1;
-        _focusedIndex = -1;
-        GetMonitorWorkAreaForPoint(LeftPx, TopPx, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
-        float scale = monDpi / 96f;
-        MeasureAndLayout((mr - ml - 12) / scale, (mb - mt - 12) / scale, out float wDip, out float hDip);
-        int wPx = (int)MathF.Round(wDip * scale);
-        int hPx = (int)MathF.Round(hDip * scale);
-        int xPx = Math.Clamp(LeftPx, ml + 6, Math.Max(ml + 6, mr - wPx - 6));
-        int yPx = Math.Clamp(TopPx, mt + 6, Math.Max(mt + 6, mb - hPx - 6));
-        ResizeDip(wDip, hDip);
-        MovePx(xPx, yPx);
-        Invalidate();
+        int focus = _focusOnLoad ? items.FindIndex(i => i.Enabled && !i.IsHeader && !i.IsSeparator) : -1;
+        _focusedIndex = _hoverIndex = focus;
+        _focusOnLoad = false;
+        _scroll.Offset = 0;
+        Place();
+    }
+
+    public void UpdateItem(UiMenuItem previous, UiMenuItem next)
+    {
+        if (Handle == 0 || _closingAll) return;
+        int index = _items.IndexOf(previous);
+        if (index < 0) return;
+        _items[index] = next;
+        Place();
+        if (_openSubIndex == index && _subMenu != null)
+        {
+            if (next.SubItems is { Count: > 0 } children) _subMenu.UpdateItems(children);
+            else CloseSubMenu();
+        }
+    }
+
+    public void UpdateParentLabel(string text, string tooltip)
+    {
+        if (_parentMenu is { } parent && parent._openSubIndex >= 0 && parent._subMenu == this)
+            parent.UpdateLabel(parent._items[parent._openSubIndex], text, tooltip);
+    }
+
+    public void UpdateLabel(UiMenuItem item, string text, string tooltip)
+    {
+        if (Handle == 0 || !_items.Contains(item)) return;
+        item.Tooltip = tooltip;
+        if (item.Text == text) { Invalidate(); return; }
+        item.Text = text;
+        Place();
     }
 
     private void OpenAt(int anchorXPx, int anchorYPx, bool alignBottomUp, int? flipEdgePx = null)
     {
-        GetMonitorWorkAreaForPoint(anchorXPx, anchorYPx, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
-        float scale = monDpi / 96f;
-        MeasureAndLayout((mr - ml - 12) / scale, (mb - mt - 12) / scale, out float wDip, out float hDip);
+        (_anchorX, _anchorY, _alignBottomUp, _flipEdge) = (anchorXPx, anchorYPx, alignBottomUp, flipEdgePx);
+        Place();
+        Show(activate: _parentMenu == null);
+    }
 
-        int wPx = (int)MathF.Round(wDip * scale);
-        int hPx = (int)MathF.Round(hDip * scale);
-        int xPx = anchorXPx;
-        int yPx = alignBottomUp ? anchorYPx - hPx : anchorYPx;
-
-        if (xPx + wPx > mr - 6) xPx = Math.Max(ml + 6, (flipEdgePx ?? (mr - 6)) - wPx);
-        if (xPx < ml + 6) xPx = ml + 6;
-        if (yPx + hPx > mb - 6) yPx = Math.Max(mt + 6, mb - hPx - 6);
-        if (yPx < mt + 6) yPx = mt + 6;
-
-        ResizeDip(wDip, hDip);
-        MovePx(xPx, yPx);
-        Show(activate: true);
+    private void Place()
+    {
+        GetMonitorWorkAreaForPoint(_anchorX, _anchorY, out int ml, out int mt, out int mr, out int mb, out uint dpi);
+        float scale = dpi / 96f;
+        MeasureAndLayout((mr - ml) / scale, (mb - mt) / scale, out float w, out float h);
+        int wp = (int)MathF.Ceiling(w * scale), hp = (int)MathF.Ceiling(h * scale);
+        int x = _anchorX, y = _alignBottomUp ? _anchorY - hp : _anchorY;
+        if (x + wp > mr) x = _flipEdge.GetValueOrDefault(mr) - wp;
+        if (_parentMenu == null && !_alignBottomUp && y + hp > mb) y = _anchorY - hp;
+        x = Math.Clamp(x, ml, Math.Max(ml, mr - wp));
+        y = Math.Clamp(y, mt, Math.Max(mt, mb - hp));
+        SetBoundsPx(x, y, w, h);
+        if (_subMenu is { } child && _openSubIndex >= 0)
+        {
+            SetChildAnchor(child, _openSubIndex);
+            child.Place();
+        }
     }
 
     private void MeasureAndLayout(float maxWDip, float maxHDip, out float widthDip, out float heightDip)
     {
         var ctx = D2dSharedContext.Instance;
-        float maxW = 160f;
+        float maxW = TrayStyle ? 24f : 160f;
         bool anyLeftCol = false;
         foreach (var item in _items)
         {
@@ -143,14 +182,22 @@ internal sealed class PopupMenuWindow : LayeredWindow
                 y += SepH;
                 continue;
             }
-            float h = item.IsHeader ? HeaderH : ItemH;
-            float textW = ctx.MeasureText(item.Text, UiMetrics.FontFamily, item.IsHeader ? 11.5f : 12.5f,
-                item.IsHeader ? 600 : 400, maxWDip, 32f, false).Width;
+            var size = ctx.MeasureText(item.Text, UiMetrics.FontFamily, item.IsHeader ? 11.5f : 12.5f,
+                item.IsHeader ? 600 : 400, maxWDip, 32f, false);
+            float h = TrayStyle ? size.Height + 12f : item.IsHeader ? HeaderH : ItemH;
+            float textW = MathF.Min(size.Width, item.MaxTextWidth);
             float hintW = string.IsNullOrEmpty(item.RightHint)
                 ? 0f
                 : ctx.MeasureText(item.RightHint, UiMetrics.FontFamily, 11f, 400, 120f, 32f, false).Width + 20f;
             float subW = item.Checked || item.SubItems is { Count: > 0 } ? 22f : 0f;
             float rowW = PadX * 2f + (anyLeftCol ? 28f : 10f) + textW + hintW + subW + 20f;
+            if (TrayStyle)
+            {
+                // WPF ItemBorder has 8 DIP horizontal padding and 10 DIP before its mark.
+                float mark = item.Checked || item.SubItems is { Count: > 0 }
+                    ? 10f + ctx.MeasureText(item.Checked ? "✓" : "›", UiMetrics.FontFamily, 12.5f, 400, 40f, 32f, false).Width : 0f;
+                rowW = PadX * 2f + 16f + textW + mark;
+            }
             if (rowW > maxW) maxW = rowW;
             _itemRects.Add(new UiRect(PadX, y, 0f, h));
             y += h;
@@ -158,8 +205,8 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
         _contentHeight = y;
         bool needsScroll = y + PadY * 2f > maxHDip;
-        widthDip = Math.Clamp(MathF.Ceiling(maxW + (needsScroll ? UiMetrics.ScrollBarWidth + 4f : 0f)), 140f, MathF.Max(140f, maxWDip));
-        heightDip = Math.Clamp(y + PadY * 2f, 44f, MathF.Max(44f, maxHDip));
+        widthDip = Math.Clamp(MathF.Ceiling(maxW + (needsScroll ? UiMetrics.ScrollBarWidth + 4f : 0f)), TrayStyle ? 24f : 140f, MathF.Max(TrayStyle ? 24f : 140f, maxWDip));
+        heightDip = Math.Clamp(y + PadY * 2f, TrayStyle ? 20f : 44f, MathF.Max(TrayStyle ? 20f : 44f, maxHDip));
         float itemW = widthDip - PadX * 2f - (needsScroll ? UiMetrics.ScrollBarWidth + 2f : 0f);
         for (int i = 0; i < _itemRects.Count; i++)
         {
@@ -177,7 +224,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
     protected override void OnRender(D2dTarget g, float widthDip, float heightDip)
     {
         _hit.Clear();
-        var outer = new UiRect(1f, 1f, widthDip - 2f, heightDip - 2f);
+        var outer = new UiRect(0.5f, 0.5f, widthDip - 1f, heightDip - 1f);
         g.FillRoundedRect(outer, UiMetrics.MenuCornerRadius, _theme.SurfaceBg);
         g.DrawRoundedRect(outer, UiMetrics.MenuCornerRadius, _theme.Border, 1f);
 
@@ -193,6 +240,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         _scroll.Clamp();
 
         g.PushClip(view);
+        _hit.PushClip(view);
         for (int i = 0; i < _items.Count; i++)
         {
             var item = _items[i];
@@ -202,7 +250,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
             if (item.IsSeparator)
             {
                 float sy = r.CenterY;
-                g.DrawLine(r.X + 8f, sy, r.Right - 8f, sy, _theme.Border, 1f, roundCaps: false);
+                g.DrawLine(r.X + 4f, sy, r.Right - 4f, sy, _theme.Border, 1f, roundCaps: false);
                 continue;
             }
             if (item.IsHeader)
@@ -215,6 +263,23 @@ internal sealed class PopupMenuWindow : LayeredWindow
             if (highlighted && item.Enabled)
                 g.FillRoundedRect(r, 4f, _theme.NavHover);
 
+            if (!string.IsNullOrEmpty(item.Tooltip))
+                _hit.Add("menu.tip." + i, r, UiCursorKind.Arrow, item.Tooltip);
+            if (TrayStyle)
+            {
+                UiColor color = item.Enabled ? _theme.TextPrimary : _theme.TextPrimary.WithAlphaFraction(0.5f);
+                string? mark = item.SubItems is { Count: > 0 } ? "›" : item.Checked ? "✓" : null;
+                var label = r.Deflate(8f, 0f);
+                if (mark != null)
+                {
+                    g.DrawText(mark, label, color, 12.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
+                    float markWidth = D2dSharedContext.Instance.MeasureText(mark, UiMetrics.FontFamily, 12.5f, 400, 40f, 32f, false).Width;
+                    label = new UiRect(label.X, label.Y, MathF.Max(1f, label.Width - markWidth - 10f), label.Height);
+                }
+                label = new UiRect(label.X, label.Y, MathF.Min(label.Width, item.MaxTextWidth), label.Height);
+                g.DrawText(item.Text, label, color, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+                continue;
+            }
             float textLeft = r.X + (anyLeftCol ? 28f : 10f);
             if (item.Icon is UiIcon ic)
             {
@@ -259,6 +324,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
             g.DrawText(item.Text, new UiRect(textLeft, r.Y, MathF.Max(10f, r.Right - rightReserve - textLeft), r.Height),
                 fg, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         }
+        _hit.PopClip();
         g.PopClip();
 
         _scroll.Draw(g, _theme, _hit, "menu.scroll", view);
@@ -266,6 +332,8 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
     protected override void OnPointerMove(float xDip, float yDip, bool leftDown)
     {
+        for (var ancestor = _parentMenu; ancestor != null; ancestor = ancestor._parentMenu)
+            ancestor.CancelPendingHover();
         if (leftDown && _scroll.DragMove(yDip)) { Invalidate(); return; }
         _hit.UpdateHover(xDip, yDip);
         int next = HitIndex(xDip, yDip);
@@ -273,8 +341,16 @@ internal sealed class PopupMenuWindow : LayeredWindow
         {
             _hoverIndex = next;
             _focusedIndex = next;
-            SetCursorKind(next >= 0 && _items[next].Enabled ? UiCursorKind.Hand : UiCursorKind.Arrow);
-            HandleSubMenuHover(next);
+            SetCursorKind(!TrayStyle && next >= 0 && _items[next].Enabled ? UiCursorKind.Hand : UiCursorKind.Arrow);
+            CancelPendingHover();
+            // Give diagonal travel to the existing child a chance to cross its parent row.
+            if (!leftDown && _openSubIndex >= 0 && _schedule != null && next != _openSubIndex)
+                _pendingHover = _schedule(TimeSpan.FromMilliseconds(220), () =>
+                {
+                    _pendingHover = null;
+                    if (Handle != 0 && _hoverIndex == next) HandleSubMenuHover(next);
+                });
+            else if (!leftDown) HandleSubMenuHover(next);
             Invalidate();
         }
     }
@@ -291,12 +367,14 @@ internal sealed class PopupMenuWindow : LayeredWindow
     protected override void OnPointerDown(UiPointerEventArgs e)
     {
         if (e.Button != UiMouseButton.Left) return;
+        CancelPendingHover();
         if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
         {
             Invalidate();
             return;
         }
-        _pressedIndex = HitIndex(e.X, e.Y);
+        int index = HitIndex(e.X, e.Y);
+        _pressedItem = index >= 0 && _items[index].Enabled ? _items[index] : null;
     }
 
     protected override void OnPointerUp(UiPointerEventArgs e)
@@ -309,14 +387,14 @@ internal sealed class PopupMenuWindow : LayeredWindow
             return;
         }
         int idx = HitIndex(e.X, e.Y);
-        int pressed = _pressedIndex;
-        _pressedIndex = -1;
-        if (idx >= 0 && idx == pressed) ActivateItem(idx);
+        var pressed = _pressedItem;
+        _pressedItem = null;
+        if (idx >= 0 && ReferenceEquals(_items[idx], pressed)) ActivateItem(idx);
     }
 
     protected override void OnCaptureLost()
     {
-        _pressedIndex = -1;
+        _pressedItem = null;
         _scroll.EndDrag();
     }
 
@@ -324,6 +402,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
     {
         if (_scroll.MaxOffset > 0.5f)
         {
+            CloseSubMenu();
             _scroll.OnWheel(delta);
             Invalidate();
         }
@@ -331,12 +410,14 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
     protected override bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
+        CancelPendingHover();
+        if (_subMenu is { IsVisible: true } child) return child.OnKeyDown(vk, ctrl, shift, alt);
         if (vk == 0x1B /*VK_ESCAPE*/ || (vk == 0x25 /*VK_LEFT*/ && _parentMenu is not null))
         {
             if (_parentMenu is not null)
             {
                 _parentMenu.CloseSubMenu();
-                _parentMenu.RequestFocus();
+                _parentMenu.Invalidate();
             }
             else
             {
@@ -352,16 +433,18 @@ internal sealed class PopupMenuWindow : LayeredWindow
                 OpenSubMenu(_focusedIndex);
                 if (_subMenu is not null && _subMenu._items.Count > 0)
                 {
-                    _subMenu._focusedIndex = 0;
-                    _subMenu._hoverIndex = 0;
+                    int first = _subMenu._items.FindIndex(i => i.Enabled && !i.IsHeader && !i.IsSeparator);
+                    _subMenu._focusOnLoad = first < 0;
+                    _subMenu._focusedIndex = first;
+                    _subMenu._hoverIndex = first;
                     _subMenu.Invalidate();
                 }
                 return true;
             }
         }
-        if (vk == 0x26 /*UP*/ || vk == 0x28 /*DOWN*/)
+        if (vk is 0x26 or 0x28 or 0x09)
         {
-            int dir = vk == 0x28 ? 1 : -1;
+            int dir = vk == 0x28 || (vk == 0x09 && !shift) ? 1 : -1;
             int count = _items.Count;
             if (count == 0) return true;
             int idx = _focusedIndex < 0 ? (dir > 0 ? -1 : count) : _focusedIndex;
@@ -380,7 +463,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
             }
             return true;
         }
-        if (vk == 0x0D /*ENTER*/ && _focusedIndex >= 0)
+        if (vk is 0x0D or 0x20 && _focusedIndex >= 0)
         {
             ActivateItem(_focusedIndex);
             return true;
@@ -390,17 +473,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
     protected override void OnActivated(bool active)
     {
-        if (active)
-        {
-            // Clicking back into parent menu closes any open child submenu without closing the chain
-            if (_subMenu is { IsVisible: true }) CloseSubMenu();
-            return;
-        }
-        if (_closingAll) return;
-
-        nint fg = GetForegroundWindow();
-        if (GetRootMenu().ContainsWindow(fg)) return;
-        GetRootMenu().CloseChain();
+        if (!active && _parentMenu == null && !_closingAll) CloseChain();
     }
 
     protected override void OnClosed()
@@ -418,15 +491,9 @@ internal sealed class PopupMenuWindow : LayeredWindow
         return cur;
     }
 
-    private bool ContainsWindow(nint hwnd)
-    {
-        if (hwnd == 0) return false;
-        if (hwnd == Handle) return true;
-        return _subMenu is not null && _subMenu.ContainsWindow(hwnd);
-    }
-
     private void CloseChain()
     {
+        if (_closingAll) return;
         _closingAll = true;
         CloseSubMenu();
         CloseWindow();
@@ -462,18 +529,34 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
     private void OpenSubMenu(int idx)
     {
+        if (_openSubIndex == idx && _subMenu is { IsVisible: true }) return;
         CloseSubMenu();
         var sub = _items[idx].SubItems;
         if (sub is null || sub.Count == 0) return;
         _openSubIndex = idx;
+        var child = _subMenu = new PopupMenuWindow(_theme, sub, Handle, this);
+        SetChildAnchor(child, idx);
+        child.OpenAt(child._anchorX, child._anchorY, false, child._flipEdge);
+        _items[idx].SubmenuOpened?.Invoke(child);
+        Invalidate();
+    }
+
+    private void SetChildAnchor(PopupMenuWindow child, int idx)
+    {
         var r = _itemRects[idx].Offset(0f, PadY - _scroll.Offset);
-        var pt = DipToScreenPx(r.Right - 4f, r.Y - 4f);
-        _subMenu = new PopupMenuWindow(_theme, sub, Handle, this);
-        _subMenu.OpenAt(pt.X, pt.Y, alignBottomUp: false, flipEdgePx: DipToScreenPx(r.X + 4f, r.Y).X);
+        var pt = DipToScreenPx(r.Right, r.Y);
+        (child._anchorX, child._anchorY, child._flipEdge) = (pt.X, pt.Y, DipToScreenPx(r.X, r.Y).X);
+    }
+
+    private void CancelPendingHover()
+    {
+        _pendingHover?.Dispose();
+        _pendingHover = null;
     }
 
     private void CloseSubMenu()
     {
+        CancelPendingHover();
         _openSubIndex = -1;
         if (_subMenu is not null)
         {
@@ -499,5 +582,5 @@ internal sealed class PopupMenuWindow : LayeredWindow
         return -1;
     }
 
-    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
+
 }

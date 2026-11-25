@@ -43,7 +43,9 @@ internal interface IViewHostActions
         Action<string, bool> onCommitted,
         bool mono = false,
         bool password = false,
-        bool selectAll = true);
+        bool selectAll = false,
+        bool readOnlyMultiline = false,
+        int maxLength = 0);
     void CloseInlineEdit(bool commit);
     void NavigateTo(MainNavTab tab);
     void OpenPhoneDevice(string? profileId = null) { }
@@ -64,8 +66,83 @@ internal interface IViewPage : IDisposable
     bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt);
     void OnFilesDropped(string[] paths) { }
     void OnCaptureLost() { }
+    void OnFocusLost() { }
     bool NeedsAnimationTick => false;
     void TickAnimation() { }
+}
+
+// ConfigService owns the existing atomic file and last committed snapshot.
+internal static class ViewPersistence
+{
+    internal static bool CommitSettings(this IViewHostActions actions)
+    {
+        if (SonicRoute.Core.ConfigService.TryCommit(actions.Config)) return true;
+        actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+        actions.Invalidate();
+        return false;
+    }
+
+    internal static bool WriteRule(this IViewHostActions actions, Action write)
+    {
+        try
+        {
+            write();
+            return true;
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException
+            or System.Security.SecurityException or ArgumentException or System.Text.Json.JsonException)
+        {
+            SonicRoute.Core.ExceptionDiagnostics.Record("Native.RuleWrite", ex);
+            actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+            return false;
+        }
+    }
+}
+
+// The frozen name editors save after 300 ms idle or immediately on focus loss.
+// Keep uncommitted text in EDIT so another setting cannot serialize a canceled edit.
+internal sealed class AliasEditor(IViewHostActions actions) : IDisposable
+{
+    private IDisposable? _timer;
+    private int _version;
+
+    public void Open(string tag, UiRect rect, string key, bool device)
+    {
+        Dispose();
+        int version = _version;
+        Dictionary<string, string> Names() => device ? actions.Config.DeviceNames : actions.Config.AppNames;
+        void Apply(string text)
+        {
+            var names = Names();
+            string value = text.Trim();
+            string previous = names.GetValueOrDefault(key, "");
+            if (value == previous) return;
+            if (value.Length == 0) names.Remove(key);
+            else names[key] = value;
+            if (actions.CommitSettings()) actions.NotifySettingsChanged();
+        }
+
+        actions.StartInlineEdit(tag, rect, Names().GetValueOrDefault(key, ""), text =>
+        {
+            _timer?.Dispose();
+            _timer = actions.Host.ScheduleOnce(TimeSpan.FromMilliseconds(300), () =>
+            {
+                _timer = null;
+                if (version == _version && actions.ActiveInlineEditTag == tag) Apply(text);
+            });
+        }, (text, _) =>
+        {
+            Dispose();
+            Apply(text);
+        });
+    }
+
+    public void Dispose()
+    {
+        _version++;
+        _timer?.Dispose();
+        _timer = null;
+    }
 }
 
 internal static class ViewSliderKeys

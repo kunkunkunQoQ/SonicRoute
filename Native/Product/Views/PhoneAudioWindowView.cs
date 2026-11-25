@@ -46,6 +46,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private UiRect _dropAreaRect;
     private string? _externalDragHoverZone;
     private string? _dropStatusMessage;
+    private long _commandVersion;
     private IDisposable? _dragRegistration;
     private bool _dragSubscribed;
 
@@ -108,7 +109,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _config,
             Invalidate,
             ShowCombo,
-            StartInlineEdit,
+            (tag, rect, value, changed, committed) => StartInlineEdit(tag, rect, value, changed, committed, 50),
             () => _inlineEdit.ActiveTag,
             commit => _inlineEdit.Close(commit, viaEnter: false),
             "companion.airplay");
@@ -137,7 +138,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             }
             else
             {
-                onCommit?.Invoke(text, true);
+                onCommit?.Invoke(text, viaEnter);
             }
         };
     }
@@ -209,7 +210,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         {
             if (!AndroidDeviceIdentity.Matches(online, _activeDevice))
             {
+                ++_commandVersion;
                 _selectedPackage = null;
+                _dropStatusMessage = null;
                 CancelAppDrag();
                 CancelKeyboardSeek();
             }
@@ -305,28 +308,32 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         if (IsVisible) Invalidate();
     }
 
-    private async Task RouteExternalAppAsync(AudioAppInfo app, string targetDeviceId)
+    private Task RouteExternalAppAsync(AudioAppInfo app, string targetDeviceId) => RunCompanionCommand(async () =>
     {
-        try
-        {
-            ControlReply reply = app.IsExternal
-                ? await _host.Audio.SetExternalOutputsAsync(app, [targetDeviceId]).ConfigureAwait(false)
-                : await _host.Audio.SelectOutputAsync((int)app.ProcessId, targetDeviceId).ConfigureAwait(false);
-            string? err = reply.Text.StartsWith("error:", StringComparison.OrdinalIgnoreCase) ? reply.Text : null;
-            _host.TryPost(() =>
-            {
-                _dropStatusMessage = err;
-                if (IsVisible) Invalidate();
-            });
-        }
+        ControlReply reply = app.IsExternal
+            ? await _host.Audio.SetExternalOutputsAsync(app, [targetDeviceId]).ConfigureAwait(false)
+            : await _host.CurrentApp.SelectOutputAsync((int)app.ProcessId, targetDeviceId).ConfigureAwait(false);
+        if (reply.Text.StartsWith("error:", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException(reply.Text);
+    });
+
+    private async Task RunCompanionCommand(Func<Task> operation, Action? completed = null)
+    {
+        long request = ++_commandVersion;
+        string? error = null;
+        try { await operation().ConfigureAwait(false); }
+        catch (OperationCanceledException) { return; }
         catch (Exception ex)
         {
-            _host.TryPost(() =>
-            {
-                _dropStatusMessage = PhonePreview.TranslateError(ex);
-                if (IsVisible) Invalidate();
-            });
+            ExceptionDiagnostics.Record("PhoneCompanion.Command", ex);
+            error = PhonePreview.TranslateError(ex);
         }
+        _host.TryPost(() =>
+        {
+            if (request != _commandVersion || !IsVisible) return;
+            _dropStatusMessage = error;
+            if (error == null) completed?.Invoke();
+            Invalidate();
+        });
     }
 
     protected override void OnShown()
@@ -342,11 +349,12 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnHidden()
     {
+        ++_commandVersion;
         CancelAppDrag();
         _seekKey = 0;
         StopSeekTimer();
         _seeking = false;
-        _inlineEdit.Close(commit: false, viaEnter: false);
+        _inlineEdit.Close(commit: true, viaEnter: false);
         _inlineChanged = null;
         _inlineCommitted = null;
         CloseCombo();
@@ -360,6 +368,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnClosed()
     {
+        ++_commandVersion;
         CancelAppDrag();
         _seekKey = 0;
         StopSeekTimer();
@@ -764,7 +773,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         // Search box
         var searchRect = new UiRect(padX, y, contentW, 28f);
         UiPrimitives.DrawTextBox(g, _theme, _hit, "companion.search", searchRect, _searchText, L10n.T("Phone.SearchAppsHint"),
-            focused: _inlineEdit.ActiveTag == "companion.search", fontSize: 11.5f);
+            focused: _inlineEdit.ActiveTag == "companion.search", fontSize: 11.5f, search: true);
 
         var listRect = ComputeDropAreaRect(widthDip, heightDip, _airPlaySelected);
 
@@ -1187,13 +1196,13 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         switch (item.Id)
         {
             case "companion.prev":
-                if (_mediaClient != null) _ = _mediaClient.SendAsync("previous", _host.Phone.Lifetime);
-                break;
             case "companion.play":
-                if (_mediaClient != null) _ = _mediaClient.SendAsync("toggle", _host.Phone.Lifetime);
-                break;
             case "companion.next":
-                if (_mediaClient != null) _ = _mediaClient.SendAsync("next", _host.Phone.Lifetime);
+                if (_mediaClient is { } client && _mediaCts is { } media)
+                {
+                    string command = item.Id == "companion.prev" ? "previous" : item.Id == "companion.play" ? "toggle" : "next";
+                    _ = RunCompanionCommand(() => client.SendAsync(command, media.Token));
+                }
                 break;
             case "companion.receive":
                 ToggleWholePhoneAudio();
@@ -1205,7 +1214,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 OpenPhoneManagementDeepLink();
                 break;
             case "companion.refresh":
-                _ = _host.Phone.RefreshAsync(restore: true);
+                _ = RunCompanionCommand(() => _host.Phone.RefreshAsync(restore: true));
                 break;
             case "companion.airplaygrip":
             case "companion.device":
@@ -1308,28 +1317,15 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         var state = _mediaState;
         var client = _mediaClient;
         var cts = _mediaCts;
-        if (state?.CanSeek == true && client != null && cts != null && !cts.IsCancellationRequested
-            && state.Package == _seekPackage && state.Title == _seekTitle)
-        {
-            try
-            {
-                await client.SeekAsync(state.Package, target, cts.Token).ConfigureAwait(false);
-                _host.TryPost(() =>
-                {
-                    if (ReferenceEquals(_mediaState, state))
-                    {
-                        _mediaState = state with { PositionMs = target, ReceivedTimestamp = Stopwatch.GetTimestamp() };
-                    }
-                    UpdateSeekAnimationTimer();
-                    if (IsVisible) Invalidate();
-                });
-                return;
-            }
-            catch (OperationCanceledException) { }
-            catch { }
-        }
         UpdateSeekAnimationTimer();
-        if (IsVisible) Invalidate();
+        if (state?.CanSeek != true || client == null || cts == null || cts.IsCancellationRequested
+            || state.Package != _seekPackage || state.Title != _seekTitle) return;
+        await RunCompanionCommand(() => client.SeekAsync(state.Package, target, cts.Token), () =>
+        {
+            if (!ReferenceEquals(_mediaCts, cts) || !ReferenceEquals(_mediaState, state)) return;
+            _mediaState = state with { PositionMs = target, ReceivedTimestamp = Stopwatch.GetTimestamp() };
+            UpdateSeekAnimationTimer();
+        }).ConfigureAwait(false);
     }
 
     private void OpenPhoneManagementDeepLink()
@@ -1354,10 +1350,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         var device = _activeDevice;
         if (device == null) return;
         var existing = _host.Phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, device));
-        if (existing != null)
-            _ = _host.Phone.Sources.RemoveAsync(existing.Id);
-        else
-            _ = _host.Phone.Sources.AddAsync(device, AndroidApp.DeviceAudio, keepPhoneAudio: false);
+        _ = RunCompanionCommand(() => existing != null ? _host.Phone.Sources.RemoveAsync(existing.Id) :
+            _host.Phone.Sources.AddAsync(device, AndroidApp.DeviceAudio, keepPhoneAudio: false));
     }
 
     private void DrawReturnOverlay(D2dTarget g, UiRect bounds, bool hovered, bool airPlay)
@@ -1394,7 +1388,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         var app = GetFilteredApps().FirstOrDefault(a => a.Package == package);
         if (app == null) return;
         ViewNative.GetCursorPos(out var pt);
-        _ = _host.Phone.OpenDisplayAsync(device, app, pt.X, pt.Y);
+        _ = RunCompanionCommand(() => _host.Phone.OpenDisplayAsync(device, app, pt.X, pt.Y));
     }
 
     private void ToggleAppAudioCapture(string package)
@@ -1404,10 +1398,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         var app = GetFilteredApps().FirstOrDefault(a => a.Package == package);
         if (app == null) return;
         var existing = _host.Phone.Sources.Sources.FirstOrDefault(s => s.App.Package == app.Package && AndroidDeviceIdentity.Matches(s.Device, device));
-        if (existing != null)
-            _ = _host.Phone.Sources.RemoveAsync(existing.Id);
-        else
-            _ = _host.Phone.Sources.AddAsync(device, app, keepPhoneAudio: false);
+        _ = RunCompanionCommand(() => existing != null ? _host.Phone.Sources.RemoveAsync(existing.Id) :
+            _host.Phone.Sources.AddAsync(device, app, keepPhoneAudio: false));
     }
 
     private AndroidApp[] GetFilteredApps()
@@ -1463,6 +1455,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 _airPlaySelected = false;
                 phone.Store.SelectProfile(picked.Key);
             }
+            ++_commandVersion;
             _dropStatusMessage = null;
             _scroll.Offset = 0f;
             RefreshData();
@@ -1488,14 +1481,18 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         }
     }
 
-    private void StartInlineEdit(string tag, UiRect rectDip, string text, Action<string>? onChanged, Action<string, bool> onCommitted)
+    protected override InlineEditHost ActiveEditor => _inlineEdit;
+
+    private void StartInlineEdit(string tag, UiRect rectDip, string text, Action<string>? onChanged, Action<string, bool> onCommitted, int maxLength = 0)
     {
+        _inlineEdit.Close(commit: true, viaEnter: false);
         _inlineChanged = onChanged;
         _inlineCommitted = onCommitted;
         var pt = DipToScreenPx(rectDip.X, rectDip.Y);
         int wPx = Math.Max(20, (int)MathF.Round(rectDip.Width * DpiScale));
         int hPx = Math.Max(18, (int)MathF.Round(rectDip.Height * DpiScale));
-        _inlineEdit.Open(Handle, tag, text, pt.X, pt.Y, wPx, hPx, 11.5f, Dpi, _theme.SurfaceBg, _theme.TextPrimary, selectAll: true);
+        _inlineEdit.Open(Handle, tag, text, pt.X, pt.Y, wPx, hPx, 11.5f, Dpi, _theme.SurfaceBg, _theme.TextPrimary, maxLength: maxLength);
+        Invalidate();
     }
 
     private bool TryGetAppIcon(AndroidApp app, out byte[] bgra, out int w, out int h, out int ver)

@@ -26,6 +26,7 @@ internal sealed class AppsPageView : IViewPage
     private static readonly StringComparer IdCmp = StringComparer.OrdinalIgnoreCase;
 
     private readonly IViewHostActions _actions;
+    private readonly AliasEditor _aliasEditor;
     private readonly UiScrollState _appsScroll = new();
     private readonly UiScrollState _detailsScroll = new();
     private readonly Dictionary<string, NativeAppIconService.IconBitmap?> _externalIconCache = new(StringComparer.Ordinal);
@@ -67,6 +68,12 @@ internal sealed class AppsPageView : IViewPage
     private bool _refreshPending;
     private int _stateGen;
     private int _outputEditGen;
+    private Task _inputWrites = Task.CompletedTask;
+    private string? _pendingInput;
+    private int _inputEditGen;
+#if SONICROUTE_PHONE
+    private Task _externalOutputs = Task.CompletedTask;
+#endif
 
     private IDisposable? _peakTimer;
     private bool _peakInFlight;
@@ -83,6 +90,7 @@ internal sealed class AppsPageView : IViewPage
     internal AppsPageView(IViewHostActions actions)
     {
         _actions = actions;
+        _aliasEditor = new(actions);
     }
 
     public bool NeedsAnimationTick
@@ -195,7 +203,7 @@ internal sealed class AppsPageView : IViewPage
         if (_draggingVolume)
         {
             _draggingVolume = false;
-            if (_selectedApp is { IsExternal: false }) _actions.Host.FlushVolumeWrites();
+            _actions.Host.FlushVolumeWrites();
         }
         _appsScroll.EndDrag();
         _detailsScroll.EndDrag();
@@ -483,7 +491,7 @@ internal sealed class AppsPageView : IViewPage
         _renameTitleRect = new UiRect(titleLeft, c1In.Y, MathF.Max(80f, MathF.Min(titleMaxW, 220f)), 26f);
 
         if (_actions.ActiveInlineEditTag == "apps.rename")
-            g.DrawRoundedRect(_renameTitleRect, 5f, t.Accent, 1.5f);
+            UiPrimitives.DrawTextBox(g, t, hit, "apps.rename", _renameTitleRect, titleText, focused: true, fontSize: 13f);
         else
             g.DrawText(titleText, new UiRect(titleLeft, c1In.Y, titleMaxW, 26f), t.TextPrimary, 18f, 600);
 
@@ -776,7 +784,7 @@ internal sealed class AppsPageView : IViewPage
         if (id != "apps.vol.slider" || _selectedApp == null || _selectedVolume < 0 ||
             !ViewSliderKeys.TryChange(vk, _selectedVolume, 0, 100, 1, 10, out double next)) return false;
         ApplySliderVolume((int)next);
-        if (!_selectedApp.IsExternal) _actions.Host.FlushVolumeWrites();
+        _actions.Host.FlushVolumeWrites();
         return true;
     }
 
@@ -792,7 +800,7 @@ internal sealed class AppsPageView : IViewPage
         wasDragging |= _phoneScroll.Dragging;
         _phoneScroll.EndDrag();
 #endif
-        if (wasDraggingVol && _selectedApp is { IsExternal: false })
+        if (wasDraggingVol)
             _actions.Host.FlushVolumeWrites();
 
         if (wasDragging) return true;
@@ -874,6 +882,7 @@ internal sealed class AppsPageView : IViewPage
         _refreshPending = false;
 
         int gen = _stateGen;
+        long volumeAtRead = _actions.Host.AppVolumeRevision;
         string? targetIdentity = _selectedIdentity;
         var selectedSnapshot = _selectedApp;
         bool readMic = _actions.Config.ExperimentalMic;
@@ -903,7 +912,7 @@ internal sealed class AppsPageView : IViewPage
                 var liveSelected = targetIdentity != null ? apps.FirstOrDefault(a => a.Identity == targetIdentity) : null;
                 if (liveSelected != null)
                 {
-                    bool pendingVol = !liveSelected.IsExternal && _actions.Host.HasPendingVolume((int)liveSelected.ProcessId);
+                    bool pendingVol = _actions.Host.HasPendingVolume(liveSelected);
                     if (!pendingVol)
                     {
                         try
@@ -964,11 +973,11 @@ internal sealed class AppsPageView : IViewPage
                         if (liveSelected != null)
                         {
                             _selectedApp = liveSelected;
-                            if (vol >= 0 && !_draggingVolume) _selectedVolume = vol;
-                            _selectedMuted = muted;
+                            if (vol >= 0 && !_draggingVolume && volumeAtRead == _actions.Host.AppVolumeRevision && !_actions.Host.HasPendingVolume(liveSelected)) _selectedVolume = vol;
+                            if (vol >= 0 && !_draggingVolume) _selectedMuted = muted;
                             _selectedPeak = peak;
                             _nativeOutput = natOut;
-                            _nativeInput = natIn;
+                            if (_pendingInput == null) _nativeInput = natIn;
                             _selectedOutputs = selOuts;
                             if (liveSelected.HasActiveSession && !liveSelected.IsExternal && _actions.Config.ShowAppPeakMeter)
                                 KickPeakBurst();
@@ -980,6 +989,9 @@ internal sealed class AppsPageView : IViewPage
                             _selectedApp = null;
                             _selectedIdentity = null;
                             _selectedVolume = -1;
+                            _pendingInput = null;
+                            _pendingOutputs = null;
+                            _pendingPrimary = null;
                             StopPeakBurst();
                         }
                     }
@@ -1124,6 +1136,9 @@ internal sealed class AppsPageView : IViewPage
         if (_selectedIdentity == app.Identity) return;
         _actions.CloseInlineEdit(commit: true);
         _stateGen++;
+        _outputEditGen++;
+        _inputEditGen++;
+        _pendingInput = null;
         _selectedIdentity = app.Identity;
         _selectedApp = app;
         _selectedVolume = -1;
@@ -1140,6 +1155,9 @@ internal sealed class AppsPageView : IViewPage
     private void ClearAppSelection()
     {
         _stateGen++;
+        _outputEditGen++;
+        _inputEditGen++;
+        _pendingInput = null;
         _selectedIdentity = null;
         _selectedApp = null;
         _selectedVolume = -1;
@@ -1155,6 +1173,7 @@ internal sealed class AppsPageView : IViewPage
         var selectedApps = _apps.Where(a => _multiSelected.Contains(a.Identity)).ToList();
         if (selectedApps.Count == 0) selectedApps.Add(primary);
         bool multi = selectedApps.Count > 1;
+        bool primaryMuted = _mutedByIdentity.GetValueOrDefault(primary.Identity);
 
         var items = new List<UiMenuItem>();
         if (!multi && !string.IsNullOrWhiteSpace(primary.ProcessName))
@@ -1164,9 +1183,9 @@ internal sealed class AppsPageView : IViewPage
 
         items.Add(new UiMenuItem
         {
-            Text = _mutedByIdentity.GetValueOrDefault(primary.Identity) ? L10n.T("Qp.Unmute") : L10n.T("Qp.Mute"),
+            Text = primaryMuted ? L10n.T("Qp.Unmute") : L10n.T("Qp.Mute"),
             Icon = UiIcon.Speaker,
-            Click = () => BatchToggleMute(selectedApps),
+            Click = () => BatchToggleMute(selectedApps, !primaryMuted),
         });
 
         var withProc = selectedApps.Where(a => !string.IsNullOrWhiteSpace(a.ProcessName)).ToList();
@@ -1177,7 +1196,7 @@ internal sealed class AppsPageView : IViewPage
             {
                 Text = L10n.T("Apps.DisableAuto"),
                 Checked = allAutoDisabled,
-                Click = () => BatchToggleList(withProc, _actions.Config.DisabledAutoSwitchApps),
+                Click = () => SetBatchMembership(withProc, _actions.Config.DisabledAutoSwitchApps, !allAutoDisabled),
             });
 
             bool allShownInPanel = withProc.All(a => !_actions.Config.HiddenPanelApps.Contains(a.ProcessName!, IdCmp));
@@ -1185,7 +1204,7 @@ internal sealed class AppsPageView : IViewPage
             {
                 Text = L10n.T("Apps.ShowInPanel"),
                 Checked = allShownInPanel,
-                Click = () => BatchToggleList(withProc, _actions.Config.HiddenPanelApps),
+                Click = () => SetBatchMembership(withProc, _actions.Config.HiddenPanelApps, allShownInPanel),
             });
         }
 
@@ -1214,61 +1233,77 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_actions.Config.HiddenPanelApps.Count == 0) return;
         _actions.Config.HiddenPanelApps.Clear();
-        ConfigService.TrySave(_actions.Config);
-        _actions.NotifySettingsChanged();
+        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
     }
 
-    private void BatchToggleMute(List<AudioAppInfo> targets)
+    private void BatchToggleMute(List<AudioAppInfo> targets, bool targetMute)
     {
-        bool targetMute = !_mutedByIdentity.GetValueOrDefault(targets[0].Identity);
         _ = Task.Run(() =>
         {
+            int failed = 0;
             foreach (var app in targets)
             {
-                try { _actions.Host.Audio.Volume(app, mute: targetMute); }
-                catch { }
+                try
+                {
+                    var actual = _actions.Host.Audio.Volume(app, mute: targetMute);
+                    if (actual.Count == 0 || actual.Muted != targetMute) failed++;
+                }
+                catch (Exception ex)
+                {
+                    ExceptionDiagnostics.Record("Native.Apps.BatchMute", ex);
+                    failed++;
+                }
             }
-            _actions.Host.TryPost(() => TriggerRefresh(forceAppsRefresh: false));
+            CompleteAudioBatch(targets.Count, failed);
         });
     }
 
-    private void BatchToggleList(List<AudioAppInfo> targets, List<string> configList)
+    private void SetBatchMembership(List<AudioAppInfo> targets, List<string> configList, bool include)
     {
-        bool allInList = targets.All(a => configList.Contains(a.ProcessName!, IdCmp));
         foreach (var app in targets)
         {
             string pn = app.ProcessName!;
-            if (allInList) configList.RemoveAll(x => IdCmp.Equals(x, pn));
+            if (!include) configList.RemoveAll(x => IdCmp.Equals(x, pn));
             else if (!configList.Contains(pn, IdCmp)) configList.Add(pn);
         }
-        ConfigService.TrySave(_actions.Config);
-        _actions.NotifySettingsChanged();
+        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
     }
 
-    private void BatchResetRoutes(List<AudioAppInfo> targets)
+    private async void BatchResetRoutes(List<AudioAppInfo> targets)
     {
-        _ = Task.Run(async () =>
+        bool resetMic = _actions.Config.ExperimentalMic;
+        async Task<bool> ResetAsync(AudioAppInfo app)
         {
-            foreach (var app in targets)
+            try
             {
-                if (app.IsExternal)
-                {
+                Task<ControlReply> output;
 #if SONICROUTE_PHONE
-                    try { await _actions.Host.Audio.SetExternalOutputsAsync(app, new[] { AudioService.SystemDefaultDeviceId }).ConfigureAwait(false); }
-                    catch { }
+                if (app.IsExternal)
+                    output = QueueExternalOutputs(app, [AudioService.SystemDefaultDeviceId]);
+                else
 #endif
-                    continue;
-                }
-                int pid = (int)app.ProcessId;
-                try { await _actions.Host.CurrentApp.SelectOutputAsync(pid, AudioService.SystemDefaultDeviceId).ConfigureAwait(false); }
-                catch { }
-                if (_actions.Config.ExperimentalMic)
-                {
-                    try { _actions.Host.Audio.SetRoute(pid, Flow.Capture, null); }
-                    catch { }
-                }
+                    output = _actions.Host.CurrentApp.SelectOutputAsync((int)app.ProcessId, AudioService.SystemDefaultDeviceId);
+                var input = !app.IsExternal && resetMic ? QueueInputRoute((int)app.ProcessId, null) : Task.FromResult<string?>(null);
+                var reply = await output.ConfigureAwait(false);
+                return await input.ConfigureAwait(false) == null && !reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase);
             }
-            _actions.Host.TryPost(() => TriggerRefresh(forceAppsRefresh: false));
+            catch (Exception ex)
+            {
+                ExceptionDiagnostics.Record("Native.Apps.BatchReset", ex);
+                return false;
+            }
+        }
+
+        var results = await Task.WhenAll(targets.Select(ResetAsync)).ConfigureAwait(false);
+        CompleteAudioBatch(results.Length, results.Count(ok => !ok));
+    }
+
+    private void CompleteAudioBatch(int count, int failed)
+    {
+        _actions.Host.TryPost(() =>
+        {
+            if (_active && failed > 0) _actions.ShowNotice(string.Format(L10n.T("Auto.RunPartial"), count - failed, failed));
+            _actions.Host.NotifyAudioVisualChanged();
         });
     }
 
@@ -1276,27 +1311,7 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_selectedApp == null || string.IsNullOrWhiteSpace(_selectedApp.ProcessName)) return;
         string proc = _selectedApp.ProcessName!;
-        string initial = _actions.Config.AppNames.TryGetValue(proc, out var custom) ? custom : "";
-        _actions.StartInlineEdit(
-            "apps.rename",
-            _renameTitleRect,
-            initial,
-            text =>
-            {
-                string trimmed = (text ?? "").Trim();
-                if (string.IsNullOrEmpty(trimmed)) _actions.Config.AppNames.Remove(proc);
-                else _actions.Config.AppNames[proc] = trimmed;
-                _actions.Invalidate();
-            },
-            (text, _) =>
-            {
-                string trimmed = (text ?? "").Trim();
-                if (string.IsNullOrEmpty(trimmed)) _actions.Config.AppNames.Remove(proc);
-                else _actions.Config.AppNames[proc] = trimmed;
-                ConfigService.TrySave(_actions.Config);
-                _actions.Host.ViewSettingsChanged();
-                _actions.ShowNotice(L10n.T("Apps.RenameSaved"));
-            });
+        _aliasEditor.Open("apps.rename", _renameTitleRect, proc, device: false);
     }
 
     private void ImportCustomIcon()
@@ -1463,41 +1478,61 @@ internal sealed class AppsPageView : IViewPage
         int editGen = ++_outputEditGen;
         _actions.Invalidate();
 
-        _ = Task.Run(async () =>
-        {
-            ControlReply reply;
+        Task<ControlReply> write;
 #if SONICROUTE_PHONE
-            if (app.IsExternal)
-            {
-                reply = await _actions.Host.Audio.SetExternalOutputsAsync(app, nextOutputs).ConfigureAwait(false);
-            }
-            else
+        if (app.IsExternal)
+            write = QueueExternalOutputs(app, nextOutputs);
+        else
 #endif
-            {
-                int pid = (int)app.ProcessId;
-                if (!ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(deviceId))
-                {
-                    reply = await _actions.Host.CurrentApp.SelectOutputAsync(pid, deviceId).ConfigureAwait(false);
-                }
-                else
-                {
-                    var args = new string[2 + nextOutputs.Length];
-                    args[0] = pid.ToString(CultureInfo.InvariantCulture);
-                    args[1] = preferred;
-                    nextOutputs.CopyTo(args, 2);
-                    reply = await _actions.Host.Audio.ExecuteAsync(new ControlRequest("outputs-set", args)).ConfigureAwait(false);
-                }
-            }
+        {
+            int pid = (int)app.ProcessId;
+            // Enqueue on the input thread so single clicks and Ctrl/Shift requests reach the
+            // same per-process owner in the order they were made.
+            write = !ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(deviceId)
+                ? _actions.Host.CurrentApp.SelectOutputAsync(pid, deviceId)
+                : _actions.Host.CurrentApp.SetOutputsAsync(pid, preferred, nextOutputs);
+        }
+        _ = FinishOutputAsync(write, app.Identity, editGen);
+    }
 
-            _actions.Host.TryPost(() =>
+#if SONICROUTE_PHONE
+    private Task<ControlReply> QueueExternalOutputs(AudioAppInfo app, string[] outputs)
+    {
+        var previous = _externalOutputs;
+        var write = Task.Run(async () =>
+        {
+            await previous.ConfigureAwait(false);
+            try { return await _actions.Host.Audio.SetExternalOutputsAsync(app, outputs).ConfigureAwait(false); }
+            catch (Exception ex) { return new ControlReply("error: " + ex.Message); }
+        });
+        _externalOutputs = write;
+        return write;
+    }
+#endif
+
+    private async Task FinishOutputAsync(Task<ControlReply> write, string identity, int generation)
+    {
+        string? error = null;
+        try
+        {
+            var reply = await write.ConfigureAwait(false);
+            if (reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase)) error = reply.Text;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        _actions.Host.TryPost(() =>
+        {
+            if (generation != _outputEditGen || identity != _selectedIdentity) return;
+            if (error == null && _pendingOutputs != null)
             {
-                if (editGen != _outputEditGen) return;
-                _pendingOutputs = null;
-                _pendingPrimary = null;
-                if (reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase))
-                    _actions.ShowNotice(reply.Text);
-                TriggerRefresh(forceAppsRefresh: false);
-            });
+                _selectedOutputs = _pendingOutputs;
+                _nativeOutput = _pendingPrimary ?? AudioService.SystemDefaultDeviceId;
+            }
+            _pendingOutputs = null;
+            _pendingPrimary = null;
+            _stateGen++; // discard an older in-flight endpoint read, then read the settled state
+            if (!_active) return;
+            if (error != null) _actions.ShowNotice(error);
+            TriggerRefresh(forceAppsRefresh: false);
         });
     }
 
@@ -1588,20 +1623,38 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_selectedApp == null || _selectedApp.IsExternal) return;
         int pid = (int)_selectedApp.ProcessId;
-        _nativeInput = deviceId;
+        string identity = _selectedApp.Identity;
+        int generation = ++_inputEditGen;
+        _pendingInput = _nativeInput = deviceId;
         _actions.Invalidate();
 
-        _ = Task.Run(() =>
+        _ = FinishInputAsync(QueueInputRoute(pid, AudioService.IsSystemDefault(deviceId) ? null : deviceId), identity, generation);
+    }
+
+    private Task<string?> QueueInputRoute(int pid, string? deviceId)
+    {
+        Task previous = _inputWrites;
+        var write = Task.Run(async () =>
         {
-            try
-            {
-                _actions.Host.Audio.SetRoute(pid, Flow.Capture, AudioService.IsSystemDefault(deviceId) ? null : deviceId);
-            }
-            catch (Exception ex)
-            {
-                _actions.Host.TryPost(() => _actions.ShowNotice(ex.Message));
-            }
-            _actions.Host.TryPost(() => TriggerRefresh(forceAppsRefresh: false));
+            await previous.ConfigureAwait(false);
+            try { _actions.Host.Audio.SetRoute(pid, Flow.Capture, deviceId); return (string?)null; }
+            catch (Exception ex) { return ex.Message; }
+        });
+        _inputWrites = write;
+        return write;
+    }
+
+    private async Task FinishInputAsync(Task<string?> write, string identity, int generation)
+    {
+        string? error = await write.ConfigureAwait(false);
+        _actions.Host.TryPost(() =>
+        {
+            if (generation != _inputEditGen || _selectedIdentity != identity) return;
+            _pendingInput = null;
+            _stateGen++;
+            if (!_active) return;
+            if (error != null) _actions.ShowNotice(error);
+            TriggerRefresh(forceAppsRefresh: false);
         });
     }
 
@@ -1638,26 +1691,15 @@ internal sealed class AppsPageView : IViewPage
         var app = _selectedApp;
         _selectedVolume = percent;
 
-        if (!app.IsExternal)
-        {
-            int pid = (int)app.ProcessId;
-            _actions.Host.QueueVolume(pid, percent, (actual, applied) =>
-            {
-                if (!_active || _selectedApp?.Identity != app.Identity) return;
-                if (applied && actual >= 0 && !_draggingVolume) _selectedVolume = actual;
-                else if (!applied) _actions.ShowNotice(L10n.T("Ov.VolFail"));
-                _actions.Invalidate();
-            });
-            KickPeakBurst();
-        }
-        else
-        {
-            _ = Task.Run(() =>
-            {
-                try { _actions.Host.Audio.Volume(app, level: percent); }
-                catch { }
-            });
-        }
+        _actions.Host.QueueAppVolume(app, percent);
+        if (!app.IsExternal) KickPeakBurst();
+        _actions.Invalidate();
+    }
+
+    internal void ConfirmAppVolume(string identity, int actual)
+    {
+        if (!_active || _selectedApp?.Identity != identity || _draggingVolume || _selectedVolume == actual) return;
+        _selectedVolume = actual;
         _actions.Invalidate();
     }
 
@@ -1667,8 +1709,7 @@ internal sealed class AppsPageView : IViewPage
         string proc = _selectedApp.ProcessName!;
         var list = _actions.Config.DisabledAutoSwitchApps;
         if (list.RemoveAll(x => IdCmp.Equals(x, proc)) == 0) list.Add(proc);
-        ConfigService.TrySave(_actions.Config);
-        _actions.NotifySettingsChanged();
+        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
     }
 
     private void ToggleShowInQuickPanel()
@@ -1677,8 +1718,7 @@ internal sealed class AppsPageView : IViewPage
         string proc = _selectedApp.ProcessName!;
         var list = _actions.Config.HiddenPanelApps;
         if (list.RemoveAll(x => IdCmp.Equals(x, proc)) == 0) list.Add(proc);
-        ConfigService.TrySave(_actions.Config);
-        _actions.NotifySettingsChanged();
+        if (_actions.CommitSettings()) _actions.NotifySettingsChanged();
     }
 
     private void ResetSelectedAppRoutes()
@@ -1953,6 +1993,7 @@ internal sealed class AppsPageView : IViewPage
         _phonePage?.Dispose();
         _phonePage = null;
 #endif
+        _aliasEditor.Dispose();
         _externalIconCache.Clear();
     }
 

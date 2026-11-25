@@ -119,7 +119,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             {
                 bool previous = cfg.ExecutionHistoryEnabled;
                 cfg.ExecutionHistoryEnabled = !previous;
-                if (!ConfigService.TrySave(cfg))
+                if (!ConfigService.TryCommit(cfg))
                 {
                     cfg.ExecutionHistoryEnabled = previous;
                     actions.ShowNotice(L10n.T("Tray.SaveFailed"));
@@ -144,8 +144,9 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                         if (int.TryParse(txt.Trim().Replace("MB", "", StringComparison.OrdinalIgnoreCase).Trim(), out int v) && v >= 1 && v <= 64)
                         {
                             int previous = cfg.ExecutionHistoryLimitMb;
+                            if (previous == v) return;
                             cfg.ExecutionHistoryLimitMb = v;
-                            if (!ConfigService.TrySave(cfg))
+                            if (!ConfigService.TryCommit(cfg))
                             {
                                 cfg.ExecutionHistoryLimitMb = previous;
                                 actions.ShowNotice(L10n.T("Tray.SaveFailed"));
@@ -155,7 +156,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                             _ = AutoRuleService.GetHistoryStore()?.SetLimitAsync(v);
                         }
                         else actions.ShowNotice(L10n.T("History.InvalidLimit"));
-                    });
+                    }, maxLength: 2);
             }, UiCursorKind.IBeam);
 
             g.DrawText(limitHint, new UiRect(x + pad + 32f, limRect.Bottom + 6f, innerW - 32f, limitHintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
@@ -225,8 +226,8 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                     return;
                 cfg.ExperimentalUnlocked = true;
                 cfg.ExperimentalMode = !cfg.ExperimentalMode;
+                if (!SaveConfig()) return;
                 if (!cfg.ExperimentalMode) AutoRuleService.StopExecutionHistory();
-                SaveConfig();
                 actions.ShowNotice(L10n.T("St.ExpModeNeedRestart"));
             }, Register);
         y += masterH + 14f;
@@ -240,7 +241,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             cfg.ExperimentalMic, true, () =>
             {
                 cfg.ExperimentalMic = !cfg.ExperimentalMic;
-                SaveConfig();
+                if (!SaveConfig()) return;
                 actions.ShowNotice(L10n.T("St.ExpMicNeedRestart"));
             }, Register);
         my += 56f;
@@ -251,7 +252,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                 cfg.MicInPanel, true, () =>
                 {
                     cfg.MicInPanel = !cfg.MicInPanel;
-                    SaveConfig();
+                    if (!SaveConfig()) return;
                     actions.ShowNotice(L10n.T("St.ExpMicPanelNeedRestart"));
                 }, Register);
             my += 52f;
@@ -308,7 +309,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                 if (int.TryParse(txt.Trim().Replace("px", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
                 {
                     cfg.OsdWidth = Math.Clamp(val, 180, 600);
-                    SaveConfig();
+                    if (!SaveConfig()) return;
                     actions.Host.PreviewOsd();
                 }
             }, mono: true);
@@ -328,13 +329,13 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                 if (cleaned.EndsWith('%') && double.TryParse(cleaned.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
                 {
                     cfg.OsdFontScale = Math.Clamp(Math.Round(pct / 100.0, 2), 0.7, 2.0);
-                    SaveConfig();
+                    if (!SaveConfig()) return;
                     actions.Host.PreviewOsd();
                 }
                 else if (double.TryParse(cleaned, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
                 {
                     cfg.OsdFontScale = Math.Clamp(Math.Round(val, 2), 0.7, 2.0);
-                    SaveConfig();
+                    if (!SaveConfig()) return;
                     actions.Host.PreviewOsd();
                 }
             }, mono: true);
@@ -416,7 +417,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         actions.ShowCombo(anchor, choices, cur, picked =>
         {
             actions.Config.OsdPosition = picked.Key;
-            SaveConfig();
+            if (!SaveConfig()) return;
             actions.Host.PreviewOsd();
         });
     }
@@ -586,8 +587,8 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
     {
         if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ClearConfig"), L10n.T("Exp.ClearConfigHint")))
             return;
-        ConfigService.ResetToDefault();
-        actions.Host.RestartPreview();
+        if (ConfigService.TryResetToDefault(out _)) actions.Host.RestartPreview();
+        else actions.ShowNotice(L10n.T("Tray.SaveFailed"));
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown) => leftDown && _scroll.DragMove(y);
@@ -622,12 +623,11 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
 
     public void Dispose() => _disposed = true;
 
-    private void SaveConfig()
+    private bool SaveConfig()
     {
-        if (!ConfigService.TrySave(actions.Config))
-            actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+        if (!actions.CommitSettings()) return false;
         actions.NotifySettingsChanged();
-        actions.Host.ViewSettingsChanged();
+        return true;
     }
 
     private static UiRect ClipToViewport(UiRect r, UiRect vp)

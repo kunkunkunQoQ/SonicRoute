@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using SonicRoute.Core;
+using SonicRoute.Core.Models;
 using SonicRoute.Native.Audio;
 using SonicRoute.Native.Product.Views;
 using SonicRoute.Updates;
@@ -28,10 +29,85 @@ internal sealed partial class ApplicationHost
     internal IReadOnlyDictionary<string, string> HotkeyStatuses => _automation.HotkeyStatuses;
     internal ProductAudio Audio => _audio;
     internal bool PreviewGlobalControls { get; private set; }
-    internal bool HasPendingVolume(int pid) => _volumeWriter.HasPending(pid);
-    internal int QueueVolume(int pid, int volume, Action<int, bool> readback) =>
-        _volumeWriter.Enqueue(pid, volume, (_, _, applied, actual) => readback(actual, applied));
-    internal void FlushVolumeWrites() => _volumeWriter.Flush();
+    internal long AppVolumeRevision { get; private set; }
+    internal bool HasPendingVolume(AudioAppInfo app)
+    {
+#if SONICROUTE_PHONE
+        if (app.ExternalSourceId is { } source) return _externalVolumeWriter.HasPending(source);
+#endif
+        return !app.IsExternal && _volumeWriter.HasPending((int)app.ProcessId);
+    }
+
+    internal void QueueAppVolume(AudioAppInfo app, int level)
+    {
+        ++AppVolumeRevision;
+        string identity = app.Identity;
+        void Confirm(bool applied, int actual)
+        {
+            ++AppVolumeRevision;
+            if (_disposed) return;
+            if (!applied || actual < 0) { ReportAudioWriteFailure(); return; }
+            mainView?.ConfirmAppVolume(identity, actual);
+            panelView?.ConfirmAppVolume(identity, actual);
+        }
+
+        int request = -1;
+#if SONICROUTE_PHONE
+        if (app.ExternalSourceId is { } source)
+            request = _externalVolumeWriter.Enqueue(source, level, (_, _, applied, actual) => Confirm(applied, actual));
+        else
+#endif
+        if (!app.IsExternal && app.ProcessId > 0)
+            request = _volumeWriter.Enqueue((int)app.ProcessId, level, (_, _, applied, actual) => Confirm(applied, actual));
+        if (request < 0) Confirm(false, -1);
+    }
+
+    private Task _panelAudioClicks = Task.CompletedTask;
+
+    internal void SubmitPanelAudio(Action command)
+    {
+        Task previous = _panelAudioClicks;
+        _panelAudioClicks = Task.Run(async () =>
+        {
+            await previous.ConfigureAwait(false);
+            try { command(); }
+            catch (Exception error)
+            {
+                ExceptionDiagnostics.Record("Native.PanelAudio", error);
+                PostContinuation(ReportAudioWriteFailure);
+            }
+        });
+    }
+
+    internal long EndpointWriteRevision { get; private set; }
+    internal bool EndpointVolumePending(string? id) => id != null && _endpointVolumeWriter.HasPending(id);
+    internal void QueueEndpointVolume(string? id, int level)
+    {
+        if (id == null) { ReportAudioWriteFailure(); return; }
+        ++EndpointWriteRevision;
+        if (_endpointVolumeWriter.Enqueue(id, level, (endpoint, _, applied, actual) =>
+        {
+            ++EndpointWriteRevision;
+            if (!applied) { ReportAudioWriteFailure(); return; }
+            panelView?.ConfirmEndpointVolume(endpoint, actual);
+        }) < 0) ReportAudioWriteFailure();
+    }
+
+    internal void ReportAudioWriteFailure()
+    {
+        if (_disposed) return;
+        PublishOsd(BuildIdentity.DisplayName, L10n.T("Tray.AudioActionFailed"), success: false);
+        NotifyAudioVisualChanged();
+    }
+
+    internal void FlushVolumeWrites()
+    {
+        _volumeWriter.Flush();
+        _endpointVolumeWriter.Flush();
+#if SONICROUTE_PHONE
+        _externalVolumeWriter.Flush();
+#endif
+    }
     internal void NotifyAudioVisualChanged()
     {
         if (_disposed) return;
@@ -82,8 +158,9 @@ internal sealed partial class ApplicationHost
     internal bool RecordingHotkey => _window.CapturingHotkey;
     internal void HoldHotkeys(bool hold)
     {
+        if (_window.CapturingHotkey == hold) return;
         _window.CapturingHotkey = hold;
-        _automation.ReloadSettings();
+        _automation.ReloadBindings();
     }
 
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -352,14 +429,41 @@ internal sealed partial class ApplicationHost
         osdAnimation = _window.ScheduleOnce(TimeSpan.FromMilliseconds(16), Frame);
     }
 
+    internal void SetTrayWheelPaused(bool paused)
+    {
+        bool previous = _config.TrayWheelPaused;
+        if (paused == previous) return;
+        if (!_automation.TryConfigureTrayWheel(paused))
+        {
+            _automation.TryConfigureTrayWheel(previous);
+            PublishOsd(L10n.T("Tray.PauseWheel"), L10n.T("Tray.AudioActionFailed"), success: false);
+            return;
+        }
+        _config.TrayWheelPaused = paused;
+        if (!ConfigService.TryCommit(_config))
+        {
+            _automation.TryConfigureTrayWheel(_config.TrayWheelPaused);
+            PublishOsd(L10n.T("Tray.PauseWheel"), L10n.T("Tray.SaveFailed"), success: false);
+            return;
+        }
+        RefreshForegroundInterest();
+        mainView?.ExternalRefresh();
+    }
+
     private void ShowTrayMenu()
     {
         TrayMenuController.Shared.Show(
             this,
             _config,
             _window.Handle,
+            _window.TrayMenuPoint,
             onOpenMain: OpenProductMain,
-            onOpenPanel: () => _feedback.Publish(FeedbackKind.ShowPanel),
+            onOpenPanel: () =>
+            {
+                if (panelView is { IsVisible: true }) panelView.RequestFocus();
+                else _feedback.Publish(FeedbackKind.ShowPanel);
+            },
+            onOpenUpdates: () => { OpenProductMain(); EnsureMainShell().OpenUpdateSettings(); },
             onExit: () => _window.RequestExit());
     }
 }

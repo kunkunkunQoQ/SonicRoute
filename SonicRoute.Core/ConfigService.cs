@@ -224,6 +224,17 @@ namespace SonicRoute.Core
         }
 
         /// <summary>Called by the settings owner before handing work to a worker; mutations must use that same owner.</summary>
+#if NET10_0_OR_GREATER
+        internal void RestoreFrom(AppConfig snapshot)
+        {
+            // Reuse the generated AOT field contract. Never share mutable collections with the checkpoint.
+            var copy = snapshot.Snapshot();
+            foreach (var property in PersistenceJsonContext.Default.AppConfig.Properties)
+                if (property.Get is { } get && property.Set is { } set) set(this, get(copy));
+            _micMuteOsdDefaultInputPersistent = copy._micMuteOsdDefaultInputPersistent;
+        }
+#endif
+
         public AppConfig Snapshot()
         {
             var copy = (AppConfig)MemberwiseClone();
@@ -264,6 +275,7 @@ namespace SonicRoute.Core
         // 避免反复读盘 + 反序列化，降低 GC 压力与内存波动。
         private static AppConfig? _cache;
         private static AppConfig? _publishedSnapshot;
+        private static AppConfig? _committedSnapshot;
         private static readonly object _lock = new();
         private static readonly object _writeLock = new();
         private static long _saveVersion;
@@ -305,11 +317,12 @@ namespace SonicRoute.Core
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
                             WriteConfig(json);
+                            lock (_lock) _committedSnapshot = pending.Config;
                             saved = true;
                         }
                     }
                 }
-                catch { }
+                catch (Exception ex) { ExceptionDiagnostics.Record("Config.QueueSave", ex); }
                 lock (_lock) current = pending.Version == _saveVersion;
                 if (current) try { SaveCompleted?.Invoke(saved); } catch { }
             }
@@ -358,7 +371,7 @@ namespace SonicRoute.Core
                 {
                     // A settings owner can publish a queued save while this cold read is in progress.
                     if (_cache != null) return _cache;
-                    _publishedSnapshot = cfg.Snapshot();
+                    _committedSnapshot = _publishedSnapshot = cfg.Snapshot();
                     return _cache = cfg;
                 }
             }
@@ -391,24 +404,54 @@ namespace SonicRoute.Core
         }
 
         /// <summary>保存并报告是否成功落盘；保留原有内存缓存更新行为。</summary>
-        public static bool TrySave(AppConfig config)
+        public static bool TrySave(AppConfig config) => WriteSnapshot(config, restoreOnFailure: false);
+
+#if NET10_0_OR_GREATER
+        /// <summary>Owner-thread UI commit. Restore the live object when its replacement cannot be written.</summary>
+        public static bool TryCommit(AppConfig config) => WriteSnapshot(config, restoreOnFailure: true);
+#endif
+
+        private static bool WriteSnapshot(AppConfig config, bool restoreOnFailure)
         {
             // Capture on the settings owner before entering the I/O serialization lock.
             AppConfig snapshot;
             try { snapshot = config.Snapshot(); }
-            catch { return false; }
+            catch (Exception ex) { ExceptionDiagnostics.Record("Config.Snapshot", ex); return false; }
+            long version;
+            lock (_lock)
+            {
+                if (restoreOnFailure && !ReferenceEquals(config, _cache)) return false;
+                version = ++_saveVersion;
+                _pendingSave = null;
+                _cache = config;
+                _publishedSnapshot = snapshot;
+            }
             lock (_writeLock)
             {
-                lock (_lock) { ++_saveVersion; _pendingSave = null; _cache = config; _publishedSnapshot = snapshot; }
+                lock (_lock) if (version != _saveVersion) return false;
                 bool saved = false;
                 try
                 {
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
                     WriteConfig(JsonSerializer.Serialize(snapshot, WriteContract));
+                    lock (_lock) _committedSnapshot = snapshot;
                     saved = true;
                 }
-                catch { /* 保存失败保留原文件，不阻断运行。 */ }
+                catch (Exception ex)
+                {
+                    ExceptionDiagnostics.Record("Config.Save", ex);
+#if NET10_0_OR_GREATER
+                    lock (_lock)
+                    {
+                        if (restoreOnFailure && version == _saveVersion && _committedSnapshot is { } last)
+                        {
+                            config.RestoreFrom(last);
+                            _publishedSnapshot = last;
+                        }
+                    }
+#endif
+                }
                 return saved;
             }
         }
@@ -449,17 +492,31 @@ namespace SonicRoute.Core
         /// <summary>一键清理配置文件：删除 config.json 并重置内存缓存为全新默认配置（实验设置功能）。</summary>
         public static AppConfig ResetToDefault()
         {
+            TryResetToDefault(out var result);
+            return result;
+        }
+
+        public static bool TryResetToDefault(out AppConfig result)
+        {
             lock (_writeLock)
             {
                 lock (_lock) { ++_saveVersion; _pendingSave = null; }
                 // This explicit reset is allowed to replace defaults, but retain the previous settings.
+                bool wasBlocked = _savesBlocked;
                 _savesBlocked = false;
                 try { BackupBeforeWrite(); if (File.Exists(ConfigPath)) File.Delete(ConfigPath); }
-                catch (Exception ex) { ExceptionDiagnostics.Record("Config.Reset", ex); return Load(); }
+                catch (Exception ex)
+                {
+                    _savesBlocked = wasBlocked;
+                    ExceptionDiagnostics.Record("Config.Reset", ex);
+                    result = Load();
+                    return false;
+                }
                 LoadWarning = null;
                 var cfg = new AppConfig();
-                lock (_lock) { _cache = cfg; _publishedSnapshot = cfg.Snapshot(); }
-                return cfg;
+                lock (_lock) { _cache = cfg; _committedSnapshot = _publishedSnapshot = cfg.Snapshot(); }
+                result = cfg;
+                return true;
             }
         }
 
@@ -542,7 +599,7 @@ namespace SonicRoute.Core
                     if (dir != null) Directory.CreateDirectory(dir);
                     BackupBeforeWrite();
                     AtomicFile.WriteAllBytes(ConfigPath, ordinary);
-                    lock (_lock) { _cache = null; _publishedSnapshot = null; }
+                    lock (_lock) { _cache = null; _committedSnapshot = _publishedSnapshot = null; }
                 }
                 return true;
             }

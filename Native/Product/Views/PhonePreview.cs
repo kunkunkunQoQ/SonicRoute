@@ -34,6 +34,7 @@ internal sealed class PhonePreview : IDisposable
     internal readonly PcToPhoneAudioManager Pc;
     internal readonly AndroidVirtualDisplayManager Displays;
     internal readonly AndroidFileTransfers Transfers = new();
+    private readonly Dictionary<string, Queue<(string[] Paths, string Destination, string? PullFrom)>> pendingTransfers = new(StringComparer.Ordinal);
     internal readonly PhoneClipboard Clipboard;
     internal event Action? Changed;
     internal string? Error { get; private set; }
@@ -72,7 +73,7 @@ internal sealed class PhonePreview : IDisposable
         Discovery.Changed += Observe;
         Store.Changed += OnStoreChanged;
         Pc.Changed += Notify;
-        Transfers.Changed += _ => Notify();
+        Transfers.Changed += OnTransferChanged;
         Displays.ResourcesRetired += Notify;
         Clipboard.Changed += Notify;
     }
@@ -328,11 +329,23 @@ internal sealed class PhonePreview : IDisposable
         });
     }
 
-    internal async Task DiscoverAndConnectAsync(string address, CancellationToken cancel)
+    internal async Task DiscoverAndConnectAsync(string address, CancellationToken cancel, AndroidSavedConnection? saved = null)
     {
         long revision = Connections.Revision;
-        var result = await Wireless.ConnectAsync(address, cancel).ConfigureAwait(false);
+        var result = saved == null ? await Wireless.ConnectAsync(address, cancel).ConfigureAwait(false)
+            : await Wireless.ReconnectAsync(saved.Device, saved.Address, cancel).ConfigureAwait(false);
         Accept(result, revision);
+    }
+
+    internal async Task RestoreUsbAsync(AndroidDevice chosen, CancellationToken cancel)
+    {
+        long revision = Connections.Revision;
+        var devices = await Discovery.ReadAsync(cancel).ConfigureAwait(false);
+        var live = devices.FirstOrDefault(d => d.State == "device" && !d.IsWifi && AndroidDeviceIdentity.Matches(chosen, d)
+            && !AndroidConnectionManager.IsAmbiguous(d, devices) && Connections.Resolve(d) == null);
+        cancel.ThrowIfCancellationRequested();
+        if (live == null) throw AndroidError.WithCode(new IOException("USB device is unavailable."), AndroidErrorCode.UsbReconnectHint);
+        Accept(new(live, devices), revision);
     }
 
     internal async Task PairAsync(string address, string code, CancellationToken cancel)
@@ -539,6 +552,44 @@ internal sealed class PhonePreview : IDisposable
         return new AndroidPhonePcmPlayer(Adb, device, pcm, sink, cancel,
             (connected, outputs) => { if (Connections.IsCurrent(connected)) Store.UpdateOutputs(connected, outputs); },
             Connections.OperationToken(device));
+    }
+
+    internal int QueuedTransferCount(string profileId) => pendingTransfers.GetValueOrDefault(profileId)?.Count ?? 0;
+    internal void ClearQueuedTransfers(string profileId) => pendingTransfers.Remove(profileId);
+
+    // Enqueue and advance on the host owner. A closed view does not own accepted transfers.
+    internal bool EnqueueTransfer(AndroidDevice device, string profileId, string[] paths, string destination, string? remoteFolder)
+    {
+        if (paths.Length == 0 || Connections.Get(device).Profile?.Id != profileId) return false;
+        if (Transfers.Get(profileId)?.Phase != AndroidFilePhase.Running && QueuedTransferCount(profileId) == 0)
+            return StartTransfer(device, paths, destination, remoteFolder);
+        if (!pendingTransfers.TryGetValue(profileId, out var queue)) pendingTransfers.Add(profileId, queue = new());
+        queue.Enqueue((paths, destination, remoteFolder));
+        return true;
+    }
+
+    private void OnTransferChanged(string profileId)
+    {
+        var phase = Transfers.Get(profileId)?.Phase;
+        if (phase != AndroidFilePhase.Running)
+            owner.PostContinuation(() =>
+            {
+                if (closed != 0 || !pendingTransfers.TryGetValue(profileId, out var queue)) return;
+                if (phase == AndroidFilePhase.Cancelled) { ClearQueuedTransfers(profileId); return; }
+                if (Transfers.Get(profileId)?.Phase == AndroidFilePhase.Running) return;
+                var last = Store.Profiles.FirstOrDefault(p => p.Id == profileId)?.LastDevice;
+                var current = last == null ? null : Connections.Get(last);
+                var next = queue.Dequeue();
+                if (queue.Count == 0) ClearQueuedTransfers(profileId);
+                if (current?.Device is not { } device || current.Profile?.Id != profileId ||
+                    !StartTransfer(device, next.Paths, next.Destination, next.PullFrom))
+                {
+                    ClearQueuedTransfers(profileId);
+                    Error = L10n.T("Tray.AudioActionFailed");
+                    Notify();
+                }
+            });
+        Notify();
     }
 
     internal bool StartTransfer(AndroidDevice device, IReadOnlyList<string> paths, string destination, string? remoteFolder)
@@ -806,6 +857,8 @@ internal sealed class PhonePreview : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref closed, 1) != 0) return;
+        Transfers.Changed -= OnTransferChanged;
+        pendingTransfers.Clear();
         lock (displayWatches)
             foreach (var watch in displayWatches.Values) watch.CloseStatusOnUi();
         Clipboard.Dispose();

@@ -90,8 +90,7 @@ internal sealed class ColorPickerWindow : LayeredWindow
         Invalidate();
     }
 
-    protected override void OnMoved(int leftPx, int topPx) => RepositionEdit();
-    protected override void OnDpiChanged(uint newDpi) => RepositionEdit();
+    protected override void OnDpiChanged(uint newDpi) => Invalidate();
 
     protected override void OnRender(D2dTarget g, float w, float h)
     {
@@ -159,6 +158,8 @@ internal sealed class ColorPickerWindow : LayeredWindow
             DrawField(g, first + i);
         }
     }
+
+    protected override InlineEditHost ActiveEditor => _inlineEdit;
 
     private void DrawField(D2dTarget g, int i) =>
         UiPrimitives.DrawTextBox(g, _theme, _hit, ChannelIds[i], _channels[i], _values[i], "", _inlineEdit.ActiveTag == ChannelIds[i], mono: i == 6, fontSize: 13);
@@ -246,14 +247,7 @@ internal sealed class ColorPickerWindow : LayeredWindow
         _onAccepted(chosen);
     }
 
-    private void RepositionEdit()
-    {
-        int i = Array.IndexOf(ChannelIds, _inlineEdit.ActiveTag);
-        if (!_inlineEdit.IsOpen || i < 0) return;
-        var r = _channels[i];
-        var pt = DipToScreenPx(r.X, r.Y);
-        _inlineEdit.Reposition(pt.X, pt.Y, (int)MathF.Round(r.Width * DpiScale), (int)MathF.Round(r.Height * DpiScale), 13f, Dpi);
-    }
+
 
     private void CommitField(string id, string text, bool viaEnter)
     {

@@ -53,10 +53,15 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         });
     }
 
-    private void ReloadRules()
+    internal void ReloadBindings()
     {
-        if (stopped) return;
-        var rules = AutoRuleStore.LoadAll();
+        if (stopped || hotkeys == null) return;
+        if (host.RecordingHotkey) hotkeys.Reload(new Dictionary<string, string>());
+        else RegisterBindings(AutoRuleStore.LoadAll());
+    }
+
+    private void RegisterBindings(List<AutoRule> rules)
+    {
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (string action in HotkeyActions.All)
         {
@@ -66,7 +71,14 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         foreach (var rule in rules)
             if (rule.Enabled && rule.Trigger == AutoRuleTrigger.Hotkey && !string.IsNullOrWhiteSpace(rule.Hotkey))
                 map[AutoRuleService.HotkeyPrefix + rule.Id] = rule.Hotkey;
-        hotkeys?.Reload(!host.RecordingHotkey ? map : new());
+        hotkeys?.Reload(map);
+    }
+
+    private void ReloadRules()
+    {
+        if (stopped) return;
+        var rules = AutoRuleStore.LoadAll();
+        if (!host.RecordingHotkey) RegisterBindings(rules);
         AutoRuleService.RefreshWatcher();
         host.RefreshForegroundInterest();
         bool needsSchedule = rules.Any(r => r.Enabled && r.Trigger == AutoRuleTrigger.Schedule);
@@ -74,6 +86,9 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         scheduled = needsSchedule;
         UpdateRuleDirectoryPolicy();
     }
+
+    internal bool TryConfigureTrayWheel(bool paused) =>
+        hotkeys?.ConfigureTrayWheel(!paused, config.TrayWheelEverywhere) == true;
 
     internal void ReloadSettings() => context.Enter(() =>
     {

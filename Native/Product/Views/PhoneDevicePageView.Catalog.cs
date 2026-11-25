@@ -53,7 +53,7 @@ internal sealed partial class PhoneDevicePageView
         g.DrawText(L10n.T("Phone.AppPickerTitle"), new UiRect(inner.X, inner.Y, inner.Width - 80f, 32f), theme.TextPrimary, 18f, 600);
         var search = new UiRect(inner.X, done.Bottom + 8f, inner.Width, 34f);
         UiPrimitives.DrawTextBox(g, theme, _hit, "phone.appsearch", search, _appSearch, L10n.T("Phone.SearchAppsHint"),
-            focused: _actions.ActiveInlineEditTag == "phone.appsearch");
+            focused: _actions.ActiveInlineEditTag == "phone.appsearch", search: true);
         string status = L10n.T(_catalogLoading ? "Phone.LoadingPhoneApps" : _catalogApps.Count == 0 ? "Phone.CatalogEmpty" : "Phone.CatalogSelectionHint");
         float statusH = MathF.Max(16f, D2dSharedContext.Instance.MeasureText(status, UiMetrics.FontFamily, 11f, 400, inner.Width, 84f, true).Height);
         g.DrawText(status, new UiRect(inner.X, search.Bottom + 8f, inner.Width, statusH), theme.TextSecondary, 11f, wrap: true);

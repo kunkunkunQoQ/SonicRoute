@@ -11,6 +11,10 @@ internal sealed partial class ApplicationHost
     internal ProductCurrentApp CurrentApp { get; private set; } = null!;
     private ProductAutomation _automation = null!;
     private CoalescedVolumeWriter _volumeWriter = null!;
+    private CoalescedVolumeWriter<string> _endpointVolumeWriter = null!;
+#if SONICROUTE_PHONE
+    private CoalescedVolumeWriter<string> _externalVolumeWriter = null!;
+#endif
     private bool _resident;
 
     private void StartServices(bool resident)
@@ -23,10 +27,21 @@ internal sealed partial class ApplicationHost
             var state = _audio.Volume(Flow.Render, null, pid, level: percent);
             return (state.Count > 0, state.Percent);
         });
+        _endpointVolumeWriter = new(PostContinuation, ScheduleOnce, (id, percent) =>
+        {
+            var actual = _audio.Volume(Flow.Render, id, level: percent);
+            return (actual.Count > 0, actual.Percent);
+        });
         _audio.Start(resident);
         _audio.AudioChanged += NotifyAudioVisualChanged;
         PcRoutingApi.OutputsChanged += NotifyAudioVisualChanged;
 #if SONICROUTE_PHONE
+        _externalVolumeWriter = new(PostContinuation, ScheduleOnce, (sourceId, percent) =>
+        {
+            if (_audio.ExternalAudio is not { } bridge) return (false, -1);
+            var actual = bridge.SetExternalVolume(sourceId, level: percent);
+            return (actual.Count > 0, actual.Percent);
+        });
         _audio.ExternalAudio = new ExternalAudioBridge(
             () => HasPhone ? Phone : null,
             () => Phone,
@@ -68,9 +83,14 @@ internal sealed partial class ApplicationHost
         PcRoutingApi.OutputsChanged -= NotifyAudioVisualChanged;
         _automation?.Dispose();
         CurrentApp?.Dispose();
+        _panelAudioClicks.GetAwaiter().GetResult();
+        _endpointVolumeWriter?.Dispose();
+        _endpointVolumeWriter?.Completion.GetAwaiter().GetResult();
         _volumeWriter?.Dispose();
         _volumeWriter?.Completion.GetAwaiter().GetResult();
 #if SONICROUTE_PHONE
+        _externalVolumeWriter?.Dispose();
+        _externalVolumeWriter?.Completion.GetAwaiter().GetResult();
         _audio.ExternalAudio?.Dispose();
         _audio.ExternalAudio = null;
 #endif

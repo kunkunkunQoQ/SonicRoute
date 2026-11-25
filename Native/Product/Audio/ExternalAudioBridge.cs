@@ -119,9 +119,9 @@ internal sealed class ExternalAudioBridge : IDisposable
         return new(session.State.Volume, session.State.Muted, 1);
     }
 
-    internal VolumeState SetExternalVolume(AudioAppInfo app, int? level = null, bool? mute = null, int delta = 0, bool toggle = false)
+    internal VolumeState SetExternalVolume(string? sourceId, int? level = null, bool? mute = null, int delta = 0, bool toggle = false)
     {
-        var session = FindSession(app.ExternalSourceId)
+        var session = FindSession(sourceId)
             ?? throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
         lock (session)
         {
@@ -183,21 +183,30 @@ internal sealed class ExternalAudioBridge : IDisposable
         }
     }
 
-    internal Endpoint[] GetPhoneOutputs()
+    internal Endpoint[] GetPhoneOutputs(AudioAppInfo? menuTarget = null)
     {
         var phone = _tryGetPhone();
         if (phone == null) return [];
+        var source = menuTarget?.ExternalSourceId is { } sourceId ? phone.Sources.FindSource(sourceId) : null;
+        if (menuTarget is { IsExternal: true } && source == null && _tryGetAirPlay()?.Source?.Id != menuTarget.ExternalSourceId) return [];
         var devices = phone.Discovery.Devices ?? [];
         var list = new List<Endpoint>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var d in devices)
+        void AddDevice(AndroidDevice online)
         {
-            if (!string.Equals(d.State, "device", StringComparison.Ordinal)) continue;
-            var online = phone.Connections.ResolveKey(AndroidDeviceIdentity.Key(d));
-            if (online == null) continue;
             string key = AndroidDeviceIdentity.Key(online);
-            if (!seen.Add(key)) continue;
+            if (!seen.Add(key)) return;
             string phoneName = phone.Store.GetDisplayName(online);
+            if (menuTarget != null)
+            {
+                string current = AndroidOutputIdentity.FormatDeviceId(key, AndroidOutputSink.Current.Key);
+                bool own = source != null && AndroidDeviceIdentity.Matches(source.Device, online);
+                string currentName = ConfigService.Load().DeviceNames.GetValueOrDefault(current) ??
+                    (devices.Count(d => d.State == "device") > 1 && !own
+                        ? L10n.T("Phone.NativeAudioOutput") + " · " + phoneName : L10n.T("Phone.NativeAudioOutput"));
+                list.Add(new(own ? AndroidAudioSession.SourcePhoneOutputId : current, currentName));
+                if (source != null && !own) return;
+            }
             var profile = phone.Store.FindProfile(online);
             var sinks = profile?.OutputSinks is { Count: > 0 } configured
                 ? AndroidOutputSink.NormalizeList(configured)
@@ -207,11 +216,15 @@ internal sealed class ExternalAudioBridge : IDisposable
                 if (sink.Kind == AndroidOutputSinkKind.Current) continue;
                 string devId = AndroidOutputIdentity.FormatDeviceId(key, sink.Key);
                 string label = sink.Kind == AndroidOutputSinkKind.Speaker
-                    ? $"{phoneName} · {L10n.T("Phone.OutputSpeaker")}"
-                    : $"{phoneName} · {sink.Name}";
+                    ? string.Format(L10n.T("Phone.PcDropSpeakerTitle"), phoneName)
+                    : string.Format(L10n.T("Phone.BluetoothOutputFormat"),
+                        sink.Name == "蓝牙音频设备" ? L10n.T("Phone.BluetoothAudioDevice") : sink.Name, phoneName);
                 list.Add(new Endpoint(devId, label));
             }
         }
+        foreach (var device in devices)
+            if (device.State == "device" && phone.Connections.ResolveKey(AndroidDeviceIdentity.Key(device)) is { } online) AddDevice(online);
+        if (source != null) AddDevice(source.Device);
         return list.ToArray();
     }
 

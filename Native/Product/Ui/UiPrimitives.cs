@@ -134,7 +134,9 @@ internal sealed class UiHitMap
 
     public void PopClip() => _clips.Pop();
 
-    private static UiRect Intersect(UiRect a, UiRect b)
+    internal UiRect VisiblePart(UiRect bounds) => _clips.TryPeek(out var clip) ? Intersect(bounds, clip) : bounds;
+
+    internal static UiRect Intersect(UiRect a, UiRect b)
     {
         float x = MathF.Max(a.X, b.X);
         float y = MathF.Max(a.Y, b.Y);
@@ -514,19 +516,28 @@ internal static class UiPrimitives
 
     public static void DrawTextBox(
         D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string value, string placeholder = "",
-        bool focused = false, bool mono = false, float fontSize = 12.5f)
+        bool focused = false, bool mono = false, float fontSize = 13f, bool search = false, bool readOnlyMultiline = false,
+        bool enabled = true)
     {
-        hit.Add(id, rect, UiCursorKind.IBeam);
-        bool hot = hit.IsHover(id);
-        g.FillRoundedRect(rect, 6f, t.SurfaceBg);
-        g.DrawRoundedRect(rect, 6f, focused || hot ? t.Accent : t.Border, focused ? 1.5f : 1f);
+        if (enabled) hit.Add(id, rect, UiCursorKind.IBeam);
+        bool hot = enabled && hit.IsHover(id);
+        g.FillRoundedRect(rect, 8f, readOnlyMultiline ? t.SurfaceAlt : t.SurfaceBg);
+        g.DrawRoundedRect(rect, 8f, focused || hot ? t.Accent : t.Border, 1f);
+        if (search) g.DrawIcon(UiIcon.Search, new UiRect(rect.X + 10, rect.CenterY - 8, 16, 16), t.TextSecondary);
+        var textBox = rect.Deflate(search ? 36f : 11f, 2f, 11f, 2f);
+        if (focused && g.Editor is { } editor)
+        {
+            editor.SetLayout(rect, textBox, hit.VisiblePart(rect), fontSize, mono, placeholder);
+            return;
+        }
         bool empty = string.IsNullOrEmpty(value);
         string shown = empty ? placeholder : value;
         if (!string.IsNullOrEmpty(shown))
         {
-            g.DrawText(shown, rect.Deflate(9f, 2f), empty ? t.TextSecondary : t.TextPrimary,
-                fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center,
-                wrap: false, ellipsis: true,
+            var ink = empty ? t.TextSecondary : t.TextPrimary;
+            g.DrawText(shown, textBox, enabled ? ink : ink.WithAlphaFraction(0.5f),
+                fontSize, 400, UiTextAlign.Leading, readOnlyMultiline ? UiVertAlign.Top : UiVertAlign.Center,
+                wrap: readOnlyMultiline, ellipsis: !readOnlyMultiline,
                 fontFamily: mono ? UiMetrics.MonoFontFamily : UiMetrics.FontFamily);
         }
     }

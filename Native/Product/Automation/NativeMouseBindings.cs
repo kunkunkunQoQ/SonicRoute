@@ -7,17 +7,18 @@ internal sealed class NativeMouseBindings(NativeApplicationWindow window, bool t
     private readonly Dictionary<MouseChord, int> enabled = new();
     private readonly Dictionary<int, string> actions = new();
     internal bool IsInstalled => window.MouseRegistered;
-    internal void Reload(IEnumerable<KeyValuePair<string,string>> bindings)
+    internal bool Reload(IEnumerable<KeyValuePair<string,string>> bindings)
     {
         var next = new Dictionary<MouseChord, int>();
         var mapping = new Dictionary<int, string>();
         int id = -1;
         foreach (var pair in bindings)
             if (TryChord(pair.Key, out var chord) && next.TryAdd(chord, id)) mapping[id--] = pair.Value;
-        if (!window.ConfigureMouse(next, wheel, entireTray)) return;
+        if (!window.ConfigureMouse(next, wheel, entireTray)) return false;
         enabled.Clear(); actions.Clear();
         foreach (var item in next) enabled.Add(item.Key, item.Value);
         foreach (var item in mapping) actions.Add(item.Key, item.Value);
+        return true;
     }
 
     private static bool TryChord(string combo,out MouseChord chord)

@@ -47,6 +47,20 @@ internal sealed partial class ProductAudio : IDisposable
         return devices.Active(flow).ToArray();
     }
 
+    internal static Endpoint? DefaultEndpoint(Flow flow)
+    {
+        using var apartment = new MtaScope();
+        using var devices = new Endpoints();
+        try
+        {
+            using var endpoint = devices.Default(flow, Role.Console);
+            string id = Endpoints.Id(endpoint);
+            try { return new(id, Endpoints.ReadName(endpoint)); }
+            catch (COMException) { return new(id, ""); }
+        }
+        catch (COMException error) when (error.HResult == unchecked((int)0x80070490)) { return null; }
+    }
+
     internal static string DefaultId(Flow flow, Role role = Role.Console)
     {
         using var apartment = new MtaScope();
@@ -232,7 +246,7 @@ internal sealed partial class ProductAudio : IDisposable
             if (ExternalAudio == null) throw new InvalidOperationException("No active external audio session.");
             if (level == null && !mute.HasValue && delta == 0 && !toggle)
                 return ExternalAudio.ReadExternalVolume(app);
-            return ExternalAudio.SetExternalVolume(app, level, mute, delta, toggle);
+            return ExternalAudio.SetExternalVolume(app.ExternalSourceId, level, mute, delta, toggle);
         }
 #endif
         return Volume(Flow.Render, null, checked((int)app.ProcessId), level, mute, delta, toggle);

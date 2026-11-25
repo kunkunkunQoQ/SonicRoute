@@ -50,11 +50,20 @@ internal sealed unsafe class InlineEditHost : IDisposable
     private uint _fontDpi;
     private float _fontSizeDip;
     private bool _mono;
+    private bool _readOnlyMultiline;
     private bool _suppressChange;
     private bool _closingPending;
+    private bool _composing;
+    private string _lastChanged = "";
+    private bool _layoutSeen;
+    private UiRect _textBounds, _visibleBounds;
+    internal UiRect FieldBounds { get; private set; }
+    private (int X, int Y, int W, int H, int ChildX, int ChildY, int ChildW, int ChildH)? _placement;
+    private string _placeholder = "";
     private bool _disposed;
 
     public string? ActiveTag { get; private set; }
+    internal bool ReadOnlyMultiline => _readOnlyMultiline;
     public bool IsOpen => _hostHwnd != 0 && _editHwnd != 0;
 
     public event Action<string, string>? TextChanged;
@@ -74,7 +83,9 @@ internal sealed unsafe class InlineEditHost : IDisposable
         UiColor fg,
         bool mono = false,
         bool password = false,
-        bool selectAll = false)
+        bool selectAll = false,
+        bool readOnlyMultiline = false,
+        int maxLength = 0)
     {
         if (_disposed) return;
         EnsureClass();
@@ -83,26 +94,34 @@ internal sealed unsafe class InlineEditHost : IDisposable
         ActiveTag = tag;
         _ownerHwnd = ownerHwnd;
         _mono = mono;
+        _readOnlyMultiline = readOnlyMultiline;
+        FieldBounds = default;
         _fontSizeDip = fontSizeDip;
         _fontDpi = dpi;
         _closingPending = false;
+        _composing = false;
+        _lastChanged = initialText ?? "";
+        _layoutSeen = false;
+        _placement = null;
+        _placeholder = "";
         UpdateColors(bg, fg);
 
         _hostHwnd = CreateWindowExW(
             WsExToolWindow, HostClassName, "", WsPopup,
-            screenXPx, screenYPx, Math.Max(20, widthPx), Math.Max(18, heightPx),
+            screenXPx + (int)MathF.Round(11 * dpi / 96f), screenYPx + (heightPx - Math.Max(1, (int)MathF.Round(fontSizeDip * 1.45f * dpi / 96f))) / 2,
+            Math.Max(1, widthPx - (int)MathF.Round(22 * dpi / 96f)), Math.Max(1, (int)MathF.Round(fontSizeDip * 1.45f * dpi / 96f)),
             ownerHwnd, 0, GetModuleHandleW(null), 0);
         if (_hostHwnd == 0)
             throw new Win32Exception(Marshal.GetLastWin32Error());
         Hosts[_hostHwnd] = this;
 
-        uint editStyle = WsChild | WsVisible | EsLeft | EsAutoHScroll | (password ? EsPassword : 0u);
+        uint editStyle = WsChild | WsVisible | EsLeft | (readOnlyMultiline ? 0x00200844u /* WS_VSCROLL | ES_READONLY | ES_AUTOVSCROLL | ES_MULTILINE */ : EsAutoHScroll) | (password ? EsPassword : 0u);
         int editH = Math.Max(16, (int)MathF.Round(fontSizeDip * 1.45f * (dpi / 96f)));
-        int editY = Math.Max(0, (heightPx - editH) / 2);
+        int editY = 0;
         _suppressChange = true;
         _editHwnd = CreateWindowExW(
-            0, "EDIT", initialText ?? "", editStyle,
-            2, editY, Math.Max(12, widthPx - 4), editH,
+            0, "EDIT", readOnlyMultiline ? initialText?.ReplaceLineEndings("\r\n") ?? "" : initialText ?? "", editStyle,
+            0, editY, Math.Max(1, widthPx - (int)MathF.Round(22 * dpi / 96f)), editH,
             _hostHwnd, 1001, GetModuleHandleW(null), 0);
         _suppressChange = false;
         if (_editHwnd == 0)
@@ -113,11 +132,12 @@ internal sealed unsafe class InlineEditHost : IDisposable
             return;
         }
 
+        if (maxLength > 0) SendMessageW(_editHwnd, 0x00C5 /* EM_SETLIMITTEXT */, (nuint)maxLength, 0);
         Edits[_editHwnd] = this;
         _origEditProc = SetWindowLongPtrW(_editHwnd, -4 /*GWLP_WNDPROC*/, (nint)EditSubProcPtr);
 
         RebuildFont(fontSizeDip, dpi);
-        SendMessageW(_editHwnd, EmSetMargins, 3 /*EC_LEFTMARGIN | EC_RIGHTMARGIN*/, (4 << 16) | 4);
+        SendMessageW(_editHwnd, EmSetMargins, 3 /*EC_LEFTMARGIN | EC_RIGHTMARGIN*/, 0);
 
         ShowWindow(_hostHwnd, 5 /*SW_SHOW*/);
         SetFocus(_editHwnd);
@@ -125,26 +145,65 @@ internal sealed unsafe class InlineEditHost : IDisposable
         SendMessageW(_editHwnd, EmSetSel, selectAll ? 0u : (nuint)len, len);
     }
 
-    public void Reposition(int screenXPx, int screenYPx, int widthPx, int heightPx, float fontSizeDip, uint dpi)
+    internal void BeginLayout() => _layoutSeen = false;
+
+    internal void SetLayout(UiRect field, UiRect text, UiRect visible, float fontSize, bool mono, string cue)
     {
-        if (!IsOpen) return;
-        if (_fontDpi != dpi || MathF.Abs(_fontSizeDip - fontSizeDip) > 0.1f)
-            RebuildFont(fontSizeDip, dpi);
-        SetWindowPos(_hostHwnd, 0, screenXPx, screenYPx, Math.Max(20, widthPx), Math.Max(18, heightPx), 0x0014 /*SWP_NOZORDER|SWP_NOACTIVATE*/);
-        int editH = Math.Max(16, (int)MathF.Round(fontSizeDip * 1.45f * (dpi / 96f)));
-        int editY = Math.Max(0, (heightPx - editH) / 2);
-        SetWindowPos(_editHwnd, 0, 2, editY, Math.Max(12, widthPx - 4), editH, 0x0014);
+        FieldBounds = field;
+        _textBounds = text;
+        _visibleBounds = visible;
+        _layoutSeen = true;
+        if (_mono != mono || _fontSizeDip != fontSize)
+        {
+            _mono = mono;
+            RebuildFont(fontSize, _fontDpi);
+        }
+        if (_placeholder != cue)
+        {
+            _placeholder = cue;
+            fixed (char* p = cue) SendMessageW(_editHwnd, 0x1501 /* EM_SETCUEBANNER */, 1, (nint)p);
+        }
+    }
+
+    internal void FinishLayout(LayeredWindow owner)
+    {
+        if (!IsOpen || _closingPending) return;
+        var text = _textBounds;
+        float lineHeight = _readOnlyMultiline ? text.Height : MathF.Min(text.Height, _fontSizeDip * 1.45f);
+        var line = new UiRect(text.X, text.CenterY - lineHeight / 2, text.Width, lineHeight);
+        var view = UiHitMap.Intersect(line, _visibleBounds);
+        if (!_layoutSeen || view.IsEmpty)
+        {
+            ShowWindow(_hostHwnd, 0);
+            ScheduleCommitClose();
+            return;
+        }
+
+        if (_fontDpi != owner.Dpi) RebuildFont(_fontSizeDip, owner.Dpi);
+        var first = owner.DipToScreenPx(view.X, view.Y);
+        var last = owner.DipToScreenPx(view.Right, view.Bottom);
+        var start = owner.DipToScreenPx(line.X, line.Y);
+        var end = owner.DipToScreenPx(line.Right, line.Bottom);
+        var position = (first.X, first.Y, Math.Max(1, last.X - first.X), Math.Max(1, last.Y - first.Y),
+            start.X - first.X, start.Y - first.Y, Math.Max(1, end.X - start.X), Math.Max(1, end.Y - start.Y));
+        if (_placement == position) return;
+        _placement = position;
+        var (x, y, width, height, childX, childY, childWidth, childHeight) = position;
+        SetWindowPos(_hostHwnd, 0, x, y, width, height, 0x0014);
+        SetWindowPos(_editHwnd, 0, childX, childY, childWidth, childHeight, 0x0014);
     }
 
     private void RebuildFont(float fontSizeDip, uint dpi)
     {
         _fontSizeDip = fontSizeDip;
         _fontDpi = dpi;
-        if (_font != 0) { DeleteObject(_font); _font = 0; }
+        nint previous = _font;
         int fontPx = -Math.Max(10, (int)MathF.Round(fontSizeDip * (dpi / 96f)));
         _font = CreateFontW(fontPx, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5 /*CLEARTYPE*/, 0,
             _mono ? UiMetrics.MonoFontFamily : UiMetrics.FontFamily);
-        if (_font != 0 && _editHwnd != 0) SendMessageW(_editHwnd, WmSetFont, (nuint)_font, 1);
+        if (_font == 0) { _font = previous; return; }
+        if (_editHwnd != 0) SendMessageW(_editHwnd, WmSetFont, (nuint)_font, 1);
+        if (previous != 0) DeleteObject(previous);
     }
 
     public void SetTheme(UiColor bg, UiColor fg)
@@ -153,6 +212,20 @@ internal sealed unsafe class InlineEditHost : IDisposable
         if (_hostHwnd != 0) InvalidateRect(_hostHwnd, 0, true);
         if (_editHwnd != 0) InvalidateRect(_editHwnd, 0, true);
     }
+
+    internal void BeginPointerSelection(int screenX, int screenY, uint message, nuint keys)
+    {
+        if (!IsOpen) return;
+        _closingPending = false;
+        SetFocus(_editHwnd);
+        var pt = new WinPoint { X = screenX, Y = screenY };
+        ScreenToClient(_editHwnd, ref pt);
+        // Pass the initiating physical press to EDIT. Its own selection drag now owns capture.
+        SendMessageW(_editHwnd, message, keys, (nint)((pt.Y << 16) | (ushort)pt.X));
+    }
+
+    [StructLayout(LayoutKind.Sequential)] private struct WinPoint { public int X, Y; }
+    [DllImport("user32.dll")] private static extern bool ScreenToClient(nint hwnd, ref WinPoint point);
 
     public string GetText()
     {
@@ -189,7 +262,20 @@ internal sealed unsafe class InlineEditHost : IDisposable
         }
         if (_font != 0) { DeleteObject(_font); _font = 0; }
         if (commit && tag is not null)
-            Committed?.Invoke(tag, text, viaEnter);
+        {
+            try { Committed?.Invoke(tag, text, viaEnter); }
+            catch (Exception error) { SonicRoute.Core.ExceptionDiagnostics.Record("Native.EditCommit", error); }
+        }
+    }
+
+    private void NotifyTextChanged()
+    {
+        if (_composing || _suppressChange || TextChanged == null || ActiveTag is not string tag) return;
+        string value = GetText();
+        if (value == _lastChanged) return;
+        _lastChanged = value;
+        try { TextChanged.Invoke(tag, value); }
+        catch (Exception error) { SonicRoute.Core.ExceptionDiagnostics.Record("Native.EditChange", error); }
     }
 
     private void ScheduleCommitClose()
@@ -248,15 +334,16 @@ internal sealed unsafe class InlineEditHost : IDisposable
                 }
                 break;
 
+            case 0x0138 /* WM_CTLCOLORSTATIC for read-only EDIT */:
             case WmCtlColorEdit:
                 SetTextColor((nint)wParam, host._fgColorRef);
                 SetBkColor((nint)wParam, host._bgColorRef);
                 return host._bgBrush;
 
             case WmCommand:
-                if (((uint)wParam >> 16) == 0x0300 /*EN_CHANGE*/ && !host._suppressChange && host.ActiveTag is string tag)
+                if (((uint)wParam >> 16) == 0x0300 /*EN_CHANGE*/)
                 {
-                    host.TextChanged?.Invoke(tag, host.GetText());
+                    host.NotifyTextChanged();
                 }
                 else if (((uint)wParam >> 16) == 0x0200 /*EN_KILLFOCUS*/)
                 {
@@ -265,7 +352,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
                 return 0;
 
             case WmUserCommitClose:
-                if (host.IsOpen) host.Close(commit: true, viaEnter: false);
+                if (host.IsOpen && host._closingPending) host.Close(commit: true, viaEnter: false);
                 return 0;
 
             case WmDestroy:
@@ -287,7 +374,15 @@ internal sealed unsafe class InlineEditHost : IDisposable
             SendMessageW(hwnd, EmSetSel, 0, -1);
             return 0;
         }
-        if (msg == WmKeyDown && !IsImeComposing(hwnd))
+        if (msg == 0x010D /* WM_IME_STARTCOMPOSITION */) host._composing = true;
+        if (msg == 0x010E /* WM_IME_ENDCOMPOSITION */)
+        {
+            nint result = CallWindowProcW(origProc, hwnd, msg, wParam, lParam);
+            host._composing = false;
+            host.NotifyTextChanged();
+            return result;
+        }
+        if (msg == WmKeyDown && !host._composing && !IsImeComposing(hwnd))
         {
             int vk = (int)wParam;
             if (vk is 9 or 13 or 27)
@@ -299,9 +394,9 @@ internal sealed unsafe class InlineEditHost : IDisposable
                 return 0;
             }
         }
-        else if (msg == WmMouseWheel)
+        else if (msg == WmMouseWheel && !host._readOnlyMultiline)
         {
-            host.ScheduleCommitClose();
+            LayeredWindow.ScrollFromEditor(host._ownerHwnd, wParam, lParam);
             return 0;
         }
         else if (msg == WmKillFocus)
