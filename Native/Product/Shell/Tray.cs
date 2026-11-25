@@ -153,7 +153,7 @@ internal sealed unsafe partial class NativeApplicationWindow
                 lastIconRect = rect;
                 lastIconRectTime = Environment.TickCount64;
             }
-            return Environment.TickCount64 - lastIconRectTime < 30000 && lastIconRect.Contains(point, 4);
+            return lastIconRectTime > 0 && Environment.TickCount64 - lastIconRectTime < 30000 && lastIconRect.Contains(point, 4);
         }
 
         // A hit only occurs on a wheel event. Resolve the taskbar under the pointer, including secondary monitors.

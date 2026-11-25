@@ -36,6 +36,11 @@ internal sealed class HotkeysPageView : IViewPage
         CancelRecording();
     }
 
+    public void OnCaptureLost()
+    {
+        _scroll.EndDrag();
+    }
+
     public void RefreshData()
     {
         _hotkeyRules = AutoRuleStore.LoadAll()
@@ -64,7 +69,7 @@ internal sealed class HotkeysPageView : IViewPage
         }
         float rulesCardH = _hotkeyRules.Count > 0 ? 36f + _hotkeyRules.Count * RowH + 24f : 0f;
         float mainCardH = cardInnerH + 28f;
-        float headerH = 32f + hintH + 16f;
+        float headerH = 34f + hintH + 16f;
         float totalH = headerH + mainCardH + (rulesCardH > 0 ? 14f + rulesCardH : 0f) + 8f;
 
         _scroll.ViewportHeight = contentRect.Height;
@@ -73,12 +78,20 @@ internal sealed class HotkeysPageView : IViewPage
 
         float w = _scroll.MaxOffset > 0.5f ? contentRect.Width - UiMetrics.ScrollBarWidth - 4f : contentRect.Width;
         var conflictMap = BuildConflictSet();
+        var registered = _actions.Host.HotkeyStatuses;
 
         g.PushClip(contentRect);
         float y = contentRect.Y - _scroll.Offset;
 
-        g.DrawText(title, new UiRect(contentRect.X, y, w, 28f), t.TextPrimary, 22f, 600);
-        y += 32f;
+        // Title + Reset All Defaults button
+        string resetLabel = L10n.T("AppIcons.Reset");
+        float resetW = MathF.Max(84f, D2dSharedContext.Instance.MeasureText(resetLabel, UiMetrics.FontFamily, 12f, 400, 160f, 28f, false).Width + 32f);
+        var resetAllRect = new UiRect(contentRect.X + w - resetW, y, resetW, 28f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "hk.resetAll", resetAllRect, resetLabel, fontSize: 12f, icon: UiIcon.Reset);
+        _buttons.Add((resetAllRect, ResetAllHotkeys));
+
+        g.DrawText(title, new UiRect(contentRect.X, y, MathF.Max(80f, w - resetW - 12f), 28f), t.TextPrimary, 22f, 600);
+        y += 34f;
         g.DrawText(hint, new UiRect(contentRect.X, y, w, hintH + 4f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
         y += hintH + 16f;
 
@@ -102,7 +115,7 @@ internal sealed class HotkeysPageView : IViewPage
             {
                 string combo = GetConfiguredCombo(action);
                 bool isRecording = _recordingAction == action && _recordingRuleId == null;
-                bool hasConflict = !string.IsNullOrWhiteSpace(combo) && conflictMap.Contains(combo);
+                ResolveDisplayAndConflict(action, combo, conflictMap, registered, out string display, out string? tip, out bool hasConflict);
                 string actCopy = action;
 
                 DrawHotkeyRow(
@@ -111,8 +124,10 @@ internal sealed class HotkeysPageView : IViewPage
                     new UiRect(cx, cy, cw, RowH),
                     HotkeyActions.DisplayName(action),
                     combo,
+                    display,
                     isRecording,
                     hasConflict,
+                    tip,
                     () => StartRecordingAction(actCopy),
                     () => ClearActionHotkey(actCopy));
 
@@ -135,7 +150,7 @@ internal sealed class HotkeysPageView : IViewPage
             {
                 string combo = rule.Hotkey ?? "";
                 bool isRecording = _recordingRuleId == rule.Id;
-                bool hasConflict = !string.IsNullOrWhiteSpace(combo) && conflictMap.Contains(combo);
+                ResolveDisplayAndConflict(AutoRuleService.HotkeyPrefix + rule.Id, combo, conflictMap, registered, out string display, out string? tip, out bool hasConflict);
                 var ruleCopy = rule;
 
                 DrawHotkeyRow(
@@ -144,8 +159,10 @@ internal sealed class HotkeysPageView : IViewPage
                     new UiRect(cx, ry, cw, RowH),
                     rule.Name,
                     combo,
+                    display,
                     isRecording,
                     hasConflict,
+                    tip,
                     () => StartRecordingRule(ruleCopy.Id),
                     () => ClearRuleHotkey(ruleCopy));
 
@@ -157,9 +174,50 @@ internal sealed class HotkeysPageView : IViewPage
         _scroll.Draw(g, t, hit, "hk.scroll", contentRect);
     }
 
+    private void ResolveDisplayAndConflict(
+        string regKey,
+        string combo,
+        HashSet<string> intraConflicts,
+        IReadOnlyDictionary<string, string> registered,
+        out string display,
+        out string? tooltip,
+        out bool hasConflict)
+    {
+        display = combo;
+        tooltip = null;
+        hasConflict = false;
+
+        if (string.IsNullOrWhiteSpace(combo)) return;
+
+        if (registered.TryGetValue(regKey, out var actual))
+        {
+            if (!string.Equals(actual, combo, StringComparison.OrdinalIgnoreCase))
+            {
+                display = actual + " ⚠";
+                tooltip = string.Format(L10n.T("Hk.ConflictTip"), combo, actual);
+                hasConflict = true;
+                return;
+            }
+        }
+        else
+        {
+            display = combo + " ⚠";
+            tooltip = L10n.T("Hk.Unregistered");
+            hasConflict = true;
+            return;
+        }
+
+        if (intraConflicts.Contains(combo))
+        {
+            display = combo + " ⚠";
+            tooltip = L10n.T("Hk.Conflict");
+            hasConflict = true;
+        }
+    }
+
     private void DrawHotkeyRow(
         D2dTarget g, UiThemePalette t, UiHitMap hit, string idPrefix, UiRect row,
-        string label, string combo, bool isRecording, bool hasConflict,
+        string label, string combo, string display, bool isRecording, bool hasConflict, string? tooltip,
         Action onRecord, Action onClear)
     {
         float clearW = 58f;
@@ -178,13 +236,13 @@ internal sealed class HotkeysPageView : IViewPage
             ? L10n.T("Hk.RecordingPrompt")
             : string.IsNullOrWhiteSpace(combo)
                 ? L10n.T("Ov.Unset")
-                : hasConflict ? combo + " ⚠" : combo;
+                : display;
 
         string pillId = idPrefix + ".pill";
         UiPrimitives.DrawSecondaryButton(
             g, t, hit, pillId, pillRect, shown,
-            fontSize: 12.5f, active: isRecording,
-            tooltip: hasConflict ? L10n.T("Hk.Conflict") : null);
+            fontSize: 12.5f, active: isRecording, danger: !isRecording && hasConflict,
+            tooltip: tooltip);
         _buttons.Add((pillRect, onRecord));
 
         string recId = idPrefix + ".rec";
@@ -211,11 +269,20 @@ internal sealed class HotkeysPageView : IViewPage
 
     public bool OnPointerDown(UiPointerEventArgs e)
     {
-        if ((_recordingAction != null || _recordingRuleId != null) &&
-            e.Button == UiMouseButton.Middle)
+        if (_recordingAction != null || _recordingRuleId != null)
         {
-            CommitRecordedCombo(FormatMouseButton("MButton"));
-            return true;
+            string? mouseName = e.Button switch
+            {
+                UiMouseButton.Middle => "MButton",
+                UiMouseButton.XButton1 => "XButton1",
+                UiMouseButton.XButton2 => "XButton2",
+                _ => null,
+            };
+            if (mouseName != null)
+            {
+                CommitRecordedCombo(FormatMouseButton(mouseName, e.Ctrl, e.Alt, e.Shift));
+                return true;
+            }
         }
 
         if (e.Button == UiMouseButton.Left && _scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
@@ -248,7 +315,10 @@ internal sealed class HotkeysPageView : IViewPage
     {
         if (_recordingAction != null || _recordingRuleId != null)
         {
-            CommitRecordedCombo(FormatMouseButton(delta > 0 ? "WheelUp" : "WheelDown"));
+            bool ctrl = (GetKeyState(0x11) & 0x8000) != 0;
+            bool alt = (GetKeyState(0x12) & 0x8000) != 0;
+            bool shift = (GetKeyState(0x10) & 0x8000) != 0;
+            CommitRecordedCombo(FormatMouseButton(delta > 0 ? "WheelUp" : "WheelDown", ctrl, alt, shift));
             return true;
         }
         if (_viewportRect.Contains(x, y))
@@ -358,6 +428,18 @@ internal sealed class HotkeysPageView : IViewPage
         _actions.Invalidate();
     }
 
+    private void ResetAllHotkeys()
+    {
+        CancelRecording();
+        _actions.Config.Hotkeys.Clear();
+        foreach (var pair in HotkeyActions.Defaults)
+            _actions.Config.Hotkeys[pair.Key] = pair.Value;
+        ConfigService.TrySave(_actions.Config);
+        _actions.Host.ViewSettingsChanged();
+        _actions.ShowNotice(L10n.T("Hk.Updated"));
+        _actions.Invalidate();
+    }
+
     private string GetConfiguredCombo(string action) =>
         _actions.Config.Hotkeys.TryGetValue(action, out var c) ? c
         : HotkeyActions.Defaults.TryGetValue(action, out var d) ? d : "";
@@ -383,12 +465,12 @@ internal sealed class HotkeysPageView : IViewPage
         return conflicts;
     }
 
-    private static string FormatMouseButton(string button)
+    private static string FormatMouseButton(string button, bool ctrl, bool alt, bool shift)
     {
         var parts = new List<string>(5);
-        if (GetKeyState(0x11) < 0) parts.Add("Ctrl");
-        if (GetKeyState(0x12) < 0) parts.Add("Alt");
-        if (GetKeyState(0x10) < 0) parts.Add("Shift");
+        if (ctrl) parts.Add("Ctrl");
+        if (alt) parts.Add("Alt");
+        if (shift) parts.Add("Shift");
         if (GetKeyState(0x5B) < 0 || GetKeyState(0x5C) < 0) parts.Add("Win");
         parts.Add(button);
         return string.Join("+", parts);

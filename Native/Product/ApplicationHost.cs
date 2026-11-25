@@ -41,9 +41,11 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
     {
         bool newProfile = !File.Exists(ConfigService.ConfigPath);
         AppConfig config = ConfigService.Load();
-        if (newProfile && ConfigService.LoadWarning == null)
+        if (newProfile && ConfigService.LoadWarning == null
+            && Environment.GetEnvironmentVariable("SONICROUTE_DISABLE_DEFAULT_HOTKEYS") == "1")
         {
-            // Parallel development editions must not compete for the installed user's shortcuts.
+            // Isolated automated test runs can opt out of global hotkeys via env var;
+            // interactive launches preserve WPF 1.36 default hotkeys and tray wheel.
             foreach (string action in HotkeyActions.All) config.Hotkeys[action] = "";
             config.TrayWheelPaused = true;
         }
@@ -107,6 +109,10 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
             case ShellSignalKind.MainWindow: _feedback.Publish(FeedbackKind.OpenMain); break;
             case ShellSignalKind.QuickPanel: _feedback.Publish(FeedbackKind.TogglePanel); break;
             case ShellSignalKind.TrayMenu: _feedback.Publish(FeedbackKind.TrayMenu); break;
+            case ShellSignalKind.Theme:
+                if (string.Equals(_config.ThemeMode, "system", StringComparison.OrdinalIgnoreCase))
+                    ViewSettingsChanged();
+                break;
         }
         BusinessSignal(signal);
 #if SONICROUTE_PHONE

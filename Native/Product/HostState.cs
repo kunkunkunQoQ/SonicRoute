@@ -11,16 +11,16 @@ internal interface IMainThread
 }
 
 internal enum FeedbackKind { OpenMain, TogglePanel, HidePanel, ShowPanel, TrayMenu, Osd, OutputPending, OutputSettled, MicStatus, SettingsWarning }
-internal sealed record HostFeedback(long Generation, FeedbackKind Kind, string Title, string Text);
+internal sealed record HostFeedback(long Generation, FeedbackKind Kind, string Title, string Text, int? Volume = null, bool? Muted = null, bool? Success = null);
 
 // Optional views pull the latest state on attachment. Audio writes and rules belong to the host.
 internal sealed class FeedbackState
 {
     internal HostFeedback? Last { get; private set; }
     internal event Action<HostFeedback>? Changed;
-    internal void Publish(FeedbackKind kind, string title = "", string text = "")
+    internal void Publish(FeedbackKind kind, string title = "", string text = "", int? volume = null, bool? muted = null, bool? success = null)
     {
-        Last = new((Last?.Generation ?? 0) + 1, kind, title, text);
+        Last = new((Last?.Generation ?? 0) + 1, kind, title, text, volume, muted, success);
         Changed?.Invoke(Last);
     }
 }

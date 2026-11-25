@@ -120,6 +120,17 @@ internal sealed unsafe class Endpoints : IDisposable
         finally { Marshal.FreeCoTaskMem(text); }
     }
 
+    internal static string? IconPath(Com control)
+    {
+        nint text = 0;
+        try
+        {
+            int hr = ((delegate* unmanaged[Stdcall]<nint,nint*,int>)control.Slot(6))(control.Handle,&text);
+            return hr >= 0 ? Marshal.PtrToStringUni(text) : null;
+        }
+        finally { Marshal.FreeCoTaskMem(text); }
+    }
+
     internal static void SetDefault(string endpointId, Role role)
     {
         using var policy = Com.Create(new("870af99c-171d-4f9e-af0d-e63df40c2bc9"),new("f8679f50-850a-41cf-9c72-430f290290c8"));

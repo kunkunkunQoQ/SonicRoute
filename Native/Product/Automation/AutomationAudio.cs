@@ -95,7 +95,8 @@ internal sealed partial class ProductAutomation
         return apps.FirstOrDefault(a => Matches(a.ProcessName)) ?? apps.FirstOrDefault(a => Matches(a.Label));
     }
 
-    private readonly Queue<(string Action, int Pid, int Steps)> inputs = new(32);
+    private sealed record InputFeedback(string Title, string Text, int? Volume = null, bool? Muted = null, bool Success = true);
+    private readonly Queue<(string Action, int Pid, nint Hwnd, int Steps)> inputs = new(32);
     private bool processingInputs;
 
     private void Hotkey(string action)
@@ -106,28 +107,32 @@ internal sealed partial class ProductAutomation
             return;
         }
         if (action == HotkeyActions.ActPanel) { feedback.Publish(FeedbackKind.TogglePanel); return; }
-        QueueInput(action, ForegroundAppService.GetForegroundProcessId(), 1);
+        nint hwnd = ShellNative.GetForegroundWindow();
+        int pid = hwnd == 0 ? ForegroundAppService.GetForegroundProcessId() : ProductWindowPid(hwnd);
+        QueueInput(action, pid, hwnd, 1);
     }
 
     private void Wheel(ShellSignal signal)
     {
-        int steps = (int)Math.Max(1,Math.Min(int.MaxValue,Math.Abs(signal.Value) / 120));
+        int steps = (int)Math.Max(1, Math.Min(int.MaxValue, Math.Abs(signal.Value) / 120));
         if (signal.Value < 0) steps = -steps;
-        int pid = signal.Window == 0 ? ForegroundAppService.GetForegroundProcessId() : ProductWindowPid(signal.Window);
-        switch(signal.Modifiers)
+        nint hwnd = signal.Window;
+        int pid = hwnd == 0 ? ForegroundAppService.GetForegroundProcessId() : ProductWindowPid(hwnd);
+        if (hwnd == 0) hwnd = ShellNative.GetForegroundWindow();
+        switch (signal.Modifiers)
         {
-            case 5: QueueInput(HotkeyActions.ActSetDefaultOutput,pid,-steps); break;
-            case 1: QueueInput(HotkeyActions.ActSwitchOutput,pid,-steps); break;
-            case 4: QueueInput(steps > 0 ? HotkeyActions.ActSystemVolUp : HotkeyActions.ActSystemVolDown,pid,1); break;
-            default: QueueInput(steps > 0 ? HotkeyActions.ActVolUp : HotkeyActions.ActVolDown,pid,1); break;
+            case 5: QueueInput(HotkeyActions.ActSetDefaultOutput, pid, hwnd, -steps); break;
+            case 1: QueueInput(HotkeyActions.ActSwitchOutput, pid, hwnd, -steps); break;
+            case 4: QueueInput(steps > 0 ? HotkeyActions.ActSystemVolUp : HotkeyActions.ActSystemVolDown, pid, hwnd, 1); break;
+            default: QueueInput(steps > 0 ? HotkeyActions.ActVolUp : HotkeyActions.ActVolDown, pid, hwnd, 1); break;
         }
     }
 
-    private void QueueInput(string action,int pid,int steps)
+    private void QueueInput(string action, int pid, nint hwnd, int steps)
     {
-        if (action == HotkeyActions.ActSwitchOutput) { _ = host.CurrentApp.CycleOutputAsync(pid,steps: steps); return; }
+        if (action == HotkeyActions.ActSwitchOutput) { _ = host.CurrentApp.CycleOutputAsync(pid, hwnd: hwnd, steps: steps); return; }
         if (inputs.Count >= 128) { feedback.Publish(FeedbackKind.Osd, HotkeyActions.DisplayName(action), L10n.T("Auto.Running")); return; }
-        inputs.Enqueue((action,pid,steps));
+        inputs.Enqueue((action, pid, hwnd, steps));
         if (!processingInputs) _ = DrainInputs();
     }
 
@@ -140,21 +145,35 @@ internal sealed partial class ProductAutomation
             {
                 try
                 {
-                    string result = await Task.Run(() => ExecuteInput(command.Action, command.Pid, command.Steps));
-                    if (!stopped) feedback.Publish(FeedbackKind.Osd, HotkeyActions.DisplayName(command.Action),result);
+                    var result = await Task.Run(() => ExecuteInput(command.Action, command.Pid, command.Hwnd, command.Steps));
+                    if (!stopped)
+                    {
+                        feedback.Publish(FeedbackKind.Osd, result.Title, result.Text, result.Volume, result.Muted, result.Success);
+                        host.NotifyAudioVisualChanged();
+                    }
                 }
-                catch (Exception error) { if (!stopped) feedback.Publish(FeedbackKind.Osd, HotkeyActions.DisplayName(command.Action),error.Message); }
+                catch (Exception error)
+                {
+                    if (!stopped)
+                        feedback.Publish(FeedbackKind.Osd, HotkeyActions.DisplayName(command.Action), error.Message, success: false);
+                }
             }
         }
         finally { processingInputs = false; }
     }
 
-    private async Task<string> ExecuteInput(string action,int foreground,int steps)
+    private async Task<InputFeedback> ExecuteInput(string action, int foreground, nint hwnd, int steps)
     {
         if (action == HotkeyActions.ActMuteInput)
-            return L10n.T(audio.GlobalMicMute(null) ? "Ov.MicMuted" : "Ov.MicUnmuted");
+        {
+            bool muted = audio.GlobalMicMute(null);
+            return new(L10n.T("Ov.MuteMic"), L10n.T(muted ? "Ov.MicMuted" : "Ov.MicUnmuted"), Muted: muted);
+        }
         if (action == HotkeyActions.ActResetAllApps)
-            return L10n.T(audio.ResetRoutes() ? "Act.ResetAllAppsDone" : "Act.ResetAllAppsFailed");
+        {
+            bool ok = audio.ResetRoutes();
+            return new(HotkeyActions.DisplayName(action), L10n.T(ok ? "Act.ResetAllAppsDone" : "Act.ResetAllAppsFailed"), Success: ok);
+        }
         if (action is HotkeyActions.ActSetDefaultInput or HotkeyActions.ActSetDefaultOutput
             or HotkeyActions.ActSwitchInput or HotkeyActions.ActSwitchAllInput or HotkeyActions.ActSwitchAllOutput)
         {
@@ -162,19 +181,28 @@ internal sealed partial class ProductAutomation
             bool system = action is HotkeyActions.ActSetDefaultOutput or HotkeyActions.ActSetDefaultInput;
             var flow = output ? Flow.Render : Flow.Capture;
             var hidden = output ? config.HiddenOutputDevices : config.HiddenInputDevices;
-            var devices = ProductAudio.Devices(flow).Where(d => !hidden.Contains(d.Id)).ToList();
+            var devices = (output ? audio.RenderDevicesWithPhone() : ProductAudio.Devices(flow))
+                .Where(d => !hidden.Contains(d.Id)).ToList();
             string defaultId = output ? AudioService.SystemDefaultDeviceId : AudioService.SystemDefaultInputDeviceId;
             if (!system && !hidden.Contains(defaultId))
-                devices.Insert(0,new(defaultId,L10n.T(output ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn")));
+                devices.Insert(0, new(defaultId, L10n.T(output ? "Dev.SystemDefaultOut" : "Dev.SystemDefaultIn")));
             if (devices.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
-            var apps = system ? [] : action == HotkeyActions.ActSwitchInput
-                ? new List<AudioAppInfo> { host.CurrentApp.Resolve(foreground) ?? throw new InvalidOperationException(L10n.T("Ov.NoSession")) } : audio.Apps();
+            AudioAppInfo? singleApp = null;
+            List<AudioAppInfo> apps;
+            if (system) apps = [];
+            else if (action == HotkeyActions.ActSwitchInput)
+            {
+                singleApp = host.CurrentApp.Resolve(foreground, hwnd) ?? throw new InvalidOperationException(L10n.T("Ov.NoSession"));
+                apps = [singleApp];
+            }
+            else apps = audio.Apps();
             if (!system && apps.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoSession"));
-            string? old = system ? ProductAudio.DefaultId(flow) : audio.ReadRoute((int)apps[0].ProcessId,flow);
+            if (singleApp != null) host.CurrentApp.RecordUsedApp(singleApp);
+            string? old = system ? ProductAudio.DefaultId(flow) : audio.ReadRoute(apps[0], flow);
             old ??= action == HotkeyActions.ActSwitchInput ? defaultId : ProductAudio.DefaultId(flow);
-            int index = devices.FindIndex(d => Same(d.Id,old));
-            var target = devices[DeviceCycle.Index(index,devices.Count,steps < 0,Math.Abs(steps))];
-            if (system) audio.SetDefault(flow,target.Id);
+            int index = devices.FindIndex(d => Same(d.Id, old));
+            var target = devices[DeviceCycle.Index(index, devices.Count, steps < 0, Math.Abs(steps))];
+            if (system) audio.SetDefault(flow, target.Id);
             else
             {
                 int writes = 0;
@@ -182,24 +210,49 @@ internal sealed partial class ProductAutomation
                 {
                     try
                     {
-                        if (flow == Flow.Render ? Success(await host.CurrentApp.SelectOutputAsync((int)a.ProcessId,target.Id)) :
-                            audio.SetRoute((int)a.ProcessId,flow,target.Id)) writes++;
+                        if (flow == Flow.Render)
+                        {
+#if SONICROUTE_PHONE
+                            if (a.IsExternal)
+                            {
+                                var reply = await audio.SetExternalOutputsAsync(a, [target.Id]);
+                                if (Success(reply)) writes++;
+                                continue;
+                            }
+#endif
+                            if (!a.IsExternal && Success(await host.CurrentApp.SelectOutputAsync((int)a.ProcessId, target.Id)))
+                                writes++;
+                        }
+                        else if (!a.IsExternal && audio.SetRoute((int)a.ProcessId, flow, target.Id))
+                        {
+                            writes++;
+                        }
                     }
                     catch (Exception e) { AutoRuleScheduler.Log("Hotkey route: " + e.Message); }
                 }
                 if (writes == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
             }
-            return config.DeviceNames.TryGetValue(target.Id,out string? name) && !string.IsNullOrWhiteSpace(name) ? name : target.Name;
+            string devLabel = config.DeviceNames.TryGetValue(target.Id, out string? name) && !string.IsNullOrWhiteSpace(name) ? name : target.Name;
+            string prefix = output ? "🔊 " : "🎙️ ";
+            string title = singleApp != null ? AppDisplayName.Get(singleApp) : HotkeyActions.DisplayName(action);
+            return new(title, prefix + devLabel);
         }
 
-        int step = Math.Clamp(config.VolumeStep,1,20);
-        int pid = 0;
+        int step = Math.Clamp(config.VolumeStep, 1, 20);
+        AudioAppInfo? targetApp = null;
         if (action is HotkeyActions.ActMute or HotkeyActions.ActVolUp or HotkeyActions.ActVolDown)
-            pid = checked((int)(host.CurrentApp.Resolve(foreground) ?? throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"))).ProcessId);
+        {
+            targetApp = host.CurrentApp.Resolve(foreground, hwnd) ?? throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
+            host.CurrentApp.RecordUsedApp(targetApp);
+        }
         bool toggle = action == HotkeyActions.ActMute;
-        var state = audio.Volume(Flow.Render,null,pid,
-            delta: toggle ? 0 : action is HotkeyActions.ActVolUp or HotkeyActions.ActSystemVolUp ? step : -step,toggle:toggle);
-        return toggle ? L10n.T(state.Muted ? "Ov.AppMuted" : "Ov.AppUnmuted") : $"{state.Percent}%";
+        var state = targetApp != null
+            ? audio.Volume(targetApp, delta: toggle ? 0 : action == HotkeyActions.ActVolUp ? step : -step, toggle: toggle)
+            : audio.Volume(Flow.Render, null, 0,
+                delta: toggle ? 0 : action is HotkeyActions.ActVolUp or HotkeyActions.ActSystemVolUp ? step : -step, toggle: toggle);
+        string volTitle = targetApp != null ? AppDisplayName.Get(targetApp) : HotkeyActions.DisplayName(action);
+        string volText = state.Muted ? L10n.T("Ov.AppMuted") : $"{state.Percent}%";
+        return new(volTitle, volText, Volume: state.Percent, Muted: state.Muted);
     }
 
     [System.Runtime.InteropServices.LibraryImport("user32")] private static partial uint GetWindowThreadProcessId(nint hwnd,out uint pid);

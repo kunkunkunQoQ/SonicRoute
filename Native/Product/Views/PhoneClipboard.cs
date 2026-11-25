@@ -1,12 +1,17 @@
 #if SONICROUTE_PHONE
 using System.Diagnostics;
+using System.IO;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using SonicRoute.AndroidAudio;
+using SonicRoute.Core;
 
 namespace SonicRoute.Native.Product;
 
-/// <summary>Opt-in Unicode text clipboard bridge for one phone and the native host HWND.</summary>
+/// <summary>Opt-in Unicode text clipboard bridge with per-device persistence and anti-loop markers.</summary>
 internal sealed partial class PhoneClipboard : IDisposable
 {
     private const uint CfUnicodeText = 13;
@@ -24,8 +29,18 @@ internal sealed partial class PhoneClipboard : IDisposable
         "keeperpasswordmanager", "dashlane", "lastpass", "identities", "robotaskbaricon"
     };
 
+    private readonly AdbClient _adb;
     private readonly NativeApplicationWindow _window;
     private readonly IMainThread _owner;
+    private readonly string? _settingsPath;
+    private readonly Func<AndroidDevice, bool>? _isRemoved;
+    private readonly Func<AndroidDevice, AndroidDevice?>? _resolveOnline;
+    private readonly List<AndroidDevice> _enabledDevices = new();
+    private readonly object _saveGate = new();
+    private Task _saveTask = Task.CompletedTask;
+    private bool _saving;
+    private AndroidDevice[]? _pendingSave;
+
     private CancellationTokenSource? _lifetime;
     private Channel<string>? _outgoing;
     private AndroidDevice? _device;
@@ -35,29 +50,208 @@ internal sealed partial class PhoneClipboard : IDisposable
     private string? _lastText;
     private uint _lastWriteSequence;
     private int _enabled, _ownsClipboardInterest, _disposed, _readRetry;
+    private bool _initialized, _saveError;
 
-    internal PhoneClipboard(AdbClient adb, NativeApplicationWindow window, IMainThread owner)
+    internal event Action? Changed;
+
+    internal PhoneClipboard(
+        AdbClient adb,
+        NativeApplicationWindow window,
+        IMainThread owner,
+        string? settingsPath = null,
+        Func<AndroidDevice, bool>? isRemoved = null,
+        Func<AndroidDevice, AndroidDevice?>? resolveOnline = null)
     {
+        _adb = adb;
         _window = window;
         _owner = owner;
-        _adb = adb;
+        _settingsPath = settingsPath;
+        _isRemoved = isRemoved;
+        _resolveOnline = resolveOnline;
     }
 
-    private readonly AdbClient _adb;
-    internal bool Enabled => Volatile.Read(ref _enabled) != 0;
-    internal string Status => Volatile.Read(ref _status);
+    internal bool Enabled => Volatile.Read(ref _enabled) != 0 || _enabledDevices.Count > 0;
+    internal string Status => _saveError ? L10n.T("Phone.ClipboardSaveError") : Volatile.Read(ref _status);
+    internal bool HasActiveWork => Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _enabled) != 0;
 
-    internal void Enable(AndroidDevice device)
+    internal bool IsEnabled(AndroidDevice? device)
+    {
+        if (device == null) return false;
+        lock (_enabledDevices)
+            return _enabledDevices.Any(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
+    }
+
+    internal string StatusFor(AndroidDevice? device)
+    {
+        if (_saveError) return L10n.T("Phone.ClipboardSaveError");
+        if (device == null || !IsEnabled(device)) return L10n.T("Phone.ClipboardDefaultHint");
+        if (Volatile.Read(ref _enabled) != 0 && _device is { } active && AndroidDeviceIdentity.MatchesSavedDevice(active, device))
+            return Volatile.Read(ref _status);
+        return L10n.T("Phone.ClipboardWaitingPhone");
+    }
+
+    internal static bool HasConfiguredDevices(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length == 0 || info.Length > 64 * 1024) return false;
+            using var stream = File.OpenRead(path);
+            using var doc = JsonDocument.Parse(stream);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+            if (!root.TryGetProperty("Version", out var v) || v.ValueKind != JsonValueKind.Number || !v.TryGetInt32(out int ver) || ver != 1)
+                return false;
+            if (!root.TryGetProperty("EnabledDevices", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var item in arr.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                if (item.TryGetProperty("Serial", out var s) && s.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(s.GetString()))
+                    return true;
+            }
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return false;
+        }
+    }
+
+    internal async Task InitializeAsync()
+    {
+        if (_initialized || Volatile.Read(ref _disposed) != 0 || string.IsNullOrEmpty(_settingsPath)) return;
+        _initialized = true;
+        var loaded = await Task.Run(() => LoadEnabledDevices(_settingsPath)).ConfigureAwait(false);
+        if (Volatile.Read(ref _disposed) != 0 || loaded.Length == 0) return;
+
+        _owner.TryPost(() =>
+        {
+            if (Volatile.Read(ref _disposed) != 0) return;
+            lock (_enabledDevices)
+            {
+                foreach (var d in loaded)
+                {
+                    if (_isRemoved?.Invoke(d) == true) continue;
+                    if (_enabledDevices.Count >= 32) break;
+                    if (!_enabledDevices.Any(x => AndroidDeviceIdentity.MatchesSavedDevice(x, d)))
+                        _enabledDevices.Add(d);
+                }
+            }
+            Reconcile();
+            NotifyChanged();
+        });
+    }
+
+    internal void Reconcile()
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        AndroidDevice? target = null;
+        lock (_enabledDevices)
+        {
+            for (int i = _enabledDevices.Count - 1; i >= 0; i--)
+            {
+                if (_isRemoved?.Invoke(_enabledDevices[i]) == true)
+                    _enabledDevices.RemoveAt(i);
+            }
+            foreach (var saved in _enabledDevices)
+            {
+                var online = _resolveOnline?.Invoke(saved);
+                if (online != null && string.Equals(online.State, "device", StringComparison.Ordinal))
+                {
+                    target = online;
+                    break;
+                }
+            }
+        }
+        if (target != null)
+            StartBridge(target);
+        else if (Volatile.Read(ref _enabled) != 0)
+            StopBridge(L10n.T("Phone.ClipboardWaitingPhone"));
+    }
+
+    internal void Enable(AndroidDevice device) => SetEnabled(device, true);
+
+    internal void SetEnabled(AndroidDevice device, bool enabled)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         ArgumentNullException.ThrowIfNull(device);
-        if (Enabled && _device is { } current && AndroidDeviceIdentity.Key(current) == AndroidDeviceIdentity.Key(device)) return;
-        Disable();
+        if (enabled && _isRemoved?.Invoke(device) == true) return;
+
+        bool listChanged = false;
+        lock (_enabledDevices)
+        {
+            if (enabled)
+            {
+                if (!IsEnabled(device))
+                {
+                    if (_enabledDevices.Count >= 32)
+                        throw AndroidError.WithCode(new InvalidOperationException("最多同步32台手机。"), AndroidErrorCode.MaxClipboardPhones);
+                    _enabledDevices.Add(device);
+                    listChanged = true;
+                }
+            }
+            else
+            {
+                int removed = _enabledDevices.RemoveAll(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device));
+                listChanged = removed > 0;
+            }
+        }
+        if (listChanged) QueueSave();
+
+        if (enabled)
+        {
+            var target = _resolveOnline?.Invoke(device) ?? (string.Equals(device.State, "device", StringComparison.Ordinal) ? device : null);
+            if (target != null) StartBridge(target);
+            else SetStatus(L10n.T("Phone.ClipboardWaitingPhone"));
+        }
+        else if (_device is { } current && AndroidDeviceIdentity.MatchesSavedDevice(current, device))
+        {
+            StopBridge(L10n.T("Phone.ClipboardDefaultHint"));
+            Reconcile();
+        }
+        else
+        {
+            NotifyChanged();
+        }
+    }
+
+    internal void Disable()
+    {
+        bool listChanged;
+        lock (_enabledDevices)
+        {
+            listChanged = _enabledDevices.Count > 0;
+            _enabledDevices.Clear();
+        }
+        if (listChanged) QueueSave();
+        StopBridge(L10n.T("Phone.ClipboardDefaultHint"));
+    }
+
+    internal void DisableForDevice(AndroidDevice device)
+    {
+        bool listChanged;
+        lock (_enabledDevices)
+            listChanged = _enabledDevices.RemoveAll(d => AndroidDeviceIdentity.MatchesSavedDevice(d, device)) > 0;
+        if (listChanged) QueueSave();
+        if (_device is { } current && AndroidDeviceIdentity.MatchesSavedDevice(current, device))
+        {
+            StopBridge(L10n.T("Phone.ClipboardDefaultHint"));
+            Reconcile();
+        }
+    }
+
+    private void StartBridge(AndroidDevice device)
+    {
+        if (Volatile.Read(ref _disposed) != 0) return;
+        if (Volatile.Read(ref _enabled) != 0 && _device is { } current && AndroidDeviceIdentity.SameTransport(current, device))
+            return;
+        StopBridge(null);
 
         _window.SetInterest(_window.Interest | ShellInterest.Clipboard);
         if (!_window.Interest.HasFlag(ShellInterest.Clipboard))
         {
-            SetStatus("Clipboard listener unavailable");
+            SetStatus(L10n.T("Phone.ClipboardDesktopUnavailable"));
             return;
         }
         _ownsClipboardInterest = 1;
@@ -75,16 +269,17 @@ internal sealed partial class PhoneClipboard : IDisposable
         _outgoing = outgoing;
         _lastText = null;
         Volatile.Write(ref _enabled, 1);
-        SetStatus("Connecting");
+        SetStatus(L10n.T("Phone.ClipboardConnecting"));
         _ = Task.Run(() => SendLoopAsync(client, outgoing.Reader, lifetime.Token));
         _ = Task.Run(() => WatchLoopAsync(device, client, outgoing.Writer, lifetime));
     }
 
-    internal void Disable()
+    private void StopBridge(string? endStatus)
     {
         if (Interlocked.Exchange(ref _enabled, 0) == 0)
         {
             _retry?.Dispose(); _retry = null;
+            if (endStatus != null) SetStatus(endStatus);
             return;
         }
         _retry?.Dispose(); _retry = null;
@@ -97,13 +292,13 @@ internal sealed partial class PhoneClipboard : IDisposable
         _device = null;
         if (Interlocked.Exchange(ref _ownsClipboardInterest, 0) != 0)
             _window.SetInterest(_window.Interest & ~ShellInterest.Clipboard);
-        SetStatus("Off");
+        if (endStatus != null) SetStatus(endStatus);
     }
 
     /// <summary>Called by the host after WM_CLIPBOARDUPDATE, on the host STA.</summary>
     internal void OnClipboardChanged()
     {
-        if (!Enabled) return;
+        if (Volatile.Read(ref _enabled) == 0) return;
         uint sequence = GetClipboardSequenceNumber();
         if (sequence != 0 && sequence == _lastWriteSequence) return;
         if (ExcludedFromSharing()) return;
@@ -131,9 +326,13 @@ internal sealed partial class PhoneClipboard : IDisposable
             {
                 try
                 {
-                    SetStatusFromWorker("Connecting", client);
+                    SetStatusFromWorker(L10n.T("Phone.ClipboardConnecting"), client);
                     await client.WatchAsync(device,
-                        () => SetStatusFromWorker("Connected", client),
+                        () =>
+                        {
+                            attempt = 0;
+                            SetStatusFromWorker(L10n.T("Phone.ClipboardConnected"), client);
+                        },
                         text =>
                         {
                             if (!token.IsCancellationRequested)
@@ -144,9 +343,20 @@ internal sealed partial class PhoneClipboard : IDisposable
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
                 catch (Exception error)
                 {
-                    attempt = Math.Min(attempt + 1, 6);
-                    SetStatusFromWorker(error is IOException ? "Disconnected · reconnecting" : "Clipboard unavailable · reconnecting", client);
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Min(30, 1 << (attempt - 1))), token).ConfigureAwait(false);
+                    if (AndroidError.TryGetCode(error, out var code) && code == AndroidErrorCode.ClipboardPermissionError)
+                    {
+                        SetStatusFromWorker(L10n.T("Phone.Err.ClipboardPermissionError"), client);
+                        break;
+                    }
+                    if (attempt >= 3 || (error is not IOException and not SocketException))
+                    {
+                        SetStatusFromWorker(L10n.T("Phone.ClipboardDisconnected"), client);
+                        break;
+                    }
+                    int seconds = attempt switch { 0 => 1, 1 => 3, _ => 8 };
+                    attempt++;
+                    SetStatusFromWorker(L10n.T("Phone.ClipboardConnecting"), client);
+                    await Task.Delay(TimeSpan.FromSeconds(seconds), token).ConfigureAwait(false);
                 }
             }
         }
@@ -164,7 +374,7 @@ internal sealed partial class PhoneClipboard : IDisposable
                         Volatile.Write(ref _enabled, 0);
                         if (Interlocked.Exchange(ref _ownsClipboardInterest, 0) != 0)
                             _window.SetInterest(_window.Interest & ~ShellInterest.Clipboard);
-                        SetStatus("Off");
+                        NotifyChanged();
                     }
                 });
             }
@@ -181,12 +391,20 @@ internal sealed partial class PhoneClipboard : IDisposable
                 try
                 {
                     await client.SendAsync(text, client.Revision, token).ConfigureAwait(false);
-                    _owner.TryPost(() => { if (Enabled && ReferenceEquals(_client, client)) SetStatus("Connected"); });
+                    _owner.TryPost(() =>
+                    {
+                        if (Volatile.Read(ref _enabled) != 0 && ReferenceEquals(_client, client))
+                            SetStatus(L10n.T("Phone.ClipboardConnected"));
+                    });
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
                 catch (Exception)
                 {
-                    _owner.TryPost(() => { if (Enabled && ReferenceEquals(_client, client)) SetStatus("Clipboard write failed"); });
+                    _owner.TryPost(() =>
+                    {
+                        if (Volatile.Read(ref _enabled) != 0 && ReferenceEquals(_client, client))
+                            SetStatus(L10n.T("Phone.ClipboardDisconnected"));
+                    });
                 }
             }
         }
@@ -195,14 +413,14 @@ internal sealed partial class PhoneClipboard : IDisposable
 
     private void ApplyPhoneText(string text, IAndroidClipboardClient client)
     {
-        if (!Enabled || !ReferenceEquals(_client, client) || !AndroidClipboardClient.IsSupported(text)
+        if (Volatile.Read(ref _enabled) == 0 || !ReferenceEquals(_client, client) || !AndroidClipboardClient.IsSupported(text)
             || string.Equals(text, _lastText, StringComparison.Ordinal)) return;
         uint sequence = GetClipboardSequenceNumber();
         string? current = ReadUnicodeText();
         if (string.Equals(current, text, StringComparison.Ordinal)) { _lastText = text; return; }
-        if (!WriteUnicodeText(text, sequence)) { SetStatus("PC clipboard unavailable"); return; }
+        if (!WriteUnicodeText(text, sequence)) { SetStatus(L10n.T("Phone.ClipboardDesktopUnavailable")); return; }
         _lastText = text;
-        SetStatus("Connected");
+        SetStatus(L10n.T("Phone.ClipboardConnected"));
     }
 
     private string? ReadUnicodeText()
@@ -233,6 +451,8 @@ internal sealed partial class PhoneClipboard : IDisposable
     {
         if (OpenClipboard(_window.Handle) == 0) return false;
         nint memory = 0;
+        nint remoteFlag = 0;
+        nint cloudFlag = 0;
         try
         {
             if (expectedSequence.HasValue && GetClipboardSequenceNumber() != expectedSequence.Value) return false;
@@ -248,7 +468,21 @@ internal sealed partial class PhoneClipboard : IDisposable
                 Marshal.WriteInt16(pointer, chars.Length * sizeof(char), 0);
             }
             finally { GlobalUnlock(memory); }
-            if (EmptyClipboard() == 0 || SetClipboardData(CfUnicodeText, memory) == 0) return false;
+
+            // Write anti-loop and cloud-exclusion markers matching WPF PhoneClipboardSync.
+            if (RemoteFormat != 0) remoteFlag = GlobalAlloc(GmemMoveable | GmemZeroInit, 4);
+            if (CloudFormat != 0) cloudFlag = GlobalAlloc(GmemMoveable | GmemZeroInit, 4);
+
+            if (EmptyClipboard() == 0) return false;
+            if (RemoteFormat != 0 && remoteFlag != 0)
+            {
+                if (SetClipboardData(RemoteFormat, remoteFlag) != 0) remoteFlag = 0;
+            }
+            if (CloudFormat != 0 && cloudFlag != 0)
+            {
+                if (SetClipboardData(CloudFormat, cloudFlag) != 0) cloudFlag = 0;
+            }
+            if (SetClipboardData(CfUnicodeText, memory) == 0) return false;
             memory = 0; // Windows owns the movable block after successful transfer.
             _lastWriteSequence = GetClipboardSequenceNumber();
             return true;
@@ -256,6 +490,8 @@ internal sealed partial class PhoneClipboard : IDisposable
         finally
         {
             if (memory != 0) GlobalFree(memory);
+            if (remoteFlag != 0) GlobalFree(remoteFlag);
+            if (cloudFlag != 0) GlobalFree(cloudFlag);
             CloseClipboard();
         }
     }
@@ -294,14 +530,132 @@ internal sealed partial class PhoneClipboard : IDisposable
         finally { GlobalUnlock(memory); }
     }
 
+    private void QueueSave()
+    {
+        if (string.IsNullOrEmpty(_settingsPath)) return;
+        lock (_saveGate)
+        {
+            lock (_enabledDevices)
+                _pendingSave = _enabledDevices.Select(d => d with { Name = "", State = "offline", TransportId = null }).ToArray();
+            if (_saving) return;
+            _saving = true;
+            _saveTask = Task.Run(SaveLoopAsync);
+        }
+    }
+
+    private async Task SaveLoopAsync()
+    {
+        try
+        {
+            await Task.Delay(100).ConfigureAwait(false);
+            while (true)
+            {
+                AndroidDevice[] snapshot;
+                lock (_saveGate) snapshot = _pendingSave!;
+                Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath!)!);
+                AtomicFile.Write(_settingsPath!, stream => WriteJson(stream, snapshot));
+                lock (_saveGate)
+                {
+                    if (ReferenceEquals(snapshot, _pendingSave))
+                    {
+                        _saving = false;
+                        _owner.TryPost(() =>
+                        {
+                            if (_saveError) { _saveError = false; NotifyChanged(); }
+                        });
+                        return;
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            lock (_saveGate) _saving = false;
+            _owner.TryPost(() => { _saveError = true; NotifyChanged(); });
+        }
+    }
+
+    private static void WriteJson(Stream stream, AndroidDevice[] devices)
+    {
+        using var writer = new Utf8JsonWriter(stream);
+        writer.WriteStartObject();
+        writer.WriteNumber("Version", 1);
+        writer.WritePropertyName("EnabledDevices");
+        writer.WriteStartArray();
+        foreach (var d in devices)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("Serial", d.Serial);
+            writer.WriteString("Name", d.Name);
+            writer.WriteString("State", d.State);
+            writer.WriteBoolean("IsWifi", d.IsWifi);
+            if (d.HardwareId != null) writer.WriteString("HardwareId", d.HardwareId);
+            if (d.TransportId != null) writer.WriteString("TransportId", d.TransportId);
+            if (d.IdentityFingerprint != null) writer.WriteString("IdentityFingerprint", d.IdentityFingerprint);
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+        writer.Flush();
+    }
+
+    private static AndroidDevice[] LoadEnabledDevices(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length == 0 || info.Length > 64 * 1024) return [];
+            using var stream = File.OpenRead(path);
+            using var doc = JsonDocument.Parse(stream);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return [];
+            if (!root.TryGetProperty("Version", out var ver) || ver.ValueKind != JsonValueKind.Number || !ver.TryGetInt32(out int version) || version != 1)
+                return [];
+            if (!root.TryGetProperty("EnabledDevices", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return [];
+            var list = new List<AndroidDevice>();
+            foreach (var item in arr.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                string? serial = item.TryGetProperty("Serial", out var sp) && sp.ValueKind == JsonValueKind.String ? sp.GetString() : null;
+                if (string.IsNullOrWhiteSpace(serial) || serial.Length > 512) continue;
+                string? hw = item.TryGetProperty("HardwareId", out var hp) && hp.ValueKind == JsonValueKind.String ? hp.GetString() : null;
+                if (hw != null && hw.Length > 128) continue;
+                bool isWifi = item.TryGetProperty("IsWifi", out var wp) && wp.ValueKind == JsonValueKind.True;
+                string? fp = item.TryGetProperty("IdentityFingerprint", out var fpp) && fpp.ValueKind == JsonValueKind.String ? fpp.GetString() : null;
+                list.Add(new AndroidDevice(serial, "", "offline", isWifi, hw) { IdentityFingerprint = fp });
+                if (list.Count >= 32) break;
+            }
+            return list.DistinctBy(AndroidDeviceIdentity.Key).ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return [];
+        }
+    }
+
+    internal Task FlushAsync() { lock (_saveGate) return _saveTask; }
+
     private void SetStatusFromWorker(string status, IAndroidClipboardClient client) =>
-        _owner.TryPost(() => { if (Enabled && ReferenceEquals(_client, client)) SetStatus(status); });
-    private void SetStatus(string status) => Volatile.Write(ref _status, status);
+        _owner.TryPost(() => { if (Volatile.Read(ref _enabled) != 0 && ReferenceEquals(_client, client)) SetStatus(status); });
+
+    private void SetStatus(string status)
+    {
+        Volatile.Write(ref _status, status);
+        NotifyChanged();
+    }
+
+    private void NotifyChanged()
+    {
+        if (Volatile.Read(ref _disposed) == 0)
+            Changed?.Invoke();
+    }
 
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        Disable();
+        StopBridge(null);
+        try { FlushAsync().GetAwaiter().GetResult(); } catch { }
     }
 
     [LibraryImport("user32", EntryPoint = "OpenClipboard", SetLastError = true)] private static partial int OpenClipboard(nint owner);

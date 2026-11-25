@@ -8,7 +8,7 @@ namespace SonicRoute.Native.Ui;
 
 /// <summary>
 /// Owned borderless Win32 Unicode EDIT popup layered cleanly over Direct2D ModernTextBox bounds.
-/// Provides native IME composition, copy/paste, selection, and theme-matched colors.
+/// Provides native IME composition, copy/paste, selection, theme colors, and safe deferred focus teardown.
 /// </summary>
 internal sealed unsafe class InlineEditHost : IDisposable
 {
@@ -22,11 +22,14 @@ internal sealed unsafe class InlineEditHost : IDisposable
     private const uint EsLeft = 0x0000;
 
     private const uint WmCommand = 0x0111;
+    private const uint WmEraseBkgnd = 0x0014;
     private const uint WmCtlColorEdit = 0x0133;
     private const uint WmKillFocus = 0x0008;
     private const uint WmKeyDown = 0x0100;
+    private const uint WmMouseWheel = 0x020A;
     private const uint WmDestroy = 0x0002;
     private const uint WmSetFont = 0x0030;
+    private const uint WmUserCommitClose = 0x0402;
     private const uint EmSetSel = 0x00B1;
     private const uint EmSetMargins = 0x00D3;
 
@@ -43,7 +46,11 @@ internal sealed unsafe class InlineEditHost : IDisposable
     private nint _font;
     private uint _bgColorRef;
     private uint _fgColorRef;
+    private uint _fontDpi;
+    private float _fontSizeDip;
+    private bool _mono;
     private bool _suppressChange;
+    private bool _closingPending;
     private bool _disposed;
 
     public string? ActiveTag { get; private set; }
@@ -73,6 +80,10 @@ internal sealed unsafe class InlineEditHost : IDisposable
         Close(commit: false, viaEnter: false);
 
         ActiveTag = tag;
+        _mono = mono;
+        _fontSizeDip = fontSizeDip;
+        _fontDpi = dpi;
+        _closingPending = false;
         UpdateColors(bg, fg);
 
         _hostHwnd = CreateWindowExW(
@@ -86,12 +97,15 @@ internal sealed unsafe class InlineEditHost : IDisposable
         uint editStyle = WsChild | WsVisible | EsLeft | EsAutoHScroll | (password ? EsPassword : 0u);
         int editH = Math.Max(16, (int)MathF.Round(fontSizeDip * 1.45f * (dpi / 96f)));
         int editY = Math.Max(0, (heightPx - editH) / 2);
+        _suppressChange = true;
         _editHwnd = CreateWindowExW(
             0, "EDIT", initialText ?? "", editStyle,
             2, editY, Math.Max(12, widthPx - 4), editH,
             _hostHwnd, 1001, GetModuleHandleW(null), 0);
+        _suppressChange = false;
         if (_editHwnd == 0)
         {
+            Hosts.Remove(_hostHwnd);
             DestroyWindow(_hostHwnd);
             _hostHwnd = 0;
             return;
@@ -100,10 +114,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
         Edits[_editHwnd] = this;
         _origEditProc = SetWindowLongPtrW(_editHwnd, -4 /*GWLP_WNDPROC*/, (nint)EditSubProcPtr);
 
-        int fontPx = -Math.Max(10, (int)MathF.Round(fontSizeDip * (dpi / 96f)));
-        _font = CreateFontW(fontPx, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5 /*CLEARTYPE*/, 0,
-            mono ? UiMetrics.MonoFontFamily : UiMetrics.FontFamily);
-        if (_font != 0) SendMessageW(_editHwnd, WmSetFont, (nuint)_font, 1);
+        RebuildFont(fontSizeDip, dpi);
         SendMessageW(_editHwnd, EmSetMargins, 3 /*EC_LEFTMARGIN | EC_RIGHTMARGIN*/, (4 << 16) | 4);
 
         ShowWindow(_hostHwnd, 5 /*SW_SHOW*/);
@@ -115,15 +126,29 @@ internal sealed unsafe class InlineEditHost : IDisposable
     public void Reposition(int screenXPx, int screenYPx, int widthPx, int heightPx, float fontSizeDip, uint dpi)
     {
         if (!IsOpen) return;
+        if (_fontDpi != dpi || MathF.Abs(_fontSizeDip - fontSizeDip) > 0.1f)
+            RebuildFont(fontSizeDip, dpi);
         SetWindowPos(_hostHwnd, 0, screenXPx, screenYPx, Math.Max(20, widthPx), Math.Max(18, heightPx), 0x0014 /*SWP_NOZORDER|SWP_NOACTIVATE*/);
         int editH = Math.Max(16, (int)MathF.Round(fontSizeDip * 1.45f * (dpi / 96f)));
         int editY = Math.Max(0, (heightPx - editH) / 2);
         SetWindowPos(_editHwnd, 0, 2, editY, Math.Max(12, widthPx - 4), editH, 0x0014);
     }
 
+    private void RebuildFont(float fontSizeDip, uint dpi)
+    {
+        _fontSizeDip = fontSizeDip;
+        _fontDpi = dpi;
+        if (_font != 0) { DeleteObject(_font); _font = 0; }
+        int fontPx = -Math.Max(10, (int)MathF.Round(fontSizeDip * (dpi / 96f)));
+        _font = CreateFontW(fontPx, 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5 /*CLEARTYPE*/, 0,
+            _mono ? UiMetrics.MonoFontFamily : UiMetrics.FontFamily);
+        if (_font != 0 && _editHwnd != 0) SendMessageW(_editHwnd, WmSetFont, (nuint)_font, 1);
+    }
+
     public void SetTheme(UiColor bg, UiColor fg)
     {
         UpdateColors(bg, fg);
+        if (_hostHwnd != 0) InvalidateRect(_hostHwnd, 0, true);
         if (_editHwnd != 0) InvalidateRect(_editHwnd, 0, true);
     }
 
@@ -142,6 +167,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
 
     public void Close(bool commit, bool viaEnter)
     {
+        _closingPending = false;
         string? tag = ActiveTag;
         string text = commit ? GetText() : "";
         ActiveTag = null;
@@ -162,6 +188,28 @@ internal sealed unsafe class InlineEditHost : IDisposable
         if (_font != 0) { DeleteObject(_font); _font = 0; }
         if (commit && tag is not null)
             Committed?.Invoke(tag, text, viaEnter);
+    }
+
+    private void ScheduleCommitClose()
+    {
+        if (_closingPending || _hostHwnd == 0) return;
+        _closingPending = true;
+        PostMessageW(_hostHwnd, WmUserCommitClose, 0, 0);
+    }
+
+    private static bool IsImeComposing(nint hwnd)
+    {
+        nint himc = ImmGetContext(hwnd);
+        if (himc == 0) return false;
+        try
+        {
+            int bytes = ImmGetCompositionStringW(himc, 0x0008 /*GCS_COMPSTR*/, 0, 0);
+            return bytes > 0;
+        }
+        finally
+        {
+            ImmReleaseContext(hwnd, himc);
+        }
     }
 
     private void UpdateColors(UiColor bg, UiColor fg)
@@ -190,6 +238,14 @@ internal sealed unsafe class InlineEditHost : IDisposable
 
         switch (msg)
         {
+            case WmEraseBkgnd:
+                if (host._bgBrush != 0 && GetClientRect(hwnd, out var rc))
+                {
+                    FillRect((nint)wParam, ref rc, host._bgBrush);
+                    return 1;
+                }
+                break;
+
             case WmCtlColorEdit:
                 SetTextColor((nint)wParam, host._fgColorRef);
                 SetBkColor((nint)wParam, host._bgColorRef);
@@ -202,8 +258,12 @@ internal sealed unsafe class InlineEditHost : IDisposable
                 }
                 else if (((uint)wParam >> 16) == 0x0200 /*EN_KILLFOCUS*/)
                 {
-                    host.Close(commit: true, viaEnter: false);
+                    host.ScheduleCommitClose();
                 }
+                return 0;
+
+            case WmUserCommitClose:
+                if (host.IsOpen) host.Close(commit: true, viaEnter: false);
                 return 0;
 
             case WmDestroy:
@@ -219,7 +279,8 @@ internal sealed unsafe class InlineEditHost : IDisposable
         if (!Edits.TryGetValue(hwnd, out var host))
             return DefWindowProcW(hwnd, msg, wParam, lParam);
 
-        if (msg == WmKeyDown)
+        nint origProc = host._origEditProc;
+        if (msg == WmKeyDown && !IsImeComposing(hwnd))
         {
             int vk = (int)wParam;
             if (vk == 0x0D /*VK_RETURN*/)
@@ -233,14 +294,21 @@ internal sealed unsafe class InlineEditHost : IDisposable
                 return 0;
             }
         }
+        else if (msg == WmMouseWheel)
+        {
+            host.ScheduleCommitClose();
+            return 0;
+        }
         else if (msg == WmKillFocus)
         {
+            nint result = origProc != 0 ? CallWindowProcW(origProc, hwnd, msg, wParam, lParam) : DefWindowProcW(hwnd, msg, wParam, lParam);
             nint nextFocus = (nint)wParam;
             if (nextFocus != host._hostHwnd)
-                host.Close(commit: true, viaEnter: false);
+                host.ScheduleCommitClose();
+            return result;
         }
 
-        return CallWindowProcW(host._origEditProc, hwnd, msg, wParam, lParam);
+        return origProc != 0 ? CallWindowProcW(origProc, hwnd, msg, wParam, lParam) : DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 
     private static void EnsureClass()
@@ -265,6 +333,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
         }
     }
 
+    [StructLayout(LayoutKind.Sequential)] private struct WinRect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)]
     private struct WndClassExW
     {
@@ -283,9 +352,15 @@ internal sealed unsafe class InlineEditHost : IDisposable
     [DllImport("user32.dll")] private static extern nint CallWindowProcW(nint prev, nint hwnd, uint msg, nuint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern nint SetWindowLongPtrW(nint hwnd, int idx, nint val);
     [DllImport("user32.dll")] private static extern nint SendMessageW(nint hwnd, uint msg, nuint wParam, nint lParam);
+    [DllImport("user32.dll")] private static extern bool PostMessageW(nint hwnd, uint msg, nuint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern int GetWindowTextLengthW(nint hwnd);
     [DllImport("user32.dll")] private static extern int GetWindowTextW(nint hwnd, nint buf, int maxCount);
     [DllImport("user32.dll")] private static extern bool InvalidateRect(nint hwnd, nint rect, bool erase);
+    [DllImport("user32.dll")] private static extern bool GetClientRect(nint hwnd, out WinRect rect);
+    [DllImport("user32.dll")] private static extern int FillRect(nint hdc, ref WinRect rc, nint brush);
+    [DllImport("imm32.dll")] private static extern nint ImmGetContext(nint hwnd);
+    [DllImport("imm32.dll")] private static extern bool ImmReleaseContext(nint hwnd, nint himc);
+    [DllImport("imm32.dll", CharSet = CharSet.Unicode)] private static extern int ImmGetCompositionStringW(nint himc, uint index, nint buf, uint len);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern nint CreateFontW(int h, int w, int esc, int ori, int weight, uint italic, uint under, uint strike, uint cs, uint outp, uint clip, uint qual, uint pitch, string face);
     [DllImport("gdi32.dll")] private static extern nint CreateSolidBrush(uint colorRef);
     [DllImport("gdi32.dll")] private static extern uint SetTextColor(nint hdc, uint colorRef);

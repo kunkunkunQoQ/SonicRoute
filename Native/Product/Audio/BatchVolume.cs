@@ -58,7 +58,7 @@ internal sealed partial class ProductAudio
                 if (flow == Flow.Capture && pid.HasValue && target.HasValue)
                 {
                     token.ThrowIfCancellationRequested();
-                    InvalidateGroup(flow);
+                    InvalidateGroup(pid.Value, flow);
                     var current = GetGroup(pid.Value, flow).Sources;
                     if (current.Count == 0 || current.Any(v => (v.UInt32(6) != 0) != target.Value))
                         return (0, volumes.Count);

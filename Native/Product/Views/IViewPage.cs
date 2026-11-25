@@ -43,6 +43,7 @@ internal interface IViewHostActions
         bool selectAll = true);
     void CloseInlineEdit(bool commit);
     void NavigateTo(MainNavTab tab);
+    void OpenPhoneDevice(string? profileId = null) { }
 }
 
 internal interface IViewPage : IDisposable
@@ -56,6 +57,8 @@ internal interface IViewPage : IDisposable
     bool OnPointerUp(UiPointerEventArgs e);
     bool OnMouseWheel(float x, float y, float delta, bool horizontal);
     bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt);
+    void OnFilesDropped(string[] paths) { }
+    void OnCaptureLost() { }
     bool NeedsAnimationTick => false;
     void TickAnimation() { }
 }

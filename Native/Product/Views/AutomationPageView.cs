@@ -131,8 +131,20 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             AutoRuleService.ExecutionStateChanged -= OnExecutionStateChanged;
         }
         CancelHotkeyCapture();
-        CancelDrags();
+        OnCaptureLost();
         actions.CloseInlineEdit(commit: true);
+    }
+
+    public void OnCaptureLost()
+    {
+        _listScroll.EndDrag();
+        _editorScroll.EndDrag();
+        _historyScroll.EndDrag();
+        _draggingVolStepIndex = -1;
+        if (_ruleDragging || _dragRuleId != null)
+            CommitOrCancelRuleDrag(commit: false);
+        if (_stepDragging || _dragStepIndex >= 0)
+            CommitOrCancelStepDrag(commit: false);
     }
 
     private void OnExecutionStateChanged()
@@ -156,7 +168,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 AudioAppInfo[] apps = [];
                 try
                 {
-                    outs = ProductAudio.Devices(Flow.Render);
+                    outs = actions.Host.Audio.RenderDevicesWithPhone();
                     ins = ProductAudio.Devices(Flow.Capture);
                     apps = actions.Host.Audio.Apps().ToArray();
                 }
@@ -352,8 +364,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                     if (!string.IsNullOrEmpty(det)) sub += " · " + det;
                     int stepCnt = rule.CloneSteps().Count;
                     sub += $" ({stepCnt})";
+                    bool hkConflict = HasHotkeyConflict(rule);
+                    if (hkConflict) sub += " · " + L10n.T("Auto.HotkeyConflict");
                     g.DrawText(sub, new UiRect(infoX, rowRect.Y + 32f, infoW, 18f),
-                        t.TextSecondary, 10.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+                        hkConflict ? t.Fail : t.TextSecondary, 10.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
 
                     // Right controls: Run | Favorite | Enable Switch
                     float cx = rowRect.Right - 6f;
@@ -620,7 +634,16 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             });
             y += 38f;
             g.DrawText(L10n.T("Auto.HotkeyHint"), new UiRect(inputX, y, inputW, 18f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            y += 24f;
+            y += 22f;
+            if (HasHotkeyConflict(_editingRule))
+            {
+                g.DrawText(L10n.T("Auto.HotkeyConflict"), new UiRect(inputX, y, inputW, 18f), t.Fail, 11f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+                y += 20f;
+            }
+            else
+            {
+                y += 2f;
+            }
         }
         else if (_editingRule.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppSwitch or AutoRuleTrigger.AppExit)
         {
@@ -1050,14 +1073,19 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (_listScroll.DragMove(y) || _editorScroll.DragMove(y) || _historyScroll.DragMove(y))
             return true;
 
-        if (_draggingVolStepIndex >= 0 && leftDown && (uint)_draggingVolStepIndex < (uint)_editingSteps.Count)
+        if (_draggingVolStepIndex >= 0)
         {
-            UpdateStepVolumeFromX(_editingSteps[_draggingVolStepIndex], _draggingVolSliderRect, x);
-            return true;
+            if (!leftDown) { _draggingVolStepIndex = -1; return true; }
+            if ((uint)_draggingVolStepIndex < (uint)_editingSteps.Count)
+            {
+                UpdateStepVolumeFromX(_editingSteps[_draggingVolStepIndex], _draggingVolSliderRect, x);
+                return true;
+            }
         }
 
-        if (_dragRuleId != null && leftDown)
+        if (_dragRuleId != null)
         {
+            if (!leftDown) { CommitOrCancelRuleDrag(commit: _ruleDragging); return true; }
             _ruleDragPointerY = y;
             if (!_ruleDragging && MathF.Abs(y - _ruleDragStartY) >= 6f)
                 _ruleDragging = true;
@@ -1065,8 +1093,9 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             return true;
         }
 
-        if (_dragStepIndex >= 0 && leftDown)
+        if (_dragStepIndex >= 0)
         {
+            if (!leftDown) { CommitOrCancelStepDrag(commit: _stepDragging); return true; }
             _stepDragPointerY = y;
             if (!_stepDragging && MathF.Abs(y - _stepDragStartY) >= 6f)
                 _stepDragging = true;
@@ -1531,6 +1560,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     private void TestEditorRule()
     {
         if (_editingRule == null) return;
+        actions.CloseInlineEdit(commit: true);
         if (!ValidateEditor(out string errMsg)) { actions.ShowNotice(errMsg); return; }
         var draft = _editingRule.Clone();
         draft.SetSteps(_editingSteps);
@@ -1855,6 +1885,38 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             hour = Math.Clamp(ts.Hours, 0, 23);
             minute = Math.Clamp(ts.Minutes, 0, 59);
         }
+    }
+
+    private bool HasHotkeyConflict(AutoRule rule)
+    {
+        if (!rule.Enabled || rule.Trigger != AutoRuleTrigger.Hotkey || string.IsNullOrWhiteSpace(rule.Hotkey))
+            return false;
+
+        string hk = rule.Hotkey.Trim();
+        if (actions.Host.HotkeyStatuses.TryGetValue(AutoRuleService.HotkeyPrefix + rule.Id, out string? status)
+            && string.Equals(status, "", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        foreach (var kv in actions.Config.Hotkeys)
+        {
+            if (!actions.Config.ExperimentalMic && kv.Key is HotkeyActions.ActSwitchInput or HotkeyActions.ActSwitchAllInput)
+                continue;
+            if (!string.IsNullOrWhiteSpace(kv.Value) && string.Equals(kv.Value.Trim(), hk, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        foreach (var other in _rules)
+        {
+            if (other.Id != rule.Id && other.Enabled && other.Trigger == AutoRuleTrigger.Hotkey
+                && !string.IsNullOrWhiteSpace(other.Hotkey)
+                && string.Equals(other.Hotkey.Trim(), hk, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static string AutomationTriggerTitle(AutoRuleTrigger trigger) => L10n.T(trigger switch

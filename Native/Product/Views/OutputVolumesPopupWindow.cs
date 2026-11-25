@@ -9,11 +9,13 @@ using SonicRoute.Native.Ui;
 namespace SonicRoute.Native.Product.Views;
 
 /// <summary>
-/// Companion popup window showing individual volume/mute/default controls for all visible output devices.
-/// Exact parity with WPF OutputVolumePopupTemplate + OutputVolumePopupLayout.
+/// Companion popup window showing individual volume/mute/default controls for visible output devices.
+/// Parity with WPF OutputVolumePopupTemplate + OutputVolumePopupLayout, bidirectional sync, and zero idle timers.
 /// </summary>
 internal sealed class OutputVolumesPopupWindow : LayeredWindow
 {
+    private static readonly int[] PresetPercentages = [25, 50, 75, 100];
+
     private sealed class OutputDeviceRow
     {
         public required string Id;
@@ -28,26 +30,39 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
     private readonly AppConfig _config;
     private readonly Action? _onDefaultChanged;
     private readonly Action? _onDeactivatedCheck;
+    private readonly Action<string?, int?, bool?>? _onEndpointStateChanged;
     private readonly UiHitMap _hit = new();
     private readonly UiScrollState _scroll = new();
 
+    private readonly object _writeGate = new();
+    private readonly Dictionary<string, int> _pendingWrites = new(StringComparer.OrdinalIgnoreCase);
+    private bool _writeLoopRunning;
+
     private UiThemePalette _theme;
     private List<OutputDeviceRow> _rows = new();
+    private PopupMenuWindow? _presetMenu;
     private string? _draggingId;
     private UiRect _draggingRect;
+    private string? _rightPressId;
     private bool _loading;
+    private bool _refreshQueued;
+    private bool _audioSubscribed;
+
+    internal bool HasOpenModal => _presetMenu is { IsDisposed: false, IsVisible: true };
 
     internal OutputVolumesPopupWindow(
         ApplicationHost host,
         AppConfig config,
         Action? onDefaultChanged = null,
-        Action? onDeactivatedCheck = null)
+        Action? onDeactivatedCheck = null,
+        Action<string?, int?, bool?>? onEndpointStateChanged = null)
         : base(UiMetrics.OutputPopupWidth, 160f, 220f, 90f)
     {
         _host = host;
         _config = config;
         _onDefaultChanged = onDefaultChanged;
         _onDeactivatedCheck = onDeactivatedCheck;
+        _onEndpointStateChanged = onEndpointStateChanged;
         _theme = UiThemePalette.Resolve(config);
         TopMost = true;
         ToolWindow = true;
@@ -99,10 +114,38 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         SetBoundsPx((int)MathF.Round(rect.X * s), (int)MathF.Round(rect.Y * s), rect.Width, rect.Height);
     }
 
+    internal void SyncEndpointState(string? deviceId, int? volume = null, bool? muted = null)
+    {
+        if (_rows.Count == 0) return;
+        bool changed = false;
+        foreach (var row in _rows)
+        {
+            if (deviceId != null && !string.Equals(row.Id, deviceId, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (volume.HasValue && _draggingId != row.Id && row.Volume != volume.Value)
+            {
+                row.Volume = Math.Clamp(volume.Value, 0, 100);
+                changed = true;
+            }
+            if (muted.HasValue && row.Muted != muted.Value)
+            {
+                row.Muted = muted.Value;
+                changed = true;
+            }
+        }
+        if (changed && IsVisible) Invalidate();
+    }
+
     internal void RefreshData(LayeredWindow? ownerToReposition = null, UiRect? companionOccupiedDip = null)
     {
-        if (_loading) return;
+        if (_loading || IsDisposed)
+        {
+            _refreshQueued = true;
+            return;
+        }
         _loading = true;
+        _refreshQueued = false;
+
         _ = Task.Run(() =>
         {
             var nextRows = new List<OutputDeviceRow>();
@@ -110,9 +153,11 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             {
                 var devices = ProductAudio.Devices(Flow.Render);
                 string? defId = devices.Length > 0 ? ProductAudio.DefaultId(Flow.Render) : null;
+                var hidden = _config.PanelOutputVolumesRetainedOnly ? _config.HiddenOutputDevices : null;
                 foreach (var dev in devices)
                 {
-                    if (_config.HiddenOutputDevices.Contains(dev.Id)) continue;
+                    if (string.IsNullOrWhiteSpace(dev.Id) || AudioService.IsSystemDefault(dev.Id)) continue;
+                    if (hidden != null && hidden.Contains(dev.Id)) continue;
                     string name = _config.DeviceNames.GetValueOrDefault(dev.Id, dev.Name);
                     int vol = 0;
                     bool muted = false;
@@ -142,6 +187,13 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             {
                 _loading = false;
                 if (IsDisposed) return;
+                if (_draggingId != null)
+                {
+                    var dragged = _rows.FirstOrDefault(r => string.Equals(r.Id, _draggingId, StringComparison.OrdinalIgnoreCase));
+                    var target = nextRows.FirstOrDefault(r => string.Equals(r.Id, _draggingId, StringComparison.OrdinalIgnoreCase));
+                    if (dragged != null && target != null) target.Volume = dragged.Volume;
+                }
+
                 int prevCount = _rows.Count;
                 _rows = nextRows;
                 if (ownerToReposition != null && IsVisible && prevCount != _rows.Count)
@@ -149,8 +201,43 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                     RepositionForOwner(ownerToReposition, companionOccupiedDip);
                 }
                 if (IsVisible) Invalidate();
+                if (_refreshQueued && IsVisible)
+                {
+                    _refreshQueued = false;
+                    RefreshData(ownerToReposition, companionOccupiedDip);
+                }
             });
         });
+    }
+
+    protected override void OnShown()
+    {
+        base.OnShown();
+        SubscribeAudio(true);
+    }
+
+    protected override void OnHidden()
+    {
+        SubscribeAudio(false);
+        ClosePresetMenu();
+        CancelActiveDrags();
+        base.OnHidden();
+    }
+
+    protected override void OnClosed()
+    {
+        SubscribeAudio(false);
+        ClosePresetMenu();
+        CancelActiveDrags();
+        base.OnClosed();
+    }
+
+    protected override void OnCaptureLost()
+    {
+        bool hadDrag = _draggingId != null || _scroll.Dragging;
+        CancelActiveDrags();
+        _host.FlushVolumeWrites();
+        if (hadDrag && IsVisible) Invalidate();
     }
 
     protected override string GetWindowTitle() => L10n.T("Qp.Output");
@@ -241,7 +328,8 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 if (_rows[idx].Volume != val)
                 {
                     _rows[idx].Volume = val;
-                    SetDeviceVolume(_rows[idx].Id, val);
+                    QueueDeviceVolume(_rows[idx].Id, val);
+                    _onEndpointStateChanged?.Invoke(_rows[idx].Id, val, null);
                     Invalidate();
                 }
             }
@@ -263,7 +351,15 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
     protected override void OnPointerDown(UiPointerEventArgs e)
     {
+        if (e.Button == UiMouseButton.Right)
+        {
+            var rHit = _hit.HitTest(e.X, e.Y);
+            _rightPressId = rHit?.Id;
+            return;
+        }
         if (e.Button != UiMouseButton.Left) return;
+
+        ClosePresetMenu();
         if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
         {
             Invalidate();
@@ -282,7 +378,8 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 _draggingRect = hit.Value.Bounds;
                 int val = UiPrimitives.SliderValueFromX(_draggingRect, e.X);
                 _rows[vIdx].Volume = val;
-                SetDeviceVolume(_rows[vIdx].Id, val);
+                QueueDeviceVolume(_rows[vIdx].Id, val);
+                _onEndpointStateChanged?.Invoke(_rows[vIdx].Id, val, null);
                 Invalidate();
             }
             return;
@@ -292,6 +389,19 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
     protected override void OnPointerUp(UiPointerEventArgs e)
     {
+        if (e.Button == UiMouseButton.Right)
+        {
+            string? pressed = _rightPressId;
+            _rightPressId = null;
+            var rHit = _hit.HitTest(e.X, e.Y);
+            if (rHit is { } rh && rh.Id == pressed && rh.Id.StartsWith("ov.vol:", StringComparison.Ordinal)
+                && int.TryParse(rh.Id.AsSpan(7), out int pIdx) && pIdx >= 0 && pIdx < _rows.Count && _rows[pIdx].Available)
+            {
+                ShowVolumePresetsMenu(_rows[pIdx], e.X, e.Y);
+            }
+            return;
+        }
+
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
@@ -302,6 +412,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         {
             _draggingId = null;
             _hit.ActiveId = null;
+            _host.FlushVolumeWrites();
             Invalidate();
             return;
         }
@@ -335,6 +446,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             {
                 var row = _rows[mIdx];
                 row.Muted = !row.Muted;
+                _onEndpointStateChanged?.Invoke(row.Id, null, row.Muted);
                 Invalidate();
                 string id = row.Id;
                 _ = Task.Run(() =>
@@ -346,7 +458,8 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                         {
                             row.Muted = st.Muted;
                             row.Volume = st.Percent;
-                            Invalidate();
+                            _onEndpointStateChanged?.Invoke(id, st.Percent, st.Muted);
+                            if (IsVisible) Invalidate();
                         });
                     }
                     catch { }
@@ -365,7 +478,8 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 int step = Math.Clamp(_config.VolumeStep, 1, 20);
                 int next = Math.Clamp(_rows[idx].Volume + (delta > 0 ? step : -step), 0, 100);
                 _rows[idx].Volume = next;
-                SetDeviceVolume(_rows[idx].Id, next);
+                QueueDeviceVolume(_rows[idx].Id, next);
+                _onEndpointStateChanged?.Invoke(_rows[idx].Id, next, null);
                 Invalidate();
                 return;
             }
@@ -378,6 +492,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
     {
         if (vk == 0x1B /*VK_ESCAPE*/)
         {
+            if (HasOpenModal) { ClosePresetMenu(); return true; }
             Hide();
             _onDeactivatedCheck?.Invoke();
             return true;
@@ -387,15 +502,100 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
     protected override void OnActivated(bool active)
     {
-        if (!active) _onDeactivatedCheck?.Invoke();
+        if (!active && !HasOpenModal) _onDeactivatedCheck?.Invoke();
     }
 
-    private void SetDeviceVolume(string deviceId, int level)
+    private void ShowVolumePresetsMenu(OutputDeviceRow row, float xDip, float yDip)
     {
+        ClosePresetMenu();
+        var items = new List<UiMenuItem>(PresetPercentages.Length);
+        foreach (int pct in PresetPercentages)
+        {
+            int captured = pct;
+            items.Add(new UiMenuItem
+            {
+                Text = $"{captured}%",
+                Checked = row.Volume == captured,
+                Click = () =>
+                {
+                    _presetMenu = null;
+                    row.Volume = captured;
+                    QueueDeviceVolume(row.Id, captured);
+                    _onEndpointStateChanged?.Invoke(row.Id, captured, null);
+                    Invalidate();
+                },
+            });
+        }
+        var pt = DipToScreenPx(xDip, yDip);
+        _presetMenu = PopupMenuWindow.ShowAtCursor(_theme, items, Handle, pt.X, pt.Y);
+    }
+
+    private void ClosePresetMenu()
+    {
+        if (_presetMenu is { } menu)
+        {
+            _presetMenu = null;
+            if (!menu.IsDisposed) menu.CloseWindow();
+        }
+    }
+
+    private void CancelActiveDrags()
+    {
+        _draggingId = null;
+        _rightPressId = null;
+        _scroll.EndDrag();
+        _hit.ActiveId = null;
+    }
+
+    private void QueueDeviceVolume(string deviceId, int level)
+    {
+        bool startWorker = false;
+        lock (_writeGate)
+        {
+            _pendingWrites[deviceId] = level;
+            if (!_writeLoopRunning)
+            {
+                _writeLoopRunning = true;
+                startWorker = true;
+            }
+        }
+        if (!startWorker) return;
+
         _ = Task.Run(() =>
         {
-            try { _host.Audio.Volume(Flow.Render, deviceId, 0, level: level); }
-            catch { }
+            while (true)
+            {
+                KeyValuePair<string, int> next;
+                lock (_writeGate)
+                {
+                    if (_pendingWrites.Count == 0)
+                    {
+                        _writeLoopRunning = false;
+                        break;
+                    }
+                    next = _pendingWrites.First();
+                    _pendingWrites.Remove(next.Key);
+                }
+                try { _host.Audio.Volume(Flow.Render, next.Key, 0, level: next.Value); }
+                catch { }
+            }
+        });
+    }
+
+    private void SubscribeAudio(bool enable)
+    {
+        if (enable == _audioSubscribed) return;
+        _audioSubscribed = enable;
+        if (enable) _host.Audio.AudioChanged += OnAudioChanged;
+        else _host.Audio.AudioChanged -= OnAudioChanged;
+    }
+
+    private void OnAudioChanged()
+    {
+        if (!IsVisible || IsDisposed) return;
+        _host.TryPost(() =>
+        {
+            if (IsVisible && !IsDisposed) RefreshData();
         });
     }
 
@@ -413,8 +613,8 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             new(work.X, MathF.Min(work.Bottom, owner.Bottom + gap), work.Width, MathF.Max(0f, work.Bottom - owner.Bottom - gap)), // 3: below
         };
 
-        // Prefer left (2), then above (0), right (1), below (3)
-        int[] order = occupied.HasValue ? new[] { 0, 3, 2, 1 } : new[] { 2, 0, 1, 3 };
+        // Exact WPF OutputVolumePopupLayout priority: [3, 0, 1, 2] when companion occupied, [0, 1, 2, 3] otherwise
+        int[] order = occupied.HasValue ? [3, 0, 1, 2] : [0, 1, 2, 3];
         int chosen = -1;
         float bestArea = -1f;
 

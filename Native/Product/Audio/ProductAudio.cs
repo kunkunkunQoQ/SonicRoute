@@ -17,9 +17,28 @@ internal sealed partial class ProductAudio : IDisposable
     private List<AudioAppInfo>? _apps;
     private long _appsAt;
     private bool _disposed;
-    private readonly Dictionary<Flow, VolumeGroup> _groups = new(2);
+    private readonly Dictionary<(int Pid, Flow Flow), VolumeGroup> _groups = new();
     private static readonly Guid Context = new("2CF052AA-46C6-4158-AEF3-C279D17FBC22");
+    internal event Action? AudioChanged;
+#if SONICROUTE_PHONE
+    internal ExternalAudioBridge? ExternalAudio
+    {
+        get => _routing.ExternalAudio;
+        set => _routing.ExternalAudio = value;
+    }
+#endif
     internal void Start(bool resident) { if (resident) _routing.Start(); }
+    internal void NotifyAudioChanged() => AudioChanged?.Invoke();
+    internal void InvalidateAppsCache() { lock (_catalogGate) { _apps = null; _appsAt = 0; } }
+    internal void InvalidateVolumeCache()
+    {
+        using var apartment = new MtaScope();
+        lock (_volumeGate)
+        {
+            foreach (var group in _groups.Values) group.Dispose();
+            _groups.Clear();
+        }
+    }
 
     internal static Endpoint[] Devices(Flow flow)
     {
@@ -55,23 +74,50 @@ internal sealed partial class ProductAudio : IDisposable
         return true;
     }
 
-    internal List<AudioAppInfo> Apps()
+    internal List<AudioAppInfo> Apps() => Apps(refresh: false);
+
+    internal List<AudioAppInfo> Apps(bool refresh)
     {
+        List<AudioAppInfo> list;
         lock (_catalogGate)
         {
-            if (_apps != null && Environment.TickCount64 - _appsAt < 1000) return new(_apps);
-            var catalog = new AudioAppCatalog();
-            using var apartment = new MtaScope();
-            using var devices = new Endpoints();
-            foreach (var flow in new[] { Flow.Render, Flow.Capture })
-                VisitAll(devices, flow, (pid, state, control) =>
-                {
-                    if (state != 2 && pid != 0) catalog.Add(pid, state == 1, Endpoints.DisplayName(control));
-                });
-            _apps = catalog.Sorted();
-            _appsAt = Environment.TickCount64;
-            return new(_apps);
+            if (!refresh && _apps != null && Environment.TickCount64 - _appsAt < 1000)
+                list = new(_apps);
+            else
+            {
+                var catalog = new AudioAppCatalog();
+                using var apartment = new MtaScope();
+                using var devices = new Endpoints();
+                foreach (var flow in new[] { Flow.Render, Flow.Capture })
+                    VisitAll(devices, flow, (pid, state, control) =>
+                    {
+                        if (state == 2 || pid == 0) return;
+                        var app = catalog.Add(pid, state == 1, Endpoints.DisplayName(control));
+                        if (app != null && string.IsNullOrWhiteSpace(app.IconPath))
+                        {
+                            string? iconPath = Endpoints.IconPath(control);
+                            if (!string.IsNullOrWhiteSpace(iconPath)) app.IconPath = iconPath;
+                        }
+                    });
+                _apps = catalog.Sorted();
+                _appsAt = Environment.TickCount64;
+                list = new(_apps);
+            }
         }
+#if SONICROUTE_PHONE
+        ExternalAudio?.AppendExternalApps(list);
+#endif
+        return list;
+    }
+
+    internal Endpoint[] RenderDevicesWithPhone()
+    {
+        var win = Devices(Flow.Render);
+#if SONICROUTE_PHONE
+        var phone = ExternalAudio?.GetPhoneOutputs() ?? [];
+        if (phone.Length > 0) return [.. win, .. phone];
+#endif
+        return win;
     }
 
     private static void VisitAll(Endpoints devices, Flow flow, Action<uint,uint,Com> visit)
@@ -87,35 +133,109 @@ internal sealed partial class ProductAudio : IDisposable
         }
     }
 
-    internal string? ReadRoute(int pid, Flow flow) => PcRoutingApi.GetPersistedEndpoint(pid, (EDataFlow)flow);
+    internal string? ReadRoute(int pid, Flow flow)
+    {
+#if SONICROUTE_PHONE
+        if (flow == Flow.Render && ExternalAudio?.GetPhoneRoutedDeviceId(pid) is { } phoneOut)
+            return phoneOut;
+#endif
+        return PcRoutingApi.GetPersistedEndpoint(pid, (EDataFlow)flow);
+    }
+
+    internal string? ReadRoute(AudioAppInfo app, Flow flow)
+    {
+        if (!app.IsExternal) return ReadRoute(checked((int)app.ProcessId), flow);
+#if SONICROUTE_PHONE
+        if (flow == Flow.Render && ExternalAudio != null)
+            return ExternalAudio.GetExternalOutputs(app).FirstOrDefault();
+#endif
+        return null;
+    }
+
+    internal string[] GetSelectedOutputs(AudioAppInfo app)
+    {
+        if (!app.IsExternal)
+        {
+            int pid = checked((int)app.ProcessId);
+            var set = AppPlaybackOutputs.GetSelected(pid, PcRoutingApi.GetPersistedEndpoint(pid, EDataFlow.eRender));
+#if SONICROUTE_PHONE
+            if (ExternalAudio?.GetPhoneRoutedDeviceId(pid) is { } phoneOut)
+            {
+                if (set.Count == 1 && Core.AudioService.IsSystemDefault(set.First()))
+                    return [phoneOut];
+                set.Add(phoneOut);
+            }
+#endif
+            return set.ToArray();
+        }
+#if SONICROUTE_PHONE
+        if (ExternalAudio != null) return ExternalAudio.GetExternalOutputs(app);
+#endif
+        return [Core.AudioService.SystemDefaultDeviceId];
+    }
+
     internal bool SetRoute(int pid, Flow flow, string? endpoint)
     {
         var result = PcRoutingApi.ApplyEndpoint(pid, (EDataFlow)flow, endpoint);
         if (!result.Success) throw new COMException(result.Message, result.HResult);
+        NotifyAudioChanged();
         return true;
     }
+
     internal Task<ControlReply> SelectOutputAsync(int pid, string target)
         => _routing.SelectOutputAsync(pid, target);
+
+#if SONICROUTE_PHONE
+    internal Task<ControlReply> SetExternalOutputsAsync(AudioAppInfo app, string[] outputs) =>
+        ExternalAudio != null
+            ? ExternalAudio.SetExternalOutputsAsync(app, outputs)
+            : Task.FromResult(new ControlReply("error: phone_unavailable"));
+#endif
 
     internal bool ResetRoutes()
     {
         using var apartment = new MtaScope();
+#if SONICROUTE_PHONE
+        ExternalAudio?.StopAllPcToPhone(restorePreviousEndpoint: true);
+#endif
         bool cleared = AppPlaybackRestore.ClearAsync().GetAwaiter().GetResult();
         LocalAppOutputMirrors.ClearAllAsync().GetAwaiter().GetResult();
         using var policy = new Policy();
-        try { policy.ClearAll(); return cleared; }
+        try
+        {
+            policy.ClearAll();
+            InvalidateAppsCache();
+            NotifyAudioChanged();
+            return cleared;
+        }
         catch (COMException)
         {
-            var pids = Apps().Select(app => (int)app.ProcessId).ToHashSet();
+            var pids = Apps().Where(a => !a.IsExternal && a.ProcessId > 0).Select(app => (int)app.ProcessId).ToHashSet();
             foreach (var process in System.Diagnostics.Process.GetProcesses())
                 using (process) if (process.Id > 0) pids.Add(process.Id);
 
             foreach (int pid in pids)
                 foreach (Flow flow in new[] { Flow.Render, Flow.Capture })
                     PcRoutingApi.ApplyEndpoint(pid, (EDataFlow)flow, null);
+            InvalidateAppsCache();
+            NotifyAudioChanged();
             // A per-process fallback cannot confirm routes of applications that have exited.
             return false;
         }
+    }
+
+    internal VolumeState Volume(AudioAppInfo app, int? level = null, bool? mute = null, int delta = 0, bool toggle = false)
+    {
+#if SONICROUTE_PHONE
+        if (app.IsExternal)
+        {
+            if (ExternalAudio == null) throw new InvalidOperationException("No active external audio session.");
+            if (level == null && !mute.HasValue && delta == 0 && !toggle)
+                return ExternalAudio.ReadExternalVolume(app);
+            return ExternalAudio.SetExternalVolume(app, level, mute, delta, toggle);
+        }
+#endif
+        return Volume(Flow.Render, null, checked((int)app.ProcessId), level, mute, delta, toggle);
     }
 
     internal VolumeState Volume(Flow flow, string? endpoint, int pid = 0, int? level = null,
@@ -139,7 +259,7 @@ internal sealed partial class ProductAudio : IDisposable
             catch (COMException)
             {
                 // Retry discovery/read without repeating an already applied relative change.
-                InvalidateGroup(flow);
+                InvalidateGroup(pid, flow);
                 throw;
             }
         }
@@ -178,14 +298,28 @@ internal sealed partial class ProductAudio : IDisposable
         public void Dispose() { foreach (var c in Sources) c.Dispose(); Apartment.Dispose(); }
     }
 
-    private void InvalidateGroup(Flow flow)
-    { if (_groups.Remove(flow, out var group)) group.Dispose(); }
+    private void InvalidateGroup(int pid, Flow flow)
+    { if (_groups.Remove((pid, flow), out var group)) group.Dispose(); }
+
+    private void ClearStaleGroups()
+    {
+        long now = Environment.TickCount64;
+        List<(int Pid, Flow Flow)>? stale = null;
+        foreach (var pair in _groups)
+        {
+            if (now - pair.Value.At >= 5000 || _groups.Count > 64)
+                (stale ??= new()).Add(pair.Key);
+        }
+        if (stale == null) return;
+        foreach (var key in stale) InvalidateGroup(key.Pid, key.Flow);
+    }
 
     private VolumeGroup GetGroup(int pid, Flow flow)
     {
-        if (_groups.TryGetValue(flow, out var group) && group.Pid == pid && group.Sources.Count != 0
+        if (_groups.TryGetValue((pid, flow), out var group) && group.Sources.Count != 0
             && Environment.TickCount64 - group.At < 5000) return group;
-        InvalidateGroup(flow);
+        InvalidateGroup(pid, flow);
+        ClearStaleGroups();
         group = new(pid);
         try
         {
@@ -194,10 +328,31 @@ internal sealed partial class ProductAudio : IDisposable
             {
                 if (p == pid && state != 2) group.Sources.Add(control.Query(Endpoints.SimpleVolume));
             });
-            _groups.Add(flow, group);
+            _groups.Add((pid, flow), group);
             return group;
         }
         catch { group.Dispose(); throw; }
+    }
+
+    internal bool GlobalPlaybackMute(bool? set = null)
+    {
+        lock (_volumeGate)
+        {
+            var devices = Devices(Flow.Render);
+            if (devices.Length == 0) throw new InvalidOperationException("No render endpoints.");
+            bool target = set ?? !devices.All(d => Volume(Flow.Render, d.Id).Muted);
+            Exception? failure = null;
+            foreach (var d in devices)
+            {
+                try { Volume(Flow.Render, d.Id, mute: target); }
+                catch (Exception error) { failure ??= error; }
+            }
+            if (failure != null) throw new InvalidOperationException("One or more playback writes failed.", failure);
+            var final = Devices(Flow.Render);
+            if (final.Length == 0 || !final.All(d => Volume(Flow.Render, d.Id).Muted == target))
+                throw new InvalidOperationException("Playback mute state changed during operation.");
+            return target;
+        }
     }
 
     internal bool GlobalMicMute(bool? set)

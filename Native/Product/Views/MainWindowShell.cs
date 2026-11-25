@@ -23,6 +23,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     private UiThemePalette _theme;
     private MainNavTab _currentTab = MainNavTab.Apps;
     private IViewPage? _activePage;
+    private nint _appIconHandle;
 
     // Sidebar collapse animation (196 <-> 0 DIP, 180ms CubicOut)
     private float _sidebarWidth;
@@ -65,9 +66,11 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
         Resizable = true;
         ShowInTaskbar = true;
+        EnableFileDrop();
 
         _inlineEdit.TextChanged += OnInlineTextChanged;
         _inlineEdit.Committed += OnInlineCommitted;
+        _host.Updates.Changed += OnUpdatesChanged;
     }
 
     public ApplicationHost Host => _host;
@@ -89,8 +92,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         if (firstCreate)
         {
             CenterOnPrimaryWorkArea();
-            var hIcon = LoadAppIconHandle();
-            if (hIcon != 0) SetIcon(hIcon);
+            if (_appIconHandle == 0) _appIconHandle = LoadAppIconHandle();
+            if (_appIconHandle != 0) SetIcon(_appIconHandle);
         }
 
         _theme = UiThemePalette.Resolve(_config);
@@ -107,6 +110,16 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 #if SONICROUTE_PHONE
         if (_pages.TryGetValue(MainNavTab.Apps, out var page) && page is AppsPageView apps)
             apps.OpenPhoneConnection();
+#endif
+    }
+
+    public void OpenPhoneDevice(string? profileId = null)
+    {
+        ShowMain(0);
+        NavigateTo(MainNavTab.Apps);
+#if SONICROUTE_PHONE
+        if (_pages.TryGetValue(MainNavTab.Apps, out var page) && page is AppsPageView apps)
+            apps.OpenPhoneDevice(profileId);
 #endif
     }
 
@@ -249,7 +262,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         Invalidate();
     }
 
-    protected override string GetWindowTitle() => $"{BuildIdentity.DisplayName} v1.36";
+    protected override string GetWindowTitle() => BuildIdentity.DisplayName;
 
     protected override void OnShown()
     {
@@ -263,6 +276,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         ClosePopups();
         _activePage?.OnDeactivated();
         _sidebarAnimating = false;
+        _sidebarWidth = _sidebarTargetWidth;
         ReleaseRenderResources();
     }
 
@@ -270,6 +284,43 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         // Hide window on close button instead of destroying process; OnHidden releases D2D/DIB resources.
         return true;
+    }
+
+    protected override void OnWindowStateChanged(bool minimized, bool maximized)
+    {
+        if (minimized)
+        {
+            CloseInlineEdit(commit: false);
+            ClosePopups();
+            _activePage?.OnDeactivated();
+            StopAnimationTimer();
+            _sidebarAnimating = false;
+            _sidebarWidth = _sidebarTargetWidth;
+        }
+        else
+        {
+            _activePage?.OnActivated();
+            _activePage?.RefreshData();
+            if (_activePage is { NeedsAnimationTick: true })
+                StartAnimationTimer(16);
+            Invalidate();
+        }
+    }
+
+    protected override void OnFilesDropped(string[] paths, float xDip, float yDip)
+    {
+        if (paths.Length == 0 || !IsVisible) return;
+        _activePage?.OnFilesDropped(paths);
+        Invalidate();
+    }
+
+    protected override void OnCaptureLost()
+    {
+        _titleTextPressed = false;
+        _titleBarPressed = false;
+        _hit.ActiveId = null;
+        _activePage?.OnCaptureLost();
+        Invalidate();
     }
 
     protected override void OnMoved(int leftPx, int topPx)
@@ -285,6 +336,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     protected override void OnDpiChanged(uint newDpi)
     {
         RepositionInlineEdit();
+        Invalidate();
     }
 
     protected override void OnActivated(bool active)
@@ -338,15 +390,12 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
         g.FillRoundedRect(windowRect, radius, _theme.WindowBgAlpha);
 
-        // Title bar (42px)
         var titleRect = new UiRect(0f, 0f, widthDip, UiMetrics.TitleBarHeight);
         RenderTitleBar(g, titleRect);
 
-        // Body below title bar
         float bodyY = UiMetrics.TitleBarHeight;
         float bodyH = MathF.Max(0f, heightDip - bodyY);
 
-        // Left Nav Rail
         if (_sidebarWidth > 0.5f)
         {
             var navClip = new UiRect(0f, bodyY, _sidebarWidth, bodyH);
@@ -356,7 +405,6 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             g.DrawLine(_sidebarWidth - 0.5f, bodyY, _sidebarWidth - 0.5f, heightDip, _theme.Border, 1f, roundCaps: false);
         }
 
-        // Content area (Margin 26,20,26,20 or 26,20,26,8 on Apps)
         float padBottom = _currentTab == MainNavTab.Apps ? 8f : 20f;
         var contentRect = new UiRect(
             _sidebarWidth + 26f,
@@ -371,20 +419,17 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             g.PopClip();
         }
 
-        // Toast notice pill near bottom
         if (!string.IsNullOrEmpty(_noticeText))
             RenderNoticeToast(g, widthDip, heightDip, _noticeText);
 
         if (layer != 0) g.PopRoundedLayer(layer);
 
-        // Crisp outer 1px border
         g.DrawRoundedRect(new UiRect(0.5f, 0.5f, widthDip - 1f, heightDip - 1f), radius, _theme.Border, 1f);
     }
 
     private void RenderTitleBar(D2dTarget g, UiRect rect)
     {
-        // Left BuildIdentity title pill (Margin 8,0,0,0, Padding 8,5, CornerRadius 7)
-        string titleLabel = $"{BuildIdentity.DisplayName} v1.36";
+        const string titleLabel = "SonicRoute";
         float textW = D2dSharedContext.Instance.MeasureText(titleLabel, UiMetrics.FontFamily, 13.5f, 600, 200f, 32f, false).Width;
         var pillRect = new UiRect(8f, (rect.Height - 28f) * 0.5f, textW + 16f, 28f);
         _hit.Add("shell.titleToggle", pillRect, UiCursorKind.Hand, L10n.T("Window.DragToMove"));
@@ -394,17 +439,31 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         UiColor titleFg = _titleTextPressed ? _theme.TextPrimary.WithAlphaFraction(0.7f) : _theme.TextPrimary;
         g.DrawText(titleLabel, pillRect, titleFg, 13.5f, 600, UiTextAlign.Center, UiVertAlign.Center);
 
-        // Right caption buttons: 46x30, CornerRadius 7, Margin 0,0,10,0
         float btnW = 46f, btnH = 30f;
         float btnY = (rect.Height - btnH) * 0.5f;
         float closeX = rect.Right - 10f - btnW;
         float maxX = closeX - btnW;
         float minX = maxX - btnW;
 
-        // Empty titlebar drag zone
+        float dragRight = minX;
+
+        if (_host.Updates.ShouldNotify)
+        {
+            string updText = string.Format(L10n.T("Upd.Notice"), _host.Updates.Release?.Tag ?? "");
+            float measuredUpd = D2dSharedContext.Instance.MeasureText(updText, UiMetrics.FontFamily, 12f, 600, 260f, 28f, false).Width;
+            float updW = Math.Clamp(measuredUpd + 24f, 80f, 300f);
+            float updX = minX - 12f - updW;
+            if (updX > pillRect.Right + 12f)
+            {
+                var updRect = new UiRect(updX, (rect.Height - 28f) * 0.5f, updW, 28f);
+                UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "shell.updateNotice", updRect, updText, fontSize: 12f, radius: 7f, active: true, tooltip: L10n.T("Upd.Available"));
+                dragRight = updRect.X;
+            }
+        }
+
         float dragLeft = pillRect.Right + 4f;
-        if (minX > dragLeft)
-            _hit.Add("shell.titleDrag", new UiRect(dragLeft, 0f, minX - dragLeft, rect.Height), UiCursorKind.Arrow);
+        if (dragRight > dragLeft)
+            _hit.Add("shell.titleDrag", new UiRect(dragLeft, 0f, dragRight - dragLeft, rect.Height), UiCursorKind.Arrow);
 
         DrawCaptionButton(g, "shell.min", new UiRect(minX, btnY, btnW, btnH), UiIcon.Minimize, false, L10n.T("Window.Minimize"));
         DrawCaptionButton(g, "shell.max", new UiRect(maxX, btnY, btnW, btnH), IsMaximized ? UiIcon.Restore : UiIcon.Maximize, false,
@@ -436,7 +495,6 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     private void RenderNavRail(D2dTarget g, UiRect navRect)
     {
-        // StackPanel Margin="14,20,14,16"
         float x = navRect.X + 14f;
         float y = navRect.Y + 20f;
         float itemW = navRect.Width - 28f;
@@ -453,7 +511,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
         if (_config.ExperimentalUnlocked && _config.ExperimentalMode)
         {
-            y += UiMetrics.NavItemHeight + 10f; // extra 6px top margin
+            y += UiMetrics.NavItemHeight + 10f;
             DrawNavItem(g, MainNavTab.Experimental, L10n.T("Nav.Experimental"), UiIcon.Experiment, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         }
     }
@@ -468,7 +526,6 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         if (selected) g.FillRoundedRect(rect, UiMetrics.NavItemRadius, _theme.NavSelected);
         else if (hot) g.FillRoundedRect(rect, UiMetrics.NavItemRadius, _theme.NavHover);
 
-        // Padding 14,0; 30px icon column with 19x19 icon
         var iconRect = new UiRect(rect.X + 14f, rect.CenterY - 9.5f, 19f, 19f);
         g.DrawIcon(icon, iconRect, selected ? _theme.Accent : _theme.TextSecondary, 1.8f);
 
@@ -524,10 +581,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         _hit.ClearHover();
         SetCursorKind(UiCursorKind.Arrow);
-        if (_activePage?.OnPointerMove(-1000f, -1000f, false) == true)
-            Invalidate();
-        else
-            Invalidate();
+        _activePage?.OnPointerMove(-1000f, -1000f, false);
+        Invalidate();
     }
 
     protected override void OnPointerDown(UiPointerEventArgs e)
@@ -561,7 +616,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
                 _pressStartY = e.Y;
                 return;
             }
-            if (hit.Value.Id is "shell.min" or "shell.max" or "shell.close")
+            if (hit.Value.Id is "shell.min" or "shell.max" or "shell.close" or "shell.updateNotice")
             {
                 Invalidate();
                 return;
@@ -608,6 +663,9 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
                     case "shell.close":
                         Hide();
                         return;
+                    case "shell.updateNotice":
+                        NavigateTo(MainNavTab.Settings);
+                        return;
                     case "nav.Apps":
                         NavigateTo(MainNavTab.Apps);
                         return;
@@ -648,6 +706,14 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             return true;
         }
         return false;
+    }
+
+    private void OnUpdatesChanged(string? _)
+    {
+        _host.TryPost(() =>
+        {
+            if (!IsDisposed && IsVisible) Invalidate();
+        });
     }
 
     private void ToggleSidebar()
@@ -731,6 +797,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     public override void Dispose()
     {
+        _host.Updates.Changed -= OnUpdatesChanged;
         _noticeTimer?.Dispose();
         _noticeTimer = null;
         ClosePopups();
@@ -741,6 +808,11 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             page.Dispose();
         _pages.Clear();
         _activePage = null;
+        if (_appIconHandle != 0)
+        {
+            DestroyIcon(_appIconHandle);
+            _appIconHandle = 0;
+        }
         base.Dispose();
     }
 
@@ -749,4 +821,5 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     [DllImport("user32.dll")] private static extern nint SendMessageW(nint hwnd, uint msg, nuint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint pt);
+    [DllImport("user32.dll")] private static extern bool DestroyIcon(nint hIcon);
 }

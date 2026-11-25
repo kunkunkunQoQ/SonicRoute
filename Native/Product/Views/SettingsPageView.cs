@@ -3,14 +3,19 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.IO.Pipes;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using SonicRoute.Core;
 using SonicRoute.Core.Interop;
 using SonicRoute.Core.Models;
 using SonicRoute.Native.Audio;
 using SonicRoute.Native.Ui;
+using SonicRoute.StoreInterop;
+using SonicRoute.Updates;
 
 namespace SonicRoute.Native.Product.Views;
 
@@ -28,24 +33,61 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     private bool _keepDevicesExpanded;
     private bool _deviceNamesExpanded;
     private bool _langMoreExpanded;
+    private bool _autoStartMoreExpanded;
+    private bool _autoStartBusy;
+    private bool _configImportBusy;
+    private int _autoStartSyncVersion;
     private bool _draggingVolumeStep;
     private UiRect _volumeStepSliderRect;
     private UiRect _contentRect;
     private int _authorClicks;
-    private string _updateStatus = "";
+    private string _updateNotes = "";
+    private bool _subscribedUpdates;
     private bool _disposed;
 
     public void OnActivated()
     {
         _keepDevicesExpanded = !actions.Config.CollapseDeviceSections;
         _deviceNamesExpanded = !actions.Config.CollapseDeviceSections;
+        if (!_subscribedUpdates)
+        {
+            actions.Host.Updates.Changed += OnUpdatesChanged;
+            _subscribedUpdates = true;
+        }
+        if (string.IsNullOrEmpty(_updateNotes) && actions.Host.Updates.Release is { Notes.Length: > 0 } rel)
+            _updateNotes = rel.Notes;
+        if (actions.Host.EnvironmentInfo.IsPackaged)
+            _ = SyncStoreAutoStartAsync(++_autoStartSyncVersion);
         RefreshData();
     }
 
     public void OnDeactivated()
     {
         _draggingVolumeStep = false;
+        if (_subscribedUpdates)
+        {
+            actions.Host.Updates.Changed -= OnUpdatesChanged;
+            _subscribedUpdates = false;
+        }
         actions.CloseInlineEdit(commit: true);
+    }
+
+    public void OnCaptureLost()
+    {
+        _draggingVolumeStep = false;
+    }
+
+    public void OnFilesDropped(string[] paths)
+    {
+        if (paths == null || paths.Length == 0 || _configImportBusy) return;
+        string? jsonPath = paths.FirstOrDefault(p =>
+            !string.IsNullOrWhiteSpace(p) &&
+            p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(p));
+        if (jsonPath != null)
+        {
+            ImportConfigFromPath(jsonPath);
+        }
     }
 
     public void RefreshData()
@@ -159,8 +201,10 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         int curLangIdx = Array.FindIndex(langs, l => string.Equals(l.Code, L10n.CurrentLanguage, StringComparison.OrdinalIgnoreCase));
         string curLangLabel = langs.Length > 0 ? langs[Math.Max(0, curLangIdx)].NativeName : L10n.CurrentLanguage;
 
+        bool packaged = actions.Host.EnvironmentInfo.IsPackaged;
         float langMoreH = _langMoreExpanded ? 46f : 0f;
-        float cardH = pad + 28f + 12f + 36f + langMoreH + 8f + 54f * 3f + pad;
+        float autoMoreH = !packaged ? 28f + (_autoStartMoreExpanded ? 40f : 0f) : 0f;
+        float cardH = pad + 28f + 12f + 36f + langMoreH + 8f + 54f * 3f + autoMoreH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
@@ -200,22 +244,36 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             cy += 46f;
         }
 
-        // Auto-start switch
-        bool autoStart = actions.Host.PreviewAutoStart;
+        // Auto-start switch (MSIX Store StartupTask vs portable HKCU Run)
+        bool autoStart = packaged ? cfg.AutoStartStore : actions.Host.PreviewAutoStart;
         cy = DrawSettingsSwitchWithHint(g, t, hit, "st.autostart", new UiRect(x + pad, cy, innerW, 54f),
-            UiIcon.Power, L10n.T("St.AutoStart"), L10n.T("Settings.AutoStartHint"), autoStart, true, () =>
+            UiIcon.Power, L10n.T("St.AutoStart"), L10n.T("Settings.AutoStartHint"), autoStart, packaged, () =>
             {
-                bool next = !actions.Host.PreviewAutoStart;
-                try
-                {
-                    actions.Host.SetPreviewAutoStart(next);
-                    actions.Invalidate();
-                }
-                catch
-                {
-                    actions.ShowNotice(L10n.T("St.AutoStartFail"));
-                }
+                if (_autoStartBusy) return;
+                ToggleAutoStart(!autoStart);
             }, register);
+
+        if (!packaged)
+        {
+            var autoMoreRect = new UiRect(x + pad + 32f, cy + 2f, 118f, 24f);
+            register("st.autostart.more", autoMoreRect, () => { _autoStartMoreExpanded = !_autoStartMoreExpanded; actions.Invalidate(); }, UiCursorKind.Hand, null);
+            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(autoMoreRect.X, autoMoreRect.Y, 92f, autoMoreRect.Height),
+                hit.IsHover("st.autostart.more") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            g.DrawIcon(UiIcon.ChevronDown, new UiRect(autoMoreRect.X + 94f, autoMoreRect.CenterY - 4.5f, 9f, 9f),
+                t.Accent, 1.8f, _autoStartMoreExpanded ? 180f : 0f);
+            cy += 28f;
+
+            if (_autoStartMoreExpanded)
+            {
+                var cleanRect = new UiRect(x + pad + 32f, cy + 2f, 200f, 30f);
+                UiPrimitives.DrawSecondaryButton(g, t, hit, "st.autostart.clean", cleanRect, L10n.T("St.CleanAutoStart"),
+                    enabled: !_autoStartBusy, fontSize: 12f);
+                if (!_autoStartBusy)
+                    register("st.autostart.clean", cleanRect, CleanAutoStart, UiCursorKind.Hand, L10n.T("St.CleanAutoStart"));
+                cy += 40f;
+            }
+            g.DrawLine(x + pad + 2f, cy - 1f, x + pad + innerW - 2f, cy - 1f, t.Border, 1f, roundCaps: false);
+        }
 
         // Start minimized
         cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startmin", new UiRect(x + pad, cy, innerW, 54f),
@@ -784,47 +842,160 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         float x, float y, float w, AppConfig cfg,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
+        var updates = actions.Host.Updates;
+        bool store = updates.IsPackaged;
+        string displayVersion = FileVersionInfo.GetVersionInfo(UpdateBootstrap.ExecutablePath).ProductVersion ?? "1.36";
+        string versionLine = string.Format(L10n.T("Upd.Current"), displayVersion, AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture)
+            + " · " + UpdateProtocol.RuntimeName;
+        string? newestLine = updates.Release != null ? string.Format(L10n.T("Upd.Newest"), updates.Release.Tag) : null;
+
+        string statusLine = store ? L10n.T("Upd.Store") : L10n.T("Upd." + updates.State);
+        string? outcomeLine = !store && updates.LastOutcome.Length != 0 ? L10n.T(updates.LastOutcome) : null;
+        string? dlLine = updates.State == UpdateState.Downloading
+            ? string.Format(CultureInfo.InvariantCulture, "{0:F1} / {1:F1} MB · {2:F1} KB/s",
+                updates.Bytes / 1048576.0,
+                (updates.Release?.Package?.Size ?? 0) / 1048576.0,
+                updates.BytesPerSecond / 1024.0)
+            : null;
+        string? errLine = updates.State == UpdateState.Failed ? L10n.T(updates.ErrorHint) : null;
+
+        bool showProgress = updates.State is UpdateState.Downloading or UpdateState.Verifying;
+        string notes = string.IsNullOrWhiteSpace(_updateNotes) ? (updates.Release?.Notes ?? "") : _updateNotes;
+        bool showNotes = !string.IsNullOrWhiteSpace(notes);
+        bool showDownload = !store && updates.Release?.Package != null && !updates.Busy && updates.State != UpdateState.Ready;
+        bool showInstall = !store && updates.State == UpdateState.Ready;
+        bool showCancel = showProgress;
+        bool showDismiss = !store && updates.ShouldNotify;
+        bool showActionRow = showDownload || showInstall || showCancel || showDismiss;
+
         float pad = 16f;
         float innerW = w - pad * 2f;
-        float cardH = pad + 34f + 38f + 44f + 6f + 24f + pad;
+        float verH = newestLine != null ? 42f : 23f;
+        float autoH = store ? 0f : 52f;
+        int statusLines = 1 + (outcomeLine != null ? 1 : 0) + (dlLine != null ? 1 : 0) + (errLine != null ? 1 : 0);
+        float statusH = statusLines * 18f + 10f;
+        float progH = showProgress ? 16f : 0f;
+        float notesH = showNotes ? 76f : 0f;
+        float actionsH = showActionRow ? 42f : 0f;
+        float footerH = 28f;
+
+        float cardH = pad + 34f + verH + autoH + statusH + progH + notesH + actionsH + footerH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 140f, 28f), UiIcon.Info, L10n.T("Upd.Title"));
-        UiPrimitives.DrawBadge(g, t, new UiRect(x + w - pad - 156f, cy + 3f, 156f, 22f),
-            "SonicRoute 1.36 Native AOT", t.NavSelected, t.Accent, t.Accent.WithAlphaFraction(0.45f), 10.5f);
-        cy += 34f;
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 210f, 28f), UiIcon.Clock, L10n.T("Upd.Title"));
 
-        // Check Update + Auto Check toggle
-        var chkRect = new UiRect(x + pad, cy, 128f, 32f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.about.checkupd", chkRect, L10n.T("St.CheckUpdate"), icon: UiIcon.Refresh);
-        register("st.about.checkupd", chkRect, CheckForUpdates, UiCursorKind.Hand, L10n.T("St.CheckUpdate"));
+        var logRect = new UiRect(x + w - pad - 32f, cy, 32f, 30f);
+        UiPrimitives.DrawGhostIconButton(g, t, hit, "st.about.changelog", logRect, UiIcon.History, 16f, tooltip: L10n.T("Upd.Changelog"));
+        register("st.about.changelog", logRect, () => OpenUrl(updates.Release?.Url ?? UpdateProtocol.Repository + "/releases"), UiCursorKind.Hand, L10n.T("Upd.Changelog"));
 
-        string statusText = string.IsNullOrEmpty(_updateStatus)
-            ? string.Format(L10n.T("Upd.Current"), "1.36", BuildIdentity.Edition, "Native AOT")
-            : _updateStatus;
-        g.DrawText(statusText, new UiRect(chkRect.Right + 12f, cy, innerW - 140f, 32f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        cy += 38f;
+        var chkRect = new UiRect(logRect.X - 134f, cy, 128f, 30f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "st.about.checkupd", chkRect, L10n.T("St.CheckUpdate"), enabled: !updates.Busy, icon: UiIcon.Refresh, fontSize: 12f);
+        if (!updates.Busy)
+            register("st.about.checkupd", chkRect, CheckForUpdates, UiCursorKind.Hand, L10n.T("St.CheckUpdate"));
+        cy += 36f;
 
-        // Auto-check updates switch row
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.about.autochk", new UiRect(x + pad, cy, innerW, 44f),
-            UiIcon.Clock, L10n.T("Upd.Automatic"), "", cfg.AutoCheckUpdates, true, () =>
-            {
-                cfg.AutoCheckUpdates = !cfg.AutoCheckUpdates;
-                SaveConfig();
-            }, register);
+        // Current & newest version
+        g.DrawText(versionLine, new UiRect(x + pad, cy, innerW, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        cy += 19f;
+        if (newestLine != null)
+        {
+            g.DrawText(newestLine, new UiRect(x + pad, cy, innerW, 18f), t.Accent, 11.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
+            cy += 19f;
+        }
+        cy += 4f;
 
+        // Auto-check updates switch row (unpackaged only)
+        if (!store)
+        {
+            cy = DrawSettingsSwitchWithHint(g, t, hit, "st.about.autochk", new UiRect(x + pad, cy, innerW, 52f),
+                UiIcon.Clock, L10n.T("Upd.Automatic"), L10n.T("Upd.AutomaticHint"), cfg.AutoCheckUpdates, true, () =>
+                {
+                    cfg.AutoCheckUpdates = !cfg.AutoCheckUpdates;
+                    SaveConfig();
+                    updates.AutomaticSettingChanged(cfg.AutoCheckUpdates);
+                }, register);
+        }
+
+        // Status text
         cy += 6f;
+        string combinedStatus = statusLine;
+        if (dlLine != null) combinedStatus += "  " + dlLine;
+        if (outcomeLine != null) combinedStatus += "\n" + outcomeLine;
+        if (errLine != null) combinedStatus += "\n" + errLine;
+        g.DrawText(combinedStatus, new UiRect(x + pad, cy, innerW, statusH - 6f),
+            updates.State == UpdateState.Failed ? t.Fail : t.TextPrimary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
+        cy += statusH;
+
+        if (showProgress)
+        {
+            float frac = updates.Release?.Package is { Size: > 0 } pkg
+                ? Math.Clamp((float)(updates.Bytes / (double)pkg.Size), 0f, 1f)
+                : 0f;
+            var track = new UiRect(x + pad, cy + 2f, innerW, 6f);
+            g.FillRoundedRect(track, 3f, t.SliderBg);
+            if (frac > 0.005f)
+                g.FillRoundedRect(new UiRect(track.X, track.Y, track.Width * frac, track.Height), 3f, t.Accent);
+            cy += 16f;
+        }
+
+        if (showNotes)
+        {
+            var notesRect = new UiRect(x + pad, cy, innerW, 68f);
+            g.FillRoundedRect(notesRect, 6f, t.SurfaceAlt);
+            g.DrawRoundedRect(notesRect, 6f, t.Border, 1f);
+            g.DrawText(notes.Trim(), notesRect.Deflate(8f, 6f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: true);
+            cy += 76f;
+        }
+
+        if (showActionRow)
+        {
+            float bx = x + pad;
+            if (showDownload)
+            {
+                var r = new UiRect(bx, cy, 118f, 32f);
+                UiPrimitives.DrawAccentButton(g, t, hit, "st.about.dl", r, L10n.T("Upd.Download"), fontSize: 12f);
+                register("st.about.dl", r, () => _ = updates.DownloadAsync(), UiCursorKind.Hand, null);
+                bx = r.Right + 8f;
+            }
+            if (showInstall)
+            {
+                var r = new UiRect(bx, cy, 134f, 32f);
+                UiPrimitives.DrawAccentButton(g, t, hit, "st.about.install", r, L10n.T("Upd.Restart"), fontSize: 12f);
+                register("st.about.install", r, InstallReadyUpdate, UiCursorKind.Hand, null);
+                bx = r.Right + 8f;
+            }
+            if (showCancel)
+            {
+                var r = new UiRect(bx, cy, 108f, 32f);
+                UiPrimitives.DrawSecondaryButton(g, t, hit, "st.about.cancel", r, L10n.T("Upd.Cancel"), fontSize: 12f);
+                register("st.about.cancel", r, () => updates.CancelDownload(), UiCursorKind.Hand, null);
+                bx = r.Right + 8f;
+            }
+            if (showDismiss)
+            {
+                var laterR = new UiRect(bx, cy, 104f, 32f);
+                UiPrimitives.DrawSecondaryButton(g, t, hit, "st.about.later", laterR, L10n.T("Upd.Later"), fontSize: 12f);
+                register("st.about.later", laterR, () => updates.Dismiss(false), UiCursorKind.Hand, null);
+
+                var ignR = new UiRect(laterR.Right + 8f, cy, 108f, 32f);
+                UiPrimitives.DrawSecondaryButton(g, t, hit, "st.about.ignore", ignR, L10n.T("Upd.Ignore"), fontSize: 12f);
+                register("st.about.ignore", ignR, () => updates.Dismiss(true), UiCursorKind.Hand, null);
+            }
+            cy += 42f;
+        }
+
+        cy += 4f;
         // 5-click version / author label to unlock experimental mode
-        string verText = $"{L10n.T("App.About")} · SonicRoute 1.36 Native AOT";
+        string verText = $"{L10n.T("App.About")} · SonicRoute {displayVersion} Native AOT";
         var verRect = new UiRect(x + pad, cy, innerW * 0.62f, 24f);
         register("st.about.author", verRect, OnAuthorLabelClicked, UiCursorKind.Hand, L10n.T("St.ExpAuthorTip"));
         g.DrawText(verText, verRect, hit.IsHover("st.about.author") ? t.Accent : t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
 
         // GitHub & GPL-3.0 links on the right
         var ghRect = new UiRect(x + w - pad - 130f, cy, 58f, 24f);
-        register("st.about.github", ghRect, () => OpenUrl("https://github.com/kunkunkunkunkun/SonicRoute"), UiCursorKind.Hand, null);
+        register("st.about.github", ghRect, () => OpenUrl(UpdateProtocol.Repository), UiCursorKind.Hand, null);
         g.DrawText("GitHub", ghRect, hit.IsHover("st.about.github") ? t.AccentHover : t.Accent, 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
 
         var licRect = new UiRect(x + w - pad - 66f, cy, 66f, 24f);
@@ -975,7 +1146,16 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt) => false;
 
-    public void Dispose() => _disposed = true;
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_subscribedUpdates)
+        {
+            actions.Host.Updates.Changed -= OnUpdatesChanged;
+            _subscribedUpdates = false;
+        }
+    }
 
     private void UpdateVolumeStepFromX(float x)
     {
@@ -1124,26 +1304,79 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     private void ImportConfig()
     {
         string? path = NativeDialogs.Open(actions.OwnerWindow.Handle, "SonicRoute configuration|*.json|All files|*.*");
-        if (path == null) return;
-        byte[]? prepared = ConfigService.PrepareImport(path);
-        if (prepared == null)
+        if (path != null) ImportConfigFromPath(path);
+    }
+
+    private void ImportConfigFromPath(string path)
+    {
+        if (_configImportBusy) return;
+        _configImportBusy = true;
+        _ = Task.Run(() =>
         {
-            actions.ShowNotice(L10n.T("Exp.TransferFail"));
-            return;
-        }
-        var preview = ConfigService.ReadPreparedConfig(prepared);
-        string msg = preview == null ? path : string.Format(
-            IsZh() ? "语言：{0}\n设备别名：{1}\n快捷键：{2}\n应用图标：{3}\n自动化收藏：{4}\n\n确认导入并重启？"
-                   : "Language: {0}\nDevice aliases: {1}\nShortcuts: {2}\nApp icons: {3}\nFavorite rules: {4}\n\nImport and restart?",
-            preview.Language, preview.DeviceNames.Count, preview.Hotkeys.Count, preview.AppIcons.Count, preview.FavoriteRuleIds.Count);
-        if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg)) return;
-        if (!ConfigService.ApplyImport(prepared))
-        {
-            actions.ShowNotice(L10n.T("Exp.TransferFail"));
-            return;
-        }
-        actions.ShowNotice(L10n.T("Exp.ImportDone"));
-        actions.Host.RestartPreview();
+            byte[]? prepared = null;
+            AppConfig? preview = null;
+            int missingDevices = 0;
+            int missingApps = 0;
+            try
+            {
+                prepared = ConfigService.PrepareImport(path);
+                if (prepared != null)
+                {
+                    preview = ConfigService.ReadPreparedConfig(prepared);
+                    if (preview != null)
+                    {
+                        var devIds = new HashSet<string>(
+                            ProductAudio.Devices(Flow.Render).Concat(ProductAudio.Devices(Flow.Capture)).Select(d => d.Id),
+                            StringComparer.OrdinalIgnoreCase);
+                        missingDevices = (preview.DeviceNames?.Keys ?? Enumerable.Empty<string>())
+                            .Concat(preview.HiddenOutputDevices ?? [])
+                            .Concat(preview.HiddenInputDevices ?? [])
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Count(id => !AudioService.IsSystemDefault(id) && !devIds.Contains(id));
+
+                        var appNames = new HashSet<string>(
+                            actions.Host.Audio.Apps().Select(a => a.ProcessName ?? ""),
+                            StringComparer.OrdinalIgnoreCase);
+                        missingApps = (preview.AppNames?.Keys ?? Enumerable.Empty<string>())
+                            .Concat(preview.AppIcons?.Keys ?? Enumerable.Empty<string>())
+                            .Concat(preview.HiddenPanelApps ?? [])
+                            .Concat(preview.DisabledAutoSwitchApps ?? [])
+                            .Where(n => !string.IsNullOrWhiteSpace(n))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Count(n => !appNames.Contains(n));
+                    }
+                }
+            }
+            catch { }
+
+            actions.Host.TryPost(() =>
+            {
+                _configImportBusy = false;
+                if (_disposed) return;
+                if (prepared == null || preview == null)
+                {
+                    actions.ShowNotice(L10n.T("Exp.TransferFail"));
+                    return;
+                }
+
+                string msg = string.Format(L10n.T("Exp.ImportPreview"),
+                    preview.Hotkeys?.Count ?? 0,
+                    preview.DeviceNames?.Count ?? 0,
+                    preview.AppNames?.Count ?? 0,
+                    missingDevices,
+                    missingApps);
+                if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg)) return;
+
+                ConfigService.FlushPendingSaves();
+                if (!ConfigService.ApplyImport(prepared))
+                {
+                    actions.ShowNotice(L10n.T("Exp.TransferFail"));
+                    return;
+                }
+                actions.ShowNotice(L10n.T("Exp.ImportDone"));
+                actions.Host.RestartPreview();
+            });
+        });
     }
 
     private void ResetSettings()
@@ -1154,15 +1387,152 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         actions.Host.RestartPreview();
     }
 
+    private void OnUpdatesChanged(string? notes)
+    {
+        if (_disposed) return;
+        actions.Host.TryPost(() =>
+        {
+            if (_disposed) return;
+            if (notes != null) _updateNotes = notes;
+            actions.Invalidate();
+        });
+    }
+
     private void CheckForUpdates()
     {
-        _updateStatus = IsZh() ? "当前已是测试预览基线 1.36 Native AOT；可打开 GitHub Releases 查看发布。"
-                               : "Running 1.36 Native AOT preview; open GitHub Releases for official packages.";
-        actions.Invalidate();
-        if (NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Upd.Title"),
-            IsZh() ? "是否打开官方 GitHub Releases 页面检查最新版本？" : "Open official GitHub Releases page to check for updates?"))
+        var updates = actions.Host.Updates;
+        if (updates.IsPackaged)
         {
-            OpenUrl("https://github.com/kunkunkunkunkun/SonicRoute/releases");
+            OpenUrl(BuildIdentity.Edition == "Lite"
+                ? "ms-windows-store://updates"
+                : "ms-windows-store://pdp/?ProductId=9NQZGRTPM1NT");
+            return;
+        }
+        _ = updates.CheckAsync(true);
+    }
+
+    private async void InstallReadyUpdate()
+    {
+        if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Upd.Title"), L10n.T("Upd.InstallConfirm")))
+            return;
+        try
+        {
+            bool started = await actions.Host.Updates.InstallAsync();
+            if (!started || _disposed) return;
+            using var pipe = new NamedPipeClientStream(".", actions.Host.EnvironmentInfo.ControlPipeName,
+                PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await pipe.ConnectAsync(3000).ConfigureAwait(false);
+            string frame = JsonSerializer.Serialize(new ControlRequest("exit", []), HostJson.Default.ControlRequest);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await RuleCommandFrame.WriteFrameAsync(pipe, frame, cts.Token).ConfigureAwait(false);
+            await RuleCommandFrame.ReadFrameAsync(pipe, cts.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            ExceptionDiagnostics.Record("SettingsPageView.InstallUpdate", ex);
+            if (!_disposed)
+                actions.Host.TryPost(() => actions.ShowNotice(L10n.T("Upd.Failed")));
+        }
+    }
+
+    private async Task SyncStoreAutoStartAsync(int version)
+    {
+        try
+        {
+            var task = await StoreStartup.GetHandleAsync();
+            if (_disposed || _autoStartBusy || version != _autoStartSyncVersion) return;
+            int state = task.State;
+            bool enabled = state is 2 or 4;
+            if (actions.Config.AutoStartStore != enabled)
+            {
+                actions.Config.AutoStartStore = enabled;
+                SaveConfig();
+            }
+            actions.Invalidate();
+        }
+        catch
+        {
+            if (!_disposed && !_autoStartBusy && version == _autoStartSyncVersion)
+                actions.ShowNotice(L10n.T("St.AutoStartFail"));
+        }
+    }
+
+    private async void ToggleAutoStart(bool enable)
+    {
+        bool packaged = actions.Host.EnvironmentInfo.IsPackaged;
+        _autoStartBusy = true;
+        ++_autoStartSyncVersion;
+        actions.Invalidate();
+        try
+        {
+            if (packaged)
+            {
+                var task = await StoreStartup.GetHandleAsync();
+                int state = enable ? await task.RequestEnableAsync() : task.State;
+                if (!enable)
+                {
+                    task.Disable();
+                    state = task.State;
+                }
+                bool enabled = state is 2 or 4;
+                actions.Config.AutoStartStore = enabled;
+                SaveConfig();
+                if (enable && !enabled)
+                {
+                    string key = state == 1 ? "St.AutoStartDisabledByUser"
+                        : state == 3 ? "St.AutoStartDisabledByPolicy"
+                        : "St.AutoStartFail";
+                    actions.ShowNotice(L10n.T(key));
+                }
+            }
+            else
+            {
+                actions.Host.SetPreviewAutoStart(enable);
+                actions.Config.AutoStart = actions.Host.PreviewAutoStart;
+                SaveConfig();
+            }
+        }
+        catch
+        {
+            if (!_disposed) actions.ShowNotice(L10n.T("St.AutoStartFail"));
+        }
+        finally
+        {
+            _autoStartBusy = false;
+            if (!_disposed) actions.Invalidate();
+        }
+    }
+
+    private async void CleanAutoStart()
+    {
+        if (_autoStartBusy) return;
+        _autoStartBusy = true;
+        ++_autoStartSyncVersion;
+        actions.Invalidate();
+        try
+        {
+            if (actions.Host.EnvironmentInfo.IsPackaged)
+            {
+                var task = await StoreStartup.GetHandleAsync();
+                task.Disable();
+                actions.Config.AutoStartStore = task.State is 2 or 4;
+            }
+            else
+            {
+                actions.Host.SetPreviewAutoStart(false);
+                actions.Config.AutoStart = false;
+            }
+            SaveConfig();
+            if (!_disposed) actions.ShowNotice(L10n.T("St.CleanAutoStartDone"));
+        }
+        catch
+        {
+            if (!_disposed) actions.ShowNotice(L10n.T("St.CleanAutoStartFail"));
+        }
+        finally
+        {
+            _autoStartBusy = false;
+            if (!_disposed) actions.Invalidate();
         }
     }
 

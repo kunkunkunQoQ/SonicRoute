@@ -65,6 +65,17 @@ internal sealed class ThemePageView : IViewPage
         _pickerWindow = null;
     }
 
+    public void OnCaptureLost()
+    {
+        if (_draggingSlider != null)
+        {
+            _draggingSlider = null;
+            ConfigService.TrySave(_actions.Config);
+        }
+        _scroll.EndDrag();
+        _actions.Invalidate();
+    }
+
     public void RefreshData() => _actions.Invalidate();
 
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
@@ -91,31 +102,26 @@ internal sealed class ThemePageView : IViewPage
         g.PushClip(contentRect);
         float y = contentRect.Y - _scroll.Offset;
 
-        // Page Header
         g.DrawText(L10n.T("Nav.Theme"), new UiRect(contentRect.X, y, w, 28f), t.TextPrimary, 22f, 600);
         y += 33f;
         g.DrawText(pageHint, new UiRect(contentRect.X, y, w, hintH + 2f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
         y += hintH + 16f;
 
-        // --- Card 1: Theme Mode + Accent + Live Preview ---
         var card1 = new UiRect(contentRect.X, y, w, card1H);
         UiPrimitives.DrawCard(g, t, card1, UiMetrics.CardCornerRadius);
         RenderModeAndAccentCard(g, t, hit, card1.Deflate(18f), cfg);
         y += card1H + 14f;
 
-        // --- Card 2: Background Opacity ---
         var card2 = new UiRect(contentRect.X, y, w, card2H);
         UiPrimitives.DrawCard(g, t, card2, UiMetrics.CardCornerRadius);
         RenderOpacityCard(g, t, hit, card2.Deflate(18f), cfg);
         y += card2H + 14f;
 
-        // --- Card 3: OSD Appearance ---
         var card3 = new UiRect(contentRect.X, y, w, card3H);
         UiPrimitives.DrawCard(g, t, card3, 16f);
         RenderOsdCard(g, t, hit, card3.Deflate(20f), cfg);
         y += card3H + 14f;
 
-        // --- Card 4: QuickPanel Layout & Position ---
         var card4 = new UiRect(contentRect.X, y, w, card4H);
         UiPrimitives.DrawCard(g, t, card4, 16f);
         RenderPanelCard(g, t, hit, card4.Deflate(20f), cfg);
@@ -130,7 +136,6 @@ internal sealed class ThemePageView : IViewPage
         DrawSectionBadgeHeader(g, t, new UiRect(inner.X, y, inner.Width, 38f), UiIcon.Palette, L10n.T("St.ThemeMode"), L10n.T("Th.ModeHint"));
         y += 50f;
 
-        // 3 ThemeChoice cards
         float modeGap = 8f;
         float modeW = MathF.Min(136f, (inner.Width - modeGap * 2f) / 3f);
         for (int i = 0; i < ThemeModes.Length; i++)
@@ -164,7 +169,6 @@ internal sealed class ThemePageView : IViewPage
         }
         y += 56f;
 
-        // Accent + Live Preview container
         var box = new UiRect(inner.X, y, inner.Width, inner.Bottom - y);
         g.DrawRoundedRect(box, 11f, t.Border, 1f);
         var boxIn = box.Deflate(14f, 12f);
@@ -172,11 +176,9 @@ internal sealed class ThemePageView : IViewPage
         float previewW = Math.Clamp(boxIn.Width * 0.36f, 130f, 210f);
         float leftW = boxIn.Width - previewW - 14f;
 
-        // Left: Accent title, hint, preset dots, swatch + hex + color picker button
         g.DrawText(L10n.T("Th.CustomTitle"), new UiRect(boxIn.X, boxIn.Y, leftW, 20f), t.TextPrimary, 13.5f, 600);
         g.DrawText(L10n.T("Th.CustomHint"), new UiRect(boxIn.X, boxIn.Y + 22f, leftW, 18f), t.TextSecondary, 11.5f, 400);
 
-        // Accent preset chips
         float presetY = boxIn.Y + 46f;
         float px = boxIn.X;
         for (int i = 0; i < AccentPresets.Length; i++)
@@ -214,7 +216,6 @@ internal sealed class ThemePageView : IViewPage
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.chooseColor", pickBtn, pickLabel, fontSize: 12f, icon: UiIcon.Theme);
         _clicks.Add((pickBtn, OpenColorPicker));
 
-        // Right: Live miniature ThemePreview mockup
         var prevRect = new UiRect(boxIn.Right - previewW, boxIn.Y + 6f, previewW, boxIn.Height - 12f);
         RenderThemePreview(g, t, prevRect);
     }
@@ -224,7 +225,6 @@ internal sealed class ThemePageView : IViewPage
         g.FillRoundedRect(rect, 11f, t.SurfaceAlt);
         var inner = rect.Deflate(10f);
 
-        // Header: "界面预览" + 3 window dots
         g.DrawText(L10n.T("Th.Preview"), new UiRect(inner.X, inner.Y, inner.Width - 36f, 14f), t.TextPrimary, 10f, 600);
         for (int i = 0; i < 3; i++)
             g.FillEllipse(inner.Right - 24f + i * 9f, inner.Y + 7f, 3f, 3f, t.Border);
@@ -234,14 +234,12 @@ internal sealed class ThemePageView : IViewPage
         var bIn = body.Deflate(7f);
 
         float navW = MathF.Min(54f, bIn.Width * 0.36f);
-        // Left mini nav
         g.FillRoundedRect(new UiRect(bIn.X + 4f, bIn.Y + 6f, navW - 12f, 5f), 2.5f, t.SliderBg);
         var activePill = new UiRect(bIn.X, bIn.Y + 18f, navW - 4f, 16f);
         g.FillRoundedRect(activePill, 4f, t.NavSelected);
         g.FillRoundedRect(activePill.Deflate(5f, 5.5f), 2.5f, t.Accent);
         g.FillRoundedRect(new UiRect(bIn.X + 4f, bIn.Y + 42f, navW - 16f, 5f), 2.5f, t.SliderBg);
 
-        // Right mini page
         float rx = bIn.X + navW + 4f;
         float rw = MathF.Max(30f, bIn.Right - rx);
         g.FillRoundedRect(new UiRect(rx, bIn.Y + 4f, MathF.Min(55f, rw * 0.65f), 5f), 2.5f, t.SliderBg);
@@ -274,27 +272,31 @@ internal sealed class ThemePageView : IViewPage
     {
         float y = inner.Y;
 
-        // Top Header + Preview / Reset buttons
+        string adjLabel = L10n.T("Exp.OsdAdjust");
         string prevLabel = L10n.T("Exp.OsdPreview");
         string rstLabel = L10n.T("Exp.OsdReset");
-        float prevW = MathF.Max(78f, D2dSharedContext.Instance.MeasureText(prevLabel, UiMetrics.FontFamily, 12f, 400, 140f, 36f, false).Width + 34f);
-        float rstW = MathF.Max(112f, D2dSharedContext.Instance.MeasureText(rstLabel, UiMetrics.FontFamily, 12f, 400, 180f, 36f, false).Width + 34f);
+        float adjW = MathF.Max(92f, D2dSharedContext.Instance.MeasureText(adjLabel, UiMetrics.FontFamily, 12f, 400, 160f, 36f, false).Width + 32f);
+        float prevW = MathF.Max(72f, D2dSharedContext.Instance.MeasureText(prevLabel, UiMetrics.FontFamily, 12f, 400, 120f, 36f, false).Width + 30f);
+        float rstW = MathF.Max(108f, D2dSharedContext.Instance.MeasureText(rstLabel, UiMetrics.FontFamily, 12f, 400, 180f, 36f, false).Width + 32f);
 
         var rstBtn = new UiRect(inner.Right - rstW, y + 2f, rstW, 36f);
         var prevBtn = new UiRect(rstBtn.X - 8f - prevW, y + 2f, prevW, 36f);
+        var adjBtn = new UiRect(prevBtn.X - 8f - adjW, y + 2f, adjW, 36f);
+
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position, tooltip: L10n.T("Exp.OsdAdjustHint"));
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.preview", prevBtn, prevLabel, fontSize: 12f, icon: UiIcon.Play);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Exp.OsdResetHint"));
+        _clicks.Add((adjBtn, () => _actions.Host.BeginOsdAdjust()));
         _clicks.Add((prevBtn, () => _actions.Host.PreviewOsd()));
         _clicks.Add((rstBtn, ResetOsdSettings));
 
-        DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, prevBtn.X - inner.X - 10f), 42f),
+        DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, adjBtn.X - inner.X - 10f), 42f),
             UiIcon.Monitor, L10n.T("Theme.OsdAppearanceSettings"), L10n.T("Th.OsdHint"));
         y += 56f;
 
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;
 
-        // Switches
         DrawToggleRow(g, t, hit, "th.osd.volvisual", new UiRect(inner.X, y, inner.Width, 38f),
             L10n.T("Theme.OsdVolumeVisual"), L10n.T("Theme.OsdVolumeVisualHint"), cfg.OsdVolumeVisualEnabled,
             () => { cfg.OsdVolumeVisualEnabled = !cfg.OsdVolumeVisualEnabled; SaveAndNotifySettings(); });
@@ -313,7 +315,6 @@ internal sealed class ThemePageView : IViewPage
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;
 
-        // OSD Position 9-grid + Offset X/Y
         g.DrawText(L10n.T("Exp.Osd"), new UiRect(inner.X, y, inner.Width, 20f), t.TextPrimary, 13.5f, 600);
         y += 26f;
 
@@ -339,7 +340,6 @@ internal sealed class ThemePageView : IViewPage
             }
         }
 
-        // Offset X / Y next to 9-grid
         float offLeft = inner.X + 3 * (gridCell + gridGap) + 20f;
         g.DrawText(L10n.T("Exp.Osd.X") + " (px)", new UiRect(offLeft, y + 4f, 80f, 16f), t.TextSecondary, 11.5f, 400);
         _osdOffsetXRect = new UiRect(offLeft, y + 24f, 82f, 30f);
@@ -367,7 +367,6 @@ internal sealed class ThemePageView : IViewPage
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;
 
-        // Expandable OSD Style sliders
         var moreBtn = new UiRect(inner.Right - 96f, y - 2f, 96f, 26f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.more", moreBtn, L10n.T("Exp.MoreOptions"), fontSize: 11.5f, active: _osdMoreExpanded);
         _clicks.Add((moreBtn, () => { _osdMoreExpanded = !_osdMoreExpanded; _actions.Invalidate(); }));
@@ -398,10 +397,16 @@ internal sealed class ThemePageView : IViewPage
     {
         float y = inner.Y;
 
+        string adjLabel = L10n.T("Exp.PanelPosAdjust");
         string rstLabel = L10n.T("Exp.PanelPosReset");
+        float adjW = MathF.Max(88f, D2dSharedContext.Instance.MeasureText(adjLabel, UiMetrics.FontFamily, 12f, 400, 150f, 36f, false).Width + 32f);
         float rstW = MathF.Max(92f, D2dSharedContext.Instance.MeasureText(rstLabel, UiMetrics.FontFamily, 12f, 400, 150f, 36f, false).Width + 32f);
         var rstBtn = new UiRect(inner.Right - rstW, y + 2f, rstW, 36f);
+        var adjBtn = new UiRect(rstBtn.X - 8f - adjW, y + 2f, adjW, 36f);
+
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset);
+        _clicks.Add((adjBtn, () => _actions.Host.BeginQuickPanelAdjust()));
         _clicks.Add((rstBtn, () =>
         {
             cfg.QuickPanelPosMode = "default";
@@ -411,14 +416,13 @@ internal sealed class ThemePageView : IViewPage
             _actions.ShowNotice(L10n.T("Exp.PanelPosResetDone"));
         }));
 
-        DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, rstBtn.X - inner.X - 10f), 42f),
+        DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, adjBtn.X - inner.X - 10f), 42f),
             UiIcon.Application, L10n.T("Exp.PanelPosSection"), L10n.T("Th.PanelHint"));
         y += 56f;
 
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
         y += 12f;
 
-        // Position Mode (default vs custom X/Y)
         bool isCustomPos = string.Equals(cfg.QuickPanelPosMode, "custom", StringComparison.OrdinalIgnoreCase);
         var defBtn = new UiRect(inner.X, y, 108f, 30f);
         var cusBtn = new UiRect(defBtn.Right + 8f, y, 108f, 30f);
@@ -447,19 +451,16 @@ internal sealed class ThemePageView : IViewPage
         }));
         y += 42f;
 
-        // Panel Height slider (350..850)
         int pHeight = Math.Clamp(cfg.QuickPanelHeight, 350, 850);
         _panelHeightSliderRect = DrawLabeledSlider(g, t, hit, "th.panel.h", new UiRect(inner.X, y, inner.Width, 38f),
             L10n.T("Exp.PanelHeight"), $"{pHeight} px", (pHeight - 350f) / (850f - 350f));
         y += 44f;
 
-        // Peak meter switch
         DrawToggleRow(g, t, hit, "th.panel.peak", new UiRect(inner.X, y, inner.Width, 30f),
             L10n.T("Theme.AppPeakMeter"), null, cfg.ShowAppPeakMeter,
             () => { cfg.ShowAppPeakMeter = !cfg.ShowAppPeakMeter; SaveAndNotifySettings(); });
         y += 38f;
 
-        // Legacy Compact rows switch
         DrawToggleRow(g, t, hit, "th.panel.legacy", new UiRect(inner.X, y, inner.Width, 38f),
             L10n.T("Theme.PanelLegacyRows"), L10n.T("Theme.PanelLegacyRowsHint"), cfg.QuickPanelUseLegacyAppRows,
             () => { cfg.QuickPanelUseLegacyAppRows = !cfg.QuickPanelUseLegacyAppRows; SaveAndNotifySettings(); });
@@ -479,7 +480,6 @@ internal sealed class ThemePageView : IViewPage
         }
         y += 44f;
 
-        // ShowAllOutputVolumes switch
         DrawToggleRow(g, t, hit, "th.panel.allOutVol", new UiRect(inner.X, y, inner.Width, 30f),
             L10n.T("Qp.ExpandOutputVolumes"), null, cfg.QuickPanelShowAllOutputVolumes,
             () => { cfg.QuickPanelShowAllOutputVolumes = !cfg.QuickPanelShowAllOutputVolumes; SaveAndNotifySettings(); });
@@ -568,6 +568,7 @@ internal sealed class ThemePageView : IViewPage
             _draggingSlider = null;
             ConfigService.TrySave(_actions.Config);
             if (finished is "osdW" or "osdFont") _actions.Host.PreviewOsd();
+            if (finished is "panelH") _actions.NotifySettingsChanged();
             return true;
         }
         if (_scroll.Dragging)
@@ -577,7 +578,7 @@ internal sealed class ThemePageView : IViewPage
         }
         if (e.Button != UiMouseButton.Left) return false;
 
-        for (int i = 0; i < _clicks.Count; i++)
+        for (int i = _clicks.Count - 1; i >= 0; i--)
         {
             if (_clicks[i].Rect.Contains(e.X, e.Y))
             {
@@ -702,11 +703,26 @@ internal sealed class ThemePageView : IViewPage
             _pickerWindow.RequestFocus();
             return;
         }
-        _pickerWindow = ColorPickerWindow.Open(_actions.OwnerWindow, _actions.Theme, _actions.Theme.Accent, chosen =>
-        {
-            _actions.Config.Accent = chosen.ToHexRgb();
-            SaveAndNotifyTheme();
-        });
+        string previousAccent = _actions.Config.Accent;
+        _pickerWindow = ColorPickerWindow.Open(
+            _actions.OwnerWindow,
+            _actions.Theme,
+            _actions.Theme.Accent,
+            chosen =>
+            {
+                _actions.Config.Accent = chosen.ToHexRgb();
+                SaveAndNotifyTheme();
+            },
+            liveColor =>
+            {
+                _actions.Config.Accent = liveColor.ToHexRgb();
+                _actions.NotifyThemeChanged();
+            },
+            () =>
+            {
+                _actions.Config.Accent = previousAccent;
+                _actions.NotifyThemeChanged();
+            });
     }
 
     private void ResetOsdSettings()

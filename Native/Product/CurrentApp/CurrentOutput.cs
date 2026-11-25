@@ -41,6 +41,23 @@ internal sealed partial class ProductCurrentApp
         return QueueOutput(pid, 0, target, 1, outputs);
     }
 
+    private static string FormatSwitchingTitle(string? appTitle)
+    {
+        if (string.IsNullOrWhiteSpace(appTitle)) return L10n.T("Ov.SwitchingOutput");
+        string template = L10n.T("Ov.Switching");
+        return template.IndexOf("{0}", StringComparison.Ordinal) >= 0
+            ? string.Format(template, appTitle)
+            : appTitle + " · " + template;
+    }
+
+    private static string FormatFinalTitle(string? appTitle) =>
+        string.IsNullOrWhiteSpace(appTitle) ? L10n.T("Ov.VolumeTitle") : appTitle!;
+
+    private static string FormatFailedTitle(string? appTitle) =>
+        string.IsNullOrWhiteSpace(appTitle)
+            ? L10n.T("Ov.OutputSwitchFailed")
+            : L10n.T("Ov.OutputSwitchFailed") + " · " + appTitle;
+
     private Task<ControlReply> QueueOutput(int pid, nint hwnd, string? explicitTarget, int steps, string[]? selected, int? requiredPid = null)
     {
         lock (_routesGate)
@@ -54,12 +71,45 @@ internal sealed partial class ProductCurrentApp
                 await previousPlanning.ConfigureAwait(false);
                 try
                 {
-                    int targetPid = explicitTarget is null ? checked((int)(Resolve(pid, hwnd)?.ProcessId ?? 0)) : pid;
+                    SonicRoute.Core.Models.AudioAppInfo? resolvedApp = explicitTarget is null
+                        ? Resolve(pid, hwnd)
+                        : audio.Apps().FirstOrDefault(a => !a.IsExternal && (int)a.ProcessId == pid);
+                    int targetPid = explicitTarget is null ? checked((int)(resolvedApp?.ProcessId ?? 0)) : pid;
+#if SONICROUTE_PHONE
+                    if (explicitTarget is null && resolvedApp is { IsExternal: true })
+                    {
+                        var cfg = ConfigService.Load();
+                        var vis = Visible(cfg);
+                        if (vis.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
+                        string appTitle = AppDisplayName.Get(resolvedApp);
+                        string? cur = audio.ReadRoute(resolvedApp, Flow.Render) ?? AudioService.SystemDefaultDeviceId;
+                        int idx = vis.FindIndex(d => Same(d.Id, cur));
+                        int off = (int)Math.Min(Math.Abs((long)steps), int.MaxValue);
+                        string nextTarget = vis[DeviceCycle.Index(idx, vis.Count, steps < 0, off)].Id;
+                        RecordUsedApp(resolvedApp);
+                        Publish(new(generation, 0, nextTarget, cur, OutputIntentStatus.Pending, selected),
+                            FormatSwitchingTitle(appTitle), "🔊 " + Label(nextTarget, vis, cfg));
+                        return Task.Run(async () =>
+                        {
+                            var reply = await audio.SetExternalOutputsAsync(resolvedApp, [nextTarget]).ConfigureAwait(false);
+                            bool ok = !reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase);
+                            string? actual = audio.ReadRoute(resolvedApp, Flow.Render);
+                            var curCfg = ConfigService.Load();
+                            Publish(new(generation, 0, nextTarget, actual, ok ? OutputIntentStatus.Confirmed : OutputIntentStatus.Rejected),
+                                ok ? FormatFinalTitle(appTitle) : FormatFailedTitle(appTitle),
+                                actual == null ? L10n.T("Ov.CurrentUnavailable") : "🔊 " + Label(actual, Visible(curCfg), curCfg));
+                            if (ok) audio.NotifyAudioChanged();
+                            return reply;
+                        });
+                    }
+#endif
                     if (requiredPid.HasValue && targetPid != requiredPid.Value) throw new InvalidOperationException("Requested session is unavailable.");
                     if (targetPid <= 0) throw new InvalidOperationException(L10n.T("Ov.NoOutputSession"));
                     var config = ConfigService.Load();
                     var visible = Visible(config);
                     if (explicitTarget == null && visible.Count == 0) throw new InvalidOperationException(L10n.T("Ov.NoDevice"));
+                    if (resolvedApp != null) RecordUsedApp(resolvedApp);
+                    string appName = resolvedApp != null ? AppDisplayName.Get(resolvedApp) : (ForegroundAppService.GetProcessNameSafe(targetPid) ?? "");
                     string? old = audio.ReadRoute(targetPid, Flow.Render);
                     string target;
                     Task<ControlReply> write;
@@ -74,9 +124,10 @@ internal sealed partial class ProductCurrentApp
                         }
                         else target = explicitTarget;
                         scope.Target = target;
-                        Publish(new(generation, targetPid, target, old, OutputIntentStatus.Pending, selected), L10n.T("Ov.SwitchingOutput"), Label(target, visible, config));
+                        Publish(new(generation, targetPid, target, old, OutputIntentStatus.Pending, selected),
+                            FormatSwitchingTitle(appName), "🔊 " + Label(target, visible, config));
                         Task previousWrite = scope.Apply;
-                        write = Task.Run(() => ApplyAsync(previousWrite, targetPid, target, generation, explicitTarget == null, selected));
+                        write = Task.Run(() => ApplyAsync(previousWrite, targetPid, appName, target, generation, explicitTarget == null, selected));
                         scope.Apply = write;
                         _ = RetireAsync(targetPid, scope, write);
                     }
@@ -84,7 +135,8 @@ internal sealed partial class ProductCurrentApp
                 }
                 catch (Exception error)
                 {
-                    Publish(new(generation, pid, explicitTarget, null, OutputIntentStatus.Rejected), L10n.T("Ov.CurrentUnavailable"), error.Message);
+                    Publish(new(generation, pid, explicitTarget, null, OutputIntentStatus.Rejected),
+                        FormatFailedTitle(null), error.Message);
                     return Task.FromResult(new ControlReply("error: " + error.Message));
                 }
             });
@@ -93,7 +145,7 @@ internal sealed partial class ProductCurrentApp
         }
     }
 
-    private async Task<ControlReply> ApplyAsync(Task previous, int pid, string target, long generation, bool cycle, string[]? selected)
+    private async Task<ControlReply> ApplyAsync(Task previous, int pid, string appName, string target, long generation, bool cycle, string[]? selected)
     {
         await previous.ConfigureAwait(false);
         ControlReply result;
@@ -119,21 +171,24 @@ internal sealed partial class ProductCurrentApp
                 observed.SetEquals(selected!.Length == 0 ? [AudioService.SystemDefaultDeviceId] : selected));
             bool success = !result.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase) && matched;
             var config = ConfigService.Load();
-            Publish(new(generation, pid, target, actual, success ? OutputIntentStatus.Confirmed : OutputIntentStatus.Rejected, selected, observed?.ToArray()), success ? L10n.T("Ov.VolumeTitle") : L10n.T("Ov.CurrentUnavailable"),
-                Label(actual, Visible(config), config));
+            Publish(new(generation, pid, target, actual, success ? OutputIntentStatus.Confirmed : OutputIntentStatus.Rejected, selected, observed?.ToArray()),
+                success ? FormatFinalTitle(appName) : FormatFailedTitle(appName),
+                actual == null ? L10n.T("Ov.CurrentUnavailable") : "🔊 " + Label(actual, Visible(config), config));
+            audio.NotifyAudioChanged();
             if (!matched) return new("error: output_readback_mismatch, actual=" + (actual ?? AudioService.SystemDefaultDeviceId));
             return result;
         }
         catch (Exception error)
         {
-            Publish(new(generation, pid, target, null, OutputIntentStatus.Rejected), L10n.T("Ov.CurrentUnavailable"), error.Message);
+            Publish(new(generation, pid, target, null, OutputIntentStatus.Rejected),
+                FormatFailedTitle(appName), error.Message);
             return new("error: " + error.Message);
         }
     }
 
-    private static List<Endpoint> Visible(AppConfig config)
+    private List<Endpoint> Visible(AppConfig config)
     {
-        var devices = ProductAudio.Devices(Flow.Render).Where(d => !config.HiddenOutputDevices.Contains(d.Id)).ToList();
+        var devices = audio.RenderDevicesWithPhone().Where(d => !config.HiddenOutputDevices.Contains(d.Id)).ToList();
         if (!config.HiddenOutputDevices.Contains(AudioService.SystemDefaultDeviceId))
             devices.Insert(0, new(AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultOut")));
         return devices;
@@ -161,7 +216,10 @@ internal sealed partial class ProductCurrentApp
         owner.TryPost(() =>
         {
             if (_closed || LastOutput != state || state.Generation != Interlocked.Read(ref _lastRequest)) return;
-            feedback.Publish(state.Status == OutputIntentStatus.Pending ? FeedbackKind.OutputPending : FeedbackKind.OutputSettled, title, text);
+            bool? success = state.Status == OutputIntentStatus.Confirmed ? true
+                : state.Status == OutputIntentStatus.Rejected ? false
+                : null;
+            feedback.Publish(state.Status == OutputIntentStatus.Pending ? FeedbackKind.OutputPending : FeedbackKind.OutputSettled, title, text, success: success);
             OutputChanged?.Invoke(state);
         });
     }

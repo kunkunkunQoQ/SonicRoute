@@ -12,8 +12,10 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
     private bool resident, stopped, scheduled;
     private int reloadPosted;
     private ProductMicMonitor? microphones;
+    private static readonly IReadOnlyDictionary<string, string> EmptyStatuses = new Dictionary<string, string>(StringComparer.Ordinal);
 
     internal bool NeedsForeground => resident && AutoRuleService.WatchesForeground;
+    internal IReadOnlyDictionary<string, string> HotkeyStatuses => hotkeys?.RegistrationStatus ?? EmptyStatuses;
     internal string? ProcessName(int pid) => ForegroundAppService.GetProcessNameSafe(pid);
 
     // Watcher diff/baseline mutations remain on the STA even across asynchronous process queries.
@@ -39,7 +41,7 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         if (!resident) return;
         context.Enter(() =>
         {
-            hotkeys = new HotkeyService(window, host.PreviewGlobalControls && !config.TrayWheelPaused, config.TrayWheelEverywhere);
+            hotkeys = new HotkeyService(window, !config.TrayWheelPaused, config.TrayWheelEverywhere);
             hotkeys.HotkeyPressed += Hotkey;
             AutoRuleStore.Changed += RulesChanged;
             ReloadRules();
@@ -64,7 +66,7 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         foreach (var rule in rules)
             if (rule.Enabled && rule.Trigger == AutoRuleTrigger.Hotkey && !string.IsNullOrWhiteSpace(rule.Hotkey))
                 map[AutoRuleService.HotkeyPrefix + rule.Id] = rule.Hotkey;
-        hotkeys?.Reload(host.PreviewGlobalControls && !host.RecordingHotkey ? map : new());
+        hotkeys?.Reload(!host.RecordingHotkey ? map : new());
         AutoRuleService.RefreshWatcher();
         host.RefreshForegroundInterest();
         bool needsSchedule = rules.Any(r => r.Enabled && r.Trigger == AutoRuleTrigger.Schedule);
@@ -75,7 +77,7 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
 
     internal void ReloadSettings() => context.Enter(() =>
     {
-        hotkeys?.ConfigureTrayWheel(host.PreviewGlobalControls && !config.TrayWheelPaused, config.TrayWheelEverywhere);
+        hotkeys?.ConfigureTrayWheel(!config.TrayWheelPaused, config.TrayWheelEverywhere);
         ReloadRules();
         microphones?.InvalidateTopology();
     });
@@ -126,7 +128,10 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
                 microphones?.InvalidateTopology();
                 ReloadRules();
                 break;
-            case ShellSignalKind.Device: microphones?.InvalidateTopology(); break;
+            case ShellSignalKind.Device:
+                microphones?.InvalidateTopology();
+                host.HandleDeviceSignal();
+                break;
         }
     });
 

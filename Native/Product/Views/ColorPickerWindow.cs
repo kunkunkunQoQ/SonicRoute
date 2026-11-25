@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using SonicRoute.Native.Ui;
 
@@ -24,7 +23,10 @@ internal sealed class ColorPickerWindow : LayeredWindow
     ];
 
     private readonly UiThemePalette _theme;
+    private readonly UiColor _initialColor;
     private readonly Action<UiColor> _onAccepted;
+    private readonly Action<UiColor>? _onLiveChanged;
+    private readonly Action? _onCancelled;
     private readonly UiHitMap _hit = new();
     private readonly InlineEditHost _inlineEdit = new();
 
@@ -47,25 +49,43 @@ internal sealed class ColorPickerWindow : LayeredWindow
     private UiRect _gRect;
     private UiRect _bRect;
 
-    private bool _closedResult;
+    private bool _hexError;
+    private bool _accepted;
+    private bool _reverted;
 
-    internal ColorPickerWindow(LayeredWindow owner, UiThemePalette theme, UiColor initialColor, Action<UiColor> onAccepted)
+    internal ColorPickerWindow(
+        LayeredWindow owner,
+        UiThemePalette theme,
+        UiColor initialColor,
+        Action<UiColor> onAccepted,
+        Action<UiColor>? onLiveChanged = null,
+        Action? onCancelled = null)
         : base(340f, 360f, 340f, 360f)
     {
         _theme = theme;
+        _initialColor = initialColor.WithAlpha(255);
         _onAccepted = onAccepted;
+        _onLiveChanged = onLiveChanged;
+        _onCancelled = onCancelled;
         TopMost = true;
         ToolWindow = true;
+        DestroyOnClose = true;
         OwnerHandle = owner.Handle;
 
-        SetColorFromRgb(initialColor, updateHsv: true);
+        SetColorFromRgb(_initialColor, updateHsv: true, notifyLive: false);
 
         _inlineEdit.Committed += OnInlineCommitted;
     }
 
-    public static ColorPickerWindow Open(LayeredWindow owner, UiThemePalette theme, UiColor initialColor, Action<UiColor> onAccepted)
+    public static ColorPickerWindow Open(
+        LayeredWindow owner,
+        UiThemePalette theme,
+        UiColor initialColor,
+        Action<UiColor> onAccepted,
+        Action<UiColor>? onLiveChanged = null,
+        Action? onCancelled = null)
     {
-        var win = new ColorPickerWindow(owner, theme, initialColor, onAccepted);
+        var win = new ColorPickerWindow(owner, theme, initialColor, onAccepted, onLiveChanged, onCancelled);
         win.EnsureCreated(L10n.T("Th.ChooseColor"));
 
         GetMonitorWorkAreaForWindow(owner.Handle, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
@@ -86,14 +106,24 @@ internal sealed class ColorPickerWindow : LayeredWindow
     protected override void OnHidden()
     {
         _inlineEdit.Close(commit: false, viaEnter: false);
+        RevertIfUnaccepted();
         ReleaseRenderResources();
     }
 
     protected override void OnClosed()
     {
+        RevertIfUnaccepted();
         _inlineEdit.Committed -= OnInlineCommitted;
         _inlineEdit.Dispose();
         base.OnClosed();
+    }
+
+    protected override void OnCaptureLost()
+    {
+        _draggingSv = false;
+        _draggingHue = false;
+        _hit.ActiveId = null;
+        Invalidate();
     }
 
     protected override void OnMoved(int leftPx, int topPx) => RepositionEdit();
@@ -108,11 +138,9 @@ internal sealed class ColorPickerWindow : LayeredWindow
         float pad = 16f;
         float contentW = widthDip - pad * 2f;
 
-        // Header
         g.DrawText(L10n.T("Th.ChooseColor"), new UiRect(pad, 12f, contentW - 28f, 22f), _theme.TextPrimary, 14f, 600);
         UiPrimitives.DrawGhostIconButton(g, _theme, _hit, "cp.close", new UiRect(widthDip - pad - 24f, 11f, 24f, 24f), UiIcon.Close, 13f);
 
-        // HSV SV Box
         _svRect = new UiRect(pad, 42f, contentW, 136f);
         _hit.Add("cp.sv", _svRect, UiCursorKind.Hand);
         EnsureSvBitmap();
@@ -121,13 +149,11 @@ internal sealed class ColorPickerWindow : LayeredWindow
         g.PopClip();
         g.DrawRoundedRect(_svRect, 4f, _theme.Border, 1f);
 
-        // SV crosshair
         float mx = _svRect.X + (float)_sat * _svRect.Width;
         float my = _svRect.Y + (float)(1.0 - _val) * _svRect.Height;
         g.DrawEllipse(mx, my, 6f, 6f, UiColor.Black, 2.2f);
         g.DrawEllipse(mx, my, 6f, 6f, UiColor.White, 1.4f);
 
-        // Hue Spectrum Bar
         _hueRect = new UiRect(pad, _svRect.Bottom + 10f, contentW, 16f);
         _hit.Add("cp.hue", _hueRect, UiCursorKind.Hand);
         g.FillHueSpectrumRect(_hueRect, 4f);
@@ -136,7 +162,6 @@ internal sealed class ColorPickerWindow : LayeredWindow
         g.FillRoundedRect(new UiRect(hx - 3f, _hueRect.Y - 2f, 6f, _hueRect.Height + 4f), 3f, UiColor.White);
         g.DrawRoundedRect(new UiRect(hx - 3f, _hueRect.Y - 2f, 6f, _hueRect.Height + 4f), 3f, UiColor.Black, 1f);
 
-        // Swatch preview + Hex + R/G/B inputs
         float rowY = _hueRect.Bottom + 12f;
         var swatchRect = new UiRect(pad, rowY, 44f, 44f);
         g.FillRoundedRect(swatchRect, 8f, _selected);
@@ -148,9 +173,10 @@ internal sealed class ColorPickerWindow : LayeredWindow
         float chGap = 6f;
         float chW = (rightW - hexW - chGap * 3f) / 3f;
 
-        g.DrawText("Hex", new UiRect(inputLeft, rowY - 1f, hexW, 14f), _theme.TextSecondary, 10.5f, 600);
+        g.DrawText("Hex", new UiRect(inputLeft, rowY - 1f, hexW, 14f), _hexError ? _theme.Fail : _theme.TextSecondary, 10.5f, 600);
         _hexRect = new UiRect(inputLeft, rowY + 15f, hexW, 28f);
         UiPrimitives.DrawTextBox(g, _theme, _hit, "cp.hex", _hexRect, _selected.ToHexRgb(), "", _inlineEdit.ActiveTag == "cp.hex", mono: true, fontSize: 12f);
+        if (_hexError) g.DrawRoundedRect(_hexRect, 6f, _theme.Fail, 1.2f);
 
         float rx = _hexRect.Right + chGap;
         g.DrawText(L10n.T("Color.Red"), new UiRect(rx, rowY - 1f, chW, 14f), _theme.TextSecondary, 10.5f, 600);
@@ -167,7 +193,6 @@ internal sealed class ColorPickerWindow : LayeredWindow
         _bRect = new UiRect(bx, rowY + 15f, chW, 28f);
         UiPrimitives.DrawTextBox(g, _theme, _hit, "cp.b", _bRect, _selected.B.ToString(CultureInfo.InvariantCulture), "", _inlineEdit.ActiveTag == "cp.b", mono: true, fontSize: 12f);
 
-        // Preset Swatches row
         float presetY = rowY + 56f;
         float swGap = 6f;
         float swSize = (contentW - swGap * (Presets.Length - 1)) / Presets.Length;
@@ -182,7 +207,6 @@ internal sealed class ColorPickerWindow : LayeredWindow
             g.DrawRoundedRect(pr, 5f, sel ? _theme.TextPrimary : _theme.Border, sel ? 1.8f : 1f);
         }
 
-        // Bottom OK / Cancel buttons
         float btnY = heightDip - pad - 32f;
         float btnW = 92f;
         var cancelRect = new UiRect(widthDip - pad - btnW, btnY, btnW, 32f);
@@ -256,13 +280,13 @@ internal sealed class ColorPickerWindow : LayeredWindow
         {
             case "cp.close":
             case "cp.cancel":
-                _closedResult = false;
-                CloseWindow();
+                CancelAndClose();
                 return;
             case "cp.ok":
                 AcceptAndClose();
                 return;
             case "cp.hex":
+                _hexError = false;
                 BeginEdit("cp.hex", _hexRect, _selected.ToHexRgb());
                 return;
             case "cp.r":
@@ -279,7 +303,8 @@ internal sealed class ColorPickerWindow : LayeredWindow
                     int.TryParse(hit.Value.Id.AsSpan("cp.preset.".Length), out int idx) &&
                     idx >= 0 && idx < Presets.Length)
                 {
-                    SetColorFromRgb(Presets[idx], updateHsv: true);
+                    _hexError = false;
+                    SetColorFromRgb(Presets[idx], updateHsv: true, notifyLive: true);
                     Invalidate();
                 }
                 return;
@@ -291,7 +316,7 @@ internal sealed class ColorPickerWindow : LayeredWindow
         if (vk == 0x1B /*VK_ESCAPE*/)
         {
             if (_inlineEdit.IsOpen) _inlineEdit.Close(commit: false, viaEnter: false);
-            else CloseWindow();
+            else CancelAndClose();
             return true;
         }
         if (vk == 0x0D /*VK_RETURN*/)
@@ -305,11 +330,26 @@ internal sealed class ColorPickerWindow : LayeredWindow
     private void AcceptAndClose()
     {
         if (_inlineEdit.IsOpen) _inlineEdit.Close(commit: true, viaEnter: true);
-        if (_closedResult) return;
-        _closedResult = true;
+        if (_accepted) return;
+        _accepted = true;
         var chosen = _selected;
         CloseWindow();
         _onAccepted(chosen);
+    }
+
+    private void CancelAndClose()
+    {
+        if (_inlineEdit.IsOpen) _inlineEdit.Close(commit: false, viaEnter: false);
+        RevertIfUnaccepted();
+        CloseWindow();
+    }
+
+    private void RevertIfUnaccepted()
+    {
+        if (_accepted || _reverted) return;
+        _reverted = true;
+        _onLiveChanged?.Invoke(_initialColor);
+        _onCancelled?.Invoke();
     }
 
     private void BeginEdit(string tag, UiRect rect, string initial)
@@ -356,7 +396,14 @@ internal sealed class ColorPickerWindow : LayeredWindow
         if (tag == "cp.hex")
         {
             if (UiColor.TryParseHex(trimmed, out var col))
-                SetColorFromRgb(col, updateHsv: true);
+            {
+                _hexError = false;
+                SetColorFromRgb(col.WithAlpha(255), updateHsv: true, notifyLive: true);
+            }
+            else if (!string.IsNullOrEmpty(trimmed))
+            {
+                _hexError = true;
+            }
         }
         else if (byte.TryParse(trimmed, NumberStyles.None, CultureInfo.InvariantCulture, out byte ch))
         {
@@ -367,28 +414,34 @@ internal sealed class ColorPickerWindow : LayeredWindow
                 "cp.b" => UiColor.FromRgb(_selected.R, _selected.G, ch),
                 _ => _selected,
             };
-            SetColorFromRgb(next, updateHsv: true);
+            _hexError = false;
+            SetColorFromRgb(next, updateHsv: true, notifyLive: true);
         }
         Invalidate();
     }
 
     private void PickSv(float xDip, float yDip)
     {
+        _hexError = false;
         _sat = Math.Clamp((xDip - _svRect.X) / MathF.Max(1f, _svRect.Width), 0f, 1f);
         _val = 1.0 - Math.Clamp((yDip - _svRect.Y) / MathF.Max(1f, _svRect.Height), 0f, 1f);
         _selected = HsvToRgb(_hue, _sat, _val);
+        _onLiveChanged?.Invoke(_selected);
     }
 
     private void PickHue(float xDip)
     {
+        _hexError = false;
         _hue = Math.Clamp((xDip - _hueRect.X) / MathF.Max(1f, _hueRect.Width), 0f, 1f) * 360.0;
         _selected = HsvToRgb(_hue, _sat, _val);
+        _onLiveChanged?.Invoke(_selected);
     }
 
-    private void SetColorFromRgb(UiColor rgb, bool updateHsv)
+    private void SetColorFromRgb(UiColor rgb, bool updateHsv, bool notifyLive)
     {
         _selected = rgb.WithAlpha(255);
         if (updateHsv) RgbToHsv(_selected, ref _hue, out _sat, out _val);
+        if (notifyLive) _onLiveChanged?.Invoke(_selected);
     }
 
     private void EnsureSvBitmap()

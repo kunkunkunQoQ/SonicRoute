@@ -81,16 +81,25 @@ internal sealed class ProductMicMonitor(ProductAudio audio, NativeApplicationWin
                     if (baseline.HasValue && baseline.Value != current)
                         window.TryPost(() =>
                         {
-                            if (!closed) feedback.Publish(FeedbackKind.Osd,L10n.T("Ov.MuteMic"),L10n.T(current ? "Ov.MicMuted" : "Ov.MicUnmuted"));
+                            if (!closed) feedback.Publish(FeedbackKind.Osd, L10n.T("Ov.MuteMic"), L10n.T(current ? "Ov.MicMuted" : "Ov.MicUnmuted"), muted: current);
                         });
                     bool persistent = config.MicMuteOsdPersistent && allMuted || config.MicMuteOsdDefaultInputPersistent && defaultMuted;
                     if (lastPersistent != persistent)
                     {
                         lastPersistent = persistent;
                         window.TryPost(() => { if (!closed) feedback.Publish(FeedbackKind.MicStatus,
-                            L10n.T("Ov.MuteMic"), persistent ? L10n.T("Ov.MicMuted") : ""); });
+                            L10n.T("Ov.MuteMic"), persistent ? L10n.T("Ov.MicMuted") : "", muted: persistent); });
                     }
                     baseline = current;
+                }
+                else
+                {
+                    baseline = null;
+                    if (lastPersistent)
+                    {
+                        lastPersistent = false;
+                        window.TryPost(() => { if (!closed) feedback.Publish(FeedbackKind.MicStatus, L10n.T("Ov.MuteMic"), "", muted: false); });
+                    }
                 }
             }
             catch (Exception e)

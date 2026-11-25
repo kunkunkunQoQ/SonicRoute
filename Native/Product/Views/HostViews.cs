@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using SonicRoute.Core;
 using SonicRoute.Native.Audio;
 using SonicRoute.Native.Product.Views;
+using SonicRoute.Updates;
 
 namespace SonicRoute.Native.Product;
 
@@ -12,19 +13,39 @@ internal sealed partial class ApplicationHost
     private MainWindowShell? mainView;
     private QuickPanelWindow? panelView;
     private OsdWindow? osdView;
-    private IDisposable? osdDeadline, osdAnimation, switchDeadline;
+    private IDisposable? osdDeadline, osdAnimation, osdIdleRelease, switchDeadline;
     private long switchingSince;
     private bool panelDismissQueued;
     private bool micOsd;
     private string micOsdTitle = "", micOsdText = "";
+    private bool? micOsdMuted;
+    private long micRestoreVersion;
     private string PreviewControlsFile => Path.Combine(_environment.DataDirectory, "global-controls.enabled");
 
     internal string DataDirectory => _environment.DataDirectory;
+    internal CandidateEnvironment EnvironmentInfo => _environment;
+    internal UpdateService Updates => _updates;
+    internal IReadOnlyDictionary<string, string> HotkeyStatuses => _automation.HotkeyStatuses;
     internal ProductAudio Audio => _audio;
     internal bool PreviewGlobalControls { get; private set; }
     internal bool HasPendingVolume(int pid) => _volumeWriter.HasPending(pid);
     internal int QueueVolume(int pid, int volume, Action<int, bool> readback) =>
         _volumeWriter.Enqueue(pid, volume, (_, _, applied, actual) => readback(actual, applied));
+    internal void FlushVolumeWrites() => _volumeWriter.Flush();
+    internal void NotifyAudioVisualChanged()
+    {
+        if (_disposed) return;
+        _window.TryPost(() =>
+        {
+            if (_disposed) return;
+            mainView?.ExternalRefresh();
+            if (panelView is { IsVisible: true })
+            {
+                panelView.RefreshData();
+                panelView.Invalidate();
+            }
+        });
+    }
 
     private void StartViews()
     {
@@ -39,6 +60,7 @@ internal sealed partial class ApplicationHost
         L10n.Instance.PropertyChanged -= RefreshLanguage;
         osdDeadline?.Dispose();
         osdAnimation?.Dispose();
+        osdIdleRelease?.Dispose();
         switchDeadline?.Dispose();
         TrayMenuController.Shared.CloseActive();
         mainView?.Dispose();
@@ -108,7 +130,20 @@ internal sealed partial class ApplicationHost
     }
 
     internal void OpenProductMain() => _feedback.Publish(FeedbackKind.OpenMain);
-    internal void PreviewOsd() => _feedback.Publish(FeedbackKind.Osd, "SonicRoute · Native AOT Preview", L10n.T("Theme.OsdStyle"));
+    internal void OpenPhoneManagement(string? profileId = null) => EnsureMainShell().OpenPhoneDevice(profileId);
+    internal void PreviewOsd() => _feedback.Publish(FeedbackKind.Osd, "📍", L10n.T("Exp.OsdPreview"));
+    internal void PublishOsd(string title, string text, int? volume = null, bool? muted = null, bool? success = null) =>
+        _feedback.Publish(FeedbackKind.Osd, title, text, volume, muted, success);
+    internal void BeginOsdAdjust()
+    {
+        osdView ??= new OsdWindow(_config);
+        osdDeadline?.Dispose();
+        osdAnimation?.Dispose();
+        osdIdleRelease?.Dispose();
+        osdDeadline = osdAnimation = osdIdleRelease = null;
+        osdView.BeginAdjust(_window.Handle);
+    }
+    internal void BeginQuickPanelAdjust() => EnsureQuickPanel().BeginAdjust();
 
     private static IViewPage CreateMainPage(MainNavTab tab, IViewHostActions actions) => tab switch
     {
@@ -165,7 +200,10 @@ internal sealed partial class ApplicationHost
                     break;
 
                 case FeedbackKind.Osd:
-                    if (switchDeadline == null && switchingSince == 0) ShowOsd(feedback.Title, feedback.Text);
+                    switchDeadline?.Dispose();
+                    switchDeadline = null;
+                    switchingSince = 0;
+                    ShowOsd(feedback.Title, feedback.Text, volume: feedback.Volume, muted: feedback.Muted);
                     break;
 
                 case FeedbackKind.OutputPending:
@@ -183,24 +221,29 @@ internal sealed partial class ApplicationHost
                 case FeedbackKind.OutputSettled:
                     switchDeadline?.Dispose();
                     switchDeadline = null;
-                    long remaining = switchingSince == 0 ? 0 : 500 - (Environment.TickCount64 - switchingSince);
+                    long remaining = (switchingSince == 0 || feedback.Success == false)
+                        ? 0
+                        : 500 - (Environment.TickCount64 - switchingSince);
                     void Settle()
                     {
                         switchingSince = 0;
                         switchDeadline = null;
-                        ShowOsd(feedback.Title, feedback.Text);
+                        ShowOsd(feedback.Title, feedback.Text, muted: feedback.Muted, volume: feedback.Volume);
                     }
                     if (remaining > 0) switchDeadline = _window.ScheduleOnce(TimeSpan.FromMilliseconds(remaining), Settle);
                     else Settle();
                     break;
 
                 case FeedbackKind.MicStatus:
+                    ++micRestoreVersion;
                     micOsd = feedback.Text.Length != 0;
-                    (micOsdTitle, micOsdText) = (feedback.Title, feedback.Text);
+                    (micOsdTitle, micOsdText, micOsdMuted) = (feedback.Title, feedback.Text, feedback.Muted);
                     if (osdDeadline == null && switchingSince == 0)
                     {
-                        if (micOsd) ShowOsd(micOsdTitle, micOsdText, persistent: true);
-                        else osdView?.HideAndRelease();
+                        if (micOsd) ShowOsd(micOsdTitle, micOsdText, persistent: true, muted: micOsdMuted);
+                        else if (osdView is { IsVisible: true })
+                            AnimateOsd(osdView.CurrentAlpha, 0, _config.OsdFadeOutMs, HideOsdWithIdleRelease);
+                        else HideOsdWithIdleRelease();
                     }
                     break;
             }
@@ -224,22 +267,67 @@ internal sealed partial class ApplicationHost
         });
     }
 
-    private void ShowOsd(string title, string text, bool persistent = false)
+    private void ShowOsd(string title, string text, bool persistent = false, bool? muted = null, int? volume = null)
     {
         if (osdView == null || osdView.IsDisposed) osdView = new OsdWindow(_config);
         osdDeadline?.Dispose();
         osdAnimation?.Dispose();
-        osdDeadline = osdAnimation = null;
-        bool animate = !osdView.IsVisible && _config.OsdFadeInMs > 0;
-        byte alpha = animate ? (byte)24 : (byte)255;
-        if (!osdView.ShowOsd(_window.Handle, title, text, alpha) &&
-            !osdView.ShowOsd(_window.Handle, title, text, alpha)) return;
-        if (animate) AnimateOsd(alpha, 255, _config.OsdFadeInMs, static () => { });
-        if (!persistent) osdDeadline = _window.ScheduleOnce(TimeSpan.FromMilliseconds(1250), () =>
+        osdIdleRelease?.Dispose();
+        osdDeadline = osdAnimation = osdIdleRelease = null;
+        bool wasVisible = osdView.IsVisible;
+        bool animate = !wasVisible && _config.OsdFadeInMs > 0;
+        byte alpha = animate ? (byte)24 : (wasVisible ? osdView.CurrentAlpha : (byte)255);
+        if (!osdView.ShowOsd(_window.Handle, title, text, alpha, muted, volume) &&
+            !osdView.ShowOsd(_window.Handle, title, text, alpha, muted, volume)) return;
+        if (animate || alpha < 255) AnimateOsd(alpha, 255, _config.OsdFadeInMs, static () => { });
+        if (!persistent) osdDeadline = _window.ScheduleOnce(TimeSpan.FromMilliseconds(1100), () =>
         {
             osdDeadline = null;
-            if (micOsd) ShowOsd(micOsdTitle, micOsdText, persistent: true);
-            else AnimateOsd(255, 0, _config.OsdFadeOutMs, () => osdView?.HideAndRelease());
+            if (micOsd)
+            {
+                long ver = micRestoreVersion;
+                string restoreTitle = micOsdTitle;
+                string restoreText = micOsdText;
+                bool? restoreMuted = micOsdMuted;
+                _ = Task.Run(() =>
+                {
+                    bool stillMuted = false;
+                    try
+                    {
+                        var devs = ProductAudio.Devices(Flow.Capture);
+                        stillMuted = devs.Length > 0 && devs.All(d => _audio.Volume(Flow.Capture, d.Id).Muted);
+                    }
+                    catch { }
+                    _window.TryPost(() =>
+                    {
+                        if (_disposed || ver != micRestoreVersion || osdDeadline != null || switchingSince != 0) return;
+                        if (stillMuted) ShowOsd(restoreTitle, restoreText, persistent: true, muted: restoreMuted);
+                        else
+                        {
+                            micOsd = false;
+                            byte cur = osdView?.CurrentAlpha ?? 255;
+                            AnimateOsd(cur, 0, _config.OsdFadeOutMs, HideOsdWithIdleRelease);
+                        }
+                    });
+                });
+            }
+            else
+            {
+                byte cur = osdView?.CurrentAlpha ?? 255;
+                AnimateOsd(cur, 0, _config.OsdFadeOutMs, HideOsdWithIdleRelease);
+            }
+        });
+    }
+
+    private void HideOsdWithIdleRelease()
+    {
+        if (osdView == null) return;
+        osdView.Hide();
+        osdIdleRelease?.Dispose();
+        osdIdleRelease = _window.ScheduleOnce(TimeSpan.FromSeconds(8), () =>
+        {
+            osdIdleRelease = null;
+            if (osdView is { IsVisible: false }) osdView.ReleaseIdleResources();
         });
     }
 
@@ -247,15 +335,16 @@ internal sealed partial class ApplicationHost
     {
         osdAnimation?.Dispose();
         osdAnimation = null;
-        if (duration <= 0) { completed(); return; }
+        if (duration <= 0) { osdView?.SetOsdAlpha(to); completed(); return; }
         long start = Environment.TickCount64;
         void Frame()
         {
             osdAnimation = null;
             if (osdView == null || !osdView.IsVisible) return;
-            float amount = Math.Clamp((Environment.TickCount64 - start) / (float)duration, 0f, 1f);
-            osdView.SetOsdAlpha((byte)MathF.Round(from + (to - from) * amount));
-            if (amount >= 1) completed();
+            float t = Math.Clamp((Environment.TickCount64 - start) / (float)duration, 0f, 1f);
+            float eased = to > from ? 1f - MathF.Pow(1f - t, 3f) : t * t * t;
+            osdView.SetOsdAlpha((byte)MathF.Round(from + (to - from) * eased));
+            if (t >= 1f) completed();
             else osdAnimation = _window.ScheduleOnce(TimeSpan.FromMilliseconds(16), Frame);
         }
         osdAnimation = _window.ScheduleOnce(TimeSpan.FromMilliseconds(16), Frame);

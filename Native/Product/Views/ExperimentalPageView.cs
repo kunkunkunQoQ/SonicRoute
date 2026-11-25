@@ -1,19 +1,38 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using SonicRoute.Core;
+using SonicRoute.Core.Interop;
+using SonicRoute.Native.Audio;
 using SonicRoute.Native.Ui;
 
 namespace SonicRoute.Native.Product.Views;
 
 internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
 {
+    private static readonly (string Code, string Key)[] OsdPositionChoices =
+    [
+        ("TL", "Theme.PosTL"),
+        ("TC", "Theme.PosTC"),
+        ("TR", "Theme.PosTR"),
+        ("ML", "Theme.PosML"),
+        ("MC", "Theme.PosMC"),
+        ("MR", "Theme.PosMR"),
+        ("BL", "Theme.PosBL"),
+        ("BC", "Theme.PosBC"),
+        ("BR", "Theme.PosBR"),
+        ("Custom", "Exp.Osd.Custom"),
+    ];
+
     private readonly UiScrollState _scroll = new();
     private readonly Dictionary<string, UiRect> _rects = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private UiRect _contentRect;
     private bool _resettingRoutes;
+    private bool _configBusy;
     private bool _disposed;
 
     public void OnActivated() { }
@@ -24,6 +43,19 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
     }
 
     public void RefreshData() => actions.Invalidate();
+
+    public void OnFilesDropped(string[] paths)
+    {
+        if (paths == null || paths.Length == 0 || _configBusy) return;
+        string? jsonPath = paths.FirstOrDefault(p =>
+            !string.IsNullOrWhiteSpace(p) &&
+            p.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
+            File.Exists(p));
+        if (jsonPath != null)
+        {
+            ImportConfigFromPath(jsonPath);
+        }
+    }
 
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
@@ -64,9 +96,10 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             new UiRect(x, y, w, 20f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         y += 32f;
 
-        // 1. Experimental Master Toggle Card
         float pad = 16f;
         float innerW = w - pad * 2f;
+
+        // 1. Experimental Master Toggle Card
         float masterH = pad + 56f + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, masterH));
         DrawSwitchRow(g, t, hit, "exp.mode", new UiRect(x + pad, y + pad, innerW, 56f),
@@ -84,33 +117,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             }, Register);
         y += masterH + 14f;
 
-        // 2. Experimental Mic Routing Card
-        float micH = pad + 56f + (cfg.ExperimentalMic ? 52f : 0f) + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, micH));
-        float my = y + pad;
-        DrawSwitchRow(g, t, hit, "exp.mic", new UiRect(x + pad, my, innerW, 56f),
-            UiIcon.Microphone, L10n.T("St.ExperimentalMic"), L10n.T("St.ExperimentalMicHint"),
-            cfg.ExperimentalMic, cfg.ExperimentalMic, () =>
-            {
-                cfg.ExperimentalMic = !cfg.ExperimentalMic;
-                SaveConfig();
-                actions.ShowNotice(L10n.T("St.ExpMicNeedRestart"));
-            }, Register);
-        if (cfg.ExperimentalMic)
-        {
-            my += 56f;
-            DrawSwitchRow(g, t, hit, "exp.micpanel", new UiRect(x + pad + 20f, my, innerW - 20f, 52f),
-                UiIcon.Microphone, L10n.T("Exp.MicPanel"), "",
-                cfg.MicInPanel, false, () =>
-                {
-                    cfg.MicInPanel = !cfg.MicInPanel;
-                    SaveConfig();
-                    actions.ShowNotice(L10n.T("St.ExpMicPanelNeedRestart"));
-                }, Register);
-        }
-        y += micH + 14f;
-
-        // 3. Background Polling Fallback Card
+        // 2. Background Polling Fallback Card (WPF 1.36 ExpBackgroundPollingCheck)
         float pollH = pad + 64f + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, pollH));
         DrawSwitchRow(g, t, hit, "exp.polling", new UiRect(x + pad, y + pad, innerW, 64f),
@@ -122,7 +129,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             }, Register);
         y += pollH + 14f;
 
-        // 4. Execution History Card
+        // 3. Execution History Card (WPF 1.36 ExpHistoryCheck)
         bool histActive = cfg.ExperimentalMode && cfg.ExecutionHistoryEnabled;
         float histH = pad + 60f + (histActive ? 50f : 0f) + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, histH));
@@ -180,7 +187,158 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         }
         y += histH + 14f;
 
-        // 5. Multi-output & Routing Helpers Card
+        // 4. Mic & Panel Quick Behavior Card
+        float micH = pad + 56f + (cfg.ExperimentalMic ? 52f : 0f) + 56f + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, micH));
+        float my = y + pad;
+        DrawSwitchRow(g, t, hit, "exp.mic", new UiRect(x + pad, my, innerW, 56f),
+            UiIcon.Microphone, L10n.T("St.ExperimentalMic"), L10n.T("St.ExperimentalMicHint"),
+            cfg.ExperimentalMic, true, () =>
+            {
+                cfg.ExperimentalMic = !cfg.ExperimentalMic;
+                SaveConfig();
+                actions.ShowNotice(L10n.T("St.ExpMicNeedRestart"));
+            }, Register);
+        my += 56f;
+        if (cfg.ExperimentalMic)
+        {
+            DrawSwitchRow(g, t, hit, "exp.micpanel", new UiRect(x + pad + 20f, my, innerW - 20f, 52f),
+                UiIcon.Microphone, L10n.T("Exp.MicPanel"), "",
+                cfg.MicInPanel, true, () =>
+                {
+                    cfg.MicInPanel = !cfg.MicInPanel;
+                    SaveConfig();
+                    actions.ShowNotice(L10n.T("St.ExpMicPanelNeedRestart"));
+                }, Register);
+            my += 52f;
+        }
+        DrawSwitchRow(g, t, hit, "exp.panelretained", new UiRect(x + pad, my, innerW, 56f),
+            UiIcon.Speaker, L10n.T("St.PanelOutputVolumesRetainedOnly"), L10n.T("St.PanelOutputVolumesRetainedOnlyHint"),
+            cfg.PanelOutputVolumesRetainedOnly, false, () =>
+            {
+                cfg.PanelOutputVolumesRetainedOnly = !cfg.PanelOutputVolumesRetainedOnly;
+                SaveConfig();
+            }, Register);
+        y += micH + 14f;
+
+        // 5. OSD Preview & Quick Parameters Card
+        float osdH = pad + 32f + 56f + 44f + 44f + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, osdH));
+        float oy = y + pad;
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, oy, innerW - 230f, 28f), UiIcon.Monitor, L10n.T("Exp.Osd"));
+        var prevBtn = new UiRect(x + w - pad - 224f, oy, 108f, 30f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.osd.preview", prevBtn, L10n.T("Exp.OsdPreview"), icon: UiIcon.Play, fontSize: 12f);
+        Register("exp.osd.preview", prevBtn, () => actions.Host.PreviewOsd(), UiCursorKind.Hand, L10n.T("Exp.OsdPreview"));
+
+        var themeBtn = new UiRect(prevBtn.Right + 8f, oy, 108f, 30f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.osd.theme", themeBtn, L10n.T("Nav.Theme"), icon: UiIcon.Theme, fontSize: 12f);
+        Register("exp.osd.theme", themeBtn, () => actions.NavigateTo(MainNavTab.Theme), UiCursorKind.Hand, L10n.T("Nav.Theme"));
+        oy += 36f;
+
+        DrawSwitchRow(g, t, hit, "exp.osd.volvisual", new UiRect(x + pad, oy, innerW, 52f),
+            UiIcon.Speaker, L10n.T("Theme.OsdVolumeVisual"), L10n.T("Theme.OsdVolumeVisualHint"),
+            cfg.OsdVolumeVisualEnabled, true, () =>
+            {
+                cfg.OsdVolumeVisualEnabled = !cfg.OsdVolumeVisualEnabled;
+                SaveConfig();
+            }, Register);
+        oy += 58f;
+
+        // Row 1: Position + Width + Font Scale
+        float thirdW = (innerW - 20f) / 3f;
+        g.DrawText(L10n.T("Exp.Osd"), new UiRect(x + pad, oy, thirdW, 16f), t.TextSecondary, 11f, 400);
+        var posCombo = new UiRect(x + pad, oy + 18f, thirdW, 28f);
+        string posLabel = GetOsdPositionLabel(cfg.OsdPosition);
+        UiPrimitives.DrawComboBox(g, t, hit, "exp.osd.pos", posCombo, posLabel);
+        Register("exp.osd.pos", posCombo, () => OpenOsdPositionCombo(posCombo), UiCursorKind.Hand, L10n.T("Exp.OsdHint"));
+
+        float col2X = posCombo.Right + 10f;
+        g.DrawText(L10n.T("Exp.OsdWidthLabel"), new UiRect(col2X, oy, thirdW, 16f), t.TextSecondary, 11f, 400);
+        var wRect = new UiRect(col2X, oy + 18f, thirdW, 28f);
+        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.w", wRect, $"{Math.Clamp(cfg.OsdWidth, 180, 600)} px",
+            focused: actions.ActiveInlineEditTag == "exp.osd.w");
+        Register("exp.osd.w", wRect, () =>
+        {
+            actions.StartInlineEdit("exp.osd.w", wRect, cfg.OsdWidth.ToString(CultureInfo.InvariantCulture), null, (txt, commit) =>
+            {
+                if (!commit) return;
+                if (int.TryParse(txt.Trim().Replace("px", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
+                {
+                    cfg.OsdWidth = Math.Clamp(val, 180, 600);
+                    SaveConfig();
+                    actions.Host.PreviewOsd();
+                }
+            }, mono: true);
+        }, UiCursorKind.IBeam, null);
+
+        float col3X = wRect.Right + 10f;
+        double fontScale = Math.Clamp(cfg.OsdFontScale, 0.7, 1.6);
+        g.DrawText(L10n.T("Exp.OsdFontLabel"), new UiRect(col3X, oy, thirdW, 16f), t.TextSecondary, 11f, 400);
+        var fsRect = new UiRect(col3X, oy + 18f, thirdW, 28f);
+        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.font", fsRect, $"{(int)Math.Round(fontScale * 100)}%",
+            focused: actions.ActiveInlineEditTag == "exp.osd.font");
+        Register("exp.osd.font", fsRect, () =>
+        {
+            actions.StartInlineEdit("exp.osd.font", fsRect, fontScale.ToString("0.00", CultureInfo.InvariantCulture), null, (txt, commit) =>
+            {
+                if (!commit) return;
+                string cleaned = txt.Trim();
+                if (cleaned.EndsWith('%') && double.TryParse(cleaned.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
+                {
+                    cfg.OsdFontScale = Math.Clamp(Math.Round(pct / 100.0, 2), 0.7, 1.6);
+                    SaveConfig();
+                    actions.Host.PreviewOsd();
+                }
+                else if (double.TryParse(cleaned, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
+                {
+                    cfg.OsdFontScale = Math.Clamp(Math.Round(val, 2), 0.7, 1.6);
+                    SaveConfig();
+                    actions.Host.PreviewOsd();
+                }
+            }, mono: true);
+        }, UiCursorKind.IBeam, null);
+        oy += 52f;
+
+        // Row 2: Fade-in + Fade-out
+        float halfW = (innerW - 12f) / 2f;
+        g.DrawText(L10n.T("Exp.OsdFadeInLabel"), new UiRect(x + pad, oy, halfW, 16f), t.TextSecondary, 11f, 400);
+        var finRect = new UiRect(x + pad, oy + 18f, halfW, 28f);
+        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.fin", finRect, $"{Math.Clamp(cfg.OsdFadeInMs, 0, 500)} ms",
+            focused: actions.ActiveInlineEditTag == "exp.osd.fin");
+        Register("exp.osd.fin", finRect, () =>
+        {
+            actions.StartInlineEdit("exp.osd.fin", finRect, cfg.OsdFadeInMs.ToString(CultureInfo.InvariantCulture), null, (txt, commit) =>
+            {
+                if (!commit) return;
+                if (int.TryParse(txt.Trim().Replace("ms", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
+                {
+                    cfg.OsdFadeInMs = Math.Clamp(val, 0, 500);
+                    SaveConfig();
+                }
+            }, mono: true);
+        }, UiCursorKind.IBeam, null);
+
+        float foutX = finRect.Right + 12f;
+        g.DrawText(L10n.T("Exp.OsdFadeOutLabel"), new UiRect(foutX, oy, halfW, 16f), t.TextSecondary, 11f, 400);
+        var foutRect = new UiRect(foutX, oy + 18f, halfW, 28f);
+        UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.fout", foutRect, $"{Math.Clamp(cfg.OsdFadeOutMs, 0, 1000)} ms",
+            focused: actions.ActiveInlineEditTag == "exp.osd.fout");
+        Register("exp.osd.fout", foutRect, () =>
+        {
+            actions.StartInlineEdit("exp.osd.fout", foutRect, cfg.OsdFadeOutMs.ToString(CultureInfo.InvariantCulture), null, (txt, commit) =>
+            {
+                if (!commit) return;
+                if (int.TryParse(txt.Trim().Replace("ms", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
+                {
+                    cfg.OsdFadeOutMs = Math.Clamp(val, 0, 1000);
+                    SaveConfig();
+                }
+            }, mono: true);
+        }, UiCursorKind.IBeam, null);
+
+        y += osdH + 14f;
+
+        // 6. Multi-output & Routing Helpers Card
         float routeH = pad + 28f + 36f + 40f + pad;
         UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, routeH));
         float ry = y + pad;
@@ -197,48 +355,65 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             Register("exp.resetroutes", rstRoutesRect, ResetAllAppRoutes);
         y += routeH + 14f;
 
-        // 6. Preview Host Controls & Restart Card
-        float prevH = pad + 28f + 56f + 46f + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, prevH));
-        float py = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, py, innerW, 28f), UiIcon.Application,
-            IsZh() ? "Native AOT 预览宿主控制" : "Native AOT Preview Controls");
-        py += 32f;
+        // 7. Config Files Management Card (WPF 1.36 ExpConfigFiles)
+        float cfgH = pad + 28f + 38f + 40f + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, cfgH));
+        float cy = y + pad;
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.File, L10n.T("Exp.ConfigFiles"));
+        cy += 34f;
+        g.DrawText(L10n.T("Exp.ConfigTransferHint"), new UiRect(x + pad + 32f, cy, innerW - 32f, 22f),
+            t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        cy += 30f;
 
-        bool globalCtrl = actions.Host.PreviewGlobalControls;
-        DrawSwitchRow(g, t, hit, "exp.globalctrl", new UiRect(x + pad, py, innerW, 52f),
-            UiIcon.Keyboard,
-            IsZh() ? "预览版全局快捷键与托盘滚轮" : "Preview global shortcuts and tray wheel",
-            IsZh() ? "启用后将与正式版共享系统快捷键和托盘滚轮。" : "Competes with any running installed edition for global hotkeys and tray wheel.",
-            globalCtrl, false, () =>
-            {
-                if (!globalCtrl && !NativeDialogs.Confirm(actions.OwnerWindow.Handle, "Native AOT Preview",
-                    IsZh() ? "启用后，测试版可能与正式版争用相同的全局快捷键和托盘滚轮。继续？"
-                           : "The preview and installed version may compete for the same global shortcuts and tray wheel. Enable?"))
-                    return;
-                actions.Host.SetPreviewGlobalControls(!globalCtrl);
-                actions.Invalidate();
-            }, Register);
-        py += 58f;
+        float btnW = MathF.Min(164f, (innerW - 48f) / 3f);
+        var expBtn = new UiRect(x + pad + 32f, cy, btnW, 34f);
+        var impBtn = new UiRect(expBtn.Right + 8f, cy, btnW, 34f);
+        var rstBtn = new UiRect(impBtn.Right + 16f, cy, btnW, 34f);
 
-        var restartRect = new UiRect(x + pad + 32f, py, 168f, 34f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.restart", restartRect,
-            IsZh() ? "重启预览版" : "Restart Preview", icon: UiIcon.Refresh, fontSize: 12.5f);
-        Register("exp.restart", restartRect, () =>
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.export", expBtn, L10n.T("Exp.ExportConfig"), enabled: !_configBusy, fontSize: 12f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.import", impBtn, L10n.T("Exp.ImportConfig"), enabled: !_configBusy, fontSize: 12f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.clear", rstBtn, L10n.T("Exp.ClearConfig"), enabled: !_configBusy, danger: true, fontSize: 12f);
+        if (!_configBusy)
         {
-            if (NativeDialogs.Confirm(actions.OwnerWindow.Handle, "SonicRoute",
-                IsZh() ? "立即重启 Native AOT 预览版？" : "Restart Native AOT Preview now?"))
-            {
-                actions.Host.RestartPreview();
-            }
-        });
-        y += prevH + 16f;
+            Register("exp.cfg.export", expBtn, ExportConfig, UiCursorKind.Hand, L10n.T("Exp.ExportConfig"));
+            Register("exp.cfg.import", impBtn, ImportConfig, UiCursorKind.Hand, L10n.T("Exp.ImportConfig"));
+            Register("exp.cfg.clear", rstBtn, ResetConfig, UiCursorKind.Hand, L10n.T("Exp.ClearConfigHint"));
+        }
+
+        y += cfgH + 16f;
 
         g.PopClip();
 
         _scroll.ContentHeight = MathF.Max(0f, y - startY);
         _scroll.Clamp();
         _scroll.Draw(g, t, hit, "exp.scroll", viewport);
+    }
+
+    private void OpenOsdPositionCombo(UiRect anchor)
+    {
+        var choices = new List<ComboChoice>(OsdPositionChoices.Length);
+        foreach (var (code, key) in OsdPositionChoices)
+        {
+            choices.Add(new ComboChoice(code, L10n.T(key)));
+        }
+        string cur = string.IsNullOrWhiteSpace(actions.Config.OsdPosition) ? "TR" : actions.Config.OsdPosition;
+        actions.ShowCombo(anchor, choices, cur, picked =>
+        {
+            actions.Config.OsdPosition = picked.Key;
+            SaveConfig();
+            actions.Host.PreviewOsd();
+        });
+    }
+
+    private static string GetOsdPositionLabel(string? code)
+    {
+        string normalized = string.IsNullOrWhiteSpace(code) ? "TR" : code.Trim();
+        foreach (var (c, key) in OsdPositionChoices)
+        {
+            if (string.Equals(c, normalized, StringComparison.OrdinalIgnoreCase))
+                return L10n.T(key);
+        }
+        return normalized;
     }
 
     private static void DrawSwitchRow(
@@ -284,6 +459,119 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                 actions.Invalidate();
             });
         });
+    }
+
+    private void ExportConfig()
+    {
+        string? path = NativeDialogs.Save(actions.OwnerWindow.Handle, "JSON (*.json)|*.json|All files|*.*", "json", L10n.T("Exp.ExportConfig"));
+        if (path == null) return;
+        _configBusy = true;
+        actions.Invalidate();
+        string snapshot = ConfigService.CaptureExportSnapshot();
+        _ = Task.Run(() =>
+        {
+            bool ok = ConfigService.ExportTo(path, snapshot);
+            actions.Host.TryPost(() =>
+            {
+                _configBusy = false;
+                if (_disposed) return;
+                actions.ShowNotice(L10n.T(ok ? "Exp.ExportDone" : "Exp.TransferFail"));
+                actions.Invalidate();
+            });
+        });
+    }
+
+    private void ImportConfig()
+    {
+        string? path = NativeDialogs.Open(actions.OwnerWindow.Handle, "JSON (*.json)|*.json|All files|*.*", L10n.T("Exp.ImportConfig"));
+        if (path != null) ImportConfigFromPath(path);
+    }
+
+    private void ImportConfigFromPath(string path)
+    {
+        if (_configBusy) return;
+        _configBusy = true;
+        actions.Invalidate();
+        _ = Task.Run(() =>
+        {
+            byte[]? prepared = null;
+            AppConfig? preview = null;
+            int missingDevices = 0;
+            int missingApps = 0;
+            try
+            {
+                prepared = ConfigService.PrepareImport(path);
+                if (prepared != null)
+                {
+                    preview = ConfigService.ReadPreparedConfig(prepared);
+                    if (preview != null)
+                    {
+                        var devIds = new HashSet<string>(
+                            ProductAudio.Devices(Flow.Render).Concat(ProductAudio.Devices(Flow.Capture)).Select(d => d.Id),
+                            StringComparer.OrdinalIgnoreCase);
+                        missingDevices = (preview.DeviceNames?.Keys ?? Enumerable.Empty<string>())
+                            .Concat(preview.HiddenOutputDevices ?? [])
+                            .Concat(preview.HiddenInputDevices ?? [])
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Count(id => !AudioService.IsSystemDefault(id) && !devIds.Contains(id));
+
+                        var appNames = new HashSet<string>(
+                            actions.Host.Audio.Apps().Select(a => a.ProcessName ?? ""),
+                            StringComparer.OrdinalIgnoreCase);
+                        missingApps = (preview.AppNames?.Keys ?? Enumerable.Empty<string>())
+                            .Concat(preview.AppIcons?.Keys ?? Enumerable.Empty<string>())
+                            .Concat(preview.HiddenPanelApps ?? [])
+                            .Concat(preview.DisabledAutoSwitchApps ?? [])
+                            .Where(n => !string.IsNullOrWhiteSpace(n))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Count(n => !appNames.Contains(n));
+                    }
+                }
+            }
+            catch { }
+
+            actions.Host.TryPost(() =>
+            {
+                _configBusy = false;
+                if (_disposed) return;
+                if (prepared == null || preview == null)
+                {
+                    actions.ShowNotice(L10n.T("Exp.TransferFail"));
+                    actions.Invalidate();
+                    return;
+                }
+
+                string msg = string.Format(L10n.T("Exp.ImportPreview"),
+                    preview.Hotkeys?.Count ?? 0,
+                    preview.DeviceNames?.Count ?? 0,
+                    preview.AppNames?.Count ?? 0,
+                    missingDevices,
+                    missingApps);
+                if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg))
+                {
+                    actions.Invalidate();
+                    return;
+                }
+
+                ConfigService.FlushPendingSaves();
+                if (!ConfigService.ApplyImport(prepared))
+                {
+                    actions.ShowNotice(L10n.T("Exp.TransferFail"));
+                    actions.Invalidate();
+                    return;
+                }
+                actions.ShowNotice(L10n.T("Exp.ImportDone"));
+                actions.Host.RestartPreview();
+            });
+        });
+    }
+
+    private void ResetConfig()
+    {
+        if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ClearConfig"), L10n.T("Exp.ClearConfigHint")))
+            return;
+        ConfigService.ResetToDefault();
+        actions.Host.RestartPreview();
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown) => _scroll.DragMove(y);

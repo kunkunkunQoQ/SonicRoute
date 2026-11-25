@@ -24,8 +24,31 @@ internal sealed partial class ApplicationHost
             return (state.Count > 0, state.Percent);
         });
         _audio.Start(resident);
+        _audio.AudioChanged += NotifyAudioVisualChanged;
+        PcRoutingApi.OutputsChanged += NotifyAudioVisualChanged;
+#if SONICROUTE_PHONE
+        _audio.ExternalAudio = new ExternalAudioBridge(
+            () => HasPhone ? Phone : null,
+            () => Phone,
+            () => HasAirPlay ? AirPlay : null,
+            () =>
+            {
+                _audio.InvalidateAppsCache();
+                NotifyAudioVisualChanged();
+            });
+#endif
         _automation.Start(resident);
         if (resident) { RefreshForegroundInterest(); CurrentApp.Refresh(); }
+    }
+
+    internal void HandleDeviceSignal()
+    {
+        _audio.InvalidateAppsCache();
+        _audio.InvalidateVolumeCache();
+        NotifyAudioVisualChanged();
+#if SONICROUTE_PHONE
+        phone?.OnDeviceBroadcast();
+#endif
     }
 
     internal void RefreshForegroundInterest()
@@ -41,10 +64,16 @@ internal sealed partial class ApplicationHost
     private void StopServices()
     {
         _resident = false;
+        _audio.AudioChanged -= NotifyAudioVisualChanged;
+        PcRoutingApi.OutputsChanged -= NotifyAudioVisualChanged;
         _automation?.Dispose();
         CurrentApp?.Dispose();
         _volumeWriter?.Dispose();
         _volumeWriter?.Completion.GetAwaiter().GetResult();
+#if SONICROUTE_PHONE
+        _audio.ExternalAudio?.Dispose();
+        _audio.ExternalAudio = null;
+#endif
         Task.Run(_audio.Dispose).GetAwaiter().GetResult();
     }
 

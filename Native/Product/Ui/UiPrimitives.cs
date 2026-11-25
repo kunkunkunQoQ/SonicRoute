@@ -36,7 +36,7 @@ internal sealed class UiHitMap
     public bool UpdateHover(float x, float y)
     {
         var hit = HitTest(x, y);
-        bool changed = hit?.Id != Hovered?.Id || hit?.Tooltip != Hovered?.Tooltip;
+        bool changed = hit?.Id != Hovered?.Id;
         Hovered = hit;
         return changed;
     }
@@ -314,19 +314,19 @@ internal static class UiPrimitives
         float fillW = barW * clampedVal;
         if (fillW > 0.5f)
         {
-            UiColor fillCol = muted ? t.TextSecondary.WithAlphaFraction(0.55f) : t.Accent;
+            UiColor fillCol = muted ? t.AccentInverse.WithAlphaFraction(0.55f) : t.Accent;
             g.FillRoundedRect(new UiRect(barX, barY, fillW, trackHeight), r, fillCol);
         }
 
-        if (showPeak && peak01 > 0.01f && !muted)
+        if (showPeak && peak01 > 0.01f && !muted && fillW > 0.5f)
         {
-            float peakW = barW * Math.Clamp(peak01, 0f, 1f);
+            float peakW = fillW * Math.Clamp(peak01, 0f, 1f);
             g.FillRoundedRect(new UiRect(barX, barY, peakW, trackHeight), r, t.AccentPeak);
         }
 
         float thumbX = barX + fillW;
         float rad = (hot ? thumbDiameter + 2f : thumbDiameter) * 0.5f;
-        UiColor thumbCol = muted ? t.TextSecondary : t.Accent;
+        UiColor thumbCol = muted ? t.AccentInverse : t.Accent;
         if (!enabled) thumbCol = t.AccentDisabled;
         g.FillEllipse(thumbX, rect.CenterY, rad, rad, thumbCol);
     }

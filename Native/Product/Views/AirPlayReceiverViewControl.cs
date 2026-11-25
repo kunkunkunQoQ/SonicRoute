@@ -1,6 +1,7 @@
 #if SONICROUTE_PHONE
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
@@ -22,16 +23,14 @@ internal sealed class AirPlayReceiverViewControl
     private readonly Action<string, UiRect, string, Action<string>?, Action<string, bool>> _startInlineEdit;
     private readonly Func<string?> _getActiveInlineTag;
     private readonly Action<bool> _closeInlineEdit;
-    private readonly UiHitMap _ownHit = new();
 
     private bool _attached;
     private bool _hevcChecked;
     private bool _hevcAvailable;
     private byte[]? _lastArtworkPng;
     private byte[]? _artworkBgra;
-    private int _artW, _artH, _artVer;
-    private UiHitMap? _lastHit;
-    private string _idPrefix = "airplay";
+    private int _artW, _artH, _artVer, _artGen;
+    private readonly string _idPrefix;
 
     internal AirPlayReceiverViewControl(IViewHostActions actions, string idPrefix = "airplay")
         : this(
@@ -91,6 +90,11 @@ internal sealed class AirPlayReceiverViewControl
         if (!_attached) return;
         _attached = false;
         _host.AirPlay.Changed -= OnAirPlayChanged;
+        Interlocked.Increment(ref _artGen);
+        _lastArtworkPng = null;
+        _artworkBgra = null;
+        _artW = 0;
+        _artH = 0;
     }
 
     private void OnAirPlayChanged()
@@ -107,33 +111,43 @@ internal sealed class AirPlayReceiverViewControl
         bool running = status.Stage is AirPlayStage.Waiting or AirPlayStage.Connected;
         bool changing = status.Stage is AirPlayStage.Starting or AirPlayStage.Stopping;
 
-        float h = 38f; // Header row
+        float h = 38f;
         if (!running && !changing)
         {
-            h += 12f; // border/pad
+            h += 14f;
             bool twoCols = width >= 330f;
-            h += twoCols ? 50f : 104f; // Name + Decoder
-            h += 38f; // Require PIN row
+            h += twoCols ? 52f : 105f;
+            h += 34f;
         }
 
         string? statusMsg = GetStatusMessage(status);
-        if (!string.IsNullOrWhiteSpace(statusMsg)) h += 24f;
+        if (!string.IsNullOrWhiteSpace(statusMsg))
+        {
+            float lineCapacity = MathF.Max(14f, width / 6.5f);
+            int lines = Math.Max(1, (int)MathF.Ceiling(statusMsg.Length / lineCapacity));
+            h += MathF.Max(24f, lines * 16f + 8f);
+        }
         if (status.Code is { Length: > 0 }) h += 46f;
-        if (status.Stage == AirPlayStage.Waiting) h += 36f;
+        if (status.Stage == AirPlayStage.Waiting)
+        {
+            string steps = L10n.T("Phone.AirPlaySteps");
+            float lineCapacity = MathF.Max(16f, width / 6f);
+            int lines = Math.Max(2, (int)MathF.Ceiling(steps.Length / lineCapacity));
+            h += MathF.Max(36f, lines * 15f + 6f);
+        }
 
         var track = status.Stage == AirPlayStage.Connected ? status.Metadata : null;
         if (track != null && (track.Title.Length > 0 || track.Artist.Length > 0 || track.Artwork != null))
-            h += 50f;
+            h += 48f;
 
-        if (status.Mirroring) h += 72f;
-        if (_host.AirPlay.Source != null) h += 38f;
+        if (status.Mirroring) h += 70f;
+        if (_host.AirPlay.Source != null) h += 36f;
 
         return h + 4f;
     }
 
     internal void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect bounds, bool showHeaderStatus = true)
     {
-        _lastHit = hit;
         var status = _host.AirPlay.Status;
         bool running = status.Stage is AirPlayStage.Waiting or AirPlayStage.Connected;
         bool changing = status.Stage is AirPlayStage.Starting or AirPlayStage.Stopping;
@@ -185,7 +199,7 @@ internal sealed class AirPlayReceiverViewControl
             g.DrawLine(x, y, x + w, y, t.Border, 1f, roundCaps: false);
             y += 8f;
 
-            string currentName = string.IsNullOrWhiteSpace(_config.AirPlayReceiverName) ? DefaultReceiverName() : _config.AirPlayReceiverName;
+            string currentName = string.IsNullOrWhiteSpace(_config.AirPlayReceiverName) ? AirPlayPreview.DefaultName : _config.AirPlayReceiverName;
             string nameEditTag = $"{_idPrefix}.name";
             bool nameFocused = _getActiveInlineTag() == nameEditTag;
             string decoderLabel = GetDecoderLabel(_config.AirPlayVideoDecoder);
@@ -198,7 +212,7 @@ internal sealed class AirPlayReceiverViewControl
                 y += 18f;
 
                 var nameRect = new UiRect(x, y, colW, 30f);
-                UiPrimitives.DrawTextBox(g, t, hit, nameEditTag, nameRect, currentName, DefaultReceiverName(), focused: nameFocused, fontSize: 12f);
+                UiPrimitives.DrawTextBox(g, t, hit, nameEditTag, nameRect, currentName, AirPlayPreview.DefaultName, focused: nameFocused, fontSize: 12f);
 
                 var decRect = new UiRect(x + colW + 10f, y, colW, 30f);
                 UiPrimitives.DrawComboBox(g, t, hit, $"{_idPrefix}.decoder", decRect, decoderLabel, fontSize: 12f);
@@ -208,7 +222,7 @@ internal sealed class AirPlayReceiverViewControl
             {
                 g.DrawText(L10n.T("Phone.AirPlayName"), new UiRect(x, y, w, 16f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
                 y += 18f;
-                UiPrimitives.DrawTextBox(g, t, hit, nameEditTag, new UiRect(x, y, w, 30f), currentName, DefaultReceiverName(), focused: nameFocused, fontSize: 12f);
+                UiPrimitives.DrawTextBox(g, t, hit, nameEditTag, new UiRect(x, y, w, 30f), currentName, AirPlayPreview.DefaultName, focused: nameFocused, fontSize: 12f);
                 y += 35f;
 
                 g.DrawText(L10n.T("Phone.StreamDecoder"), new UiRect(x, y, w, 16f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
@@ -217,7 +231,6 @@ internal sealed class AirPlayReceiverViewControl
                 y += 34f;
             }
 
-            var pinRow = new UiRect(x, y, w, 28f);
             g.DrawText(L10n.T("Phone.AirPlayRequireCode"), new UiRect(x, y, MathF.Max(20f, w - 42f), 28f),
                 t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
             UiPrimitives.DrawSwitch(g, t, hit, $"{_idPrefix}.pin", new UiRect(x + w - 36f, y + 2f, 36f, 24f), _config.AirPlayRequireCode);
@@ -227,9 +240,14 @@ internal sealed class AirPlayReceiverViewControl
         string? statusMsg = GetStatusMessage(status);
         if (!string.IsNullOrWhiteSpace(statusMsg))
         {
-            g.DrawText(statusMsg, new UiRect(x, y, w, 20f), status.ErrorKey != null ? t.Fail : t.TextSecondary,
-                12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            y += 24f;
+            var sz = D2dSharedContext.Instance.MeasureText(statusMsg, UiMetrics.FontFamily, 12f, 400, w, 120f, wrap: true);
+            float msgH = MathF.Max(20f, sz.Height + 2f);
+            var statusRect = new UiRect(x, y, w, msgH);
+            if (status.NetworkError is int netErr)
+                hit.Add($"{_idPrefix}.status", statusRect, UiCursorKind.Arrow, $"Winsock {netErr}");
+            g.DrawText(statusMsg, statusRect, status.ErrorKey != null ? t.Fail : t.TextSecondary,
+                12f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
+            y += msgH + 4f;
         }
 
         if (status.Code is { Length: > 0 } code)
@@ -245,9 +263,12 @@ internal sealed class AirPlayReceiverViewControl
 
         if (status.Stage == AirPlayStage.Waiting)
         {
-            g.DrawText(L10n.T("Phone.AirPlaySteps"), new UiRect(x, y, w, 32f),
+            string steps = L10n.T("Phone.AirPlaySteps");
+            var sz = D2dSharedContext.Instance.MeasureText(steps, UiMetrics.FontFamily, 10.5f, 400, w, 100f, wrap: true);
+            float stepsH = MathF.Max(32f, sz.Height + 2f);
+            g.DrawText(steps, new UiRect(x, y, w, stepsH),
                 t.TextSecondary, 10.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
-            y += 36f;
+            y += stepsH + 4f;
         }
 
         var track = status.Stage == AirPlayStage.Connected ? status.Metadata : null;
@@ -297,7 +318,8 @@ internal sealed class AirPlayReceiverViewControl
         if (hitId == $"{_idPrefix}.toggle")
         {
             var stage = _host.AirPlay.Status.Stage;
-            bool running = stage is AirPlayStage.Waiting or AirPlayStage.Connected or AirPlayStage.Starting;
+            if (stage is AirPlayStage.Starting or AirPlayStage.Stopping) return true;
+            bool running = stage is AirPlayStage.Waiting or AirPlayStage.Connected;
             _closeInlineEdit(true);
             _ = _host.AirPlay.SetReceivingAsync(_config, !running);
             return true;
@@ -305,12 +327,12 @@ internal sealed class AirPlayReceiverViewControl
 
         if (hitId == $"{_idPrefix}.name")
         {
-            string current = string.IsNullOrWhiteSpace(_config.AirPlayReceiverName) ? DefaultReceiverName() : _config.AirPlayReceiverName;
+            string current = string.IsNullOrWhiteSpace(_config.AirPlayReceiverName) ? AirPlayPreview.DefaultName : _config.AirPlayReceiverName;
             _startInlineEdit($"{_idPrefix}.name", hitBounds, current, null, (text, commit) =>
             {
                 if (!commit) return;
                 string norm = AirPlayIdentity.NormalizeName(text);
-                if (norm == DefaultReceiverName()) norm = "";
+                if (norm == AirPlayPreview.DefaultName) norm = "";
                 _config.AirPlayReceiverName = norm;
                 ConfigService.TrySave(_config);
                 _invalidate();
@@ -380,39 +402,68 @@ internal sealed class AirPlayReceiverViewControl
     {
         if (png is null || png.Length == 0)
         {
-            bgra = Array.Empty<byte>(); w = h = ver = 0;
+            _lastArtworkPng = null;
+            _artworkBgra = null;
+            bgra = Array.Empty<byte>();
+            w = h = ver = 0;
             return false;
         }
-        if (ReferenceEquals(png, _lastArtworkPng) && _artworkBgra != null)
+
+        if (ReferenceEquals(png, _lastArtworkPng))
         {
-            bgra = _artworkBgra; w = _artW; h = _artH; ver = _artVer;
-            return true;
-        }
-        _lastArtworkPng = png;
-        if (SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 72, 72, out byte[] pixels, out int pw, out int ph))
-        {
-            for (int i = 0; i < pixels.Length; i += 4)
+            if (_artworkBgra != null)
             {
-                byte a = pixels[i + 3];
-                if (a == 255) continue;
-                if (a == 0) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 0; continue; }
-                pixels[i] = (byte)(pixels[i] * a / 255);
-                pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
-                pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
+                bgra = _artworkBgra;
+                w = _artW;
+                h = _artH;
+                ver = _artVer;
+                return true;
             }
-            _artworkBgra = pixels;
-            _artW = pw;
-            _artH = ph;
-            _artVer++;
-            bgra = pixels; w = pw; h = ph; ver = _artVer;
-            return true;
+            bgra = Array.Empty<byte>();
+            w = h = ver = 0;
+            return false;
         }
+
+        _lastArtworkPng = png;
         _artworkBgra = null;
-        bgra = Array.Empty<byte>(); w = h = ver = 0;
+        int gen = Interlocked.Increment(ref _artGen);
+        _ = Task.Run(() =>
+        {
+            if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 72, 72, out byte[] pixels, out int pw, out int ph))
+                return;
+            PremultiplyBgra32(pixels);
+            _host.TryPost(() =>
+            {
+                if (_attached && Volatile.Read(ref _artGen) == gen && ReferenceEquals(_lastArtworkPng, png))
+                {
+                    _artworkBgra = pixels;
+                    _artW = pw;
+                    _artH = ph;
+                    _artVer++;
+                    _invalidate();
+                }
+            });
+        });
+
+        bgra = Array.Empty<byte>();
+        w = h = ver = 0;
         return false;
     }
 
-    private static string GetStageLabel(AirPlayStatus status) => L10n.T(status.Stage switch
+    private static void PremultiplyBgra32(byte[] pixels)
+    {
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            byte a = pixels[i + 3];
+            if (a == 255) continue;
+            if (a == 0) { pixels[i] = pixels[i + 1] = pixels[i + 2] = 0; continue; }
+            pixels[i] = (byte)(pixels[i] * a / 255);
+            pixels[i + 1] = (byte)(pixels[i + 1] * a / 255);
+            pixels[i + 2] = (byte)(pixels[i + 2] * a / 255);
+        }
+    }
+
+    internal static string GetStageLabel(AirPlayStatus status) => L10n.T(status.Stage switch
     {
         AirPlayStage.Starting => "Phone.AirPlayStarting",
         AirPlayStage.Stopping => "Phone.AirPlayStopping",
@@ -422,9 +473,13 @@ internal sealed class AirPlayReceiverViewControl
         _ => "Phone.AirPlayOff",
     });
 
-    private static string? GetStatusMessage(AirPlayStatus status)
+    internal static string? GetStatusMessage(AirPlayStatus status)
     {
-        if (status.ErrorKey != null) return L10n.T(status.ErrorKey);
+        if (status.ErrorKey != null)
+        {
+            string msg = L10n.T(status.ErrorKey);
+            return status.NetworkError is int code ? $"{msg} (Winsock {code})" : msg;
+        }
         return status.Stage switch
         {
             AirPlayStage.Waiting => status.Name,
@@ -441,19 +496,5 @@ internal sealed class AirPlayReceiverViewControl
         2 => L10n.T("Phone.AirPlayHevcOption"),
         _ => L10n.T("Phone.StreamDecoderAutomatic"),
     };
-
-    private static string DefaultReceiverName()
-    {
-        string host = "";
-        foreach (char c in Environment.MachineName)
-        {
-            if (char.IsAsciiLetterOrDigit(c) || c == '-')
-            {
-                host += c;
-                if (host.Length >= 32) break;
-            }
-        }
-        return host.Length == 0 ? "SonicRoute" : "SonicRoute - " + host;
-    }
 }
 #endif

@@ -22,12 +22,12 @@ internal sealed class AppsPageView : IViewPage
 {
     private const float LeftRowHeight = 44f;
     private const float PhoneListMaxHeight = 196f;
+    private const int PeakBurstMaxTicks = 24;
     private static readonly StringComparer IdCmp = StringComparer.OrdinalIgnoreCase;
 
     private readonly IViewHostActions _actions;
     private readonly UiScrollState _appsScroll = new();
     private readonly UiScrollState _detailsScroll = new();
-    private readonly Dictionary<string, NativeAppIconService.IconBitmap?> _customIconCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, NativeAppIconService.IconBitmap?> _externalIconCache = new(StringComparer.Ordinal);
     private readonly List<(UiRect Rect, Action Click)> _clicks = new();
     private readonly List<(UiRect Rect, AudioAppInfo App)> _appRowRects = new();
@@ -64,9 +64,13 @@ internal sealed class AppsPageView : IViewPage
 
     private bool _active;
     private bool _refreshing;
+    private bool _refreshPending;
     private int _stateGen;
     private int _outputEditGen;
-    private IDisposable? _pollTimer;
+
+    private IDisposable? _peakTimer;
+    private bool _peakInFlight;
+    private int _peakBurstRemaining;
 
 #if SONICROUTE_PHONE
     private PhoneDevicePageView? _phonePage;
@@ -107,7 +111,27 @@ internal sealed class AppsPageView : IViewPage
         _selectedIdentity = null;
         _selectedApp = null;
         _multiSelected.Clear();
+        StopPeakBurst();
         _phonePage!.ShowConnectionPage();
+        _phonePage.OnActivated();
+        _actions.Invalidate();
+    }
+
+    internal void OpenPhoneDevice(string? profileId = null)
+    {
+        EnsurePhonePage();
+        _showingPhone = true;
+        _selectedIdentity = null;
+        _selectedApp = null;
+        _multiSelected.Clear();
+        StopPeakBurst();
+        var store = _actions.Host.Phone.Store;
+        if (!string.IsNullOrWhiteSpace(profileId))
+            _phonePage!.ShowProfile(profileId);
+        else if (store.Profile.LastDevice != null)
+            _phonePage!.ShowProfile(store.Profile.Id);
+        else
+            _phonePage!.ShowConnectionPage();
         _phonePage.OnActivated();
         _actions.Invalidate();
     }
@@ -121,7 +145,11 @@ internal sealed class AppsPageView : IViewPage
     {
         _actions.Host.TryPost(() =>
         {
-            if (_active) _actions.Invalidate();
+            if (_active)
+            {
+                TriggerRefresh(forceAppsRefresh: false);
+                _actions.Invalidate();
+            }
         });
     }
 #endif
@@ -138,15 +166,15 @@ internal sealed class AppsPageView : IViewPage
         }
         if (_showingPhone) _phonePage?.OnActivated();
 #endif
-        TriggerRefresh(immediate: true);
+        TriggerRefresh(forceAppsRefresh: false);
     }
 
     public void OnDeactivated()
     {
         _active = false;
-        _pollTimer?.Dispose();
-        _pollTimer = null;
+        _refreshPending = false;
         _draggingVolume = false;
+        StopPeakBurst();
 #if SONICROUTE_PHONE
         if (_phoneSubscribed)
         {
@@ -159,7 +187,49 @@ internal sealed class AppsPageView : IViewPage
 
     public void RefreshData()
     {
-        if (_active) TriggerRefresh(immediate: true);
+        if (_active) TriggerRefresh(forceAppsRefresh: false);
+    }
+
+    public void OnCaptureLost()
+    {
+        if (_draggingVolume)
+        {
+            _draggingVolume = false;
+            if (_selectedApp is { IsExternal: false }) _actions.Host.FlushVolumeWrites();
+        }
+        _appsScroll.EndDrag();
+        _detailsScroll.EndDrag();
+#if SONICROUTE_PHONE
+        _phoneScroll.EndDrag();
+        if (_showingPhone) _phonePage?.OnCaptureLost();
+#endif
+        _actions.Invalidate();
+    }
+
+    public void OnFilesDropped(string[] paths)
+    {
+#if SONICROUTE_PHONE
+        if (_showingPhone && _phonePage != null)
+        {
+            _phonePage.OnFilesDropped(paths);
+            return;
+        }
+#endif
+        if (paths.Length != 1 || _selectedApp == null || string.IsNullOrWhiteSpace(_selectedApp.ProcessName))
+        {
+            if (_selectedApp == null) _actions.ShowNotice(L10n.T("Apps.SelectHint"));
+            return;
+        }
+        string ext = Path.GetExtension(paths[0]);
+        if (IdCmp.Equals(ext, ".png") || IdCmp.Equals(ext, ".jpg") || IdCmp.Equals(ext, ".jpeg")
+            || IdCmp.Equals(ext, ".ico") || IdCmp.Equals(ext, ".exe"))
+        {
+            ImportCustomIconFromPath(paths[0]);
+        }
+        else
+        {
+            _actions.ShowNotice(L10n.T("AppIcons.Invalid"));
+        }
     }
 
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
@@ -223,18 +293,7 @@ internal sealed class AppsPageView : IViewPage
                 string id = "apps.phone." + prof.Id;
                 hit.Add(id, rowRect, UiCursorKind.Hand);
                 var profCopy = prof;
-                _clicks.Add((rowRect, () =>
-                {
-                    EnsurePhonePage();
-                    phone.Store.SelectProfile(profCopy.Id);
-                    _showingPhone = true;
-                    _selectedIdentity = null;
-                    _selectedApp = null;
-                    _multiSelected.Clear();
-                    _phonePage!.ShowProfile(profCopy.Id);
-                    _phonePage.OnActivated();
-                    _actions.Invalidate();
-                }));
+                _clicks.Add((rowRect, () => OpenPhoneDevice(profCopy.Id)));
 
                 if (selected) g.FillRoundedRect(rowRect, 7f, t.NavSelected);
                 else if (hit.IsHover(id)) g.FillRoundedRect(rowRect, 7f, t.NavHover);
@@ -284,7 +343,13 @@ internal sealed class AppsPageView : IViewPage
         float refreshH = 30f;
         var refreshRect = new UiRect(inner.X, inner.Bottom - refreshH, inner.Width, refreshH);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.refresh", refreshRect, L10n.T("Apps.Refresh"), fontSize: 12.5f);
-        _clicks.Add((refreshRect, () => TriggerRefresh(immediate: true)));
+        _clicks.Add((refreshRect, () =>
+        {
+            TriggerRefresh(forceAppsRefresh: true);
+#if SONICROUTE_PHONE
+            _ = _actions.Host.Phone.RefreshAsync(restore: true);
+#endif
+        }));
 
         float listAvailH = MathF.Max(40f, refreshRect.Y - 10f - y);
         _appsListRect = new UiRect(inner.X, y, inner.Width, listAvailH);
@@ -352,7 +417,6 @@ internal sealed class AppsPageView : IViewPage
         var outChoices = BuildOutputChoices();
         var inChoices = BuildInputChoices();
 
-        // First pass estimate for scrollbar
         float estW = viewport.Width - 2f;
         float estRouteColW = _actions.Config.ExperimentalMic ? (estW - 28f) * 0.5f : (estW - 20f);
         LayoutPillFlow(outChoices, estRouteColW, out float outPillsH);
@@ -386,6 +450,7 @@ internal sealed class AppsPageView : IViewPage
         var iconCard = new UiRect(c1In.X, c1In.Y, 48f, 48f);
         UiPrimitives.DrawCard(g, t, iconCard, 10f);
         if (hasApp) DrawAppIcon(g, t, app!, iconCard.Deflate(8f));
+        else g.DrawIcon(UiIcon.Apps, iconCard.Deflate(12f), t.TextSecondary, 1.8f);
 
         string importLabel = L10n.T("AppIcons.Import");
         string resetLabel = L10n.T("AppIcons.Reset");
@@ -440,22 +505,25 @@ internal sealed class AppsPageView : IViewPage
         var outCol = new UiRect(c2In.X, colTop, routeColW, c2In.Bottom - colTop);
         g.DrawText(L10n.T("Apps.Output"), new UiRect(outCol.X, outCol.Y, outCol.Width, 18f), t.TextSecondary, 13f, 600);
         _outputComboRect = new UiRect(outCol.X, outCol.Y + 22f, outCol.Width, 34f);
-        string currentOutLabel = hasApp ? DeviceLabel(_nativeOutput, Flow.Render) : "";
+        string displayedPrimary = GetDisplayedPrimaryOutput();
+        string currentOutLabel = hasApp ? DeviceLabel(displayedPrimary, Flow.Render) : L10n.T("Ov.NoOutput");
         UiPrimitives.DrawComboBox(g, t, hit, "apps.out.combo", _outputComboRect, currentOutLabel, enabled: hasApp);
         if (hasApp) _clicks.Add((_outputComboRect, () => OpenOutputCombo(outChoices)));
 
         var activeSet = _pendingOutputs ?? _selectedOutputs;
-        string? displayedNative = _pendingPrimary ?? _nativeOutput;
+        string? nativeCandidate = hasApp && !app!.IsExternal && !PcRoutingApi.IsPhoneOutputDevice(displayedPrimary) && activeSet.Contains(displayedPrimary)
+            ? displayedPrimary
+            : null;
         float pillsOriginY = _outputComboRect.Bottom + 6f;
         for (int i = 0; i < outChoices.Length; i++)
         {
             var dev = outChoices[i];
             var pr = outPillRects[i].Offset(outCol.X, pillsOriginY);
             bool isMember = hasApp && activeSet.Contains(dev.Id);
-            bool isNative = hasApp && isMember && IdCmp.Equals(dev.Id, displayedNative);
+            bool isNative = hasApp && isMember && (app!.IsExternal || (nativeCandidate != null && IdCmp.Equals(dev.Id, nativeCandidate)));
             bool isMirror = hasApp && isMember && !isNative;
             string pidKey = "apps.out.dev." + i;
-            DrawQuickDevButton(g, t, hit, pidKey, pr, UiPrimitives.ShortDeviceName(dev.Label), isNative, isMirror, enabled: hasApp, tooltip: dev.Label);
+            DrawQuickDevButton(g, t, hit, pidKey, pr, dev.Label, isNative, isMirror, enabled: hasApp, tooltip: L10n.T("Qp.PlaybackMultiSelect"));
             var devCopy = dev;
             if (hasApp) _clicks.Add((pr, () => HandleOutputPillClick(devCopy.Id, outChoices)));
         }
@@ -466,7 +534,7 @@ internal sealed class AppsPageView : IViewPage
             bool inEnabled = hasApp && !app!.IsExternal;
             g.DrawText(L10n.T("Apps.Input"), new UiRect(inCol.X, inCol.Y, inCol.Width, 18f), t.TextSecondary, 13f, 600);
             _inputComboRect = new UiRect(inCol.X, inCol.Y + 22f, inCol.Width, 34f);
-            string currentInLabel = hasApp ? DeviceLabel(_nativeInput, Flow.Capture) : "";
+            string currentInLabel = hasApp ? DeviceLabel(_nativeInput, Flow.Capture) : L10n.T("Ov.NoInput");
             UiPrimitives.DrawComboBox(g, t, hit, "apps.in.combo", _inputComboRect, currentInLabel, enabled: inEnabled);
             if (inEnabled) _clicks.Add((_inputComboRect, () => OpenInputCombo(inChoices)));
 
@@ -477,7 +545,7 @@ internal sealed class AppsPageView : IViewPage
                 var pr = inPillRects[i].Offset(inCol.X, inPillsOriginY);
                 bool isSel = inEnabled && IdCmp.Equals(dev.Id, _nativeInput);
                 string iidKey = "apps.in.dev." + i;
-                DrawQuickDevButton(g, t, hit, iidKey, pr, UiPrimitives.ShortDeviceName(dev.Label), isSel, false, enabled: inEnabled, tooltip: dev.Label);
+                DrawQuickDevButton(g, t, hit, iidKey, pr, dev.Label, isSel, false, enabled: inEnabled);
                 var devCopy = dev;
                 if (inEnabled) _clicks.Add((pr, () => SelectInputRoute(devCopy.Id)));
             }
@@ -495,9 +563,13 @@ internal sealed class AppsPageView : IViewPage
         float volRowY = c3In.Y + 22f;
         bool volReady = hasApp && _selectedVolume >= 0;
         string muteText = _selectedMuted ? L10n.T("Qp.Unmute") : L10n.T("Qp.Mute");
-        float muteW = MathF.Max(54f, D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, _selectedMuted ? 600 : 400, 110f, 28f, false).Width + 18f);
+        float muteW = MathF.Max(78f, D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, _selectedMuted ? 600 : 400, 120f, 28f, false).Width + 40f);
         var muteBtnRect = new UiRect(c3In.X, volRowY + 2f, muteW, 28f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.mute", muteBtnRect, muteText, enabled: volReady, fontSize: 12f, active: _selectedMuted, tooltip: L10n.T("Apps.MuteTitle"));
+        UiPrimitives.DrawSecondaryButton(
+            g, t, hit, "apps.mute", muteBtnRect, muteText,
+            enabled: volReady, fontSize: 12f,
+            icon: _selectedMuted ? UiIcon.VolumeMutedSlash : UiIcon.Speaker,
+            active: _selectedMuted, tooltip: L10n.T("Apps.MuteTitle"));
         if (volReady) _clicks.Add((muteBtnRect, ToggleSelectedAppMute));
 
         var pctRect = new UiRect(c3In.Right - 48f, volRowY, 46f, 32f);
@@ -570,21 +642,6 @@ internal sealed class AppsPageView : IViewPage
 
     private void DrawAppIcon(D2dTarget g, UiThemePalette t, AudioAppInfo app, UiRect rect)
     {
-        if (!string.IsNullOrWhiteSpace(app.ProcessName) &&
-            AppIconFiles.GetFileName(_actions.Config, app.ProcessName!) is { } customFile)
-        {
-            if (!_customIconCache.TryGetValue(customFile, out var customBmp))
-            {
-                customBmp = LoadCustomIconBitmap(customFile);
-                _customIconCache[customFile] = customBmp;
-            }
-            if (customBmp is { } cb)
-            {
-                g.DrawBgraBitmap("app.custom." + customFile, cb.BgraPixels, cb.Width, cb.Height, rect);
-                return;
-            }
-        }
-
         if (app.ExternalIconPng is { Length: > 0 } extBytes)
         {
             if (!_externalIconCache.TryGetValue(app.Identity, out var extBmp))
@@ -599,16 +656,33 @@ internal sealed class AppsPageView : IViewPage
             }
         }
 
-        var nativeIcon = NativeAppIconService.GetAppIcon((int)app.ProcessId, app.IconPath, app.ProcessName);
-        if (nativeIcon is { } nb)
+        var resolved = NativeAppIconService.GetAppIcon(
+            _actions.Config,
+            (int)app.ProcessId,
+            app.IconPath,
+            app.ProcessName,
+            () => _actions.Host.TryPost(() =>
+            {
+                if (_active) _actions.Invalidate();
+            }));
+
+        if (resolved is { } nb)
         {
-            g.DrawBgraBitmap("app.native." + (app.IconPath ?? app.ProcessName ?? app.Identity), nb.BgraPixels, nb.Width, nb.Height, rect);
+            string customFile = !string.IsNullOrWhiteSpace(app.ProcessName)
+                ? (AppIconFiles.GetFileName(_actions.Config, app.ProcessName!) ?? "")
+                : "";
+            string key = customFile.Length > 0
+                ? "app.custom." + customFile
+                : "app.native." + (app.IconPath ?? app.ProcessName ?? app.Identity);
+            g.DrawBgraBitmap(key, nb.BgraPixels, nb.Width, nb.Height, rect);
             return;
         }
 
+        g.FillRoundedRect(rect, 6f, t.NavSelected);
+        g.DrawRoundedRect(rect, 6f, t.Accent.WithAlphaFraction(0.35f), 1f);
         string lbl = GetAppDisplayLabel(app);
         string initial = lbl.Length > 0 ? lbl[..1].ToUpperInvariant() : "?";
-        g.DrawText(initial, rect, t.TextPrimary, rect.Height * 0.52f, 600, UiTextAlign.Center, UiVertAlign.Center);
+        g.DrawText(initial, rect, t.Accent, rect.Height * 0.48f, 600, UiTextAlign.Center, UiVertAlign.Center);
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown)
@@ -690,7 +764,8 @@ internal sealed class AppsPageView : IViewPage
 
     public bool OnPointerUp(UiPointerEventArgs e)
     {
-        bool wasDragging = _draggingVolume || _appsScroll.Dragging || _detailsScroll.Dragging;
+        bool wasDraggingVol = _draggingVolume;
+        bool wasDragging = wasDraggingVol || _appsScroll.Dragging || _detailsScroll.Dragging;
         _draggingVolume = false;
         _appsScroll.EndDrag();
         _detailsScroll.EndDrag();
@@ -698,6 +773,9 @@ internal sealed class AppsPageView : IViewPage
         wasDragging |= _phoneScroll.Dragging;
         _phoneScroll.EndDrag();
 #endif
+        if (wasDraggingVol && _selectedApp is { IsExternal: false })
+            _actions.Host.FlushVolumeWrites();
+
         if (wasDragging) return true;
 
         if (e.Button != UiMouseButton.Left) return false;
@@ -770,46 +848,34 @@ internal sealed class AppsPageView : IViewPage
         return false;
     }
 
-    private void TriggerRefresh(bool immediate)
+    private void TriggerRefresh(bool forceAppsRefresh)
     {
-        _pollTimer?.Dispose();
-        _pollTimer = null;
         if (!_active) return;
-
-        if (immediate)
+        if (_refreshing)
         {
-            RunAudioPoll();
+            _refreshPending = true;
+            return;
         }
-        else
-        {
-            int delayMs = _actions.Config.ShowAppPeakMeter ? 350 : 1000;
-            _pollTimer = _actions.Host.ScheduleOnce(TimeSpan.FromMilliseconds(delayMs), RunAudioPoll);
-        }
-    }
-
-    private void RunAudioPoll()
-    {
-        if (!_active || _refreshing) return;
         _refreshing = true;
+        _refreshPending = false;
 
         int gen = _stateGen;
         string? targetIdentity = _selectedIdentity;
-        int selectedPid = _selectedApp != null && !_selectedApp.IsExternal ? (int)_selectedApp.ProcessId : 0;
+        var selectedSnapshot = _selectedApp;
         bool readMic = _actions.Config.ExperimentalMic;
-        bool readPeak = _actions.Config.ShowAppPeakMeter && selectedPid > 0;
+        bool readPeak = _actions.Config.ShowAppPeakMeter && selectedSnapshot is { IsExternal: false, HasActiveSession: true };
 
         _ = Task.Run(() =>
         {
             try
             {
-                var outs = ProductAudio.Devices(Flow.Render);
+                var outs = _actions.Host.Audio.RenderDevicesWithPhone();
                 var ins = readMic ? ProductAudio.Devices(Flow.Capture) : Array.Empty<Endpoint>();
-                var apps = _actions.Host.Audio.Apps();
+                var apps = _actions.Host.Audio.Apps(forceAppsRefresh);
                 var mutedMap = new Dictionary<string, bool>(apps.Count, StringComparer.Ordinal);
                 foreach (var a in apps)
                 {
-                    if (a.IsExternal) continue;
-                    try { mutedMap[a.Identity] = _actions.Host.Audio.Volume(Flow.Render, null, (int)a.ProcessId).Muted; }
+                    try { mutedMap[a.Identity] = _actions.Host.Audio.Volume(a).Muted; }
                     catch { mutedMap[a.Identity] = false; }
                 }
 
@@ -820,13 +886,15 @@ internal sealed class AppsPageView : IViewPage
                 string natIn = AudioService.SystemDefaultDeviceId;
                 HashSet<string> selOuts = new(IdCmp) { AudioService.SystemDefaultDeviceId };
 
-                if (selectedPid > 0 && apps.Any(a => (int)a.ProcessId == selectedPid))
+                var liveSelected = targetIdentity != null ? apps.FirstOrDefault(a => a.Identity == targetIdentity) : null;
+                if (liveSelected != null)
                 {
-                    if (!_actions.Host.HasPendingVolume(selectedPid))
+                    bool pendingVol = !liveSelected.IsExternal && _actions.Host.HasPendingVolume((int)liveSelected.ProcessId);
+                    if (!pendingVol)
                     {
                         try
                         {
-                            var vs = _actions.Host.Audio.Volume(Flow.Render, null, selectedPid);
+                            var vs = _actions.Host.Audio.Volume(liveSelected);
                             vol = vs.Percent;
                             muted = vs.Muted;
                         }
@@ -834,19 +902,20 @@ internal sealed class AppsPageView : IViewPage
                     }
                     try
                     {
-                        string? persisted = _actions.Host.Audio.ReadRoute(selectedPid, Flow.Render);
+                        string? persisted = _actions.Host.Audio.ReadRoute(liveSelected, Flow.Render);
                         natOut = string.IsNullOrWhiteSpace(persisted) || AudioService.IsSystemDefault(persisted)
                             ? AudioService.SystemDefaultDeviceId
                             : AudioPolicyConfig.UnpackDeviceId(persisted);
-                        selOuts = AppPlaybackOutputs.GetSelected(selectedPid, natOut);
+                        selOuts = new HashSet<string>(_actions.Host.Audio.GetSelectedOutputs(liveSelected), IdCmp);
+                        if (selOuts.Count == 0) selOuts.Add(natOut);
                     }
                     catch { }
 
-                    if (readMic)
+                    if (readMic && !liveSelected.IsExternal)
                     {
                         try
                         {
-                            string? persistedIn = _actions.Host.Audio.ReadRoute(selectedPid, Flow.Capture);
+                            string? persistedIn = _actions.Host.Audio.ReadRoute((int)liveSelected.ProcessId, Flow.Capture);
                             natIn = string.IsNullOrWhiteSpace(persistedIn) || AudioService.IsSystemDefault(persistedIn)
                                 ? AudioService.SystemDefaultDeviceId
                                 : AudioPolicyConfig.UnpackDeviceId(persistedIn);
@@ -854,12 +923,13 @@ internal sealed class AppsPageView : IViewPage
                         catch { }
                     }
 
-                    if (readPeak)
+                    if (readPeak && !liveSelected.IsExternal)
                     {
                         try
                         {
-                            var pmap = _actions.Host.Audio.ReadPeaks(new[] { selectedPid });
-                            peak = pmap.GetValueOrDefault(selectedPid);
+                            int pid = (int)liveSelected.ProcessId;
+                            var pmap = _actions.Host.Audio.ReadPeaks(new[] { pid });
+                            peak = pmap.GetValueOrDefault(pid);
                         }
                         catch { }
                     }
@@ -869,6 +939,7 @@ internal sealed class AppsPageView : IViewPage
                 {
                     _refreshing = false;
                     if (!_active) return;
+
                     _outputs = outs;
                     _inputs = ins;
                     _apps = apps;
@@ -876,27 +947,31 @@ internal sealed class AppsPageView : IViewPage
 
                     if (targetIdentity != null && gen == _stateGen)
                     {
-                        var found = apps.FirstOrDefault(a => a.Identity == targetIdentity);
-                        if (found != null)
+                        if (liveSelected != null)
                         {
-                            _selectedApp = found;
+                            _selectedApp = liveSelected;
                             if (vol >= 0 && !_draggingVolume) _selectedVolume = vol;
                             _selectedMuted = muted;
                             _selectedPeak = peak;
                             _nativeOutput = natOut;
                             _nativeInput = natIn;
                             _selectedOutputs = selOuts;
+                            if (liveSelected.HasActiveSession && !liveSelected.IsExternal && _actions.Config.ShowAppPeakMeter)
+                                KickPeakBurst();
+                            else
+                                StopPeakBurst();
                         }
                         else if (_selectedApp != null)
                         {
                             _selectedApp = null;
                             _selectedIdentity = null;
                             _selectedVolume = -1;
+                            StopPeakBurst();
                         }
                     }
 
                     _actions.Invalidate();
-                    TriggerRefresh(immediate: false);
+                    if (_refreshPending) TriggerRefresh(forceAppsRefresh: false);
                 });
             }
             catch
@@ -904,9 +979,76 @@ internal sealed class AppsPageView : IViewPage
                 _actions.Host.TryPost(() =>
                 {
                     _refreshing = false;
-                    if (_active) TriggerRefresh(immediate: false);
+                    if (_active && _refreshPending) TriggerRefresh(forceAppsRefresh: false);
                 });
             }
+        });
+    }
+
+    private void KickPeakBurst()
+    {
+        if (!_active || !_actions.Config.ShowAppPeakMeter || _selectedApp is not { IsExternal: false, HasActiveSession: true })
+        {
+            StopPeakBurst();
+            return;
+        }
+        _peakBurstRemaining = PeakBurstMaxTicks;
+        ScheduleNextPeakTick();
+    }
+
+    private void ScheduleNextPeakTick()
+    {
+        if (_peakTimer != null || !_active || _peakBurstRemaining <= 0
+            || !_actions.Config.ShowAppPeakMeter
+            || _selectedApp is not { IsExternal: false, HasActiveSession: true })
+        {
+            return;
+        }
+        _peakTimer = _actions.Host.ScheduleOnce(TimeSpan.FromMilliseconds(120), OnPeakTick);
+    }
+
+    private void StopPeakBurst()
+    {
+        _peakTimer?.Dispose();
+        _peakTimer = null;
+        _peakBurstRemaining = 0;
+        _selectedPeak = 0f;
+    }
+
+    private void OnPeakTick()
+    {
+        _peakTimer = null;
+        if (!_active || _peakInFlight || _peakBurstRemaining <= 0
+            || !_actions.Config.ShowAppPeakMeter
+            || _selectedApp is not { IsExternal: false, HasActiveSession: true } app)
+        {
+            return;
+        }
+
+        _peakBurstRemaining--;
+        int pid = (int)app.ProcessId;
+        _peakInFlight = true;
+
+        _ = Task.Run(() =>
+        {
+            float read = 0f;
+            try { read = _actions.Host.Audio.ReadPeaks(new[] { pid }).GetValueOrDefault(pid); }
+            catch { }
+
+            _actions.Host.TryPost(() =>
+            {
+                _peakInFlight = false;
+                if (!_active || _selectedApp?.ProcessId != (uint)pid) return;
+                float next = read >= _selectedPeak ? read : _selectedPeak * 0.72f;
+                if (next < 0.005f) next = 0f;
+                if (MathF.Abs(next - _selectedPeak) > 0.008f)
+                {
+                    _selectedPeak = next;
+                    _actions.Invalidate();
+                }
+                if (_peakBurstRemaining > 0 && (_selectedPeak > 0.01f || read > 0.01f))
+                    ScheduleNextPeakTick();
+            });
         });
     }
 
@@ -976,8 +1118,9 @@ internal sealed class AppsPageView : IViewPage
         _pendingOutputs = null;
         _pendingPrimary = null;
         _outputRangeAnchor = null;
+        StopPeakBurst();
         _actions.Invalidate();
-        TriggerRefresh(immediate: true);
+        TriggerRefresh(forceAppsRefresh: false);
     }
 
     private void ClearAppSelection()
@@ -987,9 +1130,9 @@ internal sealed class AppsPageView : IViewPage
         _selectedApp = null;
         _selectedVolume = -1;
         _selectedMuted = false;
-        _selectedPeak = 0f;
         _pendingOutputs = null;
         _pendingPrimary = null;
+        StopPeakBurst();
         _actions.Invalidate();
     }
 
@@ -1032,6 +1175,16 @@ internal sealed class AppsPageView : IViewPage
             });
         }
 
+        if (_actions.Config.HiddenPanelApps.Count > 0)
+        {
+            items.Add(new UiMenuItem
+            {
+                Text = L10n.T("Apps.ShowInPanel") + " (" + L10n.T("St.SelectAll") + ")",
+                Icon = UiIcon.Refresh,
+                Click = UnhideAllPanelApps,
+            });
+        }
+
         items.Add(UiMenuItem.Separator());
         items.Add(new UiMenuItem
         {
@@ -1043,6 +1196,14 @@ internal sealed class AppsPageView : IViewPage
         _actions.ShowMenuAtCursor(items);
     }
 
+    private void UnhideAllPanelApps()
+    {
+        if (_actions.Config.HiddenPanelApps.Count == 0) return;
+        _actions.Config.HiddenPanelApps.Clear();
+        ConfigService.TrySave(_actions.Config);
+        _actions.NotifySettingsChanged();
+    }
+
     private void BatchToggleMute(List<AudioAppInfo> targets)
     {
         bool targetMute = !_mutedByIdentity.GetValueOrDefault(targets[0].Identity);
@@ -1050,11 +1211,10 @@ internal sealed class AppsPageView : IViewPage
         {
             foreach (var app in targets)
             {
-                if (app.IsExternal) continue;
-                try { _actions.Host.Audio.Volume(Flow.Render, null, (int)app.ProcessId, mute: targetMute); }
+                try { _actions.Host.Audio.Volume(app, mute: targetMute); }
                 catch { }
             }
-            _actions.Host.TryPost(() => TriggerRefresh(immediate: true));
+            _actions.Host.TryPost(() => TriggerRefresh(forceAppsRefresh: false));
         });
     }
 
@@ -1077,7 +1237,14 @@ internal sealed class AppsPageView : IViewPage
         {
             foreach (var app in targets)
             {
-                if (app.IsExternal) continue;
+                if (app.IsExternal)
+                {
+#if SONICROUTE_PHONE
+                    try { await _actions.Host.Audio.SetExternalOutputsAsync(app, new[] { AudioService.SystemDefaultDeviceId }).ConfigureAwait(false); }
+                    catch { }
+#endif
+                    continue;
+                }
                 int pid = (int)app.ProcessId;
                 try { await _actions.Host.CurrentApp.SelectOutputAsync(pid, AudioService.SystemDefaultDeviceId).ConfigureAwait(false); }
                 catch { }
@@ -1087,7 +1254,7 @@ internal sealed class AppsPageView : IViewPage
                     catch { }
                 }
             }
-            _actions.Host.TryPost(() => TriggerRefresh(immediate: true));
+            _actions.Host.TryPost(() => TriggerRefresh(forceAppsRefresh: false));
         });
     }
 
@@ -1121,38 +1288,66 @@ internal sealed class AppsPageView : IViewPage
     private void ImportCustomIcon()
     {
         if (_selectedApp == null || string.IsNullOrWhiteSpace(_selectedApp.ProcessName)) return;
+        string? path = NativeDialogs.Open(_actions.OwnerWindow.Handle, "PNG / JPEG / ICO / EXE|*.png;*.jpg;*.jpeg;*.ico;*.exe");
+        if (!string.IsNullOrWhiteSpace(path))
+            ImportCustomIconFromPath(path);
+    }
+
+    private void ImportCustomIconFromPath(string path)
+    {
+        if (_selectedApp == null || string.IsNullOrWhiteSpace(_selectedApp.ProcessName)) return;
         string proc = _selectedApp.ProcessName!;
         if (_actions.Config.AppIcons.Count >= AppIconFiles.MaxIcons && !_actions.Config.AppIcons.ContainsKey(proc))
         {
             _actions.ShowNotice(L10n.T("AppIcons.Limit"));
             return;
         }
-        string? path = NativeDialogs.Open(_actions.OwnerWindow.Handle, "PNG / JPEG / ICO|*.png;*.jpg;*.jpeg;*.ico");
-        if (string.IsNullOrWhiteSpace(path)) return;
 
         try
         {
             var info = new FileInfo(path);
-            if (!info.Exists || info.Length == 0 || info.Length > 8 * 1024 * 1024)
+            if (!info.Exists || info.Length == 0 || info.Length > 32 * 1024 * 1024)
             {
                 _actions.ShowNotice(L10n.T("AppIcons.Invalid"));
                 return;
             }
-            byte[] raw = File.ReadAllBytes(path);
-            if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(raw, AppIconFiles.IconSize, AppIconFiles.IconSize, out byte[] bgra, out int w, out int h)
-                || w != AppIconFiles.IconSize || h != AppIconFiles.IconSize)
+
+            byte[] bgra;
+            int w, h;
+            if (IdCmp.Equals(Path.GetExtension(path), ".exe"))
             {
-                _actions.ShowNotice(L10n.T("AppIcons.Invalid"));
-                return;
+                if (!TryExtractExeIconBgra(path, out bgra, out w, out h))
+                {
+                    _actions.ShowNotice(L10n.T("AppIcons.Invalid"));
+                    return;
+                }
             }
+            else
+            {
+                if (info.Length > 8 * 1024 * 1024)
+                {
+                    _actions.ShowNotice(L10n.T("AppIcons.Invalid"));
+                    return;
+                }
+                byte[] raw = File.ReadAllBytes(path);
+                if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(raw, AppIconFiles.IconSize, AppIconFiles.IconSize, out bgra, out w, out h)
+                    || w != AppIconFiles.IconSize || h != AppIconFiles.IconSize)
+                {
+                    _actions.ShowNotice(L10n.T("AppIcons.Invalid"));
+                    return;
+                }
+            }
+
             byte[] png64 = EncodePng64(bgra, w, h);
+            string? previous = AppIconFiles.GetFileName(_actions.Config, proc);
             string savedName = AppIconFiles.SavePngIfChanged(png64, out bool changed);
             if (!ConfigService.TrySetAppIcon(proc, savedName))
             {
                 _actions.ShowNotice(L10n.T("AppIcons.SaveFailed"));
                 return;
             }
-            if (changed) _customIconCache.Remove(savedName);
+            if (!string.IsNullOrEmpty(previous)) NativeAppIconService.InvalidateCustomIcon(previous);
+            if (changed) NativeAppIconService.InvalidateCustomIcon(savedName);
             AppIconFiles.CleanupUnused(_actions.Config);
             _actions.Host.ViewSettingsChanged();
             _actions.ShowNotice(L10n.T("AppIcons.Imported"));
@@ -1167,11 +1362,13 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_selectedApp == null || string.IsNullOrWhiteSpace(_selectedApp.ProcessName)) return;
         string proc = _selectedApp.ProcessName!;
+        string? previous = AppIconFiles.GetFileName(_actions.Config, proc);
         if (!ConfigService.TrySetAppIcon(proc, null))
         {
             _actions.ShowNotice(L10n.T("AppIcons.SaveFailed"));
             return;
         }
+        if (!string.IsNullOrEmpty(previous)) NativeAppIconService.InvalidateCustomIcon(previous);
         AppIconFiles.CleanupUnused(_actions.Config);
         _actions.Host.ViewSettingsChanged();
         _actions.ShowNotice(L10n.T("AppIcons.ResetDone"));
@@ -1181,9 +1378,9 @@ internal sealed class AppsPageView : IViewPage
     {
         if (_selectedApp == null) return;
         var list = choices.Select(c => new ComboChoice(c.Id, c.Label)).ToArray();
-        _actions.ShowCombo(_outputComboRect, list, _nativeOutput, picked =>
+        _actions.ShowCombo(_outputComboRect, list, GetDisplayedPrimaryOutput(), picked =>
         {
-            SelectSingleOutputRoute(picked.Key);
+            ApplyOutputSelection(_selectedApp, choices, picked.Key, ctrl: false, shift: false);
         });
     }
 
@@ -1199,46 +1396,85 @@ internal sealed class AppsPageView : IViewPage
 
     private void HandleOutputPillClick(string deviceId, DeviceChoice[] choices)
     {
-        if (_selectedApp == null || _selectedApp.IsExternal) return;
+        if (_selectedApp == null) return;
         bool ctrl = (GetKeyState(0x11) & 0x8000) != 0;
         bool shift = (GetKeyState(0x10) & 0x8000) != 0;
+        ApplyOutputSelection(_selectedApp, choices, deviceId, ctrl, shift);
+    }
 
-        if (!ctrl && !shift)
+    private void ApplyOutputSelection(AudioAppInfo app, DeviceChoice[] choices, string deviceId, bool ctrl, bool shift)
+    {
+        bool isMultiExternal = IsMultiOutputExternal(app);
+        if (app.IsExternal && !isMultiExternal)
         {
-            _outputRangeAnchor = deviceId;
-            SelectSingleOutputRoute(deviceId);
+            ctrl = false;
+            shift = false;
+        }
+        if (!app.IsExternal && ctrl && shift && PcRoutingApi.IsPhoneOutputDevice(deviceId))
             return;
-        }
 
-        int pid = (int)_selectedApp.ProcessId;
-        var selection = new HashSet<string>(_pendingOutputs ?? _selectedOutputs, IdCmp);
-        if (shift)
+        string[] order = choices.Select(c => c.Id).ToArray();
+        var currentSelected = _pendingOutputs ?? _selectedOutputs;
+        string[] nextOutputs = SelectPlaybackRange(order, currentSelected, deviceId, _outputRangeAnchor, ctrl, shift);
+        if (nextOutputs.Length == 0) nextOutputs = new[] { AudioService.SystemDefaultDeviceId };
+
+#if SONICROUTE_PHONE
+        if (app.IsExternal && _actions.Host.Audio.ExternalAudio?.FindSession(app.ExternalSourceId) is AndroidAudioSession android && android.State.Device is { } sourceDevice)
         {
-            int a = Array.FindIndex(choices, c => IdCmp.Equals(c.Id, _outputRangeAnchor));
-            int b = Array.FindIndex(choices, c => IdCmp.Equals(c.Id, deviceId));
-            if (a < 0) a = b;
-            for (int i = Math.Min(a, b); i <= Math.Max(a, b); i++)
-                selection.Add(choices[i].Id);
+            bool OwnForcedOutput(string id) => AndroidOutputIdentity.TryParseDeviceId(id, out var key, out _)
+                && string.Equals(key, AndroidDeviceIdentity.Key(sourceDevice), StringComparison.OrdinalIgnoreCase);
+            if (nextOutputs.Contains(AndroidAudioSession.SourcePhoneOutputId, IdCmp) && nextOutputs.Any(OwnForcedOutput))
+            {
+                nextOutputs = IdCmp.Equals(deviceId, AndroidAudioSession.SourcePhoneOutputId)
+                    ? nextOutputs.Where(id => !OwnForcedOutput(id)).ToArray()
+                    : nextOutputs.Where(id => !IdCmp.Equals(id, AndroidAudioSession.SourcePhoneOutputId)).ToArray();
+                if (nextOutputs.Length == 0) nextOutputs = new[] { AudioService.SystemDefaultDeviceId };
+            }
         }
-        else
-        {
-            if (!selection.Remove(deviceId)) selection.Add(deviceId);
-            _outputRangeAnchor = deviceId;
-        }
-        if (selection.Count == 0) selection.Add(AudioService.SystemDefaultDeviceId);
+#endif
 
-        string preferred = selection.Contains(deviceId) ? deviceId
-            : selection.Contains(_nativeOutput) ? _nativeOutput
-            : selection.First();
+        _outputRangeAnchor = shift && !ctrl ? (_outputRangeAnchor ?? deviceId) : deviceId;
+        string? explicitPrimary = ctrl && shift ? deviceId
+            : !ctrl && !shift ? (!PcRoutingApi.IsPhoneOutputDevice(deviceId) ? deviceId : null)
+            : _pendingPrimary != null && nextOutputs.Contains(_pendingPrimary, IdCmp) ? _pendingPrimary : null;
 
-        _pendingOutputs = selection;
+        string preferred = SelectOptimisticPrimaryOutput(
+            nextOutputs,
+            explicitPrimary ?? _nativeOutput,
+            preferPhysical: !app.IsExternal,
+            lowPriorityId: LowPriorityOutputId(app));
+
+        _pendingOutputs = new HashSet<string>(nextOutputs, IdCmp);
         _pendingPrimary = preferred;
         int editGen = ++_outputEditGen;
         _actions.Invalidate();
 
         _ = Task.Run(async () =>
         {
-            var reply = await _actions.Host.CurrentApp.SetOutputsAsync(pid, preferred, selection.ToArray()).ConfigureAwait(false);
+            ControlReply reply;
+#if SONICROUTE_PHONE
+            if (app.IsExternal)
+            {
+                reply = await _actions.Host.Audio.SetExternalOutputsAsync(app, nextOutputs).ConfigureAwait(false);
+            }
+            else
+#endif
+            {
+                int pid = (int)app.ProcessId;
+                if (!ctrl && !shift && !PcRoutingApi.IsPhoneOutputDevice(deviceId))
+                {
+                    reply = await _actions.Host.CurrentApp.SelectOutputAsync(pid, deviceId).ConfigureAwait(false);
+                }
+                else
+                {
+                    var args = new string[2 + nextOutputs.Length];
+                    args[0] = pid.ToString(CultureInfo.InvariantCulture);
+                    args[1] = preferred;
+                    nextOutputs.CopyTo(args, 2);
+                    reply = await _actions.Host.Audio.ExecuteAsync(new ControlRequest("outputs-set", args)).ConfigureAwait(false);
+                }
+            }
+
             _actions.Host.TryPost(() =>
             {
                 if (editGen != _outputEditGen) return;
@@ -1246,33 +1482,92 @@ internal sealed class AppsPageView : IViewPage
                 _pendingPrimary = null;
                 if (reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase))
                     _actions.ShowNotice(reply.Text);
-                TriggerRefresh(immediate: true);
+                TriggerRefresh(forceAppsRefresh: false);
             });
         });
     }
 
-    private void SelectSingleOutputRoute(string deviceId)
+    private static string[] SelectPlaybackRange(string[] order, HashSet<string> selected, string clicked, string? anchor, bool ctrl, bool shift)
     {
-        if (_selectedApp == null || _selectedApp.IsExternal) return;
-        int pid = (int)_selectedApp.ProcessId;
-        _pendingOutputs = new HashSet<string>(IdCmp) { deviceId };
-        _pendingPrimary = deviceId;
-        int editGen = ++_outputEditGen;
-        _actions.Invalidate();
-
-        _ = Task.Run(async () =>
+        if (!shift && !ctrl) return new[] { clicked };
+        var result = new HashSet<string>(selected, IdCmp);
+        if (shift && ctrl)
         {
-            var reply = await _actions.Host.CurrentApp.SelectOutputAsync(pid, deviceId).ConfigureAwait(false);
-            _actions.Host.TryPost(() =>
+            result.Add(clicked);
+        }
+        else if (shift)
+        {
+            anchor ??= order.FirstOrDefault(result.Contains);
+            int start = Array.FindIndex(order, id => IdCmp.Equals(id, anchor));
+            int end = Array.FindIndex(order, id => IdCmp.Equals(id, clicked));
+            if (start < 0 || end < 0) result.Add(clicked);
+            else for (int i = Math.Min(start, end); i <= Math.Max(start, end); i++) result.Add(order[i]);
+        }
+        else if (!result.Remove(clicked))
+        {
+            result.Add(clicked);
+        }
+        var visible = order.Where(result.Contains);
+        return visible.Concat(selected.Where(id => result.Contains(id) && !order.Contains(id, IdCmp))).ToArray();
+    }
+
+    private static string SelectOptimisticPrimaryOutput(IReadOnlyList<string> outputs, string? currentOutputId, bool preferPhysical, string? lowPriorityId = null)
+    {
+        if (outputs.Count == 0) return AudioService.SystemDefaultDeviceId;
+
+        string? Pick(bool filtered)
+        {
+            string? first = null, matchedCurrent = null, systemDefault = null;
+            for (int i = 0; i < outputs.Count; i++)
             {
-                if (editGen != _outputEditGen) return;
-                _pendingOutputs = null;
-                _pendingPrimary = null;
-                if (reply.Text.StartsWith("error", StringComparison.OrdinalIgnoreCase))
-                    _actions.ShowNotice(reply.Text);
-                TriggerRefresh(immediate: true);
-            });
-        });
+                string id = outputs[i];
+                if (filtered)
+                {
+                    if (preferPhysical && PcRoutingApi.IsPhoneOutputDevice(id)) continue;
+                    if (lowPriorityId != null && IdCmp.Equals(id, lowPriorityId)) continue;
+                }
+                if (!preferPhysical && AudioService.IsSystemDefault(id)) return id;
+                first ??= id;
+                if (AudioService.IsSystemDefault(id)) systemDefault ??= id;
+                if (currentOutputId != null && IdCmp.Equals(id, currentOutputId)) matchedCurrent = id;
+            }
+            return matchedCurrent ?? systemDefault ?? first;
+        }
+
+        return Pick(true) ?? Pick(false) ?? AudioService.SystemDefaultDeviceId;
+    }
+
+    private bool IsMultiOutputExternal(AudioAppInfo app)
+    {
+#if SONICROUTE_PHONE
+        return app.IsExternal && _actions.Host.Audio.ExternalAudio?.FindSession(app.ExternalSourceId) is IMultiOutputAudioSession;
+#else
+        return false;
+#endif
+    }
+
+    private string? LowPriorityOutputId(AudioAppInfo app)
+    {
+#if SONICROUTE_PHONE
+        return app.IsExternal && _actions.Host.Audio.ExternalAudio?.FindSession(app.ExternalSourceId) is AndroidAudioSession
+            ? AndroidAudioSession.SourcePhoneOutputId
+            : null;
+#else
+        return null;
+#endif
+    }
+
+    private string GetDisplayedPrimaryOutput()
+    {
+        if (_pendingOutputs is { Count: > 0 } && _selectedApp != null)
+        {
+            return SelectOptimisticPrimaryOutput(
+                _pendingOutputs.ToArray(),
+                _pendingPrimary ?? _nativeOutput,
+                preferPhysical: !_selectedApp.IsExternal,
+                lowPriorityId: LowPriorityOutputId(_selectedApp));
+        }
+        return _nativeOutput;
     }
 
     private void SelectInputRoute(string deviceId)
@@ -1292,26 +1587,26 @@ internal sealed class AppsPageView : IViewPage
             {
                 _actions.Host.TryPost(() => _actions.ShowNotice(ex.Message));
             }
-            _actions.Host.TryPost(() => TriggerRefresh(immediate: true));
+            _actions.Host.TryPost(() => TriggerRefresh(forceAppsRefresh: false));
         });
     }
 
     private void ToggleSelectedAppMute()
     {
-        if (_selectedApp == null || _selectedApp.IsExternal) return;
-        int pid = (int)_selectedApp.ProcessId;
+        if (_selectedApp == null) return;
+        var app = _selectedApp;
         _ = Task.Run(() =>
         {
             try
             {
-                var vs = _actions.Host.Audio.Volume(Flow.Render, null, pid, toggle: true);
+                var vs = _actions.Host.Audio.Volume(app, toggle: true);
                 _actions.Host.TryPost(() =>
                 {
-                    if (_selectedApp?.ProcessId == (uint)pid)
+                    if (_selectedApp?.Identity == app.Identity)
                     {
                         _selectedMuted = vs.Muted;
-                        _selectedVolume = vs.Percent;
-                        _mutedByIdentity[_selectedApp.Identity] = vs.Muted;
+                        if (vs.Percent >= 0) _selectedVolume = vs.Percent;
+                        _mutedByIdentity[app.Identity] = vs.Muted;
                         _actions.Invalidate();
                     }
                 });
@@ -1325,16 +1620,30 @@ internal sealed class AppsPageView : IViewPage
 
     private void ApplySliderVolume(int percent)
     {
-        if (_selectedApp == null || _selectedApp.IsExternal) return;
-        int pid = (int)_selectedApp.ProcessId;
+        if (_selectedApp == null) return;
+        var app = _selectedApp;
         _selectedVolume = percent;
-        _actions.Host.QueueVolume(pid, percent, (actual, applied) =>
+
+        if (!app.IsExternal)
         {
-            if (!_active || _selectedApp?.ProcessId != (uint)pid) return;
-            if (applied && actual >= 0 && !_draggingVolume) _selectedVolume = actual;
-            else if (!applied) _actions.ShowNotice(L10n.T("Ov.VolFail"));
-            _actions.Invalidate();
-        });
+            int pid = (int)app.ProcessId;
+            _actions.Host.QueueVolume(pid, percent, (actual, applied) =>
+            {
+                if (!_active || _selectedApp?.Identity != app.Identity) return;
+                if (applied && actual >= 0 && !_draggingVolume) _selectedVolume = actual;
+                else if (!applied) _actions.ShowNotice(L10n.T("Ov.VolFail"));
+                _actions.Invalidate();
+            });
+            KickPeakBurst();
+        }
+        else
+        {
+            _ = Task.Run(() =>
+            {
+                try { _actions.Host.Audio.Volume(app, level: percent); }
+                catch { }
+            });
+        }
         _actions.Invalidate();
     }
 
@@ -1369,13 +1678,18 @@ internal sealed class AppsPageView : IViewPage
     private DeviceChoice[] BuildOutputChoices()
     {
         var cfg = _actions.Config;
+        var active = _pendingOutputs ?? _selectedOutputs;
         var list = new List<DeviceChoice>();
-        if (!cfg.HiddenOutputDevices.Contains(AudioService.SystemDefaultDeviceId) || IdCmp.Equals(_nativeOutput, AudioService.SystemDefaultDeviceId))
+        if (!cfg.HiddenOutputDevices.Contains(AudioService.SystemDefaultDeviceId)
+            || IdCmp.Equals(_nativeOutput, AudioService.SystemDefaultDeviceId)
+            || active.Contains(AudioService.SystemDefaultDeviceId))
+        {
             list.Add(new DeviceChoice(AudioService.SystemDefaultDeviceId, L10n.T("Dev.SystemDefaultOut")));
+        }
 
         foreach (var ep in _outputs)
         {
-            if (cfg.HiddenOutputDevices.Contains(ep.Id) && !IdCmp.Equals(_nativeOutput, ep.Id) && !_selectedOutputs.Contains(ep.Id))
+            if (cfg.HiddenOutputDevices.Contains(ep.Id) && !IdCmp.Equals(_nativeOutput, ep.Id) && !active.Contains(ep.Id))
                 continue;
             list.Add(new DeviceChoice(ep.Id, DeviceLabel(ep.Id, Flow.Render, ep.Name)));
         }
@@ -1406,8 +1720,7 @@ internal sealed class AppsPageView : IViewPage
 
         for (int i = 0; i < choices.Length; i++)
         {
-            string shortLbl = UiPrimitives.ShortDeviceName(choices[i].Label);
-            float textW = ctx.MeasureText(shortLbl, UiMetrics.FontFamily, 12.5f, 600, MathF.Max(60f, maxWidth - 24f), rowH, false).Width;
+            float textW = ctx.MeasureText(choices[i].Label, UiMetrics.FontFamily, 12.5f, 600, MathF.Max(60f, maxWidth - 24f), rowH, false).Width;
             float pillW = MathF.Min(maxWidth, MathF.Ceiling(textW) + 24f);
             if (x > 0f && x + pillW > maxWidth)
             {
@@ -1444,12 +1757,6 @@ internal sealed class AppsPageView : IViewPage
         return fallback ?? list.FirstOrDefault(e => IdCmp.Equals(e.Id, id))?.Name ?? id;
     }
 
-    private static NativeAppIconService.IconBitmap? LoadCustomIconBitmap(string fileName)
-    {
-        try { return DecodePngBitmap(AppIconFiles.ReadPng(fileName)); }
-        catch { return null; }
-    }
-
     private static NativeAppIconService.IconBitmap? DecodePngBitmap(byte[] png)
     {
         if (!SonicRoute.Native.Graphics.WicIconLoader.TryDecodePngToBgra32(png, 64, 64, out byte[] pixels, out int w, out int h))
@@ -1466,24 +1773,100 @@ internal sealed class AppsPageView : IViewPage
         return new NativeAppIconService.IconBitmap(pixels, w, h);
     }
 
+    private static bool TryExtractExeIconBgra(string exePath, out byte[] bgra64, out int outW, out int outH)
+    {
+        bgra64 = Array.Empty<byte>();
+        outW = outH = 0;
+        var shfi = new ShFileInfo();
+        const uint flags = 0x000000100 /*SHGFI_ICON*/ | 0x000000000 /*SHGFI_LARGEICON*/;
+        if (SHGetFileInfoW(exePath, 0, ref shfi, (uint)Marshal.SizeOf<ShFileInfo>(), flags) == 0 || shfi.HIcon == 0)
+            return false;
+        try
+        {
+            if (!GetIconInfo(shfi.HIcon, out var ii)) return false;
+            try
+            {
+                if (ii.HbmColor == 0) return false;
+                var bmpInfo = new BitmapStruct();
+                if (GetObjectW(ii.HbmColor, Marshal.SizeOf<BitmapStruct>(), ref bmpInfo) == 0) return false;
+                int sw = bmpInfo.BmWidth;
+                int sh = Math.Abs(bmpInfo.BmHeight);
+                if (sw <= 0 || sh <= 0 || sw > 256 || sh > 256) return false;
+
+                byte[] src = new byte[sw * sh * 4];
+                var bmi = new BitmapInfoHeader
+                {
+                    BiSize = (uint)Marshal.SizeOf<BitmapInfoHeader>(),
+                    BiWidth = sw,
+                    BiHeight = -sh,
+                    BiPlanes = 1,
+                    BiBitCount = 32,
+                    BiCompression = 0,
+                };
+                nint hdc = GetDC(0);
+                try
+                {
+                    var pin = GCHandle.Alloc(src, GCHandleType.Pinned);
+                    try
+                    {
+                        if (GetDIBits(hdc, ii.HbmColor, 0, (uint)sh, pin.AddrOfPinnedObject(), ref bmi, 0) == 0)
+                            return false;
+                    }
+                    finally { pin.Free(); }
+                }
+                finally { ReleaseDC(0, hdc); }
+
+                // Bilinear/nearest resize to 64x64 BGRA
+                int target = AppIconFiles.IconSize;
+                byte[] dst = new byte[target * target * 4];
+                for (int y = 0; y < target; y++)
+                {
+                    int sy = Math.Clamp(y * sh / target, 0, sh - 1);
+                    for (int x = 0; x < target; x++)
+                    {
+                        int sx = Math.Clamp(x * sw / target, 0, sw - 1);
+                        int si = (sy * sw + sx) * 4;
+                        int di = (y * target + x) * 4;
+                        dst[di + 0] = src[si + 0];
+                        dst[di + 1] = src[si + 1];
+                        dst[di + 2] = src[si + 2];
+                        dst[di + 3] = src[si + 3];
+                    }
+                }
+                bgra64 = dst;
+                outW = target;
+                outH = target;
+                return true;
+            }
+            finally
+            {
+                if (ii.HbmColor != 0) DeleteObject(ii.HbmColor);
+                if (ii.HbmMask != 0) DeleteObject(ii.HbmMask);
+            }
+        }
+        finally
+        {
+            DestroyIcon(shfi.HIcon);
+        }
+    }
+
     private static byte[] EncodePng64(byte[] bgra, int w, int h)
     {
-        // Convert BGRA to filtered RGBA scanlines (filter byte 0 per row)
         int stride = w * 4;
         byte[] raw = new byte[(stride + 1) * h];
         for (int row = 0; row < h; row++)
         {
             int dst = row * (stride + 1);
             int src = row * stride;
-            raw[dst] = 0; // filter None
+            raw[dst] = 0;
             for (int col = 0; col < w; col++)
             {
                 int s = src + col * 4;
                 int d = dst + 1 + col * 4;
-                raw[d + 0] = bgra[s + 2]; // R
-                raw[d + 1] = bgra[s + 1]; // G
-                raw[d + 2] = bgra[s + 0]; // B
-                raw[d + 3] = bgra[s + 3]; // A
+                raw[d + 0] = bgra[s + 2];
+                raw[d + 1] = bgra[s + 1];
+                raw[d + 2] = bgra[s + 0];
+                raw[d + 3] = bgra[s + 3];
             }
         }
 
@@ -1501,8 +1884,8 @@ internal sealed class AppsPageView : IViewPage
         var ihdr = new byte[13];
         WriteBigEndianUInt32(ihdr, 0, (uint)w);
         WriteBigEndianUInt32(ihdr, 4, (uint)h);
-        ihdr[8] = 8; // bit depth
-        ihdr[9] = 6; // RGBA
+        ihdr[8] = 8;
+        ihdr[9] = 6;
         WriteChunk(ms, "IHDR", ihdr);
         WriteChunk(ms, "IDAT", idatPayload);
         WriteChunk(ms, "IEND", Array.Empty<byte>());
@@ -1553,9 +1936,37 @@ internal sealed class AppsPageView : IViewPage
         _phonePage?.Dispose();
         _phonePage = null;
 #endif
-        _customIconCache.Clear();
         _externalIconCache.Clear();
     }
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ShFileInfo
+    {
+        public nint HIcon; public int IIcon; public uint DwAttributes;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string SzDisplayName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)] public string SzTypeName;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IconInfo { public bool FIcon; public uint XHotspot, YHotspot; public nint HbmMask, HbmColor; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BitmapStruct { public int BmType, BmWidth, BmHeight, BmWidthBytes; public ushort BmPlanes, BmBitsPixel; public nint BmBits; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BitmapInfoHeader
+    {
+        public uint BiSize; public int BiWidth, BiHeight; public ushort BiPlanes, BiBitCount;
+        public uint BiCompression, BiSizeImage; public int BiXPelsPerMeter, BiYPelsPerMeter; public uint BiClrUsed, BiClrImportant;
+    }
+
     [DllImport("user32.dll")] private static extern short GetKeyState(int nVirtKey);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern nint SHGetFileInfoW(string path, uint attrs, ref ShFileInfo psfi, uint cbSize, uint flags);
+    [DllImport("user32.dll")] private static extern bool DestroyIcon(nint hIcon);
+    [DllImport("user32.dll")] private static extern bool GetIconInfo(nint hIcon, out IconInfo info);
+    [DllImport("gdi32.dll")] private static extern int GetObjectW(nint obj, int size, ref BitmapStruct bmp);
+    [DllImport("gdi32.dll")] private static extern int GetDIBits(nint hdc, nint hbm, uint start, uint lines, nint bits, ref BitmapInfoHeader bmi, uint usage);
+    [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint obj);
+    [DllImport("user32.dll")] private static extern nint GetDC(nint hwnd);
+    [DllImport("user32.dll")] private static extern int ReleaseDC(nint hwnd, nint hdc);
 }

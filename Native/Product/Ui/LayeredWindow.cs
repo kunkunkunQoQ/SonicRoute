@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 
 namespace SonicRoute.Native.Ui;
 
-internal enum UiMouseButton { Left, Right, Middle }
+internal enum UiMouseButton { Left, Right, Middle, XButton1, XButton2 }
 
 internal enum UiCursorKind { Arrow, Hand, IBeam, SizeNS, SizeWE, SizeNWSE, SizeNESW }
 
@@ -72,11 +72,16 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private const uint WmMButtonDown = 0x0207;
     private const uint WmMButtonUp = 0x0208;
     private const uint WmMouseWheel = 0x020A;
+    private const uint WmXButtonDown = 0x020B;
+    private const uint WmXButtonUp = 0x020C;
     private const uint WmMouseHWheel = 0x020E;
+    private const uint WmCaptureChanged = 0x0215;
+    private const uint WmDropFiles = 0x0233;
     private const uint WmMouseLeave = 0x02A3;
     private const uint WmDpiChanged = 0x02E0;
     private const uint WmNcCalcSize = 0x0083;
     private const uint WmUserInvalidate = 0x0401;
+    private const int GwlExStyle = -20;
 
     private static readonly nint HwndTopMost = new(-1);
     private static readonly nint HwndNoTopMost = new(-2);
@@ -120,7 +125,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private UiCursorKind _cursor = UiCursorKind.Arrow;
 
     public nint Handle { get; private set; }
-    public bool IsVisible => _visible && Handle != 0;
+    public bool IsVisible => _visible && Handle != 0 && !IsIconic(Handle);
+    public bool IsMinimized { get; private set; }
     public bool IsDisposed => _disposed;
     public float WidthDip => _widthDip;
     public float HeightDip => _heightDip;
@@ -138,6 +144,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
     protected bool ClickThrough { get; set; }
     protected bool Resizable { get; set; }
     protected bool ShowInTaskbar { get; set; }
+    protected bool DestroyOnClose { get; set; }
+    protected bool AcceptFileDrop { get; set; }
     protected nint OwnerHandle { get; set; }
 
     protected LayeredWindow(float widthDip, float heightDip, float minWidthDip = 100f, float minHeightDip = 40f)
@@ -176,7 +184,12 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
         Instances[Handle] = this;
         uint actualDpi = GetDpiForWindow(Handle);
-        if (actualDpi >= 96) _dpi = actualDpi;
+        if (actualDpi >= 96 && actualDpi != _dpi)
+        {
+            _dpi = actualDpi;
+            SetWindowPos(Handle, 0, 0, 0, WidthPx, HeightPx, SwpNoMove | SwpNoZOrder | SwpNoActivate);
+        }
+        if (AcceptFileDrop) DragAcceptFiles(Handle, true);
 
         if (iconHandle != 0)
         {
@@ -243,6 +256,32 @@ internal abstract unsafe class LayeredWindow : IDisposable
         TopMost = topMost;
         if (Handle != 0)
             SetWindowPos(Handle, topMost ? HwndTopMost : HwndNoTopMost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+    }
+
+    public void EnableFileDrop()
+    {
+        AcceptFileDrop = true;
+        if (Handle != 0) DragAcceptFiles(Handle, true);
+    }
+
+    public void SetClickThrough(bool clickThrough)
+    {
+        ClickThrough = clickThrough;
+        ApplyExStyleBit(WsExTransparent, clickThrough);
+    }
+
+    public void SetNoActivate(bool noActivate)
+    {
+        NoActivate = noActivate;
+        ApplyExStyleBit(WsExNoActivate, noActivate);
+    }
+
+    private void ApplyExStyleBit(uint bit, bool enable)
+    {
+        if (Handle == 0) return;
+        nint cur = GetWindowLongPtrW(Handle, GwlExStyle);
+        nint next = enable ? (nint)((long)cur | bit) : (nint)((long)cur & ~bit);
+        if (next != cur) SetWindowLongPtrW(Handle, GwlExStyle, next);
     }
 
     public void Show(bool activate = true)
@@ -362,6 +401,26 @@ internal abstract unsafe class LayeredWindow : IDisposable
         GetMonitorWorkArea(mon, out left, out top, out right, out bottom, out dpi);
     }
 
+    private static void GetMonitorBoundsForWindow(nint hwnd, out WinRect monitor, out WinRect work, out uint dpi)
+    {
+        var mon = hwnd != 0
+            ? MonitorFromWindow(hwnd, 2)
+            : MonitorFromPoint(new Point { X = 0, Y = 0 }, 1);
+        var mi = new MonitorInfo { CbSize = (uint)Marshal.SizeOf<MonitorInfo>() };
+        if (mon != 0 && GetMonitorInfoW(mon, ref mi))
+        {
+            monitor = mi.Monitor;
+            work = mi.Work;
+        }
+        else
+        {
+            monitor = new WinRect { Right = GetSystemMetrics(0), Bottom = GetSystemMetrics(1) };
+            work = monitor;
+        }
+        dpi = 96;
+        if (mon != 0 && GetDpiForMonitor(mon, 0, out uint dx, out _) == 0 && dx >= 96) dpi = dx;
+    }
+
     private static void GetMonitorWorkArea(nint mon, out int left, out int top, out int right, out int bottom, out uint dpi)
     {
         var mi = new MonitorInfo { CbSize = (uint)Marshal.SizeOf<MonitorInfo>() };
@@ -470,6 +529,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
     protected virtual void OnActivated(bool active) { }
     protected virtual void OnResized(float widthDip, float heightDip) { }
     protected virtual void OnMoved(int leftPx, int topPx) { }
+    protected virtual void OnCaptureLost() { }
+    protected virtual void OnWindowStateChanged(bool minimized, bool maximized) { }
+    protected virtual void OnFilesDropped(string[] paths, float xDip, float yDip) { }
 
     public virtual void Dispose()
     {
@@ -495,9 +557,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 if (win.Resizable)
                 {
                     var mmi = Marshal.PtrToStructure<MinMaxInfo>(lParam);
-                    GetMonitorWorkAreaForWindow(hwnd, out int ml, out int mt, out int mr, out int mb, out _);
-                    mmi.MaxPosition = new Point { X = ml, Y = mt };
-                    mmi.MaxSize = new Point { X = Math.Max(100, mr - ml), Y = Math.Max(100, mb - mt) };
+                    GetMonitorBoundsForWindow(hwnd, out var mon, out var work, out _);
+                    mmi.MaxPosition = new Point { X = work.Left - mon.Left, Y = work.Top - mon.Top };
+                    mmi.MaxSize = new Point { X = Math.Max(100, work.Right - work.Left), Y = Math.Max(100, work.Bottom - work.Top) };
                     mmi.MinTrackSize = new Point
                     {
                         X = (int)MathF.Round(win._minWidthDip * win.DpiScale),
@@ -563,21 +625,35 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 return 0;
 
             case WmMove:
-                if (GetWindowRect(hwnd, out var wr))
+                if (!win.IsMinimized && !IsIconic(hwnd))
                 {
-                    win._leftPx = wr.Left;
-                    win._topPx = wr.Top;
+                    if (GetWindowRect(hwnd, out var wr))
+                    {
+                        win._leftPx = wr.Left;
+                        win._topPx = wr.Top;
+                    }
+                    else
+                    {
+                        win._leftPx = unchecked((short)((long)lParam & 0xFFFF));
+                        win._topPx = unchecked((short)(((long)lParam >> 16) & 0xFFFF));
+                    }
+                    win.OnMoved(win._leftPx, win._topPx);
                 }
-                else
-                {
-                    win._leftPx = unchecked((short)((long)lParam & 0xFFFF));
-                    win._topPx = unchecked((short)(((long)lParam >> 16) & 0xFFFF));
-                }
-                win.OnMoved(win._leftPx, win._topPx);
                 return 0;
 
             case WmSize:
             {
+                if (wParam == 1 /*SIZE_MINIMIZED*/)
+                {
+                    if (!win.IsMinimized)
+                    {
+                        win.IsMinimized = true;
+                        win.OnWindowStateChanged(minimized: true, maximized: false);
+                    }
+                    return 0;
+                }
+                bool wasMin = win.IsMinimized;
+                win.IsMinimized = false;
                 if (GetWindowRect(hwnd, out var swr))
                 {
                     win._leftPx = swr.Left;
@@ -589,6 +665,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 {
                     win._widthDip = pw / win.DpiScale;
                     win._heightDip = ph / win.DpiScale;
+                    if (wasMin) win.OnWindowStateChanged(minimized: false, maximized: wParam == 2);
                     win.OnResized(win._widthDip, win._heightDip);
                     if (win._visible) win.RenderNow();
                 }
@@ -638,6 +715,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmLButtonDblClk:
                 if (!win.NoActivate) SetFocus(hwnd);
+                SetCapture(hwnd);
                 win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Left, 2));
                 return 0;
 
@@ -647,6 +725,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 return 0;
 
             case WmRButtonDown:
+                if (!win.NoActivate) SetFocus(hwnd);
                 win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Right, 1));
                 return 0;
 
@@ -655,12 +734,62 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 return 0;
 
             case WmMButtonDown:
+                if (!win.NoActivate) SetFocus(hwnd);
                 win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Middle, 1));
                 return 0;
 
             case WmMButtonUp:
                 win.OnPointerUp(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Middle, 1));
                 return 0;
+
+            case WmXButtonDown:
+            {
+                if (!win.NoActivate) SetFocus(hwnd);
+                int xbtn = (int)(((uint)wParam >> 16) & 0xFFFF);
+                var btn = xbtn == 2 ? UiMouseButton.XButton2 : UiMouseButton.XButton1;
+                win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, btn, 1));
+                return 1;
+            }
+
+            case WmXButtonUp:
+            {
+                int xbtn = (int)(((uint)wParam >> 16) & 0xFFFF);
+                var btn = xbtn == 2 ? UiMouseButton.XButton2 : UiMouseButton.XButton1;
+                win.OnPointerUp(MakePointerArgs(wParam, lParam, win.DpiScale, btn, 1));
+                return 1;
+            }
+
+            case WmCaptureChanged:
+                if (lParam != hwnd) win.OnCaptureLost();
+                return 0;
+
+            case WmDropFiles:
+            {
+                nint hDrop = (nint)wParam;
+                try
+                {
+                    uint count = DragQueryFileW(hDrop, 0xFFFFFFFFu, null, 0);
+                    if (count > 0 && count < 4096)
+                    {
+                        var list = new List<string>((int)count);
+                        char[] buf = new char[1024];
+                        for (uint i = 0; i < count; i++)
+                        {
+                            uint len = DragQueryFileW(hDrop, i, buf, (uint)buf.Length);
+                            if (len > 0) list.Add(new string(buf, 0, (int)len));
+                        }
+                        var dropPt = default(Point);
+                        DragQueryPoint(hDrop, ref dropPt);
+                        if (list.Count > 0)
+                            win.OnFilesDropped(list.ToArray(), dropPt.X / win.DpiScale, dropPt.Y / win.DpiScale);
+                    }
+                }
+                finally
+                {
+                    DragFinish(hDrop);
+                }
+                return 0;
+            }
 
             case WmMouseWheel:
             case WmMouseHWheel:
@@ -692,7 +821,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmClose:
                 if (!win.OnClosing()) return 0;
-                win.Hide();
+                if (win.DestroyOnClose) DestroyWindow(hwnd);
+                else win.Hide();
                 return 0;
 
             case WmDestroy:
@@ -832,5 +962,11 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("gdi32.dll")] private static extern nint SelectObject(nint hdc, nint obj);
     [DllImport("gdi32.dll")] private static extern bool DeleteObject(nint obj);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out WinRect rect);
+    [DllImport("user32.dll")] private static extern nint GetWindowLongPtrW(nint hwnd, int idx);
+    [DllImport("user32.dll")] private static extern nint SetWindowLongPtrW(nint hwnd, int idx, nint val);
+    [DllImport("shell32.dll")] private static extern void DragAcceptFiles(nint hwnd, bool accept);
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern uint DragQueryFileW(nint drop, uint idx, [Out] char[]? file, uint cch);
+    [DllImport("shell32.dll")] private static extern bool DragQueryPoint(nint drop, ref Point pt);
+    [DllImport("shell32.dll")] private static extern void DragFinish(nint drop);
     [DllImport("user32.dll")] private static extern bool UpdateLayeredWindow(nint hwnd, nint hdcDst, nint pptDst, ref Size psize, nint hdcSrc, ref Point pptSrc, uint crKey, ref BlendFunction pblend, uint dwFlags);
 }
