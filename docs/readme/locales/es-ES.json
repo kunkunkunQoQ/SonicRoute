@@ -89,16 +89,13 @@
         "**Alcance y licencias anteriores.** Desde el 17 de noviembre de 2026, la GPL-3.0-only se aplica a todo el proyecto cubierto en esta revisión, incluido el código anterior, en la medida en que el titular de los derechos pueda otorgar esa licencia. Los permisos ya concedidos bajo la licencia MIT y la anterior licencia propia del proyecto siguen vigentes. Las etiquetas y los binarios ya publicados conservan su indicación de licencia original. Los componentes de terceros conservan sus propias licencias (véanse los {noticesLink})."
     ],
     "features": [
-        "**Elige dónde suena cada aplicación.** En el panel rápido o en la página Aplicaciones, Ctrl+clic añade o quita una salida, Mayús+clic mantiene la selección actual y añade un intervalo continuo, y Ctrl+Mayús+clic selecciona o cambia el dispositivo de enrutamiento nativo. Puedes combinar varias salidas del PC y, con Full, añadir salidas del móvil Android.",
+        "**Elige los dispositivos de reproducción y grabación de cada aplicación.** En el panel rápido o en «Aplicaciones», haz clic en una salida para usarla sola. Con Ctrl añades o quitas una salida y con Mayús añades varias consecutivas a la selección. Para una aplicación del PC, usa Ctrl+Mayús+clic en la salida del PC por la que Windows debe reproducir el sonido directamente. SonicRoute sigue enviando el audio a las demás salidas seleccionadas. En Full también puedes añadir salidas de un móvil Android conectado.",
         "**Ajusta el volumen sin salir del juego o de la llamada.** Los medidores del panel rápido muestran qué aplicaciones están sonando. Ajusta cada una con su control deslizante o usa la rueda sobre el icono de SonicRoute para regular la aplicación actual. Un atajo global permite silenciar o reactivar todos los micrófonos.",
         "**Automatiza los cambios de audio.** Combina {triggerCount} disparadores con {actionCount} acciones para cambiar de dispositivo, ajustar el volumen o abrir un programa. También puedes ejecutar una regla guardada desde la línea de comandos con `sr`.",
-        "**Conecta tu móvil con Full.** Escucha el audio de Android en el PC o envía el del PC al altavoz del móvil o a un dispositivo Bluetooth conectado a él. Abre aplicaciones Android en pantallas virtuales compatibles con H.265. El receptor AirPlay permite escuchar audio de un dispositivo Apple y duplicar su pantalla conservando las proporciones. También puedes explorar el almacenamiento compartido del móvil Android y enviar o recibir varios archivos a la vez."
+        "**Usa Android y AirPlay desde el PC (Full).** Escucha el sonido de una aplicación Android en el PC o envía el del PC al altavoz del móvil o a un dispositivo Bluetooth conectado a él. Abre aplicaciones Android en pantallas virtuales con vídeo H.265 en equipos compatibles. Por AirPlay puedes duplicar la pantalla de un dispositivo Apple conservando sus proporciones y reproducir el audio que recibas por varias salidas del PC y de móviles Android a la vez. También puedes explorar el almacenamiento compartido del móvil y transferir varios archivos en ambos sentidos."
     ],
     "developmentTitle": "Novedades de la versión de desarrollo de Full",
-    "developmentNotes": [
-        "Para enviar audio de Android al PC, elige en cada móvil Opus (predeterminado) o PCM sin comprimir. Hay tres modos de latencia: «Latencia ultrabaja», «Equilibrado» (predeterminado) y «Estable». Los cambios se aplican la próxima vez que inicies una transmisión de audio desde ese móvil.",
-        "Si el codificador del móvil lo admite, la tasa de bits del vídeo de la pantalla virtual se ajusta automáticamente a las condiciones de la conexión."
-    ],
+    "developmentNotes": [],
     "scenario": "Situación",
     "whatYouCanDo": "Cómo te ayuda SonicRoute",
     "useCaseNames": [
@@ -124,12 +121,14 @@
     "faqQuestions": [
         "¿Qué ajustes se conservan al salir de SonicRoute?",
         "¿Qué entorno de ejecución necesita cada edición?",
-        "¿Cuál es el consumo de procesador y batería en segundo plano?"
+        "¿Cuál es el consumo de procesador y batería en segundo plano?",
+        "¿Cómo ajusto la latencia del audio que llega al PC desde Android?"
     ],
     "faqAnswers": [
         "Windows conserva la salida principal y el dispositivo de grabación que elijas para cada aplicación, así como el volumen de las sesiones de audio existentes. Para reproducir el sonido por varias salidas a la vez, usar los atajos, los controles del área de notificación o la automatización, transmitir audio al móvil o desde él, duplicar la pantalla o sincronizar el portapapeles, SonicRoute debe seguir en ejecución.",
         "Full y Lite necesitan .NET 10 Desktop Runtime para su arquitectura. Las ediciones de Microsoft Store requieren la versión x64. Legacy utiliza .NET Framework 4.8. Las ediciones antiguas para .NET 8 siguen disponibles, aunque han dejado de recibir actualizaciones.",
-        "SonicRoute responde principalmente a eventos de Windows. Cuando es necesario, comprueba el estado una vez por segundo y libera los datos que ya no se utilizan. El uso de CPU depende del equipo y de las funciones que utilices."
+        "SonicRoute responde principalmente a eventos de Windows. Cuando es necesario, comprueba el estado una vez por segundo y libera los datos que ya no se utilizan. El uso de CPU depende del equipo y de las funciones que utilices.",
+        "En Full, abre la página del móvil. El modo de latencia de audio predeterminado es «Equilibrado». Prueba «Latencia ultrabaja» para reducir el retardo o «Estable» si oyes cortes. El móvil transmite el audio en Opus de forma predeterminada. Para enviarlo sin comprimir, elige «Raw PCM» en la lista de decodificadores. Los cambios se aplican la próxima vez que transmitas audio desde ese móvil."
     ],
     "aiPromptTitle": "Referencia para asistentes de IA",
     "aiPromptBody": "{aiDoc} reúne en un formato estructurado la arquitectura, los comandos y las pautas de diagnóstico. Puedes usarlo como referencia con Cursor, Copilot, ChatGPT o Claude para investigar un fallo o escribir un script.",

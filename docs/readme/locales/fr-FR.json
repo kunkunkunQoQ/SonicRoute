@@ -89,16 +89,13 @@
         "**Portée et licences antérieures.** Depuis le 17 novembre 2026, la GPL-3.0-only couvre l’ensemble du projet dans cette révision, code antérieur compris, dans la limite des droits que peut accorder le titulaire. Les autorisations déjà accordées au titre de la licence MIT et de l’ancienne licence propre au projet restent valables. Les tags et les binaires déjà publiés conservent leur mention de licence d’origine. Les composants tiers restent soumis à leurs propres licences (voir les {noticesLink})."
     ],
     "features": [
-        "**Choisissez les périphériques de lecture et d’enregistrement de chaque application.** Dans le panneau rapide ou la page Applications, Ctrl+clic ajoute ou retire une sortie, Maj+clic conserve la sélection actuelle et ajoute une plage continue, et Ctrl+Maj+clic sélectionne ou change le périphérique de routage natif. Toutes les éditions peuvent diffuser sur plusieurs sorties du PC à la fois, et Full peut y ajouter les sorties d’un téléphone Android connecté.",
+        "**Choisissez les périphériques de lecture et d’enregistrement de chaque application.** Dans le panneau rapide ou sur la page Applications, Ctrl+clic ajoute ou retire une sortie. Maj+clic étend la sélection à plusieurs sorties consécutives. Pour une application Windows, Ctrl+Maj+clic sur une sortie du PC en fait sa sortie principale. SonicRoute diffuse le même son sur les autres sorties sélectionnées. L’édition Full peut aussi utiliser les sorties d’un téléphone Android connecté.",
         "**Réglez le volume de chaque application.** Les indicateurs de niveau du panneau rapide montrent quelles applications émettent du son. Chacune a son propre curseur de volume. Utilisez la molette sur l’icône de notification pour régler l’application ciblée. Un raccourci clavier permet de couper puis de réactiver tous les micros.",
         "**Automatisez les réglages courants.** Vous disposez de {triggerCount} déclencheurs et de {actionCount} actions pour créer vos règles. À l’ouverture d’un jeu, une règle peut sélectionner le casque et lancer votre application de discussion vocale. La commande `sr` permet aussi d’exécuter une règle depuis un terminal ou un script.",
-        "**Utilisez Android et AirPlay sur le PC (Full).** Écoutez une application Android sur le PC, envoyez le son du PC au téléphone ou utilisez une application Android dans son propre écran virtuel. SonicRoute reçoit également le son et la recopie d’écran des appareils Apple via AirPlay. Vous pouvez aussi parcourir le stockage partagé du téléphone Android et envoyer ou recevoir plusieurs fichiers à la fois."
+        "**Connectez un téléphone Android ou recevez des contenus AirPlay (Full).** Écoutez le son d’une application Android sur le PC, envoyez le son du PC au téléphone ou ouvrez une application Android sur un écran virtuel. Vous pouvez parcourir le stockage partagé du téléphone et transférer plusieurs fichiers à la fois dans les deux sens. Depuis un appareil Apple, vous pouvez recopier l’écran via AirPlay ou transmettre le son à SonicRoute pour l’écouter sur plusieurs sorties du PC ou d’Android à la fois."
     ],
     "developmentTitle": "En développement pour l’édition Full",
-    "developmentNotes": [
-        "Pour transmettre le son d’Android au PC, choisissez Opus (par défaut) ou le PCM non compressé. Chaque téléphone dispose de trois modes de latence : « Latence minimale », « Équilibré » (par défaut) et « Stable ». Vos réglages prennent effet à la prochaine transmission audio depuis ce téléphone.",
-        "Si l’encodeur Android le permet, SonicRoute adapte le débit vidéo de l’écran virtuel aux conditions de connexion."
-    ],
+    "developmentNotes": [],
     "scenario": "Situation",
     "whatYouCanDo": "Comment SonicRoute vous aide",
     "useCaseNames": [
@@ -124,12 +121,14 @@
     "faqQuestions": [
         "Quels réglages sont conservés quand je quitte SonicRoute ?",
         "De quel environnement d’exécution chaque édition a-t-elle besoin ?",
-        "Quel est l’effet de SonicRoute sur le processeur et la batterie en arrière-plan ?"
+        "Quel est l’effet de SonicRoute sur le processeur et la batterie en arrière-plan ?",
+        "Comment régler la latence quand j’écoute le son d’une application Android sur le PC ?"
     ],
     "faqAnswers": [
         "Windows conserve, pour chaque application, la sortie principale du PC et le périphérique d’enregistrement, ainsi que le volume des sessions audio existantes. La lecture sur les sorties supplémentaires s’arrête quand vous quittez SonicRoute. Les raccourcis, les commandes de la zone de notification, l’automatisation, l’audio du téléphone, la recopie d’écran et la synchronisation du presse-papiers nécessitent que SonicRoute reste en cours d’exécution.",
         "Full et Lite nécessitent .NET 10 Desktop Runtime pour leur architecture. Les éditions du Microsoft Store utilisent la version x64 et Legacy utilise .NET Framework 4.8. Les anciennes éditions pour .NET 8 restent téléchargeables, mais ne reçoivent plus de mises à jour.",
-        "SonicRoute réagit principalement aux événements de Windows. Il ne vérifie l’état du système une fois par seconde que lorsque c’est nécessaire et libère les données inutiles à la demande. La charge du processeur dépend du PC et des fonctions utilisées."
+        "SonicRoute réagit principalement aux événements de Windows. Il ne vérifie l’état du système une fois par seconde que lorsque c’est nécessaire et libère les données inutiles à la demande. La charge du processeur dépend du PC et des fonctions utilisées.",
+        "Dans l’édition Full, ouvrez la page du téléphone. Sous « Audio », le mode de latence par défaut est « Équilibré ». Essayez « Latence minimale » pour réduire le décalage, ou « Stable » si le son se coupe. Le téléphone transmet le son en Opus par défaut. Pour l’envoyer sans compression, choisissez « Raw PCM » dans la liste des décodeurs. Les réglages s’appliquent à la prochaine transmission audio depuis ce téléphone."
     ],
     "aiPromptTitle": "Référence pour les assistants IA",
     "aiPromptBody": "{aiDoc} présente l’architecture, les commandes et les pistes de dépannage sous une forme structurée. Vous pouvez le fournir à un assistant comme Cursor, Copilot, ChatGPT ou Claude pour analyser un problème ou écrire un script.",
