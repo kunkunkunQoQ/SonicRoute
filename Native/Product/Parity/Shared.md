@@ -17,3 +17,13 @@
 | 滑块、峰值、设备行 | App.xaml 441–500，QuickPanelModernWindow.xaml RowSlider | Ui/UiPrimitives.cs DrawVolumeSlider，Views/QuickPanelWindow.cs | 共享统一拖动坐标与稳定身份已保留；模板阴影、特定场景的滑块配色及禁用态有差异 | P2，局部与原生差异 |
 | 光栅化与生命周期 | WindowUiLifetime.cs，MainWindow.PageLifetime.cs | Ui/D2dRenderer.cs 27–31、420–427、665–707，Ui/LayeredWindow.cs 303、450–509 | 分层窗口按需绘制，逐窗口画刷、位图、DIB；字体及几何有共享缓存。位图版本变化时旧 FIFO 索引会累积，文本测量反复创建相同布局 | P1，共享生命周期 |
 | 配置与业务 | MainWindow.SettingsSave.cs，QuickPanelModernWindow.PlaybackSelection.cs | Views/HostViews.cs，Views/SettingsPageView.cs，Views/QuickPanelWindow.cs | 保留现有配置与 Ctrl/Shift 路由链路；UI 与业务生命周期须分别验证 | P1，已有路径 |
+
+## 实施和验证状态
+
+| 项目 | 已实施或已核对 | 剩余偏差与证据范围 |
+|---|---|---|
+| 主题、图标和语言 | 复核两套主题色、强调色、透明度公式。冻结 AutomationIcons.cs 中的 45 个具名路径与 UiIcons.cs 的同名路径逐字相同。DirectWrite 按当前内置语言建立字体格式和测量缓存。9 份内置语言资源逐个核对 Git blob。桌面主题或高对比度通知只更新可见窗口调色板，已展开的菜单、取色器和下拉框随之重绘；拖动透明度时沿用同一路径 | 系统字体回退、ClearType 与分层表面的灰度抗锯齿、WPF 行基线仍可产生像素差异。原生专有图标不在 45 项比较内 |
+| 状态、焦点及提示 | 单选实心选择、复选 18 DIP、禁用透明度和开关悬停同步到冻结样式。可操作区域保留稳定 ID；键盘焦点与鼠标按下状态分别存储。焦点可经 Tab 或 Shift+Tab 移动，Enter 或 Space 只在对应松键且同一目标仍有效时激活。可见滚动容器支持键盘翻页。悬停使用按需创建的 Windows tooltip | 焦点环和系统提示框采用原生绘制；目前仅向已登记提示文字的可命中控件显示。自绘控件未提供整棵 WPF UI Automation 控件树 |
+| 滚动和下拉 | 14 DIP 轨道、最小 28 DIP 滑块、高对比度系统文字/高亮色；点击轨道空白按页，持续按住按系统键盘延迟及速率重复翻页，到达指针或松开、失活、捕获转移即停。Combo 采用选中强调色、9 DIP 弹出边框圆角、按内容/工作区量宽、320 DIP 最大高；显式选择和 Esc 返还 owner 焦点 | WPF PopupAnimation 滑入、所有主题与监视器组合尚未逐项重现或实测 |
+| 菜单和输入 | 菜单外框和选项圆角、间距、右侧勾选、长标签量宽及右缘子菜单向左打开。Unicode EDIT 支持原生选择/剪贴板，Ctrl+A、Tab 提交、Enter 和 Esc 均有单独处理，组合输入期间保留输入法优先 | 候选窗和系统选择色由 Windows 管理。菜单关闭时机、滚动与 IME 的组合操作仍需用户检查 |
+| 生命周期和缓存 | 图像新版本原位替换，一键一条淘汰记录；按窗最多 96 个位图。共享字体格式限 64，短文本测量最多 128 条，仅缓存数值。应用图标成功/失败缓存各限 96。隐藏面板释放 DIB、内存 DC、渲染目标和提示 HWND；宿主退出显式释放共享 D2D/DWrite 资源。托盘从未打开图形时不创建工厂 | OSD 保留原有短期复用/释放时机。采样为隔离桌面短窗口，数据和单位见主报告，不作为泄漏或长期整版占用结论 |

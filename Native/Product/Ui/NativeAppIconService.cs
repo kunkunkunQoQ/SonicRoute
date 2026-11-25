@@ -25,7 +25,7 @@ internal static class NativeAppIconService
     private static readonly object Gate = new();
     private static readonly Dictionary<string, IconBitmap> Cache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, long> NegativeCache = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly Queue<string> Order = new();
+    private static readonly LinkedList<string> Order = new();
     private static readonly HashSet<string> InFlight = new(StringComparer.OrdinalIgnoreCase);
     private static IconBitmap? _brandIcon;
     private static int? _stockAppIconHash;
@@ -57,7 +57,9 @@ internal static class NativeAppIconService
         lock (Gate)
         {
             string key = "custom:" + fileName.Trim();
-            Cache.Remove(key);
+            if (Cache.Remove(key))
+                for (var node = Order.First; node != null; node = node.Next)
+                    if (StringComparer.OrdinalIgnoreCase.Equals(node.Value, key)) { Order.Remove(node); break; }
             NegativeCache.Remove(key);
         }
     }
@@ -163,16 +165,30 @@ internal static class NativeAppIconService
         {
             NegativeCache.Remove(key);
             if (Cache.ContainsKey(key)) { Cache[key] = bmp; return; }
-            if (Cache.Count >= MaxEntries && Order.Count > 0)
-                Cache.Remove(Order.Dequeue());
+            if (Cache.Count == MaxEntries && Order.First is { } oldest)
+            {
+                Cache.Remove(oldest.Value);
+                Order.RemoveFirst();
+            }
             Cache[key] = bmp;
-            Order.Enqueue(key);
+            Order.AddLast(key);
         }
     }
 
     private static void PutNegative(string key)
     {
-        lock (Gate) NegativeCache[key] = Environment.TickCount64;
+        lock (Gate)
+        {
+            if (NegativeCache.Count == MaxEntries && !NegativeCache.ContainsKey(key))
+            {
+                string? oldest = null;
+                long oldestTime = long.MaxValue;
+                foreach (var failure in NegativeCache)
+                    if (failure.Value < oldestTime) { oldest = failure.Key; oldestTime = failure.Value; }
+                if (oldest != null) NegativeCache.Remove(oldest);
+            }
+            NegativeCache[key] = Environment.TickCount64;
+        }
     }
 
     private static string? TryResolveProcessPath(int pid)

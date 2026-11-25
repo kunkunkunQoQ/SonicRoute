@@ -14,7 +14,14 @@ internal readonly record struct UiTextSize(float Width, float Height, int LineCo
 
 internal sealed unsafe class D2dSharedContext : IDisposable
 {
-    public static D2dSharedContext Instance { get; } = new();
+    private static D2dSharedContext? _instance;
+    public static D2dSharedContext Instance => _instance ??= new();
+
+    internal static void ReleaseShared()
+    {
+        _instance?.Dispose();
+        _instance = null;
+    }
 
     private static readonly Guid IidFactory = new("06152247-6f50-465a-9245-118bfd3b6007");
     private static readonly Guid IidWriteFactory = new("b859ee5a-d838-4b5b-a2e8-1adc7d93db48");
@@ -28,6 +35,10 @@ internal sealed unsafe class D2dSharedContext : IDisposable
     private readonly Dictionary<nint, nint> _trimSigns = new();
     private readonly Queue<TextFormatKey> _formatOrder = new();
     private const int MaxFormats = 64;
+    private readonly Dictionary<MeasureKey, UiTextSize> _measurements = new();
+    private readonly Queue<MeasureKey> _measureOrder = new();
+    private readonly record struct MeasureKey(string Text, string Family, string Language, float Size,
+        int Weight, float Width, float Height, bool Wrap);
 
     private D2dSharedContext() { }
 
@@ -138,6 +149,9 @@ internal sealed unsafe class D2dSharedContext : IDisposable
         bool wrap)
     {
         if (string.IsNullOrEmpty(text)) return new UiTextSize(0f, fontSize * 1.3f, 1);
+        var key = new MeasureKey(text, fontFamily, L10n.CurrentLanguage, fontSize, fontWeight, maxWidth, maxHeight, wrap);
+        bool cache = text.Length <= 160;
+        if (cache && _measurements.TryGetValue(key, out var measured)) return measured;
         EnsureInit();
         nint fmt = GetTextFormat(fontFamily, fontSize, fontWeight, UiTextAlign.Leading, UiVertAlign.Top, wrap, false);
         nint layout = 0;
@@ -151,7 +165,16 @@ internal sealed unsafe class D2dSharedContext : IDisposable
         {
             DWriteTextMetrics metrics = default;
             if (((delegate* unmanaged[Stdcall]<nint, DWriteTextMetrics*, int>)Slot(layout, 60))(layout, &metrics) == 0)
-                return new UiTextSize(metrics.WidthIncludingTrailingWhitespace, metrics.Height, (int)Math.Max(1u, metrics.LineCount));
+            {
+                var size = new UiTextSize(metrics.WidthIncludingTrailingWhitespace, metrics.Height, (int)Math.Max(1u, metrics.LineCount));
+                if (cache)
+                {
+                    if (_measureOrder.Count == 128) _measurements.Remove(_measureOrder.Dequeue());
+                    _measurements.Add(key, size);
+                    _measureOrder.Enqueue(key);
+                }
+                return size;
+            }
             return new UiTextSize(0f, fontSize * 1.3f, 1);
         }
         finally
@@ -317,6 +340,8 @@ internal sealed unsafe class D2dSharedContext : IDisposable
 
     public void Dispose()
     {
+        _measurements.Clear();
+        _measureOrder.Clear();
         foreach (nint g in _iconGeometries.Values) { nint tmp = g; Release(ref tmp); }
         _iconGeometries.Clear();
         foreach (nint s in _trimSigns.Values) { nint tmp = s; Release(ref tmp); }
@@ -671,22 +696,6 @@ internal sealed unsafe class D2dTarget : IDisposable
         if (widthPx <= 0 || heightPx <= 0 || bgraPixels.Length < widthPx * heightPx * 4 || dstRect.IsEmpty) return;
         if (!_bitmaps.TryGetValue(cacheKey, out var entry) || entry.W != widthPx || entry.H != heightPx || entry.Version != version)
         {
-            if (entry.Bitmap != 0)
-            {
-                nint old = entry.Bitmap;
-                D2dSharedContext.Release(ref old);
-                _bitmaps.Remove(cacheKey);
-            }
-            if (_bitmaps.Count >= MaxCachedBitmaps && _bitmapOrder.Count > 0)
-            {
-                var evictKey = _bitmapOrder.Dequeue();
-                if (_bitmaps.Remove(evictKey, out var evicted))
-                {
-                    nint tmp = evicted.Bitmap;
-                    D2dSharedContext.Release(ref tmp);
-                }
-            }
-
             nint bmp = 0;
             var props = new D2dBitmapProps
             {
@@ -700,9 +709,24 @@ internal sealed unsafe class D2dTarget : IDisposable
                     (_target, new D2dSizeU((uint)widthPx, (uint)heightPx), (nint)pData, (uint)(widthPx * 4), &props, &bmp);
                 if (hr != 0 || bmp == 0) return;
             }
+            if (entry.Bitmap != 0)
+            {
+                // Replacing a version keeps its one existing eviction entry.
+                nint old = entry.Bitmap;
+                D2dSharedContext.Release(ref old);
+            }
+            else
+            {
+                if (_bitmaps.Count == MaxCachedBitmaps)
+                {
+                    _bitmaps.Remove(_bitmapOrder.Dequeue(), out var evicted);
+                    nint old = evicted.Bitmap;
+                    D2dSharedContext.Release(ref old);
+                }
+                _bitmapOrder.Enqueue(cacheKey);
+            }
             entry = new BitmapEntry(bmp, widthPx, heightPx, version);
             _bitmaps[cacheKey] = entry;
-            _bitmapOrder.Enqueue(cacheKey);
         }
 
         var dst = new D2dRectF(dstRect.X, dstRect.Y, dstRect.Right, dstRect.Bottom);
