@@ -1,7 +1,11 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 
+#if SONICROUTE_NATIVE
+namespace SonicRoute.Native.Graphics;
+#else
 namespace SonicRoute.AndroidAudio;
+#endif
 
 /// <summary>
 /// Deterministic, zero-unsafe COM vtable invocation and lifetime wrapper for WIC, Media Foundation, and D3D11.

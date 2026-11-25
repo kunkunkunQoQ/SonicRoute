@@ -1,6 +1,4 @@
 using System.IO;
-using NAudio.Wave;
-
 namespace SonicRoute.AndroidAudio;
 
 public interface IPcmPlayer : IDisposable
@@ -9,8 +7,10 @@ public interface IPcmPlayer : IDisposable
     void Stop();
 }
 
-internal interface IWasapiPlaybackSource : IWaveProvider
+internal interface IWasapiPlaybackSource
 {
+    PcmWaveFormat WaveFormat { get; }
+    int Read(byte[] buffer, int offset, int count);
     event Action? PlaybackBufferRequested;
 }
 

@@ -12,6 +12,7 @@ internal sealed class ProductMicMonitor(ProductAudio audio, NativeApplicationWin
     private IDisposable? topology, retry;
     private bool closed, running, rebuild, dirty, incomplete;
     private bool? baseline;
+    private bool lastPersistent;
     private string? defaultInput;
     private Task completion = Task.CompletedTask;
     private int count;
@@ -82,6 +83,13 @@ internal sealed class ProductMicMonitor(ProductAudio audio, NativeApplicationWin
                         {
                             if (!closed) feedback.Publish(FeedbackKind.Osd,L10n.T("Ov.MuteMic"),L10n.T(current ? "Ov.MicMuted" : "Ov.MicUnmuted"));
                         });
+                    bool persistent = config.MicMuteOsdPersistent && allMuted || config.MicMuteOsdDefaultInputPersistent && defaultMuted;
+                    if (lastPersistent != persistent)
+                    {
+                        lastPersistent = persistent;
+                        window.TryPost(() => { if (!closed) feedback.Publish(FeedbackKind.MicStatus,
+                            L10n.T("Ov.MuteMic"), persistent ? L10n.T("Ov.MicMuted") : ""); });
+                    }
                     baseline = current;
                 }
             }

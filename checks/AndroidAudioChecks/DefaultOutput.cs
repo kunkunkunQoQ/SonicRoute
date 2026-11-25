@@ -11,15 +11,15 @@ internal static partial class Program
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         int notifications = 0;
         var callback = new DefaultOutputNotifications.DeviceCallback(() => notifications++);
-        callback.OnDefaultDeviceChanged(DataFlow.Capture, Role.Multimedia, "input");
-        callback.OnDefaultDeviceChanged(DataFlow.Render, Role.Communications, "chat");
-        callback.OnDefaultDeviceChanged(DataFlow.Render, Role.Console, "console");
+        callback.OnDefaultDeviceChanged((int)DataFlow.Capture, (int)Role.Multimedia, "input");
+        callback.OnDefaultDeviceChanged((int)DataFlow.Render, (int)Role.Communications, "chat");
+        callback.OnDefaultDeviceChanged((int)DataFlow.Render, (int)Role.Console, "console");
         Check(notifications == 0, "default renderer ignores input and unrelated device roles");
-        callback.OnDefaultDeviceChanged(DataFlow.Render, Role.Multimedia, "first");
-        callback.OnDefaultDeviceChanged(DataFlow.Render, Role.Multimedia, "FIRST");
+        callback.OnDefaultDeviceChanged((int)DataFlow.Render, (int)Role.Multimedia, "first");
+        callback.OnDefaultDeviceChanged((int)DataFlow.Render, (int)Role.Multimedia, "FIRST");
         Check(notifications == 1, "matching render notifications suppress duplicate endpoint IDs");
-        callback.OnDefaultDeviceChanged(DataFlow.Render, Role.Multimedia, null!);
-        callback.OnDefaultDeviceChanged(DataFlow.Render, Role.Multimedia, "second");
+        callback.OnDefaultDeviceChanged((int)DataFlow.Render, (int)Role.Multimedia, null!);
+        callback.OnDefaultDeviceChanged((int)DataFlow.Render, (int)Role.Multimedia, "second");
         Check(notifications == 3, "missing and returning default endpoints both invalidate the renderer");
         using (DefaultOutputNotifications.Subscribe(() => { }))
         using (DefaultOutputNotifications.Subscribe(() => { })) { }

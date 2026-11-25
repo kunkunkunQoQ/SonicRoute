@@ -161,7 +161,7 @@ internal sealed partial class ProductCurrentApp
         owner.TryPost(() =>
         {
             if (_closed || LastOutput != state || state.Generation != Interlocked.Read(ref _lastRequest)) return;
-            feedback.Publish(FeedbackKind.Osd, title, text);
+            feedback.Publish(state.Status == OutputIntentStatus.Pending ? FeedbackKind.OutputPending : FeedbackKind.OutputSettled, title, text);
             OutputChanged?.Invoke(state);
         });
     }

@@ -620,6 +620,9 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         StateChanged?.Invoke(state);
     }
 
+    internal void SetPreviewTopmost(bool enabled) => _window?.SetTopmost(enabled);
+    internal void SetPreviewFullscreen(bool enabled) => _window?.SetFullscreen(enabled);
+
     public void Activate() => _window?.Activate();
 
     public void Restore()

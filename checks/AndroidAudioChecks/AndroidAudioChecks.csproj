@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><PlatformTarget>x64</PlatformTarget><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../../SonicRoute.AndroidAudio/SonicRoute.AndroidAudio.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../SonicRoute.AndroidAudio/SonicRoute.AndroidAudio.csproj" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <Compile Include="../../shared/WindowsAudio/WasapiDeviceLease.cs" Link="TestSupport/WasapiDeviceLease.cs" />
+  </ItemGroup>
 </Project>

@@ -55,6 +55,11 @@ namespace SonicRoute
             _mouseHook = new NativeMouseBindings(window, trayWheel, everywhere);
             _mouseHook.Reload([]);
         }
+        internal void ConfigureTrayWheel(bool active, bool everywhere)
+        {
+            _mouseHook.Configure(active, everywhere);
+            _mouseHook.Reload(_compiledMouseBindings);
+        }
         internal void Dispatch(int id)
         {
             if (!_window.CapturingHotkey && (_actionById.TryGetValue(id, out var action) || _mouseHook.TryGetAction(id, out action)) && action != null)

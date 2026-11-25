@@ -1,3 +1,72 @@
+#if SONICROUTE_NATIVE_LOOPBACK
+using System.Diagnostics;
+using SonicRoute.Native.Audio;
+
+namespace SonicRoute.AndroidAudio;
+
+/// <summary>Process-loopback capture backed by the Native Audio library's generated COM activation path.</summary>
+internal static class PcProcessLoopbackCapture
+{
+    internal const string CaptureSessionId = ProcessCaptureIdentity.SessionId;
+
+    internal static Task RunMtaCaptureLoopAsync(int processId, Stream destination, CancellationToken token,
+        Action? onProcessExited, Action<int, int>? onPacketStreamed = null, Action? onStarted = null)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                token.ThrowIfCancellationRequested();
+                using var capture = new ProcessCapture((uint)processId, new Guid(CaptureSessionId), token);
+                capture.Start();
+                onStarted?.Invoke();
+                long lastAliveCheck = Stopwatch.GetTimestamp();
+                while (!token.IsCancellationRequested)
+                {
+                    capture.WaitForPacket(onProcessExited == null ? Timeout.Infinite : 50);
+                    token.ThrowIfCancellationRequested();
+                    capture.DrainBytes(packet =>
+                    {
+                        ReadOnlySpan<byte> bytes = packet.Span;
+                        destination.Write(bytes);
+                        if (onPacketStreamed != null)
+                        {
+                            int nonSilent = 0;
+                            foreach (byte value in bytes)
+                                if (value != 0) { nonSilent = bytes.Length; break; }
+                            onPacketStreamed(bytes.Length, nonSilent);
+                        }
+                    });
+
+                    if (onProcessExited != null && Stopwatch.GetTimestamp() - lastAliveCheck >= 2 * Stopwatch.Frequency)
+                    {
+                        lastAliveCheck = Stopwatch.GetTimestamp();
+                        if (!IsProcessAlive(processId))
+                        {
+                            try { onProcessExited(); } catch { }
+                            break;
+                        }
+                    }
+                }
+                completion.TrySetResult();
+            }
+            catch (OperationCanceledException) { completion.TrySetCanceled(token); }
+            catch (Exception error) { completion.TrySetException(error); }
+        }) { IsBackground = true, Name = $"SonicRoute-ProcessAudio-{processId}" };
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        return completion.Task;
+    }
+
+    private static bool IsProcessAlive(int processId)
+    {
+        try { using var process = Process.GetProcessById(processId); return !process.HasExited; }
+        catch (ArgumentException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+}
+#else
 using System.Buffers;
 using System.Diagnostics;
 using System.IO;
@@ -358,3 +427,4 @@ internal static class PcProcessLoopbackCapture
         catch { return true; }
     }
 }
+#endif

@@ -39,7 +39,7 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         if (!resident) return;
         context.Enter(() =>
         {
-            hotkeys = new HotkeyService(window, !config.TrayWheelPaused, config.TrayWheelEverywhere);
+            hotkeys = new HotkeyService(window, host.PreviewGlobalControls && !config.TrayWheelPaused, config.TrayWheelEverywhere);
             hotkeys.HotkeyPressed += Hotkey;
             AutoRuleStore.Changed += RulesChanged;
             ReloadRules();
@@ -64,7 +64,7 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         foreach (var rule in rules)
             if (rule.Enabled && rule.Trigger == AutoRuleTrigger.Hotkey && !string.IsNullOrWhiteSpace(rule.Hotkey))
                 map[AutoRuleService.HotkeyPrefix + rule.Id] = rule.Hotkey;
-        hotkeys?.Reload(map);
+        hotkeys?.Reload(host.PreviewGlobalControls && !host.RecordingHotkey ? map : new());
         AutoRuleService.RefreshWatcher();
         host.RefreshForegroundInterest();
         bool needsSchedule = rules.Any(r => r.Enabled && r.Trigger == AutoRuleTrigger.Schedule);
@@ -72,6 +72,13 @@ internal sealed partial class ProductAutomation(ApplicationHost host, NativeAppl
         scheduled = needsSchedule;
         UpdateRuleDirectoryPolicy();
     }
+
+    internal void ReloadSettings() => context.Enter(() =>
+    {
+        hotkeys?.ConfigureTrayWheel(host.PreviewGlobalControls && !config.TrayWheelPaused, config.TrayWheelEverywhere);
+        ReloadRules();
+        microphones?.InvalidateTopology();
+    });
 
     private void RulesChanged()
     {

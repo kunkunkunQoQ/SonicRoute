@@ -1,7 +1,11 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 
+#if SONICROUTE_NATIVE
+namespace SonicRoute.Native.Graphics;
+#else
 namespace SonicRoute.AndroidAudio;
+#endif
 
 /// <summary>
 /// Decodes PNG icon bytes using Windows Imaging Component (WIC / windowscodecs.dll) into 32bpp BGRA
@@ -14,21 +18,23 @@ public static class WicIconLoader
     private static readonly Guid IidWicImagingFactory = new("ec5ec8a9-c395-4314-9c77-54d7a935ff70");
     private static readonly Guid PixelFormat32bppBgra = new("6fddc324-4e03-4bfe-b185-3d77768dc90f");
 
-    private const string EmbeddedPhoneIconResource = "SonicRoute.AndroidRuntime.VirtualDisplay.phone-icon.png";
     private const int WicDecodeMetadataCacheOnDemand = 0;
     private const int WicInterpolationModeFant = 3;
     private const int WicDitherTypeNone = 0;
     private const int WicPaletteTypeCustom = 0;
 
+#if !SONICROUTE_NATIVE
     public static byte[]? LoadDefaultPhoneIconPng()
     {
         var asm = typeof(WicIconLoader).Assembly;
-        using var stream = asm.GetManifestResourceStream(EmbeddedPhoneIconResource);
+        using var stream = asm.GetManifestResourceStream("SonicRoute.AndroidRuntime.VirtualDisplay.phone-icon.png");
         if (stream == null) return null;
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
         return ms.ToArray();
     }
+
+#endif
 
     public static bool TryDecodePngToBgra32(
         ReadOnlySpan<byte> pngBytes,

@@ -1,6 +1,10 @@
 using System.Runtime.InteropServices;
 
+#if SONICROUTE_NATIVE
+namespace SonicRoute.Native.Graphics;
+#else
 namespace SonicRoute.AndroidAudio;
+#endif
 
 internal static partial class Win32Native
 {

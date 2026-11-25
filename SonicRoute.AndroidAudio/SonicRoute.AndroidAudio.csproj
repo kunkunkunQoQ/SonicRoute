@@ -7,8 +7,8 @@
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <PlatformTarget Condition="'$(RuntimeIdentifier)' == ''">x64</PlatformTarget>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);SONICROUTE_NATIVE_LOOPBACK</DefineConstants>
   </PropertyGroup>
-  <Import Project="../shared/WindowsAudio/WindowsAudio.props" />
   <ItemGroup>
     <ProjectReference Include="../Native/Audio/Audio.csproj" />
     <PackageReference Include="Concentus" Version="2.2.2" />
@@ -20,6 +20,9 @@
     <EmbeddedResource Include="AirPlay/AacEld.NOTICE.md" LogicalName="SonicRoute.AirPlay.AacEld.NOTICE.md" />
     <EmbeddedResource Include="AirPlay/FFmpeg-LGPL-2.1.txt" LogicalName="SonicRoute.AirPlay.AacEld.FFmpeg-LGPL-2.1.txt" />
     <Compile Include="../SonicRoute.Core/AtomicFile.cs" Link="Shared/AtomicFile.cs" />
+    <Compile Include="../shared/WindowsAudio/Win32Native.cs" Link="WindowsAudio/Win32Native.cs" />
+    <Compile Include="../shared/WindowsAudio/ProcessCaptureIdentity.cs" Link="WindowsAudio/ProcessCaptureIdentity.cs" />
+    <Compile Include="../shared/WindowsAudio/PcProcessLoopbackCapture.cs" Link="WindowsAudio/PcProcessLoopbackCapture.cs" />
     <InternalsVisibleTo Include="AndroidAudioChecks" />
     <InternalsVisibleTo Include="FullProbe" />
     <InternalsVisibleTo Include="AndroidUiChecks" />

@@ -62,17 +62,21 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
 
     internal int Run(string[] args, string? selector)
     {
+        if (selector == null) StartViews();
+        StartServices(selector == null);
         if (selector == null)
         {
+#if SONICROUTE_PHONE
+            RestoreFull();
+#endif
             _window.SetInterest(ShellInterest.Power | ShellInterest.Session | ShellInterest.Theme | ShellInterest.Time | ShellInterest.Device);
-            _ = _updates.StartAsync(Task.CompletedTask);
+
             switch (HostStartup.InitialView(_config, args))
             {
                 case StartupView.Main: _feedback.Publish(FeedbackKind.OpenMain); break;
                 case StartupView.QuickPanel: _feedback.Publish(FeedbackKind.TogglePanel); break;
             }
         }
-        StartServices(selector == null);
         _instance.Listen(ExecuteRuleAsync, ExecuteControlAsync);
         if (!_window.TryPost(() =>
         {
@@ -105,6 +109,9 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
             case ShellSignalKind.TrayMenu: _feedback.Publish(FeedbackKind.TrayMenu); break;
         }
         BusinessSignal(signal);
+#if SONICROUTE_PHONE
+        FullSignal(signal);
+#endif
     }
 
     private static void HandleError(Exception error) => ExceptionDiagnostics.Record("NativeHost.Callback", error);
@@ -150,6 +157,12 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
                         ++_generation;
                         return "ok";
                     }));
+                case "panel" when request.Args.Length == 0:
+                    await OnOwner(() => { _feedback.Publish(FeedbackKind.TogglePanel); return true; });
+                    return new("ok");
+                case "osd" when request.Args.Length == 0:
+                    await OnOwner(() => { PreviewOsd(); return true; });
+                    return new("ok");
                 case "activate" when request.Args.Length == 0:
                     await OnOwner(() => { _feedback.Publish(FeedbackKind.OpenMain); return true; });
                     return new("ok");
@@ -183,13 +196,17 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
         _disposed = true;
         _window.Signal -= OnSignal;
         _window.CallbackError -= HandleError;
+        StopViews();
+#if SONICROUTE_PHONE
+        StopFull();
+#endif
         StopServices();
         _updates.Dispose();
         AutoRuleStore.Shutdown();
         ConfigService.FlushPendingSaves();
         if (Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_METRICS") == "1")
         {
-            var released = new AudioRelease(Audio.Com.Owners, Audio.Subscription.Active, Audio.MtaLifetime.Active);
+            var released = new AudioRelease(Native.Audio.Com.Owners, Native.Audio.Subscription.Active, Native.Audio.MtaLifetime.Active);
             var receipt = new ExitReceipt(Environment.ProcessId, released, GC.GetTotalAllocatedBytes(true), DateTimeOffset.UtcNow);
             File.WriteAllBytes(Path.Combine(_environment.Root, "last-exit.json"),
                 JsonSerializer.SerializeToUtf8Bytes(receipt, HostJson.Default.ExitReceipt));

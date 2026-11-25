@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -36,6 +36,16 @@ namespace SonicRoute
         public const string HotkeyPrefix = "Rule:";
         private static readonly HashSet<string> _executingRules = new(StringComparer.Ordinal);
         private static readonly CancellationTokenSource _executionLifetime = new();
+#if SONICROUTE_NATIVE
+        private static readonly Dictionary<string, CancellationTokenSource> _nativeRuleCancellation = new(StringComparer.Ordinal);
+        internal static bool CancelRule(string id)
+        {
+            CancellationTokenSource? source;
+            lock (_executingRules) _nativeRuleCancellation.TryGetValue(id, out source);
+            if (source == null) return false;
+            try { source.Cancel(); return true; } catch (ObjectDisposedException) { return false; }
+        }
+#endif
         private static volatile bool _shuttingDown;
         private static int _startupExecuted;
         internal static event Action? ExecutionStateChanged;
@@ -721,7 +731,7 @@ namespace SonicRoute
             => ExecuteCoreAsync(rule, new HashSet<string>(StringComparer.OrdinalIgnoreCase), source, null);
 
         private static async Task<ExecutionResult> ExecuteCoreAsync(AutoRule rule, HashSet<string> ancestors,
-            string source, string? parentRunId)
+            string source, string? parentRunId, CancellationToken parentToken = default)
         {
             if (rule == null || string.IsNullOrWhiteSpace(rule.Id)) return new ExecutionResult(0, 1);
             if (_shuttingDown) return new ExecutionResult(0, 0, canceled: true);
@@ -732,6 +742,12 @@ namespace SonicRoute
             string id = rule.Id, name = rule.Name;
             int succeeded = 0, failed = 0;
             var token = _executionLifetime.Token;
+#if SONICROUTE_NATIVE
+            using var cancellation = parentToken.CanBeCanceled
+                ? CancellationTokenSource.CreateLinkedTokenSource(token, parentToken)
+                : CancellationTokenSource.CreateLinkedTokenSource(token);
+            token = cancellation.Token;
+#endif
             try
             {
                 if (ancestors.Contains(id) || ancestors.Count >= 16)
@@ -743,6 +759,9 @@ namespace SonicRoute
                 {
                     entered = _executingRules.Add(id);
                     if (!entered) return Finish(new ExecutionResult(0, 0, busy: true));
+#if SONICROUTE_NATIVE
+                    _nativeRuleCancellation.Add(id, cancellation);
+#endif
                 }
                 var path = new HashSet<string>(ancestors, StringComparer.OrdinalIgnoreCase) { id };
                 var steps = rule.CloneSteps();
@@ -802,7 +821,13 @@ namespace SonicRoute
                     try { _ = history.CompleteAsync(outcome); } catch { }
                 if (entered)
                 {
-                    lock (_executingRules) _executingRules.Remove(id);
+                    lock (_executingRules)
+                    {
+                        _executingRules.Remove(id);
+#if SONICROUTE_NATIVE
+                        _nativeRuleCancellation.Remove(id);
+#endif
+                    }
                     NotifyExecutionStateChanged();
                 }
             }
@@ -826,7 +851,7 @@ namespace SonicRoute
                             token.ThrowIfCancellationRequested();
                             if (target == null) { if (detail != null) detail.Reason = "rule_missing"; return false; }
                             if (detail != null) detail.TargetRuleName = target.Name;
-                            var result = await ExecuteCoreAsync(target, path, "rule", parentRunId);
+                            var result = await ExecuteCoreAsync(target, path, "rule", parentRunId, token);
                             if (detail != null && (result.Busy || result.Canceled || result.Failed > 0 || result.Succeeded == 0))
                                 detail.Reason = path.Contains(target.Id) || path.Count >= 16 ? "cycle" : result.Busy ? "rule_busy" : "rule_failed";
                             return !result.Busy && !result.Canceled && result.Failed == 0 && result.Succeeded > 0;

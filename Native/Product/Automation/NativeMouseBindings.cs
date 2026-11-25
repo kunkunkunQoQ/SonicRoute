@@ -2,6 +2,8 @@ namespace SonicRoute.Native.Product;
 
 internal sealed class NativeMouseBindings(NativeApplicationWindow window, bool trayWheel, bool everywhere) : IDisposable
 {
+    private bool wheel = trayWheel, entireTray = everywhere;
+    internal void Configure(bool active, bool all) => (wheel, entireTray) = (active, all);
     private readonly Dictionary<MouseChord, int> enabled = new();
     private readonly Dictionary<int, string> actions = new();
     internal bool IsInstalled => window.MouseRegistered;
@@ -12,7 +14,7 @@ internal sealed class NativeMouseBindings(NativeApplicationWindow window, bool t
         int id = -1;
         foreach (var pair in bindings)
             if (TryChord(pair.Key, out var chord) && next.TryAdd(chord, id)) mapping[id--] = pair.Value;
-        if (!window.ConfigureMouse(next, trayWheel, everywhere)) return;
+        if (!window.ConfigureMouse(next, wheel, entireTray)) return;
         enabled.Clear(); actions.Clear();
         foreach (var item in next) enabled.Add(item.Key, item.Value);
         foreach (var item in mapping) actions.Add(item.Key, item.Value);

@@ -1,9 +1,12 @@
-using NAudio.Wave;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Numerics;
 
 namespace SonicRoute.AndroidAudio;
+
+/// <summary>Format metadata for the fixed 48 kHz stereo IEEE-float playback stream.</summary>
+public readonly record struct PcmWaveFormat(int Encoding, int Channels, int SampleRate,
+    int AverageBytesPerSecond, int BlockAlign, int BitsPerSample);
 
 /// <summary>One producer and one WASAPI consumer; bounded float PCM, 48 kHz stereo.</summary>
 public sealed class AndroidPcmSource : IWasapiPlaybackSource
@@ -62,7 +65,8 @@ public sealed class AndroidPcmSource : IWasapiPlaybackSource
         add => PlaybackBufferRequested += value;
         remove => PlaybackBufferRequested -= value;
     }
-    public WaveFormat WaveFormat { get; } = WaveFormat.CreateIeeeFloatWaveFormat(SampleRate, Channels);
+    public PcmWaveFormat WaveFormat { get; } = new(3, Channels, SampleRate,
+        SampleRate * Channels * sizeof(float), Channels * sizeof(float), sizeof(float) * 8);
 
     public AudioLatencyMode LatencyMode
     {

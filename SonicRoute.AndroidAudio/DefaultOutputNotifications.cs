@@ -1,4 +1,4 @@
-using NAudio.CoreAudioApi;
+using SonicRoute.Native.Audio;
 
 namespace SonicRoute.AndroidAudio;
 
@@ -83,11 +83,11 @@ internal static class DefaultOutputNotifications
 
         private string? _lastDefault;
         private int _seen;
-        public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId)
+        public void OnDefaultDeviceChanged(int flow, int role, string defaultDeviceId)
         {
-            if (flow != DataFlow.Render) return;
+            if (flow != (int)Flow.Render) return;
             bool multimediaChanged = false;
-            if (role == Role.Multimedia)
+            if (role == (int)Role.Multimedia)
             {
                 string? previous = Interlocked.Exchange(ref _lastDefault, defaultDeviceId);
                 multimediaChanged = Interlocked.Exchange(ref _seen, 1) == 0
@@ -95,7 +95,7 @@ internal static class DefaultOutputNotifications
             }
             defaultChanged(true, multimediaChanged);
         }
-        public void OnDeviceStateChanged(string id, DeviceState state) => topologyChanged();
+        public void OnDeviceStateChanged(string id, uint state) => topologyChanged();
         public void OnDeviceAdded(string id) => topologyChanged();
         public void OnDeviceRemoved(string id) => topologyChanged();
         public void OnPropertyValueChanged(string id, PropertyKey key) { }

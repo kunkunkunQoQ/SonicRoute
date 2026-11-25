@@ -315,7 +315,7 @@ internal static partial class Program
         });
 
         using var toneWaveOut = new NAudio.Wave.WasapiOut(NAudio.CoreAudioApi.AudioClientShareMode.Shared, true, 40);
-        toneWaveOut.Init(toneSource);
+        toneWaveOut.Init(new AndroidPcmWaveProvider(toneSource));
         toneWaveOut.Play();
 
         string phoneKey = AndroidDeviceIdentity.Key(device);
@@ -395,4 +395,11 @@ internal static partial class Program
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"PASS {_checks} live PC-to-Phone assertions; evidence: {resultPath}");
     }
+}
+
+internal sealed class AndroidPcmWaveProvider(AndroidPcmSource source) : NAudio.Wave.IWaveProvider
+{
+    public NAudio.Wave.WaveFormat WaveFormat { get; } = NAudio.Wave.WaveFormat.CreateIeeeFloatWaveFormat(
+        AndroidPcmSource.SampleRate, AndroidPcmSource.Channels);
+    public int Read(byte[] buffer, int offset, int count) => source.Read(buffer, offset, count);
 }
