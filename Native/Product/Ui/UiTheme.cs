@@ -107,6 +107,8 @@ internal sealed class UiThemePalette
     public UiColor NavHover { get; init; }
     public UiColor NavSelected { get; init; }
     public UiColor SliderBg { get; init; }
+    public UiColor? HighContrastScrollInk { get; init; }
+    public UiColor HighContrastScrollHighlight { get; init; }
     public UiColor Overlay { get; init; }
 
     public UiColor Accent { get; init; }
@@ -130,6 +132,9 @@ internal sealed class UiThemePalette
     public static UiThemePalette Resolve(AppConfig cfg)
     {
         bool dark = IsDarkTheme(cfg.ThemeMode);
+        var contrast = new HighContrast { Size = (uint)Marshal.SizeOf<HighContrast>() };
+        bool useContrast = SystemParametersInfoW(0x0042 /* SPI_GETHIGHCONTRAST */, contrast.Size, ref contrast, 0)
+            && (contrast.Flags & 1) != 0;
         UiColor accentColor = ResolveAccent(cfg.Accent);
         int opacity = Math.Clamp(cfg.BackgroundOpacity, 0, 100);
         byte alpha = (byte)(255 * opacity / 100);
@@ -192,6 +197,8 @@ internal sealed class UiThemePalette
             NavHover = navHover,
             NavSelected = navSelected,
             SliderBg = sliderBg,
+            HighContrastScrollInk = useContrast ? SystemColor(18 /* COLOR_BTNTEXT */) : null,
+            HighContrastScrollHighlight = useContrast ? SystemColor(13 /* COLOR_HIGHLIGHT */) : default,
             Overlay = overlay,
             Accent = accentColor,
             AccentHover = hover,
@@ -223,6 +230,16 @@ internal sealed class UiThemePalette
         }
         catch { }
         return false;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HighContrast { public uint Size, Flags; public nint Scheme; }
+    [DllImport("user32.dll")] private static extern bool SystemParametersInfoW(uint action, uint size, ref HighContrast value, uint flags);
+    [DllImport("user32.dll")] private static extern uint GetSysColor(int index);
+    private static UiColor SystemColor(int index)
+    {
+        uint rgb = GetSysColor(index);
+        return UiColor.FromRgb((byte)rgb, (byte)(rgb >> 8), (byte)(rgb >> 16));
     }
 
     public static UiColor ResolveAccent(string? accent)

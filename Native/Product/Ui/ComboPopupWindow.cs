@@ -16,7 +16,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
     private const float MaxListHeight = 320f;
     private readonly LayeredWindow _owner;
 
-    private readonly UiThemePalette _theme;
+    private UiThemePalette _theme;
     private readonly IReadOnlyList<ComboChoice> _choices;
     private readonly string _selectedKey;
     private readonly Action<ComboChoice> _onSelected;
@@ -108,12 +108,18 @@ internal sealed class ComboPopupWindow : LayeredWindow
         return pop;
     }
 
+    internal override void ApplyTheme(UiThemePalette theme)
+    {
+        _theme = theme;
+        Invalidate();
+    }
+
     protected override void OnRender(D2dTarget g, float widthDip, float heightDip)
     {
         _hit.Clear();
         var outer = new UiRect(1f, 1f, widthDip - 2f, heightDip - 2f);
-        g.FillRoundedRect(outer, UiMetrics.ComboCornerRadius, _theme.SurfaceBg);
-        g.DrawRoundedRect(outer, UiMetrics.ComboCornerRadius, _theme.Border, 1f);
+        g.FillRoundedRect(outer, 9f, _theme.SurfaceBg);
+        g.DrawRoundedRect(outer, 9f, _theme.Border, 1f);
 
         var view = new UiRect(Pad, Pad, widthDip - Pad * 2f, heightDip - Pad * 2f);
         _scroll.ViewportHeight = view.Height;

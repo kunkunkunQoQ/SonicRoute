@@ -126,6 +126,11 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private WindowTooltip? _tooltip;
     private string? _armedKeyTarget;
     private int _armedKey;
+    private UiScrollState? _heldTrack;
+    private float _pointerX, _pointerY;
+    private int _pageDirection;
+    private uint _repeatDelay, _repeatInterval;
+    private bool _repeatTimer;
     private bool _paintPending;
     private bool _animTimerActive;
     private UiCursorKind _cursor = UiCursorKind.Arrow;
@@ -317,6 +322,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
     public void ReleasePointerCapture()
     {
+        StopScrollRepeat();
         _armedKeyTarget = null;
         _tooltip?.Clear();
         var hwnd = Handle;
@@ -371,8 +377,20 @@ internal abstract unsafe class LayeredWindow : IDisposable
         var foreground = GetForegroundWindow();
         if (foreground != 0 && foreground != owner) return;
         window.RequestFocus();
-        if (advance && window.InputMap?.MoveFocus(reverse) == true) window.Invalidate();
+        if (advance && window.InputMap?.MoveFocus(reverse, window.RenderNow) == true) window.Invalidate();
     }
+
+    internal static void RefreshVisibleThemes(Func<UiThemePalette> resolve)
+    {
+        if (Instances.Count == 0) return;
+        UiThemePalette? palette = null;
+        foreach (var window in Instances.Values.ToArray())
+        {
+            if (window.IsVisible) window.ApplyTheme(palette ??= resolve());
+        }
+    }
+
+    internal virtual void ApplyTheme(UiThemePalette theme) { }
 
     public void Invalidate()
     {
@@ -386,6 +404,48 @@ internal abstract unsafe class LayeredWindow : IDisposable
         if (_cursor == cursor) return;
         _cursor = cursor;
         if (Handle != 0) ApplyCursor(cursor);
+    }
+
+    internal static void BeginScrollRepeat(UiScrollState state, int direction)
+    {
+        if (!Instances.TryGetValue(GetCapture(), out var win) || win._leftClickCount == 0) return;
+        win._heldTrack = state;
+        win._pageDirection = direction;
+        SystemParametersInfoW(0x16 /* SPI_GETKEYBOARDDELAY */, 0, out uint delay, 0);
+        SystemParametersInfoW(0x0A /* SPI_GETKEYBOARDSPEED */, 0, out uint speed, 0);
+        win._repeatDelay = (Math.Min(3u, delay) + 1) * 250u;
+        win._repeatInterval = (uint)Math.Round(1000d / (2.5 + Math.Min(31u, speed) * 27.5 / 31));
+        win.UpdateScrollRepeat(false);
+    }
+
+    private void UpdateScrollRepeat(bool tick)
+    {
+        if (_heldTrack is not { } track) return;
+        var thumb = track.GetThumbRect();
+        float y = _pointerY - InputOffsetY;
+        bool inside = !thumb.IsEmpty && track.TrackRect.Contains(_pointerX, y)
+            && (_pageDirection < 0 ? y < thumb.Y && track.Offset > 0 : y > thumb.Bottom && track.Offset < track.MaxOffset);
+        if (!inside)
+        {
+            if (_repeatTimer) KillTimer(Handle, 2);
+            _repeatTimer = false;
+            return;
+        }
+        if (tick)
+        {
+            track.Offset += _pageDirection * track.ViewportHeight;
+            track.Clamp();
+            Invalidate();
+        }
+        if (!_repeatTimer || tick)
+            _repeatTimer = SetTimer(Handle, 2, tick ? _repeatInterval : _repeatDelay, 0) != 0;
+    }
+
+    private void StopScrollRepeat()
+    {
+        if (_repeatTimer && Handle != 0) KillTimer(Handle, 2);
+        _repeatTimer = false;
+        _heldTrack = null;
     }
 
     protected void StartAnimationTimer(int intervalMs = 16)
@@ -463,7 +523,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
     public void RenderNow()
     {
-        if (_disposed || Handle == 0) return;
+        if (_disposed || !_visible || Handle == 0 || IsMinimized) return;
         _paintPending = false;
         int wPx = WidthPx;
         int hPx = HeightPx;
@@ -546,7 +606,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     protected virtual string GetWindowTitle() => "SonicRoute";
     protected virtual void OnRender(D2dTarget g, float widthDip, float heightDip) { }
     protected virtual void OnShown() { }
-    protected virtual void OnHidden() { }
+    protected virtual void OnHidden() => ReleaseRenderResources();
     protected virtual bool OnClosing() => true;
     protected virtual void OnClosed() { }
     protected virtual void OnDpiChanged(uint newDpi) { }
@@ -561,6 +621,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
     protected virtual void OnPointerUp(UiPointerEventArgs e) { }
     protected virtual void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal) { }
     protected virtual bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt) => false;
+    protected virtual bool OnKeyUp(int vk) => false;
+    protected virtual void OnFocusLost() { }
     protected virtual void OnChar(char ch) { }
     protected virtual void OnActivated(bool active) { }
     protected virtual void OnResized(float widthDip, float heightDip) { }
@@ -658,6 +720,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmTimer:
                 if (wParam == 1) win.OnTickAnimation();
+                if (wParam == 2 && win._repeatTimer) win.UpdateScrollRepeat(true);
                 return 0;
 
             case WmMove:
@@ -734,6 +797,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
                     TrackMouseEvent(ref tme);
                 }
                 (float x, float y) = ExtractPoint(lParam, win.DpiScale);
+                (win._pointerX, win._pointerY) = (x, y);
+                win.UpdateScrollRepeat(false);
                 win.OnPointerMove(x, y, ((uint)wParam & 0x0001) != 0);
                 if (win.IsVisible && (wParam & 0x73u) == 0 &&
                     win.InputMap?.HitTest(x, y - win.InputOffsetY) is { Tooltip.Length: > 0 } hovered)
@@ -761,6 +826,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 win._tooltip?.Clear();
                 win._armedKeyTarget = null;
                 var (downX, downY) = ExtractPoint(lParam, win.DpiScale);
+                (win._pointerX, win._pointerY) = (downX, downY);
                 if (win.InputMap is { } map)
                 {
                     if (map.ShowFocus) win.Invalidate();
@@ -774,6 +840,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 if (win._leftClickCount == 0 || GetCapture() != hwnd) return 0;
                 // WM_CAPTURECHANGED is synchronous. Finish our gesture before releasing
                 // capture, so only an unexpected transfer cancels the view's press.
+                win.StopScrollRepeat();
                 int clicks = win._leftClickCount;
                 win._leftClickCount = 0;
                 ReleaseCapture();
@@ -826,12 +893,14 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 {
                     win._leftClickCount = 0;
                     win._rightPointerDown = false;
+                    win.StopScrollRepeat();
                     win.OnCaptureLost();
                 }
                 return 0;
 
             case WmCancelMode:
             case WmKillFocus:
+                win.OnFocusLost();
                 if (win.InputMap is { ShowFocus: true } oldFocus)
                 {
                     oldFocus.HideFocus();
@@ -888,7 +957,13 @@ internal abstract unsafe class LayeredWindow : IDisposable
                     return 0;
                 if (msg == WmKeyDown && !ctrl && !alt && win._leftClickCount == 0 && win.InputMap is { } inputs)
                 {
-                    if (wParam == 9 && inputs.MoveFocus(shift))
+                    if (inputs.ScrollFocused((int)wParam))
+                    {
+                        win._armedKeyTarget = null;
+                        win.Invalidate();
+                        return 0;
+                    }
+                    if (wParam == 9 && inputs.MoveFocus(shift, win.RenderNow))
                     {
                         win._armedKeyTarget = null;
                         win.Invalidate();
@@ -908,6 +983,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 break;
             }
             case WmKeyUp:
+                if (win.OnKeyUp((int)wParam)) return 0;
                 if ((int)wParam == win._armedKey && win._armedKeyTarget is string armed)
                 {
                     win._armedKeyTarget = null;
@@ -1052,6 +1128,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("user32.dll")] private static extern bool IsZoomed(nint hwnd);
     [DllImport("user32.dll")] private static extern bool PostMessageW(nint hwnd, uint msg, nuint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern nint SendMessageW(nint hwnd, uint msg, nuint wParam, nint lParam);
+    [DllImport("user32.dll")] private static extern bool SystemParametersInfoW(uint action, uint param, out uint value, uint flags);
     [DllImport("user32.dll")] private static extern nint SetTimer(nint hwnd, nuint id, uint elapse, nint proc);
     [DllImport("user32.dll")] private static extern bool KillTimer(nint hwnd, nuint id);
     [DllImport("user32.dll")] private static extern bool ValidateRect(nint hwnd, nint rect);

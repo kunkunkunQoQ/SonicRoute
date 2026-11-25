@@ -39,7 +39,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
     private const float HeaderH = 26f;
     private const float SepH = 9f;
 
-    private readonly UiThemePalette _theme;
+    private UiThemePalette _theme;
     private List<UiMenuItem> _items;
     private readonly List<UiRect> _itemRects = new();
     private readonly UiScrollState _scroll = new();
@@ -91,8 +91,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         _focusedIndex = -1;
         GetMonitorWorkAreaForPoint(LeftPx, TopPx, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
         float scale = monDpi / 96f;
-        float maxHDip = Math.Clamp((mb - mt) / scale - 16f, 120f, 640f);
-        MeasureAndLayout(maxHDip, out float wDip, out float hDip);
+        MeasureAndLayout((mr - ml - 12) / scale, (mb - mt - 12) / scale, out float wDip, out float hDip);
         int wPx = (int)MathF.Round(wDip * scale);
         int hPx = (int)MathF.Round(hDip * scale);
         int xPx = Math.Clamp(LeftPx, ml + 6, Math.Max(ml + 6, mr - wPx - 6));
@@ -106,8 +105,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
     {
         GetMonitorWorkAreaForPoint(anchorXPx, anchorYPx, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
         float scale = monDpi / 96f;
-        float maxHDip = Math.Clamp((mb - mt) / scale - 16f, 120f, 640f);
-        MeasureAndLayout(maxHDip, out float wDip, out float hDip);
+        MeasureAndLayout((mr - ml - 12) / scale, (mb - mt - 12) / scale, out float wDip, out float hDip);
 
         int wPx = (int)MathF.Round(wDip * scale);
         int hPx = (int)MathF.Round(hDip * scale);
@@ -124,7 +122,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         Show(activate: true);
     }
 
-    private void MeasureAndLayout(float maxHDip, out float widthDip, out float heightDip)
+    private void MeasureAndLayout(float maxWDip, float maxHDip, out float widthDip, out float heightDip)
     {
         var ctx = D2dSharedContext.Instance;
         float maxW = 160f;
@@ -147,7 +145,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
             }
             float h = item.IsHeader ? HeaderH : ItemH;
             float textW = ctx.MeasureText(item.Text, UiMetrics.FontFamily, item.IsHeader ? 11.5f : 12.5f,
-                item.IsHeader ? 600 : 400, 360f, 32f, false).Width;
+                item.IsHeader ? 600 : 400, maxWDip, 32f, false).Width;
             float hintW = string.IsNullOrEmpty(item.RightHint)
                 ? 0f
                 : ctx.MeasureText(item.RightHint, UiMetrics.FontFamily, 11f, 400, 120f, 32f, false).Width + 20f;
@@ -160,14 +158,20 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
         _contentHeight = y;
         bool needsScroll = y + PadY * 2f > maxHDip;
-        widthDip = Math.Clamp(MathF.Ceiling(maxW + (needsScroll ? UiMetrics.ScrollBarWidth + 4f : 0f)), 168f, 400f);
-        heightDip = Math.Clamp(y + PadY * 2f, 44f, maxHDip);
+        widthDip = Math.Clamp(MathF.Ceiling(maxW + (needsScroll ? UiMetrics.ScrollBarWidth + 4f : 0f)), 140f, MathF.Max(140f, maxWDip));
+        heightDip = Math.Clamp(y + PadY * 2f, 44f, MathF.Max(44f, maxHDip));
         float itemW = widthDip - PadX * 2f - (needsScroll ? UiMetrics.ScrollBarWidth + 2f : 0f);
         for (int i = 0; i < _itemRects.Count; i++)
         {
             var r = _itemRects[i];
             _itemRects[i] = new UiRect(r.X, r.Y, itemW, r.Height);
         }
+    }
+
+    internal override void ApplyTheme(UiThemePalette theme)
+    {
+        _theme = theme;
+        Invalidate();
     }
 
     protected override void OnRender(D2dTarget g, float widthDip, float heightDip)

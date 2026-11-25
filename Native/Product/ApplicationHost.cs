@@ -110,8 +110,7 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
             case ShellSignalKind.QuickPanel: _feedback.Publish(FeedbackKind.TogglePanel); break;
             case ShellSignalKind.TrayMenu: _feedback.Publish(FeedbackKind.TrayMenu); break;
             case ShellSignalKind.Theme:
-                if (string.Equals(_config.ThemeMode, "system", StringComparison.OrdinalIgnoreCase))
-                    ViewSettingsChanged();
+                RefreshViewThemes();
                 break;
         }
         BusinessSignal(signal);
@@ -206,6 +205,7 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
 #if SONICROUTE_PHONE
         StopFull();
 #endif
+        Ui.D2dSharedContext.ReleaseShared();
         StopServices();
         _updates.Dispose();
         AutoRuleStore.Shutdown();

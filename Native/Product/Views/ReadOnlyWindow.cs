@@ -159,12 +159,21 @@ internal sealed class ReadOnlyWindow
         MoveWindow(_detail, p + split, top, Math.Max(1, width - split), body, true);
     }
 
+    private void CancelRead()
+    {
+        if (_read is not { } request) return;
+        lock (request)
+        {
+            if (Interlocked.CompareExchange(ref _read, null, request) == request) request.Cancel();
+        }
+    }
+
     internal async void Refresh()
     {
         if (!IsOpen || _license) return;
+        CancelRead();
         var store = AutoRuleService.GetHistoryStore();
-        if (store == null) { SetRows([], L10n.T("History.Empty")); return; }
-        _read?.Cancel();
+        if (store == null) { SetRows([], L10n.T("History.Empty")); EnableWindow(_refresh, true); return; }
         var request = _read = new CancellationTokenSource();
         var token = request.Token;
         EnableWindow(_refresh, false);
@@ -182,7 +191,7 @@ internal sealed class ReadOnlyWindow
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch { notice = "History.ReadError"; }
-        if (!_actions.Host.TryPost(() =>
+        if (!_actions.Host.PostContinuation(() =>
         {
             try
             {
@@ -192,7 +201,14 @@ internal sealed class ReadOnlyWindow
                 EnableWindow(_refresh, true);
             }
             finally { request.Dispose(); }
-        })) request.Dispose();
+        }))
+        {
+            lock (request)
+            {
+                Interlocked.CompareExchange(ref _read, null, request);
+                request.Dispose();
+            }
+        }
     }
     private unsafe void SetRows(IReadOnlyList<ExecutionHistoryEntry> rows, string notice)
     {
@@ -284,8 +300,7 @@ internal sealed class ReadOnlyWindow
             case 0x82:
                 Windows.Remove(hwnd);
                 viewer._window = 0;
-                viewer._read?.Cancel();
-                viewer._read = null;
+                viewer.CancelRead();
                 viewer._entries = [];
                 if (viewer._disabledOwner) { EnableWindow(viewer._owner, true); ViewNative.SetForegroundWindow(viewer._owner); }
                 foreach (nint handle in new[] { viewer._font, viewer._surfaceBrush, viewer._windowBrush })

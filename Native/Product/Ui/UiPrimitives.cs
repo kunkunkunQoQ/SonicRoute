@@ -16,6 +16,8 @@ internal sealed class UiHitMap
 {
     private readonly List<(UiHitItem Item, UiRect Visible)> _items = new(64);
     private readonly Stack<UiRect> _clips = new();
+    private readonly List<(UiScrollState State, UiRect View)> _scrollViews = new();
+    private UiScrollState? _keyboardScroll;
     public UiHitItem? Hovered { get; private set; }
     public string? ActiveId { get; set; }
     public string? FocusId { get; private set; }
@@ -23,6 +25,7 @@ internal sealed class UiHitMap
 
     public void FocusPointer(float x, float y)
     {
+        _keyboardScroll = null;
         FocusId = HitTest(x, y)?.Id;
         ShowFocus = false;
     }
@@ -36,16 +39,45 @@ internal sealed class UiHitMap
             HitTest(visible.CenterX, visible.CenterY)?.Id == item.Id;
     }
 
-    public bool MoveFocus(bool reverse)
+    private List<string> TabOrder(UiRect? within = null)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var order = new List<string>();
         for (int i = 0; i < _items.Count; i++)
-            if (IsTabStop(i) && seen.Add(_items[i].Item.Id)) order.Add(_items[i].Item.Id);
+        {
+            var (item, rect) = _items[i];
+            if (within is UiRect region && !region.Contains(rect.CenterX, rect.CenterY)) continue;
+            if (IsTabStop(i) && seen.Add(item.Id)) order.Add(item.Id);
+        }
+        return order;
+    }
+
+    public bool MoveFocus(bool reverse, Action render)
+    {
+        var order = TabOrder();
         if (order.Count == 0) return false;
         int index = FocusId == null ? -1 : order.IndexOf(FocusId);
         if (index < 0 && reverse) index = 0;
-        FocusId = order[(index + order.Count + (reverse ? -1 : 1)) % order.Count];
+        string next = order[(index + order.Count + (reverse ? -1 : 1)) % order.Count];
+        if (TryGetFocus(out _, out var current))
+        {
+            for (int i = 0; i < _scrollViews.Count; i++)
+            {
+                var (state, view) = _scrollViews[i];
+                if (!view.Contains(current.CenterX, current.CenterY)) continue;
+                if (reverse ? state.Offset <= 0 : state.Offset >= state.MaxOffset) continue;
+                var old = TabOrder(view);
+                if (old.Count == 0 || (reverse ? old[0] : old[^1]) != FocusId) continue;
+                state.Offset += (reverse ? -1 : 1) * MathF.Max(1f, view.Height - 24f);
+                state.Clamp();
+                render();
+                var revealed = TabOrder(view);
+                if (reverse) revealed.Reverse();
+                next = revealed.Find(id => !old.Contains(id)) ?? next;
+                break;
+            }
+        }
+        FocusId = next;
         ShowFocus = true;
         return true;
     }
@@ -69,6 +101,32 @@ internal sealed class UiHitMap
     {
         _items.Clear();
         _clips.Clear();
+        _scrollViews.Clear();
+    }
+
+    public void RegisterScroll(UiScrollState state, UiRect view)
+    {
+        if (_clips.TryPeek(out var parent)) view = Intersect(view, parent);
+        if (!view.IsEmpty) _scrollViews.Add((state, view));
+    }
+
+    public bool ScrollFocused(int key)
+    {
+        if (!ShowFocus || key is not (33 or 34 or 35 or 36)) return false;
+        bool haveTarget = TryGetFocus(out _, out var bounds);
+        // Inner lists draw their tracks before the outer page does.
+        foreach (var (state, view) in _scrollViews)
+        {
+            if (haveTarget ? !view.Contains(bounds.CenterX, bounds.CenterY) : state != _keyboardScroll) continue;
+            float before = state.Offset;
+            state.Offset = key switch { 33 => before - view.Height, 34 => before + view.Height,
+                35 => state.MaxOffset, _ => 0f };
+            state.Clamp();
+            if (state.Offset == before) continue;
+            _keyboardScroll = state;
+            return true;
+        }
+        return false;
     }
 
     public void PushClip(UiRect clip) =>
@@ -167,8 +225,10 @@ internal sealed class UiScrollState
             return true;
         }
         // WPF's track buttons issue PageUp/PageDown; only the thumb starts a drag.
-        Offset += yDip < thumb.Y ? -ViewportHeight : ViewportHeight;
+        int direction = yDip < thumb.Y ? -1 : 1;
+        Offset += direction * ViewportHeight;
         Clamp();
+        LayeredWindow.BeginScrollRepeat(this, direction);
         return true;
     }
 
@@ -196,13 +256,16 @@ internal sealed class UiScrollState
         }
 
         TrackRect = new UiRect(viewportRect.Right - UiMetrics.ScrollBarWidth, viewportRect.Y + 2f, UiMetrics.ScrollBarWidth, MathF.Max(10f, viewportRect.Height - 4f));
+        hit.RegisterScroll(this, viewportRect);
         hit.Add(hitId, TrackRect, UiCursorKind.Arrow);
         var thumb = GetThumbRect();
         if (thumb.IsEmpty) return;
 
         bool hot = Dragging || hit.IsHover(hitId);
         float w = hot ? UiMetrics.ScrollThumbHoverWidth : UiMetrics.ScrollThumbWidth;
-        UiColor col = Dragging
+        UiColor col = t.HighContrastScrollInk is UiColor systemInk
+            ? (Dragging ? t.HighContrastScrollHighlight : systemInk)
+            : Dragging
             ? t.Accent
             : hot
                 ? t.TextPrimary.WithAlphaFraction(0.90f)

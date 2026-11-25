@@ -153,9 +153,11 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         }
     }
 
-    public void InvalidateTheme()
+    public void InvalidateTheme() => ApplyTheme(UiThemePalette.Resolve(_config));
+
+    internal override void ApplyTheme(UiThemePalette theme)
     {
-        _theme = UiThemePalette.Resolve(_config);
+        _theme = theme;
         _historyViewer?.UpdateTheme();
         _licenseViewer?.UpdateTheme();
         if (_inlineEdit.IsOpen)
@@ -165,11 +167,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     public void RefreshAll() => ExternalRefresh();
 
-    public void NotifyThemeChanged()
-    {
-        InvalidateTheme();
-        _host.ViewSettingsChanged();
-    }
+    public void NotifyThemeChanged() => _host.RefreshViewThemes();
 
     public void NotifySettingsChanged()
     {
@@ -343,6 +341,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         }
         else
         {
+            InvalidateTheme();
             _activePage?.OnActivated();
             _activePage?.RefreshData();
             if (_activePage is { NeedsAnimationTick: true })
