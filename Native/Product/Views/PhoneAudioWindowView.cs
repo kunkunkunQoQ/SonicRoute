@@ -145,6 +145,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     internal override void ApplyTheme(UiThemePalette theme)
     {
         _theme = theme;
+        if (_inlineEdit.IsOpen) _inlineEdit.SetTheme(theme.SurfaceBg, theme.TextPrimary);
         if (IsVisible) Invalidate();
     }
 
