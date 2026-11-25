@@ -46,7 +46,8 @@ namespace SonicRoute.Updates
             return "\"" + value + new string('\\', value.Length - value.TrimEnd('\\').Length) + "\"";
         }
 
-        internal static bool BeforeStartup(string[] args, string dataDirectory, string edition, bool packaged, string mutexName, Action<string> alert)
+        internal static bool BeforeStartup(string[] args, string dataDirectory, string edition, bool packaged, string mutexName, Action<string> alert,
+            string? gateScope = null, Action<string>? validateTarget = null)
         {
             bool worker = args.Length == 2 && (args[0] == "--update-worker" || args[0] == "--update-recover");
             bool updated = args.Length == 2 && args[0] == "--update-start";
@@ -58,11 +59,11 @@ namespace SonicRoute.Updates
             }
             if (worker)
             {
-                RunWorker(args[1], args[0] == "--update-recover", dataDirectory, edition, mutexName);
+                RunWorker(args[1], args[0] == "--update-recover", dataDirectory, edition, mutexName, gateScope, validateTarget);
                 return false;
             }
             if (internalCommand && !updated) return false;
-            using var gate = new Mutex(false, UpdateInstaller.GateName(edition));
+            using var gate = new Mutex(false, UpdateInstaller.GateName(gateScope ?? edition));
             bool available = TryAcquire(gate, 0);
             if (available) gate.ReleaseMutex();
             string marker = Path.Combine(Path.GetDirectoryName(ExecutablePath)!, UpdateInstaller.MarkerName);
@@ -71,6 +72,8 @@ namespace SonicRoute.Updates
                 if (!Guid.TryParseExact(args[1], "N", out _) || available || !File.Exists(marker) || File.ReadAllText(marker) != args[1]) return false;
                 var p = UpdateInstaller.ReadPlan(Path.Combine(dataDirectory, "Updates", "transactions", args[1], "plan.json"));
                 UpdateInstaller.ValidatePlan(p, edition, Architecture);
+                validateTarget?.Invoke(p.TargetExe);
+                if (!p.DataDirectory.Equals(dataDirectory, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Unexpected update profile.");
                 if (!p.TargetExe.Equals(ExecutablePath, StringComparison.OrdinalIgnoreCase) || p.Status != "starting") return false;
                 Pending = p;
                 return true;
@@ -83,6 +86,8 @@ namespace SonicRoute.Updates
                 string path = Path.Combine(dataDirectory, "Updates", "transactions", id, "plan.json");
                 var p = UpdateInstaller.ReadPlan(path);
                 UpdateInstaller.ValidatePlan(p, edition, Architecture);
+                validateTarget?.Invoke(p.TargetExe);
+                if (!p.DataDirectory.Equals(dataDirectory, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Unexpected update profile.");
                 if (!p.TargetExe.Equals(ExecutablePath, StringComparison.OrdinalIgnoreCase)) { alert("Upd.RecoveryRequired"); return false; }
                 Start(p.Runner, "--update-recover " + Quote(path), p.DataDirectory);
                 return false;
@@ -104,12 +109,12 @@ namespace SonicRoute.Updates
             catch (AbandonedMutexException) { return true; }
         }
 
-        private static void RunWorker(string path, bool recover, string dataDirectory, string edition, string instanceMutex)
+        private static void RunWorker(string path, bool recover, string dataDirectory, string edition, string instanceMutex, string? gateScope, Action<string>? validateTarget)
         {
             InstallPlan? plan = null;
             bool instanceOwned = false;
             bool gateOwned = false;
-            using var gate = new Mutex(false, UpdateInstaller.GateName(edition));
+            using var gate = new Mutex(false, UpdateInstaller.GateName(gateScope ?? edition));
             Mutex instance = new Mutex(false, instanceMutex);
             Process? child = null;
             EventWaitHandle? finished = null;
@@ -119,6 +124,7 @@ namespace SonicRoute.Updates
             {
                 plan = UpdateInstaller.ReadPlan(path);
                 UpdateInstaller.ValidatePlan(plan, edition, Architecture);
+                validateTarget?.Invoke(plan.TargetExe);
                 if (!Path.GetFullPath(path).Equals(plan.PlanPath, StringComparison.OrdinalIgnoreCase)
                     || !Path.GetFullPath(dataDirectory).Equals(plan.DataDirectory, StringComparison.OrdinalIgnoreCase)
                     || !ExecutablePath.Equals(plan.Runner, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Untrusted worker plan.");

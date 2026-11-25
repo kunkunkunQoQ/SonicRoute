@@ -10,6 +10,7 @@ namespace SonicRoute.Core
     // Older targets retain their existing serializer; no reflection fallback is needed
     // for this closed set of config/rule types on NET10.
     [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "StringMap")]
     [JsonSerializable(typeof(AppConfig))]
     [JsonSerializable(typeof(AutoRule))]
     [JsonSerializable(typeof(List<AutoRule>))]

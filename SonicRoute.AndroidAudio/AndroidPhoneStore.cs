@@ -44,7 +44,6 @@ public sealed class AndroidPhoneStore
 {
     private readonly object _gate = new();
     private readonly Func<string>? _defaultName;
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private sealed record State(IReadOnlyList<AndroidPhoneProfile> Profiles, string SelectedId,
         IReadOnlyList<AndroidDevice>? RemovedDevices = null, IReadOnlyList<AndroidPhoneProfile>? RemovedProfiles = null);
     private State _state;
@@ -105,14 +104,14 @@ public sealed class AndroidPhoneStore
             IReadOnlyList<AndroidPhoneProfile>? removedProfiles = null;
             if (version == 1)
             {
-                var saved = json.RootElement.Deserialize<LegacyFile>();
+                var saved = json.RootElement.Deserialize(AndroidSettingsJsonContext.Default.LegacyFile);
                 if (saved?.Apps == null) return false;
                 profiles = [LoadProfile(new(Guid.NewGuid().ToString("N"), saved.Name, saved.Device, saved.Apps, saved.DisabledSmartVolumePackages))];
                 selected = profiles[0].Id;
             }
             else if (version is 2 or 3)
             {
-                var saved = json.RootElement.Deserialize<PhoneFile>();
+                var saved = json.RootElement.Deserialize(AndroidSettingsJsonContext.Default.PhoneFile);
                 if (saved?.Phones == null || saved.Phones.Length is < 1 or > 32) return false;
                 profiles = saved.Phones.Select(LoadProfile).DistinctBy(p => p.Id).ToArray();
                 selected = saved.SelectedId;
@@ -575,13 +574,13 @@ public sealed class AndroidPhoneStore
             state.RemovedProfiles?.Select(SaveProfile).ToArray());
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         AtomicFile.BackupBeforeWrite(FilePath);
-        AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, JsonOptions));
+        AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, saved, AndroidSettingsJsonContext.Default.PhoneFile));
         _legacyFormat = false;
     }
     private static SavedPhone SaveProfile(AndroidPhoneProfile profile) => new(profile.Id, profile.Name, profile.LastDevice,
         profile.RetainedApps.ToArray(), profile.DisabledSmartVolumeApps.ToArray(), profile.ReceiveFolder, profile.ManuallyDisconnected, profile.LastWirelessAddress);
-    private sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
-    private sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null, bool ManuallyDisconnected = false, string? LastWirelessAddress = null);
-    private sealed record PhoneFile(int Version, string SelectedId, SavedPhone[] Phones, AndroidDevice[]? RemovedDevices = null,
+    internal sealed record LegacyFile(int Version, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null);
+    internal sealed record SavedPhone(string Id, string Name, AndroidDevice? Device, AndroidApp[] Apps, string[]? DisabledSmartVolumePackages = null, string? ReceiveFolder = null, bool ManuallyDisconnected = false, string? LastWirelessAddress = null);
+    internal sealed record PhoneFile(int Version, string SelectedId, SavedPhone[] Phones, AndroidDevice[]? RemovedDevices = null,
         SavedPhone[]? RemovedProfiles = null);
 }

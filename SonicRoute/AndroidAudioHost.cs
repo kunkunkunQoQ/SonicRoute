@@ -54,6 +54,17 @@ internal static partial class AndroidAudioHost
         return sources;
     });
     private static readonly CancellationTokenSource MediaShutdown = new();
+    internal static readonly AndroidFileTransfers FileTransfers = new();
+
+    internal static bool StartFileTransfer(AdbClient adb, AndroidDevice device, string[] paths, string destination, string? pullFrom)
+    {
+        var manager = PhoneAudioWindowCache.Manager;
+        var admission = manager.Get(device);
+        if (admission.Profile == null || !manager.IsCurrent(device)) return false;
+        var transfer = new AndroidFileTransfer(adb, device.CommandTarget);
+        return FileTransfers.TryStart(admission.Profile.Id, transfer, paths, destination, pullFrom,
+            () => manager.IsCurrent(device), manager.OperationToken(device), out _);
+    }
     private static readonly HashSet<Task> MediaWatches = new();
     private static readonly Lazy<PcToPhoneAudioManager> LazyPcToPhone = new(() =>
     {
@@ -783,7 +794,7 @@ internal static partial class AndroidAudioHost
     {
         if (LazySources.IsValueCreated) Sources.BeginShutdown();
         MediaShutdown.Cancel();
-        var pending = new List<Task>();
+        var pending = new List<Task> { FileTransfers.CloseAsync() };
         if (LazyPcToPhone.IsValueCreated) pending.Add(PcToPhone.DisposeAsync().AsTask());
         if (SavedSourceStartup.IsValueCreated) pending.Add(SavedSourceStartup.Value);
         lock (MediaWatches) pending.AddRange(MediaWatches);

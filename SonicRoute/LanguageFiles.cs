@@ -24,7 +24,12 @@ namespace SonicRoute
 #endif
                 );
 
-        internal static string Serialize(Dictionary<string, string> data) => JsonSerializer.Serialize(data, ExportJson.Options);
+        internal static string Serialize(Dictionary<string, string> data) =>
+#if NET10_0_OR_GREATER
+            JsonSerializer.Serialize(data, ExportJson.Contract.DictionaryStringString);
+#else
+            JsonSerializer.Serialize(data, ExportJson.Options);
+#endif
 
         // Export/rename alone create the writer options; normal reads need no writer cache.
         private static class ExportJson
@@ -33,10 +38,10 @@ namespace SonicRoute
             {
                 WriteIndented = true,
                 Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-#if NET10_0_OR_GREATER
-                TypeInfoResolver = LanguageJsonContext.Default,
-#endif
             };
+#if NET10_0_OR_GREATER
+            internal static readonly LanguageJsonContext Contract = new(Options);
+#endif
         }
 
         internal static bool IsValidCode(string code)

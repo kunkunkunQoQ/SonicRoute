@@ -46,7 +46,7 @@ public static class SavedPlaybackStore
     });
     private static IReadOnlyDictionary<string, SavedPlaybackSelection>? _snapshot;
 #if NET10_0_OR_GREATER
-    private static JsonSerializerOptions Options => PersistenceJsonContext.Default.Options;
+    private static System.Text.Json.Serialization.Metadata.JsonTypeInfo<Dictionary<string, SavedPlaybackSelection>> Options => PersistenceJsonContext.Default.DictionaryStringSavedPlaybackSelection;
 #else
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 #endif

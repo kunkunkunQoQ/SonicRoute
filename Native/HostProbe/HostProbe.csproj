@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <AssemblyTitle>SonicRoute</AssemblyTitle>
+    <AssemblyTitle Condition="'$(SonicRouteEdition)'=='Lite'">SonicRoute Lite</AssemblyTitle>
+    <Product>SonicRoute Phase 1 verification host</Product>
+    <ApplicationIcon>../../SonicRoute/SonicRoute.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../SonicRoute.Core/SonicRoute.Core.csproj" />
+    <ProjectReference Include="../../StoreInterop/StoreInterop.csproj" />
+    <Compile Include="../../SonicRoute/RuleCommandLine.Wire.cs;../../SonicRoute/Updates/UpdateProtocol.cs;../../SonicRoute/Updates/UpdateInstaller.cs;../../SonicRoute/AppRuntimeIdentity.cs;../../SonicRoute/BuildIdentity.cs" />
+    <Compile Include="../Monitoring/*.cs" />
+    <EmbeddedResource Include="../../build/FullRelease.files.json" LogicalName="SonicRoute.FullRelease.files.json" Condition="'$(SonicRouteEdition)'=='Full'"/>
+  </ItemGroup>
+</Project>

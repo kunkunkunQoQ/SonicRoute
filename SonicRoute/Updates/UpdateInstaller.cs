@@ -39,6 +39,14 @@ namespace SonicRoute.Updates
             : name == "SonicRoute.exe.config" ? Path.GetFileName(TargetExe) + ".config" : name;
     }
 
+#if NET10_0_OR_GREATER
+    internal sealed record UpdateOutcome(string Status, string Version, string Error, string Id, string TargetExe);
+    [System.Text.Json.Serialization.JsonSourceGenerationOptions(WriteIndented = true, PropertyNameCaseInsensitive = true)]
+    [System.Text.Json.Serialization.JsonSerializable(typeof(InstallPlan))]
+    [System.Text.Json.Serialization.JsonSerializable(typeof(UpdateOutcome))]
+    internal partial class UpdateTransactionContext : System.Text.Json.Serialization.JsonSerializerContext { }
+#endif
+
     internal static class UpdateInstaller
     {
         internal const string MarkerName = ".sonicroute-update.pending";
@@ -48,7 +56,11 @@ namespace SonicRoute.Updates
         {
             string path = plan.PlanPath;
             string temporary = path + ".tmp";
+#if NET10_0_OR_GREATER
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(plan, UpdateTransactionContext.Default.InstallPlan);
+#else
             byte[] bytes = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(plan, UpdateProtocol.Json));
+#endif
             using (var file = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
             { file.Write(bytes, 0, bytes.Length); file.Flush(true); }
             if (File.Exists(path)) File.Replace(temporary, path, null);
@@ -61,7 +73,12 @@ namespace SonicRoute.Updates
             {
                 string path = Path.Combine(plan.DataDirectory, "Updates", "last-result.json");
                 string temporary = path + ".tmp";
+#if NET10_0_OR_GREATER
+                var outcome = new UpdateOutcome(plan.Status, plan.Version, plan.Error, plan.Id, plan.TargetExe);
+                File.WriteAllText(temporary, JsonSerializer.Serialize(outcome, UpdateTransactionContext.Default.UpdateOutcome));
+#else
                 File.WriteAllText(temporary, JsonSerializer.Serialize(new { plan.Status, plan.Version, plan.Error, plan.Id, plan.TargetExe }, UpdateProtocol.Json));
+#endif
                 if (File.Exists(path)) File.Replace(temporary, path, null); else File.Move(temporary, path);
             }
             catch { }
@@ -70,7 +87,11 @@ namespace SonicRoute.Updates
         internal static InstallPlan ReadPlan(string path)
         {
             if (new FileInfo(path).Length > 1024 * 1024) throw new InvalidDataException("Update plan too large.");
+#if NET10_0_OR_GREATER
+            return JsonSerializer.Deserialize(File.ReadAllText(path), UpdateTransactionContext.Default.InstallPlan) ?? throw new InvalidDataException("Empty update plan.");
+#else
             return JsonSerializer.Deserialize<InstallPlan>(File.ReadAllText(path), UpdateProtocol.Json) ?? throw new InvalidDataException("Empty update plan.");
+#endif
         }
 
         internal static void ValidatePlan(InstallPlan p, string edition, string architecture)

@@ -121,7 +121,12 @@ namespace SonicRoute.Updates
             var sums = UpdateProtocol.ReadChecksums(Encoding.UTF8.GetString(await MetadataAsync(sumsAsset, 65536, token).ConfigureAwait(false)));
             if (!sums.TryGetValue(UpdateProtocol.ManifestName, out var manifestHash) || !manifestHash.Equals(manifestAsset.Digest.Substring(7), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Manifest absent from checksums.");
-            var manifest = JsonSerializer.Deserialize<UpdateManifest>(manifestBytes, UpdateProtocol.Json) ?? throw new InvalidDataException("Empty manifest.");
+#if NET10_0_OR_GREATER
+            var manifest = JsonSerializer.Deserialize(manifestBytes, UpdateManifestContext.Default.UpdateManifest);
+#else
+            var manifest = JsonSerializer.Deserialize<UpdateManifest>(manifestBytes, UpdateProtocol.Json);
+#endif
+            if (manifest == null) throw new InvalidDataException("Empty manifest.");
             if (manifest.SchemaVersion != 1 || (manifest.ProtocolVersion != 1 && manifest.ProtocolVersion != 2)
                 || UpdateProtocol.ParseVersion(manifest.Version) != UpdateProtocol.ParseVersion(release.Tag))
                 throw new InvalidDataException("Unsupported update manifest.");

@@ -10,6 +10,7 @@
   </PropertyGroup>
   <Import Project="../shared/WindowsAudio/WindowsAudio.props" />
   <ItemGroup>
+    <ProjectReference Include="../Native/Audio/Audio.csproj" />
     <PackageReference Include="Concentus" Version="2.2.2" />
     <EmbeddedResource Include="AndroidRuntime.files.json" />
     <EmbeddedResource Include="../AndroidRuntime/*" Exclude="../AndroidRuntime/*.txt" LogicalName="SonicRoute.AndroidRuntime.%(Filename)%(Extension)" />
@@ -20,6 +21,7 @@
     <EmbeddedResource Include="AirPlay/FFmpeg-LGPL-2.1.txt" LogicalName="SonicRoute.AirPlay.AacEld.FFmpeg-LGPL-2.1.txt" />
     <Compile Include="../SonicRoute.Core/AtomicFile.cs" Link="Shared/AtomicFile.cs" />
     <InternalsVisibleTo Include="AndroidAudioChecks" />
+    <InternalsVisibleTo Include="FullProbe" />
     <InternalsVisibleTo Include="AndroidUiChecks" />
     <InternalsVisibleTo Include="SonicRoute" />
   </ItemGroup>

@@ -38,7 +38,8 @@ namespace SonicRoute.Core
                 string entry = DateTime.UtcNow.ToString("o") + " [" + stage + "] " + detail + Environment.NewLine;
                 string? preferred = null;
                 try { preferred = LogPath; } catch { }
-                if (preferred == null || !TryWrite(preferred, entry))
+                if ((preferred == null || !TryWrite(preferred, entry))
+                    && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("SONICROUTE_DATA_DIRECTORY")))
                     TryWrite(Path.Combine(Path.GetTempPath(), "SonicRoute", "diagnostics.log"), entry);
             }
             catch { /* Diagnostics must not replace the original failure. */ }

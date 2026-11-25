@@ -124,7 +124,7 @@ public sealed class AndroidClipboardClient(AdbClient adb) : IAndroidClipboardCli
             var writer = _writer ?? throw AndroidError.WithCode(new IOException("剪贴板尚未连接。"), AndroidErrorCode.ClipboardNotConnected);
             using var sending = CancellationTokenSource.CreateLinkedTokenSource(token, _writeLifetime);
             // The coordinator supplies one bounded writer per phone, rather than queued writes per copy.
-            string line = JsonSerializer.Serialize(new { text, revision = expectedRevision });
+            string line = JsonSerializer.Serialize(new ClipboardWrite(text, expectedRevision), AndroidWireJsonContext.Default.ClipboardWrite);
             await writer.WriteLineAsync(line.AsMemory(), sending.Token).ConfigureAwait(false);
             await writer.FlushAsync(sending.Token).ConfigureAwait(false);
         }

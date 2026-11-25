@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="ViewLifetimeChecks/**/*.cs" />
+    <ProjectReference Include="../../SonicRoute.AndroidAudio/SonicRoute.AndroidAudio.csproj" />
+    <PackageReference Include="QRCoder" Version="1.7.0" />
+    <EmbeddedResource Include="../../checks/AndroidAudioChecks/fixtures/*.au" LogicalName="FullProbe.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="frame64.h264" LogicalName="FullProbe.frame64.h264" />
+    <EmbeddedResource Include="*.packets" LogicalName="FullProbe.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

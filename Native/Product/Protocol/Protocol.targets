@@ -1,0 +1,7 @@
+<Project>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../../SonicRoute/AppRuntimeIdentity.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/BuildIdentity.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/RestartCoordinator.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/RuleCommandLine.Parse.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/RuleCommandLine.Selection.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/RuleCommandLine.Wire.cs"/>
+    <Compile Include="$(MSBuildThisFileDirectory)../../../SonicRoute/Updates/*.cs" Exclude="$(MSBuildThisFileDirectory)../../../SonicRoute/Updates/*.Desktop.cs"/>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)../../../build/FullRelease.files.json" LogicalName="SonicRoute.FullRelease.files.json" Condition="'$(SonicRouteEdition)'=='Full'"/>
+  </ItemGroup>
+</Project>

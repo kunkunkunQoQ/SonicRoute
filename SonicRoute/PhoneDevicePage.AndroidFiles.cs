@@ -22,13 +22,16 @@ public partial class PhoneDevicePage
 {
     private static readonly ReceiveDirectorySettings AndroidReceiveFolder =
         new(Path.Combine(Path.GetDirectoryName(ConfigService.ConfigPath)!, "android-file-receive-folder.txt"));
-    private CancellationTokenSource? _androidListing, _androidFileWork;
-    private string? _androidViewSerial, _androidTransferSerial, _androidStatusSerial, _androidFileMessage;
+    private CancellationTokenSource? _androidListing;
+    private string? _androidViewSerial, _androidStatusSerial, _androidFileMessage;
     private string _androidFolder = AndroidFileTransfer.Downloads;
     private bool _choosingPhoneFolder, _fileDragOver;
 
+    private string? TransferProfileId => _device == null ? null : AndroidAudioHost.Phone.FindProfile(_device)?.Id;
+    private AndroidFileProgress? FileProgressState => TransferProfileId is { } id ? AndroidAudioHost.FileTransfers.Get(id) : null;
+
     private string? AndroidFileTarget() => !_disposed && !IsConnectionPage
-        && _androidFileWork == null && _device != null && PhoneAudioWindowCache.Manager.IsCurrent(_device) ? _device.CommandTarget : null;
+        && FileProgressState?.Phase != AndroidFilePhase.Running && _device != null && PhoneAudioWindowCache.Manager.IsCurrent(_device) ? _device.CommandTarget : null;
 
     private void UpdateAndroidFiles(bool connectionPage)
     {
@@ -44,10 +47,20 @@ public partial class PhoneDevicePage
         AndroidReceivePath.Text = AndroidFolderLabel(folder);
         AndroidReceivePath.ToolTip = folder;
         LocalReceiveFolderPath.Text = AndroidReceiveFolder.GetReceiveDirectory();
-        bool working = serial != null && _androidTransferSerial == serial && _androidFileWork != null;
+        var progress = FileProgressState;
+        bool working = progress?.Phase == AndroidFilePhase.Running;
         FileProgressRow.Visibility = working ? Visibility.Visible : Visibility.Collapsed;
         FileProgress.IsIndeterminate = working;
-        FileStatus.Text = serial != null && _androidStatusSerial == serial ? _androidFileMessage ?? "" : "";
+        FileStatus.Text = serial != null && _androidStatusSerial == serial && _androidFileMessage != null
+            ? _androidFileMessage : progress?.Phase switch
+        {
+            AndroidFilePhase.Running => string.Format(L10n.T("Phone.FileBatchProgress"), progress.Index, progress.Count, progress.Text),
+            AndroidFilePhase.Saved => string.Format(L10n.T("Phone.FileSaved"), progress.Text),
+            AndroidFilePhase.InvalidFile => L10n.T("Phone.FileOnlyFiles"),
+            AndroidFilePhase.Cancelled => L10n.T("Auto.Cancel"),
+            AndroidFilePhase.Failed => progress.Text,
+            _ => ""
+        };
         FileStatus.Visibility = FileStatus.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         UpdateAndroidFileAction();
     }
@@ -96,7 +109,21 @@ public partial class PhoneDevicePage
         catch (ExternalException ex) { SetAndroidFileStatus(serial, ex.Message); }
     }
 
-    private void CancelFile_Click(object sender, RoutedEventArgs e) => _androidFileWork?.Cancel();
+    private void CancelFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (TransferProfileId is { } id) AndroidAudioHost.FileTransfers.Cancel(id);
+    }
+
+    private void FileTransferChanged(string id)
+    {
+        if (Dispatcher.HasShutdownStarted) return;
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (!_active || _disposed || TransferProfileId != id) return;
+            _androidFileMessage = null;
+            UpdateAndroidFiles(IsConnectionPage);
+        });
+    }
 
     private void LocalReceiveFolder_Click(object sender, RoutedEventArgs e)
     {
@@ -285,43 +312,22 @@ public partial class PhoneDevicePage
         }
     }
 
-    private async Task RunAndroidFilesAsync(string serial, string[] paths, string? pullFrom = null)
+    private Task RunAndroidFilesAsync(string serial, string[] paths, string? pullFrom = null)
     {
-        if (paths.Length == 0 || AndroidFileTarget() != serial) return;
-        var target = _device;
-        if (target == null || target.CommandTarget != serial) return;
-        using var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, PhoneAudioWindowCache.Manager.OperationToken(target));
-        _androidFileWork = work;
-        _androidTransferSerial = serial;
+        if (paths.Length == 0 || AndroidFileTarget() != serial || _device is not { } target || target.CommandTarget != serial)
+            return Task.CompletedTask;
         try
         {
-            CloseAndroidFilePicker();
-            string phoneFolder = AndroidAudioHost.Phone.Profile.ReceiveFolder;
-            string pcFolder = AndroidReceiveFolder.GetReceiveDirectory();
-            var files = new AndroidFileTransfer(AndroidAudioHost.Adb, serial);
-            string saved = "";
-            if (pullFrom == null && !await Task.Run(() => paths.All(p => Path.IsPathFullyQualified(p) && File.Exists(p)), work.Token))
-                throw new IOException(L10n.T("Phone.FileOnlyFiles"));
-            for (int i = 0; i < paths.Length; i++)
+            string destination = pullFrom == null ? AndroidAudioHost.Phone.Profile.ReceiveFolder : AndroidReceiveFolder.GetReceiveDirectory();
+            if (AndroidAudioHost.StartFileTransfer(AndroidAudioHost.Adb, target, paths, destination, pullFrom))
             {
-                string path = paths[i];
-                work.Token.ThrowIfCancellationRequested();
-                SetAndroidFileStatus(serial, string.Format(L10n.T("Phone.FileBatchProgress"), i + 1, paths.Length, Path.GetFileName(path)));
-                // Opening a source or creating a receive folder can block on a Windows network share.
-                saved = await Task.Run(() => pullFrom == null
-                    ? files.SendAsync(path, phoneFolder, work.Token)
-                    : files.ReceiveAsync(pullFrom, path, pcFolder, work.Token), work.Token);
+                _androidFileMessage = null;
+                CloseAndroidFilePicker();
+                UpdateAndroidFiles(IsConnectionPage);
             }
-            SetAndroidFileStatus(serial, string.Format(L10n.T("Phone.FileSaved"), paths.Length == 1 ? saved : pullFrom == null ? phoneFolder : pcFolder));
         }
-        catch (OperationCanceledException) { SetAndroidFileStatus(serial, L10n.T("Auto.Cancel")); }
         catch (Exception ex) { SetAndroidFileStatus(serial, ex.Message); }
-        finally
-        {
-            _androidFileWork = null;
-            _androidTransferSerial = null;
-            if (!_disposed) UpdateAndroidFiles(IsConnectionPage);
-        }
+        return Task.CompletedTask;
     }
 }
 #endif

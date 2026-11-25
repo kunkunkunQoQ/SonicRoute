@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PublishAot>true</PublishAot>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>SonicRoute.GraphicsProbe</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Foreground/**/*.cs" />
+    <Compile Include="../Graphics/*.cs" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(GraphicsOpenProfile)' == 'true'">
+    <DefineConstants>$(DefineConstants);GRAPHICS_OPEN_PROFILE</DefineConstants>
+  </PropertyGroup>
+</Project>

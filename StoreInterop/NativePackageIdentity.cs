@@ -1,36 +1,26 @@
-using System.Runtime.InteropServices;
 using System.ComponentModel;
-using System.Text;
+using System.Runtime.InteropServices;
 
 namespace SonicRoute.StoreInterop;
 
-public static class NativePackageIdentity
+public static unsafe partial class NativePackageIdentity
 {
-    private const int InsufficientBuffer = 122;
-    private const int NoPackage = 15700;
-    private const int NoApplication = 15703;
+    private const int InsufficientBuffer = 122, NoPackage = 15700, NoApplication = 15703;
 
-    [DllImport("kernel32.dll", ExactSpelling = true)]
-    private static extern int GetCurrentPackageFullName(ref uint length, IntPtr buffer);
-
-    [DllImport("kernel32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
-    private static extern int GetCurrentApplicationUserModelId(ref uint length, StringBuilder? buffer);
-
-    [DllImport("kernel32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
-    private static extern int GetCurrentPackageFamilyName(ref uint length, StringBuilder? buffer);
+    [LibraryImport("kernel32.dll")] private static partial int GetCurrentPackageFullName(ref uint length, char* buffer);
+    [LibraryImport("kernel32.dll")] private static partial int GetCurrentApplicationUserModelId(ref uint length, char* buffer);
+    [LibraryImport("kernel32.dll")] private static partial int GetCurrentPackageFamilyName(ref uint length, char* buffer);
 
     public static bool IsPackaged()
     {
         uint length = 0;
-        int error = GetCurrentPackageFullName(ref length, IntPtr.Zero);
-        return InterpretResult(error, length);
+        return InterpretResult(GetCurrentPackageFullName(ref length, null), length);
     }
 
     internal static bool InterpretResult(int error, uint length)
     {
         if (error == NoPackage) return false;
         if (error == InsufficientBuffer && length > 0) return true;
-        // Detection failures must never turn a Store startup change into a Run-key write.
         throw new Win32Exception(error, "Unable to determine SonicRoute package identity.");
     }
 
@@ -38,23 +28,20 @@ public static class NativePackageIdentity
     {
         uint length = 0;
         int error = GetCurrentApplicationUserModelId(ref length, null);
-        if (error == NoApplication)
+        bool familyOnly = error == NoApplication;
+        if (familyOnly)
         {
-            // A direct executable launch can carry only package identity. Both Store
-            // manifests register SonicRoute.exe as the single application, "App".
             length = 0;
             error = GetCurrentPackageFamilyName(ref length, null);
-            if (error != InsufficientBuffer) throw new Win32Exception(error);
-            var family = new StringBuilder((int)length);
-            error = GetCurrentPackageFamilyName(ref length, family);
-            if (error != 0) throw new Win32Exception(error);
-            return family + "!App";
         }
-
-        if (error != InsufficientBuffer) throw new Win32Exception(error);
-        var id = new StringBuilder((int)length);
-        error = GetCurrentApplicationUserModelId(ref length, id);
-        if (error != 0) throw new Win32Exception(error);
-        return id.ToString();
+        if (error != InsufficientBuffer || length == 0) throw new Win32Exception(error);
+        char[] buffer = new char[checked((int)length)];
+        fixed (char* value = buffer)
+        {
+            error = familyOnly ? GetCurrentPackageFamilyName(ref length, value) : GetCurrentApplicationUserModelId(ref length, value);
+            if (error != 0) throw new Win32Exception(error);
+        }
+        var name = new string(buffer, 0, checked((int)length - 1));
+        return familyOnly ? name + "!App" : name;
     }
 }

@@ -27,7 +27,6 @@ internal sealed record AndroidSavedSourceRoute(string DeviceKey, string Package,
 public sealed class AndroidAudioSettingsStore
 {
     private readonly object _gate = new();
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly Dictionary<string, AndroidAppAudioSettings> _apps = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AndroidStreamSettings> _streams = new(StringComparer.Ordinal);
     private Task _save = Task.CompletedTask;
@@ -59,7 +58,7 @@ public sealed class AndroidAudioSettingsStore
         try
         {
             using var file = File.OpenRead(path);
-            var saved = JsonSerializer.Deserialize<SettingsFile>(file);
+            var saved = JsonSerializer.Deserialize(file, AndroidSettingsJsonContext.Default.SettingsFile);
             if (saved?.Version is not (1 or 2 or 3) || saved.Apps == null) return false;
             foreach (var entry in saved.Apps)
             {
@@ -164,8 +163,8 @@ public sealed class AndroidAudioSettingsStore
             var beforeStreams = new Dictionary<string, AndroidStreamSettings>(_streams, StringComparer.Ordinal);
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
             string backup = FilePath + ".pre-rebind-" + Guid.NewGuid().ToString("N") + ".bak";
-            AtomicFile.Write(backup, s => JsonSerializer.Serialize(s, new SettingsFile(3, _apps, _streams), JsonOptions));
-            AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, apps, streams), JsonOptions));
+            AtomicFile.Write(backup, s => JsonSerializer.Serialize(s, new SettingsFile(3, _apps, _streams), AndroidSettingsJsonContext.Default.SettingsFile));
+            AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, apps, streams), AndroidSettingsJsonContext.Default.SettingsFile));
             foreach (var entry in apps) _apps[entry.Key] = entry.Value;
             foreach (var entry in streams) _streams[entry.Key] = entry.Value;
             ++_revision;
@@ -189,7 +188,7 @@ public sealed class AndroidAudioSettingsStore
                         if (beforeStreams.TryGetValue(newKey, out var original)) restoredStreams[newKey] = original;
                         else restoredStreams.Remove(newKey);
                     }
-                    AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, restoredApps, restoredStreams), JsonOptions));
+                    AtomicFile.Write(FilePath, s => JsonSerializer.Serialize(s, new SettingsFile(3, restoredApps, restoredStreams), AndroidSettingsJsonContext.Default.SettingsFile));
                     _apps.Clear(); foreach (var entry in restoredApps) _apps[entry.Key] = entry.Value;
                     _streams.Clear(); foreach (var entry in restoredStreams) _streams[entry.Key] = entry.Value;
                     ++_revision;
@@ -332,7 +331,7 @@ public sealed class AndroidAudioSettingsStore
                     if (!_loadedSafely) { _writing = false; return; }
                     Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
                     AtomicFile.BackupBeforeWrite(FilePath);
-                    AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, new SettingsFile(3, _apps, _streams), JsonOptions));
+                    AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(stream, new SettingsFile(3, _apps, _streams), AndroidSettingsJsonContext.Default.SettingsFile));
                     _writing = false; return;
                 }
             }
@@ -341,6 +340,6 @@ public sealed class AndroidAudioSettingsStore
         { lock (_gate) _writing = false; Trace.WriteLine("Save phone audio settings: " + ex.Message); }
     }
     public Task FlushAsync() { lock (_gate) return _save; }
-    private sealed record SettingsFile(int Version, Dictionary<string, AndroidAppAudioSettings> Apps,
+    internal sealed record SettingsFile(int Version, Dictionary<string, AndroidAppAudioSettings> Apps,
         Dictionary<string, AndroidStreamSettings>? Streams = null);
 }

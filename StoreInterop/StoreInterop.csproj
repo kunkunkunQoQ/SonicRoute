@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The embedded 2.3.1 runtime has a static C# 11 function-pointer implementation of Context.CallInContext. -->
+    <DefineConstants>$(DefineConstants);CsWinRT_LANG_11_FEATURES</DefineConstants>
     <CsWinRTEmbedded>true</CsWinRTEmbedded>
     <CsWinRTWindowsMetadata Condition="'$(CsWinRTWindowsMetadata)' == '' and Exists('C:\Program Files (x86)\Windows Kits\10\Platforms\UAP\10.0.22621.0\Platform.xml')">10.0.22621.0</CsWinRTWindowsMetadata>
     <CsWinRTWindowsMetadata Condition="'$(CsWinRTWindowsMetadata)' == '' and Exists('C:\Program Files (x86)\Windows Kits\10\Platforms\UAP\10.0.26100.0\Platform.xml')">10.0.26100.0</CsWinRTWindowsMetadata>

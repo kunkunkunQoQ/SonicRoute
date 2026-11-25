@@ -13,7 +13,7 @@ namespace SonicRoute.Updates
 
     // One application-owned operation. UI windows only observe events; closing one never leaks a subscription.
     // No recurring timer, watcher, scan or resident HTTP connection while idle.
-    internal sealed class UpdateService : IDisposable
+    internal sealed partial class UpdateService : IDisposable
     {
         private readonly CancellationTokenSource _lifetime = new();
         private CancellationTokenSource? _download;
@@ -23,7 +23,20 @@ namespace SonicRoute.Updates
         private string? _payload;
         private int _operation;
         private readonly Func<HttpMessageHandler>? _handlerFactory;
-        internal UpdateService(Func<HttpMessageHandler>? handlerFactory = null) { _handlerFactory = handlerFactory; }
+        private readonly string _version;
+        private readonly string _edition;
+        private readonly Func<Action, CancellationToken, Task> _onOwner;
+        private readonly Action<string>? _validateTarget;
+
+        internal UpdateService(string version, string edition, Func<Action, CancellationToken, Task> onOwner,
+            Action<string>? validateTarget = null, Func<HttpMessageHandler>? handlerFactory = null)
+        {
+            _version = version;
+            _edition = edition;
+            _onOwner = onOwner;
+            _validateTarget = validateTarget;
+            _handlerFactory = handlerFactory;
+        }
         internal event Action<string?>? Changed;
         internal UpdateState State { get; private set; }
         internal UpdateRelease? Release { get; private set; }
@@ -43,7 +56,7 @@ namespace SonicRoute.Updates
             {
                 if (Release == null || NotificationsDismissed) return false;
                 var version = UpdateProtocol.ParseVersion(Release.Tag);
-                return version > UpdateProtocol.ParseVersion(App.DisplayVersion) &&
+                return version > UpdateProtocol.ParseVersion(_version) &&
                     version != UpdateProtocol.ParseVersion(ConfigService.Load().IgnoredUpdateVersion);
             }
         }
@@ -89,9 +102,9 @@ namespace SonicRoute.Updates
             {
                 await RecordCheckAsync(manual).ConfigureAwait(false);
                 using var transport = new UpdateTransport(_handlerFactory?.Invoke());
-                var release = await transport.CheckAsync(AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture,
-                    App.DisplayVersion, manual ? _lifetime.Token : automaticToken).ConfigureAwait(false);
-                bool newer = UpdateProtocol.ParseVersion(release.Tag) > UpdateProtocol.ParseVersion(App.DisplayVersion);
+                var release = await transport.CheckAsync(_edition, UpdateBootstrap.Architecture,
+                    _version, manual ? _lifetime.Token : automaticToken).ConfigureAwait(false);
+                bool newer = UpdateProtocol.ParseVersion(release.Tag) > UpdateProtocol.ParseVersion(_version);
                 notes = newer ? release.Notes : "";
                 // Application state retains only install metadata. Notes belong to the open UI;
                 // its existing WindowUiLifetime/ReleaseDeferredPages release all owning references.
@@ -134,9 +147,7 @@ namespace SonicRoute.Updates
                 if (manual) config.IgnoredUpdateVersion = "";
                 ConfigService.QueueSave(config);
             }
-            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            if (dispatcher == null || dispatcher.CheckAccess()) { Record(); return Task.CompletedTask; }
-            return dispatcher.InvokeAsync(Record, System.Windows.Threading.DispatcherPriority.Normal, _lifetime.Token).Task;
+            return _onOwner(Record, _lifetime.Token);
         }
 
         internal async Task DownloadAsync()
@@ -182,15 +193,20 @@ namespace SonicRoute.Updates
             State = UpdateState.Preparing; Error = ""; Notify();
             try
             {
-                var plan = await Task.Run(() => UpdateInstaller.Prepare(Release, _payload, UpdateBootstrap.ExecutablePath,
-                    AppDataRoot.DirectoryPath), _lifetime.Token).ConfigureAwait(false);
-                using var ready = new EventWaitHandle(false, EventResetMode.ManualReset, plan.EventName("ready"));
-                using var process = UpdateBootstrap.Start(plan.Runner, "--update-worker " + UpdateBootstrap.Quote(plan.PlanPath), plan.DataDirectory);
-                if (!await Task.Run(() => ready.WaitOne(10000)).ConfigureAwait(false)) throw new IOException("Update helper did not become ready.");
-                return true;
+                _validateTarget?.Invoke(UpdateBootstrap.ExecutablePath);
+                return await PrepareAndStartAsync(Release, _payload, AppDataRoot.DirectoryPath, _lifetime.Token).ConfigureAwait(false);
             }
             catch (Exception e) { State = UpdateState.Failed; Error = e.GetType().Name + ": " + e.Message; return false; }
             finally { Volatile.Write(ref _operation, 0); Notify(); }
+        }
+
+        internal static async Task<bool> PrepareAndStartAsync(UpdateRelease release, string payload, string dataDirectory, CancellationToken cancellation)
+        {
+            var plan = await Task.Run(() => UpdateInstaller.Prepare(release, payload, UpdateBootstrap.ExecutablePath, dataDirectory), cancellation).ConfigureAwait(false);
+            using var ready = new EventWaitHandle(false, EventResetMode.ManualReset, plan.EventName("ready"));
+            using var process = UpdateBootstrap.Start(plan.Runner, "--update-worker " + UpdateBootstrap.Quote(plan.PlanPath), plan.DataDirectory);
+            if (!await Task.Run(() => ready.WaitOne(10000)).ConfigureAwait(false)) throw new IOException("Update helper did not become ready.");
+            return true;
         }
 
         internal void ReadOutcome()

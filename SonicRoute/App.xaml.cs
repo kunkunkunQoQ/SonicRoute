@@ -124,7 +124,7 @@ namespace SonicRoute
                 if (commandMode == RuleCommandLine.Mode.Help)
                 {
                     var helpLanguage = ConfigService.Load().Language;
-                    L10n.Instance.SetLanguage(string.IsNullOrWhiteSpace(helpLanguage) ? DetectSystemLanguage() : helpLanguage);
+                    L10n.Instance.SetLanguage(string.IsNullOrWhiteSpace(helpLanguage) ? HostStartup.DetectSystemLanguage() : helpLanguage);
                     RuleCommandLine.WriteHelp();
                 }
                 else RuleCommandLine.WriteResult(RuleCommandLine.Error(2, "invalid_arguments"));
@@ -152,7 +152,7 @@ namespace SonicRoute
             // 首次启动（未设置过语言）跟随系统语言，之后使用配置的语言
             if (string.IsNullOrWhiteSpace(config.Language))
             {
-                config.Language = DetectSystemLanguage();
+                config.Language = HostStartup.DetectSystemLanguage();
                 ConfigService.Save(config);
             }
             L10n.Instance.SetLanguage(config.Language);
@@ -280,15 +280,15 @@ namespace SonicRoute
                 Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; await RunUiBenchmarkAsync(); }));
                 return;
             }
-            bool showMain = !config.StartMinimized;
-            if (phoneLab || startupArgs.Contains("--panel", StringComparer.OrdinalIgnoreCase))
-                Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ToggleQuickPanel(); }));
-            else if (startupArgs.Contains("--main", StringComparer.OrdinalIgnoreCase))
-                Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ShowMainWindow(); }));
-            else if (config.StartPanelOnStart)
-                Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ToggleQuickPanel(); }));
-            else if (showMain)
-                Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ShowMainWindow(); }));
+            switch (HostStartup.InitialView(config, startupArgs, phoneLab))
+            {
+                case StartupView.QuickPanel:
+                    Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ToggleQuickPanel(); }));
+                    break;
+                case StartupView.Main:
+                    Dispatcher.BeginInvoke(new Action(async () => { await foregroundWarmup; ShowMainWindow(); }));
+                    break;
+            }
 
             // 一次性启动规则等待原有后台预热完成，服务/OSD 已初始化，不阻塞启动界面。
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
@@ -1114,32 +1114,7 @@ namespace SonicRoute
         }
 
         /// <summary>首次启动：按 Windows 系统 UI 语言匹配到支持的语言；未匹配则默认英文。</summary>
-        private static string DetectSystemLanguage()
-        {
-            try
-            {
-                var ci = System.Globalization.CultureInfo.InstalledUICulture;
-                string name = ci?.Name?.ToLowerInvariant() ?? "";
-                if (name.StartsWith("zh-tw") || name.StartsWith("zh-hk") || name.StartsWith("zh-mo") || name.StartsWith("zh-hant"))
-                    return "zh-TW";
-                string two = ci?.TwoLetterISOLanguageName?.ToLowerInvariant() ?? "";
-                return two switch
-                {
-                    "zh" => "zh-CN",
-                    "ja" => "ja-JP",
-                    "ko" => "ko-KR",
-                    "fr" => "fr-FR",
-                    "de" => "de-DE",
-                    "es" => "es-ES",
-                    "ru" => "ru-RU",
-                    _ => "en-US"
-                };
-            }
-            catch
-            {
-                return "en-US";
-            }
-        }
+
     }
 }
 

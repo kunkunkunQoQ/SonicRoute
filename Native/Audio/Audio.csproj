@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="AudioProbe" />
+    <InternalsVisibleTo Include="SonicRoute.AndroidAudio" />
+  </ItemGroup>
+</Project>

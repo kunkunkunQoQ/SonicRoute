@@ -1,0 +1,14 @@
+{
+  "Language": "zh-CN",
+  "StartMinimized": true,
+  "StartPanelOnStart": false,
+  "AutoCheckUpdates": false,
+  "AutoStart": false,
+  "TrayWheelPaused": true,
+  "DefaultAppMode": "last",
+  "Hotkeys": {},
+  "BackgroundPollingFallbackEnabled": false,
+  "MicMuteOsdEnabled": false,
+  "MicMuteOsdPersistent": false,
+  "AutoRules": []
+}

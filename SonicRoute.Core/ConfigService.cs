@@ -297,7 +297,7 @@ namespace SonicRoute.Core
                 bool saved = false, current = false;
                 try
                 {
-                    string json = JsonSerializer.Serialize(pending.Config, SaveOptions);
+                    string json = JsonSerializer.Serialize(pending.Config, WriteContract);
                     lock (_writeLock)
                     {
                         lock (_lock) current = pending.Version == _saveVersion;
@@ -366,7 +366,7 @@ namespace SonicRoute.Core
 
         private static AppConfig ReadConfig(string path)
         {
-            var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), ReadOptions)
+            var cfg = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path), ReadContract)
                 ?? throw new JsonException("The configuration root must be an object.");
             return cfg;
         }
@@ -405,7 +405,7 @@ namespace SonicRoute.Core
                 {
                     var dir = Path.GetDirectoryName(ConfigPath);
                     if (dir != null) Directory.CreateDirectory(dir);
-                    WriteConfig(JsonSerializer.Serialize(snapshot, SaveOptions));
+                    WriteConfig(JsonSerializer.Serialize(snapshot, WriteContract));
                     saved = true;
                 }
                 catch { /* 保存失败保留原文件，不阻断运行。 */ }
@@ -414,16 +414,11 @@ namespace SonicRoute.Core
         }
 
 #if NET10_0_OR_GREATER
-        private static readonly JsonSerializerOptions SaveOptions = PersistenceJsonContext.Default.Options;
+        private static System.Text.Json.Serialization.Metadata.JsonTypeInfo<AppConfig> WriteContract => PersistenceJsonContext.Default.AppConfig;
+        private static System.Text.Json.Serialization.Metadata.JsonTypeInfo<AppConfig> ReadContract => WriteContract;
 #else
-        private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
-#endif
-#if NET10_0_OR_GREATER || NET48
-        // Indentation affects writes only. Legacy can reuse its existing reflection
-        // metadata for reads and saves instead of building a second options cache.
-        private static JsonSerializerOptions? ReadOptions => SaveOptions;
-#else
-        private static JsonSerializerOptions? ReadOptions => null;
+        private static readonly JsonSerializerOptions WriteContract = new() { WriteIndented = true };
+        private static JsonSerializerOptions? ReadContract => WriteContract;
 #endif
 
         /// <summary>替换整份小映射，后台图标读取可继续使用旧快照；保存失败则恢复旧映射。</summary>
@@ -472,7 +467,7 @@ namespace SonicRoute.Core
         public static string CaptureExportSnapshot()
         {
             // This explicit capture runs on the same owner as settings edits.
-            return JsonSerializer.Serialize(Load().Snapshot(), SaveOptions);
+            return JsonSerializer.Serialize(Load().Snapshot(), WriteContract);
         }
 
         /// <summary>后台导出稳定配置及图片；不把快照替换成运行中的配置对象。</summary>
@@ -489,10 +484,10 @@ namespace SonicRoute.Core
                     lock (_lock) published = _publishedSnapshot!;
                     // Background callers use the last owner-published snapshot. Never
                     // enumerate or re-save the live dictionaries while the UI edits them.
-                    snapshot = JsonSerializer.Serialize(published, SaveOptions);
+                    snapshot = JsonSerializer.Serialize(published, WriteContract);
                 }
                 using var document = JsonDocument.Parse(snapshot);
-                var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
+                var config = document.RootElement.Deserialize<AppConfig>(ReadContract);
                 if (config == null) return false;
                 var assets = AppIconFiles.ExportAssets(config);
                 AtomicFile.WriteAllBytes(destPath, TransferJson(document.RootElement, config, assets));
@@ -517,7 +512,7 @@ namespace SonicRoute.Core
                 if (stream.Length > AppIconFiles.MaxTransferBytes) return null;
                 using var document = JsonDocument.Parse(stream);
                 if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
-                var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
+                var config = document.RootElement.Deserialize<AppConfig>(ReadContract);
                 if (config == null || (config.AppIcons?.Count ?? 0) > AppIconFiles.MaxIcons) return null;
                 config.NormalizeCollections();
                 var assets = AppIconFiles.ReadImportAssets(document.RootElement, config);
@@ -535,7 +530,7 @@ namespace SonicRoute.Core
             try
             {
                 using var document = JsonDocument.Parse(prepared);
-                var config = document.RootElement.Deserialize<AppConfig>(ReadOptions);
+                var config = document.RootElement.Deserialize<AppConfig>(ReadContract);
                 if (config == null) return false;
                 config.NormalizeCollections();
                 AppIconFiles.ImportAssets(document.RootElement, config);
@@ -559,11 +554,20 @@ namespace SonicRoute.Core
             if (prepared.Length > AppIconFiles.MaxTransferBytes) return null;
             try
             {
-                var config = JsonSerializer.Deserialize<AppConfig>(prepared, ReadOptions);
+                var config = JsonSerializer.Deserialize<AppConfig>(prepared, ReadContract);
                 config?.NormalizeCollections();
                 return config;
             }
             catch { return null; }
+        }
+
+        private static void WriteMap(Utf8JsonWriter writer, Dictionary<string, string> map)
+        {
+#if NET10_0_OR_GREATER
+            JsonSerializer.Serialize(writer, map, PersistenceJsonContext.Default.StringMap);
+#else
+            JsonSerializer.Serialize(writer, map);
+#endif
         }
 
         // Asset data exists only in explicit backups, never in the frequently loaded/saved config.json.
@@ -576,11 +580,11 @@ namespace SonicRoute.Core
                 foreach (var property in root.EnumerateObject())
                     if (property.Name != "AppIconAssets" && property.Name != nameof(AppConfig.AppIcons)) property.WriteTo(writer);
                 writer.WritePropertyName(nameof(AppConfig.AppIcons));
-                JsonSerializer.Serialize(writer, config.AppIcons);
+                WriteMap(writer, config.AppIcons);
                 if (assets != null && assets.Count > 0)
                 {
                     writer.WritePropertyName("AppIconAssets");
-                    JsonSerializer.Serialize(writer, assets);
+                    WriteMap(writer, assets);
                 }
                 writer.WriteEndObject();
             }

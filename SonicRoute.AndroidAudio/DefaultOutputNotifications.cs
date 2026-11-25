@@ -1,6 +1,4 @@
-using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
-using NAudio.CoreAudioApi.Interfaces;
 
 namespace SonicRoute.AndroidAudio;
 
@@ -29,7 +27,7 @@ internal static class DefaultOutputNotifications
     {
         lock (Gate)
         {
-            _native ??= WasapiDeviceLease.ObserveDefaultOutput(new DeviceCallback(PublishDefault, PublishTopology));
+            _native ??= new AndroidDeviceNotificationRegistration(new DeviceCallback(PublishDefault, PublishTopology));
             var subscription = new Subscription(interest, changed);
             Subscribers.Add(subscription);
             PublishSubscribers();
@@ -78,8 +76,7 @@ internal static class DefaultOutputNotifications
         }
     }
 
-    [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-    internal sealed class DeviceCallback(Action<bool, bool> defaultChanged, Action topologyChanged) : IMMNotificationClient
+    internal sealed class DeviceCallback(Action<bool, bool> defaultChanged, Action topologyChanged)
     {
         internal DeviceCallback(Action changed)
             : this((_, multimediaChanged) => { if (multimediaChanged) changed(); }, static () => { }) { }

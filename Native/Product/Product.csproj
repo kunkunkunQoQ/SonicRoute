@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <AssemblyName>SonicRoute</AssemblyName>
+    <RootNamespace>SonicRoute</RootNamespace>
+    <AssemblyTitle>SonicRoute</AssemblyTitle>
+    <AssemblyTitle Condition="'$(SonicRouteEdition)'=='Lite'">SonicRoute Lite</AssemblyTitle>
+    <Product>SonicRoute</Product>
+    <PublishAot>true</PublishAot>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationIcon>../../SonicRoute/SonicRoute.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../SonicRoute.Core/SonicRoute.Core.csproj" />
+    <ProjectReference Include="../../StoreInterop/StoreInterop.csproj" />
+    <Compile Include="../../SonicRoute/ForegroundChangeSource.cs;../../SonicRoute/L10n.cs;../../SonicRoute/LanguageFiles.cs;../../SonicRoute/LanguageJsonContext.cs;../../SonicRoute/HostStartup.cs;../../SonicRoute/CommandOutput.cs" />
+    <EmbeddedResource Include="../../SonicRoute/Resources/Lang/*.json" LogicalName="SonicRoute.Resources.Lang.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Import Project="Protocol/Protocol.targets" />
+</Project>

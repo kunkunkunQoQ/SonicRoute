@@ -8,12 +8,12 @@ namespace SonicRoute.AndroidAudio;
 /// <summary>Uncompressed embedded tools. Prepare each component once, only when requested.</summary>
 public sealed class AndroidRuntimeBundle
 {
-    private sealed record RuntimeFile(string Path, string Group, long Bytes, string SHA256);
+    internal sealed record RuntimeFile(string Path, string Group, long Bytes, string SHA256);
     private static readonly Assembly Assembly = typeof(AndroidRuntimeBundle).Assembly;
     private static readonly Lazy<RuntimeFile[]> Files = new(() =>
     {
         using var stream = Assembly.GetManifestResourceStream("SonicRoute.AndroidAudio.AndroidRuntime.files.json")!;
-        var files = JsonSerializer.Deserialize<RuntimeFile[]>(stream)!;
+        var files = JsonSerializer.Deserialize(stream, AndroidWireJsonContext.Default.RuntimeFileArray)!;
         if (files.Length is < 1 or > 32 || files.Any(f => f.Bytes is < 1 or > 32 * 1024 * 1024
             || f.Path.Split('/').Any(p => p is "" or "." or "..") || f.Path.Contains('\\') || f.Path.Contains(':')
             || f.SHA256.Length != 64)) throw new InvalidDataException("Invalid embedded phone runtime manifest.");

@@ -19,7 +19,7 @@ public sealed class AndroidAppCatalogCache(string filePath,
     private long _cachedBytes;
     private const long CacheBudget = 8 * 1024 * 1024;
     private sealed record Snapshot(string Serial, IReadOnlyList<AndroidApp> Apps, long Bytes = 0);
-    private sealed record Saved(int Version, string Serial, AndroidApp[] Apps);
+    internal sealed record Saved(int Version, string Serial, AndroidApp[] Apps);
     public string FilePath { get; } = Path.GetFullPath(filePath);
     public bool TryGet(AndroidDevice device, out IReadOnlyList<AndroidApp> apps)
     {
@@ -375,7 +375,7 @@ public sealed class AndroidAppCatalogCache(string filePath,
             if (!File.Exists(path)) path = FilePath; // lazy compatibility with the old one-phone cache
             if (!File.Exists(path) || new FileInfo(path).Length > 16 * 1024 * 1024) return null;
             using var file = File.OpenRead(path);
-            var saved = JsonSerializer.Deserialize<Saved>(file);
+            var saved = JsonSerializer.Deserialize(file, AndroidWireJsonContext.Default.Saved);
             if (saved?.Apps == null || !(saved.Version == 2 && saved.Serial == key || saved.Version == 1
                 && AndroidDeviceIdentity.Matches(device, new(saved.Serial, "", "device", saved.Serial.Contains(':') || saved.Serial.Contains("_adb-tls"))))) return null;
             Validate(saved.Apps);
@@ -390,7 +390,7 @@ public sealed class AndroidAppCatalogCache(string filePath,
         {
             Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
             AtomicFile.Write(DeviceFile(snapshot.Serial), stream => JsonSerializer.Serialize(stream,
-                new Saved(2, snapshot.Serial, snapshot.Apps.ToArray())));
+                new Saved(2, snapshot.Serial, snapshot.Apps.ToArray()), AndroidWireJsonContext.Default.Saved));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         { Trace.WriteLine("Write phone app cache: " + ex.Message); }

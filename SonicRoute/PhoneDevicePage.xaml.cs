@@ -91,6 +91,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
     {
         if (_disposed || _active) return;
         _active = true;
+        AndroidAudioHost.FileTransfers.Changed += FileTransferChanged;
         Interlocked.Increment(ref _activePageCount);
         AndroidAudioHost.Phone.Changed += ProfileChanged;
         L10n.Instance.PropertyChanged += OnLanguageChanged;
@@ -130,6 +131,7 @@ public partial class PhoneDevicePage : UserControl, IDisposable
         if (_active)
         {
             _active = false;
+            AndroidAudioHost.FileTransfers.Changed -= FileTransferChanged;
             Interlocked.Decrement(ref _activePageCount);
         }
         _operation?.Cancel();

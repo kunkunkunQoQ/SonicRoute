@@ -51,6 +51,13 @@ namespace SonicRoute.Updates
         internal ReleaseAsset? Asset;
     }
 
+#if NET10_0_OR_GREATER
+    [System.Text.Json.Serialization.JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true, WriteIndented = true)]
+    [System.Text.Json.Serialization.JsonSerializable(typeof(UpdateManifest))]
+    [System.Text.Json.Serialization.JsonSerializable(typeof(string[]))]
+    internal partial class UpdateManifestContext : System.Text.Json.Serialization.JsonSerializerContext { }
+#endif
+
     internal static class UpdateProtocol
     {
         internal const string Repository = "https://github.com/kunkunkunQoQ/SonicRoute";
@@ -85,7 +92,7 @@ namespace SonicRoute.Updates
         {
             using var input = typeof(UpdateProtocol).Assembly.GetManifestResourceStream("SonicRoute.FullRelease.files.json")
                 ?? throw new InvalidDataException("Missing full-edition package layout.");
-            return new HashSet<string>(JsonSerializer.Deserialize<string[]>(input)!, StringComparer.Ordinal);
+            return new HashSet<string>(JsonSerializer.Deserialize(input, UpdateManifestContext.Default.StringArray)!, StringComparer.Ordinal);
         }
 #endif
 

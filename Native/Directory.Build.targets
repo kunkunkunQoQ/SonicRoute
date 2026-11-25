@@ -1,0 +1,12 @@
+<Project>
+  <Import Project="../Directory.Build.targets" />
+  <!-- Keep the compiler, native runtime pack and BCL servicing level together. -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <RuntimeFrameworkVersion>10.0.15</RuntimeFrameworkVersion>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(PublishAot)' == 'true'">
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler">
+      <ILCompilerPackVersion Condition="'%(KnownILCompilerPack.TargetFramework)' == 'net10.0'">10.0.15</ILCompilerPackVersion>
+    </KnownILCompilerPack>
+  </ItemGroup>
+</Project>

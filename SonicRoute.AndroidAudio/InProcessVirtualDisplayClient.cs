@@ -277,8 +277,8 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         };
     }
 
-    private void EnqueueControl(byte[] packet, int gamepadFocusVersion = 0) =>
-        _controlOutbound?.Enqueue(packet, gamepadFocusVersion);
+    private bool EnqueueControl(byte[] packet, int gamepadFocusVersion = 0) =>
+        _controlOutbound?.Enqueue(packet, gamepadFocusVersion) == true;
 
     private void OnCorruptFrameSkipped() => TryRequestSyncFrame();
 
@@ -298,8 +298,7 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 
         byte[] packet = new byte[1];
         ScrcpyControlMessageWriter.WriteRequestSyncFrame(packet);
-        EnqueueControl(packet);
-        return true;
+        return EnqueueControl(packet);
     }
 
     private void SendRestoreStartApp()
@@ -328,13 +327,14 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 
         try
         {
-            await Task.WhenAny(videoTask, _window!.Closed).ConfigureAwait(false);
-            _sessionCts?.Cancel();
+            var queue = _controlOutbound!;
+            await queue.WaitForSessionEndAsync(videoTask, _window!.Closed, _sessionCts!).ConfigureAwait(false);
             await Task.WhenAll(
                 SuppressCancel(videoTask),
                 SuppressCancel(controlSendTask),
                 SuppressCancel(controlDrainTask)).ConfigureAwait(false);
 
+            if (queue.Failure.IsCompletedSuccessfully) throw await queue.Failure.ConfigureAwait(false);
             if (!_ready.Task.IsCompleted)
             {
                 _ready.TrySetException(ConnectionError("视频流未正常首帧输出即结束。", AndroidErrorCode.DisplayConnectionEnded));
@@ -471,6 +471,16 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
 
     internal sealed class ControlQueue
     {
+        internal const int Capacity = 256;
+        private const int MaxPacket = 5 + ScrcpyControlMessageWriter.MaxInjectTextUtf8Bytes;
+        private readonly TaskCompletionSource<IOException> _failure = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal Task<IOException> Failure => _failure.Task;
+
+        internal async Task WaitForSessionEndAsync(Task video, Task window, CancellationTokenSource session)
+        {
+            await Task.WhenAny(video, window, Failure).ConfigureAwait(false);
+            await session.CancelAsync().ConfigureAwait(false);
+        }
         private sealed class PendingMotion(byte[] data)
         {
             public byte[]? Data = data;
@@ -479,29 +489,32 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
         private readonly record struct ControlPacket(byte[]? Data, int GamepadFocusVersion = 0, PendingMotion? Motion = null);
 
         private readonly object _gate = new();
-        private volatile Channel<ControlPacket>? _channel = Channel.CreateUnbounded<ControlPacket>(new UnboundedChannelOptions { SingleReader = true });
+        private volatile Channel<ControlPacket>? _channel = Channel.CreateBounded<ControlPacket>(
+            new BoundedChannelOptions(Capacity) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
         private PendingMotion? _pendingMotion;
         private bool _keepNextMouseMove;
 
-        internal void Enqueue(byte[] data, int gamepadFocusVersion = 0)
+        internal bool Enqueue(byte[] data, int gamepadFocusVersion = 0)
         {
+            if (data.Length > MaxPacket) throw new ArgumentOutOfRangeException(nameof(data));
             lock (_gate)
             {
-                if (_channel is not { } channel) return;
+                if (_channel is not { } channel) return false;
                 _pendingMotion = null;
-                channel.Writer.TryWrite(new ControlPacket(data, gamepadFocusVersion));
+                return TryEnqueueLocked(channel, new ControlPacket(data, gamepadFocusVersion));
             }
         }
 
-        internal void EnqueueTouch(ReadOnlySpan<byte> data)
+        internal bool EnqueueTouch(ReadOnlySpan<byte> data)
         {
+            if (data.Length != 32) throw new ArgumentException("Expected one touch packet.", nameof(data));
             byte action = data[1];
             bool isMouse = BinaryPrimitives.ReadUInt64BigEndian(data.Slice(2, 8)) == ScrcpyControlMessageWriter.PointerIdMouse;
             bool isMouseMove = isMouse && action == ScrcpyControlMessageWriter.MotionActionMove;
             bool isMouseButton = isMouse && action is ScrcpyControlMessageWriter.MotionActionDown or ScrcpyControlMessageWriter.MotionActionUp;
             lock (_gate)
             {
-                if (_channel is not { } channel) return;
+                if (_channel is not { } channel) return false;
                 bool canMerge = isMouse && action == ScrcpyControlMessageWriter.MotionActionHoverMove
                     || isMouseMove && !_keepNextMouseMove;
                 // Keep the first drag sample after a button transition to help start the gesture.
@@ -516,19 +529,30 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
                     if (pending is not null && pending[1] == action && data[18..].SequenceEqual(pending.AsSpan(18)))
                     {
                         data.Slice(10, 8).CopyTo(pending.AsSpan(10, 8));
-                        return;
+                        return true;
                     }
                     _pendingMotion = new PendingMotion(data.ToArray());
-                    channel.Writer.TryWrite(new ControlPacket(null, Motion: _pendingMotion));
-                    return;
+                    return TryEnqueueLocked(channel, new ControlPacket(null, Motion: _pendingMotion));
                 }
 
                 if (isMouseButton && pending is not null && pending[1] == ScrcpyControlMessageWriter.MotionActionHoverMove)
                     _pendingMotion!.Data = null; // This button event carries its own coordinates.
 
                 _pendingMotion = null;
-                channel.Writer.TryWrite(new ControlPacket(data.ToArray()));
+                return TryEnqueueLocked(channel, new ControlPacket(data.ToArray()));
             }
+        }
+
+        private bool TryEnqueueLocked(Channel<ControlPacket> channel, ControlPacket packet)
+        {
+            if (channel.Writer.TryWrite(packet)) return true;
+            // A key/button transition cannot be dropped. Stop just this remote controller:
+            // the session loop cancels both sides and releases remote input ownership.
+            _channel = null;
+            _pendingMotion = null;
+            channel.Writer.TryComplete();
+            _failure.TrySetResult(new IOException("Android display input queue is full; the display session was stopped."));
+            return false;
         }
 
         internal async Task SendAsync(Stream controlStream, Func<int, bool> canSendGamepadInput, CancellationToken ct)
@@ -558,7 +582,10 @@ public sealed class InProcessVirtualDisplayClient : IVirtualDisplayClient
                 }
             }
             catch (OperationCanceledException) { }
-            catch (IOException) { }
+            catch (IOException ex)
+            {
+                if (!ct.IsCancellationRequested) _failure.TrySetResult(ex);
+            }
             finally { Close(); }
         }
 

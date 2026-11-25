@@ -24,14 +24,11 @@ namespace SonicRoute.Core
             "Automation");
 
 #if NET10_0_OR_GREATER
-        private static readonly JsonSerializerOptions SaveOptions = PersistenceJsonContext.Default.Options;
+        private static System.Text.Json.Serialization.Metadata.JsonTypeInfo<SonicRoute.Core.Models.AutoRule> WriteContract => PersistenceJsonContext.Default.AutoRule;
+        private static System.Text.Json.Serialization.Metadata.JsonTypeInfo<SonicRoute.Core.Models.AutoRule> ReadContract => WriteContract;
 #else
-        private static readonly JsonSerializerOptions SaveOptions = new() { WriteIndented = true };
-#endif
-#if NET10_0_OR_GREATER || NET48
-        private static JsonSerializerOptions? ReadOptions => SaveOptions;
-#else
-        private static JsonSerializerOptions? ReadOptions => null;
+        private static readonly JsonSerializerOptions WriteContract = new() { WriteIndented = true };
+        private static JsonSerializerOptions? ReadContract => WriteContract;
 #endif
 
         private static List<AutoRule>? _cache;
@@ -134,7 +131,7 @@ namespace SonicRoute.Core
                 foreach (var rule in _cache!)
                 {
                     var entry = _files[_byId[rule.Id]];
-                    fingerprints[rule.Id] = entry.Fingerprint ??= JsonSerializer.Serialize(entry.Rule, SaveOptions);
+                    fingerprints[rule.Id] = entry.Fingerprint ??= JsonSerializer.Serialize(entry.Rule, WriteContract);
                 }
                 return (_revision, _cache!.Select(rule => rule.Clone()).ToList(), fingerprints);
             }
@@ -193,7 +190,7 @@ namespace SonicRoute.Core
                     {
                         var info = new FileInfo(file);
                         entry.Length = info.Length; entry.Written = info.LastWriteTimeUtc.Ticks;
-                        entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(file), ReadOptions);
+                        entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(file), ReadContract);
                     }
                     catch { /* 损坏文件仍占用名称。 */ }
                     if (entry.Rule == null)
@@ -201,7 +198,7 @@ namespace SonicRoute.Core
                         string backup = file + ".bak";
                         if (File.Exists(backup))
                         {
-                            try { entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(backup), ReadOptions); }
+                            try { entry.Rule = JsonSerializer.Deserialize<AutoRule>(File.ReadAllText(backup), ReadContract); }
                             catch { }
                         }
                     }
@@ -390,7 +387,7 @@ namespace SonicRoute.Core
                 while ((_files.ContainsKey(target) || File.Exists(target)) && !oldPaths.Contains(target, StringComparer.OrdinalIgnoreCase))
                     target = Path.Combine(RulesDir, $"{baseName}({suffix++}).json");
                 AtomicFile.BackupBeforeWrite(target);
-                AtomicFile.WriteAllText(target, JsonSerializer.Serialize(rule, SaveOptions));
+                AtomicFile.WriteAllText(target, JsonSerializer.Serialize(rule, WriteContract));
                 // 新文件完整提交后才清理旧名称；写入失败不会走到这里。
                 foreach (string old in oldPaths)
                 {
@@ -456,7 +453,12 @@ namespace SonicRoute.Core
                 using var doc = JsonDocument.Parse(File.ReadAllText(cfgPath));
                 if (!doc.RootElement.TryGetProperty("AutoRules", out var arr)
                     || arr.ValueKind != JsonValueKind.Array) return;
-                var legacy = arr.Deserialize<List<AutoRule>>(ReadOptions);
+
+#if NET10_0_OR_GREATER
+                var legacy = arr.Deserialize(PersistenceJsonContext.Default.ListAutoRule);
+#else
+                var legacy = arr.Deserialize<List<AutoRule>>(ReadContract);
+#endif
                 if (legacy == null || legacy.Count == 0) return;
                 Directory.CreateDirectory(RulesDir);
                 var occupied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -473,7 +475,7 @@ namespace SonicRoute.Core
                     occupied.Add(Path.GetFileNameWithoutExtension(fileName));
                     AtomicFile.WriteAllText(
                         Path.Combine(RulesDir, fileName),
-                        JsonSerializer.Serialize(r, SaveOptions));
+                        JsonSerializer.Serialize(r, WriteContract));
                 }
                 Invalidate();
             }

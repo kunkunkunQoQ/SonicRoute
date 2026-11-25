@@ -288,14 +288,20 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
     public const uint StlsVersion = 0x01000000;
     public const int LocalMaxPayload = 1024 * 1024;
     public const int MaxPayloadCap = 4 * 1024 * 1024;
+    internal const int MaxOpenStreams = 32;
+    internal const int OutboundCapacity = 32;
+    internal const int MaxPooledPackets = 8;
 
     private const string HostBanner = "host::features=shell_v2,cmd,stat_v2,ls_v2,fixed_push_mkdir\0";
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
 
     private readonly IAdbPacketLink _link;
     private readonly ConcurrentDictionary<uint, AdbMuxStream> _streams = new();
-    private readonly Channel<OutboundPacket> _outbound = Channel.CreateUnbounded<OutboundPacket>(
-        new UnboundedChannelOptions { SingleReader = true, SingleWriter = false, AllowSynchronousContinuations = false });
+    private readonly Channel<OutboundPacket> _outbound = Channel.CreateBounded<OutboundPacket>(
+        new BoundedChannelOptions(OutboundCapacity) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+    private readonly SemaphoreSlim _streamSlots = new(MaxOpenStreams, MaxOpenStreams);
+    private readonly SemaphoreSlim _payloadSlots = new(MaxPooledPackets, MaxPooledPackets);
+    private ArrayPool<byte> _outboundPool = ArrayPool<byte>.Shared;
     private readonly CancellationTokenSource _lifetime = new();
     private int _nextLocalId;
     private int _disposed;
@@ -327,6 +333,7 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
     public uint NegotiatedVersion { get; }
     public bool SkipChecksum { get; }
     public int PeerMaxPayload { get; }
+    internal int SendLimit => Math.Min(PeerMaxPayload, LocalMaxPayload);
     public string PeerBanner { get; }
     public string DeviceType { get; }
     public IReadOnlyDictionary<string, string> DeviceProperties { get; }
@@ -335,6 +342,7 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
     public string? PeerCertificateSha256 => _link.PeerCertificateSha256;
     public bool IsConnected => Volatile.Read(ref _disposed) == 0 && Volatile.Read(ref _disconnected) == 0;
     public bool HasActiveStreams => !_streams.IsEmpty;
+    internal int QueuedPacketCount => _outbound.Reader.Count;
 
     public event Action? Disconnected;
 
@@ -343,7 +351,8 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         AdbKeyStore keyStore,
         Func<X509Certificate2?, bool>? serverCertificateValidator = null,
         string? targetHost = null,
-        CancellationToken token = default)
+        CancellationToken token = default,
+        ArrayPool<byte>? outboundPool = null)
     {
         ArgumentNullException.ThrowIfNull(link);
         ArgumentNullException.ThrowIfNull(keyStore);
@@ -420,7 +429,8 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
                             uint negotiated = Math.Min(VersionSkipChecksum, Math.Max(VersionMin, header.Arg0));
                             int peerMax = header.Arg1 == 0 ? 4096 : Math.Clamp((int)Math.Min(header.Arg1, int.MaxValue), 4096, MaxPayloadCap);
                             string peerBanner = Utf8NoBom.GetString(payloadBuf, 0, len).TrimEnd('\0');
-                            var conn = new AdbMuxConnection(link, negotiated, peerMax, peerBanner, isTls);
+                            var conn = new AdbMuxConnection(link, negotiated, peerMax, peerBanner, isTls)
+                                { _outboundPool = outboundPool ?? ArrayPool<byte>.Shared };
                             conn.StartLoops();
                             return conn;
 
@@ -456,13 +466,20 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (!IsConnected) throw new IOException("ADB direct connection is closed.");
         ArgumentException.ThrowIfNullOrEmpty(destination);
+        token.ThrowIfCancellationRequested();
+        if (Utf8NoBom.GetByteCount(destination) >= SendLimit)
+            throw new ArgumentException("ADB service name exceeds the negotiated packet size.", nameof(destination));
+        if (!_streamSlots.Wait(0)) throw new IOException("ADB connection has reached its concurrent stream limit.");
 
         uint localId = unchecked((uint)Interlocked.Increment(ref _nextLocalId));
         if (localId == 0) localId = unchecked((uint)Interlocked.Increment(ref _nextLocalId));
 
         var stream = new AdbMuxStream(this, localId);
         if (!_streams.TryAdd(localId, stream))
+        {
+            _streamSlots.Release();
             throw new InvalidOperationException("ADB stream ID collision.");
+        }
 
         byte[] destBytes = Utf8NoBom.GetBytes(destination + "\0");
         try
@@ -473,7 +490,6 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         }
         catch
         {
-            _streams.TryRemove(localId, out _);
             await stream.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -524,11 +540,10 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         return await OpenStreamAsync("localabstract:" + name, token).ConfigureAwait(false);
     }
 
-    internal void PostControlPacket(uint command, uint arg0, uint arg1)
+    internal ValueTask PostControlPacketAsync(uint command, uint arg0, uint arg1, CancellationToken token)
     {
-        if (!IsConnected) return;
         var header = AdbPacketHeader.Create(command, arg0, arg1, ReadOnlySpan<byte>.Empty, computeChecksum: !SkipChecksum);
-        _outbound.Writer.TryWrite(new OutboundPacket(header, null, 0, null));
+        return _outbound.Writer.WriteAsync(new OutboundPacket(header, null, 0, null), token);
     }
 
     internal async Task SendPacketAsync(uint command, uint arg0, uint arg1, ReadOnlyMemory<byte> payload, CancellationToken token)
@@ -536,26 +551,67 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         if (!IsConnected) throw new IOException("ADB direct connection is closed.");
         token.ThrowIfCancellationRequested();
 
-        byte[]? pooled = null;
-        int len = payload.Length;
-        if (len > 0)
-        {
-            pooled = ArrayPool<byte>.Shared.Rent(len);
-            payload.Span.CopyTo(pooled);
-        }
-
-        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var header = AdbPacketHeader.Create(command, arg0, arg1, payload.Span, computeChecksum: !SkipChecksum);
-        if (!_outbound.Writer.TryWrite(new OutboundPacket(header, pooled, len, done)))
-        {
-            if (pooled != null) ArrayPool<byte>.Shared.Return(pooled);
-            throw new IOException("ADB direct connection outbound queue closed.");
-        }
-
-        await done.Task.WaitAsync(token).ConfigureAwait(false);
+        await _payloadSlots.WaitAsync(token).ConfigureAwait(false);
+        var packet = CopyReservedPacket(command, arg0, arg1, payload.Span);
+        await SendOwnedPacketAsync(packet, token).ConfigureAwait(false);
     }
 
-    internal void UnregisterStream(uint localId) => _streams.TryRemove(localId, out _);
+    internal void SendPacket(uint command, uint arg0, uint arg1, ReadOnlySpan<byte> payload, CancellationToken token)
+    {
+        _payloadSlots.Wait(token);
+        var packet = CopyReservedPacket(command, arg0, arg1, payload);
+        SendOwnedPacketAsync(packet, token).GetAwaiter().GetResult();
+    }
+
+    private OutboundPacket CopyReservedPacket(uint command, uint arg0, uint arg1, ReadOnlySpan<byte> payload)
+    {
+        byte[]? pooled = null;
+        try
+        {
+            if (!IsConnected) throw new IOException("ADB direct connection is closed.");
+            if (payload.IsEmpty || payload.Length > SendLimit) throw new IOException("Invalid outbound ADB payload length.");
+            pooled = _outboundPool.Rent(payload.Length);
+            payload.CopyTo(pooled);
+            var header = AdbPacketHeader.Create(command, arg0, arg1, payload, computeChecksum: !SkipChecksum);
+            return new OutboundPacket(header, pooled, payload.Length, new(TaskCreationOptions.RunContinuationsAsynchronously));
+        }
+        catch
+        {
+            if (pooled != null) _outboundPool.Return(pooled);
+            _payloadSlots.Release();
+            throw;
+        }
+    }
+
+    private async Task SendOwnedPacketAsync(OutboundPacket packet, CancellationToken token)
+    {
+        try { await _outbound.Writer.WriteAsync(packet, token).ConfigureAwait(false); }
+        catch { ReleasePayload(packet); throw; }
+        // Once enqueued, only the writer may return this buffer, even if its caller cancels.
+        await packet.Done!.Task.WaitAsync(token).ConfigureAwait(false);
+    }
+
+    internal void RetireStream(uint localId, uint remoteId)
+    {
+        if (!_streams.TryRemove(localId, out _)) return;
+        if (remoteId == 0 || !IsConnected) { _streamSlots.Release(); return; }
+        // Synchronous disposal must not wait on socket I/O. The admission slot remains
+        // held until CLSE has entered the FIFO, bounding these asynchronous producers.
+        _ = QueueCloseAsync();
+        async Task QueueCloseAsync()
+        {
+            try { await PostControlPacketAsync(AdbCommands.Clse, localId, remoteId, _lifetime.Token).ConfigureAwait(false); }
+            catch (Exception ex) when (!IsConnected || ex is ChannelClosedException or OperationCanceledException) { }
+            finally { _streamSlots.Release(); }
+        }
+    }
+
+    private void ReleasePayload(OutboundPacket packet)
+    {
+        if (packet.PooledBuffer == null) return;
+        _outboundPool.Return(packet.PooledBuffer);
+        _payloadSlots.Release();
+    }
 
     private async Task WriteLoopAsync()
     {
@@ -579,8 +635,7 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
                 }
                 finally
                 {
-                    if (packet.PooledBuffer != null)
-                        ArrayPool<byte>.Shared.Return(packet.PooledBuffer);
+                    ReleasePayload(packet);
                 }
             }
         }
@@ -597,8 +652,7 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
             _outbound.Writer.TryComplete(failure);
             while (_outbound.Reader.TryRead(out var leftover))
             {
-                if (leftover.PooledBuffer != null)
-                    ArrayPool<byte>.Shared.Return(leftover.PooledBuffer);
+                ReleasePayload(leftover);
                 leftover.Done?.TrySetException(failure ?? new IOException("ADB direct connection closed."));
             }
             if (failure != null && Volatile.Read(ref _disposed) == 0)
@@ -626,25 +680,27 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
                     {
                         case AdbCommands.Okay:
                             if (_streams.TryGetValue(header.Arg1, out var okayStream))
-                                okayStream.OnOkay(header.Arg0);
+                                await okayStream.OnOkay(header.Arg0).ConfigureAwait(false);
+                            else if (header.Arg0 != 0 && header.Arg1 != 0)
+                                await PostControlPacketAsync(AdbCommands.Clse, header.Arg1, header.Arg0, _lifetime.Token).ConfigureAwait(false);
                             break;
 
                         case AdbCommands.Wrte:
                             if (_streams.TryGetValue(header.Arg1, out var wrteStream))
-                                wrteStream.OnWrte(header.Arg0, payload);
+                                await wrteStream.OnWrte(header.Arg0, payload).ConfigureAwait(false);
                             else if (header.Arg0 != 0 && header.Arg1 != 0)
-                                PostControlPacket(AdbCommands.Clse, header.Arg1, header.Arg0);
+                                await PostControlPacketAsync(AdbCommands.Clse, header.Arg1, header.Arg0, _lifetime.Token).ConfigureAwait(false);
                             break;
 
                         case AdbCommands.Clse:
-                            if (_streams.TryRemove(header.Arg1, out var closedStream))
+                            if (_streams.TryGetValue(header.Arg1, out var closedStream))
                                 closedStream.OnRemoteClose(header.Arg0);
                             break;
 
                         case AdbCommands.Open:
                             // Device-initiated reverse socket openings are refused cleanly with CLSE.
                             if (header.Arg0 != 0)
-                                PostControlPacket(AdbCommands.Clse, 0, header.Arg0);
+                                await PostControlPacketAsync(AdbCommands.Clse, 0, header.Arg0, _lifetime.Token).ConfigureAwait(false);
                             break;
                     }
                 }
@@ -674,7 +730,10 @@ internal sealed class AdbMuxConnection : IAsyncDisposable
         foreach (var kv in _streams)
         {
             if (_streams.TryRemove(kv.Key, out var stream))
+            {
                 stream.OnTransportFault(reason);
+                _streamSlots.Release();
+            }
         }
         _lifetime.Cancel();
         Disconnected?.Invoke();
@@ -725,6 +784,7 @@ internal sealed class AdbMuxStream : Stream
 {
     private const int HighWaterMarkBytes = 4 * 1024 * 1024;
     private const int LowWaterMarkBytes = 2 * 1024 * 1024;
+    internal const int MaxPendingWrites = 4;
 
     private readonly AdbMuxConnection _conn;
     private readonly uint _localId;
@@ -733,6 +793,8 @@ internal sealed class AdbMuxStream : Stream
     private readonly object _flowLock = new();
     private readonly object _writeStateLock = new();
     private readonly SemaphoreSlim _writeSerialize = new(1, 1);
+    private CancellationTokenSource? _stopWrites = new();
+    private readonly CancellationToken _writesClosed;
     private readonly TaskCompletionSource _openTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private uint _remoteId;
@@ -742,14 +804,16 @@ internal sealed class AdbMuxStream : Stream
     private Exception? _fault;
     private long _bufferedBytes;
     private int _deferredOkayCount;
+    private bool _creditWriterRunning, _creditAgain;
     private bool _receiveCompleted;
     private int _disposed;
-    private int _clseSent;
+    private int _pendingWrites;
 
     internal AdbMuxStream(AdbMuxConnection conn, uint localId)
     {
         _conn = conn;
         _localId = localId;
+        _writesClosed = _stopWrites!.Token;
         _rxReader = _rxPipe.Reader.AsStream(leaveOpen: false);
     }
 
@@ -763,7 +827,7 @@ internal sealed class AdbMuxStream : Stream
 
     internal Task WaitOpenedAsync(CancellationToken token) => _openTcs.Task.WaitAsync(token);
 
-    internal void OnOkay(uint remoteId)
+    internal ValueTask OnOkay(uint remoteId)
     {
         bool sendLateClose = false;
         bool openedNow = false;
@@ -772,7 +836,7 @@ internal sealed class AdbMuxStream : Stream
         {
             if (Volatile.Read(ref _disposed) != 0)
             {
-                sendLateClose = !_opened && remoteId != 0 && Interlocked.Exchange(ref _clseSent, 1) == 0;
+                sendLateClose = !_opened && remoteId != 0;
             }
             else if (!_opened)
             {
@@ -788,43 +852,46 @@ internal sealed class AdbMuxStream : Stream
                 _writeCreditTcs = null;
             }
         }
-        if (sendLateClose) _conn.PostControlPacket(AdbCommands.Clse, _localId, remoteId);
         if (openedNow) _openTcs.TrySetResult();
         creditWaiter?.TrySetResult();
+        return sendLateClose ? _conn.PostControlPacketAsync(AdbCommands.Clse, _localId, remoteId, CancellationToken.None) : ValueTask.CompletedTask;
     }
 
-    internal void OnWrte(uint remoteId, ReadOnlySpan<byte> payload)
+    internal ValueTask OnWrte(uint remoteId, ReadOnlySpan<byte> payload)
     {
-        if (Volatile.Read(ref _disposed) != 0) return;
+        if (Volatile.Read(ref _disposed) != 0) return ValueTask.CompletedTask;
         uint targetRemote = RemoteId;
         if (targetRemote == 0) targetRemote = remoteId;
 
-        bool sendOkay;
+        bool sendOkay, overrun;
         lock (_flowLock)
         {
-            if (_receiveCompleted || Volatile.Read(ref _disposed) != 0) return;
-            if (!payload.IsEmpty)
+            if (_receiveCompleted || Volatile.Read(ref _disposed) != 0) return ValueTask.CompletedTask;
+            // Without the delayed_ack feature the peer has exactly one WRTE credit.
+            // Do not append another packet after withholding that credit.
+            overrun = _deferredOkayCount != 0;
+            if (!overrun && !payload.IsEmpty)
             {
                 Span<byte> dest = _rxPipe.Writer.GetSpan(payload.Length);
                 payload.CopyTo(dest);
                 _rxPipe.Writer.Advance(payload.Length);
                 _bufferedBytes += payload.Length;
             }
-            if (_bufferedBytes < HighWaterMarkBytes)
-            {
-                sendOkay = true;
-            }
-            else
-            {
-                _deferredOkayCount++;
-                sendOkay = false;
-            }
+            sendOkay = !overrun && _bufferedBytes < HighWaterMarkBytes;
+            if (!sendOkay) _deferredOkayCount = 1;
             // Completion uses the same gate: no writer operation may outlive it.
             _ = _rxPipe.Writer.FlushAsync().AsTask();
         }
 
-        if (sendOkay && targetRemote != 0)
-            _conn.PostControlPacket(AdbCommands.Okay, _localId, targetRemote);
+        if (overrun)
+        {
+            OnTransportFault(new IOException("ADB peer exceeded its receive credit."));
+            CloseStreamCore();
+            return ValueTask.CompletedTask;
+        }
+        return sendOkay && targetRemote != 0
+            ? _conn.PostControlPacketAsync(AdbCommands.Okay, _localId, targetRemote, CancellationToken.None)
+            : ValueTask.CompletedTask;
     }
 
     internal void OnRemoteClose(uint remoteId)
@@ -840,12 +907,12 @@ internal sealed class AdbMuxStream : Stream
             _writeCreditTcs = null;
         }
 
+        StopWrites();
         CompleteReceive();
         if (openErr != null) _openTcs.TrySetException(openErr);
         creditWaiter?.TrySetException(new EndOfStreamException("ADB stream closed by remote."));
 
-        if (remoteId != 0 && Interlocked.Exchange(ref _clseSent, 1) == 0)
-            _conn.PostControlPacket(AdbCommands.Clse, _localId, remoteId);
+        _conn.RetireStream(_localId, remoteId);
     }
 
     internal void OnTransportFault(Exception reason)
@@ -859,6 +926,7 @@ internal sealed class AdbMuxStream : Stream
             creditWaiter = _writeCreditTcs;
             _writeCreditTcs = null;
         }
+        StopWrites();
         CompleteReceive(reason);
         if (!wasOpened) _openTcs.TrySetException(reason);
         creditWaiter?.TrySetException(reason);
@@ -897,22 +965,39 @@ internal sealed class AdbMuxStream : Stream
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (buffer.IsEmpty) return;
 
-        await _writeSerialize.WaitAsync(cancellationToken).ConfigureAwait(false);
+        EnterWriteBudget();
+        bool entered = false;
+        using var writing = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _writesClosed);
         try
         {
+            await _writeSerialize.WaitAsync(writing.Token).ConfigureAwait(false);
+            entered = true;
             int offset = 0;
-            int chunkMax = _conn.PeerMaxPayload;
+            int chunkMax = _conn.SendLimit;
             while (offset < buffer.Length)
             {
                 int chunk = Math.Min(buffer.Length - offset, chunkMax);
-                uint remote = await WaitAndConsumeWriteCreditAsync(cancellationToken).ConfigureAwait(false);
-                await _conn.SendPacketAsync(AdbCommands.Wrte, _localId, remote, buffer.Slice(offset, chunk), cancellationToken).ConfigureAwait(false);
+                uint remote = await WaitAndConsumeWriteCreditAsync(writing.Token).ConfigureAwait(false);
+                try { await _conn.SendPacketAsync(AdbCommands.Wrte, _localId, remote, buffer.Slice(offset, chunk), writing.Token).ConfigureAwait(false); }
+                catch (Exception ex)
+                {
+                    // After taking a credit, cancellation may race physical transmission.
+                    // End this stream rather than sending subsequent data with the wrong credit.
+                    OnTransportFault(ex);
+                    CloseStreamCore();
+                    throw;
+                }
                 offset += chunk;
             }
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new IOException("ADB stream closed during write.", _fault);
+        }
         finally
         {
-            _writeSerialize.Release();
+            if (entered) _writeSerialize.Release();
+            Interlocked.Decrement(ref _pendingWrites);
         }
     }
 
@@ -920,21 +1005,44 @@ internal sealed class AdbMuxStream : Stream
         WriteAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
 
     public override void Write(byte[] buffer, int offset, int count) =>
-        WriteAsync(buffer.AsMemory(offset, count), CancellationToken.None).AsTask().GetAwaiter().GetResult();
+        Write(buffer.AsSpan(offset, count));
 
     public override void Write(ReadOnlySpan<byte> buffer)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (buffer.IsEmpty) return;
-        byte[] copy = ArrayPool<byte>.Shared.Rent(buffer.Length);
+        EnterWriteBudget();
+        bool entered = false;
+        using var writing = CancellationTokenSource.CreateLinkedTokenSource(_writesClosed);
+        // This compatibility API has no caller token. Bound time blocked on a stalled
+        // device and keep each logical write contiguous without copying the whole span.
+        writing.CancelAfter(TimeSpan.FromSeconds(30));
         try
         {
-            buffer.CopyTo(copy);
-            WriteAsync(copy.AsMemory(0, buffer.Length), CancellationToken.None).AsTask().GetAwaiter().GetResult();
+            _writeSerialize.Wait(writing.Token);
+            entered = true;
+            while (!buffer.IsEmpty)
+            {
+                int size = Math.Min(_conn.SendLimit, buffer.Length);
+                uint remote = WaitAndConsumeWriteCreditAsync(writing.Token).AsTask().GetAwaiter().GetResult();
+                try { _conn.SendPacket(AdbCommands.Wrte, _localId, remote, buffer[..size], writing.Token); }
+                catch (Exception ex) { OnTransportFault(ex); CloseStreamCore(); throw; }
+                buffer = buffer[size..];
+            }
         }
+        catch (OperationCanceledException ex) { throw new IOException("Synchronous ADB write timed out or closed.", ex); }
         finally
         {
-            ArrayPool<byte>.Shared.Return(copy);
+            if (entered) _writeSerialize.Release();
+            Interlocked.Decrement(ref _pendingWrites);
         }
+    }
+
+    private void EnterWriteBudget()
+    {
+        if (Interlocked.Increment(ref _pendingWrites) <= MaxPendingWrites) return;
+        Interlocked.Decrement(ref _pendingWrites);
+        throw new IOException("Too many concurrent writes on this ADB stream.");
     }
 
     public override void Flush() { }
@@ -944,22 +1052,47 @@ internal sealed class AdbMuxStream : Stream
 
     private void ReleaseFlowCredits(int bytesConsumed)
     {
-        int sendCount = 0;
+        uint remote = RemoteId;
+        bool overrun = false;
         lock (_flowLock)
         {
             _bufferedBytes = Math.Max(0, _bufferedBytes - bytesConsumed);
-            if (_deferredOkayCount > 0 && _bufferedBytes <= LowWaterMarkBytes)
+            if (_deferredOkayCount == 0 || _bufferedBytes > LowWaterMarkBytes || remote == 0 || _receiveCompleted) return;
+            _deferredOkayCount = 0;
+            if (_creditWriterRunning)
             {
-                sendCount = _deferredOkayCount;
-                _deferredOkayCount = 0;
+                if (!_creditAgain) { _creditAgain = true; return; }
+                overrun = true;
+            }
+            else _creditWriterRunning = true;
+        }
+        if (overrun)
+        {
+            OnTransportFault(new IOException("ADB peer continued sending without its deferred credit."));
+            CloseStreamCore();
+            return;
+        }
+        // The caller already owns the bytes. A cancelled read must not revoke them or
+        // its protocol credit. Only one ACK writer per stream may wait on the FIFO.
+        _ = SendReleasedCreditsAsync(remote);
+    }
+
+    private async Task SendReleasedCreditsAsync(uint remote)
+    {
+        try
+        {
+            while (true)
+            {
+                await _conn.PostControlPacketAsync(AdbCommands.Okay, _localId, remote, _writesClosed).ConfigureAwait(false);
+                lock (_flowLock)
+                {
+                    if (!_creditAgain) { _creditWriterRunning = false; return; }
+                    _creditAgain = false;
+                }
             }
         }
-        uint remote = RemoteId;
-        if (sendCount > 0 && remote != 0)
-        {
-            for (int i = 0; i < sendCount; i++)
-                _conn.PostControlPacket(AdbCommands.Okay, _localId, remote);
-        }
+        catch (OperationCanceledException) when (_writesClosed.IsCancellationRequested) { }
+        catch (Exception ex) { OnTransportFault(ex); CloseStreamCore(); }
     }
 
     private async ValueTask<uint> WaitAndConsumeWriteCreditAsync(CancellationToken token)
@@ -1005,7 +1138,7 @@ internal sealed class AdbMuxStream : Stream
     private void CloseStreamCore()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-        _conn.UnregisterStream(_localId);
+        StopWrites();
 
         uint remote;
         TaskCompletionSource? creditWaiter;
@@ -1021,8 +1154,7 @@ internal sealed class AdbMuxStream : Stream
         _openTcs.TrySetException(new ObjectDisposedException(nameof(AdbMuxStream)));
         creditWaiter?.TrySetException(new ObjectDisposedException(nameof(AdbMuxStream)));
 
-        if (remote != 0 && Interlocked.Exchange(ref _clseSent, 1) == 0)
-            _conn.PostControlPacket(AdbCommands.Clse, _localId, remote);
+        _conn.RetireStream(_localId, remote);
     }
 
     private void CompleteReceive(Exception? reason = null)
@@ -1034,5 +1166,13 @@ internal sealed class AdbMuxStream : Stream
             _deferredOkayCount = 0;
             _rxPipe.Writer.Complete(reason);
         }
+    }
+
+    private void StopWrites()
+    {
+        var stop = Interlocked.Exchange(ref _stopWrites, null);
+        if (stop == null) return;
+        try { stop.Cancel(); }
+        finally { stop.Dispose(); }
     }
 }

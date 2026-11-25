@@ -7,7 +7,6 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -19,41 +18,8 @@ using SonicRoute.Core;
 namespace SonicRoute
 {
     /// <summary>命令行直接执行保存的规则；复用手动执行语义，输出一行 JSON 和退出码。</summary>
-    internal static class RuleCommandLine
+    internal static partial class RuleCommandLine
     {
-        internal enum Mode { None, Run, Help, Invalid }
-
-        internal sealed class Result
-        {
-            public Result() { } // System.Text.Json 在两个 TFM 下均使用公共无参构造。
-            public int ExitCode { get; set; }
-            public string Code { get; set; } = "";
-            public string RuleId { get; set; } = "";
-            public string RuleName { get; set; } = "";
-            public int Succeeded { get; set; }
-            public int Failed { get; set; }
-            public bool Stopped { get; set; }
-            public int Skipped { get; set; }
-        }
-
-        internal static Mode Parse(string[] args, out string selector)
-        {
-            selector = "";
-            if (args.Length == 1 && (EqualsArg(args[0], "--help") || EqualsArg(args[0], "-h")))
-                return Mode.Help;
-            if (args.Length == 2 && (EqualsArg(args[0], "--run-rule") || EqualsArg(args[0], "-r")) && !string.IsNullOrWhiteSpace(args[1]))
-            {
-                selector = args[1].Trim();
-                return Encoding.UTF8.GetByteCount(selector) <= MaxFrameBytes ? Mode.Run : Mode.Invalid;
-            }
-            // 保留原 --main/--panel 启动行为；混用规则调用和界面参数视为参数错误。
-            return args.Any(a => EqualsArg(a, "--run-rule") || EqualsArg(a, "-r") || EqualsArg(a, "--help") || EqualsArg(a, "-h")
-                || a.StartsWith("--run-rule=", StringComparison.OrdinalIgnoreCase)) ? Mode.Invalid : Mode.None;
-        }
-
-        private static bool EqualsArg(string value, string expected) =>
-            string.Equals(value, expected, StringComparison.OrdinalIgnoreCase);
-
         /// <summary>正常启动时登记一次用户级短命令，后台写入；不覆盖整个 PATH，也不启动额外常驻进程。</summary>
         internal static void EnsureShortCommand(string help)
         {
@@ -137,14 +103,8 @@ namespace SonicRoute
                     AutoRuleStore.Invalidate(); // 显式请求读取最新磁盘规则，不增加文件监听。
                     return AutoRuleStore.LoadAll();
                 });
-                bool isGuid = Guid.TryParse(selector, out var requestedId);
-                var matches = rules.Where(r => string.Equals(r.Id, selector, StringComparison.OrdinalIgnoreCase)
-                    || (isGuid && Guid.TryParse(r.Id, out var id) && id == requestedId)).ToList();
-                if (matches.Count == 0)
-                    matches = rules.Where(r => string.Equals(r.Name, selector, StringComparison.OrdinalIgnoreCase)).ToList();
-                if (matches.Count == 0) return Error(3, "rule_not_found");
-                if (matches.Count != 1) return Error(4, "ambiguous_rule");
-                var rule = matches[0];
+                var rule = SelectRule(selector, rules, out var failure);
+                if (rule == null) return failure!;
                 var execution = await AutoRuleService.ExecuteWithResultAsync(rule, "command");
                 // A temporary command host may exit immediately after returning its result.
                 await AutoRuleService.FlushExecutionHistoryAsync();
@@ -188,73 +148,19 @@ namespace SonicRoute
                     await WriteFrameAsync(pipe, selector, timeout.Token);
                 // 规则可包含长延时，不对执行结果施加固定超时，也不自动重试。
                 string json = await ReadFrameAsync(pipe, CancellationToken.None);
-                return JsonSerializer.Deserialize<Result>(json) ?? Error(6, "server_unavailable");
+                return ReadResult(json) ?? Error(6, "server_unavailable");
             }
             catch { return Error(6, "server_unavailable"); }
         }
 
-        internal const int MaxFrameBytes = 16 * 1024;
+        internal const int MaxFrameBytes = RuleCommandFrame.MaxFrameBytes;
+        internal static Task WriteFrameAsync(Stream stream, string text, CancellationToken token) => RuleCommandFrame.WriteFrameAsync(stream, text, token);
+        internal static Task<string> ReadFrameAsync(Stream stream, CancellationToken token) => RuleCommandFrame.ReadFrameAsync(stream, token);
 
-        internal static async Task WriteFrameAsync(Stream stream, string text, CancellationToken token)
-        {
-            byte[] body = Encoding.UTF8.GetBytes(text);
-            if (body.Length == 0 || body.Length > MaxFrameBytes) throw new InvalidDataException();
-            byte[] header = BitConverter.GetBytes(body.Length);
-            await stream.WriteAsync(header, 0, header.Length, token).ConfigureAwait(false);
-            await stream.WriteAsync(body, 0, body.Length, token).ConfigureAwait(false);
-            await stream.FlushAsync(token).ConfigureAwait(false);
-        }
+        internal static void WriteResult(Result result) => CommandOutput.Write(EncodeResult(result));
 
-        internal static async Task<string> ReadFrameAsync(Stream stream, CancellationToken token)
-        {
-            byte[] header = new byte[4];
-            await ReadFullAsync(stream, header, token).ConfigureAwait(false);
-            int length = BitConverter.ToInt32(header, 0);
-            if (length <= 0 || length > MaxFrameBytes) throw new InvalidDataException();
-            byte[] body = new byte[length];
-            await ReadFullAsync(stream, body, token).ConfigureAwait(false);
-            return new UTF8Encoding(false, true).GetString(body);
-        }
+        internal static void WriteHelp() => CommandOutput.Write(L10n.T("Auto.CliHelp"));
 
-        private static async Task ReadFullAsync(Stream stream, byte[] buffer, CancellationToken token)
-        {
-            int offset = 0;
-            while (offset < buffer.Length)
-            {
-                int read = await stream.ReadAsync(buffer, offset, buffer.Length - offset, token).ConfigureAwait(false);
-                if (read == 0) throw new EndOfStreamException();
-                offset += read;
-            }
-        }
-
-        internal static void WriteResult(Result result) => WriteOutput(JsonSerializer.Serialize(result));
-
-        internal static void WriteHelp() => WriteOutput(L10n.T("Auto.CliHelp"));
-
-        private static void WriteOutput(string output)
-        {
-            try
-            {
-                // GUI 子系统没有默认控制台；保留调用方已有重定向，否则附着父控制台。
-                if (GetFileType(GetStdHandle(-11)) == 0) AttachConsole(uint.MaxValue);
-                var handle = GetStdHandle(-11);
-                if (GetFileType(handle) == 2)
-                {
-                    string line = output + Environment.NewLine;
-                    if (WriteConsole(handle, line, (uint)line.Length, out _, IntPtr.Zero)) return;
-                }
-                using var writer = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false));
-                writer.WriteLine(output);
-                writer.Flush();
-            }
-            catch { } // 由快捷方式启动时可无控制台；退出码仍可由调用者读取。
-        }
-
-        [DllImport("kernel32.dll")] private static extern bool AttachConsole(uint processId);
-        [DllImport("kernel32.dll")] private static extern IntPtr GetStdHandle(int handle);
-        [DllImport("kernel32.dll")] private static extern uint GetFileType(IntPtr handle);
-        [DllImport("kernel32.dll", EntryPoint = "WriteConsoleW", CharSet = CharSet.Unicode)]
-        private static extern bool WriteConsole(IntPtr handle, string text, uint length, out uint written, IntPtr reserved);
         [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW", CharSet = CharSet.Unicode)]
         private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint message, IntPtr wParam,
             string lParam, uint flags, uint timeout, out IntPtr result);
@@ -348,7 +254,7 @@ namespace SonicRoute
                 {
                     timeout.CancelAfter(TimeSpan.FromSeconds(10));
                     using (timeout.Token.Register(() => pipe.Dispose()))
-                        await RuleCommandLine.WriteFrameAsync(pipe, JsonSerializer.Serialize(result), timeout.Token).ConfigureAwait(false);
+                        await RuleCommandLine.WriteFrameAsync(pipe, RuleCommandLine.EncodeResult(result), timeout.Token).ConfigureAwait(false);
                 }
             }
             catch (Exception ex)
