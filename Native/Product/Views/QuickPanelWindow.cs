@@ -29,6 +29,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         public required AudioAppInfo App;
         public required string Identity;
+        public required string HitKey;
         public int Pid;
         public bool IsExternal;
         public string DisplayName = "";
@@ -91,6 +92,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private int _draggingRowIdx = -1;
     private bool _draggingMaster;
     private UiRect _draggingSliderRect;
+    private float _drawnSlideY;
     private string? _rightPressId;
 
 #if SONICROUTE_PHONE
@@ -345,6 +347,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     {
                         App = app,
                         Identity = app.Identity,
+                        HitKey = Uri.EscapeDataString(app.Identity),
                         Pid = pid,
                         IsExternal = app.IsExternal,
                         DisplayName = label,
@@ -370,9 +373,20 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 if (_draggingRowIdx >= 0 && _draggingRowIdx < _rows.Count)
                 {
                     var draggingOld = _rows[_draggingRowIdx];
-                    var draggingNew = newRows.FirstOrDefault(r => string.Equals(r.Identity, draggingOld.Identity, StringComparison.Ordinal));
-                    if (draggingNew != null) draggingNew.Volume = draggingOld.Volume;
+                    if (_draggingRowIdx < newRows.Count && newRows[_draggingRowIdx].Identity == draggingOld.Identity)
+                        newRows[_draggingRowIdx].Volume = draggingOld.Volume;
+                    else
+                    {
+                        _draggingRowIdx = -1;
+                        _hit.ActiveId = null;
+                        _host.FlushVolumeWrites();
+                    }
                 }
+#if SONICROUTE_PHONE
+                if (_pendingDragRowIdx >= 0 && (_pendingDragRowIdx >= newRows.Count ||
+                    _rows[_pendingDragRowIdx].Identity != newRows[_pendingDragRowIdx].Identity))
+                    _pendingDragRowIdx = -1;
+#endif
 
                 _outputs = render;
                 _allRenderOutputs = allRenderWithPhone;
@@ -534,10 +548,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
     protected override void OnRender(D2dTarget g, float widthDip, float heightDip)
     {
         _hit.Clear();
+        _drawnSlideY = _animatingEntrance ? _entranceSlideY : 0f;
         UiThemePalette theme = _animatingEntrance ? ScaleThemeOpacity(_theme, _entranceOpacity) : _theme;
         if (_animatingEntrance)
         {
-            g.PushTransform(new D2dMatrix3x2(1f, 0f, 0f, 1f, 0f, _entranceSlideY));
+            g.PushTransform(new D2dMatrix3x2(1f, 0f, 0f, 1f, 0f, _drawnSlideY));
         }
 
         try
@@ -689,6 +704,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         {
             float rowW = _scroll.MaxOffset > 0.5f ? listRect.Width - UiMetrics.ScrollBarWidth - 4f : listRect.Width;
             g.PushClip(listRect);
+            _hit.PushClip(listRect);
             float curY = listRect.Y - _scroll.Offset;
             for (int i = 0; i < _rows.Count; i++)
             {
@@ -697,10 +713,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 if (curY + layout.TotalH >= listRect.Y && curY <= listRect.Bottom)
                 {
                     bool isCurrent = currentApp != null && string.Equals(row.Identity, currentApp.Identity, StringComparison.OrdinalIgnoreCase);
-                    RenderAppRow(g, theme, row, i, new UiRect(listRect.X, curY, rowW, layout.TotalH), legacyLayout, isCurrent, layout.OutPills, layout.InPills);
+                    RenderAppRow(g, theme, row, new UiRect(listRect.X, curY, rowW, layout.TotalH), legacyLayout, isCurrent, layout.OutPills, layout.InPills);
                 }
                 curY += layout.TotalH;
             }
+            _hit.PopClip();
             g.PopClip();
             _scroll.Draw(g, theme, _hit, "qp.scroll", listRect);
         }
@@ -842,11 +859,18 @@ internal sealed class QuickPanelWindow : LayeredWindow
         return choices;
     }
 
+    private bool TryGetAppIndex(ReadOnlySpan<char> hitKey, out int index)
+    {
+        for (index = 0; index < _rows.Count; index++)
+            if (hitKey.SequenceEqual(_rows[index].HitKey)) return true;
+        index = -1;
+        return false;
+    }
+
     private void RenderAppRow(
         D2dTarget g,
         UiThemePalette theme,
         AppRowState row,
-        int index,
         UiRect rowBounds,
         bool legacyLayout,
         bool isCurrent,
@@ -868,7 +892,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
         // 30x30 Icon button on left + 18x18 real icon + 8x8 AccentInverse mute dot
         var iconBtnRect = new UiRect(headerRect.X + 4f, headerRect.CenterY - 15f, 30f, 30f);
-        string iconHitId = $"qp.appmute:{index}";
+        string iconHitId = $"qp.appmute:{row.HitKey}";
         string iconTip = string.IsNullOrEmpty(row.App.SourceLabel) ? row.DisplayName : $"{row.DisplayName} ({row.App.SourceLabel})";
         _hit.Add(iconHitId, iconBtnRect, UiCursorKind.Hand, iconTip);
         if (_hit.IsHover(iconHitId))
@@ -904,7 +928,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         float expandW = showCompactOutName ? 80f : 32f;
         float expandH = legacyLayout ? (showCompactOutName ? 24f : 20f) : 32f;
         var expandRect = new UiRect(headerRect.Right - expandW - 2f, headerRect.CenterY - expandH * 0.5f, expandW, expandH);
-        string expandId = $"qp.expand:{index}";
+        string expandId = $"qp.expand:{row.HitKey}";
         _hit.Add(expandId, expandRect, UiCursorKind.Hand, L10n.T("Qp.ExpandDevices"));
         if (row.Expanded) g.FillRoundedRect(expandRect, 6f, theme.NavSelected);
         else if (_hit.IsHover(expandId)) g.FillRoundedRect(expandRect, 6f, theme.NavHover);
@@ -925,7 +949,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
         float midX = iconBtnRect.Right + 4f;
         float midW = MathF.Max(40f, expandRect.X - 6f - midX);
-        string sliderId = $"qp.appslider:{index}";
+        string sliderId = $"qp.appslider:{row.HitKey}";
 
         if (legacyLayout)
         {
@@ -963,7 +987,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             var btnRect = relRect.Offset(rowBounds.X, rowBounds.Y);
             if (isExit)
             {
-                string exitId = $"qp.appexit:{index}";
+                string exitId = $"qp.appexit:{row.HitKey}";
                 _hit.Add(exitId, btnRect, UiCursorKind.Hand, L10n.T("Phone.StopReceivingApp"));
                 bool exitHot = _hit.IsHover(exitId);
                 g.FillRoundedRect(btnRect, 7f, theme.SurfaceBg);
@@ -972,7 +996,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 continue;
             }
 
-            string hitId = $"qp.appdev:{index}:{devId}";
+            string hitId = $"qp.appdev:{row.HitKey}:{devId}";
             _hit.Add(hitId, btnRect, UiCursorKind.Hand, label);
 
             bool isNative = IdCmp.Equals(row.NativeOutputId, devId);
@@ -996,7 +1020,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             foreach (var (devId, label, relRect) in inPills)
             {
                 var btnRect = relRect.Offset(rowBounds.X, rowBounds.Y);
-                string hitId = $"qp.appin:{index}:{devId}";
+                string hitId = $"qp.appin:{row.HitKey}:{devId}";
                 _hit.Add(hitId, btnRect, UiCursorKind.Hand, label);
 
                 bool isNativeIn = IdCmp.Equals(row.NativeInputId, devId);
@@ -1117,7 +1141,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         }
 #endif
 
-        if (leftDown && _scroll.DragMove(yDip)) { Invalidate(); return; }
+        if (leftDown && _scroll.DragMove(yDip - _drawnSlideY)) { Invalidate(); return; }
 
         if (leftDown && _draggingMaster)
         {
@@ -1145,7 +1169,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             return;
         }
 
-        if (_hit.UpdateHover(xDip, yDip))
+        if (_hit.UpdateHover(xDip, yDip - _drawnSlideY))
         {
             SetCursorKind(_adjustMode ? UiCursorKind.Hand : (_hit.Hovered?.Cursor ?? UiCursorKind.Arrow));
             Invalidate();
@@ -1167,7 +1191,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 CancelAdjustMode();
                 return;
             }
-            var rHit = _hit.HitTest(e.X, e.Y);
+            var rHit = _hit.HitTest(e.X, e.Y - _drawnSlideY);
             _rightPressId = rHit?.Id;
             return;
         }
@@ -1187,7 +1211,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             return;
         }
 
-        var hit = _hit.HitTest(e.X, e.Y);
+        var hit = _hit.HitTest(e.X, e.Y - _drawnSlideY);
         if (hit is { } rh && (rh.Id == "qp.resize.top" || rh.Id == "qp.resize.bottom"))
         {
             _resizingHeight = true;
@@ -1199,7 +1223,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             return;
         }
 
-        if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
+        if (hit?.Id == "qp.scroll" && _scroll.BeginDrag(e.Y - _drawnSlideY))
         {
             Invalidate();
             return;
@@ -1220,7 +1244,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             return;
         }
 
-        if (hit.Value.Id.StartsWith("qp.appslider:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(13), out int rIdx))
+        if (hit.Value.Id.StartsWith("qp.appslider:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(13), out int rIdx))
         {
             if (rIdx >= 0 && rIdx < _rows.Count && _rows[rIdx].Available)
             {
@@ -1235,7 +1259,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         }
 
 #if SONICROUTE_PHONE
-        if (hit.Value.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(11), out int dragIdx))
+        if (hit.Value.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(11), out int dragIdx))
         {
             if (dragIdx >= 0 && dragIdx < _rows.Count && !_rows[dragIdx].IsExternal && _phoneCompanion is { IsVisible: true })
             {
@@ -1255,14 +1279,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         {
             string? pressed = _rightPressId;
             _rightPressId = null;
-            var rHit = _hit.HitTest(e.X, e.Y);
+            var rHit = _hit.HitTest(e.X, e.Y - _drawnSlideY);
             if (rHit is { } rh && rh.Id == pressed)
             {
                 if (rh.Id == "qp.masterslider")
                 {
                     ShowMasterPresetsMenu(e.X, e.Y);
                 }
-                else if (rh.Id.StartsWith("qp.appslider:", StringComparison.Ordinal) && int.TryParse(rh.Id.AsSpan(13), out int pIdx))
+                else if (rh.Id.StartsWith("qp.appslider:", StringComparison.Ordinal) && TryGetAppIndex(rh.Id.AsSpan(13), out int pIdx))
                 {
                     if (pIdx >= 0 && pIdx < _rows.Count && _rows[pIdx].Available)
                         ShowAppPresetsMenu(_rows[pIdx], e.X, e.Y);
@@ -1270,6 +1294,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
             }
             return;
         }
+
+        if (e.Button != UiMouseButton.Left) return;
 
         if (_adjustMode && _adjustDragging)
         {
@@ -1308,9 +1334,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
         string? active = _hit.ActiveId;
         _hit.ActiveId = null;
-        if (e.Button != UiMouseButton.Left) return;
 
-        var hit = _hit.HitTest(e.X, e.Y);
+        var hit = _hit.HitTest(e.X, e.Y - _drawnSlideY);
         if (hit is null || hit.Value.Id != active) { Invalidate(); return; }
 
         switch (hit.Value.Id)
@@ -1341,18 +1366,18 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 ToggleMasterMute();
                 break;
             case "qp.masterdev":
-                OpenMasterDeviceCombo(hit.Value.Bounds);
+                OpenMasterDeviceCombo(hit.Value.Bounds.Offset(0f, _drawnSlideY));
                 break;
             default:
-                if (hit.Value.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(11), out int mIdx))
+                if (hit.Value.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(11), out int mIdx))
                 {
                     ToggleAppMute(mIdx);
                 }
-                else if (hit.Value.Id.StartsWith("qp.expand:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(10), out int eIdx))
+                else if (hit.Value.Id.StartsWith("qp.expand:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(10), out int eIdx))
                 {
                     ToggleRowExpand(eIdx);
                 }
-                else if (hit.Value.Id.StartsWith("qp.appexit:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(11), out int xIdx))
+                else if (hit.Value.Id.StartsWith("qp.appexit:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(11), out int xIdx))
                 {
                     DisconnectExternalRow(xIdx);
                 }
@@ -1360,7 +1385,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 {
                     string rest = hit.Value.Id[10..];
                     int colon = rest.IndexOf(':');
-                    if (colon > 0 && int.TryParse(rest[..colon], out int aIdx))
+                    if (colon > 0 && TryGetAppIndex(rest[..colon], out int aIdx))
                     {
                         string devId = rest[(colon + 1)..];
                         SelectAppOutput(aIdx, devId, e.Ctrl, e.Shift);
@@ -1370,7 +1395,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 {
                     string rest = hit.Value.Id[9..];
                     int colon = rest.IndexOf(':');
-                    if (colon > 0 && int.TryParse(rest[..colon], out int iIdx))
+                    if (colon > 0 && TryGetAppIndex(rest[..colon], out int iIdx))
                     {
                         string devId = rest[(colon + 1)..];
                         SelectAppInput(iIdx, devId);
@@ -1382,7 +1407,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
     {
-        var hit = _hit.HitTest(xDip, yDip);
+        var hit = _hit.HitTest(xDip, yDip - _drawnSlideY);
         int step = Math.Clamp(_config.VolumeStep, 1, 20);
         if (hit is { } h)
         {
@@ -1394,7 +1419,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 Invalidate();
                 return;
             }
-            if (h.Id.StartsWith("qp.appslider:", StringComparison.Ordinal) && int.TryParse(h.Id.AsSpan(13), out int rIdx))
+            if (h.Id.StartsWith("qp.appslider:", StringComparison.Ordinal) && TryGetAppIndex(h.Id.AsSpan(13), out int rIdx))
             {
                 if (rIdx >= 0 && rIdx < _rows.Count && _rows[rIdx].Available)
                 {

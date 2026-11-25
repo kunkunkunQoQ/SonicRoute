@@ -54,6 +54,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private const uint WmClose = 0x0010;
     private const uint WmEraseBkgnd = 0x0014;
     private const uint WmShowWindow = 0x0018;
+    private const uint WmCancelMode = 0x001F;
     private const uint WmMouseActivate = 0x0021;
     private const uint WmGetMinMaxInfo = 0x0024;
     private const uint WmSetCursor = 0x0020;
@@ -120,6 +121,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private bool _visible;
     private bool _disposed;
     private bool _trackingLeave;
+    private int _leftClickCount;
+    private bool _rightPointerDown;
     private bool _paintPending;
     private bool _animTimerActive;
     private UiCursorKind _cursor = UiCursorKind.Arrow;
@@ -311,7 +314,12 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
     public void ReleasePointerCapture()
     {
-        if (Handle != 0 && GetCapture() == Handle) ReleaseCapture();
+        var hwnd = Handle;
+        bool hadPress = _leftClickCount != 0 || _rightPointerDown;
+        _leftClickCount = 0;
+        _rightPointerDown = false;
+        if (hwnd != 0 && GetCapture() == hwnd) ReleaseCapture();
+        if (hadPress) OnCaptureLost();
     }
 
     public void CenterOnPrimaryWorkArea()
@@ -708,28 +716,37 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 return 0;
 
             case WmLButtonDown:
-                if (!win.NoActivate) SetFocus(hwnd);
-                SetCapture(hwnd);
-                win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Left, 1));
-                return 0;
-
             case WmLButtonDblClk:
+                if (win._leftClickCount != 0) win.ReleasePointerCapture();
                 if (!win.NoActivate) SetFocus(hwnd);
+                if (win.Handle != hwnd || !win._visible) return 0;
                 SetCapture(hwnd);
-                win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Left, 2));
+                if (win.Handle != hwnd || GetCapture() != hwnd) return 0;
+                win._leftClickCount = msg == WmLButtonDblClk ? 2 : 1;
+                win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Left, win._leftClickCount));
                 return 0;
 
             case WmLButtonUp:
-                if (GetCapture() == hwnd) ReleaseCapture();
-                win.OnPointerUp(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Left, 1));
+                if (win._leftClickCount == 0 || GetCapture() != hwnd) return 0;
+                // WM_CAPTURECHANGED is synchronous. Finish our gesture before releasing
+                // capture, so only an unexpected transfer cancels the view's press.
+                int clicks = win._leftClickCount;
+                win._leftClickCount = 0;
+                ReleaseCapture();
+                if (win.Handle != hwnd || !win._visible) return 0;
+                win.OnPointerUp(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Left, clicks));
                 return 0;
 
             case WmRButtonDown:
                 if (!win.NoActivate) SetFocus(hwnd);
+                if (win.Handle != hwnd || !win._visible) return 0;
+                win._rightPointerDown = true;
                 win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Right, 1));
                 return 0;
 
             case WmRButtonUp:
+                if (!win._rightPointerDown) return 0;
+                win._rightPointerDown = false;
                 win.OnPointerUp(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Right, 1));
                 return 0;
 
@@ -760,8 +777,18 @@ internal abstract unsafe class LayeredWindow : IDisposable
             }
 
             case WmCaptureChanged:
-                if (lParam != hwnd) win.OnCaptureLost();
+                if (lParam != hwnd && win._leftClickCount != 0)
+                {
+                    win._leftClickCount = 0;
+                    win._rightPointerDown = false;
+                    win.OnCaptureLost();
+                }
                 return 0;
+
+            case WmCancelMode:
+            case WmKillFocus:
+                win.ReleasePointerCapture();
+                break;
 
             case WmDropFiles:
             {
@@ -826,6 +853,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 return 0;
 
             case WmDestroy:
+                win.ReleasePointerCapture();
                 Instances.Remove(hwnd);
                 win._visible = false;
                 win.ReleaseRenderResources();

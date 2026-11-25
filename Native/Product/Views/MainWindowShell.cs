@@ -23,6 +23,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     private UiThemePalette _theme;
     private MainNavTab _currentTab = MainNavTab.Apps;
     private IViewPage? _activePage;
+    private IViewPage? _pressedPage;
+    private UiRect _pageViewport;
     private nint _appIconHandle;
 
     // Sidebar collapse animation (196 <-> 0 DIP, 180ms CubicOut)
@@ -256,6 +258,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
         CloseInlineEdit(commit: true);
         ClosePopups();
+        if (_pressedPage != null) OnCaptureLost();
+        _pageViewport = default;
         _activePage?.OnDeactivated();
         _currentTab = tab;
         ActivateCurrentPage();
@@ -319,7 +323,9 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         _titleTextPressed = false;
         _titleBarPressed = false;
         _hit.ActiveId = null;
-        _activePage?.OnCaptureLost();
+        var page = _pressedPage;
+        _pressedPage = null;
+        page?.OnCaptureLost();
         Invalidate();
     }
 
@@ -396,26 +402,31 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         float bodyY = UiMetrics.TitleBarHeight;
         float bodyH = MathF.Max(0f, heightDip - bodyY);
 
-        if (_sidebarWidth > 0.5f)
+        var navClip = new UiRect(0f, bodyY, _sidebarWidth, bodyH);
+        if (navClip.Width > 0.5f)
         {
-            var navClip = new UiRect(0f, bodyY, _sidebarWidth, bodyH);
             g.PushClip(navClip);
+            _hit.PushClip(navClip);
             RenderNavRail(g, new UiRect(0f, bodyY, UiMetrics.NavExpandedWidth, bodyH));
+            _hit.PopClip();
             g.PopClip();
-            g.DrawLine(_sidebarWidth - 0.5f, bodyY, _sidebarWidth - 0.5f, heightDip, _theme.Border, 1f, roundCaps: false);
+            g.DrawLine(navClip.Right - 0.5f, bodyY, navClip.Right - 0.5f, heightDip, _theme.Border, 1f, roundCaps: false);
         }
 
+        _pageViewport = new UiRect(navClip.Right, bodyY, MathF.Max(0f, widthDip - navClip.Right), bodyH);
         float padBottom = _currentTab == MainNavTab.Apps ? 8f : 20f;
         var contentRect = new UiRect(
-            _sidebarWidth + 26f,
+            _pageViewport.X + 26f,
             bodyY + 20f,
-            MathF.Max(40f, widthDip - _sidebarWidth - 52f),
+            MathF.Max(40f, _pageViewport.Width - 52f),
             MathF.Max(40f, bodyH - 20f - padBottom));
 
         if (_activePage != null)
         {
-            g.PushClip(new UiRect(_sidebarWidth, bodyY, MathF.Max(0f, widthDip - _sidebarWidth), bodyH));
+            g.PushClip(_pageViewport);
+            _hit.PushClip(_pageViewport);
             _activePage.Render(g, _theme, _hit, contentRect);
+            _hit.PopClip();
             g.PopClip();
         }
 
@@ -581,115 +592,97 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     {
         _hit.ClearHover();
         SetCursorKind(UiCursorKind.Arrow);
-        _activePage?.OnPointerMove(-1000f, -1000f, false);
         Invalidate();
     }
 
     protected override void OnPointerDown(UiPointerEventArgs e)
     {
         if (_inlineEdit.IsOpen && !_inlineRectDip.Contains(e.X, e.Y))
-            CloseInlineEdit(commit: true);
-
-        var hit = _hit.HitTest(e.X, e.Y);
-        _hit.ActiveId = hit?.Id;
-
-        if (e.Button == UiMouseButton.Left && hit != null)
         {
-            if (hit.Value.Id == "shell.titleToggle")
-            {
-                _titleTextPressed = true;
-                _pressStartX = e.X;
-                _pressStartY = e.Y;
-                Invalidate();
-                return;
-            }
-            if (hit.Value.Id == "shell.titleDrag")
-            {
-                if (e.ClickCount >= 2)
-                {
-                    ReleasePointerCapture();
-                    ToggleMaximize();
-                    return;
-                }
-                _titleBarPressed = true;
-                _pressStartX = e.X;
-                _pressStartY = e.Y;
-                return;
-            }
-            if (hit.Value.Id is "shell.min" or "shell.max" or "shell.close" or "shell.updateNotice")
-            {
-                Invalidate();
-                return;
-            }
+            CloseInlineEdit(commit: true);
+            if (!IsVisible || IsDisposed) return;
         }
 
-        if (_activePage?.OnPointerDown(e) == true)
+        var hit = _hit.HitTest(e.X, e.Y);
+        if (e.Button != UiMouseButton.Left)
+        {
+            if (_activePage?.OnPointerDown(e, hit?.Id) == true) Invalidate();
+            return;
+        }
+        _hit.ActiveId = hit?.Id;
+        if (hit != null) Invalidate();
+
+        if (hit?.Id == "shell.titleToggle")
+        {
+            _titleTextPressed = true;
+            _pressStartX = e.X;
+            _pressStartY = e.Y;
+            return;
+        }
+        if (hit?.Id == "shell.titleDrag")
+        {
+            if (e.ClickCount >= 2)
+            {
+                ReleasePointerCapture();
+                ToggleMaximize();
+                return;
+            }
+            _titleBarPressed = true;
+            _pressStartX = e.X;
+            _pressStartY = e.Y;
+            return;
+        }
+
+        _pressedPage = _pageViewport.Contains(e.X, e.Y) ? _activePage : null;
+        if (_pressedPage?.OnPointerDown(e, hit?.Id) == true)
             Invalidate();
     }
 
     protected override void OnPointerUp(UiPointerEventArgs e)
     {
-        string? activeId = _hit.ActiveId;
+        if (e.Button != UiMouseButton.Left) return;
+
+        var page = _pressedPage;
+        _pressedPage = null;
+        var releasedId = _hit.HitTest(e.X, e.Y)?.Id;
+        var clickId = releasedId == _hit.ActiveId ? releasedId : null;
+        if (_hit.ActiveId != null) Invalidate();
         _hit.ActiveId = null;
 
-        if (e.Button == UiMouseButton.Left)
+        if (page != null)
         {
-            if (_titleTextPressed)
-            {
-                _titleTextPressed = false;
-                if (MathF.Abs(e.X - _pressStartX) < 4f && MathF.Abs(e.Y - _pressStartY) < 4f)
-                    ToggleSidebar();
-                Invalidate();
-                return;
-            }
-            if (_titleBarPressed)
-            {
-                _titleBarPressed = false;
-                Invalidate();
-                return;
-            }
-
-            var hit = _hit.HitTest(e.X, e.Y);
-            if (hit != null && hit.Value.Id == activeId)
-            {
-                switch (hit.Value.Id)
-                {
-                    case "shell.min":
-                        MinimizeWindow();
-                        return;
-                    case "shell.max":
-                        ToggleMaximize();
-                        return;
-                    case "shell.close":
-                        Hide();
-                        return;
-                    case "shell.updateNotice":
-                        NavigateTo(MainNavTab.Settings);
-                        return;
-                    case "nav.Apps":
-                        NavigateTo(MainNavTab.Apps);
-                        return;
-                    case "nav.Hotkeys":
-                        NavigateTo(MainNavTab.Hotkeys);
-                        return;
-                    case "nav.Theme":
-                        NavigateTo(MainNavTab.Theme);
-                        return;
-                    case "nav.Settings":
-                        NavigateTo(MainNavTab.Settings);
-                        return;
-                    case "nav.Automation":
-                        NavigateTo(MainNavTab.Automation);
-                        return;
-                    case "nav.Experimental":
-                        NavigateTo(MainNavTab.Experimental);
-                        return;
-                }
-            }
+            if (page == _activePage && page.OnPointerUp(e, clickId)) Invalidate();
+            return;
         }
 
-        if (_activePage?.OnPointerUp(e) == true)
+        if (_titleTextPressed)
+        {
+            _titleTextPressed = false;
+            if (clickId == "shell.titleToggle" && MathF.Abs(e.X - _pressStartX) < 4f && MathF.Abs(e.Y - _pressStartY) < 4f)
+                ToggleSidebar();
             Invalidate();
+            return;
+        }
+        if (_titleBarPressed)
+        {
+            _titleBarPressed = false;
+            Invalidate();
+            return;
+        }
+
+        switch (clickId)
+        {
+            case "shell.min": MinimizeWindow(); break;
+            case "shell.max": ToggleMaximize(); break;
+            case "shell.close": Hide(); break;
+            case "shell.updateNotice": NavigateTo(MainNavTab.Settings); break;
+            case "nav.Apps": NavigateTo(MainNavTab.Apps); break;
+            case "nav.Hotkeys": NavigateTo(MainNavTab.Hotkeys); break;
+            case "nav.Theme": NavigateTo(MainNavTab.Theme); break;
+            case "nav.Settings": NavigateTo(MainNavTab.Settings); break;
+            case "nav.Automation": NavigateTo(MainNavTab.Automation); break;
+            case "nav.Experimental": NavigateTo(MainNavTab.Experimental); break;
+        }
     }
 
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)

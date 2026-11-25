@@ -62,6 +62,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
     private bool _seeking;
     private long _seekPositionMs;
     private string? _seekPackage;
+    private string? _rightPressId;
     private string? _seekTitle;
     private UiRect _seekSliderRect;
     private bool _seekTimerRunning;
@@ -345,11 +346,13 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnCaptureLost()
     {
+        _rightPressId = null;
         bool changed = false;
         if (_seeking)
         {
             changed = true;
-            _ = CommitMediaSeekAsync();
+            _seeking = false;
+            UpdateSeekAnimationTimer();
         }
         if (_scroll.Dragging)
         {
@@ -604,7 +607,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _scroll.Clamp();
 
             g.PushClip(inner);
+            _hit.PushClip(inner);
             _airPlay.Render(g, _theme, _hit, new UiRect(inner.X, inner.Y - _scroll.Offset, inner.Width - (_scroll.MaxOffset > 0.5f ? 8f : 0f), airH), showHeaderStatus: false);
+            _hit.PopClip();
             g.PopClip();
             _scroll.Draw(g, _theme, _hit, "companion.scroll", inner);
 
@@ -742,6 +747,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         {
             float itemW = _scroll.MaxOffset > 0.5f ? listRect.Width - UiMetrics.ScrollBarWidth - 2f : listRect.Width;
             g.PushClip(listRect);
+            _hit.PushClip(listRect);
             for (int i = 0; i < apps.Length; i++)
             {
                 float iy = listRect.Y + i * (itemH + itemGap) - _scroll.Offset;
@@ -749,7 +755,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
                 var app = apps[i];
                 var rowRect = new UiRect(listRect.X, iy, itemW, itemH);
-                string rowId = $"companion.app:{i}";
+                string rowId = $"companion.app:{app.Package}";
                 bool isPlayingApp = app.IsDeviceAudio
                     ? (_mediaState?.Playing == true || (_mediaState?.PlayingPackages.Count ?? 0) > 0 || wholePhoneSource != null)
                     : (_mediaState?.PlayingPackages.Contains(app.Package) == true
@@ -793,6 +799,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 g.DrawText(rowName, new UiRect(tx, rowRect.Y + 6f, tw, 18f), _theme.TextPrimary, 12.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
                 g.DrawText(rowSub, new UiRect(tx, rowRect.Y + 24f, tw, 15f), _theme.TextSecondary, 10f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             }
+            _hit.PopClip();
             g.PopClip();
 
             _scroll.Draw(g, _theme, _hit, "companion.scroll", listRect);
@@ -987,6 +994,11 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnPointerDown(UiPointerEventArgs e)
     {
+        if (e.Button == UiMouseButton.Right)
+        {
+            _rightPressId = _hit.HitTest(e.X, e.Y)?.Id;
+            return;
+        }
         if (e.Button != UiMouseButton.Left) return;
         if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
         {
@@ -1010,6 +1022,17 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
     protected override void OnPointerUp(UiPointerEventArgs e)
     {
+        const string appPrefix = "companion.app:";
+        var hit = _hit.HitTest(e.X, e.Y);
+        if (e.Button == UiMouseButton.Right)
+        {
+            string? pressed = _rightPressId;
+            _rightPressId = null;
+            if (hit is { } row && row.Id == pressed && row.Id.StartsWith(appPrefix, StringComparison.Ordinal))
+                ToggleAppAudioCapture(row.Id[appPrefix.Length..]);
+            return;
+        }
+        if (e.Button != UiMouseButton.Left) return;
         if (_seeking)
         {
             _hit.ActiveId = null;
@@ -1021,19 +1044,9 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
         string? active = _hit.ActiveId;
         _hit.ActiveId = null;
 
-        var hit = _hit.HitTest(e.X, e.Y);
-        if (hit is null) return;
+        if (hit is null || hit.Value.Id != active) { Invalidate(); return; }
 
         if (_airPlaySelected && _airPlay.HandleClick(hit.Value.Id, hit.Value.Bounds)) return;
-
-        if (e.Button == UiMouseButton.Right && hit.Value.Id.StartsWith("companion.app:", StringComparison.Ordinal))
-        {
-            if (int.TryParse(hit.Value.Id.AsSpan(14), out int rIdx))
-                ToggleAppAudioCapture(rIdx);
-            return;
-        }
-
-        if (e.Button != UiMouseButton.Left || hit.Value.Id != active) { Invalidate(); return; }
 
         switch (hit.Value.Id)
         {
@@ -1063,8 +1076,8 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
                 OpenDeviceSwitcher(hit.Value.Bounds);
                 break;
             default:
-                if (hit.Value.Id.StartsWith("companion.app:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(14), out int idx))
-                    LaunchAppVirtualDisplay(idx);
+                if (hit.Value.Id.StartsWith(appPrefix, StringComparison.Ordinal))
+                    LaunchAppVirtualDisplay(hit.Value.Id[appPrefix.Length..]);
                 break;
         }
     }
@@ -1159,24 +1172,22 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _ = _host.Phone.Sources.AddAsync(device, AndroidApp.DeviceAudio, keepPhoneAudio: false);
     }
 
-    private void LaunchAppVirtualDisplay(int filteredIndex)
+    private void LaunchAppVirtualDisplay(string package)
     {
         var device = _activeDevice;
         if (device == null) return;
-        var apps = GetFilteredApps();
-        if (filteredIndex < 0 || filteredIndex >= apps.Length) return;
-        var app = apps[filteredIndex];
+        var app = GetFilteredApps().FirstOrDefault(a => a.Package == package);
+        if (app == null) return;
         ViewNative.GetCursorPos(out var pt);
         _ = _host.Phone.OpenDisplayAsync(device, app, pt.X, pt.Y);
     }
 
-    private void ToggleAppAudioCapture(int filteredIndex)
+    private void ToggleAppAudioCapture(string package)
     {
         var device = _activeDevice;
         if (device == null) return;
-        var apps = GetFilteredApps();
-        if (filteredIndex < 0 || filteredIndex >= apps.Length) return;
-        var app = apps[filteredIndex];
+        var app = GetFilteredApps().FirstOrDefault(a => a.Package == package);
+        if (app == null) return;
         var existing = _host.Phone.Sources.Sources.FirstOrDefault(s => s.App.Package == app.Package && AndroidDeviceIdentity.Matches(s.Device, device));
         if (existing != null)
             _ = _host.Phone.Sources.RemoveAsync(existing.Id);

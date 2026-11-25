@@ -31,7 +31,7 @@ internal sealed class ThemePageView : IViewPage
 
     private readonly IViewHostActions _actions;
     private readonly UiScrollState _scroll = new();
-    private readonly List<(UiRect Rect, Action Click)> _clicks = new();
+    private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
 
     private UiRect _viewportRect;
     private UiRect _opacitySliderRect;
@@ -100,6 +100,7 @@ internal sealed class ThemePageView : IViewPage
         float w = _scroll.MaxOffset > 0.5f ? contentRect.Width - UiMetrics.ScrollBarWidth - 4f : contentRect.Width;
 
         g.PushClip(contentRect);
+        hit.PushClip(contentRect);
         float y = contentRect.Y - _scroll.Offset;
 
         g.DrawText(L10n.T("Nav.Theme"), new UiRect(contentRect.X, y, w, 28f), t.TextPrimary, 22f, 600);
@@ -126,6 +127,7 @@ internal sealed class ThemePageView : IViewPage
         UiPrimitives.DrawCard(g, t, card4, 16f);
         RenderPanelCard(g, t, hit, card4.Deflate(20f), cfg);
 
+        hit.PopClip();
         g.PopClip();
         _scroll.Draw(g, t, hit, "th.scroll", contentRect);
     }
@@ -146,11 +148,11 @@ internal sealed class ThemePageView : IViewPage
                 || (key == "system" && string.IsNullOrEmpty(cfg.ThemeMode));
             string id = "th.mode." + key;
             hit.Add(id, mr, UiCursorKind.Hand);
-            _clicks.Add((mr, () =>
+            _clicks[id] = () =>
             {
                 cfg.ThemeMode = key;
                 SaveAndNotifyTheme();
-            }));
+            };
 
             UiColor bg = selected ? t.NavSelected : hit.IsHover(id) ? t.NavHover : t.SurfaceBg;
             g.FillRoundedRect(mr, 9f, bg);
@@ -187,11 +189,11 @@ internal sealed class ThemePageView : IViewPage
             var dotRect = new UiRect(px, presetY, 22f, 22f);
             string id = "th.accent." + key;
             hit.Add(id, dotRect, UiCursorKind.Hand, col.ToHexRgb());
-            _clicks.Add((dotRect, () =>
+            _clicks[id] = () =>
             {
                 cfg.Accent = key;
                 SaveAndNotifyTheme();
-            }));
+            };
             g.FillRoundedRect(dotRect, 6f, col);
             bool active = t.Accent.R == col.R && t.Accent.G == col.G && t.Accent.B == col.B;
             if (active) g.DrawRoundedRect(dotRect, 6f, t.TextPrimary, 1.8f);
@@ -205,16 +207,16 @@ internal sealed class ThemePageView : IViewPage
 
         _hexBoxRect = new UiRect(swatch.Right + 10f, rowY + 10f, 90f, 34f);
         UiPrimitives.DrawTextBox(g, t, hit, "th.hex", _hexBoxRect, t.Accent.ToHexRgb(), "#2F80ED", _actions.ActiveInlineEditTag == "th.hex", mono: true, fontSize: 12f);
-        _clicks.Add((_hexBoxRect, () =>
+        _clicks["th.hex"] = () =>
         {
             _actions.StartInlineEdit("th.hex", _hexBoxRect, t.Accent.ToHexRgb(), null, (val, _) => CommitHex(val), mono: true);
-        }));
+        };
 
         string pickLabel = L10n.T("Th.ChooseColor");
         float pickW = MathF.Max(104f, D2dSharedContext.Instance.MeasureText(pickLabel, UiMetrics.FontFamily, 12f, 400, 160f, 34f, false).Width + 38f);
         var pickBtn = new UiRect(_hexBoxRect.Right + 8f, rowY + 10f, MathF.Min(pickW, MathF.Max(80f, leftW - (_hexBoxRect.Right - boxIn.X) - 8f)), 34f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.chooseColor", pickBtn, pickLabel, fontSize: 12f, icon: UiIcon.Theme);
-        _clicks.Add((pickBtn, OpenColorPicker));
+        _clicks["th.chooseColor"] = OpenColorPicker;
 
         var prevRect = new UiRect(boxIn.Right - previewW, boxIn.Y + 6f, previewW, boxIn.Height - 12f);
         RenderThemePreview(g, t, prevRect);
@@ -286,9 +288,9 @@ internal sealed class ThemePageView : IViewPage
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position, tooltip: L10n.T("Exp.OsdAdjustHint"));
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.preview", prevBtn, prevLabel, fontSize: 12f, icon: UiIcon.Play);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Exp.OsdResetHint"));
-        _clicks.Add((adjBtn, () => _actions.Host.BeginOsdAdjust()));
-        _clicks.Add((prevBtn, () => _actions.Host.PreviewOsd()));
-        _clicks.Add((rstBtn, ResetOsdSettings));
+        _clicks["th.osd.adjust"] = () => _actions.Host.BeginOsdAdjust();
+        _clicks["th.osd.preview"] = () => _actions.Host.PreviewOsd();
+        _clicks["th.osd.reset"] = ResetOsdSettings;
 
         DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, adjBtn.X - inner.X - 10f), 42f),
             UiIcon.Monitor, L10n.T("Theme.OsdAppearanceSettings"), L10n.T("Th.OsdHint"));
@@ -331,12 +333,12 @@ internal sealed class ThemePageView : IViewPage
                 UiPrimitives.DrawSecondaryButton(g, t, hit, gid, cell, "", fontSize: 10f, radius: 5f, active: active, tooltip: code);
                 g.FillEllipse(cell.CenterX, cell.CenterY, 3f, 3f, active ? t.Accent : t.TextSecondary);
                 var codeCopy = code;
-                _clicks.Add((cell, () =>
+                _clicks[gid] = () =>
                 {
                     cfg.OsdPosition = codeCopy;
                     SaveAndNotifySettings();
                     _actions.Host.PreviewOsd();
-                }));
+                };
             }
         }
 
@@ -344,24 +346,24 @@ internal sealed class ThemePageView : IViewPage
         g.DrawText(L10n.T("Exp.Osd.X") + " (px)", new UiRect(offLeft, y + 4f, 80f, 16f), t.TextSecondary, 11.5f, 400);
         _osdOffsetXRect = new UiRect(offLeft, y + 24f, 82f, 30f);
         UiPrimitives.DrawTextBox(g, t, hit, "th.osd.ox", _osdOffsetXRect, cfg.OsdOffsetX.ToString(CultureInfo.InvariantCulture), "0", _actions.ActiveInlineEditTag == "th.osd.ox", mono: true);
-        _clicks.Add((_osdOffsetXRect, () =>
+        _clicks["th.osd.ox"] = () =>
         {
             _actions.StartInlineEdit("th.osd.ox", _osdOffsetXRect, cfg.OsdOffsetX.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
             {
                 if (int.TryParse(val.Trim(), out int ox)) { cfg.OsdOffsetX = Math.Clamp(ox, -2000, 2000); SaveAndNotifySettings(); }
             }, mono: true);
-        }));
+        };
 
         g.DrawText(L10n.T("Exp.Osd.Y") + " (px)", new UiRect(offLeft + 96f, y + 4f, 80f, 16f), t.TextSecondary, 11.5f, 400);
         _osdOffsetYRect = new UiRect(offLeft + 96f, y + 24f, 82f, 30f);
         UiPrimitives.DrawTextBox(g, t, hit, "th.osd.oy", _osdOffsetYRect, cfg.OsdOffsetY.ToString(CultureInfo.InvariantCulture), "0", _actions.ActiveInlineEditTag == "th.osd.oy", mono: true);
-        _clicks.Add((_osdOffsetYRect, () =>
+        _clicks["th.osd.oy"] = () =>
         {
             _actions.StartInlineEdit("th.osd.oy", _osdOffsetYRect, cfg.OsdOffsetY.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
             {
                 if (int.TryParse(val.Trim(), out int oy)) { cfg.OsdOffsetY = Math.Clamp(oy, -2000, 2000); SaveAndNotifySettings(); }
             }, mono: true);
-        }));
+        };
 
         y += 3 * (gridCell + gridGap) + 12f;
         g.DrawLine(inner.X, y, inner.Right, y, t.Border, 1f, roundCaps: false);
@@ -369,7 +371,7 @@ internal sealed class ThemePageView : IViewPage
 
         var moreBtn = new UiRect(inner.Right - 96f, y - 2f, 96f, 26f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.osd.more", moreBtn, L10n.T("Exp.MoreOptions"), fontSize: 11.5f, active: _osdMoreExpanded);
-        _clicks.Add((moreBtn, () => { _osdMoreExpanded = !_osdMoreExpanded; _actions.Invalidate(); }));
+        _clicks["th.osd.more"] = () => { _osdMoreExpanded = !_osdMoreExpanded; _actions.Invalidate(); };
         g.DrawText(L10n.T("Theme.OsdStyle"), new UiRect(inner.X, y, inner.Width - 108f, 24f), t.TextPrimary, 14.5f, 600);
         y += 34f;
 
@@ -406,15 +408,15 @@ internal sealed class ThemePageView : IViewPage
 
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.adjust", adjBtn, adjLabel, fontSize: 12f, icon: UiIcon.Position);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.reset", rstBtn, rstLabel, fontSize: 12f, icon: UiIcon.Reset);
-        _clicks.Add((adjBtn, () => _actions.Host.BeginQuickPanelAdjust()));
-        _clicks.Add((rstBtn, () =>
+        _clicks["th.panel.adjust"] = () => _actions.Host.BeginQuickPanelAdjust();
+        _clicks["th.panel.reset"] = () =>
         {
             cfg.QuickPanelPosMode = "default";
             cfg.QuickPanelCustomX = -1;
             cfg.QuickPanelCustomY = -1;
             SaveAndNotifySettings();
             _actions.ShowNotice(L10n.T("Exp.PanelPosResetDone"));
-        }));
+        };
 
         DrawThemeCardHeader(g, t, new UiRect(inner.X, y, MathF.Max(100f, adjBtn.X - inner.X - 10f), 42f),
             UiIcon.Application, L10n.T("Exp.PanelPosSection"), L10n.T("Th.PanelHint"));
@@ -428,27 +430,27 @@ internal sealed class ThemePageView : IViewPage
         var cusBtn = new UiRect(defBtn.Right + 8f, y, 108f, 30f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.posDef", defBtn, L10n.T("Dev.SystemDefault"), fontSize: 12f, active: !isCustomPos);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.panel.posCus", cusBtn, L10n.T("Exp.Osd.Custom"), fontSize: 12f, active: isCustomPos);
-        _clicks.Add((defBtn, () => { cfg.QuickPanelPosMode = "default"; SaveAndNotifySettings(); }));
-        _clicks.Add((cusBtn, () => { cfg.QuickPanelPosMode = "custom"; SaveAndNotifySettings(); }));
+        _clicks["th.panel.posDef"] = () => { cfg.QuickPanelPosMode = "default"; SaveAndNotifySettings(); };
+        _clicks["th.panel.posCus"] = () => { cfg.QuickPanelPosMode = "custom"; SaveAndNotifySettings(); };
 
         _panelCustomXRect = new UiRect(cusBtn.Right + 16f, y, 72f, 30f);
         _panelCustomYRect = new UiRect(_panelCustomXRect.Right + 8f, y, 72f, 30f);
         UiPrimitives.DrawTextBox(g, t, hit, "th.panel.cx", _panelCustomXRect, cfg.QuickPanelCustomX.ToString(CultureInfo.InvariantCulture), "X", _actions.ActiveInlineEditTag == "th.panel.cx", mono: true);
         UiPrimitives.DrawTextBox(g, t, hit, "th.panel.cy", _panelCustomYRect, cfg.QuickPanelCustomY.ToString(CultureInfo.InvariantCulture), "Y", _actions.ActiveInlineEditTag == "th.panel.cy", mono: true);
-        _clicks.Add((_panelCustomXRect, () =>
+        _clicks["th.panel.cx"] = () =>
         {
             _actions.StartInlineEdit("th.panel.cx", _panelCustomXRect, cfg.QuickPanelCustomX.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
             {
                 if (int.TryParse(val.Trim(), out int px)) { cfg.QuickPanelPosMode = "custom"; cfg.QuickPanelCustomX = px; SaveAndNotifySettings(); }
             }, mono: true);
-        }));
-        _clicks.Add((_panelCustomYRect, () =>
+        };
+        _clicks["th.panel.cy"] = () =>
         {
             _actions.StartInlineEdit("th.panel.cy", _panelCustomYRect, cfg.QuickPanelCustomY.ToString(CultureInfo.InvariantCulture), null, (val, _) =>
             {
                 if (int.TryParse(val.Trim(), out int py)) { cfg.QuickPanelPosMode = "custom"; cfg.QuickPanelCustomY = py; SaveAndNotifySettings(); }
             }, mono: true);
-        }));
+        };
         y += 42f;
 
         int pHeight = Math.Clamp(cfg.QuickPanelHeight, 350, 850);
@@ -508,7 +510,7 @@ internal sealed class ThemePageView : IViewPage
         string label, string? hint, bool isChecked, Action onToggle)
     {
         hit.Add(id, rect, UiCursorKind.Hand);
-        _clicks.Add((rect, onToggle));
+        _clicks[id] = onToggle;
         float textW = MathF.Max(60f, rect.Width - 50f);
         if (string.IsNullOrEmpty(hint))
         {
@@ -519,7 +521,7 @@ internal sealed class ThemePageView : IViewPage
             g.DrawText(label, new UiRect(rect.X, rect.Y, textW, 20f), t.TextPrimary, 13.5f, 400);
             g.DrawText(hint, new UiRect(rect.X, rect.Y + 20f, textW, 18f), t.TextSecondary, 11.5f, 400);
         }
-        UiPrimitives.DrawSwitch(g, t, hit, id + ".sw", new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
+        UiPrimitives.DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
     }
 
     private static UiRect DrawLabeledSlider(D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect, string label, string valText, float norm01)
@@ -542,26 +544,29 @@ internal sealed class ThemePageView : IViewPage
         return leftDown && _scroll.DragMove(y);
     }
 
-    public bool OnPointerDown(UiPointerEventArgs e)
+    public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
         if (e.Button != UiMouseButton.Left) return false;
-        if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y)) return true;
+        if (targetId == "th.scroll" && _scroll.BeginDrag(e.Y)) return true;
 
-        if (TryBeginSlider("opacity", _opacitySliderRect, e.X, e.Y)) return true;
-        if (_osdMoreExpanded)
+        _draggingSlider = targetId switch
         {
-            if (TryBeginSlider("osdW", _osdWidthSliderRect, e.X, e.Y)) return true;
-            if (TryBeginSlider("osdFont", _osdFontSliderRect, e.X, e.Y)) return true;
-            if (TryBeginSlider("osdFin", _osdFadeInSliderRect, e.X, e.Y)) return true;
-            if (TryBeginSlider("osdFout", _osdFadeOutSliderRect, e.X, e.Y)) return true;
-        }
-        if (TryBeginSlider("panelH", _panelHeightSliderRect, e.X, e.Y)) return true;
-
-        return false;
+            "th.opacity" => "opacity",
+            "th.osd.w" => "osdW",
+            "th.osd.font" => "osdFont",
+            "th.osd.fin" => "osdFin",
+            "th.osd.fout" => "osdFout",
+            "th.panel.h" => "panelH",
+            _ => null,
+        };
+        if (_draggingSlider == null) return false;
+        ApplySliderDrag(_draggingSlider, e.X);
+        return true;
     }
 
-    public bool OnPointerUp(UiPointerEventArgs e)
+    public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
+        if (e.Button != UiMouseButton.Left) return false;
         if (_draggingSlider != null)
         {
             string finished = _draggingSlider;
@@ -576,17 +581,9 @@ internal sealed class ThemePageView : IViewPage
             _scroll.EndDrag();
             return true;
         }
-        if (e.Button != UiMouseButton.Left) return false;
-
-        for (int i = _clicks.Count - 1; i >= 0; i--)
-        {
-            if (_clicks[i].Rect.Contains(e.X, e.Y))
-            {
-                _clicks[i].Click();
-                return true;
-            }
-        }
-        return false;
+        if (clickId == null || !_clicks.TryGetValue(clickId, out var click)) return false;
+        click();
+        return true;
     }
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)
@@ -601,14 +598,6 @@ internal sealed class ThemePageView : IViewPage
     }
 
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt) => false;
-
-    private bool TryBeginSlider(string name, UiRect rect, float x, float y)
-    {
-        if (!rect.Contains(x, y)) return false;
-        _draggingSlider = name;
-        ApplySliderDrag(name, x);
-        return true;
-    }
 
     private void ApplySliderDrag(string name, float x)
     {

@@ -171,13 +171,13 @@ internal sealed class ComboPopupWindow : LayeredWindow
 
     protected override void OnPointerUp(UiPointerEventArgs e)
     {
+        if (e.Button != UiMouseButton.Left) return;
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
             Invalidate();
             return;
         }
-        if (e.Button != UiMouseButton.Left) return;
         int idx = HitChoiceIndex(e.X, e.Y);
         int pressed = _pressedIndex;
         _pressedIndex = -1;
@@ -185,6 +185,12 @@ internal sealed class ComboPopupWindow : LayeredWindow
         {
             CommitIndex(idx);
         }
+    }
+
+    protected override void OnCaptureLost()
+    {
+        _pressedIndex = -1;
+        _scroll.EndDrag();
     }
 
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
@@ -295,7 +301,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
 
     private int HitChoiceIndex(float x, float y)
     {
-        var view = new UiRect(Pad, Pad, WidthDip - Pad * 2f - (_scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth : 0f), HeightDip - Pad * 2f);
+        var view = new UiRect(Pad, Pad, WidthDip - Pad * 2f - (_scroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth + 2f : 0f), HeightDip - Pad * 2f);
         if (!view.Contains(x, y)) return -1;
         int idx = (int)MathF.Floor((y - view.Y + _scroll.Offset) / ItemH);
         return idx >= 0 && idx < _choices.Count ? idx : -1;

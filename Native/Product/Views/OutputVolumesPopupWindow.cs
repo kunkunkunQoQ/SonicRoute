@@ -192,6 +192,12 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                     var dragged = _rows.FirstOrDefault(r => string.Equals(r.Id, _draggingId, StringComparison.OrdinalIgnoreCase));
                     var target = nextRows.FirstOrDefault(r => string.Equals(r.Id, _draggingId, StringComparison.OrdinalIgnoreCase));
                     if (dragged != null && target != null) target.Volume = dragged.Volume;
+                    else
+                    {
+                        _draggingId = null;
+                        _hit.ActiveId = null;
+                        _host.FlushVolumeWrites();
+                    }
                 }
 
                 int prevCount = _rows.Count;
@@ -268,6 +274,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
         float rowW = _scroll.MaxOffset > 0.5f ? listRect.Width - UiMetrics.ScrollBarWidth - 4f : listRect.Width;
         g.PushClip(listRect);
+        _hit.PushClip(listRect);
         for (int i = 0; i < _rows.Count; i++)
         {
             float ry = listRect.Y + i * UiMetrics.OutputPopupRowHeight - _scroll.Offset;
@@ -275,7 +282,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
             var row = _rows[i];
             var nameRect = new UiRect(listRect.X, ry, rowW, 22f);
-            string setDefId = $"ov.def:{i}";
+            string setDefId = $"ov.def:{row.Id}";
             _hit.Add(setDefId, nameRect, UiCursorKind.Hand, row.Name);
 
             bool nameHot = _hit.IsHover(setDefId);
@@ -295,7 +302,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
             float ctrlY = ry + 26f;
             var muteRect = new UiRect(listRect.X, ctrlY + 2f, 54f, 28f);
-            string muteId = $"ov.mute:{i}";
+            string muteId = $"ov.mute:{row.Id}";
             UiPrimitives.DrawSecondaryButton(g, _theme, _hit, muteId, muteRect, "",
                 enabled: row.Available, radius: 6f,
                 icon: row.Muted ? UiIcon.VolumeMutedSlash : UiIcon.Speaker,
@@ -307,10 +314,11 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 12.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center, wrap: false, ellipsis: false);
 
             var sliderRect = new UiRect(muteRect.Right + 6f, ctrlY, MathF.Max(40f, pctRect.X - 6f - (muteRect.Right + 6f)), 32f);
-            string sliderId = $"ov.vol:{i}";
+            string sliderId = $"ov.vol:{row.Id}";
             UiPrimitives.DrawVolumeSlider(g, _theme, _hit, sliderId, sliderRect,
                 row.Volume / 100f, 0f, row.Muted, showPeak: false, trackHeight: 4f, thumbDiameter: 14f, enabled: row.Available);
         }
+        _hit.PopClip();
         g.PopClip();
 
         _scroll.Draw(g, _theme, _hit, "ov.scroll", listRect);
@@ -349,6 +357,14 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         Invalidate();
     }
 
+    private bool TryGetDeviceIndex(ReadOnlySpan<char> deviceId, out int index)
+    {
+        for (index = 0; index < _rows.Count; index++)
+            if (deviceId.Equals(_rows[index].Id, StringComparison.OrdinalIgnoreCase)) return true;
+        index = -1;
+        return false;
+    }
+
     protected override void OnPointerDown(UiPointerEventArgs e)
     {
         if (e.Button == UiMouseButton.Right)
@@ -360,17 +376,17 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         if (e.Button != UiMouseButton.Left) return;
 
         ClosePresetMenu();
-        if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
+        var hit = _hit.HitTest(e.X, e.Y);
+        if (hit?.Id == "ov.scroll" && _scroll.BeginDrag(e.Y))
         {
             Invalidate();
             return;
         }
 
-        var hit = _hit.HitTest(e.X, e.Y);
         if (hit is null) return;
         _hit.ActiveId = hit.Value.Id;
 
-        if (hit.Value.Id.StartsWith("ov.vol:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(7), out int vIdx))
+        if (hit.Value.Id.StartsWith("ov.vol:", StringComparison.Ordinal) && TryGetDeviceIndex(hit.Value.Id.AsSpan(7), out int vIdx))
         {
             if (vIdx >= 0 && vIdx < _rows.Count && _rows[vIdx].Available)
             {
@@ -395,13 +411,14 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             _rightPressId = null;
             var rHit = _hit.HitTest(e.X, e.Y);
             if (rHit is { } rh && rh.Id == pressed && rh.Id.StartsWith("ov.vol:", StringComparison.Ordinal)
-                && int.TryParse(rh.Id.AsSpan(7), out int pIdx) && pIdx >= 0 && pIdx < _rows.Count && _rows[pIdx].Available)
+                && TryGetDeviceIndex(rh.Id.AsSpan(7), out int pIdx) && pIdx >= 0 && pIdx < _rows.Count && _rows[pIdx].Available)
             {
                 ShowVolumePresetsMenu(_rows[pIdx], e.X, e.Y);
             }
             return;
         }
 
+        if (e.Button != UiMouseButton.Left) return;
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
@@ -419,12 +436,11 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
 
         string? active = _hit.ActiveId;
         _hit.ActiveId = null;
-        if (e.Button != UiMouseButton.Left) return;
 
         var hit = _hit.HitTest(e.X, e.Y);
         if (hit is null || hit.Value.Id != active) { Invalidate(); return; }
 
-        if (hit.Value.Id.StartsWith("ov.def:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(7), out int dIdx))
+        if (hit.Value.Id.StartsWith("ov.def:", StringComparison.Ordinal) && TryGetDeviceIndex(hit.Value.Id.AsSpan(7), out int dIdx))
         {
             if (dIdx >= 0 && dIdx < _rows.Count)
             {
@@ -440,7 +456,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 });
             }
         }
-        else if (hit.Value.Id.StartsWith("ov.mute:", StringComparison.Ordinal) && int.TryParse(hit.Value.Id.AsSpan(8), out int mIdx))
+        else if (hit.Value.Id.StartsWith("ov.mute:", StringComparison.Ordinal) && TryGetDeviceIndex(hit.Value.Id.AsSpan(8), out int mIdx))
         {
             if (mIdx >= 0 && mIdx < _rows.Count && _rows[mIdx].Available)
             {
@@ -471,7 +487,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
     {
         var hit = _hit.HitTest(xDip, yDip);
-        if (hit is { } h && h.Id.StartsWith("ov.vol:", StringComparison.Ordinal) && int.TryParse(h.Id.AsSpan(7), out int idx))
+        if (hit is { } h && h.Id.StartsWith("ov.vol:", StringComparison.Ordinal) && TryGetDeviceIndex(h.Id.AsSpan(7), out int idx))
         {
             if (idx >= 0 && idx < _rows.Count && _rows[idx].Available)
             {

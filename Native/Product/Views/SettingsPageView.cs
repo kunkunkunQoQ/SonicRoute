@@ -22,7 +22,6 @@ namespace SonicRoute.Native.Product.Views;
 internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 {
     private readonly UiScrollState _scroll = new();
-    private readonly Dictionary<string, UiRect> _rects = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
 
     private Endpoint[] _outputs = [];
@@ -63,7 +62,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
     public void OnDeactivated()
     {
-        _draggingVolumeStep = false;
+        OnCaptureLost();
         if (_subscribedUpdates)
         {
             actions.Host.Updates.Changed -= OnUpdatesChanged;
@@ -74,6 +73,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
     public void OnCaptureLost()
     {
+        _scroll.EndDrag();
         _draggingVolumeStep = false;
     }
 
@@ -123,7 +123,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
         _contentRect = contentRect;
-        _rects.Clear();
         _clicks.Clear();
 
         var cfg = actions.Config;
@@ -138,7 +137,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
         void RegisterClick(string id, UiRect r, Action onClick, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null)
         {
-            _rects[id] = r;
             _clicks[id] = onClick;
             if (r.Bottom > viewport.Y && r.Y < viewport.Bottom)
             {
@@ -148,6 +146,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         }
 
         g.PushClip(viewport);
+        hit.PushClip(viewport);
 
         // Page Header
         g.DrawText(L10n.T("St.Settings"), new UiRect(x, y, w, 30f), t.TextPrimary, 22f, 600, UiTextAlign.Leading, UiVertAlign.Center);
@@ -183,6 +182,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         y = RenderAboutCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick);
         y += 16f;
 
+        hit.PopClip();
         g.PopClip();
 
         _scroll.ContentHeight = MathF.Max(0f, y - startY);
@@ -395,7 +395,6 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         int clampedStep = Math.Clamp(cfg.VolumeStep, 1, 20);
         var sliderRect = new UiRect(volRect.Right - 220f, volRect.CenterY - 12f, 146f, 24f);
         _volumeStepSliderRect = sliderRect;
-        _rects["st.volstep.slider"] = sliderRect;
         float val01 = (clampedStep - 1) / 19f;
         UiPrimitives.DrawVolumeSlider(g, t, hit, "st.volstep.slider", sliderRect, val01, 0f, false, false);
         if (sliderRect.Bottom > viewport.Y && sliderRect.Y < viewport.Bottom)
@@ -628,8 +627,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             var cardRect = new UiRect(x + col * (itemW + gap), y + row * (itemH + gap), itemW, itemH);
             bool isChecked = !hiddenList.Contains(dev.Id, StringComparer.OrdinalIgnoreCase);
 
-            string cardId = $"st.devchk.{prefix}.{i}";
-            string editId = $"st.devchk.edit.{prefix}.{i}";
+            string cardId = $"st.devchk.{prefix}.{dev.Id}";
+            string editId = $"st.devchk.edit.{prefix}.{dev.Id}";
 
             bool hot = hit.IsHover(cardId) || hit.IsHover(editId);
             g.FillRoundedRect(cardRect, 8f, t.SurfaceBg);
@@ -1024,7 +1023,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         g.DrawText(title, new UiRect(rect.X + 32f, rect.Y + 6f, textW, 18f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         g.DrawText(hint, new UiRect(rect.X + 32f, rect.Y + 26f, textW, 22f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: false, ellipsis: true);
 
-        UiPrimitives.DrawSwitch(g, t, hit, id + ":sw", new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
+        UiPrimitives.DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
         if (drawBottomBorder)
             g.DrawLine(rect.X + 2f, rect.Bottom, rect.Right - 2f, rect.Bottom, t.Border, 1f, roundCaps: false);
         return rect.Bottom;
@@ -1064,7 +1063,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
     public bool OnPointerMove(float x, float y, bool leftDown)
     {
-        if (_scroll.DragMove(y)) return true;
+        if (leftDown && _scroll.DragMove(y)) return true;
         if (_draggingVolumeStep && leftDown)
         {
             UpdateVolumeStepFromX(x);
@@ -1073,13 +1072,13 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         return false;
     }
 
-    public bool OnPointerDown(UiPointerEventArgs e)
+    public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
         if (e.Button != UiMouseButton.Left) return false;
-        if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
+        if (targetId == "st.scroll" && _scroll.BeginDrag(e.Y))
             return true;
 
-        if (_volumeStepSliderRect.Contains(e.X, e.Y) && _contentRect.Contains(e.X, e.Y))
+        if (targetId == "st.volstep.slider")
         {
             _draggingVolumeStep = true;
             UpdateVolumeStepFromX(e.X);
@@ -1089,8 +1088,9 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         return false;
     }
 
-    public bool OnPointerUp(UiPointerEventArgs e)
+    public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
+        if (e.Button != UiMouseButton.Left) return false;
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
@@ -1102,33 +1102,14 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             SaveConfig();
             return true;
         }
-        if (e.Button != UiMouseButton.Left || !_contentRect.Contains(e.X, e.Y)) return false;
-
-        foreach (var kv in _rects)
-        {
-            if (kv.Value.Contains(e.X, e.Y) && _clicks.TryGetValue(kv.Key, out var action))
-            {
-                if (e.ClickCount >= 2 && kv.Key.StartsWith("st.devchk.", StringComparison.Ordinal) && !kv.Key.Contains(".edit.", StringComparison.Ordinal))
-                {
-                    // Double-click device card triggers rename
-                    var parts = kv.Key.Split('.');
-                    if (parts.Length == 4 && int.TryParse(parts[3], out int idx))
-                    {
-                        var list = parts[2] == "out"
-                            ? BuildDeviceList(_outputs, Flow.Render, false)
-                            : BuildDeviceList(_inputs, Flow.Capture, false);
-                        if ((uint)idx < (uint)list.Count)
-                        {
-                            StartRenameDevice(list[idx], kv.Value);
-                            return true;
-                        }
-                    }
-                }
-                action();
-                return true;
-            }
-        }
-        return false;
+        if (clickId == null) return false;
+        const string deviceCard = "st.devchk.";
+        if (e.ClickCount >= 2 && clickId.StartsWith(deviceCard, StringComparison.Ordinal)
+            && !clickId.StartsWith("st.devchk.edit.", StringComparison.Ordinal))
+            clickId = "st.devchk.edit." + clickId[deviceCard.Length..];
+        if (!_clicks.TryGetValue(clickId, out var click)) return false;
+        click();
+        return true;
     }
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)

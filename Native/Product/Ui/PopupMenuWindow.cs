@@ -81,7 +81,8 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
     public void UpdateItems(List<UiMenuItem> items)
     {
-        if (IsDisposed || _closingAll) return;
+        if (Handle == 0 || IsDisposed || _closingAll) return;
+        ReleasePointerCapture();
         CloseSubMenu();
         _items = items;
         _hoverIndex = -1;
@@ -293,17 +294,23 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
     protected override void OnPointerUp(UiPointerEventArgs e)
     {
+        if (e.Button != UiMouseButton.Left) return;
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
             Invalidate();
             return;
         }
-        if (e.Button != UiMouseButton.Left) return;
         int idx = HitIndex(e.X, e.Y);
         int pressed = _pressedIndex;
         _pressedIndex = -1;
         if (idx >= 0 && idx == pressed) ActivateItem(idx);
+    }
+
+    protected override void OnCaptureLost()
+    {
+        _pressedIndex = -1;
+        _scroll.EndDrag();
     }
 
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)

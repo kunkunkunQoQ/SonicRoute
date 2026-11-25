@@ -28,7 +28,6 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
     ];
 
     private readonly UiScrollState _scroll = new();
-    private readonly Dictionary<string, UiRect> _rects = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private UiRect _contentRect;
     private bool _resettingRoutes;
@@ -39,8 +38,11 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
 
     public void OnDeactivated()
     {
+        _scroll.EndDrag();
         actions.CloseInlineEdit(commit: true);
     }
+
+    public void OnCaptureLost() => _scroll.EndDrag();
 
     public void RefreshData() => actions.Invalidate();
 
@@ -60,7 +62,6 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
         _contentRect = contentRect;
-        _rects.Clear();
         _clicks.Clear();
 
         var cfg = actions.Config;
@@ -75,7 +76,6 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
 
         void Register(string id, UiRect r, Action onClick, UiCursorKind cursor = UiCursorKind.Hand, string? tip = null)
         {
-            _rects[id] = r;
             _clicks[id] = onClick;
             if (r.Bottom > viewport.Y && r.Y < viewport.Bottom)
             {
@@ -85,6 +85,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         }
 
         g.PushClip(viewport);
+        hit.PushClip(viewport);
 
         // Header + Beta badge
         g.DrawText(L10n.T("Nav.Experimental"), new UiRect(x, y, w - 120f, 30f), t.TextPrimary, 22f, 600, UiTextAlign.Leading, UiVertAlign.Center);
@@ -382,6 +383,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
 
         y += cfgH + 16f;
 
+        hit.PopClip();
         g.PopClip();
 
         _scroll.ContentHeight = MathF.Max(0f, y - startY);
@@ -436,7 +438,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             g.DrawText(title, new UiRect(rect.X + 32f, rect.Y + 4f, textW, 18f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             g.DrawText(hint, new UiRect(rect.X + 32f, rect.Y + 24f, textW, rect.Height - 26f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: true);
         }
-        UiPrimitives.DrawSwitch(g, t, hit, id + ":sw", new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
+        UiPrimitives.DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked);
         if (drawBottomBorder)
             g.DrawLine(rect.X + 2f, rect.Bottom, rect.Right - 2f, rect.Bottom, t.Border, 1f, roundCaps: false);
     }
@@ -574,31 +576,25 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         actions.Host.RestartPreview();
     }
 
-    public bool OnPointerMove(float x, float y, bool leftDown) => _scroll.DragMove(y);
+    public bool OnPointerMove(float x, float y, bool leftDown) => leftDown && _scroll.DragMove(y);
 
-    public bool OnPointerDown(UiPointerEventArgs e)
+    public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
         if (e.Button != UiMouseButton.Left) return false;
-        return _scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y);
+        return targetId == "exp.scroll" && _scroll.BeginDrag(e.Y);
     }
 
-    public bool OnPointerUp(UiPointerEventArgs e)
+    public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
+        if (e.Button != UiMouseButton.Left) return false;
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
             return true;
         }
-        if (e.Button != UiMouseButton.Left || !_contentRect.Contains(e.X, e.Y)) return false;
-        foreach (var kv in _rects)
-        {
-            if (kv.Value.Contains(e.X, e.Y) && _clicks.TryGetValue(kv.Key, out var click))
-            {
-                click();
-                return true;
-            }
-        }
-        return false;
+        if (clickId == null || !_clicks.TryGetValue(clickId, out var click)) return false;
+        click();
+        return true;
     }
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)

@@ -53,8 +53,8 @@ internal interface IViewPage : IDisposable
     void RefreshData();
     void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect);
     bool OnPointerMove(float x, float y, bool leftDown);
-    bool OnPointerDown(UiPointerEventArgs e);
-    bool OnPointerUp(UiPointerEventArgs e);
+    bool OnPointerDown(UiPointerEventArgs e, string? targetId);
+    bool OnPointerUp(UiPointerEventArgs e, string? clickId);
     bool OnMouseWheel(float x, float y, float delta, bool horizontal);
     bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt);
     void OnFilesDropped(string[] paths) { }

@@ -14,21 +14,41 @@ internal readonly record struct UiHitItem(
 /// </summary>
 internal sealed class UiHitMap
 {
-    private readonly List<UiHitItem> _items = new(64);
+    private readonly List<(UiHitItem Item, UiRect Visible)> _items = new(64);
+    private readonly Stack<UiRect> _clips = new();
     public UiHitItem? Hovered { get; private set; }
     public string? ActiveId { get; set; }
 
-    public void Clear() => _items.Clear();
+    public void Clear()
+    {
+        _items.Clear();
+        _clips.Clear();
+    }
 
-    public void Add(string id, UiRect bounds, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null) =>
-        _items.Add(new UiHitItem(id, bounds, cursor, tooltip));
+    public void PushClip(UiRect clip) =>
+        _clips.Push(_clips.TryPeek(out var parent) ? Intersect(clip, parent) : clip);
+
+    public void PopClip() => _clips.Pop();
+
+    private static UiRect Intersect(UiRect a, UiRect b)
+    {
+        float x = MathF.Max(a.X, b.X);
+        float y = MathF.Max(a.Y, b.Y);
+        return new UiRect(x, y, MathF.Min(a.Right, b.Right) - x, MathF.Min(a.Bottom, b.Bottom) - y);
+    }
+
+    public void Add(string id, UiRect bounds, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null)
+    {
+        var visible = _clips.TryPeek(out var clip) ? Intersect(bounds, clip) : bounds;
+        if (!visible.IsEmpty) _items.Add((new UiHitItem(id, bounds, cursor, tooltip), visible));
+    }
 
     public UiHitItem? HitTest(float x, float y)
     {
         for (int i = _items.Count - 1; i >= 0; i--)
         {
-            if (_items[i].Bounds.Contains(x, y))
-                return _items[i];
+            if (_items[i].Visible.Contains(x, y))
+                return _items[i].Item;
         }
         return null;
     }
@@ -399,7 +419,7 @@ internal static class UiPrimitives
         g.DrawIcon(icon, new UiRect(rect.X + 2f, rect.CenterY - 8.5f, 17f, 17f), iconCol, 1.8f);
         g.DrawText(title, new UiRect(rect.X + 32f, rect.Y, MathF.Max(0f, rect.Width - 82f), rect.Height),
             textCol, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
-        DrawSwitch(g, t, hit, id + ":sw", new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked, enabled);
+        DrawSwitch(g, t, hit, id, new UiRect(rect.Right - 36f, rect.CenterY - 12f, 34f, 24f), isChecked, enabled);
         if (drawBottomBorder)
             g.DrawLine(rect.X + 2f, rect.Bottom, rect.Right - 2f, rect.Bottom, t.Border, 1f, roundCaps: false);
     }

@@ -14,7 +14,7 @@ internal sealed class HotkeysPageView : IViewPage
 
     private readonly IViewHostActions _actions;
     private readonly UiScrollState _scroll = new();
-    private readonly List<(UiRect Rect, Action Click)> _buttons = new();
+    private readonly Dictionary<string, Action> _buttons = new(StringComparer.Ordinal);
     private List<AutoRule> _hotkeyRules = new();
     private UiRect _viewportRect;
 
@@ -81,6 +81,7 @@ internal sealed class HotkeysPageView : IViewPage
         var registered = _actions.Host.HotkeyStatuses;
 
         g.PushClip(contentRect);
+        hit.PushClip(contentRect);
         float y = contentRect.Y - _scroll.Offset;
 
         // Title + Reset All Defaults button
@@ -88,7 +89,7 @@ internal sealed class HotkeysPageView : IViewPage
         float resetW = MathF.Max(84f, D2dSharedContext.Instance.MeasureText(resetLabel, UiMetrics.FontFamily, 12f, 400, 160f, 28f, false).Width + 32f);
         var resetAllRect = new UiRect(contentRect.X + w - resetW, y, resetW, 28f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "hk.resetAll", resetAllRect, resetLabel, fontSize: 12f, icon: UiIcon.Reset);
-        _buttons.Add((resetAllRect, ResetAllHotkeys));
+        _buttons["hk.resetAll"] = ResetAllHotkeys;
 
         g.DrawText(title, new UiRect(contentRect.X, y, MathF.Max(80f, w - resetW - 12f), 28f), t.TextPrimary, 22f, 600);
         y += 34f;
@@ -170,6 +171,7 @@ internal sealed class HotkeysPageView : IViewPage
             }
         }
 
+        hit.PopClip();
         g.PopClip();
         _scroll.Draw(g, t, hit, "hk.scroll", contentRect);
     }
@@ -243,14 +245,14 @@ internal sealed class HotkeysPageView : IViewPage
             g, t, hit, pillId, pillRect, shown,
             fontSize: 12.5f, active: isRecording, danger: !isRecording && hasConflict,
             tooltip: tooltip);
-        _buttons.Add((pillRect, onRecord));
+        _buttons[pillId] = onRecord;
 
         string recId = idPrefix + ".rec";
         UiPrimitives.DrawSecondaryButton(
             g, t, hit, recId, recRect,
             isRecording ? L10n.T("Auto.Cancel") : L10n.T("Hk.Change"),
             fontSize: 12f, active: isRecording);
-        _buttons.Add((recRect, isRecording ? CancelRecording : onRecord));
+        _buttons[recId] = isRecording ? CancelRecording : onRecord;
 
         string clrId = idPrefix + ".clr";
         bool canClear = !string.IsNullOrWhiteSpace(combo) || isRecording;
@@ -259,7 +261,7 @@ internal sealed class HotkeysPageView : IViewPage
             L10n.T("Auto.HotkeyClear"),
             enabled: canClear,
             fontSize: 12f);
-        if (canClear) _buttons.Add((clearRect, onClear));
+        if (canClear) _buttons[clrId] = onClear;
     }
 
     public bool OnPointerMove(float x, float y, bool leftDown)
@@ -267,7 +269,7 @@ internal sealed class HotkeysPageView : IViewPage
         return leftDown && _scroll.DragMove(y);
     }
 
-    public bool OnPointerDown(UiPointerEventArgs e)
+    public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
         if (_recordingAction != null || _recordingRuleId != null)
         {
@@ -291,24 +293,17 @@ internal sealed class HotkeysPageView : IViewPage
         return false;
     }
 
-    public bool OnPointerUp(UiPointerEventArgs e)
+    public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
+        if (e.Button != UiMouseButton.Left) return false;
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
             return true;
         }
-        if (e.Button != UiMouseButton.Left) return false;
-
-        for (int i = _buttons.Count - 1; i >= 0; i--)
-        {
-            if (_buttons[i].Rect.Contains(e.X, e.Y))
-            {
-                _buttons[i].Click();
-                return true;
-            }
-        }
-        return false;
+        if (clickId == null || !_buttons.TryGetValue(clickId, out var click)) return false;
+        click();
+        return true;
     }
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)

@@ -158,11 +158,10 @@ internal sealed class PhoneDevicePageView : IViewPage
 
     public void OnCaptureLost()
     {
-        bool changed = _draggingVolume || _fileScroll.Dragging || _scroll.Dragging || _hit.ActiveId != null;
+        bool changed = _draggingVolume || _fileScroll.Dragging || _scroll.Dragging;
         _draggingVolume = false;
         _fileScroll.EndDrag();
         _scroll.EndDrag();
-        _hit.ActiveId = null;
         if (changed) _actions.Invalidate();
     }
 
@@ -252,9 +251,11 @@ internal sealed class PhoneDevicePageView : IViewPage
         float startY = contentRect.Y - _scroll.Offset;
 
         g.PushClip(contentRect);
+        _hit.PushClip(contentRect);
         float endY = IsConnectionPage
             ? RenderConnectionView(g, t, contentRect.X, startY, viewW)
             : RenderConnectedView(g, t, contentRect.X, startY, viewW);
+        _hit.PopClip();
         g.PopClip();
 
         _scroll.ContentHeight = MathF.Max(0f, endY - startY);
@@ -605,6 +606,7 @@ internal sealed class PhoneDevicePageView : IViewPage
             {
                 float rowW = _fileScroll.MaxOffset > 0.5f ? inner.Width - UiMetrics.ScrollBarWidth - 2f : inner.Width;
                 g.PushClip(inner);
+                _hit.PushClip(inner);
                 for (int i = 0; i < entries.Length; i++)
                 {
                     float ry = inner.Y + i * rowH - _fileScroll.Offset;
@@ -612,7 +614,7 @@ internal sealed class PhoneDevicePageView : IViewPage
 
                     var f = entries[i];
                     var rowRect = new UiRect(inner.X, ry, rowW, rowH);
-                    string fid = $"phone.rfile:{i}";
+                    string fid = $"phone.rfile:{_remoteFolder}/{f.Name}";
                     bool selected = !f.Directory && _selectedRemoteFiles.Contains(f.Name);
                     _hit.Add(fid, rowRect, UiCursorKind.Hand, f.Label);
                     if (selected) g.FillRoundedRect(rowRect, 6f, t.NavSelected);
@@ -644,6 +646,7 @@ internal sealed class PhoneDevicePageView : IViewPage
                         g.DrawText(f.SizeText, new UiRect(rowRect.Right - 72f, rowRect.Y, 64f, rowRect.Height),
                             t.TextSecondary, 11f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
                 }
+                _hit.PopClip();
                 g.PopClip();
                 _fileScroll.Draw(g, t, _hit, "phone.filescroll", inner);
             }
@@ -836,23 +839,22 @@ internal sealed class PhoneDevicePageView : IViewPage
         return changed;
     }
 
-    public bool OnPointerDown(UiPointerEventArgs e)
+    public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
         if (e.Button != UiMouseButton.Left) return false;
-        if (_showFileBrowser && _fileScroll.TrackRect.Contains(e.X, e.Y) && _fileScroll.BeginDrag(e.Y))
+        if (targetId == "phone.filescroll" && _fileScroll.BeginDrag(e.Y))
         {
             _actions.Invalidate();
             return true;
         }
-        if (_scroll.TrackRect.Contains(e.X, e.Y) && _scroll.BeginDrag(e.Y))
+        if (targetId == "phone.scroll" && _scroll.BeginDrag(e.Y))
         {
             _actions.CloseInlineEdit(commit: true);
             _actions.Invalidate();
             return true;
         }
         var hit = _hit.HitTest(e.X, e.Y);
-        _hit.ActiveId = hit?.Id;
-        if (hit is { } h && h.Id == "phone.audiovol" && _activeDevice != null)
+        if (targetId == "phone.audiovol" && hit is { } h && _activeDevice != null)
         {
             var whole = _actions.Host.Phone.Sources.Sources.FirstOrDefault(s => s.App.IsDeviceAudio && AndroidDeviceIdentity.Matches(s.Device, _activeDevice));
             if (whole != null)
@@ -868,35 +870,30 @@ internal sealed class PhoneDevicePageView : IViewPage
         return hit != null;
     }
 
-    public bool OnPointerUp(UiPointerEventArgs e)
+    public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
+        if (e.Button != UiMouseButton.Left) return false;
         if (_draggingVolume)
         {
             _draggingVolume = false;
-            _hit.ActiveId = null;
             _actions.Invalidate();
             return true;
         }
         if (_fileScroll.Dragging)
         {
             _fileScroll.EndDrag();
-            _hit.ActiveId = null;
             _actions.Invalidate();
             return true;
         }
         if (_scroll.Dragging)
         {
             _scroll.EndDrag();
-            _hit.ActiveId = null;
             _actions.Invalidate();
             return true;
         }
-        string? active = _hit.ActiveId;
-        _hit.ActiveId = null;
-        if (e.Button != UiMouseButton.Left) return false;
 
         var hit = _hit.HitTest(e.X, e.Y);
-        if (hit is null || hit.Value.Id != active) { _actions.Invalidate(); return false; }
+        if (hit is null || hit.Value.Id != clickId) { _actions.Invalidate(); return false; }
         string id = hit.Value.Id;
 
         if (_airPlay.HandleClick(id, hit.Value.Bounds)) return true;
@@ -1144,12 +1141,14 @@ internal sealed class PhoneDevicePageView : IViewPage
             LoadRemoteFolder(online, parent);
             return true;
         }
-        if (id.StartsWith("phone.rfile:", StringComparison.Ordinal) && online != null && int.TryParse(id[12..], out int fIdx))
+        if (id.StartsWith("phone.rfile:", StringComparison.Ordinal) && online != null)
         {
-            var entries = _choosingPhoneFolder ? _remoteFiles.Where(f => f.Directory).ToArray() : _remoteFiles.ToArray();
-            if (fIdx >= 0 && fIdx < entries.Length)
+            string prefix = $"phone.rfile:{_remoteFolder}/";
+            if (!id.StartsWith(prefix, StringComparison.Ordinal)) return false;
+            string name = id[prefix.Length..];
+            var file = _remoteFiles.FirstOrDefault(f => f.Name == name);
+            if (file != null)
             {
-                var file = entries[fIdx];
                 if (file.Directory)
                 {
                     LoadRemoteFolder(online, _remoteFolder.TrimEnd('/') + "/" + file.Name);

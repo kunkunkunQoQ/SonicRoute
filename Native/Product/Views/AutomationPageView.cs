@@ -24,7 +24,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     private readonly UiScrollState _listScroll = new();
     private readonly UiScrollState _editorScroll = new();
     private readonly UiScrollState _historyScroll = new();
-    private readonly Dictionary<string, UiRect> _rects = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Action> _rightClicks = new(StringComparer.Ordinal);
 
@@ -219,7 +218,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
-        _rects.Clear();
         _clicks.Clear();
         _rightClicks.Clear();
         _visibleRuleRows.Clear();
@@ -240,7 +238,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     private void RegisterBtn(string id, UiRect r, UiRect vp, UiHitMap hit, Action onClick, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null, Action? onRightClick = null)
     {
-        _rects[id] = r;
         _clicks[id] = onClick;
         if (onRightClick != null) _rightClicks[id] = onRightClick;
         if (r.Bottom > vp.Y && r.Y < vp.Bottom)
@@ -316,6 +313,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         const float rowGap = 6f;
 
         g.PushClip(_listViewport);
+        hit.PushClip(_listViewport);
         if (filtered.Count == 0)
         {
             g.DrawText(L10n.T(_rules.Count == 0 ? "Auto.Empty" : "Auto.NoMatches"),
@@ -349,7 +347,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                     // Left Grip handle
                     var gripRect = new UiRect(rowRect.X + 4f, rowRect.Y + 8f, 18f, rowH - 16f);
                     UiPrimitives.DrawGhostIconButton(g, t, hit, "auto.grip." + rule.Id, gripRect, UiIcon.Grip, 13f, tooltip: L10n.T("Auto.DragRules"));
-                    _rects["auto.grip." + rule.Id] = gripRect;
 
                     // Name + trigger summary
                     float infoX = gripRect.Right + 4f;
@@ -409,6 +406,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 ry += rowH + rowGap;
             }
         }
+        hit.PopClip();
         g.PopClip();
 
         _listScroll.ContentHeight = filtered.Count == 0 ? 60f : filtered.Count * (rowH + rowGap);
@@ -481,6 +479,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         float startY = hy;
 
         g.PushClip(vp);
+        hit.PushClip(vp);
         for (int i = 0; i < _historyEntries.Count; i++)
         {
             var entry = _historyEntries[i];
@@ -530,6 +529,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             }
             hy += ch + 8f;
         }
+        hit.PopClip();
         g.PopClip();
 
         _historyScroll.ContentHeight = MathF.Max(0f, hy - startY);
@@ -560,6 +560,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         float startY = y;
 
         g.PushClip(_editorViewport);
+        hit.PushClip(_editorViewport);
 
         // Editor title
         g.DrawIcon(UiIcon.Edit, new UiRect(ex, y + 3f, 22f, 22f), t.Accent, 1.8f);
@@ -731,6 +732,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         });
         y += 46f;
 
+        hit.PopClip();
         g.PopClip();
 
         _editorScroll.ContentHeight = MathF.Max(0f, y - startY);
@@ -782,7 +784,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         float ty = y + pad;
         var gripRect = new UiRect(x + pad, ty + 2f, 22f, 30f);
         UiPrimitives.DrawGhostIconButton(g, t, hit, $"step.grip.{index}", gripRect, UiIcon.Grip, 14f, tooltip: L10n.T("Auto.DragOrder"));
-        _rects[$"step.grip.{index}"] = gripRect;
 
         var idxBadgeRect = new UiRect(gripRect.Right + 4f, ty + 6f, 44f, 22f);
         UiPrimitives.DrawBadge(g, t, idxBadgeRect, $"#{index + 1}", t.SurfaceBg, fg, border, 11f);
@@ -903,7 +904,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             float val01 = isRel ? (val + 100) / 200f : val / 100f;
             var slRect = new UiRect(ix, y + 2f, MathF.Max(80f, iw - 60f), 24f);
             _stepVolSliders[index] = slRect;
-            _rects[$"step.{index}.vol"] = slRect;
             UiPrimitives.DrawVolumeSlider(g, t, hit, $"step.{index}.vol", slRect, val01, 0f, false, false);
             if (slRect.Bottom > _editorViewport.Y && slRect.Y < _editorViewport.Bottom)
             {
@@ -1106,32 +1106,26 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         return false;
     }
 
-    public bool OnPointerDown(UiPointerEventArgs e)
+    public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
         if (e.Button == UiMouseButton.Right)
         {
-            foreach (var kv in _rightClicks)
-            {
-                if (_rects.TryGetValue(kv.Key, out var r) && r.Contains(e.X, e.Y))
-                {
-                    kv.Value();
-                    return true;
-                }
-            }
-            return false;
+            if (targetId == null || !_rightClicks.TryGetValue(targetId, out var contextMenu)) return false;
+            contextMenu();
+            return true;
         }
         if (e.Button != UiMouseButton.Left) return false;
 
-        if (_listScroll.TrackRect.Contains(e.X, e.Y) && _listScroll.BeginDrag(e.Y)) return true;
-        if (_editorScroll.TrackRect.Contains(e.X, e.Y) && _editorScroll.BeginDrag(e.Y)) return true;
-        if (_historyScroll.TrackRect.Contains(e.X, e.Y) && _historyScroll.BeginDrag(e.Y)) return true;
+        if (targetId == "auto.list.scroll" && _listScroll.BeginDrag(e.Y)) return true;
+        if (targetId == "edit.scroll" && _editorScroll.BeginDrag(e.Y)) return true;
+        if (targetId == "hist.scroll" && _historyScroll.BeginDrag(e.Y)) return true;
 
         // Rule grip drag start
         if (_listViewport.Contains(e.X, e.Y))
         {
             foreach (var row in _visibleRuleRows)
             {
-                if (_rects.TryGetValue("auto.grip." + row.RuleId, out var gr) && gr.Contains(e.X, e.Y))
+                if (targetId == "auto.grip." + row.RuleId)
                 {
                     _dragRuleId = row.RuleId;
                     _ruleDragStartY = _ruleDragPointerY = e.Y;
@@ -1147,7 +1141,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             for (int i = 0; i < _stepCardRects.Count; i++)
             {
                 int idx = _stepCardRects[i].Index;
-                if (_rects.TryGetValue($"step.grip.{idx}", out var gr) && gr.Contains(e.X, e.Y))
+                if (targetId == $"step.grip.{idx}")
                 {
                     _dragStepIndex = idx;
                     _stepDragStartY = _stepDragPointerY = e.Y;
@@ -1157,7 +1151,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             }
             foreach (var kv in _stepVolSliders)
             {
-                if (kv.Value.Contains(e.X, e.Y) && (uint)kv.Key < (uint)_editingSteps.Count)
+                if (targetId == $"step.{kv.Key}.vol" && (uint)kv.Key < (uint)_editingSteps.Count)
                 {
                     _draggingVolStepIndex = kv.Key;
                     _draggingVolSliderRect = kv.Value;
@@ -1170,8 +1164,9 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         return false;
     }
 
-    public bool OnPointerUp(UiPointerEventArgs e)
+    public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
+        if (e.Button != UiMouseButton.Left) return false;
         if (_listScroll.Dragging) { _listScroll.EndDrag(); return true; }
         if (_editorScroll.Dragging) { _editorScroll.EndDrag(); return true; }
         if (_historyScroll.Dragging) { _historyScroll.EndDrag(); return true; }
@@ -1194,16 +1189,9 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             return true;
         }
 
-        if (e.Button != UiMouseButton.Left) return false;
-        foreach (var kv in _rects)
-        {
-            if (kv.Value.Contains(e.X, e.Y) && _clicks.TryGetValue(kv.Key, out var click))
-            {
-                click();
-                return true;
-            }
-        }
-        return false;
+        if (clickId == null || !_clicks.TryGetValue(clickId, out var click)) return false;
+        click();
+        return true;
     }
 
     public bool OnMouseWheel(float x, float y, float delta, bool horizontal)

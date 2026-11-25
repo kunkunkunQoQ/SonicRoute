@@ -261,6 +261,7 @@ internal sealed class ColorPickerWindow : LayeredWindow
 
     protected override void OnPointerUp(UiPointerEventArgs e)
     {
+        if (e.Button != UiMouseButton.Left) return;
         string? activeId = _hit.ActiveId;
         _hit.ActiveId = null;
 
@@ -272,7 +273,6 @@ internal sealed class ColorPickerWindow : LayeredWindow
             return;
         }
 
-        if (e.Button != UiMouseButton.Left) return;
         var hit = _hit.HitTest(e.X, e.Y);
         if (hit == null || hit.Value.Id != activeId) return;
 

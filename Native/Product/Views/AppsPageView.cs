@@ -29,8 +29,8 @@ internal sealed class AppsPageView : IViewPage
     private readonly UiScrollState _appsScroll = new();
     private readonly UiScrollState _detailsScroll = new();
     private readonly Dictionary<string, NativeAppIconService.IconBitmap?> _externalIconCache = new(StringComparer.Ordinal);
-    private readonly List<(UiRect Rect, Action Click)> _clicks = new();
-    private readonly List<(UiRect Rect, AudioAppInfo App)> _appRowRects = new();
+    private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, AudioAppInfo> _appRows = new(StringComparer.Ordinal);
 
     private List<AudioAppInfo> _apps = new();
     private Endpoint[] _outputs = Array.Empty<Endpoint>();
@@ -235,7 +235,7 @@ internal sealed class AppsPageView : IViewPage
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
         _clicks.Clear();
-        _appRowRects.Clear();
+        _appRows.Clear();
 
         float leftW = Math.Clamp(contentRect.Width * 0.215f, 140f, 172f);
         var leftCardRect = new UiRect(contentRect.X, contentRect.Y, leftW, contentRect.Height);
@@ -282,6 +282,7 @@ internal sealed class AppsPageView : IViewPage
 
             float itemW = _phoneScroll.MaxOffset > 0.5f ? inner.Width - UiMetrics.ScrollBarWidth : inner.Width;
             g.PushClip(_phoneListRect);
+            hit.PushClip(_phoneListRect);
             for (int i = 0; i < profiles.Length; i++)
             {
                 var prof = profiles[i];
@@ -293,7 +294,7 @@ internal sealed class AppsPageView : IViewPage
                 string id = "apps.phone." + prof.Id;
                 hit.Add(id, rowRect, UiCursorKind.Hand);
                 var profCopy = prof;
-                _clicks.Add((rowRect, () => OpenPhoneDevice(profCopy.Id)));
+                _clicks[id] = () => OpenPhoneDevice(profCopy.Id);
 
                 if (selected) g.FillRoundedRect(rowRect, 7f, t.NavSelected);
                 else if (hit.IsHover(id)) g.FillRoundedRect(rowRect, 7f, t.NavHover);
@@ -313,6 +314,7 @@ internal sealed class AppsPageView : IViewPage
                 if (online)
                     g.FillEllipse(rowRect.Right - 8f, rowRect.CenterY, 3f, 3f, t.Success);
             }
+            hit.PopClip();
             g.PopClip();
             _phoneScroll.Draw(g, t, hit, "apps.phone.scroll", _phoneListRect);
             y += listH + 4f;
@@ -325,7 +327,7 @@ internal sealed class AppsPageView : IViewPage
         var addBtnRect = new UiRect(inner.X, y, inner.Width, 26f);
         bool addActive = _showingPhone && _phonePage?.IsConnectionPage == true;
         UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.phone.add", addBtnRect, L10n.T("Phone.AddDeviceButton"), fontSize: 12f, active: addActive);
-        _clicks.Add((addBtnRect, OpenPhoneConnection));
+        _clicks["apps.phone.add"] = OpenPhoneConnection;
         y += 34f;
 
         g.DrawLine(inner.X + 1f, y, inner.Right - 1f, y, t.Border, 1f, roundCaps: false);
@@ -343,13 +345,13 @@ internal sealed class AppsPageView : IViewPage
         float refreshH = 30f;
         var refreshRect = new UiRect(inner.X, inner.Bottom - refreshH, inner.Width, refreshH);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.refresh", refreshRect, L10n.T("Apps.Refresh"), fontSize: 12.5f);
-        _clicks.Add((refreshRect, () =>
+        _clicks["apps.refresh"] = () =>
         {
             TriggerRefresh(forceAppsRefresh: true);
 #if SONICROUTE_PHONE
             _ = _actions.Host.Phone.RefreshAsync(restore: true);
 #endif
-        }));
+        };
 
         float listAvailH = MathF.Max(40f, refreshRect.Y - 10f - y);
         _appsListRect = new UiRect(inner.X, y, inner.Width, listAvailH);
@@ -359,6 +361,7 @@ internal sealed class AppsPageView : IViewPage
 
         float rowW = _appsScroll.MaxOffset > 0.5f ? inner.Width - UiMetrics.ScrollBarWidth : inner.Width;
         g.PushClip(_appsListRect);
+        hit.PushClip(_appsListRect);
         for (int i = 0; i < _apps.Count; i++)
         {
             var app = _apps[i];
@@ -372,9 +375,9 @@ internal sealed class AppsPageView : IViewPage
 #endif
                 (_selectedIdentity == app.Identity || _multiSelected.Contains(app.Identity));
 
-            string id = "apps.item." + i;
+            string id = "apps.item." + app.Identity;
             hit.Add(id, rowRect, UiCursorKind.Hand, GetAppDisplayLabel(app));
-            _appRowRects.Add((rowRect, app));
+            _appRows[id] = app;
 
             if (selected) g.FillRoundedRect(rowRect, 7f, t.NavSelected);
             else if (hit.IsHover(id)) g.FillRoundedRect(rowRect, 7f, t.NavHover);
@@ -402,6 +405,7 @@ internal sealed class AppsPageView : IViewPage
             else if (app.HasActiveSession)
                 g.FillEllipse(rowRect.Right - 8f, rowRect.CenterY, 3f, 3f, t.Success);
         }
+        hit.PopClip();
         g.PopClip();
 
         _appsScroll.Draw(g, t, hit, "apps.list.scroll", _appsListRect);
@@ -440,6 +444,7 @@ internal sealed class AppsPageView : IViewPage
         card2H = 20f + 26f + 22f + 34f + 6f + MathF.Max(outPillsH, inPillsH);
 
         g.PushClip(viewport);
+        hit.PushClip(viewport);
         float y = viewport.Y - _detailsScroll.Offset;
 
         // --- Card 1: App Header ---
@@ -462,8 +467,8 @@ internal sealed class AppsPageView : IViewPage
         bool canResetIcon = hasProcName && AppIconFiles.GetFileName(_actions.Config, procName!) != null;
         UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.icon.import", importBtn, importLabel, enabled: hasProcName, fontSize: 12f, tooltip: L10n.T("AppIcons.Hint"));
         UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.icon.reset", resetBtn, resetLabel, enabled: canResetIcon, fontSize: 12f, tooltip: L10n.T("AppIcons.Reset"));
-        if (hasProcName) _clicks.Add((importBtn, ImportCustomIcon));
-        if (canResetIcon) _clicks.Add((resetBtn, ResetCustomIcon));
+        if (hasProcName) _clicks["apps.icon.import"] = ImportCustomIcon;
+        if (canResetIcon) _clicks["apps.icon.reset"] = ResetCustomIcon;
 
         float titleLeft = iconCard.Right + 10f;
         float titleMaxW = MathF.Max(80f, importBtn.X - titleLeft - 36f);
@@ -478,7 +483,7 @@ internal sealed class AppsPageView : IViewPage
 
         var editBtn = new UiRect(titleLeft + measuredTitleW + 4f, c1In.Y, 26f, 26f);
         UiPrimitives.DrawGhostIconButton(g, t, hit, "apps.rename", editBtn, UiIcon.Edit, 14f, enabled: hasProcName, tooltip: L10n.T("Apps.RenameHint"));
-        if (hasProcName) _clicks.Add((editBtn, BeginInlineRename));
+        if (hasProcName) _clicks["apps.rename"] = BeginInlineRename;
 
         if (hasApp)
         {
@@ -508,7 +513,7 @@ internal sealed class AppsPageView : IViewPage
         string displayedPrimary = GetDisplayedPrimaryOutput();
         string currentOutLabel = hasApp ? DeviceLabel(displayedPrimary, Flow.Render) : L10n.T("Ov.NoOutput");
         UiPrimitives.DrawComboBox(g, t, hit, "apps.out.combo", _outputComboRect, currentOutLabel, enabled: hasApp);
-        if (hasApp) _clicks.Add((_outputComboRect, () => OpenOutputCombo(outChoices)));
+        if (hasApp) _clicks["apps.out.combo"] = () => OpenOutputCombo(outChoices);
 
         var activeSet = _pendingOutputs ?? _selectedOutputs;
         string? nativeCandidate = hasApp && !app!.IsExternal && !PcRoutingApi.IsPhoneOutputDevice(displayedPrimary) && activeSet.Contains(displayedPrimary)
@@ -522,10 +527,10 @@ internal sealed class AppsPageView : IViewPage
             bool isMember = hasApp && activeSet.Contains(dev.Id);
             bool isNative = hasApp && isMember && (app!.IsExternal || (nativeCandidate != null && IdCmp.Equals(dev.Id, nativeCandidate)));
             bool isMirror = hasApp && isMember && !isNative;
-            string pidKey = "apps.out.dev." + i;
+            string pidKey = "apps.out.dev." + dev.Id;
             DrawQuickDevButton(g, t, hit, pidKey, pr, dev.Label, isNative, isMirror, enabled: hasApp, tooltip: L10n.T("Qp.PlaybackMultiSelect"));
             var devCopy = dev;
-            if (hasApp) _clicks.Add((pr, () => HandleOutputPillClick(devCopy.Id, outChoices)));
+            if (hasApp) _clicks[pidKey] = () => HandleOutputPillClick(devCopy.Id, outChoices);
         }
 
         if (_actions.Config.ExperimentalMic)
@@ -536,7 +541,7 @@ internal sealed class AppsPageView : IViewPage
             _inputComboRect = new UiRect(inCol.X, inCol.Y + 22f, inCol.Width, 34f);
             string currentInLabel = hasApp ? DeviceLabel(_nativeInput, Flow.Capture) : L10n.T("Ov.NoInput");
             UiPrimitives.DrawComboBox(g, t, hit, "apps.in.combo", _inputComboRect, currentInLabel, enabled: inEnabled);
-            if (inEnabled) _clicks.Add((_inputComboRect, () => OpenInputCombo(inChoices)));
+            if (inEnabled) _clicks["apps.in.combo"] = () => OpenInputCombo(inChoices);
 
             float inPillsOriginY = _inputComboRect.Bottom + 6f;
             for (int i = 0; i < inChoices.Length; i++)
@@ -544,10 +549,10 @@ internal sealed class AppsPageView : IViewPage
                 var dev = inChoices[i];
                 var pr = inPillRects[i].Offset(inCol.X, inPillsOriginY);
                 bool isSel = inEnabled && IdCmp.Equals(dev.Id, _nativeInput);
-                string iidKey = "apps.in.dev." + i;
+                string iidKey = "apps.in.dev." + dev.Id;
                 DrawQuickDevButton(g, t, hit, iidKey, pr, dev.Label, isSel, false, enabled: inEnabled);
                 var devCopy = dev;
-                if (inEnabled) _clicks.Add((pr, () => SelectInputRoute(devCopy.Id)));
+                if (inEnabled) _clicks[iidKey] = () => SelectInputRoute(devCopy.Id);
             }
         }
 
@@ -570,7 +575,7 @@ internal sealed class AppsPageView : IViewPage
             enabled: volReady, fontSize: 12f,
             icon: _selectedMuted ? UiIcon.VolumeMutedSlash : UiIcon.Speaker,
             active: _selectedMuted, tooltip: L10n.T("Apps.MuteTitle"));
-        if (volReady) _clicks.Add((muteBtnRect, ToggleSelectedAppMute));
+        if (volReady) _clicks["apps.mute"] = ToggleSelectedAppMute;
 
         var pctRect = new UiRect(c3In.Right - 48f, volRowY, 46f, 32f);
         int shownVol = _draggingVolume ? _dragVolumeVal : Math.Max(0, _selectedVolume);
@@ -605,21 +610,22 @@ internal sealed class AppsPageView : IViewPage
         hit.Add("apps.ctrl.disableAuto", sw1Row, UiCursorKind.Hand);
         g.DrawText(L10n.T("Apps.DisableAuto"), new UiRect(sw1Row.X, sw1Row.Y, sw1Row.Width - 40f, sw1Row.Height),
             hasProcName ? t.TextPrimary : t.TextSecondary, 12f, 600, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
-        UiPrimitives.DrawSwitch(g, t, hit, "apps.ctrl.disableAuto.sw", new UiRect(sw1Row.Right - 36f, sw1Row.CenterY - 12f, 34f, 24f), disableAuto, hasProcName);
-        if (hasProcName) _clicks.Add((sw1Row, ToggleDisableAutoSwitch));
+        UiPrimitives.DrawSwitch(g, t, hit, "apps.ctrl.disableAuto", new UiRect(sw1Row.Right - 36f, sw1Row.CenterY - 12f, 34f, 24f), disableAuto, hasProcName);
+        if (hasProcName) _clicks["apps.ctrl.disableAuto"] = ToggleDisableAutoSwitch;
 
         bool showInPanel = !hasProcName || !_actions.Config.HiddenPanelApps.Contains(procName!, IdCmp);
         var sw2Row = new UiRect(sw1Row.Right + 8f, ctrlY, ctrlColW, 32f);
         hit.Add("apps.ctrl.showPanel", sw2Row, UiCursorKind.Hand);
         g.DrawText(L10n.T("Apps.PanelVisible"), new UiRect(sw2Row.X, sw2Row.Y, sw2Row.Width - 40f, sw2Row.Height),
             hasProcName ? t.TextPrimary : t.TextSecondary, 12f, 600, UiTextAlign.Leading, UiVertAlign.Center, wrap: true, ellipsis: false);
-        UiPrimitives.DrawSwitch(g, t, hit, "apps.ctrl.showPanel.sw", new UiRect(sw2Row.Right - 36f, sw2Row.CenterY - 12f, 34f, 24f), showInPanel, hasProcName);
-        if (hasProcName) _clicks.Add((sw2Row, ToggleShowInQuickPanel));
+        UiPrimitives.DrawSwitch(g, t, hit, "apps.ctrl.showPanel", new UiRect(sw2Row.Right - 36f, sw2Row.CenterY - 12f, 34f, 24f), showInPanel, hasProcName);
+        if (hasProcName) _clicks["apps.ctrl.showPanel"] = ToggleShowInQuickPanel;
 
         var resetRouteBtn = new UiRect(sw2Row.Right + 8f, ctrlY + 2f, ctrlColW, 28f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "apps.ctrl.resetRoute", resetRouteBtn, L10n.T("Dev.SystemDefault"), enabled: hasApp, fontSize: 12f, icon: UiIcon.Reset, tooltip: L10n.T("Act.ResetAllApps"));
-        if (hasApp) _clicks.Add((resetRouteBtn, ResetSelectedAppRoutes));
+        if (hasApp) _clicks["apps.ctrl.resetRoute"] = ResetSelectedAppRoutes;
 
+        hit.PopClip();
         g.PopClip();
         _detailsScroll.Draw(g, t, hit, "apps.details.scroll", viewport);
     }
@@ -709,36 +715,31 @@ internal sealed class AppsPageView : IViewPage
         return false;
     }
 
-    public bool OnPointerDown(UiPointerEventArgs e)
+    public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
         if (e.Button == UiMouseButton.Right)
         {
-            for (int i = 0; i < _appRowRects.Count; i++)
+            if (targetId != null && _appRows.TryGetValue(targetId, out var clickedApp))
             {
-                if (_appRowRects[i].Rect.Contains(e.X, e.Y))
-                {
-                    var clickedApp = _appRowRects[i].App;
-                    if (!_multiSelected.Contains(clickedApp.Identity))
-                        SelectSingleApp(clickedApp);
-                    ShowAppContextMenu(clickedApp);
-                    return true;
-                }
+                if (!_multiSelected.Contains(clickedApp.Identity)) SelectSingleApp(clickedApp);
+                ShowAppContextMenu(clickedApp);
+                return true;
             }
 #if SONICROUTE_PHONE
-            if (_showingPhone && _phonePage != null) return _phonePage.OnPointerDown(e);
+            if (_showingPhone && _phonePage != null) return _phonePage.OnPointerDown(e, targetId);
 #endif
             return false;
         }
 
         if (e.Button != UiMouseButton.Left) return false;
 
-        if (_appsScroll.TrackRect.Contains(e.X, e.Y) && _appsScroll.BeginDrag(e.Y)) return true;
-        if (_detailsScroll.TrackRect.Contains(e.X, e.Y) && _detailsScroll.BeginDrag(e.Y)) return true;
+        if (targetId == "apps.list.scroll" && _appsScroll.BeginDrag(e.Y)) return true;
+        if (targetId == "apps.details.scroll" && _detailsScroll.BeginDrag(e.Y)) return true;
 #if SONICROUTE_PHONE
-        if (_phoneScroll.TrackRect.Contains(e.X, e.Y) && _phoneScroll.BeginDrag(e.Y)) return true;
+        if (targetId == "apps.phone.scroll" && _phoneScroll.BeginDrag(e.Y)) return true;
 #endif
 
-        if (_selectedApp != null && _selectedVolume >= 0 && _volumeSliderRect.Contains(e.X, e.Y))
+        if (_selectedApp != null && _selectedVolume >= 0 && targetId == "apps.vol.slider")
         {
             _draggingVolume = true;
             _dragVolumeVal = UiPrimitives.SliderValueFromX(_volumeSliderRect, e.X);
@@ -746,24 +747,22 @@ internal sealed class AppsPageView : IViewPage
             return true;
         }
 
-        for (int i = 0; i < _appRowRects.Count; i++)
+        if (targetId != null && _appRows.TryGetValue(targetId, out var app))
         {
-            if (_appRowRects[i].Rect.Contains(e.X, e.Y))
-            {
-                HandleAppRowClick(_appRowRects[i].App, e.Ctrl, e.Shift);
-                return true;
-            }
+            HandleAppRowClick(app, e.Ctrl, e.Shift);
+            return true;
         }
 
 #if SONICROUTE_PHONE
         if (_showingPhone && _phonePage != null)
-            return _phonePage.OnPointerDown(e);
+            return _phonePage.OnPointerDown(e, targetId);
 #endif
         return false;
     }
 
-    public bool OnPointerUp(UiPointerEventArgs e)
+    public bool OnPointerUp(UiPointerEventArgs e, string? clickId)
     {
+        if (e.Button != UiMouseButton.Left) return false;
         bool wasDraggingVol = _draggingVolume;
         bool wasDragging = wasDraggingVol || _appsScroll.Dragging || _detailsScroll.Dragging;
         _draggingVolume = false;
@@ -778,20 +777,15 @@ internal sealed class AppsPageView : IViewPage
 
         if (wasDragging) return true;
 
-        if (e.Button != UiMouseButton.Left) return false;
-
-        for (int i = _clicks.Count - 1; i >= 0; i--)
+        if (clickId != null && _clicks.TryGetValue(clickId, out var click))
         {
-            if (_clicks[i].Rect.Contains(e.X, e.Y))
-            {
-                _clicks[i].Click();
-                return true;
-            }
+            click();
+            return true;
         }
 
 #if SONICROUTE_PHONE
         if (_showingPhone && _phonePage != null)
-            return _phonePage.OnPointerUp(e);
+            return _phonePage.OnPointerUp(e, clickId);
 #endif
         return false;
     }
