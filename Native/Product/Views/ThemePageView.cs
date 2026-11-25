@@ -181,7 +181,7 @@ internal sealed class ThemePageView : IViewPage
         g.DrawText(L10n.T("Th.CustomTitle"), new UiRect(boxIn.X, boxIn.Y, leftW, 20f), t.TextPrimary, 13.5f, 600);
         g.DrawText(L10n.T("Th.CustomHint"), new UiRect(boxIn.X, boxIn.Y + 22f, leftW, 18f), t.TextSecondary, 11.5f, 400);
 
-        float presetY = boxIn.Y + 46f;
+        float presetY = boxIn.Y + 108f;
         float px = boxIn.X;
         for (int i = 0; i < AccentPresets.Length; i++)
         {
@@ -200,7 +200,7 @@ internal sealed class ThemePageView : IViewPage
             px += 28f;
         }
 
-        float rowY = presetY + 30f;
+        float rowY = boxIn.Y + 46f;
         var swatch = new UiRect(boxIn.X, rowY, 54f, 54f);
         g.FillRoundedRect(swatch, 8f, t.Accent);
         g.DrawRoundedRect(swatch, 8f, t.Border, 1f);
@@ -381,9 +381,9 @@ internal sealed class ThemePageView : IViewPage
                 L10n.T("Exp.OsdWidthLabel"), $"{cfg.OsdWidth}px", (cfg.OsdWidth - 180f) / (600f - 180f));
             y += 40f;
 
-            double fontScale = Math.Clamp(cfg.OsdFontScale, 0.7, 1.6);
+            double fontScale = Math.Clamp(cfg.OsdFontScale, 0.7, 2.0);
             _osdFontSliderRect = DrawLabeledSlider(g, t, hit, "th.osd.font", new UiRect(inner.X, y, inner.Width, 38f),
-                L10n.T("Exp.OsdFontLabel"), $"{(int)Math.Round(fontScale * 100)}%", (float)((fontScale - 0.7) / (1.6 - 0.7)));
+                L10n.T("Exp.OsdFontLabel"), $"{(int)Math.Round(fontScale * 100)}%", (float)((fontScale - 0.7) / (2.0 - 0.7)));
             y += 40f;
 
             _osdFadeInSliderRect = DrawLabeledSlider(g, t, hit, "th.osd.fin", new UiRect(inner.X, y, inner.Width, 38f),
@@ -599,6 +599,47 @@ internal sealed class ThemePageView : IViewPage
 
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt) => false;
 
+    public bool OnFocusedKey(string id, int vk)
+    {
+        var cfg = _actions.Config;
+        (double current, double min, double max, double small, double large) = id switch
+        {
+            "th.opacity" => (cfg.BackgroundOpacity, 0, 100, 1, 10),
+            "th.osd.w" => (cfg.OsdWidth, 180, 600, 1, 10),
+            "th.osd.font" => (cfg.OsdFontScale, 0.7, 2.0, 0.05, 0.1),
+            "th.osd.fin" => (cfg.OsdFadeInMs, 0, 500, 10, 50),
+            "th.osd.fout" => (cfg.OsdFadeOutMs, 0, 1000, 50, 100),
+            "th.panel.h" => (cfg.QuickPanelHeight, 350, 850, 10, 10),
+            _ => (0, 0, 0, 0, 0)
+        };
+        if (max == 0 || !ViewSliderKeys.TryChange(vk, current, min, max, small, large, out double value)) return false;
+        if (value == current) return true;
+        void SetValue(double v)
+        {
+            switch (id)
+            {
+                case "th.opacity": cfg.BackgroundOpacity = (int)v; break;
+                case "th.osd.w": cfg.OsdWidth = (int)v; break;
+                case "th.osd.font": cfg.OsdFontScale = Math.Round(v, 2); break;
+                case "th.osd.fin": cfg.OsdFadeInMs = (int)v; break;
+                case "th.osd.fout": cfg.OsdFadeOutMs = (int)v; break;
+                case "th.panel.h": cfg.QuickPanelHeight = (int)v; break;
+            }
+        }
+        SetValue(value);
+        if (!ConfigService.TrySave(cfg))
+        {
+            SetValue(current);
+            _actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+            return true;
+        }
+        if (id == "th.opacity") _actions.NotifyThemeChanged();
+        if (id == "th.panel.h") _actions.NotifySettingsChanged();
+        if (id is "th.osd.w" or "th.osd.font") _actions.Host.PreviewOsd();
+        _actions.Invalidate();
+        return true;
+    }
+
     private void ApplySliderDrag(string name, float x)
     {
         var cfg = _actions.Config;
@@ -628,7 +669,7 @@ internal sealed class ThemePageView : IViewPage
             case "osdFont":
             {
                 float t = UiPrimitives.SliderValueFromX(_osdFontSliderRect, x) / 100f;
-                double v = Math.Round(0.7 + t * (1.6 - 0.7), 2);
+                double v = Math.Round(0.7 + t * (2.0 - 0.7), 2);
                 if (Math.Abs(cfg.OsdFontScale - v) > 0.005)
                 {
                     cfg.OsdFontScale = v;
@@ -692,7 +733,7 @@ internal sealed class ThemePageView : IViewPage
             _pickerWindow.RequestFocus();
             return;
         }
-        string previousAccent = _actions.Config.Accent;
+
         _pickerWindow = ColorPickerWindow.Open(
             _actions.OwnerWindow,
             _actions.Theme,
@@ -701,16 +742,6 @@ internal sealed class ThemePageView : IViewPage
             {
                 _actions.Config.Accent = chosen.ToHexRgb();
                 SaveAndNotifyTheme();
-            },
-            liveColor =>
-            {
-                _actions.Config.Accent = liveColor.ToHexRgb();
-                _actions.NotifyThemeChanged();
-            },
-            () =>
-            {
-                _actions.Config.Accent = previousAccent;
-                _actions.NotifyThemeChanged();
             });
     }
 

@@ -30,6 +30,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
     private readonly UiScrollState _scroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private UiRect _contentRect;
+    private bool _clearingHistory;
     private bool _resettingRoutes;
     private bool _configBusy;
     private bool _disposed;
@@ -87,18 +88,130 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         g.PushClip(viewport);
         hit.PushClip(viewport);
 
-        // Header + Beta badge
-        g.DrawText(L10n.T("Nav.Experimental"), new UiRect(x, y, w - 120f, 30f), t.TextPrimary, 22f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        string badgeText = IsZh() ? "BETA · 实验功能" : "BETA";
-        UiPrimitives.DrawBadge(g, t, new UiRect(x + w - 116f, y + 4f, 116f, 22f), badgeText,
-            t.Fail.WithAlphaFraction(0.16f), t.Fail, t.Fail.WithAlphaFraction(0.4f), 10.5f);
-        y += 34f;
-        g.DrawText(IsZh() ? "实验功能可能需要重启，仅在你明确开启时生效。" : "Experimental features may require restart and stay off until enabled.",
-            new UiRect(x, y, w, 20f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        y += 32f;
+        g.DrawText(L10n.T("Nav.Experimental"), new UiRect(x, y, w, 22f), t.TextPrimary, 16f, 600);
+        y += 36f;
 
         float pad = 16f;
         float innerW = w - pad * 2f;
+
+        // 2. Background Polling Fallback Card (WPF 1.36 ExpBackgroundPollingCheck)
+        float pollH = pad + 64f + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, pollH));
+        DrawSwitchRow(g, t, hit, "exp.polling", new UiRect(x + pad, y + pad, innerW, 64f),
+            UiIcon.Options, L10n.T("Exp.BackgroundPolling"), L10n.T("Exp.BackgroundPollingHint"),
+            cfg.BackgroundPollingFallbackEnabled, false, () =>
+            {
+                cfg.BackgroundPollingFallbackEnabled = !cfg.BackgroundPollingFallbackEnabled;
+                SaveConfig();
+            }, Register);
+        y += pollH + 14f;
+
+        // 3. Execution History Card (WPF 1.36 ExpHistoryCheck)
+        bool histActive = cfg.ExperimentalMode && cfg.ExecutionHistoryEnabled;
+        string limitHint = L10n.T("History.LimitHint");
+        float limitHintH = histActive ? D2dSharedContext.Instance.MeasureText(limitHint, UiMetrics.FontFamily, 11.5f, 400, innerW - 32f, 90f, true).Height : 0f;
+        float histH = pad + 60f + (histActive ? 86f + limitHintH : 0f) + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, histH));
+        float hy = y + pad;
+        DrawSwitchRow(g, t, hit, "exp.history", new UiRect(x + pad, hy, innerW, 60f),
+            UiIcon.History, L10n.T("History.Title"), L10n.T("History.Hint"),
+            cfg.ExecutionHistoryEnabled, histActive, () =>
+            {
+                bool previous = cfg.ExecutionHistoryEnabled;
+                cfg.ExecutionHistoryEnabled = !previous;
+                if (!ConfigService.TrySave(cfg))
+                {
+                    cfg.ExecutionHistoryEnabled = previous;
+                    actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+                    return;
+                }
+                if (!cfg.ExecutionHistoryEnabled) AutoRuleService.StopExecutionHistory();
+                actions.NotifySettingsChanged();
+            }, Register);
+        if (histActive)
+        {
+            hy += 66f;
+            g.DrawText(L10n.T("History.Limit"), new UiRect(x + pad + 32f, hy, 140f, 32f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            var limRect = new UiRect(x + pad + 178f, hy, 70f, 32f);
+            UiPrimitives.DrawTextBox(g, t, hit, "exp.hist.limit", limRect,
+                Math.Clamp(cfg.ExecutionHistoryLimitMb, 1, 64).ToString(CultureInfo.InvariantCulture),
+                focused: actions.ActiveInlineEditTag == "exp.hist.limit");
+            Register("exp.hist.limit", limRect, () =>
+            {
+                actions.StartInlineEdit("exp.hist.limit", limRect,
+                    Math.Clamp(cfg.ExecutionHistoryLimitMb, 1, 64).ToString(CultureInfo.InvariantCulture), null, (txt, viaEnter) =>
+                    {
+                        if (int.TryParse(txt.Trim().Replace("MB", "", StringComparison.OrdinalIgnoreCase).Trim(), out int v) && v >= 1 && v <= 64)
+                        {
+                            int previous = cfg.ExecutionHistoryLimitMb;
+                            cfg.ExecutionHistoryLimitMb = v;
+                            if (!ConfigService.TrySave(cfg))
+                            {
+                                cfg.ExecutionHistoryLimitMb = previous;
+                                actions.ShowNotice(L10n.T("Tray.SaveFailed"));
+                                return;
+                            }
+                            actions.NotifySettingsChanged();
+                            _ = AutoRuleService.GetHistoryStore()?.SetLimitAsync(v);
+                        }
+                        else actions.ShowNotice(L10n.T("History.InvalidLimit"));
+                    });
+            }, UiCursorKind.IBeam);
+
+            g.DrawText(limitHint, new UiRect(x + pad + 32f, limRect.Bottom + 6f, innerW - 32f, limitHintH), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
+            var viewRect = new UiRect(x + pad + 32f, limRect.Bottom + 16f + limitHintH, 130f, 32f);
+            UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.hist.view", viewRect, L10n.T("History.View"), fontSize: 12f);
+            Register("exp.hist.view", viewRect, actions.OpenHistory);
+            var clrRect = new UiRect(viewRect.Right + 8f, viewRect.Y, 120f, 32f);
+            UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.hist.clear", clrRect, L10n.T("History.Clear"), enabled: !_clearingHistory, fontSize: 12f);
+            if (!_clearingHistory) Register("exp.hist.clear", clrRect, () =>
+            {
+                var store = AutoRuleService.GetHistoryStore();
+                if (store == null || _clearingHistory) return;
+                _clearingHistory = true;
+                actions.Invalidate();
+                _ = Task.Run(async () =>
+                {
+                    bool ok = await store.ClearAsync().ConfigureAwait(false);
+                    actions.Host.TryPost(() =>
+                    {
+                        _clearingHistory = false;
+                        if (_disposed) return;
+                        actions.Invalidate();
+                        actions.ShowNotice(L10n.T(ok ? "History.Cleared" : "History.ReadError"));
+                        if (ok) actions.RefreshHistoryIfOpen();
+                    });
+                });
+            });
+        }
+        y += histH + 14f;
+
+        // 7. Config Files Management Card (WPF 1.36 ExpConfigFiles)
+        float cfgH = pad + 28f + 38f + 40f + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, cfgH));
+        float cy = y + pad;
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.File, L10n.T("Exp.ConfigFiles"));
+        cy += 34f;
+        g.DrawText(L10n.T("Exp.ConfigTransferHint"), new UiRect(x + pad + 32f, cy, innerW - 32f, 22f),
+            t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        cy += 30f;
+
+        float btnW = MathF.Min(164f, (innerW - 48f) / 3f);
+        var expBtn = new UiRect(x + pad + 32f, cy, btnW, 34f);
+        var impBtn = new UiRect(expBtn.Right + 8f, cy, btnW, 34f);
+        var rstBtn = new UiRect(impBtn.Right + 16f, cy, btnW, 34f);
+
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.export", expBtn, L10n.T("Exp.ExportConfig"), enabled: !_configBusy, fontSize: 12f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.import", impBtn, L10n.T("Exp.ImportConfig"), enabled: !_configBusy, fontSize: 12f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.clear", rstBtn, L10n.T("Exp.ClearConfig"), enabled: !_configBusy, danger: true, fontSize: 12f);
+        if (!_configBusy)
+        {
+            Register("exp.cfg.export", expBtn, ExportConfig, UiCursorKind.Hand, L10n.T("Exp.ExportConfig"));
+            Register("exp.cfg.import", impBtn, ImportConfig, UiCursorKind.Hand, L10n.T("Exp.ImportConfig"));
+            Register("exp.cfg.clear", rstBtn, ResetConfig, UiCursorKind.Hand, L10n.T("Exp.ClearConfigHint"));
+        }
+
+        y += cfgH + 16f;
 
         // 1. Experimental Master Toggle Card
         float masterH = pad + 56f + pad;
@@ -117,76 +230,6 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                 actions.ShowNotice(L10n.T("St.ExpModeNeedRestart"));
             }, Register);
         y += masterH + 14f;
-
-        // 2. Background Polling Fallback Card (WPF 1.36 ExpBackgroundPollingCheck)
-        float pollH = pad + 64f + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, pollH));
-        DrawSwitchRow(g, t, hit, "exp.polling", new UiRect(x + pad, y + pad, innerW, 64f),
-            UiIcon.Options, L10n.T("Exp.BackgroundPolling"), L10n.T("Exp.BackgroundPollingHint"),
-            cfg.BackgroundPollingFallbackEnabled, false, () =>
-            {
-                cfg.BackgroundPollingFallbackEnabled = !cfg.BackgroundPollingFallbackEnabled;
-                SaveConfig();
-            }, Register);
-        y += pollH + 14f;
-
-        // 3. Execution History Card (WPF 1.36 ExpHistoryCheck)
-        bool histActive = cfg.ExperimentalMode && cfg.ExecutionHistoryEnabled;
-        float histH = pad + 60f + (histActive ? 50f : 0f) + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, histH));
-        float hy = y + pad;
-        DrawSwitchRow(g, t, hit, "exp.history", new UiRect(x + pad, hy, innerW, 60f),
-            UiIcon.History, L10n.T("History.Title"), L10n.T("History.Hint"),
-            cfg.ExecutionHistoryEnabled, histActive, () =>
-            {
-                if (!cfg.ExecutionHistoryEnabled && !NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("History.Title"),
-                    IsZh() ? "启用后会记录自动化规则的执行明细。确定启用？" : "Execution details for automation rules will be recorded. Enable?"))
-                    return;
-                cfg.ExecutionHistoryEnabled = !cfg.ExecutionHistoryEnabled;
-                if (!cfg.ExecutionHistoryEnabled) AutoRuleService.StopExecutionHistory();
-                SaveConfig();
-            }, Register);
-        if (histActive)
-        {
-            hy += 66f;
-            g.DrawText(L10n.T("History.Limit"), new UiRect(x + pad + 32f, hy, 140f, 32f), t.TextPrimary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            var limRect = new UiRect(x + pad + 178f, hy, 70f, 32f);
-            UiPrimitives.DrawTextBox(g, t, hit, "exp.hist.limit", limRect,
-                Math.Clamp(cfg.ExecutionHistoryLimitMb, 1, 64).ToString(CultureInfo.InvariantCulture) + " MB",
-                focused: actions.ActiveInlineEditTag == "exp.hist.limit");
-            Register("exp.hist.limit", limRect, () =>
-            {
-                actions.StartInlineEdit("exp.hist.limit", limRect,
-                    Math.Clamp(cfg.ExecutionHistoryLimitMb, 1, 64).ToString(CultureInfo.InvariantCulture), null, (txt, commit) =>
-                    {
-                        if (!commit) return;
-                        if (int.TryParse(txt.Trim().Replace("MB", "", StringComparison.OrdinalIgnoreCase).Trim(), out int v) && v >= 1 && v <= 64)
-                        {
-                            cfg.ExecutionHistoryLimitMb = v;
-                            SaveConfig();
-                            _ = AutoRuleService.GetHistoryStore()?.SetLimitAsync(v);
-                        }
-                        else actions.ShowNotice(L10n.T("History.InvalidLimit"));
-                    });
-            }, UiCursorKind.IBeam);
-
-            var clrRect = new UiRect(x + w - pad - 120f, hy, 120f, 32f);
-            UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.hist.clear", clrRect, L10n.T("History.Clear"), danger: true, fontSize: 12f);
-            Register("exp.hist.clear", clrRect, () =>
-            {
-                var store = AutoRuleService.GetHistoryStore();
-                if (store == null) return;
-                _ = Task.Run(async () =>
-                {
-                    bool ok = await store.ClearAsync().ConfigureAwait(false);
-                    actions.Host.TryPost(() =>
-                    {
-                        if (!_disposed) actions.ShowNotice(L10n.T(ok ? "History.Cleared" : "History.ReadError"));
-                    });
-                });
-            });
-        }
-        y += histH + 14f;
 
         // 4. Mic & Panel Quick Behavior Card
         float micH = pad + 56f + (cfg.ExperimentalMic ? 52f : 0f) + 56f + pad;
@@ -260,9 +303,8 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             focused: actions.ActiveInlineEditTag == "exp.osd.w");
         Register("exp.osd.w", wRect, () =>
         {
-            actions.StartInlineEdit("exp.osd.w", wRect, cfg.OsdWidth.ToString(CultureInfo.InvariantCulture), null, (txt, commit) =>
+            actions.StartInlineEdit("exp.osd.w", wRect, cfg.OsdWidth.ToString(CultureInfo.InvariantCulture), null, (txt, _) =>
             {
-                if (!commit) return;
                 if (int.TryParse(txt.Trim().Replace("px", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
                 {
                     cfg.OsdWidth = Math.Clamp(val, 180, 600);
@@ -273,26 +315,25 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
         }, UiCursorKind.IBeam, null);
 
         float col3X = wRect.Right + 10f;
-        double fontScale = Math.Clamp(cfg.OsdFontScale, 0.7, 1.6);
+        double fontScale = Math.Clamp(cfg.OsdFontScale, 0.7, 2.0);
         g.DrawText(L10n.T("Exp.OsdFontLabel"), new UiRect(col3X, oy, thirdW, 16f), t.TextSecondary, 11f, 400);
         var fsRect = new UiRect(col3X, oy + 18f, thirdW, 28f);
         UiPrimitives.DrawTextBox(g, t, hit, "exp.osd.font", fsRect, $"{(int)Math.Round(fontScale * 100)}%",
             focused: actions.ActiveInlineEditTag == "exp.osd.font");
         Register("exp.osd.font", fsRect, () =>
         {
-            actions.StartInlineEdit("exp.osd.font", fsRect, fontScale.ToString("0.00", CultureInfo.InvariantCulture), null, (txt, commit) =>
+            actions.StartInlineEdit("exp.osd.font", fsRect, fontScale.ToString("0.00", CultureInfo.InvariantCulture), null, (txt, _) =>
             {
-                if (!commit) return;
                 string cleaned = txt.Trim();
                 if (cleaned.EndsWith('%') && double.TryParse(cleaned.TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
                 {
-                    cfg.OsdFontScale = Math.Clamp(Math.Round(pct / 100.0, 2), 0.7, 1.6);
+                    cfg.OsdFontScale = Math.Clamp(Math.Round(pct / 100.0, 2), 0.7, 2.0);
                     SaveConfig();
                     actions.Host.PreviewOsd();
                 }
                 else if (double.TryParse(cleaned, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
                 {
-                    cfg.OsdFontScale = Math.Clamp(Math.Round(val, 2), 0.7, 1.6);
+                    cfg.OsdFontScale = Math.Clamp(Math.Round(val, 2), 0.7, 2.0);
                     SaveConfig();
                     actions.Host.PreviewOsd();
                 }
@@ -308,9 +349,8 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             focused: actions.ActiveInlineEditTag == "exp.osd.fin");
         Register("exp.osd.fin", finRect, () =>
         {
-            actions.StartInlineEdit("exp.osd.fin", finRect, cfg.OsdFadeInMs.ToString(CultureInfo.InvariantCulture), null, (txt, commit) =>
+            actions.StartInlineEdit("exp.osd.fin", finRect, cfg.OsdFadeInMs.ToString(CultureInfo.InvariantCulture), null, (txt, _) =>
             {
-                if (!commit) return;
                 if (int.TryParse(txt.Trim().Replace("ms", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
                 {
                     cfg.OsdFadeInMs = Math.Clamp(val, 0, 500);
@@ -326,9 +366,8 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             focused: actions.ActiveInlineEditTag == "exp.osd.fout");
         Register("exp.osd.fout", foutRect, () =>
         {
-            actions.StartInlineEdit("exp.osd.fout", foutRect, cfg.OsdFadeOutMs.ToString(CultureInfo.InvariantCulture), null, (txt, commit) =>
+            actions.StartInlineEdit("exp.osd.fout", foutRect, cfg.OsdFadeOutMs.ToString(CultureInfo.InvariantCulture), null, (txt, _) =>
             {
-                if (!commit) return;
                 if (int.TryParse(txt.Trim().Replace("ms", "", StringComparison.OrdinalIgnoreCase).Trim(), out int val))
                 {
                     cfg.OsdFadeOutMs = Math.Clamp(val, 0, 1000);
@@ -356,32 +395,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
             Register("exp.resetroutes", rstRoutesRect, ResetAllAppRoutes);
         y += routeH + 14f;
 
-        // 7. Config Files Management Card (WPF 1.36 ExpConfigFiles)
-        float cfgH = pad + 28f + 38f + 40f + pad;
-        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, cfgH));
-        float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.File, L10n.T("Exp.ConfigFiles"));
-        cy += 34f;
-        g.DrawText(L10n.T("Exp.ConfigTransferHint"), new UiRect(x + pad + 32f, cy, innerW - 32f, 22f),
-            t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        cy += 30f;
 
-        float btnW = MathF.Min(164f, (innerW - 48f) / 3f);
-        var expBtn = new UiRect(x + pad + 32f, cy, btnW, 34f);
-        var impBtn = new UiRect(expBtn.Right + 8f, cy, btnW, 34f);
-        var rstBtn = new UiRect(impBtn.Right + 16f, cy, btnW, 34f);
-
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.export", expBtn, L10n.T("Exp.ExportConfig"), enabled: !_configBusy, fontSize: 12f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.import", impBtn, L10n.T("Exp.ImportConfig"), enabled: !_configBusy, fontSize: 12f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "exp.cfg.clear", rstBtn, L10n.T("Exp.ClearConfig"), enabled: !_configBusy, danger: true, fontSize: 12f);
-        if (!_configBusy)
-        {
-            Register("exp.cfg.export", expBtn, ExportConfig, UiCursorKind.Hand, L10n.T("Exp.ExportConfig"));
-            Register("exp.cfg.import", impBtn, ImportConfig, UiCursorKind.Hand, L10n.T("Exp.ImportConfig"));
-            Register("exp.cfg.clear", rstBtn, ResetConfig, UiCursorKind.Hand, L10n.T("Exp.ClearConfigHint"));
-        }
-
-        y += cfgH + 16f;
 
         hit.PopClip();
         g.PopClip();
@@ -549,7 +563,7 @@ internal sealed class ExperimentalPageView(IViewHostActions actions) : IViewPage
                     preview.AppNames?.Count ?? 0,
                     missingDevices,
                     missingApps);
-                if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg))
+                if (!NativeDialogs.ConfirmImport(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg))
                 {
                     actions.Invalidate();
                     return;

@@ -237,7 +237,7 @@ internal sealed class AppsPageView : IViewPage
         _clicks.Clear();
         _appRows.Clear();
 
-        float leftW = Math.Clamp(contentRect.Width * 0.215f, 140f, 172f);
+        float leftW = Math.Clamp(contentRect.Width * 0.215f, 140f, 172f) - 8f;
         var leftCardRect = new UiRect(contentRect.X, contentRect.Y, leftW, contentRect.Height);
         var rightRect = new UiRect(leftCardRect.Right + 8f, contentRect.Y, MathF.Max(120f, contentRect.Width - leftW - 8f), contentRect.Height);
 
@@ -442,6 +442,8 @@ internal sealed class AppsPageView : IViewPage
         var outPillRects = LayoutPillFlow(outChoices, routeColW, out outPillsH);
         var inPillRects = _actions.Config.ExperimentalMic ? LayoutPillFlow(inChoices, routeColW, out inPillsH) : Array.Empty<UiRect>();
         card2H = 20f + 26f + 22f + 34f + 6f + MathF.Max(outPillsH, inPillsH);
+        _detailsScroll.ContentHeight = card1H + card2H + card3H + card4H + 28f;
+        _detailsScroll.Clamp();
 
         g.PushClip(viewport);
         hit.PushClip(viewport);
@@ -758,6 +760,22 @@ internal sealed class AppsPageView : IViewPage
             return _phonePage.OnPointerDown(e, targetId);
 #endif
         return false;
+    }
+
+    public bool ActivateFocused(UiPointerEventArgs e, string id)
+    {
+        if (!_appRows.TryGetValue(id, out var app)) return OnPointerUp(e, id);
+        HandleAppRowClick(app, e.Ctrl, e.Shift);
+        return true;
+    }
+
+    public bool OnFocusedKey(string id, int vk)
+    {
+        if (id != "apps.vol.slider" || _selectedApp == null || _selectedVolume < 0 ||
+            !ViewSliderKeys.TryChange(vk, _selectedVolume, 0, 100, 1, 10, out double next)) return false;
+        ApplySliderVolume((int)next);
+        if (!_selectedApp.IsExternal) _actions.Host.FlushVolumeWrites();
+        return true;
     }
 
     public bool OnPointerUp(UiPointerEventArgs e, string? clickId)

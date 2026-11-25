@@ -55,7 +55,6 @@ internal sealed class HotkeysPageView : IViewPage
         _buttons.Clear();
         _viewportRect = contentRect;
 
-        string title = L10n.T("Nav.Hotkeys");
         string hint = L10n.T("Hk.Hint");
         float hintH = D2dSharedContext.Instance.MeasureText(hint, UiMetrics.FontFamily, 12f, 400, contentRect.Width, 80f, wrap: true).Height;
 
@@ -69,8 +68,8 @@ internal sealed class HotkeysPageView : IViewPage
         }
         float rulesCardH = _hotkeyRules.Count > 0 ? 36f + _hotkeyRules.Count * RowH + 24f : 0f;
         float mainCardH = cardInnerH + 28f;
-        float headerH = 34f + hintH + 16f;
-        float totalH = headerH + mainCardH + (rulesCardH > 0 ? 14f + rulesCardH : 0f) + 8f;
+        float headerH = hintH + 16f;
+        float totalH = headerH + mainCardH + (rulesCardH > 0 ? 14f + rulesCardH : 0f) + 48f;
 
         _scroll.ViewportHeight = contentRect.Height;
         _scroll.ContentHeight = totalH;
@@ -84,15 +83,6 @@ internal sealed class HotkeysPageView : IViewPage
         hit.PushClip(contentRect);
         float y = contentRect.Y - _scroll.Offset;
 
-        // Title + Reset All Defaults button
-        string resetLabel = L10n.T("AppIcons.Reset");
-        float resetW = MathF.Max(84f, D2dSharedContext.Instance.MeasureText(resetLabel, UiMetrics.FontFamily, 12f, 400, 160f, 28f, false).Width + 32f);
-        var resetAllRect = new UiRect(contentRect.X + w - resetW, y, resetW, 28f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "hk.resetAll", resetAllRect, resetLabel, fontSize: 12f, icon: UiIcon.Reset);
-        _buttons["hk.resetAll"] = ResetAllHotkeys;
-
-        g.DrawText(title, new UiRect(contentRect.X, y, MathF.Max(80f, w - resetW - 12f), 28f), t.TextPrimary, 22f, 600);
-        y += 34f;
         g.DrawText(hint, new UiRect(contentRect.X, y, w, hintH + 4f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
         y += hintH + 16f;
 
@@ -170,6 +160,13 @@ internal sealed class HotkeysPageView : IViewPage
                 ry += RowH;
             }
         }
+
+        y += rulesCardH + 10f;
+        string resetLabel = L10n.T("AppIcons.Reset");
+        float resetW = MathF.Max(84f, D2dSharedContext.Instance.MeasureText(resetLabel, UiMetrics.FontFamily, 12f, 400, 160f, 28f, false).Width + 32f);
+        var resetAllRect = new UiRect(contentRect.X + w - resetW, y, resetW, 28f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "hk.resetAll", resetAllRect, resetLabel, fontSize: 12f, icon: UiIcon.Reset);
+        _buttons["hk.resetAll"] = ResetAllHotkeys;
 
         hit.PopClip();
         g.PopClip();

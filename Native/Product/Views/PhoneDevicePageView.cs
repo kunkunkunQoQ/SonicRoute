@@ -18,7 +18,7 @@ namespace SonicRoute.Native.Product.Views;
 /// Full Phone &amp; AirPlay device management page implementing IViewPage.
 /// Supports both Connected Phone Device view and Add Device / Connection view.
 /// </summary>
-internal sealed class PhoneDevicePageView : IViewPage
+internal sealed partial class PhoneDevicePageView : IViewPage
 {
     private readonly IViewHostActions _actions;
     private readonly UiScrollState _scroll = new();
@@ -100,6 +100,7 @@ internal sealed class PhoneDevicePageView : IViewPage
     internal void ShowConnectionPage()
     {
         _actions.CloseInlineEdit(commit: false);
+        CloseCatalog();
         _showConnection = true;
         _scroll.Offset = 0f;
         CancelEncoderRead();
@@ -110,6 +111,7 @@ internal sealed class PhoneDevicePageView : IViewPage
     internal void ShowProfile(string profileId)
     {
         _actions.CloseInlineEdit(commit: false);
+        CloseCatalog();
         _showConnection = false;
         _airPlayConnectionChoice = false;
         _actions.Host.Phone.Store.SelectProfile(profileId);
@@ -153,7 +155,7 @@ internal sealed class PhoneDevicePageView : IViewPage
         StopMediaWatch();
         CancelEncoderRead();
         CancelRemoteList();
-        CancelCts(ref _catalogCts);
+        CloseCatalog();
     }
 
     public void OnCaptureLost()
@@ -188,7 +190,7 @@ internal sealed class PhoneDevicePageView : IViewPage
             _catalogApps = Array.Empty<AndroidApp>();
             CancelRemoteList();
             RestartMediaWatch(online);
-            if (online != null) LoadCatalog(online);
+            CloseCatalog();
         }
         RefreshStreamingSettings(online);
         UpdateQrPairing();
@@ -245,6 +247,12 @@ internal sealed class PhoneDevicePageView : IViewPage
     public void Render(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect contentRect)
     {
         _hit = hit;
+        _visibleDeviceRect = contentRect;
+        if (_showCatalog)
+        {
+            RenderCatalog(g, t, contentRect);
+            return;
+        }
         _scroll.ViewportHeight = contentRect.Height;
 
         float viewW = MathF.Max(200f, contentRect.Width - UiMetrics.ScrollBarWidth - 6f);
@@ -402,14 +410,10 @@ internal sealed class PhoneDevicePageView : IViewPage
         y = RenderStreamingCard(g, t, x, y, w, online != null);
 
         // Card 4: App Library Card
-        var apps = profile.RetainedApps.Concat(_catalogApps).DistinctBy(a => a.Package)
-            .Where(a => string.IsNullOrWhiteSpace(_appSearch) || a.Name.Contains(_appSearch, StringComparison.OrdinalIgnoreCase) || a.Package.Contains(_appSearch, StringComparison.OrdinalIgnoreCase))
-            .Take(60)
-            .ToArray();
-
-        float libHeaderH = 74f;
+        var apps = profile.RetainedApps;
+        float libHeaderH = 70f;
         float libRowH = 48f;
-        float libBodyH = apps.Length == 0 ? 40f : apps.Length * libRowH;
+        float libBodyH = apps.Count == 0 ? 40f : apps.Count * libRowH;
         var libCard = new UiRect(x, y, w, libHeaderH + libBodyH + 12f);
         UiPrimitives.DrawCard(g, t, libCard, 12f);
 
@@ -418,26 +422,22 @@ internal sealed class PhoneDevicePageView : IViewPage
         float ly = libCard.Y + 12f;
 
         g.DrawText(L10n.T("Phone.QuickPanelAppsTitle"), new UiRect(lx, ly, lw - 100f, 24f), t.TextPrimary, 15f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.refreshapps", new UiRect(libCard.Right - 102f, ly - 2f, 90f, 28f),
-            L10n.T("History.Refresh"), enabled: online != null, fontSize: 11.5f, icon: UiIcon.Refresh);
-        ly += 30f;
+        g.DrawText(string.Format(L10n.T("Phone.RetainedCountFormat"), apps.Count), new UiRect(libCard.Right - 124f, ly, 112f, 24f), t.TextSecondary, 11f, 400, UiTextAlign.Trailing);
+        g.DrawText(L10n.T("Phone.PinDesc"), new UiRect(lx, ly + 28f, lw, 32f), t.TextSecondary, 11.5f, wrap: true);
+        ly += 58f;
 
-        var searchRect = new UiRect(lx, ly, lw, 30f);
-        UiPrimitives.DrawTextBox(g, t, _hit, "phone.appsearch", searchRect, _appSearch, L10n.T("Phone.SearchAppsHint"),
-            focused: _actions.ActiveInlineEditTag == "phone.appsearch", fontSize: 12f);
-        ly += 38f;
-
-        if (apps.Length == 0)
+        if (apps.Count == 0)
         {
             g.DrawText(L10n.T("Phone.RetainedEmptyHint"), new UiRect(lx, ly, lw, 32f), t.TextSecondary, 12f, 400, UiTextAlign.Center, UiVertAlign.Center);
         }
         else
         {
-            for (int i = 0; i < apps.Length; i++)
+            for (int i = 0; i < apps.Count; i++)
             {
                 var app = apps[i];
                 var rowRect = new UiRect(lx, ly + i * libRowH, lw, libRowH);
-                bool retained = profile.RetainedApps.Any(a => a.Package == app.Package);
+                if (rowRect.Bottom < _visibleDeviceRect.Y || rowRect.Y >= _visibleDeviceRect.Bottom) continue;
+                const bool retained = true;
                 bool smart = phone.Store.IsSmartVolumeEnabled(profile.LastDevice, app.Package);
                 bool hasDisplayAudio = online != null && phone.Sources.Sources.Any(s => s.App.Package == app.Package && AndroidDeviceIdentity.Matches(s.Device, online));
 
@@ -471,7 +471,9 @@ internal sealed class PhoneDevicePageView : IViewPage
             }
         }
 
-        y = libCard.Bottom + 10f;
+        var addRect = new UiRect(x, libCard.Bottom, w, 38f);
+        UiPrimitives.DrawSecondaryButton(g, t, _hit, "phone.addapps", addRect, L10n.T("Phone.AddQuickPanelAppButton"), enabled: online != null);
+        y = addRect.Bottom + 12f;
 
         // Card 5: File Transfer Card
         y = RenderFileTransferCard(g, t, x, y, w, phone, profile, online);
@@ -841,6 +843,11 @@ internal sealed class PhoneDevicePageView : IViewPage
 
     public bool OnPointerDown(UiPointerEventArgs e, string? targetId)
     {
+        if (_showCatalog && e.Button == UiMouseButton.Right && targetId?.StartsWith(CatalogRow, StringComparison.Ordinal) == true)
+        {
+            ShowCatalogMenu(targetId[CatalogRow.Length..]);
+            return true;
+        }
         if (e.Button != UiMouseButton.Left) return false;
         if (targetId == "phone.filescroll" && _fileScroll.BeginDrag(e.Y))
         {
@@ -942,48 +949,45 @@ internal sealed class PhoneDevicePageView : IViewPage
         if (id == "phone.rename" || id == "phone.rename.box")
         {
             var boxRect = _renameRect.IsEmpty ? hit.Value.Bounds : _renameRect;
-            _actions.StartInlineEdit("phone.rename", boxRect, phone.Store.GetProfileDisplayName(profile), null, (text, commit) =>
+            void Rename(string text)
             {
-                if (commit) { phone.Store.Rename(text); _actions.Invalidate(); }
+                if (phone.Store.Profile.Id == profile.Id) phone.Store.Rename(text);
+            }
+            _actions.StartInlineEdit("phone.rename", boxRect, phone.Store.GetProfileDisplayName(profile), Rename, (text, _) =>
+            {
+                Rename(text);
+                _actions.Invalidate();
             });
             return true;
         }
         if (id == "phone.appsearch")
         {
-            string before = _appSearch;
-            _actions.StartInlineEdit("phone.appsearch", hit.Value.Bounds, _appSearch, t => { _appSearch = t; _actions.Invalidate(); }, (t, commit) =>
-            {
-                _appSearch = commit ? t : before;
-                _actions.Invalidate();
-            });
+            _actions.StartInlineEdit(id, hit.Value.Bounds, _appSearch, SetCatalogSearch, (text, _) => SetCatalogSearch(text));
             return true;
         }
         if (id == "phone.pairaddr")
         {
-            string before = _pairAddress;
-            _actions.StartInlineEdit("phone.pairaddr", hit.Value.Bounds, _pairAddress, t => _pairAddress = t, (t, commit) =>
+            _actions.StartInlineEdit("phone.pairaddr", hit.Value.Bounds, _pairAddress, t => _pairAddress = t, (t, _) =>
             {
-                _pairAddress = commit ? t.Trim() : before;
+                _pairAddress = t.Trim();
                 _actions.Invalidate();
             }, mono: true);
             return true;
         }
         if (id == "phone.paircode")
         {
-            string before = _pairCode;
-            _actions.StartInlineEdit("phone.paircode", hit.Value.Bounds, _pairCode, t => _pairCode = t, (t, commit) =>
+            _actions.StartInlineEdit("phone.paircode", hit.Value.Bounds, _pairCode, t => _pairCode = t, (t, _) =>
             {
-                _pairCode = commit ? t.Trim() : before;
+                _pairCode = t.Trim();
                 _actions.Invalidate();
             }, mono: true);
             return true;
         }
         if (id == "phone.connaddr")
         {
-            string before = _connectAddress;
-            _actions.StartInlineEdit("phone.connaddr", hit.Value.Bounds, _connectAddress, t => _connectAddress = t, (t, commit) =>
+            _actions.StartInlineEdit("phone.connaddr", hit.Value.Bounds, _connectAddress, t => _connectAddress = t, (t, _) =>
             {
-                _connectAddress = commit ? t.Trim() : before;
+                _connectAddress = t.Trim();
                 _actions.Invalidate();
             }, mono: true);
             return true;
@@ -1054,7 +1058,23 @@ internal sealed class PhoneDevicePageView : IViewPage
         if (id == "phone.mediaprev" && _mediaClient != null) { _ = _mediaClient.SendAsync("previous", phone.Lifetime); return true; }
         if (id == "phone.mediaplay" && _mediaClient != null) { _ = _mediaClient.SendAsync("toggle", phone.Lifetime); return true; }
         if (id == "phone.medianext" && _mediaClient != null) { _ = _mediaClient.SendAsync("next", phone.Lifetime); return true; }
-        if (id == "phone.refreshapps" && online != null) { LoadCatalog(online); return true; }
+        if (id == "phone.addapps" && online != null)
+        {
+            _showCatalog = true;
+            _detailOffset = _scroll.Offset;
+            _scroll.Offset = 0f;
+            _appSearch = "";
+            FilterCatalog();
+            LoadCatalog(online);
+            _actions.Invalidate();
+            return true;
+        }
+        if (id == "phone.catalog.done") { CloseCatalog(); _actions.Invalidate(); return true; }
+        if (id.StartsWith(CatalogRow, StringComparison.Ordinal) && _showCatalog)
+        {
+            SelectCatalogRow(id[CatalogRow.Length..], e.Ctrl, e.Shift);
+            return true;
+        }
 
         if (id.StartsWith("phone.stream.", StringComparison.Ordinal) && online != null)
         {
@@ -1201,6 +1221,18 @@ internal sealed class PhoneDevicePageView : IViewPage
     public bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
         if (_actions.ActiveInlineEditTag != null) return false;
+        if (_showCatalog)
+        {
+            if (vk == 0x1B) { CloseCatalog(); _actions.Invalidate(); return true; }
+            if (ctrl && vk == 0x41)
+            {
+                _selectedCatalog.Clear();
+                foreach (var app in _filteredCatalog) _selectedCatalog.Add(app.Package);
+                _actions.Invalidate();
+                return true;
+            }
+            return false;
+        }
         if (_showFileBrowser)
         {
             if (vk == 0x1B) // Escape
@@ -1792,7 +1824,8 @@ internal sealed class PhoneDevicePageView : IViewPage
                         if (!ReferenceEquals(_qrCts, cts)) return;
                         _qrCts = null;
                         _qrBgra = null;
-                        _showConnection = false;
+                        CloseCatalog();
+        _showConnection = false;
                         SetStatus(L10n.T("Phone.ConnectedStatus"), false);
                         RefreshData();
                     });
@@ -1895,6 +1928,7 @@ internal sealed class PhoneDevicePageView : IViewPage
         var cts = CancellationTokenSource.CreateLinkedTokenSource(phone.Lifetime);
         cts.CancelAfter(TimeSpan.FromSeconds(18));
         _catalogCts = cts;
+        _catalogLoading = true;
 
         _ = Task.Run(async () =>
         {
@@ -1905,10 +1939,20 @@ internal sealed class PhoneDevicePageView : IViewPage
                 {
                     if (!ReferenceEquals(_catalogCts, cts)) return;
                     _catalogApps = apps;
+                    _catalogLoading = false;
+                    FilterCatalog();
                     if (_active) _actions.Invalidate();
                 });
             }
-            catch { }
+            catch
+            {
+                _actions.Host.TryPost(() =>
+                {
+                    if (!ReferenceEquals(_catalogCts, cts)) return;
+                    _catalogLoading = false;
+                    _actions.Invalidate();
+                });
+            }
         });
     }
 

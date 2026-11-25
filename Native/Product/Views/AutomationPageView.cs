@@ -23,7 +23,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 {
     private readonly UiScrollState _listScroll = new();
     private readonly UiScrollState _editorScroll = new();
-    private readonly UiScrollState _historyScroll = new();
     private readonly Dictionary<string, Action> _clicks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Action> _rightClicks = new(StringComparer.Ordinal);
 
@@ -35,16 +34,14 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     private string _searchText = "";
     private string? _selectedRuleId;
+    private int _stateFilter;
+    private int _triggerFilter = -1;
     private AutoRule? _editingRule;
     private List<AutoRuleStep> _editingSteps = new();
     private bool _isNewDraft;
     private string? _templateHint;
     private bool _capturingHotkey;
 
-    private bool _historyMode;
-    private bool _historyLoading;
-    private List<ExecutionHistoryEntry> _historyEntries = new();
-    private string? _expandedRunId;
 
     // Rule drag-to-reorder state
     private readonly List<(string RuleId, UiRect RowRect)> _visibleRuleRows = new();
@@ -138,7 +135,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     {
         _listScroll.EndDrag();
         _editorScroll.EndDrag();
-        _historyScroll.EndDrag();
         _draggingVolStepIndex = -1;
         if (_ruleDragging || _dragRuleId != null)
             CommitOrCancelRuleDrag(commit: false);
@@ -183,7 +179,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 });
             });
         }
-        if (_historyMode) LoadHistoryAsync();
     }
 
     private void LoadRules()
@@ -199,19 +194,14 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             .ThenBy(r => r.Id, StringComparer.Ordinal)
             .ToList();
 
-        if (_editingRule == null && _rules.Count > 0)
-        {
-            var pick = _rules.FirstOrDefault(r => r.Id == _selectedRuleId) ?? _rules[0];
-            OpenRuleInEditor(pick, isNewDraft: false, templateHint: null);
-        }
-        else if (_editingRule != null && !_isNewDraft)
+        if (_editingRule != null && !_isNewDraft)
         {
             var match = _rules.FirstOrDefault(r => r.Id == _editingRule.Id);
             if (match == null)
             {
                 _editingRule = null;
                 _editingSteps.Clear();
-                if (_rules.Count > 0) OpenRuleInEditor(_rules[0], false, null);
+
             }
         }
     }
@@ -224,16 +214,11 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         _stepCardRects.Clear();
         _stepVolSliders.Clear();
 
-        float leftW = Math.Clamp(contentRect.Width * 0.34f, 260f, 300f);
-        float gap = 14f;
-        var leftCard = new UiRect(contentRect.X, contentRect.Y, leftW, contentRect.Height);
-        var rightCard = new UiRect(leftCard.Right + gap, contentRect.Y, MathF.Max(260f, contentRect.Width - leftW - gap), contentRect.Height);
-
-        RenderLeftPane(g, t, hit, leftCard);
-        if (_historyMode)
-            RenderHistoryPane(g, t, hit, rightCard);
+        _listViewport = _editorViewport = default;
+        if (_editingRule != null)
+            RenderEditorPane(g, t, hit, contentRect);
         else
-            RenderEditorPane(g, t, hit, rightCard);
+            RenderLeftPane(g, t, hit, contentRect);
     }
 
     private void RegisterBtn(string id, UiRect r, UiRect vp, UiHitMap hit, Action onClick, UiCursorKind cursor = UiCursorKind.Hand, string? tooltip = null, Action? onRightClick = null)
@@ -249,42 +234,42 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     private void RenderLeftPane(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect card)
     {
-        UiPrimitives.DrawCard(g, t, card);
-        float pad = 12f;
-        float innerW = card.Width - pad * 2f;
-        float y = card.Y + pad;
-
-        // Title + Toolbar row
-        g.DrawText(L10n.T("Nav.Automation"), new UiRect(card.X + pad, y, innerW, 24f), t.TextPrimary, 16f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        y += 30f;
-
-        // Toolbar: New | Templates | Import | History
-        float btnGap = 6f;
-        float iconBtnW = 32f;
-        float newW = MathF.Max(80f, innerW - iconBtnW * 3f - btnGap * 3f);
-        var newRect = new UiRect(card.X + pad, y, newW, 32f);
-        UiPrimitives.DrawAccentButton(g, t, hit, "auto.new", newRect, L10n.T("Auto.New").Replace("＋ ", ""), icon: UiIcon.Plus, fontSize: 12f);
-        RegisterBtn("auto.new", newRect, card, hit, NewRule, UiCursorKind.Hand, L10n.T("Auto.New"));
+        const float pad = 0f;
+        float innerW = card.Width;
+        float y = card.Y;
+        const float newW = 136f, iconBtnW = 40f, btnGap = 8f;
+        float toolbarW = newW + 3f * (iconBtnW + btnGap);
+        float titleW = MathF.Max(40f, innerW - toolbarW - 12f);
+        g.DrawText(L10n.T("Nav.Automation"), new UiRect(card.X, y, titleW, 28f), t.TextPrimary, 22f, 600);
+        string hint = L10n.T("Auto.Hint");
+        float hintH = MathF.Max(18f, D2dSharedContext.Instance.MeasureText(hint, UiMetrics.FontFamily, 12f, 400, titleW, 100f, true).Height);
+        g.DrawText(hint, new UiRect(card.X, y + 32f, titleW, hintH), t.TextSecondary, 12f, 400, wrap: true);
+        var newRect = new UiRect(card.Right - toolbarW, y, newW, 40f);
+        UiPrimitives.DrawAccentButton(g, t, hit, "auto.new", newRect, L10n.T("Auto.New"));
+        RegisterBtn("auto.new", newRect, card, hit, NewRule);
 
         float bx = newRect.Right + btnGap;
-        var tplRect = new UiRect(bx, y, iconBtnW, 32f);
+        var tplRect = new UiRect(bx, y, iconBtnW, 40f);
         UiPrimitives.DrawSecondaryButton(g, t, hit, "auto.templates", tplRect, "", icon: UiIcon.Templates, tooltip: L10n.T("Template.Open"));
         RegisterBtn("auto.templates", tplRect, card, hit, () => OpenTemplatesMenu(tplRect), UiCursorKind.Hand, L10n.T("Template.Open"));
         bx += iconBtnW + btnGap;
 
-        var impRect = new UiRect(bx, y, iconBtnW, 32f);
+        var impRect = new UiRect(bx, y, iconBtnW, 40f);
         string impTip = IsZh() ? "导入规则 JSON" : "Import rule JSON";
         UiPrimitives.DrawSecondaryButton(g, t, hit, "auto.import", impRect, "", icon: UiIcon.File, tooltip: impTip);
         RegisterBtn("auto.import", impRect, card, hit, ImportRuleJson, UiCursorKind.Hand, impTip);
         bx += iconBtnW + btnGap;
 
-        var histRect = new UiRect(bx, y, iconBtnW, 32f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "auto.history", histRect, "", icon: UiIcon.History, active: _historyMode, tooltip: L10n.T("History.Title"));
-        RegisterBtn("auto.history", histRect, card, hit, ToggleHistoryMode, UiCursorKind.Hand, L10n.T("History.Title"));
+        var histRect = new UiRect(bx, y, iconBtnW, 40f);
+        UiPrimitives.DrawSecondaryButton(g, t, hit, "auto.history", histRect, "", icon: UiIcon.History, enabled: actions.Config.ExperimentalMode && actions.Config.ExecutionHistoryEnabled, tooltip: L10n.T("History.Title"));
+        if (actions.Config.ExperimentalMode && actions.Config.ExecutionHistoryEnabled)
+            RegisterBtn("auto.history", histRect, card, hit, actions.OpenHistory, UiCursorKind.Hand, L10n.T("History.Title"));
         y += 40f;
 
-        // Search box + options button
-        var searchRect = new UiRect(card.X + pad, y, innerW - 36f, 30f);
+        y = card.Y + 32f + hintH + 18f;
+        float stateW = MathF.Min(130f, innerW * 0.23f);
+        float triggerW = MathF.Min(180f, innerW * 0.32f);
+        var searchRect = new UiRect(card.X, y, innerW - stateW - triggerW - 60f, 36f);
         UiPrimitives.DrawTextBox(g, t, hit, "auto.search", searchRect, _searchText, L10n.T("Auto.Search"),
             focused: actions.ActiveInlineEditTag == "auto.search", fontSize: 12f);
         RegisterBtn("auto.search", searchRect, card, hit, () =>
@@ -294,7 +279,27 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 (txt, _) => { _searchText = txt; actions.Invalidate(); });
         }, UiCursorKind.IBeam, L10n.T("Auto.Search"));
 
-        var optRect = new UiRect(searchRect.Right + 6f, y, 30f, 30f);
+        var stateRect = new UiRect(searchRect.Right + 8f, y, stateW, 36f);
+        string StateLabel(int state) => L10n.T(state switch { 1 => "Auto.Enabled", 2 => "Auto.Disabled", _ => "Auto.FilterAllStates" });
+        UiPrimitives.DrawComboBox(g, t, hit, "auto.stateFilter", stateRect, StateLabel(_stateFilter));
+        RegisterBtn("auto.stateFilter", stateRect, card, hit, () =>
+            actions.ShowCombo(stateRect, Enumerable.Range(0, 3).Select(n => new ComboChoice(n.ToString(), StateLabel(n))).ToList(), _stateFilter.ToString(), p =>
+            {
+                _stateFilter = int.Parse(p.Key, CultureInfo.InvariantCulture);
+                _listScroll.Offset = 0f;
+                actions.Invalidate();
+            }));
+        var triggerRect = new UiRect(stateRect.Right + 8f, y, triggerW, 36f);
+        string TriggerLabel(int n) => n < 0 ? L10n.T("Auto.FilterAllTriggers") : AutomationTriggerTitle((AutoRuleTrigger)n);
+        UiPrimitives.DrawComboBox(g, t, hit, "auto.triggerFilter", triggerRect, TriggerLabel(_triggerFilter));
+        RegisterBtn("auto.triggerFilter", triggerRect, card, hit, () =>
+            actions.ShowCombo(triggerRect, Enumerable.Range(-1, 7).Select(n => new ComboChoice(n.ToString(), TriggerLabel(n))).ToList(), _triggerFilter.ToString(), p =>
+            {
+                _triggerFilter = int.Parse(p.Key, CultureInfo.InvariantCulture);
+                _listScroll.Offset = 0f;
+                actions.Invalidate();
+            }));
+        var optRect = new UiRect(triggerRect.Right + 8f, y, 36f, 36f);
         UiPrimitives.DrawGhostIconButton(g, t, hit, "auto.listopt", optRect, UiIcon.Options, 15f, tooltip: L10n.T("Auto.ListOptions"));
         RegisterBtn("auto.listopt", optRect, card, hit, () => OpenListOptionsMenu(optRect), UiCursorKind.Hand, L10n.T("Auto.ListOptions"));
         y += 38f;
@@ -303,9 +308,11 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         _listViewport = new UiRect(card.X + pad, y, innerW, MathF.Max(40f, card.Bottom - pad - y));
         _listScroll.ViewportHeight = _listViewport.Height;
 
-        var filtered = string.IsNullOrWhiteSpace(_searchText)
-            ? _rules
-            : _rules.Where(r => (r.Name ?? "").Contains(_searchText.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        string query = _searchText.Trim();
+        var filtered = query.Length == 0 && _stateFilter == 0 && _triggerFilter < 0 ? _rules :
+            _rules.Where(r => (query.Length == 0 || (r.Name ?? "").Contains(query, StringComparison.OrdinalIgnoreCase))
+                && (_stateFilter == 0 || r.Enabled == (_stateFilter == 1))
+                && (_triggerFilter < 0 || (int)r.Trigger == _triggerFilter)).ToList();
 
         float listPadR = _listScroll.MaxOffset > 0.5f ? UiMetrics.ScrollBarWidth + 4f : 0f;
         float rowW = MathF.Max(120f, _listViewport.Width - listPadR);
@@ -331,7 +338,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
                 if (rowRect.Bottom >= _listViewport.Y - 2f && rowRect.Y <= _listViewport.Bottom + 2f)
                 {
-                    bool selected = !_historyMode && _editingRule != null && _editingRule.Id == rule.Id;
+                    bool selected = _selectedRuleId == rule.Id;
                     bool running = AutoRuleService.IsRunning(rule.Id);
                     bool isDragged = _ruleDragging && _dragRuleId == rule.Id;
 
@@ -350,7 +357,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
                     // Name + trigger summary
                     float infoX = gripRect.Right + 4f;
-                    float rightCtrlW = 94f;
+                    float rightCtrlW = 182f;
                     float infoW = MathF.Max(40f, rowRect.Right - rightCtrlW - infoX - 4f);
                     string title = string.IsNullOrWhiteSpace(rule.Name) ? L10n.T("Auto.DefaultNamePrefix") : rule.Name;
                     g.DrawText(title, new UiRect(infoX, rowRect.Y + 9f, infoW, 20f),
@@ -359,7 +366,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                     string sub = AutomationTriggerTitle(rule.Trigger);
                     string det = AutomationTriggerDetail(rule);
                     if (!string.IsNullOrEmpty(det)) sub += " · " + det;
-                    int stepCnt = rule.CloneSteps().Count;
+                    int stepCnt = Math.Max(1, rule.Actions.Count);
                     sub += $" ({stepCnt})";
                     bool hkConflict = HasHotkeyConflict(rule);
                     if (hkConflict) sub += " · " + L10n.T("Auto.HotkeyConflict");
@@ -385,13 +392,26 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                     UiPrimitives.DrawGhostIconButton(g, t, hit, "auto.run." + rule.Id, runRect,
                         running ? UiIcon.Waiting : UiIcon.Play, 13f,
                         iconColor: running ? t.Accent : t.TextPrimary, enabled: !running, tooltip: L10n.T(running ? "Auto.Running" : "Auto.Run"));
-                    RegisterBtn("auto.run." + rule.Id, runRect, _listViewport, hit, () => RunRuleById(rule.Id), UiCursorKind.Hand, L10n.T("Auto.Run"));
+                    if (!running) RegisterBtn("auto.run." + rule.Id, runRect, _listViewport, hit, () => RunRuleById(rule.Id), UiCursorKind.Hand, L10n.T("Auto.Run"));
+
+                    float buttonX = runRect.X;
+                    void AddRowCommand(string suffix, UiIcon icon, string label, Action command)
+                    {
+                        buttonX -= 28f;
+                        var button = new UiRect(buttonX, rowRect.CenterY - 13f, 26f, 26f);
+                        string id = suffix + rule.Id;
+                        string tip = L10n.T(label);
+                        UiPrimitives.DrawGhostIconButton(g, t, hit, id, button, icon, 14f, tooltip: tip);
+                        RegisterBtn(id, button, _listViewport, hit, command, UiCursorKind.Hand, tip);
+                    }
+                    AddRowCommand("auto.delete.", UiIcon.Delete, "Auto.Delete", () => DeleteRule(rule.Id));
+                    AddRowCommand("auto.copy.", UiIcon.Copy, "Auto.Copy", () => DuplicateRule(rule.Id));
+                    AddRowCommand("auto.edit.", UiIcon.Edit, "Auto.Edit", () => OpenRuleInEditor(rule, false, null));
 
                     // Row click body (select in editor) + right-click context menu
-                    var bodyRect = new UiRect(gripRect.Right, rowRect.Y, runRect.X - gripRect.Right, rowH);
+                    var bodyRect = new UiRect(gripRect.Right, rowRect.Y, buttonX - gripRect.Right, rowH);
                     RegisterBtn(rowId, bodyRect, _listViewport, hit, () =>
                     {
-                        _historyMode = false;
                         var found = AutoRuleStore.Find(rule.Id) ?? rule;
                         OpenRuleInEditor(found, false, null);
                     }, UiCursorKind.Hand, rule.Name, () => ShowRuleContextMenu(rule));
@@ -412,129 +432,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         _listScroll.ContentHeight = filtered.Count == 0 ? 60f : filtered.Count * (rowH + rowGap);
         _listScroll.Clamp();
         _listScroll.Draw(g, t, hit, "auto.list.scroll", _listViewport);
-    }
-
-    private void RenderHistoryPane(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect card)
-    {
-        UiPrimitives.DrawCard(g, t, card);
-        float pad = 18f;
-        float innerW = card.Width - pad * 2f;
-        float y = card.Y + pad;
-
-        // Header
-        g.DrawIcon(UiIcon.History, new UiRect(card.X + pad, y + 4f, 20f, 20f), t.Accent, 1.8f);
-        g.DrawText(L10n.T("History.Title"), new UiRect(card.X + pad + 28f, y, innerW - 220f, 28f), t.TextPrimary, 17f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-
-        var backRect = new UiRect(card.Right - pad - 76f, y, 76f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "hist.close", backRect, L10n.T("Auto.Cancel"), fontSize: 12f);
-        RegisterBtn("hist.close", backRect, card, hit, () => { _historyMode = false; actions.Invalidate(); });
-
-        var clearRect = new UiRect(backRect.X - 88f, y, 80f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "hist.clear", clearRect, L10n.T("History.Clear"), danger: true, fontSize: 11.5f);
-        RegisterBtn("hist.clear", clearRect, card, hit, ClearHistoryAsync);
-
-        var refRect = new UiRect(clearRect.X - 76f, y, 68f, 30f);
-        UiPrimitives.DrawSecondaryButton(g, t, hit, "hist.refresh", refRect, L10n.T("History.Refresh"), fontSize: 11.5f);
-        RegisterBtn("hist.refresh", refRect, card, hit, LoadHistoryAsync);
-        y += 40f;
-
-        var vp = new UiRect(card.X + pad, y, innerW, MathF.Max(40f, card.Bottom - pad - y));
-        _historyScroll.ViewportHeight = vp.Height;
-
-        bool enabled = actions.Config.ExperimentalMode && actions.Config.ExecutionHistoryEnabled;
-        if (!enabled)
-        {
-            g.DrawText(L10n.T("History.Hint"), new UiRect(vp.X, vp.Y + 12f, vp.Width, 44f), t.TextSecondary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true);
-            if (!actions.Config.ExecutionHistoryEnabled || !actions.Config.ExperimentalMode)
-            {
-                var enRect = new UiRect(vp.X, vp.Y + 66f, 160f, 34f);
-                UiPrimitives.DrawAccentButton(g, t, hit, "hist.enable", enRect, IsZh() ? "开启执行记录" : "Enable History");
-                RegisterBtn("hist.enable", enRect, card, hit, () =>
-                {
-                    actions.Config.ExperimentalUnlocked = true;
-                    actions.Config.ExperimentalMode = true;
-                    actions.Config.ExecutionHistoryEnabled = true;
-                    ConfigService.TrySave(actions.Config);
-                    actions.NotifySettingsChanged();
-                    LoadHistoryAsync();
-                });
-            }
-            return;
-        }
-
-        if (_historyLoading)
-        {
-            g.DrawText(L10n.T("Tray.Loading"), vp, t.TextSecondary, 13f, 400, UiTextAlign.Center, UiVertAlign.Center);
-            return;
-        }
-
-        if (_historyEntries.Count == 0)
-        {
-            g.DrawText(L10n.T("History.Empty"), vp.Deflate(20f, 20f), t.TextSecondary, 12.5f, 400, UiTextAlign.Center, UiVertAlign.Center, wrap: true);
-            return;
-        }
-
-        float listW = _historyScroll.MaxOffset > 0.5f ? vp.Width - UiMetrics.ScrollBarWidth - 6f : vp.Width;
-        float hy = vp.Y - _historyScroll.Offset;
-        float startY = hy;
-
-        g.PushClip(vp);
-        hit.PushClip(vp);
-        for (int i = 0; i < _historyEntries.Count; i++)
-        {
-            var entry = _historyEntries[i];
-            bool expanded = _expandedRunId == entry.RunId;
-            float stepsH = expanded ? (entry.Steps.Count * 22f + 10f) : 0f;
-            float ch = 64f + stepsH;
-            var er = new UiRect(vp.X, hy, listW, ch);
-            if (er.Bottom >= vp.Y && er.Y <= vp.Bottom)
-            {
-                g.FillRoundedRect(er, 8f, t.SurfaceCard);
-                g.DrawRoundedRect(er, 8f, expanded ? t.Accent : t.Border, 1f);
-
-                string timeStr = entry.StartedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-                g.DrawText(entry.RuleName, new UiRect(er.X + 12f, er.Y + 8f, er.Width - 130f, 20f), t.TextPrimary, 13f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-
-                bool ok = string.Equals(entry.Status, "success", StringComparison.OrdinalIgnoreCase);
-                bool fail = string.Equals(entry.Status, "failed", StringComparison.OrdinalIgnoreCase);
-                UiColor badgeBg = ok ? t.Success.WithAlphaFraction(0.18f) : fail ? t.Fail.WithAlphaFraction(0.18f) : t.NavSelected;
-                UiColor badgeFg = ok ? t.Success : fail ? t.Fail : t.Accent;
-                UiPrimitives.DrawBadge(g, t, new UiRect(er.Right - 92f, er.Y + 8f, 80f, 20f), L10n.T("History.Status." + entry.Status), badgeBg, badgeFg);
-
-                string meta = $"{timeStr} · {L10n.T("History.Source." + entry.Source)} · {string.Format(L10n.T("History.Summary"), entry.Succeeded, entry.Failed, entry.Skipped)} · {entry.ElapsedMs} ms";
-                g.DrawText(meta, new UiRect(er.X + 12f, er.Y + 32f, er.Width - 24f, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-
-                if (expanded)
-                {
-                    float sy = er.Y + 58f;
-                    foreach (var step in entry.Steps)
-                    {
-                        string actName = Enum.IsDefined(typeof(AutoRuleAction), step.Action)
-                            ? L10n.T(AutoActionKey((AutoRuleAction)step.Action))
-                            : step.Action.ToString(CultureInfo.InvariantCulture);
-                        string stepLine = $"{step.Number}. {actName} — {L10n.T("History.Status." + step.Status)} ({step.ElapsedMs} ms)";
-                        if (!string.IsNullOrEmpty(step.Reason))
-                            stepLine += " · " + L10n.T("History.Reason." + step.Reason);
-                        g.DrawText(stepLine, new UiRect(er.X + 16f, sy, er.Width - 28f, 20f), t.TextSecondary, 11f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-                        sy += 22f;
-                    }
-                }
-
-                string hid = "hist.entry." + entry.RunId;
-                RegisterBtn(hid, new UiRect(er.X, er.Y, er.Width, 58f), vp, hit, () =>
-                {
-                    _expandedRunId = _expandedRunId == entry.RunId ? null : entry.RunId;
-                    actions.Invalidate();
-                });
-            }
-            hy += ch + 8f;
-        }
-        hit.PopClip();
-        g.PopClip();
-
-        _historyScroll.ContentHeight = MathF.Max(0f, hy - startY);
-        _historyScroll.Clamp();
-        _historyScroll.Draw(g, t, hit, "hist.scroll", vp);
     }
 
     private void RenderEditorPane(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect card)
@@ -1048,9 +945,8 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         UiPrimitives.DrawTextBox(g, t, hit, delayTag, delayRect, step.DelayMs.ToString(CultureInfo.InvariantCulture), "0", focused: actions.ActiveInlineEditTag == delayTag, fontSize: 12f);
         RegisterBtn(delayTag, delayRect, _editorViewport, hit, () =>
         {
-            actions.StartInlineEdit(delayTag, delayRect, step.DelayMs.ToString(CultureInfo.InvariantCulture), null, (s, commit) =>
+            actions.StartInlineEdit(delayTag, delayRect, step.DelayMs.ToString(CultureInfo.InvariantCulture), null, (s, _) =>
             {
-                if (!commit) return;
                 if (int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int ms))
                 {
                     step.DelayMs = Math.Clamp(ms, 0, 600000);
@@ -1070,7 +966,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     public bool OnPointerMove(float x, float y, bool leftDown)
     {
-        if (_listScroll.DragMove(y) || _editorScroll.DragMove(y) || _historyScroll.DragMove(y))
+        if (_listScroll.DragMove(y) || _editorScroll.DragMove(y))
             return true;
 
         if (_draggingVolStepIndex >= 0)
@@ -1118,7 +1014,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
         if (targetId == "auto.list.scroll" && _listScroll.BeginDrag(e.Y)) return true;
         if (targetId == "edit.scroll" && _editorScroll.BeginDrag(e.Y)) return true;
-        if (targetId == "hist.scroll" && _historyScroll.BeginDrag(e.Y)) return true;
 
         // Rule grip drag start
         if (_listViewport.Contains(e.X, e.Y))
@@ -1136,7 +1031,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         }
 
         // Step grip or volume slider drag start
-        if (!_historyMode && _editorViewport.Contains(e.X, e.Y))
+        if (_editorViewport.Contains(e.X, e.Y))
         {
             for (int i = 0; i < _stepCardRects.Count; i++)
             {
@@ -1169,7 +1064,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         if (e.Button != UiMouseButton.Left) return false;
         if (_listScroll.Dragging) { _listScroll.EndDrag(); return true; }
         if (_editorScroll.Dragging) { _editorScroll.EndDrag(); return true; }
-        if (_historyScroll.Dragging) { _historyScroll.EndDrag(); return true; }
 
         if (_draggingVolStepIndex >= 0)
         {
@@ -1198,7 +1092,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
     {
         if (horizontal) return false;
         if (_listViewport.Contains(x, y)) { _listScroll.OnWheel(delta); return true; }
-        if (_historyMode) { _historyScroll.OnWheel(delta); return true; }
         if (_editorViewport.Contains(x, y))
         {
             foreach (var kv in _stepVolSliders)
@@ -1387,7 +1280,6 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
 
     private void NewRule()
     {
-        _historyMode = false;
         var draft = new AutoRule { Name = "", Enabled = true, Trigger = AutoRuleTrigger.Hotkey };
         draft.SetSteps([new AutoRuleStep()]);
         OpenRuleInEditor(draft, isNewDraft: true, templateHint: null);
@@ -1401,9 +1293,11 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
             Icon = UiIcon.Templates,
             Click = () =>
             {
-                _historyMode = false;
-                var draft = tpl.CreateDraft(L10n.T(tpl.NameKey));
-                OpenRuleInEditor(draft, isNewDraft: true, templateHint: L10n.T(tpl.DescriptionKey) + " " + L10n.T("Template.DraftHint"));
+                string baseName = L10n.T(tpl.NameKey), name = baseName;
+                for (int suffix = 2; _rules.Any(rule => string.Equals(rule.Name, name, StringComparison.OrdinalIgnoreCase)); suffix++)
+                    name = $"{baseName} ({suffix})";
+                var draft = tpl.CreateDraft(name);
+                OpenRuleInEditor(draft, isNewDraft: true, templateHint: L10n.T("Template.DraftHint") + "\n" + L10n.T(tpl.DescriptionKey));
             }
         }).ToList();
         actions.ShowMenu(anchor, items);
@@ -1538,7 +1432,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
                 if (!_disposed)
                 {
                     actions.ShowNotice(msg);
-                    if (_historyMode) LoadHistoryAsync();
+                    actions.RefreshHistoryIfOpen();
                     actions.Invalidate();
                 }
             });
@@ -1592,6 +1486,8 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         _isNewDraft = false;
         _templateHint = null;
         _selectedRuleId = _editingRule.Id;
+        _editingRule = null;
+        _editingSteps.Clear();
         actions.Host.ViewSettingsChanged();
         LoadRules();
         actions.ShowNotice(L10n.T("Auto.Saved"));
@@ -1603,12 +1499,10 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         CancelHotkeyCapture();
         actions.CloseInlineEdit(commit: false);
         _templateHint = null;
-        if (_isNewDraft && _rules.Count > 0)
-            OpenRuleInEditor(_rules[0], false, null);
-        else if (_editingRule != null && AutoRuleStore.Find(_editingRule.Id) is { } saved)
-            OpenRuleInEditor(saved, false, null);
-        else
-            actions.Invalidate();
+        _editingRule = null;
+        _editingSteps.Clear();
+        _isNewDraft = false;
+        actions.Invalidate();
     }
 
     private bool ValidateEditor(out string message)
@@ -1647,65 +1541,11 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         return true;
     }
 
-    private void ToggleHistoryMode()
-    {
-        _historyMode = !_historyMode;
-        if (_historyMode) LoadHistoryAsync();
-        actions.Invalidate();
-    }
-
-    private void LoadHistoryAsync()
-    {
-        var store = AutoRuleService.GetHistoryStore();
-        if (store == null)
-        {
-            _historyEntries.Clear();
-            _historyLoading = false;
-            actions.Invalidate();
-            return;
-        }
-        _historyLoading = true;
-        _ = Task.Run(async () =>
-        {
-            List<ExecutionHistoryEntry> entries;
-            try
-            {
-                await store.WhenIdleAsync().ConfigureAwait(false);
-                entries = await store.ReadRecentAsync().ConfigureAwait(false);
-            }
-            catch { entries = new(); }
-            actions.Host.TryPost(() =>
-            {
-                _historyLoading = false;
-                if (_disposed) return;
-                _historyEntries = entries;
-                actions.Invalidate();
-            });
-        });
-    }
-
-    private void ClearHistoryAsync()
-    {
-        var store = AutoRuleService.GetHistoryStore();
-        if (store == null) return;
-        _ = Task.Run(async () =>
-        {
-            bool ok = await store.ClearAsync().ConfigureAwait(false);
-            actions.Host.TryPost(() =>
-            {
-                if (_disposed) return;
-                _historyEntries.Clear();
-                actions.ShowNotice(L10n.T(ok ? "History.Cleared" : "History.ReadError"));
-                actions.Invalidate();
-            });
-        });
-    }
-
     private void OpenListOptionsMenu(UiRect anchor)
     {
         var items = new List<UiMenuItem>
         {
-            new() { Text = L10n.T("Auto.ResetFilters"), Click = () => { _searchText = ""; actions.Invalidate(); } },
+            new() { Text = L10n.T("Auto.ResetFilters"), Click = () => { _searchText = ""; _stateFilter = 0; _triggerFilter = -1; _listScroll.Offset = 0f; actions.Invalidate(); } },
             new() { Text = L10n.T("Auto.ResetRuleOrder"), Enabled = actions.Config.AutomationRuleOrder.Count > 0, Click = () =>
             {
                 actions.Config.AutomationRuleOrder.Clear();
@@ -1928,7 +1768,7 @@ internal sealed class AutomationPageView(IViewHostActions actions) : IViewPage
         return string.IsNullOrWhiteSpace(rule.TriggerApp) ? "*" : rule.TriggerApp;
     }
 
-    private static string AutoActionKey(AutoRuleAction action) => action switch
+    internal static string AutoActionKey(AutoRuleAction action) => action switch
     {
         AutoRuleAction.SetSystemOutput => "Auto.ActionSystemOutput",
         AutoRuleAction.SetSystemInput => "Auto.ActionSystemInput",

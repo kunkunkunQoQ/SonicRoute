@@ -109,6 +109,9 @@ internal static unsafe class NativeDialogs
     internal static string? RecordHotkey(nint owner, string title, string initial)
         => Run(owner, title, initial, true, false, true);
 
+    internal static bool ConfirmImport(nint owner, string title, string message)
+        => MessageBoxW(owner, message, title, 0x41) == 1; // MB_OKCANCEL | MB_ICONINFORMATION
+
     internal static bool Confirm(nint owner, string title, string message)
         => MessageBoxW(owner, message, title, 0x00000124) == 6;
 

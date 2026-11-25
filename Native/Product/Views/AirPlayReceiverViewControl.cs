@@ -328,9 +328,8 @@ internal sealed class AirPlayReceiverViewControl
         if (hitId == $"{_idPrefix}.name")
         {
             string current = string.IsNullOrWhiteSpace(_config.AirPlayReceiverName) ? AirPlayPreview.DefaultName : _config.AirPlayReceiverName;
-            _startInlineEdit($"{_idPrefix}.name", hitBounds, current, null, (text, commit) =>
+            _startInlineEdit($"{_idPrefix}.name", hitBounds, current, null, (text, _) =>
             {
-                if (!commit) return;
                 string norm = AirPlayIdentity.NormalizeName(text);
                 if (norm == AirPlayPreview.DefaultName) norm = "";
                 _config.AirPlayReceiverName = norm;

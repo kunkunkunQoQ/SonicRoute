@@ -32,6 +32,9 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     private bool _keepDevicesExpanded;
     private bool _deviceNamesExpanded;
     private bool _langMoreExpanded;
+    private (string Code, string NativeName)[]? _languageChoices;
+    private (string Code, string NativeName)[] _customLanguages = [];
+    private readonly Dictionary<string, string> _languageEdits = new(StringComparer.OrdinalIgnoreCase);
     private bool _autoStartMoreExpanded;
     private bool _autoStartBusy;
     private bool _configImportBusy;
@@ -154,32 +157,13 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         g.DrawText(L10n.T("Settings.PageHint"), new UiRect(x, y, w, 20f), t.TextSecondary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         y += 34f;
 
-        // 1. General / Language & Startup Card
-        y = RenderGeneralStartupCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick);
-        y += 14f;
-
-        // 2. Default App Selection Card
-        y = RenderDefaultAppCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick);
-        y += 14f;
-
-        // 3. Audio & Volume + Behavior Switches Card
-        y = RenderAudioBehaviorCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick);
-        y += 14f;
-
-        // 4. Device Visibility Card
-        y = RenderDeviceVisibilityCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick);
-        y += 14f;
-
-        // 5. Device Names Card
-        y = RenderDeviceNamesCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick);
-        y += 14f;
-
-        // 6. Config & Maintenance Card
+        y = RenderDeviceVisibilityCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
+        y = RenderDeviceNamesCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
+        y = RenderDefaultAppCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
+        y = RenderAudioBehaviorCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
+        y = RenderLanguageCard(g, t, hit, viewport, x, y, w, RegisterClick) + 14f;
+        y = RenderAboutCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick) + 14f;
         y = RenderMaintenanceCard(g, t, hit, viewport, x, y, w, RegisterClick);
-        y += 14f;
-
-        // 7. About & Updates Card
-        y = RenderAboutCard(g, t, hit, viewport, x, y, w, cfg, RegisterClick);
         y += 16f;
 
         hit.PopClip();
@@ -190,26 +174,35 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         _scroll.Draw(g, t, hit, "st.scroll", viewport);
     }
 
-    private float RenderGeneralStartupCard(
+    private float RenderLanguageCard(
         D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect viewport,
-        float x, float y, float w, AppConfig cfg,
+        float x, float y, float w,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
         float pad = 16f;
         float innerW = w - pad * 2f;
         var langs = L10n.SupportedLanguages;
+        if (!ReferenceEquals(_languageChoices, langs))
+        {
+            _languageChoices = langs;
+            _customLanguages = L10n.ListCustomLanguages()
+                .OrderByDescending(l => string.Equals(l.Code, L10n.CurrentLanguage, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(l => l.NativeName, StringComparer.OrdinalIgnoreCase).ToArray();
+            _languageEdits.Clear();
+        }
         int curLangIdx = Array.FindIndex(langs, l => string.Equals(l.Code, L10n.CurrentLanguage, StringComparison.OrdinalIgnoreCase));
         string curLangLabel = langs.Length > 0 ? langs[Math.Max(0, curLangIdx)].NativeName : L10n.CurrentLanguage;
 
-        bool packaged = actions.Host.EnvironmentInfo.IsPackaged;
+
         float langMoreH = _langMoreExpanded ? 46f : 0f;
-        float autoMoreH = !packaged ? 28f + (_autoStartMoreExpanded ? 40f : 0f) : 0f;
-        float cardH = pad + 28f + 12f + 36f + langMoreH + 8f + 54f * 3f + autoMoreH + pad;
+
+        float customH = _customLanguages.Length == 0 ? 0f : 30f + 36f * _customLanguages.Length;
+        float cardH = pad + 28f + 12f + 40f + langMoreH + customH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.Message, L10n.T("St.Language") + " · " + L10n.T("St.StartupSection"));
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.Message, L10n.T("St.Language"));
         cy += 38f;
 
         // Language ComboBox + MoreOptions button
@@ -244,53 +237,45 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             cy += 46f;
         }
 
-        // Auto-start switch (MSIX Store StartupTask vs portable HKCU Run)
-        bool autoStart = packaged ? cfg.AutoStartStore : actions.Host.PreviewAutoStart;
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.autostart", new UiRect(x + pad, cy, innerW, 54f),
-            UiIcon.Power, L10n.T("St.AutoStart"), L10n.T("Settings.AutoStartHint"), autoStart, packaged, () =>
-            {
-                if (_autoStartBusy) return;
-                ToggleAutoStart(!autoStart);
-            }, register);
-
-        if (!packaged)
+        if (_customLanguages.Length > 0)
         {
-            var autoMoreRect = new UiRect(x + pad + 32f, cy + 2f, 118f, 24f);
-            register("st.autostart.more", autoMoreRect, () => { _autoStartMoreExpanded = !_autoStartMoreExpanded; actions.Invalidate(); }, UiCursorKind.Hand, null);
-            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(autoMoreRect.X, autoMoreRect.Y, 92f, autoMoreRect.Height),
-                hit.IsHover("st.autostart.more") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-            g.DrawIcon(UiIcon.ChevronDown, new UiRect(autoMoreRect.X + 94f, autoMoreRect.CenterY - 4.5f, 9f, 9f),
-                t.Accent, 1.8f, _autoStartMoreExpanded ? 180f : 0f);
-            cy += 28f;
-
-            if (_autoStartMoreExpanded)
+            g.DrawText(L10n.T("Exp.CustomLang"), new UiRect(x + pad, cy, innerW, 26f), t.TextSecondary, 12.5f, 600);
+            cy += 30f;
+            foreach (var (code, nativeName) in _customLanguages)
             {
-                var cleanRect = new UiRect(x + pad + 32f, cy + 2f, 200f, 30f);
-                UiPrimitives.DrawSecondaryButton(g, t, hit, "st.autostart.clean", cleanRect, L10n.T("St.CleanAutoStart"),
-                    enabled: !_autoStartBusy, fontSize: 12f);
-                if (!_autoStartBusy)
-                    register("st.autostart.clean", cleanRect, CleanAutoStart, UiCursorKind.Hand, L10n.T("St.CleanAutoStart"));
-                cy += 40f;
+                var box = new UiRect(x + pad, cy, MathF.Min(140f, innerW * .31f), 28f);
+                string tag = "st.lang.name." + code;
+                string draft = _languageEdits.GetValueOrDefault(code, nativeName);
+                UiPrimitives.DrawTextBox(g, t, hit, tag, box, draft, focused: actions.ActiveInlineEditTag == tag);
+                register(tag, box, () => actions.StartInlineEdit(tag, box, draft, null, (text, _) =>
+                {
+                    _languageEdits[code] = text;
+                    actions.Invalidate();
+                }), UiCursorKind.IBeam, L10n.T("Exp.LangNameHint"));
+                var remove = new UiRect(x + w - pad - 72f, cy, 72f, 28f);
+                var save = new UiRect(remove.X - 78f, cy, 72f, 28f);
+                g.DrawText(code, new UiRect(box.Right + 8f, cy, MathF.Max(1f, save.X - box.Right - 14f), 28f),
+                    code == L10n.CurrentLanguage ? t.Accent : t.TextSecondary, 11f);
+                DrawToolbarAction(g, t, hit, "st.lang.save." + code, save, L10n.T("Exp.LangSave"), () =>
+                {
+                    if (!L10n.RenameCustomLanguage(code, _languageEdits.GetValueOrDefault(code, nativeName)))
+                        actions.ShowNotice(L10n.T("Exp.LangEditFail"));
+                    actions.Invalidate();
+                }, register);
+                DrawToolbarAction(g, t, hit, "st.lang.delete." + code, remove, L10n.T("Exp.LangDelete"), () =>
+                {
+                    if (!L10n.DeleteCustomLanguage(code))
+                    {
+                        actions.ShowNotice(L10n.T("Exp.LangEditFail"));
+                        return;
+                    }
+                    actions.Config.Language = L10n.CurrentLanguage;
+                    SaveConfig();
+                    actions.RefreshAll();
+                }, register);
+                cy += 36f;
             }
-            g.DrawLine(x + pad + 2f, cy - 1f, x + pad + innerW - 2f, cy - 1f, t.Border, 1f, roundCaps: false);
         }
-
-        // Start minimized
-        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startmin", new UiRect(x + pad, cy, innerW, 54f),
-            UiIcon.Monitor, L10n.T("St.StartMinimized"), L10n.T("Settings.StartMinimizedHint"), cfg.StartMinimized, true, () =>
-            {
-                cfg.StartMinimized = !cfg.StartMinimized;
-                SaveConfig();
-            }, register);
-
-        // Start panel on start
-        DrawSettingsSwitchWithHint(g, t, hit, "st.startpanel", new UiRect(x + pad, cy, innerW, 54f),
-            UiIcon.Application, L10n.T("St.StartPanel"), L10n.T("Settings.StartPanelHint"), cfg.StartPanelOnStart, false, () =>
-            {
-                cfg.StartPanelOnStart = !cfg.StartPanelOnStart;
-                SaveConfig();
-            }, register);
-
         return y + cardH;
     }
 
@@ -347,9 +332,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 L10n.T("Auto.TargetApp"), focused: actions.ActiveInlineEditTag == "st.fixedapp.edit");
             register("st.fixedapp.edit", fixedBoxRect, () =>
             {
-                actions.StartInlineEdit("st.fixedapp.edit", fixedBoxRect, cfg.FixedAppName, null, (text, commit) =>
+                actions.StartInlineEdit("st.fixedapp.edit", fixedBoxRect, cfg.FixedAppName, null, (text, _) =>
                 {
-                    if (!commit) return;
                     cfg.FixedAppName = text.Trim();
                     SaveConfig();
                 });
@@ -377,13 +361,62 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         int switchCount = 8 + (cfg.ExperimentalMic ? 1 : 0) + (cfg.ExperimentalUnlocked ? 1 : 0);
         float volRowH = 58f;
         float rowH = 54f;
-        float cardH = pad + 28f + 8f + volRowH + switchCount * rowH + pad;
+        bool packaged = actions.Host.EnvironmentInfo.IsPackaged;
+        float startupH = 54f * 3f + (packaged ? 0f : 28f + (_autoStartMoreExpanded ? 40f : 0f));
+        float cardH = pad + 28f + 8f + startupH + volRowH + switchCount * rowH + pad;
         var card = new UiRect(x, y, w, cardH);
         UiPrimitives.DrawCard(g, t, card);
 
         float cy = y + pad;
         UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.Settings, L10n.T("St.Misc"));
         cy += 36f;
+
+        // Start minimized
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startmin", new UiRect(x + pad, cy, innerW, 54f),
+            UiIcon.Monitor, L10n.T("St.StartMinimized"), L10n.T("Settings.StartMinimizedHint"), cfg.StartMinimized, true, () =>
+            {
+                cfg.StartMinimized = !cfg.StartMinimized;
+                SaveConfig();
+            }, register);
+
+        // Auto-start switch (MSIX Store StartupTask vs portable HKCU Run)
+        bool autoStart = packaged ? cfg.AutoStartStore : actions.Host.PreviewAutoStart;
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.autostart", new UiRect(x + pad, cy, innerW, 54f),
+            UiIcon.Power, L10n.T("St.AutoStart"), L10n.T("Settings.AutoStartHint"), autoStart, packaged, () =>
+            {
+                if (_autoStartBusy) return;
+                ToggleAutoStart(!autoStart);
+            }, register);
+
+        if (!packaged)
+        {
+            var autoMoreRect = new UiRect(x + pad + 32f, cy + 2f, 118f, 24f);
+            register("st.autostart.more", autoMoreRect, () => { _autoStartMoreExpanded = !_autoStartMoreExpanded; actions.Invalidate(); }, UiCursorKind.Hand, null);
+            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(autoMoreRect.X, autoMoreRect.Y, 92f, autoMoreRect.Height),
+                hit.IsHover("st.autostart.more") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            g.DrawIcon(UiIcon.ChevronDown, new UiRect(autoMoreRect.X + 94f, autoMoreRect.CenterY - 4.5f, 9f, 9f),
+                t.Accent, 1.8f, _autoStartMoreExpanded ? 180f : 0f);
+            cy += 28f;
+
+            if (_autoStartMoreExpanded)
+            {
+                var cleanRect = new UiRect(x + pad + 32f, cy + 2f, 200f, 30f);
+                UiPrimitives.DrawSecondaryButton(g, t, hit, "st.autostart.clean", cleanRect, L10n.T("St.CleanAutoStart"),
+                    enabled: !_autoStartBusy, fontSize: 12f);
+                if (!_autoStartBusy)
+                    register("st.autostart.clean", cleanRect, CleanAutoStart, UiCursorKind.Hand, L10n.T("St.CleanAutoStart"));
+                cy += 40f;
+            }
+            g.DrawLine(x + pad + 2f, cy - 1f, x + pad + innerW - 2f, cy - 1f, t.Border, 1f, roundCaps: false);
+        }
+
+        // Start panel on start
+        cy = DrawSettingsSwitchWithHint(g, t, hit, "st.startpanel", new UiRect(x + pad, cy, innerW, 54f),
+            UiIcon.Application, L10n.T("St.StartPanel"), L10n.T("Settings.StartPanelHint"), cfg.StartPanelOnStart, false, () =>
+            {
+                cfg.StartPanelOnStart = !cfg.StartPanelOnStart;
+                SaveConfig();
+            }, register);
 
         // Volume Step row (slider + numeric box)
         var volRect = new UiRect(x + pad, cy, innerW, volRowH);
@@ -404,18 +437,17 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         }
 
         var stepBoxRect = new UiRect(volRect.Right - 64f, volRect.CenterY - 15f, 64f, 30f);
-        UiPrimitives.DrawTextBox(g, t, hit, "st.volstep.box", stepBoxRect, clampedStep.ToString(CultureInfo.InvariantCulture) + "%",
+        UiPrimitives.DrawTextBox(g, t, hit, "st.volstep.box", stepBoxRect, clampedStep.ToString(CultureInfo.InvariantCulture),
             focused: actions.ActiveInlineEditTag == "st.volstep.box");
         register("st.volstep.box", stepBoxRect, () =>
         {
-            actions.StartInlineEdit("st.volstep.box", stepBoxRect, clampedStep.ToString(CultureInfo.InvariantCulture), null, (text, commit) =>
+            actions.StartInlineEdit("st.volstep.box", stepBoxRect, clampedStep.ToString(CultureInfo.InvariantCulture), null, (text, _) =>
             {
-                if (!commit) return;
                 if (int.TryParse(text.Trim().TrimEnd('%'), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v))
-                {
                     cfg.VolumeStep = Math.Clamp(v, 1, 20);
-                    SaveConfig();
-                }
+                else
+                    cfg.VolumeStep = 4;
+                SaveConfig();
             });
         }, UiCursorKind.IBeam, L10n.T("St.VolumeStep"));
         g.DrawLine(volRect.X + 2f, volRect.Bottom, volRect.Right - 2f, volRect.Bottom, t.Border, 1f, roundCaps: false);
@@ -518,8 +550,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         const float gap = 8f;
         int cols = Math.Max(1, (int)MathF.Floor((innerW + gap) / (itemW + gap)));
 
-        var outDevices = BuildDeviceList(_outputs, Flow.Render, includeSystemDefault: false);
-        var inDevices = cfg.ExperimentalMic ? BuildDeviceList(_inputs, Flow.Capture, includeSystemDefault: false) : [];
+        var outDevices = BuildDeviceList(_outputs, Flow.Render, includeSystemDefault: true);
+        var inDevices = cfg.ExperimentalMic ? BuildDeviceList(_inputs, Flow.Capture, includeSystemDefault: true) : [];
 
         int outRows = outDevices.Count == 0 ? 1 : (int)MathF.Ceiling(outDevices.Count / (float)cols);
         int inRows = inDevices.Count == 0 ? 0 : (int)MathF.Ceiling(inDevices.Count / (float)cols);
@@ -541,12 +573,15 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 110f, 26f), UiIcon.Monitor, L10n.T("Settings.KeepTitle"));
         g.DrawText(L10n.T("Settings.KeepHint"), new UiRect(x + pad + 32f, cy + 26f, innerW - 110f, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
 
-        var toggleRect = new UiRect(x + w - pad - 102f, cy + 2f, 102f, 26f);
-        register("st.keep.toggle", toggleRect, () => { _keepDevicesExpanded = !_keepDevicesExpanded; actions.Invalidate(); }, UiCursorKind.Hand, L10n.T("Exp.CollapseTip"));
-        g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(toggleRect.X, toggleRect.Y, 80f, toggleRect.Height),
-            hit.IsHover("st.keep.toggle") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
-        g.DrawIcon(UiIcon.ChevronDown, new UiRect(toggleRect.Right - 14f, toggleRect.CenterY - 4.5f, 9f, 9f),
-            t.Accent, 1.8f, _keepDevicesExpanded ? 180f : 0f);
+        if (cfg.CollapseDeviceSections)
+        {
+            var toggleRect = new UiRect(x + w - pad - 102f, cy + 2f, 102f, 26f);
+            register("st.keep.toggle", toggleRect, () => { _keepDevicesExpanded = !_keepDevicesExpanded; actions.Invalidate(); }, UiCursorKind.Hand, L10n.T("Exp.CollapseTip"));
+            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(toggleRect.X, toggleRect.Y, 80f, toggleRect.Height),
+                hit.IsHover("st.keep.toggle") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
+            g.DrawIcon(UiIcon.ChevronDown, new UiRect(toggleRect.Right - 14f, toggleRect.CenterY - 4.5f, 9f, 9f),
+                t.Accent, 1.8f, _keepDevicesExpanded ? 180f : 0f);
+        }
 
         cy += headerH + 6f;
         if (_keepDevicesExpanded)
@@ -717,12 +752,15 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW - 110f, 26f), UiIcon.Label, L10n.T("St.DeviceNames"));
         g.DrawText(L10n.T("St.DeviceNamesHint"), new UiRect(x + pad + 32f, cy + 26f, innerW - 110f, 20f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
 
-        var toggleRect = new UiRect(x + w - pad - 102f, cy + 2f, 102f, 26f);
-        register("st.names.toggle", toggleRect, () => { _deviceNamesExpanded = !_deviceNamesExpanded; actions.Invalidate(); }, UiCursorKind.Hand, L10n.T("Exp.CollapseTip"));
-        g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(toggleRect.X, toggleRect.Y, 80f, toggleRect.Height),
-            hit.IsHover("st.names.toggle") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
-        g.DrawIcon(UiIcon.ChevronDown, new UiRect(toggleRect.Right - 14f, toggleRect.CenterY - 4.5f, 9f, 9f),
-            t.Accent, 1.8f, _deviceNamesExpanded ? 180f : 0f);
+        if (cfg.CollapseDeviceSections)
+        {
+            var toggleRect = new UiRect(x + w - pad - 102f, cy + 2f, 102f, 26f);
+            register("st.names.toggle", toggleRect, () => { _deviceNamesExpanded = !_deviceNamesExpanded; actions.Invalidate(); }, UiCursorKind.Hand, L10n.T("Exp.CollapseTip"));
+            g.DrawText(L10n.T("Exp.MoreOptions"), new UiRect(toggleRect.X, toggleRect.Y, 80f, toggleRect.Height),
+                hit.IsHover("st.names.toggle") ? t.AccentHover : t.Accent, 11.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
+            g.DrawIcon(UiIcon.ChevronDown, new UiRect(toggleRect.Right - 14f, toggleRect.CenterY - 4.5f, 9f, 9f),
+                t.Accent, 1.8f, _deviceNamesExpanded ? 180f : 0f);
+        }
 
         cy += headerH + 6f;
         if (_deviceNamesExpanded)
@@ -769,7 +807,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                 g.DrawText(GetDeviceTitle(dev, title), new UiRect(rowRect.X + 36f, rowRect.Y, labelW, rowH), t.TextPrimary, 12f, 400, UiTextAlign.Leading, UiVertAlign.Center);
             }
 
-            string boxId = $"st.devname.{prefix}.{i}";
+            string boxId = $"st.devname.{prefix}.{dev.Id}";
             float boxW = MathF.Max(120f, w * 0.48f);
             var boxRect = new UiRect(rowRect.Right - 10f - boxW, rowRect.CenterY - 15f, boxW, 30f);
             string alias = cfg.DeviceNames.TryGetValue(dev.Id, out var saved) ? saved : "";
@@ -1188,9 +1226,8 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     private void StartRenameDevice(AudioDeviceInfo device, UiRect rect)
     {
         string current = actions.Config.DeviceNames.TryGetValue(device.Id, out var name) ? name : "";
-        actions.StartInlineEdit("st.rename." + device.Id, rect, current, null, (text, commit) =>
+        actions.StartInlineEdit("st.rename." + device.Id, rect, current, null, (text, _) =>
         {
-            if (!commit) return;
             string trimmed = text.Trim();
             if (string.IsNullOrEmpty(trimmed)) actions.Config.DeviceNames.Remove(device.Id);
             else actions.Config.DeviceNames[device.Id] = trimmed;
@@ -1346,7 +1383,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
                     preview.AppNames?.Count ?? 0,
                     missingDevices,
                     missingApps);
-                if (!NativeDialogs.Confirm(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg)) return;
+                if (!NativeDialogs.ConfirmImport(actions.OwnerWindow.Handle, L10n.T("Exp.ImportConfig"), msg)) return;
 
                 ConfigService.FlushPendingSaves();
                 if (!ConfigService.ApplyImport(prepared))
@@ -1524,7 +1561,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             using var stream = typeof(SettingsPageView).Assembly.GetManifestResourceStream("SonicRoute.License");
             if (stream == null) return;
             using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            NativeDialogs.Input(actions.OwnerWindow.Handle, "GNU General Public License", reader.ReadToEnd(), readOnly: true, multiline: true);
+            actions.ShowProjectLicense("SonicRoute\r\nCopyright (c) 2026 kunkunkunQoQ\r\nGPL-3.0-only\r\n\r\n" + reader.ReadToEnd());
         }
         catch { }
     }

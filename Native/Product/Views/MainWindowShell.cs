@@ -20,6 +20,21 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     private readonly UiHitMap _hit = new();
     private readonly InlineEditHost _inlineEdit = new();
 
+    protected override UiHitMap InputMap => _hit;
+
+    protected override bool ActivateFocused(UiHitItem item, UiPointerEventArgs e)
+    {
+        if (item.Id == "shell.titleToggle")
+        {
+            ToggleSidebar();
+            return true;
+        }
+        if (ActivateShellControl(item.Id)) return true;
+        if (_activePage?.ActivateFocused(e, item.Id) != true) return false;
+        Invalidate();
+        return true;
+    }
+
     private UiThemePalette _theme;
     private MainNavTab _currentTab = MainNavTab.Apps;
     private IViewPage? _activePage;
@@ -41,6 +56,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     private float _pressStartY;
 
     // Popups & modals
+    private ReadOnlyWindow? _historyViewer, _licenseViewer;
     private PopupMenuWindow? _activeMenu;
     private ComboPopupWindow? _activeCombo;
     private Action<string>? _inlineTextChanged;
@@ -82,7 +98,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     public bool HasOpenModal =>
         _activeMenu is { IsVisible: true } ||
         _activeCombo is { IsVisible: true } ||
-        _inlineEdit.IsOpen;
+        _inlineEdit.IsOpen || _licenseViewer is { IsOpen: true };
     public string? ActiveInlineEditTag => _inlineEdit.ActiveTag;
     public UiRect ActiveInlineEditRect => _inlineRectDip;
 
@@ -140,6 +156,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     public void InvalidateTheme()
     {
         _theme = UiThemePalette.Resolve(_config);
+        _historyViewer?.UpdateTheme();
+        _licenseViewer?.UpdateTheme();
         if (_inlineEdit.IsOpen)
             _inlineEdit.SetTheme(_theme.SurfaceBg, _theme.TextPrimary);
         if (IsVisible) Invalidate();
@@ -155,9 +173,29 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     public void NotifySettingsChanged()
     {
+        if (!_config.ExperimentalMode || !_config.ExecutionHistoryEnabled) _historyViewer?.Close();
         EnsureValidTab();
         _host.ViewSettingsChanged();
         if (IsVisible) Invalidate();
+    }
+
+    public void OpenHistory()
+    {
+        if (!_config.ExperimentalMode || !_config.ExecutionHistoryEnabled) return;
+        if (_historyViewer is { IsOpen: true })
+        {
+            _historyViewer.Activate();
+            _historyViewer.Refresh();
+        }
+        else _historyViewer = new ReadOnlyWindow(this);
+    }
+
+    public void RefreshHistoryIfOpen() => _historyViewer?.Refresh();
+
+    public void ShowProjectLicense(string text)
+    {
+        if (_licenseViewer is { IsOpen: true }) _licenseViewer.Activate();
+        else _licenseViewer = new ReadOnlyWindow(this, text);
     }
 
     public void ShowNotice(string message)
@@ -276,6 +314,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     protected override void OnHidden()
     {
+        _historyViewer?.Close();
+        _licenseViewer?.Close();
         CloseInlineEdit(commit: false);
         ClosePopups();
         _activePage?.OnDeactivated();
@@ -507,7 +547,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
     private void RenderNavRail(D2dTarget g, UiRect navRect)
     {
         float x = navRect.X + 14f;
-        float y = navRect.Y + 20f;
+        float y = navRect.Y + 22f;
         float itemW = navRect.Width - 28f;
 
         DrawNavItem(g, MainNavTab.Apps, L10n.T("Nav.Apps"), UiIcon.Apps, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
@@ -522,7 +562,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
         if (_config.ExperimentalUnlocked && _config.ExperimentalMode)
         {
-            y += UiMetrics.NavItemHeight + 10f;
+            y += UiMetrics.NavItemHeight + 8f;
             DrawNavItem(g, MainNavTab.Experimental, L10n.T("Nav.Experimental"), UiIcon.Experiment, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
         }
     }
@@ -670,6 +710,11 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             return;
         }
 
+        ActivateShellControl(clickId);
+    }
+
+    private bool ActivateShellControl(string? clickId)
+    {
         switch (clickId)
         {
             case "shell.min": MinimizeWindow(); break;
@@ -682,7 +727,9 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
             case "nav.Settings": NavigateTo(MainNavTab.Settings); break;
             case "nav.Automation": NavigateTo(MainNavTab.Automation); break;
             case "nav.Experimental": NavigateTo(MainNavTab.Experimental); break;
+            default: return false;
         }
+        return true;
     }
 
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
@@ -693,7 +740,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     protected override bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
-        if (_activePage?.OnKeyDown(vk, ctrl, shift, alt) == true)
+        if (_activePage?.OnKeyDown(vk, ctrl, shift, alt) == true ||
+            (!ctrl && !alt && _hit.TryGetFocus(out var item, out _) && _activePage?.OnFocusedKey(item.Id, vk) == true))
         {
             Invalidate();
             return true;
@@ -790,6 +838,8 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     public override void Dispose()
     {
+        _historyViewer?.Close();
+        _licenseViewer?.Close();
         _host.Updates.Changed -= OnUpdatesChanged;
         _noticeTimer?.Dispose();
         _noticeTimer = null;
