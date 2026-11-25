@@ -50,7 +50,7 @@ internal sealed class CandidateEnvironment
 
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         string requested = Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ROOT") ?? local;
-        string profile = Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ID") ?? "v1.36-preview";
+        string profile = Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_ID") ?? "v136-preview";
         if (profile.Length is < 1 or > 48 || !profile.All(c => char.IsAsciiLetterOrDigit(c) || c == '-' || c == '_'))
             throw new ArgumentException("Invalid candidate profile name.");
         if (!Path.IsPathFullyQualified(requested) || requested.StartsWith(@"\\", StringComparison.Ordinal) ||
