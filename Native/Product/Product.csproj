@@ -26,6 +26,7 @@
     <ProjectReference Include="../../StoreInterop/StoreInterop.csproj" />
     <Compile Include="../../SonicRoute/CoalescedVolumeWriter.cs;../../SonicRoute/ForegroundChangeSource.cs;../../SonicRoute/L10n.cs;../../SonicRoute/LanguageFiles.cs;../../SonicRoute/LanguageJsonContext.cs;../../SonicRoute/HostStartup.cs;../../SonicRoute/CommandOutput.cs" />
     <EmbeddedResource Include="../../SonicRoute/Resources/Lang/*.json" LogicalName="SonicRoute.Resources.Lang.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../SonicRoute/SonicRoute.png" LogicalName="SonicRoute.SonicRoute.png" />
   </ItemGroup>
   <Import Project="Protocol/Protocol.targets" />
   <Import Project="Routing/Routing.targets" />

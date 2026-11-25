@@ -1,11 +1,17 @@
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using SonicRoute.Core;
 using SonicRoute.Native.Audio;
+using SonicRoute.Native.Product.Views;
 
 namespace SonicRoute.Native.Product;
 
 internal sealed partial class ApplicationHost
 {
-    private ProductViewWindow? mainView, panelView, osdView;
+    private MainWindowShell? mainView;
+    private QuickPanelWindow? panelView;
+    private OsdWindow? osdView;
     private IDisposable? osdDeadline, osdAnimation, switchDeadline;
     private long switchingSince;
     private bool panelDismissQueued;
@@ -34,6 +40,7 @@ internal sealed partial class ApplicationHost
         osdDeadline?.Dispose();
         osdAnimation?.Dispose();
         switchDeadline?.Dispose();
+        TrayMenuController.Shared.CloseActive();
         mainView?.Dispose();
         panelView?.Dispose();
         osdView?.Dispose();
@@ -41,8 +48,12 @@ internal sealed partial class ApplicationHost
 
     private void RefreshLanguage(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
-        mainView?.View?.ExternalRefresh();
-        panelView?.View?.ExternalRefresh();
+        mainView?.ExternalRefresh();
+        if (panelView is { IsVisible: true })
+        {
+            panelView.RefreshData();
+            panelView.Invalidate();
+        }
     }
 
     internal Task<string> RunRule(string selector) => ExecuteRuleAsync(selector);
@@ -82,8 +93,8 @@ internal sealed partial class ApplicationHost
     internal void ViewSettingsChanged()
     {
         _automation?.ReloadSettings();
-        mainView?.Invalidate();
-        panelView?.Invalidate();
+        mainView?.InvalidateTheme();
+        panelView?.ApplyThemeAndSettings();
     }
 
     internal void RestartPreview() => _ = RestartViewAsync();
@@ -99,6 +110,31 @@ internal sealed partial class ApplicationHost
     internal void OpenProductMain() => _feedback.Publish(FeedbackKind.OpenMain);
     internal void PreviewOsd() => _feedback.Publish(FeedbackKind.Osd, "SonicRoute · Native AOT Preview", L10n.T("Theme.OsdStyle"));
 
+    private static IViewPage CreateMainPage(MainNavTab tab, IViewHostActions actions) => tab switch
+    {
+        MainNavTab.Apps => new AppsPageView(actions),
+        MainNavTab.Hotkeys => new HotkeysPageView(actions),
+        MainNavTab.Theme => new ThemePageView(actions),
+        MainNavTab.Settings => new SettingsPageView(actions),
+        MainNavTab.Automation => new AutomationPageView(actions),
+        MainNavTab.Experimental => new ExperimentalPageView(actions),
+        _ => new AppsPageView(actions),
+    };
+
+    private MainWindowShell EnsureMainShell()
+    {
+        if (mainView == null || mainView.IsDisposed)
+            mainView = new MainWindowShell(this, _config, CreateMainPage);
+        return mainView;
+    }
+
+    private QuickPanelWindow EnsureQuickPanel()
+    {
+        if (panelView == null || panelView.IsDisposed)
+            panelView = new QuickPanelWindow(this, _config, OpenProductMain, DismissPanel, _window.Handle);
+        return panelView;
+    }
+
     private void ShowFeedback(HostFeedback feedback)
     {
         try
@@ -106,41 +142,44 @@ internal sealed partial class ApplicationHost
             switch (feedback.Kind)
             {
                 case FeedbackKind.OpenMain:
-                    panelView?.Close();
-                    if (mainView == null)
-                    {
-                        mainView = new(ProductSurface.Main, _config);
-                        mainView.View = new(this, _config, mainView, false);
-                    }
-                    mainView.Show(_window.Handle);
+                    panelView?.Hide();
+                    TrayMenuController.Shared.CloseActive();
+                    EnsureMainShell().ShowMain(_window.Handle);
                     break;
+
                 case FeedbackKind.TogglePanel:
-                    if (panelView?.Visible == true) { panelView.Close(); break; }
+                    if (panelView?.IsVisible == true) { panelView.Hide(); break; }
                     goto case FeedbackKind.ShowPanel;
+
                 case FeedbackKind.ShowPanel:
-                    if (panelView == null)
-                    {
-                        panelView = new(ProductSurface.Panel, _config, DismissPanel);
-                        panelView.View = new(this, _config, panelView, true);
-                    }
-                    panelView.Show(_window.Handle);
+                    TrayMenuController.Shared.CloseActive();
+                    EnsureQuickPanel().ShowQuickPanel();
                     break;
-                case FeedbackKind.HidePanel: panelView?.Close(); break;
-                case FeedbackKind.TrayMenu: ShowTrayMenu(); break;
+
+                case FeedbackKind.HidePanel:
+                    panelView?.Hide();
+                    break;
+
+                case FeedbackKind.TrayMenu:
+                    ShowTrayMenu();
+                    break;
+
                 case FeedbackKind.Osd:
                     if (switchDeadline == null && switchingSince == 0) ShowOsd(feedback.Title, feedback.Text);
                     break;
+
                 case FeedbackKind.OutputPending:
                     switchDeadline?.Dispose();
                     switchDeadline = null;
-                    if (switchingSince != 0) ShowOsd(feedback.Title, feedback.Text, true);
+                    if (switchingSince != 0) ShowOsd(feedback.Title, feedback.Text, persistent: true);
                     else switchDeadline = _window.ScheduleOnce(TimeSpan.FromMilliseconds(45), () =>
                     {
                         switchDeadline = null;
                         switchingSince = Environment.TickCount64;
-                        ShowOsd(feedback.Title, feedback.Text, true);
+                        ShowOsd(feedback.Title, feedback.Text, persistent: true);
                     });
                     break;
+
                 case FeedbackKind.OutputSettled:
                     switchDeadline?.Dispose();
                     switchDeadline = null;
@@ -154,13 +193,14 @@ internal sealed partial class ApplicationHost
                     if (remaining > 0) switchDeadline = _window.ScheduleOnce(TimeSpan.FromMilliseconds(remaining), Settle);
                     else Settle();
                     break;
+
                 case FeedbackKind.MicStatus:
                     micOsd = feedback.Text.Length != 0;
                     (micOsdTitle, micOsdText) = (feedback.Title, feedback.Text);
                     if (osdDeadline == null && switchingSince == 0)
                     {
-                        if (micOsd) ShowOsd(micOsdTitle, micOsdText, true);
-                        else osdView?.Close();
+                        if (micOsd) ShowOsd(micOsdTitle, micOsdText, persistent: true);
+                        else osdView?.HideAndRelease();
                     }
                     break;
             }
@@ -170,23 +210,27 @@ internal sealed partial class ApplicationHost
 
     private void DismissPanel()
     {
-        if (panelView?.View?.HasModal == true || panelDismissQueued) return;
+        if (panelView == null || !panelView.IsVisible || panelView.IsPinned || panelView.HasOpenModal || panelDismissQueued)
+            return;
         panelDismissQueued = true;
         _window.TryPost(() =>
         {
             panelDismissQueued = false;
-            if (panelView?.View?.HasModal == false && ShellNative.GetForegroundWindow() != panelView.Handle)
-                panelView.Close();
+            if (panelView is { IsVisible: true, IsPinned: false, HasOpenModal: false }
+                && ShellNative.GetForegroundWindow() != panelView.Handle)
+            {
+                panelView.Hide();
+            }
         });
     }
 
     private void ShowOsd(string title, string text, bool persistent = false)
     {
-        osdView ??= new(ProductSurface.Osd, _config);
+        if (osdView == null || osdView.IsDisposed) osdView = new OsdWindow(_config);
         osdDeadline?.Dispose();
         osdAnimation?.Dispose();
         osdDeadline = osdAnimation = null;
-        bool animate = osdView.Handle == 0 && _config.OsdFadeInMs > 0;
+        bool animate = !osdView.IsVisible && _config.OsdFadeInMs > 0;
         byte alpha = animate ? (byte)24 : (byte)255;
         if (!osdView.ShowOsd(_window.Handle, title, text, alpha) &&
             !osdView.ShowOsd(_window.Handle, title, text, alpha)) return;
@@ -194,8 +238,8 @@ internal sealed partial class ApplicationHost
         if (!persistent) osdDeadline = _window.ScheduleOnce(TimeSpan.FromMilliseconds(1250), () =>
         {
             osdDeadline = null;
-            if (micOsd) ShowOsd(micOsdTitle, micOsdText, true);
-            else AnimateOsd(255, 0, _config.OsdFadeOutMs, osdView.Close);
+            if (micOsd) ShowOsd(micOsdTitle, micOsdText, persistent: true);
+            else AnimateOsd(255, 0, _config.OsdFadeOutMs, () => osdView?.HideAndRelease());
         });
     }
 
@@ -208,7 +252,7 @@ internal sealed partial class ApplicationHost
         void Frame()
         {
             osdAnimation = null;
-            if (osdView?.Handle is null or 0) return;
+            if (osdView == null || !osdView.IsVisible) return;
             float amount = Math.Clamp((Environment.TickCount64 - start) / (float)duration, 0f, 1f);
             osdView.SetOsdAlpha((byte)MathF.Round(from + (to - from) * amount));
             if (amount >= 1) completed();
@@ -219,54 +263,12 @@ internal sealed partial class ApplicationHost
 
     private void ShowTrayMenu()
     {
-        nint foreground = ShellNative.GetForegroundWindow();
-        ViewNative.GetCursorPos(out var point);
-        var top = new List<(string Label, Action? Action)>
-        {
-            (L10n.T("Tray.OpenMain"), OpenProductMain),
-            (L10n.T("Tray.OpenPanel"), () => _feedback.Publish(FeedbackKind.ShowPanel)),
-            ("", null)
-        };
-        top.Add((L10n.T("Dev.SystemDefaultOut"), () => TrayAudioMenu(point, 0)));
-        var current = CurrentApp.Resolve(hwnd: foreground);
-        if (current != null) top.Add((current.Label, () => TrayAudioMenu(point, checked((int)current.ProcessId))));
-        if (_config.ExperimentalMic) top.Add((L10n.T("Tray.MuteAllMicrophones"), () => TrayOperation(() =>
-            _audio.GlobalMicMute(null) ? L10n.T("Ov.MicMuted") : L10n.T("Ov.MicUnmuted"))));
-        if (PreviewGlobalControls) top.Add((L10n.T("Tray.PauseWheel"), () => { _config.TrayWheelPaused = !_config.TrayWheelPaused; ConfigService.TrySave(_config); ViewSettingsChanged(); }));
-        foreach (var rule in AutoRuleStore.LoadAll().Where(rule => _config.FavoriteRuleIds.Contains(rule.Id)).Take(20))
-            top.Add((rule.Name, () => _ = RunRule(rule.Id)));
-        top.Add(("", null));
-        top.Add((L10n.T("Tray.Exit"), () => _window.RequestExit()));
-        TrayMenu(point, top);
-    }
-
-    private void TrayAudioMenu(ViewNative.Point point, int pid)
-    {
-        var entries = new List<(string Label, Action? Action)>();
-        if (pid != 0) entries.Add((L10n.T("Dev.SystemDefaultOut"), () => _ = CurrentApp.SelectOutputAsync(pid, AudioService.SystemDefaultDeviceId)));
-        foreach (var device in ProductAudio.Devices(Flow.Render).Where(device => !_config.HiddenOutputDevices.Contains(device.Id)))
-            entries.Add((_config.DeviceNames.GetValueOrDefault(device.Id, device.Name), pid == 0
-                ? () => TrayOperation(() => { _audio.SetDefault(Flow.Render, device.Id); return device.Name; })
-                : () => _ = CurrentApp.SelectOutputAsync(pid, device.Id)));
-        entries.Add(("", null));
-        foreach (int level in new[] { 25, 50, 75, 100 })
-            entries.Add(($"{level}%", () => TrayOperation(() => $"{_audio.Volume(Flow.Render, null, pid, level: level).Percent}%")));
-        TrayMenu(point, entries);
-    }
-
-    private void TrayMenu(ViewNative.Point point, IReadOnlyList<(string Label, Action? Action)> entries)
-    {
-        uint selected = ViewNative.Menu(_window.Handle, point, entries);
-        if (selected > 0 && selected <= entries.Count) entries[(int)selected - 1].Action?.Invoke();
-    }
-
-    private void TrayOperation(Func<string> action)
-    {
-        _ = Task.Run(() =>
-        {
-            string result;
-            try { result = action(); } catch (Exception error) { result = error.Message; }
-            TryPost(() => _feedback.Publish(FeedbackKind.Osd, L10n.T("Ov.VolumeTitle"), result));
-        });
+        TrayMenuController.Shared.Show(
+            this,
+            _config,
+            _window.Handle,
+            onOpenMain: OpenProductMain,
+            onOpenPanel: () => _feedback.Publish(FeedbackKind.ShowPanel),
+            onExit: () => _window.RequestExit());
     }
 }

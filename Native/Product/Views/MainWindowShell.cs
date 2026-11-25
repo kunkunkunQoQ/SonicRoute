@@ -1,0 +1,752 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using SonicRoute.Core;
+using SonicRoute.Native.Ui;
+
+namespace SonicRoute.Native.Product.Views;
+
+internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
+{
+    private const uint WmSysCommand = 0x0112;
+    private const nuint ScMoveCaption = 0xF012;
+    private const float SidebarDurationMs = 180f;
+
+    private readonly ApplicationHost _host;
+    private readonly AppConfig _config;
+    private readonly Func<MainNavTab, IViewHostActions, IViewPage> _pageFactory;
+    private readonly Dictionary<MainNavTab, IViewPage> _pages = new();
+    private readonly UiHitMap _hit = new();
+    private readonly InlineEditHost _inlineEdit = new();
+
+    private UiThemePalette _theme;
+    private MainNavTab _currentTab = MainNavTab.Apps;
+    private IViewPage? _activePage;
+
+    // Sidebar collapse animation (196 <-> 0 DIP, 180ms CubicOut)
+    private float _sidebarWidth;
+    private float _sidebarStartWidth;
+    private float _sidebarTargetWidth;
+    private long _sidebarAnimStartTicks;
+    private bool _sidebarAnimating;
+
+    // Title drag tracking (click toggles sidebar, >=4px drag initiates SC_MOVE)
+    private bool _titleTextPressed;
+    private bool _titleBarPressed;
+    private float _pressStartX;
+    private float _pressStartY;
+
+    // Popups & modals
+    private PopupMenuWindow? _activeMenu;
+    private ComboPopupWindow? _activeCombo;
+    private Action<string>? _inlineTextChanged;
+    private Action<string, bool>? _inlineCommitted;
+    private UiRect _inlineRectDip;
+    private float _inlineFontSize = 12.5f;
+
+    // Toast notice pill
+    private string? _noticeText;
+    private IDisposable? _noticeTimer;
+
+    internal MainWindowShell(
+        ApplicationHost host,
+        AppConfig config,
+        Func<MainNavTab, IViewHostActions, IViewPage> pageFactory)
+        : base(UiMetrics.MainDefaultWidth, UiMetrics.MainDefaultHeight, UiMetrics.MainMinWidth, UiMetrics.MainMinHeight)
+    {
+        _host = host;
+        _config = config;
+        _pageFactory = pageFactory;
+        _theme = UiThemePalette.Resolve(config);
+        _sidebarWidth = _sidebarTargetWidth = config.MainSidebarCollapsed
+            ? UiMetrics.NavCollapsedWidth
+            : UiMetrics.NavExpandedWidth;
+
+        Resizable = true;
+        ShowInTaskbar = true;
+
+        _inlineEdit.TextChanged += OnInlineTextChanged;
+        _inlineEdit.Committed += OnInlineCommitted;
+    }
+
+    public ApplicationHost Host => _host;
+    public AppConfig Config => _config;
+    public UiThemePalette Theme => _theme;
+    public LayeredWindow OwnerWindow => this;
+    public bool HasOpenModal =>
+        _activeMenu is { IsVisible: true } ||
+        _activeCombo is { IsVisible: true } ||
+        _inlineEdit.IsOpen;
+    public string? ActiveInlineEditTag => _inlineEdit.ActiveTag;
+    public UiRect ActiveInlineEditRect => _inlineRectDip;
+
+    public void ShowMain(nint ownerHint)
+    {
+        OwnerHandle = 0; // Main window is top-level in taskbar
+        bool firstCreate = Handle == 0;
+        EnsureCreated(GetWindowTitle());
+        if (firstCreate)
+        {
+            CenterOnPrimaryWorkArea();
+            var hIcon = LoadAppIconHandle();
+            if (hIcon != 0) SetIcon(hIcon);
+        }
+
+        _theme = UiThemePalette.Resolve(_config);
+        EnsureValidTab();
+        Show(activate: true);
+        RequestFocus();
+        ActivateCurrentPage();
+    }
+
+    public void OpenPhoneConnection()
+    {
+        ShowMain(0);
+        NavigateTo(MainNavTab.Apps);
+#if SONICROUTE_PHONE
+        if (_pages.TryGetValue(MainNavTab.Apps, out var page) && page is AppsPageView apps)
+            apps.OpenPhoneConnection();
+#endif
+    }
+
+    public void ExternalRefresh()
+    {
+        if (IsDisposed) return;
+        _theme = UiThemePalette.Resolve(_config);
+        EnsureValidTab();
+        if (IsVisible)
+        {
+            _activePage?.RefreshData();
+            Invalidate();
+        }
+    }
+
+    public void InvalidateTheme()
+    {
+        _theme = UiThemePalette.Resolve(_config);
+        if (_inlineEdit.IsOpen)
+            _inlineEdit.SetTheme(_theme.SurfaceBg, _theme.TextPrimary);
+        if (IsVisible) Invalidate();
+    }
+
+    public void RefreshAll() => ExternalRefresh();
+
+    public void NotifyThemeChanged()
+    {
+        InvalidateTheme();
+        _host.ViewSettingsChanged();
+    }
+
+    public void NotifySettingsChanged()
+    {
+        EnsureValidTab();
+        _host.ViewSettingsChanged();
+        if (IsVisible) Invalidate();
+    }
+
+    public void ShowNotice(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        _noticeText = message;
+        _noticeTimer?.Dispose();
+        _noticeTimer = _host.ScheduleOnce(TimeSpan.FromSeconds(3.2), () =>
+        {
+            _noticeTimer = null;
+            _noticeText = null;
+            if (IsVisible) Invalidate();
+        });
+        if (IsVisible) Invalidate();
+    }
+
+    public void ShowMenu(UiRect anchorDip, List<UiMenuItem> items)
+    {
+        ClosePopups();
+        if (Handle == 0 || items.Count == 0) return;
+        _activeMenu = PopupMenuWindow.ShowAtRect(_theme, items, this, anchorDip);
+    }
+
+    public void ShowMenuAtCursor(List<UiMenuItem> items, bool alignBottomUp = false)
+    {
+        ClosePopups();
+        if (Handle == 0 || items.Count == 0) return;
+        if (GetCursorPos(out var pt))
+            _activeMenu = PopupMenuWindow.ShowAtCursor(_theme, items, Handle, pt.X, pt.Y, alignBottomUp);
+    }
+
+    public void ShowCombo(UiRect anchorDip, IReadOnlyList<ComboChoice> choices, string selectedKey, Action<ComboChoice> onSelected)
+    {
+        ClosePopups();
+        if (Handle == 0 || choices.Count == 0) return;
+        _activeCombo = ComboPopupWindow.ShowFor(_theme, this, anchorDip, choices, selectedKey, choice =>
+        {
+            onSelected(choice);
+            if (IsVisible) Invalidate();
+        });
+    }
+
+    public void StartInlineEdit(
+        string tag,
+        UiRect rectDip,
+        string initialText,
+        Action<string>? onTextChanged,
+        Action<string, bool> onCommitted,
+        bool mono = false,
+        bool password = false,
+        bool selectAll = true)
+    {
+        if (Handle == 0 || !IsVisible) return;
+        ClosePopups();
+        _inlineEdit.Close(commit: false, viaEnter: false);
+
+        _inlineTextChanged = onTextChanged;
+        _inlineCommitted = onCommitted;
+        _inlineRectDip = rectDip;
+        _inlineFontSize = rectDip.Height >= 34f ? 13f : 12f;
+
+        var screen = DipToScreenPx(rectDip.X, rectDip.Y);
+        int wPx = Math.Max(24, (int)MathF.Round(rectDip.Width * DpiScale));
+        int hPx = Math.Max(20, (int)MathF.Round(rectDip.Height * DpiScale));
+
+        _inlineEdit.Open(
+            Handle,
+            tag,
+            initialText,
+            screen.X,
+            screen.Y,
+            wPx,
+            hPx,
+            _inlineFontSize,
+            Dpi,
+            _theme.SurfaceBg,
+            _theme.TextPrimary,
+            mono,
+            password,
+            selectAll);
+        Invalidate();
+    }
+
+    public void CloseInlineEdit(bool commit)
+    {
+        if (_inlineEdit.IsOpen)
+        {
+            _inlineEdit.Close(commit, viaEnter: false);
+            Invalidate();
+        }
+    }
+
+    public void NavigateTo(MainNavTab tab)
+    {
+        if (tab == MainNavTab.Experimental && !(_config.ExperimentalUnlocked && _config.ExperimentalMode))
+            tab = MainNavTab.Settings;
+        if (_currentTab == tab && _activePage != null) return;
+
+        CloseInlineEdit(commit: true);
+        ClosePopups();
+        _activePage?.OnDeactivated();
+        _currentTab = tab;
+        ActivateCurrentPage();
+        Invalidate();
+    }
+
+    protected override string GetWindowTitle() => $"{BuildIdentity.DisplayName} v1.36";
+
+    protected override void OnShown()
+    {
+        _theme = UiThemePalette.Resolve(_config);
+        _activePage?.OnActivated();
+    }
+
+    protected override void OnHidden()
+    {
+        CloseInlineEdit(commit: false);
+        ClosePopups();
+        _activePage?.OnDeactivated();
+        _sidebarAnimating = false;
+        ReleaseRenderResources();
+    }
+
+    protected override bool OnClosing()
+    {
+        // Hide window on close button instead of destroying process; OnHidden releases D2D/DIB resources.
+        return true;
+    }
+
+    protected override void OnMoved(int leftPx, int topPx)
+    {
+        RepositionInlineEdit();
+    }
+
+    protected override void OnResized(float widthDip, float heightDip)
+    {
+        RepositionInlineEdit();
+    }
+
+    protected override void OnDpiChanged(uint newDpi)
+    {
+        RepositionInlineEdit();
+    }
+
+    protected override void OnActivated(bool active)
+    {
+        if (!active)
+        {
+            _titleTextPressed = false;
+            _titleBarPressed = false;
+        }
+    }
+
+    protected override void OnTickAnimation()
+    {
+        bool anyAnim = false;
+        if (_sidebarAnimating)
+        {
+            float elapsedMs = (float)(Stopwatch.GetTimestamp() - _sidebarAnimStartTicks) * 1000f / Stopwatch.Frequency;
+            float p = Math.Clamp(elapsedMs / SidebarDurationMs, 0f, 1f);
+            float eased = 1f - MathF.Pow(1f - p, 3f);
+            _sidebarWidth = _sidebarStartWidth + (_sidebarTargetWidth - _sidebarStartWidth) * eased;
+            if (p >= 1f)
+            {
+                _sidebarWidth = _sidebarTargetWidth;
+                _sidebarAnimating = false;
+            }
+            else
+            {
+                anyAnim = true;
+            }
+        }
+
+        if (_activePage is { NeedsAnimationTick: true })
+        {
+            _activePage.TickAnimation();
+            if (_activePage.NeedsAnimationTick) anyAnim = true;
+        }
+
+        if (!anyAnim) StopAnimationTimer();
+        Invalidate();
+    }
+
+    protected override void OnRender(D2dTarget g, float widthDip, float heightDip)
+    {
+        _hit.Clear();
+        bool maximized = IsMaximized;
+        float radius = maximized ? 0f : UiMetrics.MainCornerRadius;
+        var windowRect = new UiRect(0f, 0f, widthDip, heightDip);
+
+        nint layer = 0;
+        if (radius > 0f) layer = g.PushRoundedLayer(windowRect, radius);
+
+        g.FillRoundedRect(windowRect, radius, _theme.WindowBgAlpha);
+
+        // Title bar (42px)
+        var titleRect = new UiRect(0f, 0f, widthDip, UiMetrics.TitleBarHeight);
+        RenderTitleBar(g, titleRect);
+
+        // Body below title bar
+        float bodyY = UiMetrics.TitleBarHeight;
+        float bodyH = MathF.Max(0f, heightDip - bodyY);
+
+        // Left Nav Rail
+        if (_sidebarWidth > 0.5f)
+        {
+            var navClip = new UiRect(0f, bodyY, _sidebarWidth, bodyH);
+            g.PushClip(navClip);
+            RenderNavRail(g, new UiRect(0f, bodyY, UiMetrics.NavExpandedWidth, bodyH));
+            g.PopClip();
+            g.DrawLine(_sidebarWidth - 0.5f, bodyY, _sidebarWidth - 0.5f, heightDip, _theme.Border, 1f, roundCaps: false);
+        }
+
+        // Content area (Margin 26,20,26,20 or 26,20,26,8 on Apps)
+        float padBottom = _currentTab == MainNavTab.Apps ? 8f : 20f;
+        var contentRect = new UiRect(
+            _sidebarWidth + 26f,
+            bodyY + 20f,
+            MathF.Max(40f, widthDip - _sidebarWidth - 52f),
+            MathF.Max(40f, bodyH - 20f - padBottom));
+
+        if (_activePage != null)
+        {
+            g.PushClip(new UiRect(_sidebarWidth, bodyY, MathF.Max(0f, widthDip - _sidebarWidth), bodyH));
+            _activePage.Render(g, _theme, _hit, contentRect);
+            g.PopClip();
+        }
+
+        // Toast notice pill near bottom
+        if (!string.IsNullOrEmpty(_noticeText))
+            RenderNoticeToast(g, widthDip, heightDip, _noticeText);
+
+        if (layer != 0) g.PopRoundedLayer(layer);
+
+        // Crisp outer 1px border
+        g.DrawRoundedRect(new UiRect(0.5f, 0.5f, widthDip - 1f, heightDip - 1f), radius, _theme.Border, 1f);
+    }
+
+    private void RenderTitleBar(D2dTarget g, UiRect rect)
+    {
+        // Left BuildIdentity title pill (Margin 8,0,0,0, Padding 8,5, CornerRadius 7)
+        string titleLabel = $"{BuildIdentity.DisplayName} v1.36";
+        float textW = D2dSharedContext.Instance.MeasureText(titleLabel, UiMetrics.FontFamily, 13.5f, 600, 200f, 32f, false).Width;
+        var pillRect = new UiRect(8f, (rect.Height - 28f) * 0.5f, textW + 16f, 28f);
+        _hit.Add("shell.titleToggle", pillRect, UiCursorKind.Hand, L10n.T("Window.DragToMove"));
+
+        bool pillHot = _hit.IsHover("shell.titleToggle");
+        if (pillHot) g.FillRoundedRect(pillRect, 7f, _theme.NavHover);
+        UiColor titleFg = _titleTextPressed ? _theme.TextPrimary.WithAlphaFraction(0.7f) : _theme.TextPrimary;
+        g.DrawText(titleLabel, pillRect, titleFg, 13.5f, 600, UiTextAlign.Center, UiVertAlign.Center);
+
+        // Right caption buttons: 46x30, CornerRadius 7, Margin 0,0,10,0
+        float btnW = 46f, btnH = 30f;
+        float btnY = (rect.Height - btnH) * 0.5f;
+        float closeX = rect.Right - 10f - btnW;
+        float maxX = closeX - btnW;
+        float minX = maxX - btnW;
+
+        // Empty titlebar drag zone
+        float dragLeft = pillRect.Right + 4f;
+        if (minX > dragLeft)
+            _hit.Add("shell.titleDrag", new UiRect(dragLeft, 0f, minX - dragLeft, rect.Height), UiCursorKind.Arrow);
+
+        DrawCaptionButton(g, "shell.min", new UiRect(minX, btnY, btnW, btnH), UiIcon.Minimize, false, L10n.T("Window.Minimize"));
+        DrawCaptionButton(g, "shell.max", new UiRect(maxX, btnY, btnW, btnH), IsMaximized ? UiIcon.Restore : UiIcon.Maximize, false,
+            L10n.T(IsMaximized ? "Window.Restore" : "Window.Maximize"));
+        DrawCaptionButton(g, "shell.close", new UiRect(closeX, btnY, btnW, btnH), UiIcon.Close, true, L10n.T("Window.Close"));
+    }
+
+    private void DrawCaptionButton(D2dTarget g, string id, UiRect rect, UiIcon icon, bool isClose, string tooltip)
+    {
+        _hit.Add(id, rect, UiCursorKind.Hand, tooltip);
+        bool hot = _hit.IsHover(id);
+        bool down = _hit.IsActive(id);
+
+        if (hot)
+        {
+            UiColor bg = isClose ? UiColor.FromRgb(0xE8, 0x11, 0x23) : _theme.NavHover;
+            if (down) bg = bg.WithAlphaFraction(0.75f);
+            g.FillRoundedRect(rect, 7f, bg);
+        }
+
+        UiColor fg = (hot && isClose)
+            ? UiColor.White
+            : hot ? _theme.TextPrimary : _theme.TextSecondary;
+        if (down && !isClose) fg = fg.WithAlphaFraction(0.7f);
+
+        var iconBox = new UiRect(rect.CenterX - 5.5f, rect.CenterY - 5.5f, 11f, 11f);
+        g.DrawIcon(icon, iconBox, fg, 1.5f);
+    }
+
+    private void RenderNavRail(D2dTarget g, UiRect navRect)
+    {
+        // StackPanel Margin="14,20,14,16"
+        float x = navRect.X + 14f;
+        float y = navRect.Y + 20f;
+        float itemW = navRect.Width - 28f;
+
+        DrawNavItem(g, MainNavTab.Apps, L10n.T("Nav.Apps"), UiIcon.Apps, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+        y += UiMetrics.NavItemHeight + 4f;
+        DrawNavItem(g, MainNavTab.Hotkeys, L10n.T("Nav.Hotkeys"), UiIcon.Keyboard, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+        y += UiMetrics.NavItemHeight + 4f;
+        DrawNavItem(g, MainNavTab.Theme, L10n.T("Nav.Theme"), UiIcon.Theme, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+        y += UiMetrics.NavItemHeight + 4f;
+        DrawNavItem(g, MainNavTab.Settings, L10n.T("Nav.Settings"), UiIcon.Settings, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+        y += UiMetrics.NavItemHeight + 4f;
+        DrawNavItem(g, MainNavTab.Automation, L10n.T("Nav.Automation"), UiIcon.Automation, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+
+        if (_config.ExperimentalUnlocked && _config.ExperimentalMode)
+        {
+            y += UiMetrics.NavItemHeight + 10f; // extra 6px top margin
+            DrawNavItem(g, MainNavTab.Experimental, L10n.T("Nav.Experimental"), UiIcon.Experiment, new UiRect(x, y, itemW, UiMetrics.NavItemHeight));
+        }
+    }
+
+    private void DrawNavItem(D2dTarget g, MainNavTab tab, string label, UiIcon icon, UiRect rect)
+    {
+        string id = "nav." + tab;
+        _hit.Add(id, rect, UiCursorKind.Hand);
+        bool selected = _currentTab == tab;
+        bool hot = _hit.IsHover(id);
+
+        if (selected) g.FillRoundedRect(rect, UiMetrics.NavItemRadius, _theme.NavSelected);
+        else if (hot) g.FillRoundedRect(rect, UiMetrics.NavItemRadius, _theme.NavHover);
+
+        // Padding 14,0; 30px icon column with 19x19 icon
+        var iconRect = new UiRect(rect.X + 14f, rect.CenterY - 9.5f, 19f, 19f);
+        g.DrawIcon(icon, iconRect, selected ? _theme.Accent : _theme.TextSecondary, 1.8f);
+
+        var textRect = new UiRect(rect.X + 14f + 30f, rect.Y, MathF.Max(10f, rect.Width - 52f), rect.Height);
+        g.DrawText(label, textRect, _theme.TextPrimary, UiMetrics.NavFontSize, selected ? 600 : 400, UiTextAlign.Leading, UiVertAlign.Center);
+    }
+
+    private void RenderNoticeToast(D2dTarget g, float widthDip, float heightDip, string text)
+    {
+        float maxW = MathF.Min(460f, widthDip - 64f);
+        var size = D2dSharedContext.Instance.MeasureText(text, UiMetrics.FontFamily, 12.5f, 600, maxW - 28f, 44f, wrap: true);
+        float pillW = Math.Clamp(size.Width + 28f, 120f, maxW);
+        float pillH = MathF.Max(32f, size.Height + 14f);
+        var rect = new UiRect((widthDip - pillW) * 0.5f, heightDip - pillH - 18f, pillW, pillH);
+
+        g.FillRoundedRect(rect, pillH * 0.5f, _theme.SurfaceBg);
+        g.DrawRoundedRect(rect, pillH * 0.5f, _theme.Accent, 1.2f);
+        g.DrawText(text, rect.Deflate(14f, 4f), _theme.TextPrimary, 12.5f, 600, UiTextAlign.Center, UiVertAlign.Center, wrap: true, ellipsis: false);
+    }
+
+    protected override void OnPointerMove(float xDip, float yDip, bool leftDown)
+    {
+        if (_titleTextPressed && leftDown)
+        {
+            if (MathF.Abs(xDip - _pressStartX) >= 4f || MathF.Abs(yDip - _pressStartY) >= 4f)
+            {
+                _titleTextPressed = false;
+                ReleasePointerCapture();
+                if (!IsMaximized) BeginWindowMoveDrag();
+                return;
+            }
+        }
+        else if (_titleBarPressed && leftDown)
+        {
+            if (MathF.Abs(xDip - _pressStartX) >= 4f || MathF.Abs(yDip - _pressStartY) >= 4f)
+            {
+                _titleBarPressed = false;
+                ReleasePointerCapture();
+                if (!IsMaximized) BeginWindowMoveDrag();
+                return;
+            }
+        }
+
+        bool hoverChanged = _hit.UpdateHover(xDip, yDip);
+        if (_hit.Hovered is { } hit) SetCursorKind(hit.Cursor);
+        else SetCursorKind(UiCursorKind.Arrow);
+
+        bool pageChanged = _activePage?.OnPointerMove(xDip, yDip, leftDown) ?? false;
+        if (hoverChanged || pageChanged) Invalidate();
+    }
+
+    protected override void OnPointerLeave()
+    {
+        _hit.ClearHover();
+        SetCursorKind(UiCursorKind.Arrow);
+        if (_activePage?.OnPointerMove(-1000f, -1000f, false) == true)
+            Invalidate();
+        else
+            Invalidate();
+    }
+
+    protected override void OnPointerDown(UiPointerEventArgs e)
+    {
+        if (_inlineEdit.IsOpen && !_inlineRectDip.Contains(e.X, e.Y))
+            CloseInlineEdit(commit: true);
+
+        var hit = _hit.HitTest(e.X, e.Y);
+        _hit.ActiveId = hit?.Id;
+
+        if (e.Button == UiMouseButton.Left && hit != null)
+        {
+            if (hit.Value.Id == "shell.titleToggle")
+            {
+                _titleTextPressed = true;
+                _pressStartX = e.X;
+                _pressStartY = e.Y;
+                Invalidate();
+                return;
+            }
+            if (hit.Value.Id == "shell.titleDrag")
+            {
+                if (e.ClickCount >= 2)
+                {
+                    ReleasePointerCapture();
+                    ToggleMaximize();
+                    return;
+                }
+                _titleBarPressed = true;
+                _pressStartX = e.X;
+                _pressStartY = e.Y;
+                return;
+            }
+            if (hit.Value.Id is "shell.min" or "shell.max" or "shell.close")
+            {
+                Invalidate();
+                return;
+            }
+        }
+
+        if (_activePage?.OnPointerDown(e) == true)
+            Invalidate();
+    }
+
+    protected override void OnPointerUp(UiPointerEventArgs e)
+    {
+        string? activeId = _hit.ActiveId;
+        _hit.ActiveId = null;
+
+        if (e.Button == UiMouseButton.Left)
+        {
+            if (_titleTextPressed)
+            {
+                _titleTextPressed = false;
+                if (MathF.Abs(e.X - _pressStartX) < 4f && MathF.Abs(e.Y - _pressStartY) < 4f)
+                    ToggleSidebar();
+                Invalidate();
+                return;
+            }
+            if (_titleBarPressed)
+            {
+                _titleBarPressed = false;
+                Invalidate();
+                return;
+            }
+
+            var hit = _hit.HitTest(e.X, e.Y);
+            if (hit != null && hit.Value.Id == activeId)
+            {
+                switch (hit.Value.Id)
+                {
+                    case "shell.min":
+                        MinimizeWindow();
+                        return;
+                    case "shell.max":
+                        ToggleMaximize();
+                        return;
+                    case "shell.close":
+                        Hide();
+                        return;
+                    case "nav.Apps":
+                        NavigateTo(MainNavTab.Apps);
+                        return;
+                    case "nav.Hotkeys":
+                        NavigateTo(MainNavTab.Hotkeys);
+                        return;
+                    case "nav.Theme":
+                        NavigateTo(MainNavTab.Theme);
+                        return;
+                    case "nav.Settings":
+                        NavigateTo(MainNavTab.Settings);
+                        return;
+                    case "nav.Automation":
+                        NavigateTo(MainNavTab.Automation);
+                        return;
+                    case "nav.Experimental":
+                        NavigateTo(MainNavTab.Experimental);
+                        return;
+                }
+            }
+        }
+
+        if (_activePage?.OnPointerUp(e) == true)
+            Invalidate();
+    }
+
+    protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
+    {
+        if (_activePage?.OnMouseWheel(xDip, yDip, delta, horizontal) == true)
+            Invalidate();
+    }
+
+    protected override bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
+    {
+        if (_activePage?.OnKeyDown(vk, ctrl, shift, alt) == true)
+        {
+            Invalidate();
+            return true;
+        }
+        return false;
+    }
+
+    private void ToggleSidebar()
+    {
+        _config.MainSidebarCollapsed = !_config.MainSidebarCollapsed;
+        ConfigService.TrySave(_config);
+
+        _sidebarStartWidth = _sidebarWidth;
+        _sidebarTargetWidth = _config.MainSidebarCollapsed
+            ? UiMetrics.NavCollapsedWidth
+            : UiMetrics.NavExpandedWidth;
+        _sidebarAnimStartTicks = Stopwatch.GetTimestamp();
+        _sidebarAnimating = true;
+        StartAnimationTimer(16);
+        Invalidate();
+    }
+
+    private void BeginWindowMoveDrag()
+    {
+        if (Handle != 0)
+            SendMessageW(Handle, WmSysCommand, ScMoveCaption, 0);
+    }
+
+    private void ActivateCurrentPage()
+    {
+        if (!_pages.TryGetValue(_currentTab, out var page))
+        {
+            page = _pageFactory(_currentTab, this);
+            _pages[_currentTab] = page;
+        }
+        _activePage = page;
+        if (IsVisible) _activePage.OnActivated();
+        if (_activePage.NeedsAnimationTick) StartAnimationTimer(16);
+    }
+
+    private void EnsureValidTab()
+    {
+        if (_currentTab == MainNavTab.Experimental && !(_config.ExperimentalUnlocked && _config.ExperimentalMode))
+            NavigateTo(MainNavTab.Settings);
+    }
+
+    private void ClosePopups()
+    {
+        if (_activeMenu is { IsVisible: true }) _activeMenu.CloseWindow();
+        _activeMenu = null;
+        if (_activeCombo is { IsVisible: true }) _activeCombo.CloseWindow();
+        _activeCombo = null;
+    }
+
+    private void RepositionInlineEdit()
+    {
+        if (!_inlineEdit.IsOpen || Handle == 0) return;
+        var screen = DipToScreenPx(_inlineRectDip.X, _inlineRectDip.Y);
+        int wPx = Math.Max(24, (int)MathF.Round(_inlineRectDip.Width * DpiScale));
+        int hPx = Math.Max(20, (int)MathF.Round(_inlineRectDip.Height * DpiScale));
+        _inlineEdit.Reposition(screen.X, screen.Y, wPx, hPx, _inlineFontSize, Dpi);
+    }
+
+    private void OnInlineTextChanged(string tag, string text) => _inlineTextChanged?.Invoke(text);
+
+    private void OnInlineCommitted(string tag, string text, bool viaEnter)
+    {
+        var cb = _inlineCommitted;
+        _inlineTextChanged = null;
+        _inlineCommitted = null;
+        cb?.Invoke(text, viaEnter);
+        if (IsVisible) Invalidate();
+    }
+
+    private static nint LoadAppIconHandle()
+    {
+        try
+        {
+            var icon = NativeAppIconService.GetBrandIcon();
+            if (icon is { } bmp)
+                return SonicRoute.Native.Graphics.WicIconLoader.CreateIconFromBgra32(bmp.BgraPixels, bmp.Width, bmp.Height);
+        }
+        catch { }
+        return 0;
+    }
+
+    public override void Dispose()
+    {
+        _noticeTimer?.Dispose();
+        _noticeTimer = null;
+        ClosePopups();
+        _inlineEdit.TextChanged -= OnInlineTextChanged;
+        _inlineEdit.Committed -= OnInlineCommitted;
+        _inlineEdit.Dispose();
+        foreach (var page in _pages.Values)
+            page.Dispose();
+        _pages.Clear();
+        _activePage = null;
+        base.Dispose();
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X, Y; }
+
+    [DllImport("user32.dll")] private static extern nint SendMessageW(nint hwnd, uint msg, nuint wParam, nint lParam);
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out NativePoint pt);
+}
