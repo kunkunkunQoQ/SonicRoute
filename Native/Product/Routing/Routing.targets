@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup><DefineConstants>$(DefineConstants);SONICROUTE_NATIVE_PC</DefineConstants></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../../SonicRoute/AppPlaybackRestore.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/AppPlaybackOutputs.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/LocalAppOutputMirrors.cs;$(MSBuildThisFileDirectory)../../../SonicRoute/PlaybackAppIdentity.cs"/>
+    <Compile Include="$(MSBuildThisFileDirectory)../../../shared/WindowsAudio/AudioProcessTree.cs;$(MSBuildThisFileDirectory)../../../shared/WindowsAudio/DesktopMirrorPcmSource.cs;$(MSBuildThisFileDirectory)../../../shared/WindowsAudio/ProcessCaptureIdentity.cs"/>
+  </ItemGroup>
+</Project>

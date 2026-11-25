@@ -34,5 +34,6 @@ internal sealed unsafe class Policy : IDisposable
         using var value = new HString(fullId);
         Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,Flow,Role,nint,int>)_factory.Slot(25))(_factory.Handle,pid,flow,role,value.Handle),"SetPersistedDefaultAudioEndpoint");
     }
+    internal void ClearAll() => Com.Check(_factory.Call(27), "ClearAllPersistedApplicationDefaultEndpoints");
     public void Dispose() => _factory.Dispose();
 }

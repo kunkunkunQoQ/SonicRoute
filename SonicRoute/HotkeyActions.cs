@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
+#if !SONICROUTE_NATIVE
 using System.Windows.Input;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 using MouseWheelEventArgs = System.Windows.Input.MouseWheelEventArgs;
+#endif
 
 namespace SonicRoute
 {
@@ -95,6 +97,7 @@ namespace SonicRoute
             _ => action
         };
 
+#if !SONICROUTE_NATIVE
         /// <summary>
         /// 把按键事件格式化为 "Ctrl+Alt+1" / "F2" / "A" 形式。
         /// 支持：无修饰键的单键（含 F 区 F1-F24）、带修饰键组合；
@@ -159,5 +162,6 @@ namespace SonicRoute
             if ((Keyboard.Modifiers & ModifierKeys.Windows) != 0) mods.Add("Win");
             return mods.Count == 0 ? keyName : string.Join("+", mods) + "+" + keyName;
         }
+#endif
     }
 }

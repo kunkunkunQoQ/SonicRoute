@@ -291,8 +291,7 @@ namespace SonicRoute.Core
 
         private static List<AudioAppInfo> EnumerateApps(bool includeIconPaths)
         {
-            var apps = new Dictionary<uint, AudioAppInfo>();
-            var processes = new Dictionary<uint, (string? Name, bool Alive)>();
+            var apps = new AudioAppCatalog();
             var enumerator = CreateEnumerator();
             try
             {
@@ -308,7 +307,7 @@ namespace SonicRoute.Core
                         {
                             devices.Item(i, out var device);
                             if (device == null) continue;
-                            try { CollectSessions(device, apps, processes, includeIconPaths); }
+                            try { CollectSessions(device, apps, includeIconPaths); }
                             finally { Marshal.ReleaseComObject(device); }
                         }
                     }
@@ -320,14 +319,10 @@ namespace SonicRoute.Core
                 Marshal.ReleaseComObject(enumerator);
             }
 
-            return apps.Values
-                .OrderByDescending(a => a.HasActiveSession) // 正在播放的应用优先
-                .ThenBy(a => a.Label, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
+            return apps.Sorted();
         }
 
-        private static void CollectSessions(IMMDevice device,
-            Dictionary<uint, AudioAppInfo> apps, Dictionary<uint, (string? Name, bool Alive)> processes, bool includeIconPaths)
+        private static void CollectSessions(IMMDevice device, AudioAppCatalog apps, bool includeIconPaths)
         {
             var iidSessionManager = IID_IAudioSessionManager2;
             int hrActivate = device.Activate(ref iidSessionManager, ComConstants.CLSCTX_ALL, IntPtr.Zero, out object mgrObj);
@@ -356,45 +351,15 @@ namespace SonicRoute.Core
                             int hrName = session.GetDisplayName(out displayName);
                             if (hrName < 0) displayName = null;
 
-                            if (string.IsNullOrWhiteSpace(displayName))
-                                displayName = null;
-
-                            // 一个 PID 可能跨设备拥有多个会话；本轮只查一次进程名/存活状态。
-                            if (!processes.TryGetValue(pid, out var process))
-                            {
-                                string? name = ForegroundAppService.GetProcessNameSafe((int)pid);
-                                process = (name, name != null || IsProcessAlive(pid));
-                                processes[pid] = process;
-                            }
-                            string? processName = process.Name;
-                            if (IsInternalApplication(pid, processName)) continue;
-                            // 幽灵会话：进程已不存在（任务管理器也搜不到）但会话残留未标记 Expired。
-                            // 过滤掉，避免完整界面应用列表出现无法操作的 PID 空项；权限受限的
-                            // 真实进程（IsProcessAlive=true）仍保留 PID 显示。
-                            if (!process.Alive) continue;
-
-                            if (!apps.TryGetValue(pid, out var existing))
-                            {
-                                existing = apps[pid] = new AudioAppInfo
-                                {
-                                    ProcessId = pid,
-                                    DisplayName = displayName,
-                                    ProcessName = processName
-                                };
-                            }
-                            else if (existing.DisplayName == null && displayName != null)
-                            {
-                                existing.DisplayName = displayName;
-                            }
+                            var existing = apps.Add(pid, hrState >= 0 && state == AudioSessionState.Active, displayName);
+                            if (existing == null) continue;
                             // Reuse the session already being read. Elevated/service processes
                             // may deny image-path queries even though their icon file is readable.
                             if (includeIconPaths && Volatile.Read(ref _appIconMetadataEnabled) != 0 && existing.IconPath == null
                                 && session.GetIconPath(out var iconPath) >= 0
                                 && !string.IsNullOrWhiteSpace(iconPath))
                                 existing.IconPath = iconPath;
-                            // 存在正在播放(Active)的会话 → 标记，供列表排序优先展示
-                            if (hrState >= 0 && state == AudioSessionState.Active)
-                                existing.HasActiveSession = true;
+
                         }
                         finally
                         {
@@ -410,25 +375,6 @@ namespace SonicRoute.Core
             finally
             {
                 Marshal.ReleaseComObject(mgr);
-            }
-        }
-
-        /// <summary>进程是否真实存在：ArgumentException=进程已不存在（幽灵会话）；
-        /// 其他异常（如权限受限）=进程存在但读不到信息，视为存活保留显示。</summary>
-        private static bool IsProcessAlive(uint pid)
-        {
-            try
-            {
-                using var p = Process.GetProcessById((int)pid);
-                return true;
-            }
-            catch (ArgumentException)
-            {
-                return false;
-            }
-            catch
-            {
-                return true; // 权限受限等：进程存在，保留 PID 显示
             }
         }
 

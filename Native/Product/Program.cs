@@ -65,10 +65,11 @@ internal static partial class Program
             return 0;
         }
 
+        var config = ApplicationHost.LoadSettings();
         bool temporary = mode == RuleMode.Run;
         using var window = new NativeApplicationWindow(env.ActivationTitle, env.ActivationMessage,
             BuildIdentity.DisplayName + " · Native Candidate", trayEnabled: !temporary);
-        using var host = new ApplicationHost(env, window, instance);
+        using var host = new ApplicationHost(env, window, instance, config);
         return host.Run(args, temporary ? selector : null);
     }
 

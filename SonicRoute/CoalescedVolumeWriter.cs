@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
+#if !SONICROUTE_NATIVE
 using System.Windows.Threading;
+#endif
 
 namespace SonicRoute
 {
@@ -12,55 +14,77 @@ namespace SonicRoute
         private sealed class Request
         {
             internal int Pid, Percent, Version;
+            internal volatile bool Settled;
             internal Action<int, int, bool, int> Readback = null!;
         }
-        private readonly Dispatcher _dispatcher;
+        private readonly Func<Action, bool> _post;
+        private readonly Func<TimeSpan, Action, IDisposable> _schedule;
+        private readonly Action<Task>? _protect;
         private readonly Func<int, int, (bool Applied, int Actual)> _write;
         private readonly Dictionary<int, Request> _pending = new();
-        private readonly ConcurrentDictionary<int, int> _latest = new();
-        private readonly ConcurrentDictionary<int, int> _settled = new();
+        private readonly ConcurrentDictionary<int, Request> _latest = new();
         private readonly object _queueGate = new();
         private readonly Dictionary<int, Request> _queued = new();
-        private readonly DispatcherTimer _timer;
+        private IDisposable? _timer;
         private Task _tail = Task.CompletedTask;
         private int _version;
         private bool _throttled;
         private volatile bool _disposed;
         internal Task Completion { get { lock (_queueGate) return _tail; } }
-        internal bool HasPending(int pid) => _latest.TryGetValue(pid, out int latest)
-            && (!_settled.TryGetValue(pid, out int settled) || settled != latest);
+        internal bool HasPending(int pid) => _latest.TryGetValue(pid, out var request) && !request.Settled;
 
+        private bool Retire(Request request) =>
+            ((ICollection<KeyValuePair<int, Request>>)_latest).Remove(new(request.Pid, request));
+
+#if !SONICROUTE_NATIVE
         internal CoalescedVolumeWriter(Dispatcher dispatcher, Func<int, int, (bool Applied, int Actual)> write)
+            : this(action =>
+            {
+                if (dispatcher.HasShutdownStarted) return false;
+                dispatcher.BeginInvoke(action); return true;
+            }, (delay, action) => new DesktopDeadline(dispatcher, delay, action), write, pending => App.ProtectAudioWriteFromTrim(pending)) { }
+
+        private sealed class DesktopDeadline : IDisposable
         {
-            _dispatcher = dispatcher; _write = write;
-            _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
-            { Interval = TimeSpan.FromMilliseconds(90) };
-            _timer.Tick += Tick;
+            private readonly DispatcherTimer _timer;
+            internal DesktopDeadline(Dispatcher dispatcher, TimeSpan delay, Action action)
+            {
+                _timer = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = delay };
+                _timer.Tick += (_, _) => { Dispose(); action(); };
+                _timer.Start();
+            }
+            public void Dispose() => _timer.Stop();
+        }
+#endif
+        internal CoalescedVolumeWriter(Func<Action, bool> post, Func<TimeSpan, Action, IDisposable> schedule,
+            Func<int, int, (bool Applied, int Actual)> write, Action<Task>? protect = null)
+        {
+            _post = post; _schedule = schedule; _write = write; _protect = protect;
         }
 
         internal int Enqueue(int pid, int percent, Action<int, int, bool, int> readback)
         {
-            if (_disposed) return -1;
+            if (_disposed || (_latest.Count >= 128 && !_latest.ContainsKey(pid))) return -1;
             int version = ++_version;
-            _latest[pid] = version;
-            _pending[pid] = new Request { Pid = pid, Percent = percent, Version = version, Readback = readback };
+            var request = new Request { Pid = pid, Percent = percent, Version = version, Readback = readback };
+            _latest[pid] = _pending[pid] = request;
             if (!_throttled) { Flush(); _throttled = true; }
-            if (!_timer.IsEnabled) _timer.Start();
+            _timer ??= _schedule(TimeSpan.FromMilliseconds(90), () => { Flush(); _throttled = false; });
             return version;
         }
 
-        private void Tick(object? sender, EventArgs e) { _timer.Stop(); Flush(); _throttled = false; }
+
 
         internal void Cancel(int pid)
         {
             if (_disposed) return;
             _pending.Remove(pid);
-            _latest[pid] = ++_version;
+            _latest.TryRemove(pid, out _);
         }
 
         internal void Flush()
         {
-            _timer.Stop();
+            _timer?.Dispose(); _timer = null;
             _throttled = false;
             if (_pending.Count == 0) return;
             var requests = new List<Request>(_pending.Values);
@@ -85,21 +109,21 @@ namespace SonicRoute
                 }
                 foreach (var request in requests)
                 {
-                    if (!_latest.TryGetValue(request.Pid, out int current) || current != request.Version) continue;
+                    if (!_latest.TryGetValue(request.Pid, out var current) || current != request) continue;
                     (bool Applied, int Actual) result;
                     try { result = _write(request.Pid, request.Percent); }
                     catch { result = (false, -1); }
-                    _settled[request.Pid] = request.Version;
-                    if (_disposed || _dispatcher.HasShutdownStarted) continue;
+                    request.Settled = true;
+                    if (_disposed) { Retire(request); continue; }
                     try
                     {
-                        _dispatcher.BeginInvoke(new Action(() =>
+                        if (!_post(() =>
                         {
-                            if (!_disposed && _latest.TryGetValue(request.Pid, out int latest) && latest == request.Version)
+                            if (Retire(request) && !_disposed)
                                 request.Readback(request.Pid, request.Version, result.Applied, result.Actual);
-                        }));
+                        })) Retire(request);
                     }
-                    catch (InvalidOperationException) { }
+                    catch (InvalidOperationException) { Retire(request); }
                 }
             }
         }
@@ -108,9 +132,9 @@ namespace SonicRoute
         {
             if (_disposed) return;
             Flush();
-            App.ProtectAudioWriteFromTrim(Completion);
+            _protect?.Invoke(Completion);
             _disposed = true;
-            _timer.Stop(); _timer.Tick -= Tick;
+            _timer?.Dispose(); _timer = null;
         }
     }
 }

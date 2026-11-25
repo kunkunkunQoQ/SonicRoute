@@ -1,4 +1,9 @@
-#if SONICROUTE_PHONE
+#if SONICROUTE_NATIVE_PC
+using AudioService = SonicRoute.Native.Product.PcRoutingApi;
+using ApplicationAudio = SonicRoute.Native.Product.PcRoutingApi;
+using AudioPolicyConfig = SonicRoute.Native.Product.PcRoutingPolicy;
+#endif
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
 using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
 #endif
@@ -23,7 +28,7 @@ internal static partial class AppPlaybackOutputs
     internal static HashSet<string> GetSelected(int pid, string? persistedEndpoint)
     {
         var outputs = LocalAppOutputMirrors.GetExtraOutputs(pid).ToHashSet(Ids);
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
         if (LocalAppOutputMirrors.GetExclusivePhone(pid, out _) != null) return outputs;
         persistedEndpoint = AndroidAudioHost.TryGetPcAppPhoneOutput(pid) ?? persistedEndpoint;
 #endif
@@ -34,7 +39,7 @@ internal static partial class AppPlaybackOutputs
     internal static HashSet<string> GetSelected(AudioAppInfo app, string? persistedEndpoint)
     {
         if (!app.IsExternal) return GetSelected((int)app.ProcessId, persistedEndpoint);
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
         if (ApplicationAudio.ExternalSession(app) is IMultiOutputAudioSession multi)
         {
             var outputs = multi.GetOutputs().Select(Endpoint).ToHashSet(Ids);
@@ -46,14 +51,18 @@ internal static partial class AppPlaybackOutputs
         return new HashSet<string>(Ids) { Endpoint(persistedEndpoint) };
     }
 
-    internal static async Task<(bool Success, int HResult, string Message)> SetAsync(
+    internal static Task<(bool Success, int HResult, string Message)> SetAsync(
         AudioAppInfo app, string[] selected, string? preferredPrimary)
+        => SetAsync(app, selected, preferredPrimary, nativeIfUnmanaged: false);
+
+    internal static async Task<(bool Success, int HResult, string Message)> SetAsync(
+        AudioAppInfo app, string[] selected, string? preferredPrimary, bool nativeIfUnmanaged)
     {
         var outputs = selected.Select(Endpoint).Distinct(Ids).ToArray();
         if (outputs.Length == 0) outputs = [AudioService.SystemDefaultDeviceId];
         if (app.IsExternal)
         {
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
             if (ApplicationAudio.ExternalSession(app) is IMultiOutputAudioSession multi)
             {
                 try
@@ -77,7 +86,16 @@ internal static partial class AppPlaybackOutputs
         int pid = (int)app.ProcessId;
         return await SerializeAsync(pid, async () =>
         {
-#if SONICROUTE_PHONE
+            // A simple app switch stays on the native OS path. Test saved/mirrored
+            // ownership inside the same per-process gate used for explicit selections.
+            if (nativeIfUnmanaged && outputs.Length == 1 && !ApplicationAudio.IsPhoneOutputDevice(outputs[0])
+                && LocalAppOutputMirrors.GetExtraOutputs(pid).Length == 0 && !AppPlaybackRestore.HasSavedChoice(pid)
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
+                && !IsManaged(pid)
+#endif
+                )
+                return AudioService.ApplyEndpoint(pid, EDataFlow.eRender, outputs[0]);
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
             bool reset = selected.Length == 0;
             if (reset) Forget(pid, HistoryFor(pid));
             long epoch = Volatile.Read(ref _historyEpoch);
@@ -87,7 +105,7 @@ internal static partial class AppPlaybackOutputs
             var identity = outputs.Length > 1 || SavedPlaybackStore.ReadAll().Count != 0 ? PlaybackAppIdentity.Read(pid) : null;
             string preferred = Endpoint(preferredPrimary);
             var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute: true).ConfigureAwait(false);
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
             if (result.Success && !reset && Volatile.Read(ref _historyEpoch) == epoch)
                 Remember(pid, before.ToArray(), outputs, preferred);
 #endif
@@ -106,7 +124,7 @@ internal static partial class AppPlaybackOutputs
             if (before.SetEquals(outputs) && (outputs.All(ApplicationAudio.IsPhoneOutputDevice) || Ids.Equals(Endpoint(saved), preferred)))
                 return true;
             var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute: true).ConfigureAwait(false);
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
             if (result.Success) Remember(pid, before.ToArray(), outputs, preferred);
 #endif
             if (!result.Success) System.Diagnostics.Trace.WriteLine("Playback restore: " + result.Message);
@@ -134,24 +152,25 @@ internal static partial class AppPlaybackOutputs
         }
     }
 
+    internal static string? PreferredPrimary(string[] physical, string preferred) =>
+        physical.FirstOrDefault(id => Ids.Equals(id, preferred)) ?? physical.FirstOrDefault(AudioService.IsSystemDefault) ?? physical.FirstOrDefault();
+
     private static async Task<(bool Success, int HResult, string Message)> ApplyAsync(
         int pid, string[] outputs, string preferred, bool allowSpeakerMute)
     {
         var undo = new Stack<Func<Task>>();
         var physical = outputs.Where(id => !ApplicationAudio.IsPhoneOutputDevice(id)).ToArray();
-        string? primary = physical.FirstOrDefault(id => Ids.Equals(id, preferred))
-            ?? physical.FirstOrDefault(AudioService.IsSystemDefault)
-            ?? physical.FirstOrDefault();
+        string? primary = PreferredPrimary(physical, preferred);
         var extras = outputs.Where(id => !Ids.Equals(id, primary)).ToArray();
         string[] oldExtras = LocalAppOutputMirrors.GetExtraOutputs(pid);
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
         string? previousPhone = AndroidAudioHost.TryGetPcAppPhoneOutput(pid);
         bool previousPhoneOnly = LocalAppOutputMirrors.GetExclusivePhone(pid, out bool previousSpeakerMute) != null;
 #endif
         try
         {
             using var reservation = outputs.Length > 1 ? LocalAppOutputMirrors.Reserve(pid) : null;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
             if (previousPhone != null) StopPhone();
             if (previousPhoneOnly && primary != null)
             {
@@ -181,7 +200,7 @@ internal static partial class AppPlaybackOutputs
 
             if (extras.Length != 0 || oldExtras.Length != 0)
             {
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
                 if (primary == null) await LocalAppOutputMirrors.SetExclusivePhoneOutputsAsync(pid, extras, allowSpeakerMute).ConfigureAwait(false);
                 else
 #endif
@@ -201,7 +220,7 @@ internal static partial class AppPlaybackOutputs
         }
         finally { ApplicationAudio.NotifyRouteChanged(pid); }
 
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
         Task RestoreMirrors() => previousPhoneOnly
             ? LocalAppOutputMirrors.SetExclusivePhoneOutputsAsync(pid, oldExtras, previousSpeakerMute)
             : LocalAppOutputMirrors.SetExtraOutputsAsync(pid, oldExtras);
@@ -216,7 +235,7 @@ internal static partial class AppPlaybackOutputs
 
     private static (bool Success, int HResult, string Message) RouteError(Exception error)
     {
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
         string detail = AndroidErrorTranslation.Format(error);
 #else
         string detail = error.Message;

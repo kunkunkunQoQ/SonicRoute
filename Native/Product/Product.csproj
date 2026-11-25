@@ -17,10 +17,13 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../Audio/Audio.csproj" />
     <ProjectReference Include="../../SonicRoute.Core/SonicRoute.Core.csproj" />
     <ProjectReference Include="../../StoreInterop/StoreInterop.csproj" />
-    <Compile Include="../../SonicRoute/ForegroundChangeSource.cs;../../SonicRoute/L10n.cs;../../SonicRoute/LanguageFiles.cs;../../SonicRoute/LanguageJsonContext.cs;../../SonicRoute/HostStartup.cs;../../SonicRoute/CommandOutput.cs" />
+    <Compile Include="../../SonicRoute/CoalescedVolumeWriter.cs;../../SonicRoute/ForegroundChangeSource.cs;../../SonicRoute/L10n.cs;../../SonicRoute/LanguageFiles.cs;../../SonicRoute/LanguageJsonContext.cs;../../SonicRoute/HostStartup.cs;../../SonicRoute/CommandOutput.cs" />
     <EmbeddedResource Include="../../SonicRoute/Resources/Lang/*.json" LogicalName="SonicRoute.Resources.Lang.%(Filename)%(Extension)" />
   </ItemGroup>
   <Import Project="Protocol/Protocol.targets" />
+  <Import Project="Routing/Routing.targets" />
+  <Import Project="Automation/Automation.targets" />
 </Project>

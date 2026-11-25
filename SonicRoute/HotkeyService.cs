@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
+#if SONICROUTE_NATIVE
+using SonicRoute.Native.Product;
+#else
 using System.Windows;
 using System.Windows.Interop;
+#endif
 
 namespace SonicRoute
 {
@@ -23,11 +27,16 @@ namespace SonicRoute
         private const uint MOD_SHIFT = 0x4;
         private const uint MOD_WIN = 0x8;
 
+#if SONICROUTE_NATIVE
+        private readonly NativeApplicationWindow _window;
+        private readonly NativeMouseBindings _mouseHook;
+#else
         private readonly Window _host;
         private readonly HwndSource _source;
-        private readonly Dictionary<int, string> _actionById = new();
         private readonly MouseHotkeyHook _mouseHook;
         internal MouseHotkeyHook MouseHook => _mouseHook;
+#endif
+        private readonly Dictionary<int, string> _actionById = new();
         private Dictionary<string, string> _requestedBindings = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _mouseByAction = new(StringComparer.Ordinal);
         private List<KeyValuePair<string, string>> _compiledMouseBindings = new();
@@ -39,6 +48,19 @@ namespace SonicRoute
         /// 供设置页显示"被其他程序占用"等冲突状态。</summary>
         public Dictionary<string, string> RegistrationStatus { get; } = new();
 
+#if SONICROUTE_NATIVE
+        internal HotkeyService(NativeApplicationWindow window, bool trayWheel, bool everywhere)
+        {
+            _window = window;
+            _mouseHook = new NativeMouseBindings(window, trayWheel, everywhere);
+            _mouseHook.Reload([]);
+        }
+        internal void Dispatch(int id)
+        {
+            if (!_window.CapturingHotkey && (_actionById.TryGetValue(id, out var action) || _mouseHook.TryGetAction(id, out action)) && action != null)
+                HotkeyPressed?.Invoke(action);
+        }
+#else
         public HotkeyService()
         {
             _host = new Window
@@ -70,6 +92,7 @@ namespace SonicRoute
             return IntPtr.Zero;
         }
 
+#endif
         /// <summary>合并后的绑定仅更新受影响的冲突组；未变化的成功注册保留，失败/回退绑定按请求重试。
         /// 空串/缺失 = 不绑定（跳过，不回退默认）；
         /// 含鼠标键/滚轮的绑定 → 低级鼠标钩子；其余 → RegisterHotKey（被占用自动回退默认组合）。</summary>
@@ -161,7 +184,11 @@ namespace SonicRoute
 
         private void ReleaseRegistration(int id)
         {
+#if SONICROUTE_NATIVE
+            _window.UnregisterHotkey(id);
+#else
             UnregisterHotKey(_source.Handle, id);
+#endif
             _actionById.Remove(id);
         }
 
@@ -190,8 +217,15 @@ namespace SonicRoute
         {
             if (string.IsNullOrWhiteSpace(combo)) return false;
             if (!TryParse(combo, out uint mods, out uint vk)) return false;
-            int id = _nextId++;
+            if (_actionById.Count >= 0xbfff) return false;
+            while (_actionById.ContainsKey(_nextId)) _nextId = _nextId % 0xbfff + 1;
+            int id = _nextId;
+            _nextId = _nextId % 0xbfff + 1;
+#if SONICROUTE_NATIVE
+            if (_window.RegisterHotkey(id, mods, vk))
+#else
             if (RegisterHotKey(_source.Handle, id, mods, vk))
+#endif
             {
                 _actionById[id] = action;
                 RegistrationStatus[action] = combo;
@@ -202,8 +236,7 @@ namespace SonicRoute
 
         private void UnregisterAll()
         {
-            foreach (var id in _actionById.Keys)
-                UnregisterHotKey(_source.Handle, id);
+            foreach (var id in _actionById.Keys.ToArray()) ReleaseRegistration(id);
             _actionById.Clear();
         }
 
@@ -211,8 +244,10 @@ namespace SonicRoute
         {
             UnregisterAll();
             _mouseHook.Dispose();
+#if !SONICROUTE_NATIVE
             _source.RemoveHook(WndProc);
             _host.Close();
+#endif
         }
 
         internal static bool TryParse(string combo, out uint mods, out uint vk)

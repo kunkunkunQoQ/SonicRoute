@@ -23,71 +23,26 @@ namespace SonicRoute
     /// </summary>
     public static class CurrentAppService
     {
-        private static readonly object _lock = new();
-        private static AudioAppInfo? _current;
-        private static AudioAppInfo? _lastForegroundAudio;
-
-        /// <summary>共享"当前应用"（面板显示、快捷键静音/切设备的目标）。变更触发 CurrentChanged。</summary>
-        public static event Action? CurrentChanged;
-        // 原始前台变化也供自动化复用；不受音频会话、当前应用选择模式和异步音频查询影响。
+        private static readonly CurrentAppSelection Selection = new();
+        public static event Action? CurrentChanged
+        {
+            add => Selection.Changed += value;
+            remove => Selection.Changed -= value;
+        }
         internal static event Action<int>? ForegroundChanged;
+        public static AudioAppInfo? Current { get => Selection.Current; set => Selection.Current = value; }
+        public static AudioAppInfo? LastForegroundAudio { get => Selection.LastForeground; set => Selection.LastForeground = value; }
 
-        public static AudioAppInfo? Current
-        {
-            get { lock (_lock) return _current; }
-            set
-            {
-                bool changed;
-                lock (_lock)
-                {
-                    changed = !SameApp(_current, value);
-                    _current = value;
-                }
-                if (changed) CurrentChanged?.Invoke();
-            }
-        }
-
-        /// <summary>最近一次有音频的前台应用（任何模式都记录，recent 模式用它切换当前应用）。</summary>
-        public static AudioAppInfo? LastForegroundAudio
-        {
-            get { lock (_lock) return _lastForegroundAudio; }
-            set { lock (_lock) _lastForegroundAudio = value; }
-        }
-
-        private static bool SameApp(AudioAppInfo? a, AudioAppInfo? b)
-        {
-            if (a == null || b == null) return a == null && b == null;
-            return a.Identity == b.Identity;
-        }
-
-        /// <summary>在前台应用列表里匹配一个音频应用：先精确 PID，再按进程名（解决哔哩哔哩等
-        /// 客户端 UI 进程与音频 helper 进程同名不同 PID 的情况）。已"禁用自动切换"的应用不参与匹配。</summary>
         private static AudioAppInfo? MatchForeground(List<AudioAppInfo> apps, int fgPid
 #if SONICROUTE_PHONE
             , nint fgHwnd = 0
 #endif
-            )
-        {
-            var disabled = ConfigService.Load().DisabledAutoSwitchApps;
-            bool Off(AudioAppInfo a) =>
-                !string.IsNullOrWhiteSpace(a.ProcessName) && disabled.Contains(a.ProcessName);
-
+            ) => CurrentAppSelection.MatchForeground(apps, ConfigService.Load(), fgPid,
 #if SONICROUTE_PHONE
-            if (fgPid != AppInfo.CurrentProcessId)
-#endif
-            {
-                var exact = apps.FirstOrDefault(a => !a.IsExternal && a.ProcessId == (uint)fgPid);
-                if (exact != null && !Off(exact)) return exact;
-            }
-#if SONICROUTE_PHONE
-            string? fgName = ApplicationAudio.ForegroundAppName(fgPid, fgHwnd);
+                fgPid != AppInfo.CurrentProcessId, () => ApplicationAudio.ForegroundAppName(fgPid, fgHwnd));
 #else
-            string? fgName = ApplicationAudio.ForegroundAppName(fgPid);
+                true, () => ApplicationAudio.ForegroundAppName(fgPid));
 #endif
-            if (string.IsNullOrWhiteSpace(fgName)) return null;
-            return apps.FirstOrDefault(a =>
-                string.Equals(a.ProcessName, fgName, StringComparison.OrdinalIgnoreCase) && !Off(a));
-        }
 
         public static AudioAppInfo? Resolve(List<AudioAppInfo> apps, AppConfig cfg, int? foregroundPid = null)
             => ResolveCore(apps, cfg, foregroundPid, IntPtr.Zero);
@@ -97,70 +52,42 @@ namespace SonicRoute
 
         private static AudioAppInfo? ResolveCore(List<AudioAppInfo> apps, AppConfig cfg, int? foregroundPid, IntPtr foregroundHwnd)
         {
-            if (apps == null || apps.Count == 0) return null;
-
-            var disabled = cfg.DisabledAutoSwitchApps;
-            bool Off(AudioAppInfo a) =>
-                !string.IsNullOrWhiteSpace(a.ProcessName) && disabled.Contains(a.ProcessName);
-
-            AudioAppInfo? ByName(string? n) =>
-                string.IsNullOrWhiteSpace(n) ? null :
-                apps.FirstOrDefault(x => string.Equals(x.ProcessName, n, StringComparison.OrdinalIgnoreCase));
-
-            // 1) 用户显式指定：last / fixed 精确匹配（被禁用自动切换的应用不自动选中，仍可手动选择）
-            if (cfg.DefaultAppMode == "last")
+            return Selection.Resolve(apps, cfg, () =>
             {
-                var t = ByName(cfg.LastUsedAppName);
-                if (t != null && !Off(t)) return t;
-            }
-            else if (cfg.DefaultAppMode == "fixed")
-            {
-                var t = ByName(cfg.FixedAppName);
-                if (t != null && !Off(t)) return t;
-            }
-
-            // 2) 直接前台应用（有音频、非本程序；进程内虚拟屏 HWND 按独立应用放行）——先精确 PID，再按进程名；MatchForeground 已跳过禁用应用
-            int own = AppInfo.CurrentProcessId;
+                int own = AppInfo.CurrentProcessId;
 #if SONICROUTE_PHONE
-            int fg;
-            nint fgHwnd = foregroundHwnd;
-            if (foregroundPid == null)
-            {
-                (fg, nint liveHwnd) = ApplicationAudio.GetForegroundWindowContext();
-                if (fgHwnd == 0) fgHwnd = liveHwnd;
-            }
-            else
-            {
-                fg = foregroundPid.Value;
-                if (fg == own && fgHwnd == 0)
+                int fg;
+                nint fgHwnd = foregroundHwnd;
+                if (foregroundPid == null)
                 {
-                    var ctx = ApplicationAudio.GetForegroundWindowContext();
-                    if (ctx.Pid == own) fgHwnd = ctx.Hwnd;
+                    (fg, nint liveHwnd) = ApplicationAudio.GetForegroundWindowContext();
+                    if (fgHwnd == 0) fgHwnd = liveHwnd;
                 }
-            }
-            bool ownVirtualDisplay = fg == own && ApplicationAudio.IsVirtualDisplayWindow(fgHwnd);
-            if (fg > 0 && (fg != own || ownVirtualDisplay))
-            {
-                var a = MatchForeground(apps, fg, fgHwnd);
-                if (a != null) return a;
-            }
+                else
+                {
+                    fg = foregroundPid.Value;
+                    if (fg == own && fgHwnd == 0)
+                    {
+                        var ctx = ApplicationAudio.GetForegroundWindowContext();
+                        if (ctx.Pid == own) fgHwnd = ctx.Hwnd;
+                    }
+                }
+                bool ownVirtualDisplay = fg == own && ApplicationAudio.IsVirtualDisplayWindow(fgHwnd);
+                if (fg > 0 && (fg != own || ownVirtualDisplay))
+                {
+                    var a = MatchForeground(apps, fg, fgHwnd);
+                    if (a != null) return a;
+                }
 #else
-            int fg = foregroundPid ?? ForegroundAppService.GetForegroundProcessId();
-            if (fg > 0 && fg != own)
-            {
-                var a = MatchForeground(apps, fg);
-                if (a != null) return a;
-            }
+                int fg = foregroundPid ?? ForegroundAppService.GetForegroundProcessId();
+                if (fg > 0 && fg != own)
+                {
+                    var a = MatchForeground(apps, fg);
+                    if (a != null) return a;
+                }
 #endif
-
-            // 3) 最近一次有音频的前台应用（跳过禁用；面板在前台时仍能回到用户正在用的应用）
-            var last = LastForegroundAudio;
-            if (last != null && apps.Any(x => x.Identity == last.Identity) && !Off(last)) return last;
-
-            // 4) 上次操作的应用；5) 兜底（跳过禁用，全部禁用时回退列表第一个）
-            var byLast = ByName(cfg.LastUsedAppName);
-            if (byLast != null && !Off(byLast)) return byLast;
-            return apps.FirstOrDefault(a => !Off(a)) ?? apps[0];
+                return null;
+            });
         }
 
         private static int _ownPid, _lastCheckedFgPid, _foregroundRetryBudget;
@@ -306,11 +233,7 @@ namespace SonicRoute
         }
         private static void ApplyForeground(AudioAppInfo app)
         {
-            var prev = LastForegroundAudio;
-            if (prev != null && prev.Identity == app.Identity) return;
-            LastForegroundAudio = app;
-            var cfg = ConfigService.Load();
-            if (cfg.DefaultAppMode == "recent") Current = app;
+            Selection.Observe(app, ConfigService.Load());
         }
     }
 }

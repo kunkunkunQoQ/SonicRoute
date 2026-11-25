@@ -19,7 +19,7 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
     private bool _disposed;
     private int _handoff;
 
-    internal ApplicationHost(CandidateEnvironment environment, NativeApplicationWindow window, ProductInstance instance)
+    internal ApplicationHost(CandidateEnvironment environment, NativeApplicationWindow window, ProductInstance instance, AppConfig config)
     {
         _environment = environment;
         _window = window;
@@ -30,20 +30,34 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
             action();
             return true;
         }));
-        _config = ConfigService.Load();
-        if (string.IsNullOrWhiteSpace(_config.Language))
-        {
-            _config.Language = HostStartup.DetectSystemLanguage();
-            ConfigService.Save(_config);
-        }
-        L10n.Instance.SetLanguage(_config.Language);
+        _config = config;
         if (ConfigService.LoadWarning is { } warning)
             _feedback.Publish(FeedbackKind.SettingsWarning, "Config.Load", warning.PreservedPath ?? ConfigService.ConfigPath);
         _window.CallbackError += HandleError;
         _window.Signal += OnSignal;
     }
 
+    internal static AppConfig LoadSettings()
+    {
+        bool newProfile = !File.Exists(ConfigService.ConfigPath);
+        AppConfig config = ConfigService.Load();
+        if (newProfile && ConfigService.LoadWarning == null)
+        {
+            // Parallel development editions must not compete for the installed user's shortcuts.
+            foreach (string action in HotkeyActions.All) config.Hotkeys[action] = "";
+            config.TrayWheelPaused = true;
+        }
+        if (string.IsNullOrWhiteSpace(config.Language))
+        {
+            config.Language = HostStartup.DetectSystemLanguage();
+            ConfigService.Save(config);
+        }
+        L10n.Instance.SetLanguage(config.Language);
+        return config;
+    }
+
     public bool TryPost(Action work) => _window.TryPost(work);
+    public bool PostContinuation(Action work) => _window.PostContinuation(work);
     public IDisposable ScheduleOnce(TimeSpan delay, Action work) => _window.ScheduleOnce(delay, work);
 
     internal int Run(string[] args, string? selector)
@@ -70,7 +84,12 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
 
     private async Task RunTemporaryAsync(string selector)
     {
-        try { _window.RequestExit(Program.WriteRule(await ExecuteRuleAsync(selector))); }
+        try
+        {
+            string result = await ExecuteRuleAsync(selector);
+            await _instance.DrainTemporaryClientsAsync();
+            _window.RequestExit(Program.WriteRule(result));
+        }
         catch (Exception error) { HandleError(error); _window.RequestExit(8); }
     }
 
@@ -168,5 +187,12 @@ internal sealed partial class ApplicationHost : IDisposable, IMainThread
         _updates.Dispose();
         AutoRuleStore.Shutdown();
         ConfigService.FlushPendingSaves();
+        if (Environment.GetEnvironmentVariable("SONICROUTE_CANDIDATE_METRICS") == "1")
+        {
+            var released = new AudioRelease(Audio.Com.Owners, Audio.Subscription.Active, Audio.MtaLifetime.Active);
+            var receipt = new ExitReceipt(Environment.ProcessId, released, GC.GetTotalAllocatedBytes(true), DateTimeOffset.UtcNow);
+            File.WriteAllBytes(Path.Combine(_environment.Root, "last-exit.json"),
+                JsonSerializer.SerializeToUtf8Bytes(receipt, HostJson.Default.ExitReceipt));
+        }
     }
 }

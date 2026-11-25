@@ -103,8 +103,10 @@ namespace SonicRoute
         {
             lock (_lock) { if (_started) return; _started = true; _shutdown = false; }
             Log("Start: 挂接系统事件并开始调度");
+#if !SONICROUTE_NATIVE
             SystemEvents.TimeChanged += OnSystemTimeChanged;
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
+#endif
             RefreshScheduler(false);
         }
 
@@ -117,8 +119,10 @@ namespace SonicRoute
                 _shutdown = true;
                 if (_started)
                 {
+#if !SONICROUTE_NATIVE
                     SystemEvents.TimeChanged -= OnSystemTimeChanged;
                     SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+#endif
                     _started = false;
                 }
                 _timer?.Dispose();
@@ -201,6 +205,10 @@ namespace SonicRoute
                 if (now < plan.Due) { _timer?.Change(plan.Due - now, Timeout.InfiniteTimeSpan); return; }
                 plan.CallbackTaken = true;
             }
+#if SONICROUTE_NATIVE
+            if (AutoRuleService.Product?.TryPost(() => ExecutePlan(plan)) == true) return;
+            lock (_lock) { if (!_shutdown && ReferenceEquals(_pendingPlan, plan)) { plan.CallbackTaken = false; _timer?.Change(100, Timeout.Infinite); } }
+#else
             var app = System.Windows.Application.Current;
             if (app != null && !app.Dispatcher.CheckAccess())
             {
@@ -210,6 +218,7 @@ namespace SonicRoute
                 return;
             }
             ExecutePlan(plan);
+#endif
         }
 
         private static void ExecutePlan(Plan plan)
@@ -292,11 +301,13 @@ namespace SonicRoute
 
         // ---------- 系统事件 ----------
 
+#if !SONICROUTE_NATIVE
         private static void OnSystemTimeChanged(object? sender, EventArgs e) => RefreshScheduler(false);
 
         private static void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
         {
             if (e.Mode == PowerModes.Resume) RefreshScheduler(false);
         }
+#endif
     }
 }

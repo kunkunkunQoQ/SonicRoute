@@ -5,6 +5,8 @@ param(
     [Parameter(Mandatory)][string]$Executable,
     [Parameter(Mandatory)][string]$OutputDirectory,
     [string]$WpfHook,
+    [string]$ProfilePath = (Join-Path $PSScriptRoot 'IdleProfile.json'),
+    [ValidateSet('Interactive','Private')][string]$Desktop = 'Interactive',
     [ValidateRange(2,60)][int]$Seconds=8
 )
 $ErrorActionPreference='Stop'
@@ -30,7 +32,7 @@ $install=Join-Path $fixture 'install'
 New-Item -ItemType Directory $data,$install|Out-Null
 $exe=Join-Path $install 'SonicRoute.exe'
 Copy-Item -LiteralPath $source -Destination $exe
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'IdleProfile.json') -Destination (Join-Path $data 'config.json')
+Copy-Item -LiteralPath $ProfilePath -Destination (Join-Path $data 'config.json')
 $envVars=@{SONICROUTE_CANDIDATE_ROOT=$root;SONICROUTE_CANDIDATE_ID=$profile}
 if($Mode -eq 'Wpf'){
     $envVars['SONICROUTE_DATA_DIRECTORY']=$data
@@ -66,7 +68,7 @@ function Read-Gc(){
     if($Mode -eq 'Native'){
         $s=Invoke-Control status|ConvertFrom-Json
         if($s.Pid -ne $server.Id -or $s.Edition -ne $Edition -or !$s.NativeAot -or ([IO.Path]::GetFullPath($s.DataDirectory) -ne [IO.Path]::GetFullPath($data))){throw 'Unexpected candidate identity.'}
-        return $s|Select-Object Allocated,ManagedHeap,LastGcHeap,Gen0,Gen1,Gen2,Messages,Dispatches,TimerFires
+        return $s|Select-Object Allocated,ManagedHeap,LastGcHeap,Gen0,Gen1,Gen2,Messages,Dispatches,TimerFires,SystemEvents,LastSignal
     }
     $null=[SonicRouteProcessMetrics]::SampleWpf($server.Id,$instance,$Edition,100)
     $gc=[ordered]@{}
@@ -104,10 +106,14 @@ try{
     }
     if($deadline.Elapsed.TotalSeconds -ge 20){throw 'Isolated fixture startup timed out.'}
     $null=Read-Gc
+    $automation=if($Mode -eq 'Native'){try{Invoke-Control automation-status}catch{$null}}
     $counters=[SonicRouteThreadCounters]::new()
     $null=$counters.Sample($server.Id)
     Start-Sleep -Seconds 4
+    $calibration=Read-Gc
+    $managedClock=[Diagnostics.Stopwatch]::StartNew()
     $startGc=Read-Gc
+    $managedStart=$managedClock.Elapsed.TotalSeconds
     $startSwitches=$counters.Sample($server.Id)
     $start=Get-Usage
     $clock=[Diagnostics.Stopwatch]::StartNew()
@@ -116,6 +122,7 @@ try{
     $wall=$clock.Elapsed.TotalSeconds
     $endSwitches=$counters.Sample($server.Id)
     $endGc=Read-Gc
+    $managedDuration=$managedClock.Elapsed.TotalSeconds-$managedStart
     $count=0L
     $common=0
     foreach($id in $endSwitches.Keys){if($startSwitches.ContainsKey($id)){$count+=($endSwitches[$id]-$startSwitches[$id]);$common++}}
@@ -124,10 +131,14 @@ try{
     try{$gpu=@(Get-CimInstance Win32_PerfRawData_GPUPerformanceCounters_GPUProcessMemory -Filter "Name LIKE 'pid_$($server.Id)_%'" -OperationTimeoutSec 5|Select-Object Name,DedicatedUsage,SharedUsage)}catch{$gpu=@();$gpuError=$_.Exception.Message}
     $result=[ordered]@{
         Mode=$Mode;Edition=$Edition;Pid=$server.Id;File=$exe;FileSize=(Get-Item $exe).Length;SHA256=(Get-FileHash $exe).Hash
-        Windows=[Environment]::OSVersion.VersionString;InputConfigSHA256=(Get-FileHash (Join-Path $PSScriptRoot 'IdleProfile.json')).Hash
+        Windows=[Environment]::OSVersion.VersionString;Desktop=$Desktop;InputConfigSHA256=(Get-FileHash -LiteralPath $ProfilePath).Hash;BackgroundStatus=$automation
         Seconds=$wall;CpuMs=$finish.CpuMs-$start.CpuMs;CpuPercentOfOneCore=($finish.CpuMs-$start.CpuMs)/($wall*10)
         ContextSwitchesOnCommonThreads=$count;CommonThreads=$common;ThreadArrivals=$endSwitches.Count-$common;ThreadDepartures=$startSwitches.Count-$common
-        Start=$start;End=$finish;StartManaged=$startGc;EndManaged=$endGc;AllocatedBytesPerSecond=($endGc.Allocated-$startGc.Allocated)/$wall
+        ContextSwitchesByThread=@(foreach($threadId in $endSwitches.Keys){if($startSwitches.ContainsKey($threadId)){
+            [ordered]@{Tid=$threadId;Delta=$endSwitches[$threadId]-$startSwitches[$threadId]}
+        }})
+        Start=$start;End=$finish;StartManaged=$startGc;EndManaged=$endGc;ManagedDurationSeconds=$managedDuration;BackToBackSampleBytes=$startGc.Allocated-$calibration.Allocated
+        AllocatedBytesPerSecond=($endGc.Allocated-$startGc.Allocated)/$managedDuration
         Modules=$modules;Gpu=$gpu;GpuQueryError=$gpuError
     }
 }finally{

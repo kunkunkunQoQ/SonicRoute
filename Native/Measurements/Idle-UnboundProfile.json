@@ -1,0 +1,29 @@
+{
+  "Language": "zh-CN",
+  "StartMinimized": true,
+  "StartPanelOnStart": false,
+  "AutoCheckUpdates": false,
+  "AutoStart": false,
+  "TrayWheelPaused": true,
+  "DefaultAppMode": "last",
+  "Hotkeys": {
+    "切换当前应用快捷设备": "",
+    "静音当前应用": "",
+    "麦克风静音当前应用": "",
+    "增大当前应用音量": "",
+    "减小当前应用音量": "",
+    "增大系统默认输出音量": "",
+    "减小系统默认输出音量": "",
+    "打开快速面板": "",
+    "切换全局应用输出设备": "",
+    "还原全部应用默认设备": "",
+    "切换全局应用输入设备": "",
+    "切换系统默认输出设备": "",
+    "切换系统默认输入设备": "",
+    "切换当前应用麦克风设备": ""
+  },
+  "BackgroundPollingFallbackEnabled": false,
+  "MicMuteOsdEnabled": false,
+  "MicMuteOsdPersistent": false,
+  "AutoRules": []
+}

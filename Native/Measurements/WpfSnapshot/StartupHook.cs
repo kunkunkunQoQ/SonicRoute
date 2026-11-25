@@ -49,6 +49,7 @@ internal static class StartupHook
     {
         if (id != message) return 0;
         handled = true;
+        if (command == 200) return PlaybackSelection.Begin() ? 1 : 0;
         if (command == 100)
         {
             var info = GC.GetGCMemoryInfo();

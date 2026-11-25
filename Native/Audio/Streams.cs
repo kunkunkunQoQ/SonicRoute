@@ -52,6 +52,17 @@ internal sealed unsafe class PcmRender : AudioStream
         }
         catch { Dispose(); throw; }
     }
+    internal int WriteReserved(int frames, Func<nint,int,int>? copy = null)
+    {
+        if (frames <= 0) return 0;
+        var target = SharedAudioBuffers.Acquire(Service!, checked((uint)frames));
+        uint committed = 0;
+        try { committed = copy == null ? (uint)frames : checked((uint)(copy(target, checked(frames * 4)) / 4)); }
+        finally { SharedAudioBuffers.Release(Service!, committed, copy == null ? 2u : 0u); }
+        return (int)committed;
+    }
+    internal uint Capacity => _capacity;
+    internal int WriteAvailable(ReadOnlySpan<byte> frames) => SharedAudioBuffers.Write(Service!, frames, 4);
     internal uint Available => _capacity - Padding;
     internal uint Padding => SharedAudioBuffers.Padding(Client);
     internal Com GetControl() => Client.Service(14,new("F4B1A599-7266-4319-A8CA-E70ACB11E8CD"));
@@ -128,8 +139,9 @@ internal sealed unsafe class ProcessCapture : AudioStream
 {
     private readonly CancellationToken _token;
     private readonly WaitHandle[] _waits;
-    private short[]? _buffer;
+    private byte[]? _buffer;
     internal bool EventDriven { get; }
+    internal long Discontinuities { get; private set; }
     internal static Com Begin(uint processId,ICompletion handler)
     {
         nint callback = (nint)ComInterfaceMarshaller<ICompletion>.ConvertToUnmanaged(handler);
@@ -155,12 +167,12 @@ internal sealed unsafe class ProcessCapture : AudioStream
         try { return handler.Take(TimeSpan.FromSeconds(5),token); }
         finally { handler.Abandon(); }
     }
-    internal ProcessCapture(uint pid,Guid session,CancellationToken token,bool preferEvents = true) : base(Activate(pid,token))
+    internal ProcessCapture(uint pid,Guid session,CancellationToken token,bool preferEvents = true, WaitHandle? renderWake = null) : base(Activate(pid,token))
     {
         _token = token;
         try
         {
-            _waits = [token.WaitHandle,BufferEvent];
+            _waits = renderWake == null ? [token.WaitHandle, BufferEvent] : [token.WaitHandle, BufferEvent, renderWake];
             const uint loopback = 0x00020000;
             const long captureDuration = 200_000;
             if (preferEvents)
@@ -174,7 +186,7 @@ internal sealed unsafe class ProcessCapture : AudioStream
             }
             if (!EventDriven) Com.Check(Initialize(loopback,session,captureDuration,false),"initialize non-event capture");
             Service = Client.Service(14,new("C8ADBD64-E71E-48a0-A4DE-185C395CD317"));
-            _buffer = ArrayPool<short>.Shared.Rent(8192);
+            _buffer = ArrayPool<byte>.Shared.Rent(16384);
         }
         catch { Dispose(); throw; }
     }
@@ -193,9 +205,12 @@ internal sealed unsafe class ProcessCapture : AudioStream
     }
     protected override void ReleaseStorage()
     {
-        if (_buffer is { } buffer) { _buffer = null; ArrayPool<short>.Shared.Return(buffer); }
+        if (_buffer is { } buffer) { _buffer = null; ArrayPool<byte>.Shared.Return(buffer); }
     }
-    internal void Drain(PcmPacket packet)
+    internal void Drain(PcmPacket packet) => DrainCore(packet, null);
+    internal void DrainBytes(Action<ReadOnlyMemory<byte>> packet) => DrainCore(null, packet);
+
+    private void DrainCore(PcmPacket? samplesPacket, Action<ReadOnlyMemory<byte>>? bytesPacket)
     {
         Com reader = Service!;
         // Bound dispatch work when a slow consumer lets the engine refill continuously.
@@ -207,25 +222,28 @@ internal sealed unsafe class ProcessCapture : AudioStream
             int hr = ((delegate* unmanaged[Stdcall]<nint,nint*,uint*,uint*,ulong*,ulong*,int>)reader.Slot(3))(reader.Handle,&data,&frames,&flags,null,null);
             Com.Check(hr,"IAudioCaptureClient.GetBuffer");
             if (hr == 0x08890001) return;
-            short[]? overflow = null;
+            if ((flags & 1) != 0) ++Discontinuities;
+            byte[]? overflow = null;
             try
             {
                 int length;
-                short[] buffer;
+                byte[] buffer;
                 try
                 {
-                    length = checked((int)frames * 2);
+                    length = checked((int)frames * 4);
+                    if (length > 192_000) throw new InvalidDataException("Unexpected process capture packet larger than one second.");
                     if (length == 0) return;
                     buffer = _buffer!;
-                    if (length > buffer.Length) buffer = overflow = ArrayPool<short>.Shared.Rent(length);
+                    if (length > buffer.Length) buffer = overflow = ArrayPool<byte>.Shared.Rent(length);
                     var samples = buffer.AsSpan(0,length);
                     if ((flags & 2) != 0 || data == 0) samples.Clear();
-                    else new ReadOnlySpan<short>((void*)data,length).CopyTo(samples);
+                    else new ReadOnlySpan<byte>((void*)data,length).CopyTo(samples);
                 }
                 finally { Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,int>)reader.Slot(4))(reader.Handle,frames),"IAudioCaptureClient.ReleaseBuffer"); }
-                packet(buffer.AsSpan(0,length));
+                if (bytesPacket != null) bytesPacket(buffer.AsMemory(0,length));
+                else samplesPacket!(MemoryMarshal.Cast<byte,short>(buffer.AsSpan(0,length)));
             }
-            finally { if (overflow != null) ArrayPool<short>.Shared.Return(overflow); }
+            finally { if (overflow != null) ArrayPool<byte>.Shared.Return(overflow); }
         }
     }
 }

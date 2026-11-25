@@ -50,6 +50,9 @@ internal sealed class ProductInstance : IDisposable
         return await RuleCommandFrame.ReadFrameAsync(pipe, CancellationToken.None).ConfigureAwait(false);
     }
 
+    internal Task DrainTemporaryClientsAsync() => Task.WhenAll(
+        _rules?.StopAcceptingAsync() ?? Task.CompletedTask, _control?.StopAcceptingAsync() ?? Task.CompletedTask);
+
     public void Dispose()
     {
         _rules?.Dispose();
@@ -66,6 +69,11 @@ internal sealed class ProductInstance : IDisposable
         private readonly string _name;
         private readonly Func<string, Task<ControlReply>> _execute;
         private readonly CancellationTokenSource _stop = new();
+        private readonly CancellationTokenSource _acceptStop = new();
+        private readonly object _gate = new();
+        private readonly TaskCompletionSource _idle = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _clients;
+        private bool _draining;
         private readonly CancellationToken _token;
         private readonly SemaphoreSlim _capacity = new(Capacity, Capacity);
         private readonly Task _accept;
@@ -90,15 +98,16 @@ internal sealed class ProductInstance : IDisposable
             {
                 while (true)
                 {
-                    await _capacity.WaitAsync(_token).ConfigureAwait(false);
+                    await _capacity.WaitAsync(_acceptStop.Token).ConfigureAwait(false);
                     next ??= Create();
-                    await next.WaitForConnectionAsync(_token).ConfigureAwait(false);
+                    await next.WaitForConnectionAsync(_acceptStop.Token).ConfigureAwait(false);
                     var connected = next;
                     next = null;
+                    lock (_gate) ++_clients;
                     _ = HandleAsync(connected);
                 }
             }
-            catch (OperationCanceledException) when (_token.IsCancellationRequested) { }
+            catch (OperationCanceledException) when (_acceptStop.IsCancellationRequested) { }
             catch (Exception e) { ExceptionDiagnostics.Record("IPC.Listen", e); }
             finally { next?.Dispose(); }
         }
@@ -125,19 +134,37 @@ internal sealed class ProductInstance : IDisposable
             {
                 pipe.Dispose();
                 _capacity.Release();
+                lock (_gate)
+                {
+                    if (--_clients == 0 && _draining) _idle.TrySetResult();
+                }
                 // Once acknowledged by a worker, shutdown must proceed even if its caller disconnected.
                 try { reply?.AfterReply?.Invoke(); }
                 catch (Exception e) { ExceptionDiagnostics.Record("IPC.AfterReply", e); }
             }
         }
 
+        internal async Task StopAcceptingAsync()
+        {
+            _acceptStop.Cancel();
+            await _accept.ConfigureAwait(false);
+            lock (_gate)
+            {
+                _draining = true;
+                if (_clients == 0) _idle.TrySetResult();
+            }
+            await _idle.Task.ConfigureAwait(false);
+        }
+
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposing, 1) != 0) return;
+            _acceptStop.Cancel();
             _stop.Cancel();
             // Only the overlapped accept is synchronously drained. Already submitted business
             // commands belong to the application lifetime and may still be completing on its owner.
             _accept.GetAwaiter().GetResult();
+            _acceptStop.Dispose();
             _stop.Dispose();
         }
     }

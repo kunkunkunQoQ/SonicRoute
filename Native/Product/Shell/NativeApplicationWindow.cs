@@ -95,6 +95,24 @@ internal sealed unsafe partial class NativeApplicationWindow : IDisposable
         }
     }
 
+    // Async rule continuations have already been accepted. When producers saturate the
+    // bounded STA queue, let the consumer make space instead of losing a running rule.
+    internal bool PostContinuation(Action continuation)
+    {
+        lock (postLock)
+        {
+            while (!closing && posted.Count >= QueueLimit)
+            {
+                if (Win.GetCurrentThreadId() == ownerThread) break;
+                Monitor.Wait(postLock);
+            }
+            if (closing) return false;
+            if (posted.Count < QueueLimit) return TryPost(continuation);
+        }
+        continuation(); // Only the owner reaches here. Never wait for its own pump.
+        return true;
+    }
+
     internal int Run()
     {
         VerifyOwner();
@@ -115,6 +133,7 @@ internal sealed unsafe partial class NativeApplicationWindow : IDisposable
             if (closing) return;
             if (Win.PostMessageW(Handle, ExitMessage, 0, 0) == 0) throw LastError("PostMessageW(exit)");
             closing = true;
+            Monitor.PulseAll(postLock);
             exitCode = code;
         }
     }
@@ -213,7 +232,11 @@ internal sealed unsafe partial class NativeApplicationWindow : IDisposable
         for (int i = 0; i < limit; i++)
         {
             Action? action;
-            lock (postLock) { if (!posted.TryDequeue(out action)) return; }
+            lock (postLock)
+            {
+                if (!posted.TryDequeue(out action)) return;
+                if (posted.Count == QueueLimit - 1) Monitor.PulseAll(postLock);
+            }
             try { action(); } catch (Exception ex) { Report(ex); }
         }
         lock (postLock)
@@ -286,7 +309,7 @@ internal sealed unsafe partial class NativeApplicationWindow : IDisposable
     {
         if (disposed) return;
         VerifyOwner();
-        lock (postLock) { closing = true; }
+        lock (postLock) { closing = true; Monitor.PulseAll(postLock); }
         if (Handle != 0)
         {
             SetInterest(ShellInterest.None);

@@ -13,6 +13,8 @@ internal sealed unsafe partial class NativeApplicationWindow
     private readonly int[] wheelDelta = new int[4];
     private readonly nint[] wheelForeground = new nint[4];
     private bool wheelEnabled, wheelEverywhere, wheelPosted;
+    private int boundGestures;
+    private long mouseGeneration;
     private nint mouseHook;
     internal bool CapturingHotkey { get; set; }
 
@@ -28,7 +30,13 @@ internal sealed unsafe partial class NativeApplicationWindow
         }
         if (!needed) StopMouse();
         mouseBindings.Clear();
-        foreach (var pair in bindings) mouseBindings.Add(pair.Key, pair.Value);
+        boundGestures = 0;
+        ++mouseGeneration;
+        foreach (var pair in bindings)
+        {
+            mouseBindings.Add(pair.Key, pair.Value);
+            boundGestures |= 1 << (int)pair.Key.Gesture;
+        }
         wheelEnabled = trayWheel;
         wheelEverywhere = everywhere;
         if (!trayWheel) Array.Clear(wheelDelta);
@@ -39,6 +47,8 @@ internal sealed unsafe partial class NativeApplicationWindow
     {
         if (mouseHook != 0) { Win.UnhookWindowsHookEx(mouseHook); mouseHook = 0; }
         wheelEnabled = false;
+        ++mouseGeneration;
+        boundGestures = 0;
         mouseBindings.Clear();
         Array.Clear(wheelDelta);
     }
@@ -67,11 +77,18 @@ internal sealed unsafe partial class NativeApplicationWindow
             case 0x20b when high is 1 or 2: gesture = high == 1 ? MouseGesture.Side1 : MouseGesture.Side2; break;
             default: return false;
         }
-        uint mods = PressedModifiers();
-        if (mouseBindings.TryGetValue(new(gesture, mods), out int id))
-            return TryPost(() => Raise(ShellSignalKind.Hotkey, id));
+        uint? mods = null;
+        if ((boundGestures & (1 << (int)gesture)) != 0)
+        {
+            mods = PressedModifiers();
+            if (mouseBindings.TryGetValue(new(gesture, mods.Value), out int id))
+            {
+                long generation = mouseGeneration;
+                return TryPost(() => { if (generation == mouseGeneration) Raise(ShellSignalKind.Hotkey, id); });
+            }
+        }
         if (message != 0x20a || !wheelEnabled || !IsOverTray(data.Point)) return false;
-        int bucket = mods switch { 1 => 1, 5 => 2, 4 => 3, _ => 0 };
+        int bucket = (mods ?? PressedModifiers()) switch { 1 => 1, 5 => 2, 4 => 3, _ => 0 };
         if (!wheelPosted && !TryPost(DrainWheel)) return false;
         wheelPosted = true;
         // Wheel deltas are additive. Match the product's four modifier groups without queueing each tick.

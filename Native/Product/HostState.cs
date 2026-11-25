@@ -6,6 +6,7 @@ namespace SonicRoute.Native.Product;
 internal interface IMainThread
 {
     bool TryPost(Action work);
+    bool PostContinuation(Action work);
     IDisposable ScheduleOnce(TimeSpan delay, Action work);
 }
 
@@ -30,6 +31,12 @@ internal sealed record HostStatus(int Pid, string Edition, bool Packaged, bool N
     long Allocated, long ManagedHeap, long LastGcHeap, int Gen0, int Gen1, int Gen2, long Generation);
 internal sealed record ControlRequest(string Verb, string[] Args);
 
+internal sealed record AudioRelease(int OwnedComInterfaces, int VolumeAndDeviceSubscriptions, int MtaUsageCookies);
+internal sealed record ExitReceipt(int Pid, AudioRelease AfterServiceStop, long ManagedBytesAllocated, DateTimeOffset Utc);
+
+[JsonSerializable(typeof(ExitReceipt))]
 [JsonSerializable(typeof(HostStatus))]
 [JsonSerializable(typeof(ControlRequest))]
+[JsonSerializable(typeof(OutputIntentState))]
+[JsonSerializable(typeof(AppSession))]
 internal partial class HostJson : JsonSerializerContext { }

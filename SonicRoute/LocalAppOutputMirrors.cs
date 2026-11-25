@@ -2,12 +2,18 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+#if SONICROUTE_NATIVE_PC
+using AudioService = SonicRoute.Native.Product.PcRoutingApi;
+using ApplicationAudio = SonicRoute.Native.Product.PcRoutingApi;
+using SonicRoute.Native.Product;
+#else
 using NAudio.CoreAudioApi;
 using NAudio.CoreAudioApi.Interfaces;
+#endif
 using SonicRoute.AndroidAudio;
 using SonicRoute.Core;
 using SonicRoute.Core.Compat;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
 using System.Buffers;
 #endif
 using AudioPolicyConfig = SonicRoute.Core.Interop.AudioPolicyConfig;
@@ -21,7 +27,7 @@ internal static partial class LocalAppOutputMirrors
     private static readonly ConcurrentDictionary<int, Route> Routes = new();
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
     private static IDisposable? _deviceWatch;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
     private static IDisposable? _defaultWatch;
 #endif
     private static int _refreshQueued;
@@ -32,7 +38,12 @@ internal static partial class LocalAppOutputMirrors
     internal static bool HasActiveOrChangingRoutes => Changes.CurrentCount == 0 || HasActiveRoutes;
 #endif
 
-    private static string OwnerName(int pid) => @"Local\SonicRoute.AudioMirror." + pid;
+    private static string OwnerName(int pid) =>
+#if SONICROUTE_NATIVE_PC
+        PcRoutingApi.MirrorOwnerName(pid);
+#else
+        @"Local\SonicRoute.AudioMirror." + pid;
+#endif
 
     // Full and Lite can share settings and run side by side. Only one may replay the same process.
     internal static IDisposable Reserve(int pid)
@@ -63,7 +74,9 @@ internal static partial class LocalAppOutputMirrors
             {
                 if (processId <= 0 || AudioProcessTree.ContainsProcess(processId, AppInfo.CurrentProcessId))
                     throw new InvalidOperationException(L10n.T("Tray.AppUnavailable"));
-#if SONICROUTE_PHONE
+#if SONICROUTE_NATIVE_PC
+                _deviceWatch ??= ProductAudio.WatchDevices(QueueRefresh);
+#elif SONICROUTE_PHONE
                 _deviceWatch ??= DefaultOutputNotifications.SubscribeTopology(QueueRefresh, includeDefaultChanged: false);
 #else
                 _deviceWatch ??= WasapiDeviceLease.ObserveDefaultOutput(new DeviceEvents());
@@ -83,7 +96,7 @@ internal static partial class LocalAppOutputMirrors
                         Routes[processId] = route;
                         _ = RetireAfterCaptureAsync(route);
                     }
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
                     if (HasSystemDefaultMirror()) _defaultWatch ??= DefaultOutputNotifications.Subscribe(QueueRefresh);
 #endif
                     ApplicationAudio.NotifyRouteChanged(route.ProcessId);
@@ -107,7 +120,7 @@ internal static partial class LocalAppOutputMirrors
 
     internal static async Task ShutdownAsync()
     {
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
         AppPlaybackOutputs.ForgetAll();
 #endif
         Shutdown.Cancel();
@@ -129,7 +142,7 @@ internal static partial class LocalAppOutputMirrors
         try
         {
             ReleaseUnusedPhoneWatch();
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
             if (!HasSystemDefaultMirror()) DisposeWatch(ref _defaultWatch);
 #endif
             if (Routes.IsEmpty) DisposeWatch(ref _deviceWatch);
@@ -204,11 +217,15 @@ internal static partial class LocalAppOutputMirrors
                         defaultLookedUp = true;
                         try
                         {
+#if SONICROUTE_NATIVE_PC
+                            currentDefaultId = ProductAudio.DefaultId(SonicRoute.Native.Audio.Flow.Render, SonicRoute.Native.Audio.Role.Multimedia);
+#else
                             using var devices = new WasapiDeviceLease.Enumerator();
                             using var defaultLease = devices.TryDefault(Role.Multimedia);
                             currentDefaultId = defaultLease?.Device.State == DeviceState.Active
                                 && defaultLease.Device.DataFlow == DataFlow.Render
                                 ? defaultLease.Device.ID : null;
+#endif
                         }
                         catch (COMException ex)
                         {
@@ -253,7 +270,7 @@ internal static partial class LocalAppOutputMirrors
         });
     }
 
-#if !SONICROUTE_PHONE
+#if !SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
     [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
     private sealed class DeviceEvents : IMMNotificationClient
     {
@@ -271,6 +288,9 @@ internal static partial class LocalAppOutputMirrors
 
     private static string[] ResolveOutputs(string[] requested, bool strict)
     {
+#if SONICROUTE_NATIVE_PC
+        return PcRoutingApi.ResolveOutputs(requested, strict);
+#else
         using var devices = new WasapiDeviceLease.Enumerator();
         // Mirror destinations are explicit selections. Changes to the primary route do not remove them.
         var selected = new HashSet<string>(Ids);
@@ -290,12 +310,13 @@ internal static partial class LocalAppOutputMirrors
             catch (Exception ex) when (!strict && (ex is COMException or IOException)) { }
         }
         return selected.ToArray();
+#endif
     }
 
     private sealed class Sink(string id, IDisposable player)
     {
         internal readonly string Id = id;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
         internal AndroidPcmSource? Pcm { get; init; }
         internal DesktopMirrorPlayer? DesktopPlayer => Player as DesktopMirrorPlayer;
 #else
@@ -330,7 +351,11 @@ internal static partial class LocalAppOutputMirrors
             if (HasExited) throw new InvalidOperationException(L10n.T("Tray.AppUnavailable"));
             var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var cancelWait = token.Register(() => ready.TrySetCanceled());
+#if SONICROUTE_NATIVE_PC
+            Capture = CaptureNativeAsync(() => ready.TrySetResult(true));
+#else
             Capture = LocalProcessAudioCapture.CaptureAsync(processId, Push, () => ready.TrySetResult(true), _stop.Token);
+#endif
             var first = await Task.WhenAny(ready.Task, Capture).ConfigureAwait(false);
             await first.ConfigureAwait(false);
             if (Capture.IsCompleted) throw new IOException(L10n.T("Tray.AppUnavailable"));
@@ -353,7 +378,7 @@ internal static partial class LocalAppOutputMirrors
                 {
                     var existing = previous.FirstOrDefault(s => Ids.Equals(s.Id, id));
                     if (existing != null) { next.Add(existing); continue; }
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
                     if (AndroidOutputIdentity.IsPhoneOutput(id))
                     {
                         var pcm = new AndroidPcmSource();
@@ -392,7 +417,11 @@ internal static partial class LocalAppOutputMirrors
 
         internal Sink CreateDesktopSink(string id)
         {
-            var player = new DesktopMirrorPlayer(AudioService.IsSystemDefault(id) ? null : id);
+            var player = new DesktopMirrorPlayer(AudioService.IsSystemDefault(id) ? null : id
+#if SONICROUTE_NATIVE_PC
+                , _renderWake, _measurement
+#endif
+            );
             var sink = new Sink(id, player);
             player.Failed += error => RecordAndPruneFailed(sink, error);
             return sink;
@@ -400,8 +429,11 @@ internal static partial class LocalAppOutputMirrors
 
         private void RecordAndPruneFailed(Sink sink, Exception error)
         {
-            ExceptionDiagnostics.Record("LocalAppOutputMirrors.Playback", error);
-            _ = PruneFailed(sink);
+            _ = Task.Run(async () =>
+            {
+                ExceptionDiagnostics.Record("LocalAppOutputMirrors.Playback", error);
+                await PruneFailed(sink).ConfigureAwait(false);
+            });
         }
 
         partial void UpdateIsolation(bool phoneOnly, bool allowSpeakerMute);
@@ -419,7 +451,7 @@ internal static partial class LocalAppOutputMirrors
         {
             var outputs = Sinks;
             if (outputs.Length == 0) return;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE_PC
             bool hasPhone = false;
             foreach (var sink in outputs)
             {
@@ -449,6 +481,9 @@ internal static partial class LocalAppOutputMirrors
             _stop.Cancel();
             try { await Capture.ConfigureAwait(false); } catch (OperationCanceledException) { } catch (Exception ex) { Debug.WriteLine(ex); }
             Replace([]);
+#if SONICROUTE_NATIVE_PC
+            _renderWake.Dispose();
+#endif
             _process.Dispose();
             _stop.Dispose();
             _owner?.Dispose();

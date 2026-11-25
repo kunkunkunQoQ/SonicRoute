@@ -7,7 +7,7 @@ namespace SonicRoute.AndroidAudio;
 
 internal static class PcProcessLoopbackCapture
 {
-    internal const string CaptureSessionId = "f4f87993-b445-47c4-8e81-475afe1b6760";
+    internal const string CaptureSessionId = ProcessCaptureIdentity.SessionId;
     private const string VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK = "VAD\\Process_Loopback";
     private const int PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE = 0;
     private const int AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK = 1;

@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="AudioProbe" />
+    <InternalsVisibleTo Include="SonicRoute" />
     <InternalsVisibleTo Include="SonicRoute.AndroidAudio" />
   </ItemGroup>
 </Project>

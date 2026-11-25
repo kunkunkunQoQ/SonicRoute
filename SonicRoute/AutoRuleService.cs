@@ -6,7 +6,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+#if SONICROUTE_NATIVE
+using SonicRoute.Native.Product;
+#else
 using System.Windows.Threading;
+#endif
 using SonicRoute.Core;
 using SonicRoute.Core.Compat;
 using SonicRoute.Core.Interop;
@@ -145,8 +149,16 @@ namespace SonicRoute
 
         // ---------- 触发监听（应用启动 / 前台切换） ----------
 
+#if SONICROUTE_NATIVE
+        internal static ProductAutomation? Product { get; set; }
+        internal static bool WatchesForeground => _foregroundSubscribed;
+        internal static void NotifyForeground(int pid) { if (_foregroundSubscribed) ForegroundChanged(pid); }
+        internal static string ProcessDetection => _processSnapshot == null ? "off" : _processEvents?.IsAvailable == true ? "wmi" : "snapshot";
+        private static IDisposable? _watchFallbackTimer;
+#else
         private static DispatcherTimer? _watchFallbackTimer;
         private static Dispatcher? _watchDispatcher;
+#endif
         private static ProcessChangeSource? _processEvents;
         private static long _processEventRetryAt;
         private static int _processEventRetryDelay = 2000;
@@ -165,7 +177,7 @@ namespace SonicRoute
         private static ProcessSnapshotService? _processSnapshot;
         private static int _lastFgPid;
         private static int _observedForegroundPid;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
         private static nint _lastFgHwnd;
         private static nint _observedForegroundHwnd;
 #endif
@@ -177,7 +189,7 @@ namespace SonicRoute
             internal AutoRule Rule = null!;
             internal long Revision, ForegroundSequence;
             internal int ForegroundPid;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
             internal nint ForegroundHwnd;
 #endif
         }
@@ -268,10 +280,14 @@ namespace SonicRoute
         public static void RefreshWatcher()
         {
             if (_shuttingDown) return;
+#if !SONICROUTE_NATIVE
             _watchDispatcher ??= Dispatcher.CurrentDispatcher;
+#endif
             var rules = GetWatchRules();
             bool needsExternal = _hasAppStart || _hasAppExit;
+#if !SONICROUTE_NATIVE
             RefreshExternalWatcher(needsExternal);
+#endif
             bool needsSnapshot = rules.Any(r => (r.Trigger is AutoRuleTrigger.AppStart or AutoRuleTrigger.AppExit)
                 && !r.TriggerApp.StartsWith("android:", StringComparison.OrdinalIgnoreCase));
             bool needsForeground = _hasAppSwitch;
@@ -281,15 +297,19 @@ namespace SonicRoute
             if (needsForeground && !_foregroundSubscribed)
             {
                 _lastFgPid = -1;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
                 _lastFgHwnd = 0;
 #endif
+#if !SONICROUTE_NATIVE
                 CurrentAppService.ForegroundChanged += ForegroundChanged;
+#endif
                 _foregroundSubscribed = true;
             }
             else if (!needsForeground && _foregroundSubscribed)
             {
+#if !SONICROUTE_NATIVE
                 CurrentAppService.ForegroundChanged -= ForegroundChanged;
+#endif
                 _foregroundSubscribed = false;
                 _foregroundCheckPending = false;
             }
@@ -374,10 +394,14 @@ namespace SonicRoute
 
         private static void StopWatcher(bool keepExternal = false)
         {
+#if !SONICROUTE_NATIVE
             if (!keepExternal) RefreshExternalWatcher(false);
+#endif
             ++_watchGeneration;
-            _watchFallbackTimer?.Stop(); _watchFallbackTimer = null;
+            StopFallbackTimer();
+#if !SONICROUTE_NATIVE
             if (_foregroundSubscribed) CurrentAppService.ForegroundChanged -= ForegroundChanged;
+#endif
             _foregroundSubscribed = false;
             _processEvents?.Dispose(); _processEvents = null;
             _processEventRetryDelay = 2000;
@@ -389,15 +413,34 @@ namespace SonicRoute
             _processSnapshot?.Dispose(); _processSnapshot = null;
         }
 
+        private static void StopFallbackTimer()
+        {
+#if SONICROUTE_NATIVE
+            _watchFallbackTimer?.Dispose();
+#else
+            _watchFallbackTimer?.Stop();
+#endif
+            _watchFallbackTimer = null;
+        }
+
         private static void UpdateWatchFallbackPolicy()
         {
             if (_processEvents?.IsAvailable == true) _processEventRetryDelay = 2000;
             // 前台监听已有自身恢复机制；不为自动化再建立另一份前台轮询。
             bool need = _processSnapshot != null && (_processEvents?.IsAvailable != true
                 || ConfigService.Load().BackgroundPollingFallbackEnabled);
-            if (!need) { _watchFallbackTimer?.Stop(); _watchFallbackTimer = null; return; }
+            if (!need) { StopFallbackTimer(); return; }
             if (_watchFallbackTimer == null)
             {
+#if SONICROUTE_NATIVE
+                _watchFallbackTimer = Product!.ScheduleOnce(TimeSpan.FromSeconds(1), () =>
+                {
+                    _watchFallbackTimer = null;
+                    TryRecoverProcessEvents();
+                    _ = TickAsync(true, false);
+                    UpdateWatchFallbackPolicy();
+                });
+#else
                 _watchFallbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
                 _watchFallbackTimer.Tick += async (_, _) =>
                 {
@@ -405,13 +448,14 @@ namespace SonicRoute
                     await TickAsync(true, false);
                 };
                 _watchFallbackTimer.Start();
+#endif
             }
         }
 
         private static void ForegroundChanged(int pid)
         {
             _observedForegroundPid = pid;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
             _observedForegroundHwnd = pid == AppInfo.CurrentProcessId ? ApplicationAudio.GetForegroundWindowHandle() : 0;
 #endif
             ++_foregroundSequence;
@@ -448,10 +492,10 @@ namespace SonicRoute
                         // 复用现有修订快照，逐项重新确认资格；不为每个旧待办克隆整个规则库。
                         var rule = GetWatchRules().FirstOrDefault(r => r.Id == request.Rule.Id);
                         if (rule == null || !rule.Enabled || rule.Trigger != request.Rule.Trigger) continue;
-                        if (!ReferenceEquals(rule, request.Rule) && JsonSerializer.Serialize(rule) != JsonSerializer.Serialize(request.Rule)) continue;
+                        if (!ReferenceEquals(rule, request.Rule) && !AutoRuleStore.SameContents(rule, request.Rule)) continue;
                         if (rule.Trigger == AutoRuleTrigger.AppSwitch && (request.ForegroundSequence != _foregroundSequence
                             || request.ForegroundPid != ForegroundAppService.GetForegroundProcessId()
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
                             || (request.ForegroundPid == AppInfo.CurrentProcessId
                                 && request.ForegroundHwnd != ApplicationAudio.GetForegroundWindowHandle())
 #endif
@@ -468,16 +512,26 @@ namespace SonicRoute
         {
             var targets = _processEventTargets;
             if (name != null && targets != null && !targets.Contains(name)) return;
+#if SONICROUTE_NATIVE
+            var dispatcher = Product;
+            if (_shuttingDown || dispatcher == null
+#else
             var dispatcher = _watchDispatcher;
             if (_shuttingDown || dispatcher == null || dispatcher.HasShutdownStarted
+#endif
                 || Interlocked.Exchange(ref _processNotificationQueued, 1) != 0) return;
-            dispatcher.BeginInvoke(new Action(() =>
+            void RefreshOnOwner()
             {
                 Interlocked.Exchange(ref _processNotificationQueued, 0);
                 if (_shuttingDown || _processSnapshot == null) return;
                 UpdateWatchFallbackPolicy();
                 _ = TickAsync(true, false);
-            }), DispatcherPriority.Background);
+            }
+#if SONICROUTE_NATIVE
+            if (!dispatcher.TryPost(RefreshOnOwner)) Interlocked.Exchange(ref _processNotificationQueued, 0);
+#else
+            dispatcher.BeginInvoke(new Action(RefreshOnOwner), DispatcherPriority.Background);
+#endif
         }
 
         private static async Task TickAsync(bool process, bool foreground)
@@ -511,7 +565,7 @@ namespace SonicRoute
             long rulesRevision = _watchRulesRevision;
             List<WatchRequest>? requests = null;
             void Trigger(AutoRule rule, int foregroundPid = 0
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
                 , nint foregroundHwnd = 0
 #endif
                 )
@@ -520,7 +574,7 @@ namespace SonicRoute
                 requests.Add(new WatchRequest
                 {
                     Rule = rule, Revision = rulesRevision, ForegroundPid = foregroundPid,
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
                     ForegroundHwnd = foregroundHwnd,
 #endif
                     ForegroundSequence = _foregroundSequence
@@ -613,7 +667,7 @@ namespace SonicRoute
             if (foreground && _hasAppSwitch)
             {
                 int fg = _observedForegroundPid;
-#if SONICROUTE_PHONE
+#if SONICROUTE_PHONE && !SONICROUTE_NATIVE
                 nint fgHwnd = _observedForegroundHwnd;
                 bool fgChanged = fg != 0 && (fg != _lastFgPid || (fg == AppInfo.CurrentProcessId && fgHwnd != _lastFgHwnd));
                 if (fgChanged)
@@ -634,7 +688,11 @@ namespace SonicRoute
 #else
                 if (fg != 0 && fg != _lastFgPid)
                 {
+#if SONICROUTE_NATIVE
+                    string? name = Product!.ProcessName(fg);
+#else
                     string? name = ApplicationAudio.ForegroundAppName(fg);
+#endif
                     if (!string.IsNullOrWhiteSpace(name))
                     {
                         foreach (var r in rules)
@@ -774,6 +832,7 @@ namespace SonicRoute
                             return !result.Busy && !result.Canceled && result.Failed == 0 && result.Succeeded > 0;
                         }
 
+#if !SONICROUTE_NATIVE
                     case AutoRuleAction.SetSystemOutput:
                         return await Task.Run(() => SetSystemDevice(EDataFlow.eRender, step.TargetDeviceId, detail));
 
@@ -928,6 +987,7 @@ namespace SonicRoute
                     case AutoRuleAction.SetAppInput:
                         return await Task.Run(() => ApplyEndpointForApp(step.TargetApp, EDataFlow.eCapture, step.TargetDeviceId, detail));
 
+#endif
                     case AutoRuleAction.LaunchProgram:
                         return await Task.Run(() => LaunchPrograms(step.EffectiveLaunchItems(), step.LaunchMode));
 
@@ -935,7 +995,13 @@ namespace SonicRoute
                         return await Task.Run(() => RunPowerShells(step.ProgramPaths));
 
                     case AutoRuleAction.ShowOsd:
+#if SONICROUTE_NATIVE
+                        return await Product!.FeedbackAsync(FeedbackKind.Osd, string.IsNullOrWhiteSpace(step.OsdTitle) ? L10n.T("Auto.OsdDefaultTitle") : step.OsdTitle, step.OsdText, token);
+                    default:
+                        return await Product!.ExecuteStepAsync(step, detail, token);
+#else
                         return ShowCustomOsd(step.OsdTitle, step.OsdText);
+#endif
                 }
             }
             catch (OperationCanceledException) { throw; }
@@ -947,6 +1013,7 @@ namespace SonicRoute
             return false;
         }
 
+#if !SONICROUTE_NATIVE
         private static bool WithApp(string processName, Func<AudioAppInfo, bool> action, ExecutionHistoryStep? detail = null)
         {
             var app = ResolveAppTarget(processName);
@@ -1027,6 +1094,7 @@ namespace SonicRoute
             return r.Success;
         }
 
+#endif
         /// <summary>
         /// 执行启动程序动作（v1.18 起按启动项执行，每项独立打开方式）。
         /// - 启动模式 0（全部启动）：逐个执行全部启动项；启动模式 1（随机启动一个）：随机选一个完整启动项执行。
@@ -1115,6 +1183,7 @@ namespace SonicRoute
         }
 
         /// <summary>显示自定义 OSD（主标题 / 副标题；空标题时用默认「自动化」）。</summary>
+#if !SONICROUTE_NATIVE
         private static bool ShowCustomOsd(string title, string text)
         {
             try
@@ -1131,5 +1200,6 @@ namespace SonicRoute
             }
             catch { return false; }
         }
+#endif
     }
 }

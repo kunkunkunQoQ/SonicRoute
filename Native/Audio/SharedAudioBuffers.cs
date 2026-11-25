@@ -24,15 +24,25 @@ internal static unsafe class SharedAudioBuffers
     internal static uint Capacity(Com client) => client.UInt32(4);
     internal static uint Padding(Com client) => client.UInt32(6);
 
+    internal static nint Acquire(Com render, uint frames)
+    {
+        nint buffer = 0;
+        Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)render.Slot(3))
+            (render.Handle, frames, &buffer), "IAudioRenderClient.GetBuffer");
+        return buffer;
+    }
+
+    internal static void Release(Com render, uint frames, uint flags) =>
+        Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,uint,int>)render.Slot(4))
+            (render.Handle, frames, flags), "IAudioRenderClient.ReleaseBuffer");
+
     internal static int Write(Com render, ReadOnlySpan<byte> bytes, int frameSize)
     {
         if (frameSize <= 0 || bytes.Length % frameSize != 0) throw new ArgumentException("Partial PCM frame.");
         uint requested = (uint)(bytes.Length / frameSize);
         if (requested == 0) return 0;
 
-        nint buffer = 0;
-        Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)render.Slot(3))
-            (render.Handle, requested, &buffer), "IAudioRenderClient.GetBuffer");
+        nint buffer = Acquire(render, requested);
         uint committed = 0;
         try
         {
@@ -41,8 +51,7 @@ internal static unsafe class SharedAudioBuffers
         }
         finally
         {
-            Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,uint,int>)render.Slot(4))
-                (render.Handle, committed, 0), "IAudioRenderClient.ReleaseBuffer");
+            Release(render, committed, 0);
         }
         return (int)committed;
     }

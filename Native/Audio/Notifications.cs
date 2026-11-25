@@ -33,6 +33,16 @@ internal sealed partial class Notice : IDeviceNotifications, IEndpointNotificati
 {
     private readonly object _gate = new();
     private bool _stopped;
+    private readonly Action? _changed;
+    private int _queued;
+    internal Notice(Action? changed = null) => _changed = changed;
+    private void Deliver()
+    {
+        Interlocked.Exchange(ref _queued, 0);
+        lock (_gate) { if (_stopped) return; }
+        try { _changed?.Invoke(); }
+        catch (Exception error) { System.Diagnostics.Trace.WriteLine(error.Message); }
+    }
     private int _count, _late;
     internal int Added, Removed, StateChanges;
     internal int Count => Volatile.Read(ref _count);
@@ -42,8 +52,10 @@ internal sealed partial class Notice : IDeviceNotifications, IEndpointNotificati
     {
         lock (_gate)
         {
-            if (_stopped) _late++;
-            else _count++;
+            if (_stopped) { _late++; return 0; }
+            _count++;
+            if (_changed != null && Interlocked.Exchange(ref _queued, 1) == 0)
+                ThreadPool.UnsafeQueueUserWorkItem(static n => n.Deliver(), this, preferLocal: false);
             Monitor.PulseAll(_gate);
         }
         return 0;
@@ -72,12 +84,14 @@ internal sealed partial class Notice : IDeviceNotifications, IEndpointNotificati
     public int OnSimpleVolumeChanged(float level,int mute,nint context) => Signal();
     public int OnChannelVolumeChanged(uint count,nint levels,uint channel,nint context) => 0;
     public int OnGroupingParamChanged(nint grouping,nint context) => 0;
-    public int OnStateChanged(int state) => 0;
-    public int OnSessionDisconnected(int reason) => 0;
+    public int OnStateChanged(int state) => Signal();
+    public int OnSessionDisconnected(int reason) => Signal();
 }
 
 internal sealed unsafe class Subscription : IDisposable
 {
+    private static int _active;
+    internal static int Active => Volatile.Read(ref _active);
     private readonly Com _source;
     private readonly int _registerSlot;
     private nint _pointer;
@@ -93,6 +107,7 @@ internal sealed unsafe class Subscription : IDisposable
         _pointer = pointer;
         try { Com.Check(Change(registerSlot,pointer),"Register notification"); }
         catch { Com.Release(Interlocked.Exchange(ref _pointer,0)); throw; }
+        Interlocked.Increment(ref _active);
     }
     private int Change(int slot,nint ptr) => ((delegate* unmanaged[Stdcall]<nint,nint,int>)_source.Slot(slot))(_source.Handle,ptr);
     public void Dispose()
@@ -101,6 +116,6 @@ internal sealed unsafe class Subscription : IDisposable
         if (ptr == 0) return;
         Sink.Stop();
         try { Com.Check(Change(_registerSlot + 1,ptr),"Unregister notification"); }
-        finally { Com.Release(ptr); }
+        finally { Com.Release(ptr); Interlocked.Decrement(ref _active); }
     }
 }

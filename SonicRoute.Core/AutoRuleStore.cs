@@ -422,6 +422,9 @@ namespace SonicRoute.Core
             }
         }
 
+        public static bool SameContents(AutoRule left, AutoRule right) =>
+            JsonSerializer.Serialize(left, WriteContract) == JsonSerializer.Serialize(right, WriteContract);
+
         /// <summary>失效缓存（导入 / 外部修改后调用）。</summary>
         public static void Invalidate()
         {

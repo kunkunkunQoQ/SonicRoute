@@ -52,9 +52,16 @@ internal sealed unsafe class Endpoints : IDisposable
         var result = new List<Endpoint>();
         for (uint i = 0; i < count; i++)
         {
-            Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)list.Slot(4))(list.Handle,i,&ptr), "endpoint collection item");
+            int hr = ((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)list.Slot(4))(list.Handle,i,&ptr);
+            if (hr < 0 || ptr == 0) continue;
             using var device = new Com(ptr);
-            result.Add(new(Id(device),ReadName(device)));
+            string id;
+            try { id = Id(device); }
+            catch (COMException) { continue; } // An unplugged item must not hide its siblings.
+            string name;
+            try { name = ReadName(device); }
+            catch (COMException) { name = ""; } // The stable endpoint ID is usable without its friendly name.
+            result.Add(new(id, name));
         }
         return result;
     }
@@ -73,20 +80,44 @@ internal sealed unsafe class Endpoints : IDisposable
     }
     internal static List<SessionInfo> Sessions(Com device)
     {
+        var result = new List<SessionInfo>();
+        VisitSessions(device, (pid, state, _) => result.Add(new(pid, state)));
+        return result;
+    }
+
+    // The control is borrowed only during visit. A client retaining it must Query its own reference.
+    internal static void VisitSessions(Com device, Action<uint, uint, Com> visit)
+    {
         using var manager = Activate(device, SessionManager);
         nint ptr = 0;
         Com.Check(((delegate* unmanaged[Stdcall]<nint,nint*,int>)manager.Slot(5))(manager.Handle,&ptr), "GetSessionEnumerator");
         using var sessions = new Com(ptr);
         uint count = sessions.UInt32(3);
-        var result = new List<SessionInfo>();
         for (uint i = 0; i < count; i++)
         {
-            Com.Check(((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)sessions.Slot(4))(sessions.Handle,i,&ptr), "GetSession");
+            if (((delegate* unmanaged[Stdcall]<nint,uint,nint*,int>)sessions.Slot(4))(sessions.Handle,i,&ptr) < 0 || ptr == 0) continue;
             using var control = new Com(ptr);
-            using var control2 = control.Query(SessionControl2);
-            result.Add(new(control2.UInt32(14), control.UInt32(3)));
+            uint pid, state;
+            try
+            {
+                using var control2 = control.Query(SessionControl2);
+                pid = control2.UInt32(14);
+                state = control.UInt32(3);
+            }
+            catch (COMException) { continue; } // The session can disappear during enumeration.
+            visit(pid, state, control);
         }
-        return result;
+    }
+
+    internal static string? DisplayName(Com control)
+    {
+        nint text = 0;
+        try
+        {
+            int hr = ((delegate* unmanaged[Stdcall]<nint,nint*,int>)control.Slot(4))(control.Handle,&text);
+            return hr >= 0 ? Marshal.PtrToStringUni(text) : null;
+        }
+        finally { Marshal.FreeCoTaskMem(text); }
     }
 
     internal static void SetDefault(string endpointId, Role role)
