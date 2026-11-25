@@ -68,10 +68,10 @@ Para v1.36, elige **Full** si quieres usar Android o AirPlay y **Lite** si solo 
 
 ## ✨ Qué ofrece SonicRoute
 
-- **Elige dónde suena cada aplicación.** En el panel rápido o en la página Aplicaciones, Ctrl+clic añade o quita una salida, Mayús+clic mantiene la selección actual y añade un intervalo continuo, y Ctrl+Mayús+clic selecciona o cambia el dispositivo de enrutamiento nativo. Puedes combinar varias salidas del PC y, con Full, añadir salidas del móvil Android.
+- **Elige los dispositivos de reproducción y grabación de cada aplicación.** En el panel rápido o en «Aplicaciones», haz clic en una salida para usarla sola. Con Ctrl añades o quitas una salida y con Mayús añades varias consecutivas a la selección. Para una aplicación del PC, usa Ctrl+Mayús+clic en la salida del PC por la que Windows debe reproducir el sonido directamente. SonicRoute sigue enviando el audio a las demás salidas seleccionadas. En Full también puedes añadir salidas de un móvil Android conectado.
 - **Ajusta el volumen sin salir del juego o de la llamada.** Los medidores del panel rápido muestran qué aplicaciones están sonando. Ajusta cada una con su control deslizante o usa la rueda sobre el icono de SonicRoute para regular la aplicación actual. Un atajo global permite silenciar o reactivar todos los micrófonos.
 - **Automatiza los cambios de audio.** Combina 6 disparadores con 39 acciones para cambiar de dispositivo, ajustar el volumen o abrir un programa. También puedes ejecutar una regla guardada desde la línea de comandos con `sr`.
-- **Conecta tu móvil con Full.** Escucha el audio de Android en el PC o envía el del PC al altavoz del móvil o a un dispositivo Bluetooth conectado a él. Abre aplicaciones Android en pantallas virtuales compatibles con H.265. El receptor AirPlay permite escuchar audio de un dispositivo Apple y duplicar su pantalla conservando las proporciones. También puedes explorar el almacenamiento compartido del móvil Android y enviar o recibir varios archivos a la vez.
+- **Usa Android y AirPlay desde el PC (Full).** Escucha el sonido de una aplicación Android en el PC o envía el del PC al altavoz del móvil o a un dispositivo Bluetooth conectado a él. Abre aplicaciones Android en pantallas virtuales con vídeo H.265 en equipos compatibles. Por AirPlay puedes duplicar la pantalla de un dispositivo Apple conservando sus proporciones y reproducir el audio que recibas por varias salidas del PC y de móviles Android a la vez. También puedes explorar el almacenamiento compartido del móvil y transferir varios archivos en ambos sentidos.
 
 ## 🎮 Para el día a día
 
@@ -109,11 +109,15 @@ Full y Lite necesitan .NET 10 Desktop Runtime para su arquitectura. Las edicione
 
 SonicRoute responde principalmente a eventos de Windows. Cuando es necesario, comprueba el estado una vez por segundo y libera los datos que ya no se utilizan. El uso de CPU depende del equipo y de las funciones que utilices.
 
+**¿Cómo ajusto la latencia del audio que llega al PC desde Android?**
+
+En Full, abre la página del móvil. El modo de latencia de audio predeterminado es «Equilibrado». Prueba «Latencia ultrabaja» para reducir el retardo o «Estable» si oyes cortes. El móvil transmite el audio en Opus de forma predeterminada. Para enviarlo sin comprimir, elige «Raw PCM» en la lista de decodificadores. Los cambios se aplican la próxima vez que transmitas audio desde ese móvil.
+
 ## 🆕 Aspectos destacados de la versión v1.36
 
-En todas las ediciones, Mayús+clic en el panel rápido conserva ahora la selección actual y añade un intervalo, Ctrl+Mayús+clic selecciona o cambia el dispositivo de enrutamiento nativo de Windows y distintos estilos de botón distinguen las rutas nativas de los espejos. La barra lateral principal puede contraerse guardando su estado y la página Aplicaciones iguala los controles multisalida del panel rápido.
+La selección de salidas se sincroniza entre el panel rápido y «Aplicaciones». Mayús+clic amplía la selección sin perder lo que ya habías elegido. Para una aplicación del PC, Ctrl+Mayús+clic cambia la salida principal. Los botones distinguen la salida por la que Windows reproduce el sonido de una aplicación de las salidas adicionales a las que SonicRoute envía ese mismo audio. Ahora puedes plegar la barra lateral de la ventana principal y SonicRoute recuerda cómo la dejaste.
 
-La edición Full añade salida simultánea en varios dispositivos para AirPlay, transporte PCM sin comprimir y tres modos de latencia de audio (Latencia ultrabaja, Equilibrado y Estable) para Android, compatibilidad ampliada de captura desde Android 11 y tasa de bits adaptativa inalámbrica en pantallas virtuales, además de mantener la identidad en la barra de tareas de Store y reglas de firewall para AirPlay. Consulta [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) para ver las versiones anteriores.
+En Full puedes escuchar el audio recibido por AirPlay en varios dispositivos a la vez. Para transmitir el sonido de una aplicación Android se necesita Android 11 o posterior. La compatibilidad también depende del móvil y de la aplicación. Ahora puedes elegir PCM sin comprimir y ajustar la latencia de cada móvil. Si el codificador lo admite, la pantalla virtual adapta la tasa de bits del vídeo a la conexión. Las ediciones de Microsoft Store mantienen la ventana agrupada con su icono anclado en la barra de tareas. El paquete Full incluye reglas de firewall para recibir AirPlay en redes privadas y de dominio. Consulta [Historial de versiones](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) para ver las versiones anteriores.
 
 <details>
 <summary>v1.35</summary>

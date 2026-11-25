@@ -97,16 +97,13 @@
         "**Geltungsbereich und frühere Lizenzen.** Seit dem 17. November 2026 gilt GPL-3.0-only für das von der Lizenz erfasste Projekt in dieser Fassung, einschließlich älteren Codes, soweit der Rechteinhaber die Lizenz erteilen kann. Bereits erteilte Rechte aus der MIT-Lizenz und der früheren projektspezifischen Lizenz bleiben bestehen. Frühere Tags und veröffentlichte Binärdateien behalten ihre damalige Lizenzkennzeichnung. Für Komponenten Dritter gelten die jeweiligen Lizenzen (siehe {noticesLink})."
     ],
     "features": [
-        "**Wiedergabe und Aufnahme pro App festlegen.** Im Schnellpanel oder auf der App-Seite fügen Sie mit Strg+Klick ein Wiedergabegerät hinzu oder entfernen es, behalten mit Umschalt+Klick die aktuelle Auswahl bei und fügen einen Bereich hinzu und wählen oder wechseln mit Strg+Umschalt+Klick das native Routing-Gerät. Alle Editionen unterstützen mehrere PC-Ausgänge gleichzeitig. In Full können Sie auch Ausgänge eines verbundenen Android-Smartphones hinzufügen.",
+        "**Wiedergabe- und Aufnahmegerät für jede App wählen.** Im Schnellpanel und auf der Seite „Apps“ fügen Sie mit Strg+Klick einen Ausgang hinzu oder entfernen ihn. Mit Umschalt+Klick erweitern Sie die Auswahl um mehrere aufeinanderfolgende Ausgänge. Mit Strg+Umschalt+Klick auf einen PC-Ausgang legen Sie ihn als primäres Wiedergabegerät der Windows-App fest. SonicRoute gibt den Ton zusätzlich auf den übrigen ausgewählten Geräten wieder. In der Full-Edition können Sie auch Ausgänge eines verbundenen Android-Smartphones nutzen.",
         "**Die Lautstärke einzelner Apps regeln.** Im Schnellpanel sehen Sie an den Pegelanzeigen, welche Apps gerade Ton ausgeben. Jede App hat einen eigenen Lautstärkeregler. Mit dem Mausrad über dem Symbol im Infobereich ändern Sie die Lautstärke der aktuellen App. Per Tastenkürzel können Sie alle Mikrofone stummschalten und die Stummschaltung wieder aufheben.",
         "**Wiederkehrende Aufgaben automatisieren.** Für Regeln stehen {triggerCount} Auslöser und {actionCount} Aktionen zur Verfügung. Beim Start eines Spiels kann eine Regel zum Headset wechseln und den Sprachchat öffnen. Gespeicherte Regeln lassen sich mit `sr` auch im Terminal oder aus einem Skript ausführen.",
-        "**Android und AirPlay am PC nutzen (Full).** Geben Sie den Ton einer Android-App am PC oder den PC-Ton auf dem Smartphone wieder. Android-Apps lassen sich auf einem eigenen virtuellen Bildschirm bedienen. Über AirPlay empfängt der PC Audio und Bildschirmübertragungen von Apple-Geräten. Sie können den gemeinsamen Speicher des Android-Geräts durchsuchen und mehrere Dateien auf einmal senden oder empfangen."
+        "**Android-Smartphone verbinden oder AirPlay empfangen (Full).** Hören Sie den Ton einer Android-App am PC oder geben Sie den PC-Ton auf dem Smartphone wieder. Android-Apps lassen sich auf einem virtuellen Bildschirm bedienen. Im gemeinsamen Speicher des Smartphones können Sie Ordner durchsuchen und mehrere Dateien auf einmal senden oder empfangen. Von einem Apple-Gerät können Sie den Bildschirm per AirPlay spiegeln oder Ton übertragen und ihn gleichzeitig auf mehreren PC- oder Android-Ausgängen wiedergeben."
     ],
     "developmentTitle": "In Entwicklung für die Full-Edition",
-    "developmentNotes": [
-        "Für die Audioübertragung vom Android-Smartphone zum PC stehen Opus (Standard) und unkomprimiertes PCM zur Wahl. Pro Smartphone können Sie den Latenzmodus „Sehr geringe Latenz“, „Ausgewogen“ (Standard) oder „Stabil“ einstellen. Die Änderungen gelten ab der nächsten Audioübertragung von diesem Gerät.",
-        "Wenn der Android-Encoder es unterstützt, passt SonicRoute die Videobitrate des virtuellen Bildschirms an die Verbindungsqualität an."
-    ],
+    "developmentNotes": [],
     "scenario": "Alltagsszenario",
     "whatYouCanDo": "So hilft SonicRoute",
     "useCaseNames": [
@@ -132,12 +129,14 @@
     "faqQuestions": [
         "Was bleibt erhalten, wenn ich SonicRoute beende?",
         "Welche Laufzeitumgebung benötigt meine Ausgabe?",
-        "Wie stark belastet SonicRoute im Hintergrund den Prozessor oder den Akku?"
+        "Wie stark belastet SonicRoute im Hintergrund den Prozessor oder den Akku?",
+        "Wie stelle ich die Latenz ein, wenn ich Android-Audio am PC höre?"
     ],
     "faqAnswers": [
         "Windows behält für jede App den primären PC-Ausgang und das Aufnahmegerät bei. Die Lautstärke bestehender Audiositzungen bleibt ebenfalls erhalten. Die Wiedergabe auf zusätzlichen Ausgängen endet, wenn Sie SonicRoute beenden. Tastenkürzel, die Steuerung im Infobereich, Automatisierung, Smartphone-Audio, Bildschirmspiegelung und der Abgleich der Zwischenablage setzen voraus, dass SonicRoute läuft.",
         "Full und Lite benötigen die .NET 10 Desktop Runtime für ihre jeweilige Architektur, die Store-Ausgaben die x64-Version. Legacy verwendet .NET Framework 4.8. Frühere .NET-8-Ausgaben können weiterhin heruntergeladen werden, erhalten aber keine Updates mehr.",
-        "SonicRoute reagiert vor allem auf Windows-Ereignisse. Nur wenn nötig, prüft es den Zustand zusätzlich einmal pro Sekunde. Es gibt nicht mehr benötigte Daten bei Bedarf frei. Die tatsächliche CPU-Auslastung hängt vom System und seiner Nutzung ab."
+        "SonicRoute reagiert vor allem auf Windows-Ereignisse. Nur wenn nötig, prüft es den Zustand zusätzlich einmal pro Sekunde. Es gibt nicht mehr benötigte Daten bei Bedarf frei. Die tatsächliche CPU-Auslastung hängt vom System und seiner Nutzung ab.",
+        "Öffnen Sie in der Full-Edition die Geräteseite des Smartphones. Unter „Audio“ ist „Ausgewogen“ voreingestellt. Für eine kürzere Verzögerung wählen Sie „Sehr geringe Latenz“. Bei Tonaussetzern können Sie „Stabil“ ausprobieren. Das Smartphone überträgt den Ton standardmäßig mit Opus. Für unkomprimierten Ton wählen Sie in der Decoderliste „Raw PCM“. Die Einstellungen gelten ab der nächsten Audioübertragung von diesem Gerät."
     ],
     "aiPromptTitle": "Referenz für KI-Assistenten",
     "aiPromptBody": "{aiDoc} fasst Architektur, Befehle und Hinweise zur Fehlersuche in strukturierter Form zusammen. Sie können die Datei einem KI-Assistenten wie Cursor, Copilot, ChatGPT oder Claude für die Diagnose oder zum Schreiben von Skripten mitgeben.",

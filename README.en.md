@@ -68,10 +68,10 @@ Choose **Lite** for Windows audio, **Full** to add Android and AirPlay, or **Leg
 
 ## ✨ What SonicRoute offers
 
-- **Choose where each app plays and records.** In the quick panel or the Apps page, Ctrl-click a playback device to add or remove it, Shift-click to keep existing selections and add a contiguous range, or Ctrl+Shift-click to select or switch the native routing device. All editions can play through several PC outputs at once. Full can also include outputs on a connected Android phone.
+- **Choose playback and recording devices for each app.** In the quick panel or on the Apps page, Ctrl-click an output to add or remove it. Shift-click to add a range without clearing your selection. For a Windows app, Ctrl+Shift-click a PC output to make it the app’s primary playback device. SonicRoute sends the same audio to the other selected outputs. Full can also use outputs on a connected Android phone.
 - **See what’s playing and adjust its volume.** Live level meters show which apps are playing, each with its own volume slider. Scroll over the tray icon to adjust the current app’s volume, or use a hotkey to mute and unmute your microphones.
 - **Automate routine changes.** Choose one of 6 triggers and build a sequence from 39 available actions. When a game starts, a rule can switch to your headset and open voice chat. You can also run a saved rule from a terminal or script with `sr`.
-- **Use Android and AirPlay on your PC (Full).** Play an Android app’s audio on your PC, send PC audio to your phone, or use an Android app in its own virtual display. SonicRoute also receives AirPlay audio and screen mirroring from Apple devices. Browse an Android phone’s shared storage and transfer multiple files in either direction.
+- **Connect an Android phone or receive AirPlay (Full).** Play Android app audio on your PC, send PC audio to your phone, or open an Android app in its own virtual display. Browse the phone’s shared storage and transfer files in either direction, including several at once. From an Apple device, you can mirror the screen or send AirPlay audio to SonicRoute and play it through several PC or Android outputs at once.
 
 ## 🎮 Everyday uses
 
@@ -109,11 +109,15 @@ Full and Lite require the .NET 10 Desktop Runtime for the build’s architecture
 
 SonicRoute relies on Windows notifications and checks process state once a second when needed. It releases data it no longer uses. CPU use and battery impact depend on your system and what you’re doing.
 
+**How do I adjust the latency when playing Android audio on my PC?**
+
+In Full, open the phone’s device page. Under Audio, the default latency mode is Balanced. Try Ultra-low latency for a shorter delay, or Stable if you hear dropouts. The phone sends audio using Opus by default. For uncompressed audio, choose Raw PCM in the decoder list. Changes apply the next time you start an audio stream from that phone.
+
 ## 🆕 What’s new in v1.36
 
-Across all editions, `Shift-click` in the quick panel now keeps existing selections while adding a contiguous range, `Ctrl+Shift-click` selects or switches the Windows native routing endpoint, and distinct button styles tell native routes apart from capture-distributed mirrors. The main window’s primary sidebar can now collapse with its state saved, and the Apps page matches the quick panel’s multi-output controls.
+In the quick panel and on the Apps page, Shift-click adds a range of outputs to your current selection. Ctrl+Shift-click a PC output to make it the primary playback device for a Windows app. The buttons show which output Windows uses for the app and which ones receive a copy. SonicRoute also remembers whether you left the main window’s sidebar open or collapsed. Both Microsoft Store editions keep the running app grouped with its pinned taskbar icon.
 
-Full adds simultaneous multi-device output for AirPlay, uncompressed Raw PCM transport and three audio latency modes (Ultra-low latency, Balanced, and Stable) for Android, broader ROM capture compatibility starting from Android 11, and event-driven adaptive video bitrate for wireless virtual displays, alongside Store taskbar identity and AirPlay firewall rules. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
+Full can play incoming AirPlay audio through several outputs at once. It can capture audio from compatible apps on Android 11 or later, with a choice of Opus or uncompressed PCM and three latency modes. If the phone’s encoder supports it, the virtual display adapts its video bitrate to the USB or Wi-Fi connection. The Full package for the Microsoft Store includes rules for incoming AirPlay connections on private and domain networks. See [Version history](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2) for earlier releases.
 
 <details>
 <summary>v1.35</summary>
