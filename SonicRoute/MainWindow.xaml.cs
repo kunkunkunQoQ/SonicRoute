@@ -113,14 +113,17 @@ namespace SonicRoute
             if (HeaderTitleText != null)
                 HeaderTitleText.Text = $"{BuildIdentity.DisplayName} {App.DisplayVersion}";
             _config = ConfigService.Load();
-            InitializeExternalAudio();
+            ApplyMainSidebarState(_config.MainSidebarCollapsed, animate: false);
             InitializeUpdateNotifications();
 
             Loaded += async (_, _) =>
             {
                 await LoadDevicesAsync();
                 if (_isClosed) return;
-                if (!_isClosed) { await LoadAppsAsync(); await InitializePhoneManagementAsync(); }
+                await LoadAppsAsync();
+                if (_isClosed) return;
+                await InitializePhoneManagementAsync();
+                if (_isClosed) return;
                 // 实验 UI（应用/设置输入区/名称区）可见性：麦克风选项开启时显示
                 ApplyExpMicUi(_config.ExperimentalMic);
                 NavExperimental.Visibility = _config.ExperimentalUnlocked && _config.ExperimentalMode
@@ -132,7 +135,7 @@ namespace SonicRoute
             IsVisibleChanged += AutoRefreshVisibilityChanged;
             // 快捷键内联录音：在窗口内直接捕获按键，免弹窗
             PreviewKeyDown += MainWindow_PreviewKeyDown;
-            Deactivated += (_, _) => { EndAutoDrag(commit: false); EndAutomationRuleDrag(false); };
+            Deactivated += (_, _) => { ResetTitlePressState(); EndAutoDrag(commit: false); EndAutomationRuleDrag(false); };
 
             // 快捷键内联录音（鼠标键）：录制态下支持绑定中键/侧键（XButton1/2）
             PreviewMouseDown += MainWindow_PreviewMouseDown;
@@ -289,6 +292,8 @@ namespace SonicRoute
 
         private bool _titleMaximized;
         private readonly double _restoreWidth = 920, _restoreHeight = 620;
+        private bool _titlePointerDown;
+        private System.Windows.Point _titlePressPoint;
 
         // 快捷键内联录音：正在等待重新绑定的动作名（非 null 表示处于录音态）
         private string? _recordingAction;
@@ -296,7 +301,88 @@ namespace SonicRoute
         private void Titlebar_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton != MouseButton.Left) return;
-            if (!_titleMaximized) DragMove();
+            if (e.ClickCount == 2)
+            {
+                TitlebarMax_Click(sender, e);
+                e.Handled = true;
+                return;
+            }
+            if (!_titleMaximized)
+            {
+                try { DragMove(); }
+                catch (InvalidOperationException) { }
+                e.Handled = true;
+            }
+        }
+
+        private void HeaderTitle_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton != MouseButton.Left) return;
+            _titlePointerDown = true;
+            _titlePressPoint = e.GetPosition(this);
+            if (HeaderTitleHoverBg != null) HeaderTitleHoverBg.Tag = "pressed";
+            HeaderTitleText.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void HeaderTitle_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (!_titlePointerDown) return;
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                ResetTitlePressState();
+                return;
+            }
+            System.Windows.Point current = e.GetPosition(this);
+            if (Math.Abs(current.X - _titlePressPoint.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(current.Y - _titlePressPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            ResetTitlePressState();
+            if (!_titleMaximized)
+            {
+                try { DragMove(); }
+                catch (InvalidOperationException) { }
+            }
+        }
+
+        private void HeaderTitle_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton != MouseButton.Left || !_titlePointerDown) return;
+            System.Windows.Point current = e.GetPosition(this);
+            bool withinDrag = Math.Abs(current.X - _titlePressPoint.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(current.Y - _titlePressPoint.Y) < SystemParameters.MinimumVerticalDragDistance;
+            ResetTitlePressState();
+            if (withinDrag) ToggleMainSidebar();
+            e.Handled = true;
+        }
+
+        private void HeaderTitle_LostMouseCapture(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            ResetTitlePressState();
+        }
+
+        private void ResetTitlePressState()
+        {
+            _titlePointerDown = false;
+            if (HeaderTitleHoverBg != null) HeaderTitleHoverBg.Tag = null;
+            if (HeaderTitleText != null && HeaderTitleText.IsMouseCaptured)
+                HeaderTitleText.ReleaseMouseCapture();
+        }
+
+        private void ToggleMainSidebar()
+        {
+            _config.MainSidebarCollapsed = !_config.MainSidebarCollapsed;
+            ApplyMainSidebarState(_config.MainSidebarCollapsed, animate: true);
+            SaveSettings(_config);
+        }
+
+        private void ApplyMainSidebarState(bool collapsed, bool animate)
+        {
+            if (MainNavHost == null) return;
+            bool expanded = !collapsed;
+            if (!MainNavHost.IsAtRest(expanded))
+                MainNavHost.SetExpanded(expanded, animate);
         }
 
         private void TitlebarMin_Click(object sender, RoutedEventArgs e)
@@ -373,6 +459,7 @@ namespace SonicRoute
             ExperimentalPageHost.Visibility = tag == "Experimental" ? Visibility.Visible : Visibility.Collapsed;
             if (ExperimentalPage != null) ExperimentalPage.Visibility = ExperimentalPageHost.Visibility;
             AutomationPageHost.Visibility = tag == "Automation" ? Visibility.Visible : Visibility.Collapsed;
+            UpdateAutoExecutionSubscription();
 
             if (tag == "Apps") { await LoadAppsAsync(); ActivatePhoneManagement(); }
             else if (tag == "Hotkeys") BuildHotkeyList();
@@ -477,7 +564,7 @@ namespace SonicRoute
                 if (item is not Button btn || btn.Tag is not AudioDeviceInfo dev) continue;
                 bool active = activeId != null &&
                               string.Equals(dev.Id, activeId, StringComparison.OrdinalIgnoreCase);
-                btn.SetResourceReference(StyleProperty, active ? "QuickDevButtonActive" : "QuickDevButton");
+                SetQuickDeviceStyle(btn, active ? "QuickDevButtonActive" : "QuickDevButton");
             }
         }
 
@@ -560,7 +647,7 @@ namespace SonicRoute
                 }
                 string? selectedIdentity = (AppsListBox.SelectedItem as AppItem)?.Identity;
                 _appItems = GetAppCandidates(apps);
-                AppItem.LoadIconsAsync(_appItems);
+                AppItem.LoadIconsAsync(_appItems, _uiLifetime.Token);
                 foreach (var item in _appItems) { item.RefreshAutoSwitchState(); item.IsMuted = muted[item.Identity]; }
                 AppsListBox.ItemsSource = null;
                 AppsListBox.ItemsSource = _appItems;
@@ -576,6 +663,7 @@ namespace SonicRoute
             if (AppsListBox.SelectedItem != null) ShowPhoneDeviceDetails(false);
             AppsRenameBox.Visibility = Visibility.Collapsed;
             _appsSelected = (AppsListBox.SelectedItem as AppItem)?.Info;
+            ResetAppsPlaybackState(_appsSelected?.Identity);
             bool routesSuppressed = _suppressDevCombo;
             _suppressDevCombo = true;
             try { AppsOutputCombo.ItemsSource = PanelDevices.VisibleForAppOutputs(_appsSelected, _outputDisplay, _config); }
@@ -764,24 +852,8 @@ namespace SonicRoute
         private async Task ApplyAppsComboSelectionAsync()
         {
             var app = _appsSelected;
-            if (app == null) return;
-            var dev = AppsOutputCombo.SelectedItem as AudioDeviceInfo;
-            if (dev == null) return;
-
-            var pid = (int)app.ProcessId;
-            var (ok, msg) = await Apply(app, EDataFlow.eRender, dev.Id);
-            if (_isClosed || _appsSelected?.Identity != app.Identity) return;
-            if (ok)
-            {
-                if (ApplicationAudio.IsWindowsLinkOutputDevice(dev.Id)) ShowToast($"{dev.DisplayName} · {msg}");
-                if (!app.IsExternal)
-                    (System.Windows.Application.Current as App)?.NotifyAppRouteChanged(pid, caller: this);
-                await RefreshAppsSelectionAsync();
-            }
-            else
-            {
-                ShowToast($"✗ {msg}");
-            }
+            if (app == null || AppsOutputCombo.SelectedItem is not AudioDeviceInfo dev) return;
+            await QueueAppsPlaybackClickAsync(dev, System.Windows.Input.ModifierKeys.None);
         }
 
         /// <summary>应用页输入下拉选择即生效。</summary>
@@ -824,37 +896,44 @@ namespace SonicRoute
                 int muteVersion = _appsMuteVersion;
                 var app = _appsSelected;
                 if (app == null) return;
+                ResetAppsPlaybackState(app.Identity);
+                int playbackRead = ++_appsPlaybackReadVersion;
                 var pid = (int)app.ProcessId;
                 bool volumePending = _appVolumeWriter?.HasPending(pid) == true;
-                var output = _uiLifetime.ReadAsync(() => ApplicationAudio.GetPersistedEndpoint(app, EDataFlow.eRender));
+                var output = ReadAppsPlaybackAsync(app);
                 var input = _config.ExperimentalMic
                     ? _uiLifetime.ReadAsync(() => ApplicationAudio.GetPersistedEndpoint(app, EDataFlow.eCapture))
                     : Task.FromResult<string?>(null);
                 var state = _uiLifetime.ReadAsync(() => ApplicationAudio.ReadStateChecked(app));
                 await Task.WhenAll(output, input, state);
                 if (_isClosed || request != _appsStateRequest || _appsSelected?.Identity != app.Identity) return;
-                var outId = output.Result;
-                string? outShort = outId == null ? null : AudioPolicyConfig.UnpackDeviceId(outId);
+                ConfirmAppsPlayback(app.Identity, playbackRead, output.Result.Primary, output.Result.Playback);
+                string? displayId = GetAppsDisplayedPrimary(output.Result.Primary);
+                string? outShort = string.IsNullOrWhiteSpace(displayId) || AudioService.IsSystemDefault(displayId)
+                    ? null
+                    : AudioPolicyConfig.UnpackDeviceId(displayId!);
+                bool prevDevCombo = _suppressDevCombo;
                 _suppressDevCombo = true;
-                var outChoices = PanelDevices.VisibleForAppOutputs(app, _outputDisplay, _config, outShort);
-                AppsOutputCombo.ItemsSource = outChoices;
-                AppsOutputCombo.SelectedItem = outShort == null
-                    ? outChoices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? outChoices.FirstOrDefault(d => d.IsDefault) ?? outChoices.FirstOrDefault()
-                    : outChoices.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
-                        ?? outChoices.FirstOrDefault(d => d.IsDefault) ?? outChoices.FirstOrDefault();
-                _suppressDevCombo = false;
-                // 输入设备（麦克风）：与输出一致
-                var inId = input.Result;
-                string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
-                _suppressDevCombo = true;
-                var inChoices = PanelDevices.VisibleInputs(_inputDisplay, _config, inShort);
-                AppsInputCombo.ItemsSource = null;
-                AppsInputCombo.ItemsSource = inChoices;
-                AppsInputCombo.SelectedItem = inShort == null
-                                              ? (inChoices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? inChoices.FirstOrDefault(d => d.IsDefault) ?? inChoices.FirstOrDefault())
-                                              : inChoices.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase))
-                                                ?? inChoices.FirstOrDefault(d => d.IsDefault) ?? inChoices.FirstOrDefault();
-                _suppressDevCombo = false;
+                try
+                {
+                    var outChoices = PanelDevices.VisibleForAppOutputs(app, _outputDisplay, _config, outShort);
+                    AppsOutputCombo.ItemsSource = outChoices;
+                    AppsOutputCombo.SelectedItem = outShort == null
+                        ? outChoices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? outChoices.FirstOrDefault(d => d.IsDefault) ?? outChoices.FirstOrDefault()
+                        : outChoices.FirstOrDefault(d => string.Equals(d.Id, outShort, StringComparison.OrdinalIgnoreCase))
+                            ?? outChoices.FirstOrDefault(d => d.IsDefault) ?? outChoices.FirstOrDefault();
+                    // 输入设备（麦克风）：与输出一致
+                    var inId = input.Result;
+                    string? inShort = inId == null ? null : AudioPolicyConfig.UnpackDeviceId(inId);
+                    var inChoices = PanelDevices.VisibleInputs(_inputDisplay, _config, inShort);
+                    AppsInputCombo.ItemsSource = null;
+                    AppsInputCombo.ItemsSource = inChoices;
+                    AppsInputCombo.SelectedItem = inShort == null
+                                                  ? (inChoices.FirstOrDefault(d => AudioService.IsSystemDefault(d.Id)) ?? inChoices.FirstOrDefault(d => d.IsDefault) ?? inChoices.FirstOrDefault())
+                                                  : inChoices.FirstOrDefault(d => string.Equals(d.Id, inShort, StringComparison.OrdinalIgnoreCase))
+                                                    ?? inChoices.FirstOrDefault(d => d.IsDefault) ?? inChoices.FirstOrDefault();
+                }
+                finally { _suppressDevCombo = prevDevCombo; }
                 HighlightAppsRouteButtons();
                 int vol = state.Result.Volume;
                 bool muted = state.Result.Muted;
@@ -1539,6 +1618,7 @@ namespace SonicRoute
             foreach (var panel in new FrameworkElement[] { LangMorePanel, SettingsMorePanel,
                 KeepDevicesBody, DeviceNamesBody, OsdSlidersPanel })
                 if (panel?.Parent is AnimatedExpandHost host) host.FinishImmediately();
+            MainNavHost?.FinishImmediately();
         }
 
         /// <summary>语言卡片「显示更多选项」折叠：展开/收起语言文件管理（导出/导入/打开/还原）。</summary>
@@ -2664,8 +2744,11 @@ namespace SonicRoute
         private void AutoRefreshVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateAutoRefreshVisibility();
         private void UpdateAutoRefreshVisibility()
         {
+            UpdateExternalAudioSubscription();
+            UpdateAutoExecutionSubscription();
             if (Application.Current is App app) app.UpdateAppIconMetadataDemand();
             if (!AutoRefreshWindowVisible) { StopAutoRefresh(); return; }
+            _ = RefreshAutoRulesAsync();
             _ = RefreshAutoAppsAsync(_navigationVersion, ensureFresh: true);
         }
 
@@ -3025,14 +3108,14 @@ namespace SonicRoute
             if (sender is System.Windows.Controls.ComboBox combo) LoadAppComboIcons(combo);
         }
 
-        private static void LoadAppComboIcons(System.Windows.Controls.ComboBox combo)
+        private void LoadAppComboIcons(System.Windows.Controls.ComboBox combo)
         {
-            AppItem.LoadIconsAsync(combo.Items.OfType<AppItem>());
+            AppItem.LoadIconsAsync(combo.Items.OfType<AppItem>(), _uiLifetime.Token);
         }
 
-        private static void LoadSelectedAppIcon(System.Windows.Controls.ComboBox combo)
+        private void LoadSelectedAppIcon(System.Windows.Controls.ComboBox combo)
         {
-            if (combo.SelectedItem is AppItem item) AppItem.LoadIconsAsync(new[] { item });
+            if (combo.SelectedItem is AppItem item) AppItem.LoadIconsAsync(new[] { item }, _uiLifetime.Token);
         }
 
         private void SelectAutoApp(System.Windows.Controls.ComboBox combo, string? processName)

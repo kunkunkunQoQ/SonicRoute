@@ -326,7 +326,7 @@ public final class InputController {
                     MotionEvent down = MotionEvent.obtain(
                             lastTouchDownMs, now, MotionEvent.ACTION_DOWN, pointerCount, pointerProps, pointerCoords,
                             0, msg.buttons, 1f, 1f, 0, 0, source, 0);
-                    if (!AndroidSystemPlatform.injectInputEvent(down, target, AndroidSystemPlatform.INJECT_MODE_ASYNC)) {
+                    if (!injectMotionEvent(down, target)) {
                         return;
                     }
                 }
@@ -334,7 +334,7 @@ public final class InputController {
                         lastTouchDownMs, now, MotionEvent.ACTION_BUTTON_PRESS, pointerCount, pointerProps, pointerCoords,
                         0, msg.buttons, 1f, 1f, 0, 0, source, 0);
                 AndroidSystemPlatform.setActionButton(press, msg.actionButton);
-                AndroidSystemPlatform.injectInputEvent(press, target, AndroidSystemPlatform.INJECT_MODE_ASYNC);
+                injectMotionEvent(press, target);
                 return;
             }
             if (action == MotionEvent.ACTION_UP) {
@@ -342,14 +342,14 @@ public final class InputController {
                         lastTouchDownMs, now, MotionEvent.ACTION_BUTTON_RELEASE, pointerCount, pointerProps, pointerCoords,
                         0, msg.buttons, 1f, 1f, 0, 0, source, 0);
                 AndroidSystemPlatform.setActionButton(release, msg.actionButton);
-                if (!AndroidSystemPlatform.injectInputEvent(release, target, AndroidSystemPlatform.INJECT_MODE_ASYNC)) {
+                if (!injectMotionEvent(release, target)) {
                     return;
                 }
                 if (msg.buttons == 0) {
                     MotionEvent up = MotionEvent.obtain(
                             lastTouchDownMs, now, MotionEvent.ACTION_UP, pointerCount, pointerProps, pointerCoords,
                             0, msg.buttons, 1f, 1f, 0, 0, source, 0);
-                    AndroidSystemPlatform.injectInputEvent(up, target, AndroidSystemPlatform.INJECT_MODE_ASYNC);
+                    injectMotionEvent(up, target);
                 }
                 return;
             }
@@ -358,7 +358,7 @@ public final class InputController {
         MotionEvent event = MotionEvent.obtain(
                 lastTouchDownMs, now, action, pointerCount, pointerProps, pointerCoords,
                 0, msg.buttons, 1f, 1f, 0, 0, source, 0);
-        AndroidSystemPlatform.injectInputEvent(event, target, AndroidSystemPlatform.INJECT_MODE_ASYNC);
+        injectMotionEvent(event, target);
     }
 
     private void injectScroll(ClientMessage msg) {
@@ -376,11 +376,21 @@ public final class InputController {
         pointerCoords[0].setAxisValue(MotionEvent.AXIS_HSCROLL, msg.hScroll);
         pointerCoords[0].setAxisValue(MotionEvent.AXIS_VSCROLL, msg.vScroll);
 
+        int target = actionDisplayId();
         long now = SystemClock.uptimeMillis();
         MotionEvent event = MotionEvent.obtain(
                 lastTouchDownMs, now, MotionEvent.ACTION_SCROLL, 1, pointerProps, pointerCoords,
                 0, msg.buttons, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
-        AndroidSystemPlatform.injectInputEvent(event, actionDisplayId(), AndroidSystemPlatform.INJECT_MODE_ASYNC);
+        injectMotionEvent(event, target);
+    }
+
+    private static boolean injectMotionEvent(MotionEvent event, int displayId) {
+        try {
+            return AndroidSystemPlatform.injectInputEvent(event, displayId, AndroidSystemPlatform.INJECT_MODE_ASYNC);
+        } finally {
+            // The Binder call has copied the event before returning, including in async mode.
+            event.recycle();
+        }
     }
 
     private Point mapCoordinates(int x, int y, int screenW, int screenH) {

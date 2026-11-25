@@ -11,6 +11,7 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
     private readonly object _gate = new();
     private Output[] _outputs = [], _audible = [];
     private float _volume = 1;
+    private float _headerGain = 1;
     private bool _smart;
     private AudioLatencyMode _latencyMode = AudioLatencyMode.Balanced;
     private string? _primaryDevice;
@@ -30,6 +31,14 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
         {
             _volume = volume; _smart = smart;
             foreach (var output in _outputs) { output.Pcm.Volume = volume; output.Pcm.SmartVolume = smart; }
+        }
+    }
+    internal void SetHeaderGain(float gain)
+    {
+        lock (_gate)
+        {
+            _headerGain = gain;
+            foreach (var output in _outputs) output.Pcm.HeaderGain = gain;
         }
     }
     internal void SetLatencyMode(AudioLatencyMode mode)
@@ -85,9 +94,22 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
                 if (output == null)
                 {
                     AudioLatencyMode latencyMode;
-                    lock (_gate) latencyMode = _latencyMode;
+                    float volume, headerGain;
+                    bool smart;
+                    lock (_gate)
+                    {
+                        latencyMode = _latencyMode;
+                        volume = _volume;
+                        smart = _smart;
+                        headerGain = _headerGain;
+                    }
                     var pcm = new AndroidPcmSource(latencyMode, packetCounterOnly: forwardsPackets?.Invoke(id) == true)
-                        { PreserveQuietLevel = preserveQuietLevel };
+                    {
+                        PreserveQuietLevel = preserveQuietLevel,
+                        Volume = volume,
+                        SmartVolume = smart,
+                        HeaderGain = headerGain
+                    };
                     var player = create(pcm, id, token);
                     staged.Add(output = new Output(id, pcm, player));
                     void Failed(Exception error) => _ = Task.Run(() => removeFailed(p => ReferenceEquals(p, player)));
@@ -135,6 +157,7 @@ internal sealed class PcmOutputMirrors(Func<Predicate<IPcmPlayer>, Task> removeF
                 output.Pcm.Volume = _volume;
                 output.Pcm.SmartVolume = _smart;
                 output.Pcm.LatencyMode = _latencyMode;
+                output.Pcm.HeaderGain = _headerGain;
             }
             Volatile.Write(ref _outputs, next);
             UpdateAudible();

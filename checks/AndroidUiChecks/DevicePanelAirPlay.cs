@@ -246,7 +246,7 @@ internal static partial class Program
         Func<Action, IDisposable> watch = _ => new AirPlayFixtureOutput();
         using var transport = new TcpClient();
         using var lifetime = new CancellationTokenSource();
-        var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null, ["Fixture", true, player, watch, false, false], null)!;
+        var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null, ["Fixture", true, player, watch, false, false, false], null)!;
         var source = (IAsyncDisposable)Activator.CreateInstance(sourceType, instance, null,
             ["Simulated Apple device", host.GetMethod("Publish", statics)!.CreateDelegate<Action>(), (Action)(() => { }), player, watch, CancellationToken.None], null)!;
         var session = Activator.CreateInstance(sessionType, instance, null, [receiver, transport, IPAddress.Loopback, IPAddress.Loopback], null)!;

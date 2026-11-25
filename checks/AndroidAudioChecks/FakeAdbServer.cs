@@ -318,7 +318,7 @@ internal sealed class FakeAdbServer : IAsyncDisposable
         {
             string? reply = cmd switch
             {
-                "pm list packages -U" => "package:com.example.music uid:10123\n",
+                "pm list packages -U --user 0" or "pm list packages -U --user current" => "package:com.example.music uid:10123\n",
                 "getprop ro.build.version.sdk" => "36\n",
                 _ => null
             };

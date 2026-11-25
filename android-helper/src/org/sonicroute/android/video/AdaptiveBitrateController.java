@@ -89,10 +89,10 @@ public final class AdaptiveBitrateController {
     private static final TransportPolicy USB_POLICY = new TransportPolicy(
             0.25,
             500_000,
-            0.80,
-            0.72,
             0.90,
-            0.50,
+            0.80,
+            0.90,
+            0.70,
             1.12,
             600_000_000L,
             250_000_000L,
@@ -109,10 +109,10 @@ public final class AdaptiveBitrateController {
     private static final TransportPolicy WIFI_POLICY = new TransportPolicy(
             0.15,
             400_000,
-            0.72,
-            0.62,
             0.85,
-            0.45,
+            0.75,
+            0.85,
+            0.60,
             1.08,
             450_000_000L,
             200_000_000L,
@@ -281,18 +281,19 @@ public final class AdaptiveBitrateController {
                 return;
             }
             final double factor = emergency ? policy.emergencyDownshiftFactor : policy.downshiftFactor;
-            int target = (int) Math.round(currentBitRateBps * factor);
+            final int factorTarget = (int) Math.round(currentBitRateBps * factor);
+            int target = factorTarget;
             if (writeCongested || safeWriteNs > policy.emergencyWriteNs) {
-                int throughputTarget = (int) Math.round(smoothedThroughputBps * policy.throughputSafetyScale);
-                if (throughputTarget > 0 && throughputTarget < target) {
-                    int minStepTarget = (int) Math.round(currentBitRateBps * policy.minStepFloorFactor);
-                    target = Math.max(minStepTarget, throughputTarget);
+                long throughputTarget = Math.round(smoothedThroughputBps * policy.throughputSafetyScale);
+                if (throughputTarget > 0 && throughputTarget < factorTarget) {
+                    target = (int) throughputTarget;
                 }
             }
-            target = clamp(target, minBitRateBps, maxBitRateBps);
-            if (target < currentBitRateBps) {
-                tryApplyBitrate(target, nowNs, false, emergency ? "emergency" : "congestion");
-            }
+            int minStepTarget = (int) Math.round(currentBitRateBps * policy.minStepFloorFactor);
+            target = Math.max(target, minStepTarget);
+            // Near the bitrate floor, the configured step can be smaller than the absolute deadband.
+            int minDelta = Math.min(computeMinDeltaBps(currentBitRateBps), currentBitRateBps - factorTarget);
+            tryApplyBitrate(target, nowNs, false, emergency ? "emergency" : "congestion", minDelta);
             return;
         }
 
@@ -318,15 +319,15 @@ public final class AdaptiveBitrateController {
             int minDelta = computeMinDeltaBps(currentBitRateBps);
             int scaledTarget = (int) Math.round(currentBitRateBps * policy.upshiftFactor);
             int target = Math.min(maxBitRateBps, Math.max(currentBitRateBps + minDelta, scaledTarget));
-            if (tryApplyBitrate(target, nowNs, true, "recovery")) {
+            if (tryApplyBitrate(target, nowNs, true, "recovery", minDelta)) {
                 lowPressureStartNs = nowNs;
             }
         }
     }
 
-    private boolean tryApplyBitrate(int targetBitrate, long nowNs, boolean upshift, String reason) {
+    private boolean tryApplyBitrate(int targetBitrate, long nowNs, boolean upshift, String reason, int minDeltaBps) {
         int clamped = clamp(targetBitrate, minBitRateBps, maxBitRateBps);
-        if (!shouldApplyBitrateDelta(currentBitRateBps, clamped, minBitRateBps, maxBitRateBps)) {
+        if (!shouldApplyBitrateDelta(currentBitRateBps, clamped, minBitRateBps, maxBitRateBps, minDeltaBps)) {
             return false;
         }
         final int prev = currentBitRateBps;
@@ -358,13 +359,17 @@ public final class AdaptiveBitrateController {
     }
 
     public static boolean shouldApplyBitrateDelta(int currentBps, int targetBps, int minBps, int maxBps) {
+        return shouldApplyBitrateDelta(currentBps, targetBps, minBps, maxBps, computeMinDeltaBps(currentBps));
+    }
+
+    private static boolean shouldApplyBitrateDelta(int currentBps, int targetBps, int minBps, int maxBps, int minDeltaBps) {
         if (targetBps == currentBps) {
             return false;
         }
         if (targetBps == minBps || targetBps == maxBps) {
             return true;
         }
-        return Math.abs(targetBps - currentBps) >= computeMinDeltaBps(currentBps);
+        return Math.abs(targetBps - currentBps) >= minDeltaBps;
     }
 
     private static int computeMinDeltaBps(int currentBps) {

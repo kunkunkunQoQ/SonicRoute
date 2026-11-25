@@ -108,6 +108,7 @@ namespace SonicRoute
         {
             if (_disposed) return;
             Flush();
+            App.ProtectAudioWriteFromTrim(Completion);
             _disposed = true;
             _timer.Stop(); _timer.Tick -= Tick;
         }

@@ -15,25 +15,13 @@ public partial class MainWindow
 #if SONICROUTE_PHONE
     private bool _externalAudioSubscribed;
     private readonly PendingAudioUiChange _externalAudioQueued = new();
-    private void InitializeExternalAudio()
-    {
-        IsVisibleChanged += ExternalAudioVisibilityChanged;
-        UpdateExternalAudioSubscription();
-    }
-    private void ExternalAudioVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateExternalAudioSubscription();
     private void UpdateExternalAudioSubscription()
     {
-        bool active = IsVisible && !_isClosed;
+        bool active = IsVisible && WindowState != WindowState.Minimized && !_isClosed;
         if (active == _externalAudioSubscribed) return;
         _externalAudioSubscribed = active;
         if (active) { ApplicationAudio.UiChanged += ExternalAudioChanged; L10n.Instance.PropertyChanged += ExternalAudioLanguageChanged; RefreshExternalAudioLists(); }
         else { ApplicationAudio.UiChanged -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
-    }
-    private void ReleaseExternalAudio()
-    {
-        IsVisibleChanged -= ExternalAudioVisibilityChanged;
-        if (_externalAudioSubscribed) { ApplicationAudio.UiChanged -= ExternalAudioChanged; L10n.Instance.PropertyChanged -= ExternalAudioLanguageChanged; }
-        _externalAudioSubscribed = false;
     }
     private void ExternalAudioLanguageChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => ExternalAudioChanged(AudioUiChange.All);
     private void ExternalAudioChanged(AudioUiChange change)
@@ -42,7 +30,7 @@ public partial class MainWindow
         _uiLifetime.Post(Dispatcher, () =>
         {
             var pending = _externalAudioQueued.Take();
-            if (_isClosed || !IsVisible) return;
+            if (!_externalAudioSubscribed) return;
             // The apps/settings/automation navigation paths load current candidates on entry.
             if (pending.Has(AudioUiScope.SourceList | AudioUiScope.Outputs)
                 && (AppsPage.IsVisible || SettingsPageHost.IsVisible || AutomationPageHost.IsVisible))
@@ -82,7 +70,7 @@ public partial class MainWindow
             ? ReuseExternalItem(item, info) : AppItem.From(info)).ToList();
         foreach (var item in items.Where(item => item.Info.IsExternal))
         { item.RefreshName(); item.RefreshAutoSwitchState(); item.IsMuted = ApplicationAudio.IsMuted(item.Info); }
-        AppItem.LoadIconsAsync(items.Where(item => item.Info.IsExternal).ToList());
+        AppItem.LoadIconsAsync(items.Where(item => item.Info.IsExternal), _uiLifetime.Token);
         return items;
     }
     private static AppItem ReuseExternalItem(AppItem item, AudioAppInfo info)
@@ -143,15 +131,9 @@ public partial class MainWindow
 #else
     private bool _localAudioSubscribed;
     private int _localAudioRefreshQueued;
-    private void InitializeExternalAudio()
+    private void UpdateExternalAudioSubscription()
     {
-        IsVisibleChanged += LocalAudioVisibilityChanged;
-        UpdateLocalAudioSubscription();
-    }
-    private void LocalAudioVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) => UpdateLocalAudioSubscription();
-    private void UpdateLocalAudioSubscription()
-    {
-        bool active = IsVisible && !_isClosed;
+        bool active = IsVisible && WindowState != WindowState.Minimized && !_isClosed;
         if (active == _localAudioSubscribed) return;
         _localAudioSubscribed = active;
         if (active)
@@ -164,19 +146,13 @@ public partial class MainWindow
             ApplicationAudio.Changed -= OnLocalAudioChanged;
         }
     }
-    private void ReleaseExternalAudio()
-    {
-        IsVisibleChanged -= LocalAudioVisibilityChanged;
-        if (_localAudioSubscribed) ApplicationAudio.Changed -= OnLocalAudioChanged;
-        _localAudioSubscribed = false;
-    }
     private void OnLocalAudioChanged()
     {
         if (_isClosed || Interlocked.Exchange(ref _localAudioRefreshQueued, 1) != 0) return;
         _uiLifetime.Post(Dispatcher, () =>
         {
             Interlocked.Exchange(ref _localAudioRefreshQueued, 0);
-            if (_isClosed || !IsVisible || !AppsPage.IsVisible || _appsSelected == null) return;
+            if (!_localAudioSubscribed || !AppsPage.IsVisible || _appsSelected == null) return;
             _ = RefreshAppsSelectionAsync();
         });
     }

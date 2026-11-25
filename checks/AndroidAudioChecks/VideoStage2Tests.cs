@@ -21,14 +21,21 @@ internal static partial class Program
 
     private static async Task CheckDisplayControlQueueAsync()
     {
-        static byte[] Touch(byte action, int x, ulong pointer = ScrcpyControlMessageWriter.PointerIdMouse)
+        static byte[] Touch(byte action, int x, ulong pointer = ScrcpyControlMessageWriter.PointerIdMouse,
+            int? buttons = null, int width = 4096, int y = 20)
         {
             bool pressed = action is ScrcpyControlMessageWriter.MotionActionDown or ScrcpyControlMessageWriter.MotionActionMove;
             int button = action is ScrcpyControlMessageWriter.MotionActionDown or ScrcpyControlMessageWriter.MotionActionUp ? 1 : 0;
             var data = new byte[32];
-            ScrcpyControlMessageWriter.WriteInjectTouch(data, action, pointer, x, 20, 4096, 1080,
-                pressed ? 1f : 0f, button, pressed ? 1 : 0);
+            ScrcpyControlMessageWriter.WriteInjectTouch(data, action, pointer, x, y, width, 1080,
+                pressed ? 1f : 0f, button, buttons ?? (pressed ? 1 : 0));
             return data;
+        }
+
+        static void EnqueuePacket(InProcessVirtualDisplayClient.ControlQueue queue, byte[] packet)
+        {
+            if (packet[0] == ScrcpyControlMessageWriter.TypeInjectTouchEvent) queue.EnqueueTouch(packet);
+            else queue.Enqueue(packet);
         }
 
         static bool SamePackets(IEnumerable<byte[]> actual, IEnumerable<byte[]> expected) =>
@@ -39,19 +46,20 @@ internal static partial class Program
         const byte up = ScrcpyControlMessageWriter.MotionActionUp;
         const byte move = ScrcpyControlMessageWriter.MotionActionMove;
         const ulong finger = ScrcpyControlMessageWriter.PointerIdGenericFinger;
+        byte[] lastHover = Touch(hover, 112);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var queue = new InProcessVirtualDisplayClient.ControlQueue();
-        using var stream = new BlockedControlStream();
+        using var stream = new BlockedControlStream(lastHover);
         var send = queue.SendAsync(stream, version => version == 2, timeout.Token);
 
         byte[] inFlightHover = Touch(hover, 0);
-        queue.Enqueue(inFlightHover);
+        queue.EnqueueTouch(inFlightHover);
         await stream.FirstWriteStarted.Task.WaitAsync(timeout.Token);
-        for (int i = 1; i <= 4000; i++) queue.Enqueue(Touch(hover, i));
+        for (int i = 1; i <= 4000; i++) queue.EnqueueTouch(Touch(hover, i));
         byte[] clickDown = Touch(down, 4001);
         byte[] clickUp = Touch(up, 4002);
-        queue.Enqueue(clickDown);
-        queue.Enqueue(clickUp);
+        queue.EnqueueTouch(clickDown);
+        queue.EnqueueTouch(clickUp);
 
         var rapidClicks = new List<byte[]>();
         for (int i = 1; i <= 64; i++)
@@ -59,7 +67,7 @@ internal static partial class Program
             rapidClicks.Add(Touch(down, i));
             rapidClicks.Add(Touch(up, i));
         }
-        foreach (byte[] packet in rapidClicks) queue.Enqueue(packet);
+        foreach (byte[] packet in rapidClicks) queue.EnqueueTouch(packet);
 
         var scroll = new byte[21];
         ScrcpyControlMessageWriter.WriteInjectScroll(scroll, 30, 40, 4096, 1080, 1f, -1f, 0);
@@ -78,25 +86,49 @@ internal static partial class Program
         byte[] beforeFingerDown = Touch(hover, 104);
         byte[] fingerDown = Touch(down, 105, finger);
         byte[] fingerUp = Touch(up, 106, finger);
-        byte[] dragDown = Touch(down, 107);
-        byte[] dragFirst = Touch(move, 108);
-        byte[] dragSecond = Touch(move, 109);
-        byte[] dragUp = Touch(up, 110);
         byte[] beforeStaleGamepad = Touch(hover, 111);
-        byte[] lastHover = Touch(hover, 112);
 
         foreach (byte[] packet in new[] { Touch(hover, 99), latest, scroll, beforeFinger, otherHover, anotherOtherHover,
-            beforeFingerDown, fingerDown, fingerUp, dragDown, dragFirst, dragSecond, dragUp, key, shortcut, resize })
-            queue.Enqueue(packet);
-        queue.Enqueue(gamepad, gamepadFocusVersion: 2);
-        queue.Enqueue(Touch(hover, 113));
-        queue.Enqueue(Touch(up, 114));
-        queue.Enqueue(beforeStaleGamepad);
-        queue.Enqueue(gamepad, gamepadFocusVersion: 1);
-        queue.Enqueue(lastHover);
+            beforeFingerDown, fingerDown, fingerUp })
+            EnqueuePacket(queue, packet);
 
-        queue.Close();
+        byte[] dragDown = Touch(down, 200);
+        byte[] dragFirst = Touch(move, 201);
+        byte[] beforeScroll = Touch(move, 208, y: 35);
+        queue.EnqueueTouch(dragDown);
+        queue.EnqueueTouch(dragFirst);
+        for (int x = 202; x < 208; x++) queue.EnqueueTouch(Touch(move, x));
+        queue.EnqueueTouch(beforeScroll);
+
+        byte[] beforeFingerMoves = Touch(move, 210);
+        byte[] fingerMoveA = Touch(move, 211, finger);
+        byte[] fingerMoveB = Touch(move, 212, finger - 1);
+        byte[] fingerMoveC = Touch(move, 213, finger);
+        byte[] afterFinger = Touch(move, 214);
+        byte[] chordMove = Touch(move, 215, buttons: 3);
+        byte[] beforeKey = Touch(move, 216);
+        byte[] beforeShortcut = Touch(move, 217);
+        byte[] beforeResize = Touch(move, 218);
+        byte[] beforeGamepad = Touch(move, 219, width: 1024);
+        byte[] lastDrag = Touch(move, 222, width: 1024);
+        byte[] dragUp = Touch(up, 223, width: 1024);
+        foreach (byte[] packet in new[] { scroll, beforeFingerMoves, fingerMoveA, fingerMoveB, fingerMoveC, afterFinger,
+            chordMove, beforeKey, key, beforeShortcut, shortcut, beforeResize, resize, beforeGamepad })
+            EnqueuePacket(queue, packet);
+        queue.Enqueue(gamepad, gamepadFocusVersion: 2);
+        queue.EnqueueTouch(Touch(move, 220, width: 1024));
+        queue.EnqueueTouch(Touch(move, 221, width: 1024));
+        queue.EnqueueTouch(lastDrag);
+        queue.EnqueueTouch(dragUp);
+        queue.EnqueueTouch(Touch(hover, 113));
+        queue.EnqueueTouch(Touch(up, 114));
+        queue.EnqueueTouch(beforeStaleGamepad);
+        queue.Enqueue(gamepad, gamepadFocusVersion: 1);
+        queue.EnqueueTouch(lastHover);
+
         stream.ReleaseFirstWrite.TrySetResult();
+        await stream.LastWriteCompleted.Task.WaitAsync(timeout.Token);
+        queue.Close();
         await send.WaitAsync(timeout.Token);
         Check(SamePackets(stream.Packets.Take(3), [inFlightHover, clickDown, clickUp]),
             "4000 queued mouse hovers add no writes ahead of DOWN/UP and leave the in-flight hover unchanged");
@@ -104,36 +136,41 @@ internal static partial class Program
             "64 rapid clicks keep every DOWN/UP and their original coordinates and order");
         Check(SamePackets(stream.Packets.Skip(3 + rapidClicks.Count),
             [latest, scroll, beforeFinger, otherHover, anotherOtherHover, beforeFingerDown, fingerDown, fingerUp,
-             dragDown, dragFirst, dragSecond, dragUp, key, shortcut, resize, gamepad, Touch(up, 114), beforeStaleGamepad, lastHover]),
-            "hover batches retain the latest coordinates and respect touch, drag, scroll, keyboard, shortcut, resize and gamepad barriers");
+             dragDown, dragFirst, beforeScroll, scroll, beforeFingerMoves, fingerMoveA, fingerMoveB, fingerMoveC,
+             afterFinger, chordMove, beforeKey, key, beforeShortcut, shortcut, beforeResize, resize, beforeGamepad,
+             gamepad, lastDrag, dragUp, Touch(up, 114), beforeStaleGamepad, lastHover]),
+            "drag coalescing keeps the first and final coordinates, preserves UP and respects pointer, button and other control boundaries");
 
-        foreach (bool disconnect in new[] { false, true })
+        foreach (string end in new[] { "cancel", "disconnect", "close" })
         {
             var endingQueue = new InProcessVirtualDisplayClient.ControlQueue();
-            using var blocked = new BlockedControlStream { Disconnect = disconnect };
+            using var blocked = new BlockedControlStream { Disconnect = end == "disconnect" };
             using var stop = CancellationTokenSource.CreateLinkedTokenSource(timeout.Token);
             Task ending = endingQueue.SendAsync(blocked, _ => true, stop.Token);
-            endingQueue.Enqueue(inFlightHover);
+            byte[] inFlightMove = Touch(move, 324);
+            endingQueue.EnqueueTouch(inFlightMove);
             await blocked.FirstWriteStarted.Task.WaitAsync(timeout.Token);
-            endingQueue.Enqueue(latest);
-            endingQueue.Enqueue(clickDown);
-            endingQueue.Enqueue(clickUp);
-            if (disconnect) blocked.ReleaseFirstWrite.TrySetResult();
-            else stop.Cancel();
+            endingQueue.EnqueueTouch(Touch(move, 325));
+            endingQueue.EnqueueTouch(Touch(move, 326));
+            endingQueue.EnqueueTouch(clickUp);
+            if (end == "close") endingQueue.Close();
+            if (end == "cancel") stop.Cancel();
+            else blocked.ReleaseFirstWrite.TrySetResult();
             await ending.WaitAsync(timeout.Token);
 
-            endingQueue.Enqueue(clickDown);
+            endingQueue.EnqueueTouch(clickDown);
             using var afterClose = new MemoryStream();
             await endingQueue.SendAsync(afterClose, _ => true, timeout.Token).WaitAsync(timeout.Token);
-            Check(blocked.Packets.Count == 0 && afterClose.Length == 0,
-                $"{(disconnect ? "Control stream disconnect" : "Cancellation")} ends the blocked send and retires its queue without replay");
+            Check(SamePackets(blocked.Packets, end == "close" ? [inFlightMove] : []) && afterClose.Length == 0,
+                $"Control queue {end} drops pending input and leaves the in-flight MOVE unchanged");
         }
     }
 
-    private sealed class BlockedControlStream : MemoryStream
+    private sealed class BlockedControlStream(byte[]? lastPacket = null) : MemoryStream
     {
         public readonly TaskCompletionSource FirstWriteStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource ReleaseFirstWrite = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource LastWriteCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly List<byte[]> Packets = new();
         public bool Disconnect { get; init; }
 
@@ -146,6 +183,8 @@ internal static partial class Program
                 if (Disconnect) throw new IOException("Simulated control stream disconnect.");
             }
             Packets.Add(buffer.ToArray());
+            if (lastPacket is not null && buffer.Span.SequenceEqual(lastPacket))
+                LastWriteCompleted.TrySetResult();
         }
     }
 

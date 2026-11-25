@@ -15,6 +15,7 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 defaults:
   run:
@@ -26,7 +27,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 35
     outputs:
-      candidate_artifact: ${{ steps.candidate.outputs.artifact_name }}
+      candidate_artifact_id: ${{ steps.upload_candidate.outputs.artifact-id }}
+      candidate_artifact_digest: ${{ steps.upload_candidate.outputs.artifact-digest }}
 
     steps:
       - name: Select isolated candidate output
@@ -106,6 +108,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Preserve validated candidate and receipt
+        id: upload_candidate
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.candidate.outputs.artifact_name }}
@@ -118,10 +121,41 @@ jobs:
           if-no-files-found: error
 
       - name: Download candidate into a separate directory
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ steps.candidate.outputs.artifact_name }}
-          path: ${{ runner.temp }}/candidate-roundtrip
+        timeout-minutes: 6
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ARTIFACT_ID: ${{ steps.upload_candidate.outputs.artifact-id }}
+          CANDIDATE_ARTIFACT_DIGEST: ${{ steps.upload_candidate.outputs.artifact-digest }}
+          CANDIDATE_DOWNLOAD_DIRECTORY: ${{ runner.temp }}/candidate-roundtrip
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:CANDIDATE_ARTIFACT_ID -notmatch '^[1-9][0-9]*$' -or $env:CANDIDATE_ARTIFACT_DIGEST -notmatch '^[0-9a-fA-F]{64}$') { throw 'Invalid candidate artifact ID or SHA-256 digest.' }
+          $archive = Join-Path $env:RUNNER_TEMP ('release-candidate-' + $env:CANDIDATE_ARTIFACT_ID + '.zip')
+          $uri = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:CANDIDATE_ARTIFACT_ID/zip"
+          if (Test-Path -LiteralPath $env:CANDIDATE_DOWNLOAD_DIRECTORY) { throw 'Candidate download directory must be new.' }
+          $downloaded = $false
+          try {
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+              # Download the immutable ID via REST, bypassing the artifact name lookup.
+              & curl.exe --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 40 --header "Authorization: Bearer $env:GH_TOKEN" --header 'Accept: application/vnd.github+json' --output $archive $uri
+              $exitCode = $LASTEXITCODE
+              if ($exitCode -eq 0 -and (Test-Path -LiteralPath $archive -PathType Leaf)) { $downloaded = $true; break }
+              if ($attempt -lt 6) {
+                $delay = [int][Math]::Pow(2, $attempt)
+                Write-Warning "Artifact download attempt $attempt failed (curl exit $exitCode); retrying in $delay seconds."
+                Start-Sleep -Seconds $delay
+              }
+            }
+            if (-not $downloaded) { throw 'Candidate artifact download failed after six attempts.' }
+            $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+            if ($actualDigest -ne $env:CANDIDATE_ARTIFACT_DIGEST) { throw 'Candidate artifact archive SHA-256 mismatch.' }
+            Expand-Archive -LiteralPath $archive -DestinationPath $env:CANDIDATE_DOWNLOAD_DIRECTORY
+            Write-Host "Verified candidate artifact $env:CANDIDATE_ARTIFACT_ID (SHA-256 $actualDigest)."
+          } finally {
+            if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+          }
+          # The original release pipeline revalidates the extracted receipt and asset bytes.
 
       - name: Revalidate downloaded candidate without write credentials
         env:
@@ -155,6 +189,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -163,10 +198,42 @@ jobs:
           persist-credentials: false
       - name: Initialize checkout-local build exclusions
         run: .\packaging\Updates\Initialize-ReleaseCheckout.ps1
-      - uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.validate.outputs.candidate_artifact }}
-          path: ${{ runner.temp }}/sonicroute-candidate
+      - name: Download exact validated candidate by ID
+        timeout-minutes: 6
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_ARTIFACT_ID: ${{ needs.validate.outputs.candidate_artifact_id }}
+          CANDIDATE_ARTIFACT_DIGEST: ${{ needs.validate.outputs.candidate_artifact_digest }}
+          CANDIDATE_DOWNLOAD_DIRECTORY: ${{ runner.temp }}/sonicroute-candidate
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:CANDIDATE_ARTIFACT_ID -notmatch '^[1-9][0-9]*$' -or $env:CANDIDATE_ARTIFACT_DIGEST -notmatch '^[0-9a-fA-F]{64}$') { throw 'Invalid candidate artifact ID or SHA-256 digest.' }
+          $archive = Join-Path $env:RUNNER_TEMP ('release-candidate-' + $env:CANDIDATE_ARTIFACT_ID + '.zip')
+          $uri = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:CANDIDATE_ARTIFACT_ID/zip"
+          if (Test-Path -LiteralPath $env:CANDIDATE_DOWNLOAD_DIRECTORY) { throw 'Candidate download directory must be new.' }
+          $downloaded = $false
+          try {
+            for ($attempt = 1; $attempt -le 6; $attempt++) {
+              if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+              # Download the immutable ID via REST, bypassing the artifact name lookup.
+              & curl.exe --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 10 --max-time 40 --header "Authorization: Bearer $env:GH_TOKEN" --header 'Accept: application/vnd.github+json' --output $archive $uri
+              $exitCode = $LASTEXITCODE
+              if ($exitCode -eq 0 -and (Test-Path -LiteralPath $archive -PathType Leaf)) { $downloaded = $true; break }
+              if ($attempt -lt 6) {
+                $delay = [int][Math]::Pow(2, $attempt)
+                Write-Warning "Artifact download attempt $attempt failed (curl exit $exitCode); retrying in $delay seconds."
+                Start-Sleep -Seconds $delay
+              }
+            }
+            if (-not $downloaded) { throw 'Candidate artifact download failed after six attempts.' }
+            $actualDigest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
+            if ($actualDigest -ne $env:CANDIDATE_ARTIFACT_DIGEST) { throw 'Candidate artifact archive SHA-256 mismatch.' }
+            Expand-Archive -LiteralPath $archive -DestinationPath $env:CANDIDATE_DOWNLOAD_DIRECTORY
+            Write-Host "Verified candidate artifact $env:CANDIDATE_ARTIFACT_ID (SHA-256 $actualDigest)."
+          } finally {
+            if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+          }
+          # The original release pipeline revalidates the extracted receipt and asset bytes.
       - name: Revalidate source, receipt, bytes and remote state before publishing
         env:
           GH_TOKEN: ${{ github.token }}

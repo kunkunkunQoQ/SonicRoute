@@ -434,6 +434,15 @@ internal static class ApplicationAudio
         return Task.FromResult(ApplyEndpoint(app, flow, deviceId));
     }
 #if SONICROUTE_PHONE
+    internal static string FormatAirPlayRouteError(Exception ex, IEnumerable<string?> outputs)
+    {
+        if (outputs.Any(IsPhoneOutputDevice))
+            return AndroidError.TryGetCode(ex, out var code)
+                ? AndroidErrorTranslation.Format(code, ex.Message)
+                : L10n.T("Phone.Err.PhoneAudioOutputFailed");
+        return L10n.T("Phone.AirPlayAudioError");
+    }
+
     private static async Task<(bool Success, int HResult, string Message)> ApplyExternalEndpointAsync(AudioAppInfo app, EDataFlow flow, string deviceId)
     {
         if (IsWindowsLinkOutputDevice(deviceId) && WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) == null && Source(app) == null)
@@ -447,11 +456,7 @@ internal static class ApplicationAudio
             }
             catch (Exception ex)
             {
-                string message = L10n.T("Phone.AirPlayAudioError");
-                if (IsPhoneOutputDevice(deviceId))
-                    message = AndroidError.TryGetCode(ex, out var code) ? AndroidErrorTranslation.Format(code, ex.Message)
-                        : L10n.T("Phone.Err.PhoneAudioOutputFailed");
-                return (false, ex.HResult, message);
+                return (false, ex.HResult, FormatAirPlayRouteError(ex, [deviceId]));
             }
         }
         if (flow == EDataFlow.eRender && WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) is { } wlSource)

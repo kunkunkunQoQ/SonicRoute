@@ -27,9 +27,11 @@ public final class AdaptiveBitrateControllerTest {
         testPacketWriterMetricsApi();
         testCongestionDownshiftAndCooldown();
         testEmergencyDownshiftThresholds();
+        testSustainedEmergencyDownshifts();
         testRecoveryAndBaselineCapWithPeriodicKeyframes();
         testWifiRecoveryTimingAndStepSize();
         testThroughputGuidedDownshift();
+        testSmallDownshiftsReachMinimumBitrate();
         testFpsRangeCompatibility();
         testHysteresisAndDeadbandNoOscillation();
         testUsbVsWifiDifferentiationAndFloors();
@@ -100,8 +102,8 @@ public final class AdaptiveBitrateControllerTest {
             nowNs += 16 * MS;
         }
         assertEquals(1, applied.size(), "USB should downshift once after trend forms");
-        assertEquals(6_400_000, applied.get(0).intValue(), "USB normal downshift should apply 0.80x");
-        assertEquals(6_400_000, usb.getCurrentBitRateBps(), "current bitrate reflects applied value");
+        assertEquals(7_200_000, applied.get(0).intValue(), "USB normal downshift should apply 0.90x");
+        assertEquals(7_200_000, usb.getCurrentBitRateBps(), "current bitrate reflects applied value");
         assertEquals(1, usb.getDownshiftCount(), "downshift counter increments");
         assertEquals(1, usb.getAdjustmentCount(), "adjustment counter increments");
 
@@ -116,7 +118,7 @@ public final class AdaptiveBitrateControllerTest {
         nowNs += 300 * MS;
         usb.onPacketSent(18_000, 15 * MS, 75_000L, false, false, nowNs);
         assertEquals(2, applied.size(), "USB should downshift again once 600ms cooldown elapses");
-        assertEquals(5_120_000, applied.get(1).intValue(), "second USB downshift steps down by 0.80x");
+        assertEquals(6_480_000, applied.get(1).intValue(), "second USB downshift steps down by 0.90x");
     }
 
     private static void testEmergencyDownshiftThresholds() {
@@ -128,18 +130,20 @@ public final class AdaptiveBitrateControllerTest {
             return true;
         });
 
-        usb.onPacketSent(40_000, 125 * MS, 30_000L, false, false, 100 * MS);
+        usb.onPacketSent(120_000, 120 * MS, 120_000L, false, false, 0L);
+        assertEquals(0, usbApplied.size(), "USB emergency thresholds are strict");
+        usb.onPacketSent(120_000, 125 * MS, 30_000L, false, false, 130 * MS);
         assertEquals(1, usbApplied.size(), "USB >120ms write stall triggers immediate emergency downshift");
-        int afterFirstUsb = usbApplied.get(0);
-        assertTrue(afterFirstUsb < 8_000_000 && afterFirstUsb >= 4_000_000, "first USB emergency drop bounded");
+        assertEquals(6_400_000, usbApplied.get(0).intValue(), "USB emergency factor is 0.80x with sufficient throughput");
 
         // Within 250ms emergency cooldown, should not fire again.
-        usb.onPacketSent(40_000, 140 * MS, 130_000L, false, false, 250 * MS);
+        usb.onPacketSent(120_000, 140 * MS, 130_000L, false, false, 379 * MS);
         assertEquals(1, usbApplied.size(), "USB emergency respects 250ms cooldown");
 
         // After 250ms cooldown, frameAge > 120ms triggers immediate emergency downshift even before 600ms.
-        usb.onPacketSent(10_000, 5 * MS, 130_000L, false, false, 360 * MS);
-        assertEquals(2, usbApplied.size(), "USB frameAge >120ms triggers emergency downshift after 250ms");
+        usb.onPacketSent(40_000, 5 * MS, 130_000L, false, false, 380 * MS);
+        assertEquals(2, usbApplied.size(), "USB frameAge >120ms triggers emergency downshift at 250ms");
+        assertEquals(5_120_000, usbApplied.get(1).intValue(), "USB frame-age emergency applies the 0.80x factor");
 
         // Wi-Fi emergency: > 90ms triggers immediately.
         AdaptiveBitrateController wifi = new AdaptiveBitrateController(TransportMode.WIFI, true);
@@ -149,8 +153,16 @@ public final class AdaptiveBitrateControllerTest {
             return true;
         });
 
-        wifi.onPacketSent(25_000, 95 * MS, 20_000L, false, false, 100 * MS);
+        wifi.onPacketSent(100_000, 90 * MS, 90_000L, false, false, 0L);
+        assertEquals(0, wifiApplied.size(), "Wi-Fi emergency thresholds are strict");
+        wifi.onPacketSent(100_000, 95 * MS, 20_000L, false, false, 100 * MS);
         assertEquals(1, wifiApplied.size(), "Wi-Fi >90ms write stall triggers immediate emergency downshift");
+        assertEquals(6_000_000, wifiApplied.get(0).intValue(), "Wi-Fi emergency factor is 0.75x with sufficient throughput");
+        wifi.onPacketSent(100_000, 95 * MS, 20_000L, false, false, 299 * MS);
+        assertEquals(1, wifiApplied.size(), "Wi-Fi emergency respects 200ms cooldown");
+        wifi.onPacketSent(40_000, 5 * MS, 95_000L, false, false, 300 * MS);
+        assertEquals(2, wifiApplied.size(), "Wi-Fi frameAge >90ms triggers emergency downshift at 200ms");
+        assertEquals(4_500_000, wifiApplied.get(1).intValue(), "Wi-Fi frame-age emergency applies the 0.75x factor");
     }
 
     private static void testRecoveryAndBaselineCapWithPeriodicKeyframes() {
@@ -161,13 +173,16 @@ public final class AdaptiveBitrateControllerTest {
             return true;
         });
 
-        // Drive bitrate down once via congestion.
+        // Apply two normal drops so recovery can exercise both the +12% step and the baseline cap.
         long nowNs = 0L;
         for (int i = 0; i < 6; ++i) {
             usb.onPacketSent(20_000, 14 * MS, 75_000L, false, false, nowNs);
             nowNs += 16 * MS;
         }
-        assertEquals(6_400_000, usb.getCurrentBitRateBps(), "precondition: USB dropped to 6.4 Mbps");
+        nowNs += 600 * MS;
+        usb.onPacketSent(20_000, 14 * MS, 75_000L, false, false, nowNs);
+        nowNs += 16 * MS;
+        assertEquals(6_480_000, usb.getCurrentBitRateBps(), "precondition: two USB drops reach 6.48 Mbps");
         int drops = applied.size();
 
         // Now stream healthy packets (1ms write, 10ms frame age) for 15 seconds, with a normal 25ms IDR every 2s.
@@ -177,14 +192,39 @@ public final class AdaptiveBitrateControllerTest {
             int bytes = isIdr ? 90_000 : 8_000;
             usb.onPacketSent(bytes, writeNs, 10_000L, isIdr, false, nowNs);
             nowNs += 16 * MS;
+            if (step == 149) {
+                assertEquals(drops, applied.size(), "USB must wait >=2500ms low pressure before upshift");
+            }
         }
 
-        assertTrue(usb.getUpshiftCount() >= 2, "USB recovers smoothly over multiple >=2.5s stability windows");
+        assertEquals(2, usb.getUpshiftCount(), "USB recovers over two >=2.5s stability windows");
+        assertEquals(7_257_600, applied.get(drops).intValue(), "USB recovery step is +12% before reaching baseline");
         assertEquals(8_000_000, usb.getCurrentBitRateBps(), "recovered bitrate caps cleanly at user baseline");
-        assertTrue(applied.size() > drops, "recovery invoked bitrate applier");
         for (int bps : applied) {
             assertTrue(bps <= 8_000_000, "applied bitrate never exceeds user baseline: " + bps);
         }
+    }
+
+    private static void testSustainedEmergencyDownshifts() {
+        assertEmergencyDownshiftsReachMinimum(TransportMode.USB, 250 * MS,
+                new int[] {5_600_000, 3_920_000, 2_744_000, 2_000_000});
+        assertEmergencyDownshiftsReachMinimum(TransportMode.WIFI, 200 * MS,
+                new int[] {4_800_000, 2_880_000, 1_728_000, 1_200_000});
+    }
+
+    private static void assertEmergencyDownshiftsReachMinimum(TransportMode mode, long cooldownNs, int[] expectedSteps) {
+        AdaptiveBitrateController controller = new AdaptiveBitrateController(mode, true);
+        controller.resetSession(8_000_000, 100_000, 50_000_000, 60.0f, bps -> true);
+
+        // Very low measured throughput hits the single-step floor until the session minimum takes over.
+        long nowNs = 0L;
+        for (int expected : expectedSteps) {
+            controller.onPacketSent(10_000, 130 * MS, 130_000L, false, false, nowNs);
+            assertEquals(expected, controller.getCurrentBitRateBps(), mode + " steps down at its emergency cooldown");
+            nowNs += cooldownNs;
+        }
+        controller.onPacketSent(10_000, 130 * MS, 130_000L, false, false, nowNs);
+        assertEquals(expectedSteps.length, controller.getDownshiftCount(), mode + " stops at its floor under emergency pressure");
     }
 
     private static void testWifiRecoveryTimingAndStepSize() {
@@ -200,7 +240,7 @@ public final class AdaptiveBitrateControllerTest {
             wifi.onPacketSent(25_000, 12 * MS, 60_000L, false, false, nowNs);
             nowNs += 16 * MS;
         }
-        assertEquals(7_200_000, wifi.getCurrentBitRateBps(), "Wi-Fi drops 10Mbps -> 7.2Mbps");
+        assertEquals(8_500_000, wifi.getCurrentBitRateBps(), "Wi-Fi drops 10Mbps -> 8.5Mbps");
         int countAfterDrop = applied.size();
 
         // Feed low pressure for ~3200ms (< 3500ms required for Wi-Fi) -> must NOT upshift yet.
@@ -216,29 +256,52 @@ public final class AdaptiveBitrateControllerTest {
             nowNs += 16 * MS;
         }
         assertEquals(countAfterDrop + 1, applied.size(), "Wi-Fi should upshift once after >=3500ms");
-        assertEquals(7_776_000, wifi.getCurrentBitRateBps(), "Wi-Fi recovery step is +8% (7.2M * 1.08 = 7.776M)");
+        assertEquals(9_180_000, wifi.getCurrentBitRateBps(), "Wi-Fi recovery step is +8% (8.5M * 1.08 = 9.18M)");
     }
 
     private static void testThroughputGuidedDownshift() {
         AdaptiveBitrateController wifi = new AdaptiveBitrateController(TransportMode.WIFI, true);
-        List<Integer> applied = new ArrayList<Integer>();
-        wifi.resetSession(10_000_000, 100_000, 50_000_000, 30.0f, bps -> {
-            applied.add(bps);
-            return true;
-        });
+        wifi.resetSession(10_000_000, 100_000, 50_000_000, 30.0f, bps -> true);
 
-        // Simulate 10KB packet taking 40ms to write => ~2.0 Mbps socket throughput (< 10M * 0.72).
-        long nowNs = 0L;
-        for (int i = 0; i < 6; ++i) {
-            wifi.onPacketSent(10_000, 40 * MS, 45_000L, false, false, nowNs);
-            nowNs += 45 * MS;
+        // 40 ms writes form a normal congestion trend. Throughput safety target is 7.2M * 0.85.
+        for (int i = 0; i < 3; ++i) {
+            wifi.onPacketSent(36_000, 40 * MS, 45_000L, false, false, i * 45 * MS);
         }
-        assertTrue(!applied.isEmpty(), "low throughput should trigger downshift");
-        assertEquals(4_500_000, applied.get(0).intValue(), "step-bounded throughput downshift clamps at 0.45x on first drop");
+        assertEquals(6_120_000, wifi.getCurrentBitRateBps(), "normal Wi-Fi congestion can use throughput within the step limit");
 
-        nowNs += 500 * MS;
-        wifi.onPacketSent(10_000, 40 * MS, 45_000L, false, false, nowNs);
-        assertTrue(wifi.getCurrentBitRateBps() <= 2_500_000, "second step approaches 0.85 * estimated throughput (~1.7-2.1M)");
+        // Lower throughput produces a 1.7 Mbps target, below the permitted single-step floor.
+        wifi.resetSession(10_000_000, 100_000, 50_000_000, 30.0f, bps -> true);
+        for (int i = 0; i < 3; ++i) {
+            wifi.onPacketSent(10_000, 40 * MS, 45_000L, false, false, i * 45 * MS);
+        }
+        assertEquals(6_000_000, wifi.getCurrentBitRateBps(), "normal Wi-Fi throughput-guided drop clamps to 0.60x");
+        wifi.onPacketSent(10_000, 40 * MS, 45_000L, false, false, 540 * MS);
+        assertEquals(3_600_000, wifi.getCurrentBitRateBps(), "next Wi-Fi drop is bounded relative to the current bitrate");
+    }
+
+    private static void testSmallDownshiftsReachMinimumBitrate() {
+        // Frame-age pressure with fast writes keeps throughput guidance out of the downshift.
+        assertSmallDownshiftsReachMinimum(TransportMode.USB, 800_000, 600 * MS, 75_000L,
+                new int[] {720_000, 648_000, 583_200, 524_880, 500_000});
+        assertSmallDownshiftsReachMinimum(TransportMode.WIFI, 600_000, 450 * MS, 60_000L,
+                new int[] {510_000, 433_500, 400_000});
+    }
+
+    private static void assertSmallDownshiftsReachMinimum(
+            TransportMode mode, int baseline, long cooldownNs, long frameAgeUs, int[] expectedSteps) {
+        AdaptiveBitrateController controller = new AdaptiveBitrateController(mode, true);
+        controller.resetSession(baseline, 100_000, 50_000_000, 60.0f, bps -> true);
+
+        controller.onPacketSent(2_000, MS, frameAgeUs, false, false, 0L);
+        controller.onPacketSent(2_000, MS, frameAgeUs, false, false, 16 * MS);
+        long nowNs = 32 * MS;
+        for (int expected : expectedSteps) {
+            controller.onPacketSent(2_000, MS, frameAgeUs, false, false, nowNs);
+            assertEquals(expected, controller.getCurrentBitRateBps(), mode + " applies sub-100kbps downshift");
+            nowNs += cooldownNs;
+        }
+        controller.onPacketSent(2_000, MS, frameAgeUs, false, false, nowNs);
+        assertEquals(expectedSteps.length, controller.getDownshiftCount(), mode + " stops adjusting at its minimum bitrate");
     }
 
     private static void testFpsRangeCompatibility() {
@@ -344,17 +407,8 @@ public final class AdaptiveBitrateControllerTest {
             wifi.onPacketSent(25_000, 10 * MS, 70_000L, false, false, nowNs);
             nowNs += 16 * MS;
         }
-        assertEquals(6_400_000, usbSteps.get(0).intValue(), "USB first downshift = 0.80x");
-        assertEquals(5_760_000, wifiSteps.get(0).intValue(), "Wi-Fi first downshift = 0.72x");
-
-        // Sustain heavy congestion until both reach their respective floors.
-        for (int i = 0; i < 60; ++i) {
-            nowNs += 500 * MS;
-            usb.onPacketSent(20_000, 50 * MS, 95_000L, false, false, nowNs);
-            wifi.onPacketSent(20_000, 50 * MS, 95_000L, false, false, nowNs);
-        }
-        assertEquals(2_000_000, usb.getCurrentBitRateBps(), "USB stops at 2Mbps floor");
-        assertEquals(1_200_000, wifi.getCurrentBitRateBps(), "Wi-Fi stops at 1.2Mbps floor");
+        assertEquals(7_200_000, usbSteps.get(0).intValue(), "USB first downshift = 0.90x");
+        assertEquals(6_800_000, wifiSteps.get(0).intValue(), "Wi-Fi first downshift = 0.85x");
 
         // Check absolute floor clamp for smaller baselines: 1.5Mbps USB -> 500kbps, 2Mbps Wi-Fi -> 400kbps.
         usb.resetSession(1_500_000, 100_000, 50_000_000, 30.0f, bps -> true);
@@ -371,8 +425,10 @@ public final class AdaptiveBitrateControllerTest {
     private static void testDriverRejectionFallbackToFixedBitrate() {
         AdaptiveBitrateController wifi = new AdaptiveBitrateController(TransportMode.WIFI, true);
         AtomicInteger attempts = new AtomicInteger();
+        AtomicInteger attemptedBitrate = new AtomicInteger();
         wifi.resetSession(8_000_000, 100_000, 50_000_000, 60.0f, bps -> {
             attempts.incrementAndGet();
+            attemptedBitrate.set(bps);
             return false; // Simulate encoder driver rejecting runtime bitrate change.
         });
 
@@ -383,6 +439,7 @@ public final class AdaptiveBitrateControllerTest {
         }
 
         assertEquals(1, attempts.get(), "applier must stop being called immediately after returning false");
+        assertEquals(4_800_000, attemptedBitrate.get(), "encoder is offered the bounded Wi-Fi emergency bitrate");
         assertTrue(!wifi.isDynamicSupported(), "dynamicSupported must become false after rejection");
         assertEquals(8_000_000, wifi.getCurrentBitRateBps(), "bitrate must fall back to fixed baseline");
         assertEquals(0, wifi.getAdjustmentCount(), "rejected call must not count as successful adjustment");

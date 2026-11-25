@@ -1,10 +1,10 @@
-<!-- Generated from docs/readme/shared.json, docs/readme/locales/de-DE.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/de-DE.json, and docs/readme/releases/v1.36.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
-# 🎧 SonicRoute v1.35 Beta
+# 🎧 SonicRoute v1.36 Beta
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | **Deutsch** | [Français](README.fr.md) | [Español](README.es.md) | [Русский](README.ru.md) | [🤖 AI](README.ai.md)
 
-[![Beta: v1.35](https://img.shields.io/static/v1?label=Beta&message=v1.35&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.35...Beta) [![Lizenz: GPL-3.0-only](https://img.shields.io/static/v1?label=Lizenz&message=GPL-3.0-only&color=blue)](LICENSE) [![Plattform: Windows 10 | 11](https://img.shields.io/static/v1?label=Plattform&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Architektur: x64 | ARM64](https://img.shields.io/static/v1?label=Architektur&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=Downloads)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Auf Afdian unterstützen](https://img.shields.io/static/v1?label=&message=Auf+Afdian+unterst%C3%BCtzen&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Beta: v1.36](https://img.shields.io/static/v1?label=Beta&message=v1.36&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.36...Beta) [![Lizenz: GPL-3.0-only](https://img.shields.io/static/v1?label=Lizenz&message=GPL-3.0-only&color=blue)](LICENSE) [![Plattform: Windows 10 | 11](https://img.shields.io/static/v1?label=Plattform&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Architektur: x64 | ARM64](https://img.shields.io/static/v1?label=Architektur&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Downloads](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=Downloads)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Auf Afdian unterstützen](https://img.shields.io/static/v1?label=&message=Auf+Afdian+unterst%C3%BCtzen&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **Legen Sie für jede App fest, wo ihr Ton zu hören ist.**
 
@@ -35,15 +35,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (experimentell) · Neun Sprachen ·
 
 ## 🚀 Herunterladen und loslegen
 
-**Aktuelle Version: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 21. November 2026 · [Versionshinweise (auf Englisch und Chinesisch)](docs/release-v1.35.md)
+**Aktuelle Version: [v1.36](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.36)** · 24. November 2026 · [Versionshinweise (auf Englisch und Chinesisch)](docs/release-v1.36.md)
 
-Wählen Sie **Lite** für die Audiofunktionen am PC, **Full** für zusätzliche Android- und AirPlay-Funktionen oder **Legacy** für PC-Audio auf x64-Systemen mit .NET Framework 4.8. Die Tabelle enthält Downloads für v1.35 und Links zu den Ausgaben im Microsoft Store.
+Wählen Sie **Lite** für die Audiofunktionen am PC, **Full** für zusätzliche Android- und AirPlay-Funktionen oder **Legacy** für PC-Audio auf x64-Systemen mit .NET Framework 4.8. Die Tabelle enthält Downloads für v1.36 und Links zu den Ausgaben im Microsoft Store.
 
 | Ausgabe | Download | Voraussetzungen |
 |---|---|---|
-| ⭐ Full (PC, Android und AirPlay) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | Portable EXE. Benötigt die .NET 10 Desktop Runtime für die gewählte Architektur. |
-| ⚡ Lite (PC-Audio) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | Portable EXE. Benötigt die .NET 10 Desktop Runtime für die gewählte Architektur. |
-| 🛡️ Legacy (PC-Audio, x64) | [ZIP-Archiv](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | ZIP-Archiv vor dem Start vollständig entpacken. Benötigt .NET Framework 4.8. |
+| ⭐ Full (PC, Android und AirPlay) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-arm64.exe) | Portable EXE. Benötigt die .NET 10 Desktop Runtime für die gewählte Architektur. |
+| ⚡ Lite (PC-Audio) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-x64.exe) / [ARM64 (experimentell)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-arm64.exe) | Portable EXE. Benötigt die .NET 10 Desktop Runtime für die gewählte Architektur. |
+| 🛡️ Legacy (PC-Audio, x64) | [ZIP-Archiv](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Legacy-x64.zip) | ZIP-Archiv vor dem Start vollständig entpacken. Benötigt .NET Framework 4.8. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Full und Lite benötigen die .NET 10 Desktop Runtime für x64. Die aktuelle Version steht auf der jeweiligen Store-Seite. |
 
 <details>
@@ -68,7 +68,7 @@ Wählen Sie **Lite** für die Audiofunktionen am PC, **Full** für zusätzliche 
 
 ## ✨ Das bietet SonicRoute
 
-- **Wiedergabe und Aufnahme pro App festlegen.** Mit Strg+Klick wählen Sie im Schnellpanel einzelne Wiedergabegeräte aus oder ab, mit Umschalt+Klick mehrere aufeinanderfolgende Geräte. Alle Editionen unterstützen mehrere PC-Ausgänge gleichzeitig. In Full können Sie auch Ausgänge eines verbundenen Android-Smartphones hinzufügen.
+- **Wiedergabe und Aufnahme pro App festlegen.** Im Schnellpanel oder auf der App-Seite fügen Sie mit Strg+Klick ein Wiedergabegerät hinzu oder entfernen es, behalten mit Umschalt+Klick die aktuelle Auswahl bei und fügen einen Bereich hinzu und wählen oder wechseln mit Strg+Umschalt+Klick das native Routing-Gerät. Alle Editionen unterstützen mehrere PC-Ausgänge gleichzeitig. In Full können Sie auch Ausgänge eines verbundenen Android-Smartphones hinzufügen.
 - **Die Lautstärke einzelner Apps regeln.** Im Schnellpanel sehen Sie an den Pegelanzeigen, welche Apps gerade Ton ausgeben. Jede App hat einen eigenen Lautstärkeregler. Mit dem Mausrad über dem Symbol im Infobereich ändern Sie die Lautstärke der aktuellen App. Per Tastenkürzel können Sie alle Mikrofone stummschalten und die Stummschaltung wieder aufheben.
 - **Wiederkehrende Aufgaben automatisieren.** Für Regeln stehen 6 Auslöser und 39 Aktionen zur Verfügung. Beim Start eines Spiels kann eine Regel zum Headset wechseln und den Sprachchat öffnen. Gespeicherte Regeln lassen sich mit `sr` auch im Terminal oder aus einem Skript ausführen.
 - **Android und AirPlay am PC nutzen (Full).** Geben Sie den Ton einer Android-App am PC oder den PC-Ton auf dem Smartphone wieder. Android-Apps lassen sich auf einem eigenen virtuellen Bildschirm bedienen. Über AirPlay empfängt der PC Audio und Bildschirmübertragungen von Apple-Geräten. Sie können den gemeinsamen Speicher des Android-Geräts durchsuchen und mehrere Dateien auf einmal senden oder empfangen.
@@ -109,35 +109,30 @@ Full und Lite benötigen die .NET 10 Desktop Runtime für ihre jeweilige Archite
 
 SonicRoute reagiert vor allem auf Windows-Ereignisse. Nur wenn nötig, prüft es den Zustand zusätzlich einmal pro Sekunde. Es gibt nicht mehr benötigte Daten bei Bedarf frei. Die tatsächliche CPU-Auslastung hängt vom System und seiner Nutzung ab.
 
-## 🆕 Neu in v1.35
+## 🆕 Neu in v1.36
+
+In allen Editionen behält Umschalt+Klick im Schnellpanel nun die bestehende Auswahl bei und fügt einen Bereich hinzu, Strg+Umschalt+Klick wählt oder wechselt das native Windows-Routing-Gerät, und unterschiedliche Schaltflächenstile trennen native Routen von Spiegelungen. Die linke Hauptseitenleiste lässt sich einklappen, und die App-Seite bietet nun dieselbe Mehrfachausgabe-Steuerung wie das Schnellpanel.
+
+Die Full-Edition ergänzt gleichzeitige Mehrfachausgabe für AirPlay, unkomprimiertes PCM sowie drei Audiolatenzmodi (Sehr geringe Latenz, Ausgewogen, Stabil) für Android, breitere App-Aufnahmekompatibilität ab Android 11 und eine adaptive Videobitrate für drahtlose virtuelle Displays sowie Store-Taskleistenidentität und AirPlay-Firewallregeln. Frühere Versionen finden Sie unter [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+
+<details>
+<summary>v1.35</summary>
 
 Wenn Sie im Schnellpanel ein Mikrofon für eine PC-App auswählen, wird das Gerät sofort hervorgehoben. Sie können weiterklicken, während SonicRoute die Änderungen der Reihe nach übernimmt. In der Full-Edition gilt das auch für externe Audioquellen mit nur einem Ausgang. Beim Wechsel des Ausgangs erscheint der gewählte Gerätename sofort in der App-Zeile. Tastenkürzel zum Gerätewechsel lassen sich mehrmals hintereinander drücken. Wechseln Sie per Tastenkürzel den Ausgang der aktuellen App und dauert das höchstens 45 ms, erscheint nur das Ergebnis. Wird ein Fortschrittshinweis eingeblendet, bleibt er vor der Erfolgsmeldung mindestens 500 ms sichtbar. Fehler werden sofort gemeldet. Verschiebt Windows die Audiositzung einer App auf einen anderen gewählten Ausgang, läuft die Wiedergabe auf den übrigen ausgewählten Ausgängen weiter.
 
 In der Full-Edition können Sie den Ausgang auch während eines Wechsels des Android-Aufnahmemodus ändern und den virtuellen Bildschirm weiter bedienen. Schalten Sie die Synchronisierung der Zwischenablage für ein Smartphone aus, werden dessen ausstehende Schreibvorgänge in die Zwischenablage des PCs abgebrochen. Die anderen Smartphones synchronisieren sich weiter. Schlägt ein Schreibvorgang fehl, gibt SonicRoute den dafür reservierten Speicher frei. Frühere Änderungen finden Sie unter [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
 
-<details>
-<summary>v1.34</summary>
-
-In allen Editionen lassen sich jetzt für jede App mehrere PC-Wiedergabegeräte auswählen. Wenn die App nach einem Neustart von SonicRoute erneut Audio wiedergibt, wird die Auswahl wiederhergestellt. Die Lautstärkeregelung im Infobereich und die Maus-Tastenkürzel nutzen gemeinsam einen systemweiten Maus-Hook.
-
-In der Full-Edition zeigen beide Android-Bedienfelder denselben USB- und WLAN-Verbindungsstatus an. Beim Aktualisieren des Smartphone-Schnellpanels lässt sich auch das ausgewählte Gerät erneut verbinden. Das Ausgabemenü von Android-Apps zeigt jetzt den benutzerdefinierten Namen der aktuellen Audioausgabe des Smartphones an. Frühere Versionen finden Sie unter [Versionsverlauf](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
-
 </details>
-
-## In Entwicklung für die Full-Edition
-
-- Für die Audioübertragung vom Android-Smartphone zum PC stehen Opus (Standard) und unkomprimiertes PCM zur Wahl. Pro Smartphone können Sie den Latenzmodus „Sehr geringe Latenz“, „Ausgewogen“ (Standard) oder „Stabil“ einstellen. Die Änderungen gelten ab der nächsten Audioübertragung von diesem Gerät.
-- Wenn der Android-Encoder es unterstützt, passt SonicRoute die Videobitrate des virtuellen Bildschirms an die Verbindungsqualität an.
 
 <a name="windows-link"></a>
 
-### Windows Link in der Betaversion von SonicRoute Full
+## Windows Link in der Betaversion von SonicRoute Full
 
 - **Zwei Windows-PCs koppeln.** Aktivieren Sie Windows Link auf beiden PCs in SonicRoute Full. Suchen Sie den anderen PC im lokalen Netzwerk oder geben Sie seine Adresse ein. Vergleichen und bestätigen Sie auf beiden PCs den achtstelligen Kopplungscode.
 - **Audio auf dem anderen PC wiedergeben.** Ziehen Sie eine App auf den Ziel-PC und wählen Sie, ob der Ton dort oder auf beiden PCs zu hören sein soll. Sie können auch den gesamten Systemton übertragen oder für eine Quelle mehrere Ausgaben wählen.
 - **Fenster oder Bildschirm mit Ton teilen.** Mit Ihrer Freigabe kann die andere Person das geteilte Fenster oder den Bildschirm per Maus und Tastatur bedienen. Sie können Dateien und Ordner übertragen. Aktivieren Sie auf beiden PCs den Abgleich der Zwischenablage, um neu kopierten unformatierten Text zu teilen.
 
-[Anleitung für Windows Link (auf Chinesisch)](docs/windows-link.md) · [Alle Änderungen ansehen](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.35...Beta)
+[Anleitung für Windows Link (auf Chinesisch)](docs/windows-link.md) · [Alle Änderungen ansehen](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.36...Beta)
 
 ## 📚 Dokumentation
 

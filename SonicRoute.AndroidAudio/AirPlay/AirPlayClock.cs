@@ -17,14 +17,14 @@ internal sealed class AirPlayClock : IAsyncDisposable
     private long _lastDelayRequest;
     private readonly object _clockGate = new();
 
-    internal AirPlayClock(IPAddress local, IPAddress peer, bool ptp, string id, CancellationToken token, int remoteTimingPort = 0)
+    internal AirPlayClock(AirPlayListenerPorts ports, IPAddress local, IPAddress peer, bool ptp, string id, CancellationToken token, int remoteTimingPort = 0)
     {
         _stop = CancellationTokenSource.CreateLinkedTokenSource(token);
         var sockets = new List<Socket>(2);
         try
         {
-            sockets.Add(Bind(local, ptp ? 319 : 0));
-            if (ptp) sockets.Add(Bind(local, 320));
+            sockets.Add(ports.BindUdp(local, ptp ? 319 : 0));
+            if (ptp) sockets.Add(ports.BindUdp(local, 320));
             _sockets = sockets.ToArray();
             if (ptp)
             {
@@ -44,13 +44,6 @@ internal sealed class AirPlayClock : IAsyncDisposable
     }
 
     internal int TimingPort => _sockets.Length == 1 ? ((IPEndPoint)_sockets[0].LocalEndPoint!).Port : 0;
-
-    private static Socket Bind(IPAddress address, int port)
-    {
-        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        try { socket.Bind(new IPEndPoint(address, port)); return socket; }
-        catch { socket.Dispose(); throw; }
-    }
 
     private static async Task ReceiveNtpAsync(Socket socket, IPAddress peer, CancellationToken token)
     {

@@ -493,7 +493,8 @@ namespace SonicRoute
                 try { await previous; } catch { }
                 if (_isClosed || version != _systemDefaultChangeVersion) return;
 
-                var ok = await Task.Run(() => _setSystemDefault(EDataFlow.eRender, dev.Id));
+                var ok = await ReadbackAfterWriteAsync((Write: _setSystemDefault, dev.Id),
+                    static state => state.Write(EDataFlow.eRender, state.Id));
                 if (_isClosed || version != _systemDefaultChangeVersion) return;
 
                 if (ok.Success)
@@ -505,7 +506,7 @@ namespace SonicRoute
                 {
                     ((App)System.Windows.Application.Current).ShowOsd(L10n.T("Act.SetDefaultOutput"), L10n.T("St.SysDefaultSetFail"));
                     string? actual = null;
-                    try { actual = await _uiLifetime.ReadAsync(() => _readSystemDefaultId(EDataFlow.eRender)); }
+                    try { actual = await _uiLifetime.ReadAsync(_readSystemDefaultId, static read => read(EDataFlow.eRender)); }
                     catch (OperationCanceledException) when (_isClosed) { return; }
                     if (_isClosed || version != _systemDefaultChangeVersion) return;
                     RestoreSystemDefaultComboSelection(actual);
@@ -974,7 +975,7 @@ namespace SonicRoute
             if (row.ShowOutputName)
             {
                 string? displayId = row.PendingPlayback is { } pending
-                    ? SelectOptimisticPrimaryOutput(pending.Outputs, outputId, preferPhysical: true)
+                    ? SelectOptimisticPrimaryOutput(pending.Outputs, pending.PreferredPrimary ?? outputId, preferPhysical: true)
                     : outputId;
                 bool systemDefault = AudioService.IsSystemDefault(displayId);
                 bool needDefault = systemDefault && !row.LegacyLayout;

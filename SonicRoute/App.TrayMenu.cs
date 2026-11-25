@@ -27,7 +27,7 @@ namespace SonicRoute
 #endif
             CloseTrayMenu();
             CancelUiReclaim();
-            _uiWorkingSetDirty = true;
+            _uiResourcesDirty = true;
             try
             {
                 var menu = CreateTrayMenu(foregroundPid, foregroundHwnd);

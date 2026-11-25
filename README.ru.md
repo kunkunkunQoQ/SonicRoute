@@ -1,10 +1,10 @@
-<!-- Generated from docs/readme/shared.json, docs/readme/locales/ru-RU.json, and docs/readme/releases/v1.35.json. Run node docs/readme/generate.cjs after editing. -->
+<!-- Generated from docs/readme/shared.json, docs/readme/locales/ru-RU.json, and docs/readme/releases/v1.36.json. Run node docs/readme/generate.cjs after editing. -->
 <!-- AI / LLM Context: https://github.com/kunkunkunQoQ/SonicRoute/wiki/AI -->
-# 🎧 SonicRoute v1.35 Beta
+# 🎧 SonicRoute v1.36 Beta
 
 [简体中文](README.md) | [English](README.en.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Español](README.es.md) | **Русский** | [🤖 AI](README.ai.md)
 
-[![Beta: v1.35](https://img.shields.io/static/v1?label=Beta&message=v1.35&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.35...Beta) [![Лицензия: GPL-3.0-only](https://img.shields.io/static/v1?label=%D0%9B%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F&message=GPL-3.0-only&color=blue)](LICENSE) [![Платформа: Windows 10 | 11](https://img.shields.io/static/v1?label=%D0%9F%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Архитектура: x64 | ARM64](https://img.shields.io/static/v1?label=%D0%90%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D0%B0&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Загрузки](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%D0%97%D0%B0%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B8)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/static/v1?label=&message=%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C+%D0%BD%D0%B0+Afdian&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
+[![Beta: v1.36](https://img.shields.io/static/v1?label=Beta&message=v1.36&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.36...Beta) [![Лицензия: GPL-3.0-only](https://img.shields.io/static/v1?label=%D0%9B%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F&message=GPL-3.0-only&color=blue)](LICENSE) [![Платформа: Windows 10 | 11](https://img.shields.io/static/v1?label=%D0%9F%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0&message=Windows+10+%7C+11&color=blue)](https://github.com/kunkunkunQoQ/SonicRoute) [![Архитектура: x64 | ARM64](https://img.shields.io/static/v1?label=%D0%90%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D0%B0&message=x64+%7C+ARM64&color=orange)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Загрузки](https://img.shields.io/github/downloads/kunkunkunQoQ/SonicRoute/total?color=blue&label=%D0%97%D0%B0%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B8)](https://github.com/kunkunkunQoQ/SonicRoute/releases) [![Поддержать на Afdian](https://img.shields.io/static/v1?label=&message=%D0%9F%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C+%D0%BD%D0%B0+Afdian&color=946CE6&logo=afdian&logoColor=white)](https://afdian.com/a/koukou021)
 
 **Выбирайте, куда выводить звук каждого приложения.**
 
@@ -35,15 +35,15 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментальная
 
 ## 🚀 Скачать и начать работу
 
-**Текущая стабильная версия: [v1.35](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.35)** · 21 ноября 2026 г. · [Примечания к выпуску (на китайском и английском)](docs/release-v1.35.md)
+**Текущая стабильная версия: [v1.36](https://github.com/kunkunkunQoQ/SonicRoute/releases/tag/v1.36)** · 24 ноября 2026 г. · [Примечания к выпуску (на китайском и английском)](docs/release-v1.36.md)
 
-В выпуске v1.35 выберите **Full** для работы с Android и AirPlay или **Lite**, если нужен только звук на ПК. Для компьютеров x64 с .NET Framework 4.8 есть **Legacy** с функциями управления звуком на ПК.
+В выпуске v1.36 выберите **Full** для работы с Android и AirPlay или **Lite**, если нужен только звук на ПК. Для компьютеров x64 с .NET Framework 4.8 есть **Legacy** с функциями управления звуком на ПК.
 
 | Редакция | Скачать | Требования |
 |---|---|---|
-| ⭐ Full (.NET 10, с поддержкой Android и AirPlay) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-x64.exe) / [ARM64 (экспериментальная сборка)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-arm64.exe) | Переносимый EXE-файл. Нужна среда .NET 10 Desktop Runtime той же архитектуры, что и программа. |
-| ⚡ Lite (.NET 10, только звук ПК) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-x64.exe) / [ARM64 (экспериментальная сборка)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Lite-arm64.exe) | Переносимый EXE-файл. Нужна среда .NET 10 Desktop Runtime той же архитектуры, что и программа. |
-| 🛡️ Legacy x64 (только звук ПК, .NET Framework 4.8) | [Скачать ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.35/SonicRoute-v1.35-Legacy-x64.zip) | Полностью распакуйте ZIP-архив перед запуском. Нужна среда .NET Framework 4.8. |
+| ⭐ Full (.NET 10, с поддержкой Android и AirPlay) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-x64.exe) / [ARM64 (экспериментальная сборка)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-arm64.exe) | Переносимый EXE-файл. Нужна среда .NET 10 Desktop Runtime той же архитектуры, что и программа. |
+| ⚡ Lite (.NET 10, только звук ПК) | [x64](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-x64.exe) / [ARM64 (экспериментальная сборка)](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Lite-arm64.exe) | Переносимый EXE-файл. Нужна среда .NET 10 Desktop Runtime той же архитектуры, что и программа. |
+| 🛡️ Legacy x64 (только звук ПК, .NET Framework 4.8) | [Скачать ZIP](https://github.com/kunkunkunQoQ/SonicRoute/releases/download/v1.36/SonicRoute-v1.36-Legacy-x64.zip) | Полностью распакуйте ZIP-архив перед запуском. Нужна среда .NET Framework 4.8. |
 | 🔄 Microsoft Store | [Full](https://apps.microsoft.com/detail/9NQZGRTPM1NT) / [Lite](https://apps.microsoft.com/detail/9N37LQ8SMLF6) | Обеим редакциям нужна среда .NET 10 Desktop Runtime для x64. Версия каждой редакции указана на её странице в магазине. |
 
 <details>
@@ -68,7 +68,7 @@ Windows 10 2004+ / Windows 11 · x64 / ARM64 (экспериментальная
 
 ## ✨ Возможности SonicRoute
 
-- **Выбирайте устройства воспроизведения и записи для каждого приложения.** На быстрой панели щелчок с зажатой клавишей Ctrl добавляет или убирает отдельный выход, а с Shift выбирает несколько выходов подряд. Звук можно воспроизводить на нескольких устройствах ПК одновременно, а в Full к ним можно добавить и выходы Android-телефона.
+- **Выбирайте устройства воспроизведения и записи для каждого приложения.** На быстрой панели и на странице «Приложения» Ctrl + щелчок добавляет или убирает устройство, Shift + щелчок сохраняет текущий выбор и добавляет диапазон, а Ctrl+Shift + щелчок выбирает или переключает устройство нативной маршрутизации. Все редакции поддерживают одновременное воспроизведение на нескольких выходах ПК, а Full — также на выходах подключённого телефона Android.
 - **Регулируйте громкость приложений.** По индикаторам на быстрой панели видно, какое приложение сейчас звучит. Громкость можно изменить ползунком, а для текущего приложения — колёсиком мыши над значком SonicRoute. Горячая клавиша позволяет выключить или включить сразу все микрофоны.
 - **Настройте автоматизацию.** Выберите из 6 триггеров и 39 действий те, которые нужны для вашего правила. Например, при запуске игры можно сменить устройство вывода и отрегулировать громкость. Сохранённые правила можно запускать из командной строки с помощью `sr`.
 - **Используйте Android и AirPlay в редакции Full.** Слушайте звук приложений Android на ПК или передавайте звук с ПК на динамик телефона либо подключённое к нему Bluetooth-устройство. Приложения Android можно открывать на отдельных виртуальных экранах с поддержкой H.265. Через AirPlay можно принимать звук устройств Apple и видеть их экран с сохранением пропорций. Можно также просматривать общую память Android-устройства и передавать сразу несколько файлов в обе стороны.
@@ -109,35 +109,30 @@ Windows сохраняет основное устройство воспрои�
 
 Программа отслеживает уведомления Windows, при необходимости раз в секунду проверяет состояние процессов и освобождает ненужные данные. Нагрузка на процессор и расход заряда зависят от системы и используемых функций.
 
-## 🆕 Что нового в v1.35
+## 🆕 Что нового в v1.36
+
+Во всех редакциях на быстрой панели Shift + щелчок теперь сохраняет текущее выделение и добавляет диапазон, Ctrl+Shift + щелчок выбирает или переключает устройство нативной маршрутизации Windows, а стили кнопок различают нативный маршрут и зеркалирование. Боковую панель главного окна можно сворачивать с сохранением состояния, а страница «Приложения» получила те же элементы управления несколькими выходами, что и быстрая панель.
+
+В редакции Full добавлены одновременный вывод AirPlay на несколько устройств, передача звука Android в формате PCM без сжатия и три режима задержки (Сверхнизкая, Сбалансированная, Стабильная), расширена совместимость захвата звука начиная с Android 11, добавлено адаптивное управление битрейтом видео по Wi-Fi, а также сохранена группировка на панели задач Store и правила брандмауэра AirPlay. Сведения о предыдущих выпусках приведены в разделе [История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
+
+<details>
+<summary>v1.35</summary>
 
 Когда вы выбираете микрофон для приложения на ПК, устройство сразу выделяется на быстрой панели. Можно продолжать нажимать кнопки, пока SonicRoute применяет изменения по очереди. В редакции Full так же работает выбор устройства для внешних источников звука с одним выходом. При смене выхода его название сразу появляется в строке приложения. Сочетания клавиш для смены устройств можно нажимать несколько раз подряд. Если переключить выход текущего приложения с клавиатуры и операция займёт не более 45 мс, на экране появится только результат. Если появилось уведомление о переключении, оно останется на экране не менее 500 мс, прежде чем сменится сообщением об успехе. Ошибки отображаются сразу. Если Windows переносит аудиосеанс приложения на другой выбранный выход, звук продолжает воспроизводиться и на остальных выбранных выходах.
 
 В редакции Full можно менять выход во время смены режима захвата звука Android и продолжать работу с виртуальным экраном. При отключении синхронизации буфера обмена для одного телефона отменяются его незавершённые операции записи в буфер обмена ПК. Остальные телефоны продолжают синхронизацию. Если запись не удаётся, SonicRoute освобождает выделенную для неё память. Подробнее о предыдущих выпусках см. в разделе «[История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2)».
 
-<details>
-<summary>v1.34</summary>
-
-Во всех редакциях теперь можно выбирать несколько устройств воспроизведения на ПК для каждого приложения. После перезапуска SonicRoute выбор восстанавливается, когда приложение снова начинает воспроизводить звук. Регулировка громкости из области уведомлений и горячие клавиши с кнопками мыши используют общий системный перехватчик событий мыши.
-
-В редакции Full состояние подключения по USB и Wi-Fi синхронизируется между двумя панелями Android. Кнопка обновления на быстрой панели телефона также позволяет повторно подключить выбранное устройство. В меню вывода приложений Android теперь отображается заданное пользователем имя текущего выхода телефона. Сведения о предыдущих выпусках приведены в разделе [История версий](https://github.com/kunkunkunQoQ/SonicRoute/wiki/09-%E7%89%88%E6%9C%AC%E5%8E%86%E5%8F%B2).
-
 </details>
-
-## Новое в разрабатываемой версии Full
-
-- Для каждого телефона можно выбрать формат передачи звука с Android на ПК: Opus (по умолчанию) или PCM без сжатия. Доступны три режима задержки: «Сверхнизкая задержка», «Сбалансированный» (по умолчанию) и «Стабильный». Настройки вступают в силу при следующем запуске передачи звука с этого телефона.
-- Битрейт видео с виртуального экрана автоматически меняется в зависимости от качества соединения, если кодировщик телефона это поддерживает.
 
 <a name="windows-link"></a>
 
-### Windows Link в бета-версии Full
+## Windows Link в бета-версии Full
 
 - **Сопряжение двух компьютеров с Windows.** Включите Windows Link в SonicRoute Full на обоих ПК. Найдите второй компьютер в локальной сети или введите его адрес. Убедитесь, что на обоих экранах один и тот же восьмизначный код, и подтвердите сопряжение на каждом ПК.
 - **Выбор устройства вывода.** Перетащите приложение на другой ПК, чтобы слушать его там или на обоих компьютерах сразу. Также можно передавать весь системный звук или выбрать несколько устройств вывода для одного источника.
 - **Показ окна или экрана со звуком.** Вы можете разрешить пользователю другого ПК управлять общим окном или экраном с помощью мыши и клавиатуры. Между компьютерами можно передавать файлы и папки. Чтобы обмениваться только что скопированным текстом без форматирования, включите синхронизацию буфера обмена на обоих ПК.
 
-[Руководство по Windows Link (на китайском)](docs/windows-link.md) · [Посмотреть все изменения](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.35...Beta)
+[Руководство по Windows Link (на китайском)](docs/windows-link.md) · [Посмотреть все изменения](https://github.com/kunkunkunQoQ/SonicRoute/compare/v1.36...Beta)
 
 ## 📚 Документация
 

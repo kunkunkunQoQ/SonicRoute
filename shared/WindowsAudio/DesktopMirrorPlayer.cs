@@ -17,13 +17,15 @@ internal sealed class DesktopMirrorPlayer : IDisposable
     private DesktopMirrorPcmSource? _pending;
     private RegisteredWaitHandle? _drainWait;
     private bool _closed, _failed;
+    internal string EndpointId { get; }
     internal event Action<Exception>? Failed;
 
-    internal DesktopMirrorPlayer(string endpointId)
+    internal DesktopMirrorPlayer(string? endpointId)
     {
         _device = WasapiDeviceLease.Open(endpointId);
         try
         {
+            EndpointId = _device.Device.ID;
             _client = _device.Device.AudioClient;
             var flags = AudioClientStreamFlags.EventCallback | AudioClientStreamFlags.AutoConvertPcm | AudioClientStreamFlags.SrcDefaultQuality;
             _client.Initialize(AudioClientShareMode.Shared, flags, 1_000_000, 0, Format, Guid.Empty);

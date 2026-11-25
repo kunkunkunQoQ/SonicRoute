@@ -1,4 +1,5 @@
 #if SONICROUTE_PHONE
+using SonicRoute.AirPlay;
 using SonicRoute.AndroidAudio;
 using SonicRoute.WindowsLink;
 #endif
@@ -12,6 +13,9 @@ internal static partial class AppPlaybackOutputs
 {
     private static readonly StringComparer Ids = StringComparer.OrdinalIgnoreCase;
     private static readonly Dictionary<int, ProcessGate> Gates = [];
+#if SONICROUTE_IDLE_WORKING_SET_TRIM
+    internal static bool HasPendingChanges { get { lock (Gates) return Gates.Count != 0; } }
+#endif
     private sealed class ProcessGate { internal readonly SemaphoreSlim Changes = new(1, 1); internal int Users; }
 
 #if SONICROUTE_PHONE
@@ -33,6 +37,27 @@ internal static partial class AppPlaybackOutputs
         outputs.Add(Endpoint(persistedEndpoint));
         return outputs;
     }
+
+    internal static HashSet<string> GetSelectedForApp(AudioAppInfo app, string? persistedEndpoint)
+    {
+        if (!app.IsExternal) return GetSelected((int)app.ProcessId, persistedEndpoint);
+#if SONICROUTE_PHONE
+        if (WindowsLinkHub.FindIncomingAudio(app.ExternalSourceId) is { } incoming)
+            return WindowsLinkIncomingOutputs.GetSelected(incoming);
+        if (ApplicationAudio.ExternalSession(app) is IMultiOutputAudioSession multi)
+        {
+            var outputs = multi.GetOutputs().Select(Endpoint).ToHashSet(Ids);
+            if (multi is AndroidAudioSession android && android.UsesSourcePhonePlayback)
+                outputs.Add(AndroidAudioSession.SourcePhoneOutputId);
+            return outputs;
+        }
+#endif
+        return new HashSet<string>(Ids) { Endpoint(persistedEndpoint) };
+    }
+
+    internal static Task<(bool Success, int HResult, string Message)> SetSelectedAsync(
+        AudioAppInfo app, string[] selected, string? preferredPrimary) =>
+        SetAsync(app, selected, preferredPrimary, allowSpeakerMute: !app.IsExternal && !selected.Any(ApplicationAudio.IsWindowsLinkOutputDevice));
 
     internal static async Task<(bool Success, int HResult, string Message)> SetAsync(
         AudioAppInfo app, string[] selected, string? preferredPrimary, bool allowSpeakerMute)
@@ -58,7 +83,12 @@ internal static partial class AppPlaybackOutputs
                     await multi.SetOutputsAsync(outputs.Select(id => AudioService.IsSystemDefault(id) ? null : id).ToArray()).ConfigureAwait(false);
                     return (true, 0, L10n.T("History.Status.success"));
                 }
-                catch (Exception ex) { return RouteError(ex); }
+                catch (Exception ex)
+                {
+                    return multi is AirPlayAudioOutput
+                        ? (false, ex.HResult, ApplicationAudio.FormatAirPlayRouteError(ex, outputs))
+                        : RouteError(ex);
+                }
             }
 #endif
             return outputs.Length == 1 ? await ApplicationAudio.ApplyEndpointAsync(app, EDataFlow.eRender, outputs[0])
@@ -94,8 +124,10 @@ internal static partial class AppPlaybackOutputs
         SerializeAsync(pid, async () =>
         {
             if (!stillWanted() || PlaybackAppIdentity.Read(pid) != app) return false;
-            var before = GetSelected(pid, AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender));
-            if (before.SetEquals(outputs)) return true;
+            string? saved = AudioService.GetPersistedEndpoint(pid, EDataFlow.eRender);
+            var before = GetSelected(pid, saved);
+            if (before.SetEquals(outputs) && (outputs.All(ApplicationAudio.IsExternalOutputDevice) || Ids.Equals(Endpoint(saved), preferred)))
+                return true;
             bool allowSpeakerMute = !outputs.Any(ApplicationAudio.IsWindowsLinkOutputDevice);
             var result = await ApplyAsync(pid, outputs, preferred, allowSpeakerMute).ConfigureAwait(false);
 #if SONICROUTE_PHONE
@@ -135,8 +167,9 @@ internal static partial class AppPlaybackOutputs
 #else
         var physical = outputs;
 #endif
-        string? primary = physical.FirstOrDefault(AudioService.IsSystemDefault)
-            ?? physical.FirstOrDefault(id => Ids.Equals(id, preferred)) ?? physical.FirstOrDefault();
+        string? primary = physical.FirstOrDefault(id => Ids.Equals(id, preferred))
+            ?? physical.FirstOrDefault(AudioService.IsSystemDefault)
+            ?? physical.FirstOrDefault();
         string[] oldExtras = LocalAppOutputMirrors.GetExtraOutputs(pid);
 #if SONICROUTE_PHONE
         var service = WindowsLinkHub.Service;

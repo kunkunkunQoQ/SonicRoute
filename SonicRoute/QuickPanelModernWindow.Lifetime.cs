@@ -20,14 +20,23 @@ namespace SonicRoute
         private Func<string?, int, (bool Applied, int Actual)> _writeEndpointVolume = SystemVolumeService.SetVolumePercentChecked;
         private Func<int, int, bool> _writeAppVolume = SessionVolumeService.SetVolumePercent;
 
-        private CoalescedVolumeWriter EnsureAppVolumeWriter() =>
-            _appVolumeWriter ??= new CoalescedVolumeWriter(Dispatcher, WriteAppVolumeChecked);
-
-        private (bool Applied, int Actual) WriteAppVolumeChecked(int pid, int percent)
+        // A click that reached the backend still commits after close. Only the UI wait is cancelled.
+        private Task<TResult> ReadbackAfterWriteAsync<TState, TResult>(TState state, Func<TState, TResult> write)
         {
-            if (_writeAppVolume == (Func<int, int, bool>)SessionVolumeService.SetVolumePercent)
-                return SessionVolumeService.SetVolumePercentChecked(pid, percent);
-            return (_writeAppVolume(pid, percent), percent);
+            var work = Task.Run(() => write(state));
+            App.ProtectAudioWriteFromTrim(work);
+            return _uiLifetime.ReadAsync(work);
+        }
+
+        private CoalescedVolumeWriter EnsureAppVolumeWriter()
+        {
+            if (_appVolumeWriter != null) return _appVolumeWriter;
+            // A committed native write can outlive the panel. Keep only its backend delegate.
+            var write = _writeAppVolume;
+            return _appVolumeWriter = new CoalescedVolumeWriter(Dispatcher,
+                write == (Func<int, int, bool>)SessionVolumeService.SetVolumePercent
+                    ? SessionVolumeService.SetVolumePercentChecked
+                    : (pid, percent) => (write(pid, percent), percent));
         }
 
         private int RegisterEndpointWrite(string? id)
@@ -123,6 +132,7 @@ namespace SonicRoute
             ++_loadVersion; ++_systemVolumeRequest; ++_globalMuteVersion; ++_micMuteVersion;
             // Pending slider changes are committed independently of UI cancellation.
             FlushPendingVolumes();
+            App.ProtectAudioWriteFromTrim(_volumeWriteTask);
             _appVolumeWriter?.Dispose();
             _appVolumeWriter = null;
             StopOutputVolumes();

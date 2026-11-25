@@ -153,7 +153,7 @@ internal static partial class Program
             using var lifetime = new CancellationTokenSource();
             var playerFactory = MakePlayer("session-1");
             var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null,
-                ["AirPlayFixture", true, playerFactory, watch, false, false], null)!;
+                ["AirPlayFixture", true, playerFactory, watch, false, false, false], null)!;
             var source = (IAsyncDisposable)Activator.CreateInstance(sourceType, instance, null,
                 ["Simulated iPhone", publish, (Action)(() => { }), playerFactory, watch, CancellationToken.None], null)!;
             var session = Activator.CreateInstance(sessionType, instance, null,
@@ -296,36 +296,95 @@ internal static partial class Program
                 Check(ActualOutput() == devA, "AirPlay A->B->A stays on actual A after intermediate B failure");
                 AssertAirPlayShown(row, "AirPlay A->B->A intermediate B failure does not overwrite newer A highlight", devA);
 
-                // 1f. Even with Ctrl or Shift held during click, AirPlay strictly remains single-select
+                // 1f. Ctrl+Click / Shift+Click multi-select on AirPlay (Windows + phone speaker) and single-click return
+                void AssertAirPlayShownMulti(object r, string desc, params string[] expectedIds)
+                {
+                    var winActive = panel.FindResource("DevButtonActive");
+                    var winIdle = panel.FindResource("DevButton");
+                    var devs = Devices(r);
+                    var active = devs.Where(d => ReferenceEquals(d.Button.Style, winActive)).Select(d => d.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var expected = expectedIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    Check(active.SetEquals(expected)
+                        && devs.All(d => d.Button.IsEnabled && (expected.Contains(d.Id) || ReferenceEquals(d.Button.Style, winIdle))),
+                        desc);
+                }
+                string[] ActualAirPlayOutputs() => ((IMultiOutputAudioSession)source).GetOutputs()
+                    .Select(id => id ?? system).ToArray();
+
+                Pill(row, devC).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                TakeReq(devC).Finish.SetResult(true);
+                Complete(Field<Task>(row, "PlaybackChange"));
+
                 var savedKeys = new byte[256];
                 if (!GetKeyboardState(savedKeys)) throw new IOException("Unable to read keyboard state.");
                 try
                 {
                     var ctrlKeys = (byte[])savedKeys.Clone();
                     ctrlKeys[0x11] = 0x80; // VK_CONTROL
+                    ctrlKeys[0xA2] = 0x80; // VK_LCONTROL (read by WPF Keyboard.Modifiers)
                     SetKeyboardState(ctrlKeys);
+
                     Pill(row, devB).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     var pendingCtrl = Field<object>(row, "PendingOutput");
                     var pendingCtrlOuts = (string[])pendingCtrl.GetType().GetProperty("Outputs")!.GetValue(pendingCtrl)!;
-                    Check(pendingCtrlOuts.Length == 1 && pendingCtrlOuts[0] == devB,
-                        "AirPlay with Ctrl held keeps single-output pending intent");
-                    AssertAirPlayShown(row, "AirPlay with Ctrl held strictly highlights only B (never multi-select)", devB);
+                    Check(pendingCtrlOuts.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, devB]),
+                        "AirPlay Ctrl+Click adds secondary output optimistically");
+                    AssertAirPlayShownMulti(row, "AirPlay Ctrl+Click highlights both C and B optimistically", devC, devB);
                     TakeReq(devB).Finish.SetResult(true);
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, devB]),
+                        "AirPlay Ctrl+Click confirms [devC, devB] via IMultiOutputAudioSession");
+                    AssertAirPlayShownMulti(row, "AirPlay Ctrl+Click keeps [devC, devB] highlighted after commit", devC, devB);
+
+                    Pill(row, phoneSpeaker).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AssertAirPlayShownMulti(row, "AirPlay Ctrl+Click adds phone speaker alongside Windows outputs", devC, devB, phoneSpeaker);
+                    TakeReq(phoneSpeaker).Finish.SetResult(true);
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, devB, phoneSpeaker]),
+                        "AirPlay confirms [devC, devB, phoneSpeaker]");
+
+                    Pill(row, phoneSpeaker).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Pill(row, devB).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC]),
+                        "AirPlay Ctrl+Click removes devB and phoneSpeaker cleanly back to [devC]");
+                    AssertAirPlayShown(row, "AirPlay Ctrl+Click removal leaves only C highlighted", devC);
+
+                    SetKeyboardState(savedKeys);
+                    Pill(row, devC).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     Complete(Field<Task>(row, "PlaybackChange"));
 
                     var shiftKeys = (byte[])savedKeys.Clone();
                     shiftKeys[0x10] = 0x80; // VK_SHIFT
+                    shiftKeys[0xA0] = 0x80; // VK_LSHIFT (read by WPF Keyboard.Modifiers)
                     SetKeyboardState(shiftKeys);
-                    Pill(row, devC).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                    var pendingShift = Field<object>(row, "PendingOutput");
-                    var pendingShiftOuts = (string[])pendingShift.GetType().GetProperty("Outputs")!.GetValue(pendingShift)!;
-                    Check(pendingShiftOuts.Length == 1 && pendingShiftOuts[0] == devC,
-                        "AirPlay with Shift held keeps single-output pending intent");
-                    AssertAirPlayShown(row, "AirPlay with Shift held strictly highlights only C (never multi-select)", devC);
-                    TakeReq(devC).Finish.SetResult(true);
+
+                    Pill(row, phoneSpeaker).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AssertAirPlayShownMulti(row, "AirPlay Shift+Click adds phone speaker range optimistically", devC, phoneSpeaker);
+                    TakeReq(phoneSpeaker).Finish.SetResult(true);
                     Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devC, phoneSpeaker]),
+                        "AirPlay Shift+Click confirms [devC, phoneSpeaker]");
+
+                    Pill(row, devA).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    AssertAirPlayShownMulti(row, "AirPlay Shift+Click adds contiguous range while preserving existing selection", devA, devB, devC, phoneSpeaker);
+                    TakeReq(devA).Finish.SetResult(true);
+                    TakeReq(devB).Finish.SetResult(true);
+                    Complete(Field<Task>(row, "PlaybackChange"));
+                    Check(ActualAirPlayOutputs().ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals([devA, devB, devC, phoneSpeaker]),
+                        "AirPlay Shift+Click confirms contiguous range plus preserved selection");
+                    AssertAirPlayShownMulti(row, "AirPlay Shift+Click keeps all selected outputs highlighted after commit", devA, devB, devC, phoneSpeaker);
                 }
                 finally { SetKeyboardState(savedKeys); }
+
+                Pill(row, devA).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                AssertAirPlayShown(row, "AirPlay single Click returns optimistically to A", devA);
+                TakeReq(devA).Finish.SetResult(true);
+                Complete(Field<Task>(row, "PlaybackChange"));
+                Check(ActualAirPlayOutputs().SequenceEqual([devA], StringComparer.OrdinalIgnoreCase),
+                    "AirPlay single Click confirms return to single selection A");
+                AssertAirPlayShown(row, "AirPlay single Click keeps only A highlighted after commit", devA);
 
                 // 1g. Device disconnect (removed from _outputDisplay while pending or before write)
                 // Case 1: queued behind blocked B, then C is removed from _outputDisplay before C's write starts
@@ -501,6 +560,7 @@ internal static partial class Program
             var panel = new QuickPanelModernWindow();
             var type = typeof(QuickPanelModernWindow);
             var activeStyle = panel.FindResource("DevButtonActive");
+            var mirrorStyle = panel.FindResource("DevButtonMirror");
             var idleStyle = panel.FindResource("DevButton");
             var rows = (IDictionary)type.GetField("_rows", Hidden)!.GetValue(panel)!;
 
@@ -509,11 +569,23 @@ internal static partial class Program
             static List<(Button Button, string Id, EDataFlow Flow)> Buttons(object row) => Field<List<(Button, string, EDataFlow)>>(row, "DeviceButtons");
             static Button DevBtn(object row, string id, EDataFlow flow) => Buttons(row).Single(b => b.Id == id && b.Flow == flow).Button;
             bool IsActive(Button b) => ReferenceEquals(b.Style, activeStyle);
+            bool IsMirror(Button b) => ReferenceEquals(b.Style, mirrorStyle);
             void AssertFlow(object row, EDataFlow flow, string desc, params string[] expected)
             {
                 var btns = Buttons(row).Where(b => b.Flow == flow).ToList();
                 var active = btns.Where(b => IsActive(b.Button)).Select(b => b.Id).ToHashSet();
-                Check(active.SetEquals(expected)
+                if (flow == EDataFlow.eCapture)
+                {
+                    Check(active.SetEquals(expected)
+                        && btns.All(b => b.Button.IsEnabled && (expected.Contains(b.Id) || ReferenceEquals(b.Button.Style, idleStyle))),
+                        desc);
+                    return;
+                }
+                var expectedActive = expected.Length == 0 ? new HashSet<string>() : new HashSet<string> { expected[0] };
+                var expectedMirrors = expected.Skip(1).ToHashSet();
+                var mirrors = btns.Where(b => IsMirror(b.Button)).Select(b => b.Id).ToHashSet();
+                Check(active.SetEquals(expectedActive)
+                    && mirrors.SetEquals(expectedMirrors)
                     && btns.All(b => b.Button.IsEnabled && (expected.Contains(b.Id) || ReferenceEquals(b.Button.Style, idleStyle))),
                     desc);
             }
@@ -567,7 +639,9 @@ internal static partial class Program
                 var w = new PcWrite(desired, preferred, Stopwatch.GetTimestamp());
                 outWrites.Writer.TryWrite(w);
                 if (!await w.Finish.Task.WaitAsync(deadline.Token)) return (false, -1, "Simulated output rejection");
-                actualOut[(int)appInfo.ProcessId] = (desired.Contains(sysOut) ? sysOut : preferred ?? desired[0], desired);
+                string nextPrimary = preferred != null && desired.Contains(preferred, StringComparer.OrdinalIgnoreCase) ? preferred
+                    : desired.Contains(sysOut, StringComparer.OrdinalIgnoreCase) ? sysOut : desired[0];
+                actualOut[(int)appInfo.ProcessId] = (nextPrimary, desired);
                 return (true, 0, "");
             }));
 
@@ -645,18 +719,18 @@ internal static partial class Program
                 AssertFlow(row1, EDataFlow.eRender, "output Ctrl multi-select stays active while mic is pending", outA, outB);
                 var holdMicB = TakeMic(pid1, micB);
 
-                // Range-select outB..outC via Shift while micB is still blocked
+                // Range-select outB..outC via Shift while keeping existing outA and while micB is still blocked
                 Task outShiftTask = ClickOut(row1, outC, ModifierKeys.Shift);
-                AssertFlow(row1, EDataFlow.eRender, "output Shift range updates independently while micB is blocked", outB, outC);
+                AssertFlow(row1, EDataFlow.eRender, "output Shift range preserves outA and updates independently while micB is blocked", outA, outB, outC);
                 AssertFlow(row1, EDataFlow.eCapture, "output Shift leaves pending micB intact", micB);
 
                 holdOutCtrl.Finish.SetResult(true);
-                TakeOut([outB, outC], outB).Finish.SetResult(true);
+                TakeOut([outA, outB, outC], outA).Finish.SetResult(true);
                 Complete(outShiftTask);
                 AssertFlow(row1, EDataFlow.eCapture, "output completion does not disturb still-pending micB", micB);
                 holdMicB.Finish.SetResult(true);
                 Complete(Field<Task>(row1, "InputChange"));
-                AssertFlow(row1, EDataFlow.eRender, "both output multi-select and mic confirmed independently (render)", outB, outC);
+                AssertFlow(row1, EDataFlow.eRender, "both output multi-select and mic confirmed independently (render)", outA, outB, outC);
                 AssertFlow(row1, EDataFlow.eCapture, "both output multi-select and mic confirmed independently (capture)", micB);
 
                 // 2f. Different PC apps (pid1, pid2) switching concurrently do not interfere
@@ -762,7 +836,7 @@ internal static partial class Program
             using var transport = new TcpClient();
             using var lifetime = new CancellationTokenSource();
             var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null,
-                ["NameFixture", true, apPlayerFactory, watch, false, false], null)!;
+                ["NameFixture", true, apPlayerFactory, watch, false, false, false], null)!;
             var apSource = (IAsyncDisposable)Activator.CreateInstance(airPlaySourceType, instance, null,
                 ["AirPlay Player", publishAirPlay, (Action)(() => { }), apPlayerFactory, watch, CancellationToken.None], null)!;
             var apSession = Activator.CreateInstance(sessionType, instance, null,
@@ -805,7 +879,9 @@ internal static partial class Program
                 var w = new PcWrite(desired, preferred, Stopwatch.GetTimestamp());
                 pcWrites.Writer.TryWrite(w);
                 if (!await w.Finish.Task.WaitAsync(deadline.Token)) return (false, -1, "PC name test failure");
-                Volatile.Write(ref pcActual, new PcRoute(desired.Contains(system) ? system : preferred ?? desired[0], desired));
+                string nextPrimary = preferred != null && desired.Contains(preferred, StringComparer.OrdinalIgnoreCase) ? preferred
+                    : desired.Contains(system, StringComparer.OrdinalIgnoreCase) ? system : desired[0];
+                Volatile.Write(ref pcActual, new PcRoute(nextPrimary, desired));
                 return (true, 0, "");
             }));
 
@@ -857,24 +933,45 @@ internal static partial class Program
                 wPcB.Result.Finish.SetResult(false);
                 Complete(pcClickB);
                 Check(RowName(pcRow) == "Speakers A", "PC failure rolls back row.Name.Text to actual 'Speakers A'");
-                // Multi-output primary rule: Ctrl-add pcOutB keeps current primary pcOutA; Ctrl-add system promotes system · default
+                // Multi-output primary rule: Ctrl-add pcOutB or system keeps current primary pcOutA; Ctrl+Shift promotes system · default
+                var pcActiveStyle = panel.FindResource("DevButtonActive");
+                var pcMirrorStyle = panel.FindResource("DevButtonMirror");
                 Task pcCtrlB = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
                     [pcRow, PcBtn(pcRow, pcOutB).Tag, ModifierKeys.Control])!;
-                Check(RowName(pcRow) == "Speakers A", "PC Ctrl-add secondary physical keeps current primary 'Speakers A'");
+                Check(RowName(pcRow) == "Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC Ctrl-add secondary physical keeps current primary 'Speakers A' and sets DevButtonMirror");
                 Task pcCtrlSys = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
                     [pcRow, PcBtn(pcRow, system).Tag, ModifierKeys.Control])!;
-                Check(RowName(pcRow) == "System Default · Speakers A",
-                    "PC Ctrl-add system default promotes 'System Default · Speakers A' as primary name");
+                Check(RowName(pcRow) == "Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, system).Style, pcMirrorStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC Ctrl-add system default keeps current primary 'Speakers A' as DevButtonActive and adds system as DevButtonMirror");
+                Task pcNativeSys = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
+                    [pcRow, PcBtn(pcRow, system).Tag, ModifierKeys.Control | ModifierKeys.Shift])!;
+                Check(RowName(pcRow) == "System Default · Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, system).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcMirrorStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC Ctrl+Shift-click system default immediately promotes 'System Default · Speakers A' to DevButtonActive while physical outputs become DevButtonMirror");
                 var w1 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w1); w1.Result.Finish.SetResult(true);
                 var w2 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w2); w2.Result.Finish.SetResult(true);
-                Complete(pcCtrlSys);
-                Check(RowName(pcRow) == "System Default · Speakers A", "PC multi-output success reconciles with actual route");
+                var w3 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w3); w3.Result.Finish.SetResult(true);
+                Complete(pcNativeSys);
+                Check(RowName(pcRow) == "System Default · Speakers A"
+                    && ReferenceEquals(PcBtn(pcRow, system).Style, pcActiveStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutA).Style, pcMirrorStyle)
+                    && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcMirrorStyle),
+                    "PC multi-output success reconciles with actual route");
                 // Switch PC to pcOutB and confirm reconciliation
                 Task pcFinalB = (Task)panelType.GetMethod("QueuePlaybackClickAsync", Hidden)!.Invoke(panel,
                     [pcRow, PcBtn(pcRow, pcOutB).Tag, ModifierKeys.None])!;
-                var w3 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w3); w3.Result.Finish.SetResult(true);
+                var w4 = pcWrites.Reader.ReadAsync(deadline.Token).AsTask(); Complete(w4); w4.Result.Finish.SetResult(true);
                 Complete(pcFinalB);
-                Check(RowName(pcRow) == "Headphones B", "PC single output success reconciles row.Name.Text to 'Headphones B'");
+                Check(RowName(pcRow) == "Headphones B" && ReferenceEquals(PcBtn(pcRow, pcOutB).Style, pcActiveStyle),
+                    "PC single output success reconciles row.Name.Text to 'Headphones B'");
 
                 // 3b. Android (IMultiOutputAudioSession) with ShowOutputName = true
                 Check(RowName(andRow) == "System Default · Speakers A",
@@ -1152,7 +1249,7 @@ internal static partial class Program
             using var transport = new TcpClient();
             using var lifetime = new CancellationTokenSource();
             var receiver = (IAsyncDisposable)Activator.CreateInstance(receiverType, instance, null,
-                ["PerfFixture", true, playerFactory, watch, false, false], null)!;
+                ["PerfFixture", true, playerFactory, watch, false, false, false], null)!;
             var apSource = (IAsyncDisposable)Activator.CreateInstance(sourceType, instance, null,
                 ["Perf AirPlay", publish, (Action)(() => { }), playerFactory, watch, CancellationToken.None], null)!;
             var session = Activator.CreateInstance(sessionType, instance, null,

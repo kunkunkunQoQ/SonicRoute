@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 package org.sonicroute.android.platform;
 
+import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.content.AttributionSource;
 import android.content.ClipData;
@@ -54,6 +55,8 @@ public final class AndroidSystemPlatform {
     private static IInterface packageManager;
     private static IInterface statusBarService;
     private static android.hardware.input.InputManager inputManager;
+    private static volatile Method setDisplayIdMethod;
+    private static volatile Method injectInputEventMethod;
     private static long lastInjectEventsWarnMs;
 
     private AndroidSystemPlatform() {
@@ -172,19 +175,28 @@ public final class AndroidSystemPlatform {
             return -1;
         }
         try {
-            ApplicationInfo appInfo = null;
+            int userId = getCurrentUserId();
+            ApplicationInfo appInfo;
             try {
                 Method m = pm.getClass().getMethod("getApplicationInfo", String.class, long.class, int.class);
-                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0L, 0);
+                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0L, userId);
             } catch (NoSuchMethodException fallback) {
                 Method m = pm.getClass().getMethod("getApplicationInfo", String.class, int.class, int.class);
-                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0, 0);
+                appInfo = (ApplicationInfo) m.invoke(pm, packageName, 0, userId);
             }
-            return appInfo != null ? appInfo.uid : -1;
+            if (appInfo == null) {
+                return -1;
+            }
+            String[] packages = (String[]) pm.getClass().getMethod("getPackagesForUid", int.class).invoke(pm, appInfo.uid);
+            return packages != null && packages.length == 1 && packageName.equals(packages[0]) ? appInfo.uid : -1;
         } catch (Throwable error) {
             ServerLog.d("Could not resolve UID for " + packageName + ": " + error.getMessage());
             return -1;
         }
+    }
+
+    public static int getCurrentUserId() throws ReflectiveOperationException {
+        return (int) ActivityManager.class.getMethod("getCurrentUser").invoke(null);
     }
 
     public static boolean startApp(String packageSpec, int displayId, boolean defaultForceStop) {
@@ -408,7 +420,12 @@ public final class AndroidSystemPlatform {
     public static boolean injectInputEvent(InputEvent event, int displayId, int mode) {
         if (displayId != 0) {
             try {
-                InputEvent.class.getMethod("setDisplayId", int.class).invoke(event, displayId);
+                Method setDisplayId = setDisplayIdMethod;
+                if (setDisplayId == null) {
+                    setDisplayId = InputEvent.class.getMethod("setDisplayId", int.class);
+                    setDisplayIdMethod = setDisplayId;
+                }
+                setDisplayId.invoke(event, displayId);
             } catch (Throwable error) {
                 ServerLog.w("Could not bind input event to display " + displayId, error);
                 return false;
@@ -416,7 +433,11 @@ public final class AndroidSystemPlatform {
         }
         try {
             android.hardware.input.InputManager im = getInputManager();
-            Method inject = android.hardware.input.InputManager.class.getMethod("injectInputEvent", InputEvent.class, int.class);
+            Method inject = injectInputEventMethod;
+            if (inject == null) {
+                inject = android.hardware.input.InputManager.class.getMethod("injectInputEvent", InputEvent.class, int.class);
+                injectInputEventMethod = inject;
+            }
             return (boolean) inject.invoke(im, event, mode);
         } catch (InvocationTargetException error) {
             Throwable cause = error.getCause();

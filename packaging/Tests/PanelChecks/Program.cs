@@ -158,6 +158,12 @@ internal static partial class Program
             }
             app.Resources = ProductResources();
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            if (args.Contains("--main-idle-ui"))
+            {
+                CheckMainIdleUi();
+                Console.WriteLine($"RESULT passed={_checks} MAIN_IDLE_UI=true AUDIO_WRITES=NONE");
+                return 0;
+            }
             if (args.Contains("--mic-osd-persistence"))
             {
                 CheckMicOsdPersistence();

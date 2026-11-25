@@ -160,7 +160,57 @@ internal static partial class Program
         await source.PhoneRemovedAsync(device).WaitAsync(lifetime.Token);
         Check(source.State.State == CaptureState.Receiving && source.State.OutputId == null && defaultWatches == 1,
             "removing the selected Android device releases its renderer and resumes Windows output");
+
+        var multi = (IMultiOutputAudioSession)source;
+        source.SetMute(false);
+        source.SetVolume(55);
+        source.SetRemoteVolume(-6.0);
+        int winCountBefore = windowsPlayers.Count;
+        var primaryWin = windowsPlayers[^1];
+        int speakerBefore = server.ReceivedFor("speaker").Length;
+        await multi.SetOutputsAsync([null, "win-extra", speaker, "WIN-EXTRA"]).WaitAsync(lifetime.Token);
+        await multi.SetOutputsAsync([null, "win-extra", speaker]).WaitAsync(lifetime.Token);
+        var mirrorWin = windowsPlayers[^1];
+        Check(!primaryWin.Disposed && windowsPlayers.Count == winCountBefore + 1 && defaultWatches == 1
+            && multi.GetOutputs().SequenceEqual([null, "win-extra", speaker])
+            && Math.Abs(mirrorWin.Pcm.Volume - 0.55f) < 0.001f
+            && Math.Abs(mirrorWin.Pcm.HeaderGain - pcmSource!.HeaderGain) < 0.0001f,
+            "AirPlay multi-output adds mirrors without recreating primary Windows output and suppresses duplicates");
+        source.SetRemoteVolume(0.0);
+        source.SetMute(true);
+        Check(mirrorWin.Pcm.Volume == 0 && Math.Abs(mirrorWin.Pcm.HeaderGain - 1f) < 0.0001f,
+            "AirPlay mute and remote volume sync across mirror outputs");
+        source.SetMute(false);
+        long primaryNonSilentBefore = pcmSource!.NonSilentSamplesWritten;
+        long mirrorNonSilentBefore = mirrorWin.Pcm.NonSilentSamplesWritten;
+        source.Write(Enumerable.Repeat(0.35f, 1920).ToArray(), AndroidPcmSource.SampleRate);
+        await server.WaitForLocalAbstractBytesAsync(silentBytes + 11520 + 7680, TimeSpan.FromSeconds(2));
+        Check(pcmSource.NonSilentSamplesWritten == primaryNonSilentBefore + 1920
+            && mirrorWin.Pcm.NonSilentSamplesWritten == mirrorNonSilentBefore + 1920
+            && server.ReceivedFor("speaker").Skip(speakerBefore + 3840).Any(v => v != 0),
+            "one AirPlay Write fans out non-zero PCM simultaneously to primary, Windows mirror, and Android speaker");
+        source.Write(Enumerable.Repeat(0.25f, 4800).ToArray(), AndroidPcmSource.SampleRate);
+        source.Flush();
+        Check(source.BufferedSamples == 0 && mirrorWin.Pcm.BufferedSamples == 0,
+            "AirPlay Flush clears both primary and mirror PCM buffers");
+        await source.PhoneRemovedAsync(device).WaitAsync(lifetime.Token);
+        Check(source.State.State == CaptureState.Receiving && !primaryWin.Disposed && !mirrorWin.Disposed
+            && multi.GetOutputs().SequenceEqual([null, "win-extra"]),
+            "removing a mirrored phone drops only the phone mirror while keeping Windows outputs active");
+        await multi.SetOutputsAsync([speaker, "win-extra"]).WaitAsync(lifetime.Token);
+        Check(source.State.OutputId == speaker && defaultWatches == 0 && !mirrorWin.Disposed
+            && multi.GetOutputs().SequenceEqual([speaker, "win-extra"]),
+            "switching primary to phone preserves the Windows mirror and stops default-output watch");
+        await source.PhoneRemovedAsync(device).WaitAsync(lifetime.Token);
+        var promotedWin = windowsPlayers[^1];
+        Check(source.State.State == CaptureState.Receiving && source.State.OutputId == "win-extra"
+            && multi.GetOutputs().SequenceEqual(["win-extra"]) && !promotedWin.Disposed && mirrorWin.Disposed,
+            "removing a primary phone promotes the surviving Windows mirror without ending AirPlay");
+        await multi.SetOutputsAsync(["win-extra", speaker]).WaitAsync(lifetime.Token);
         await source.SetOutputAsync(speaker).WaitAsync(lifetime.Token);
+        Check(promotedWin.Disposed && windowsPlayers[^1].Disposed,
+            "rapid multi-output add/remove retires unused mirrors cleanly");
+
         Volatile.Write(ref expectFallback, true);
         server.Disconnect();
         await restored.Task.WaitAsync(lifetime.Token);
@@ -180,6 +230,7 @@ internal static partial class Program
     {
         private CancellationTokenSource? _stop;
         private Task? _consume;
+        internal AndroidPcmSource Pcm => pcm;
         internal bool Disposed { get; private set; }
         public void Play()
         {

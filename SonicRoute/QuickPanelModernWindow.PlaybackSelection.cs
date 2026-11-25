@@ -16,13 +16,11 @@ namespace SonicRoute;
 
 public partial class QuickPanelModernWindow
 {
-    private record PlaybackIntent(string[] Outputs, string? Anchor);
+    internal record PlaybackIntent(string[] Outputs, string? Anchor, string? PreferredPrimary = null);
     private sealed record PendingInputIntent(string DeviceId);
 
     private Func<int, string?, HashSet<string>> _readRowPlaybackOutputs = AppPlaybackOutputs.GetSelected;
-    private Func<AudioAppInfo, string[], string?, Task<(bool Success, int HResult, string Message)>> _setRowPlaybackOutputs =
-        static (app, outputs, primary) => AppPlaybackOutputs.SetAsync(app, outputs, primary,
-            allowSpeakerMute: !outputs.Any(ApplicationAudio.IsWindowsLinkOutputDevice));
+    private Func<AudioAppInfo, string[], string?, Task<(bool Success, int HResult, string Message)>> _setRowPlaybackOutputs = AppPlaybackOutputs.SetSelectedAsync;
     private Func<AudioAppInfo, EDataFlow, string, (bool Success, int HResult, string Message)> _applyRowEndpoint = ApplicationAudio.ApplyEndpoint;
 
 #if !SONICROUTE_PHONE
@@ -46,6 +44,9 @@ public partial class QuickPanelModernWindow
         if (!Current()) return Task.CompletedTask;
         var order = row.DeviceButtons.Where(entry => entry.Flow == EDataFlow.eRender).Select(entry => entry.Id).ToArray();
         if (!order.Contains(device.Id, StringComparer.OrdinalIgnoreCase)) return Task.CompletedTask;
+        if (modifiers.HasFlag(ModifierKeys.Control) && modifiers.HasFlag(ModifierKeys.Shift)
+            && ApplicationAudio.IsExternalOutputDevice(device.Id))
+            return Task.CompletedTask;
         if (!Available(device.Id))
         {
             ShowOsd(AppDisplayName.Get(row.App), L10n.T("Ov.CurrentUnavailable"));
@@ -55,7 +56,7 @@ public partial class QuickPanelModernWindow
         var pending = row.PendingPlayback;
         var request = CreatePlaybackIntent(order,
             pending?.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? row.ConfirmedPlayback,
-            device.Id, pending?.Anchor ?? row.PlaybackAnchor, modifiers);
+            device.Id, pending?.Anchor ?? row.PlaybackAnchor, modifiers, pending?.PreferredPrimary);
         var required = request.Outputs.Where(Available).ToArray();
         return QueueApply(false);
 
@@ -87,11 +88,11 @@ public partial class QuickPanelModernWindow
                     return;
                 }
 
-                string preferred = request.Outputs.Contains(before.Output, StringComparer.OrdinalIgnoreCase) ? before.Output : request.Outputs[0];
+                string preferred = SelectOptimisticPrimaryOutput(request.Outputs, request.PreferredPrimary ?? before.Output, preferPhysical: true);
                 MarkLastUsed(row.App);
-                var result = speakerConsent
-                    ? await AppPlaybackOutputs.SetAsync(row.App, request.Outputs, preferred, allowSpeakerMute: true)
-                    : await _setRowPlaybackOutputs(row.App, request.Outputs, preferred);
+                var result = await _uiLifetime.ReadAsync(speakerConsent
+                    ? AppPlaybackOutputs.SetAsync(row.App, request.Outputs, preferred, allowSpeakerMute: true)
+                    : _setRowPlaybackOutputs(row.App, request.Outputs, preferred));
                 applied = result.Success;
                 if (!Current()) return;
                 if (applied)
@@ -148,7 +149,7 @@ public partial class QuickPanelModernWindow
                             if (applied)
                             {
                                 row.ConfirmedPlayback = request.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase);
-                                row.OutputId = SelectOptimisticPrimaryOutput(request.Outputs, row.OutputId, preferPhysical: true);
+                                row.OutputId = SelectOptimisticPrimaryOutput(request.Outputs, request.PreferredPrimary ?? row.OutputId, preferPhysical: true);
                             }
                         }
                         row.PendingPlayback = null;
@@ -179,11 +180,29 @@ public partial class QuickPanelModernWindow
         UpdateRowName(row, output);
     }
 
+    private static string? GetLocalNativeOutput(AppRow row, HashSet<string> selected)
+    {
+        if (row.PendingPlayback is { } pending)
+        {
+            string optimistic = SelectOptimisticPrimaryOutput(pending.Outputs, pending.PreferredPrimary ?? row.OutputId, preferPhysical: true);
+            return !ApplicationAudio.IsExternalOutputDevice(optimistic) && selected.Contains(optimistic) ? optimistic : null;
+        }
+        return row.OutputId is { } output && !ApplicationAudio.IsExternalOutputDevice(output) && selected.Contains(output)
+            ? output : null;
+    }
+
     private void UpdateLocalPlaybackSelection(AppRow row)
     {
         var selected = row.PendingPlayback?.Outputs.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? row.ConfirmedPlayback;
+        string? native = GetLocalNativeOutput(row, selected);
         foreach (var item in row.DeviceButtons)
-            if (item.Flow == EDataFlow.eRender) SetRowDeviceSelection(item.Button, item.Id, selected.Contains(item.Id) ? item.Id : "");
+        {
+            if (item.Flow != EDataFlow.eRender) continue;
+            string style = !selected.Contains(item.Id) ? "DevButton"
+                : native != null && string.Equals(item.Id, native, StringComparison.OrdinalIgnoreCase) ? "DevButtonActive"
+                : "DevButtonMirror";
+            SetRowDeviceStyle(item.Button, style);
+        }
     }
 
     private void ConfirmLocalInput(AppRow row, int read, string? input)
@@ -237,7 +256,8 @@ public partial class QuickPanelModernWindow
                     return;
                 }
                 MarkLastUsed(row.App);
-                var (ok, _, msg) = await Task.Run(() => _applyRowEndpoint(row.App, EDataFlow.eCapture, request.DeviceId));
+                var (ok, _, msg) = await ReadbackAfterWriteAsync((Write: _applyRowEndpoint, row.App, request.DeviceId),
+                    static state => state.Write(state.App, EDataFlow.eCapture, state.DeviceId));
                 applied = ok;
                 if (!Current()) return;
                 if (ok)
@@ -287,38 +307,43 @@ public partial class QuickPanelModernWindow
         if (outputs.Count == 0)
             return AudioService.SystemDefaultDeviceId;
 
-        string? first = null;
-        string? matchedCurrent = null;
-        for (int i = 0; i < outputs.Count; i++)
+        string? Pick(bool filtered)
         {
-            string id = outputs[i];
-            if (preferPhysical && ApplicationAudio.IsExternalOutputDevice(id)) continue;
-            if (lowPriorityId != null && string.Equals(id, lowPriorityId, StringComparison.OrdinalIgnoreCase)) continue;
-            if (AudioService.IsSystemDefault(id)) return id;
-            first ??= id;
-            if (currentOutputId != null && string.Equals(id, currentOutputId, StringComparison.OrdinalIgnoreCase))
-                matchedCurrent = id;
+            string? first = null;
+            string? matchedCurrent = null;
+            string? systemDefault = null;
+            for (int i = 0; i < outputs.Count; i++)
+            {
+                string id = outputs[i];
+                if (filtered)
+                {
+                    if (preferPhysical && ApplicationAudio.IsExternalOutputDevice(id)) continue;
+                    if (lowPriorityId != null && string.Equals(id, lowPriorityId, StringComparison.OrdinalIgnoreCase)) continue;
+                }
+                if (!preferPhysical && AudioService.IsSystemDefault(id)) return id;
+                first ??= id;
+                if (AudioService.IsSystemDefault(id)) systemDefault ??= id;
+                if (currentOutputId != null && string.Equals(id, currentOutputId, StringComparison.OrdinalIgnoreCase))
+                    matchedCurrent = id;
+            }
+            return matchedCurrent ?? systemDefault ?? first;
         }
-        if (matchedCurrent != null) return matchedCurrent;
-        if (first != null) return first;
 
-        for (int i = 0; i < outputs.Count; i++)
-        {
-            string id = outputs[i];
-            if (AudioService.IsSystemDefault(id)) return id;
-            first ??= id;
-            if (currentOutputId != null && string.Equals(id, currentOutputId, StringComparison.OrdinalIgnoreCase))
-                matchedCurrent = id;
-        }
-        return matchedCurrent ?? first ?? AudioService.SystemDefaultDeviceId;
+        return Pick(filtered: true) ?? Pick(filtered: false) ?? AudioService.SystemDefaultDeviceId;
     }
 
-    private static PlaybackIntent CreatePlaybackIntent(string[] order, HashSet<string> selected, string clicked, string? anchor, ModifierKeys modifiers)
+    internal static PlaybackIntent CreatePlaybackIntent(string[] order, HashSet<string> selected, string clicked,
+        string? anchor, ModifierKeys modifiers, string? priorPreferred = null)
     {
         var outputs = SelectPlaybackRange(order, selected, clicked, anchor, modifiers);
         if (outputs.Length == 0) outputs = [AudioService.SystemDefaultDeviceId];
-        if (!modifiers.HasFlag(ModifierKeys.Shift) || anchor == null) anchor = clicked;
-        return new PlaybackIntent(outputs, anchor);
+        bool extend = modifiers.HasFlag(ModifierKeys.Shift);
+        bool toggle = modifiers.HasFlag(ModifierKeys.Control);
+        string nextAnchor = extend && !toggle ? anchor ?? clicked : clicked;
+        string? preferredPrimary = extend && toggle ? clicked
+            : !extend && !toggle ? (!ApplicationAudio.IsExternalOutputDevice(clicked) ? clicked : null)
+            : priorPreferred != null && outputs.Contains(priorPreferred, StringComparer.OrdinalIgnoreCase) ? priorPreferred : null;
+        return new PlaybackIntent(outputs, nextAnchor, preferredPrimary);
     }
 
 #if SONICROUTE_PHONE
@@ -347,19 +372,24 @@ public partial class QuickPanelModernWindow
         bool toggle = modifiers.HasFlag(ModifierKeys.Control);
         if (!extend && !toggle) return [clicked];
         var result = new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase);
-        if (extend)
+        if (extend && toggle)
         {
-            anchor ??= order.FirstOrDefault(selected.Contains);
+            result.Add(clicked);
+        }
+        else if (extend)
+        {
+            anchor ??= order.FirstOrDefault(result.Contains);
             int start = Array.FindIndex(order, id => string.Equals(id, anchor, StringComparison.OrdinalIgnoreCase));
             int end = Array.FindIndex(order, id => string.Equals(id, clicked, StringComparison.OrdinalIgnoreCase));
-            if (!toggle) result.Clear();
             if (start < 0 || end < 0) result.Add(clicked);
             else for (int i = Math.Min(start, end); i <= Math.Max(start, end); i++) result.Add(order[i]);
         }
-        else if (!result.Remove(clicked)) result.Add(clicked);
+        else if (!result.Remove(clicked))
+        {
+            result.Add(clicked);
+        }
         var visible = order.Where(result.Contains);
-        // Ctrl preserves active outputs even when a device is hidden from this panel.
-        return toggle ? visible.Concat(selected.Where(id => result.Contains(id) && !order.Contains(id, StringComparer.OrdinalIgnoreCase))).ToArray()
-            : visible.ToArray();
+        // Modifier selections preserve active outputs even when a device is hidden from this panel.
+        return visible.Concat(selected.Where(id => result.Contains(id) && !order.Contains(id, StringComparer.OrdinalIgnoreCase))).ToArray();
     }
 }

@@ -60,26 +60,6 @@ internal static partial class Program
         finally { SetKeyboardState(saved); }
     }
 
-    private static void CheckPlaybackRange()
-    {
-        const BindingFlags statics = BindingFlags.Static | BindingFlags.NonPublic;
-        var select = typeof(QuickPanelModernWindow).GetMethod("SelectPlaybackRange", statics)!
-            .CreateDelegate<Func<string[], HashSet<string>, string, string?, ModifierKeys, string[]>>();
-        string[] order = ["System", "Headset", "Speakers", "KUN"];
-        string[] Pick(string[] selected, string clicked, string? anchor, ModifierKeys modifiers) =>
-            select(order, new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase), clicked, anchor, modifiers);
-        Check(Pick(["System"], "KUN", null, ModifierKeys.Control).SequenceEqual(["System", "KUN"])
-            && Pick(["System", "KUN"], "System", "KUN", ModifierKeys.Control).SequenceEqual(["KUN"])
-            && Pick(["Headset", "KUN"], "System", "KUN", ModifierKeys.None).SequenceEqual(["System"]),
-            "Ctrl toggles only the clicked output and a plain click replaces the selection");
-        Check(Pick(["System", "KUN"], "Headset", "KUN", ModifierKeys.Shift).SequenceEqual(["Headset", "Speakers", "KUN"])
-            && Pick(["Headset"], "KUN", null, ModifierKeys.Shift).SequenceEqual(["Headset", "Speakers", "KUN"]),
-            "Shift replaces the selection with the full inclusive range in either direction");
-        Check(Pick(["System", "Speakers"], "KUN", "Speakers", ModifierKeys.Control | ModifierKeys.Shift)
-                .SequenceEqual(["System", "Speakers", "KUN"]),
-            "Ctrl+Shift adds the contiguous range and preserves previously selected outputs outside it");
-    }
-
     private sealed class PushSpeakerLease(Action ended) : IPcProcessSilenceLease
     {
         public void Release(bool restorePreviousEndpoint) => Dispose();
@@ -161,9 +141,15 @@ internal static partial class Program
             bool HasActiveOutputs(params string[] expected)
             {
                 var buttons = Descendants<Button>(visual).Where(b => b.Tag is AudioDeviceInfo { Flow: EDataFlow.eRender }).ToArray();
-                return buttons.Any(b => ((AudioDeviceInfo)b.Tag).Id == remoteId) && buttons.All(b => b.IsEnabled)
-                    && buttons.Where(b => b.Style == panel.FindResource("DevButtonActive")).Select(b => ((AudioDeviceInfo)b.Tag).Id)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(expected);
+                return buttons.Any(b => ((AudioDeviceInfo)b.Tag).Id == remoteId)
+                    && expected.All(id => buttons.Any(b => ((AudioDeviceInfo)b.Tag).Id == id))
+                    && buttons.All(b =>
+                    {
+                        string id = ((AudioDeviceInfo)b.Tag).Id;
+                        string style = !expected.Contains(id) ? "DevButton"
+                            : id == localId ? "DevButtonActive" : "DevButtonMirror";
+                        return b.IsEnabled && b.Style == panel.FindResource(style);
+                    });
             }
             Until(() => HasActiveOutputs(localId));
             bool displayedWarning = false;
