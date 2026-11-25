@@ -69,7 +69,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         NoActivate = false;
     }
 
-    internal void ApplyTheme(UiThemePalette theme)
+    internal override void ApplyTheme(UiThemePalette theme)
     {
         _theme = theme;
         if (IsVisible) Invalidate();
@@ -440,7 +440,14 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
         var hit = _hit.HitTest(e.X, e.Y);
         if (hit is null || hit.Value.Id != active) { Invalidate(); return; }
 
-        if (hit.Value.Id.StartsWith("ov.def:", StringComparison.Ordinal) && TryGetDeviceIndex(hit.Value.Id.AsSpan(7), out int dIdx))
+        ActivateFocused(hit.Value, e);
+    }
+
+    protected override UiHitMap InputMap => _hit;
+
+    protected override bool ActivateFocused(UiHitItem item, UiPointerEventArgs e)
+    {
+        if (item.Id.StartsWith("ov.def:", StringComparison.Ordinal) && TryGetDeviceIndex(item.Id.AsSpan(7), out int dIdx))
         {
             if (dIdx >= 0 && dIdx < _rows.Count)
             {
@@ -456,7 +463,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 });
             }
         }
-        else if (hit.Value.Id.StartsWith("ov.mute:", StringComparison.Ordinal) && TryGetDeviceIndex(hit.Value.Id.AsSpan(8), out int mIdx))
+        else if (item.Id.StartsWith("ov.mute:", StringComparison.Ordinal) && TryGetDeviceIndex(item.Id.AsSpan(8), out int mIdx))
         {
             if (mIdx >= 0 && mIdx < _rows.Count && _rows[mIdx].Available)
             {
@@ -482,30 +489,34 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
                 });
             }
         }
+        return true;
     }
 
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
     {
         var hit = _hit.HitTest(xDip, yDip);
-        if (hit is { } h && h.Id.StartsWith("ov.vol:", StringComparison.Ordinal) && TryGetDeviceIndex(h.Id.AsSpan(7), out int idx))
-        {
-            if (idx >= 0 && idx < _rows.Count && _rows[idx].Available)
-            {
-                int step = Math.Clamp(_config.VolumeStep, 1, 20);
-                int next = Math.Clamp(_rows[idx].Volume + (delta > 0 ? step : -step), 0, 100);
-                _rows[idx].Volume = next;
-                QueueDeviceVolume(_rows[idx].Id, next);
-                _onEndpointStateChanged?.Invoke(_rows[idx].Id, next, null);
-                Invalidate();
-                return;
-            }
-        }
+        int step = Math.Clamp(_config.VolumeStep, 1, 20);
+        if (hit is { } item && AdjustSlider(item.Id, delta > 0 ? step : -step)) return;
         _scroll.OnWheel(delta);
         Invalidate();
     }
 
+    private bool AdjustSlider(string id, int delta)
+    {
+        if (!id.StartsWith("ov.vol:", StringComparison.Ordinal) || !TryGetDeviceIndex(id.AsSpan(7), out int index)) return false;
+        var row = _rows[index];
+        if (!row.Available) return false;
+        row.Volume = Math.Clamp(row.Volume + delta, 0, 100);
+        QueueDeviceVolume(row.Id, row.Volume);
+        _onEndpointStateChanged?.Invoke(row.Id, row.Volume, null);
+        Invalidate();
+        return true;
+    }
+
     protected override bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
+        int delta = QuickPanelWindow.PanelSliderKeyDelta(vk);
+        if (!ctrl && !alt && delta != 0 && _hit.TryGetFocus(out var item, out _) && AdjustSlider(item.Id, delta)) return true;
         if (vk == 0x1B /*VK_ESCAPE*/)
         {
             if (HasOpenModal) { ClosePresetMenu(); return true; }

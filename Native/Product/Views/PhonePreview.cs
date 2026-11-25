@@ -20,6 +20,7 @@ internal sealed class PhonePreview : IDisposable
     private readonly Dictionary<IVirtualDisplayClient, DisplaySessionWatch> displayWatches = new();
     private readonly Func<AirPlayPreview?>? tryGetAirPlay;
     private readonly IMainThread owner;
+    private readonly AppConfig config;
     private Task? tracking;
     private int closed;
 
@@ -37,11 +38,12 @@ internal sealed class PhonePreview : IDisposable
     internal event Action? Changed;
     internal string? Error { get; private set; }
 
-    internal PhonePreview(string root, NativeApplicationWindow shell, IMainThread owner,
+    internal PhonePreview(string root, NativeApplicationWindow shell, IMainThread owner, AppConfig config,
         Func<int, IPcProcessSilenceLease?>? silenceLocalProcess = null,
         Func<AirPlayPreview?>? tryGetAirPlay = null)
     {
         this.owner = owner;
+        this.config = config;
         this.tryGetAirPlay = tryGetAirPlay;
         token = lifetime.Token;
 
@@ -599,6 +601,8 @@ internal sealed class PhonePreview : IDisposable
     {
         private readonly object gate = new();
         private AndroidAudioSource? source;
+        private Views.VirtualDisplayStatusWindow? statusWindow;
+        private bool statusUpdateQueued;
         private VirtualDisplayState desired = client.State;
         private bool closed, dirty, running;
         private Task reconciliation = Task.CompletedTask;
@@ -612,6 +616,7 @@ internal sealed class PhonePreview : IDisposable
             lock (gate)
             {
                 closed = true;
+                QueueStatusUpdateLocked();
                 pending = QueueLocked();
             }
             await pending.ConfigureAwait(false);
@@ -630,6 +635,7 @@ internal sealed class PhonePreview : IDisposable
                 lock (gate)
                 {
                     closed = true;
+                    QueueStatusUpdateLocked();
                     pending = QueueLocked();
                 }
                 await pending.ConfigureAwait(false);
@@ -642,8 +648,41 @@ internal sealed class PhonePreview : IDisposable
             {
                 if (closed) return;
                 desired = state;
+                QueueStatusUpdateLocked();
                 _ = QueueLocked();
             }
+        }
+
+        private void QueueStatusUpdateLocked()
+        {
+            if (!statusUpdateQueued) statusUpdateQueued = owner.owner.TryPost(UpdateStatusOnUi);
+        }
+
+        private void UpdateStatusOnUi()
+        {
+            VirtualDisplayState state;
+            bool finished;
+            lock (gate)
+            {
+                statusUpdateQueued = false;
+                state = desired;
+                finished = closed || Volatile.Read(ref owner.closed) != 0;
+            }
+            if (finished || state is not (VirtualDisplayState.OnPhone or VirtualDisplayState.Recovering or VirtualDisplayState.Missing))
+            {
+                CloseStatusOnUi();
+                return;
+            }
+            if (client.WindowHandle == 0) return;
+            if (statusWindow == null || statusWindow.IsDisposed)
+                statusWindow = new Views.VirtualDisplayStatusWindow(client, owner.config, owner.owner);
+            statusWindow.UpdateState(state);
+        }
+
+        internal void CloseStatusOnUi()
+        {
+            statusWindow?.Dispose();
+            statusWindow = null;
         }
 
         private Task QueueLocked()
@@ -767,6 +806,8 @@ internal sealed class PhonePreview : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref closed, 1) != 0) return;
+        lock (displayWatches)
+            foreach (var watch in displayWatches.Values) watch.CloseStatusOnUi();
         Clipboard.Dispose();
         lifetime.Cancel();
         Task.Run(async () =>
@@ -806,7 +847,7 @@ internal sealed partial class ApplicationHost
         get
         {
             if (phone != null) return phone;
-            var created = new PhonePreview(_environment.DataDirectory, _window, this,
+            var created = new PhonePreview(_environment.DataDirectory, _window, this, _config,
                 _audio.ExternalAudio != null ? _audio.ExternalAudio.AcquireLocalSilenceLease : null,
                 () => HasAirPlay ? AirPlay : null);
             created.Changed += OnExternalSourcesChanged;

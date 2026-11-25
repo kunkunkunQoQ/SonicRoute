@@ -75,7 +75,7 @@ internal sealed class OsdWindow : LayeredWindow
         }
 
         float width = Math.Clamp(_config.OsdWidth, 180, 600);
-        float s = Math.Clamp((float)_config.OsdFontScale, 0.7f, 1.6f);
+        float s = Math.Clamp((float)_config.OsdFontScale, 0.7f, 2f);
         bool hasVol = _config.OsdVolumeVisualEnabled && _parsedPercent >= 0;
         float height = 68f * s + 2f + (hasVol ? 12f * s : 0f);
 
@@ -114,7 +114,7 @@ internal sealed class OsdWindow : LayeredWindow
         StopBarAnimation();
 
         float width = Math.Clamp(_config.OsdWidth, 180, 600);
-        float s = Math.Clamp((float)_config.OsdFontScale, 0.7f, 1.6f);
+        float s = Math.Clamp((float)_config.OsdFontScale, 0.7f, 2f);
         float height = 68f * s + 2f;
 
         ResizeDip(width, height);
@@ -153,6 +153,12 @@ internal sealed class OsdWindow : LayeredWindow
     internal void ReleaseIdleResources()
     {
         if (!IsVisible) ReleaseRenderResources();
+    }
+
+    internal override void ApplyTheme(UiThemePalette theme)
+    {
+        _theme = theme;
+        Invalidate();
     }
 
     protected override string GetWindowTitle() => "SonicRoute OSD";
@@ -252,10 +258,10 @@ internal sealed class OsdWindow : LayeredWindow
         float alphaFrac = _alpha / 255f;
         if (alphaFrac <= 0.005f) return;
 
-        float s = Math.Clamp((float)_config.OsdFontScale, 0.7f, 1.6f);
+        float s = Math.Clamp((float)_config.OsdFontScale, 0.7f, 2f);
         float radius = 10f * s;
-        float padX = 16f * s;
-        float padY = 10f * s;
+        float padX = 16f * s + 1f;
+        float padY = 10f * s + 1f;
 
         var surface = new UiRect(0f, 0f, widthDip, heightDip);
         g.FillRoundedRect(surface, radius, _theme.SurfaceBgAlpha.WithAlphaFraction(alphaFrac));

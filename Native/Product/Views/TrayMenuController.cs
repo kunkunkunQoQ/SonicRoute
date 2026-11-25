@@ -43,8 +43,17 @@ internal sealed class TrayMenuController
 
         var theme = UiThemePalette.Resolve(config);
         var initial = BuildInitialItems(host, config, onOpenMain, onOpenPanel, onExit);
-        var menu = PopupMenuWindow.ShowAtCursor(theme, initial, ownerHandle, cursor.X, cursor.Y, alignBottomUp: true);
+        var menu = PopupMenuWindow.ShowAtCursor(theme, initial, ownerHandle, cursor.X, cursor.Y);
         _activeMenu = menu;
+        menu.Closed += () =>
+        {
+            if (!ReferenceEquals(_activeMenu, menu)) return;
+            _activeMenu = null;
+            _loadCts = null;
+            ++_requestId;
+            cts.Cancel();
+            cts.Dispose();
+        };
 
         CancellationToken ct = cts.Token;
         _ = Task.Run(() =>

@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using SonicRoute.Core.Models;
+using SonicRoute.AndroidAudio;
+using SonicRoute.Native.Ui;
 
 namespace SonicRoute.Native.Product.Views;
 
@@ -28,6 +30,27 @@ internal static class CrossDeviceDragHost
     internal static int ScreenY { get; private set; }
 
     internal static event Action? StateChanged;
+
+    internal static bool ContainsScreenPoint(LayeredWindow? window, int x, int y) =>
+        window is { IsVisible: true } && x >= window.LeftPx && x < window.LeftPx + window.WidthPx &&
+        y >= window.TopPx && y < window.TopPx + window.HeightPx;
+
+    internal static async Task FinishAndroidDropAsync(ApplicationHost host, AndroidDevice device, AndroidApp app, bool? shared, int x, int y, bool returnToPhone = false)
+    {
+        try
+        {
+            if (returnToPhone)
+                await host.Phone.ReturnAndroidToPhoneAsync(device, app.Package).ConfigureAwait(false);
+            else if (shared is { } keepPhoneAudio)
+                await host.Phone.Sources.AddAsync(device, app, keepPhoneAudio).ConfigureAwait(false);
+            else
+                await host.Phone.OpenDisplayAsync(device, app, x, y).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            host.TryPost(() => host.PublishOsd(L10n.T("Phone.AudioWindowTitle"), PhonePreview.TranslateError(ex), success: false));
+        }
+    }
 
     internal static IDisposable RegisterTarget(Func<int, int, string?> hitTestDropZone, Action<AudioAppInfo, string> onDrop)
     {

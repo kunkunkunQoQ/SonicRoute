@@ -50,7 +50,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private readonly ApplicationHost _host;
     private readonly AppConfig _config;
     private readonly Action? _onOpenMain;
-    private readonly nint _trayOwnerHwnd;
+    internal override void ApplyTheme(UiThemePalette theme)
+    {
+        _theme = theme;
+        Invalidate();
+    }
+
+    protected override UiHitMap InputMap => _hit;
+    protected override float InputOffsetY => _drawnSlideY;
     private readonly UiHitMap _hit = new();
     private readonly UiScrollState _scroll = new();
     private readonly Dictionary<string, (byte[] Pixels, int W, int H, int Ver)> _extIconCache = new(StringComparer.Ordinal);
@@ -89,6 +96,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private bool _refreshQueued;
     private bool _eventsSubscribed;
     private bool _peakReadInFlight;
+    private int[] _peakPids = [];
+    private int _timerInterval;
     private int _draggingRowIdx = -1;
     private bool _draggingMaster;
     private UiRect _draggingSliderRect;
@@ -100,6 +109,12 @@ internal sealed class QuickPanelWindow : LayeredWindow
     private float _appDragStartDipX;
     private float _appDragStartDipY;
     private bool _draggingCrossDevice;
+    private DragIconWindow? _dragIcon;
+    private UiRect _phoneDropBounds;
+    private bool _showPhoneDrop;
+    private bool _airPlayDrop;
+    private AndroidAudioSource? _androidDrag;
+    private bool? _sharedDrop;
 #endif
 
     private bool _resizingHeight;
@@ -137,15 +152,13 @@ internal sealed class QuickPanelWindow : LayeredWindow
         ApplicationHost host,
         AppConfig config,
         Action? onOpenMain = null,
-        Action? onDismissRequested = null,
-        nint trayOwnerHwnd = 0)
+        Action? onDismissRequested = null)
         : base(UiMetrics.QuickPanelWindowWidth, Math.Clamp(config.QuickPanelHeight, 350, 850), UiMetrics.QuickPanelWindowWidth, UiMetrics.QuickPanelMinHeight)
     {
         _host = host;
         _config = config;
         _onOpenMain = onOpenMain;
         if (onDismissRequested != null) OnDismissRequested += onDismissRequested;
-        _trayOwnerHwnd = trayOwnerHwnd;
         _theme = UiThemePalette.Resolve(config);
         TopMost = true;
         ToolWindow = true;
@@ -354,7 +367,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
                         Volume = vol,
                         Muted = muted,
                         Available = avail,
-                        Peak = _smoothedPeaks.GetValueOrDefault(app.Identity),
                         Expanded = expanded,
                         NativeOutputId = nativeOut,
                         SelectedOutputs = selectedOuts,
@@ -399,10 +411,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 _globalPlaybackMuted = globalPlaybackMuted;
                 _globalMicMuted = micMuted;
                 _micKnown = micKnown;
+                _smoothedPeaks.Clear();
+                foreach (var previous in _rows)
+                    if (previous.Peak > 0f) _smoothedPeaks[previous.Identity] = previous.Peak;
                 _rows = newRows;
 
                 foreach (var row in _rows)
                 {
+                    row.Peak = _smoothedPeaks.GetValueOrDefault(row.Identity);
                     if (row.IsExternal && row.App.ExternalIconPng is { Length: > 0 } png)
                     {
                         if (TryGetExternalIcon(row.Identity, png, out var bgra, out int w, out int h, out int ver))
@@ -415,6 +431,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     }
                 }
 
+                UpdatePeakTargets();
                 if (IsVisible) Invalidate();
                 if (_refreshQueued && IsVisible)
                 {
@@ -425,19 +442,40 @@ internal sealed class QuickPanelWindow : LayeredWindow
         });
     }
 
+    private void UpdatePeakTargets()
+    {
+        _peakPids = _rows.Where(static r => !r.IsExternal && r.Pid > 0 && r.Available && !r.Muted)
+            .Select(static r => r.Pid).Distinct().ToArray();
+        foreach (var row in _rows)
+            if (row.Muted || !row.Available) row.Peak = 0f;
+        UpdateAnimationTimer();
+    }
+
+    private void UpdateAnimationTimer()
+    {
+        int interval = 0;
+        if (IsVisible && !IsDisposed)
+        {
+            if (_animatingEntrance) interval = 16;
+            else if (_config.ShowAppPeakMeter && _peakPids.Length != 0) interval = 50;
+        }
+        if (_timerInterval == interval) return;
+        StopAnimationTimer();
+        _timerInterval = interval;
+        if (interval != 0) StartAnimationTimer(interval);
+    }
+
     protected override void OnShown()
     {
         base.OnShown();
         SubscribeEvents(true);
-        if (_animatingEntrance)
-            StartAnimationTimer(16);
-        else if (_config.ShowAppPeakMeter)
-            StartAnimationTimer(50);
+        UpdateAnimationTimer();
     }
 
     protected override void OnHidden()
     {
         StopAnimationTimer();
+        _timerInterval = 0;
         _animatingEntrance = false;
         _adjustMode = false;
         _adjustDragging = false;
@@ -452,6 +490,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     protected override void OnClosed()
     {
         StopAnimationTimer();
+        _timerInterval = 0;
         _animatingEntrance = false;
         _adjustMode = false;
         _adjustDragging = false;
@@ -475,7 +514,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         if (!IsVisible || IsDisposed)
         {
-            StopAnimationTimer();
+            UpdateAnimationTimer();
             return;
         }
 
@@ -491,26 +530,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 _animatingEntrance = false;
                 _entranceOpacity = 1f;
                 _entranceSlideY = 0f;
-                StopAnimationTimer();
-                if (_config.ShowAppPeakMeter) StartAnimationTimer(50);
+                UpdateAnimationTimer();
             }
             Invalidate();
             return;
         }
 
-        if (!_config.ShowAppPeakMeter)
-        {
-            StopAnimationTimer();
-            return;
-        }
-        if (_peakReadInFlight || _rows.Count == 0) return;
-
-        int[] pids = _rows
-            .Where(r => !r.IsExternal && r.Pid > 0 && r.Available && !r.Muted)
-            .Select(r => r.Pid)
-            .Distinct()
-            .ToArray();
-        if (pids.Length == 0) return;
+        if (_peakReadInFlight || _peakPids.Length == 0 || !_config.ShowAppPeakMeter) return;
+        int[] pids = _peakPids;
 
         _peakReadInFlight = true;
         _ = Task.Run(() =>
@@ -534,7 +561,6 @@ internal sealed class QuickPanelWindow : LayeredWindow
                     if (MathF.Abs(next - prev) > 0.008f)
                     {
                         row.Peak = next;
-                        _smoothedPeaks[row.Identity] = next;
                         changed = true;
                     }
                 }
@@ -577,14 +603,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         _hit.Add("qp.resize.top", new UiRect(12f, 0f, surfaceW - 24f, 5f), UiCursorKind.SizeNS);
         _hit.Add("qp.resize.bottom", new UiRect(12f, heightDip - 5f, surfaceW - 24f, 5f), UiCursorKind.SizeNS);
 
-        const float padX = 16f;
-        const float padTop = 14f;
-        const float padBottom = 12f;
+        const float padX = 17f;
+        const float padTop = 15f;
+        const float padBottom = 13f;
         float innerW = surfaceW - padX * 2f;
 
         // 1. Header Bar
         float y = padTop;
-        var headerRect = new UiRect(padX, y, innerW, 28f);
+        var headerRect = new UiRect(padX, y, innerW, 32f);
         float rx = headerRect.Right;
 
         const float pinBtnW = 28f;
@@ -638,11 +664,10 @@ internal sealed class QuickPanelWindow : LayeredWindow
         // 3. Master Volume Row (Fixed Mute Label + Slider + Percentage)
         y = masterComboRect.Bottom + 10f;
         string muteText = L10n.T("Qp.Mute");
-        float muteW = Math.Clamp(D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, _masterMuted ? 600 : 400, 120f, 28f, false).Width + 20f, 54f, 96f);
+        float muteW = Math.Clamp(D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, 400, 120f, 28f, false).Width + 36f, 54f, 100f);
         var masterMuteRect = new UiRect(padX, y + 2f, muteW, 28f);
-        UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.mastermute", masterMuteRect, muteText,
-            fontSize: 12f, radius: 7f, active: _masterMuted,
-            tooltip: _masterMuted ? L10n.T("Qp.Unmute") : L10n.T("Qp.Mute"));
+        DrawToolButton(g, theme, "qp.mastermute", masterMuteRect, muteText, active: _masterMuted,
+            icon: _masterMuted ? UiIcon.Speaker : UiIcon.VolumeMutedSlash);
 
         var pctRect = new UiRect(padX + innerW - 42f, y, 42f, 32f);
         g.DrawText($"{_masterVolume}%", pctRect, theme.TextPrimary, 12.5f, 600, UiTextAlign.Trailing, UiVertAlign.Center, wrap: false, ellipsis: false);
@@ -666,30 +691,30 @@ internal sealed class QuickPanelWindow : LayeredWindow
         g.DrawText(L10n.T("Qp.AppVolumes"), appsHeaderRect, theme.TextSecondary, 12f, 600, UiTextAlign.Leading, UiVertAlign.Center);
         y = appsHeaderRect.Bottom + 6f;
 
-        var listRect = new UiRect(padX, y, innerW, MathF.Max(36f, footerTop - 14f - y));
+        var listRect = new UiRect(padX, y, innerW + 14f, MathF.Max(36f, footerTop - 14f - y));
+#if SONICROUTE_PHONE
+        _phoneDropBounds = listRect;
+        if (_showPhoneDrop)
+        {
+            DrawPhoneDropArea(g, theme, listRect);
+            RenderFooterBar(g, theme, new UiRect(padX, footerTop, innerW, footerH));
+            return;
+        }
+#endif
         bool legacyLayout = _config.QuickPanelUseLegacyAppRows;
         bool showInputsInPanel = _config.ExperimentalMic && _config.MicInPanel;
         var currentApp = _host.CurrentApp.Current;
 
-        var cachedRowLayouts = new List<(float TotalH, List<(string Id, string Label, UiRect Rect, bool IsExit)> OutPills, List<(string Id, string Label, UiRect Rect)> InPills)>(_rows.Count);
-        float totalContentH = 0f;
-        float prelimW = _rows.Count > 4 ? listRect.Width - UiMetrics.ScrollBarWidth - 4f : listRect.Width;
-
-        // First pass: measure exact wrapped pill heights using available row width
-        for (int pass = 0; pass < 2; pass++)
+        // At most one row can be expanded. A peak repaint needs no per-row pill lists.
+        float collapsedHeight = legacyLayout ? UiMetrics.QuickPanelCompactRowHeight : UiMetrics.QuickPanelFullRowHeight;
+        var collapsed = new RowLayout(collapsedHeight, [], []);
+        AppRowState? expandedRow = _expandedAppId == null ? null : _rows.Find(static r => r.Expanded);
+        RowLayout expanded = expandedRow == null ? collapsed : MeasureExpandedRow(expandedRow, collapsedHeight, showInputsInPanel, listRect.Width);
+        float totalContentH = collapsedHeight * _rows.Count + expanded.TotalH - collapsedHeight;
+        if (expandedRow != null && totalContentH > listRect.Height)
         {
-            cachedRowLayouts.Clear();
-            totalContentH = 0f;
-            float measureW = pass == 0 ? prelimW : ((totalContentH > listRect.Height) ? listRect.Width - UiMetrics.ScrollBarWidth - 4f : listRect.Width);
-            for (int i = 0; i < _rows.Count; i++)
-            {
-                var layout = MeasureRowLayout(_rows[i], legacyLayout, showInputsInPanel, measureW);
-                cachedRowLayouts.Add(layout);
-                totalContentH += layout.TotalH;
-            }
-            bool needsBar = totalContentH > listRect.Height;
-            float usedW = needsBar ? listRect.Width - UiMetrics.ScrollBarWidth - 4f : listRect.Width;
-            if (MathF.Abs(usedW - measureW) < 0.5f) break;
+            expanded = MeasureExpandedRow(expandedRow, collapsedHeight, showInputsInPanel, listRect.Width - UiMetrics.ScrollBarWidth - 4f);
+            totalContentH = collapsedHeight * (_rows.Count - 1) + expanded.TotalH;
         }
 
         _scroll.ViewportHeight = listRect.Height;
@@ -709,7 +734,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             for (int i = 0; i < _rows.Count; i++)
             {
                 var row = _rows[i];
-                var layout = cachedRowLayouts[i];
+                var layout = ReferenceEquals(row, expandedRow) ? expanded : collapsed;
                 if (curY + layout.TotalH >= listRect.Y && curY <= listRect.Bottom)
                 {
                     bool isCurrent = currentApp != null && string.Equals(row.Identity, currentApp.Identity, StringComparison.OrdinalIgnoreCase);
@@ -726,15 +751,62 @@ internal sealed class QuickPanelWindow : LayeredWindow
         RenderFooterBar(g, theme, new UiRect(padX, footerTop, innerW, footerH));
     }
 
-    private (float TotalH, List<(string Id, string Label, UiRect Rect, bool IsExit)> OutPills, List<(string Id, string Label, UiRect Rect)> InPills)
-        MeasureRowLayout(AppRowState row, bool legacyLayout, bool showInputs, float rowWidth)
+#if SONICROUTE_PHONE
+    internal bool? UpdatePhoneDrop(int xPx, int yPx, bool airPlay = false)
     {
-        float headerH = (legacyLayout ? UiMetrics.QuickPanelCompactRowHeight : UiMetrics.QuickPanelFullRowHeight) - 2f;
-        float baseH = headerH + 2f;
+        if (!IsVisible) return null;
+        float x = (xPx - LeftPx) / DpiScale;
+        float y = (yPx - TopPx) / DpiScale - _drawnSlideY;
+        bool? shared = _phoneDropBounds.Contains(x, y) ? !airPlay && y >= _phoneDropBounds.CenterY : null;
+        if (!_showPhoneDrop || shared != _sharedDrop || _airPlayDrop != airPlay)
+        {
+            _showPhoneDrop = true;
+            _airPlayDrop = airPlay;
+            _sharedDrop = shared;
+            Invalidate();
+        }
+        return shared;
+    }
+
+    internal void ClearPhoneDrop()
+    {
+        if (!_showPhoneDrop) return;
+        _showPhoneDrop = false;
+        _sharedDrop = null;
+        if (IsVisible) Invalidate();
+    }
+
+    private void DrawPhoneDropArea(D2dTarget g, UiThemePalette theme, UiRect bounds)
+    {
+        g.FillRoundedRect(bounds, 8f, theme.SurfaceBg);
+        int count = _airPlayDrop ? 1 : 2;
+        for (int i = 0; i < count; i++)
+        {
+            bool shared = i == 1;
+            var zone = new UiRect(bounds.X + 2f, (shared ? bounds.CenterY : bounds.Y) + 2f,
+                bounds.Width - 4f, bounds.Height / count - 4f);
+            if (_sharedDrop == shared) g.FillRoundedRect(zone, 6f, theme.Overlay);
+            g.PushClip(zone);
+            g.DrawText(L10n.T(_airPlayDrop ? "Dev.SystemDefaultOut" : shared ? "Phone.DropBothPlayTitle" : "Phone.DropComputerOnlyTitle"),
+                new UiRect(zone.X + 8f, zone.CenterY - 20f, zone.Width - 16f, 20f), theme.TextPrimary, 13f, 600, UiTextAlign.Center);
+            g.DrawText(L10n.T(_airPlayDrop ? "Phone.AirPlayDropWindowsDesc" : shared ? "Phone.DropBothPlayDesc" : "Phone.DropComputerOnlyDesc"),
+                new UiRect(zone.X + 8f, zone.CenterY + 4f, zone.Width - 16f, 30f), theme.TextSecondary, 11f, 400,
+                UiTextAlign.Center, UiVertAlign.Top, wrap: true);
+            g.PopClip();
+        }
+        if (!_airPlayDrop) g.DrawLine(bounds.X + 2f, bounds.CenterY, bounds.Right - 2f, bounds.CenterY, theme.Accent, 1f);
+        g.DrawRoundedRect(bounds, 8f, theme.Accent, 2f);
+    }
+#endif
+
+    private readonly record struct RowLayout(float TotalH, IReadOnlyList<(string Id, string Label, UiRect Rect, bool IsExit)> OutPills,
+        IReadOnlyList<(string Id, string Label, UiRect Rect)> InPills);
+
+    private RowLayout MeasureExpandedRow(AppRowState row, float collapsedHeight, bool showInputs, float rowWidth)
+    {
+        float headerH = collapsedHeight - 2f;
         var outPills = new List<(string, string, UiRect, bool)>();
         var inPills = new List<(string, string, UiRect)>();
-        if (!row.Expanded) return (baseH, outPills, inPills);
-
         float devX = 26f;
         float devW = MathF.Max(60f, rowWidth - devX);
         float y = headerH + 4f;
@@ -756,7 +828,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         }
 
         y += 6f;
-        return (y, outPills, inPills);
+        return new RowLayout(y, outPills, inPills);
     }
 
     private static float LayoutWrappedPills(
@@ -874,8 +946,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
         UiRect rowBounds,
         bool legacyLayout,
         bool isCurrent,
-        List<(string Id, string Label, UiRect Rect, bool IsExit)> outPills,
-        List<(string Id, string Label, UiRect Rect)> inPills)
+        IReadOnlyList<(string Id, string Label, UiRect Rect, bool IsExit)> outPills,
+        IReadOnlyList<(string Id, string Label, UiRect Rect)> inPills)
     {
         float headerH = (legacyLayout ? UiMetrics.QuickPanelCompactRowHeight : UiMetrics.QuickPanelFullRowHeight) - 2f;
         var headerRect = new UiRect(rowBounds.X, rowBounds.Y, rowBounds.Width, headerH);
@@ -1039,31 +1111,30 @@ internal sealed class QuickPanelWindow : LayeredWindow
 
     private void RenderFooterBar(D2dTarget g, UiThemePalette theme, UiRect rect)
     {
-        // Bottom 3-button toolbar: [GlobalMute] [MicMute] [FullUi] — MicMute always visible and synced to live capture state
-        float rx = rect.Right;
-        const float btnH = 28f;
-        const float gap = 6f;
-        var ctx = D2dSharedContext.Instance;
+        const float gap = 6f, mainWidth = 76f, micWidth = 120f, muteWidth = 112f;
+        float left = rect.Right - mainWidth - micWidth - muteWidth - 3 * gap;
+        DrawToolButton(g, theme, "qp.globalmute", new UiRect(left, rect.Y, muteWidth, 28), L10n.T("Qp.GlobalMute"), active: _globalPlaybackMuted);
+        left += muteWidth + gap;
+        DrawToolButton(g, theme, "qp.mic", new UiRect(left, rect.Y, micWidth, 28), L10n.T("Qp.MicMute"), enabled: _micKnown, active: _globalMicMuted);
+        DrawToolButton(g, theme, "qp.settings", new UiRect(left + micWidth + gap, rect.Y, mainWidth, 28), L10n.T("Qp.FullUi"));
+    }
 
-        string fullUiLbl = L10n.T("Qp.FullUi");
-        float fullUiW = Math.Clamp(MathF.Ceiling(ctx.MeasureText(fullUiLbl, UiMetrics.FontFamily, 12f, 400, 140f, btnH, false).Width + 20f), 76f, 108f);
-        var fullUiRect = new UiRect(rx - fullUiW, rect.Y, fullUiW, btnH);
-        UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.settings", fullUiRect, fullUiLbl, fontSize: 12f, radius: 7f);
-        rx = fullUiRect.X - gap;
-
-        string micLbl = L10n.T("Qp.MicMute");
-        float micW = Math.Clamp(MathF.Ceiling(ctx.MeasureText(micLbl, UiMetrics.FontFamily, 12f, _globalMicMuted ? 600 : 400, 150f, btnH, false).Width + 20f), 96f, 132f);
-        var micRect = new UiRect(rx - micW, rect.Y, micW, btnH);
-        UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.mic", micRect, micLbl,
-            enabled: _micKnown, fontSize: 12f, radius: 7f, active: _globalMicMuted);
-        rx = micRect.X - gap;
-
-        string gmLbl = L10n.T("Qp.GlobalMute");
-        float availGmW = MathF.Max(76f, rx - rect.X);
-        float gmW = MathF.Min(availGmW, Math.Clamp(MathF.Ceiling(ctx.MeasureText(gmLbl, UiMetrics.FontFamily, 12f, _globalPlaybackMuted ? 600 : 400, 150f, btnH, false).Width + 20f), 96f, 124f));
-        var gmRect = new UiRect(rx - gmW, rect.Y, gmW, btnH);
-        UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.globalmute", gmRect, gmLbl,
-            fontSize: 12f, radius: 7f, active: _globalPlaybackMuted);
+    private void DrawToolButton(D2dTarget g, UiThemePalette theme, string id, UiRect rect, string label,
+        bool enabled = true, bool active = false, UiIcon? icon = null)
+    {
+        if (enabled) _hit.Add(id, rect, UiCursorKind.Hand, label);
+        bool hovered = enabled && _hit.IsHover(id);
+        if (active || hovered || _hit.IsActive(id))
+            g.FillRoundedRect(rect, 8f, active ? theme.NavSelected : theme.NavHover);
+        var ink = active ? theme.Accent : theme.TextSecondary;
+        if (!enabled) ink = ink.WithAlphaFraction(0.5f);
+        g.DrawRoundedRect(rect, 8f, theme.Border, 1);
+        if (icon is { } symbol)
+        {
+            g.DrawIcon(symbol, new UiRect(rect.X + 9, rect.CenterY - 6, 12, 12), ink, 1.6f);
+            rect = new UiRect(rect.X + 18, rect.Y, rect.Width - 18, rect.Height);
+        }
+        g.DrawText(label, rect.Deflate(3, 0), ink, 12, 400, UiTextAlign.Center, UiVertAlign.Center);
     }
 
     protected override void OnPointerMove(float xDip, float yDip, bool leftDown)
@@ -1118,6 +1189,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (leftDown && _draggingCrossDevice)
         {
             ViewNative.GetCursorPos(out var cur);
+            _dragIcon?.Follow(cur.X, cur.Y);
+            if (_androidDrag != null) UpdatePhoneDrop(cur.X, cur.Y);
             CrossDeviceDragHost.UpdateDrag(cur.X, cur.Y);
             return;
         }
@@ -1128,10 +1201,20 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 var dragRow = _rows[_pendingDragRowIdx];
                 _pendingDragRowIdx = -1;
                 _hit.ActiveId = null;
-                if (!dragRow.IsExternal && dragRow.Pid > 0 && _phoneCompanion is { IsVisible: true })
+                var sourceId = dragRow.App.ExternalSourceId;
+                var android = sourceId != null && _host.HasPhone ? _host.Phone.Sources.FindSource(sourceId) : null;
+                bool airPlay = sourceId != null && _host.HasAirPlay && _host.AirPlay.Source?.Id == sourceId;
+                if (android != null || airPlay || (!dragRow.IsExternal && dragRow.Pid > 0 && _phoneCompanion is { IsVisible: true }))
                 {
                     _draggingCrossDevice = true;
                     ViewNative.GetCursorPos(out var cur);
+                    _androidDrag = android;
+                    if (android != null) UpdatePhoneDrop(cur.X, cur.Y);
+                    NativeAppIconService.IconBitmap? icon = dragRow.ExternalIconBgra is { } bgra
+                        ? new NativeAppIconService.IconBitmap(bgra, dragRow.ExtIconW, dragRow.ExtIconH)
+                        : !dragRow.IsExternal ? NativeAppIconService.GetAppIcon(_config, dragRow.Pid, dragRow.App.IconPath, dragRow.App.ProcessName) : null;
+                    _dragIcon = new DragIconWindow(icon, dragRow.DisplayName, _theme.TextPrimary, cur.X, cur.Y,
+                        airPlay ? UiIcon.AirPlay : android?.App.IsDeviceAudio == true ? UiIcon.Phone : null);
                     CrossDeviceDragHost.BeginDrag(dragRow.App, cur.X, cur.Y);
                     SetCursorKind(UiCursorKind.Hand);
                     Invalidate();
@@ -1186,6 +1269,13 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         if (e.Button == UiMouseButton.Right)
         {
+#if SONICROUTE_PHONE
+            if (_draggingCrossDevice)
+            {
+                ReleasePointerCapture();
+                return;
+            }
+#endif
             if (_adjustMode)
             {
                 CancelAdjustMode();
@@ -1261,7 +1351,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #if SONICROUTE_PHONE
         if (hit.Value.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(11), out int dragIdx))
         {
-            if (dragIdx >= 0 && dragIdx < _rows.Count && !_rows[dragIdx].IsExternal && _phoneCompanion is { IsVisible: true })
+            if (dragIdx >= 0 && dragIdx < _rows.Count && (_rows[dragIdx].IsExternal || _phoneCompanion is { IsVisible: true }))
             {
                 _pendingDragRowIdx = dragIdx;
                 _appDragStartDipX = e.X;
@@ -1321,7 +1411,24 @@ internal sealed class QuickPanelWindow : LayeredWindow
             _draggingCrossDevice = false;
             _hit.ActiveId = null;
             ViewNative.GetCursorPos(out var cur);
-            CrossDeviceDragHost.EndDrag(cur.X, cur.Y);
+            _dragIcon?.Dispose();
+            _dragIcon = null;
+            var android = _androidDrag;
+            _androidDrag = null;
+            string? sourceId = CrossDeviceDragHost.DraggedApp?.ExternalSourceId;
+            bool? shared = android == null ? null : UpdatePhoneDrop(cur.X, cur.Y);
+            bool outside = !CrossDeviceDragHost.ContainsScreenPoint(this, cur.X, cur.Y) &&
+                !CrossDeviceDragHost.ContainsScreenPoint(_phoneCompanion, cur.X, cur.Y);
+            ClearPhoneDrop();
+            if (android != null && !ReferenceEquals(_host.Phone.Sources.FindSource(android.Id), android))
+                CrossDeviceDragHost.CancelDrag();
+            else if (!CrossDeviceDragHost.EndDrag(cur.X, cur.Y))
+            {
+                if (android != null && (shared != null || outside))
+                    _ = CrossDeviceDragHost.FinishAndroidDropAsync(_host, android.Device, android.App, shared, cur.X, cur.Y);
+                else if (outside && sourceId != null && _host.HasAirPlay && _host.AirPlay.Source?.Id == sourceId)
+                    _host.AirPlay.ShowMirror();
+            }
             SetCursorKind(UiCursorKind.Arrow);
             Invalidate();
             return;
@@ -1338,7 +1445,12 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var hit = _hit.HitTest(e.X, e.Y - _drawnSlideY);
         if (hit is null || hit.Value.Id != active) { Invalidate(); return; }
 
-        switch (hit.Value.Id)
+        ActivateFocused(hit.Value, e);
+    }
+
+    protected override bool ActivateFocused(UiHitItem item, UiPointerEventArgs e)
+    {
+        switch (item.Id)
         {
             case "qp.pin":
                 _pinned = !_pinned;
@@ -1366,77 +1478,86 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 ToggleMasterMute();
                 break;
             case "qp.masterdev":
-                OpenMasterDeviceCombo(hit.Value.Bounds.Offset(0f, _drawnSlideY));
+                OpenMasterDeviceCombo(item.Bounds.Offset(0f, _drawnSlideY));
                 break;
             default:
-                if (hit.Value.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(11), out int mIdx))
+                if (item.Id.StartsWith("qp.appmute:", StringComparison.Ordinal) && TryGetAppIndex(item.Id.AsSpan(11), out int mIdx))
                 {
                     ToggleAppMute(mIdx);
                 }
-                else if (hit.Value.Id.StartsWith("qp.expand:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(10), out int eIdx))
+                else if (item.Id.StartsWith("qp.expand:", StringComparison.Ordinal) && TryGetAppIndex(item.Id.AsSpan(10), out int eIdx))
                 {
                     ToggleRowExpand(eIdx);
                 }
-                else if (hit.Value.Id.StartsWith("qp.appexit:", StringComparison.Ordinal) && TryGetAppIndex(hit.Value.Id.AsSpan(11), out int xIdx))
+                else if (item.Id.StartsWith("qp.appexit:", StringComparison.Ordinal) && TryGetAppIndex(item.Id.AsSpan(11), out int xIdx))
                 {
                     DisconnectExternalRow(xIdx);
                 }
-                else if (hit.Value.Id.StartsWith("qp.appdev:", StringComparison.Ordinal))
+                else if (item.Id.StartsWith("qp.appdev:", StringComparison.Ordinal))
                 {
-                    string rest = hit.Value.Id[10..];
+                    var rest = item.Id.AsSpan(10);
                     int colon = rest.IndexOf(':');
                     if (colon > 0 && TryGetAppIndex(rest[..colon], out int aIdx))
                     {
-                        string devId = rest[(colon + 1)..];
+                        string devId = rest[(colon + 1)..].ToString();
                         SelectAppOutput(aIdx, devId, e.Ctrl, e.Shift);
                     }
                 }
-                else if (hit.Value.Id.StartsWith("qp.appin:", StringComparison.Ordinal))
+                else if (item.Id.StartsWith("qp.appin:", StringComparison.Ordinal))
                 {
-                    string rest = hit.Value.Id[9..];
+                    var rest = item.Id.AsSpan(9);
                     int colon = rest.IndexOf(':');
                     if (colon > 0 && TryGetAppIndex(rest[..colon], out int iIdx))
                     {
-                        string devId = rest[(colon + 1)..];
+                        string devId = rest[(colon + 1)..].ToString();
                         SelectAppInput(iIdx, devId);
                     }
                 }
                 break;
         }
+        return true;
     }
 
     protected override void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal)
     {
         var hit = _hit.HitTest(xDip, yDip - _drawnSlideY);
         int step = Math.Clamp(_config.VolumeStep, 1, 20);
-        if (hit is { } h)
-        {
-            if (h.Id == "qp.masterslider")
-            {
-                _masterVolume = Math.Clamp(_masterVolume + (delta > 0 ? step : -step), 0, 100);
-                QueueMasterVolume(_masterVolume);
-                SyncMasterToOutputPopup(_masterVolume, null);
-                Invalidate();
-                return;
-            }
-            if (h.Id.StartsWith("qp.appslider:", StringComparison.Ordinal) && TryGetAppIndex(h.Id.AsSpan(13), out int rIdx))
-            {
-                if (rIdx >= 0 && rIdx < _rows.Count && _rows[rIdx].Available)
-                {
-                    var row = _rows[rIdx];
-                    row.Volume = Math.Clamp(row.Volume + (delta > 0 ? step : -step), 0, 100);
-                    QueueAppVolume(row, row.Volume);
-                    Invalidate();
-                    return;
-                }
-            }
-        }
+        if (hit is { } item && AdjustSlider(item.Id, delta > 0 ? step : -step)) return;
         _scroll.OnWheel(delta);
         Invalidate();
     }
 
+    internal static int PanelSliderKeyDelta(int vk) => vk switch
+    {
+        0x25 or 0x28 => -1, 0x26 or 0x27 => 1, // arrows
+        0x21 => 10, 0x22 => -10, // PageUp / PageDown
+        0x24 => -100, 0x23 => 100, // Home / End
+        _ => 0,
+    };
+
+    private bool AdjustSlider(string id, int delta)
+    {
+        if (id == "qp.masterslider")
+        {
+            _masterVolume = Math.Clamp(_masterVolume + delta, 0, 100);
+            QueueMasterVolume(_masterVolume);
+            SyncMasterToOutputPopup(_masterVolume, null);
+        }
+        else if (id.StartsWith("qp.appslider:", StringComparison.Ordinal) && TryGetAppIndex(id.AsSpan(13), out int index) && _rows[index].Available)
+        {
+            var row = _rows[index];
+            row.Volume = Math.Clamp(row.Volume + delta, 0, 100);
+            QueueAppVolume(row, row.Volume);
+        }
+        else return false;
+        Invalidate();
+        return true;
+    }
+
     protected override bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
+        int delta = PanelSliderKeyDelta(vk);
+        if (!ctrl && !alt && delta != 0 && _hit.TryGetFocus(out var item, out _) && AdjustSlider(item.Id, delta)) return true;
         if (vk == 0x1B /*VK_ESCAPE*/)
         {
             if (_adjustMode)
@@ -1447,8 +1568,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
 #if SONICROUTE_PHONE
             if (_draggingCrossDevice)
             {
-                _draggingCrossDevice = false;
-                CrossDeviceDragHost.CancelDrag();
+                ReleasePointerCapture();
                 Invalidate();
                 return true;
             }
@@ -1708,6 +1828,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (!row.Available) return;
 
         row.Muted = !row.Muted;
+        UpdatePeakTargets();
         Invalidate();
         var app = row.App;
         _ = Task.Run(() =>
@@ -1717,8 +1838,11 @@ internal sealed class QuickPanelWindow : LayeredWindow
                 var st = _host.Audio.Volume(app, toggle: true);
                 _host.TryPost(() =>
                 {
-                    row.Muted = st.Muted;
-                    if (st.Percent >= 0) row.Volume = st.Percent;
+                    var current = _rows.Find(r => r.Identity == row.Identity);
+                    if (current == null) return;
+                    current.Muted = st.Muted;
+                    if (st.Percent >= 0) current.Volume = st.Percent;
+                    UpdatePeakTargets();
                     if (IsVisible) Invalidate();
                 });
             }
@@ -1901,7 +2025,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         var visibleOutputs = _outputs.Where(d => !_config.HiddenOutputDevices.Contains(d.Id)).ToArray();
         var choices = visibleOutputs
-            .Select(d => new ComboChoice(d.Id, _config.DeviceNames.GetValueOrDefault(d.Id, d.Name)))
+            .Select(d => new ComboChoice(d.Id, _config.DeviceNames.GetValueOrDefault(d.Id, d.Name)
+                + (IdCmp.Equals(d.Id, _defaultOutputId) ? L10n.T("Ov.Default") : ""), UiIcon.Headphones))
             .ToList();
         if (choices.Count == 0) return;
 
@@ -2083,23 +2208,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             return;
         }
 
-        int anchorX = 0, anchorY = 0;
-        if (_trayOwnerHwnd != 0)
-        {
-            var id = new ShellNative.IconId
-            {
-                Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<ShellNative.IconId>(),
-                Window = _trayOwnerHwnd,
-                Id = 1,
-            };
-            if (ShellNative.Shell_NotifyIconGetRect(in id, out var trayRect) >= 0 && trayRect.Right > trayRect.Left)
-            {
-                anchorX = (trayRect.Left + trayRect.Right) / 2;
-                anchorY = (trayRect.Top + trayRect.Bottom) / 2;
-            }
-        }
-
-        GetMonitorWorkAreaForPoint(anchorX, anchorY, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
+        GetMonitorWorkAreaForPoint(0, 0, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
         float s = monDpi / 96f;
         int wPx = (int)MathF.Round(WidthDip * s);
         int hPx = (int)MathF.Round(HeightDip * s);
@@ -2155,6 +2264,10 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (_draggingCrossDevice)
         {
             _draggingCrossDevice = false;
+            _dragIcon?.Dispose();
+            _dragIcon = null;
+            _androidDrag = null;
+            ClearPhoneDrop();
             CrossDeviceDragHost.CancelDrag();
         }
 #endif
@@ -2322,6 +2435,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
         NavHover = src.NavHover.WithAlphaFraction(factor),
         NavSelected = src.NavSelected.WithAlphaFraction(factor),
         SliderBg = src.SliderBg.WithAlphaFraction(factor),
+        HighContrastScrollInk = src.HighContrastScrollInk?.WithAlphaFraction(factor),
+        HighContrastScrollHighlight = src.HighContrastScrollHighlight.WithAlphaFraction(factor),
         Overlay = src.Overlay.WithAlphaFraction(factor),
         Accent = src.Accent.WithAlphaFraction(factor),
         AccentHover = src.AccentHover.WithAlphaFraction(factor),

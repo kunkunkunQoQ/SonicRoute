@@ -112,6 +112,8 @@ internal sealed partial class ApplicationHost
         ViewSettingsChanged();
     }
 
+    internal void RefreshViewThemes() => Ui.LayeredWindow.RefreshVisibleThemes(() => Ui.UiThemePalette.Resolve(_config));
+
     internal void ViewSettingsChanged()
     {
         _automation?.ReloadSettings();
@@ -166,7 +168,7 @@ internal sealed partial class ApplicationHost
     private QuickPanelWindow EnsureQuickPanel()
     {
         if (panelView == null || panelView.IsDisposed)
-            panelView = new QuickPanelWindow(this, _config, OpenProductMain, DismissPanel, _window.Handle);
+            panelView = new QuickPanelWindow(this, _config, OpenProductMain, DismissPanel);
         return panelView;
     }
 
