@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SonicRoute.Native.Ui;
 
-internal readonly record struct ComboChoice(string Key, string Label);
+internal readonly record struct ComboChoice(string Key, string Label, UiIcon? Icon = null);
 
 /// <summary>
 /// Floating scrollable dropdown popup matching WPF App.xaml RoundedComboBox + RoundedComboItem.
@@ -11,9 +11,10 @@ internal readonly record struct ComboChoice(string Key, string Label);
 /// </summary>
 internal sealed class ComboPopupWindow : LayeredWindow
 {
-    private const float ItemH = 30f;
-    private const float Pad = 5f;
-    private const float MaxListHeight = 256f;
+    private const float ItemH = 39f;
+    private const float Pad = 1f;
+    private const float MaxListHeight = 320f;
+    private readonly LayeredWindow _owner;
 
     private readonly UiThemePalette _theme;
     private readonly IReadOnlyList<ComboChoice> _choices;
@@ -35,7 +36,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
         IReadOnlyList<ComboChoice> choices,
         string selectedKey,
         Action<ComboChoice> onSelected,
-        nint owner)
+        LayeredWindow owner)
         : base(180f, 120f, 100f, 36f)
     {
         _theme = theme;
@@ -45,7 +46,8 @@ internal sealed class ComboPopupWindow : LayeredWindow
         TopMost = true;
         ToolWindow = true;
         DestroyOnClose = true;
-        OwnerHandle = owner;
+        _owner = owner;
+        OwnerHandle = owner.Handle;
     }
 
     public static ComboPopupWindow ShowFor(
@@ -56,18 +58,24 @@ internal sealed class ComboPopupWindow : LayeredWindow
         string selectedKey,
         Action<ComboChoice> onSelected)
     {
-        var pop = new ComboPopupWindow(theme, choices, selectedKey, onSelected, owner.Handle);
+        var pop = new ComboPopupWindow(theme, choices, selectedKey, onSelected, owner);
+        var pt = owner.DipToScreenPx(comboRectDip.X, comboRectDip.Bottom + 4f);
+        GetMonitorWorkAreaForPoint(pt.X, pt.Y, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
+        float scale = monDpi / 96f;
+        float workW = MathF.Max(100f, (mr - ml - 8) / scale);
 
         var ctx = D2dSharedContext.Instance;
         float maxLabelW = 0f;
         for (int i = 0; i < choices.Count; i++)
         {
-            float lw = ctx.MeasureText(choices[i].Label, UiMetrics.FontFamily, 12.5f, 600, 340f, ItemH, false).Width;
+            float lw = ctx.MeasureText(choices[i].Label, UiMetrics.FontFamily, 13f, 400, workW, ItemH, false).Width;
+            if (choices[i].Icon.HasValue) lw += 20f;
             if (lw > maxLabelW) maxLabelW = lw;
         }
-        float wDip = Math.Clamp(MathF.Max(comboRectDip.Width, MathF.Ceiling(maxLabelW) + 32f), 140f, 380f);
         float contentH = choices.Count * ItemH;
-        float viewH = Math.Clamp(contentH, 28f, MaxListHeight - Pad * 2f);
+        float viewH = Math.Clamp(contentH, 28f, MathF.Max(28f, MathF.Min(MaxListHeight, (mb - mt - 8) / scale) - Pad * 2f));
+        float padW = 30f + (contentH > viewH ? UiMetrics.ScrollBarWidth : 0);
+        float wDip = MathF.Min(workW, MathF.Max(comboRectDip.Width, MathF.Ceiling(maxLabelW) + padW));
         float hDip = viewH + Pad * 2f;
 
         pop._scroll.ContentHeight = contentH;
@@ -84,9 +92,6 @@ internal sealed class ComboPopupWindow : LayeredWindow
             }
         }
 
-        var pt = owner.DipToScreenPx(comboRectDip.X, comboRectDip.Bottom + 4f);
-        GetMonitorWorkAreaForPoint(pt.X, pt.Y, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
-        float scale = monDpi / 96f;
         int wPx = (int)MathF.Round(wDip * scale);
         int hPx = (int)MathF.Round(hDip * scale);
         int xPx = Math.Clamp(pt.X, ml + 4, Math.Max(ml + 4, mr - wPx - 4));
@@ -124,11 +129,16 @@ internal sealed class ComboPopupWindow : LayeredWindow
             var r = new UiRect(view.X, iy, itemW, ItemH);
             bool sel = _choices[i].Key == _selectedKey;
             bool hot = i == _hoverIndex || i == _focusedIndex;
-            if (sel) g.FillRoundedRect(r, 6f, _theme.NavSelected);
-            else if (hot) g.FillRoundedRect(r, 6f, _theme.NavHover);
-
-            g.DrawText(_choices[i].Label, r.Deflate(10f, 0f), sel ? _theme.Accent : _theme.TextPrimary,
-                12.5f, sel ? 600 : 400, UiTextAlign.Leading, UiVertAlign.Center);
+            var inner = r.Deflate(4f);
+            if (sel || hot) g.FillRoundedRect(inner, 7f, _theme.Accent);
+            UiColor ink = sel || hot ? _theme.OnAccent : _theme.TextPrimary;
+            var label = inner.Deflate(10f, 0f);
+            if (_choices[i].Icon is UiIcon icon)
+            {
+                g.DrawIcon(icon, new UiRect(label.X, label.CenterY - 7f, 14f, 14f), ink);
+                label = label.Deflate(20f, 0, 0, 0);
+            }
+            g.DrawText(_choices[i].Label, label, ink, 13f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         }
         g.PopClip();
 
@@ -201,7 +211,7 @@ internal sealed class ComboPopupWindow : LayeredWindow
 
     protected override bool OnKeyDown(int vk, bool ctrl, bool shift, bool alt)
     {
-        if (vk == 0x1B /*ESC*/) { CloseWindow(); return true; }
+        if (vk == 0x1B /*ESC*/) { CloseToOwner(); return true; }
         if (_choices.Count == 0) return false;
 
         int next = _focusedIndex;
@@ -295,8 +305,14 @@ internal sealed class ComboPopupWindow : LayeredWindow
     private void CommitIndex(int idx)
     {
         var picked = _choices[idx];
-        CloseWindow();
+        CloseToOwner();
         _onSelected(picked);
+    }
+
+    private void CloseToOwner()
+    {
+        CloseWindow();
+        if (_owner.IsVisible) _owner.RequestFocus();
     }
 
     private int HitChoiceIndex(float x, float y)

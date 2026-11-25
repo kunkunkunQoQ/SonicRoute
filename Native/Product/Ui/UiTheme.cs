@@ -304,12 +304,12 @@ internal static class UiMetrics
     public const float PhoneCompanionWidth = 235f;
     public const float PhoneCompanionGap = 6f;
 
-    public const float ScrollBarWidth = 8f;
+    public const float ScrollBarWidth = 14f;
     public const float ScrollThumbWidth = 6f;
     public const float ScrollThumbHoverWidth = 8f;
     public const float ScrollThumbRadius = 4f;
 
-    public const float MenuCornerRadius = 10f;
+    public const float MenuCornerRadius = 6f;
     public const float MenuItemHeight = 32f;
     public const float ComboCornerRadius = 8f;
     public const float CardCornerRadius = 10f;

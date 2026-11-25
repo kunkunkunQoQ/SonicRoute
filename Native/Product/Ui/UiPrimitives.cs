@@ -18,6 +18,52 @@ internal sealed class UiHitMap
     private readonly Stack<UiRect> _clips = new();
     public UiHitItem? Hovered { get; private set; }
     public string? ActiveId { get; set; }
+    public string? FocusId { get; private set; }
+    public bool ShowFocus { get; private set; }
+
+    public void FocusPointer(float x, float y)
+    {
+        FocusId = HitTest(x, y)?.Id;
+        ShowFocus = false;
+    }
+
+    public void HideFocus() => ShowFocus = false;
+
+    private bool IsTabStop(int index)
+    {
+        var (item, visible) = _items[index];
+        return item.Cursor is UiCursorKind.Hand or UiCursorKind.IBeam &&
+            HitTest(visible.CenterX, visible.CenterY)?.Id == item.Id;
+    }
+
+    public bool MoveFocus(bool reverse)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var order = new List<string>();
+        for (int i = 0; i < _items.Count; i++)
+            if (IsTabStop(i) && seen.Add(_items[i].Item.Id)) order.Add(_items[i].Item.Id);
+        if (order.Count == 0) return false;
+        int index = FocusId == null ? -1 : order.IndexOf(FocusId);
+        if (index < 0 && reverse) index = 0;
+        FocusId = order[(index + order.Count + (reverse ? -1 : 1)) % order.Count];
+        ShowFocus = true;
+        return true;
+    }
+
+    public bool TryGetFocus(out UiHitItem target, out UiRect visible)
+    {
+        for (int i = 0; FocusId != null && i < _items.Count; i++)
+        {
+            if (_items[i].Item.Id == FocusId && IsTabStop(i))
+            {
+                (target, visible) = _items[i];
+                return true;
+            }
+        }
+        target = default;
+        visible = default;
+        return false;
+    }
 
     public void Clear()
     {
@@ -64,7 +110,7 @@ internal sealed class UiHitMap
     public void ClearHover() => Hovered = null;
 
     public bool IsHover(string id) => Hovered?.Id == id;
-    public bool IsActive(string id) => ActiveId == id;
+    public bool IsActive(string id) => ActiveId == id && Hovered?.Id == id;
     public bool IsHoverOrActive(string id) => Hovered?.Id == id || ActiveId == id;
 }
 
@@ -102,8 +148,8 @@ internal sealed class UiScrollState
     public UiRect GetThumbRect()
     {
         if (MaxOffset <= 0.5f || TrackRect.IsEmpty || ContentHeight <= 0f) return default;
-        float ratio = Math.Clamp(ViewportHeight / ContentHeight, 0.08f, 1f);
-        float thumbH = MathF.Max(26f, TrackRect.Height * ratio);
+        float ratio = Math.Clamp(ViewportHeight / ContentHeight, 0f, 1f);
+        float thumbH = MathF.Min(TrackRect.Height, MathF.Max(28f, TrackRect.Height * ratio));
         float travel = MathF.Max(1f, TrackRect.Height - thumbH);
         float thumbY = TrackRect.Y + travel * (Offset / MaxOffset);
         return new UiRect(TrackRect.X, thumbY, TrackRect.Width, thumbH);
@@ -120,13 +166,9 @@ internal sealed class UiScrollState
             _dragStartOffset = Offset;
             return true;
         }
-        // Page jump on track click
-        float targetRatio = Math.Clamp((yDip - TrackRect.Y - thumb.Height * 0.5f) / MathF.Max(1f, TrackRect.Height - thumb.Height), 0f, 1f);
-        Offset = targetRatio * MaxOffset;
+        // WPF's track buttons issue PageUp/PageDown; only the thumb starts a drag.
+        Offset += yDip < thumb.Y ? -ViewportHeight : ViewportHeight;
         Clamp();
-        Dragging = true;
-        _dragStartY = yDip;
-        _dragStartOffset = Offset;
         return true;
     }
 
@@ -270,7 +312,7 @@ internal static class UiPrimitives
         g.FillRoundedRect(track, 10f, trackCol);
 
         float cx = isChecked ? track.Right - 2f - 8f : track.X + 2f + 8f;
-        UiColor thumbCol = enabled ? t.OnAccent : t.OnAccent.WithAlphaFraction(0.65f);
+        UiColor thumbCol = t.OnAccent.WithAlphaFraction(!enabled ? 0.45f : hot ? 0.85f : 1f);
         g.FillEllipse(cx, track.CenterY, 8f, 8f, thumbCol);
     }
 
@@ -278,22 +320,23 @@ internal static class UiPrimitives
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
         bool hot = enabled && hit.IsHover(id);
-        var box = new UiRect(rect.X, rect.CenterY - 8f, 16f, 16f);
+        if (hot) g.FillRoundedRect(rect, 7f, t.NavHover);
+        float opacity = enabled ? 1f : 0.45f;
+        var box = new UiRect(rect.X + 8f, rect.CenterY - 9f, 18f, 18f);
         if (isChecked)
         {
-            g.FillRoundedRect(box, 4f, t.Accent);
-            g.DrawLine(box.X + 3.5f, box.Y + 8.2f, box.X + 6.8f, box.Y + 11.4f, t.OnAccent, 1.8f);
-            g.DrawLine(box.X + 6.8f, box.Y + 11.4f, box.X + 12.4f, box.Y + 4.8f, t.OnAccent, 1.8f);
+            g.FillRoundedRect(box, 5f, t.Accent.WithAlphaFraction(opacity));
+            var ink = t.OnAccent.WithAlphaFraction(opacity);
+            g.DrawLine(box.CenterX - 3.5f, box.CenterY, box.CenterX - 0.5f, box.CenterY + 3f, ink, 2f);
+            g.DrawLine(box.CenterX - 0.5f, box.CenterY + 3f, box.CenterX + 3.5f, box.CenterY - 2f, ink, 2f);
         }
         else
         {
-            g.FillRoundedRect(box, 4f, t.SurfaceBg);
-            g.DrawRoundedRect(box, 4f, hot ? t.Accent : t.Border, 1f);
+            g.DrawRoundedRect(box.Deflate(0.8f), 5f, (hot ? t.Accent : t.Border).WithAlphaFraction(opacity), 1.6f);
         }
         if (!string.IsNullOrEmpty(label))
         {
-            var textRect = new UiRect(box.Right + 8f, rect.Y, MathF.Max(0f, rect.Width - 24f), rect.Height);
-            g.DrawText(label, textRect, enabled ? t.TextPrimary : t.TextSecondary, fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
+            g.DrawText(label, rect.Deflate(35f, 0f, 8f, 0f), t.TextPrimary.WithAlphaFraction(opacity), fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
         }
     }
 
@@ -301,14 +344,12 @@ internal static class UiPrimitives
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
         bool hot = enabled && hit.IsHover(id);
-        float cy = rect.CenterY;
-        float cx = rect.X + 8f;
-        g.FillEllipse(cx, cy, 7.5f, 7.5f, t.SurfaceBg);
-        g.DrawEllipse(cx, cy, 7.5f, 7.5f, selected || hot ? t.Accent : t.Border, 1.3f);
-        if (selected) g.FillEllipse(cx, cy, 4f, 4f, t.Accent);
-
-        g.DrawText(label, new UiRect(rect.X + 23f, rect.Y, MathF.Max(0f, rect.Width - 23f), rect.Height),
-            enabled ? t.TextPrimary : t.TextSecondary, fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        float cy = rect.CenterY, cx = rect.X + 16.5f;
+        float opacity = enabled ? 1f : 0.45f;
+        if (hot) g.FillRoundedRect(rect, 7f, t.NavHover);
+        if (selected) g.FillEllipse(cx, cy, 8.5f, 8.5f, t.Accent.WithAlphaFraction(opacity));
+        else g.DrawEllipse(cx, cy, 7.7f, 7.7f, (hot ? t.Accent : t.Border).WithAlphaFraction(opacity), 1.6f);
+        g.DrawText(label, rect.Deflate(34f, 0f, 8f, 0f), t.TextPrimary.WithAlphaFraction(opacity), fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
     }
 
     /// <summary>

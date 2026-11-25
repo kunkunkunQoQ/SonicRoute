@@ -123,6 +123,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
     private bool _trackingLeave;
     private int _leftClickCount;
     private bool _rightPointerDown;
+    private WindowTooltip? _tooltip;
+    private string? _armedKeyTarget;
+    private int _armedKey;
     private bool _paintPending;
     private bool _animTimerActive;
     private UiCursorKind _cursor = UiCursorKind.Arrow;
@@ -314,6 +317,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
     public void ReleasePointerCapture()
     {
+        _armedKeyTarget = null;
+        _tooltip?.Clear();
         var hwnd = Handle;
         bool hadPress = _leftClickCount != 0 || _rightPointerDown;
         _leftClickCount = 0;
@@ -358,6 +363,15 @@ internal abstract unsafe class LayeredWindow : IDisposable
             SetForegroundWindow(Handle);
             SetFocus(Handle);
         }
+    }
+
+    internal static void ReturnFromEditor(nint owner, bool advance, bool reverse)
+    {
+        if (!Instances.TryGetValue(owner, out var window) || !window.IsVisible) return;
+        var foreground = GetForegroundWindow();
+        if (foreground != 0 && foreground != owner) return;
+        window.RequestFocus();
+        if (advance && window.InputMap?.MoveFocus(reverse) == true) window.Invalidate();
     }
 
     public void Invalidate()
@@ -461,6 +475,15 @@ internal abstract unsafe class LayeredWindow : IDisposable
         try
         {
             OnRender(_target, wPx / DpiScale, hPx / DpiScale);
+            if (InputMap is { ShowFocus: true } focus && focus.TryGetFocus(out _, out var visible))
+            {
+                var ring = visible.Offset(0, InputOffsetY).Deflate(1.5f);
+                if (!ring.IsEmpty)
+                {
+                    _target.DrawRoundedRect(ring, 3f, UiColor.White, 2f);
+                    _target.DrawRoundedRect(ring, 3f, UiColor.Black, 1f);
+                }
+            }
         }
         finally
         {
@@ -497,6 +520,8 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
     protected void ReleaseRenderResources()
     {
+        _tooltip?.Dispose();
+        _tooltip = null;
         StopAnimationTimer();
         _target?.Dispose();
         _target = null;
@@ -529,6 +554,9 @@ internal abstract unsafe class LayeredWindow : IDisposable
     protected virtual int HitTestNonClient(float xDip, float yDip) => 1 /*HTCLIENT*/;
     protected virtual void OnPointerMove(float xDip, float yDip, bool leftDown) { }
     protected virtual void OnPointerLeave() { }
+    protected virtual UiHitMap? InputMap => null;
+    protected virtual float InputOffsetY => 0;
+    protected virtual bool ActivateFocused(UiHitItem item, UiPointerEventArgs e) => false;
     protected virtual void OnPointerDown(UiPointerEventArgs e) { }
     protected virtual void OnPointerUp(UiPointerEventArgs e) { }
     protected virtual void OnMouseWheel(float xDip, float yDip, float delta, bool horizontal) { }
@@ -707,10 +735,18 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 }
                 (float x, float y) = ExtractPoint(lParam, win.DpiScale);
                 win.OnPointerMove(x, y, ((uint)wParam & 0x0001) != 0);
+                if (win.IsVisible && (wParam & 0x73u) == 0 &&
+                    win.InputMap?.HitTest(x, y - win.InputOffsetY) is { Tooltip.Length: > 0 } hovered)
+                {
+                    win._tooltip ??= new WindowTooltip(hwnd);
+                    win._tooltip.Move(hovered, wParam, lParam);
+                }
+                else win._tooltip?.Clear();
                 return 0;
             }
 
             case WmMouseLeave:
+                win._tooltip?.Clear();
                 win._trackingLeave = false;
                 win.OnPointerLeave();
                 return 0;
@@ -722,6 +758,14 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 if (win.Handle != hwnd || !win._visible) return 0;
                 SetCapture(hwnd);
                 if (win.Handle != hwnd || GetCapture() != hwnd) return 0;
+                win._tooltip?.Clear();
+                win._armedKeyTarget = null;
+                var (downX, downY) = ExtractPoint(lParam, win.DpiScale);
+                if (win.InputMap is { } map)
+                {
+                    if (map.ShowFocus) win.Invalidate();
+                    map.FocusPointer(downX, downY - win.InputOffsetY);
+                }
                 win._leftClickCount = msg == WmLButtonDblClk ? 2 : 1;
                 win.OnPointerDown(MakePointerArgs(wParam, lParam, win.DpiScale, UiMouseButton.Left, win._leftClickCount));
                 return 0;
@@ -738,6 +782,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
                 return 0;
 
             case WmRButtonDown:
+                win._tooltip?.Clear();
                 if (!win.NoActivate) SetFocus(hwnd);
                 if (win.Handle != hwnd || !win._visible) return 0;
                 win._rightPointerDown = true;
@@ -787,6 +832,11 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmCancelMode:
             case WmKillFocus:
+                if (win.InputMap is { ShowFocus: true } oldFocus)
+                {
+                    oldFocus.HideFocus();
+                    win.Invalidate();
+                }
                 win.ReleasePointerCapture();
                 break;
 
@@ -821,6 +871,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
             case WmMouseWheel:
             case WmMouseHWheel:
             {
+                win._tooltip?.Clear();
                 var pt = new Point { X = unchecked((short)((long)lParam & 0xFFFF)), Y = unchecked((short)(((long)lParam >> 16) & 0xFFFF)) };
                 ScreenToClient(hwnd, ref pt);
                 short delta = unchecked((short)((long)wParam >> 16));
@@ -830,8 +881,44 @@ internal abstract unsafe class LayeredWindow : IDisposable
 
             case WmKeyDown:
             case WmSysKeyDown:
-                if (win.OnKeyDown((int)wParam, (GetKeyState(0x11) & 0x8000) != 0, (GetKeyState(0x10) & 0x8000) != 0, (GetKeyState(0x12) & 0x8000) != 0))
+            {
+                win._tooltip?.Clear();
+                bool ctrl = GetKeyState(0x11) < 0, shift = GetKeyState(0x10) < 0, alt = GetKeyState(0x12) < 0;
+                if (win.OnKeyDown((int)wParam, ctrl, shift, alt))
                     return 0;
+                if (msg == WmKeyDown && !ctrl && !alt && win._leftClickCount == 0 && win.InputMap is { } inputs)
+                {
+                    if (wParam == 9 && inputs.MoveFocus(shift))
+                    {
+                        win._armedKeyTarget = null;
+                        win.Invalidate();
+                        return 0;
+                    }
+                    if (wParam is 13 or 32 && inputs.ShowFocus && inputs.TryGetFocus(out var item, out _))
+                    {
+                        if (((long)lParam & (1L << 30)) == 0)
+                        {
+                            win._armedKey = (int)wParam;
+                            win._armedKeyTarget = item.Id;
+                        }
+                        return 0;
+                    }
+                    if (wParam == 27) win._armedKeyTarget = null;
+                }
+                break;
+            }
+            case WmKeyUp:
+                if ((int)wParam == win._armedKey && win._armedKeyTarget is string armed)
+                {
+                    win._armedKeyTarget = null;
+                    if (win.InputMap is { ShowFocus: true } inputs &&
+                        inputs.TryGetFocus(out var item, out var visible) && item.Id == armed)
+                    {
+                        win.ActivateFocused(item, new UiPointerEventArgs { Button = UiMouseButton.Left,
+                            X = visible.CenterX, Y = visible.CenterY + win.InputOffsetY, Shift = GetKeyState(0x10) < 0 });
+                    }
+                    return 0;
+                }
                 break;
 
             case WmChar:
@@ -959,6 +1046,7 @@ internal abstract unsafe class LayeredWindow : IDisposable
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int cmd);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] private static extern nint SetFocus(nint hwnd);
     [DllImport("user32.dll")] private static extern bool IsIconic(nint hwnd);
     [DllImport("user32.dll")] private static extern bool IsZoomed(nint hwnd);

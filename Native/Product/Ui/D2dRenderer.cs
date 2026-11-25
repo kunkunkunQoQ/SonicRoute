@@ -84,7 +84,11 @@ internal sealed unsafe class D2dSharedContext : IDisposable
     {
         EnsureInit();
         float roundedSize = MathF.Round(fontSize * 4f) * 0.25f;
-        var key = new TextFormatKey(fontFamily, roundedSize, fontWeight, hAlign, vAlign, wrap, ellipsis);
+        string language = L10n.CurrentLanguage;
+        // External translation identifiers can be arbitrary file names.
+        string locale = language is "zh-CN" or "zh-TW" or "en-US" or "ja-JP" or "ko-KR" or
+            "de-DE" or "fr-FR" or "es-ES" or "ru-RU" ? language : "zh-CN";
+        var key = new TextFormatKey(fontFamily, locale, roundedSize, fontWeight, hAlign, vAlign, wrap, ellipsis);
         if (_formats.TryGetValue(key, out nint fmt)) return fmt;
 
         if (_formats.Count >= MaxFormats && _formatOrder.Count > 0)
@@ -98,7 +102,7 @@ internal sealed unsafe class D2dSharedContext : IDisposable
         }
 
         fixed (char* pFam = fontFamily)
-        fixed (char* pLoc = "en-US")
+        fixed (char* pLoc = locale)
         {
             Check(((delegate* unmanaged[Stdcall]<nint, char*, nint, uint, uint, uint, float, char*, nint*, int>)Slot(_write, 15))
                 (_write, pFam, 0, (uint)fontWeight, 0, 5 /*NORMAL*/, roundedSize, pLoc, &fmt), "CreateTextFormat");
@@ -343,7 +347,7 @@ internal sealed unsafe class D2dSharedContext : IDisposable
     [DllImport("d2d1.dll")] private static extern int D2D1CreateFactory(int type, ref Guid iid, nint options, out nint factory);
     [DllImport("dwrite.dll")] private static extern int DWriteCreateFactory(int type, ref Guid iid, out nint factory);
 
-    private readonly record struct TextFormatKey(string Family, float Size, int Weight, UiTextAlign H, UiVertAlign V, bool Wrap, bool Ellipsis);
+    private readonly record struct TextFormatKey(string Family, string Locale, float Size, int Weight, UiTextAlign H, UiVertAlign V, bool Wrap, bool Ellipsis);
 
     private ref struct SvgPathParser
     {

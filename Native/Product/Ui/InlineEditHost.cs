@@ -40,6 +40,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
     private static readonly delegate* unmanaged[Stdcall]<nint, uint, nuint, nint, nint> EditSubProcPtr = &EditSubProc;
 
     private nint _hostHwnd;
+    private nint _ownerHwnd;
     private nint _editHwnd;
     private nint _origEditProc;
     private nint _bgBrush;
@@ -80,6 +81,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
         Close(commit: false, viaEnter: false);
 
         ActiveTag = tag;
+        _ownerHwnd = ownerHwnd;
         _mono = mono;
         _fontSizeDip = fontSizeDip;
         _fontDpi = dpi;
@@ -280,17 +282,20 @@ internal sealed unsafe class InlineEditHost : IDisposable
             return DefWindowProcW(hwnd, msg, wParam, lParam);
 
         nint origProc = host._origEditProc;
+        if (msg == 0x0102 /* WM_CHAR */ && wParam == 1 /* Ctrl+A */)
+        {
+            SendMessageW(hwnd, EmSetSel, 0, -1);
+            return 0;
+        }
         if (msg == WmKeyDown && !IsImeComposing(hwnd))
         {
             int vk = (int)wParam;
-            if (vk == 0x0D /*VK_RETURN*/)
+            if (vk is 9 or 13 or 27)
             {
-                host.Close(commit: true, viaEnter: true);
-                return 0;
-            }
-            if (vk == 0x1B /*VK_ESCAPE*/)
-            {
-                host.Close(commit: false, viaEnter: false);
+                bool reverse = GetKeyState(0x10) < 0;
+                nint owner = host._ownerHwnd;
+                host.Close(commit: vk != 27, viaEnter: vk == 13);
+                LayeredWindow.ReturnFromEditor(owner, vk == 9, reverse);
                 return 0;
             }
         }
@@ -347,6 +352,7 @@ internal sealed unsafe class InlineEditHost : IDisposable
     [DllImport("user32.dll")] private static extern bool DestroyWindow(nint hwnd);
     [DllImport("user32.dll")] private static extern bool ShowWindow(nint hwnd, int cmd);
     [DllImport("user32.dll")] private static extern nint SetFocus(nint hwnd);
+    [DllImport("user32.dll")] private static extern short GetKeyState(int key);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll")] private static extern nint DefWindowProcW(nint hwnd, uint msg, nuint wParam, nint lParam);
     [DllImport("user32.dll")] private static extern nint CallWindowProcW(nint prev, nint hwnd, uint msg, nuint wParam, nint lParam);

@@ -31,8 +31,10 @@ internal sealed class UiMenuItem
 /// </summary>
 internal sealed class PopupMenuWindow : LayeredWindow
 {
-    private const float PadX = 6f;
-    private const float PadY = 6f;
+    internal event Action? Closed;
+
+    private const float PadX = 5f; // 1 DIP frame + 4 DIP WPF menu padding
+    private const float PadY = 5f;
     private const float ItemH = 30f;
     private const float HeaderH = 26f;
     private const float SepH = 9f;
@@ -100,7 +102,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         Invalidate();
     }
 
-    private void OpenAt(int anchorXPx, int anchorYPx, bool alignBottomUp)
+    private void OpenAt(int anchorXPx, int anchorYPx, bool alignBottomUp, int? flipEdgePx = null)
     {
         GetMonitorWorkAreaForPoint(anchorXPx, anchorYPx, out int ml, out int mt, out int mr, out int mb, out uint monDpi);
         float scale = monDpi / 96f;
@@ -112,7 +114,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         int xPx = anchorXPx;
         int yPx = alignBottomUp ? anchorYPx - hPx : anchorYPx;
 
-        if (xPx + wPx > mr - 6) xPx = Math.Max(ml + 6, mr - wPx - 6);
+        if (xPx + wPx > mr - 6) xPx = Math.Max(ml + 6, (flipEdgePx ?? (mr - 6)) - wPx);
         if (xPx < ml + 6) xPx = ml + 6;
         if (yPx + hPx > mb - 6) yPx = Math.Max(mt + 6, mb - hPx - 6);
         if (yPx < mt + 6) yPx = mt + 6;
@@ -129,7 +131,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         bool anyLeftCol = false;
         foreach (var item in _items)
         {
-            if (item.Checked || item.Icon is not null || item.Dot != UiMenuDotKind.None)
+            if (item.Icon is not null || item.Dot != UiMenuDotKind.None)
                 anyLeftCol = true;
         }
 
@@ -149,7 +151,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
             float hintW = string.IsNullOrEmpty(item.RightHint)
                 ? 0f
                 : ctx.MeasureText(item.RightHint, UiMetrics.FontFamily, 11f, 400, 120f, 32f, false).Width + 20f;
-            float subW = item.SubItems is { Count: > 0 } ? 22f : 0f;
+            float subW = item.Checked || item.SubItems is { Count: > 0 } ? 22f : 0f;
             float rowW = PadX * 2f + (anyLeftCol ? 28f : 10f) + textW + hintW + subW + 20f;
             if (rowW > maxW) maxW = rowW;
             _itemRects.Add(new UiRect(PadX, y, 0f, h));
@@ -178,7 +180,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         bool anyLeftCol = false;
         foreach (var it in _items)
         {
-            if (it.Checked || it.Icon is not null || it.Dot != UiMenuDotKind.None) { anyLeftCol = true; break; }
+            if (it.Icon is not null || it.Dot != UiMenuDotKind.None) { anyLeftCol = true; break; }
         }
 
         var view = new UiRect(PadX, PadY, widthDip - PadX * 2f, heightDip - PadY * 2f);
@@ -207,14 +209,10 @@ internal sealed class PopupMenuWindow : LayeredWindow
 
             bool highlighted = i == _hoverIndex || i == _focusedIndex || i == _openSubIndex;
             if (highlighted && item.Enabled)
-                g.FillRoundedRect(r, 6f, _theme.NavHover);
+                g.FillRoundedRect(r, 4f, _theme.NavHover);
 
             float textLeft = r.X + (anyLeftCol ? 28f : 10f);
-            if (item.Checked)
-            {
-                g.DrawIcon(UiIcon.Check, new UiRect(r.X + 8f, r.CenterY - 6f, 12f, 12f), _theme.Accent, 2f);
-            }
-            else if (item.Icon is UiIcon ic)
+            if (item.Icon is UiIcon ic)
             {
                 UiColor icCol = !item.Enabled ? _theme.TextSecondary.WithAlphaFraction(0.55f)
                     : item.Danger ? _theme.Fail
@@ -237,6 +235,11 @@ internal sealed class PopupMenuWindow : LayeredWindow
                 : item.Danger ? _theme.Fail : _theme.TextPrimary;
 
             float rightReserve = 10f;
+            if (item.Checked)
+            {
+                g.DrawIcon(UiIcon.Check, new UiRect(r.Right - rightReserve - 12f, r.CenterY - 6f, 12f, 12f), fg);
+                rightReserve += 20f;
+            }
             if (item.SubItems is { Count: > 0 })
             {
                 g.DrawIcon(UiIcon.ChevronRight, new UiRect(r.Right - 16f, r.CenterY - 5f, 10f, 10f), _theme.TextSecondary, 1.8f);
@@ -250,7 +253,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
             }
 
             g.DrawText(item.Text, new UiRect(textLeft, r.Y, MathF.Max(10f, r.Right - rightReserve - textLeft), r.Height),
-                fg, 12.5f, item.Checked ? 600 : 400, UiTextAlign.Leading, UiVertAlign.Center);
+                fg, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
         }
         g.PopClip();
 
@@ -399,6 +402,8 @@ internal sealed class PopupMenuWindow : LayeredWindow
     protected override void OnClosed()
     {
         CloseSubMenu();
+        Closed?.Invoke();
+        Closed = null;
         base.OnClosed();
     }
 
@@ -460,7 +465,7 @@ internal sealed class PopupMenuWindow : LayeredWindow
         var r = _itemRects[idx].Offset(0f, PadY - _scroll.Offset);
         var pt = DipToScreenPx(r.Right - 4f, r.Y - 4f);
         _subMenu = new PopupMenuWindow(_theme, sub, Handle, this);
-        _subMenu.OpenAt(pt.X, pt.Y, alignBottomUp: false);
+        _subMenu.OpenAt(pt.X, pt.Y, alignBottomUp: false, flipEdgePx: DipToScreenPx(r.X + 4f, r.Y).X);
     }
 
     private void CloseSubMenu()
