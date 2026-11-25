@@ -256,6 +256,19 @@ internal sealed class AppsPageView : IViewPage
         RenderDetailsPane(g, t, hit, rightRect);
     }
 
+    private static void DrawSidebarHeader(D2dTarget g, UiThemePalette theme, UiHitMap hit, UiRect row, string id, string label, int count)
+    {
+        string number = count.ToString(CultureInfo.InvariantCulture);
+        var measure = D2dSharedContext.Instance.MeasureText(number, UiMetrics.FontFamily, 11f, 400, 80f, 28f, false);
+        float badgeWidth = MathF.Ceiling(measure.Width) + 10f;
+        var badge = new UiRect(row.Right - badgeWidth, row.CenterY - (measure.Height + 6f) / 2f, badgeWidth, measure.Height + 6f);
+        var text = new UiRect(row.X, row.Y, MathF.Max(0f, badge.X - 4f - row.X), row.Height);
+        g.DrawText(label, text, theme.TextSecondary, 13f, 600);
+        hit.Add(id, text, UiCursorKind.Arrow, label);
+        g.FillRoundedRect(badge, 6f, theme.SurfaceAlt);
+        g.DrawText(number, badge, theme.TextSecondary, 11f, 400, UiTextAlign.Center, UiVertAlign.Center);
+    }
+
     private void RenderLeftSidebar(D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect inner)
     {
         float y = inner.Y;
@@ -265,11 +278,7 @@ internal sealed class AppsPageView : IViewPage
         var profiles = phone.Store.Profiles.Where(p => p.LastDevice != null).ToArray();
 
         var phoneHdr = new UiRect(inner.X + 1f, y, inner.Width - 2f, 22f);
-        g.DrawText(L10n.T("Phone.Title"), new UiRect(phoneHdr.X, phoneHdr.Y, phoneHdr.Width - 32f, phoneHdr.Height),
-            t.TextSecondary, 13f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        string pCountStr = profiles.Length.ToString(CultureInfo.InvariantCulture);
-        float pBadgeW = MathF.Max(22f, pCountStr.Length * 7f + 10f);
-        UiPrimitives.DrawBadge(g, t, new UiRect(phoneHdr.Right - pBadgeW, phoneHdr.Y + 1f, pBadgeW, 20f), pCountStr, t.SurfaceAlt, t.TextSecondary, fontSize: 11f);
+        DrawSidebarHeader(g, t, hit, phoneHdr, "apps.phone.header", L10n.T("Phone.Title"), profiles.Length);
         y += 28f;
 
         if (profiles.Length > 0)
@@ -335,11 +344,7 @@ internal sealed class AppsPageView : IViewPage
 #endif
 
         var appsHdr = new UiRect(inner.X + 1f, y, inner.Width - 2f, 22f);
-        g.DrawText(L10n.T("Apps.Title"), new UiRect(appsHdr.X, appsHdr.Y, appsHdr.Width - 34f, appsHdr.Height),
-            t.TextSecondary, 13f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        string aCountStr = _apps.Count.ToString(CultureInfo.InvariantCulture);
-        float aBadgeW = MathF.Max(22f, aCountStr.Length * 7f + 10f);
-        UiPrimitives.DrawBadge(g, t, new UiRect(appsHdr.Right - aBadgeW, appsHdr.Y + 1f, aBadgeW, 20f), aCountStr, t.SurfaceAlt, t.TextSecondary, fontSize: 11f);
+        DrawSidebarHeader(g, t, hit, appsHdr, "apps.list.header", L10n.T("Apps.Title"), _apps.Count);
         y += 30f;
 
         float refreshH = 30f;
@@ -427,8 +432,8 @@ internal sealed class AppsPageView : IViewPage
         float inPillsH = 0f;
         if (_actions.Config.ExperimentalMic) LayoutPillFlow(inChoices, estRouteColW, out inPillsH);
 
-        float card1H = 82f;
-        float card2H = 20f + 26f + 22f + 34f + 6f + MathF.Max(outPillsH, inPillsH);
+        float card1H = hasApp ? 82f : 70f;
+        float card2H = 20f + 26f + 22f + 36f + 5f + MathF.Max(outPillsH, inPillsH);
         float card3H = 20f + 22f + 34f;
         float card4H = 20f + 24f + 36f;
         float totalH = card1H + 8f + card2H + 8f + card3H + 8f + card4H + 4f;
@@ -441,7 +446,7 @@ internal sealed class AppsPageView : IViewPage
         float routeColW = _actions.Config.ExperimentalMic ? (contentW - 28f) * 0.5f : (contentW - 20f);
         var outPillRects = LayoutPillFlow(outChoices, routeColW, out outPillsH);
         var inPillRects = _actions.Config.ExperimentalMic ? LayoutPillFlow(inChoices, routeColW, out inPillsH) : Array.Empty<UiRect>();
-        card2H = 20f + 26f + 22f + 34f + 6f + MathF.Max(outPillsH, inPillsH);
+        card2H = 20f + 26f + 22f + 36f + 5f + MathF.Max(outPillsH, inPillsH);
         _detailsScroll.ContentHeight = card1H + card2H + card3H + card4H + 28f;
         _detailsScroll.Clamp();
 
@@ -457,7 +462,6 @@ internal sealed class AppsPageView : IViewPage
         var iconCard = new UiRect(c1In.X, c1In.Y, 48f, 48f);
         UiPrimitives.DrawCard(g, t, iconCard, 10f);
         if (hasApp) DrawAppIcon(g, t, app!, iconCard.Deflate(8f));
-        else g.DrawIcon(UiIcon.Apps, iconCard.Deflate(12f), t.TextSecondary, 1.8f);
 
         string importLabel = L10n.T("AppIcons.Import");
         string resetLabel = L10n.T("AppIcons.Reset");
@@ -511,9 +515,9 @@ internal sealed class AppsPageView : IViewPage
 
         var outCol = new UiRect(c2In.X, colTop, routeColW, c2In.Bottom - colTop);
         g.DrawText(L10n.T("Apps.Output"), new UiRect(outCol.X, outCol.Y, outCol.Width, 18f), t.TextSecondary, 13f, 600);
-        _outputComboRect = new UiRect(outCol.X, outCol.Y + 22f, outCol.Width, 34f);
+        _outputComboRect = new UiRect(outCol.X, outCol.Y + 22f, outCol.Width, 36f);
         string displayedPrimary = GetDisplayedPrimaryOutput();
-        string currentOutLabel = hasApp ? DeviceLabel(displayedPrimary, Flow.Render) : L10n.T("Ov.NoOutput");
+        string currentOutLabel = hasApp ? DeviceLabel(displayedPrimary, Flow.Render) : "";
         UiPrimitives.DrawComboBox(g, t, hit, "apps.out.combo", _outputComboRect, currentOutLabel, enabled: hasApp);
         if (hasApp) _clicks["apps.out.combo"] = () => OpenOutputCombo(outChoices);
 
@@ -521,7 +525,7 @@ internal sealed class AppsPageView : IViewPage
         string? nativeCandidate = hasApp && !app!.IsExternal && !PcRoutingApi.IsPhoneOutputDevice(displayedPrimary) && activeSet.Contains(displayedPrimary)
             ? displayedPrimary
             : null;
-        float pillsOriginY = _outputComboRect.Bottom + 6f;
+        float pillsOriginY = _outputComboRect.Bottom + 5f;
         for (int i = 0; i < outChoices.Length; i++)
         {
             var dev = outChoices[i];
@@ -530,7 +534,7 @@ internal sealed class AppsPageView : IViewPage
             bool isNative = hasApp && isMember && (app!.IsExternal || (nativeCandidate != null && IdCmp.Equals(dev.Id, nativeCandidate)));
             bool isMirror = hasApp && isMember && !isNative;
             string pidKey = "apps.out.dev." + dev.Id;
-            DrawQuickDevButton(g, t, hit, pidKey, pr, dev.Label, isNative, isMirror, enabled: hasApp, tooltip: L10n.T("Qp.PlaybackMultiSelect"));
+            DrawQuickDevButton(g, t, hit, pidKey, pr, dev.ShortLabel, isNative, isMirror, hasApp, dev.Label);
             var devCopy = dev;
             if (hasApp) _clicks[pidKey] = () => HandleOutputPillClick(devCopy.Id, outChoices);
         }
@@ -540,19 +544,19 @@ internal sealed class AppsPageView : IViewPage
             var inCol = new UiRect(outCol.Right + 8f, colTop, routeColW, c2In.Bottom - colTop);
             bool inEnabled = hasApp && !app!.IsExternal;
             g.DrawText(L10n.T("Apps.Input"), new UiRect(inCol.X, inCol.Y, inCol.Width, 18f), t.TextSecondary, 13f, 600);
-            _inputComboRect = new UiRect(inCol.X, inCol.Y + 22f, inCol.Width, 34f);
-            string currentInLabel = hasApp ? DeviceLabel(_nativeInput, Flow.Capture) : L10n.T("Ov.NoInput");
+            _inputComboRect = new UiRect(inCol.X, inCol.Y + 22f, inCol.Width, 36f);
+            string currentInLabel = hasApp ? DeviceLabel(_nativeInput, Flow.Capture) : "";
             UiPrimitives.DrawComboBox(g, t, hit, "apps.in.combo", _inputComboRect, currentInLabel, enabled: inEnabled);
             if (inEnabled) _clicks["apps.in.combo"] = () => OpenInputCombo(inChoices);
 
-            float inPillsOriginY = _inputComboRect.Bottom + 6f;
+            float inPillsOriginY = _inputComboRect.Bottom + 5f;
             for (int i = 0; i < inChoices.Length; i++)
             {
                 var dev = inChoices[i];
                 var pr = inPillRects[i].Offset(inCol.X, inPillsOriginY);
                 bool isSel = inEnabled && IdCmp.Equals(dev.Id, _nativeInput);
                 string iidKey = "apps.in.dev." + dev.Id;
-                DrawQuickDevButton(g, t, hit, iidKey, pr, dev.Label, isSel, false, enabled: inEnabled);
+                DrawQuickDevButton(g, t, hit, iidKey, pr, dev.ShortLabel, isSel, false, inEnabled, dev.Label);
                 var devCopy = dev;
                 if (inEnabled) _clicks[iidKey] = () => SelectInputRoute(devCopy.Id);
             }
@@ -591,8 +595,6 @@ internal sealed class AppsPageView : IViewPage
             _selectedPeak,
             _selectedMuted,
             _actions.Config.ShowAppPeakMeter,
-            trackHeight: 6f,
-            thumbDiameter: 14f,
             enabled: volReady);
 
         y += card3H + 8f;
@@ -636,11 +638,11 @@ internal sealed class AppsPageView : IViewPage
         D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
         string label, bool isNative, bool isMirror, bool enabled, string? tooltip = null)
     {
-        if (enabled) hit.Add(id, rect, UiCursorKind.Hand, tooltip ?? label);
+        hit.Add(id, rect, enabled ? UiCursorKind.Hand : UiCursorKind.Arrow, tooltip ?? label);
         bool hot = enabled && hit.IsHover(id);
 
         UiColor bg = isNative ? t.DeviceNativeBg : isMirror ? t.Overlay : t.SurfaceBg;
-        UiColor fg = !enabled ? t.TextSecondary.WithAlphaFraction(0.5f) : isNative ? t.DeviceNativeFg : t.TextPrimary;
+        UiColor fg = isNative ? t.DeviceNativeFg : t.TextPrimary;
         UiColor border = isNative ? t.Accent : isMirror ? t.DeviceMirrorBorder : hot ? t.Accent : t.Border;
 
         g.FillRoundedRect(rect, 9f, bg);
@@ -689,7 +691,7 @@ internal sealed class AppsPageView : IViewPage
         g.FillRoundedRect(rect, 6f, t.NavSelected);
         g.DrawRoundedRect(rect, 6f, t.Accent.WithAlphaFraction(0.35f), 1f);
         string lbl = GetAppDisplayLabel(app);
-        string initial = lbl.Length > 0 ? lbl[..1].ToUpperInvariant() : "?";
+        string initial = lbl.Length > 0 ? StringInfo.GetNextTextElement(lbl).ToUpperInvariant() : "?";
         g.DrawText(initial, rect, t.Accent, rect.Height * 0.48f, 600, UiTextAlign.Center, UiVertAlign.Center);
     }
 
@@ -1685,7 +1687,10 @@ internal sealed class AppsPageView : IViewPage
         BatchResetRoutes(new List<AudioAppInfo> { _selectedApp });
     }
 
-    private readonly record struct DeviceChoice(string Id, string Label);
+    private readonly record struct DeviceChoice(string Id, string Label)
+    {
+        public string ShortLabel { get; } = UiPrimitives.ShortDeviceName(Label);
+    }
 
     private DeviceChoice[] BuildOutputChoices()
     {
@@ -1732,9 +1737,9 @@ internal sealed class AppsPageView : IViewPage
 
         for (int i = 0; i < choices.Length; i++)
         {
-            float textW = ctx.MeasureText(choices[i].Label, UiMetrics.FontFamily, 12.5f, 600, MathF.Max(60f, maxWidth - 24f), rowH, false).Width;
-            float pillW = MathF.Min(maxWidth, MathF.Ceiling(textW) + 24f);
-            if (x > 0f && x + pillW > maxWidth)
+            float textW = ctx.MeasureText(choices[i].ShortLabel, UiMetrics.FontFamily, 12.5f, 400, MathF.Max(60f, maxWidth - 24f), rowH, false).Width;
+            float pillW = MathF.Min(maxWidth, MathF.Ceiling(textW) + 26f);
+            if (x > 0f && x + pillW + gapX > maxWidth)
             {
                 x = 0f;
                 y += rowH + gapY;

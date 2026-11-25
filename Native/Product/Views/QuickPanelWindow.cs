@@ -47,6 +47,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         public int ExtIconW, ExtIconH, ExtIconVer;
     }
 
+    private static readonly string VersionLabel = "v" + MainWindowShell.ProductVersion;
     private readonly ApplicationHost _host;
     private readonly AppConfig _config;
     private readonly Action? _onOpenMain;
@@ -613,11 +614,14 @@ internal sealed class QuickPanelWindow : LayeredWindow
         var headerRect = new UiRect(padX, y, innerW, 32f);
         float rx = headerRect.Right;
 
-        const float pinBtnW = 28f;
-        var pinRect = new UiRect(rx - pinBtnW, y - 1f, pinBtnW, 28f);
-        UiPrimitives.DrawSecondaryButton(g, theme, _hit, "qp.pin", pinRect, "",
-            radius: 8f, icon: UiIcon.Pin, active: _pinned, tooltip: L10n.T("Qp.Panel"));
-        rx = pinRect.X - 6f;
+        float titleWidth = D2dSharedContext.Instance.MeasureText(BuildIdentity.DisplayName, UiMetrics.FontFamily,
+            14f, 700, innerW, 28f, false).Width;
+        var titleRect = new UiRect(padX, y, titleWidth + 4f, 28f);
+        _hit.Add("qp.title", titleRect, UiCursorKind.Hand, PinTitleTooltip());
+        if (_hit.IsHover("qp.title") || _hit.IsActive("qp.title"))
+            g.FillRoundedRect(titleRect, 4f, theme.NavHover);
+        g.DrawText(BuildIdentity.DisplayName, titleRect, _pinned ? theme.Accent : theme.TextPrimary,
+            14f, 700, UiTextAlign.Leading, UiVertAlign.Top);
 
 #if SONICROUTE_PHONE
         const float phoneBtnW = 30f;
@@ -629,12 +633,9 @@ internal sealed class QuickPanelWindow : LayeredWindow
         rx = phoneRect.X - 6f;
 #endif
 
-        const string verLabel = "v1.36";
+        string verLabel = VersionLabel;
         float verW = D2dSharedContext.Instance.MeasureText(verLabel, UiMetrics.FontFamily, 10.5f, 400, 80f, 20f, false).Width + 4f;
         g.DrawText(verLabel, new UiRect(rx - verW, y, verW, 28f), theme.TextSecondary, 10.5f, 400, UiTextAlign.Trailing, UiVertAlign.Center);
-
-        var titleRect = new UiRect(padX, y, MathF.Max(40f, rx - verW - 8f - padX), 28f);
-        g.DrawText(BuildIdentity.DisplayName, titleRect, theme.TextPrimary, 14f, 700, UiTextAlign.Leading, UiVertAlign.Center);
 
         // 2. Output Device Selector + Expand Output Volumes Toggle
         y = headerRect.Bottom + 10f;
@@ -664,17 +665,16 @@ internal sealed class QuickPanelWindow : LayeredWindow
         // 3. Master Volume Row (Fixed Mute Label + Slider + Percentage)
         y = masterComboRect.Bottom + 10f;
         string muteText = L10n.T("Qp.Mute");
-        float muteW = Math.Clamp(D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, 400, 120f, 28f, false).Width + 36f, 54f, 100f);
+        float muteW = MathF.Max(54f, D2dSharedContext.Instance.MeasureText(muteText, UiMetrics.FontFamily, 12f, 400, innerW, 28f, false).Width + 22f);
         var masterMuteRect = new UiRect(padX, y + 2f, muteW, 28f);
-        DrawToolButton(g, theme, "qp.mastermute", masterMuteRect, muteText, active: _masterMuted,
-            icon: _masterMuted ? UiIcon.Speaker : UiIcon.VolumeMutedSlash);
+        DrawToolButton(g, theme, "qp.mastermute", masterMuteRect, muteText, active: _masterMuted);
 
         var pctRect = new UiRect(padX + innerW - 42f, y, 42f, 32f);
         g.DrawText($"{_masterVolume}%", pctRect, theme.TextPrimary, 12.5f, 600, UiTextAlign.Trailing, UiVertAlign.Center, wrap: false, ellipsis: false);
 
         var masterSliderRect = new UiRect(masterMuteRect.Right + 10f, y, MathF.Max(40f, pctRect.X - 6f - (masterMuteRect.Right + 10f)), 32f);
         UiPrimitives.DrawVolumeSlider(g, theme, _hit, "qp.masterslider", masterSliderRect,
-            _masterVolume / 100f, 0f, _masterMuted, showPeak: false, trackHeight: 4f, thumbDiameter: 14f);
+            _masterVolume / 100f, 0f, _masterMuted, showPeak: false);
 
         // 4. Divider + App Volumes Header
         y = masterSliderRect.Bottom + 10f;
@@ -1028,7 +1028,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             var sliderRect = new UiRect(midX, headerRect.CenterY - 16f, midW, 32f);
             UiPrimitives.DrawVolumeSlider(g, theme, _hit, sliderId, sliderRect,
                 row.Volume / 100f, row.Peak, row.Muted, _config.ShowAppPeakMeter && !row.IsExternal,
-                trackHeight: 4f, thumbDiameter: 14f, enabled: row.Available);
+                style: UiSliderStyle.PanelRow, enabled: row.Available);
         }
         else
         {
@@ -1043,7 +1043,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             var sliderRect = new UiRect(midX, headerRect.Y + 18f, midW, 32f);
             UiPrimitives.DrawVolumeSlider(g, theme, _hit, sliderId, sliderRect,
                 row.Volume / 100f, row.Peak, row.Muted, _config.ShowAppPeakMeter && !row.IsExternal,
-                trackHeight: 4f, thumbDiameter: 14f, enabled: row.Available);
+                style: UiSliderStyle.PanelRow, enabled: row.Available);
         }
 
         // Expanded device wrap-grid
@@ -1120,20 +1120,15 @@ internal sealed class QuickPanelWindow : LayeredWindow
     }
 
     private void DrawToolButton(D2dTarget g, UiThemePalette theme, string id, UiRect rect, string label,
-        bool enabled = true, bool active = false, UiIcon? icon = null)
+        bool enabled = true, bool active = false)
     {
         if (enabled) _hit.Add(id, rect, UiCursorKind.Hand, label);
         bool hovered = enabled && _hit.IsHover(id);
-        if (active || hovered || _hit.IsActive(id))
-            g.FillRoundedRect(rect, 8f, active ? theme.NavSelected : theme.NavHover);
+        if (hovered || _hit.IsActive(id))
+            g.FillRoundedRect(rect, 8f, theme.NavHover);
         var ink = active ? theme.Accent : theme.TextSecondary;
         if (!enabled) ink = ink.WithAlphaFraction(0.5f);
         g.DrawRoundedRect(rect, 8f, theme.Border, 1);
-        if (icon is { } symbol)
-        {
-            g.DrawIcon(symbol, new UiRect(rect.X + 9, rect.CenterY - 6, 12, 12), ink, 1.6f);
-            rect = new UiRect(rect.X + 18, rect.Y, rect.Width - 18, rect.Height);
-        }
         g.DrawText(label, rect.Deflate(3, 0), ink, 12, 400, UiTextAlign.Center, UiVertAlign.Center);
     }
 
@@ -1242,7 +1237,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
         if (leftDown && _draggingRowIdx >= 0 && _draggingRowIdx < _rows.Count)
         {
             var row = _rows[_draggingRowIdx];
-            int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, xDip);
+            int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, xDip, UiSliderStyle.PanelRow);
             if (row.Volume != val)
             {
                 row.Volume = val;
@@ -1340,7 +1335,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             {
                 _draggingRowIdx = rIdx;
                 _draggingSliderRect = hit.Value.Bounds;
-                int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, e.X);
+                int val = UiPrimitives.SliderValueFromX(_draggingSliderRect, e.X, UiSliderStyle.PanelRow);
                 _rows[rIdx].Volume = val;
                 QueueAppVolume(_rows[rIdx], val);
                 Invalidate();
@@ -1398,6 +1393,8 @@ internal sealed class QuickPanelWindow : LayeredWindow
         {
             _resizingHeight = false;
             _config.QuickPanelHeight = (int)Math.Clamp(MathF.Round(HeightDip), 350f, 850f);
+            if (_resizingTopEdge && string.Equals(_config.QuickPanelPosMode, "custom", StringComparison.OrdinalIgnoreCase))
+                _config.QuickPanelCustomY = CurrentCustomPosition().Y;
             ConfigService.TrySave(_config);
             _host.ViewSettingsChanged();
             RepositionCompanions();
@@ -1452,7 +1449,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         switch (item.Id)
         {
-            case "qp.pin":
+            case "qp.title":
                 _pinned = !_pinned;
                 Invalidate();
                 break;
@@ -1586,6 +1583,19 @@ internal sealed class QuickPanelWindow : LayeredWindow
     {
         if (!active) CheckAutoDismiss();
     }
+
+    private string PinTitleTooltip() => L10n.CurrentLanguage switch
+    {
+        "zh-CN" => _pinned ? "取消固定，切换窗口时关闭面板" : "固定面板，切换窗口时保持打开",
+        "zh-TW" => _pinned ? "取消固定，切換視窗時關閉面板" : "固定面板，切換視窗時保持開啟",
+        "ja-JP" => _pinned ? "固定を解除して、ウィンドウを切り替えるとパネルを閉じる" : "パネルを固定して、ウィンドウを切り替えても開いたままにする",
+        "ko-KR" => _pinned ? "고정 해제하고 다른 창으로 전환하면 패널 닫기" : "다른 창으로 전환해도 패널을 열어 두기",
+        "de-DE" => _pinned ? "Anheften aufheben und das Panel beim Fensterwechsel schließen" : "Panel beim Wechsel zu einem anderen Fenster geöffnet lassen",
+        "fr-FR" => _pinned ? "Désépingler et fermer le panneau lors du changement de fenêtre" : "Garder le panneau ouvert lors du changement de fenêtre",
+        "es-ES" => _pinned ? "Desfijar el panel y cerrarlo al cambiar de ventana" : "Mantener el panel abierto al cambiar de ventana",
+        "ru-RU" => _pinned ? "Открепить панель и закрывать её при смене окна" : "Оставлять панель открытой при смене окна",
+        _ => _pinned ? "Unpin and close the panel when switching windows" : "Keep the panel open when switching windows",
+    };
 
     private void CheckAutoDismiss()
     {
@@ -2193,8 +2203,7 @@ internal sealed class QuickPanelWindow : LayeredWindow
             && _config.QuickPanelCustomX >= 0 && _config.QuickPanelCustomY >= 0)
         {
             // Restore using primary monitor DPI -> physical pixel probe so multi-DPI coordinates never collide across monitors
-            GetMonitorWorkAreaForPoint(0, 0, out _, out _, out _, out _, out uint primaryDpi);
-            float ps = primaryDpi / 96f;
+            float ps = PrimaryCoordinateScale();
             int guessXPx = (int)MathF.Round(_config.QuickPanelCustomX * ps);
             int guessYPx = (int)MathF.Round(_config.QuickPanelCustomY * ps);
 
@@ -2221,13 +2230,22 @@ internal sealed class QuickPanelWindow : LayeredWindow
         SetBoundsPx(xPx, yPx, WidthDip, HeightDip);
     }
 
-    private void SaveAdjustPosition()
+    private static float PrimaryCoordinateScale()
     {
         GetMonitorWorkAreaForPoint(0, 0, out _, out _, out _, out _, out uint primaryDpi);
-        float ps = primaryDpi / 96f;
+        return primaryDpi / 96f;
+    }
+
+    private (int X, int Y) CurrentCustomPosition()
+    {
+        float scale = PrimaryCoordinateScale();
+        return (Math.Max(0, (int)MathF.Round(LeftPx / scale)), Math.Max(0, (int)MathF.Round(TopPx / scale)));
+    }
+
+    private void SaveAdjustPosition()
+    {
         _config.QuickPanelPosMode = "custom";
-        _config.QuickPanelCustomX = Math.Max(0, (int)MathF.Round(LeftPx / ps));
-        _config.QuickPanelCustomY = Math.Max(0, (int)MathF.Round(TopPx / ps));
+        (_config.QuickPanelCustomX, _config.QuickPanelCustomY) = CurrentCustomPosition();
         ConfigService.TrySave(_config);
         _adjustMode = false;
         _adjustDragging = false;

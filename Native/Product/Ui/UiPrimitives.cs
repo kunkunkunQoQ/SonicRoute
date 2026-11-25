@@ -278,6 +278,8 @@ internal sealed class UiScrollState
 /// <summary>
 /// High-fidelity WPF-matching UI primitives (Cards, Buttons, ToggleSwitch, Sliders, Inputs, ComboBoxes).
 /// </summary>
+internal enum UiSliderStyle { Standard, PanelRow, MediaSeek }
+
 internal static class UiPrimitives
 {
     public static void DrawCard(D2dTarget g, UiThemePalette t, UiRect rect, float radius = UiMetrics.CardCornerRadius, bool alt = false, bool highlightBorder = false)
@@ -421,13 +423,14 @@ internal static class UiPrimitives
     public static void DrawVolumeSlider(
         D2dTarget g, UiThemePalette t, UiHitMap hit, string id, UiRect rect,
         float value01, float peak01, bool muted, bool showPeak,
-        float trackHeight = 6f, float thumbDiameter = 14f, bool enabled = true)
+        UiSliderStyle style = UiSliderStyle.Standard, bool enabled = true)
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
         bool hot = enabled && hit.IsHoverOrActive(id);
-        float pad = thumbDiameter * 0.5f;
+        const float trackHeight = 4f;
+        float pad = SliderEndInset(style);
         float barX = rect.X + pad;
-        float barW = MathF.Max(4f, rect.Width - thumbDiameter);
+        float barW = MathF.Max(1f, rect.Width - pad * 2f);
         float barY = rect.CenterY - trackHeight * 0.5f;
         float r = trackHeight * 0.5f;
 
@@ -449,8 +452,19 @@ internal static class UiPrimitives
         }
 
         float thumbX = barX + fillW;
-        float rad = (hot ? thumbDiameter + 2f : thumbDiameter) * 0.5f;
+        float rad = style == UiSliderStyle.MediaSeek ? 5f : 7f;
         UiColor thumbCol = muted ? t.AccentInverse : t.Accent;
+        if (style == UiSliderStyle.Standard)
+        {
+            // App.xaml uses a 28 DIP hit thumb, a 17 DIP ellipse and a 2 DIP surface stroke.
+            g.FillEllipse(thumbX, rect.CenterY + 1f, 10f, 10f, new UiColor(0, 0, 0, 22));
+            g.FillEllipse(thumbX, rect.CenterY + 1f, 9f, 9f, new UiColor(0, 0, 0, 32));
+            g.FillEllipse(thumbX, rect.CenterY, 8.5f, 8.5f, t.SurfaceBg);
+            if (enabled && hot) thumbCol = hit.ActiveId == id ? t.AccentPressed : t.AccentHover;
+            g.FillEllipse(thumbX, rect.CenterY, 6.5f, 6.5f, thumbCol);
+            return;
+        }
+        if (hot) rad += 1f;
         if (!enabled) thumbCol = t.AccentDisabled;
         g.FillEllipse(thumbX, rect.CenterY, rad, rad, thumbCol);
     }
@@ -460,16 +474,23 @@ internal static class UiPrimitives
     {
         if (string.IsNullOrWhiteSpace(full)) return "";
         int paren = full.IndexOf('(');
-        string head = paren > 0 ? full[..paren].Trim() : full.Trim();
+        string head = paren > 0 ? full[..paren].Trim() : full;
         if (head.Length <= 12) return head;
         int[] elements = System.Globalization.StringInfo.ParseCombiningCharacters(head);
         return elements.Length <= 12 ? head : head[..elements[11]] + "…";
     }
 
-    public static int SliderValueFromX(UiRect rect, float mouseX, float thumbDiameter = 14f)
+    private static float SliderEndInset(UiSliderStyle style) => style switch
     {
-        float pad = thumbDiameter * 0.5f;
-        float barW = MathF.Max(1f, rect.Width - thumbDiameter);
+        UiSliderStyle.Standard => 14f,
+        UiSliderStyle.MediaSeek => 5f,
+        _ => 7f
+    };
+
+    public static int SliderValueFromX(UiRect rect, float mouseX, UiSliderStyle style = UiSliderStyle.Standard)
+    {
+        float pad = SliderEndInset(style);
+        float barW = MathF.Max(1f, rect.Width - pad * 2f);
         float t = Math.Clamp((mouseX - (rect.X + pad)) / barW, 0f, 1f);
         return (int)MathF.Round(t * 100f);
     }
@@ -478,11 +499,13 @@ internal static class UiPrimitives
     {
         if (enabled) hit.Add(id, rect, UiCursorKind.Hand);
         bool hot = enabled && hit.IsHover(id);
-        g.FillRoundedRect(rect, UiMetrics.ComboCornerRadius, t.SurfaceBg);
-        g.DrawRoundedRect(rect, UiMetrics.ComboCornerRadius, open || hot ? t.Accent : t.Border, 1f);
+        float opacity = enabled ? 1f : 0.5f;
+        g.FillRoundedRect(rect, UiMetrics.ComboCornerRadius, t.SurfaceBg.WithAlphaFraction(opacity));
+        UiColor edge = open || hot || (hit.ShowFocus && hit.FocusId == id) ? t.Accent : t.Border;
+        g.DrawRoundedRect(rect, UiMetrics.ComboCornerRadius, edge.WithAlphaFraction(opacity), 1f);
         g.DrawText(text, new UiRect(rect.X + 10f, rect.Y, MathF.Max(0f, rect.Width - 32f), rect.Height),
-            enabled ? t.TextPrimary : t.TextSecondary, fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawIcon(UiIcon.ChevronDown, new UiRect(rect.Right - 22f, rect.CenterY - 5.5f, 11f, 11f), t.TextSecondary, 1.8f, open ? 180f : 0f);
+            t.TextPrimary.WithAlphaFraction(opacity), fontSize, 400, UiTextAlign.Leading, UiVertAlign.Center);
+        g.DrawIcon(UiIcon.ChevronDown, new UiRect(rect.Right - 22f, rect.CenterY - 5.5f, 11f, 11f), t.TextSecondary.WithAlphaFraction(opacity), 1.8f, open ? 180f : 0f);
     }
 
     public static void DrawTextBox(

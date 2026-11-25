@@ -4,11 +4,17 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using SonicRoute.Core;
 using SonicRoute.Native.Ui;
+using SonicRoute.Updates;
 
 namespace SonicRoute.Native.Product.Views;
 
 internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 {
+    internal static readonly string ProductVersion =
+        FileVersionInfo.GetVersionInfo(UpdateBootstrap.ExecutablePath).ProductVersion?.Split('+')[0]
+        ?? typeof(MainWindowShell).Assembly.GetName().Version?.ToString(3) ?? "0.0";
+    private static readonly string WindowTitle = $"{BuildIdentity.DisplayName} v{ProductVersion}";
+
     private const uint WmSysCommand = 0x0112;
     private const nuint ScMoveCaption = 0xF012;
     private const float SidebarDurationMs = 180f;
@@ -302,7 +308,7 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
         Invalidate();
     }
 
-    protected override string GetWindowTitle() => BuildIdentity.DisplayName;
+    protected override string GetWindowTitle() => WindowTitle;
 
     protected override void OnShown()
     {
@@ -479,15 +485,14 @@ internal sealed class MainWindowShell : LayeredWindow, IViewHostActions
 
     private void RenderTitleBar(D2dTarget g, UiRect rect)
     {
-        const string titleLabel = "SonicRoute";
-        float textW = D2dSharedContext.Instance.MeasureText(titleLabel, UiMetrics.FontFamily, 13.5f, 600, 200f, 32f, false).Width;
+        float textW = D2dSharedContext.Instance.MeasureText(WindowTitle, UiMetrics.FontFamily, 13.5f, 600, 200f, 32f, false).Width;
         var pillRect = new UiRect(8f, (rect.Height - 28f) * 0.5f, textW + 16f, 28f);
         _hit.Add("shell.titleToggle", pillRect, UiCursorKind.Hand, L10n.T("Window.DragToMove"));
 
         bool pillHot = _hit.IsHover("shell.titleToggle");
         if (pillHot) g.FillRoundedRect(pillRect, 7f, _theme.NavHover);
         UiColor titleFg = _titleTextPressed ? _theme.TextPrimary.WithAlphaFraction(0.7f) : _theme.TextPrimary;
-        g.DrawText(titleLabel, pillRect, titleFg, 13.5f, 600, UiTextAlign.Center, UiVertAlign.Center);
+        g.DrawText(WindowTitle, pillRect, titleFg, 13.5f, 600, UiTextAlign.Center, UiVertAlign.Center);
 
         float btnW = 46f, btnH = 30f;
         float btnY = (rect.Height - btnH) * 0.5f;

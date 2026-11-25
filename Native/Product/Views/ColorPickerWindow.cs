@@ -8,7 +8,7 @@ namespace SonicRoute.Native.Product.Views;
 internal sealed class ColorPickerWindow : LayeredWindow
 {
     private const float PickerWidth = 720f;
-    private const float PickerHeight = 462f;
+    private const float PickerHeight = 494f;
     private static readonly UiColor[] Presets = CreatePresets();
     private static readonly string[] ChannelIds = ["cp.r", "cp.g", "cp.b", "cp.h", "cp.s", "cp.l", "cp.hex"];
     private static readonly string[] LabelKeys = ["Color.Red", "Color.Green", "Color.Blue", "Color.Hue", "Color.Saturation", "Color.Lightness"];
@@ -101,30 +101,30 @@ internal sealed class ColorPickerWindow : LayeredWindow
         g.DrawRoundedRect(surface, 8f, _theme.Border, 1f);
         g.DrawText(GetWindowTitle(), new UiRect(16, 0, w - 64, 34), _theme.TextPrimary, 14, 600);
         UiPrimitives.DrawGhostIconButton(g, _theme, _hit, "cp.close", new UiRect(w - 46, 1, 45, 32), UiIcon.Close, 13);
-        const float left = 20, right = 380, firstY = 82;
-        g.DrawText(L10n.T("Color.Basic"), new UiRect(left + 2, 50, 334, 22), _theme.TextPrimary, 13, 600);
+        const float left = 27, right = left + 336 + 24, firstY = 79;
+        g.DrawText(L10n.T("Color.Basic"), new UiRect(left + 2, 48, 334, 22), _theme.TextPrimary, 13, 600);
         for (int i = 0; i < Presets.Length; i++)
         {
             var swatch = Presets[i];
             var rect = new UiRect(left + 2 + i % 12 * 28, firstY + 2 + i / 12 * 28, 24, 24);
             string id = SwatchIds[i];
             _hit.Add(id, rect, UiCursorKind.Hand, SwatchLabels[i]);
-            g.FillRoundedRect(rect, 3f, swatch);
+            g.FillRoundedRect(rect, 4f, _hit.IsHover(id) ? swatch.WithAlphaFraction(0.8f) : swatch);
             bool selected = _selected == swatch;
-            g.DrawRoundedRect(rect, 3f, _hit.IsHover(id) || selected ? _theme.Accent : _theme.Border, selected ? 2f : 1f);
+            g.DrawRoundedRect(rect, 4f, _theme.Border, selected ? 2f : 1f);
             if (selected)
             {
                 var ink = swatch.R * .299 + swatch.G * .587 + swatch.B * .114 > 150 ? UiColor.Black : UiColor.White;
                 g.DrawText("✓", rect, ink, 12, 600, UiTextAlign.Center, UiVertAlign.Center);
             }
         }
-        var preview = new UiRect(left, firstY + 238, 60, 32);
+        var preview = new UiRect(left, firstY + 238, 60, 34);
         g.FillRoundedRect(preview, 8, _selected);
-        _channels[6] = new UiRect(left + 70, preview.Y, 266, 32);
+        _channels[6] = new UiRect(left + 70, preview.Y, 266, 34);
         DrawField(g, 6);
         DrawChannels(g, 0, left, preview.Bottom + 12, 336);
-        g.DrawText(L10n.T("Color.Spectrum"), new UiRect(right, 50, w - right - 20, 22), _theme.TextPrimary, 13, 600);
-        _spectrum = new UiRect(right, firstY, w - 20 - right - 44, 220);
+        g.DrawText(L10n.T("Color.Spectrum"), new UiRect(right, 48, w - right - left, 22), _theme.TextPrimary, 13, 600);
+        _spectrum = new UiRect(right, firstY, w - left - right - 44, 220);
         _hit.Add("cp.spectrum", _spectrum, UiCursorKind.Hand, L10n.T("Color.Spectrum"));
         g.DrawBgraBitmap("cp.spectrum", _spectrumPixels, SpectrumWidth, SpectrumHeight, _spectrum);
         float mx = _spectrum.X + (float)(_hue / 360) * _spectrum.Width;
@@ -136,16 +136,16 @@ internal sealed class ColorPickerWindow : LayeredWindow
         _lightBar = new UiRect(_spectrum.Right + 12, firstY, 32, 220);
         _hit.Add("cp.lightness", _lightBar, UiCursorKind.Hand, L10n.T("Color.Lightness"));
         var mid = FromHsl(_hue, _saturation, 0.5);
-        var upper = new UiRect(_lightBar.X + 4, firstY, 17, 110);
+        var track = _lightBar.Deflate(0, 6, 12, 6);
+        var upper = new UiRect(track.X, track.Y, track.Width, track.Height / 2);
         g.FillLinearGradientRect(upper, 0, UiColor.White, mid, false);
-        g.FillLinearGradientRect(upper.Offset(0, 110), 0, mid, UiColor.Black, false);
-        float thumbY = _lightBar.Bottom - (float)_lightness * 220;
-        g.DrawLine(_lightBar.Right - 9, thumbY, _lightBar.Right - 2, thumbY - 5, _theme.TextPrimary, 2);
-        g.DrawLine(_lightBar.Right - 9, thumbY, _lightBar.Right - 2, thumbY + 5, _theme.TextPrimary, 2);
-        DrawChannels(g, 3, right, _spectrum.Bottom + 14, w - 20 - right);
-        var cancel = new UiRect(w - 120, h - 50, 100, 30);
-        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "cp.ok", cancel.Offset(-110, 0), L10n.T("Color.Confirm"));
-        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "cp.cancel", cancel, L10n.T("Auto.Cancel"));
+        g.FillLinearGradientRect(upper.Offset(0, upper.Height), 0, mid, UiColor.Black, false);
+        float thumbY = track.Bottom - (float)_lightness * track.Height;
+        g.DrawText("◀", new UiRect(_lightBar.Right - 11, thumbY - 8, 12, 16), _theme.TextPrimary, 12, 400, UiTextAlign.Center);
+        DrawChannels(g, 3, right, _spectrum.Bottom + 14, w - left - right);
+        var cancel = new UiRect(w - left - 100, h - 20 - 36, 100, 36);
+        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "cp.ok", cancel.Offset(-110, 0), L10n.T("Color.Confirm"), fontSize: 13, radius: 8);
+        UiPrimitives.DrawSecondaryButton(g, _theme, _hit, "cp.cancel", cancel, L10n.T("Auto.Cancel"), fontSize: 13, radius: 8);
     }
 
     private void DrawChannels(D2dTarget g, int first, float x, float y, float totalWidth)
@@ -153,9 +153,9 @@ internal sealed class ColorPickerWindow : LayeredWindow
         float cell = totalWidth / 3;
         for (int i = 0; i < 3; i++)
         {
-            var label = new UiRect(x + i * cell + 2, y, cell - 8, 18);
-            g.DrawText(L10n.T(LabelKeys[first + i]), label, _theme.TextSecondary, 13, 500);
-            _channels[first + i] = new UiRect(label.X, y + 22, label.Width, 30);
+            var label = new UiRect(x + i * cell + 2, y, cell - 8, 17);
+            g.DrawText(L10n.T(LabelKeys[first + i]), label, _theme.TextPrimary, 13, 600);
+            _channels[first + i] = new UiRect(label.X, label.Bottom + 4, label.Width, 34);
             DrawField(g, first + i);
         }
     }
@@ -281,7 +281,11 @@ internal sealed class ColorPickerWindow : LayeredWindow
 
     private void Pick(string target, float x, float y)
     {
-        if (target == "cp.lightness") _lightness = Math.Clamp((_lightBar.Bottom - y) / _lightBar.Height, 0, 1);
+        if (target == "cp.lightness")
+        {
+            var track = _lightBar.Deflate(0, 6, 12, 6);
+            _lightness = Math.Clamp((track.Bottom - y) / track.Height, 0, 1);
+        }
         else
         {
             _hue = 360 * Math.Clamp((x - _spectrum.X) / _spectrum.Width, 0, 1);
@@ -342,16 +346,22 @@ internal sealed class ColorPickerWindow : LayeredWindow
     private static byte[] MakeSpectrum()
     {
         var data = new byte[SpectrumWidth * SpectrumHeight * 4];
-        for (int y = 0; y < SpectrumHeight; y++)
-            for (int x = 0; x < SpectrumWidth; x++)
+        for (int x = 0; x < SpectrumWidth; x++)
+        {
+            var hue = FromHsl(360d * x / (SpectrumWidth - 1), 1, .5);
+            for (int y = 0; y < SpectrumHeight; y++)
             {
-                var c = FromHsl(360d * x / (SpectrumWidth - 1), 1d - (double)y / (SpectrumHeight - 1), .5);
+                // WPF overlays transparent white to opaque #808080 on the rainbow.
+                double alpha = (double)y / (SpectrumHeight - 1);
+                byte grey = (byte)Math.Round(255 - 127 * alpha);
+                var c = UiColor.Blend(hue, UiColor.FromRgb(grey, grey, grey), alpha);
                 int offset = (y * SpectrumWidth + x) * 4;
                 data[offset] = c.B;
                 data[offset + 1] = c.G;
                 data[offset + 2] = c.R;
                 data[offset + 3] = 255;
             }
+        }
         return data;
     }
 

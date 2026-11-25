@@ -751,7 +751,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
 
         var seekSlider = new UiRect(posRect.Right + 2f, seekY, MathF.Max(24f, durRect.X - 2f - (posRect.Right + 2f)), 18f);
         UiPrimitives.DrawVolumeSlider(g, _theme, _hit, "companion.seek", seekSlider, progress01, 0f, muted: false, showPeak: false,
-            trackHeight: 4f, thumbDiameter: 10f, enabled: canSeek);
+            style: UiSliderStyle.MediaSeek, enabled: canSeek);
 
         var receiveRect = new UiRect(ctrlStartX + (btnW + gap) * 3f, ctrlY, btnW, 28f);
         bool receivingPhone = wholePhoneSource != null;
@@ -1057,7 +1057,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             long durationMs = _mediaState?.DurationMs ?? 0L;
             if (durationMs > 0)
             {
-                int pct = UiPrimitives.SliderValueFromX(_seekSliderRect, xDip, thumbDiameter: 10f);
+                int pct = UiPrimitives.SliderValueFromX(_seekSliderRect, xDip, UiSliderStyle.MediaSeek);
                 _seekPositionMs = (long)Math.Round(durationMs * (pct / 100.0));
                 Invalidate();
             }
@@ -1115,7 +1115,7 @@ internal sealed class PhoneAudioWindowView : LayeredWindow
             _seekPackage = st.Package;
             _seekTitle = st.Title;
             StopSeekTimer();
-            int pct = UiPrimitives.SliderValueFromX(h.Bounds, e.X, thumbDiameter: 10f);
+            int pct = UiPrimitives.SliderValueFromX(h.Bounds, e.X, UiSliderStyle.MediaSeek);
             _seekPositionMs = (long)Math.Round(st.DurationMs * (pct / 100.0));
         }
         Invalidate();

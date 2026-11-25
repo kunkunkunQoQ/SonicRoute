@@ -316,7 +316,7 @@ internal sealed class OutputVolumesPopupWindow : LayeredWindow
             var sliderRect = new UiRect(muteRect.Right + 6f, ctrlY, MathF.Max(40f, pctRect.X - 6f - (muteRect.Right + 6f)), 32f);
             string sliderId = $"ov.vol:{row.Id}";
             UiPrimitives.DrawVolumeSlider(g, _theme, _hit, sliderId, sliderRect,
-                row.Volume / 100f, 0f, row.Muted, showPeak: false, trackHeight: 4f, thumbDiameter: 14f, enabled: row.Available);
+                row.Volume / 100f, 0f, row.Muted, showPeak: false, enabled: row.Available);
         }
         _hit.PopClip();
         g.PopClip();

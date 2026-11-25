@@ -13,7 +13,7 @@
 |自动化模板、配置导入预览|MainWindow.AutomationTemplates.cs:25、67；MainWindow.ImportPreview.cs|AutomationPageView.cs:1288；SettingsPageView.cs:1328；ExperimentalPageView.cs 的 ImportConfigFromPath；NativeDialogs.cs:112|恢复模板说明顺序和草稿重名后缀。导入预览使用系统信息图标、确定/取消、默认确定，与冻结消息框一致。|两处原生导入已有快捷键/设备别名/应用别名/缺失设备/缺失应用五项计数，复用现有统计。|P1 / 页面、已核对 / 源码审查；未写真实配置|
 |执行历史操作与独立窗口|MainWindow.ExecutionHistory.cs:49、135|ExperimentalPageView.cs:108；MainWindowShell.cs:182；ReadOnlyWindow.cs:28、162、217|900×560，最小 680×400，随主窗口居中，列表/详情 42:58。Win32 ListBox 单行显示时间、名称、状态与来源，与 WPF 双行样式有差别。|实验开关控制可见性，限制 1–64 MB；打开、刷新、清除、选择行、复制只读详情。单实例，关闭、禁用或再次刷新可取消先前读取。明细保留步骤、原因、耗时及目标，Android 未命名目标可能显示包名。|P0 / 功能入口、已修 / 源码审查；真实历史回放待实测|
 |快捷键分组、录入、冲突|MainWindow.xaml:915；MainWindow.xaml.cs 的 BuildHotkeyList|HotkeysPageView.cs:53、217、275、306|移去顶部额外标题，恢复提示后直接出现快捷键分组。原生重置按钮仍在页尾。|系统动作/规则录入、清除及冲突提示保留，支持修饰键、鼠标中/侧键和滚轮；与被其他程序占用的全局按键共存待测。|P1 / 页面、已修 / 源码审查|
-|主题模式、强调色、预览、透明度|MainWindow.xaml:560、590、611；MainWindow.ThemeLayout.cs:80|ThemePageView.cs:81、135、258、729|色样、Hex、取色按钮恢复为第一行，原生三个快速配色保留在下方。预览及径向阴影仍有原生绘制差异。|试色保持在取色器，确认后更新一次配置，取消恢复。透明度键盘调整与画面同步。|P0 / 页面、已修 / 源码审查|
+|主题模式、强调色、预览、透明度|MainWindow.xaml:560、590、611；MainWindow.ThemeLayout.cs:80|ThemePageView.cs:81、135、258、729|色样、Hex、取色按钮恢复为同一行，移除用户标出的三个额外预设色块。旧配置中的具名颜色仍能读取。预览及径向阴影仍有原生绘制差异。|试色保持在取色器，确认后更新一次配置，取消恢复。透明度键盘调整与画面同步。|P0 / 页面、已修 / 源码审查|
 |主题页 OSD 与面板|MainWindow.xaml:637、664、707|ThemePageView.cs:273、398、602、643；ExperimentalPageView.cs:318|字号 0.7–2.0，面板高度 350–850，宽度 180–600。小尺寸时，自绘卡片边距和长文本行高与 WPF 自动布局存在差异。|字号/宽度/淡入淡出/面板高度支持方向键、Home/End 和 PageUp/PageDown。相应原生实验数值入口同步字号上限，失焦保存。|P1 / 页面、已修 / 源码审查|
 |设置分组、设备过滤与别名、默认应用|MainWindow.xaml:749、772、791；MainWindow.SettingsLayout.cs:75|SettingsPageView.cs:126、282、541、726、784、1226|首屏恢复显示设备、设备名称、默认控制的应用。恢复系统默认端点与折叠条件。固定长度、文本基线、长名称换行与 WPF 有别。|别名输入和可见性以设备 ID 命中；失焦、Tab 和 Enter 可提交。原生编辑框按需创建。设备命名保存与 WPF 延迟写入的时间粒度仍有区别。|P0 / 页面、已修 / 源码审查|
 |启动选项、音量步长、实验解锁|MainWindow.xaml:804、814、825；MainWindow.SettingsSave.cs|SettingsPageView.cs:354、1226|按基准将启动和音频开关放在后续设置组。旧候选实际已有数值框。|步长框修正失焦提交和数值归一化，编辑取消不触发回调。保留托盘/启动/本机自启动作用域。登录后真实自启动未验。|P1 / 页面、已修 / 源码审查|
@@ -23,6 +23,15 @@
 |Full Android 文件、传输与剪贴板|PhoneDevicePage.xaml:261、377；PhoneDevicePage.AndroidFiles.cs|PhoneDevicePageView.cs:547；PhonePreview.cs、PhoneAudioWindowView.cs|设备页现有文件选择、接收文件夹、传输状态和剪贴板入口。独立窗口与设备页的形态差别详见窗口矩阵。|维持由后台服务持有传输。受实机条件限制，权限拒绝、传输失败和关窗期间继续传输需运行证据。|P1 / 现有实现 / 源码审查，设备待测|
 |Full 添加设备、二维码、配对码、直连、USB|PhoneDevicePage.xaml:389、428；PhoneDevicePage.DirectConnection.cs、PhoneDevicePage.Pairing.cs|PhoneDevicePageView.cs:725、958|两种配对和直连入口已有，原生输入使用按需 EDIT；二维码与状态布局依设备响应。|修复由地址/配对码点击到连接按钮时回退为进入编辑前内容。复用原有连接所有者。网络失败重试、USB 恢复需设备。|P1 / 页面、已修 / 源码审查，设备待测|
 |Full AirPlay 接收、媒体、镜像|AirPlayReceiverView.xaml:32、55、89、102、119；PhoneDevicePage.AirPlay.cs|AirPlayReceiverViewControl.cs:108、149、316、331；PhoneDevicePageView.cs:725|接收名、解码、验证码、封面和镜像状态使用已有控件与动态布局。Lite 编译时排除整个手机功能。|修复接收名改完点击下一控件不保存。配置和运行状态沿用已有 AirPlay 服务；外部设备端发现、镜像或连续播放未验证。|P1 / 页面、局部已修 / 源码审查，设备待测|
+
+### 同条件截图复核后的主窗修正
+
+|窗口与控件|冻结基准|Native 定位|截图差异与最终处理|验证|
+|---|---|---|---|---|
+|主窗口标题与点击区|MainWindow.xaml.cs 的 HeaderTitleText 赋值；App.xaml.cs:58；build/Version.props|MainWindowShell.cs 的 ProductVersion、GetWindowTitle、RenderTitleBar|用当前可执行文件的产品版本和 Full/Lite 产品名生成标题，标题文本宽度同时决定侧栏切换和拖动分界。关于页复用同一版本。|源码审查；候选发布和系统输入见总报告|
+|应用页列表标题、计数|MainWindow.xaml:1154；SectionTitle|AppsPageView.cs 的 DrawSidebarHeader|WPF 用计数字宽加左右各 5 DIP、标题与徽标间隔 4 DIP。移除 Native 固定预留的 32–34 DIP，完整标题作为悬停提示；中、英、德及更长译文均使用同一测量。|源码审查；实际省略位置以截图为准|
+|应用详情的空选中、设备按钮|MainWindow.xaml.cs:674、689；MainWindow.AppRouteButtons.cs:131；PanelDevices.ShortName；MainWindow.xaml:268|AppsPageView.cs 的 RenderDetailsPane、DeviceChoice、LayoutPillFlow、DrawQuickDevButton|空选中时图标框、两个下拉内容留空，路由操作禁用。与速切面板共用短名规则，去除圆括号后的设备说明，超过 12 个文本元素时取前 11 个加省略号；布局与绘制共用短名，提示和下拉保留完整名称，选择与点击沿用设备 ID。基准的未选中设备快捷按钮维持常规墨色。|源码审查；真实设备需通过用户操作确认|
+|默认控制应用三张卡与指定应用|MainWindow.xaml:791；SettingsControls.xaml:92；App.xaml:245；MainWindow.xaml.cs:1195、1235、1242|SettingsPageView.cs 的 RenderDefaultAppCard、DrawAppChoiceCard、OpenFixedAppCombo|设置卡恢复 18 DIP 内边距加 1 DIP 边框。三张单选卡的圆点靠左上、图标垂直居中、标题与说明按同宽换行，共用最高内容形成的行高。单一 36 DIP 全宽选择框只在指定模式启用。最近和上次模式整行不可交互。当前候选失去匹配时清空显示，重新绑定和切换模式保留已存进程名；选择条目时保存其进程名。|源码审查；候选发布、系统输入及用户验收分别记录|
 
 ### 输入提交与资源生命周期
 

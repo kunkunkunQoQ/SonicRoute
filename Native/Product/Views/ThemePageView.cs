@@ -15,13 +15,6 @@ internal sealed class ThemePageView : IViewPage
         ("dark", "St.ThemeDark", UiIcon.Moon),
     ];
 
-    private static readonly (string Key, UiColor Color)[] AccentPresets =
-    [
-        ("blue", UiColor.FromRgb(0x2F, 0x80, 0xED)),
-        ("green", UiColor.FromRgb(0x22, 0xC5, 0x5E)),
-        ("purple", UiColor.FromRgb(0xEC, 0x48, 0x99)),
-    ];
-
     private static readonly string[] OsdGridCodes =
     [
         "TL", "TC", "TR",
@@ -87,11 +80,11 @@ internal sealed class ThemePageView : IViewPage
         string pageHint = L10n.T("Th.PageHint");
         float hintH = D2dSharedContext.Instance.MeasureText(pageHint, UiMetrics.FontFamily, 11.5f, 400, contentRect.Width, 60f, wrap: true).Height;
 
-        float card1H = 312f;
+        float card1H = 308f;
         float card2H = 148f;
         float card3H = 412f + (_osdMoreExpanded ? 164f : 0f);
         float card4H = 360f;
-        float totalH = 32f + hintH + 18f + card1H + 14f + card2H + 14f + card3H + 14f + card4H + 16f;
+        float totalH = 33f + hintH + 20f + card1H + 14f + card2H + 14f + card3H + 14f + card4H + 16f;
 
         _scroll.ViewportHeight = contentRect.Height;
         _scroll.ContentHeight = totalH;
@@ -106,7 +99,7 @@ internal sealed class ThemePageView : IViewPage
         g.DrawText(L10n.T("Nav.Theme"), new UiRect(contentRect.X, y, w, 28f), t.TextPrimary, 22f, 600);
         y += 33f;
         g.DrawText(pageHint, new UiRect(contentRect.X, y, w, hintH + 2f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
-        y += hintH + 16f;
+        y += hintH + 20f;
 
         var card1 = new UiRect(contentRect.X, y, w, card1H);
         UiPrimitives.DrawCard(g, t, card1, UiMetrics.CardCornerRadius);
@@ -136,14 +129,26 @@ internal sealed class ThemePageView : IViewPage
     {
         float y = inner.Y;
         DrawSectionBadgeHeader(g, t, new UiRect(inner.X, y, inner.Width, 38f), UiIcon.Palette, L10n.T("St.ThemeMode"), L10n.T("Th.ModeHint"));
-        y += 50f;
+        y += 54f;
 
-        float modeGap = 8f;
-        float modeW = MathF.Min(136f, (inner.Width - modeGap * 2f) / 3f);
+        float modeX = inner.X;
+        float remainingLabels = inner.Width - 12f;
+        float naturalTotal = 0f;
+        Span<float> modeWidths = stackalloc float[ThemeModes.Length];
+        for (int i = 0; i < ThemeModes.Length; i++)
+        {
+            var mode = ThemeModes[i];
+            int weight = string.Equals(cfg.ThemeMode, mode.Key, StringComparison.OrdinalIgnoreCase) ? 600 : 400;
+            float labelWidth = D2dSharedContext.Instance.MeasureText(L10n.T(mode.LabelKey), UiMetrics.FontFamily, 12.5f, weight, inner.Width, 46f, false).Width;
+            modeWidths[i] = MathF.Max(68f, MathF.Ceiling(labelWidth) + 43f);
+            naturalTotal += modeWidths[i];
+        }
+        float widthScale = MathF.Min(1f, remainingLabels / naturalTotal);
         for (int i = 0; i < ThemeModes.Length; i++)
         {
             var (key, labelKey, icon) = ThemeModes[i];
-            var mr = new UiRect(inner.X + i * (modeW + modeGap), y, modeW, 46f);
+            var mr = new UiRect(modeX, y, modeWidths[i] * widthScale, 46f);
+            modeX = mr.Right + 6f;
             bool selected = string.Equals(cfg.ThemeMode, key, StringComparison.OrdinalIgnoreCase)
                 || (key == "system" && string.IsNullOrEmpty(cfg.ThemeMode));
             string id = "th.mode." + key;
@@ -175,35 +180,16 @@ internal sealed class ThemePageView : IViewPage
         g.DrawRoundedRect(box, 11f, t.Border, 1f);
         var boxIn = box.Deflate(14f, 12f);
 
-        float previewW = Math.Clamp(boxIn.Width * 0.36f, 130f, 210f);
+        float previewW = MathF.Max(130f, (boxIn.Width - 14f) / 2.4f);
         float leftW = boxIn.Width - previewW - 14f;
 
         g.DrawText(L10n.T("Th.CustomTitle"), new UiRect(boxIn.X, boxIn.Y, leftW, 20f), t.TextPrimary, 13.5f, 600);
         g.DrawText(L10n.T("Th.CustomHint"), new UiRect(boxIn.X, boxIn.Y + 22f, leftW, 18f), t.TextSecondary, 11.5f, 400);
 
-        float presetY = boxIn.Y + 108f;
-        float px = boxIn.X;
-        for (int i = 0; i < AccentPresets.Length; i++)
-        {
-            var (key, col) = AccentPresets[i];
-            var dotRect = new UiRect(px, presetY, 22f, 22f);
-            string id = "th.accent." + key;
-            hit.Add(id, dotRect, UiCursorKind.Hand, col.ToHexRgb());
-            _clicks[id] = () =>
-            {
-                cfg.Accent = key;
-                SaveAndNotifyTheme();
-            };
-            g.FillRoundedRect(dotRect, 6f, col);
-            bool active = t.Accent.R == col.R && t.Accent.G == col.G && t.Accent.B == col.B;
-            if (active) g.DrawRoundedRect(dotRect, 6f, t.TextPrimary, 1.8f);
-            px += 28f;
-        }
-
         float rowY = boxIn.Y + 46f;
         var swatch = new UiRect(boxIn.X, rowY, 54f, 54f);
         g.FillRoundedRect(swatch, 8f, t.Accent);
-        g.DrawRoundedRect(swatch, 8f, t.Border, 1f);
+
 
         _hexBoxRect = new UiRect(swatch.Right + 10f, rowY + 10f, 90f, 34f);
         UiPrimitives.DrawTextBox(g, t, hit, "th.hex", _hexBoxRect, t.Accent.ToHexRgb(), "#2F80ED", _actions.ActiveInlineEditTag == "th.hex", mono: true, fontSize: 12f);
@@ -218,7 +204,7 @@ internal sealed class ThemePageView : IViewPage
         UiPrimitives.DrawSecondaryButton(g, t, hit, "th.chooseColor", pickBtn, pickLabel, fontSize: 12f, icon: UiIcon.Theme);
         _clicks["th.chooseColor"] = OpenColorPicker;
 
-        var prevRect = new UiRect(boxIn.Right - previewW, boxIn.Y + 6f, previewW, boxIn.Height - 12f);
+        var prevRect = new UiRect(boxIn.Right - previewW, boxIn.Y, previewW, MathF.Min(123f, boxIn.Height));
         RenderThemePreview(g, t, prevRect);
     }
 
@@ -717,8 +703,7 @@ internal sealed class ThemePageView : IViewPage
     {
         if (UiColor.TryParseHex(text, out var col))
         {
-            _actions.Config.Accent = col.ToHexRgb();
-            SaveAndNotifyTheme();
+            if (col.WithAlpha(255) != _actions.Theme.Accent) ApplyAccent(col.ToHexRgb());
         }
         else
         {
@@ -738,11 +723,7 @@ internal sealed class ThemePageView : IViewPage
             _actions.OwnerWindow,
             _actions.Theme,
             _actions.Theme.Accent,
-            chosen =>
-            {
-                _actions.Config.Accent = chosen.ToHexRgb();
-                SaveAndNotifyTheme();
-            });
+            chosen => ApplyAccent(chosen.ToHexRgb()));
     }
 
     private void ResetOsdSettings()
@@ -762,6 +743,20 @@ internal sealed class ThemePageView : IViewPage
         SaveAndNotifySettings();
         _actions.Host.PreviewOsd();
         _actions.ShowNotice(L10n.T("Exp.OsdResetDone"));
+    }
+
+    private void ApplyAccent(string value)
+    {
+        var cfg = _actions.Config;
+        string previous = cfg.Accent;
+        if (string.Equals(previous, value, StringComparison.OrdinalIgnoreCase)) return;
+        cfg.Accent = value;
+        if (!ConfigService.TrySave(cfg))
+        {
+            cfg.Accent = previous;
+            _actions.ShowNotice(L10n.T("St.SaveFailed"));
+        }
+        _actions.NotifyThemeChanged();
     }
 
     private void SaveAndNotifyTheme()

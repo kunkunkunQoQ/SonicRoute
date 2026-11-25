@@ -74,7 +74,8 @@ internal sealed class ComboPopupWindow : LayeredWindow
         }
         float contentH = choices.Count * ItemH;
         float viewH = Math.Clamp(contentH, 28f, MathF.Max(28f, MathF.Min(MaxListHeight, (mb - mt - 8) / scale) - Pad * 2f));
-        float padW = 30f + (contentH > viewH ? UiMetrics.ScrollBarWidth : 0);
+        // Outer border, both 4 DIP row margins, 10 DIP text insets, and the track gutter.
+        float padW = Pad * 2 + 8f + 20f + 1f + (contentH > viewH ? UiMetrics.ScrollBarWidth + 2f : 0);
         float wDip = MathF.Min(workW, MathF.Max(comboRectDip.Width, MathF.Ceiling(maxLabelW) + padW));
         float hDip = viewH + Pad * 2f;
 
@@ -86,8 +87,8 @@ internal sealed class ComboPopupWindow : LayeredWindow
             if (choices[i].Key == selectedKey)
             {
                 pop._focusedIndex = i;
-                float top = i * ItemH;
-                pop._scroll.EnsureVisible(top, top + ItemH, 4f);
+                pop._scroll.Offset = i * ItemH;
+                pop._scroll.Clamp();
                 break;
             }
         }

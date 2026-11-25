@@ -106,7 +106,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
             {
                 render = ProductAudio.Devices(Flow.Render);
                 capture = ProductAudio.Devices(Flow.Capture);
-                apps = actions.Host.Audio.Apps().ToArray();
+                apps = actions.Host.Audio.Apps().Where(app => !AudioService.IsInternalApplication(app.ProcessId, app.ProcessName)).ToArray();
             }
             catch { }
 
@@ -284,73 +284,60 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         float x, float y, float w, AppConfig cfg,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
-        float pad = 16f;
-        float innerW = w - pad * 2f;
-        bool isFixed = string.Equals(cfg.DefaultAppMode, "fixed", StringComparison.OrdinalIgnoreCase);
-        float cardH = pad + 28f + 22f + 86f + 10f + 34f + 22f + pad;
-        var card = new UiRect(x, y, w, cardH);
-        UiPrimitives.DrawCard(g, t, card);
-
+        const float pad = 19f; // Card border (1) + padding (18)
+        const float gap = 8f;
+        float innerW = w - 2f * pad;
+        float choiceW = (innerW - 2f * gap) / 3f;
+        float textW = MathF.Max(1f, choiceW - 68f);
+        var ctx = D2dSharedContext.Instance;
+        float Height(string text, float width, float size, int weight) =>
+            MathF.Ceiling(ctx.MeasureText(text, UiMetrics.FontFamily, size, weight, width, 2048f, wrap: true).Height);
+        var recent = MeasureChoice("St.DefaultAppRecent", "Settings.RecentHint");
+        var last = MeasureChoice("St.DefaultAppLast", "Settings.LastHint");
+        var fixedChoice = MeasureChoice("St.DefaultAppFixed", "Settings.FixedHint");
+        (string Title, string Hint, float TitleH, float HintH) MeasureChoice(string titleKey, string hintKey)
+        {
+            string title = L10n.T(titleKey), hint = L10n.T(hintKey);
+            return (title, hint, Height(title, textW, 12.5f, 600), Height(hint, textW, 10f, 400));
+        }
+        float choiceH = 26f + 5f + MathF.Max(recent.TitleH + recent.HintH,
+            MathF.Max(last.TitleH + last.HintH, fixedChoice.TitleH + fixedChoice.HintH));
+        string help = L10n.T("St.DefaultAppHint"), fixedHint = L10n.T("St.FixedAppHint");
+        float headingH = MathF.Max(20f, Height(L10n.T("St.DefaultApp"), innerW - 32f, 14.5f, 600));
+        float helpH = Height(help, innerW - 32f, 11.5f, 400);
+        float fixedHintH = Height(fixedHint, innerW, 11.5f, 400);
         float cy = y + pad;
-        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, 28f), UiIcon.Apps, L10n.T("St.DefaultApp"));
-        cy += 28f;
-        g.DrawText(L10n.T("St.DefaultAppHint"), new UiRect(x + pad + 32f, cy, innerW - 32f, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        cy += 24f;
+        float choicesY = cy + headingH + 4f + helpH + 10f;
+        var fixedComboRect = new UiRect(x + pad, choicesY + choiceH + gap, innerW, 36f);
+        float hintY = fixedComboRect.Bottom + 2f + 5f;
+        float bottom = hintY + fixedHintH + pad;
+        UiPrimitives.DrawCard(g, t, new UiRect(x, y, w, bottom - y));
+        UiPrimitives.DrawSettingsSectionHeader(g, t, new UiRect(x + pad, cy, innerW, headingH), UiIcon.Apps, L10n.T("St.DefaultApp"));
+        g.DrawText(help, new UiRect(x + pad + 32f, cy + headingH + 4f, innerW - 32f, helpH), t.TextSecondary,
+            11.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
 
-        float gap = 8f;
-        float colW = (innerW - gap * 2f) / 3f;
-        DrawAppChoiceCard(g, t, hit, "st.appmode.recent", new UiRect(x + pad, cy, colW, 82f),
-            UiIcon.Clock, L10n.T("St.DefaultAppRecent"), L10n.T("Settings.RecentHint"),
-            string.Equals(cfg.DefaultAppMode, "recent", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(cfg.DefaultAppMode),
-            () => { cfg.DefaultAppMode = "recent"; SaveConfig(); }, register);
-
-        DrawAppChoiceCard(g, t, hit, "st.appmode.last", new UiRect(x + pad + colW + gap, cy, colW, 82f),
-            UiIcon.History, L10n.T("St.DefaultAppLast"), L10n.T("Settings.LastHint"),
-            string.Equals(cfg.DefaultAppMode, "last", StringComparison.OrdinalIgnoreCase),
-            () => { cfg.DefaultAppMode = "last"; SaveConfig(); }, register);
-
-        DrawAppChoiceCard(g, t, hit, "st.appmode.fixed", new UiRect(x + pad + (colW + gap) * 2f, cy, colW, 82f),
-            UiIcon.Apps, L10n.T("St.DefaultAppFixed"), L10n.T("Settings.FixedHint"),
-            isFixed,
-            () => { cfg.DefaultAppMode = "fixed"; SaveConfig(); }, register);
-        cy += 92f;
-
-        // Fixed app picker + inline edit fallback
-        float pickW = MathF.Min(260f, innerW - 140f);
-        var fixedComboRect = new UiRect(x + pad, cy, pickW, 34f);
-        string fixedDisplay = string.IsNullOrWhiteSpace(cfg.FixedAppName) ? L10n.T("Ov.Unset") : cfg.FixedAppName;
-        UiPrimitives.DrawComboBox(g, t, hit, "st.fixedapp.combo", fixedComboRect, fixedDisplay, enabled: isFixed);
-        if (isFixed)
+        void Choice(int column, string mode, UiIcon icon, (string Title, string Hint, float TitleH, float HintH) labels)
         {
+            var rect = new UiRect(x + pad + column * (choiceW + gap), choicesY, choiceW, choiceH);
+            bool selected = string.Equals(cfg.DefaultAppMode, mode, StringComparison.OrdinalIgnoreCase);
+            DrawAppChoiceCard(g, t, hit, "st.appmode." + mode, rect, icon, labels.Title, labels.Hint, labels.TitleH, labels.HintH,
+                selected, () => { cfg.DefaultAppMode = mode; SaveConfig(); }, register);
+        }
+        Choice(0, "recent", UiIcon.Clock, recent);
+        Choice(1, "last", UiIcon.History, last);
+        Choice(2, "fixed", UiIcon.Apps, fixedChoice);
+
+        bool isFixed = string.Equals(cfg.DefaultAppMode, "fixed", StringComparison.OrdinalIgnoreCase);
+        var selectedApp = _apps.FirstOrDefault(app => !string.IsNullOrWhiteSpace(cfg.FixedAppName) &&
+            string.Equals(app.ProcessName, cfg.FixedAppName, StringComparison.OrdinalIgnoreCase));
+        string fixedDisplay = selectedApp == null ? "" : FixedAppLabel(selectedApp);
+        UiPrimitives.DrawComboBox(g, t, hit, "st.fixedapp.combo", fixedComboRect, fixedDisplay, fontSize: 13f, enabled: isFixed);
+        if (isFixed)
             register("st.fixedapp.combo", fixedComboRect, () => OpenFixedAppCombo(fixedComboRect), UiCursorKind.Hand, L10n.T("St.DefaultAppFixed"));
-        }
-
-        var fixedBoxRect = new UiRect(fixedComboRect.Right + 8f, cy, MathF.Max(90f, innerW - pickW - 8f), 34f);
-        if (isFixed)
-        {
-            UiPrimitives.DrawTextBox(g, t, hit, "st.fixedapp.edit", fixedBoxRect, cfg.FixedAppName,
-                L10n.T("Auto.TargetApp"), focused: actions.ActiveInlineEditTag == "st.fixedapp.edit");
-            register("st.fixedapp.edit", fixedBoxRect, () =>
-            {
-                actions.StartInlineEdit("st.fixedapp.edit", fixedBoxRect, cfg.FixedAppName, null, (text, _) =>
-                {
-                    cfg.FixedAppName = text.Trim();
-                    SaveConfig();
-                });
-            }, UiCursorKind.IBeam, L10n.T("St.DefaultAppFixed"));
-        }
-        else
-        {
-            g.FillRoundedRect(fixedBoxRect, 6f, t.SurfaceAlt);
-            g.DrawRoundedRect(fixedBoxRect, 6f, t.Border, 1f);
-            g.DrawText(cfg.FixedAppName, fixedBoxRect.Deflate(9f, 2f), t.TextSecondary, 12.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        }
-
-        cy += 38f;
-        g.DrawText(L10n.T("St.FixedAppHint"), new UiRect(x + pad, cy, innerW, 18f), t.TextSecondary, 11.5f, 400, UiTextAlign.Leading, UiVertAlign.Center);
-        return y + cardH;
+        g.DrawText(fixedHint, new UiRect(x + pad, hintY, innerW, fixedHintH), t.TextSecondary, 11.5f, 400,
+            UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
+        return bottom;
     }
-
     private float RenderAudioBehaviorCard(
         D2dTarget g, UiThemePalette t, UiHitMap hit, UiRect viewport,
         float x, float y, float w, AppConfig cfg,
@@ -543,7 +530,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         float x, float y, float w, AppConfig cfg,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
-        float pad = 16f;
+        const float pad = 19f;
         float innerW = w - pad * 2f;
         const float itemW = 184f;
         const float itemH = 46f;
@@ -728,7 +715,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         float x, float y, float w, AppConfig cfg,
         Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
-        float pad = 16f;
+        const float pad = 19f;
         float innerW = w - pad * 2f;
         var outDevices = BuildDeviceList(_outputs, Flow.Render, includeSystemDefault: true);
         var inDevices = cfg.ExperimentalMic ? BuildDeviceList(_inputs, Flow.Capture, includeSystemDefault: true) : [];
@@ -881,7 +868,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
     {
         var updates = actions.Host.Updates;
         bool store = updates.IsPackaged;
-        string displayVersion = FileVersionInfo.GetVersionInfo(UpdateBootstrap.ExecutablePath).ProductVersion ?? "1.36";
+        string displayVersion = MainWindowShell.ProductVersion;
         string versionLine = string.Format(L10n.T("Upd.Current"), displayVersion, AppRuntimeIdentity.Current.CommandEdition, UpdateBootstrap.Architecture)
             + " · " + UpdateProtocol.RuntimeName;
         string? newestLine = updates.Release != null ? string.Format(L10n.T("Upd.Newest"), updates.Release.Tag) : null;
@@ -1069,7 +1056,7 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
 
     private static void DrawAppChoiceCard(
         D2dTarget g, UiThemePalette t, UiHitMap hit,
-        string id, UiRect rect, UiIcon icon, string title, string hint, bool selected,
+        string id, UiRect rect, UiIcon icon, string title, string hint, float titleH, float hintH, bool selected,
         Action onClick, Action<string, UiRect, Action, UiCursorKind, string?> register)
     {
         register(id, rect, onClick, UiCursorKind.Hand, hint);
@@ -1077,19 +1064,21 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         g.FillRoundedRect(rect, 8f, selected ? t.NavSelected : t.SurfaceBg);
         g.DrawRoundedRect(rect, 8f, selected || hot ? t.Accent : t.Border, 1f);
 
-        float cx = rect.X + 16f;
-        float cy = rect.Y + 19f;
-        g.FillEllipse(cx, cy, 6.5f, 6.5f, t.SurfaceBg);
-        g.DrawEllipse(cx, cy, 6.5f, 6.5f, selected ? t.Accent : t.Border, 1.2f);
+        // SettingsAppChoice has 18/28/* columns inside its 1-DIP border and 10×12 padding.
+        float left = rect.X + 11f;
+        float cx = left + 6.5f;
+        float cy = rect.Y + 13f + 2f + 6.5f;
+        g.DrawEllipse(cx, cy, 6f, 6f, selected ? t.Accent : t.Border, 1f);
         if (selected) g.FillEllipse(cx, cy, 3.5f, 3.5f, t.Accent);
-
-        g.DrawIcon(icon, new UiRect(rect.X + 29f, rect.Y + 11f, 18f, 18f), selected ? t.Accent : t.TextSecondary, 1.8f);
-        float textX = rect.X + 54f;
-        float textW = MathF.Max(20f, rect.Right - textX - 8f);
-        g.DrawText(title, new UiRect(textX, rect.Y + 8f, textW, 22f), t.TextPrimary, 12.5f, 600, UiTextAlign.Leading, UiVertAlign.Center);
-        g.DrawText(hint, new UiRect(textX, rect.Y + 32f, textW, rect.Height - 38f), t.TextSecondary, 10.5f, 400, UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: true);
+        g.DrawIcon(icon, new UiRect(left + 18f, rect.CenterY - 9f, 18f, 18f), selected ? t.Accent : t.TextSecondary, 1.8f);
+        float textX = left + 46f;
+        float textW = MathF.Max(1f, rect.Right - 11f - textX);
+        float textY = rect.CenterY - (titleH + 5f + hintH) / 2f;
+        g.DrawText(title, new UiRect(textX, textY, textW, titleH), t.TextPrimary, 12.5f, 600,
+            UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
+        g.DrawText(hint, new UiRect(textX, textY + titleH + 5f, textW, hintH), t.TextSecondary, 10f, 400,
+            UiTextAlign.Leading, UiVertAlign.Top, wrap: true, ellipsis: false);
     }
-
     private static void DrawToolbarAction(
         D2dTarget g, UiThemePalette t, UiHitMap hit,
         string id, UiRect rect, string text, Action onClick,
@@ -1201,28 +1190,23 @@ internal sealed class SettingsPageView(IViewHostActions actions) : IViewPage
         });
     }
 
+    private string FixedAppLabel(AudioAppInfo app) =>
+        !string.IsNullOrWhiteSpace(app.ProcessName) && actions.Config.AppNames.TryGetValue(app.ProcessName, out var alias) &&
+        !string.IsNullOrWhiteSpace(alias) ? alias : app.Label;
+
     private void OpenFixedAppCombo(UiRect anchor)
     {
-        var choices = new List<ComboChoice> { new("", L10n.T("Ov.Unset")) };
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var app in _apps)
+        var apps = _apps;
+        var choices = apps.Select(app => new ComboChoice(app.Identity, FixedAppLabel(app))).ToArray();
+        var selected = Array.Find(apps, app => string.Equals(app.ProcessName, actions.Config.FixedAppName, StringComparison.OrdinalIgnoreCase));
+        actions.ShowCombo(anchor, choices, selected?.Identity ?? "", picked =>
         {
-            string proc = app.ProcessName ?? "";
-            if (string.IsNullOrWhiteSpace(proc) || !seen.Add(proc)) continue;
-            string display = actions.Config.AppNames.TryGetValue(proc, out var alias) && !string.IsNullOrWhiteSpace(alias)
-                ? alias : app.Label;
-            choices.Add(new(proc, $"{display} ({proc})"));
-        }
-        if (!string.IsNullOrWhiteSpace(actions.Config.FixedAppName) && seen.Add(actions.Config.FixedAppName))
-            choices.Add(new(actions.Config.FixedAppName, actions.Config.FixedAppName));
-
-        actions.ShowCombo(anchor, choices, actions.Config.FixedAppName, picked =>
-        {
-            actions.Config.FixedAppName = picked.Key;
+            if (!string.Equals(actions.Config.DefaultAppMode, "fixed", StringComparison.OrdinalIgnoreCase)) return;
+            var app = Array.Find(apps, candidate => candidate.Identity == picked.Key);
+            actions.Config.FixedAppName = app?.ProcessName ?? "";
             SaveConfig();
         });
     }
-
     private void StartRenameDevice(AudioDeviceInfo device, UiRect rect)
     {
         string current = actions.Config.DeviceNames.TryGetValue(device.Id, out var name) ? name : "";
